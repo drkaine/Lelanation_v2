@@ -4,12 +4,12 @@
  *   TOTAL_RATE = RATE_LIMIT_PER_120S * TARGET_PCT / 120
  *   // dev : 95 * 0.92 / 120 ≈ 0.7283 tokens/s
  *
- *   discovery 20% · hydration 70% · rank 10%
- *   // dev : 0.1457/s (~6.9s/slot) · 0.5098/s (~1.96s/slot) · 0.0728/s (~13.7s/slot)
+ *   discovery 15% · hydration 65% · rank 20%
+ *   // dev : 0.109/s (~9.2s/slot) · 0.473/s (~2.1s/slot, coût 2) · 0.146/s (~6.8s/slot)
+ *   // dev /120s : ~13.1 · ~56.8 tokens (~28.4 matchs) · ~17.5 rank slots
  *
- * Rank : concurrency BullMQ = 2 → au plus 2 workers appellent waitForRankSlot().
- * Pas de spin Redis : un seul essai, sinon budget_exhausted → retry BullMQ.
- * Les centaines d’autres jobs rank restent en file BullMQ.
+ * Rank : concurrency BullMQ = 2 ; jobs dédupliqués par jour (ingestion).
+ * Budget rank ~61% des joueurs uniques /30 min ; le reste s’étale sur la journée.
  */
 import { readFileSync } from "fs";
 import { dirname, join } from "path";
@@ -24,11 +24,11 @@ const ACQUIRE_SLOT_LUA = readFileSync(join(__dirname, "lua", "acquire-slot.lua")
 export const TARGET_PCT = 0.92;
 
 /** Part de TOTAL_RATE pour matchlists discovery (coût 1). */
-export const DISCOVERY_BUDGET_PCT = 0.2;
+export const DISCOVERY_BUDGET_PCT = 0.15;
 /** Part de TOTAL_RATE pour match + timeline (coût 2 par job hydration). */
-export const HYDRATION_BUDGET_PCT = 0.7;
+export const HYDRATION_BUDGET_PCT = 0.65;
 /** Part de TOTAL_RATE pour League v4 (rank.worker, concurrency 2). */
-export const RANK_BUDGET_PCT = 0.1;
+export const RANK_BUDGET_PCT = 0.2;
 
 export const DISCOVERY_SLOT_KEY = "rl:slots:discovery";
 export const HYDRATION_SLOT_KEY = "rl:slots:hydration";
@@ -273,8 +273,36 @@ export async function waitForHydrationSlot(): Promise<void> {
 }
 
 /**
+ * Un essai d’acquisition rank (sans attente). `waitMs` = délai jusqu’au prochain créneau si refusé,
+ * ou délai de planification si accordé (appliqué avant l’appel API par le worker).
+ */
+export async function acquireRankSlot(): Promise<{ granted: boolean; waitMs: number }> {
+  const globalCooldownMs = await getGlobalCooldownMs();
+  if (globalCooldownMs > 0) {
+    return { granted: false, waitMs: globalCooldownMs };
+  }
+
+  const now = Date.now();
+  const [allowed, value] = await evalAcquireSlot(RANK_SLOT_KEY, 1, now);
+
+  if (allowed === 1) {
+    const delay = Math.max(0, value - now);
+    pollerV2Observability.recordRateLimitAttempt(1, true, delay);
+    if (delay > 5) {
+      await sleep(delay);
+    }
+    return { granted: true, waitMs: 0 };
+  }
+
+  const waitMs = Math.max(value, 0);
+  pollerV2Observability.recordRateLimitAttempt(1, false, waitMs);
+  return { granted: false, waitMs };
+}
+
+/**
  * rank.worker uniquement (concurrency 2).
  * Un seul essai : pas de spin Redis — file d’attente = BullMQ.
+ * @deprecated Préférer acquireRankSlot + waitForRankSlotOrSkip dans rank.worker.
  */
 export async function waitForRankSlot(): Promise<RankSlotResult> {
   const globalCooldownMs = await getGlobalCooldownMs();

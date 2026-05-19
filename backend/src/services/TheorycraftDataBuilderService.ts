@@ -18,9 +18,17 @@ type ChampionBinJson = Record<string, Record<string, unknown>>
 const SUPPORTED_LANGS = ['fr_FR', 'en_US'] as const
 const SCHEMA_VERSION = 2
 const CDRAGON_BASE = 'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global'
-const CDRAGON_SKILL_TOOLTIP_URL =
-  'https://raw.communitydragon.org/latest/game/global/ui/skilltoltipdata/skilltoltipdata.bin.json'
 const CDRAGON_HASHES_URL = 'https://raw.communitydragon.org/data/hashes/lol/hashes.game.txt'
+
+function toGameDataLocale(lang: string): string {
+  const normalized = lang.trim().toLowerCase().replace('-', '_')
+  return normalized === 'fr_fr' ? 'fr_fr' : 'en_us'
+}
+
+function cdragonStringTableUrl(lang: string): string {
+  const gameLocale = toGameDataLocale(lang)
+  return `https://raw.communitydragon.org/latest/game/${gameLocale}/data/menu/en_us/lol.stringtable.json`
+}
 
 const TOOLTIP_TAG_MAP: Record<string, { className: string; icon?: string }> = {
   physicaldamage: { className: 'dmg-physical', icon: 'physical' },
@@ -40,6 +48,7 @@ const TOOLTIP_TAG_MAP: Record<string, { className: string; icon?: string }> = {
   spellname: { className: 'spell-name' },
   spellactive: { className: 'active' },
   spellpassive: { className: 'passive' },
+  rules: { className: 'tooltip-rules' },
   onhit: { className: 'on-hit' },
   true: { className: 'dmg-true', icon: 'true' },
   scalead: { className: 'tooltip-tag scale-ad' },
@@ -676,6 +685,13 @@ function extractRatioFromCalculationPart(
     const values = firstValuesFromDataValues(dataValues, String(part.mDataValue ?? ''))
     if (!values || values.length === 0) return null
     const dataValueName = String(part.mDataValue ?? '').toLowerCase()
+    if (
+      dataValueName.includes('percentmana') ||
+      dataValueName.includes('manaincrease') ||
+      (dataValueName.includes('percent') && !dataValueName.includes('ad') && !dataValueName.includes('ap'))
+    ) {
+      return null
+    }
     let stat = resolveBinStat(part.mStat, 'AP')
     if (dataValueName.includes('armor')) stat = 'bonusArmor'
     else if (dataValueName.includes('mr') || dataValueName.includes('magicresist')) stat = 'bonusMagicResist'
@@ -782,6 +798,22 @@ function buildBinCalculationExpression(
       }
       continue
     }
+    if (partType === 'StatByNamedDataValueCalculationPart') {
+      const dataValueName = String(part.mDataValue ?? '')
+      const values = firstValuesFromDataValues(dataValues, dataValueName)
+      const lower = dataValueName.toLowerCase()
+      if (
+        values &&
+        values.length > 0 &&
+        (lower.includes('percentmana') ||
+          lower.includes('manaincrease') ||
+          (lower.includes('percent') && !lower.includes('ad') && !lower.includes('ap')))
+      ) {
+        baseValues = values
+        baseParts.push(formatValueSeries(values, ' / '))
+        continue
+      }
+    }
     const ratio = extractRatioFromCalculationPart(part, dataValues, options)
     if (ratio) {
       ratios.push(ratio)
@@ -818,9 +850,14 @@ function buildBinCalculationExpression(
 }
 
 function calculationUsesPercentDisplay(key: string, calculation: Record<string, unknown>): boolean {
-  if (Boolean(calculation.mDisplayAsPercent)) return true
   const normalized = key.toLowerCase()
-  return /attackspeed|attack speed|msbuff|movementspeed|percentms|slowpercent|percent/.test(normalized)
+  if (/passivemanacalctooltip|manacalctooltip/.test(normalized)) {
+    return Boolean(calculation.mDisplayAsPercent)
+  }
+  if (Boolean(calculation.mDisplayAsPercent)) return true
+  return /attackspeed|attack speed|msbuff|movementspeed|percentms|slowpercent|percenthp|percentmax|percent/.test(
+    normalized
+  )
 }
 
 function extractBinCalculations(
@@ -919,7 +956,38 @@ function extractBinCalculations(
 
   for (const [key, rawCalculation] of Object.entries(calculations)) {
     const calculation = asObject(rawCalculation)
-    if (String(calculation.__type ?? '') !== 'GameCalculationModified') continue
+    const calculationType = String(calculation.__type ?? '')
+    if (calculationType === 'GameCalculation') {
+      const multiplierPart = asObject(calculation.mMultiplier)
+      if (Object.keys(multiplierPart).length === 0) continue
+      const buildOptions: BinCalculationBuildOptions = {
+        maxRank: context?.maxRank,
+        slotIndex: context?.slotIndex,
+        isPassive: context?.isPassive,
+        displayAsPercent: calculationUsesPercentDisplay(key, calculation),
+        precision: Number(calculation.mPrecision ?? 2),
+        binSpell: spellBin,
+        ddSpell: context?.ddSpell,
+      }
+      const existing = builtByKey.get(key.toLowerCase())
+      if (!existing) continue
+      const multiplier = evaluateCalculationPartValues(multiplierPart, dataValues, buildOptions)
+      const multSeries = multiplier.length > 0 ? multiplier : [1]
+      const scaledValues = scaleCalculationValues(
+        existing.baseValues.length > 0 ? existing.baseValues : [10],
+        multSeries,
+        buildOptions.precision ?? 2
+      )
+      const expression = formatCalculationValuesAsText(scaledValues, buildOptions) || existing.expression
+      builtByKey.set(key.toLowerCase(), {
+        expression,
+        expressionHtml: expression,
+        baseValues: scaledValues.length > 0 ? scaledValues : existing.baseValues,
+        ratios: [],
+      })
+      continue
+    }
+    if (calculationType !== 'GameCalculationModified') continue
     const refKey = String(calculation.mModifiedGameCalculation ?? '').toLowerCase()
     const ref = builtByKey.get(refKey)
     if (!ref) continue
@@ -1086,9 +1154,12 @@ function buildSpellVariableMap(
   ddSpell: ChampionSpell,
   cdSpell: CDragonChampionSpell,
   binSpell?: Record<string, unknown> | null,
-  sharedVars?: Map<string, string>
+  sharedVars?: Map<string, string>,
+  options?: { isPassive?: boolean }
 ): Map<string, string> {
-  const maxRank = Number(ddSpell.maxrank ?? cdSpell.maxLevel ?? DEFAULT_ABILITY_MAX_RANK) || DEFAULT_ABILITY_MAX_RANK
+  const maxRank = options?.isPassive
+    ? PASSIVE_CHAMPION_LEVELS.length
+    : Number(ddSpell.maxrank ?? cdSpell.maxLevel ?? DEFAULT_ABILITY_MAX_RANK) || DEFAULT_ABILITY_MAX_RANK
   const map = new Map<string, string>()
   const setVar = (key: string, value: string): void => {
     const normalized = key.toLowerCase()
@@ -1099,6 +1170,14 @@ function buildSpellVariableMap(
   extractSpellEffects(ddSpell, cdSpell, binSpell).forEach((effect) => {
     setVar(effect.key, formatValueSeries(effect.values))
   })
+  if (Array.isArray(ddSpell.effect)) {
+    ddSpell.effect.forEach((entry, idx) => {
+      if (idx <= 0) return
+      const values = trimByMaxRank(parseNumberArray(entry), maxRank)
+      if (values.length === 0) return
+      setVar(`effect${idx}amount`, formatValueSeries(values))
+    })
+  }
   const binDataValues = extractBinDataValues(binSpell ?? {}, maxRank)
   binDataValues.forEach((entry) => {
     setVar(entry.name, formatValueSeries(entry.values))
@@ -1106,9 +1185,21 @@ function buildSpellVariableMap(
   const calculations = extractBinCalculations(binSpell ?? {}, binDataValues, {
     maxRank,
     slotIndex: inferSpellSlotIndex(ddSpell),
+    isPassive: options?.isPassive,
     ddSpell,
   })
   calculations.forEach((calculation) => {
+    const calcKeyLower = calculation.key.toLowerCase()
+    if (calcKeyLower.includes('passivemanacalctooltip') || calcKeyLower.includes('manacalctooltip')) {
+      if (calculation.baseValues.length > 0) {
+        const percentSeries = calculation.baseValues.map((value) => {
+          const normalized = value > 0 && value <= 1 ? value * 100 : value
+          return Number(normalized.toFixed(2))
+        })
+        setVar(calculation.key, formatValueSeries(percentSeries))
+        return
+      }
+    }
     let rendered =
       calculation.expressionHtml ||
       calculation.expression ||
@@ -1206,12 +1297,434 @@ function firstScalarFromDataValues(
   return Number.isFinite(value) ? value : null
 }
 
+type StringTableEntries = Record<string, string>
+
+function extractPassiveTooltipLocKeys(
+  binSpell: Record<string, unknown> | null | undefined
+): { tooltipKey?: string; extendedKey?: string; summaryKey?: string } {
+  if (!binSpell) return {}
+  const client = asObject(binSpell.mClientData)
+  const tooltipData = asObject(client.mTooltipData)
+  const locKeys = asObject(tooltipData.mLocKeys)
+  return {
+    tooltipKey: String(locKeys.keyTooltip ?? '').trim() || undefined,
+    extendedKey:
+      String(locKeys.keyTooltipExtendedBelowLine ?? locKeys.keyTooltipExtended ?? '').trim() ||
+      undefined,
+    summaryKey: String(locKeys.keySummary ?? locKeys.keyTooltipSimple ?? '').trim() || undefined,
+  }
+}
+
+function lookupStringTableEntry(entries: StringTableEntries, key: string): string {
+  const normalized = String(key ?? '').trim().toLowerCase()
+  if (!normalized) return ''
+  return String(entries[normalized] ?? '').trim()
+}
+
+function spellRefToStringTableKeys(ref: string, gameMode = 1): string[] {
+  const trimmed = String(ref ?? '').trim()
+  if (!trimmed) return []
+  const withGamemode = trimmed.replace(/@gamemodeinteger@/gi, String(gameMode))
+  const match = withGamemode.match(/^spell_([a-z0-9_]+)_tooltip(?:_(\d+))?$/i)
+  if (!match) return []
+  const scriptPart = String(match[1] ?? '').toLowerCase()
+  const modeSuffix = match[2] ? String(match[2]) : String(gameMode)
+  return [
+    `spell_${scriptPart}_tooltip_${modeSuffix}`,
+    `spell_${scriptPart}_tooltip_${gameMode}`,
+    `spell_${scriptPart}_tooltip`,
+  ]
+}
+
+function resolveStringTableMustacheRefs(
+  raw: string,
+  entries: StringTableEntries,
+  gameMode = 1,
+  depth = 0
+): string {
+  if (!raw || depth > 6) return raw
+  let out = String(raw)
+  out = out.replace(/@gamemodeinteger@/gi, String(gameMode))
+  out = out.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_match, expression: string) => {
+    const expr = String(expression).trim()
+    if (!expr) return _match
+    const spellKeys = spellRefToStringTableKeys(expr, gameMode)
+    for (const key of spellKeys) {
+      const resolved = lookupStringTableEntry(entries, key)
+      if (resolved) {
+        return resolveStringTableMustacheRefs(resolved, entries, gameMode, depth + 1)
+      }
+    }
+    const direct = lookupStringTableEntry(entries, expr)
+    if (direct) {
+      return resolveStringTableMustacheRefs(direct, entries, gameMode, depth + 1)
+    }
+    return _match
+  })
+  if (out !== raw && depth < 6) {
+    return resolveStringTableMustacheRefs(out, entries, gameMode, depth + 1)
+  }
+  return out
+}
+
+function extractClientTooltipMarkup(raw: string): string {
+  let text = String(raw ?? '').trim()
+  if (!text) return ''
+  const mainMatch = text.match(/<mainText>([\s\S]*?)<\/mainText>/i)
+  if (mainMatch) text = mainMatch[1].trim()
+  text = text.replace(/<rules>([\s\S]*?)<\/rules>/gi, '<span class="tooltip-rules">$1</span>')
+  text = text
+    .replace(/<\/?titleLeft[^>]*>/gi, '')
+    .replace(/<\/?titleRight[^>]*>/gi, '')
+    .replace(/<\/?subtitleLeft[^>]*>/gi, '')
+    .replace(/<\/?subtitleRight[^>]*>/gi, '')
+    .replace(/<\/?postScriptLeft[^>]*>/gi, '')
+    .replace(/<\/?postScriptRight[^>]*>/gi, '')
+    .replace(/<infoArea>[\s\S]*?<\/infoArea>/gi, '')
+    .replace(/<br\s*\/?>\s*<br\s*\/?>/gi, '<br><br>')
+  return text.trim()
+}
+
+function buildChampionPassivePrefixes(championId: string): string[] {
+  const id = normalizeChampionBinId(championId)
+  return [...new Set([id, `${id}p`, `${id}passive`, `${id}passivebuff`])]
+}
+
+/** Client tooltips use @PassiveHealAmount@; spell parser expects {{ PassiveHealAmount }}. */
+function normalizeAtVariablesToMustache(raw: string): string {
+  return raw.replace(/@([a-zA-Z0-9_.:*\-]+)@/g, '{{ $1 }}')
+}
+
+function buildPassiveStringTableLookupKeys(
+  championId: string,
+  binSpell: Record<string, unknown> | null | undefined,
+  locKeys: ReturnType<typeof extractPassiveTooltipLocKeys>,
+  gameMode = 1
+): string[] {
+  const id = normalizeChampionBinId(championId)
+  const scriptName = String(binSpell?.mScriptName ?? '').trim().toLowerCase()
+  const prefixes = buildChampionPassivePrefixes(championId)
+  const keys: string[] = [
+    locKeys.tooltipKey ?? '',
+    scriptName ? `spell_${scriptName}_tooltip_${gameMode}` : '',
+    scriptName ? `spell_${scriptName}_tooltip` : '',
+    scriptName ? `generatedtip_passive_${scriptName}_tooltip` : '',
+    locKeys.extendedKey ?? '',
+    scriptName ? `spell_${scriptName}_tooltipextended` : '',
+    scriptName ? `generatedtip_passive_${scriptName}_tooltipextended` : '',
+  ]
+  for (const prefix of prefixes) {
+    keys.push(
+      `spell_${prefix}_tooltip_${gameMode}`,
+      `spell_${prefix}_tooltip`,
+      `generatedtip_passive_${prefix}_tooltip`,
+      `spell_${prefix}passive_tooltip_${gameMode}`,
+      `spell_${prefix}passive_tooltip`,
+      `spell_${prefix}_tooltipextended`,
+      `generatedtip_passive_${prefix}_tooltipextended`
+    )
+  }
+  keys.push(
+    `spell_${id}passive_tooltip_${gameMode}`,
+    `spell_${id}passive_tooltip`,
+    `spell_${id}passive_tooltipextended`,
+    locKeys.summaryKey ?? '',
+    `spell_${id}passive_summary`,
+    scriptName ? `generatedtip_passive_${scriptName}_description` : '',
+    `game_character_passivedescription_${id}`
+  )
+  const normalized = keys
+    .filter((key): key is string => Boolean(key))
+    .map((key) => key.toLowerCase())
+  return [...new Set(normalized)]
+}
+
+function isDetailedPassiveTooltipKey(key: string): boolean {
+  const normalized = key.toLowerCase()
+  if (normalized.endsWith('_summary') || normalized.endsWith('_description')) return false
+  if (normalized.includes('simple')) return false
+  return (
+    normalized.endsWith('_tooltip') ||
+    normalized.includes('_tooltip') ||
+    normalized.includes('tooltipextended')
+  )
+}
+
+function normalizePassiveStringTableSection(
+  section: string,
+  stringTable: StringTableEntries,
+  gameMode: number
+): string {
+  const resolved = resolveStringTableMustacheRefs(String(section ?? ''), stringTable, gameMode)
+  const extracted = extractClientTooltipMarkup(resolved)
+  let out = extracted || resolved
+  out = out.replace(/@?spellmodifierdescriptionappend@?/gi, '')
+  return normalizeAtVariablesToMustache(out)
+}
+
+function scorePassiveTooltipCandidate(text: string): number {
+  const trimmed = String(text ?? '').trim()
+  if (!trimmed || isBrokenTooltipText(trimmed) || isMetaDdragonTooltip(trimmed)) return -1
+  let score = trimmed.length
+  if (trimmed.includes('{{') || trimmed.includes('@')) score -= 80
+  if (/<titleLeft>/i.test(trimmed)) score -= 40
+  if (trimmed.includes('tooltip-rules')) score += 20
+  return score
+}
+
+function pickBestPassiveTooltipFromKeys(
+  lookupKeys: string[],
+  stringTable: StringTableEntries,
+  gameMode: number,
+  options?: { extended?: boolean }
+): string {
+  let best = ''
+  let bestScore = -1
+  for (const key of lookupKeys) {
+    const isExtended = key.includes('extended') || key.includes('tooltipextended')
+    if (options?.extended && !isExtended) continue
+    if (!options?.extended && isExtended) continue
+    if (!options?.extended && !isDetailedPassiveTooltipKey(key)) continue
+    if (options?.extended && key.endsWith('_summary')) continue
+    const raw = lookupStringTableEntry(stringTable, key)
+    if (!raw) continue
+    const normalized = normalizePassiveStringTableSection(raw, stringTable, gameMode)
+    const score = scorePassiveTooltipCandidate(normalized)
+    if (score > bestScore) {
+      bestScore = score
+      best = normalized
+    }
+  }
+  return best
+}
+
+function extractSupplementalPassiveSection(main: string, extended: string): string {
+  const mainPlain = normalizeTooltipPlainText(main).replace(/\s+/g, ' ').trim()
+  const extPlain = normalizeTooltipPlainText(extended).replace(/\s+/g, ' ').trim()
+  if (!extPlain) return ''
+  if (mainPlain && extPlain === mainPlain) return ''
+  if (mainPlain && extPlain.startsWith(mainPlain)) {
+    const rulesOnly = extended.match(/<span class="tooltip-rules">[\s\S]*<\/span>/i)
+    if (rulesOnly?.[0]) return rulesOnly[0]
+    const remainder = extended.slice(extended.toLowerCase().indexOf('<br'))
+    return remainder.trim()
+  }
+  const rulesOnly = extended.match(/<span class="tooltip-rules">[\s\S]*<\/span>/i)
+  if (rulesOnly?.[0] && !mainPlain.includes(normalizeTooltipPlainText(rulesOnly[0]).slice(0, 40))) {
+    return rulesOnly[0]
+  }
+  if (mainPlain && extPlain.includes(mainPlain.slice(0, Math.min(60, mainPlain.length)))) {
+    const rulesOnlyMatch = extended.match(/<span class="tooltip-rules">[\s\S]*<\/span>/i)
+    return rulesOnlyMatch?.[0] ?? ''
+  }
+  return extended
+}
+
+function resolvePassiveTooltipContent(args: {
+  championId: string
+  passiveBinSpell: Record<string, unknown> | null
+  stringTable: StringTableEntries
+}): { main: string; extended: string[] } {
+  const { championId, passiveBinSpell, stringTable } = args
+  const locKeys = extractPassiveTooltipLocKeys(passiveBinSpell)
+  const gameMode = resolveGameModeInteger(passiveBinSpell)
+  const lookupKeys = buildPassiveStringTableLookupKeys(championId, passiveBinSpell, locKeys, gameMode)
+  const main = pickBestPassiveTooltipFromKeys(lookupKeys, stringTable, gameMode)
+
+  const extendedKeys = lookupKeys.filter((key) => key.includes('extended') || key.includes('tooltipextended'))
+  const extended: string[] = []
+  for (const key of extendedKeys) {
+    const raw = lookupStringTableEntry(stringTable, key)
+    if (!raw) continue
+    const normalized = normalizePassiveStringTableSection(raw, stringTable, gameMode)
+    if (!normalized || isMetaDdragonTooltip(normalized) || isBrokenTooltipText(normalized)) continue
+    const supplemental = main ? extractSupplementalPassiveSection(main, normalized) : normalized
+    if (!supplemental || extended.includes(supplemental)) continue
+    extended.push(supplemental)
+  }
+
+  return { main, extended }
+}
+
+function isBrokenTooltipText(text: string): boolean {
+  const trimmed = String(text ?? '').trim()
+  if (!trimmed) return true
+  if (trimmed === '-}}' || trimmed === '-' || trimmed === '}}' || trimmed === '{{') return true
+  if (/^[-{}]+$/.test(trimmed)) return true
+  return false
+}
+
+function isMetaDdragonTooltip(raw: string): boolean {
+  const text = String(raw ?? '').trim()
+  if (!text) return false
+  if (/spell_[a-z0-9]+_tooltip/i.test(text)) return true
+  if (/\{\{\s*spell_[a-z0-9_]+_tooltip/i.test(text)) return true
+  if (/@gamemodeinteger@/i.test(text)) return true
+  if (/spellmodifierdescriptionappend/i.test(text)) return true
+  if (/\{\{[^{}]*\{\{/.test(text)) return true
+  return false
+}
+
+function resolveGameModeInteger(binSpell?: Record<string, unknown> | null): number {
+  if (!binSpell) return 1
+  const dataValues = extractBinDataValues(binSpell, DEFAULT_ABILITY_MAX_RANK)
+  const entry = dataValues.find((v) => v.name.toLowerCase() === 'gamemodeinteger')
+  const value = entry?.values?.[0]
+  if (value != null && Number.isFinite(value)) {
+    const mode = Math.round(value)
+    return mode > 0 ? mode : 1
+  }
+  return 1
+}
+
+function buildSpellStringTableLookupKeys(
+  ddSpell: ChampionSpell,
+  binSpell: Record<string, unknown> | null | undefined,
+  gameMode: number
+): string[] {
+  const spellId = String(ddSpell.id ?? '').trim().toLowerCase()
+  const scriptName = String(binSpell?.mScriptName ?? '').trim().toLowerCase()
+  const locKeys = extractPassiveTooltipLocKeys(binSpell)
+  const keys = [
+    locKeys.tooltipKey,
+    `spell_${spellId}_tooltip_${gameMode}`,
+    scriptName ? `spell_${scriptName}_tooltip_${gameMode}` : '',
+    `spell_${spellId}_tooltip`,
+    scriptName ? `spell_${scriptName}_tooltip` : '',
+    locKeys.extendedKey,
+    scriptName ? `spell_${scriptName}_tooltipextended` : '',
+    `spell_${spellId}_tooltipextended`,
+    locKeys.summaryKey,
+    `spell_${spellId}_summary`,
+    scriptName ? `generatedtip_spell_${scriptName}_description` : '',
+  ]
+  return [...new Set(keys.filter((k): k is string => Boolean(k)).map((key) => key.toLowerCase()))]
+}
+
+function isUsableSpellTooltipKey(key: string): boolean {
+  const normalized = key.toLowerCase()
+  if (
+    normalized.includes('tooltiplevelup') ||
+    normalized.includes('displayname') ||
+    normalized.includes('pickchoice')
+  ) {
+    return false
+  }
+  if (normalized.endsWith('_summary') && !normalized.includes('tooltip')) return false
+  return normalized.includes('tooltip')
+}
+
+function normalizeStringTableTooltipSection(
+  section: string,
+  stringTable: StringTableEntries,
+  gameMode = 1
+): string {
+  const resolved = resolveStringTableMustacheRefs(String(section ?? ''), stringTable, gameMode)
+  const extracted = extractClientTooltipMarkup(resolved)
+  let out = extracted || resolved
+  out = out.replace(/@?spellmodifierdescriptionappend@?/gi, '')
+  return normalizeAtVariablesToMustache(out)
+}
+
+function resolveSpellTooltipContent(args: {
+  ddSpell: ChampionSpell
+  cdSpell: CDragonChampionSpell
+  binSpell: Record<string, unknown> | null | undefined
+  stringTable: StringTableEntries
+  sharedVars: Map<string, string>
+}): { main: string; detailRaws: string[] } {
+  const { ddSpell, cdSpell, binSpell, stringTable, sharedVars } = args
+  const ddSections = splitTooltipSections(String(ddSpell.tooltip ?? ''))
+  const ddMain = (ddSections[0] ?? String(ddSpell.tooltip ?? '')).trim()
+  const ddDetailRaws = ddSections.slice(1)
+
+  const ddParsed = ddMain
+    ? parseTooltip(ddMain, ddSpell, cdSpell, binSpell, sharedVars)
+    : { descriptionText: '' }
+  const needsStringTable =
+    !ddMain || isMetaDdragonTooltip(ddMain) || isBrokenTooltipText(ddParsed.descriptionText)
+
+  if (!needsStringTable) {
+    return { main: ddMain, detailRaws: ddDetailRaws }
+  }
+
+  const gameMode = resolveGameModeInteger(binSpell)
+  const lookupKeys = buildSpellStringTableLookupKeys(ddSpell, binSpell, gameMode)
+  const spellId = String(ddSpell.id ?? '').trim().toLowerCase()
+  const scriptName = String(binSpell?.mScriptName ?? '').trim().toLowerCase()
+
+  let main = ''
+  let bestScore = -1
+  for (const key of lookupKeys) {
+    if (!isUsableSpellTooltipKey(key)) continue
+    const candidate = lookupStringTableEntry(stringTable, key)
+    if (!candidate || isMetaDdragonTooltip(candidate)) continue
+    const normalized = normalizeStringTableTooltipSection(candidate, stringTable, gameMode)
+    const score = scorePassiveTooltipCandidate(normalized)
+    if (score > bestScore) {
+      bestScore = score
+      main = normalized
+    }
+  }
+
+  if (!main) {
+    main =
+      lookupStringTableEntry(stringTable, `spell_${spellId}_summary`) ||
+      lookupStringTableEntry(
+        stringTable,
+        scriptName ? `generatedtip_spell_${scriptName}_description` : ''
+      ) ||
+      String(ddSpell.description ?? '').trim()
+  }
+
+  const detailRaws: string[] = [...ddDetailRaws]
+  for (const key of [
+    `spell_${spellId}_tooltipextended`,
+    scriptName ? `spell_${scriptName}_tooltipextended` : '',
+    extractPassiveTooltipLocKeys(binSpell).extendedKey ?? '',
+  ]) {
+    if (!key) continue
+    const candidate = lookupStringTableEntry(stringTable, key)
+    if (!candidate || isMetaDdragonTooltip(candidate) || detailRaws.includes(candidate)) continue
+    detailRaws.push(candidate)
+  }
+
+  return {
+    main,
+    detailRaws: detailRaws
+      .map((section) => normalizeStringTableTooltipSection(section, stringTable, gameMode))
+      .filter((section) => section.length > 0 && !isMetaDdragonTooltip(section)),
+  }
+}
+
 function findPassiveBinSpell(
   championBin: ChampionBinJson | null,
   championId: string
 ): Record<string, unknown> | null {
   if (!championBin) return null
   const id = normalizeChampionBinId(championId)
+
+  let bestSpell: Record<string, unknown> | null = null
+  let bestScore = -1
+  for (const value of Object.values(championBin)) {
+    if (!value || typeof value !== 'object') continue
+    const spell = asObject(value.mSpell)
+    if (Object.keys(spell).length === 0) continue
+    const locKeys = extractPassiveTooltipLocKeys(spell)
+    const tooltipKey = String(locKeys.tooltipKey ?? '').toLowerCase()
+    if (!tooltipKey || !tooltipKey.includes('passive')) continue
+    if (tooltipKey.endsWith('_summary') || tooltipKey.endsWith('summary')) continue
+    let score = 6
+    if (tooltipKey.includes('_tooltip')) score += 8
+    if (Object.keys(asObject(spell.mSpellCalculations)).length > 0) score += 5
+    if (Array.isArray(spell.DataValues) && spell.DataValues.length > 0) score += 3
+    if (score > bestScore) {
+      bestScore = score
+      bestSpell = spell
+    }
+  }
+  if (bestSpell) return bestSpell
+
   const direct = findBinSpellForDDragon(championBin, [
     `${championId}Passive`,
     `${id}passive`,
@@ -1222,8 +1735,8 @@ function findPassiveBinSpell(
   ])
   if (direct) return direct
 
-  let bestSpell: Record<string, unknown> | null = null
-  let bestScore = -1
+  let venomBestSpell: Record<string, unknown> | null = null
+  let venomBestScore = -1
   for (const value of Object.values(championBin)) {
     if (!value || typeof value !== 'object') continue
     const spell = asObject(asObject(value).mSpell)
@@ -1237,12 +1750,12 @@ function findPassiveBinSpell(
     const hasStacks = dataValues.some((v) => v.name.toLowerCase() === 'maxstacks')
     if (!hasStacks) continue
     const score = dataValues.length + Object.keys(calculations).length
-    if (score > bestScore) {
-      bestScore = score
-      bestSpell = spell
+    if (score > venomBestScore) {
+      venomBestScore = score
+      venomBestSpell = spell
     }
   }
-  return bestSpell
+  return venomBestSpell
 }
 
 const PASSIVE_VENOM_LABELS: Record<
@@ -1322,11 +1835,12 @@ function parseTooltip(
   ddSpell: ChampionSpell,
   cdSpell: CDragonChampionSpell,
   binSpell?: Record<string, unknown> | null,
-  sharedVars?: Map<string, string>
+  sharedVars?: Map<string, string>,
+  options?: { isPassive?: boolean }
 ): { descriptionParsed: string; unresolvedVariables: string[]; descriptionText: string } {
   if (!raw) return { descriptionParsed: '', unresolvedVariables: [], descriptionText: '' }
   const normalizedRaw = normalizeRiotInlineIconTokens(raw)
-  const vars = buildSpellVariableMap(ddSpell, cdSpell, binSpell, sharedVars)
+  const vars = buildSpellVariableMap(ddSpell, cdSpell, binSpell, sharedVars, options)
   const unresolved = new Set<string>()
   const openedTags: string[] = []
 
@@ -1361,6 +1875,8 @@ function parseTooltip(
 
     const normalized = expression.replace(/\s+/g, '')
     const opMatch = normalized.match(
+      /^([a-zA-Z0-9_:.-]+)([+\-*/])(-?\d+(?:\.\d+)?)$/
+    ) ?? normalized.match(
       /^([a-zA-Z0-9_:.-]+|[-+]?\d*\.?\d+)([+\-*/])([a-zA-Z0-9_:.-]+|[-+]?\d*\.?\d+)$/
     )
     if (!opMatch) return null
@@ -1419,7 +1935,9 @@ function parseTooltip(
     return null
   }
 
-  let parsed = normalizedRaw.replace(/\{\{\s*([^}]+)\s*\}\}/g, (_match, expression: string) => {
+  let parsed = normalizedRaw.replace(/<\s*br\s*\/?>/gi, '___TOOLTIP_BR___')
+
+  parsed = parsed.replace(/\{\{\s*([^}]+)\s*\}\}/g, (_match, expression: string) => {
     const resolved = resolveExpression(String(expression))
     if (resolved == null) {
       const exp = expression.trim()
@@ -1427,7 +1945,11 @@ function parseTooltip(
       if (exp.toLowerCase().includes('spellmodifier') || exp.toLowerCase().includes('append')) {
         return ''
       }
-      // Explicit fallback to avoid blank values in frontend tooltips.
+      if (exp.toLowerCase().includes('displayname')) {
+        const display = lookupVar(exp)
+        if (display != null) return display
+      }
+      if (exp.includes('{{') || exp.includes('}}')) return ''
       return '-'
     }
     return resolved
@@ -1454,6 +1976,8 @@ function parseTooltip(
   if (openedTags.length > 0) {
     parsed += '</span>'.repeat(openedTags.length)
   }
+
+  parsed = parsed.replace(/___TOOLTIP_BR___/g, '<br>')
 
   return {
     descriptionParsed: normalizeKaynFormMarkupHtml(parsed),
@@ -1813,16 +2337,31 @@ function buildExportedSpell(args: {
   cdSpell: CDragonChampionSpell
   binSpell: Record<string, unknown> | null | undefined
   sharedVars: Map<string, string>
+  stringTable: StringTableEntries
   championPartype?: string
   lang: SupportedLang
 }): Record<string, unknown> {
-  const { championId, slotIndex, ddSpell, cdSpell, binSpell, sharedVars, championPartype = '', lang } = args
+  const {
+    championId,
+    slotIndex,
+    ddSpell,
+    cdSpell,
+    binSpell,
+    sharedVars,
+    stringTable,
+    championPartype = '',
+    lang,
+  } = args
   const spellImage = asObject(ddSpell.image)
   const resolvedSlot = normalizeSpellSlot(slotIndex)
 
-  const tooltipSections = splitTooltipSections(String(ddSpell.tooltip ?? ''))
-  const mainRaw = tooltipSections[0] ?? String(ddSpell.tooltip ?? '')
-  const detailRaws = tooltipSections.slice(1)
+  const { main: mainRaw, detailRaws } = resolveSpellTooltipContent({
+    ddSpell,
+    cdSpell,
+    binSpell,
+    stringTable,
+    sharedVars,
+  })
 
   const mainTooltip = parseTooltip(mainRaw, ddSpell, cdSpell, binSpell, sharedVars)
   const detailedParsed = detailRaws.map((section) =>
@@ -1863,15 +2402,57 @@ function buildExportedSpell(args: {
   }
 }
 
+function enrichSharedVarsWithSpellDisplayNames(
+  shared: Map<string, string>,
+  championId: string,
+  spells: ChampionSpell[],
+  stringTable: StringTableEntries
+): void {
+  const setDisplay = (token: string, label: string): void => {
+    const normalized = token.toLowerCase()
+    if (!normalized || !label) return
+    shared.set(normalized, label)
+    shared.set(normalized.replace(/[^a-z0-9]/g, ''), label)
+    shared.set(`spell.${normalized}`, label)
+  }
+
+  spells.forEach((spell, idx) => {
+    const name = String(spell.name ?? '').trim()
+    if (!name) return
+    const id = String(spell.id ?? '').trim().toLowerCase()
+    const slot = normalizeSpellSlot(idx).toLowerCase()
+    const tokens = [id, `${normalizeChampionBinId(championId)}${slot}`, id.replace(/clienttooltipwrapper$/i, '')]
+    tokens.filter(Boolean).forEach((token) => setDisplay(`${token}:displayname`, name))
+  })
+
+  const id = normalizeChampionBinId(championId)
+  for (const [key, value] of Object.entries(stringTable)) {
+    if (!key.startsWith('generatedtip_spell_') || !key.endsWith('_displayname')) continue
+    const script = key.slice('generatedtip_spell_'.length, -'_displayname'.length)
+    if (!script.startsWith(id)) continue
+    const label = String(value ?? '').trim()
+    if (!label) continue
+    setDisplay(`${script}:displayname`, label)
+  }
+}
+
 function buildChampionSharedVariableMap(championBin: ChampionBinJson | null): Map<string, string> {
   const shared = new Map<string, string>()
   if (!championBin) return shared
   for (const value of Object.values(championBin)) {
-    const spell = asObject(asObject(value).mSpell)
+    const wrapper = asObject(value)
+    const spell = asObject(wrapper.mSpell)
     if (Object.keys(spell).length === 0) continue
+    const scriptName = String(wrapper.mScriptName ?? '').trim().toLowerCase()
     const dataValues = extractBinDataValues(spell, DEFAULT_ABILITY_MAX_RANK)
     dataValues.forEach((entry) => {
-      shared.set(entry.name.toLowerCase(), formatValueSeries(entry.values))
+      const key = entry.name.toLowerCase()
+      const series = formatValueSeries(entry.values)
+      shared.set(key, series)
+      if (scriptName) {
+        shared.set(`${scriptName}:${key}`, series)
+        shared.set(`spell.${scriptName}:${key}`, series)
+      }
     })
     const calculations = extractBinCalculations(spell, dataValues, {
       maxRank: DEFAULT_ABILITY_MAX_RANK,
@@ -1881,7 +2462,13 @@ function buildChampionSharedVariableMap(championBin: ChampionBinJson | null): Ma
         calc.expressionHtml ||
         calc.expression ||
         (calc.baseValues.length > 0 ? formatValueSeries(calc.baseValues, ' / ') : '')
-      if (rendered) shared.set(calc.key.toLowerCase(), rendered)
+      if (!rendered) return
+      const calcKey = calc.key.toLowerCase()
+      shared.set(calcKey, rendered)
+      if (scriptName) {
+        shared.set(`${scriptName}:${calcKey}`, rendered)
+        shared.set(`spell.${scriptName}:${calcKey}`, rendered)
+      }
     })
   }
   return shared
@@ -2055,7 +2642,7 @@ export class TheorycraftDataBuilderService {
     championBinsById: Map<string, ChampionBinJson>
     itemsById: Map<number, CDragonItem>
     perksById: Map<number, CDragonPerk>
-    skillTooltipData: Record<string, unknown>
+    stringTable: StringTableEntries
     hashesText: string
   }> {
     const cdLocale = toCDragonLocale(lang)
@@ -2064,7 +2651,7 @@ export class TheorycraftDataBuilderService {
     const itemsById = new Map<number, CDragonItem>()
     const perksById = new Map<number, CDragonPerk>()
 
-    const [itemsPayload, perksPayload, skillTooltipData, hashesText] = await Promise.all([
+    const [itemsPayload, perksPayload, stringTablePayload, hashesText] = await Promise.all([
       this.fetchWithCache<CDragonItem[]>(
         `cdragon-items-${cdLocale}`,
         `${CDRAGON_BASE}/${cdLocale}/v1/items.json`
@@ -2073,7 +2660,10 @@ export class TheorycraftDataBuilderService {
         `cdragon-perks-${cdLocale}`,
         `${CDRAGON_BASE}/${cdLocale}/v1/perks.json`
       ),
-      this.fetchWithCache<Record<string, unknown>>('cdragon-skilltooltipdata', CDRAGON_SKILL_TOOLTIP_URL),
+      this.fetchWithCache<{ entries?: StringTableEntries }>(
+        `cdragon-stringtable-${toGameDataLocale(lang)}`,
+        cdragonStringTableUrl(lang)
+      ),
       this.fetchTextWithCache('cdragon-hashes', CDRAGON_HASHES_URL),
     ])
 
@@ -2108,12 +2698,13 @@ export class TheorycraftDataBuilderService {
       if (normalizedId && binPayload) championBinsById.set(normalizedId, binPayload)
     })
 
+    const stringTable = (asObject(stringTablePayload).entries as StringTableEntries | undefined) ?? {}
     return {
       championsByKey,
       championBinsById,
       itemsById,
       perksById,
-      skillTooltipData: skillTooltipData ?? {},
+      stringTable,
       hashesText: hashesText ?? '',
     }
   }
@@ -2122,9 +2713,10 @@ export class TheorycraftDataBuilderService {
     champion: ChampionRecord
     cdChampion: CDragonChampion | null
     championBin: ChampionBinJson | null
+    stringTable: StringTableEntries
     lang: string
   }): Record<string, unknown> {
-    const { champion, cdChampion, championBin, lang } = args
+    const { champion, cdChampion, championBin, stringTable, lang } = args
     const resolvedLang = resolveLang(lang)
     const spellsRaw = Array.isArray(champion.spells) ? (champion.spells as ChampionSpell[]) : []
     const cdSpells = Array.isArray(cdChampion?.spells) ? (cdChampion?.spells as CDragonChampionSpell[]) : []
@@ -2135,6 +2727,7 @@ export class TheorycraftDataBuilderService {
     const championId = String(champion.id ?? '')
     const championPartype = String(champion.partype ?? '')
     const sharedVars = buildChampionSharedVariableMap(championBin)
+    enrichSharedVarsWithSpellDisplayNames(sharedVars, championId, spellsRaw, stringTable)
 
     const spells = spellsRaw.map((ddSpell, idx) => {
       const cdSpell = (cdSpells[idx] ?? {}) as CDragonChampionSpell
@@ -2151,6 +2744,7 @@ export class TheorycraftDataBuilderService {
         cdSpell,
         binSpell,
         sharedVars,
+        stringTable,
         championPartype,
         lang: resolvedLang,
       })
@@ -2193,29 +2787,79 @@ export class TheorycraftDataBuilderService {
           full: String(asObject(passiveRaw.image).full ?? `${championId}_Passive.png`),
         },
         ...(() => {
-          const passiveDescription = String(
+          const passiveSummary = String(
             cdPassive.description ?? passiveRaw.description ?? ''
           ).trim()
           const passiveBinSpell = findPassiveBinSpell(championBin, championId)
-          const passiveTooltip = parseTooltip(
-            passiveDescription,
-            passiveRaw,
+          const passiveDdSpell: ChampionSpell = {
+            ...passiveRaw,
+            id: `${championId}Passive`,
+            maxrank: PASSIVE_CHAMPION_LEVELS.length,
+          }
+          const passiveContent = resolvePassiveTooltipContent({
+            championId,
+            passiveBinSpell,
+            stringTable,
+          })
+          let passiveMainRaw = passiveContent.main || passiveSummary
+          let passiveTooltip = parseTooltip(
+            passiveMainRaw,
+            passiveDdSpell,
             cdPassive,
             passiveBinSpell,
-            sharedVars
+            sharedVars,
+            { isPassive: true }
           )
-          const venomDetail = passiveBinSpell
-            ? buildPassiveVenomDetailFromBin(passiveBinSpell, resolvedLang)
+          if (isBrokenTooltipText(passiveTooltip.descriptionText) && passiveSummary) {
+            passiveMainRaw = passiveSummary
+            passiveTooltip = parseTooltip(
+              passiveMainRaw,
+              passiveDdSpell,
+              cdPassive,
+              passiveBinSpell,
+              sharedVars,
+              { isPassive: true }
+            )
+          }
+          const summaryTooltip = passiveSummary
+            ? parseTooltip(passiveSummary, passiveDdSpell, cdPassive, passiveBinSpell, sharedVars, {
+                isPassive: true,
+              })
             : null
+          const extendedParsed = passiveContent.extended
+            .map((section) =>
+              parseTooltip(section, passiveDdSpell, cdPassive, passiveBinSpell, sharedVars, {
+                isPassive: true,
+              })
+            )
+            .filter((section) => !isBrokenTooltipText(section.descriptionText))
+          const venomDetail =
+            passiveContent.main || extendedParsed.length > 0
+              ? null
+              : passiveBinSpell
+                ? buildPassiveVenomDetailFromBin(passiveBinSpell, resolvedLang)
+                : null
+          const detailedTexts = [
+            ...extendedParsed.map((section) => section.descriptionParsed),
+            ...(venomDetail ? [venomDetail.descriptionHtml] : []),
+          ].filter(Boolean)
           return {
             descriptionHtml: passiveTooltip.descriptionParsed,
             descriptionParsed: passiveTooltip.descriptionParsed,
             descriptionText: passiveTooltip.descriptionText,
             parsedText: passiveTooltip.descriptionText,
-            ...(venomDetail
+            ...(summaryTooltip
               ? {
-                  detailedTexts: [venomDetail.descriptionHtml],
-                  detailedText: venomDetail.descriptionText,
+                  summaryHtml: summaryTooltip.descriptionParsed,
+                  summaryText: summaryTooltip.descriptionText,
+                }
+              : {}),
+            ...(detailedTexts.length > 0
+              ? {
+                  detailedTexts,
+                  detailedText: detailedTexts
+                    .map((section) => normalizeTooltipPlainText(section))
+                    .join('\n\n'),
                 }
               : {}),
           }
@@ -2274,6 +2918,7 @@ export class TheorycraftDataBuilderService {
               champion,
               cdChampion,
               championBin,
+              stringTable: cdragon.stringTable,
               lang,
             }),
           }
@@ -2345,6 +2990,10 @@ export const theorycraftTooltipTestUtils = {
   extractSpellRatios,
   normalizeRiotInlineIconTokens,
   findPassiveBinSpell,
+  resolvePassiveTooltipContent,
+  resolveSpellTooltipContent,
+  lookupStringTableEntry,
+  buildChampionSharedVariableMap,
   buildPassiveVenomDetailFromBin,
   parseTooltip,
   findBinSpellForDDragon,

@@ -7,11 +7,11 @@ export default defineNuxtRouteMiddleware(to => {
 
   const path = to.path
 
-  // Exclure les routes non-admin et la page de login elle-même
-  const isAdminRoute = /\/admin(\/|$)/.test(path)
   const isLoginRoute = /\/admin\/login(\/|$)/.test(path)
+  const isAdminRoute = /\/admin(\/|$)/.test(path)
+  const isTheorycraftRoute = /\/builds\/theorycraft(\/|$)/.test(path)
 
-  if (!isAdminRoute || isLoginRoute) return
+  if (isLoginRoute || (!isAdminRoute && !isTheorycraftRoute)) return
 
   const token = localStorage.getItem('adminAuth')
   if (!token) {

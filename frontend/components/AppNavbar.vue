@@ -105,6 +105,16 @@
           {{ t('nav.map') }}
         </NuxtLink>
         <NuxtLink
+          v-if="isAdminLoggedIn"
+          :to="theorycraftLink"
+          :title="t('nav.theorycraft')"
+          class="version"
+          :class="{ 'router-link-active': isTheorycraftActive }"
+          @click="toggleMenu"
+        >
+          {{ t('nav.theorycraft') }}
+        </NuxtLink>
+        <NuxtLink
           :to="statisticsIndexLink"
           :title="t('nav.statistics')"
           class="version"
@@ -226,6 +236,15 @@
           {{ t('nav.map') }}
         </NuxtLink>
         <NuxtLink
+          v-if="isAdminLoggedIn"
+          :to="theorycraftLink"
+          :title="t('nav.theorycraft')"
+          class="version"
+          :class="{ 'router-link-active': isTheorycraftActive }"
+        >
+          {{ t('nav.theorycraft') }}
+        </NuxtLink>
+        <NuxtLink
           :to="statisticsIndexLink"
           :title="t('nav.statistics')"
           class="version"
@@ -272,7 +291,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import LanguageSwitcher from '~/components/LanguageSwitcher.vue'
 import { getFallbackGameVersion } from '~/config/version'
@@ -284,7 +303,7 @@ const isMenuOpen = ref(false)
 const isBuildsMenuOpen = ref(false)
 const isMobileBuildsMenuOpen = ref(false)
 const { t, locale } = useI18n()
-const { isLoggedIn: isAdminLoggedIn } = useAdminAuth()
+const { isLoggedIn: isAdminLoggedIn, checkLoggedIn } = useAdminAuth()
 const localePath = useLocalePath()
 const route = useRoute()
 const versionStore = useVersionStore()
@@ -371,11 +390,19 @@ const patchNotesUrl = computed(() => {
 })
 
 onMounted(() => {
+  checkLoggedIn()
   if (!versionStore.currentVersion) {
     versionStore.loadCurrentVersion().catch(() => undefined)
   }
   favoritesStore.init()
 })
+
+watch(
+  () => route.path,
+  () => {
+    if (import.meta.client) checkLoggedIn()
+  }
+)
 
 const toggleMenu = () => {
   isMenuOpen.value = !isMenuOpen.value

@@ -1049,29 +1049,21 @@ async function runIngestionTransaction(payload: IngestionJobData): Promise<numbe
 }
 
 async function enqueueRankFetchJobs(participants: ParsedParticipantDto[]): Promise<void> {
-  const seen = new Set<string>();
-  const rankJobs: Array<{ name: string; data: { puuid: string; region: string; matchDate: string } }> = [];
+  const today = new Date().toISOString().split("T")[0];
 
-  for (const participant of participants) {
-    if (!participant.needsRankFetch) continue;
-
-    const puuid = String(participant.puuid ?? "").trim();
-    const region = String(participant.region ?? "").trim().toLowerCase();
-    if (!puuid || !region) continue;
-
-    const dedupeKey = `${puuid}|${region}`;
-    if (seen.has(dedupeKey)) continue;
-    seen.add(dedupeKey);
-
-    rankJobs.push({
+  const rankJobs = participants
+    .filter((p) => p.needsRankFetch)
+    .map((p) => ({
       name: "fetch-rank",
-      data: {
-        puuid,
-        region,
-        matchDate: participant.gameDate,
+      data: { puuid: p.puuid, region: p.region, matchDate: p.gameDate },
+      opts: {
+        jobId: `rank:${p.puuid}:${today}`,
+        attempts: 2,
+        backoff: { type: "fixed" as const, delay: 30000 },
+        removeOnComplete: { count: 100 },
+        removeOnFail: { count: 100 },
       },
-    });
-  }
+    }));
 
   if (rankJobs.length > 0) {
     await rankQueue.addBulk(rankJobs);

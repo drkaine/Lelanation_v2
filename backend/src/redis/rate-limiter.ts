@@ -18,6 +18,7 @@ export {
   waitForDiscoverySlot,
   waitForHydrationSlot,
   waitForRankSlot,
+  acquireRankSlot,
   waitForMatchSlot,
   waitForSlot,
   tryAcquireSlot,

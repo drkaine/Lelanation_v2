@@ -12,6 +12,9 @@ const {
   extractSpellRatios,
   parseTooltip,
   findBinSpellForDDragon,
+  findPassiveBinSpell,
+  resolvePassiveTooltipContent,
+  buildChampionSharedVariableMap,
 } = theorycraftTooltipTestUtils
 
 test('formatValueSeries collapses uniform values', () => {
@@ -94,6 +97,7 @@ test('Ornn W export includes header stats and tick stats', () => {
     cdSpell: {},
     binSpell,
     sharedVars: new Map(),
+    stringTable: {},
     lang: 'fr_FR',
   })
 
@@ -268,6 +272,118 @@ test('Malphite W strips %i:scaleArmor% and unresolved f1/f2 parentheticals', () 
   assert.ok(!tooltip.descriptionText.includes('scaleArmor%-'))
   assert.ok(!tooltip.unresolvedVariables.includes('f1'))
   assert.ok(!tooltip.unresolvedVariables.includes('f2'))
+})
+
+test('Akali passive uses detailed stringtable tooltip with damage values', async () => {
+  const { resolvePassiveTooltipContent, parseTooltip } = theorycraftTooltipTestUtils
+  const stringTableRes = await fetch(
+    'https://raw.communitydragon.org/latest/game/fr_fr/data/menu/en_us/lol.stringtable.json',
+    { headers: { 'User-Agent': 'Mozilla/5.0' } }
+  )
+  assert.ok(stringTableRes.ok)
+  const stringTable = ((await stringTableRes.json()) as { entries?: Record<string, string> }).entries ?? {}
+  const content = resolvePassiveTooltipContent({
+    championId: 'Akali',
+    passiveBinSpell: null,
+    stringTable,
+  })
+  assert.ok(content.main.includes('dégâts magiques') || content.main.includes('magicDamage'))
+  const parsed = parseTooltip(
+    content.main,
+    { id: 'AkaliPassive', maxrank: 18 },
+    {},
+    null,
+    new Map(),
+    { isPassive: true }
+  )
+  assert.ok(parsed.descriptionText.includes('45'))
+  assert.ok(
+    parsed.descriptionText.includes('vitesse de déplacement') ||
+      parsed.descriptionText.toLowerCase().includes('movement')
+  )
+})
+
+test('Gangplank Q resolves Pourparlers tooltip from stringtable when DDragon meta template', async () => {
+  const { buildExportedSpell, findBinSpellForDDragon, resolveSpellTooltipContent } =
+    theorycraftTooltipTestUtils
+  const championFullPath = join(process.cwd(), 'data', 'game', '16.10.1', 'fr_FR', 'championFull.json')
+  const championFull = JSON.parse(readFileSync(championFullPath, 'utf-8')) as {
+    data: { Gangplank: { spells: Array<Record<string, unknown>> } }
+  }
+  const ddSpell = championFull.data.Gangplank.spells[0]
+  assert.ok(ddSpell)
+  const binPath = join(process.cwd(), 'data/theorycraft-cache/cdragon-bin-gangplank.json')
+  const championBin = JSON.parse(readFileSync(binPath, 'utf-8')) as Record<string, unknown>
+  const binSpell = findBinSpellForDDragon(championBin, [String(ddSpell.id ?? ''), 'GangplankQ'])
+  assert.ok(binSpell)
+
+  const stringTableRes = await fetch(
+    'https://raw.communitydragon.org/latest/game/fr_fr/data/menu/en_us/lol.stringtable.json',
+    { headers: { 'User-Agent': 'Mozilla/5.0' } }
+  )
+  assert.ok(stringTableRes.ok)
+  const stringTable = ((await stringTableRes.json()) as { entries?: Record<string, string> }).entries ?? {}
+
+  const resolved = resolveSpellTooltipContent({
+    ddSpell,
+    cdSpell: {},
+    binSpell,
+    stringTable,
+    sharedVars: new Map(),
+  })
+  assert.ok(resolved.main.includes('ShotDamage') || resolved.main.includes('physicalDamage'))
+  assert.ok(!resolved.main.includes('Spell_GangplankQWrapper_Tooltip'))
+
+  const exported = buildExportedSpell({
+    championId: 'Gangplank',
+    slotIndex: 0,
+    ddSpell,
+    cdSpell: {},
+    binSpell,
+    sharedVars: new Map(),
+    stringTable,
+    lang: 'fr_FR',
+  })
+  const text = String(exported.descriptionText ?? '')
+  assert.ok(text.includes('Gangplank'))
+  assert.ok(text.includes('dégâts physiques') || text.toLowerCase().includes('physical'))
+  assert.ok(!text.includes('-}}'))
+})
+
+test('Fiora passive uses detailed stringtable tooltip with resolved values', async () => {
+  const binPath = join(process.cwd(), 'data/theorycraft-cache/cdragon-bin-fiora.json')
+  const championBin = JSON.parse(readFileSync(binPath, 'utf-8')) as Record<string, unknown>
+  const binSpell = findPassiveBinSpell(championBin, 'Fiora')
+  assert.ok(binSpell)
+
+  const stringTableRes = await fetch(
+    'https://raw.communitydragon.org/latest/game/fr_fr/data/menu/en_us/lol.stringtable.json'
+  )
+  assert.ok(stringTableRes.ok)
+  const stringTablePayload = (await stringTableRes.json()) as { entries?: Record<string, string> }
+  const stringTable = stringTablePayload.entries ?? {}
+
+  const { main } = resolvePassiveTooltipContent({
+    championId: 'Fiora',
+    passiveBinSpell: binSpell,
+    stringTable,
+  })
+  assert.ok(main.includes('PassiveDamageTotal'))
+  assert.ok(main.includes('PassiveHealAmount'))
+
+  const sharedVars = buildChampionSharedVariableMap(championBin)
+  const passiveTooltip = parseTooltip(
+    main,
+    { id: 'FioraPassive', maxrank: 5 },
+    {},
+    binSpell,
+    sharedVars,
+    { isPassive: true }
+  )
+  assert.ok(passiveTooltip.descriptionText.includes('35 / 50.29'))
+  assert.ok(passiveTooltip.descriptionText.includes('% de vitesse de déplacement'))
+  assert.ok(passiveTooltip.descriptionText.toLowerCase().includes('dégâts bruts'))
+  assert.ok(passiveTooltip.descriptionText.length > 200)
 })
 
 test('Twitch passive resolves OnHit token and venom damage from bin', () => {

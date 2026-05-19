@@ -4,11 +4,16 @@ import type { RankJobData } from "../dto/match.dto.js";
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
 import { RANK_QUEUE } from "../queues/definitions.js";
 import { redis } from "../redis/client.js";
-import { waitForRankSlot } from "../redis/rate-scheduler.js";
+import { acquireRankSlot } from "../redis/rate-scheduler.js";
 import { RiotClient } from "../riot/client.js";
 
 const riotClient = new RiotClient();
 const RANK_WORKER_CONCURRENCY = 2;
+const RANK_SLOT_MAX_WAIT_MS = 5000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function normalizeTier(value: string | null | undefined): string | null {
   const tier = String(value ?? "")
@@ -28,32 +33,57 @@ function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-async function hasRankSnapshotToday(puuid: string, region: string): Promise<boolean> {
-  const rows = await sql<{ exists: number }[]>`
-    SELECT 1 AS exists
-    FROM player_rank_history
-    WHERE puuid = ${puuid}
-      AND date = CURRENT_DATE
-      AND region = ${region}
-    LIMIT 1
-  `;
-  return rows.length > 0;
+type RankJobOutcome =
+  | { skipped: true; reason: string }
+  | { success: true };
+
+async function waitForRankSlotOrSkip(): Promise<boolean> {
+  const deadline = Date.now() + RANK_SLOT_MAX_WAIT_MS;
+
+  while (Date.now() < deadline) {
+    const { granted, waitMs } = await acquireRankSlot();
+    if (granted) {
+      return true;
+    }
+    if (Date.now() + waitMs > deadline) {
+      throw new Error("rank_slot_budget_exhausted");
+    }
+    await sleep(Math.min(waitMs, deadline - Date.now()));
+  }
+
+  throw new Error("rank_slot_budget_exhausted");
 }
 
-async function runRankJob(data: RankJobData): Promise<void> {
+async function runRankJob(data: RankJobData): Promise<RankJobOutcome> {
   const puuid = String(data.puuid ?? "").trim();
   const region = String(data.region ?? "").trim().toLowerCase();
   if (!puuid || !region) {
-    return;
+    return { skipped: true, reason: "invalid_job" };
   }
 
-  if (await hasRankSnapshotToday(puuid, region)) {
-    return;
+  const today = todayIsoDate();
+  const existing = await sql<{ exists: number }[]>`
+    SELECT 1 AS exists
+    FROM player_rank_history
+    WHERE puuid = ${puuid}
+      AND region = ${region}
+      AND date = ${today}::date
+    LIMIT 1
+  `;
+  if (existing.length > 0) {
+    return { skipped: true, reason: "already_fetched_today" };
   }
 
-  const rankSlot = await waitForRankSlot();
-  if (rankSlot === "budget_exhausted") {
-    throw new Error("rank_slot_budget_exhausted");
+  try {
+    await waitForRankSlotOrSkip();
+  } catch (error) {
+    if (error instanceof Error && error.message === "rank_slot_budget_exhausted") {
+      console.debug(
+        `[rank.worker] rank_job_skipped reason=budget_exhausted puuid=${puuid} region=${region}`,
+      );
+      return { skipped: true, reason: "budget_exhausted" };
+    }
+    throw error;
   }
 
   let rankTier: string | null = null;
@@ -62,12 +92,18 @@ async function runRankJob(data: RankJobData): Promise<void> {
 
   try {
     const rank = await riotClient.getRank(puuid, region);
-    const normalizedTier = normalizeTier(rank?.tier);
-    if (normalizedTier) {
-      rankTier = normalizedTier;
-      rankDivision = String(rank?.rank ?? "").trim().toUpperCase() || null;
-      rankLp = clampRankLp(rank?.leaguePoints ?? 0);
+    if (!rank) {
+      return { skipped: true, reason: "unranked" };
     }
+
+    const normalizedTier = normalizeTier(rank.tier);
+    if (!normalizedTier) {
+      return { skipped: true, reason: "unranked" };
+    }
+
+    rankTier = normalizedTier;
+    rankDivision = String(rank.rank ?? "").trim().toUpperCase() || null;
+    rankLp = clampRankLp(rank.leaguePoints ?? 0);
     pollerV2Observability.recordRankLeagueFetchSucceeded();
   } catch (error) {
     pollerV2Observability.recordRankLeagueFetchFailed();
@@ -81,14 +117,16 @@ async function runRankJob(data: RankJobData): Promise<void> {
     INSERT INTO player_rank_history (puuid, date, region, rank_tier, rank_division, rank_lp)
     VALUES (
       ${puuid},
-      ${todayIsoDate()}::date,
+      ${today}::date,
       ${region},
-      ${rankTier ?? "UNRANKED"},
+      ${rankTier},
       ${rankDivision ?? "UNRANKED"},
       ${rankLp ?? 0}
     )
     ON CONFLICT (puuid, date, region) DO NOTHING
   `;
+
+  return { success: true };
 }
 
 export const rankWorker = new Worker<RankJobData>(
@@ -96,8 +134,9 @@ export const rankWorker = new Worker<RankJobData>(
   async (job) => {
     pollerV2Observability.recordRankJobStart();
     try {
-      await runRankJob(job.data);
+      const outcome = await runRankJob(job.data);
       pollerV2Observability.recordRankJobSuccess();
+      return outcome;
     } catch (error) {
       pollerV2Observability.recordRankJobFailure(error);
       throw error;

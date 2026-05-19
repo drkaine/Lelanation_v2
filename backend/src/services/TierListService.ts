@@ -532,13 +532,17 @@ async function fetchMatchupRoleRows(
 async function getLatestPatch(): Promise<string | null> {
   const coreFrom = await sqlAggUnionAllLiveAndArchives('agg_champion_core_stats', 'ac')
   const rows = await prisma.$queryRawUnsafe<Array<{ patch: string; games: bigint }>>(`
-    SELECT
-      (split_part(ac.game_version, '.', 1) || '.' || split_part(ac.game_version, '.', 2)) AS patch,
-      COALESCE(SUM(ac.count_game), 0)::bigint AS games
-    FROM ${coreFrom}
-    WHERE ac.rank_tier <> 'UNRANKED'
-    GROUP BY 1
-    HAVING COALESCE(SUM(ac.count_game), 0) > 0
+    WITH patch_totals AS (
+      SELECT
+        (split_part(ac.game_version, '.', 1) || '.' || split_part(ac.game_version, '.', 2)) AS patch,
+        COALESCE(SUM(ac.count_game), 0)::bigint AS games
+      FROM ${coreFrom}
+      WHERE ac.rank_tier <> 'UNRANKED'
+      GROUP BY 1
+      HAVING COALESCE(SUM(ac.count_game), 0) > 0
+    )
+    SELECT patch, games
+    FROM patch_totals
     ORDER BY
       COALESCE(NULLIF(split_part(patch, '.', 1), ''), '0')::int DESC,
       COALESCE(NULLIF(split_part(patch, '.', 2), ''), '0')::int DESC
