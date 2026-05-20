@@ -1434,8 +1434,10 @@ async function loadVersionsWithMatches(): Promise<void> {
       versions?: Array<{ version: string; matchCount: number }>
     }>(apiUrl('/api/stats/versions-with-matches' + (q ? `?${q}` : '')))
     if (data?.versions?.length) setVersionsWithMatches(data.versions)
+    ensureStatsVersionFilterHasData()
   } catch {
     setVersionsWithMatches(overviewData.value?.matchesByVersion)
+    ensureStatsVersionFilterHasData()
   }
 }
 
@@ -1691,16 +1693,31 @@ async function loadBalanceFramework() {
   balanceFrameworkPending.value = true
   balanceFrameworkError.value = false
   try {
-    const params = new URLSearchParams()
-    if (statsVersionFilter.value) params.set('version', statsVersionFilter.value)
-    if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
-    if (statsOtpFilter.value && statsOtpFilter.value !== 'non')
-      params.set('otp', statsOtpFilter.value)
-    const q = params.toString()
-    balanceFrameworkData.value = await statsFetch(
-      apiUrl('/api/stats/balance-framework' + (q ? `?${q}` : '')),
-      { timeout: OVERVIEW_DETAIL_TIMEOUT_MS }
-    )
+    ensureStatsVersionFilterHasData()
+    const fetchOnce = () => {
+      const params = new URLSearchParams()
+      if (statsVersionFilter.value) params.set('version', statsVersionFilter.value)
+      if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
+      if (statsOtpFilter.value && statsOtpFilter.value !== 'non')
+        params.set('otp', statsOtpFilter.value)
+      const q = params.toString()
+      return statsFetch<typeof balanceFrameworkData.value>(
+        apiUrl('/api/stats/balance-framework' + (q ? `?${q}` : '')),
+        { timeout: OVERVIEW_DETAIL_TIMEOUT_MS }
+      )
+    }
+
+    let data = await fetchOnce()
+    const fallbackVer = statsVersionOptions.value.find(v => Number(v.matchCount ?? 0) > 0)?.version
+    if (
+      (!data?.rows?.length || data.rows.length === 0) &&
+      fallbackVer &&
+      statsVersionFilter.value !== fallbackVer
+    ) {
+      statsVersionFilter.value = fallbackVer
+      data = await fetchOnce()
+    }
+    balanceFrameworkData.value = data
   } catch {
     balanceFrameworkData.value = null
     balanceFrameworkError.value = true
@@ -2007,6 +2024,7 @@ function surrenderMatrixQueryParams(): string {
   const params = new URLSearchParams()
   if (statsVersionFilter.value) params.set('version', statsVersionFilter.value)
   if (progressionFromVersion.value) params.set('fromVersion', progressionFromVersion.value)
+  for (const t of statsDivisionFilter.value) params.append('rankTier', t)
   const s = params.toString()
   return s ? `?${s}` : ''
 }
@@ -2185,6 +2203,19 @@ if (import.meta.client) {
   )
 }
 
+/** Garde un patch présent dans `statsVersionOptions` avec des matchs (évite balance/tierlist vides sur ?version= obsolète). */
+function ensureStatsVersionFilterHasData(): boolean {
+  const versions = statsVersionOptions.value
+  if (!versions.length) return false
+  const current = statsVersionFilter.value.trim()
+  if (current && versions.some(v => v.version === current && Number(v.matchCount ?? 0) > 0)) {
+    return false
+  }
+  const withData = versions.find(v => Number(v.matchCount ?? 0) > 0)
+  statsVersionFilter.value = withData?.version ?? versions[0]?.version ?? ''
+  return true
+}
+
 function applyDefaultVersionFiltersFromKnownVersions(): boolean {
   const versions = statsVersionOptions.value
   if (!versions.length) return false
@@ -2193,6 +2224,8 @@ function applyDefaultVersionFiltersFromKnownVersions(): boolean {
     const withData = versions.find(v => Number(v.matchCount ?? 0) > 0)
     statsVersionFilter.value = withData?.version ?? versions[0]?.version ?? ''
     changed = true
+  } else {
+    changed = ensureStatsVersionFilterHasData() || changed
   }
   const progChanged = syncProgressionDeltaToVersionBeforeFilter()
   return changed || progChanged
@@ -2436,9 +2469,8 @@ function retryOverviewDetail() {
 
 /** Même filtres que overview-detail, version = patch de comparaison (progressions). */
 async function loadOverviewDetailBaseline() {
-  const cmp = progressionFromVersion.value
-  const cur = statsVersionFilter.value
-  if (!cmp || (cur && cmp === cur)) {
+  const cmp = progressionFromVersion.value?.trim() ?? ''
+  if (!cmp || !overviewDetailComparisonVersion.value) {
     overviewDetailBaselineData.value = null
     overviewDetailBaselinePending.value = false
     return
@@ -3497,6 +3529,7 @@ const drakeTypeRows = computed(() => {
       label: t('statisticsPage.overviewTeamsObjective_elder'),
       byWin: d.elder?.byWin ?? 0,
       byLoss: d.elder?.byLoss ?? 0,
+      securedWinrateGlobal: d.elder?.securedWinrateGlobal ?? null,
       distributionByWin: d.elder?.distributionByWin ?? {},
       distributionByLoss: d.elder?.distributionByLoss ?? {},
     },
@@ -3505,6 +3538,7 @@ const drakeTypeRows = computed(() => {
       label: t('statisticsPage.drakeTypeEarth'),
       byWin: d.earth.byWin,
       byLoss: d.earth.byLoss,
+      securedWinrateGlobal: d.earth.securedWinrateGlobal ?? null,
       distributionByWin: d.earth.distributionByWin ?? {},
       distributionByLoss: d.earth.distributionByLoss ?? {},
     },
@@ -3513,6 +3547,7 @@ const drakeTypeRows = computed(() => {
       label: t('statisticsPage.drakeTypeWater'),
       byWin: d.water.byWin,
       byLoss: d.water.byLoss,
+      securedWinrateGlobal: d.water.securedWinrateGlobal ?? null,
       distributionByWin: d.water.distributionByWin ?? {},
       distributionByLoss: d.water.distributionByLoss ?? {},
     },
@@ -3521,6 +3556,7 @@ const drakeTypeRows = computed(() => {
       label: t('statisticsPage.drakeTypeWind'),
       byWin: d.wind.byWin,
       byLoss: d.wind.byLoss,
+      securedWinrateGlobal: d.wind.securedWinrateGlobal ?? null,
       distributionByWin: d.wind.distributionByWin ?? {},
       distributionByLoss: d.wind.distributionByLoss ?? {},
     },
@@ -3529,6 +3565,7 @@ const drakeTypeRows = computed(() => {
       label: t('statisticsPage.drakeTypeFire'),
       byWin: d.fire.byWin,
       byLoss: d.fire.byLoss,
+      securedWinrateGlobal: d.fire.securedWinrateGlobal ?? null,
       distributionByWin: d.fire.distributionByWin ?? {},
       distributionByLoss: d.fire.distributionByLoss ?? {},
     },
@@ -3537,6 +3574,7 @@ const drakeTypeRows = computed(() => {
       label: t('statisticsPage.drakeTypeHextec'),
       byWin: d.hextec.byWin,
       byLoss: d.hextec.byLoss,
+      securedWinrateGlobal: d.hextec.securedWinrateGlobal ?? null,
       distributionByWin: d.hextec.distributionByWin ?? {},
       distributionByLoss: d.hextec.distributionByLoss ?? {},
     },
@@ -3545,6 +3583,7 @@ const drakeTypeRows = computed(() => {
       label: t('statisticsPage.drakeTypeChem'),
       byWin: d.chem.byWin,
       byLoss: d.chem.byLoss,
+      securedWinrateGlobal: d.chem.securedWinrateGlobal ?? null,
       distributionByWin: d.chem.distributionByWin ?? {},
       distributionByLoss: d.chem.distributionByLoss ?? {},
     },
@@ -3727,6 +3766,7 @@ const championGlobalTableData = ref<{
 } | null>(null)
 /** Lignes du même endpoint pour la version de référence (progressions), pour Δ sous WR/PR/BR et stats. */
 const championGlobalTableRefById = ref(new Map<number, ChampionGlobalTableRow>())
+const championGlobalTableRefMatchCount = ref(0)
 
 /** Tableau champion : toutes les colonnes visibles (plus de groupes repliables). */
 const championGlobalTableMinWidthPx = computed(() => {
@@ -3792,11 +3832,7 @@ function championGlobalSideStatDeltaSortValue(
   side: 'blue' | 'red',
   stat: 'winrate' | 'pickrate'
 ): number {
-  const refRow = championGlobalTableRefById.value.get(row.championId)
-  if (!refRow) return 0
-  const cur = side === 'blue' ? row.blue : row.red
-  const rf = side === 'blue' ? refRow.blue : refRow.red
-  return cur[stat] - rf[stat]
+  return championGlobalSideStatDeltaPp(row.championId, side, stat) ?? 0
 }
 
 function championGlobalNumericDeltaSortValue(
@@ -4013,6 +4049,14 @@ const championGlobalPatchDeltaRefLabel = computed(() => {
   return ref
 })
 
+/** Patch de référence pour deltas runes / items / sorts (overview-detail baseline). */
+const overviewDetailComparisonVersion = computed(() => {
+  const ref = patchFromVersion(progressionFromVersion.value)
+  const main = patchFromVersion(statsVersionFilter.value || gameVersion.value)
+  if (!ref || !main || ref === main) return null
+  return progressionFromVersion.value
+})
+
 function championGlobalTableQueryForVersion(versionFull: string | null | undefined): string {
   const params = new URLSearchParams()
   const v = (versionFull ?? '').trim()
@@ -4071,13 +4115,28 @@ async function loadChampionGlobalTable() {
   championGlobalTablePending.value = true
   championGlobalTableError.value = null
   championGlobalTableRefById.value = new Map()
+  championGlobalTableRefMatchCount.value = 0
   try {
-    const data = await statsFetch<{
-      matchCount: number
-      rows: ChampionGlobalTableRow[]
-      error?: string
-      message?: string
-    }>(apiUrl('/api/stats/champions/global-table' + sidesQueryParams()))
+    const mainVer = (statsVersionFilter.value || gameVersion.value || '').trim()
+    const refVer = progressionFromVersion.value?.trim() ?? ''
+    const refPatch = patchFromVersion(refVer)
+    const mainPatch = patchFromVersion(mainVer)
+    const shouldLoadRef = Boolean(refVer && refPatch && mainPatch && refPatch !== mainPatch)
+
+    const [data, refData] = await Promise.all([
+      statsFetch<{
+        matchCount: number
+        rows: ChampionGlobalTableRow[]
+        error?: string
+        message?: string
+      }>(apiUrl('/api/stats/champions/global-table' + championGlobalTableQueryForVersion(mainVer))),
+      shouldLoadRef
+        ? statsFetch<{ matchCount: number; rows: ChampionGlobalTableRow[] }>(
+            apiUrl('/api/stats/champions/global-table' + championGlobalTableQueryForVersion(refVer))
+          )
+        : Promise.resolve(null),
+    ])
+
     championGlobalTableData.value = data
     if (data?.error || data?.message) {
       championGlobalTableError.value = [data.error, data.message].filter(Boolean).join(': ')
@@ -4085,31 +4144,11 @@ async function loadChampionGlobalTable() {
       championGlobalTableError.value = null
     }
 
-    const refPatch = patchFromVersion(progressionFromVersion.value)
-    const mainPatch = patchFromVersion(statsVersionFilter.value || gameVersion.value)
-    const refVer = progressionFromVersion.value?.trim()
-    if (
-      refPatch &&
-      mainPatch &&
-      refPatch !== mainPatch &&
-      refVer &&
-      !data?.error &&
-      data.rows &&
-      data.rows.length > 0
-    ) {
-      try {
-        const refData = await statsFetch<{
-          matchCount: number
-          rows: ChampionGlobalTableRow[]
-        }>(apiUrl('/api/stats/champions/global-table' + championGlobalTableQueryForVersion(refVer)))
-        if (refData?.rows?.length) {
-          const m = new Map<number, ChampionGlobalTableRow>()
-          for (const r of refData.rows) m.set(r.championId, r)
-          championGlobalTableRefById.value = m
-        }
-      } catch {
-        /* patch de réf. optionnel */
-      }
+    if (refData) {
+      championGlobalTableRefMatchCount.value = Math.max(0, Number(refData.matchCount ?? 0))
+      const m = new Map<number, ChampionGlobalTableRow>()
+      for (const r of refData.rows ?? []) m.set(r.championId, r)
+      championGlobalTableRefById.value = m
     }
   } catch (e) {
     championGlobalTableError.value = e instanceof Error ? e.message : String(e)
@@ -4130,7 +4169,18 @@ function championGlobalSideStatDeltaPp(
   if (!refRow || !curRow) return undefined
   const cur = side === 'blue' ? curRow.blue : curRow.red
   const rf = side === 'blue' ? refRow.blue : refRow.red
-  return cur[stat] - rf[stat]
+
+  if (stat === 'winrate') {
+    if (cur.games <= 0 || rf.games <= 0) return undefined
+    return (cur.wins / cur.games) * 100 - (rf.wins / rf.games) * 100
+  }
+
+  const mcCur = championGlobalTableData.value?.matchCount ?? 0
+  const mcRef = championGlobalTableRefMatchCount.value
+  if (mcCur <= 0 || mcRef <= 0) return undefined
+  const pickCur = (cur.games / (5 * mcCur)) * 100
+  const pickRef = (rf.games / (5 * mcRef)) * 100
+  return pickCur - pickRef
 }
 
 function championGlobalNumericDelta(
@@ -4217,9 +4267,12 @@ watch(activeTab, async tab => {
   if (tab === 'championTable') loadChampionGlobalTable()
   if (tab === 'balance') loadBalanceFramework()
   if (tab === 'bans') bansTab.loadBansTable()
-  if (tab === 'items' || tab === 'spells' || tab === 'runes') {
+  if (tab === 'spells' || tab === 'items') {
+    loadOverviewDetail()
+    loadOverviewDetailBaseline()
+  } else if (tab === 'runes') {
     if (!overviewDetailData.value && !overviewDetailPending.value) loadOverviewDetail()
-    if (tab === 'runes' || tab === 'items' || tab === 'spells') loadOverviewDetailBaseline()
+    loadOverviewDetailBaseline()
   }
   if (tab === 'abandons') loadOverviewAbandons()
   if (tab === 'surrender') loadSurrenderMatrix()
@@ -4252,6 +4305,10 @@ watch([statsVersionFilter, statsDivisionFilter, statsRoleFilter, statsOtpFilter]
     loadObjectivesBaseline()
   }
   if (activeTab.value === 'surrender') loadSurrenderMatrix()
+  if (activeTab.value === 'runes' || activeTab.value === 'items' || activeTab.value === 'spells') {
+    loadOverviewDetail()
+    loadOverviewDetailBaseline()
+  }
 })
 
 watch([activeTab, statsVersionFilter, statsDivisionFilter, statsRoleFilter, statsOtpFilter], () => {
@@ -4271,6 +4328,7 @@ watch(progressionFromVersion, () => {
   if (activeTab.value === 'objectives') loadObjectivesBaseline()
   if (activeTab.value === 'surrender') loadSurrenderMatrix()
   if (activeTab.value === 'runes' || activeTab.value === 'items' || activeTab.value === 'spells') {
+    loadOverviewDetail()
     loadOverviewDetailBaseline()
   }
 })
@@ -4426,6 +4484,7 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   overviewData,
   overviewDetailBaselineData,
   overviewDetailBaselinePending,
+  overviewDetailComparisonVersion,
   overviewDetailData,
   overviewDetailError,
   overviewDetailPending,
@@ -4836,7 +4895,13 @@ if (__statisticsVm?.proxy) {
   flex: 0 0 313px;
   background: #08101f !important;
   justify-self: center;
-  overflow: visible;
+  overflow-x: hidden;
+  overflow-y: visible;
+}
+.statistics .fast-stat-card .fast-stat-table {
+  width: 100%;
+  max-width: 100%;
+  table-layout: fixed;
 }
 @media (max-width: 640px) {
   .statistics .fast-stat-card {

@@ -399,7 +399,12 @@ function globalTooltip(row: BalanceRow): string {
           </div>
         </div>
       </div>
-      <div v-else class="text-text/70">{{ p.t('statisticsPage.overviewDetailNoData') }}</div>
+      <div v-else class="text-text/70">
+        {{ p.t('statisticsPage.overviewDetailNoData') }}
+        <span v-if="p.balanceFrameworkData?.currentPatch" class="block text-xs text-text/55">
+          {{ p.balanceFrameworkData.currentPatch }}
+        </span>
+      </div>
 
       <p v-if="previousPatch" class="text-xs text-text/60">
         {{ p.t('statisticsPage.balanceDeltaReference', { patch: previousPatch }) }}

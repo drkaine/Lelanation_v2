@@ -419,7 +419,8 @@ router.get('/surrender-matrix', async (req: Request, res: Response) => {
   res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
   const version = queryString(req.query.version)
   const baselineVersion = queryString(req.query.fromVersion)
-  const data = await getSurrenderMatrix(version, baselineVersion)
+  const rankTier = rankTierParam(req.query.rankTier)
+  const data = await getSurrenderMatrix(version, baselineVersion, rankTier)
   if (!data) {
     return res.status(200).json({ version: null, baselineVersion: null, rows: [] })
   }

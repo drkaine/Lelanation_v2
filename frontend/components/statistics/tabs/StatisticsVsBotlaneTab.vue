@@ -4,7 +4,7 @@ import { getChampionImageUrl } from '~/utils/imageUrl'
 
 const p = inject('statisticsPageCtx') as any
 
-type SortKey = 'rank' | 'tier' | 'score' | 'winrate' | 'pickrate'
+type SortKey = 'rank' | 'tier' | 'score' | 'winrate' | 'delta' | 'pickrate' | 'games'
 
 type Row = {
   rank: number
@@ -17,6 +17,13 @@ type Row = {
   winrate: number
   note: number
   tier: string
+  deltaVsPeersPp: number | null
+  patchRefRankDelta?: number
+  patchRefWinratePp?: number
+  patchRefScorePp?: number
+  patchRefDeltaVsPeersPp?: number
+  patchRefPickratePp?: number
+  patchRefGamesDelta?: number
 }
 
 type RankingPayload = {
@@ -45,6 +52,7 @@ const PAGE_SIZE_OPTIONS = computed<number[]>(() =>
 )
 
 const rows = computed<Row[]>(() => (props.rankingData ?? p?.botlaneRankingData)?.rows ?? [])
+const patchRefLabel = computed(() => p?.botlanePatchDeltaRefLabel ?? null)
 
 const activePending = computed(() =>
   Boolean(
@@ -103,6 +111,11 @@ function toggleSort(key: SortKey) {
 
 const TIER_ORDER: Record<string, number> = { 'S+': 6, S: 5, A: 4, B: 3, C: 2, D: 1, F: 1 }
 
+function deltaSortValue(v: number | null | undefined): number {
+  if (v == null || !Number.isFinite(v)) return Number.NEGATIVE_INFINITY
+  return v
+}
+
 const sortedRows = computed(() => {
   const out = [...filteredRows.value]
   const dir = sortDir.value === 'asc' ? 1 : -1
@@ -112,7 +125,10 @@ const sortedRows = computed(() => {
     if (key === 'tier') return dir * ((TIER_ORDER[a.tier] ?? 0) - (TIER_ORDER[b.tier] ?? 0))
     if (key === 'score') return dir * (a.score - b.score)
     if (key === 'winrate') return dir * (a.winrate - b.winrate)
+    if (key === 'delta')
+      return dir * (deltaSortValue(a.deltaVsPeersPp) - deltaSortValue(b.deltaVsPeersPp))
     if (key === 'pickrate') return dir * (a.pickrate - b.pickrate)
+    if (key === 'games') return dir * (a.games - b.games)
     return 0
   })
   return out
@@ -132,6 +148,48 @@ watch([searchQ, pageSize, sortBy, sortDir], () => {
 
 function fmtPct01(v: number): string {
   return `${(v * 100).toFixed(2)}%`
+}
+
+function fmtDeltaPp(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return '—'
+  const sign = v > 0 ? '+' : ''
+  return `${sign}${v.toFixed(2)}`
+}
+
+function fmtPatchPp(v: number | undefined): string {
+  if (v == null || !Number.isFinite(v)) return ''
+  return typeof p?.formatTierListPatchDeltaPp === 'function'
+    ? p.formatTierListPatchDeltaPp(v)
+    : fmtDeltaPp(v)
+}
+
+function patchPpClass(v: number | undefined): string {
+  if (v == null || !Number.isFinite(v)) return 'text-text/55'
+  return typeof p?.tierListPatchDeltaClass === 'function'
+    ? p.tierListPatchDeltaClass(v)
+    : v > 0.05
+      ? 'text-green-400/90'
+      : v < -0.05
+        ? 'text-red-400/90'
+        : 'text-text/55'
+}
+
+function fmtPatchRank(v: number | undefined): string {
+  if (v == null || !Number.isFinite(v)) return ''
+  return typeof p?.formatTierListPatchDeltaRank === 'function'
+    ? p.formatTierListPatchDeltaRank(v)
+    : `${v > 0 ? '+' : ''}${Math.round(v)}`
+}
+
+function patchRankClass(v: number | undefined): string {
+  if (v == null || !Number.isFinite(v)) return 'text-text/55'
+  return typeof p?.tierListPatchDeltaRankClass === 'function'
+    ? p.tierListPatchDeltaRankClass(v)
+    : v > 0
+      ? 'text-green-400/90'
+      : v < 0
+        ? 'text-red-400/90'
+        : 'text-text/55'
 }
 
 function tierLabel(tier: string): string {
@@ -170,7 +228,7 @@ function tierLabel(tier: string): string {
       v-else
       class="tier-list-mobile-rotate statistics-overview-surface w-full overflow-x-auto rounded-lg border border-primary/30"
     >
-      <div class="tier-list-lolalytics w-full min-w-0 text-[13px] max-lg:min-w-[640px]">
+      <div class="tier-list-lolalytics w-full min-w-0 text-[13px] max-lg:min-w-[820px]">
         <div
           class="tier-list-lolalytics-head sticky top-0 z-10 flex h-auto min-h-8 w-full items-stretch justify-between border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
         >
@@ -210,10 +268,25 @@ function tierLabel(tier: string): string {
           </button>
           <button
             type="button"
+            class="tier-list-lolalytics-th tier-list-lolalytics-th-all hidden w-12 shrink-0 items-center justify-center border-b border-black hover:bg-primary/25 sm:flex"
+            :title="p.t('statisticsPage.vsBotlaneDeltaTooltip')"
+            @click="toggleSort('delta')"
+          >
+            {{ p.t('statisticsPage.vsBotlaneDeltaShort') }}{{ sortIcon('delta') }}
+          </button>
+          <button
+            type="button"
             class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-12 shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
             @click="toggleSort('pickrate')"
           >
             {{ p.t('statisticsPage.tierListPickrate') }}{{ sortIcon('pickrate') }}
+          </button>
+          <button
+            type="button"
+            class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-11 shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
+            @click="toggleSort('games')"
+          >
+            {{ p.t('statisticsPage.tierListGames') }}{{ sortIcon('games') }}
           </button>
         </div>
 
@@ -223,9 +296,16 @@ function tierLabel(tier: string): string {
           class="tier-list-lolalytics-row flex min-h-[60px] w-full items-center justify-between py-0.5 text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25"
         >
           <div
-            class="tier-list-lolalytics-td flex w-10 shrink-0 items-center justify-center tabular-nums"
+            class="tier-list-lolalytics-td flex w-10 shrink-0 flex-col items-center justify-center gap-0 tabular-nums leading-tight"
           >
-            {{ row.rank }}
+            <span>{{ row.rank }}</span>
+            <span
+              v-if="patchRefLabel && row.patchRefRankDelta != null"
+              class="text-[10px] leading-none"
+              :class="patchRankClass(row.patchRefRankDelta)"
+              :title="p.t('statisticsPage.tierListPatchDeltaRankTitle', { ref: patchRefLabel })"
+              >{{ fmtPatchRank(row.patchRefRankDelta) }}</span
+            >
           </div>
           <div
             class="tier-list-lolalytics-td flex w-[120px] shrink-0 items-center justify-center gap-1 px-1 max-lg:w-[96px]"
@@ -267,20 +347,84 @@ function tierLabel(tier: string): string {
             </span>
           </div>
           <div
-            class="tier-list-lolalytics-td flex w-14 shrink-0 items-center justify-center text-[11px] tabular-nums text-text/90"
+            class="tier-list-lolalytics-td flex w-14 shrink-0 flex-col items-center justify-center gap-0 text-[11px] tabular-nums leading-tight text-text/90"
           >
-            {{ row.score.toFixed(2) }}
+            <span>{{ row.score.toFixed(2) }}</span>
+            <span
+              v-if="patchRefLabel && row.patchRefScorePp != null"
+              class="text-[10px] leading-none"
+              :class="patchPpClass(row.patchRefScorePp)"
+              :title="p.t('statisticsPage.tierListPatchDeltaTitle', { ref: patchRefLabel })"
+              >{{ fmtPatchPp(row.patchRefScorePp) }}</span
+            >
           </div>
           <div
-            class="tier-list-lolalytics-td flex w-12 shrink-0 items-center justify-center tabular-nums"
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 tabular-nums leading-tight"
             :class="p.tierListWinrateClass(row.winrate * 100)"
           >
-            {{ fmtPct01(row.winrate) }}
+            <span>{{ fmtPct01(row.winrate) }}</span>
+            <span
+              v-if="patchRefLabel && row.patchRefWinratePp != null"
+              class="text-[10px] leading-none"
+              :class="patchPpClass(row.patchRefWinratePp)"
+              :title="p.t('statisticsPage.tierListPatchDeltaTitle', { ref: patchRefLabel })"
+              >{{ fmtPatchPp(row.patchRefWinratePp) }}</span
+            >
           </div>
           <div
-            class="tier-list-lolalytics-td flex w-12 shrink-0 items-center justify-center tabular-nums text-text/80"
+            class="tier-list-lolalytics-td hidden w-12 shrink-0 flex-col items-center justify-center gap-0 text-[11px] tabular-nums leading-tight sm:flex"
           >
-            {{ fmtPct01(row.pickrate) }}
+            <span
+              :class="
+                row.deltaVsPeersPp == null
+                  ? 'text-text/55'
+                  : row.deltaVsPeersPp > 0
+                    ? 'text-green-400/90'
+                    : row.deltaVsPeersPp < 0
+                      ? 'text-red-400/90'
+                      : 'text-text/80'
+              "
+              >{{ fmtDeltaPp(row.deltaVsPeersPp) }}</span
+            >
+            <span
+              v-if="patchRefLabel && row.patchRefDeltaVsPeersPp != null"
+              class="text-[10px] leading-none"
+              :class="patchPpClass(row.patchRefDeltaVsPeersPp)"
+              :title="p.t('statisticsPage.tierListPatchDeltaTitle', { ref: patchRefLabel })"
+              >{{ fmtPatchPp(row.patchRefDeltaVsPeersPp) }}</span
+            >
+          </div>
+          <div
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 tabular-nums leading-tight text-text/80"
+          >
+            <span>{{ fmtPct01(row.pickrate) }}</span>
+            <span
+              v-if="patchRefLabel && row.patchRefPickratePp != null"
+              class="text-[10px] leading-none"
+              :class="patchPpClass(row.patchRefPickratePp)"
+              :title="p.t('statisticsPage.tierListPatchDeltaTitle', { ref: patchRefLabel })"
+              >{{ fmtPatchPp(row.patchRefPickratePp) }}</span
+            >
+          </div>
+          <div
+            class="tier-list-lolalytics-td flex w-11 shrink-0 flex-col items-center justify-center gap-0 tabular-nums leading-tight text-text/80"
+          >
+            <span>{{ row.games }}</span>
+            <span
+              v-if="patchRefLabel && row.patchRefGamesDelta != null"
+              class="text-[10px] leading-none"
+              :class="
+                typeof p?.tierListPatchDeltaGamesClass === 'function'
+                  ? p.tierListPatchDeltaGamesClass(row.patchRefGamesDelta)
+                  : patchPpClass(row.patchRefGamesDelta)
+              "
+              :title="p.t('statisticsPage.tierListPatchDeltaGamesTitle', { ref: patchRefLabel })"
+              >{{
+                typeof p?.formatTierListPatchDeltaGames === 'function'
+                  ? p.formatTierListPatchDeltaGames(row.patchRefGamesDelta)
+                  : `${row.patchRefGamesDelta > 0 ? '+' : ''}${row.patchRefGamesDelta}`
+              }}</span
+            >
           </div>
         </div>
 

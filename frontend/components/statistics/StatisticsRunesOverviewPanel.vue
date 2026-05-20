@@ -41,6 +41,10 @@ const props = defineProps<{
 const { t } = useI18n()
 const runesStore = useRunesStore()
 
+const runeTreeReady = computed(
+  () => runesStore.status === 'success' && (runesStore.runePaths?.length ?? 0) > 0
+)
+
 const SHARD_ICONS: Record<number, string> = {
   5008: '/icons/shards/adaptative.png',
   5005: '/icons/shards/speed.png',
@@ -157,8 +161,8 @@ const pathsWithCells = computed(() => {
 })
 
 function wrClass(wr: number): string {
-  if (wr >= 52) return 'text-sky-300'
-  if (wr <= 48) return 'text-red-400/90'
+  if (wr > 51) return 'text-green-400/90'
+  if (wr < 49) return 'text-red-400/90'
   return 'text-text/80'
 }
 
@@ -249,6 +253,14 @@ function parseRuneSetParts(run: unknown): { style0: number[]; style1: number[]; 
   if (typeof run === 'string') {
     const trimmed = run.trim()
     if (!trimmed) return { style0, style1, shards }
+    /** Clé DB / agrégat : `8021_8010_9111_8299_8226_8210` (6 perks, arbre déduit côté layout). */
+    if (trimmed.includes('_') && !trimmed.includes(',') && !trimmed.startsWith('[')) {
+      for (const part of trimmed.split('_')) {
+        const perkId = Number(String(part).trim())
+        if (Number.isFinite(perkId) && perkId > 0) push(perkId, 0)
+      }
+      return { style0, style1, shards }
+    }
     if (trimmed.startsWith('[')) {
       try {
         const arr = JSON.parse(trimmed) as unknown
@@ -442,8 +454,14 @@ function runeSetLayout(
 
 <template>
   <div class="stats-runes-panel flex w-full flex-col gap-8">
+    <div v-if="!runeTreeReady" class="rounded-lg border border-primary/30 p-4 text-sm text-text/70">
+      {{ t('statisticsPage.loading') }}
+    </div>
     <!-- Grille runes + fragments -->
-    <div class="statistics-overview-surface rounded-lg border border-primary/30 p-4 sm:p-3">
+    <div
+      v-show="runeTreeReady"
+      class="statistics-overview-surface rounded-lg border border-primary/30 p-4 sm:p-3"
+    >
       <div class="flex flex-col gap-7">
         <div
           class="stats-runes-paths-grid grid min-w-0 gap-x-4 gap-y-8 overflow-x-auto pb-2 lg:gap-x-6"
@@ -601,7 +619,7 @@ function runeSetLayout(
     </div>
 
     <!-- Sets : plus / moins pick, meilleur / pire WR -->
-    <div class="grid gap-4 lg:grid-cols-2 2xl:grid-cols-4 2xl:gap-3">
+    <div v-show="runeTreeReady" class="grid gap-4 lg:grid-cols-2 2xl:grid-cols-4 2xl:gap-3">
       <div
         v-for="block in [
           {

@@ -70,13 +70,24 @@ const baselineByKey = computed<Map<string, RawItemRow>>(() => {
   return map
 })
 
+const hasComparison = computed(() => Boolean(p.overviewDetailComparisonVersion))
+
+function deltaWhenComparison(
+  cur: number | null | undefined,
+  base: number | null | undefined
+): number | null {
+  if (!hasComparison.value || p.overviewDetailBaselinePending) return null
+  if (cur == null || base == null || !Number.isFinite(cur) || !Number.isFinite(base)) return null
+  return cur - base
+}
+
 const tableRows = computed<TableRow[]>(() =>
   baseRows.value.map(row => {
     const baseline = baselineByKey.value.get(`${row.type}:${row.itemId}`)
     return {
       ...row,
-      deltaPick: baseline ? row.pickrate - baseline.pickrate : null,
-      deltaWin: baseline ? row.winrate - baseline.winrate : null,
+      deltaPick: deltaWhenComparison(row.pickrate, baseline?.pickrate),
+      deltaWin: deltaWhenComparison(row.winrate, baseline?.winrate),
     }
   })
 )
@@ -174,7 +185,7 @@ function fmtPct(value: number | null | undefined): string {
 }
 
 function fmtDelta(value: number | null | undefined): string {
-  if (value == null) return '—'
+  if (!hasComparison.value || p.overviewDetailBaselinePending || value == null) return '—'
   const n = Number(value)
   return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`
 }
@@ -186,12 +197,14 @@ function sortIcon(key: SortKey): string {
 
 function winrateClass(value: number | null | undefined): string {
   if (value == null) return 'text-text/55'
-  if (value >= 50) return 'text-success'
-  return 'text-error'
+  if (value > 51) return 'text-green-400/90'
+  if (value < 49) return 'text-red-400/90'
+  return 'text-text/80'
 }
 
 function deltaClass(value: number | null | undefined): string {
-  if (value == null) return 'text-text/55'
+  if (!hasComparison.value || value == null || p.overviewDetailBaselinePending)
+    return 'text-text/55'
   if (value > 0) return 'text-success'
   if (value < 0) return 'text-error'
   return 'text-text/75'
@@ -200,6 +213,13 @@ function deltaClass(value: number | null | undefined): string {
 
 <template>
   <div class="space-y-6">
+    <p v-if="hasComparison && !p.overviewDetailBaselinePending" class="text-xs text-text/60">
+      {{
+        p.t('statisticsPage.balanceDeltaReference', {
+          patch: p.championGlobalPatchDeltaRefLabel ?? p.overviewDetailComparisonVersion,
+        })
+      }}
+    </p>
     <div v-if="p.overviewDetailPending" class="text-text/70">
       {{ p.t('statisticsPage.loading') }}
     </div>

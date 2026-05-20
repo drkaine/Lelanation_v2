@@ -6,13 +6,16 @@
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
 import { sql } from '../db/client.js'
 import {
+  buildRankTierSqlConditions,
   normalizeStatsRoleForBanner,
   normalizeStatsRoleForChampion,
+  normalizedRankTiers,
   rankTierCacheKey,
   statsRoleCacheKey,
   statsRoleSqlLiteral,
   toQueryStringArrayParam,
 } from '../utils/statsFilters.js'
+import { buildRawMatchCond } from './ChampionGlobalTableService.js'
 import { mergeLegacyStatShardAggregates } from '../utils/statShardLegacyMerge.js'
 import { isBootsItem, loadItemMeta } from '../worker/itemBuildSelection.js'
 import {
@@ -208,13 +211,13 @@ export interface OverviewTeamsStats {
   }
   drakes: {
     types: {
-      elder: { byWin: number; byLoss: number; distributionByWin: Record<string, number>; distributionByLoss: Record<string, number> }
-      earth: { byWin: number; byLoss: number; distributionByWin: Record<string, number>; distributionByLoss: Record<string, number> }
-      water: { byWin: number; byLoss: number; distributionByWin: Record<string, number>; distributionByLoss: Record<string, number> }
-      wind: { byWin: number; byLoss: number; distributionByWin: Record<string, number>; distributionByLoss: Record<string, number> }
-      fire: { byWin: number; byLoss: number; distributionByWin: Record<string, number>; distributionByLoss: Record<string, number> }
-      hextec: { byWin: number; byLoss: number; distributionByWin: Record<string, number>; distributionByLoss: Record<string, number> }
-      chem: { byWin: number; byLoss: number; distributionByWin: Record<string, number>; distributionByLoss: Record<string, number> }
+      elder: DrakeTypeTeamRow
+      earth: DrakeTypeTeamRow
+      water: DrakeTypeTeamRow
+      wind: DrakeTypeTeamRow
+      fire: DrakeTypeTeamRow
+      hextec: DrakeTypeTeamRow
+      chem: DrakeTypeTeamRow
     }
     souls: {
       earth: { byWin: number; byLoss: number }
@@ -232,6 +235,14 @@ export interface ObjectiveWithDistribution {
   firstByLoss: number
   killsByWin: number
   killsByLoss: number
+  distributionByWin: Record<string, number>
+  distributionByLoss: Record<string, number>
+}
+
+export interface DrakeTypeTeamRow {
+  byWin: number
+  byLoss: number
+  securedWinrateGlobal?: number | null
   distributionByWin: Record<string, number>
   distributionByLoss: Record<string, number>
 }
@@ -429,7 +440,7 @@ function overviewDetailCacheKey(
   role: string | null,
   s: boolean
 ): string {
-  return `${v ?? ''}|${rankTierCacheKey(rankTier) ?? ''}|${role ?? ''}|${s}`
+  return `${v ?? ''}|${rankTierCacheKey(rankTier) ?? ''}|${role ?? ''}|${s}|itemPickV2`
 }
 function sidesCacheKey(
   version: string | string[] | null | undefined,
@@ -507,7 +518,6 @@ async function loadTeamCoreFallbackFromIngest(
 ): Promise<Map<number, TeamCoreFallback>> {
   if (!(await ingestTeamLeanTablesExist())) return new Map()
   const versions = toQueryStringArrayParam(version)
-  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
   const cond: string[] = ['1=1']
   if (versions.length === 1) {
     const patch = normalizePatchMajorMinor(versions[0]!).replace(/'/g, "''")
@@ -515,9 +525,7 @@ async function loadTeamCoreFallbackFromIngest(
   } else if (versions.length > 1) {
     cond.push(`im.game_version IN (${versions.map((v) => `'${v.replace(/'/g, "''")}'`).join(',')})`)
   }
-  if (ranks.length === 1) cond.push(`im.rank_tier = '${ranks[0]}'`)
-  else if (ranks.length > 1) cond.push(`im.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`)
-  else cond.push(`im.rank_tier <> 'UNRANKED'`)
+  cond.push(...buildRankTierSqlConditions('im', rankTier))
   const rows = await queryRawUnsafe<
     Array<{
       team_num: number
@@ -645,7 +653,6 @@ async function loadSurrenderBySideCounts(
     if (await ingestTeamLeanTablesExist()) {
       try {
         const versions = toQueryStringArrayParam(version)
-        const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
         const condIngest: string[] = ['1=1']
         if (versions.length === 1) {
           const patch = normalizePatchMajorMinor(versions[0]!).replace(/'/g, "''")
@@ -655,10 +662,7 @@ async function loadSurrenderBySideCounts(
             `im.game_version IN (${versions.map((v) => `'${v.replace(/'/g, "''")}'`).join(',')})`
           )
         }
-        if (ranks.length === 1) condIngest.push(`im.rank_tier = '${ranks[0]}'`)
-        else if (ranks.length > 1)
-          condIngest.push(`im.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`)
-        else condIngest.push(`im.rank_tier <> 'UNRANKED'`)
+        condIngest.push(...buildRankTierSqlConditions('im', rankTier))
         const ingestRows = await queryRawUnsafe<
           Array<{ team_num: number; early_cnt: bigint; surrender_cnt: bigint }>
         >(`
@@ -1289,23 +1293,32 @@ export async function getOverviewDetailStats(
       e.g += sliceGames
       if (countGame > 0) e.w += (countWin * sliceGames) / countGame
     }
+    /** Pickrate / WR : achats joueur (`count_game`), comme runes / sorts — pas les occurrences de slot (starter/core/final). */
     const sliceRows = (
-      map: Map<number, ItemSliceAgg>
+      map: Map<number, ItemSliceAgg>,
+      purchaseByItem: Map<number, { wins: number; games: number }>
     ): Array<{ itemId: number; games: number; wins: number; pickrate: number; winrate: number }> =>
       Array.from(map.entries())
         .map(([itemId, e]) => {
-          const games = Math.max(0, Math.round(e.g))
-          const wins = Math.round(e.w)
+          const purchase = purchaseByItem.get(itemId)
+          const purchaseGames = Math.max(0, Number(purchase?.games ?? 0))
+          const purchaseWins = Math.max(0, Number(purchase?.wins ?? 0))
+          const slotGames = Math.max(0, Math.round(e.g))
           return {
             itemId,
-            games,
-            wins,
+            games: slotGames,
+            wins: purchaseWins,
             pickrate:
-              totalParticipants > 0 ? Math.round((games / totalParticipants) * 10000) / 100 : 0,
-            winrate: games > 0 ? Math.round((wins / games) * 10000) / 100 : 0,
+              totalParticipants > 0
+                ? Math.round((purchaseGames / totalParticipants) * 10000) / 100
+                : 0,
+            winrate:
+              purchaseGames > 0
+                ? Math.round((purchaseWins / purchaseGames) * 10000) / 100
+                : 0,
           }
         })
-        .filter((r) => r.games > 0)
+        .filter((r) => r.games > 0 || (purchaseByItem.get(r.itemId)?.games ?? 0) > 0)
         .sort((a, b) => b.games - a.games)
 
     const itemMap = new Map<number, { wins: number; games: number }>()
@@ -1372,9 +1385,9 @@ export async function getOverviewDetailStats(
         winrate: e.games > 0 ? Math.round((e.wins / e.games) * 10000) / 100 : 0,
       }))
       .sort((a, b) => b.games - a.games)
-    const itemsStarters = sliceRows(itemStarterMap)
-    const itemsCores = sliceRows(itemCoreMap)
-    const itemsFinals = sliceRows(itemFinalMap)
+    const itemsStarters = sliceRows(itemStarterMap, itemMap)
+    const itemsCores = sliceRows(itemCoreMap, itemMap)
+    const itemsFinals = sliceRows(itemFinalMap, itemMap)
 
     // Summoner spells (solo + slots D/F + apex ladder)
     const spellMap = new Map<number, { wins: number; games: number; slot0: number; slot1: number }>()
@@ -1581,8 +1594,9 @@ export async function getOverviewDetailStats(
     const runeSetAggKeySep = '\u001e'
     const parseShardListCsv = (csv: string | null | undefined): number[] => {
       if (csv == null || csv === '') return []
-      return csv
-        .split(',')
+      const sep = String(csv).includes('_') ? '_' : ','
+      return String(csv)
+        .split(sep)
         .map((x) => Number(String(x).trim()))
         .filter((n) => Number.isFinite(n) && n > 0)
     }
@@ -1920,6 +1934,8 @@ export async function getOverviewTeamsStats(
     enrichTeamObjectiveAggFromHistogram(aggWin, aggLoss, 'riftHerald', distRiftHerald)
     enrichTeamObjectiveAggFromHistogram(aggWin, aggLoss, 'horde', distHorde)
     enrichTeamObjectiveAggFromHistogram(aggWin, aggLoss, 'elder', distElder)
+    aggWin.firstBlood.first = securedGamesFromOutcome(distFirstBlood.win)
+    aggLoss.firstBlood.first = securedGamesFromOutcome(distFirstBlood.loss)
     const objData = (
       win: { first: number; kills: number },
       loss: { first: number; kills: number },
@@ -1962,72 +1978,79 @@ export async function getOverviewTeamsStats(
       drakes: {
         types: {
           elder: {
-            byWin: sumObjectiveCountFromDistribution(distElder.win),
-            byLoss: sumObjectiveCountFromDistribution(distElder.loss),
+            byWin: securedGamesFromOutcome(distElder.win),
+            byLoss: securedGamesFromOutcome(distElder.loss),
+            securedWinrateGlobal: securedWinrateFromOutcome(distElder),
             distributionByWin: distElder.win,
             distributionByLoss: distElder.loss,
           },
           earth: {
-            byWin: sumObjectiveCountFromDistribution(distEarthDrake.win),
-            byLoss: sumObjectiveCountFromDistribution(distEarthDrake.loss),
+            byWin: securedGamesFromOutcome(distEarthDrake.win),
+            byLoss: securedGamesFromOutcome(distEarthDrake.loss),
+            securedWinrateGlobal: securedWinrateFromOutcome(distEarthDrake),
             distributionByWin: distEarthDrake.win,
             distributionByLoss: distEarthDrake.loss,
           },
           water: {
-            byWin: sumObjectiveCountFromDistribution(distWaterDrake.win),
-            byLoss: sumObjectiveCountFromDistribution(distWaterDrake.loss),
+            byWin: securedGamesFromOutcome(distWaterDrake.win),
+            byLoss: securedGamesFromOutcome(distWaterDrake.loss),
+            securedWinrateGlobal: securedWinrateFromOutcome(distWaterDrake),
             distributionByWin: distWaterDrake.win,
             distributionByLoss: distWaterDrake.loss,
           },
           wind: {
-            byWin: sumObjectiveCountFromDistribution(distWindDrake.win),
-            byLoss: sumObjectiveCountFromDistribution(distWindDrake.loss),
+            byWin: securedGamesFromOutcome(distWindDrake.win),
+            byLoss: securedGamesFromOutcome(distWindDrake.loss),
+            securedWinrateGlobal: securedWinrateFromOutcome(distWindDrake),
             distributionByWin: distWindDrake.win,
             distributionByLoss: distWindDrake.loss,
           },
           fire: {
-            byWin: sumObjectiveCountFromDistribution(distFireDrake.win),
-            byLoss: sumObjectiveCountFromDistribution(distFireDrake.loss),
+            byWin: securedGamesFromOutcome(distFireDrake.win),
+            byLoss: securedGamesFromOutcome(distFireDrake.loss),
+            securedWinrateGlobal: securedWinrateFromOutcome(distFireDrake),
             distributionByWin: distFireDrake.win,
             distributionByLoss: distFireDrake.loss,
           },
           hextec: {
-            byWin: sumObjectiveCountFromDistribution(distHextecDrake.win),
-            byLoss: sumObjectiveCountFromDistribution(distHextecDrake.loss),
+            byWin: securedGamesFromOutcome(distHextecDrake.win),
+            byLoss: securedGamesFromOutcome(distHextecDrake.loss),
+            securedWinrateGlobal: securedWinrateFromOutcome(distHextecDrake),
             distributionByWin: distHextecDrake.win,
             distributionByLoss: distHextecDrake.loss,
           },
           chem: {
-            byWin: sumObjectiveCountFromDistribution(distChemDrake.win),
-            byLoss: sumObjectiveCountFromDistribution(distChemDrake.loss),
+            byWin: securedGamesFromOutcome(distChemDrake.win),
+            byLoss: securedGamesFromOutcome(distChemDrake.loss),
+            securedWinrateGlobal: securedWinrateFromOutcome(distChemDrake),
             distributionByWin: distChemDrake.win,
             distributionByLoss: distChemDrake.loss,
           },
         },
         souls: {
           earth: {
-            byWin: sumObjectiveCountFromDistribution(distEarthSoul.win),
-            byLoss: sumObjectiveCountFromDistribution(distEarthSoul.loss),
+            byWin: securedGamesFromOutcome(distEarthSoul.win),
+            byLoss: securedGamesFromOutcome(distEarthSoul.loss),
           },
           water: {
-            byWin: sumObjectiveCountFromDistribution(distWaterSoul.win),
-            byLoss: sumObjectiveCountFromDistribution(distWaterSoul.loss),
+            byWin: securedGamesFromOutcome(distWaterSoul.win),
+            byLoss: securedGamesFromOutcome(distWaterSoul.loss),
           },
           wind: {
-            byWin: sumObjectiveCountFromDistribution(distWindSoul.win),
-            byLoss: sumObjectiveCountFromDistribution(distWindSoul.loss),
+            byWin: securedGamesFromOutcome(distWindSoul.win),
+            byLoss: securedGamesFromOutcome(distWindSoul.loss),
           },
           fire: {
-            byWin: sumObjectiveCountFromDistribution(distFireSoul.win),
-            byLoss: sumObjectiveCountFromDistribution(distFireSoul.loss),
+            byWin: securedGamesFromOutcome(distFireSoul.win),
+            byLoss: securedGamesFromOutcome(distFireSoul.loss),
           },
           hextec: {
-            byWin: sumObjectiveCountFromDistribution(distHextecSoul.win),
-            byLoss: sumObjectiveCountFromDistribution(distHextecSoul.loss),
+            byWin: securedGamesFromOutcome(distHextecSoul.win),
+            byLoss: securedGamesFromOutcome(distHextecSoul.loss),
           },
           chem: {
-            byWin: sumObjectiveCountFromDistribution(distChemSoul.win),
-            byLoss: sumObjectiveCountFromDistribution(distChemSoul.loss),
+            byWin: securedGamesFromOutcome(distChemSoul.win),
+            byLoss: securedGamesFromOutcome(distChemSoul.loss),
           },
         },
       },
@@ -2037,7 +2060,7 @@ export async function getOverviewTeamsStats(
       rankTier,
       roleFilters.champion
     )
-    if (csObjectives) applyChampionStatsToOverviewTeams(result, csObjectives)
+    if (csObjectives) applyChampionStatsWinratesToOverviewTeams(result, csObjectives)
     overviewTeamsCache.set(cacheKey, { data: result, expiresAt: now + OVERVIEW_CACHE_TTL_MS })
     return result
   } catch (err) {
@@ -2550,7 +2573,6 @@ function buildIngestMatchPlayerWhereSql(
 ): string {
   const parts: string[] = []
   const versions = toQueryStringArrayParam(version)
-  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
   if (versions.length === 1) {
     parts.push(
       `im.game_version LIKE '${normalizePatchMajorMinor(versions[0]!).replace(/'/g, "''")}%'`
@@ -2560,10 +2582,7 @@ function buildIngestMatchPlayerWhereSql(
       `im.game_version IN (${versions.map((v) => `'${String(v).replace(/'/g, "''")}'`).join(',')})`
     )
   }
-  if (ranks.length === 1) parts.push(`im.rank_tier = '${ranks[0]!.replace(/'/g, "''")}'`)
-  else if (ranks.length > 1)
-    parts.push(`im.rank_tier IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`)
-  else parts.push(`im.rank_tier <> 'UNRANKED'`)
+  parts.push(...buildRankTierSqlConditions('im', rankTier))
   const roleNorm = role != null && role !== '' ? String(role).trim().toUpperCase() : null
   if (roleNorm) parts.push(`imp.role = '${roleNorm.replace(/'/g, "''")}'`)
   return parts.join(' AND ')
@@ -2581,7 +2600,7 @@ function buildRawMirPlayerWhereSql(
 ): string {
   const parts: string[] = []
   const versions = toQueryStringArrayParam(version)
-  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
+  const ranks = normalizedRankTiers(rankTier)
   if (versions.length === 1) {
     parts.push(
       `(mir.payload_json->'info'->>'gameVersion') LIKE '${normalizePatchMajorMinor(versions[0]!).replace(/'/g, "''")}%'`
@@ -2591,12 +2610,13 @@ function buildRawMirPlayerWhereSql(
       `(mir.payload_json->'info'->>'gameVersion') IN (${versions.map((v) => `'${String(v).replace(/'/g, "''")}'`).join(',')})`
     )
   }
-  if (ranks.length === 1) parts.push(`UPPER(COALESCE(pl.rank_tier,'')) = '${ranks[0]!.replace(/'/g, "''")}'`)
-  else if (ranks.length > 1)
+  if (ranks.length === 1) {
+    parts.push(`UPPER(COALESCE(pl.rank_tier,'')) = '${ranks[0]!.replace(/'/g, "''")}'`)
+  } else if (ranks.length > 1) {
     parts.push(
       `UPPER(COALESCE(pl.rank_tier,'')) IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`
     )
-  else parts.push(`UPPER(COALESCE(pl.rank_tier,'')) <> 'UNRANKED'`)
+  }
   const roleNorm = role != null && role !== '' ? String(role).trim().toUpperCase() : null
   if (roleNorm) {
     parts.push(
@@ -2746,7 +2766,6 @@ export async function getInfosPatchDivisionMatrix(): Promise<InfosPatchDivisionM
         mo.rank_tier::text AS rank_tier,
         COALESCE(SUM(mo.count_match), 0)::bigint AS match_count
       FROM ${moUnionPatch}
-      WHERE mo.rank_tier <> 'UNRANKED'
       GROUP BY mo.game_version, mo.rank_tier
     `)
     const divisionSet = new Set<string>()
@@ -2796,24 +2815,6 @@ function minGamesPerChampForProgressionSlice(totalGamesInSlice: number): number 
   if (n >= 15_000) return 10
   if (n >= 3_000) return 5
   return 2
-}
-
-function buildRawMatchCond(
-  version?: string | string[] | null,
-  rankTier?: string | string[] | null
-): string {
-  const parts: string[] = []
-  const versions = toQueryStringArrayParam(version)
-  const ranks = toQueryStringArrayParam(rankTier)
-    .map((r) => r.toUpperCase())
-    .filter((r) => r && r !== 'ALL' && r !== '*')
-  if (versions.length === 1)
-    parts.push(`m.game_version LIKE '${normalizePatchMajorMinor(versions[0]).replace(/'/g, "''")}%'`)
-  else if (versions.length > 1) parts.push(`m.game_version IN (${versions.map(v => `'${v.replace(/'/g, "''")}'`).join(',')})`)
-  if (ranks.length === 1) parts.push(`m.rank_tier = '${ranks[0]}'`)
-  else if (ranks.length > 1) parts.push(`m.rank_tier IN (${ranks.map(r => `'${r}'`).join(',')})`)
-  else parts.push(`m.rank_tier <> 'UNRANKED'`)
-  return parts.length > 0 ? parts.join(' AND ') : '1=1'
 }
 
 function escapeSqlLikePrefix(v: string): string {
@@ -2912,8 +2913,8 @@ async function loadChampionStatsTeamObjectives(
       const involved = `(${metric.killAssist}) > 0`
       drakeSelects.push(
         `COALESCE(SUM(${metric.killAssist}), 0)::bigint AS ${key}_total`,
-        `COALESCE(SUM(CASE WHEN cs.count_win > 0 THEN ${metric.killAssist} ELSE 0 END), 0)::bigint AS ${key}_by_win`,
-        `COALESCE(SUM(CASE WHEN cs.count_game > 0 AND cs.count_win = 0 THEN ${metric.killAssist} ELSE 0 END), 0)::bigint AS ${key}_by_loss`,
+        `COALESCE(SUM(CASE WHEN ${involved} AND cs.count_win > 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS ${key}_secured_win_games`,
+        `COALESCE(SUM(CASE WHEN ${involved} AND cs.count_win = 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS ${key}_secured_loss_games`,
         `COALESCE(SUM(CASE WHEN ${involved} THEN cs.count_win ELSE 0 END), 0)::bigint AS ${key}_involved_wins`,
         `COALESCE(SUM(CASE WHEN ${involved} THEN cs.count_game ELSE 0 END), 0)::bigint AS ${key}_involved_games`
       )
@@ -2921,8 +2922,8 @@ async function loadChampionStatsTeamObjectives(
         const soulInvolved = `(${metric.soul}) > 0`
         drakeSelects.push(
           `COALESCE(SUM(${metric.soul}), 0)::bigint AS ${key}_soul_total`,
-          `COALESCE(SUM(CASE WHEN cs.count_win > 0 THEN ${metric.soul} ELSE 0 END), 0)::bigint AS ${key}_soul_by_win`,
-          `COALESCE(SUM(CASE WHEN cs.count_game > 0 AND cs.count_win = 0 THEN ${metric.soul} ELSE 0 END), 0)::bigint AS ${key}_soul_by_loss`,
+          `COALESCE(SUM(CASE WHEN ${soulInvolved} AND cs.count_win > 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS ${key}_soul_secured_win_games`,
+          `COALESCE(SUM(CASE WHEN ${soulInvolved} AND cs.count_win = 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS ${key}_soul_secured_loss_games`,
           `COALESCE(SUM(CASE WHEN ${soulInvolved} THEN cs.count_win ELSE 0 END), 0)::bigint AS ${key}_soul_involved_wins`,
           `COALESCE(SUM(CASE WHEN ${soulInvolved} THEN cs.count_game ELSE 0 END), 0)::bigint AS ${key}_soul_involved_games`
         )
@@ -2932,13 +2933,13 @@ async function loadChampionStatsTeamObjectives(
       SELECT
         cs.team AS team_num,
         COALESCE(SUM(${CHAMPION_STATS_FIRST_BLOOD}), 0)::bigint AS first_blood_total,
-        COALESCE(SUM(CASE WHEN cs.count_win > 0 THEN ${CHAMPION_STATS_FIRST_BLOOD} ELSE 0 END), 0)::bigint AS first_blood_by_win,
-        COALESCE(SUM(CASE WHEN cs.count_game > 0 AND cs.count_win = 0 THEN ${CHAMPION_STATS_FIRST_BLOOD} ELSE 0 END), 0)::bigint AS first_blood_by_loss,
+        COALESCE(SUM(CASE WHEN ${CHAMPION_STATS_FIRST_BLOOD} > 0 AND cs.count_win > 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS first_blood_secured_win_games,
+        COALESCE(SUM(CASE WHEN ${CHAMPION_STATS_FIRST_BLOOD} > 0 AND cs.count_win = 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS first_blood_secured_loss_games,
         COALESCE(SUM(CASE WHEN ${CHAMPION_STATS_FIRST_BLOOD} > 0 THEN cs.count_win ELSE 0 END), 0)::bigint AS first_blood_involved_wins,
         COALESCE(SUM(CASE WHEN ${CHAMPION_STATS_FIRST_BLOOD} > 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS first_blood_involved_games,
         COALESCE(SUM(${CHAMPION_STATS_ELDER_DRAKE}), 0)::bigint AS elder_total,
-        COALESCE(SUM(CASE WHEN cs.count_win > 0 THEN ${CHAMPION_STATS_ELDER_DRAKE} ELSE 0 END), 0)::bigint AS elder_by_win,
-        COALESCE(SUM(CASE WHEN cs.count_game > 0 AND cs.count_win = 0 THEN ${CHAMPION_STATS_ELDER_DRAKE} ELSE 0 END), 0)::bigint AS elder_by_loss,
+        COALESCE(SUM(CASE WHEN (${CHAMPION_STATS_ELDER_DRAKE}) > 0 AND cs.count_win > 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS elder_secured_win_games,
+        COALESCE(SUM(CASE WHEN (${CHAMPION_STATS_ELDER_DRAKE}) > 0 AND cs.count_win = 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS elder_secured_loss_games,
         COALESCE(SUM(CASE WHEN (${CHAMPION_STATS_ELDER_DRAKE}) > 0 THEN cs.count_win ELSE 0 END), 0)::bigint AS elder_involved_wins,
         COALESCE(SUM(CASE WHEN (${CHAMPION_STATS_ELDER_DRAKE}) > 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS elder_involved_games,
         ${drakeSelects.join(',\n        ')}
@@ -2987,16 +2988,16 @@ async function loadChampionStatsTeamObjectives(
           Number(row[`${key}_soul_involved_wins`] ?? 0),
           Number(row[`${key}_soul_involved_games`] ?? 0)
         )
-        totals.drakeTypes[key]!.byWin += Number(row[`${key}_by_win`] ?? 0)
-        totals.drakeTypes[key]!.byLoss += Number(row[`${key}_by_loss`] ?? 0)
-        totals.souls[key]!.byWin += Number(row[`${key}_soul_by_win`] ?? 0)
-        totals.souls[key]!.byLoss += Number(row[`${key}_soul_by_loss`] ?? 0)
+        totals.drakeTypes[key]!.byWin += Number(row[`${key}_secured_win_games`] ?? 0)
+        totals.drakeTypes[key]!.byLoss += Number(row[`${key}_secured_loss_games`] ?? 0)
+        totals.souls[key]!.byWin += Number(row[`${key}_soul_secured_win_games`] ?? 0)
+        totals.souls[key]!.byLoss += Number(row[`${key}_soul_secured_loss_games`] ?? 0)
       }
 
-      totals.firstByWin += Number(row.first_blood_by_win ?? 0)
-      totals.firstByLoss += Number(row.first_blood_by_loss ?? 0)
-      totals.elderByWin += Number(row.elder_by_win ?? 0)
-      totals.elderByLoss += Number(row.elder_by_loss ?? 0)
+      totals.firstByWin += Number(row.first_blood_secured_win_games ?? 0)
+      totals.firstByLoss += Number(row.first_blood_secured_loss_games ?? 0)
+      totals.elderByWin += Number(row.elder_secured_win_games ?? 0)
+      totals.elderByLoss += Number(row.elder_secured_loss_games ?? 0)
       fbInvolvedWins += Number(row.first_blood_involved_wins ?? 0)
       fbInvolvedGames += Number(row.first_blood_involved_games ?? 0)
 
@@ -3029,15 +3030,12 @@ async function loadChampionStatsTeamObjectives(
   }
 }
 
-function applyChampionStatsToOverviewTeams(
+/** Complète les winrates objectifs si l'histogramme est vide (données anciennes). */
+function applyChampionStatsWinratesToOverviewTeams(
   result: OverviewTeamsStats,
   cs: ChampionStatsTeamObjectives
 ): void {
-  result.objectives.firstBlood = {
-    firstByWin: cs.totals.firstByWin,
-    firstByLoss: cs.totals.firstByLoss,
-  }
-  if (cs.totals.firstBloodWrGlobal != null) {
+  if (result.objectiveFirstWinrateGlobal?.firstBlood == null && cs.totals.firstBloodWrGlobal != null) {
     result.objectiveFirstWinrateGlobal = result.objectiveFirstWinrateGlobal ?? {
       firstBlood: null,
       baron: null,
@@ -3049,54 +3047,33 @@ function applyChampionStatsToOverviewTeams(
     }
     result.objectiveFirstWinrateGlobal.firstBlood = cs.totals.firstBloodWrGlobal
   }
-
-  if (!result.drakes) return
-
-  const elderType = result.drakes.types.elder ?? {
-    byWin: 0,
-    byLoss: 0,
-    distributionByWin: {},
-    distributionByLoss: {},
-  }
-  elderType.byWin = cs.totals.elderByWin
-  elderType.byLoss = cs.totals.elderByLoss
-  result.drakes.types.elder = elderType
-
   for (const key of Object.keys(CHAMPION_STATS_DRAKE_METRICS)) {
     const typeRow = result.drakes.types[key as keyof typeof result.drakes.types]
-    if (typeRow) {
-      typeRow.byWin = cs.totals.drakeTypes[key]!.byWin
-      typeRow.byLoss = cs.totals.drakeTypes[key]!.byLoss
-    }
-    const soulRow = result.drakes.souls[key as keyof typeof result.drakes.souls]
-    if (soulRow) {
-      soulRow.byWin = cs.totals.souls[key]!.byWin
-      soulRow.byLoss = cs.totals.souls[key]!.byLoss
+    if (typeRow?.securedWinrateGlobal == null) {
+      const w = typeRow.byWin
+      const l = typeRow.byLoss
+      typeRow.securedWinrateGlobal = w + l > 0 ? (w / (w + l)) * 100 : null
     }
   }
 }
 
-function applyChampionStatsToOverviewSides(
+function applyChampionStatsWinratesToOverviewSides(
   result: OverviewSidesApiStats,
   cs: ChampionStatsTeamObjectives
 ): void {
   const blue = cs.byTeam.get(100)
   const red = cs.byTeam.get(200)
 
-  if (blue) {
-    result.objectivesBySide.blue.firstBlood = blue.firstBlood
-    if (result.objectivesBySideTable?.firstBlood) {
-      result.objectivesBySideTable.firstBlood.firstByBlue = blue.firstBlood
+  if (result.objectiveFirstWinrateBySide?.firstBlood?.blue == null) {
+    result.objectiveFirstWinrateBySide = result.objectiveFirstWinrateBySide ?? {
+      firstBlood: { blue: null, red: null },
+      baron: { blue: null, red: null },
+      dragon: { blue: null, red: null },
+      tower: { blue: null, red: null },
+      inhibitor: { blue: null, red: null },
+      riftHerald: { blue: null, red: null },
+      horde: { blue: null, red: null },
     }
-  }
-  if (red) {
-    result.objectivesBySide.red.firstBlood = red.firstBlood
-    if (result.objectivesBySideTable?.firstBlood) {
-      result.objectivesBySideTable.firstBlood.firstByRed = red.firstBlood
-    }
-  }
-
-  if (result.objectiveFirstWinrateBySide) {
     result.objectiveFirstWinrateBySide.firstBlood = {
       blue: blue?.firstBloodWr ?? null,
       red: red?.firstBloodWr ?? null,
@@ -3106,25 +3083,19 @@ function applyChampionStatsToOverviewSides(
   if (!result.drakesBySide) return
 
   const elder = result.drakesBySide.types.elder
-  elder.byBlue = blue?.elderTotal ?? 0
-  elder.byRed = red?.elderTotal ?? 0
-  elder.winrateBlue = blue?.elderWr ?? null
-  elder.winrateRed = red?.elderWr ?? null
+  if (elder.winrateBlue == null) elder.winrateBlue = blue?.elderWr ?? null
+  if (elder.winrateRed == null) elder.winrateRed = red?.elderWr ?? null
 
   for (const key of Object.keys(CHAMPION_STATS_DRAKE_METRICS)) {
     const typeRow = result.drakesBySide.types[key as keyof typeof result.drakesBySide.types]
     if (typeRow) {
-      typeRow.byBlue = blue?.drakeTypes[key] ?? 0
-      typeRow.byRed = red?.drakeTypes[key] ?? 0
-      typeRow.winrateBlue = blue?.drakeWinrate[key] ?? null
-      typeRow.winrateRed = red?.drakeWinrate[key] ?? null
+      if (typeRow.winrateBlue == null) typeRow.winrateBlue = blue?.drakeWinrate[key] ?? null
+      if (typeRow.winrateRed == null) typeRow.winrateRed = red?.drakeWinrate[key] ?? null
     }
     const soulRow = result.drakesBySide.souls[key as keyof typeof result.drakesBySide.souls]
     if (soulRow) {
-      soulRow.byBlue = blue?.souls[key] ?? 0
-      soulRow.byRed = red?.souls[key] ?? 0
-      soulRow.winrateBlue = blue?.soulWinrate[key] ?? null
-      soulRow.winrateRed = red?.soulWinrate[key] ?? null
+      if (soulRow.winrateBlue == null) soulRow.winrateBlue = blue?.soulWinrate[key] ?? null
+      if (soulRow.winrateRed == null) soulRow.winrateRed = red?.soulWinrate[key] ?? null
     }
   }
 }
@@ -3137,20 +3108,20 @@ const OBJECTIVE_KEY_TO_HISTOGRAM_TYPE: Record<string, string | null> = {
   inhibitor: 'inhibitor',
   riftHerald: 'riftHerald',
   horde: 'horde',
-  elder: null,
-  earth_drake: null,
-  water_drake: null,
-  wind_drake: null,
-  fire_drake: null,
-  hextec_drake: null,
-  chem_drake: null,
-  earth_soul: null,
-  water_soul: null,
-  wind_soul: null,
-  fire_soul: null,
-  hextec_soul: null,
-  chem_soul: null,
-  first_blood: null,
+  elder: 'elder',
+  earth_drake: 'earth_drake',
+  water_drake: 'water_drake',
+  wind_drake: 'wind_drake',
+  fire_drake: 'fire_drake',
+  hextec_drake: 'hextec_drake',
+  chem_drake: 'chem_drake',
+  earth_soul: 'earth_soul',
+  water_soul: 'water_soul',
+  wind_soul: 'wind_soul',
+  fire_soul: 'fire_soul',
+  hextec_soul: 'hextec_soul',
+  chem_soul: 'chem_soul',
+  first_blood: 'firstBlood',
 }
 
 function buildObjectiveHistogramWhere(
@@ -3161,15 +3132,8 @@ function buildObjectiveHistogramWhere(
   if (pVersion) {
     conditions.push(`oh.game_version LIKE '${escapeSqlLikePrefix(normalizePatchMajorMinor(pVersion))}%'`)
   }
-  const ranks = toQueryStringArrayParam(rankTier)
-    .map((r) => r.toUpperCase())
-    .filter((r) => r && r !== 'ALL' && r !== '*')
-  if (ranks.length === 1) conditions.push(`oh.rank_tier = '${ranks[0]}'`)
-  else if (ranks.length > 1) {
-    conditions.push(`oh.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`)
-  } else {
-    conditions.push(`oh.rank_tier <> 'UNRANKED'`)
-  }
+  conditions.push(...buildRankTierSqlConditions('oh', rankTier))
+  conditions.push(`oh.region <> 'GLOBAL'`)
   return conditions.join(' AND ')
 }
 
@@ -3284,6 +3248,18 @@ function firstBucketWinrateFromOutcome(dist: {
   const t = w + l
   if (t <= 0) return null
   return (w / t) * 100
+}
+
+/** Winrate quand l'équipe a sécurisé l'objectif (tous buckets >= 1). */
+function securedWinrateFromOutcome(dist: {
+  win: Record<string, number>
+  loss: Record<string, number>
+}): number | null {
+  const securedWins = securedGamesFromOutcome(dist.win)
+  const securedLosses = securedGamesFromOutcome(dist.loss)
+  const total = securedWins + securedLosses
+  if (total <= 0) return null
+  return (securedWins / total) * 100
 }
 
 export type ObjectiveDistributionSides = {
@@ -3636,32 +3612,34 @@ export async function getOverviewSidesStats(
     objectivesBySide.red.hordeKills = sumObjectiveCountFromDistribution(distHorde.red)
     objectivesBySide.blue.hordeFirst = securedGamesFromSideDistribution(distHorde.blue)
     objectivesBySide.red.hordeFirst = securedGamesFromSideDistribution(distHorde.red)
-    drakesBySide.types.elder.byBlue = sumObjectiveCountFromDistribution(distElder.blue)
-    drakesBySide.types.elder.byRed = sumObjectiveCountFromDistribution(distElder.red)
-    drakesBySide.types.earth.byBlue = sumObjectiveCountFromDistribution(distEarthDrake.blue)
-    drakesBySide.types.earth.byRed = sumObjectiveCountFromDistribution(distEarthDrake.red)
-    drakesBySide.types.water.byBlue = sumObjectiveCountFromDistribution(distWaterDrake.blue)
-    drakesBySide.types.water.byRed = sumObjectiveCountFromDistribution(distWaterDrake.red)
-    drakesBySide.types.wind.byBlue = sumObjectiveCountFromDistribution(distWindDrake.blue)
-    drakesBySide.types.wind.byRed = sumObjectiveCountFromDistribution(distWindDrake.red)
-    drakesBySide.types.fire.byBlue = sumObjectiveCountFromDistribution(distFireDrake.blue)
-    drakesBySide.types.fire.byRed = sumObjectiveCountFromDistribution(distFireDrake.red)
-    drakesBySide.types.hextec.byBlue = sumObjectiveCountFromDistribution(distHextecDrake.blue)
-    drakesBySide.types.hextec.byRed = sumObjectiveCountFromDistribution(distHextecDrake.red)
-    drakesBySide.types.chem.byBlue = sumObjectiveCountFromDistribution(distChemDrake.blue)
-    drakesBySide.types.chem.byRed = sumObjectiveCountFromDistribution(distChemDrake.red)
-    drakesBySide.souls.earth.byBlue = sumObjectiveCountFromDistribution(distEarthSoul.blue)
-    drakesBySide.souls.earth.byRed = sumObjectiveCountFromDistribution(distEarthSoul.red)
-    drakesBySide.souls.water.byBlue = sumObjectiveCountFromDistribution(distWaterSoul.blue)
-    drakesBySide.souls.water.byRed = sumObjectiveCountFromDistribution(distWaterSoul.red)
-    drakesBySide.souls.wind.byBlue = sumObjectiveCountFromDistribution(distWindSoul.blue)
-    drakesBySide.souls.wind.byRed = sumObjectiveCountFromDistribution(distWindSoul.red)
-    drakesBySide.souls.fire.byBlue = sumObjectiveCountFromDistribution(distFireSoul.blue)
-    drakesBySide.souls.fire.byRed = sumObjectiveCountFromDistribution(distFireSoul.red)
-    drakesBySide.souls.hextec.byBlue = sumObjectiveCountFromDistribution(distHextecSoul.blue)
-    drakesBySide.souls.hextec.byRed = sumObjectiveCountFromDistribution(distHextecSoul.red)
-    drakesBySide.souls.chem.byBlue = sumObjectiveCountFromDistribution(distChemSoul.blue)
-    drakesBySide.souls.chem.byRed = sumObjectiveCountFromDistribution(distChemSoul.red)
+    objectivesBySide.blue.firstBlood = securedGamesFromSideDistribution(distFirstBloodSides.blue)
+    objectivesBySide.red.firstBlood = securedGamesFromSideDistribution(distFirstBloodSides.red)
+    drakesBySide.types.elder.byBlue = securedGamesFromSideDistribution(distElder.blue)
+    drakesBySide.types.elder.byRed = securedGamesFromSideDistribution(distElder.red)
+    drakesBySide.types.earth.byBlue = securedGamesFromSideDistribution(distEarthDrake.blue)
+    drakesBySide.types.earth.byRed = securedGamesFromSideDistribution(distEarthDrake.red)
+    drakesBySide.types.water.byBlue = securedGamesFromSideDistribution(distWaterDrake.blue)
+    drakesBySide.types.water.byRed = securedGamesFromSideDistribution(distWaterDrake.red)
+    drakesBySide.types.wind.byBlue = securedGamesFromSideDistribution(distWindDrake.blue)
+    drakesBySide.types.wind.byRed = securedGamesFromSideDistribution(distWindDrake.red)
+    drakesBySide.types.fire.byBlue = securedGamesFromSideDistribution(distFireDrake.blue)
+    drakesBySide.types.fire.byRed = securedGamesFromSideDistribution(distFireDrake.red)
+    drakesBySide.types.hextec.byBlue = securedGamesFromSideDistribution(distHextecDrake.blue)
+    drakesBySide.types.hextec.byRed = securedGamesFromSideDistribution(distHextecDrake.red)
+    drakesBySide.types.chem.byBlue = securedGamesFromSideDistribution(distChemDrake.blue)
+    drakesBySide.types.chem.byRed = securedGamesFromSideDistribution(distChemDrake.red)
+    drakesBySide.souls.earth.byBlue = securedGamesFromSideDistribution(distEarthSoul.blue)
+    drakesBySide.souls.earth.byRed = securedGamesFromSideDistribution(distEarthSoul.red)
+    drakesBySide.souls.water.byBlue = securedGamesFromSideDistribution(distWaterSoul.blue)
+    drakesBySide.souls.water.byRed = securedGamesFromSideDistribution(distWaterSoul.red)
+    drakesBySide.souls.wind.byBlue = securedGamesFromSideDistribution(distWindSoul.blue)
+    drakesBySide.souls.wind.byRed = securedGamesFromSideDistribution(distWindSoul.red)
+    drakesBySide.souls.fire.byBlue = securedGamesFromSideDistribution(distFireSoul.blue)
+    drakesBySide.souls.fire.byRed = securedGamesFromSideDistribution(distFireSoul.red)
+    drakesBySide.souls.hextec.byBlue = securedGamesFromSideDistribution(distHextecSoul.blue)
+    drakesBySide.souls.hextec.byRed = securedGamesFromSideDistribution(distHextecSoul.red)
+    drakesBySide.souls.chem.byBlue = securedGamesFromSideDistribution(distChemSoul.blue)
+    drakesBySide.souls.chem.byRed = securedGamesFromSideDistribution(distChemSoul.red)
     drakesBySide.types.elder.distributionByBlue = distElder.blue
     drakesBySide.types.elder.distributionByRed = distElder.red
     drakesBySide.types.earth.distributionByBlue = distEarthDrake.blue
@@ -3756,7 +3734,7 @@ export async function getOverviewSidesStats(
       rankTier,
       roleFilters.champion
     )
-    if (csSidesObjectives) applyChampionStatsToOverviewSides(result, csSidesObjectives)
+    if (csSidesObjectives) applyChampionStatsWinratesToOverviewSides(result, csSidesObjectives)
     overviewSidesCache.set(cacheKey, { data: result, expiresAt: now + OVERVIEW_CACHE_TTL_MS })
     return result
   } catch (err) {
@@ -3929,7 +3907,6 @@ export async function getObjectiveOutcomeAggByPatchDivision(
 ): Promise<ObjectiveOutcomeAggByPatchDivision> {
   if (!isDatabaseConfigured()) return { rows: [] }
   const versions = toQueryStringArrayParam(version)
-  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
   const conditions: string[] = ['1=1']
   if (versions.length === 1) {
     conditions.push(`tc.game_version LIKE '${normalizePatchMajorMinor(versions[0]).replace(/'/g, "''")}%'`)
@@ -3938,13 +3915,7 @@ export async function getObjectiveOutcomeAggByPatchDivision(
       `tc.game_version IN (${versions.map((v) => `'${normalizePatchMajorMinor(v).replace(/'/g, "''")}'`).join(',')})`
     )
   }
-  if (ranks.length === 1) {
-    conditions.push(`tc.rank_tier = '${ranks[0]}'`)
-  } else if (ranks.length > 1) {
-    conditions.push(`tc.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`)
-  } else {
-    conditions.push(`tc.rank_tier <> 'UNRANKED'`)
-  }
+  conditions.push(...buildRankTierSqlConditions('tc', rankTier))
   const objective = (objectiveKey ?? '').trim()
   if (objective) {
     conditions.push(`tb.objective_key = '${objective.replace(/'/g, "''")}'`)

@@ -24,6 +24,7 @@ type TierListSortColumn =
   | 'patchHighEloWinratePp'
   | 'highEloGames'
   | 'patchHighEloGamesDelta'
+  | 'patchHighEloRankDelta'
   | 'delta'
 
 export type UseStatisticsTierListPageArgs = {
@@ -144,6 +145,7 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     >()
   )
   const tierListRefHighEloById = ref(new Map<number, { winrate: number; games: number }>())
+  const tierListRefHighEloRankById = ref(new Map<number, number>())
   const tierListRefRows = ref<
     Array<{
       rank: number
@@ -339,7 +341,11 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
       else if (col === 'highEloGames') diff = (a.highEloGames ?? 0) - (b.highEloGames ?? 0)
       else if (col === 'patchHighEloGamesDelta')
         diff = (a.patchRefHighEloGamesDelta ?? 0) - (b.patchRefHighEloGamesDelta ?? 0)
-      else if (col === 'delta') diff = (a.delta ?? 0) - (b.delta ?? 0)
+      else if (col === 'patchHighEloRankDelta') {
+        const da = tierListPatchHighEloRankDelta(a.championId) ?? 0
+        const db = tierListPatchHighEloRankDelta(b.championId) ?? 0
+        diff = da - db
+      } else if (col === 'delta') diff = (a.delta ?? 0) - (b.delta ?? 0)
       return mult * diff
     })
   })
@@ -393,6 +399,13 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     const ref = tierListRefFilteredRankByChampionId.value.get(championId)
     if (cur == null || ref == null) return null
     // Positive => rank improved (e.g. 10 -> 7 => +3).
+    return ref - cur
+  }
+
+  function tierListPatchHighEloRankDelta(championId: number): number | null {
+    const cur = highEloRowsByChampionId.value.get(championId)?.rank
+    const ref = tierListRefHighEloRankById.value.get(championId)
+    if (cur == null || ref == null) return null
     return ref - cur
   }
 
@@ -757,6 +770,7 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     tierListError.value = null
     tierListRefStatsById.value = new Map()
     tierListRefHighEloById.value = new Map()
+    tierListRefHighEloRankById.value = new Map()
     tierListRefRows.value = []
     try {
       const patch = effectiveTierListPatch.value
@@ -812,12 +826,15 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
             }
             tierListRefStatsById.value = m
             const hm = new Map<number, { winrate: number; games: number }>()
+            const hr = new Map<number, number>()
             if (refData.highEloRows?.length) {
               for (const row of refData.highEloRows) {
                 hm.set(row.championId, { winrate: row.winrate, games: row.games })
+                hr.set(row.championId, row.rank)
               }
             }
             tierListRefHighEloById.value = hm
+            tierListRefHighEloRankById.value = hr
           }
         } catch {
           /* réf. patch optionnelle */
@@ -863,6 +880,7 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     tierListPatchDeltaClass,
     tierListPatchDeltaGamesClass,
     tierListPatchRankDelta,
+    tierListPatchHighEloRankDelta,
     formatTierListPatchDeltaRank,
     tierListPatchDeltaRankClass,
     cycleTierListSort,

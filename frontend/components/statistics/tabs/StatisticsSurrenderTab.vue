@@ -20,13 +20,14 @@ function pct(value: number | null | undefined): string {
 }
 
 function delta(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return '(—)'
+  if (value == null || !Number.isFinite(value)) return ''
   const sign = value > 0 ? '+' : ''
   return `(${sign}${Number(value).toFixed(2)} %)`
 }
 
 function deltaClass(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value) || value === 0) return 'text-text/60'
+  if (value == null || !Number.isFinite(value)) return 'text-text/60'
+  if (value === 0) return 'text-text/60'
   return value > 0 ? 'text-rose-400' : 'text-emerald-400'
 }
 
@@ -134,13 +135,19 @@ function rankIcon(rank: string): string {
                 </td>
                 <td class="px-1 py-1.5 text-center tabular-nums">
                   {{ pct(group.all?.surrenderRate) }}
-                  <span :class="deltaClass(group.all?.surrenderDelta)">
+                  <span
+                    v-if="delta(group.all?.surrenderDelta)"
+                    :class="deltaClass(group.all?.surrenderDelta)"
+                  >
                     {{ delta(group.all?.surrenderDelta) }}
                   </span>
                 </td>
                 <td class="px-1 py-1.5 text-center tabular-nums">
                   {{ pct(group.all?.earlySurrenderRate) }}
-                  <span :class="deltaClass(group.all?.earlySurrenderDelta)">
+                  <span
+                    v-if="delta(group.all?.earlySurrenderDelta)"
+                    :class="deltaClass(group.all?.earlySurrenderDelta)"
+                  >
                     {{ delta(group.all?.earlySurrenderDelta) }}
                   </span>
                 </td>
@@ -150,13 +157,19 @@ function rankIcon(rank: string): string {
                   <td class="py-1 pl-8 pr-2 text-text/75">{{ teamLabel(100) }}</td>
                   <td class="px-1 py-1 text-center tabular-nums text-text/80">
                     {{ pct(group.blue.surrenderRate) }}
-                    <span :class="deltaClass(group.blue.surrenderDelta)">
+                    <span
+                      v-if="delta(group.blue.surrenderDelta)"
+                      :class="deltaClass(group.blue.surrenderDelta)"
+                    >
                       {{ delta(group.blue.surrenderDelta) }}
                     </span>
                   </td>
                   <td class="px-1 py-1 text-center tabular-nums text-text/80">
                     {{ pct(group.blue.earlySurrenderRate) }}
-                    <span :class="deltaClass(group.blue.earlySurrenderDelta)">
+                    <span
+                      v-if="delta(group.blue.earlySurrenderDelta)"
+                      :class="deltaClass(group.blue.earlySurrenderDelta)"
+                    >
                       {{ delta(group.blue.earlySurrenderDelta) }}
                     </span>
                   </td>
@@ -165,13 +178,19 @@ function rankIcon(rank: string): string {
                   <td class="py-1 pl-8 pr-2 text-text/75">{{ teamLabel(200) }}</td>
                   <td class="px-1 py-1 text-center tabular-nums text-text/80">
                     {{ pct(group.red.surrenderRate) }}
-                    <span :class="deltaClass(group.red.surrenderDelta)">
+                    <span
+                      v-if="delta(group.red.surrenderDelta)"
+                      :class="deltaClass(group.red.surrenderDelta)"
+                    >
                       {{ delta(group.red.surrenderDelta) }}
                     </span>
                   </td>
                   <td class="px-1 py-1 text-center tabular-nums text-text/80">
                     {{ pct(group.red.earlySurrenderRate) }}
-                    <span :class="deltaClass(group.red.earlySurrenderDelta)">
+                    <span
+                      v-if="delta(group.red.earlySurrenderDelta)"
+                      :class="deltaClass(group.red.earlySurrenderDelta)"
+                    >
                       {{ delta(group.red.earlySurrenderDelta) }}
                     </span>
                   </td>

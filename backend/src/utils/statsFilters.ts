@@ -36,6 +36,28 @@ export function applyRankTierWhere(
   else if (options?.excludeUnrankedWhenEmpty) where.rankTier = { not: 'UNRANKED' }
 }
 
+/** Ligues normalisées depuis le query (exclut ALL, *). Vide = pas de filtre ligue. */
+export function normalizedRankTiers(rankTier: string | string[] | null | undefined): string[] {
+  return toQueryStringArrayParam(rankTier)
+    .map((r) => r.toUpperCase())
+    .filter((r) => r && r !== 'ALL' && r !== '*')
+}
+
+/**
+ * Fragments SQL `alias.rank_tier` : vide si aucun filtre (tous les tiers, y compris UNRANKED).
+ */
+export function buildRankTierSqlConditions(
+  alias: string,
+  rankTier?: string | string[] | null,
+): string[] {
+  const ranks = normalizedRankTiers(rankTier)
+  if (ranks.length === 1) return [`${alias}.rank_tier = '${ranks[0]}'`]
+  if (ranks.length > 1) {
+    return [`${alias}.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`]
+  }
+  return []
+}
+
 /** Clé de cache stable pour plusieurs ligues. */
 export function rankTierCacheKey(rankTier: string | string[] | null | undefined): string | null {
   const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())

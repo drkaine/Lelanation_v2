@@ -38,7 +38,7 @@ const p = inject('statisticsPageCtx') as any
           :data="p.overviewDetailData"
           :baseline="p.overviewDetailBaselineData"
           :baseline-pending="p.overviewDetailBaselinePending"
-          :comparison-version="p.progressionFromVersion"
+          :comparison-version="p.overviewDetailComparisonVersion"
         />
         <div v-else class="statistics-overview-surface rounded-lg border border-primary/30 p-6">
           <div class="py-4 text-text/70">

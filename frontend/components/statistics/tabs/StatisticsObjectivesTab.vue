@@ -109,7 +109,57 @@ const FIRST_WINRATE_KEYS = [
 
 function formatFirstObjectiveWr(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return '—'
-  return `${Number(value).toFixed(2)}%`
+  return `${clampSoulWinrate(value).toFixed(2)}%`
+}
+
+/** Winrate borné à [0, 100] (évite affichage >100 % si données agrégées incohérentes). */
+function clampSoulWinrate(value: number): number {
+  if (!Number.isFinite(value)) return 0
+  return Math.min(100, Math.max(0, value))
+}
+
+type SoulSideRow = {
+  byBlue?: number
+  byRed?: number
+  winrateBlue?: number | null
+  winrateRed?: number | null
+}
+
+type SoulTeamRow = { byWin?: number; byLoss?: number }
+
+/** WR global = victoires / parties avec soul, tous types et côtés confondus (moyenne pondérée). */
+function poolSoulSecureWinrateFromSideRows(rows: SoulSideRow[]): number | null {
+  let games = 0
+  let wins = 0
+  for (const row of rows) {
+    for (const { g, wr } of [
+      { g: Number(row.byBlue ?? 0), wr: row.winrateBlue },
+      { g: Number(row.byRed ?? 0), wr: row.winrateRed },
+    ]) {
+      if (g > 0 && wr != null && Number.isFinite(Number(wr))) {
+        games += g
+        wins += g * (clampSoulWinrate(Number(wr)) / 100)
+      }
+    }
+  }
+  if (games <= 0) return null
+  return clampSoulWinrate((wins / games) * 100)
+}
+
+function poolSoulSecureWinrateFromTeamRows(rows: SoulTeamRow[]): number | null {
+  let games = 0
+  let wins = 0
+  for (const row of rows) {
+    const w = Number(row.byWin ?? 0)
+    const l = Number(row.byLoss ?? 0)
+    const total = w + l
+    if (total > 0) {
+      games += total
+      wins += w
+    }
+  }
+  if (games <= 0) return null
+  return clampSoulWinrate((wins / games) * 100)
 }
 
 function firstWinrateObjectiveLabel(key: (typeof FIRST_WINRATE_KEYS)[number]): string {
@@ -155,18 +205,32 @@ function drakeTypeWinrateGlobalParts(key: string): {
   delta: string
   deltaClass: string
 } {
-  const curRow = p.drakeTypeRows.find((r: { key: string }) => r.key === key)
-  const cw = Number(curRow?.byWin ?? 0)
-  const cl = Number(curRow?.byLoss ?? 0)
-  const cn = cw + cl
-  const curWr = cn > 0 ? (cw / cn) * 100 : null
+  const curRow = p.drakeTypeRows.find(
+    (r: { key: string; securedWinrateGlobal?: number | null }) => r.key === key
+  )
+  const curWr =
+    curRow?.securedWinrateGlobal != null
+      ? Number(curRow.securedWinrateGlobal)
+      : (() => {
+          const cw = Number(curRow?.byWin ?? 0)
+          const cl = Number(curRow?.byLoss ?? 0)
+          const cn = cw + cl
+          return cn > 0 ? (cw / cn) * 100 : null
+        })()
 
   const baseData = p.overviewTeamsBaselineData
-  const baseRow = baseData?.drakes?.types?.[key]
-  const bw = Number(baseRow?.byWin ?? 0)
-  const bl = Number(baseRow?.byLoss ?? 0)
-  const bn = bw + bl
-  const baseWr = bn > 0 ? (bw / bn) * 100 : null
+  const baseRow = baseData?.drakes?.types?.[key] as
+    | { byWin?: number; byLoss?: number; securedWinrateGlobal?: number | null }
+    | undefined
+  const baseWr =
+    baseRow?.securedWinrateGlobal != null
+      ? Number(baseRow.securedWinrateGlobal)
+      : (() => {
+          const bw = Number(baseRow?.byWin ?? 0)
+          const bl = Number(baseRow?.byLoss ?? 0)
+          const bn = bw + bl
+          return bn > 0 ? (bw / bn) * 100 : null
+        })()
   const delta = curWr != null && baseWr != null ? curWr - baseWr : null
   return {
     current: formatFirstObjectiveWr(curWr),
@@ -494,7 +558,7 @@ function soulSecureWinrateParts(key: string): {
   const cw = Number(curRow?.byWin ?? 0)
   const cl = Number(curRow?.byLoss ?? 0)
   const cn = cw + cl
-  const curWr = cn > 0 ? (cw / cn) * 100 : null
+  const curWr = cn > 0 ? clampSoulWinrate((cw / cn) * 100) : null
   const current = curWr == null ? '—' : `${curWr.toFixed(2)}%`
 
   const baseData = p.overviewTeamsBaselineData
@@ -505,14 +569,84 @@ function soulSecureWinrateParts(key: string): {
   const bw = Number(baseSoul?.byWin ?? 0)
   const bl = Number(baseSoul?.byLoss ?? 0)
   const bn = bw + bl
-  const baseWr = bn > 0 ? (bw / bn) * 100 : null
+  const baseWr = bn > 0 ? clampSoulWinrate((bw / bn) * 100) : null
   const delta = curWr != null && baseWr != null ? curWr - baseWr : null
   const deltaFmt = formatDelta(delta)
   return {
     current,
     value: curWr,
     delta: deltaFmt,
-    deltaDisplay: deltaFmt || '—',
+    deltaDisplay: deltaFmt,
+    deltaClass: deltaColorClass(delta),
+  }
+}
+
+/** Winrate global quand l'équipe a obtenu une soul (tous types confondus). */
+function soulGlobalSecureWinrateParts(): {
+  current: string
+  delta: string
+  deltaClass: string
+  deltaDisplay: string
+} {
+  const sideRows = (p.sidesDrakeSoulRows ?? []) as SoulSideRow[]
+  const teamRows = (p.drakeSoulRows ?? []) as SoulTeamRow[]
+  const curWr =
+    poolSoulSecureWinrateFromSideRows(sideRows) ?? poolSoulSecureWinrateFromTeamRows(teamRows)
+  const current = formatFirstObjectiveWr(curWr)
+
+  const baseSideRows = p.overviewSidesBaselineData?.drakesBySide?.souls
+    ? (Object.values(
+        p.overviewSidesBaselineData.drakesBySide.souls as Record<string, SoulSideRow>
+      ) as SoulSideRow[])
+    : []
+  const baseTeamRows = p.overviewTeamsBaselineData?.drakes?.souls
+    ? (Object.values(
+        p.overviewTeamsBaselineData.drakes.souls as Record<string, SoulTeamRow>
+      ) as SoulTeamRow[])
+    : []
+  const baseWr =
+    poolSoulSecureWinrateFromSideRows(baseSideRows) ??
+    poolSoulSecureWinrateFromTeamRows(baseTeamRows)
+  const delta = curWr != null && baseWr != null ? curWr - baseWr : null
+  const deltaFmt = formatDelta(delta)
+  return {
+    current,
+    delta: deltaFmt,
+    deltaDisplay: deltaFmt,
+    deltaClass: deltaColorClass(delta),
+  }
+}
+
+function weightedSoulSideSecureWinrate(rows: SoulSideRow[], side: 'blue' | 'red'): number | null {
+  let games = 0
+  let wins = 0
+  for (const row of rows) {
+    const g = side === 'blue' ? Number(row.byBlue ?? 0) : Number(row.byRed ?? 0)
+    const wr = side === 'blue' ? row.winrateBlue : row.winrateRed
+    if (g > 0 && wr != null && Number.isFinite(Number(wr))) {
+      games += g
+      wins += g * (clampSoulWinrate(Number(wr)) / 100)
+    }
+  }
+  if (games <= 0) return null
+  return clampSoulWinrate((wins / games) * 100)
+}
+
+function soulGlobalSecureWinrateSideParts(side: 'blue' | 'red'): {
+  current: string
+  delta: string
+  deltaClass: string
+} {
+  const curWr = weightedSoulSideSecureWinrate((p.sidesDrakeSoulRows ?? []) as SoulSideRow[], side)
+  const baseSouls = p.overviewSidesBaselineData?.drakesBySide?.souls as
+    | Record<string, SoulSideRow>
+    | undefined
+  const baseRows = baseSouls ? Object.values(baseSouls) : []
+  const baseWr = weightedSoulSideSecureWinrate(baseRows, side)
+  const delta = curWr != null && baseWr != null ? curWr - baseWr : null
+  return {
+    current: formatFirstObjectiveWr(curWr),
+    delta: formatDelta(delta),
     deltaClass: deltaColorClass(delta),
   }
 }
@@ -531,8 +665,8 @@ function soulSecureWinrateSideParts(
     side === 'blue'
       ? (baseRow?.winrateBlue as number | null | undefined)
       : (baseRow?.winrateRed as number | null | undefined)
-  const curV = curWr ?? null
-  const baseV = baseWr ?? null
+  const curV = curWr != null ? clampSoulWinrate(curWr) : null
+  const baseV = baseWr != null ? clampSoulWinrate(baseWr) : null
   const delta = curV != null && baseV != null ? curV - baseV : null
   return {
     current: formatFirstObjectiveWr(curV),
@@ -1085,7 +1219,10 @@ const drakeSoulWinrateRows = computed(() =>
               <td class="px-1 py-1.5 text-center">
                 <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
                   {{ objectiveFirstWinrateGlobalParts(wrKey).current }}
-                  <span :class="objectiveFirstWinrateGlobalParts(wrKey).deltaClass">
+                  <span
+                    v-if="objectiveFirstWinrateGlobalParts(wrKey).delta"
+                    :class="objectiveFirstWinrateGlobalParts(wrKey).deltaClass"
+                  >
                     {{ objectiveFirstWinrateGlobalParts(wrKey).delta }}
                   </span>
                 </template>
@@ -1270,6 +1407,47 @@ const drakeSoulWinrateRows = computed(() =>
             </tr>
           </thead>
           <tbody class="divide-y divide-primary/20 text-text/80">
+            <tr>
+              <td class="py-1.5 pr-2 font-medium text-text/90">
+                {{ p.t('statisticsPage.objectivesSoulGlobal') }}
+              </td>
+              <td class="px-1 py-1.5 text-center">
+                <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
+                  {{ soulGlobalSecureWinrateParts().current }}
+                  <span
+                    v-if="soulGlobalSecureWinrateParts().deltaDisplay"
+                    :class="soulGlobalSecureWinrateParts().deltaClass"
+                  >
+                    {{ soulGlobalSecureWinrateParts().deltaDisplay }}
+                  </span>
+                </template>
+                <template v-else>—</template>
+              </td>
+              <td class="px-1 py-1.5 text-center">
+                <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
+                  {{ soulGlobalSecureWinrateSideParts('blue').current }}
+                  <span
+                    v-if="soulGlobalSecureWinrateSideParts('blue').delta"
+                    :class="soulGlobalSecureWinrateSideParts('blue').deltaClass"
+                  >
+                    {{ soulGlobalSecureWinrateSideParts('blue').delta }}
+                  </span>
+                </template>
+                <template v-else>—</template>
+              </td>
+              <td class="py-1.5 pl-1 text-center">
+                <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
+                  {{ soulGlobalSecureWinrateSideParts('red').current }}
+                  <span
+                    v-if="soulGlobalSecureWinrateSideParts('red').delta"
+                    :class="soulGlobalSecureWinrateSideParts('red').deltaClass"
+                  >
+                    {{ soulGlobalSecureWinrateSideParts('red').delta }}
+                  </span>
+                </template>
+                <template v-else>—</template>
+              </td>
+            </tr>
             <tr v-for="row in drakeSoulWinrateRows" :key="'drake-soul-wr-' + row.key">
               <td class="py-1.5 pr-2">
                 <span class="inline-flex items-center gap-2 font-medium text-text/90">
@@ -1291,17 +1469,25 @@ const drakeSoulWinrateRows = computed(() =>
               </td>
               <td class="px-1 py-1.5 text-center">
                 {{ row.parts.current }}
-                <span :class="row.parts.deltaClass">{{ row.parts.deltaDisplay }}</span>
+                <span v-if="row.parts.deltaDisplay" :class="row.parts.deltaClass">{{
+                  row.parts.deltaDisplay
+                }}</span>
               </td>
               <td class="px-1 py-1.5 text-center">
                 {{ soulSecureWinrateSideParts(row.key, 'blue').current }}
-                <span :class="soulSecureWinrateSideParts(row.key, 'blue').deltaClass">
+                <span
+                  v-if="soulSecureWinrateSideParts(row.key, 'blue').delta"
+                  :class="soulSecureWinrateSideParts(row.key, 'blue').deltaClass"
+                >
                   {{ soulSecureWinrateSideParts(row.key, 'blue').delta }}
                 </span>
               </td>
               <td class="py-1.5 pl-1 text-center">
                 {{ soulSecureWinrateSideParts(row.key, 'red').current }}
-                <span :class="soulSecureWinrateSideParts(row.key, 'red').deltaClass">
+                <span
+                  v-if="soulSecureWinrateSideParts(row.key, 'red').delta"
+                  :class="soulSecureWinrateSideParts(row.key, 'red').deltaClass"
+                >
                   {{ soulSecureWinrateSideParts(row.key, 'red').delta }}
                 </span>
               </td>

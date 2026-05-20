@@ -114,9 +114,12 @@ type Cell = {
   earlySurrenderCount: number
 }
 
-function buildSurrenderCells(rows: TeamAggRow[]): Map<string, Cell> {
+function buildSurrenderCells(
+  rows: TeamAggRow[],
+  matchCountByRank: Map<string, number>
+): Map<string, Cell> {
   const byKey = new Map<string, Cell>()
-  const add = (rank: string, team: SurrenderMatrixTeam, match: number, surrender: number, early: number) => {
+  const addTeam = (rank: string, team: 100 | 200, match: number, surrender: number, early: number) => {
     const key = `${rank}|${String(team)}`
     const cur = byKey.get(key) ?? { matchCount: 0, surrenderCount: 0, earlySurrenderCount: 0 }
     cur.matchCount += match
@@ -124,6 +127,7 @@ function buildSurrenderCells(rows: TeamAggRow[]): Map<string, Cell> {
     cur.earlySurrenderCount += early
     byKey.set(key, cur)
   }
+
   for (const r of rows) {
     const rank = String(r.rank_tier ?? '').toUpperCase()
     if (!rank || rank === 'UNRANKED') continue
@@ -132,19 +136,92 @@ function buildSurrenderCells(rows: TeamAggRow[]): Map<string, Cell> {
     const match = Number(r.match_count ?? 0)
     const surrender = Number(r.surrender_count ?? 0)
     const early = Number(r.early_surrender_count ?? 0)
-    add(rank, team, match, surrender, early)
-    add(rank, 'ALL', match, surrender, early)
-    add('ALL', team, match, surrender, early)
-    add('ALL', 'ALL', match, surrender, early)
+    addTeam(rank, team, match, surrender, early)
+    addTeam('ALL', team, match, surrender, early)
   }
+
+  const ranks = new Set<string>([...matchCountByRank.keys(), ...byKey.keys()].map((k) => k.split('|')[0]!))
+  for (const rank of ranks) {
+    if (rank === 'ALL') continue
+    const blue = byKey.get(`${rank}|100`)
+    const red = byKey.get(`${rank}|200`)
+    if (!blue && !red) continue
+    const matchCount =
+      matchCountByRank.get(rank) ??
+      Math.max(blue?.matchCount ?? 0, red?.matchCount ?? 0)
+    byKey.set(`${rank}|ALL`, {
+      matchCount,
+      surrenderCount: (blue?.surrenderCount ?? 0) + (red?.surrenderCount ?? 0),
+      earlySurrenderCount: (blue?.earlySurrenderCount ?? 0) + (red?.earlySurrenderCount ?? 0),
+    })
+  }
+
+  const grandMatch =
+    matchCountByRank.get('ALL') ??
+    [...matchCountByRank.values()].reduce((s, n) => s + n, 0)
+  const grandBlue = byKey.get('ALL|100')
+  const grandRed = byKey.get('ALL|200')
+  if (grandBlue || grandRed) {
+    byKey.set('ALL|ALL', {
+      matchCount: grandMatch > 0 ? grandMatch : Math.max(grandBlue?.matchCount ?? 0, grandRed?.matchCount ?? 0),
+      surrenderCount: (grandBlue?.surrenderCount ?? 0) + (grandRed?.surrenderCount ?? 0),
+      earlySurrenderCount: (grandBlue?.earlySurrenderCount ?? 0) + (grandRed?.earlySurrenderCount ?? 0),
+    })
+  }
+
   return byKey
 }
 
-async function loadSurrenderTeamAgg(version: string | null): Promise<TeamAggRow[]> {
+async function loadSurrenderMatchCountsByRank(
+  version: string | null,
+  rankTier?: string | string[] | null
+): Promise<Map<string, number>> {
+  const moFrom = await matchVersionedAggFrom('agg_match_outcome_stats', version, 'mo')
+  const versionWhere = version
+    ? ` AND mo.game_version LIKE '${normalizePatchMajorMinor(version).replace(/'/g, "''")}%'`
+    : ''
+  const rankWhere = buildRankTierWhere('mo', rankTier)
+  const rows = await queryRawUnsafe<Array<{ rank_tier: string; match_count: bigint }>>(`
+    SELECT
+      mo.rank_tier,
+      COALESCE(SUM(mo.count_match), 0)::bigint AS match_count
+    FROM ${moFrom}
+    WHERE 1=1
+      ${rankWhere}
+      ${versionWhere}
+    GROUP BY mo.rank_tier
+  `)
+  const out = new Map<string, number>()
+  let total = 0
+  for (const r of rows) {
+    const rank = String(r.rank_tier ?? '').toUpperCase()
+    if (!rank) continue
+    const n = Number(r.match_count ?? 0)
+    out.set(rank, n)
+    total += n
+  }
+  out.set('ALL', total)
+  return out
+}
+
+function buildRankTierWhere(alias: string, rankTier?: string | string[] | null): string {
+  const ranks = toQueryStringArrayParam(rankTier)
+    .map((r) => r.toUpperCase())
+    .filter((r) => r && r !== 'ALL' && r !== '*')
+  if (ranks.length === 1) return ` AND ${alias}.rank_tier = '${ranks[0]}'`
+  if (ranks.length > 1) return ` AND ${alias}.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`
+  return ''
+}
+
+async function loadSurrenderTeamAgg(
+  version: string | null,
+  rankTier?: string | string[] | null
+): Promise<TeamAggRow[]> {
   const tcFrom = await matchVersionedAggFrom('agg_team_core_stats', version, 'tc')
   const versionWhere = version
     ? ` AND tc.game_version LIKE '${normalizePatchMajorMinor(version).replace(/'/g, "''")}%'`
     : ''
+  const rankWhere = buildRankTierWhere('tc', rankTier)
   return queryRawUnsafe<TeamAggRow[]>(`
     SELECT
       tc.rank_tier,
@@ -153,7 +230,8 @@ async function loadSurrenderTeamAgg(version: string | null): Promise<TeamAggRow[
       COALESCE(SUM(tc.count_team_surrendered), 0)::bigint AS surrender_count,
       COALESCE(SUM(tc.count_team_early_surrendered), 0)::bigint AS early_surrender_count
     FROM ${tcFrom}
-    WHERE tc.rank_tier <> 'UNRANKED'
+    WHERE 1=1
+      ${rankWhere}
       ${versionWhere}
     GROUP BY tc.rank_tier, tc.team
   `)
@@ -161,7 +239,8 @@ async function loadSurrenderTeamAgg(version: string | null): Promise<TeamAggRow[
 
 export async function getSurrenderMatrix(
   version?: string | string[] | null,
-  baselineVersion?: string | string[] | null
+  baselineVersion?: string | string[] | null,
+  rankTier?: string | string[] | null
 ): Promise<SurrenderMatrixResult | null> {
   if (!isDatabaseConfigured()) return null
   const curVersion = normalizeParam(version)
@@ -170,17 +249,20 @@ export async function getSurrenderMatrix(
   const baselinePatch = baselineRaw
     ? normalizePatchMajorMinor(baselineRaw)
     : previousPatchVersion(curPatch)
-  const cacheKey = surrenderMatrixCacheKey(curPatch, baselinePatch)
+  const rankKey = rankTierCacheKey(rankTier)
+  const cacheKey = `${surrenderMatrixCacheKey(curPatch, baselinePatch)}|${rankKey}`
   const now = Date.now()
   const cached = surrenderMatrixCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
   try {
-    const [curRows, baseRows] = await Promise.all([
-      loadSurrenderTeamAgg(curPatch),
-      baselinePatch ? loadSurrenderTeamAgg(baselinePatch) : Promise.resolve([]),
+    const [curRows, baseRows, curMatchByRank, baseMatchByRank] = await Promise.all([
+      loadSurrenderTeamAgg(curPatch, rankTier),
+      baselinePatch ? loadSurrenderTeamAgg(baselinePatch, rankTier) : Promise.resolve([]),
+      loadSurrenderMatchCountsByRank(curPatch, rankTier),
+      baselinePatch ? loadSurrenderMatchCountsByRank(baselinePatch, rankTier) : Promise.resolve(new Map()),
     ])
-    const curCells = buildSurrenderCells(curRows)
-    const baseCells = buildSurrenderCells(baseRows)
+    const curCells = buildSurrenderCells(curRows, curMatchByRank)
+    const baseCells = buildSurrenderCells(baseRows, baseMatchByRank)
     const rankOrder = ['ALL', 'IRON', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'EMERALD', 'DIAMOND', 'MASTER', 'GRANDMASTER', 'CHALLENGER']
     const teamOrder: SurrenderMatrixTeam[] = ['ALL', 100, 200]
     const rows: SurrenderMatrixRow[] = []
@@ -255,9 +337,6 @@ export async function getOverviewAbandons(
       const ranksSql = ranks.map((r) => `'${r}'`).join(',')
       cond.push(`mo.rank_tier IN (${ranksSql})`)
       condIngest.push(`im.rank_tier IN (${ranksSql})`)
-    } else {
-      cond.push(`mo.rank_tier <> 'UNRANKED'`)
-      condIngest.push(`im.rank_tier <> 'UNRANKED'`)
     }
     const whereSql = cond.join(' AND ')
     const whereIngestSql = condIngest.join(' AND ')

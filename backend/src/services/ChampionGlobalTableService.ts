@@ -3,7 +3,10 @@
  * Runtime source policy: incremental aggregate tables.
  */
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
-import { toQueryStringArrayParam } from '../utils/statsFilters.js'
+import {
+  buildRankTierSqlConditions,
+  toQueryStringArrayParam,
+} from '../utils/statsFilters.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor, sqlAggUnionAllLiveAndArchives } from './statsAggArchive.js'
 
 export function buildRawMatchCond(
@@ -12,14 +15,11 @@ export function buildRawMatchCond(
 ): string {
   const parts: string[] = []
   const versions = toQueryStringArrayParam(version)
-  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
   if (versions.length === 1)
     parts.push(`m.game_version LIKE '${normalizePatchMajorMinor(versions[0]!).replace(/'/g, "''")}%'`)
   else if (versions.length > 1)
     parts.push(`m.game_version IN (${versions.map((v) => `'${v.replace(/'/g, "''")}'`).join(',')})`)
-  if (ranks.length === 1) parts.push(`m.rank_tier = '${ranks[0]}'`)
-  else if (ranks.length > 1) parts.push(`m.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`)
-  else parts.push(`m.rank_tier <> 'UNRANKED'`)
+  parts.push(...buildRankTierSqlConditions('m', rankTier))
   return parts.length > 0 ? parts.join(' AND ') : '1=1'
 }
 

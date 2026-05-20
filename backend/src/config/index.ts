@@ -18,6 +18,8 @@ type Config = {
   MAX_RANK_BACKLOG_PAUSE_PIPELINES: number;
   /** Débit rank « normal » (hors drain). */
   RANK_LIMITER_MAX_NORMAL: number;
+  /** Débit rank en mode drain (éviter rafales 429 sur League v4). */
+  RANK_LIMITER_MAX_DRAIN: number;
 };
 
 function parsePositiveInt(raw: string | undefined): number | null {
@@ -89,4 +91,6 @@ export const config: Config = {
     parsePositiveInt(process.env.MAX_RANK_BACKLOG_PAUSE_PIPELINES) ?? 5_000,
   RANK_LIMITER_MAX_NORMAL:
     parsePositiveInt(process.env.RANK_LIMITER_MAX_NORMAL) ?? 17,
+  RANK_LIMITER_MAX_DRAIN:
+    parsePositiveInt(process.env.RANK_LIMITER_MAX_DRAIN) ?? 95,
 };

@@ -617,11 +617,15 @@ const activeRoleLabel = computed(() => {
                 >{{ row.blue.games ? row.blue.winrate.toFixed(2) : '—' }}</span
               >
               <span
-                v-if="row.blue.games"
+                v-if="
+                  row.blue.games &&
+                  p.championGlobalPatchDeltaRefLabel &&
+                  p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'winrate') != null
+                "
                 class="text-[10px] leading-none"
                 :class="
                   p.tierListPatchDeltaClass(
-                    p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'winrate') ?? 0
+                    p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'winrate')!
                   )
                 "
                 :title="
@@ -631,7 +635,7 @@ const activeRoleLabel = computed(() => {
                 "
                 >{{
                   p.formatTierListPatchDeltaPp(
-                    p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'winrate') ?? 0
+                    p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'winrate')!
                   )
                 }}</span
               >
@@ -647,11 +651,15 @@ const activeRoleLabel = computed(() => {
                 >{{ row.blue.games ? row.blue.pickrate.toFixed(2) : '—' }}</span
               >
               <span
-                v-if="row.blue.games"
+                v-if="
+                  row.blue.games &&
+                  p.championGlobalPatchDeltaRefLabel &&
+                  p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'pickrate') != null
+                "
                 class="text-[10px] leading-none"
                 :class="
                   p.tierListPatchDeltaClass(
-                    p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'pickrate') ?? 0
+                    p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'pickrate')!
                   )
                 "
                 :title="
@@ -661,7 +669,7 @@ const activeRoleLabel = computed(() => {
                 "
                 >{{
                   p.formatTierListPatchDeltaPp(
-                    p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'pickrate') ?? 0
+                    p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'pickrate')!
                   )
                 }}</span
               >
@@ -675,11 +683,15 @@ const activeRoleLabel = computed(() => {
                 >{{ row.red.games ? row.red.winrate.toFixed(2) : '—' }}</span
               >
               <span
-                v-if="row.red.games"
+                v-if="
+                  row.red.games &&
+                  p.championGlobalPatchDeltaRefLabel &&
+                  p.championGlobalSideStatDeltaPp(row.championId, 'red', 'winrate') != null
+                "
                 class="text-[10px] leading-none"
                 :class="
                   p.tierListPatchDeltaClass(
-                    p.championGlobalSideStatDeltaPp(row.championId, 'red', 'winrate') ?? 0
+                    p.championGlobalSideStatDeltaPp(row.championId, 'red', 'winrate')!
                   )
                 "
                 :title="
@@ -689,7 +701,7 @@ const activeRoleLabel = computed(() => {
                 "
                 >{{
                   p.formatTierListPatchDeltaPp(
-                    p.championGlobalSideStatDeltaPp(row.championId, 'red', 'winrate') ?? 0
+                    p.championGlobalSideStatDeltaPp(row.championId, 'red', 'winrate')!
                   )
                 }}</span
               >
@@ -705,11 +717,15 @@ const activeRoleLabel = computed(() => {
                 >{{ row.red.games ? row.red.pickrate.toFixed(2) : '—' }}</span
               >
               <span
-                v-if="row.red.games"
+                v-if="
+                  row.red.games &&
+                  p.championGlobalPatchDeltaRefLabel &&
+                  p.championGlobalSideStatDeltaPp(row.championId, 'red', 'pickrate') != null
+                "
                 class="text-[10px] leading-none"
                 :class="
                   p.tierListPatchDeltaClass(
-                    p.championGlobalSideStatDeltaPp(row.championId, 'red', 'pickrate') ?? 0
+                    p.championGlobalSideStatDeltaPp(row.championId, 'red', 'pickrate')!
                   )
                 "
                 :title="
@@ -719,7 +735,7 @@ const activeRoleLabel = computed(() => {
                 "
                 >{{
                   p.formatTierListPatchDeltaPp(
-                    p.championGlobalSideStatDeltaPp(row.championId, 'red', 'pickrate') ?? 0
+                    p.championGlobalSideStatDeltaPp(row.championId, 'red', 'pickrate')!
                   )
                 }}</span
               >
@@ -977,53 +993,78 @@ const activeRoleLabel = computed(() => {
                 {{ p.formatChampionGlobalNum(row.avgAssists) }}
               </span>
               <span
-                v-if="p.championGlobalPatchDeltaRefLabel"
+                v-if="
+                  p.championGlobalPatchDeltaRefLabel &&
+                  (p.championGlobalNumericDelta(row.championId, 'avgKills') != null ||
+                    p.championGlobalNumericDelta(row.championId, 'avgDeaths') != null ||
+                    p.championGlobalNumericDelta(row.championId, 'avgAssists') != null)
+                "
                 class="text-[10px] leading-none text-text/75"
               >
-                <span
-                  :class="
-                    p.championGlobalNumericDeltaClass(
-                      p.championGlobalNumericDelta(row.championId, 'avgKills') ?? 0
-                    )
+                <template v-if="p.championGlobalNumericDelta(row.championId, 'avgKills') != null">
+                  <span
+                    :class="
+                      p.championGlobalNumericDeltaClass(
+                        p.championGlobalNumericDelta(row.championId, 'avgKills')!
+                      )
+                    "
+                    >K
+                    {{
+                      p.formatChampionGlobalNumericDelta(
+                        p.championGlobalNumericDelta(row.championId, 'avgKills')!
+                      )
+                    }}</span
+                  >
+                </template>
+                <template
+                  v-if="
+                    p.championGlobalNumericDelta(row.championId, 'avgKills') != null &&
+                    p.championGlobalNumericDelta(row.championId, 'avgDeaths') != null
                   "
-                  >K
-                  {{
-                    p.formatChampionGlobalNumericDelta(
-                      p.championGlobalNumericDelta(row.championId, 'avgKills') ?? 0
-                    )
-                  }}</span
                 >
-                <span class="px-1 text-text/45">|</span>
-                <span
-                  :class="
-                    p.championGlobalNumericDeltaClass(
-                      p.championGlobalNumericDelta(row.championId, 'avgDeaths') ?? 0,
-                      true
-                    )
+                  <span class="px-1 text-text/45">|</span>
+                </template>
+                <template v-if="p.championGlobalNumericDelta(row.championId, 'avgDeaths') != null">
+                  <span
+                    :class="
+                      p.championGlobalNumericDeltaClass(
+                        p.championGlobalNumericDelta(row.championId, 'avgDeaths')!,
+                        true
+                      )
+                    "
+                    >D
+                    {{
+                      p.formatChampionGlobalNumericDelta(
+                        p.championGlobalNumericDelta(row.championId, 'avgDeaths')!
+                      )
+                    }}</span
+                  >
+                </template>
+                <template
+                  v-if="
+                    (p.championGlobalNumericDelta(row.championId, 'avgKills') != null ||
+                      p.championGlobalNumericDelta(row.championId, 'avgDeaths') != null) &&
+                    p.championGlobalNumericDelta(row.championId, 'avgAssists') != null
                   "
-                  >D
-                  {{
-                    p.formatChampionGlobalNumericDelta(
-                      p.championGlobalNumericDelta(row.championId, 'avgDeaths') ?? 0
-                    )
-                  }}</span
                 >
-                <span class="px-1 text-text/45">|</span>
-                <span
-                  :class="
-                    p.championGlobalNumericDeltaClass(
-                      p.championGlobalNumericDelta(row.championId, 'avgAssists') ?? 0
-                    )
-                  "
-                  >A
-                  {{
-                    p.formatChampionGlobalNumericDelta(
-                      p.championGlobalNumericDelta(row.championId, 'avgAssists') ?? 0
-                    )
-                  }}</span
-                >
+                  <span class="px-1 text-text/45">|</span>
+                </template>
+                <template v-if="p.championGlobalNumericDelta(row.championId, 'avgAssists') != null">
+                  <span
+                    :class="
+                      p.championGlobalNumericDeltaClass(
+                        p.championGlobalNumericDelta(row.championId, 'avgAssists')!
+                      )
+                    "
+                    >A
+                    {{
+                      p.formatChampionGlobalNumericDelta(
+                        p.championGlobalNumericDelta(row.championId, 'avgAssists')!
+                      )
+                    }}</span
+                  >
+                </template>
               </span>
-              <span v-else class="text-[10px] leading-none text-text/55">—</span>
             </div>
           </div>
           <div

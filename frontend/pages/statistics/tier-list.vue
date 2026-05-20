@@ -433,6 +433,10 @@ import { useStatisticsUiStore } from '~/stores/StatisticsUiStore'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { apiUrl } from '~/utils/apiUrl'
 import { useStatisticsTierListPage } from '~/composables/statistics/useStatisticsTierListPage'
+import {
+  enrichBotlaneRowsWithPatchDeltas,
+  type BotlaneTierRowWithPatchDelta,
+} from '~/composables/statistics/botlanePatchDeltas'
 
 definePageMeta({
   layout: 'default',
@@ -682,20 +686,31 @@ const {
 type BotlaneTierPayload = {
   version: string | null
   rankTier: string | string[] | null
-  rows: Array<{
-    rank: number
-    adcId: number
-    supportId: number
-    oppAdcId: number
-    oppSupportId: number
-    games: number
-    wins: number
-    winrate: number
-    deltaVsPeersPp: number | null
-    note: number
-    tier: string
-  }>
+  rows: BotlaneTierRowWithPatchDelta[]
 } | null
+
+const botlanePatchDeltaRefLabel = computed(() => {
+  const ref = normalizeVersionToPrefix(progressionFromVersion.value)
+  const main = normalizeVersionToPrefix(statsVersionFilter.value)
+  if (!ref || !main || ref === main) return null
+  return ref
+})
+
+function fetchBotlanePayload(
+  version: string,
+  endpoint: '/api/stats/botlane-vs-botlane' | '/api/stats/botlane-duo-tierlist'
+): Promise<BotlaneTierPayload> {
+  const params = new URLSearchParams()
+  params.set('version', version)
+  for (const t of statsDivisionFilter.value) params.append('rankTier', t)
+  const q = params.toString() ? `?${params.toString()}` : ''
+  const fetchOpts = {
+    timeout: BOTLANE_STATS_TIMEOUT_MS,
+    cache: 'no-store' as const,
+    headers: { 'cache-control': 'no-cache' },
+  }
+  return statsFetch<BotlaneTierPayload>(apiUrl(endpoint + q), fetchOpts)
+}
 
 function isBotlaneTierListView(vm: string): boolean {
   return vm === 'botlaneMatchups' || vm === 'botlaneDuoRank'
@@ -723,25 +738,29 @@ async function loadActiveBotlanePanel(): Promise<void> {
     return
   }
 
-  const params = new URLSearchParams()
-  params.set('version', version)
-  for (const t of statsDivisionFilter.value) params.append('rankTier', t)
-  const q = params.toString() ? `?${params.toString()}` : ''
-  const fetchOpts = {
-    timeout: BOTLANE_STATS_TIMEOUT_MS,
-    cache: 'no-store' as const,
-    headers: { 'cache-control': 'no-cache' },
-  }
+  const refPatch = botlanePatchDeltaRefLabel.value
+  const mode = vm === 'botlaneMatchups' ? 'vs' : 'duo'
+  const endpoint =
+    vm === 'botlaneMatchups' ? '/api/stats/botlane-vs-botlane' : '/api/stats/botlane-duo-tierlist'
 
   if (vm === 'botlaneMatchups') {
     botlaneRankingPending.value = false
     botlaneVsPending.value = true
     botlaneVsError.value = false
     try {
-      botlaneVsData.value = await statsFetch<BotlaneTierPayload>(
-        apiUrl('/api/stats/botlane-vs-botlane' + q),
-        fetchOpts
-      )
+      const data = await fetchBotlanePayload(version, endpoint)
+      let rows: BotlaneTierRowWithPatchDelta[] = data?.rows ?? []
+      if (refPatch && rows.length > 0) {
+        try {
+          const refData = await fetchBotlanePayload(refPatch, endpoint)
+          if (refData?.rows?.length) {
+            rows = enrichBotlaneRowsWithPatchDeltas(rows, refData.rows, mode)
+          }
+        } catch {
+          /* patch de référence optionnel */
+        }
+      }
+      botlaneVsData.value = data ? { ...data, rows } : null
       botlaneVsError.value = false
     } catch {
       botlaneVsData.value = null
@@ -754,10 +773,19 @@ async function loadActiveBotlanePanel(): Promise<void> {
     botlaneRankingPending.value = true
     botlaneRankingError.value = false
     try {
-      botlaneRankingData.value = await statsFetch<BotlaneTierPayload>(
-        apiUrl('/api/stats/botlane-duo-tierlist' + q),
-        fetchOpts
-      )
+      const data = await fetchBotlanePayload(version, endpoint)
+      let rows: BotlaneTierRowWithPatchDelta[] = data?.rows ?? []
+      if (refPatch && rows.length > 0) {
+        try {
+          const refData = await fetchBotlanePayload(refPatch, endpoint)
+          if (refData?.rows?.length) {
+            rows = enrichBotlaneRowsWithPatchDeltas(rows, refData.rows, mode)
+          }
+        } catch {
+          /* patch de référence optionnel */
+        }
+      }
+      botlaneRankingData.value = data ? { ...data, rows } : null
       botlaneRankingError.value = false
     } catch {
       botlaneRankingData.value = null
@@ -909,6 +937,7 @@ watch(
     statsDivisionFilter,
     statsRoleFilter,
     statsOtpFilter,
+    progressionFromVersion,
     () => tierList.tierListSortColumn.value,
     () => tierList.tierListSortDir.value,
     () => tierList.tierListViewModel.value,
@@ -917,6 +946,12 @@ watch(
     syncTierListStateToQuery()
   }
 )
+
+watch([progressionFromVersion, statsVersionFilter, statsDivisionFilter], () => {
+  if (isBotlaneTierListView(tierListViewModel.value)) {
+    loadActiveBotlanePanel().catch(() => undefined)
+  }
+})
 
 watch(
   () => tierListViewModel.value,

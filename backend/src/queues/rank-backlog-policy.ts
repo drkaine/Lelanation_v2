@@ -1,5 +1,5 @@
 import { config } from "../config/index.js";
-import { TARGET_PCT } from "../redis/rate-scheduler.js";
+import { RANK_BULLMQ_LIMITER_DURATION_MS } from "../redis/rate-scheduler.js";
 
 /** Au-delà de ce seuil : pause discovery/hydration, débit rank maximal. */
 export function maxRankBacklogBeforePipelinePause(): number {
@@ -10,17 +10,20 @@ export function shouldPauseMatchPipelines(rankWaiting: number): boolean {
   return rankWaiting > maxRankBacklogBeforePipelinePause();
 }
 
-/** Limiter BullMQ en mode drain (~88 % du plafond 120 s). */
-export function rankLimiterMaxDrain(rateLimitPer120s = config.RATE_LIMIT_PER_120S): number {
-  return Math.max(1, Math.floor(rateLimitPer120s * TARGET_PCT * 0.88));
+/** Appels League v4 / 120 s en mode drain (sans rafale → moins de 429). */
+export function rankLimiterMaxDrain(): number {
+  return config.RANK_LIMITER_MAX_DRAIN;
 }
 
 export function rankLimiterMaxNormal(): number {
   return config.RANK_LIMITER_MAX_NORMAL;
 }
 
-export function rankLimiterMaxForBacklog(rankWaiting: number): number {
-  return shouldPauseMatchPipelines(rankWaiting)
-    ? rankLimiterMaxDrain()
-    : rankLimiterMaxNormal();
+/** 1 job toutes les N ms → débit lisse (évite 79 jobs en rafale puis idle 80 s). */
+export function rankLimiterSmoothIntervalMs(maxPerWindow: number): number {
+  return Math.max(500, Math.ceil(RANK_BULLMQ_LIMITER_DURATION_MS / maxPerWindow));
+}
+
+export function rankWorkerConcurrency(rankWaiting: number): number {
+  return shouldPauseMatchPipelines(rankWaiting) ? 1 : 2;
 }

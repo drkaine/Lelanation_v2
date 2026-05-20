@@ -97,7 +97,7 @@ const pairRows = computed<PairRow[]>(() => p.overviewDetailData?.summonerSpellSe
 const baselineBySpell = computed<Map<number, SoloRow>>(() => {
   const m = new Map<number, SoloRow>()
   const base = p.overviewDetailBaselineData?.summonerSpells ?? []
-  for (const r of base) m.set(r.spellId, r)
+  for (const r of base) m.set(Number(r.spellId), r)
   return m
 })
 const baselineByPair = computed<Map<string, PairRow>>(() => {
@@ -107,26 +107,49 @@ const baselineByPair = computed<Map<string, PairRow>>(() => {
   return m
 })
 
+const hasComparison = computed(() => Boolean(p.overviewDetailComparisonVersion))
+
+function wrPct(row: { games: number; wins: number; winrate: number }): number {
+  const g = Number(row.games ?? 0)
+  if (g > 0) return (Number(row.wins ?? 0) / g) * 100
+  return Number(row.winrate ?? 0)
+}
+
+function deltaWhenComparison(
+  cur: number | null | undefined,
+  base: number | null | undefined
+): number | null {
+  if (!hasComparison.value || p.overviewDetailBaselinePending) return null
+  if (cur == null || base == null || !Number.isFinite(cur) || !Number.isFinite(base)) return null
+  return cur - base
+}
+
 const enrichedRows = computed<EnrichedRow[]>(() =>
   rows.value.map(r => {
-    const b = baselineBySpell.value.get(r.spellId)
+    const b = baselineBySpell.value.get(Number(r.spellId))
     const castsAvg = Number(r.casts ?? 0) / Math.max(1, Number(r.games ?? 0))
     const baselineCastsAvg =
       b != null ? Number(b.casts ?? 0) / Math.max(1, Number(b.games ?? 0)) : null
     return {
       ...r,
-      deltaPick: b ? r.pickrate - b.pickrate : null,
-      deltaCasts: b ? castsAvg - Number(baselineCastsAvg ?? 0) : null,
-      deltaWin: b ? r.winrate - b.winrate : null,
-      deltaD: b && r.pctSlotD != null && b.pctSlotD != null ? r.pctSlotD - b.pctSlotD : null,
-      deltaF: b && r.pctSlotF != null && b.pctSlotF != null ? r.pctSlotF - b.pctSlotF : null,
+      deltaPick: deltaWhenComparison(r.pickrate, b?.pickrate),
+      deltaCasts: deltaWhenComparison(castsAvg, baselineCastsAvg),
+      deltaWin: deltaWhenComparison(wrPct(r), b ? wrPct(b) : null),
+      deltaD:
+        r.pctSlotD != null && b?.pctSlotD != null
+          ? deltaWhenComparison(r.pctSlotD, b.pctSlotD)
+          : null,
+      deltaF:
+        r.pctSlotF != null && b?.pctSlotF != null
+          ? deltaWhenComparison(r.pctSlotF, b.pctSlotF)
+          : null,
     }
   })
 )
 
 const enrichedPairRows = computed<EnrichedPairRow[]>(() =>
   pairRows.value.map(r => {
-    const b = baselineByPair.value.get(`${r.spellIdD}:${r.spellIdF}`)
+    const b = baselineByPair.value.get(`${Number(r.spellIdD)}:${Number(r.spellIdF)}`)
     const spell1Avg = Number(r.spell1Casts ?? 0) / Math.max(1, Number(r.games ?? 0))
     const spell2Avg = Number(r.spell2Casts ?? 0) / Math.max(1, Number(r.games ?? 0))
     const baselineSpell1Avg =
@@ -135,10 +158,10 @@ const enrichedPairRows = computed<EnrichedPairRow[]>(() =>
       b != null ? Number(b.spell2Casts ?? 0) / Math.max(1, Number(b.games ?? 0)) : null
     return {
       ...r,
-      deltaPick: b ? r.pickrate - b.pickrate : null,
-      deltaSpell1Casts: b ? spell1Avg - Number(baselineSpell1Avg ?? 0) : null,
-      deltaSpell2Casts: b ? spell2Avg - Number(baselineSpell2Avg ?? 0) : null,
-      deltaWin: b ? r.winrate - b.winrate : null,
+      deltaPick: deltaWhenComparison(r.pickrate, b?.pickrate),
+      deltaSpell1Casts: deltaWhenComparison(spell1Avg, baselineSpell1Avg),
+      deltaSpell2Casts: deltaWhenComparison(spell2Avg, baselineSpell2Avg),
+      deltaWin: deltaWhenComparison(wrPct(r), b ? wrPct(b) : null),
     }
   })
 )
@@ -347,20 +370,20 @@ function fmtPct(v: number | null | undefined): string {
 }
 
 function fmtDelta(v: number | null | undefined): string {
-  if (v == null || p.overviewDetailBaselinePending) return '—'
+  if (!hasComparison.value || p.overviewDetailBaselinePending || v == null) return '—'
   const val = Number(v)
   return `${val >= 0 ? '+' : ''}${val.toFixed(2)}%`
 }
 
 function deltaClass(v: number | null | undefined): string {
-  if (v == null) return 'text-text/55'
+  if (!hasComparison.value || v == null || p.overviewDetailBaselinePending) return 'text-text/55'
   if (v > 0) return 'text-success'
   if (v < 0) return 'text-error'
   return 'text-text/75'
 }
 
 function deltaLabelClass(v: number | null | undefined): string {
-  if (v == null || p.overviewDetailBaselinePending) return 'text-text/55'
+  if (!hasComparison.value || v == null || p.overviewDetailBaselinePending) return 'text-text/55'
   if (v > 0) return 'text-success'
   if (v < 0) return 'text-error'
   return 'text-text/75'
@@ -369,6 +392,13 @@ function deltaLabelClass(v: number | null | undefined): string {
 
 <template>
   <div class="space-y-4">
+    <p v-if="hasComparison && !p.overviewDetailBaselinePending" class="text-xs text-text/60">
+      {{
+        p.t('statisticsPage.balanceDeltaReference', {
+          patch: p.championGlobalPatchDeltaRefLabel ?? p.overviewDetailComparisonVersion,
+        })
+      }}
+    </p>
     <div v-if="p.overviewDetailPending" class="text-text/70">
       {{ p.t('statisticsPage.loading') }}
     </div>

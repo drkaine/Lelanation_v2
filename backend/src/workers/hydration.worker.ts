@@ -16,6 +16,7 @@ import { redis } from "../redis/client.js";
 import { waitForHydrationSlot } from "../redis/rate-scheduler.js";
 import { NotFoundError, RiotClient } from "../riot/client.js";
 import { sumObjectiveTimestampMsByTeamAndKey } from "../parsers/objective-timestamp-sums.js";
+import { buildTeamObjectiveHistogramEntries } from "../parsers/team-objective-histogram.js";
 import type { MatchDto, MatchTimelineDto, ParticipantDto } from "../riot/types.js";
 import {
   findPreviousPatchEntry,
@@ -187,6 +188,9 @@ function parseTeamStats(
       });
     }
   }
+  objectives.push(
+    ...buildTeamObjectiveHistogramEntries(match, timeline, participants),
+  );
 
   const participantsInMatch = match.info.participants ?? [];
   const surrendered = participantsInMatch.some((p) => p.gameEndedInSurrender === true);

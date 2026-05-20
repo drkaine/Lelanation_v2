@@ -939,6 +939,15 @@ async function upsertMatchOutcomeStats(tx: any, payload: IngestionJobData): Prom
 }
 
 async function upsertTeamCoreStat(tx: any, payload: IngestionJobData): Promise<void> {
+  const matchSurrendered = payload.teamStats.surrendered ? 1 : 0
+  const matchEarlySurrendered = payload.teamStats.earlySurrendered ? 1 : 0
+  const team100Lost = payload.teamStats.team100Win ? 0 : 1
+  const team200Lost = payload.teamStats.team100Win ? 1 : 0
+  const team100Surrendered = matchSurrendered * team100Lost
+  const team200Surrendered = matchSurrendered * team200Lost
+  const team100EarlySurrendered = matchEarlySurrendered * team100Lost
+  const team200EarlySurrendered = matchEarlySurrendered * team200Lost
+
   await tx`
     INSERT INTO team_core_stat (
       patch, rank_tier, region, team, count_win, count_game, count_team_early_surrendered, count_team_surrendered
@@ -950,8 +959,8 @@ async function upsertTeamCoreStat(tx: any, payload: IngestionJobData): Promise<v
       100,
       ${payload.teamStats.team100Win ? 1 : 0},
       1,
-      ${payload.teamStats.earlySurrendered ? 1 : 0},
-      ${payload.teamStats.surrendered ? 1 : 0}
+      ${team100EarlySurrendered},
+      ${team100Surrendered}
     )
     ON CONFLICT (patch, rank_tier, region, team)
     DO UPDATE SET
@@ -972,8 +981,8 @@ async function upsertTeamCoreStat(tx: any, payload: IngestionJobData): Promise<v
       200,
       ${payload.teamStats.team100Win ? 0 : 1},
       1,
-      ${payload.teamStats.earlySurrendered ? 1 : 0},
-      ${payload.teamStats.surrendered ? 1 : 0}
+      ${team200EarlySurrendered},
+      ${team200Surrendered}
     )
     ON CONFLICT (patch, rank_tier, region, team)
     DO UPDATE SET

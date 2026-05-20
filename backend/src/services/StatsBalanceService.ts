@@ -357,8 +357,8 @@ export async function getBalanceFramework(
   }
 
   const sorted = [...available].sort((a, b) => comparePatch(b, a))
-  const selected = patchLabel(options.version) ?? sorted[0] ?? null
-  if (!selected) {
+  let currentPatch = patchLabel(options.version) ?? sorted[0] ?? null
+  if (!currentPatch) {
     return {
       rules,
       currentPatch: '',
@@ -368,15 +368,26 @@ export async function getBalanceFramework(
     }
   }
 
-  const currentPatch = selected
+  const role = normalizeRoleFilter(options.role)
+
+  const snapshotHasRows = (snap: PatchSnapshot): boolean =>
+    (['average', 'skilled', 'elite'] as const).some((lvl) => snap.levels[lvl].byChampionRole.size > 0)
+
+  let currentSnapshot = await buildPatchSnapshot(currentPatch, role, rules)
+  if (!snapshotHasRows(currentSnapshot) && sorted.length > 0) {
+    const fallbackPatch = sorted[0]!
+    if (fallbackPatch !== currentPatch) {
+      currentPatch = fallbackPatch
+      currentSnapshot = await buildPatchSnapshot(currentPatch, role, rules)
+    }
+  }
+
   const previousPatch = findPreviousPatch(currentPatch, sorted)
   const beforePreviousPatch = previousPatch ? findPreviousPatch(previousPatch, sorted) : null
 
-  const role = normalizeRoleFilter(options.role)
-  const [currentSnapshot, previousSnapshot] = await Promise.all([
-    buildPatchSnapshot(currentPatch, role, rules),
-    previousPatch ? buildPatchSnapshot(previousPatch, role, rules) : Promise.resolve(null),
-  ])
+  const previousSnapshot = previousPatch
+    ? await buildPatchSnapshot(previousPatch, role, rules)
+    : null
   const beforePreviousSnapshot = beforePreviousPatch
     ? await buildPatchSnapshot(beforePreviousPatch, role, rules)
     : null

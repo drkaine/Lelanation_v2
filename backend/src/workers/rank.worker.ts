@@ -1,15 +1,14 @@
-import { Worker } from "bullmq";
+import { DelayedError, Worker } from "bullmq";
 import { sql } from "../db/client.js";
 import type { RankJobData } from "../dto/match.dto.js";
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
 import { RANK_QUEUE } from "../queues/definitions.js";
+import { rankLimiterMaxDrain, rankLimiterSmoothIntervalMs } from "../queues/rank-backlog-policy.js";
 import { redis } from "../redis/client.js";
-import { rankLimiterMaxDrain } from "../queues/rank-backlog-policy.js";
 import { RANK_BULLMQ_LIMITER_DURATION_MS } from "../redis/rate-scheduler.js";
-import { RiotClient } from "../riot/client.js";
+import { RateLimitError, RiotClient } from "../riot/client.js";
 
 const riotClient = new RiotClient();
-const RANK_WORKER_CONCURRENCY = 2;
 
 function normalizeTier(value: string | null | undefined): string | null {
   const tier = String(value ?? "")
@@ -33,6 +32,28 @@ type RankJobOutcome =
   | { skipped: true; reason: string }
   | { success: true };
 
+async function upsertTodayRankSnapshot(
+  puuid: string,
+  region: string,
+  rankTier: string,
+  rankDivision: string,
+  rankLp: number,
+): Promise<void> {
+  const today = todayIsoDate();
+  await sql`
+    INSERT INTO player_rank_history (puuid, date, region, rank_tier, rank_division, rank_lp)
+    VALUES (
+      ${puuid},
+      ${today}::date,
+      ${region},
+      ${rankTier},
+      ${rankDivision},
+      ${rankLp}
+    )
+    ON CONFLICT (puuid, date, region) DO NOTHING
+  `;
+}
+
 async function runRankJob(data: RankJobData): Promise<RankJobOutcome> {
   const puuid = String(data.puuid ?? "").trim();
   const region = String(data.region ?? "").trim().toLowerCase();
@@ -53,48 +74,42 @@ async function runRankJob(data: RankJobData): Promise<RankJobOutcome> {
     return { skipped: true, reason: "already_fetched_today" };
   }
 
-  let rankTier: string | null = null;
-  let rankDivision: string | null = null;
-  let rankLp: number | null = null;
-
   try {
     const rank = await riotClient.getRank(puuid, region);
     if (!rank) {
+      await upsertTodayRankSnapshot(puuid, region, "UNRANKED", "UNRANKED", 0);
       return { skipped: true, reason: "unranked" };
     }
 
     const normalizedTier = normalizeTier(rank.tier);
     if (!normalizedTier) {
+      await upsertTodayRankSnapshot(puuid, region, "UNRANKED", "UNRANKED", 0);
       return { skipped: true, reason: "unranked" };
     }
 
-    rankTier = normalizedTier;
-    rankDivision = String(rank.rank ?? "").trim().toUpperCase() || null;
-    rankLp = clampRankLp(rank.leaguePoints ?? 0);
+    const rankDivision = String(rank.rank ?? "").trim().toUpperCase() || "UNRANKED";
+    const rankLp = clampRankLp(rank.leaguePoints ?? 0);
+    await upsertTodayRankSnapshot(puuid, region, normalizedTier, rankDivision, rankLp);
     pollerV2Observability.recordRankLeagueFetchSucceeded();
+    return { success: true };
   } catch (error) {
+    if (error instanceof RateLimitError) {
+      pollerV2Observability.recordRankLeagueFetchFailed();
+      throw error;
+    }
     pollerV2Observability.recordRankLeagueFetchFailed();
     console.warn(
       `[rank.worker] rank_fetch_failed puuid=${puuid} region=${region} reason=${error instanceof Error ? error.message : String(error)}`,
     );
     throw error;
   }
-
-  await sql`
-    INSERT INTO player_rank_history (puuid, date, region, rank_tier, rank_division, rank_lp)
-    VALUES (
-      ${puuid},
-      ${today}::date,
-      ${region},
-      ${rankTier},
-      ${rankDivision ?? "UNRANKED"},
-      ${rankLp ?? 0}
-    )
-    ON CONFLICT (puuid, date, region) DO NOTHING
-  `;
-
-  return { success: true };
 }
+
+const drainLimiterMax = rankLimiterMaxDrain();
+const rankWorkerLimiter = {
+  max: 1,
+  duration: rankLimiterSmoothIntervalMs(drainLimiterMax),
+};
 
 export const rankWorker = new Worker<RankJobData>(
   RANK_QUEUE,
@@ -105,16 +120,25 @@ export const rankWorker = new Worker<RankJobData>(
       pollerV2Observability.recordRankJobSuccess();
       return outcome;
     } catch (error) {
+      if (error instanceof RateLimitError) {
+        const delayMs = 120_000;
+        await job.moveToDelayed(Date.now() + delayMs, job.token);
+        pollerV2Observability.recordRankJobFailure(error);
+        throw new DelayedError(
+          `rank_rate_limited delay_ms=${delayMs} puuid=${job.data.puuid}`,
+        );
+      }
       pollerV2Observability.recordRankJobFailure(error);
       throw error;
     }
   },
   {
     connection: redis,
-    concurrency: RANK_WORKER_CONCURRENCY,
-    limiter: {
-      max: rankLimiterMaxDrain(),
-      duration: RANK_BULLMQ_LIMITER_DURATION_MS,
-    },
+    concurrency: 1,
+    limiter: rankWorkerLimiter,
   },
+);
+
+console.log(
+  `[rank.worker] started limiter=1/${rankWorkerLimiter.duration}ms (~${drainLimiterMax}/${RANK_BULLMQ_LIMITER_DURATION_MS}ms) concurrency=1`,
 );

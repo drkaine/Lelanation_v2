@@ -222,7 +222,7 @@ export function startDrip(): void {
     `[rate-scheduler] drip started ` +
       `discovery=${discoveryRate.toFixed(4)}/s hydration=${hydrationRate.toFixed(4)}/s ` +
       `(budgets ${DISCOVERY_BUDGET_PCT * 100}%/${HYDRATION_BUDGET_PCT * 100}% of ${TARGET_PCT * 100}% cap; ` +
-      `rank via BullMQ limiter (drain max ~88% cap / ${RANK_BULLMQ_LIMITER_DURATION_MS}ms)`,
+      `rank via BullMQ limiter (see rank.worker / RANK_LIMITER_MAX_DRAIN)`,
   );
 }
 

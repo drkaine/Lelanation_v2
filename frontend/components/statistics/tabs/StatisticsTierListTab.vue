@@ -194,14 +194,28 @@ withDefaults(
               </button>
             </div>
             <template v-if="p.hasTierListHighElo">
-              <button
-                type="button"
-                class="tier-list-lolalytics-th tier-list-lolalytics-th-apex border-p.t border-p.t-[var(--color-grey-300)] hidden w-10 shrink-0 cursor-pointer items-center justify-center border-b border-black text-[rgb(var(--rgb-gold-100))] hover:bg-primary/25 sm:flex"
-                :title="p.t('statisticsPage.tierListApexRankTooltip')"
-                @click="p.cycleTierListSort('highEloRank')"
+              <div
+                class="tier-list-lolalytics-th tier-list-lolalytics-th-apex border-p.t border-p.t-[var(--color-grey-300)] hidden min-h-8 w-10 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1 text-[rgb(var(--rgb-gold-100))] sm:flex"
               >
-                {{ p.t('statisticsPage.tierListApexRank') }}{{ p.tierListSortIcon('highEloRank') }}
-              </button>
+                <button
+                  type="button"
+                  class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[11px] leading-tight hover:bg-primary/25"
+                  :title="p.t('statisticsPage.tierListApexRankTooltip')"
+                  @click="p.cycleTierListSort('highEloRank')"
+                >
+                  {{ p.t('statisticsPage.tierListApexRank')
+                  }}{{ p.tierListSortIcon('highEloRank') }}
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[9px] leading-tight text-[rgb(var(--rgb-gold-100))]/90 hover:bg-primary/20"
+                  :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
+                  @click="p.cycleTierListSort('patchHighEloRankDelta')"
+                >
+                  {{ p.t('statisticsPage.championTableDeltaSymbol')
+                  }}{{ p.tierListSortIcon('patchHighEloRankDelta') }}
+                </button>
+              </div>
               <div
                 class="tier-list-lolalytics-th tier-list-lolalytics-th-apex border-p.t border-p.t-[var(--color-grey-300)] hidden min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1 text-[rgb(var(--rgb-gold-100))] sm:flex"
               >
@@ -420,9 +434,31 @@ withDefaults(
             </div>
             <template v-if="p.hasTierListHighElo">
               <div
-                class="tier-list-lolalytics-td tier-list-lolalytics-td-apex hidden w-10 shrink-0 items-center justify-center sm:flex"
+                class="tier-list-lolalytics-td tier-list-lolalytics-td-apex hidden w-10 shrink-0 flex-col items-center justify-center gap-0 leading-tight sm:flex"
               >
-                {{ row.highEloRank != null ? row.highEloRank : '—' }}
+                <span>{{ row.highEloRank != null ? row.highEloRank : '—' }}</span>
+                <span
+                  v-if="
+                    p.tierListPatchDeltaRefLabel &&
+                    p.tierListPatchHighEloRankDelta(row.championId) != null
+                  "
+                  class="text-[10px] leading-none"
+                  :class="
+                    p.tierListPatchDeltaRankClass(
+                      p.tierListPatchHighEloRankDelta(row.championId) || 0
+                    )
+                  "
+                  :title="
+                    p.t('statisticsPage.tierListPatchDeltaRankTitle', {
+                      ref: p.tierListPatchDeltaRefLabel,
+                    })
+                  "
+                  >{{
+                    p.formatTierListPatchDeltaRank(
+                      p.tierListPatchHighEloRankDelta(row.championId) || 0
+                    )
+                  }}</span
+                >
               </div>
               <div
                 class="tier-list-lolalytics-td tier-list-lolalytics-td-apex hidden w-12 shrink-0 flex-col items-center justify-center gap-0 leading-tight sm:flex"
