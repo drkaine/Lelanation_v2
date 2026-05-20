@@ -4,12 +4,10 @@
  *   TOTAL_RATE = RATE_LIMIT_PER_120S * TARGET_PCT / 120
  *   // dev : 95 * 0.95 / 120 ≈ 0.7521 tokens/s
  *
- *   discovery 15% · hydration 65% · rank 20%
- *   // dev : 0.109/s (~9.2s/slot) · 0.473/s (~2.1s/slot, coût 2) · 0.146/s (~6.8s/slot)
- *   // dev /120s : ~13.1 · ~56.8 tokens (~28.4 matchs) · ~17.5 rank slots
+ *   discovery 15% · hydration 85% (rank = BullMQ limiter, pas de drip Redis)
+ *   // dev : ~0.11/s discovery · ~0.64/s hydration (coût 2)
  *
- * Rank : concurrency BullMQ = 2 ; jobs dédupliqués par jour (ingestion).
- * Budget rank ~61% des joueurs uniques /30 min ; le reste s’étale sur la journée.
+ * Rank : Worker BullMQ `limiter` (17 / 120s, concurrency 2) — pas de spin Redis.
  */
 import { readFileSync } from "fs";
 import { dirname, join } from "path";
@@ -26,9 +24,12 @@ export const TARGET_PCT = 0.95;
 /** Part de TOTAL_RATE pour matchlists discovery (coût 1). */
 export const DISCOVERY_BUDGET_PCT = 0.15;
 /** Part de TOTAL_RATE pour match + timeline (coût 2 par job hydration). */
-export const HYDRATION_BUDGET_PCT = 0.65;
-/** Part de TOTAL_RATE pour League v4 (rank.worker, concurrency 2). */
-export const RANK_BUDGET_PCT = 0.2;
+export const HYDRATION_BUDGET_PCT = 0.85;
+/** Référence doc / limiter BullMQ rank (~17 appels / 120s en dev). */
+export const RANK_BUDGET_PCT = 0.1;
+
+/** Limiter BullMQ rank.worker — voir rank-backlog-policy (drain vs normal). */
+export const RANK_BULLMQ_LIMITER_DURATION_MS = 120_000;
 
 export const DISCOVERY_SLOT_KEY = "rl:slots:discovery";
 export const HYDRATION_SLOT_KEY = "rl:slots:hydration";
@@ -213,16 +214,15 @@ export function startDrip(): void {
 
   const discoveryRate = discoveryTargetRatePerSec();
   const hydrationRate = hydrationTargetRatePerSec();
-  const rankRate = rankTargetRatePerSec();
 
   startDripForKey(DISCOVERY_SLOT_KEY, discoveryRate);
   startDripForKey(HYDRATION_SLOT_KEY, hydrationRate);
-  startDripForKey(RANK_SLOT_KEY, rankRate);
 
   console.log(
     `[rate-scheduler] drip started ` +
-      `discovery=${discoveryRate.toFixed(4)}/s hydration=${hydrationRate.toFixed(4)}/s rank=${rankRate.toFixed(4)}/s ` +
-      `(budgets ${DISCOVERY_BUDGET_PCT * 100}%/${HYDRATION_BUDGET_PCT * 100}%/${RANK_BUDGET_PCT * 100}% of ${TARGET_PCT * 100}% cap)`,
+      `discovery=${discoveryRate.toFixed(4)}/s hydration=${hydrationRate.toFixed(4)}/s ` +
+      `(budgets ${DISCOVERY_BUDGET_PCT * 100}%/${HYDRATION_BUDGET_PCT * 100}% of ${TARGET_PCT * 100}% cap; ` +
+      `rank via BullMQ limiter (drain max ~88% cap / ${RANK_BULLMQ_LIMITER_DURATION_MS}ms)`,
   );
 }
 

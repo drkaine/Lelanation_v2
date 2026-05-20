@@ -1,51 +1,35 @@
 <template>
   <div class="statistics flex min-h-screen flex-col text-text">
-    <!-- Burger pour ouvrir les filtres (mobile) -->
-    <button
-      v-if="showFiltersPanel"
-      type="button"
-      class="fixed left-3 top-16 z-[46] flex h-10 w-10 items-center justify-center rounded-lg border border-primary/30 bg-surface/90 text-text shadow lg:hidden"
-      :aria-label="t('statisticsPage.openFilters')"
-      @click="openFilters"
-    >
-      <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M4 6h16M4 12h16M4 18h16"
-        />
-      </svg>
-    </button>
-
-    <!-- Onglets : pleine largeur au-dessus des filtres et du contenu -->
-    <div class="w-full flex-shrink-0 bg-surface/30 px-4 pb-2 pt-4">
-      <div
-        ref="tabsNavEl"
-        role="tablist"
-        :aria-label="t('statisticsPage.title')"
-        class="flex flex-nowrap gap-1 overflow-x-auto border-b border-primary/30 pb-2"
-      >
-        <button
-          v-for="tab in tabs"
-          :id="`statistics-tab-${tab.id}`"
-          :key="tab.id"
-          type="button"
-          role="tab"
-          :data-tab-id="tab.id"
-          :aria-selected="activeTab === tab.id"
-          :tabindex="activeTab === tab.id ? 0 : -1"
-          :class="[
-            'rounded px-3 py-1.5 text-sm font-medium transition-colors',
-            activeTab === tab.id
-              ? 'border border-accent/50 bg-accent/20 text-accent'
-              : 'border border-transparent text-text/80 hover:bg-primary/10 hover:text-text',
-          ]"
-          @click="activeTab = tab.id"
-          @keydown="onStatisticsTabsKeydown($event, tab.id)"
+    <!-- Onglets : scroll horizontal + snap (mobile) -->
+    <div class="statistics-tabs-bar w-full flex-shrink-0 bg-surface/30 px-4 pb-2 pt-4">
+      <div class="statistics-tabs-scroll-wrap relative">
+        <div
+          ref="tabsNavEl"
+          role="tablist"
+          :aria-label="t('statisticsPage.title')"
+          class="statistics-tabs-nav flex flex-nowrap gap-1 overflow-x-auto border-b border-primary/30 pb-2"
         >
-          {{ tab.label }}
-        </button>
+          <button
+            v-for="tab in tabs"
+            :id="`statistics-tab-${tab.id}`"
+            :key="tab.id"
+            type="button"
+            role="tab"
+            :data-tab-id="tab.id"
+            :aria-selected="activeTab === tab.id"
+            :tabindex="activeTab === tab.id ? 0 : -1"
+            :class="[
+              'statistics-tab-btn shrink-0 snap-start whitespace-nowrap rounded px-3 py-1.5 text-sm font-medium transition-colors',
+              activeTab === tab.id
+                ? 'border border-accent/50 bg-accent/20 text-accent'
+                : 'border border-transparent text-text/80 hover:bg-primary/10 hover:text-text',
+            ]"
+            @click="activeTab = tab.id"
+            @keydown="onStatisticsTabsKeydown($event, tab.id)"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -79,23 +63,27 @@
       <aside
         v-if="showFiltersPanel"
         :class="[
-          'fixed left-0 top-14 z-[50] flex h-[calc(100dvh-3.5rem)] w-72 max-w-[88vw] shrink-0 flex-col rounded-r-lg bg-surface/95 shadow-lg transition-transform duration-200',
-          'lg:static lg:sticky lg:top-4 lg:z-0 lg:h-auto lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto lg:overflow-x-hidden lg:rounded-lg lg:shadow-none lg:transition-[width,opacity] lg:duration-200',
+          'statistics-filters-panel fixed inset-x-0 bottom-0 top-auto z-[50] flex max-h-[80vh] w-full shrink-0 flex-col overflow-hidden rounded-t-2xl bg-surface/95 shadow-lg transition-transform duration-300 ease-out',
+          'lg:pointer-events-auto lg:static lg:sticky lg:top-4 lg:z-0 lg:h-auto lg:max-h-[calc(100vh-2rem)] lg:max-w-none lg:self-start lg:overflow-y-auto lg:overflow-x-hidden lg:rounded-lg lg:shadow-none lg:transition-[width,opacity,transform] lg:duration-200',
           filtersOpen
-            ? 'translate-x-0 lg:w-64 lg:opacity-100'
-            : '-translate-x-full lg:w-0 lg:translate-x-0 lg:opacity-0',
+            ? 'translate-y-0 lg:w-64 lg:translate-y-0 lg:opacity-100'
+            : 'pointer-events-none translate-y-full lg:w-0 lg:translate-y-0 lg:opacity-0',
         ]"
         @click.stop
       >
         <div
           class="flex shrink-0 items-center gap-2 border-b border-primary/25 p-2 lg:border-transparent lg:pb-2"
         >
+          <div
+            class="mx-auto mb-1 h-1 w-10 shrink-0 rounded-full bg-primary/40 lg:hidden"
+            aria-hidden="true"
+          />
           <h2 class="min-w-0 flex-1 truncate text-lg font-semibold text-text-accent">
             {{ t('statisticsPage.filtersTitle') }}
           </h2>
           <button
             type="button"
-            class="inline-flex shrink-0 touch-manipulation items-center gap-1.5 rounded px-2 py-1.5 text-xs font-semibold text-blue-300 transition-colors hover:bg-blue-500/15 hover:text-blue-200"
+            class="statistics-filters-reset inline-flex shrink-0 touch-manipulation items-center gap-1.5 rounded px-2 py-1.5 text-xs font-semibold text-blue-300 transition-colors hover:bg-blue-500/15 hover:text-blue-200"
             @click="resetStatsFilters"
           >
             <span class="iconify i-mdi:refresh" aria-hidden="true" />
@@ -123,369 +111,402 @@
             </svg>
           </button>
         </div>
-        <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-2 lg:flex-none">
-          <div>
-            <label for="stats-filter-version" class="mb-1 block text-sm font-medium text-text">
-              {{ t('statisticsPage.overviewFilterByVersion') }}
-            </label>
-            <select
-              id="stats-filter-version"
-              v-model="statsVersionFilter"
-              class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-              @change="onStatsFilterChange"
-            >
-              <option value="">{{ t('statisticsPage.overviewVersionAll') }}</option>
-              <option v-for="v in statsVersionOptions" :key="v.version" :value="v.version">
-                {{ v.version }}
-              </option>
-            </select>
-          </div>
-          <div>
-            <label
-              for="stats-filter-progression-version"
-              class="mb-1 block text-sm font-medium text-text"
-            >
-              {{ t('statisticsPage.progressionsReferenceVersion') }}
-            </label>
-            <select
-              id="stats-filter-progression-version"
-              v-model="progressionFromVersionModel"
-              class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-            >
-              <option
-                v-for="v in progressionSelectableVersions"
-                :key="'delta-from-' + v.version"
-                :value="v.version"
-              >
-                {{ v.version }}
-              </option>
-            </select>
-          </div>
-          <div v-if="activeTab !== 'balance' && activeTab !== 'surrender'">
-            <div class="mb-1 text-sm font-medium text-text">
-              {{ t('statisticsPage.overviewMatchesByDivision') }}
-            </div>
-            <div class="flex flex-wrap gap-1">
+        <div class="flex min-h-0 flex-1 flex-col overflow-y-auto p-2 lg:flex-none">
+          <div
+            v-if="activeTab !== 'objectives' && activeTab !== 'surrender'"
+            :class="[
+              championSearchFocused
+                ? 'statistics-search-sticky mb-2 max-lg:sticky max-lg:top-0 max-lg:z-20 max-lg:-mx-2 max-lg:border-b max-lg:border-primary/25 max-lg:bg-surface/95 max-lg:px-2 max-lg:pb-2 max-lg:pt-1 max-lg:backdrop-blur-sm'
+                : 'mb-2',
+            ]"
+          >
+            <label for="champion-search" class="mb-1 block text-sm font-medium text-text">{{
+              searchInputLabel
+            }}</label>
+            <div class="relative">
+              <input
+                id="champion-search"
+                ref="championSearchInputEl"
+                v-model.trim="championSearchQuery"
+                type="search"
+                :placeholder="searchInputPlaceholder"
+                class="w-full rounded border border-primary/40 bg-background py-0.5 pl-1.5 pr-7 text-[11px] font-medium text-text placeholder:text-text/50"
+                @focus="onChampionSearchFocus"
+                @blur="onChampionSearchBlur"
+              />
               <button
+                v-if="championSearchQuery"
                 type="button"
-                class="stats-division-btn rounded p-0.5 transition-colors"
-                :class="
-                  statsDivisionFilter.length === 0
-                    ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
-                    : 'bg-black/20 hover:bg-white/10'
-                "
-                :title="t('statisticsPage.allRanks')"
-                @click="selectAllDivisions()"
+                class="absolute right-1 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-text/70 hover:bg-primary/20 hover:text-text"
+                :aria-label="t('statisticsPage.searchClear')"
+                @mousedown.prevent
+                @click="clearChampionSearch"
               >
-                <img
-                  src="/data/community-dragon/ranked-emblem/Unranked.png"
-                  :alt="t('statisticsPage.allRanks')"
-                  class="h-3 w-3 object-contain"
-                  :class="
-                    statsDivisionFilter.length === 0
-                      ? 'saturate-110 opacity-100'
-                      : 'brightness-125 grayscale'
-                  "
-                  width="12"
-                  height="12"
-                />
-              </button>
-              <button
-                v-for="tier in rankTiers"
-                :key="tier"
-                type="button"
-                class="stats-division-btn rounded p-0.5 transition-colors"
-                :class="
-                  statsDivisionFilter.includes(tier)
-                    ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
-                    : 'bg-black/20 hover:bg-white/10'
-                "
-                :title="formatDivisionLabel(tier)"
-                @click="toggleDivisionFilter(tier)"
-              >
-                <img
-                  v-if="getRankedEmblemUrl(tier)"
-                  :src="getRankedEmblemUrl(tier)!"
-                  :alt="tier"
-                  class="h-3 w-3 object-contain"
-                  :class="
-                    statsDivisionFilter.includes(tier)
-                      ? 'saturate-110 opacity-100'
-                      : 'brightness-125 grayscale'
-                  "
-                  width="12"
-                  height="12"
-                />
-              </button>
-            </div>
-          </div>
-          <div v-else-if="activeTab === 'balance'">
-            <div class="mb-1 text-sm font-medium text-text">
-              {{ t('statisticsPage.balanceGlobalStatus') }}
-            </div>
-            <div class="grid grid-cols-1 gap-1">
-              <select
-                v-model="balanceGlobalFilter"
-                class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-              >
-                <option value="ALL">{{ t('statisticsPage.overviewVersionAll') }}</option>
-                <option value="OVERPOWERED">
-                  {{ t('statisticsPage.balanceStatusOverpowered') }}
-                </option>
-                <option value="UNDERPOWERED">
-                  {{ t('statisticsPage.balanceStatusUnderpowered') }}
-                </option>
-                <option value="BALANCED">{{ t('statisticsPage.balanceStatusBalanced') }}</option>
-              </select>
-              <select
-                v-model="balanceNeedFilter"
-                class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-              >
-                <option value="ALL">
-                  {{ t('statisticsPage.balanceNeedColumn') }} ·
-                  {{ t('statisticsPage.overviewVersionAll') }}
-                </option>
-                <option value="NERF">
-                  {{ t('statisticsPage.balanceNeedColumn') }} ·
-                  {{ t('statisticsPage.balanceNeedNerf') }}
-                </option>
-                <option value="BUFF">
-                  {{ t('statisticsPage.balanceNeedColumn') }} ·
-                  {{ t('statisticsPage.balanceNeedBuff') }}
-                </option>
-                <option value="NORMAL">
-                  {{ t('statisticsPage.balanceNeedColumn') }} ·
-                  {{ t('statisticsPage.balanceNeedNormal') }}
-                </option>
-              </select>
-              <select
-                v-model="balanceAverageFilter"
-                class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-              >
-                <option value="ALL">Average · {{ t('statisticsPage.overviewVersionAll') }}</option>
-                <option value="OVERPOWERED">
-                  Average · {{ t('statisticsPage.balanceStatusOverpowered') }}
-                </option>
-                <option value="UNDERPOWERED">
-                  Average · {{ t('statisticsPage.balanceStatusUnderpowered') }}
-                </option>
-                <option value="BALANCED">
-                  Average · {{ t('statisticsPage.balanceStatusBalanced') }}
-                </option>
-              </select>
-              <select
-                v-model="balanceSkilledFilter"
-                class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-              >
-                <option value="ALL">Skilled · {{ t('statisticsPage.overviewVersionAll') }}</option>
-                <option value="OVERPOWERED">
-                  Skilled · {{ t('statisticsPage.balanceStatusOverpowered') }}
-                </option>
-                <option value="UNDERPOWERED">
-                  Skilled · {{ t('statisticsPage.balanceStatusUnderpowered') }}
-                </option>
-                <option value="BALANCED">
-                  Skilled · {{ t('statisticsPage.balanceStatusBalanced') }}
-                </option>
-              </select>
-              <select
-                v-model="balanceEliteFilter"
-                class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-              >
-                <option value="ALL">Elite · {{ t('statisticsPage.overviewVersionAll') }}</option>
-                <option value="OVERPOWERED">
-                  Elite · {{ t('statisticsPage.balanceStatusOverpowered') }}
-                </option>
-                <option value="UNDERPOWERED">
-                  Elite · {{ t('statisticsPage.balanceStatusUnderpowered') }}
-                </option>
-                <option value="BALANCED">
-                  Elite · {{ t('statisticsPage.balanceStatusBalanced') }}
-                </option>
-              </select>
-            </div>
-          </div>
-          <div v-if="activeTab !== 'objectives' && activeTab !== 'surrender'">
-            <div class="mb-1 text-sm font-medium text-text">
-              {{ t('statisticsPage.filterRole') }}
-            </div>
-            <div class="flex flex-wrap gap-1">
-              <button
-                type="button"
-                class="stats-role-btn rounded p-0.5 transition-colors"
-                :class="!statsRoleFilter ? 'bg-blue-500/20' : 'bg-black/20 hover:bg-white/10'"
-                :title="t('statisticsPage.allRoles')"
-                @click="selectAllRoles()"
-              >
-                <img
-                  src="/icons/roles/all-role.png"
-                  :alt="t('statisticsPage.allRoles')"
-                  class="h-3 w-3 object-contain"
-                  :class="
-                    !statsRoleFilter ? 'saturate-110 opacity-100' : 'brightness-125 grayscale'
-                  "
-                  width="12"
-                  height="12"
-                />
-              </button>
-              <button
-                v-for="r in roles"
-                :key="r.value"
-                type="button"
-                class="stats-role-btn rounded p-0.5 transition-colors"
-                :class="
-                  statsRoleFilter === r.value ? 'bg-blue-500/20' : 'bg-black/20 hover:bg-white/10'
-                "
-                :title="r.label"
-                @click="toggleRoleFilter(r)"
-              >
-                <img
-                  :src="r.icon"
-                  :alt="r.label"
-                  class="h-3 w-3 object-contain"
-                  :class="
-                    statsRoleFilter === r.value
-                      ? 'saturate-110 opacity-100'
-                      : 'brightness-125 grayscale'
-                  "
-                  width="12"
-                  height="12"
-                />
-              </button>
-            </div>
-          </div>
-          <div v-show="activeTab === 'bans'">
-            <div class="mb-1 text-sm font-medium text-text">Colonnes bans</div>
-            <div class="flex flex-wrap gap-1">
-              <button
-                type="button"
-                class="rounded border px-2 py-1 text-xs font-medium transition-colors"
-                :class="
-                  showBansOutcomeColumns
-                    ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
-                    : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
-                "
-                @click="toggleBansOutcomeColumns()"
-              >
-                Équipe
-              </button>
-              <button
-                type="button"
-                class="rounded border px-2 py-1 text-xs font-medium transition-colors"
-                :class="
-                  showBansSideColumns
-                    ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
-                    : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
-                "
-                @click="toggleBansSideColumns()"
-              >
-                Côté
-              </button>
-            </div>
-          </div>
-          <div v-show="activeTab === 'championTable'">
-            <div class="mb-1 text-sm font-medium text-text">Colonnes champion</div>
-            <div class="flex flex-wrap gap-1">
-              <button
-                type="button"
-                class="rounded border px-2 py-1 text-xs font-medium transition-colors"
-                :class="
-                  showChampionSideColumns
-                    ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
-                    : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
-                "
-                @click="toggleChampionColumnGroup('side')"
-              >
-                Côté
-              </button>
-              <button
-                type="button"
-                class="rounded border px-2 py-1 text-xs font-medium transition-colors"
-                :class="
-                  showChampionDealtColumns
-                    ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
-                    : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
-                "
-                @click="toggleChampionColumnGroup('dealt')"
-              >
-                Dégâts infligés
-              </button>
-              <button
-                type="button"
-                class="rounded border px-2 py-1 text-xs font-medium transition-colors"
-                :class="
-                  showChampionTakenColumns
-                    ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
-                    : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
-                "
-                @click="toggleChampionColumnGroup('taken')"
-              >
-                Dégâts subis
+                ×
               </button>
             </div>
           </div>
           <div
-            v-show="activeTab !== 'bans' && activeTab !== 'objectives' && activeTab !== 'surrender'"
+            v-show="!championSearchFocused || !isMobileViewport"
+            class="statistics-filters-fields flex flex-col gap-3"
           >
-            <label for="otp-filter" class="mb-1 block text-sm font-medium text-text">
-              {{ t('statisticsPage.filterOtp') }}
-            </label>
-            <select
-              id="otp-filter"
-              v-model="statsOtpFilter"
-              class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-              @change="onStatsFilterChange"
-            >
-              <option value="non">{{ t('statisticsPage.filterOtpNo') }}</option>
-              <option value="oui">{{ t('statisticsPage.filterOtpYes') }}</option>
-              <option value="solo">{{ t('statisticsPage.filterOtpSolo') }}</option>
-            </select>
-          </div>
-          <div v-if="activeTab === 'spells'">
-            <label for="spells-mode-filter" class="mb-1 block text-sm font-medium text-text">
-              {{ t('statisticsPage.overviewDetailSummonerSpells') }}
-            </label>
-            <div
-              id="spells-mode-filter"
-              class="inline-flex overflow-hidden rounded border border-primary/40 bg-background"
-            >
-              <button
-                type="button"
-                class="px-2 py-1 text-xs font-medium transition-colors"
-                :class="
-                  spellsModeFilter === 'solo'
-                    ? 'bg-blue-500/20 text-blue-200'
-                    : 'text-text/75 hover:bg-white/10'
-                "
-                @click="spellsModeFilter = 'solo'"
+            <div>
+              <label for="stats-filter-version" class="mb-1 block text-sm font-medium text-text">
+                {{ t('statisticsPage.overviewFilterByVersion') }}
+              </label>
+              <select
+                id="stats-filter-version"
+                v-model="statsVersionFilter"
+                class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+                @change="onStatsFilterChange"
               >
-                {{ t('statisticsPage.spellsModeSolo') }}
-              </button>
-              <button
-                type="button"
-                class="border-l border-primary/30 px-2 py-1 text-xs font-medium transition-colors"
-                :class="
-                  spellsModeFilter === 'pair'
-                    ? 'bg-blue-500/20 text-blue-200'
-                    : 'text-text/75 hover:bg-white/10'
-                "
-                @click="spellsModeFilter = 'pair'"
-              >
-                {{ t('statisticsPage.spellsModePair') }}
-              </button>
+                <option value="">{{ t('statisticsPage.overviewVersionAll') }}</option>
+                <option v-for="v in statsVersionOptions" :key="v.version" :value="v.version">
+                  {{ v.version }}
+                </option>
+              </select>
             </div>
-          </div>
-          <div v-if="activeTab !== 'objectives' && activeTab !== 'surrender'">
-            <label for="champion-search" class="mb-1 block text-sm font-medium text-text">{{
-              searchInputLabel
-            }}</label>
-            <input
-              id="champion-search"
-              v-model.trim="championSearchQuery"
-              type="text"
-              :placeholder="searchInputPlaceholder"
-              class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text placeholder:text-text/50"
-            />
+            <div>
+              <label
+                for="stats-filter-progression-version"
+                class="mb-1 block text-sm font-medium text-text"
+              >
+                {{ t('statisticsPage.progressionsReferenceVersion') }}
+              </label>
+              <select
+                id="stats-filter-progression-version"
+                v-model="progressionFromVersionModel"
+                class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+              >
+                <option
+                  v-for="v in progressionSelectableVersions"
+                  :key="'delta-from-' + v.version"
+                  :value="v.version"
+                >
+                  {{ v.version }}
+                </option>
+              </select>
+            </div>
+            <div v-if="activeTab !== 'balance' && activeTab !== 'surrender'">
+              <div class="mb-1 text-sm font-medium text-text">
+                {{ t('statisticsPage.overviewMatchesByDivision') }}
+              </div>
+              <div class="flex flex-wrap gap-1">
+                <button
+                  type="button"
+                  class="stats-division-btn rounded p-0.5 transition-colors"
+                  :class="
+                    statsDivisionFilter.length === 0
+                      ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
+                      : 'bg-black/20 hover:bg-white/10'
+                  "
+                  :title="t('statisticsPage.allRanks')"
+                  @click="selectAllDivisions()"
+                >
+                  <img
+                    src="/data/community-dragon/ranked-emblem/Unranked.png"
+                    :alt="t('statisticsPage.allRanks')"
+                    class="h-3 w-3 object-contain"
+                    :class="
+                      statsDivisionFilter.length === 0
+                        ? 'saturate-110 opacity-100'
+                        : 'brightness-125 grayscale'
+                    "
+                    width="12"
+                    height="12"
+                  />
+                </button>
+                <button
+                  v-for="tier in rankTiers"
+                  :key="tier"
+                  type="button"
+                  class="stats-division-btn rounded p-0.5 transition-colors"
+                  :class="
+                    statsDivisionFilter.includes(tier)
+                      ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
+                      : 'bg-black/20 hover:bg-white/10'
+                  "
+                  :title="formatDivisionLabel(tier)"
+                  @click="toggleDivisionFilter(tier)"
+                >
+                  <img
+                    v-if="getRankedEmblemUrl(tier)"
+                    :src="getRankedEmblemUrl(tier)!"
+                    :alt="tier"
+                    class="h-3 w-3 object-contain"
+                    :class="
+                      statsDivisionFilter.includes(tier)
+                        ? 'saturate-110 opacity-100'
+                        : 'brightness-125 grayscale'
+                    "
+                    width="12"
+                    height="12"
+                  />
+                </button>
+              </div>
+            </div>
+            <div v-else-if="activeTab === 'balance'">
+              <div class="mb-1 text-sm font-medium text-text">
+                {{ t('statisticsPage.balanceGlobalStatus') }}
+              </div>
+              <div class="grid grid-cols-1 gap-1">
+                <select
+                  v-model="balanceGlobalFilter"
+                  class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+                >
+                  <option value="ALL">{{ t('statisticsPage.overviewVersionAll') }}</option>
+                  <option value="OVERPOWERED">
+                    {{ t('statisticsPage.balanceStatusOverpowered') }}
+                  </option>
+                  <option value="UNDERPOWERED">
+                    {{ t('statisticsPage.balanceStatusUnderpowered') }}
+                  </option>
+                  <option value="BALANCED">{{ t('statisticsPage.balanceStatusBalanced') }}</option>
+                </select>
+                <select
+                  v-model="balanceNeedFilter"
+                  class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+                >
+                  <option value="ALL">
+                    {{ t('statisticsPage.balanceNeedColumn') }} ·
+                    {{ t('statisticsPage.overviewVersionAll') }}
+                  </option>
+                  <option value="NERF">
+                    {{ t('statisticsPage.balanceNeedColumn') }} ·
+                    {{ t('statisticsPage.balanceNeedNerf') }}
+                  </option>
+                  <option value="BUFF">
+                    {{ t('statisticsPage.balanceNeedColumn') }} ·
+                    {{ t('statisticsPage.balanceNeedBuff') }}
+                  </option>
+                  <option value="NORMAL">
+                    {{ t('statisticsPage.balanceNeedColumn') }} ·
+                    {{ t('statisticsPage.balanceNeedNormal') }}
+                  </option>
+                </select>
+                <select
+                  v-model="balanceAverageFilter"
+                  class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+                >
+                  <option value="ALL">
+                    Average · {{ t('statisticsPage.overviewVersionAll') }}
+                  </option>
+                  <option value="OVERPOWERED">
+                    Average · {{ t('statisticsPage.balanceStatusOverpowered') }}
+                  </option>
+                  <option value="UNDERPOWERED">
+                    Average · {{ t('statisticsPage.balanceStatusUnderpowered') }}
+                  </option>
+                  <option value="BALANCED">
+                    Average · {{ t('statisticsPage.balanceStatusBalanced') }}
+                  </option>
+                </select>
+                <select
+                  v-model="balanceSkilledFilter"
+                  class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+                >
+                  <option value="ALL">
+                    Skilled · {{ t('statisticsPage.overviewVersionAll') }}
+                  </option>
+                  <option value="OVERPOWERED">
+                    Skilled · {{ t('statisticsPage.balanceStatusOverpowered') }}
+                  </option>
+                  <option value="UNDERPOWERED">
+                    Skilled · {{ t('statisticsPage.balanceStatusUnderpowered') }}
+                  </option>
+                  <option value="BALANCED">
+                    Skilled · {{ t('statisticsPage.balanceStatusBalanced') }}
+                  </option>
+                </select>
+                <select
+                  v-model="balanceEliteFilter"
+                  class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+                >
+                  <option value="ALL">Elite · {{ t('statisticsPage.overviewVersionAll') }}</option>
+                  <option value="OVERPOWERED">
+                    Elite · {{ t('statisticsPage.balanceStatusOverpowered') }}
+                  </option>
+                  <option value="UNDERPOWERED">
+                    Elite · {{ t('statisticsPage.balanceStatusUnderpowered') }}
+                  </option>
+                  <option value="BALANCED">
+                    Elite · {{ t('statisticsPage.balanceStatusBalanced') }}
+                  </option>
+                </select>
+              </div>
+            </div>
+            <div v-if="activeTab !== 'objectives' && activeTab !== 'surrender'">
+              <div class="mb-1 text-sm font-medium text-text">
+                {{ t('statisticsPage.filterRole') }}
+              </div>
+              <div class="flex flex-wrap gap-1">
+                <button
+                  type="button"
+                  class="stats-role-btn rounded p-0.5 transition-colors"
+                  :class="!statsRoleFilter ? 'bg-blue-500/20' : 'bg-black/20 hover:bg-white/10'"
+                  :title="t('statisticsPage.allRoles')"
+                  @click="selectAllRoles()"
+                >
+                  <img
+                    src="/icons/roles/all-role.png"
+                    :alt="t('statisticsPage.allRoles')"
+                    class="h-3 w-3 object-contain"
+                    :class="
+                      !statsRoleFilter ? 'saturate-110 opacity-100' : 'brightness-125 grayscale'
+                    "
+                    width="12"
+                    height="12"
+                  />
+                </button>
+                <button
+                  v-for="r in roles"
+                  :key="r.value"
+                  type="button"
+                  class="stats-role-btn rounded p-0.5 transition-colors"
+                  :class="
+                    statsRoleFilter === r.value ? 'bg-blue-500/20' : 'bg-black/20 hover:bg-white/10'
+                  "
+                  :title="r.label"
+                  @click="toggleRoleFilter(r)"
+                >
+                  <img
+                    :src="r.icon"
+                    :alt="r.label"
+                    class="h-3 w-3 object-contain"
+                    :class="
+                      statsRoleFilter === r.value
+                        ? 'saturate-110 opacity-100'
+                        : 'brightness-125 grayscale'
+                    "
+                    width="12"
+                    height="12"
+                  />
+                </button>
+              </div>
+            </div>
+            <div v-show="activeTab === 'bans'">
+              <div class="mb-1 text-sm font-medium text-text">Colonnes bans</div>
+              <div class="flex flex-wrap gap-1">
+                <button
+                  type="button"
+                  class="rounded border px-2 py-1 text-xs font-medium transition-colors"
+                  :class="
+                    showBansOutcomeColumns
+                      ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                  "
+                  @click="toggleBansOutcomeColumns()"
+                >
+                  Équipe
+                </button>
+                <button
+                  type="button"
+                  class="rounded border px-2 py-1 text-xs font-medium transition-colors"
+                  :class="
+                    showBansSideColumns
+                      ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                  "
+                  @click="toggleBansSideColumns()"
+                >
+                  Côté
+                </button>
+              </div>
+            </div>
+            <div v-show="activeTab === 'championTable'">
+              <div class="mb-1 text-sm font-medium text-text">Colonnes champion</div>
+              <div class="flex flex-wrap gap-1">
+                <button
+                  type="button"
+                  class="rounded border px-2 py-1 text-xs font-medium transition-colors"
+                  :class="
+                    showChampionSideColumns
+                      ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                  "
+                  @click="toggleChampionColumnGroup('side')"
+                >
+                  Côté
+                </button>
+                <button
+                  type="button"
+                  class="rounded border px-2 py-1 text-xs font-medium transition-colors"
+                  :class="
+                    showChampionDealtColumns
+                      ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                  "
+                  @click="toggleChampionColumnGroup('dealt')"
+                >
+                  Dégâts infligés
+                </button>
+                <button
+                  type="button"
+                  class="rounded border px-2 py-1 text-xs font-medium transition-colors"
+                  :class="
+                    showChampionTakenColumns
+                      ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                  "
+                  @click="toggleChampionColumnGroup('taken')"
+                >
+                  Dégâts subis
+                </button>
+              </div>
+            </div>
+            <div
+              v-show="
+                activeTab !== 'bans' && activeTab !== 'objectives' && activeTab !== 'surrender'
+              "
+            >
+              <label for="otp-filter" class="mb-1 block text-sm font-medium text-text">
+                {{ t('statisticsPage.filterOtp') }}
+              </label>
+              <select
+                id="otp-filter"
+                v-model="statsOtpFilter"
+                class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+                @change="onStatsFilterChange"
+              >
+                <option value="non">{{ t('statisticsPage.filterOtpNo') }}</option>
+                <option value="oui">{{ t('statisticsPage.filterOtpYes') }}</option>
+                <option value="solo">{{ t('statisticsPage.filterOtpSolo') }}</option>
+              </select>
+            </div>
+            <div v-if="activeTab === 'spells'">
+              <label for="spells-mode-filter" class="mb-1 block text-sm font-medium text-text">
+                {{ t('statisticsPage.overviewDetailSummonerSpells') }}
+              </label>
+              <div
+                id="spells-mode-filter"
+                class="inline-flex overflow-hidden rounded border border-primary/40 bg-background"
+              >
+                <button
+                  type="button"
+                  class="px-2 py-1 text-xs font-medium transition-colors"
+                  :class="
+                    spellsModeFilter === 'solo'
+                      ? 'bg-blue-500/20 text-blue-200'
+                      : 'text-text/75 hover:bg-white/10'
+                  "
+                  @click="spellsModeFilter = 'solo'"
+                >
+                  {{ t('statisticsPage.spellsModeSolo') }}
+                </button>
+                <button
+                  type="button"
+                  class="border-l border-primary/30 px-2 py-1 text-xs font-medium transition-colors"
+                  :class="
+                    spellsModeFilter === 'pair'
+                      ? 'bg-blue-500/20 text-blue-200'
+                      : 'text-text/75 hover:bg-white/10'
+                  "
+                  @click="spellsModeFilter = 'pair'"
+                >
+                  {{ t('statisticsPage.spellsModePair') }}
+                </button>
+              </div>
+            </div>
           </div>
           <button
             type="button"
@@ -501,7 +522,7 @@
       <div
         class="min-w-0 flex-1 p-4 lg:px-3 lg:pb-4 lg:pt-0"
         :class="[
-          showFiltersPanel ? 'pt-14' : 'pt-2',
+          showFiltersPanel ? 'max-lg:pb-20' : 'pt-2',
           showFiltersPanel && filtersOpen ? 'max-lg:pointer-events-none' : '',
         ]"
       >
@@ -510,86 +531,103 @@
             <p>{{ t('statisticsPage.description') }}</p>
           </div>
 
-          <!-- Tab: Overview (default) -->
-          <div v-if="activeTab === 'overview'" class="space-y-6">
-            <StatisticsOverviewTab />
-          </div>
-
-          <!-- Tab: Runes, items, sorts (chargé à l'ouverture de l'onglet) -->
-          <div v-if="activeTab === 'runes'" class="space-y-6">
-            <StatisticsRunesTab />
-          </div>
-
-          <!-- Tab: Progressions (depuis la version la plus ancienne, type LeagueOfGraphs) -->
-          <!-- <div v-show="activeTab === 'trends'" class="space-y-6">
-            <StatisticsTrendsTab />
-          </div> -->
-
-          <!-- Tab: Par côté — fast-stats comme vue d'ensemble -->
-          <div v-if="activeTab === 'team'" class="space-y-6">
-            <StatisticsTeamTab />
-          </div>
-
-          <div v-if="activeTab === 'objectives'" class="space-y-6">
-            <StatisticsObjectivesTab />
-          </div>
-
-          <div v-if="activeTab === 'surrender'" class="space-y-6">
-            <StatisticsSurrenderTab />
-          </div>
-
-          <!-- Tab: Infos -->
-          <div v-if="activeTab === 'infos'">
-            <StatisticsInfosTab />
-          </div>
-
-          <!-- Tab: Bans -->
-          <div v-if="activeTab === 'bans'">
-            <StatisticsBansTab />
-          </div>
-
-          <!-- Tab: Champion (tableau global bleu/rouge + dégâts + KDA) -->
-          <div v-if="activeTab === 'championTable'" class="space-y-4">
-            <StatisticsChampionTableTab />
-          </div>
-
-          <!-- Tab: Balance framework -->
-          <div v-if="activeTab === 'balance'" class="space-y-4">
-            <StatisticsBalanceTab />
-          </div>
-
-          <!-- Tab: Durée de partie -->
-          <div v-if="activeTab === 'duration'" class="space-y-4">
-            <StatisticsDurationTab />
-          </div>
-
-          <!-- Tab: Objets (global) -->
-          <div v-if="activeTab === 'items'" class="space-y-6">
-            <StatisticsItemsTab />
-          </div>
-
-          <!-- Tab: Sorts d'invocateur (global) -->
-          <div v-if="activeTab === 'spells'" class="space-y-4">
-            <StatisticsSpellsTab />
-          </div>
-
-          <!-- Tab: Abandons -->
-          <div v-if="activeTab === 'abandons'" class="space-y-4">
-            <StatisticsAbandonsTab />
-          </div>
+          <Transition name="statistics-tab" mode="out-in">
+            <div :key="activeTab" class="statistics-tab-panel min-h-[12rem]">
+              <div v-if="activeTab === 'overview'" class="space-y-6">
+                <StatisticsOverviewTab />
+              </div>
+              <div v-else-if="activeTab === 'runes'" class="space-y-6">
+                <StatisticsRunesTab />
+              </div>
+              <div v-else-if="activeTab === 'team'" class="space-y-6">
+                <StatisticsTeamTab />
+              </div>
+              <div v-else-if="activeTab === 'objectives'" class="space-y-6">
+                <StatisticsObjectivesTab />
+              </div>
+              <div v-else-if="activeTab === 'surrender'" class="space-y-6">
+                <StatisticsSurrenderTab />
+              </div>
+              <div v-else-if="activeTab === 'infos'">
+                <StatisticsInfosTab />
+              </div>
+              <div v-else-if="activeTab === 'bans'">
+                <StatisticsBansTab />
+              </div>
+              <div v-else-if="activeTab === 'championTable'" class="space-y-4">
+                <StatisticsChampionTableTab />
+              </div>
+              <div v-else-if="activeTab === 'balance'" class="space-y-4">
+                <StatisticsBalanceTab />
+              </div>
+              <div v-else-if="activeTab === 'duration'" class="space-y-4">
+                <StatisticsDurationTab />
+              </div>
+              <div v-else-if="activeTab === 'items'" class="space-y-6">
+                <StatisticsItemsTab />
+              </div>
+              <div v-else-if="activeTab === 'spells'" class="space-y-4">
+                <StatisticsSpellsTab />
+              </div>
+              <div v-else-if="activeTab === 'abandons'" class="space-y-4">
+                <StatisticsAbandonsTab />
+              </div>
+            </div>
+          </Transition>
         </div>
       </div>
     </div>
 
-    <!-- Overlay mobile : après le contenu pour passer au-dessus des z-10 / sticky stats ; sous la navbar (z-58). -->
+    <!-- Overlay mobile (bottom sheet) -->
     <div
       v-if="showFiltersPanel"
       v-show="filtersOpen"
-      class="fixed inset-0 z-[45] bg-black/50 lg:hidden"
+      class="fixed inset-0 z-[45] bg-black/60 backdrop-blur-sm lg:hidden"
       aria-hidden="true"
       role="presentation"
       @click="closeFilters"
     />
+
+    <!-- Toast vue mobile Cards (Top 5) -->
+    <div
+      v-if="showMobileViewToast && isMobileViewport"
+      class="statistics-mobile-view-toast fixed bottom-20 left-1/2 z-[49] flex max-w-[min(100%,22rem)] -translate-x-1/2 items-center gap-2 rounded-lg border border-primary/40 bg-surface/95 px-3 py-2 text-xs text-text shadow-lg backdrop-blur-sm"
+      role="status"
+    >
+      <span class="flex-1">{{ t('statisticsPage.mobileViewToast') }}</span>
+      <button
+        type="button"
+        class="shrink-0 font-semibold text-accent underline-offset-2 hover:underline"
+        @click="setOverviewFastStatView('table')"
+      >
+        {{ t('statisticsPage.mobileViewToastChange') }}
+      </button>
+      <button
+        type="button"
+        class="shrink-0 text-text/60 hover:text-text"
+        :aria-label="t('statisticsPage.closeFilters')"
+        @click="dismissMobileViewToast"
+      >
+        ×
+      </button>
+    </div>
+
+    <!-- Bouton filtres sticky (mobile) -->
+    <button
+      v-if="showFiltersPanel && !(championSearchFocused && isMobileViewport)"
+      type="button"
+      class="statistics-filters-fab fixed bottom-4 left-1/2 z-[48] flex -translate-x-1/2 items-center gap-2 rounded-full border border-primary/40 bg-surface/95 px-4 py-2.5 text-sm font-semibold text-text shadow-lg backdrop-blur-sm lg:hidden"
+      :aria-label="t('statisticsPage.openFilters')"
+      @click="openFilters"
+    >
+      {{ t('statisticsPage.filtersTitle') }}
+      <span
+        v-if="activeStatsFiltersCount > 0"
+        class="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-bold text-background"
+      >
+        {{ activeStatsFiltersCount }}
+      </span>
+    </button>
   </div>
 </template>
 
@@ -618,6 +656,7 @@ import { useVersionStore } from '~/stores/VersionStore'
 import { useStatisticsUiStore, type StatisticsMainTab } from '~/stores/StatisticsUiStore'
 import { useStatisticsCustomStore } from '~/stores/StatisticsCustomStore'
 import { useGameVersion } from '~/composables/useGameVersion'
+import { useStatisticsMobileViewport } from '~/composables/useStatisticsMobileViewport'
 import { useStatisticsBansTab } from '~/composables/statistics/useStatisticsBansTab'
 import { getChampionImageUrl, getItemImageUrl } from '~/utils/imageUrl'
 import { formatItemStatsForDisplay, formatItemEconomicForDisplay } from '~/utils/formatItemStats'
@@ -853,12 +892,21 @@ const tabs = computed(() => {
 const tabsNavEl = ref<HTMLElement | null>(null)
 type VisibleStatisticsTabId = (typeof allTabs.value)[number]['id']
 
+function scrollActiveTabIntoView(behavior: ScrollBehavior = 'smooth'): void {
+  if (!import.meta.client || !tabsNavEl.value) return
+  const el = tabsNavEl.value.querySelector<HTMLButtonElement>(
+    `button[data-tab-id="${activeTab.value}"]`
+  )
+  el?.scrollIntoView({ inline: 'start', block: 'nearest', behavior })
+}
+
 function focusStatisticsTabButton(nextId: VisibleStatisticsTabId): void {
   activeTab.value = nextId
   if (!import.meta.client) return
   requestAnimationFrame(() => {
     const el = tabsNavEl.value?.querySelector<HTMLButtonElement>(`button[data-tab-id="${nextId}"]`)
     el?.focus()
+    scrollActiveTabIntoView()
   })
 }
 
@@ -915,7 +963,38 @@ function toggleFavoriteCard(cardId: string, title: string): void {
   statisticsCustomStore.toggleFavorite(cardId, title)
 }
 
+const {
+  isMobileViewport,
+  overviewFastStatView,
+  showMobileViewToast,
+  setOverviewFastStatView,
+  dismissMobileViewToast,
+} = useStatisticsMobileViewport()
+
 const championSearchQuery = ref('')
+const championSearchFocused = ref(false)
+const championSearchInputEl = ref<HTMLInputElement | null>(null)
+let championSearchBlurTimer: ReturnType<typeof setTimeout> | null = null
+
+function onChampionSearchFocus(): void {
+  if (championSearchBlurTimer) {
+    clearTimeout(championSearchBlurTimer)
+    championSearchBlurTimer = null
+  }
+  championSearchFocused.value = true
+  if (isMobileViewport.value) filtersOpen.value = true
+}
+
+function onChampionSearchBlur(): void {
+  championSearchBlurTimer = setTimeout(() => {
+    championSearchFocused.value = false
+  }, 150)
+}
+
+function clearChampionSearch(): void {
+  championSearchQuery.value = ''
+  championSearchInputEl.value?.focus()
+}
 const spellsModeFilter = ref<'solo' | 'pair'>('solo')
 const searchInputLabel = computed(() =>
   activeTab.value === 'items'
@@ -1263,6 +1342,26 @@ const filtersOpen = computed({
   set: value => statisticsUiStore.setFiltersOpen(value),
 })
 const showFiltersPanel = computed(() => activeTab.value !== 'infos')
+
+const activeStatsFiltersCount = computed(() => {
+  let count = 0
+  if (statsVersionFilter.value) count++
+  if (statsDivisionFilter.value.length > 0) count++
+  if (statsRoleFilter.value) count++
+  if (statsOtpFilter.value !== 'non') count++
+  if (progressionFromVersionOverride.value) count++
+  if (championSearchQuery.value.trim()) count++
+  if (activeTab.value === 'balance') {
+    if (balanceGlobalFilter.value !== 'ALL') count++
+    if (balanceNeedFilter.value !== 'ALL') count++
+    if (balanceAverageFilter.value !== 'ALL') count++
+    if (balanceSkilledFilter.value !== 'ALL') count++
+    if (balanceEliteFilter.value !== 'ALL') count++
+  }
+  if (activeTab.value === 'spells' && spellsModeFilter.value !== 'solo') count++
+  return count
+})
+
 function openFilters() {
   filtersOpen.value = true
 }
@@ -1277,6 +1376,12 @@ const statsKnownVersions = ref<Array<{ version: string; matchCount: number }>>([
 watch(activeTab, value => {
   if (!import.meta.client) return
   statisticsUiStore.setActiveTab(normalizeLegacyTab(value))
+  nextTick(() => scrollActiveTabIntoView())
+})
+
+watch(tabs, () => {
+  if (!import.meta.client) return
+  nextTick(() => scrollActiveTabIntoView('auto'))
 })
 
 watch(
@@ -4205,6 +4310,7 @@ onMounted(async () => {
     runInBackground(loadOverviewTeams())
     runInBackground(loadObjectivesBaseline())
   }
+  nextTick(() => scrollActiveTabIntoView('auto'))
 })
 
 // Références explicites pour le build prod : bindings uniquement consommés via inject (onglets).
@@ -4235,6 +4341,12 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   championsPageSizeModel,
   championName,
   championSearchQuery,
+  championSearchFocused,
+  isMobileViewport,
+  overviewFastStatView,
+  setOverviewFastStatView,
+  showMobileViewToast,
+  dismissMobileViewToast,
   balanceAverageFilter,
   balanceEliteFilter,
   balanceGlobalFilter,
@@ -4644,6 +4756,67 @@ if (__statisticsVm?.proxy) {
  * Surfaces & fast-stat : hors scoped pour que les composants enfants (objets, tooltips)
  * héritent le même fond #08101f que les cartes « Vue d’ensemble ».
  */
+/* Onglets : scroll snap + fade bords */
+.statistics-tabs-nav {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.statistics-tabs-nav::-webkit-scrollbar {
+  display: none;
+}
+.statistics-tabs-scroll-wrap::before,
+.statistics-tabs-scroll-wrap::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 8px;
+  width: 28px;
+  z-index: 2;
+  pointer-events: none;
+}
+.statistics-tabs-scroll-wrap::before {
+  left: 0;
+  background: linear-gradient(to right, rgb(8 16 31 / 0.95), transparent);
+}
+.statistics-tabs-scroll-wrap::after {
+  right: 0;
+  background: linear-gradient(to left, rgb(8 16 31 / 0.95), transparent);
+}
+@media (max-width: 767px) {
+  .statistics-tab-btn {
+    font-size: 13px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+}
+@media (max-width: 1023px) {
+  .statistics-filters-panel .flex.min-h-0.flex-1 {
+    overflow-y: auto;
+  }
+}
+
+.statistics-tab-enter-active {
+  transition:
+    opacity 150ms ease-out,
+    transform 150ms ease-out;
+}
+.statistics-tab-leave-active {
+  transition:
+    opacity 100ms ease-in,
+    transform 100ms ease-in;
+}
+.statistics-tab-enter-from,
+.statistics-tab-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.statistics-tab-leave-from,
+.statistics-tab-enter-to {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .statistics aside {
   background: #08101f !important;
 }

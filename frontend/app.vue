@@ -33,14 +33,36 @@
           :class="{ 'command-bar-collapsed': !isHomeRoute && commandsCollapsed }"
         >
           <div v-show="!commandsCollapsed" class="command-bar-content">
-            <p class="command-help" aria-live="polite">
-              {{ t('commandBar.builderLabel') }}: <span class="command-shortcut">Ctrl + ←</span>
-              {{ t('commandBar.previousStep') }}, <span class="command-shortcut">Ctrl + →</span>
-              {{ t('commandBar.nextStep') }}
-              <span class="command-help-separator">|</span>
-              <span class="command-shortcut">Ctrl + ↓</span> {{ t('commandBar.showBar') }},
-              <span class="command-shortcut">Ctrl + ↑</span> {{ t('commandBar.hideBar') }}
-            </p>
+            <div
+              v-if="commandHelpOpen"
+              class="command-help-panel"
+              role="dialog"
+              aria-label="Raccourcis clavier"
+            >
+              <p class="command-help" aria-live="polite">
+                {{ t('commandBar.builderLabel') }}: <span class="command-shortcut">Ctrl + ←</span>
+                {{ t('commandBar.previousStep') }}, <span class="command-shortcut">Ctrl + →</span>
+                {{ t('commandBar.nextStep') }}
+                <span class="command-help-separator">|</span>
+                <span class="command-shortcut">Ctrl + ↓</span> {{ t('commandBar.showBar') }},
+                <span class="command-shortcut">Ctrl + ↑</span> {{ t('commandBar.hideBar') }}
+              </p>
+              <ul class="command-shortcuts-list">
+                <li>
+                  <span class="command-shortcut">Alt + T</span> {{ t('nav.disableTooltips') }}
+                </li>
+                <li>
+                  <span class="command-shortcut">Alt + P</span> {{ t('footer.presentationMode') }}
+                </li>
+                <li>
+                  <span class="command-shortcut">Alt + Z</span>
+                  {{ t('commandBar.presentationZoom') }}
+                </li>
+                <li>
+                  <span class="command-shortcut">Alt + S</span> {{ t('commandBar.championSplash') }}
+                </li>
+              </ul>
+            </div>
             <label class="command-toggle">
               <input
                 type="checkbox"
@@ -52,7 +74,6 @@
                 <span class="command-toggle-thumb" />
               </span>
               <span>{{ t('nav.disableTooltips') }}</span>
-              <span class="command-shortcut">Alt + T</span>
             </label>
             <button
               type="button"
@@ -64,7 +85,6 @@
                 <span class="command-toggle-thumb" />
               </span>
               <span>{{ t('footer.presentationMode') }}</span>
-              <span class="command-shortcut">Alt + P</span>
             </button>
             <button
               type="button"
@@ -76,7 +96,6 @@
                 <span class="command-toggle-thumb" />
               </span>
               <span>{{ t('commandBar.presentationZoom') }}</span>
-              <span class="command-shortcut">Alt + Z</span>
             </button>
             <button
               type="button"
@@ -88,7 +107,15 @@
                 <span class="command-toggle-thumb" />
               </span>
               <span>{{ t('commandBar.championSplash') }}</span>
-              <span class="command-shortcut">Alt + S</span>
+            </button>
+            <button
+              type="button"
+              class="command-help-button"
+              title="Raccourcis clavier"
+              :aria-expanded="commandHelpOpen"
+              @click="commandHelpOpen = !commandHelpOpen"
+            >
+              ?
             </button>
           </div>
           <button
@@ -167,6 +194,7 @@ const streamerNavOpen = useState<boolean>('streamer-nav-open', () => false)
 const streamerFooterOpen = useState<boolean>('streamer-footer-open', () => false)
 const streamerPanelsOpen = computed(() => streamerNavOpen.value && streamerFooterOpen.value)
 const commandsCollapsed = useState<boolean>('commands-collapsed', () => true)
+const commandHelpOpen = ref(false)
 const commandBarRef = ref<HTMLElement | null>(null)
 const commandBarHiddenByScroll = ref(false)
 const COMMAND_BAR_SCROLL_THRESHOLD = 80
@@ -332,11 +360,12 @@ const onKeyDown = (event: KeyboardEvent) => {
 
 const onDocumentPointerDown = (event: MouseEvent) => {
   if (isHomeRoute.value) return
-  if (commandsCollapsed.value) return
+  if (commandsCollapsed.value && !commandHelpOpen.value) return
   const target = event.target as Node | null
   if (!target) return
   if (commandBarRef.value?.contains(target)) return
   commandsCollapsed.value = true
+  commandHelpOpen.value = false
 }
 
 function onWindowScroll() {
@@ -485,6 +514,13 @@ if (import.meta.client) {
   top: 50px;
 }
 
+@media (max-width: 768px) {
+  .command-bar-fixed-wrapper,
+  .command-bar-spacer {
+    display: none !important;
+  }
+}
+
 .command-bar-fixed-wrapper {
   position: fixed;
   top: 50px;
@@ -538,6 +574,7 @@ if (import.meta.client) {
 }
 
 .command-bar-content {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -545,20 +582,69 @@ if (import.meta.client) {
   flex: 1;
 }
 
+.command-help-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  min-width: min(320px, calc(100vw - 24px));
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgb(var(--rgb-accent) / 0.35);
+  background: #08101f;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
 .command-help {
-  margin: 0;
+  margin: 0 0 8px;
   font-size: 10px;
   color: rgb(var(--rgb-text) / 0.75);
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
 }
 
-@media (max-width: 768px) {
-  .command-help {
-    display: none;
-  }
+.command-shortcuts-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  color: rgb(var(--rgb-text) / 0.85);
+}
+
+.command-shortcuts-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.command-help-button {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgb(var(--rgb-accent) / 0.28);
+  border-radius: 9999px;
+  background: rgb(var(--rgb-background) / 0.18);
+  color: var(--color-blue-50);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.command-help-button:hover,
+.command-help-button[aria-expanded='true'] {
+  background: rgb(var(--rgb-background) / 0.3);
+  border-color: rgb(var(--rgb-accent) / 0.45);
 }
 
 .command-help-separator {

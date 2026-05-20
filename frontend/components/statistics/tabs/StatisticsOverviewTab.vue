@@ -1,7 +1,49 @@
 <script setup lang="ts">
-import { inject } from 'vue'
+import { computed, inject } from 'vue'
+import type { FastStatChampionEntry } from '~/components/statistics/FastStatChampionRowList.vue'
 
 const p = inject('statisticsPageCtx') as any
+
+const showFastStatCards = computed(
+  () => Boolean(p.isMobileViewport) && p.overviewFastStatView === 'cards'
+)
+
+function asChampionRows<T>(rows: unknown): T[] {
+  return Array.isArray(rows) ? rows : []
+}
+
+function pickrateEntries(
+  list: Array<{ championId: number; pickrate: number }>
+): FastStatChampionEntry[] {
+  return list.map(row => ({
+    championId: row.championId,
+    value: `${Number(row.pickrate).toFixed(2)}%`,
+  }))
+}
+
+function winrateEntries(
+  list: Array<{ championId: number; winrate: number }>
+): FastStatChampionEntry[] {
+  return list.map(row => ({
+    championId: row.championId,
+    value: `${Number(row.winrate).toFixed(2)}%`,
+  }))
+}
+
+function banrateEntries(
+  list: Array<{ championId: number; banRatePercent?: string; banrate?: number }>
+): FastStatChampionEntry[] {
+  return list.map(row => {
+    const pct =
+      typeof row.banRatePercent === 'string'
+        ? parseFloat(row.banRatePercent)
+        : Number(row.banrate ?? 0)
+    return {
+      championId: row.championId,
+      value: `${Number.isFinite(pct) ? pct.toFixed(2) : '0.00'}%`,
+    }
+  })
+}
 
 function banPctForCount(count: number, matchCount: number, bansPerMatch: number): number {
   if (matchCount <= 0 || bansPerMatch <= 0) return 0
@@ -47,6 +89,39 @@ function pctDeltaClass(delta: number): string {
   if (delta < 0) return 'text-error'
   return 'text-text/60'
 }
+
+function progressionWrEntries(
+  list: Array<{ championId: number; wrOldest: number; wrSince: number; deltaWr: number }>
+): FastStatChampionEntry[] {
+  return list.slice(0, 5).map(row => ({
+    championId: row.championId,
+    value: `${Number(row.deltaWr) > 0 ? '+' : ''}${Number(row.deltaWr).toFixed(2)}%`,
+    valueLabel: `${Number(row.wrOldest).toFixed(1)}% → ${Number(row.wrSince).toFixed(1)}%`,
+    deltaClass: pctDeltaClass(Number(row.deltaWr)),
+  }))
+}
+
+function progressionPickEntries(
+  list: Array<{ championId: number; prOldest: number; prSince: number; deltaPr: number }>
+): FastStatChampionEntry[] {
+  return list.slice(0, 5).map(row => ({
+    championId: row.championId,
+    value: `${Number(row.deltaPr) > 0 ? '+' : ''}${Number(row.deltaPr).toFixed(2)}%`,
+    valueLabel: `${Number(row.prOldest).toFixed(1)}% → ${Number(row.prSince).toFixed(1)}%`,
+    deltaClass: pctDeltaClass(Number(row.deltaPr)),
+  }))
+}
+
+function progressionBanEntries(
+  list: Array<{ championId: number; banOldest: number; banSince: number; deltaBan: number }>
+): FastStatChampionEntry[] {
+  return list.slice(0, 5).map(row => ({
+    championId: row.championId,
+    value: `${Number(row.deltaBan) > 0 ? '+' : ''}${Number(row.deltaBan).toFixed(2)}%`,
+    valueLabel: `${Number(row.banOldest).toFixed(1)}% → ${Number(row.banSince).toFixed(1)}%`,
+    deltaClass: pctDeltaClass(Number(row.deltaBan)),
+  }))
+}
 </script>
 
 <template>
@@ -69,6 +144,36 @@ function pctDeltaClass(delta: number): string {
         </button>
       </div>
       <div v-else-if="p.overviewData" class="space-y-[10px]">
+        <div
+          v-if="p.isMobileViewport"
+          class="flex flex-wrap items-center justify-center gap-2 rounded-lg border border-primary/25 bg-surface/20 px-2 py-1.5"
+        >
+          <span class="text-xs text-text/70">{{ p.t('statisticsPage.overviewViewLabel') }}</span>
+          <button
+            type="button"
+            class="rounded px-2 py-1 text-xs font-medium transition-colors"
+            :class="
+              p.overviewFastStatView === 'cards'
+                ? 'bg-accent/25 text-accent'
+                : 'text-text/75 hover:bg-primary/15'
+            "
+            @click="p.setOverviewFastStatView('cards')"
+          >
+            {{ p.t('statisticsPage.overviewViewCards') }}
+          </button>
+          <button
+            type="button"
+            class="rounded px-2 py-1 text-xs font-medium transition-colors"
+            :class="
+              p.overviewFastStatView === 'table'
+                ? 'bg-accent/25 text-accent'
+                : 'text-text/75 hover:bg-primary/15'
+            "
+            @click="p.setOverviewFastStatView('table')"
+          >
+            {{ p.t('statisticsPage.overviewViewTable') }}
+          </button>
+        </div>
         <!-- Fast Stats encarts (style LeagueOfGraphs avec nos couleurs) -->
         <div class="flex flex-wrap items-start justify-center gap-x-[5px] gap-y-[10px] pb-[10px]">
           <!-- Champions les plus choisis -->
@@ -114,44 +219,16 @@ function pctDeltaClass(delta: number): string {
                 </span>
               </span>
             </h3>
-            <table
-              v-if="p.overviewTopPickrateChampionsFiltered.length"
-              class="fast-stat-table w-full text-xs"
-            >
-              <tbody>
-                <tr
-                  v-for="(row, idx) in p.overviewTopPickrateChampionsFiltered"
-                  :key="row.championId"
-                  class="fast-stat-row"
-                >
-                  <td class="py-0.5 align-middle">
-                    <div class="flex w-full min-w-0 items-center gap-0.5">
-                      <span class="w-4 shrink-0 text-text/70">{{ Number(idx) + 1 }}.</span>
-                      <img
-                        v-if="p.gameVersion && p.championByKey(row.championId)"
-                        :src="
-                          p.getChampionImageUrl(
-                            p.gameVersion,
-                            p.championByKey(row.championId)!.image.full
-                          )
-                        "
-                        :alt="p.championName(row.championId) || ''"
-                        class="h-5 w-5 shrink-0 rounded-full object-cover"
-                      />
-                      <span class="min-w-[5.5rem] shrink-0 truncate font-medium text-text">{{
-                        p.championName(row.championId) || row.championId
-                      }}</span>
-                      <span class="ml-auto w-9 shrink-0 text-right font-medium text-text"
-                        >{{ Number(row.pickrate).toFixed(2) }}%</span
-                      >
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <div v-else class="py-3 text-center text-text/60">
-              {{ p.t('statisticsPage.fastStatsNoData') }}
-            </div>
+            <StatisticsFastStatChampionRowList
+              :entries="pickrateEntries(asChampionRows(p.overviewTopPickrateChampionsFiltered))"
+              :show-cards="showFastStatCards"
+              :no-data-text="p.t('statisticsPage.fastStatsNoData')"
+              :game-version="p.gameVersion"
+              :champion-by-key="p.championByKey"
+              :champion-name="p.championName"
+              :get-champion-image-url="p.getChampionImageUrl"
+              :search-query="p.championSearchQuery"
+            />
             <div v-if="p.overviewTopPickrateChampionsFiltered.length" class="mt-1 text-center">
               <button
                 type="button"
@@ -206,44 +283,16 @@ function pctDeltaClass(delta: number): string {
                 </span>
               </span>
             </h3>
-            <table
-              v-if="p.overviewEffectiveTopWinrateChampions.length"
-              class="fast-stat-table w-full text-xs"
-            >
-              <tbody>
-                <tr
-                  v-for="(row, idx) in p.overviewEffectiveTopWinrateChampions"
-                  :key="row.championId"
-                  class="fast-stat-row"
-                >
-                  <td class="py-0.5 align-middle">
-                    <div class="flex w-full min-w-0 items-center gap-0.5">
-                      <span class="w-4 shrink-0 text-text/70">{{ Number(idx) + 1 }}.</span>
-                      <img
-                        v-if="p.gameVersion && p.championByKey(row.championId)"
-                        :src="
-                          p.getChampionImageUrl(
-                            p.gameVersion,
-                            p.championByKey(row.championId)!.image.full
-                          )
-                        "
-                        :alt="p.championName(row.championId) || ''"
-                        class="h-5 w-5 shrink-0 rounded-full object-cover"
-                      />
-                      <span class="min-w-[5.5rem] shrink-0 truncate font-medium text-text">{{
-                        p.championName(row.championId) || row.championId
-                      }}</span>
-                      <span class="ml-auto w-9 shrink-0 text-right font-medium text-text"
-                        >{{ Number(row.winrate).toFixed(2) }}%</span
-                      >
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <div v-else class="py-3 text-center text-text/60">
-              {{ p.t('statisticsPage.fastStatsNoData') }}
-            </div>
+            <StatisticsFastStatChampionRowList
+              :entries="winrateEntries(asChampionRows(p.overviewEffectiveTopWinrateChampions))"
+              :show-cards="showFastStatCards"
+              :no-data-text="p.t('statisticsPage.fastStatsNoData')"
+              :game-version="p.gameVersion"
+              :champion-by-key="p.championByKey"
+              :champion-name="p.championName"
+              :get-champion-image-url="p.getChampionImageUrl"
+              :search-query="p.championSearchQuery"
+            />
             <div v-if="p.overviewEffectiveTopWinrateChampions.length" class="mt-1 text-center">
               <button
                 type="button"
@@ -298,44 +347,23 @@ function pctDeltaClass(delta: number): string {
                 </span>
               </span>
             </h3>
-            <table
-              v-if="p.overviewEffectiveTopBanrateChampions.length"
-              class="fast-stat-table w-full text-xs"
-            >
-              <tbody>
-                <tr
-                  v-for="(row, idx) in p.overviewEffectiveTopBanrateChampions"
-                  :key="row.championId"
-                  class="fast-stat-row"
-                >
-                  <td class="py-0.5 align-middle">
-                    <div class="flex w-full min-w-0 items-center gap-0.5">
-                      <span class="w-4 shrink-0 text-text/70">{{ Number(idx) + 1 }}.</span>
-                      <img
-                        v-if="p.gameVersion && p.championByKey(row.championId)"
-                        :src="
-                          p.getChampionImageUrl(
-                            p.gameVersion,
-                            p.championByKey(row.championId)!.image.full
-                          )
-                        "
-                        :alt="p.championName(row.championId) || ''"
-                        class="h-5 w-5 shrink-0 rounded-full object-cover"
-                      />
-                      <span class="min-w-[5.5rem] shrink-0 truncate font-medium text-text">{{
-                        p.championName(row.championId) || row.championId
-                      }}</span>
-                      <span class="ml-auto w-9 shrink-0 text-right font-medium text-text"
-                        >{{ Number(row.banrate).toFixed(2) }}%</span
-                      >
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <div v-else class="py-3 text-center text-text/60">
-              {{ p.t('statisticsPage.fastStatsNoData') }}
-            </div>
+            <StatisticsFastStatChampionRowList
+              :entries="
+                banrateEntries(
+                  asChampionRows(p.overviewEffectiveTopBanrateChampions) as Array<{
+                    championId: number
+                    banrate: number
+                  }>
+                )
+              "
+              :show-cards="showFastStatCards"
+              :no-data-text="p.t('statisticsPage.fastStatsNoData')"
+              :game-version="p.gameVersion"
+              :champion-by-key="p.championByKey"
+              :champion-name="p.championName"
+              :get-champion-image-url="p.getChampionImageUrl"
+              :search-query="p.championSearchQuery"
+            />
             <div v-if="p.overviewEffectiveTopBanrateChampions.length" class="mt-1 text-center">
               <button
                 type="button"
@@ -398,52 +426,16 @@ function pctDeltaClass(delta: number): string {
                 </span>
               </span>
             </h3>
-            <table v-if="p.overviewTopWinrateSince.length" class="fast-stat-table w-full text-xs">
-              <tbody>
-                <tr
-                  v-for="(row, idx) in p.overviewTopWinrateSince.slice(0, 5)"
-                  :key="'wr-' + row.championId"
-                  class="fast-stat-row"
-                >
-                  <td class="py-0.5 align-middle">
-                    <div class="flex w-full min-w-0 items-center gap-0.5">
-                      <span class="w-4 shrink-0 text-text/70">{{ Number(idx) + 1 }}.</span>
-                      <img
-                        v-if="p.gameVersion && p.championByKey(row.championId)"
-                        :src="
-                          p.getChampionImageUrl(
-                            p.gameVersion,
-                            p.championByKey(row.championId)!.image.full
-                          )
-                        "
-                        :alt="p.championName(row.championId) || ''"
-                        class="h-5 w-5 shrink-0 rounded-full object-cover"
-                      />
-                      <div class="min-w-0 max-w-[6.5rem] shrink-0">
-                        <div class="truncate font-medium leading-tight text-text">
-                          {{ p.championName(row.championId) || row.championId }}
-                        </div>
-                        <div
-                          class="whitespace-nowrap text-[9px] tabular-nums leading-tight text-text/70"
-                        >
-                          {{ Number(row.wrOldest).toFixed(1) }}% →
-                          {{ Number(row.wrSince).toFixed(1) }}%
-                        </div>
-                      </div>
-                      <span
-                        class="ml-auto w-10 shrink-0 text-right font-medium"
-                        :class="Number(row.deltaWr) >= 0 ? 'text-success' : 'text-error'"
-                        >{{ Number(row.deltaWr) > 0 ? '+' : ''
-                        }}{{ Number(row.deltaWr).toFixed(2) }}%</span
-                      >
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <div v-else class="py-3 text-center text-text/60">
-              {{ p.t('statisticsPage.fastStatsNoProgression') }}
-            </div>
+            <StatisticsFastStatChampionRowList
+              :entries="progressionWrEntries(asChampionRows(p.overviewTopWinrateSince))"
+              :show-cards="showFastStatCards"
+              :no-data-text="p.t('statisticsPage.fastStatsNoProgression')"
+              :game-version="p.gameVersion"
+              :champion-by-key="p.championByKey"
+              :champion-name="p.championName"
+              :get-champion-image-url="p.getChampionImageUrl"
+              :search-query="p.championSearchQuery"
+            />
             <div v-if="p.overviewTopWinrateSince.length" class="mt-1 text-center">
               <button
                 type="button"
@@ -502,52 +494,16 @@ function pctDeltaClass(delta: number): string {
                 </span>
               </span>
             </h3>
-            <table v-if="p.overviewTopPickrateSince.length" class="fast-stat-table w-full text-xs">
-              <tbody>
-                <tr
-                  v-for="(row, idx) in p.overviewTopPickrateSince.slice(0, 5)"
-                  :key="'pr-' + row.championId"
-                  class="fast-stat-row"
-                >
-                  <td class="py-0.5 align-middle">
-                    <div class="flex w-full min-w-0 items-center gap-0.5">
-                      <span class="w-4 shrink-0 text-text/70">{{ Number(idx) + 1 }}.</span>
-                      <img
-                        v-if="p.gameVersion && p.championByKey(row.championId)"
-                        :src="
-                          p.getChampionImageUrl(
-                            p.gameVersion,
-                            p.championByKey(row.championId)!.image.full
-                          )
-                        "
-                        :alt="p.championName(row.championId) || ''"
-                        class="h-5 w-5 shrink-0 rounded-full object-cover"
-                      />
-                      <div class="min-w-0 max-w-[6.5rem] shrink-0">
-                        <div class="truncate font-medium leading-tight text-text">
-                          {{ p.championName(row.championId) || row.championId }}
-                        </div>
-                        <div
-                          class="whitespace-nowrap text-[9px] tabular-nums leading-tight text-text/70"
-                        >
-                          {{ Number(row.pickrateOldest).toFixed(1) }}% →
-                          {{ Number(row.pickrateSince).toFixed(1) }}%
-                        </div>
-                      </div>
-                      <span
-                        class="ml-auto w-10 shrink-0 text-right font-medium"
-                        :class="Number(row.deltaPick) >= 0 ? 'text-success' : 'text-error'"
-                        >{{ Number(row.deltaPick) > 0 ? '+' : ''
-                        }}{{ Number(row.deltaPick).toFixed(2) }}%</span
-                      >
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <div v-else class="py-3 text-center text-text/60">
-              {{ p.t('statisticsPage.fastStatsNoProgression') }}
-            </div>
+            <StatisticsFastStatChampionRowList
+              :entries="progressionPickEntries(asChampionRows(p.overviewTopPickrateSince))"
+              :show-cards="showFastStatCards"
+              :no-data-text="p.t('statisticsPage.fastStatsNoProgression')"
+              :game-version="p.gameVersion"
+              :champion-by-key="p.championByKey"
+              :champion-name="p.championName"
+              :get-champion-image-url="p.getChampionImageUrl"
+              :search-query="p.championSearchQuery"
+            />
             <div v-if="p.overviewTopPickrateSince.length" class="mt-1 text-center">
               <button
                 type="button"
@@ -606,52 +562,16 @@ function pctDeltaClass(delta: number): string {
                 </span>
               </span>
             </h3>
-            <table v-if="p.overviewTopBanrateSince.length" class="fast-stat-table w-full text-xs">
-              <tbody>
-                <tr
-                  v-for="(row, idx) in p.overviewTopBanrateSince.slice(0, 5)"
-                  :key="'br-' + row.championId"
-                  class="fast-stat-row"
-                >
-                  <td class="py-0.5 align-middle">
-                    <div class="flex w-full min-w-0 items-center gap-0.5">
-                      <span class="w-4 shrink-0 text-text/70">{{ Number(idx) + 1 }}.</span>
-                      <img
-                        v-if="p.gameVersion && p.championByKey(row.championId)"
-                        :src="
-                          p.getChampionImageUrl(
-                            p.gameVersion,
-                            p.championByKey(row.championId)!.image.full
-                          )
-                        "
-                        :alt="p.championName(row.championId) || ''"
-                        class="h-5 w-5 shrink-0 rounded-full object-cover"
-                      />
-                      <div class="min-w-0 max-w-[6.5rem] shrink-0">
-                        <div class="truncate font-medium leading-tight text-text">
-                          {{ p.championName(row.championId) || row.championId }}
-                        </div>
-                        <div
-                          class="whitespace-nowrap text-[9px] tabular-nums leading-tight text-text/70"
-                        >
-                          {{ Number(row.banrateOldest).toFixed(1) }}% →
-                          {{ Number(row.banrateSince).toFixed(1) }}%
-                        </div>
-                      </div>
-                      <span
-                        class="ml-auto w-10 shrink-0 text-right font-medium"
-                        :class="Number(row.deltaBan) >= 0 ? 'text-success' : 'text-error'"
-                        >{{ Number(row.deltaBan) > 0 ? '+' : ''
-                        }}{{ Number(row.deltaBan).toFixed(2) }}%</span
-                      >
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <div v-else class="py-3 text-center text-text/60">
-              {{ p.t('statisticsPage.fastStatsNoProgression') }}
-            </div>
+            <StatisticsFastStatChampionRowList
+              :entries="progressionBanEntries(asChampionRows(p.overviewTopBanrateSince))"
+              :show-cards="showFastStatCards"
+              :no-data-text="p.t('statisticsPage.fastStatsNoProgression')"
+              :game-version="p.gameVersion"
+              :champion-by-key="p.championByKey"
+              :champion-name="p.championName"
+              :get-champion-image-url="p.getChampionImageUrl"
+              :search-query="p.championSearchQuery"
+            />
             <div v-if="p.overviewTopBanrateSince.length" class="mt-1 text-center">
               <button
                 type="button"

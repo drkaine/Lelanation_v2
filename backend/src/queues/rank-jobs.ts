@@ -1,4 +1,5 @@
 import type { ParsedParticipantDto } from "../dto/match.dto.js";
+import { bullmqJobId } from "./bullmq-job-id.js";
 import { rankQueue } from "./index.js";
 
 /** Enfile les fetch-rank dédupliqués par joueur et par jour (BullMQ ignore les jobId existants). */
@@ -13,7 +14,8 @@ export async function enqueueRankFetchJobsForParticipants(
       name: "fetch-rank",
       data: { puuid: p.puuid, region: p.region, matchDate: p.gameDate },
       opts: {
-        jobId: `rank:${p.puuid}:${today}`,
+        jobId: bullmqJobId("rank", p.puuid, today),
+        priority: 10,
         attempts: 2,
         backoff: { type: "fixed" as const, delay: 30000 },
         removeOnComplete: { count: 100 },

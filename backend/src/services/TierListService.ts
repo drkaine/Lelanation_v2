@@ -479,29 +479,19 @@ async function fetchMatchupRoleRows(
   if (patch) filters.push(`game_version LIKE '${normalizePatchMajorMinor(patch).replace(/'/g, "''")}%'`)
   const whereSql = filters.length > 0 ? filters.join(' AND ') : '1=1'
 
-  const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', patch, 'ac')
   const vsFrom = await matchVersionedAggFrom('agg_champion_vs_stats', patch, 'vs')
 
-  const coreRows = await queryRawUnsafe<Array<{ id: bigint; championId: number; role: string }>>(`
-    SELECT id, champion_id AS "championId", role
-    FROM ${coreFrom}
-    WHERE ${whereSql}
-  `)
-  if (coreRows.length === 0) return []
-  const coreById = new Map<string, { championId: number; role: string }>()
-  for (const r of coreRows) {
-    coreById.set(String(r.id), { championId: r.championId, role: r.role })
-  }
-
   const vsRows = await queryRawUnsafe<Array<{
-    championStatId: bigint
+    championId: number
     opponentChampionId: number
+    role: string
     countGame: number
     countWin: number
   }>>(`
     SELECT
-      champion_stat_id AS "championStatId",
+      champion_id AS "championId",
       opponent_champion_id AS "opponentChampionId",
+      role,
       count_game AS "countGame",
       count_win AS "countWin"
     FROM ${vsFrom}
@@ -509,15 +499,13 @@ async function fetchMatchupRoleRows(
   `)
   const agg = new Map<string, MatchupRoleRow>()
   for (const row of vsRows) {
-    const core = coreById.get(String(row.championStatId))
-    if (!core) continue
-    const key = `${core.championId}::${row.opponentChampionId}::${core.role}`
+    const key = `${row.championId}::${row.opponentChampionId}::${row.role}`
     const ex = agg.get(key)
     if (!ex) {
       agg.set(key, {
-        championId: core.championId,
+        championId: row.championId,
         opponentChampionId: row.opponentChampionId,
-        role: core.role,
+        role: row.role,
         games: row.countGame,
         wins: row.countWin,
       })

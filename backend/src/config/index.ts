@@ -14,6 +14,10 @@ type Config = {
   DISCOVERY_MIN_QUEUE_DEPTH: number;
   MAX_HYDRATION_QUEUE_DEPTH: number;
   DISCOVERY_INTERVAL_MS: number;
+  /** Pause discovery/hydration tant que rank.waiting dépasse ce seuil. */
+  MAX_RANK_BACKLOG_PAUSE_PIPELINES: number;
+  /** Débit rank « normal » (hors drain). */
+  RANK_LIMITER_MAX_NORMAL: number;
 };
 
 function parsePositiveInt(raw: string | undefined): number | null {
@@ -81,4 +85,8 @@ export const config: Config = {
     parsePositiveInt(process.env.MAX_HYDRATION_QUEUE_DEPTH) ?? 500,
   DISCOVERY_INTERVAL_MS:
     parsePositiveInt(process.env.DISCOVERY_INTERVAL_MS) ?? 45_000,
+  MAX_RANK_BACKLOG_PAUSE_PIPELINES:
+    parsePositiveInt(process.env.MAX_RANK_BACKLOG_PAUSE_PIPELINES) ?? 5_000,
+  RANK_LIMITER_MAX_NORMAL:
+    parsePositiveInt(process.env.RANK_LIMITER_MAX_NORMAL) ?? 17,
 };

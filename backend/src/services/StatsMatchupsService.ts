@@ -43,17 +43,7 @@ export async function getMatchupsByChampion(
     if (pRegion) filters.push(`region = '${pRegion.replace(/'/g, "''")}'`)
     const whereSql = filters.join(' AND ')
 
-    const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', pVersion, 'ac')
     const vsFrom = await matchVersionedAggFrom('agg_champion_vs_stats', pVersion, 'vs')
-
-    const coreStats = await queryRawUnsafe<Array<{ id: bigint }>>(`
-      SELECT id
-      FROM ${coreFrom}
-      WHERE ${whereSql}
-    `)
-    if (coreStats.length === 0) return { matchups: [] }
-
-    const statIds = coreStats.map((s) => s.id)
 
     const vsRows = await queryRawUnsafe<Array<{
       opponentChampionId: number
@@ -65,8 +55,9 @@ export async function getMatchupsByChampion(
         count_win AS "countWin",
         count_game AS "countGame"
       FROM ${vsFrom}
-      WHERE champion_stat_id IN (${statIds.map((id) => id.toString()).join(',')})
+      WHERE ${whereSql}
     `)
+    if (vsRows.length === 0) return { matchups: [] }
 
     // Aggregate by opponent
     const byOpponent = new Map<number, { wins: number; games: number }>()

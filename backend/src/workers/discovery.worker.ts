@@ -3,7 +3,9 @@ import { config } from "../config/index.js";
 import { sql } from "../db/client.js";
 import type { DiscoveryJobData } from "../dto/match.dto.js";
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
-import { hydrationQueue, discoveryQueue } from "../queues/index.js";
+import { bullmqJobId } from "../queues/bullmq-job-id.js";
+import { maxRankBacklogBeforePipelinePause, shouldPauseMatchPipelines } from "../queues/rank-backlog-policy.js";
+import { discoveryQueue, hydrationQueue, rankQueue } from "../queues/index.js";
 import { DISCOVERY_QUEUE } from "../queues/definitions.js";
 import { redis } from "../redis/client.js";
 import { waitForDiscoverySlot } from "../redis/rate-scheduler.js";
@@ -174,6 +176,9 @@ async function processDiscoveryPlayer(
             region: player.region,
             puuid: player.puuid,
           },
+          opts: {
+            jobId: bullmqJobId("hydrate", matchId),
+          },
         })),
       );
     }
@@ -191,6 +196,19 @@ async function processDiscoveryPlayer(
 
 async function runDiscoveryCycle(): Promise<void> {
   const startedAt = Date.now();
+  const rankWaiting = await rankQueue.getWaitingCount();
+  if (shouldPauseMatchPipelines(rankWaiting)) {
+    console.debug(
+      JSON.stringify({
+        msg: "discovery_paused_rank_backlog",
+        rankWaiting,
+        threshold: maxRankBacklogBeforePipelinePause(),
+      }),
+    );
+    pollerV2Observability.recordDuration("discoveryCycleMs", Date.now() - startedAt);
+    return;
+  }
+
   const hydrationWaiting = await hydrationQueue.getWaitingCount();
   const maxHydrationQueueDepth = config.MAX_HYDRATION_QUEUE_DEPTH;
 
@@ -250,7 +268,7 @@ export async function scheduleDiscoveryRepeatJob(): Promise<void> {
   const intervalMs = config.DISCOVERY_INTERVAL_MS;
   const repeatables = await discoveryQueue.getRepeatableJobs();
   for (const job of repeatables) {
-    if (job.id?.startsWith("discovery:repeat")) {
+    if (job.id?.startsWith("discovery_repeat")) {
       await discoveryQueue.removeRepeatableByKey(job.key);
     }
   }
@@ -265,7 +283,7 @@ export async function scheduleDiscoveryRepeatJob(): Promise<void> {
       repeat: {
         every: intervalMs,
       },
-      jobId: `discovery:repeat:${intervalMs}ms`,
+      jobId: bullmqJobId("discovery", "repeat", `${intervalMs}ms`),
     },
   );
 }

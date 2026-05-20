@@ -25,6 +25,7 @@ const LOGICAL_TO_PHYSICAL: Record<string, string> = {
   agg_team_core_stats: 'team_core_stat',
   agg_botlane_duo_vs_duo_stats: 'botlane_duo_vs_duo_stats',
   agg_objective_outcome_stats: 'objective_outcome_histogram',
+  agg_champion_team_objective_stats: 'champion_stats',
   agg_champion_pick_order: 'champion_pick_order',
 }
 

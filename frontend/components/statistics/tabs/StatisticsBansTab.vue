@@ -11,8 +11,70 @@
       {{ p.bansTableData.message }}
     </div>
     <div v-else class="space-y-3">
+      <div class="statistics-bans-mobile-list space-y-2 md:hidden">
+        <article
+          v-for="row in p.paginatedBans"
+          :key="'ban-mobile-' + row.championId"
+          class="overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
+        >
+          <button
+            type="button"
+            class="flex w-full items-center gap-3 p-3 text-left"
+            @click="toggleBanCardExpanded(row.championId)"
+          >
+            <StatisticsChampionPortrait
+              v-if="p.gameVersion && p.championByKey(row.championId)"
+              :src="
+                p.getChampionImageUrl(p.gameVersion, p.championByKey(row.championId)!.image.full)
+              "
+              :alt="p.championName(row.championId) || ''"
+              :champion-id="row.championId"
+              :champion-name="p.championName(row.championId) || ''"
+              :size="48"
+            />
+            <div class="min-w-0 flex-1">
+              <div class="truncate font-semibold text-accent">
+                <StatisticsChampionNameHighlight
+                  :name="String(p.championName(row.championId) || row.championId)"
+                  :query="p.championSearchQuery"
+                />
+              </div>
+            </div>
+            <div class="shrink-0 text-center">
+              <div class="text-[10px] uppercase tracking-wide text-text/55">
+                {{ p.t('statisticsPage.bansColRate') }}
+              </div>
+              <div class="text-2xl font-bold tabular-nums leading-none text-amber-300">
+                {{ p.banRateForBansRow(row, p.bansTableData?.matchCount ?? 0).toFixed(2) }}%
+              </div>
+            </div>
+          </button>
+          <div
+            v-if="expandedBanIds.has(row.championId)"
+            class="space-y-1 border-t border-primary/20 bg-black/20 px-3 py-2 text-xs text-text/85"
+          >
+            <div v-if="p.showBansOutcomeColumns">
+              {{ p.t('statisticsPage.overviewTeamsByWin') }}:
+              {{ p.bansOutcomePct(row.championId, 'win').toFixed(2) }}%
+            </div>
+            <div v-if="p.showBansOutcomeColumns">
+              {{ p.t('statisticsPage.overviewTeamsByLoss') }}:
+              {{ p.bansOutcomePct(row.championId, 'loss').toFixed(2) }}%
+            </div>
+            <div v-if="p.showBansSideColumns">
+              {{ p.t('statisticsPage.bansColBlueSide') }}:
+              {{ p.banPctForCount(row.bansBlue, p.bansTableData?.matchCount ?? 0, 1).toFixed(2) }}%
+            </div>
+            <div v-if="p.showBansSideColumns">
+              {{ p.t('statisticsPage.bansColRedSide') }}:
+              {{ p.banPctForCount(row.bansRed, p.bansTableData?.matchCount ?? 0, 1).toFixed(2) }}%
+            </div>
+          </div>
+        </article>
+      </div>
+
       <div
-        class="statistics-overview-surface w-full overflow-x-auto rounded-lg border border-primary/30"
+        class="statistics-overview-surface hidden w-full overflow-x-auto rounded-lg border border-primary/30 md:block"
       >
         <div class="tier-list-lolalytics w-full min-w-0 text-[13px]">
           <table class="w-full min-w-[520px] text-left text-sm">
@@ -393,10 +455,18 @@
 </template>
 
 <script setup lang="ts">
-import { inject, unref } from 'vue'
+import { inject, ref, unref } from 'vue'
 import type { BansSortCol } from '~/composables/statistics/useStatisticsBansTab'
 
 const p = inject('statisticsPageCtx') as any
+const expandedBanIds = ref<Set<number>>(new Set())
+
+function toggleBanCardExpanded(championId: number): void {
+  const next = new Set(expandedBanIds.value)
+  if (next.has(championId)) next.delete(championId)
+  else next.add(championId)
+  expandedBanIds.value = next
+}
 
 function onPageSizeChange(event: Event): void {
   const target = event.target as HTMLSelectElement | null

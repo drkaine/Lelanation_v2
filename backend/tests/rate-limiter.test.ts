@@ -111,12 +111,9 @@ afterAll(async () => {
 });
 
 describe("budget allocation", () => {
-  test("les trois budgets somment à totalTargetRate", () => {
+  test("discovery + hydration Redis somment à totalTargetRate (rank = BullMQ limiter)", () => {
     const total = totalTargetRatePerSec(95);
-    const sum =
-      discoveryTargetRatePerSec(95) +
-      hydrationTargetRatePerSec(95) +
-      rankTargetRatePerSec(95);
+    const sum = discoveryTargetRatePerSec(95) + hydrationTargetRatePerSec(95);
     expect(sum).toBeCloseTo(total, 5);
   });
 
