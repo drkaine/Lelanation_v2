@@ -16,6 +16,7 @@ import { redis } from "../redis/client.js";
 import { waitForHydrationSlot } from "../redis/rate-scheduler.js";
 import { NotFoundError, RiotClient } from "../riot/client.js";
 import { sumObjectiveTimestampMsByTeamAndKey } from "../parsers/objective-timestamp-sums.js";
+import { resolveGameFirstObjective } from "../parsers/game-first-objective.js";
 import { buildTeamObjectiveHistogramEntries } from "../parsers/team-objective-histogram.js";
 import type { MatchDto, MatchTimelineDto, ParticipantDto } from "../riot/types.js";
 import {
@@ -177,24 +178,57 @@ function parseTeamStats(
   for (const team of [team100, team200]) {
     if (!team) continue;
     const tid = team.teamId as 100 | 200;
+    const outcome = (team.teamId === 100 ? team100Win : !team100Win) ? "win" : "loss";
     for (const [type, value] of Object.entries(team.objectives ?? {})) {
-      const sumKey = `${tid}|${type}`;
-      objectives.push({
-        type,
-        count: Number(value.kills ?? 0),
-        team: tid,
-        outcome: (team.teamId === 100 ? team100Win : !team100Win) ? "win" : "loss",
-        sumTimestampMs: timestampSums.get(sumKey) ?? 0,
-      });
+      const kills = Number(value.kills ?? 0);
+      if (kills > 0) {
+        const sumKey = `${tid}|${type}`;
+        objectives.push({
+          type,
+          count: kills,
+          team: tid,
+          outcome,
+          sumTimestampMs: timestampSums.get(sumKey) ?? 0,
+        });
+      }
+      if (value.first === true) {
+        const firstType =
+          type === "champion" ? "firstBlood" : `${type}First`;
+        objectives.push({
+          type: firstType,
+          count: 1,
+          team: tid,
+          outcome,
+          sumTimestampMs: 0,
+        });
+      }
     }
   }
   objectives.push(
     ...buildTeamObjectiveHistogramEntries(match, timeline, participants),
   );
+  const gameFirst = resolveGameFirstObjective(match, timeline, participants);
+  if (gameFirst) {
+    objectives.push({
+      type: "gameFirst",
+      count: gameFirst.bucket,
+      team: gameFirst.team,
+      outcome: gameFirst.outcome,
+      sumTimestampMs: 0,
+    });
+  }
 
   const participantsInMatch = match.info.participants ?? [];
   const surrendered = participantsInMatch.some((p) => p.gameEndedInSurrender === true);
   const earlySurrendered = participantsInMatch.some((p) => p.gameEndedInEarlySurrender === true);
+  const earlySurrenderedTeam100 = participantsInMatch.some(
+    (p) => p.teamId === 100 && p.teamEarlySurrendered === true
+  );
+  const earlySurrenderedTeam200 = participantsInMatch.some(
+    (p) => p.teamId === 200 && p.teamEarlySurrendered === true
+  );
+  const surrenderedTeam100 = surrendered && !team100Win;
+  const surrenderedTeam200 = surrendered && team100Win;
 
   return {
     matchId: match.metadata.matchId,
@@ -205,6 +239,10 @@ function parseTeamStats(
     objectives,
     surrendered,
     earlySurrendered,
+    surrenderedTeam100,
+    surrenderedTeam200,
+    earlySurrenderedTeam100,
+    earlySurrenderedTeam200,
   };
 }
 

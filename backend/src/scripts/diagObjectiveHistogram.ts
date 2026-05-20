@@ -23,7 +23,8 @@ async function main(): Promise<void> {
       SUM(CASE WHEN outcome = 'loss' AND obj_count >= 1 THEN count_games ELSE 0 END)::bigint AS loss_secured,
       COUNT(DISTINCT region)::int AS regions
     FROM objective_outcome_histogram
-    WHERE objective_type IN ('earth_drake', 'firstBlood')
+    WHERE (objective_type = 'dragon' AND type_drake = 'earth' AND is_soul = FALSE)
+       OR objective_type = 'firstBlood'
       AND rank_tier <> 'UNRANKED'
     GROUP BY objective_type
   `)
@@ -37,7 +38,7 @@ async function main(): Promise<void> {
   >(`
     SELECT region, objective_type, SUM(count_games)::bigint AS games
     FROM objective_outcome_histogram
-    WHERE objective_type = 'earth_drake'
+    WHERE objective_type = 'dragon' AND type_drake = 'earth' AND is_soul = FALSE
       AND outcome = 'win'
       AND obj_count >= 1
       AND rank_tier <> 'UNRANKED'

@@ -43,18 +43,27 @@ function isValidTab(value: unknown): value is StatisticsMainTab {
   return VALID_TABS.includes(value as StatisticsMainTab)
 }
 
+function defaultFiltersOpen(): boolean {
+  if (import.meta.server) return true
+  // Bottom sheet sur mobile : fermé par défaut pour ne pas bloquer le contenu.
+  if (window.matchMedia('(max-width: 1023px)').matches) return false
+  return true
+}
+
 function loadUiState(): StatisticsUiState {
   if (import.meta.server) return { filtersOpen: true, activeTab: 'overview' }
+  const filtersDefault = defaultFiltersOpen()
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return { filtersOpen: true, activeTab: 'overview' }
+    if (!raw) return { filtersOpen: filtersDefault, activeTab: 'overview' }
     const parsed = JSON.parse(raw) as Partial<StatisticsUiState>
+    const isMobile = window.matchMedia('(max-width: 1023px)').matches
     return {
-      filtersOpen: parsed.filtersOpen ?? true,
+      filtersOpen: isMobile ? false : (parsed.filtersOpen ?? filtersDefault),
       activeTab: isValidTab(parsed.activeTab) ? parsed.activeTab : 'overview',
     }
   } catch {
-    return { filtersOpen: true, activeTab: 'overview' }
+    return { filtersOpen: filtersDefault, activeTab: 'overview' }
   }
 }
 

@@ -63,6 +63,7 @@ export function useStatisticsBansTab(params: {
   championsPageSize: Ref<number>
   statsVersionFilter: Ref<string>
   progressionFromVersion: Ref<string | null>
+  resolveBaselineVersion: () => string | null
   gameVersion: Ref<string>
   statsFetch: <T>(url: string) => Promise<T>
   apiUrl: (path: string) => string
@@ -353,20 +354,8 @@ export function useStatisticsBansTab(params: {
         bansError.value = null
       }
 
-      const refPatch = params.patchFromVersion(params.progressionFromVersion.value)
-      const mainPatch = params.patchFromVersion(
-        params.statsVersionFilter.value || params.gameVersion.value
-      )
-      const refVer = params.progressionFromVersion.value?.trim()
-      if (
-        refPatch &&
-        mainPatch &&
-        refPatch !== mainPatch &&
-        refVer &&
-        !data?.error &&
-        data.rows &&
-        data.rows.length > 0
-      ) {
+      const refVer = params.resolveBaselineVersion()
+      if (refVer && !data?.error) {
         try {
           const refData = await params.statsFetch<RefPayload>(
             params.apiUrl(

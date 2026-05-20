@@ -1,12 +1,8 @@
 <script setup lang="ts">
-import { computed, inject } from 'vue'
+import { inject } from 'vue'
 import type { FastStatChampionEntry } from '~/components/statistics/FastStatChampionRowList.vue'
 
 const p = inject('statisticsPageCtx') as any
-
-const showFastStatCards = computed(
-  () => Boolean(p.isMobileViewport) && p.overviewFastStatView === 'cards'
-)
 
 function asChampionRows<T>(rows: unknown): T[] {
   return Array.isArray(rows) ? rows : []
@@ -170,46 +166,16 @@ function bansByOutcomeEntries(
         </button>
       </div>
       <div v-else-if="p.overviewData" class="space-y-[10px]">
-        <div
-          v-if="p.isMobileViewport"
-          class="flex flex-wrap items-center justify-center gap-2 rounded-lg border border-primary/25 bg-surface/20 px-2 py-1.5"
-        >
-          <span class="text-xs text-text/70">{{ p.t('statisticsPage.overviewViewLabel') }}</span>
-          <button
-            type="button"
-            class="rounded px-2 py-1 text-xs font-medium transition-colors"
-            :class="
-              p.overviewFastStatView === 'cards'
-                ? 'bg-accent/25 text-accent'
-                : 'text-text/75 hover:bg-primary/15'
-            "
-            @click="p.setOverviewFastStatView('cards')"
-          >
-            {{ p.t('statisticsPage.overviewViewCards') }}
-          </button>
-          <button
-            type="button"
-            class="rounded px-2 py-1 text-xs font-medium transition-colors"
-            :class="
-              p.overviewFastStatView === 'table'
-                ? 'bg-accent/25 text-accent'
-                : 'text-text/75 hover:bg-primary/15'
-            "
-            @click="p.setOverviewFastStatView('table')"
-          >
-            {{ p.t('statisticsPage.overviewViewTable') }}
-          </button>
-        </div>
-        <!-- Fast Stats encarts (style LeagueOfGraphs avec nos couleurs) -->
+        <!-- Fast Stats : même gabarit que TeamSideFastStatTable -->
         <div class="flex flex-wrap items-start justify-center gap-x-[5px] gap-y-[10px] pb-[10px]">
           <!-- Champions les plus choisis -->
-          <div
-            class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
-          >
-            <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
+          <div class="team-side-fast-stat fast-stat-card rounded-lg border border-primary/30 p-2">
+            <h3
+              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-amber-300"
+            >
               <button
                 type="button"
-                class="text-base leading-none transition-colors"
+                class="shrink-0 text-base leading-none transition-colors"
                 :class="
                   p.cardIsFavorite('overview.mostPicked')
                     ? 'text-amber-300 hover:text-amber-200'
@@ -229,7 +195,7 @@ function bansByOutcomeEntries(
               >
                 {{ p.cardIsFavorite('overview.mostPicked') ? '★' : '☆' }}
               </button>
-              <span class="flex-1">
+              <span class="inline-flex min-w-0 flex-1 items-center">
                 {{ p.t('statisticsPage.fastStatsMostPicked') }}
                 <span
                   class="group/stat-tip relative ml-1 inline-flex cursor-help text-text/50"
@@ -248,7 +214,7 @@ function bansByOutcomeEntries(
             <StatisticsFastStatChampionRowList
               variant="default"
               :entries="pickrateEntries(asChampionRows(p.overviewTopPickrateChampionsFiltered))"
-              :show-cards="showFastStatCards"
+              :show-cards="false"
               :no-data-text="p.t('statisticsPage.fastStatsNoData')"
               :game-version="p.gameVersion"
               :champion-by-key="p.championByKey"
@@ -256,10 +222,13 @@ function bansByOutcomeEntries(
               :get-champion-image-url="p.getChampionImageUrl"
               :search-query="p.championSearchQuery"
             />
-            <div v-if="p.overviewTopPickrateChampionsFiltered.length" class="mt-1 text-center">
+            <div
+              v-if="p.overviewTopPickrateChampionsFiltered.length"
+              class="mt-1 flex justify-center"
+            >
               <button
                 type="button"
-                class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
+                class="rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
                 @click="p.goToTierListWithSort('pickrate')"
               >
                 {{ p.t('statisticsPage.fastStatsSeeMore') }}
@@ -268,13 +237,13 @@ function bansByOutcomeEntries(
           </div>
 
           <!-- Meilleurs champions -->
-          <div
-            class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
-          >
-            <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
+          <div class="team-side-fast-stat fast-stat-card rounded-lg border border-primary/30 p-2">
+            <h3
+              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-amber-300"
+            >
               <button
                 type="button"
-                class="text-base leading-none transition-colors"
+                class="shrink-0 text-base leading-none transition-colors"
                 :class="
                   p.cardIsFavorite('overview.bestWinrate')
                     ? 'text-amber-300 hover:text-amber-200'
@@ -313,7 +282,7 @@ function bansByOutcomeEntries(
             <StatisticsFastStatChampionRowList
               variant="default"
               :entries="winrateEntries(asChampionRows(p.overviewEffectiveTopWinrateChampions))"
-              :show-cards="showFastStatCards"
+              :show-cards="false"
               :no-data-text="p.t('statisticsPage.fastStatsNoData')"
               :game-version="p.gameVersion"
               :champion-by-key="p.championByKey"
@@ -321,10 +290,13 @@ function bansByOutcomeEntries(
               :get-champion-image-url="p.getChampionImageUrl"
               :search-query="p.championSearchQuery"
             />
-            <div v-if="p.overviewEffectiveTopWinrateChampions.length" class="mt-1 text-center">
+            <div
+              v-if="p.overviewEffectiveTopWinrateChampions.length"
+              class="mt-1 flex justify-center"
+            >
               <button
                 type="button"
-                class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
+                class="rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
                 @click="p.goToTierListWithSort('winrate')"
               >
                 {{ p.t('statisticsPage.fastStatsSeeMore') }}
@@ -333,13 +305,13 @@ function bansByOutcomeEntries(
           </div>
 
           <!-- Champions les plus bannis -->
-          <div
-            class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
-          >
-            <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
+          <div class="team-side-fast-stat fast-stat-card rounded-lg border border-primary/30 p-2">
+            <h3
+              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-amber-300"
+            >
               <button
                 type="button"
-                class="text-base leading-none transition-colors"
+                class="shrink-0 text-base leading-none transition-colors"
                 :class="
                   p.cardIsFavorite('overview.mostBanned')
                     ? 'text-amber-300 hover:text-amber-200'
@@ -385,7 +357,7 @@ function bansByOutcomeEntries(
                   }>
                 )
               "
-              :show-cards="showFastStatCards"
+              :show-cards="false"
               :no-data-text="p.t('statisticsPage.fastStatsNoData')"
               :game-version="p.gameVersion"
               :champion-by-key="p.championByKey"
@@ -393,10 +365,13 @@ function bansByOutcomeEntries(
               :get-champion-image-url="p.getChampionImageUrl"
               :search-query="p.championSearchQuery"
             />
-            <div v-if="p.overviewEffectiveTopBanrateChampions.length" class="mt-1 text-center">
+            <div
+              v-if="p.overviewEffectiveTopBanrateChampions.length"
+              class="mt-1 flex justify-center"
+            >
               <button
                 type="button"
-                class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
+                class="rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
                 @click="p.goToBansTab()"
               >
                 {{ p.t('statisticsPage.fastStatsSeeMore') }}
@@ -405,13 +380,13 @@ function bansByOutcomeEntries(
           </div>
 
           <!-- Winrate depuis X -->
-          <div
-            class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
-          >
-            <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
+          <div class="team-side-fast-stat fast-stat-card rounded-lg border border-primary/30 p-2">
+            <h3
+              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-amber-300"
+            >
               <button
                 type="button"
-                class="text-base leading-none transition-colors"
+                class="shrink-0 text-base leading-none transition-colors"
                 :class="
                   p.cardIsFavorite('overview.winrateSince')
                     ? 'text-amber-300 hover:text-amber-200'
@@ -458,7 +433,7 @@ function bansByOutcomeEntries(
             <StatisticsFastStatChampionRowList
               variant="progression"
               :entries="progressionWrEntries(asChampionRows(p.overviewTopWinrateSince))"
-              :show-cards="showFastStatCards"
+              :show-cards="false"
               :no-data-text="p.t('statisticsPage.fastStatsNoProgression')"
               :game-version="p.gameVersion"
               :champion-by-key="p.championByKey"
@@ -466,10 +441,10 @@ function bansByOutcomeEntries(
               :get-champion-image-url="p.getChampionImageUrl"
               :search-query="p.championSearchQuery"
             />
-            <div v-if="p.overviewTopWinrateSince.length" class="mt-1 text-center">
+            <div v-if="p.overviewTopWinrateSince.length" class="mt-1 flex justify-center">
               <button
                 type="button"
-                class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
+                class="rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
                 @click="p.goToChampionTableWithSort('blueWinrate')"
               >
                 {{ p.t('statisticsPage.fastStatsSeeMore') }}
@@ -478,13 +453,13 @@ function bansByOutcomeEntries(
           </div>
 
           <!-- Pickrate depuis X -->
-          <div
-            class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
-          >
-            <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
+          <div class="team-side-fast-stat fast-stat-card rounded-lg border border-primary/30 p-2">
+            <h3
+              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-amber-300"
+            >
               <button
                 type="button"
-                class="text-base leading-none transition-colors"
+                class="shrink-0 text-base leading-none transition-colors"
                 :class="
                   p.cardIsFavorite('overview.pickrateSince')
                     ? 'text-amber-300 hover:text-amber-200'
@@ -527,7 +502,7 @@ function bansByOutcomeEntries(
             <StatisticsFastStatChampionRowList
               variant="progression"
               :entries="progressionPickEntries(asChampionRows(p.overviewTopPickrateSince))"
-              :show-cards="showFastStatCards"
+              :show-cards="false"
               :no-data-text="p.t('statisticsPage.fastStatsNoProgression')"
               :game-version="p.gameVersion"
               :champion-by-key="p.championByKey"
@@ -535,10 +510,10 @@ function bansByOutcomeEntries(
               :get-champion-image-url="p.getChampionImageUrl"
               :search-query="p.championSearchQuery"
             />
-            <div v-if="p.overviewTopPickrateSince.length" class="mt-1 text-center">
+            <div v-if="p.overviewTopPickrateSince.length" class="mt-1 flex justify-center">
               <button
                 type="button"
-                class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
+                class="rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
                 @click="p.goToChampionTableWithSort('bluePickrate')"
               >
                 {{ p.t('statisticsPage.fastStatsSeeMore') }}
@@ -547,13 +522,13 @@ function bansByOutcomeEntries(
           </div>
 
           <!-- Banrate depuis X -->
-          <div
-            class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
-          >
-            <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
+          <div class="team-side-fast-stat fast-stat-card rounded-lg border border-primary/30 p-2">
+            <h3
+              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-amber-300"
+            >
               <button
                 type="button"
-                class="text-base leading-none transition-colors"
+                class="shrink-0 text-base leading-none transition-colors"
                 :class="
                   p.cardIsFavorite('overview.banrateSince')
                     ? 'text-amber-300 hover:text-amber-200'
@@ -596,7 +571,7 @@ function bansByOutcomeEntries(
             <StatisticsFastStatChampionRowList
               variant="progression"
               :entries="progressionBanEntries(asChampionRows(p.overviewTopBanrateSince))"
-              :show-cards="showFastStatCards"
+              :show-cards="false"
               :no-data-text="p.t('statisticsPage.fastStatsNoProgression')"
               :game-version="p.gameVersion"
               :champion-by-key="p.championByKey"
@@ -604,10 +579,10 @@ function bansByOutcomeEntries(
               :get-champion-image-url="p.getChampionImageUrl"
               :search-query="p.championSearchQuery"
             />
-            <div v-if="p.overviewTopBanrateSince.length" class="mt-1 text-center">
+            <div v-if="p.overviewTopBanrateSince.length" class="mt-1 flex justify-center">
               <button
                 type="button"
-                class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
+                class="rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
                 @click="p.goToBansTab()"
               >
                 {{ p.t('statisticsPage.fastStatsSeeMore') }}
@@ -616,13 +591,13 @@ function bansByOutcomeEntries(
           </div>
 
           <!-- Winrate depuis X (baisse) -->
-          <div
-            class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
-          >
-            <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
+          <div class="team-side-fast-stat fast-stat-card rounded-lg border border-primary/30 p-2">
+            <h3
+              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-amber-300"
+            >
               <button
                 type="button"
-                class="text-base leading-none transition-colors"
+                class="shrink-0 text-base leading-none transition-colors"
                 :class="
                   p.cardIsFavorite('overview.winrateSinceDown')
                     ? 'text-amber-300 hover:text-amber-200'
@@ -665,7 +640,7 @@ function bansByOutcomeEntries(
             <StatisticsFastStatChampionRowList
               variant="progression"
               :entries="progressionWrEntries(asChampionRows(p.overviewBottomWinrateSince))"
-              :show-cards="showFastStatCards"
+              :show-cards="false"
               :no-data-text="p.t('statisticsPage.fastStatsNoProgression')"
               :game-version="p.gameVersion"
               :champion-by-key="p.championByKey"
@@ -673,10 +648,10 @@ function bansByOutcomeEntries(
               :get-champion-image-url="p.getChampionImageUrl"
               :search-query="p.championSearchQuery"
             />
-            <div v-if="p.overviewBottomWinrateSince.length" class="mt-1 text-center">
+            <div v-if="p.overviewBottomWinrateSince.length" class="mt-1 flex justify-center">
               <button
                 type="button"
-                class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
+                class="rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
                 @click="p.goToChampionTableWithSort('blueWinrate', 'asc')"
               >
                 {{ p.t('statisticsPage.fastStatsSeeMore') }}
@@ -685,13 +660,13 @@ function bansByOutcomeEntries(
           </div>
 
           <!-- Pickrate depuis X (baisse) -->
-          <div
-            class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
-          >
-            <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
+          <div class="team-side-fast-stat fast-stat-card rounded-lg border border-primary/30 p-2">
+            <h3
+              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-amber-300"
+            >
               <button
                 type="button"
-                class="text-base leading-none transition-colors"
+                class="shrink-0 text-base leading-none transition-colors"
                 :class="
                   p.cardIsFavorite('overview.pickrateSinceDown')
                     ? 'text-amber-300 hover:text-amber-200'
@@ -734,7 +709,7 @@ function bansByOutcomeEntries(
             <StatisticsFastStatChampionRowList
               variant="progression"
               :entries="progressionPickEntries(asChampionRows(p.overviewBottomPickrateSince))"
-              :show-cards="showFastStatCards"
+              :show-cards="false"
               :no-data-text="p.t('statisticsPage.fastStatsNoProgression')"
               :game-version="p.gameVersion"
               :champion-by-key="p.championByKey"
@@ -742,10 +717,10 @@ function bansByOutcomeEntries(
               :get-champion-image-url="p.getChampionImageUrl"
               :search-query="p.championSearchQuery"
             />
-            <div v-if="p.overviewBottomPickrateSince.length" class="mt-1 text-center">
+            <div v-if="p.overviewBottomPickrateSince.length" class="mt-1 flex justify-center">
               <button
                 type="button"
-                class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
+                class="rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
                 @click="p.goToChampionTableWithSort('bluePickrate', 'asc')"
               >
                 {{ p.t('statisticsPage.fastStatsSeeMore') }}
@@ -754,13 +729,13 @@ function bansByOutcomeEntries(
           </div>
 
           <!-- Banrate depuis X (baisse) -->
-          <div
-            class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
-          >
-            <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
+          <div class="team-side-fast-stat fast-stat-card rounded-lg border border-primary/30 p-2">
+            <h3
+              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-amber-300"
+            >
               <button
                 type="button"
-                class="text-base leading-none transition-colors"
+                class="shrink-0 text-base leading-none transition-colors"
                 :class="
                   p.cardIsFavorite('overview.banrateSinceDown')
                     ? 'text-amber-300 hover:text-amber-200'
@@ -803,7 +778,7 @@ function bansByOutcomeEntries(
             <StatisticsFastStatChampionRowList
               variant="progression"
               :entries="progressionBanEntries(asChampionRows(p.overviewBottomBanrateSince))"
-              :show-cards="showFastStatCards"
+              :show-cards="false"
               :no-data-text="p.t('statisticsPage.fastStatsNoProgression')"
               :game-version="p.gameVersion"
               :champion-by-key="p.championByKey"
@@ -811,10 +786,10 @@ function bansByOutcomeEntries(
               :get-champion-image-url="p.getChampionImageUrl"
               :search-query="p.championSearchQuery"
             />
-            <div v-if="p.overviewBottomBanrateSince.length" class="mt-1 text-center">
+            <div v-if="p.overviewBottomBanrateSince.length" class="mt-1 flex justify-center">
               <button
                 type="button"
-                class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
+                class="rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
                 @click="p.goToBansTab()"
               >
                 {{ p.t('statisticsPage.fastStatsSeeMore') }}
@@ -823,15 +798,13 @@ function bansByOutcomeEntries(
           </div>
 
           <!-- Répartition des parties (global uniquement) — donut SVG comme Solo/Duo -->
-          <div
-            class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
-          >
+          <div class="team-side-fast-stat fast-stat-card rounded-lg border border-primary/30 p-2">
             <h3
-              class="fast-stat-title mb-2 flex items-center justify-between gap-2 text-sm font-semibold"
+              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-amber-300"
             >
               <button
                 type="button"
-                class="text-base leading-none transition-colors"
+                class="shrink-0 text-base leading-none transition-colors"
                 :class="
                   p.cardIsFavorite('overview.matchOutcome')
                     ? 'text-amber-300 hover:text-amber-200'
@@ -851,7 +824,9 @@ function bansByOutcomeEntries(
               >
                 {{ p.cardIsFavorite('overview.matchOutcome') ? '★' : '☆' }}
               </button>
-              <span class="flex-1">{{ p.t('statisticsPage.overviewMatchOutcomesTitle') }}</span>
+              <span class="inline-flex min-w-0 flex-1 items-center">{{
+                p.t('statisticsPage.overviewMatchOutcomesTitle')
+              }}</span>
             </h3>
             <div
               v-if="p.overviewAbandonsPending || p.overviewPending"
@@ -901,12 +876,14 @@ function bansByOutcomeEntries(
           <!-- Bans par équipe gagnante -->
           <div
             v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0"
-            class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+            class="team-side-fast-stat fast-stat-card rounded-lg border border-primary/30 p-2"
           >
-            <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
+            <h3
+              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-amber-300"
+            >
               <button
                 type="button"
-                class="text-base leading-none transition-colors"
+                class="shrink-0 text-base leading-none transition-colors"
                 :class="
                   p.cardIsFavorite('overview.bansByWin')
                     ? 'text-amber-300 hover:text-amber-200'
@@ -926,7 +903,9 @@ function bansByOutcomeEntries(
               >
                 {{ p.cardIsFavorite('overview.bansByWin') ? '★' : '☆' }}
               </button>
-              <span class="flex-1">{{ p.t('statisticsPage.overviewTeamsBansByWin') }}</span>
+              <span class="inline-flex min-w-0 flex-1 items-center">{{
+                p.t('statisticsPage.overviewTeamsBansByWin')
+              }}</span>
             </h3>
             <StatisticsFastStatChampionRowList
               variant="bans"
@@ -937,7 +916,7 @@ function bansByOutcomeEntries(
                   p.bansExpandByWin ? 20 : 5
                 )
               "
-              :show-cards="showFastStatCards"
+              :show-cards="false"
               :no-data-text="p.t('statisticsPage.fastStatsNoData')"
               :game-version="p.gameVersion"
               :champion-by-key="p.championByKey"
@@ -945,10 +924,13 @@ function bansByOutcomeEntries(
               :get-champion-image-url="p.getChampionImageUrl"
               :search-query="p.championSearchQuery"
             />
-            <div v-if="(p.overviewTeamsData.bans.byWin ?? []).length" class="mt-1 text-center">
+            <div
+              v-if="(p.overviewTeamsData.bans.byWin ?? []).length"
+              class="mt-1 flex justify-center"
+            >
               <button
                 type="button"
-                class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
+                class="rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
                 @click="p.goToBansTab()"
               >
                 {{ p.t('statisticsPage.fastStatsSeeMore') }}
@@ -959,12 +941,14 @@ function bansByOutcomeEntries(
           <!-- Bans par équipe perdante -->
           <div
             v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0"
-            class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+            class="team-side-fast-stat fast-stat-card rounded-lg border border-primary/30 p-2"
           >
-            <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
+            <h3
+              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-amber-300"
+            >
               <button
                 type="button"
-                class="text-base leading-none transition-colors"
+                class="shrink-0 text-base leading-none transition-colors"
                 :class="
                   p.cardIsFavorite('overview.bansByLoss')
                     ? 'text-amber-300 hover:text-amber-200'
@@ -984,7 +968,9 @@ function bansByOutcomeEntries(
               >
                 {{ p.cardIsFavorite('overview.bansByLoss') ? '★' : '☆' }}
               </button>
-              <span class="flex-1">{{ p.t('statisticsPage.overviewTeamsBansByLoss') }}</span>
+              <span class="inline-flex min-w-0 flex-1 items-center">{{
+                p.t('statisticsPage.overviewTeamsBansByLoss')
+              }}</span>
             </h3>
             <StatisticsFastStatChampionRowList
               variant="bans"
@@ -995,7 +981,7 @@ function bansByOutcomeEntries(
                   p.bansExpandByLoss ? 20 : 5
                 )
               "
-              :show-cards="showFastStatCards"
+              :show-cards="false"
               :no-data-text="p.t('statisticsPage.fastStatsNoData')"
               :game-version="p.gameVersion"
               :champion-by-key="p.championByKey"
@@ -1003,10 +989,13 @@ function bansByOutcomeEntries(
               :get-champion-image-url="p.getChampionImageUrl"
               :search-query="p.championSearchQuery"
             />
-            <div v-if="(p.overviewTeamsData.bans.byLoss ?? []).length" class="mt-1 text-center">
+            <div
+              v-if="(p.overviewTeamsData.bans.byLoss ?? []).length"
+              class="mt-1 flex justify-center"
+            >
               <button
                 type="button"
-                class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
+                class="rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
                 @click="p.goToBansTab()"
               >
                 {{ p.t('statisticsPage.fastStatsSeeMore') }}

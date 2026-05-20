@@ -25,6 +25,19 @@ function formatPct(value: number | null): string {
   return `${value.toFixed(2)}%`
 }
 
+function formatPctWithCount(pctValue: number | null, count: number): string {
+  if (pctValue == null) return '—'
+  if (count > 0) return `${pctValue.toFixed(2)}% (${formatCompactCount(count)})`
+  return `${pctValue.toFixed(2)}%`
+}
+
+/** Limite les comptages soul agrégés (évite >100 % si chevauchement des types). */
+function cappedSoulObtentionCount(raw: number, matchCount: number): number {
+  const n = Number(raw) || 0
+  if (n <= 0 || matchCount <= 0) return 0
+  return Math.min(n, matchCount)
+}
+
 function formatDelta(value: number | null): string {
   if (value == null) return ''
   const sign = value > 0 ? '+' : ''
@@ -107,9 +120,134 @@ const FIRST_WINRATE_KEYS = [
   'horde',
 ] as const
 
-function formatFirstObjectiveWr(value: number | null | undefined): string {
+function formatCompactCount(n: number): string {
+  const v = Math.round(Number(n) || 0)
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`
+  if (v >= 10_000) return `${Math.round(v / 1000)}k`
+  if (v >= 1000) return `${(v / 1000).toFixed(1)}k`
+  return String(v)
+}
+
+function formatFirstObjectiveWr(value: number | null | undefined, games?: number | null): string {
   if (value == null || !Number.isFinite(value)) return '—'
-  return `${clampSoulWinrate(value).toFixed(2)}%`
+  const wr = `${clampSoulWinrate(value).toFixed(2)}%`
+  if (games != null && games > 0) return `${wr} (${formatCompactCount(games)})`
+  return wr
+}
+
+const GAME_FIRST_BUCKETS: Array<{ bucket: number; key: string }> = [
+  { bucket: 1, key: 'firstBlood' },
+  { bucket: 2, key: 'tower' },
+  { bucket: 3, key: 'dragon' },
+  { bucket: 4, key: 'baron' },
+  { bucket: 5, key: 'horde' },
+  { bucket: 6, key: 'riftHerald' },
+  { bucket: 7, key: 'inhibitor' },
+]
+
+const openGameFirstKeys = ref(new Set<string>())
+
+function toggleGameFirst() {
+  if (openGameFirstKeys.value.has('gameFirst')) openGameFirstKeys.value.delete('gameFirst')
+  else openGameFirstKeys.value.add('gameFirst')
+}
+
+function gameFirstBucketLabel(bucketKey: string): string {
+  return p.t(`statisticsPage.gameFirstBucket_${bucketKey}`)
+}
+
+function gameFirstCounts(): number[] {
+  const data = p.overviewTeamsData?.gameFirstObjective
+  if (!data) return []
+  const set = new Set<number>()
+  for (const dist of [data.distributionByWin, data.distributionByLoss]) {
+    for (const k of Object.keys(dist ?? {})) {
+      const n = parseInt(k, 10)
+      if (Number.isFinite(n) && n > 0) set.add(n)
+    }
+  }
+  return [...set].sort((a, b) => a - b)
+}
+
+function gameFirstPercentForCount(bucket: number, byWin: boolean): string {
+  const data = p.overviewTeamsData
+  if (!data?.matchCount) return '—'
+  const dist = byWin
+    ? data.gameFirstObjective?.distributionByWin
+    : data.gameFirstObjective?.distributionByLoss
+  const n = Number(dist?.[String(bucket)] ?? 0)
+  if (n <= 0) return '—'
+  return ((n / data.matchCount) * 100).toFixed(2) + '%'
+}
+
+function gameFirstPercentForCountSides(bucket: number, side: 'blue' | 'red'): string {
+  const data = p.overviewSidesData
+  if (!data?.matchCount) return '—'
+  const dist =
+    side === 'blue'
+      ? data.gameFirstObjective?.distributionByBlue
+      : data.gameFirstObjective?.distributionByRed
+  const n = Number(dist?.[String(bucket)] ?? 0)
+  if (n <= 0) return '—'
+  return ((n / data.matchCount) * 100).toFixed(2) + '%'
+}
+
+function gameFirstPctParts(side: 'win' | 'loss'): {
+  current: string
+  delta: string
+  deltaClass: string
+} {
+  const curData = p.overviewTeamsData
+  if (!curData?.gameFirstObjective || curData.matchCount <= 0) {
+    return { current: '—', delta: '', deltaClass: 'text-text/80' }
+  }
+  const dist =
+    side === 'win'
+      ? curData.gameFirstObjective.distributionByWin
+      : curData.gameFirstObjective.distributionByLoss
+  const curCount = Object.values(dist ?? {}).reduce((s, v) => s + Number(v ?? 0), 0)
+  const curPct = pct(curCount, curData.matchCount)
+  const baseData = p.overviewTeamsBaselineData?.gameFirstObjective
+  const baseDist =
+    baseData == null
+      ? null
+      : side === 'win'
+        ? baseData.distributionByWin
+        : baseData.distributionByLoss
+  const baseCount =
+    baseDist == null ? null : Object.values(baseDist).reduce((s, v) => s + Number(v ?? 0), 0)
+  const basePct =
+    p.overviewTeamsBaselineData && p.overviewTeamsBaselineData.matchCount > 0 && baseCount != null
+      ? pct(baseCount, p.overviewTeamsBaselineData.matchCount)
+      : null
+  const delta = curPct != null && basePct != null ? curPct - basePct : null
+  return {
+    current: formatPct(curPct),
+    delta: formatDelta(delta),
+    deltaClass: deltaColorClass(delta),
+  }
+}
+
+function gameFirstPctPartsSides(side: 'blue' | 'red'): {
+  current: string
+  delta: string
+  deltaClass: string
+} {
+  const curData = p.overviewSidesData
+  if (!curData?.gameFirstObjective || curData.matchCount <= 0) {
+    return { current: '—', delta: '', deltaClass: 'text-text/80' }
+  }
+  const dist =
+    side === 'blue'
+      ? curData.gameFirstObjective.distributionByBlue
+      : curData.gameFirstObjective.distributionByRed
+  const curCount = Object.values(dist ?? {}).reduce((s, v) => s + Number(v ?? 0), 0)
+  const curPct = pct(curCount, curData.matchCount)
+  return {
+    current: formatPct(curPct),
+    delta: '',
+    deltaClass: 'text-text/80',
+  }
 }
 
 /** Winrate borné à [0, 100] (évite affichage >100 % si données agrégées incohérentes). */
@@ -190,11 +328,12 @@ function objectiveFirstWinrateSideParts(
 ): { current: string; delta: string; deltaClass: string } {
   const cur = p.overviewSidesData?.objectiveFirstWinrateBySide?.[key]?.[side]
   const base = p.overviewSidesBaselineData?.objectiveFirstWinrateBySide?.[key]?.[side]
+  const games = p.overviewSidesData?.objectiveFirstWinrateGamesBySide?.[key]?.[side]
   const curV = cur ?? null
   const baseV = base ?? null
   const delta = curV != null && baseV != null ? curV - baseV : null
   return {
-    current: formatFirstObjectiveWr(curV),
+    current: formatFirstObjectiveWr(curV, games),
     delta: formatDelta(delta),
     deltaClass: deltaColorClass(delta),
   }
@@ -297,7 +436,7 @@ function drakeTypePctParts(
 
   const delta = curPct != null && basePct != null ? curPct - basePct : null
   return {
-    current: formatPct(curPct),
+    current: formatPctWithCount(curPct, curCount),
     delta: formatDelta(delta),
     deltaClass: deltaColorClass(delta),
   }
@@ -330,7 +469,7 @@ function drakeTypePctPartsSides(
 
   const delta = curPct != null && basePct != null ? curPct - basePct : null
   return {
-    current: formatPct(curPct),
+    current: formatPctWithCount(curPct, curCount),
     delta: formatDelta(delta),
     deltaClass: deltaColorClass(delta),
   }
@@ -346,6 +485,7 @@ function drakeSoulPctParts(
   }
   const curRow = p.drakeSoulRows.find((r: { key: string }) => r.key === key)
   const curCount = side === 'win' ? Number(curRow?.byWin ?? 0) : Number(curRow?.byLoss ?? 0)
+  if (curCount <= 0) return { current: '—', delta: '', deltaClass: 'text-text/80' }
   const curPct = pct(curCount, Number(curData.matchCount))
 
   const baseData = p.overviewTeamsBaselineData
@@ -363,7 +503,7 @@ function drakeSoulPctParts(
 
   const delta = curPct != null && basePct != null ? curPct - basePct : null
   return {
-    current: formatPct(curPct),
+    current: formatPctWithCount(curPct, curCount),
     delta: formatDelta(delta),
     deltaClass: deltaColorClass(delta),
   }
@@ -379,6 +519,7 @@ function drakeSoulPctPartsSides(
   }
   const curSoul = sidesDrakeSoulByKey(key)
   const curCount = side === 'blue' ? Number(curSoul.byBlue ?? 0) : Number(curSoul.byRed ?? 0)
+  if (curCount <= 0) return { current: '—', delta: '', deltaClass: 'text-text/80' }
   const curPct = pct(curCount, Number(curData.matchCount))
 
   const baseData = p.overviewSidesBaselineData
@@ -396,7 +537,7 @@ function drakeSoulPctPartsSides(
 
   const delta = curPct != null && basePct != null ? curPct - basePct : null
   return {
-    current: formatPct(curPct),
+    current: formatPctWithCount(curPct, curCount),
     delta: formatDelta(delta),
     deltaClass: deltaColorClass(delta),
   }
@@ -411,28 +552,34 @@ function soulGlobalPctParts(side: 'win' | 'loss'): {
   if (!curData || curData.matchCount <= 0) {
     return { current: '—', delta: '', deltaClass: 'text-text/80' }
   }
-  const curCount =
+  const rawCount =
     side === 'win' ? Number(p.drakeSoulGlobal.byWin ?? 0) : Number(p.drakeSoulGlobal.byLoss ?? 0)
+  const curCount = cappedSoulObtentionCount(rawCount, Number(curData.matchCount))
+  if (curCount <= 0) return { current: '—', delta: '', deltaClass: 'text-text/80' }
   const curPct = pct(curCount, Number(curData.matchCount))
 
   const baseData = p.overviewTeamsBaselineData
   const baseSouls = baseData?.drakes?.souls as
     | Record<string, { byWin?: number; byLoss?: number }>
     | undefined
-  const baseCount =
+  const baseRaw =
     baseSouls == null
       ? null
       : Object.values(baseSouls).reduce(
           (acc, soul) => acc + Number(side === 'win' ? (soul?.byWin ?? 0) : (soul?.byLoss ?? 0)),
           0
         )
+  const baseCount =
+    baseData && baseRaw != null
+      ? cappedSoulObtentionCount(baseRaw, Number(baseData.matchCount))
+      : null
   const basePct =
-    baseData && baseData.matchCount > 0 && baseCount != null
+    baseData && baseData.matchCount > 0 && baseCount != null && baseCount > 0
       ? pct(baseCount, Number(baseData.matchCount))
       : null
   const delta = curPct != null && basePct != null ? curPct - basePct : null
   return {
-    current: formatPct(curPct),
+    current: formatPctWithCount(curPct, curCount),
     delta: formatDelta(delta),
     deltaClass: deltaColorClass(delta),
   }
@@ -447,30 +594,36 @@ function soulGlobalPctPartsSides(side: 'blue' | 'red'): {
   if (!curData || curData.matchCount <= 0) {
     return { current: '—', delta: '', deltaClass: 'text-text/80' }
   }
-  const curCount =
+  const rawCount =
     side === 'blue'
       ? Number(p.sidesDrakeSoulGlobal.byBlue ?? 0)
       : Number(p.sidesDrakeSoulGlobal.byRed ?? 0)
+  const curCount = cappedSoulObtentionCount(rawCount, Number(curData.matchCount))
+  if (curCount <= 0) return { current: '—', delta: '', deltaClass: 'text-text/80' }
   const curPct = pct(curCount, Number(curData.matchCount))
 
   const baseData = p.overviewSidesBaselineData
   const baseSouls = baseData?.drakesBySide?.souls as
     | Record<string, { byBlue?: number; byRed?: number }>
     | undefined
-  const baseCount =
+  const baseRaw =
     baseSouls == null
       ? null
       : Object.values(baseSouls).reduce(
           (acc, soul) => acc + Number(side === 'blue' ? (soul?.byBlue ?? 0) : (soul?.byRed ?? 0)),
           0
         )
+  const baseCount =
+    baseData && baseRaw != null
+      ? cappedSoulObtentionCount(baseRaw, Number(baseData.matchCount))
+      : null
   const basePct =
-    baseData && baseData.matchCount > 0 && baseCount != null
+    baseData && baseData.matchCount > 0 && baseCount != null && baseCount > 0
       ? pct(baseCount, Number(baseData.matchCount))
       : null
   const delta = curPct != null && basePct != null ? curPct - basePct : null
   return {
-    current: formatPct(curPct),
+    current: formatPctWithCount(curPct, curCount),
     delta: formatDelta(delta),
     deltaClass: deltaColorClass(delta),
   }
@@ -496,6 +649,18 @@ function rowColor(key: string): string {
 
 type DistRow = { key: string; label: string; value: number; color: string }
 
+function sumDistributionCounts(
+  distWin?: Record<string, number>,
+  distLoss?: Record<string, number>
+): number {
+  let total = 0
+  for (const dist of [distWin, distLoss]) {
+    if (!dist || typeof dist !== 'object') continue
+    for (const n of Object.values(dist)) total += Number(n ?? 0)
+  }
+  return total
+}
+
 function buildDistRows(
   rows: Array<{ key: string; label: string; byWin: number; byLoss: number }>
 ): DistRow[] {
@@ -509,8 +674,37 @@ function buildDistRows(
     .filter(row => row.value > 0)
 }
 
-const drakeDistRows = computed<DistRow[]>(() => buildDistRows(p.drakeTypeRows))
-const soulDistRows = computed<DistRow[]>(() => buildDistRows(p.drakeSoulRows))
+/** Répartition donut drakes : histogramme (kills par type), sinon obtention. */
+function buildDrakeDistRows(
+  rows: Array<{
+    key: string
+    label: string
+    byWin: number
+    byLoss: number
+    distributionByWin?: Record<string, number>
+    distributionByLoss?: Record<string, number>
+  }>
+): DistRow[] {
+  return rows
+    .map(row => {
+      const fromHist = sumDistributionCounts(row.distributionByWin, row.distributionByLoss)
+      const fromObtention = Number(row.byWin ?? 0) + Number(row.byLoss ?? 0)
+      return {
+        key: row.key,
+        label: row.label,
+        value: fromHist > 0 ? fromHist : fromObtention,
+        color: rowColor(row.key),
+      }
+    })
+    .filter(row => row.value > 0)
+}
+
+const drakeDistRows = computed<DistRow[]>(() => buildDrakeDistRows(p.drakeTypeRows ?? []))
+const soulDistRows = computed<DistRow[]>(() => buildDistRows(p.drakeSoulRows ?? []))
+
+const showDistributionCards = computed(
+  () => (p.overviewTeamsData?.matchCount ?? 0) > 0 || (p.overviewSidesData?.matchCount ?? 0) > 0
+)
 
 function distTotal(rows: DistRow[]): number {
   return rows.reduce((sum, row) => sum + row.value, 0)
@@ -559,7 +753,7 @@ function soulSecureWinrateParts(key: string): {
   const cl = Number(curRow?.byLoss ?? 0)
   const cn = cw + cl
   const curWr = cn > 0 ? clampSoulWinrate((cw / cn) * 100) : null
-  const current = curWr == null ? '—' : `${curWr.toFixed(2)}%`
+  const current = formatFirstObjectiveWr(curWr)
 
   const baseData = p.overviewTeamsBaselineData
   const souls = baseData?.drakes?.souls as
@@ -875,6 +1069,62 @@ const drakeSoulWinrateRows = computed(() =>
                 </span>
               </td>
             </tr>
+            <tr>
+              <td class="py-1.5 pr-2">
+                <button
+                  type="button"
+                  class="flex items-center gap-1 font-medium text-text/90 hover:text-text"
+                  @click="toggleGameFirst()"
+                >
+                  <span
+                    class="inline-block transition-transform duration-200"
+                    :class="openGameFirstKeys.has('gameFirst') ? 'rotate-180' : ''"
+                    aria-hidden
+                    >▼</span
+                  >
+                  {{ p.t('statisticsPage.overviewTeamsGameFirstObjective') }}
+                </button>
+              </td>
+              <td class="px-1 py-1.5 text-center">
+                {{ gameFirstPctParts('win').current }}
+                <span :class="gameFirstPctParts('win').deltaClass">
+                  {{ gameFirstPctParts('win').delta }}
+                </span>
+              </td>
+              <td class="px-1 py-1.5 text-center">
+                {{ gameFirstPctParts('loss').current }}
+                <span :class="gameFirstPctParts('loss').deltaClass">
+                  {{ gameFirstPctParts('loss').delta }}
+                </span>
+              </td>
+              <td class="px-1 py-1.5 text-center">
+                {{ gameFirstPctPartsSides('blue').current }}
+              </td>
+              <td class="py-1.5 pl-1 text-center">
+                {{ gameFirstPctPartsSides('red').current }}
+              </td>
+            </tr>
+            <template v-if="openGameFirstKeys.has('gameFirst')">
+              <tr
+                v-for="row in GAME_FIRST_BUCKETS.filter(b => gameFirstCounts().includes(b.bucket))"
+                :key="'game-first-' + row.bucket"
+                class="bg-surface/30"
+              >
+                <td class="py-1 pl-6 pr-2 text-text/70">{{ gameFirstBucketLabel(row.key) }}</td>
+                <td class="px-1 py-1 text-center text-text/80">
+                  {{ gameFirstPercentForCount(row.bucket, true) }}
+                </td>
+                <td class="px-1 py-1 text-center text-text/80">
+                  {{ gameFirstPercentForCount(row.bucket, false) }}
+                </td>
+                <td class="px-1 py-1 text-center text-text/80">
+                  {{ gameFirstPercentForCountSides(row.bucket, 'blue') }}
+                </td>
+                <td class="py-1 pl-1 text-center text-text/80">
+                  {{ gameFirstPercentForCountSides(row.bucket, 'red') }}
+                </td>
+              </tr>
+            </template>
             <template v-for="key in p.objectiveKeysWithKills" :key="key">
               <tr>
                 <td class="py-1.5 pr-2">
@@ -1502,10 +1752,7 @@ const drakeSoulWinrateRows = computed(() =>
       </div>
     </div>
 
-    <div
-      v-if="drakeDistRows.length > 0 || soulDistRows.length > 0"
-      class="grid grid-cols-1 gap-4 lg:grid-cols-3"
-    >
+    <div v-if="showDistributionCards" class="grid grid-cols-1 gap-4 md:grid-cols-2">
       <div
         class="fast-stat-card mx-auto w-full max-w-[420px] rounded-lg border border-primary/30 bg-surface/30 p-3"
       >

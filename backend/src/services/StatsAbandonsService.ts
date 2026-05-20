@@ -108,6 +108,21 @@ type TeamAggRow = {
   early_surrender_count: bigint
 }
 
+const SURRENDER_MATRIX_RANK_ORDER = [
+  'ALL',
+  'UNRANKED',
+  'IRON',
+  'BRONZE',
+  'SILVER',
+  'GOLD',
+  'PLATINUM',
+  'EMERALD',
+  'DIAMOND',
+  'MASTER',
+  'GRANDMASTER',
+  'CHALLENGER',
+] as const
+
 type Cell = {
   matchCount: number
   surrenderCount: number
@@ -130,7 +145,7 @@ function buildSurrenderCells(
 
   for (const r of rows) {
     const rank = String(r.rank_tier ?? '').toUpperCase()
-    if (!rank || rank === 'UNRANKED') continue
+    if (!rank) continue
     const team = Number(r.team) as 100 | 200
     if (team !== 100 && team !== 200) continue
     const match = Number(r.match_count ?? 0)
@@ -237,6 +252,26 @@ async function loadSurrenderTeamAgg(
   `)
 }
 
+/** Totaux surrender / early par côté (team 100 / 200) depuis team_core_stat. */
+export async function getTeamSurrenderTotalsBySide(
+  version?: string | string[] | null,
+  rankTier?: string | string[] | null
+): Promise<Map<100 | 200, { surrender: number; early: number }>> {
+  const pVersion = normalizeParam(version)
+  const patch = pVersion ? normalizePatchMajorMinor(pVersion) : null
+  const rows = await loadSurrenderTeamAgg(patch, rankTier)
+  const out = new Map<100 | 200, { surrender: number; early: number }>()
+  for (const r of rows) {
+    const team = Number(r.team) as 100 | 200
+    if (team !== 100 && team !== 200) continue
+    const cur = out.get(team) ?? { surrender: 0, early: 0 }
+    cur.surrender += Number(r.surrender_count ?? 0)
+    cur.early += Number(r.early_surrender_count ?? 0)
+    out.set(team, cur)
+  }
+  return out
+}
+
 export async function getSurrenderMatrix(
   version?: string | string[] | null,
   baselineVersion?: string | string[] | null,
@@ -246,9 +281,12 @@ export async function getSurrenderMatrix(
   const curVersion = normalizeParam(version)
   const curPatch = curVersion ? normalizePatchMajorMinor(curVersion) : null
   const baselineRaw = normalizeParam(baselineVersion)
-  const baselinePatch = baselineRaw
+  let baselinePatch = baselineRaw
     ? normalizePatchMajorMinor(baselineRaw)
     : previousPatchVersion(curPatch)
+  if (baselinePatch && curPatch && baselinePatch === curPatch) {
+    baselinePatch = previousPatchVersion(curPatch)
+  }
   const rankKey = rankTierCacheKey(rankTier)
   const cacheKey = `${surrenderMatrixCacheKey(curPatch, baselinePatch)}|${rankKey}`
   const now = Date.now()
@@ -263,7 +301,7 @@ export async function getSurrenderMatrix(
     ])
     const curCells = buildSurrenderCells(curRows, curMatchByRank)
     const baseCells = buildSurrenderCells(baseRows, baseMatchByRank)
-    const rankOrder = ['ALL', 'IRON', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'EMERALD', 'DIAMOND', 'MASTER', 'GRANDMASTER', 'CHALLENGER']
+    const rankOrder = [...SURRENDER_MATRIX_RANK_ORDER]
     const teamOrder: SurrenderMatrixTeam[] = ['ALL', 100, 200]
     const rows: SurrenderMatrixRow[] = []
     for (const rankTier of rankOrder) {
@@ -342,25 +380,11 @@ export async function getOverviewAbandons(
     const whereIngestSql = condIngest.join(' AND ')
 
     const moFrom = await matchVersionedAggFrom('agg_match_outcome_stats', pVersion, 'mo')
-    const tcFrom = await matchVersionedAggFrom('agg_team_core_stats', pVersion, 'tc')
-    const whereTc = whereSql.replace(/\bmo\./g, 'tc.')
-
-    const rows = await queryRawUnsafe<
-      Array<{
-        total_matches: bigint
-        early_surrender_count: bigint
-        surrender_count: bigint
-        remake_count: bigint
-      }>
-    >(`
-      SELECT
-        (SELECT COALESCE(SUM(mo.count_match), 0)::bigint FROM ${moFrom} WHERE ${whereSql}) AS total_matches,
-        (SELECT COALESCE(SUM(tc.count_team_early_surrendered), 0)::bigint FROM ${tcFrom} WHERE ${whereTc}) AS early_surrender_count,
-        (SELECT COALESCE(SUM(tc.count_team_surrendered), 0)::bigint FROM ${tcFrom} WHERE ${whereTc}) AS surrender_count,
-        0::bigint AS remake_count
+    const totalRows = await queryRawUnsafe<Array<{ total_matches: bigint }>>(`
+      SELECT COALESCE(SUM(mo.count_match), 0)::bigint AS total_matches
+      FROM ${moFrom} WHERE ${whereSql}
     `)
-    const row = rows[0]
-    const totalMatches = Number(row?.total_matches ?? 0)
+    const totalMatches = Number(totalRows[0]?.total_matches ?? 0)
     if (totalMatches === 0) {
       return {
         totalMatches: 0,
@@ -373,9 +397,13 @@ export async function getOverviewAbandons(
       }
     }
 
-    const earlySurrenderCount = Number(row?.early_surrender_count ?? 0)
-    const surrenderCount = Number(row?.surrender_count ?? 0)
-    const remakeCount = Number(row?.remake_count ?? 0)
+    const teamRows = await loadSurrenderTeamAgg(pVersion, rankTier)
+    const earlySurrenderCount = teamRows.reduce(
+      (s, r) => s + Number(r.early_surrender_count ?? 0),
+      0
+    )
+    const surrenderCount = teamRows.reduce((s, r) => s + Number(r.surrender_count ?? 0), 0)
+    const remakeCount = 0
     // Fallback: some fresh patches can have match outcome rows before team-core surrender counters are filled.
     const fallbackNeeded =
       totalMatches > 0 && earlySurrenderCount === 0 && surrenderCount === 0

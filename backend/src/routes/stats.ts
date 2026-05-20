@@ -427,24 +427,26 @@ router.get('/surrender-matrix', async (req: Request, res: Response) => {
   return res.json(data)
 })
 
-/** GET /api/stats/overview-progression - WR delta from oldest version to all since. Query: ?version=16.1 &rankTier=GOLD */
+/** GET /api/stats/overview-progression - WR delta ref patch vs sinceVersion (patch courant). Query: ?version=16.9&sinceVersion=16.10 */
 router.get('/overview-progression', async (req: Request, res: Response) => {
   const version = queryString(req.query.version)
+  const sinceVersion = queryString(req.query.sinceVersion)
   const rankTier = rankTierParam(req.query.rankTier)
   const role = queryString(req.query.role)
-  const data = await getOverviewProgressionStats(version, rankTier, role)
+  const data = await getOverviewProgressionStats(version, rankTier, role, sinceVersion)
   if (!data) {
     return res.status(200).json({ oldestVersion: null, gainers: [], losers: [] })
   }
   return res.json(data)
 })
 
-/** GET /api/stats/overview-progression-full - All champions with WR and pickrate progression. Query: ?version=16.1 &rankTier=GOLD */
+/** GET /api/stats/overview-progression-full - WR/pick/ban delta ref patch vs sinceVersion. Query: ?version=16.9&sinceVersion=16.10 */
 router.get('/overview-progression-full', async (req: Request, res: Response) => {
   const version = queryString(req.query.version)
+  const sinceVersion = queryString(req.query.sinceVersion)
   const rankTier = rankTierParam(req.query.rankTier)
   const role = queryString(req.query.role)
-  const data = await getOverviewProgressionFullStats(version, rankTier, role)
+  const data = await getOverviewProgressionFullStats(version, rankTier, role, sinceVersion)
   if (!data) {
     return res.status(200).json({ oldestVersion: null, champions: [] })
   }

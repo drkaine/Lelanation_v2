@@ -938,15 +938,41 @@ async function upsertMatchOutcomeStats(tx: any, payload: IngestionJobData): Prom
   `;
 }
 
+function surrenderCountForTeam(
+  team: 100 | 200,
+  stats: IngestionJobData['teamStats']
+): number {
+  if (team === 100) {
+    if (stats.surrenderedTeam100 === true) return 1
+    if (stats.surrenderedTeam100 === false) return 0
+  } else {
+    if (stats.surrenderedTeam200 === true) return 1
+    if (stats.surrenderedTeam200 === false) return 0
+  }
+  if (!stats.surrendered) return 0
+  return team === 100 ? (stats.team100Win ? 0 : 1) : stats.team100Win ? 1 : 0
+}
+
+function earlySurrenderCountForTeam(
+  team: 100 | 200,
+  stats: IngestionJobData['teamStats']
+): number {
+  if (team === 100) {
+    if (stats.earlySurrenderedTeam100 === true) return 1
+    if (stats.earlySurrenderedTeam100 === false) return 0
+  } else {
+    if (stats.earlySurrenderedTeam200 === true) return 1
+    if (stats.earlySurrenderedTeam200 === false) return 0
+  }
+  if (!stats.earlySurrendered) return 0
+  return team === 100 ? (stats.team100Win ? 0 : 1) : stats.team100Win ? 1 : 0
+}
+
 async function upsertTeamCoreStat(tx: any, payload: IngestionJobData): Promise<void> {
-  const matchSurrendered = payload.teamStats.surrendered ? 1 : 0
-  const matchEarlySurrendered = payload.teamStats.earlySurrendered ? 1 : 0
-  const team100Lost = payload.teamStats.team100Win ? 0 : 1
-  const team200Lost = payload.teamStats.team100Win ? 1 : 0
-  const team100Surrendered = matchSurrendered * team100Lost
-  const team200Surrendered = matchSurrendered * team200Lost
-  const team100EarlySurrendered = matchEarlySurrendered * team100Lost
-  const team200EarlySurrendered = matchEarlySurrendered * team200Lost
+  const team100Surrendered = surrenderCountForTeam(100, payload.teamStats)
+  const team200Surrendered = surrenderCountForTeam(200, payload.teamStats)
+  const team100EarlySurrendered = earlySurrenderCountForTeam(100, payload.teamStats)
+  const team200EarlySurrendered = earlySurrenderCountForTeam(200, payload.teamStats)
 
   await tx`
     INSERT INTO team_core_stat (

@@ -25,6 +25,7 @@ import {
   sqlAggUnionAllLiveAndArchives,
 } from './statsAggArchive.js'
 import { normalizeGameVersionToMajorMinor } from '../utils/gameVersion.js'
+import { getTeamSurrenderTotalsBySide } from './StatsAbandonsService.js'
 
 /** Surrenders imputés par côté (équipe) — mêmes agrégats que overview-sides. */
 export interface OverviewSurrenderBySide {
@@ -191,9 +192,38 @@ export type ObjectiveFirstWinrateBySide = {
   horde: { blue: number | null; red: number | null }
 }
 
+export type ObjectiveFirstWinrateGames = {
+  firstBlood: number
+  baron: number
+  dragon: number
+  tower: number
+  inhibitor: number
+  riftHerald: number
+  horde: number
+}
+
+export type ObjectiveFirstWinrateGamesBySide = {
+  firstBlood: { blue: number; red: number }
+  baron: { blue: number; red: number }
+  dragon: { blue: number; red: number }
+  tower: { blue: number; red: number }
+  inhibitor: { blue: number; red: number }
+  riftHerald: { blue: number; red: number }
+  horde: { blue: number; red: number }
+}
+
+export interface GameFirstObjectiveStats {
+  distributionByWin: Record<string, number>
+  distributionByLoss: Record<string, number>
+  distributionByBlue?: Record<string, number>
+  distributionByRed?: Record<string, number>
+}
+
 export interface OverviewTeamsStats {
   matchCount: number
   objectiveFirstWinrateGlobal?: ObjectiveFirstWinrateGlobal
+  objectiveFirstWinrateGames?: ObjectiveFirstWinrateGames
+  gameFirstObjective?: GameFirstObjectiveStats
   bans: {
     byWin: Array<{ championId: number; count: number; banRatePercent: string }>
     byLoss: Array<{ championId: number; count: number; banRatePercent: string }>
@@ -341,6 +371,9 @@ export interface OverviewSidesApiStats {
   }
   surrenderBySide?: OverviewSurrenderBySide
   objectiveFirstWinrateBySide?: ObjectiveFirstWinrateBySide
+  objectiveFirstWinrateGames?: ObjectiveFirstWinrateGames
+  objectiveFirstWinrateGamesBySide?: ObjectiveFirstWinrateGamesBySide
+  gameFirstObjective?: GameFirstObjectiveStats
   objectivesBySide: {
     blue: Record<string, number>
     red: Record<string, number>
@@ -482,15 +515,6 @@ function normalizeOverviewParam(
   return s
 }
 
-function versionAtOrAfterSql(alias: string, referencePatch: string): string {
-  const [majorRaw, minorRaw] = normalizePatchMajorMinor(referencePatch).split('.')
-  const major = Number.parseInt(majorRaw ?? '0', 10) || 0
-  const minor = Number.parseInt(minorRaw ?? '0', 10) || 0
-  const majorSql = `COALESCE(NULLIF(split_part(${alias}.game_version, '.', 1), ''), '0')::int`
-  const minorSql = `COALESCE(NULLIF(split_part(${alias}.game_version, '.', 2), ''), '0')::int`
-  return `(${majorSql} > ${major} OR (${majorSql} = ${major} AND ${minorSql} >= ${minor}))`
-}
-
 type TeamCoreFallback = {
   count_first_blood: number
   sum_baron_kills: number
@@ -616,25 +640,15 @@ async function loadSurrenderBySideCounts(
   blueMatchTotal: number,
   redMatchTotal: number
 ): Promise<OverviewSurrenderBySide> {
-  const cond = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mv.')
-  const mvFrom = await matchVersionedAggFrom('agg_team_core_stats', version, 'mv')
-  const rows = await queryRawUnsafe<
-    Array<{ team_num: number; early_cnt: bigint; surrender_cnt: bigint }>
-  >(`
-      SELECT
-        mv.team AS team_num,
-        COALESCE(SUM(mv.count_team_early_surrendered), 0)::bigint AS early_cnt,
-        COALESCE(SUM(mv.count_team_surrendered), 0)::bigint AS surrender_cnt
-      FROM ${mvFrom}
-      WHERE ${cond}
-      GROUP BY mv.team
-  `)
   const byTeam = new Map<number, { early: number; surrender: number }>()
-  for (const row of rows) {
-    byTeam.set(Number(row.team_num), {
-      early: Number(row.early_cnt ?? 0),
-      surrender: Number(row.surrender_cnt ?? 0),
-    })
+  try {
+    const corrected = await getTeamSurrenderTotalsBySide(version, rankTier)
+    for (const team of [100, 200] as const) {
+      const c = corrected.get(team)
+      if (c) byTeam.set(team, { early: c.early, surrender: c.surrender })
+    }
+  } catch (err) {
+    console.warn('[loadSurrenderBySideCounts] corrected agg', err)
   }
   const hasAnyAggSurrender =
     (byTeam.get(100)?.early ?? 0) +
@@ -1066,6 +1080,15 @@ function securedGamesFromOutcome(dist: Record<string, number>): number {
   return total
 }
 
+/** Parties où l'équipe a le « first » sur l'objectif (histogramme dédié, bucket 1). */
+function firstGamesFromOutcome(dist: Record<string, number>): number {
+  return Number(dist['1'] ?? 0)
+}
+
+function firstGamesFromSideDistribution(dist: Record<string, number>): number {
+  return Number(dist['1'] ?? 0)
+}
+
 /** Expression SQL du nombre de bans (filtrable par rôle du banneur). */
 function bannerRoleBanCountSqlExpr(bannerRole: string | null, alias: string): string {
   const r = bannerRole ? statsRoleSqlLiteral(bannerRole) : null
@@ -1086,12 +1109,23 @@ function enrichTeamObjectiveAggFromHistogram(
   const w = aggWin[key]
   const l = aggLoss[key]
   if (!w || !l) return
-  w.first = securedGamesFromOutcome(dist.win)
-  l.first = securedGamesFromOutcome(dist.loss)
   if ('kills' in w && 'kills' in l) {
     w.kills = sumObjectiveCountFromDistribution(dist.win)
     l.kills = sumObjectiveCountFromDistribution(dist.loss)
   }
+}
+
+function enrichTeamObjectiveFirstFromHistogram(
+  aggWin: Record<string, { first: number; kills?: number }>,
+  aggLoss: Record<string, { first: number; kills?: number }>,
+  key: string,
+  dist: { win: Record<string, number>; loss: Record<string, number> }
+): void {
+  const w = aggWin[key]
+  const l = aggLoss[key]
+  if (!w || !l) return
+  w.first = firstGamesFromOutcome(dist.win)
+  l.first = firstGamesFromOutcome(dist.loss)
 }
 
 async function loadItemStarterSetsFromMatches(
@@ -1817,24 +1851,24 @@ export async function getOverviewTeamsStats(
       }
     }
     const aggWin = {
-      firstBlood: { first: toN(team100?.count_first_blood) },
-      baron: { first: toN(team100?.count_baron_first), kills: toN(team100?.sum_baron_kills) },
-      dragon: { first: toN(team100?.count_dragon_first), kills: toN(team100?.sum_dragon_kills) },
+      firstBlood: { first: 0 },
+      baron: { first: 0, kills: toN(team100?.sum_baron_kills) },
+      dragon: { first: 0, kills: toN(team100?.sum_dragon_kills) },
       elder: { first: 0, kills: toN(team100?.sum_elder_kills) },
-      tower: { first: toN(team100?.count_tower_first), kills: toN(team100?.sum_tower_kills) },
-      inhibitor: { first: toN(team100?.count_inhibitor_first), kills: toN(team100?.sum_inhibitor_kills) },
-      riftHerald: { first: toN(team100?.count_rift_herald_first), kills: toN(team100?.sum_rift_herald_kills) },
-      horde: { first: toN(team100?.count_horde_first), kills: toN(team100?.sum_horde_kills) },
+      tower: { first: 0, kills: toN(team100?.sum_tower_kills) },
+      inhibitor: { first: 0, kills: toN(team100?.sum_inhibitor_kills) },
+      riftHerald: { first: 0, kills: toN(team100?.sum_rift_herald_kills) },
+      horde: { first: 0, kills: toN(team100?.sum_horde_kills) },
     }
     const aggLoss = {
-      firstBlood: { first: toN(team200?.count_first_blood) },
-      baron: { first: toN(team200?.count_baron_first), kills: toN(team200?.sum_baron_kills) },
-      dragon: { first: toN(team200?.count_dragon_first), kills: toN(team200?.sum_dragon_kills) },
+      firstBlood: { first: 0 },
+      baron: { first: 0, kills: toN(team200?.sum_baron_kills) },
+      dragon: { first: 0, kills: toN(team200?.sum_dragon_kills) },
       elder: { first: 0, kills: toN(team200?.sum_elder_kills) },
-      tower: { first: toN(team200?.count_tower_first), kills: toN(team200?.sum_tower_kills) },
-      inhibitor: { first: toN(team200?.count_inhibitor_first), kills: toN(team200?.sum_inhibitor_kills) },
-      riftHerald: { first: toN(team200?.count_rift_herald_first), kills: toN(team200?.sum_rift_herald_kills) },
-      horde: { first: toN(team200?.count_horde_first), kills: toN(team200?.sum_horde_kills) },
+      tower: { first: 0, kills: toN(team200?.sum_tower_kills) },
+      inhibitor: { first: 0, kills: toN(team200?.sum_inhibitor_kills) },
+      riftHerald: { first: 0, kills: toN(team200?.sum_rift_herald_kills) },
+      horde: { first: 0, kills: toN(team200?.sum_horde_kills) },
     }
 
     const banCoreFrom = await matchVersionedAggFrom('agg_champion_bans_by_banner_core', pVersion, 'bb')
@@ -1905,6 +1939,13 @@ export async function getOverviewTeamsStats(
       distRiftHerald,
       distHorde,
       distFirstBlood,
+      distBaronFirst,
+      distDragonFirst,
+      distTowerFirst,
+      distInhibitorFirst,
+      distRiftHeraldFirst,
+      distHordeFirst,
+      distGameFirst,
     ] = await Promise.all([
       loadObjectiveDistributionByOutcome(pVersion, rankTier, 'baron'),
       loadObjectiveDistributionByOutcome(pVersion, rankTier, 'dragon'),
@@ -1926,6 +1967,13 @@ export async function getOverviewTeamsStats(
       loadObjectiveDistributionByOutcome(pVersion, rankTier, 'riftHerald'),
       loadObjectiveDistributionByOutcome(pVersion, rankTier, 'horde'),
       loadObjectiveDistributionByOutcome(pVersion, rankTier, 'first_blood'),
+      loadObjectiveDistributionByOutcome(pVersion, rankTier, 'baron_first'),
+      loadObjectiveDistributionByOutcome(pVersion, rankTier, 'dragon_first'),
+      loadObjectiveDistributionByOutcome(pVersion, rankTier, 'tower_first'),
+      loadObjectiveDistributionByOutcome(pVersion, rankTier, 'inhibitor_first'),
+      loadObjectiveDistributionByOutcome(pVersion, rankTier, 'rift_herald_first'),
+      loadObjectiveDistributionByOutcome(pVersion, rankTier, 'horde_first'),
+      loadObjectiveDistributionByOutcome(pVersion, rankTier, 'game_first'),
     ])
     enrichTeamObjectiveAggFromHistogram(aggWin, aggLoss, 'baron', distBaron)
     enrichTeamObjectiveAggFromHistogram(aggWin, aggLoss, 'dragon', distDragon)
@@ -1934,8 +1982,13 @@ export async function getOverviewTeamsStats(
     enrichTeamObjectiveAggFromHistogram(aggWin, aggLoss, 'riftHerald', distRiftHerald)
     enrichTeamObjectiveAggFromHistogram(aggWin, aggLoss, 'horde', distHorde)
     enrichTeamObjectiveAggFromHistogram(aggWin, aggLoss, 'elder', distElder)
-    aggWin.firstBlood.first = securedGamesFromOutcome(distFirstBlood.win)
-    aggLoss.firstBlood.first = securedGamesFromOutcome(distFirstBlood.loss)
+    enrichTeamObjectiveFirstFromHistogram(aggWin, aggLoss, 'firstBlood', distFirstBlood)
+    enrichTeamObjectiveFirstFromHistogram(aggWin, aggLoss, 'baron', distBaronFirst)
+    enrichTeamObjectiveFirstFromHistogram(aggWin, aggLoss, 'dragon', distDragonFirst)
+    enrichTeamObjectiveFirstFromHistogram(aggWin, aggLoss, 'tower', distTowerFirst)
+    enrichTeamObjectiveFirstFromHistogram(aggWin, aggLoss, 'inhibitor', distInhibitorFirst)
+    enrichTeamObjectiveFirstFromHistogram(aggWin, aggLoss, 'riftHerald', distRiftHeraldFirst)
+    enrichTeamObjectiveFirstFromHistogram(aggWin, aggLoss, 'horde', distHordeFirst)
     const objData = (
       win: { first: number; kills: number },
       loss: { first: number; kills: number },
@@ -1949,16 +2002,41 @@ export async function getOverviewTeamsStats(
       distributionByLoss: dist.loss,
     })
 
+    const objectiveFirstWinrateGames: ObjectiveFirstWinrateGames = {
+      firstBlood:
+        firstGamesFromOutcome(distFirstBlood.win) + firstGamesFromOutcome(distFirstBlood.loss),
+      baron:
+        firstGamesFromOutcome(distBaronFirst.win) + firstGamesFromOutcome(distBaronFirst.loss),
+      dragon:
+        firstGamesFromOutcome(distDragonFirst.win) +
+        firstGamesFromOutcome(distDragonFirst.loss),
+      tower:
+        firstGamesFromOutcome(distTowerFirst.win) + firstGamesFromOutcome(distTowerFirst.loss),
+      inhibitor:
+        firstGamesFromOutcome(distInhibitorFirst.win) +
+        firstGamesFromOutcome(distInhibitorFirst.loss),
+      riftHerald:
+        firstGamesFromOutcome(distRiftHeraldFirst.win) +
+        firstGamesFromOutcome(distRiftHeraldFirst.loss),
+      horde:
+        firstGamesFromOutcome(distHordeFirst.win) + firstGamesFromOutcome(distHordeFirst.loss),
+    }
+
     const result: OverviewTeamsStats = {
       matchCount,
       objectiveFirstWinrateGlobal: {
         firstBlood: firstBucketWinrateFromOutcome(distFirstBlood),
-        baron: firstBucketWinrateFromOutcome(distBaron),
-        dragon: firstBucketWinrateFromOutcome(distDragon),
-        tower: firstBucketWinrateFromOutcome(distTower),
-        inhibitor: firstBucketWinrateFromOutcome(distInhibitor),
-        riftHerald: firstBucketWinrateFromOutcome(distRiftHerald),
-        horde: firstBucketWinrateFromOutcome(distHorde),
+        baron: firstBucketWinrateFromOutcome(distBaronFirst),
+        dragon: firstBucketWinrateFromOutcome(distDragonFirst),
+        tower: firstBucketWinrateFromOutcome(distTowerFirst),
+        inhibitor: firstBucketWinrateFromOutcome(distInhibitorFirst),
+        riftHerald: firstBucketWinrateFromOutcome(distRiftHeraldFirst),
+        horde: firstBucketWinrateFromOutcome(distHordeFirst),
+      },
+      objectiveFirstWinrateGames,
+      gameFirstObjective: {
+        distributionByWin: distGameFirst.win,
+        distributionByLoss: distGameFirst.loss,
       },
       bans: {
         byWin,
@@ -2029,28 +2107,28 @@ export async function getOverviewTeamsStats(
         },
         souls: {
           earth: {
-            byWin: securedGamesFromOutcome(distEarthSoul.win),
-            byLoss: securedGamesFromOutcome(distEarthSoul.loss),
+            byWin: firstGamesFromOutcome(distEarthSoul.win),
+            byLoss: firstGamesFromOutcome(distEarthSoul.loss),
           },
           water: {
-            byWin: securedGamesFromOutcome(distWaterSoul.win),
-            byLoss: securedGamesFromOutcome(distWaterSoul.loss),
+            byWin: firstGamesFromOutcome(distWaterSoul.win),
+            byLoss: firstGamesFromOutcome(distWaterSoul.loss),
           },
           wind: {
-            byWin: securedGamesFromOutcome(distWindSoul.win),
-            byLoss: securedGamesFromOutcome(distWindSoul.loss),
+            byWin: firstGamesFromOutcome(distWindSoul.win),
+            byLoss: firstGamesFromOutcome(distWindSoul.loss),
           },
           fire: {
-            byWin: securedGamesFromOutcome(distFireSoul.win),
-            byLoss: securedGamesFromOutcome(distFireSoul.loss),
+            byWin: firstGamesFromOutcome(distFireSoul.win),
+            byLoss: firstGamesFromOutcome(distFireSoul.loss),
           },
           hextec: {
-            byWin: securedGamesFromOutcome(distHextecSoul.win),
-            byLoss: securedGamesFromOutcome(distHextecSoul.loss),
+            byWin: firstGamesFromOutcome(distHextecSoul.win),
+            byLoss: firstGamesFromOutcome(distHextecSoul.loss),
           },
           chem: {
-            byWin: securedGamesFromOutcome(distChemSoul.win),
-            byLoss: securedGamesFromOutcome(distChemSoul.loss),
+            byWin: firstGamesFromOutcome(distChemSoul.win),
+            byLoss: firstGamesFromOutcome(distChemSoul.loss),
           },
         },
       },
@@ -2060,7 +2138,10 @@ export async function getOverviewTeamsStats(
       rankTier,
       roleFilters.champion
     )
-    if (csObjectives) applyChampionStatsWinratesToOverviewTeams(result, csObjectives)
+    if (csObjectives) {
+      applyChampionStatsObtentionToOverviewTeams(result, csObjectives)
+      applyChampionStatsWinratesToOverviewTeams(result, csObjectives)
+    }
     overviewTeamsCache.set(cacheKey, { data: result, expiresAt: now + OVERVIEW_CACHE_TTL_MS })
     return result
   } catch (err) {
@@ -2286,7 +2367,8 @@ export async function getDurationWinrateByChampionByTier(
 export async function getOverviewProgressionStats(
   versionOldest?: string | null,
   rankTier?: string | string[] | null,
-  role?: string | null
+  role?: string | null,
+  sinceVersionPrefix?: string | null | undefined
 ): Promise<OverviewProgressionStats | null> {
   if (!isDatabaseConfigured()) return null
   if (!versionOldest || versionOldest === '') {
@@ -2294,8 +2376,16 @@ export async function getOverviewProgressionStats(
   }
   const roleFilters = resolveOverviewRoleFilters(role)
   const pRankKey = rankTierCacheKey(rankTier)
+  const voRaw = String(versionOldest).trim()
+  const vo = escapeSqlLikePrefix(voRaw)
+  const sinceRaw =
+    sinceVersionPrefix != null && String(sinceVersionPrefix).trim() !== ''
+      ? String(sinceVersionPrefix).trim()
+      : ''
+  const sinceEsc =
+    sinceRaw !== '' && sinceRaw !== voRaw ? escapeSqlLikePrefix(sinceRaw) : null
   const now = Date.now()
-  const cacheKey = `${overviewCacheKey(versionOldest, pRankKey)}|${roleFilters.cacheKey}`
+  const cacheKey = `progwr2|${vo}|${pRankKey ?? ''}|${roleFilters.cacheKey}|${sinceEsc ?? 'after'}`
   const cached = overviewProgressionCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
 
@@ -2304,8 +2394,11 @@ export async function getOverviewProgressionStats(
       ? ` AND ac.role = '${statsRoleSqlLiteral(roleFilters.champion)}'`
       : ''
     const rawCond = buildRawMatchCond(undefined, rankTier).replace(/\bm\./g, 'ac.')
-    const oldestPrefix = normalizePatchMajorMinor(String(versionOldest)).replace(/'/g, "''")
-    const sinceOldestSql = versionAtOrAfterSql('ac', oldestPrefix)
+    const oldestClause = `ac.game_version LIKE '${vo}%'`
+    const sinceClause =
+      sinceEsc != null && sinceEsc !== ''
+        ? `ac.game_version LIKE '${sinceEsc}%'`
+        : `ac.game_version NOT LIKE '${vo}%'`
 
     const oldestFrom = await matchVersionedAggFrom('agg_champion_core_stats', versionOldest, 'ac')
     const sinceFrom = await sqlAggUnionAllLiveAndArchives('agg_champion_core_stats', 'ac')
@@ -2315,14 +2408,14 @@ export async function getOverviewProgressionStats(
         SELECT ac.champion_id, ac.count_win, ac.count_game
         FROM ${oldestFrom}
         WHERE ${rawCond}
-          AND ac.game_version LIKE '${oldestPrefix}%'
+          AND ${oldestClause}
           ${roleFilterSql}
       `),
       queryRawUnsafe<Array<{ champion_id: number; count_win: bigint; count_game: bigint }>>(`
         SELECT ac.champion_id, ac.count_win, ac.count_game
         FROM ${sinceFrom}
         WHERE ${rawCond}
-          AND ${sinceOldestSql}
+          AND ${sinceClause}
           ${roleFilterSql}
       `),
     ])
@@ -2385,7 +2478,8 @@ export async function getOverviewProgressionStats(
 export async function getOverviewProgressionFullStats(
   versionOldest?: string | null,
   rankTier?: string | string[] | null,
-  role?: string | null
+  role?: string | null,
+  sinceVersionPrefix?: string | null | undefined
 ): Promise<OverviewProgressionFullStats | null> {
   if (!isDatabaseConfigured()) return null
   if (!versionOldest || versionOldest === '') {
@@ -2393,8 +2487,16 @@ export async function getOverviewProgressionFullStats(
   }
   const roleFilters = resolveOverviewRoleFilters(role)
   const pRankKey = rankTierCacheKey(rankTier)
+  const voRaw = String(versionOldest).trim()
+  const vo = escapeSqlLikePrefix(voRaw)
+  const sinceRaw =
+    sinceVersionPrefix != null && String(sinceVersionPrefix).trim() !== ''
+      ? String(sinceVersionPrefix).trim()
+      : ''
+  const sinceEsc =
+    sinceRaw !== '' && sinceRaw !== voRaw ? escapeSqlLikePrefix(sinceRaw) : null
   const now = Date.now()
-  const cacheKey = `${overviewCacheKey(versionOldest, pRankKey)}|${roleFilters.cacheKey}`
+  const cacheKey = `progfull2|${vo}|${pRankKey ?? ''}|${roleFilters.cacheKey}|${sinceEsc ?? 'after'}`
   const cached = overviewProgressionFullCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
 
@@ -2408,10 +2510,21 @@ export async function getOverviewProgressionFullStats(
     const rawCond = buildRawMatchCond(undefined, rankTier).replace(/\bm\./g, 'ac.')
     const rawCondMv = buildRawMatchCond(undefined, rankTier).replace(/\bm\./g, 'mv.')
     const rawCondMo = buildRawMatchCond(undefined, rankTier).replace(/\bm\./g, 'mo.')
-    const oldestPrefixFull = normalizePatchMajorMinor(String(versionOldest)).replace(/'/g, "''")
-    const sinceAcSql = versionAtOrAfterSql('ac', oldestPrefixFull)
-    const sinceMvSql = versionAtOrAfterSql('mv', oldestPrefixFull)
-    const sinceMoSql = versionAtOrAfterSql('mo', oldestPrefixFull)
+    const oldestClauseAc = `ac.game_version LIKE '${vo}%'`
+    const sinceClauseAc =
+      sinceEsc != null && sinceEsc !== ''
+        ? `ac.game_version LIKE '${sinceEsc}%'`
+        : `ac.game_version NOT LIKE '${vo}%'`
+    const oldestClauseMv = `mv.game_version LIKE '${vo}%'`
+    const sinceClauseMv =
+      sinceEsc != null && sinceEsc !== ''
+        ? `mv.game_version LIKE '${sinceEsc}%'`
+        : `mv.game_version NOT LIKE '${vo}%'`
+    const oldestClauseMo = `mo.game_version LIKE '${vo}%'`
+    const sinceClauseMo =
+      sinceEsc != null && sinceEsc !== ''
+        ? `mo.game_version LIKE '${sinceEsc}%'`
+        : `mo.game_version NOT LIKE '${vo}%'`
 
     const oldestFromFull = await matchVersionedAggFrom('agg_champion_core_stats', versionOldest, 'ac')
     const sinceFromFull = await sqlAggUnionAllLiveAndArchives('agg_champion_core_stats', 'ac')
@@ -2427,7 +2540,7 @@ export async function getOverviewProgressionFullStats(
         SELECT ac.champion_id, ac.count_win, ac.count_game, ac.count_ban
         FROM ${oldestFromFull}
         WHERE ${rawCond}
-          AND ac.game_version LIKE '${oldestPrefixFull}%'
+          AND ${oldestClauseAc}
           ${roleFilterSql}
       `),
       queryRawUnsafe<
@@ -2436,14 +2549,14 @@ export async function getOverviewProgressionFullStats(
         SELECT ac.champion_id, ac.count_win, ac.count_game, ac.count_ban
         FROM ${sinceFromFull}
         WHERE ${rawCond}
-          AND ${sinceAcSql}
+          AND ${sinceClauseAc}
           ${roleFilterSql}
       `),
       queryRawUnsafe<Array<{ champion_id: number; bans: bigint }>>(`
         SELECT mv.banned_champion_id AS champion_id, COALESCE(SUM(mv.ban_count), 0)::bigint AS bans
         FROM ${oldestBanFrom}
         WHERE ${rawCondMv}
-          AND mv.game_version LIKE '${oldestPrefixFull}%'
+          AND ${oldestClauseMv}
           ${roleFilterBannerSql}
         GROUP BY mv.banned_champion_id
       `),
@@ -2451,7 +2564,7 @@ export async function getOverviewProgressionFullStats(
         SELECT mv.banned_champion_id AS champion_id, COALESCE(SUM(mv.ban_count), 0)::bigint AS bans
         FROM ${sinceBanFrom}
         WHERE ${rawCondMv}
-          AND ${sinceMvSql}
+          AND ${sinceClauseMv}
           ${roleFilterBannerSql}
         GROUP BY mv.banned_champion_id
       `),
@@ -2459,13 +2572,13 @@ export async function getOverviewProgressionFullStats(
         SELECT COALESCE(SUM(mo.count_match), 0)::bigint AS cnt
         FROM ${oldestMoFrom}
         WHERE ${rawCondMo}
-          AND mo.game_version LIKE '${oldestPrefixFull}%'
+          AND ${oldestClauseMo}
       `),
       queryRawUnsafe<Array<{ cnt: bigint }>>(`
         SELECT COALESCE(SUM(mo.count_match), 0)::bigint AS cnt
         FROM ${sinceMoFrom}
         WHERE ${rawCondMo}
-          AND ${sinceMoSql}
+          AND ${sinceClauseMo}
       `),
     ])
 
@@ -2823,6 +2936,8 @@ function escapeSqlLikePrefix(v: string): string {
 
 const CHAMPION_STATS_FIRST_BLOOD =
   '(cs.count_first_blood_kill_true + cs.count_first_blood_assist_true)'
+const CHAMPION_STATS_FIRST_TOWER =
+  '(cs.count_first_tower_kill_true + cs.count_first_tower_assist_true)'
 const CHAMPION_STATS_ELDER_DRAKE = '(cs.count_elder_kill + cs.count_elder_assist)'
 
 const CHAMPION_STATS_DRAKE_METRICS: Record<
@@ -2874,6 +2989,8 @@ type ChampionStatsTeamObjectives = {
     firstByWin: number
     firstByLoss: number
     firstBloodWrGlobal: number | null
+    towerFirstByWin: number
+    towerFirstByLoss: number
     elderByWin: number
     elderByLoss: number
     drakeTypes: Record<string, { byWin: number; byLoss: number }>
@@ -2888,6 +3005,9 @@ type ChampionStatsTeamObjectives = {
       elderWr: number | null
       drakeTypes: Record<string, number>
       souls: Record<string, number>
+      drakeSecured: Record<string, { byWin: number; byLoss: number }>
+      soulSecured: Record<string, { byWin: number; byLoss: number }>
+      elderSecured: { byWin: number; byLoss: number }
       drakeWinrate: Record<string, number | null>
       soulWinrate: Record<string, number | null>
     }
@@ -2913,8 +3033,8 @@ async function loadChampionStatsTeamObjectives(
       const involved = `(${metric.killAssist}) > 0`
       drakeSelects.push(
         `COALESCE(SUM(${metric.killAssist}), 0)::bigint AS ${key}_total`,
-        `COALESCE(SUM(CASE WHEN ${involved} AND cs.count_win > 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS ${key}_secured_win_games`,
-        `COALESCE(SUM(CASE WHEN ${involved} AND cs.count_win = 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS ${key}_secured_loss_games`,
+        `COALESCE(MAX(CASE WHEN ${involved} AND cs.count_win > 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS ${key}_secured_win_games`,
+        `COALESCE(MAX(CASE WHEN ${involved} AND cs.count_win = 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS ${key}_secured_loss_games`,
         `COALESCE(SUM(CASE WHEN ${involved} THEN cs.count_win ELSE 0 END), 0)::bigint AS ${key}_involved_wins`,
         `COALESCE(SUM(CASE WHEN ${involved} THEN cs.count_game ELSE 0 END), 0)::bigint AS ${key}_involved_games`
       )
@@ -2922,8 +3042,8 @@ async function loadChampionStatsTeamObjectives(
         const soulInvolved = `(${metric.soul}) > 0`
         drakeSelects.push(
           `COALESCE(SUM(${metric.soul}), 0)::bigint AS ${key}_soul_total`,
-          `COALESCE(SUM(CASE WHEN ${soulInvolved} AND cs.count_win > 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS ${key}_soul_secured_win_games`,
-          `COALESCE(SUM(CASE WHEN ${soulInvolved} AND cs.count_win = 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS ${key}_soul_secured_loss_games`,
+          `COALESCE(MAX(CASE WHEN ${soulInvolved} AND cs.count_win > 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS ${key}_soul_secured_win_games`,
+          `COALESCE(MAX(CASE WHEN ${soulInvolved} AND cs.count_win = 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS ${key}_soul_secured_loss_games`,
           `COALESCE(SUM(CASE WHEN ${soulInvolved} THEN cs.count_win ELSE 0 END), 0)::bigint AS ${key}_soul_involved_wins`,
           `COALESCE(SUM(CASE WHEN ${soulInvolved} THEN cs.count_game ELSE 0 END), 0)::bigint AS ${key}_soul_involved_games`
         )
@@ -2933,13 +3053,15 @@ async function loadChampionStatsTeamObjectives(
       SELECT
         cs.team AS team_num,
         COALESCE(SUM(${CHAMPION_STATS_FIRST_BLOOD}), 0)::bigint AS first_blood_total,
-        COALESCE(SUM(CASE WHEN ${CHAMPION_STATS_FIRST_BLOOD} > 0 AND cs.count_win > 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS first_blood_secured_win_games,
-        COALESCE(SUM(CASE WHEN ${CHAMPION_STATS_FIRST_BLOOD} > 0 AND cs.count_win = 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS first_blood_secured_loss_games,
+        COALESCE(MAX(CASE WHEN ${CHAMPION_STATS_FIRST_BLOOD} > 0 AND cs.count_win > 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS first_blood_secured_win_games,
+        COALESCE(MAX(CASE WHEN ${CHAMPION_STATS_FIRST_BLOOD} > 0 AND cs.count_win = 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS first_blood_secured_loss_games,
         COALESCE(SUM(CASE WHEN ${CHAMPION_STATS_FIRST_BLOOD} > 0 THEN cs.count_win ELSE 0 END), 0)::bigint AS first_blood_involved_wins,
         COALESCE(SUM(CASE WHEN ${CHAMPION_STATS_FIRST_BLOOD} > 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS first_blood_involved_games,
+        COALESCE(MAX(CASE WHEN ${CHAMPION_STATS_FIRST_TOWER} > 0 AND cs.count_win > 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS first_tower_secured_win_games,
+        COALESCE(MAX(CASE WHEN ${CHAMPION_STATS_FIRST_TOWER} > 0 AND cs.count_win = 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS first_tower_secured_loss_games,
         COALESCE(SUM(${CHAMPION_STATS_ELDER_DRAKE}), 0)::bigint AS elder_total,
-        COALESCE(SUM(CASE WHEN (${CHAMPION_STATS_ELDER_DRAKE}) > 0 AND cs.count_win > 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS elder_secured_win_games,
-        COALESCE(SUM(CASE WHEN (${CHAMPION_STATS_ELDER_DRAKE}) > 0 AND cs.count_win = 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS elder_secured_loss_games,
+        COALESCE(MAX(CASE WHEN (${CHAMPION_STATS_ELDER_DRAKE}) > 0 AND cs.count_win > 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS elder_secured_win_games,
+        COALESCE(MAX(CASE WHEN (${CHAMPION_STATS_ELDER_DRAKE}) > 0 AND cs.count_win = 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS elder_secured_loss_games,
         COALESCE(SUM(CASE WHEN (${CHAMPION_STATS_ELDER_DRAKE}) > 0 THEN cs.count_win ELSE 0 END), 0)::bigint AS elder_involved_wins,
         COALESCE(SUM(CASE WHEN (${CHAMPION_STATS_ELDER_DRAKE}) > 0 THEN cs.count_game ELSE 0 END), 0)::bigint AS elder_involved_games,
         ${drakeSelects.join(',\n        ')}
@@ -2957,6 +3079,8 @@ async function loadChampionStatsTeamObjectives(
       firstByWin: 0,
       firstByLoss: 0,
       firstBloodWrGlobal: null as number | null,
+      towerFirstByWin: 0,
+      towerFirstByLoss: 0,
       elderByWin: 0,
       elderByLoss: 0,
       drakeTypes: {} as Record<string, { byWin: number; byLoss: number }>,
@@ -2974,12 +3098,22 @@ async function loadChampionStatsTeamObjectives(
       const team = Number(row.team_num)
       const drakeTypes: Record<string, number> = {}
       const souls: Record<string, number> = {}
+      const drakeSecured: Record<string, { byWin: number; byLoss: number }> = {}
+      const soulSecured: Record<string, { byWin: number; byLoss: number }> = {}
       const drakeWinrate: Record<string, number | null> = {}
       const soulWinrate: Record<string, number | null> = {}
 
       for (const key of Object.keys(CHAMPION_STATS_DRAKE_METRICS)) {
         drakeTypes[key] = Number(row[`${key}_total`] ?? 0)
         souls[key] = Number(row[`${key}_soul_total`] ?? 0)
+        drakeSecured[key] = {
+          byWin: Number(row[`${key}_secured_win_games`] ?? 0),
+          byLoss: Number(row[`${key}_secured_loss_games`] ?? 0),
+        }
+        soulSecured[key] = {
+          byWin: Number(row[`${key}_soul_secured_win_games`] ?? 0),
+          byLoss: Number(row[`${key}_soul_secured_loss_games`] ?? 0),
+        }
         drakeWinrate[key] = winrateFromInvolved(
           Number(row[`${key}_involved_wins`] ?? 0),
           Number(row[`${key}_involved_games`] ?? 0)
@@ -2996,6 +3130,8 @@ async function loadChampionStatsTeamObjectives(
 
       totals.firstByWin += Number(row.first_blood_secured_win_games ?? 0)
       totals.firstByLoss += Number(row.first_blood_secured_loss_games ?? 0)
+      totals.towerFirstByWin += Number(row.first_tower_secured_win_games ?? 0)
+      totals.towerFirstByLoss += Number(row.first_tower_secured_loss_games ?? 0)
       totals.elderByWin += Number(row.elder_secured_win_games ?? 0)
       totals.elderByLoss += Number(row.elder_secured_loss_games ?? 0)
       fbInvolvedWins += Number(row.first_blood_involved_wins ?? 0)
@@ -3014,6 +3150,12 @@ async function loadChampionStatsTeamObjectives(
         ),
         drakeTypes,
         souls,
+        drakeSecured,
+        soulSecured,
+        elderSecured: {
+          byWin: Number(row.elder_secured_win_games ?? 0),
+          byLoss: Number(row.elder_secured_loss_games ?? 0),
+        },
         drakeWinrate,
         soulWinrate,
       })
@@ -3027,6 +3169,80 @@ async function loadChampionStatsTeamObjectives(
       err instanceof Error ? err.message : err
     )
     return null
+  }
+}
+
+function applyChampionStatsObtentionToOverviewTeams(
+  result: OverviewTeamsStats,
+  cs: ChampionStatsTeamObjectives
+): void {
+  const fb = result.objectives.firstBlood
+  if ((fb.firstByWin ?? 0) + (fb.firstByLoss ?? 0) <= 0) {
+    fb.firstByWin = cs.totals.firstByWin
+    fb.firstByLoss = cs.totals.firstByLoss
+    if (result.objectiveFirstWinrateGames) {
+      result.objectiveFirstWinrateGames.firstBlood = cs.totals.firstByWin + cs.totals.firstByLoss
+    }
+  }
+  const tower = result.objectives.tower
+  if ((tower.firstByWin ?? 0) + (tower.firstByLoss ?? 0) <= 0) {
+    tower.firstByWin = cs.totals.towerFirstByWin
+    tower.firstByLoss = cs.totals.towerFirstByLoss
+  }
+  const elderRow = result.drakes.types.elder
+  if ((elderRow.byWin ?? 0) + (elderRow.byLoss ?? 0) <= 0) {
+    elderRow.byWin = cs.totals.elderByWin
+    elderRow.byLoss = cs.totals.elderByLoss
+  }
+  for (const key of Object.keys(CHAMPION_STATS_DRAKE_METRICS)) {
+    const typeRow = result.drakes.types[key as keyof typeof result.drakes.types]
+    const csType = cs.totals.drakeTypes[key]
+    if (typeRow && csType && (typeRow.byWin ?? 0) + (typeRow.byLoss ?? 0) <= 0) {
+      typeRow.byWin = csType.byWin
+      typeRow.byLoss = csType.byLoss
+    }
+    const soulRow = result.drakes.souls[key as keyof typeof result.drakes.souls]
+    const csSoul = cs.totals.souls[key]
+    if (!soulRow || !csSoul) continue
+    if ((soulRow.byWin ?? 0) + (soulRow.byLoss ?? 0) <= 0) {
+      soulRow.byWin = csSoul.byWin
+      soulRow.byLoss = csSoul.byLoss
+    }
+  }
+}
+
+function applyChampionStatsObtentionToOverviewSides(
+  result: OverviewSidesApiStats,
+  cs: ChampionStatsTeamObjectives
+): void {
+  if (!result.drakesBySide) return
+  const blue = cs.byTeam.get(100)
+  const red = cs.byTeam.get(200)
+  const elderRow = result.drakesBySide.types.elder
+  if (elderRow && (elderRow.byBlue ?? 0) + (elderRow.byRed ?? 0) <= 0) {
+    const bElder = blue?.elderSecured
+    const rElder = red?.elderSecured
+    elderRow.byBlue = (bElder?.byWin ?? 0) + (bElder?.byLoss ?? 0)
+    elderRow.byRed = (rElder?.byWin ?? 0) + (rElder?.byLoss ?? 0)
+  }
+  for (const key of Object.keys(CHAMPION_STATS_DRAKE_METRICS)) {
+    const typeRow = result.drakesBySide.types[key as keyof typeof result.drakesBySide.types]
+    if (typeRow) {
+      const blueDrake = blue?.drakeSecured[key]
+      const redDrake = red?.drakeSecured[key]
+      if ((typeRow.byBlue ?? 0) + (typeRow.byRed ?? 0) <= 0) {
+        typeRow.byBlue = (blueDrake?.byWin ?? 0) + (blueDrake?.byLoss ?? 0)
+        typeRow.byRed = (redDrake?.byWin ?? 0) + (redDrake?.byLoss ?? 0)
+      }
+    }
+    const soulRow = result.drakesBySide.souls[key as keyof typeof result.drakesBySide.souls]
+    if (!soulRow) continue
+    const blueSec = blue?.soulSecured[key]
+    const redSec = red?.soulSecured[key]
+    if ((soulRow.byBlue ?? 0) + (soulRow.byRed ?? 0) <= 0) {
+      soulRow.byBlue = (blueSec?.byWin ?? 0) + (blueSec?.byLoss ?? 0)
+      soulRow.byRed = (redSec?.byWin ?? 0) + (redSec?.byLoss ?? 0)
+    }
   }
 }
 
@@ -3047,9 +3263,16 @@ function applyChampionStatsWinratesToOverviewTeams(
     }
     result.objectiveFirstWinrateGlobal.firstBlood = cs.totals.firstBloodWrGlobal
   }
+  const elderType = result.drakes.types.elder
+  if (elderType?.securedWinrateGlobal == null) {
+    const w = elderType.byWin
+    const l = elderType.byLoss
+    elderType.securedWinrateGlobal = w + l > 0 ? (w / (w + l)) * 100 : null
+  }
   for (const key of Object.keys(CHAMPION_STATS_DRAKE_METRICS)) {
     const typeRow = result.drakes.types[key as keyof typeof result.drakes.types]
-    if (typeRow?.securedWinrateGlobal == null) {
+    if (!typeRow) continue
+    if (typeRow.securedWinrateGlobal == null) {
       const w = typeRow.byWin
       const l = typeRow.byLoss
       typeRow.securedWinrateGlobal = w + l > 0 ? (w / (w + l)) * 100 : null
@@ -3096,32 +3319,73 @@ function applyChampionStatsWinratesToOverviewSides(
     if (soulRow) {
       if (soulRow.winrateBlue == null) soulRow.winrateBlue = blue?.soulWinrate[key] ?? null
       if (soulRow.winrateRed == null) soulRow.winrateRed = red?.soulWinrate[key] ?? null
+      if (soulRow.winrateBlue == null) {
+        const b = blue?.soulSecured[key]
+        const t = (b?.byWin ?? 0) + (b?.byLoss ?? 0)
+        soulRow.winrateBlue = t > 0 ? ((b?.byWin ?? 0) / t) * 100 : null
+      }
+      if (soulRow.winrateRed == null) {
+        const r = red?.soulSecured[key]
+        const t = (r?.byWin ?? 0) + (r?.byLoss ?? 0)
+        soulRow.winrateRed = t > 0 ? ((r?.byWin ?? 0) / t) * 100 : null
+      }
     }
   }
 }
 
-/** Legacy objective_key → `objective_outcome_histogram.objective_type` (null = not stored). */
-const OBJECTIVE_KEY_TO_HISTOGRAM_TYPE: Record<string, string | null> = {
-  baron: 'baron',
-  dragon: 'dragon',
-  tower: 'tower',
-  inhibitor: 'inhibitor',
-  riftHerald: 'riftHerald',
-  horde: 'horde',
-  elder: 'elder',
-  earth_drake: 'earth_drake',
-  water_drake: 'water_drake',
-  wind_drake: 'wind_drake',
-  fire_drake: 'fire_drake',
-  hextec_drake: 'hextec_drake',
-  chem_drake: 'chem_drake',
-  earth_soul: 'earth_soul',
-  water_soul: 'water_soul',
-  wind_soul: 'wind_soul',
-  fire_soul: 'fire_soul',
-  hextec_soul: 'hextec_soul',
-  chem_soul: 'chem_soul',
-  first_blood: 'firstBlood',
+/** Filtre histogramme : drakes élémentaires / souls / elder → objective_type = dragon + type_drake + is_soul. */
+type ObjectiveHistogramFilter = {
+  objectiveType: string
+  typeDrake: string | null
+  isSoul: boolean
+}
+
+const OBJECTIVE_KEY_TO_HISTOGRAM_FILTER: Record<string, ObjectiveHistogramFilter | null> = {
+  baron: { objectiveType: 'baron', typeDrake: null, isSoul: false },
+  dragon: { objectiveType: 'dragon', typeDrake: null, isSoul: false },
+  tower: { objectiveType: 'tower', typeDrake: null, isSoul: false },
+  inhibitor: { objectiveType: 'inhibitor', typeDrake: null, isSoul: false },
+  riftHerald: { objectiveType: 'riftHerald', typeDrake: null, isSoul: false },
+  horde: { objectiveType: 'horde', typeDrake: null, isSoul: false },
+  elder: { objectiveType: 'dragon', typeDrake: 'elder', isSoul: false },
+  earth_drake: { objectiveType: 'dragon', typeDrake: 'earth', isSoul: false },
+  water_drake: { objectiveType: 'dragon', typeDrake: 'water', isSoul: false },
+  wind_drake: { objectiveType: 'dragon', typeDrake: 'wind', isSoul: false },
+  fire_drake: { objectiveType: 'dragon', typeDrake: 'fire', isSoul: false },
+  hextec_drake: { objectiveType: 'dragon', typeDrake: 'hextec', isSoul: false },
+  chem_drake: { objectiveType: 'dragon', typeDrake: 'chem', isSoul: false },
+  earth_soul: { objectiveType: 'dragon', typeDrake: 'earth', isSoul: true },
+  water_soul: { objectiveType: 'dragon', typeDrake: 'water', isSoul: true },
+  wind_soul: { objectiveType: 'dragon', typeDrake: 'wind', isSoul: true },
+  fire_soul: { objectiveType: 'dragon', typeDrake: 'fire', isSoul: true },
+  hextec_soul: { objectiveType: 'dragon', typeDrake: 'hextec', isSoul: true },
+  chem_soul: { objectiveType: 'dragon', typeDrake: 'chem', isSoul: true },
+  first_blood: { objectiveType: 'firstBlood', typeDrake: null, isSoul: false },
+  baron_first: { objectiveType: 'baronFirst', typeDrake: null, isSoul: false },
+  dragon_first: { objectiveType: 'dragonFirst', typeDrake: null, isSoul: false },
+  tower_first: { objectiveType: 'towerFirst', typeDrake: null, isSoul: false },
+  inhibitor_first: { objectiveType: 'inhibitorFirst', typeDrake: null, isSoul: false },
+  rift_herald_first: { objectiveType: 'riftHeraldFirst', typeDrake: null, isSoul: false },
+  horde_first: { objectiveType: 'hordeFirst', typeDrake: null, isSoul: false },
+  game_first: { objectiveType: 'gameFirst', typeDrake: null, isSoul: false },
+}
+
+function sqlObjectiveHistogramTypeClause(
+  filter: ObjectiveHistogramFilter,
+  alias = 'oh'
+): string {
+  const safeType = filter.objectiveType.replace(/'/g, "''")
+  const parts = [
+    `${alias}.objective_type = '${safeType}'`,
+    `${alias}.is_soul = ${filter.isSoul ? 'TRUE' : 'FALSE'}`,
+  ]
+  if (filter.typeDrake == null) {
+    parts.push(`${alias}.type_drake IS NULL`)
+  } else {
+    const safeDrake = filter.typeDrake.replace(/'/g, "''")
+    parts.push(`${alias}.type_drake = '${safeDrake}'`)
+  }
+  return parts.join(' AND ')
 }
 
 function buildObjectiveHistogramWhere(
@@ -3152,12 +3416,12 @@ async function loadObjectiveDistributionBySides(
   rankTier: string | string[] | null | undefined,
   objectiveKey: string
 ): Promise<ObjectiveDistributionSides> {
-  const histogramType = OBJECTIVE_KEY_TO_HISTOGRAM_TYPE[objectiveKey]
-  if (!histogramType) {
+  const histogramFilter = OBJECTIVE_KEY_TO_HISTOGRAM_FILTER[objectiveKey]
+  if (!histogramFilter) {
     return { blue: {}, red: {}, blueWins: {}, redWins: {} }
   }
   const whereSql = buildObjectiveHistogramWhere(pVersion, rankTier)
-  const safeType = histogramType.replace(/'/g, "''")
+  const typeClause = sqlObjectiveHistogramTypeClause(histogramFilter)
   const ohFrom = await matchVersionedAggFrom('agg_objective_outcome_stats', pVersion, 'oh')
   const rows = await queryRawUnsafe<
     Array<{ team: number; objective_bucket: number; count_win: number; count_game: number }>
@@ -3168,7 +3432,7 @@ async function loadObjectiveDistributionBySides(
       SUM(CASE WHEN oh.outcome = 'win' THEN oh.count_games ELSE 0 END)::int AS count_win,
       SUM(oh.count_games)::int AS count_game
     FROM ${ohFrom}
-    WHERE oh.objective_type = '${safeType}'
+    WHERE ${typeClause}
       AND ${whereSql}
     GROUP BY oh.team, oh.obj_count
   `)
@@ -3197,12 +3461,12 @@ async function loadObjectiveDistributionByOutcome(
   rankTier: string | string[] | null | undefined,
   objectiveKey: string
 ): Promise<{ win: Record<string, number>; loss: Record<string, number> }> {
-  const histogramType = OBJECTIVE_KEY_TO_HISTOGRAM_TYPE[objectiveKey]
-  if (!histogramType) {
+  const histogramFilter = OBJECTIVE_KEY_TO_HISTOGRAM_FILTER[objectiveKey]
+  if (!histogramFilter) {
     return { win: {}, loss: {} }
   }
   const whereSql = buildObjectiveHistogramWhere(pVersion, rankTier)
-  const safeType = histogramType.replace(/'/g, "''")
+  const typeClause = sqlObjectiveHistogramTypeClause(histogramFilter)
   const ohFrom = await matchVersionedAggFrom('agg_objective_outcome_stats', pVersion, 'oh')
   const rows = await queryRawUnsafe<
     Array<{ objective_bucket: number; win_cnt: number; loss_cnt: number }>
@@ -3212,7 +3476,7 @@ async function loadObjectiveDistributionByOutcome(
       SUM(CASE WHEN oh.outcome = 'win' THEN oh.count_games ELSE 0 END)::int AS win_cnt,
       SUM(CASE WHEN oh.outcome = 'loss' THEN oh.count_games ELSE 0 END)::int AS loss_cnt
     FROM ${ohFrom}
-    WHERE oh.objective_type = '${safeType}'
+    WHERE ${typeClause}
       AND ${whereSql}
     GROUP BY oh.obj_count
   `)
@@ -3566,6 +3830,14 @@ export async function getOverviewSidesStats(
       distRiftHerald,
       distHorde,
       distFirstBloodSides,
+      distBaronFirstSides,
+      distDragonFirstSides,
+      distTowerFirstSides,
+      distInhibitorFirstSides,
+      distRiftHeraldFirstSides,
+      distHordeFirstSides,
+      distGameFirstOut,
+      distGameFirstSides,
     ] = await Promise.all([
       loadObjectiveDistributionBySides(pVersion, rankTier, 'baron'),
       loadObjectiveDistributionBySides(pVersion, rankTier, 'dragon'),
@@ -3587,33 +3859,69 @@ export async function getOverviewSidesStats(
       loadObjectiveDistributionBySides(pVersion, rankTier, 'riftHerald'),
       loadObjectiveDistributionBySides(pVersion, rankTier, 'horde'),
       loadObjectiveDistributionBySides(pVersion, rankTier, 'first_blood'),
+      loadObjectiveDistributionBySides(pVersion, rankTier, 'baron_first'),
+      loadObjectiveDistributionBySides(pVersion, rankTier, 'dragon_first'),
+      loadObjectiveDistributionBySides(pVersion, rankTier, 'tower_first'),
+      loadObjectiveDistributionBySides(pVersion, rankTier, 'inhibitor_first'),
+      loadObjectiveDistributionBySides(pVersion, rankTier, 'rift_herald_first'),
+      loadObjectiveDistributionBySides(pVersion, rankTier, 'horde_first'),
+      loadObjectiveDistributionByOutcome(pVersion, rankTier, 'game_first'),
+      loadObjectiveDistributionBySides(pVersion, rankTier, 'game_first'),
     ])
     objectivesBySide.blue.baronKills = sumObjectiveCountFromDistribution(distBaron.blue)
     objectivesBySide.red.baronKills = sumObjectiveCountFromDistribution(distBaron.red)
-    objectivesBySide.blue.baronFirst = securedGamesFromSideDistribution(distBaron.blue)
-    objectivesBySide.red.baronFirst = securedGamesFromSideDistribution(distBaron.red)
     objectivesBySide.blue.dragonKills = sumObjectiveCountFromDistribution(distDragon.blue)
     objectivesBySide.red.dragonKills = sumObjectiveCountFromDistribution(distDragon.red)
-    objectivesBySide.blue.dragonFirst = securedGamesFromSideDistribution(distDragon.blue)
-    objectivesBySide.red.dragonFirst = securedGamesFromSideDistribution(distDragon.red)
     objectivesBySide.blue.towerKills = sumObjectiveCountFromDistribution(distTower.blue)
     objectivesBySide.red.towerKills = sumObjectiveCountFromDistribution(distTower.red)
-    objectivesBySide.blue.towerFirst = securedGamesFromSideDistribution(distTower.blue)
-    objectivesBySide.red.towerFirst = securedGamesFromSideDistribution(distTower.red)
     objectivesBySide.blue.inhibitorKills = sumObjectiveCountFromDistribution(distInhibitor.blue)
     objectivesBySide.red.inhibitorKills = sumObjectiveCountFromDistribution(distInhibitor.red)
-    objectivesBySide.blue.inhibitorFirst = securedGamesFromSideDistribution(distInhibitor.blue)
-    objectivesBySide.red.inhibitorFirst = securedGamesFromSideDistribution(distInhibitor.red)
     objectivesBySide.blue.riftHeraldKills = sumObjectiveCountFromDistribution(distRiftHerald.blue)
     objectivesBySide.red.riftHeraldKills = sumObjectiveCountFromDistribution(distRiftHerald.red)
-    objectivesBySide.blue.riftHeraldFirst = securedGamesFromSideDistribution(distRiftHerald.blue)
-    objectivesBySide.red.riftHeraldFirst = securedGamesFromSideDistribution(distRiftHerald.red)
     objectivesBySide.blue.hordeKills = sumObjectiveCountFromDistribution(distHorde.blue)
     objectivesBySide.red.hordeKills = sumObjectiveCountFromDistribution(distHorde.red)
-    objectivesBySide.blue.hordeFirst = securedGamesFromSideDistribution(distHorde.blue)
-    objectivesBySide.red.hordeFirst = securedGamesFromSideDistribution(distHorde.red)
-    objectivesBySide.blue.firstBlood = securedGamesFromSideDistribution(distFirstBloodSides.blue)
-    objectivesBySide.red.firstBlood = securedGamesFromSideDistribution(distFirstBloodSides.red)
+    const fbBlueFirst = firstGamesFromSideDistribution(distFirstBloodSides.blue)
+    const fbRedFirst = firstGamesFromSideDistribution(distFirstBloodSides.red)
+    if (fbBlueFirst + fbRedFirst > 0) {
+      objectivesBySide.blue.firstBlood = fbBlueFirst
+      objectivesBySide.red.firstBlood = fbRedFirst
+    }
+    const baronBlueFirst = firstGamesFromSideDistribution(distBaronFirstSides.blue)
+    const baronRedFirst = firstGamesFromSideDistribution(distBaronFirstSides.red)
+    if (baronBlueFirst + baronRedFirst > 0) {
+      objectivesBySide.blue.baronFirst = baronBlueFirst
+      objectivesBySide.red.baronFirst = baronRedFirst
+    }
+    const dragonBlueFirst = firstGamesFromSideDistribution(distDragonFirstSides.blue)
+    const dragonRedFirst = firstGamesFromSideDistribution(distDragonFirstSides.red)
+    if (dragonBlueFirst + dragonRedFirst > 0) {
+      objectivesBySide.blue.dragonFirst = dragonBlueFirst
+      objectivesBySide.red.dragonFirst = dragonRedFirst
+    }
+    const towerBlueFirst = firstGamesFromSideDistribution(distTowerFirstSides.blue)
+    const towerRedFirst = firstGamesFromSideDistribution(distTowerFirstSides.red)
+    if (towerBlueFirst + towerRedFirst > 0) {
+      objectivesBySide.blue.towerFirst = towerBlueFirst
+      objectivesBySide.red.towerFirst = towerRedFirst
+    }
+    const inhibBlueFirst = firstGamesFromSideDistribution(distInhibitorFirstSides.blue)
+    const inhibRedFirst = firstGamesFromSideDistribution(distInhibitorFirstSides.red)
+    if (inhibBlueFirst + inhibRedFirst > 0) {
+      objectivesBySide.blue.inhibitorFirst = inhibBlueFirst
+      objectivesBySide.red.inhibitorFirst = inhibRedFirst
+    }
+    const heraldBlueFirst = firstGamesFromSideDistribution(distRiftHeraldFirstSides.blue)
+    const heraldRedFirst = firstGamesFromSideDistribution(distRiftHeraldFirstSides.red)
+    if (heraldBlueFirst + heraldRedFirst > 0) {
+      objectivesBySide.blue.riftHeraldFirst = heraldBlueFirst
+      objectivesBySide.red.riftHeraldFirst = heraldRedFirst
+    }
+    const hordeBlueFirst = firstGamesFromSideDistribution(distHordeFirstSides.blue)
+    const hordeRedFirst = firstGamesFromSideDistribution(distHordeFirstSides.red)
+    if (hordeBlueFirst + hordeRedFirst > 0) {
+      objectivesBySide.blue.hordeFirst = hordeBlueFirst
+      objectivesBySide.red.hordeFirst = hordeRedFirst
+    }
     drakesBySide.types.elder.byBlue = securedGamesFromSideDistribution(distElder.blue)
     drakesBySide.types.elder.byRed = securedGamesFromSideDistribution(distElder.red)
     drakesBySide.types.earth.byBlue = securedGamesFromSideDistribution(distEarthDrake.blue)
@@ -3628,18 +3936,18 @@ export async function getOverviewSidesStats(
     drakesBySide.types.hextec.byRed = securedGamesFromSideDistribution(distHextecDrake.red)
     drakesBySide.types.chem.byBlue = securedGamesFromSideDistribution(distChemDrake.blue)
     drakesBySide.types.chem.byRed = securedGamesFromSideDistribution(distChemDrake.red)
-    drakesBySide.souls.earth.byBlue = securedGamesFromSideDistribution(distEarthSoul.blue)
-    drakesBySide.souls.earth.byRed = securedGamesFromSideDistribution(distEarthSoul.red)
-    drakesBySide.souls.water.byBlue = securedGamesFromSideDistribution(distWaterSoul.blue)
-    drakesBySide.souls.water.byRed = securedGamesFromSideDistribution(distWaterSoul.red)
-    drakesBySide.souls.wind.byBlue = securedGamesFromSideDistribution(distWindSoul.blue)
-    drakesBySide.souls.wind.byRed = securedGamesFromSideDistribution(distWindSoul.red)
-    drakesBySide.souls.fire.byBlue = securedGamesFromSideDistribution(distFireSoul.blue)
-    drakesBySide.souls.fire.byRed = securedGamesFromSideDistribution(distFireSoul.red)
-    drakesBySide.souls.hextec.byBlue = securedGamesFromSideDistribution(distHextecSoul.blue)
-    drakesBySide.souls.hextec.byRed = securedGamesFromSideDistribution(distHextecSoul.red)
-    drakesBySide.souls.chem.byBlue = securedGamesFromSideDistribution(distChemSoul.blue)
-    drakesBySide.souls.chem.byRed = securedGamesFromSideDistribution(distChemSoul.red)
+    drakesBySide.souls.earth.byBlue = firstGamesFromSideDistribution(distEarthSoul.blue)
+    drakesBySide.souls.earth.byRed = firstGamesFromSideDistribution(distEarthSoul.red)
+    drakesBySide.souls.water.byBlue = firstGamesFromSideDistribution(distWaterSoul.blue)
+    drakesBySide.souls.water.byRed = firstGamesFromSideDistribution(distWaterSoul.red)
+    drakesBySide.souls.wind.byBlue = firstGamesFromSideDistribution(distWindSoul.blue)
+    drakesBySide.souls.wind.byRed = firstGamesFromSideDistribution(distWindSoul.red)
+    drakesBySide.souls.fire.byBlue = firstGamesFromSideDistribution(distFireSoul.blue)
+    drakesBySide.souls.fire.byRed = firstGamesFromSideDistribution(distFireSoul.red)
+    drakesBySide.souls.hextec.byBlue = firstGamesFromSideDistribution(distHextecSoul.blue)
+    drakesBySide.souls.hextec.byRed = firstGamesFromSideDistribution(distHextecSoul.red)
+    drakesBySide.souls.chem.byBlue = firstGamesFromSideDistribution(distChemSoul.blue)
+    drakesBySide.souls.chem.byRed = firstGamesFromSideDistribution(distChemSoul.red)
     drakesBySide.types.elder.distributionByBlue = distElder.blue
     drakesBySide.types.elder.distributionByRed = distElder.red
     drakesBySide.types.earth.distributionByBlue = distEarthDrake.blue
@@ -3718,12 +4026,71 @@ export async function getOverviewSidesStats(
       surrenderBySide,
       objectiveFirstWinrateBySide: {
         firstBlood: firstBucketWinrateBySide(distFirstBloodSides),
-        baron: firstBucketWinrateBySide(distBaron),
-        dragon: firstBucketWinrateBySide(distDragon),
-        tower: firstBucketWinrateBySide(distTower),
-        inhibitor: firstBucketWinrateBySide(distInhibitor),
-        riftHerald: firstBucketWinrateBySide(distRiftHerald),
-        horde: firstBucketWinrateBySide(distHorde),
+        baron: firstBucketWinrateBySide(distBaronFirstSides),
+        dragon: firstBucketWinrateBySide(distDragonFirstSides),
+        tower: firstBucketWinrateBySide(distTowerFirstSides),
+        inhibitor: firstBucketWinrateBySide(distInhibitorFirstSides),
+        riftHerald: firstBucketWinrateBySide(distRiftHeraldFirstSides),
+        horde: firstBucketWinrateBySide(distHordeFirstSides),
+      },
+      objectiveFirstWinrateGames: {
+        firstBlood:
+          firstGamesFromSideDistribution(distFirstBloodSides.blue) +
+          firstGamesFromSideDistribution(distFirstBloodSides.red),
+        baron:
+          firstGamesFromSideDistribution(distBaronFirstSides.blue) +
+          firstGamesFromSideDistribution(distBaronFirstSides.red),
+        dragon:
+          firstGamesFromSideDistribution(distDragonFirstSides.blue) +
+          firstGamesFromSideDistribution(distDragonFirstSides.red),
+        tower:
+          firstGamesFromSideDistribution(distTowerFirstSides.blue) +
+          firstGamesFromSideDistribution(distTowerFirstSides.red),
+        inhibitor:
+          firstGamesFromSideDistribution(distInhibitorFirstSides.blue) +
+          firstGamesFromSideDistribution(distInhibitorFirstSides.red),
+        riftHerald:
+          firstGamesFromSideDistribution(distRiftHeraldFirstSides.blue) +
+          firstGamesFromSideDistribution(distRiftHeraldFirstSides.red),
+        horde:
+          firstGamesFromSideDistribution(distHordeFirstSides.blue) +
+          firstGamesFromSideDistribution(distHordeFirstSides.red),
+      },
+      objectiveFirstWinrateGamesBySide: {
+        firstBlood: {
+          blue: firstGamesFromSideDistribution(distFirstBloodSides.blue),
+          red: firstGamesFromSideDistribution(distFirstBloodSides.red),
+        },
+        baron: {
+          blue: firstGamesFromSideDistribution(distBaronFirstSides.blue),
+          red: firstGamesFromSideDistribution(distBaronFirstSides.red),
+        },
+        dragon: {
+          blue: firstGamesFromSideDistribution(distDragonFirstSides.blue),
+          red: firstGamesFromSideDistribution(distDragonFirstSides.red),
+        },
+        tower: {
+          blue: firstGamesFromSideDistribution(distTowerFirstSides.blue),
+          red: firstGamesFromSideDistribution(distTowerFirstSides.red),
+        },
+        inhibitor: {
+          blue: firstGamesFromSideDistribution(distInhibitorFirstSides.blue),
+          red: firstGamesFromSideDistribution(distInhibitorFirstSides.red),
+        },
+        riftHerald: {
+          blue: firstGamesFromSideDistribution(distRiftHeraldFirstSides.blue),
+          red: firstGamesFromSideDistribution(distRiftHeraldFirstSides.red),
+        },
+        horde: {
+          blue: firstGamesFromSideDistribution(distHordeFirstSides.blue),
+          red: firstGamesFromSideDistribution(distHordeFirstSides.red),
+        },
+      },
+      gameFirstObjective: {
+        distributionByWin: distGameFirstOut.win,
+        distributionByLoss: distGameFirstOut.loss,
+        distributionByBlue: distGameFirstSides.blue,
+        distributionByRed: distGameFirstSides.red,
       },
       drakesBySide,
       objectivesBySide,
@@ -3734,7 +4101,10 @@ export async function getOverviewSidesStats(
       rankTier,
       roleFilters.champion
     )
-    if (csSidesObjectives) applyChampionStatsWinratesToOverviewSides(result, csSidesObjectives)
+    if (csSidesObjectives) {
+      applyChampionStatsObtentionToOverviewSides(result, csSidesObjectives)
+      applyChampionStatsWinratesToOverviewSides(result, csSidesObjectives)
+    }
     overviewSidesCache.set(cacheKey, { data: result, expiresAt: now + OVERVIEW_CACHE_TTL_MS })
     return result
   } catch (err) {

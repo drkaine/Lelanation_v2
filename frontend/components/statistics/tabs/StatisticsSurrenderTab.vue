@@ -61,6 +61,7 @@ const groupedRows = computed(() => {
   }
   const order = [
     'ALL',
+    'UNRANKED',
     'IRON',
     'BRONZE',
     'SILVER',

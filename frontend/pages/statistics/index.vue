@@ -1,8 +1,10 @@
 <template>
   <div class="statistics flex min-h-screen flex-col text-text">
     <!-- Onglets : scroll horizontal + snap (mobile) -->
-    <div class="statistics-tabs-bar w-full flex-shrink-0 bg-surface/30 px-4 pb-2 pt-4">
-      <div class="statistics-tabs-scroll-wrap relative">
+    <div
+      class="statistics-tabs-bar flex w-full flex-shrink-0 items-start gap-2 bg-surface/30 px-4 pb-2 pt-4"
+    >
+      <div class="statistics-tabs-scroll-wrap relative min-w-0 flex-1">
         <div
           ref="tabsNavEl"
           role="tablist"
@@ -31,7 +33,42 @@
           </button>
         </div>
       </div>
+      <button
+        v-if="showFiltersPanel"
+        type="button"
+        class="filters-collapse-floating mt-0.5 flex shrink-0 touch-manipulation lg:hidden"
+        :aria-label="
+          filtersOpen ? t('statisticsPage.closeFilters') : t('statisticsPage.openFilters')
+        "
+        :aria-expanded="filtersOpen"
+        @click="toggleFiltersOpen"
+      >
+        <svg
+          class="h-3 w-3 transition-transform duration-200"
+          :class="filtersOpen ? 'rotate-180' : ''"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M15 19l-7-7 7-7"
+          />
+        </svg>
+      </button>
     </div>
+
+    <!-- Overlay mobile (derrière le panneau filtres) -->
+    <div
+      v-if="showFiltersPanel && filtersOpen"
+      class="fixed inset-0 z-[55] bg-black/60 backdrop-blur-sm lg:hidden"
+      aria-hidden="true"
+      role="presentation"
+      @click="closeFilters"
+    />
 
     <!-- Filtres + contenu : même hauteur -->
     <div class="flex min-h-0 flex-1">
@@ -63,21 +100,28 @@
       <aside
         v-if="showFiltersPanel"
         :class="[
-          'statistics-filters-panel fixed inset-x-0 bottom-0 top-auto z-[50] flex max-h-[80vh] w-full shrink-0 flex-col overflow-hidden rounded-t-2xl bg-surface/95 shadow-lg transition-transform duration-300 ease-out',
-          'lg:pointer-events-auto lg:static lg:sticky lg:top-4 lg:z-0 lg:h-auto lg:max-h-[calc(100vh-2rem)] lg:max-w-none lg:self-start lg:overflow-y-auto lg:overflow-x-hidden lg:rounded-lg lg:shadow-none lg:transition-[width,opacity,transform] lg:duration-200',
+          'statistics-filters-panel fixed inset-x-0 bottom-0 top-auto z-[60] flex max-h-[80vh] w-full shrink-0 flex-col overflow-hidden rounded-t-2xl bg-surface/95 shadow-lg transition-transform duration-300 ease-out',
+          'lg:static lg:sticky lg:top-4 lg:z-0 lg:h-auto lg:max-h-[calc(100vh-2rem)] lg:max-w-none lg:self-start lg:overflow-y-auto lg:overflow-x-hidden lg:rounded-lg lg:shadow-none lg:transition-[width,opacity,transform] lg:duration-200',
           filtersOpen
             ? 'translate-y-0 lg:w-64 lg:translate-y-0 lg:opacity-100'
-            : 'pointer-events-none translate-y-full lg:w-0 lg:translate-y-0 lg:opacity-0',
+            : 'translate-y-full max-lg:hidden lg:w-0 lg:translate-y-0 lg:opacity-0',
         ]"
+        role="dialog"
+        :aria-modal="filtersOpen"
+        :aria-label="t('statisticsPage.filtersTitle')"
         @click.stop
       >
         <div
           class="flex shrink-0 items-center gap-2 border-b border-primary/25 p-2 lg:border-transparent lg:pb-2"
         >
-          <div
-            class="mx-auto mb-1 h-1 w-10 shrink-0 rounded-full bg-primary/40 lg:hidden"
-            aria-hidden="true"
-          />
+          <button
+            type="button"
+            class="mx-auto mb-1 flex h-6 w-14 shrink-0 touch-manipulation items-center justify-center rounded-full lg:hidden"
+            :aria-label="t('statisticsPage.closeFilters')"
+            @click="closeFilters"
+          >
+            <span class="h-1 w-10 rounded-full bg-primary/40" aria-hidden="true" />
+          </button>
           <h2 class="min-w-0 flex-1 truncate text-lg font-semibold text-text-accent">
             {{ t('statisticsPage.filtersTitle') }}
           </h2>
@@ -578,16 +622,6 @@
       </div>
     </div>
 
-    <!-- Overlay mobile (bottom sheet) -->
-    <div
-      v-if="showFiltersPanel"
-      v-show="filtersOpen"
-      class="fixed inset-0 z-[45] bg-black/60 backdrop-blur-sm lg:hidden"
-      aria-hidden="true"
-      role="presentation"
-      @click="closeFilters"
-    />
-
     <!-- Toast vue mobile Cards (Top 5) -->
     <div
       v-if="showMobileViewToast && isMobileViewport"
@@ -612,11 +646,11 @@
       </button>
     </div>
 
-    <!-- Bouton filtres sticky (mobile) -->
+    <!-- Bouton filtres sticky (mobile, panneau fermé) -->
     <button
-      v-if="showFiltersPanel && !(championSearchFocused && isMobileViewport)"
+      v-if="showFiltersPanel && !filtersOpen"
       type="button"
-      class="statistics-filters-fab fixed bottom-4 left-1/2 z-[48] flex -translate-x-1/2 items-center gap-2 rounded-full border border-primary/40 bg-surface/95 px-4 py-2.5 text-sm font-semibold text-text shadow-lg backdrop-blur-sm lg:hidden"
+      class="statistics-filters-fab fixed bottom-4 left-1/2 z-[58] flex -translate-x-1/2 items-center gap-2 rounded-full border border-primary/40 bg-surface/95 px-4 py-2.5 text-sm font-semibold text-text shadow-lg backdrop-blur-sm lg:hidden"
       :aria-label="t('statisticsPage.openFilters')"
       @click="openFilters"
     >
@@ -638,6 +672,8 @@ import {
   computed,
   watch,
   nextTick,
+  onMounted,
+  onUnmounted,
   getCurrentInstance,
   provide,
   unref,
@@ -1367,10 +1403,30 @@ function openFilters() {
 }
 function closeFilters() {
   filtersOpen.value = false
+  if (championSearchBlurTimer) {
+    clearTimeout(championSearchBlurTimer)
+    championSearchBlurTimer = null
+  }
+  championSearchFocused.value = false
+  championSearchInputEl.value?.blur()
 }
 function toggleFiltersOpen() {
-  filtersOpen.value = !filtersOpen.value
+  if (filtersOpen.value) closeFilters()
+  else openFilters()
 }
+
+function onFiltersEscapeKey(event: KeyboardEvent) {
+  if (event.key !== 'Escape' || !filtersOpen.value || !showFiltersPanel.value) return
+  if (!import.meta.client || window.matchMedia('(min-width: 1024px)').matches) return
+  closeFilters()
+}
+
+watch([filtersOpen, isMobileViewport], () => {
+  if (!import.meta.client) return
+  const lock = isMobileViewport.value && filtersOpen.value && showFiltersPanel.value
+  document.body.style.overflow = lock ? 'hidden' : ''
+})
+
 const statsKnownVersions = ref<Array<{ version: string; matchCount: number }>>([])
 
 watch(activeTab, value => {
@@ -1617,6 +1673,7 @@ function onStatsFilterChange() {
   if (activeTab.value === 'overview') {
     loadOverview()
     loadChampions()
+    loadObjectivesBaseline()
   }
   if (activeTab.value === 'infos') loadOverview()
   if (activeTab.value === 'infos') loadInfosMeta()
@@ -1629,6 +1686,7 @@ function onStatsFilterChange() {
   if (activeTab.value === 'balance') loadBalanceFramework()
   if (activeTab.value === 'sides') loadOverviewSides()
   if (activeTab.value === 'champions') loadChampions()
+  if (activeTab.value === 'championTable') loadChampionGlobalTable()
   if (['runes', 'items', 'spells'].includes(activeTab.value)) {
     loadOverviewDetail()
   }
@@ -1874,10 +1932,19 @@ function dedupedStatsFetch<T>(key: string, run: () => Promise<T>): Promise<T> {
   return p
 }
 
+function appendProgressionSinceVersion(params: URLSearchParams): void {
+  const since = statsVersionFilter.value.trim()
+  const oldest = progressionFromVersion.value?.trim() ?? ''
+  if (since && (!oldest || since !== oldest)) {
+    params.set('sinceVersion', since)
+  }
+}
+
 function progressionRequestKey(prefix: string, oldest: string): string {
   const div = (overviewDivisionFilter.value ?? []).join(',')
   const role = statsRoleFilter.value || ''
-  return `${prefix}:${oldest}|${div}|${role}`
+  const since = statsVersionFilter.value.trim()
+  return `${prefix}:${oldest}|${since}|${div}|${role}`
 }
 
 function runInBackground<T>(promise: Promise<T>): void {
@@ -1901,6 +1968,7 @@ async function loadOverview() {
     runInBackground(loadProgressionsFull())
     runInBackground(loadOverviewAbandons())
     runInBackground(loadOverviewTeams())
+    runInBackground(loadObjectivesBaseline())
     runInBackground(loadOverviewDurationWinrate())
   } catch (err) {
     overviewData.value = null
@@ -2022,8 +2090,15 @@ const surrenderMatrixBaselineLabel = computed(
 const surrenderMatrixRows = computed(() => surrenderMatrixData.value?.rows ?? [])
 function surrenderMatrixQueryParams(): string {
   const params = new URLSearchParams()
-  if (statsVersionFilter.value) params.set('version', statsVersionFilter.value)
-  if (progressionFromVersion.value) params.set('fromVersion', progressionFromVersion.value)
+  const cur = statsVersionFilter.value?.trim() ?? ''
+  const baseline = progressionFromVersion.value?.trim() ?? ''
+  if (cur) params.set('version', cur)
+  if (
+    baseline &&
+    normalizeVersionToPrefix(baseline) !== normalizeVersionToPrefix(cur || baseline)
+  ) {
+    params.set('fromVersion', baseline)
+  }
   for (const t of statsDivisionFilter.value) params.append('rankTier', t)
   const s = params.toString()
   return s ? `?${s}` : ''
@@ -2110,6 +2185,7 @@ async function loadOverviewProgression() {
     const t = statsPerfStart('loadOverviewProgression')
     const params = new URLSearchParams()
     params.set('version', oldest)
+    appendProgressionSinceVersion(params)
     if (overviewDivisionFilter.value) {
       for (const tier of overviewDivisionFilter.value) params.append('rankTier', tier)
     }
@@ -2260,6 +2336,7 @@ async function loadProgressionsFull() {
     progressionFullPending.value = true
     const params = new URLSearchParams()
     params.set('version', oldest)
+    appendProgressionSinceVersion(params)
     if (overviewDivisionFilter.value) {
       for (const tier of overviewDivisionFilter.value) params.append('rankTier', tier)
     }
@@ -2469,8 +2546,8 @@ function retryOverviewDetail() {
 
 /** Même filtres que overview-detail, version = patch de comparaison (progressions). */
 async function loadOverviewDetailBaseline() {
-  const cmp = progressionFromVersion.value?.trim() ?? ''
-  if (!cmp || !overviewDetailComparisonVersion.value) {
+  const cmp = overviewDetailComparisonVersion.value?.trim() ?? ''
+  if (!cmp) {
     overviewDetailBaselineData.value = null
     overviewDetailBaselinePending.value = false
     return
@@ -3286,9 +3363,8 @@ async function loadOverviewSides() {
 }
 
 async function loadObjectivesBaseline() {
-  const cmp = progressionFromVersion.value
-  const cur = statsVersionFilter.value
-  if (!cmp || (cur && cmp === cur)) {
+  const cmp = resolveStatsBaselineVersion()
+  if (!cmp) {
     overviewTeamsBaselineData.value = null
     overviewSidesBaselineData.value = null
     return
@@ -4042,20 +4118,35 @@ function patchFromVersion(version: string | null | undefined): string | null {
   return `${major}.${minor}`
 }
 
+/** Version de référence pour les Δ (progression ou patch précédent avec des matchs). */
+function resolveStatsBaselineVersion(): string | null {
+  const mainVer = (statsVersionFilter.value || gameVersion.value || '').trim()
+  const refVer = (progressionFromVersion.value ?? '').trim()
+  const mainPatch = patchFromVersion(mainVer)
+  const refPatch = patchFromVersion(refVer)
+  if (refVer && refPatch && mainPatch && refPatch !== mainPatch) return refVer
+  if (!mainVer || !mainPatch) return null
+  const list = statsVersionOptions.value
+  const idx = list.findIndex(v => v.version === mainVer)
+  if (idx < 0) return null
+  const prev = list
+    .slice(idx + 1)
+    .find(v => Number(v.matchCount ?? 0) > 0)
+    ?.version?.trim()
+  if (!prev) return null
+  const prevPatch = patchFromVersion(prev)
+  if (prevPatch && prevPatch !== mainPatch) return prev
+  return null
+}
+
 const championGlobalPatchDeltaRefLabel = computed(() => {
-  const ref = patchFromVersion(progressionFromVersion.value)
-  const main = patchFromVersion(statsVersionFilter.value || gameVersion.value)
-  if (!ref || !main || ref === main) return null
-  return ref
+  const baseline = resolveStatsBaselineVersion()
+  if (!baseline) return null
+  return patchFromVersion(baseline)
 })
 
 /** Patch de référence pour deltas runes / items / sorts (overview-detail baseline). */
-const overviewDetailComparisonVersion = computed(() => {
-  const ref = patchFromVersion(progressionFromVersion.value)
-  const main = patchFromVersion(statsVersionFilter.value || gameVersion.value)
-  if (!ref || !main || ref === main) return null
-  return progressionFromVersion.value
-})
+const overviewDetailComparisonVersion = computed(() => resolveStatsBaselineVersion())
 
 function championGlobalTableQueryForVersion(versionFull: string | null | undefined): string {
   const params = new URLSearchParams()
@@ -4099,6 +4190,7 @@ const bansTab = useStatisticsBansTab({
   championsPageSize,
   statsVersionFilter,
   progressionFromVersion,
+  resolveBaselineVersion: resolveStatsBaselineVersion,
   gameVersion,
   statsFetch,
   apiUrl,
@@ -4118,10 +4210,7 @@ async function loadChampionGlobalTable() {
   championGlobalTableRefMatchCount.value = 0
   try {
     const mainVer = (statsVersionFilter.value || gameVersion.value || '').trim()
-    const refVer = progressionFromVersion.value?.trim() ?? ''
-    const refPatch = patchFromVersion(refVer)
-    const mainPatch = patchFromVersion(mainVer)
-    const shouldLoadRef = Boolean(refVer && refPatch && mainPatch && refPatch !== mainPatch)
+    const refVer = resolveStatsBaselineVersion()
 
     const [data, refData] = await Promise.all([
       statsFetch<{
@@ -4130,7 +4219,7 @@ async function loadChampionGlobalTable() {
         error?: string
         message?: string
       }>(apiUrl('/api/stats/champions/global-table' + championGlobalTableQueryForVersion(mainVer))),
-      shouldLoadRef
+      refVer
         ? statsFetch<{ matchCount: number; rows: ChampionGlobalTableRow[] }>(
             apiUrl('/api/stats/champions/global-table' + championGlobalTableQueryForVersion(refVer))
           )
@@ -4266,7 +4355,10 @@ watch(activeTab, async tab => {
   if (tab === 'infos') loadBalanceFramework()
   if (tab === 'championTable') loadChampionGlobalTable()
   if (tab === 'balance') loadBalanceFramework()
-  if (tab === 'bans') bansTab.loadBansTable()
+  if (tab === 'bans') {
+    bansTab.loadBansTable()
+    loadObjectivesBaseline()
+  }
   if (tab === 'spells' || tab === 'items') {
     loadOverviewDetail()
     loadOverviewDetailBaseline()
@@ -4282,6 +4374,7 @@ watch([statsVersionFilter, statsDivisionFilter, statsRoleFilter, statsOtpFilter]
     loadVersionsWithMatches()
     loadOverview()
     loadChampions()
+    loadObjectivesBaseline()
   }
   if (activeTab.value === 'team') {
     loadOverviewSides()
@@ -4318,6 +4411,7 @@ watch(progressionFromVersion, () => {
   if (activeTab.value === 'overview') {
     loadOverviewProgression()
     loadProgressionsFull()
+    loadObjectivesBaseline()
   }
   // if (activeTab.value === 'trends') loadProgressionsFull()
   if (activeTab.value === 'championTable') loadChampionGlobalTable()
@@ -4326,6 +4420,10 @@ watch(progressionFromVersion, () => {
   if (activeTab.value === 'team') loadOverviewSides()
   if (activeTab.value === 'objectives') loadOverviewSides()
   if (activeTab.value === 'objectives') loadObjectivesBaseline()
+  if (activeTab.value === 'bans') {
+    bansTab.loadBansTable()
+    loadObjectivesBaseline()
+  }
   if (activeTab.value === 'surrender') loadSurrenderMatrix()
   if (activeTab.value === 'runes' || activeTab.value === 'items' || activeTab.value === 'spells') {
     loadOverviewDetail()
@@ -4334,6 +4432,7 @@ watch(progressionFromVersion, () => {
 })
 
 onMounted(async () => {
+  document.addEventListener('keydown', onFiltersEscapeKey)
   const versionPromise = versionStore.currentVersion
     ? Promise.resolve()
     : versionStore.loadCurrentVersion()
@@ -4369,6 +4468,11 @@ onMounted(async () => {
     runInBackground(loadObjectivesBaseline())
   }
   nextTick(() => scrollActiveTabIntoView('auto'))
+})
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', onFiltersEscapeKey)
+  if (import.meta.client) document.body.style.overflow = ''
 })
 
 // Références explicites pour le build prod : bindings uniquement consommés via inject (onglets).
@@ -4898,10 +5002,45 @@ if (__statisticsVm?.proxy) {
   overflow-x: hidden;
   overflow-y: visible;
 }
-.statistics .fast-stat-card .fast-stat-table {
+.statistics .fast-stat-card .fast-stat-table,
+.statistics .team-side-fast-stat .fast-stat-table {
   width: 100%;
   max-width: 100%;
   table-layout: fixed;
+  border-collapse: collapse;
+  overflow-x: hidden;
+}
+.statistics .team-side-fast-stat .fast-stat-table td {
+  overflow: hidden;
+}
+.statistics .team-side-fast-stat .fast-stat-row {
+  border-bottom: 1px solid rgb(var(--rgb-primary) / 0.1);
+}
+.statistics .team-side-fast-stat .fast-stat-row:last-child {
+  border-bottom: none;
+}
+.statistics .team-side-fast-stat {
+  margin-bottom: 10px;
+  width: 313px !important;
+  min-width: 313px;
+  max-width: 313px;
+  min-height: 325px;
+  height: auto;
+  margin-left: auto;
+  margin-right: auto;
+  flex: 0 0 313px;
+  background: #08101f !important;
+  justify-self: center;
+  overflow: visible;
+}
+@media (max-width: 640px) {
+  .statistics .team-side-fast-stat {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    min-height: 0;
+    flex: 1 1 auto;
+  }
 }
 @media (max-width: 640px) {
   .statistics .fast-stat-card {

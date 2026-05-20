@@ -133,8 +133,18 @@ export interface TeamStatsDto {
   region: string;
   team100Win: boolean;
   objectives: TeamObjectiveDto[];
+  /** Partie terminée par surrender (au moins un participant). */
   surrendered: boolean;
+  /** Surrender avant 15 min (au moins un participant). */
   earlySurrendered: boolean;
+  /** Surrender imputé au côté blue (team 100), 0 ou 1 par partie. */
+  surrenderedTeam100: boolean;
+  /** Surrender imputé au côté red (team 200), 0 ou 1 par partie. */
+  surrenderedTeam200: boolean;
+  /** Early surrender imputé au côté blue (team 100). */
+  earlySurrenderedTeam100: boolean;
+  /** Early surrender imputé au côté red (team 200). */
+  earlySurrenderedTeam200: boolean;
 }
 
 export interface IngestionJobData {
