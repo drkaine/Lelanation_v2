@@ -138,16 +138,47 @@ function ratioAtRank(coefficient: number[] | number, rankIndex: number): number 
   return Number.isFinite(coefficient) ? coefficient : 0
 }
 
+function ratioStatDisplayLabel(stat: string): string {
+  const labels: Record<string, string> = {
+    totalAD: 'AD',
+    bonusAD: 'AD',
+    AP: 'AP',
+    bonusArmor: 'bonus Armor',
+    armor: 'Armor',
+    bonusMagicResist: 'bonus Magic Resist',
+    magicResist: 'Magic Resist',
+    totalHP: 'max Health',
+    bonusHP: 'bonusHP',
+    maxMana: 'max Mana',
+  }
+  return labels[stat] ?? stat
+}
+
+function formatRatioPercentSuffix(
+  ratio: { stat: string; coefficient: number[] | number },
+  rankIndex: number
+): string {
+  const coeff = ratioAtRank(ratio.coefficient, rankIndex)
+  if (coeff === 0) return ''
+  const pct = formatResolvedNumber(coeff * 100)
+  return `(+ ${pct}% ${ratioStatDisplayLabel(ratio.stat)})`
+}
+
 function formatRatioSuffix(
   ratio: { stat: string; coefficient: number[] | number },
   rankIndex: number,
   stats: TheorycraftBuildStats
 ): string {
+  const percentPart = formatRatioPercentSuffix(ratio, rankIndex)
+  if (!percentPart) return ''
+
   const coeff = ratioAtRank(ratio.coefficient, rankIndex)
-  if (coeff === 0) return ''
   const statAmount = statValue(stats, ratio.stat) * coeff
-  if (statAmount <= 0) return ''
-  return `(+ ${formatResolvedNumber(statAmount)})`
+  if (statAmount <= 0) {
+    return `<span class="tooltip-tag scale-ap">${percentPart}</span>`
+  }
+
+  return `<span class="tooltip-tag scale-ap">${percentPart} (+ ${formatResolvedNumber(statAmount)})</span>`
 }
 
 function computeCalculationValue(
@@ -405,6 +436,7 @@ export function resolveTheorycraftSpellDescription(
     maxMana: 0,
     critChance: 0,
     critDamage: 1.75,
+    cooldownReduction: 0,
   }
 
   if (spell.tooltipRaw) {

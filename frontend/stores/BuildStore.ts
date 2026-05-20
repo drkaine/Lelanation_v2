@@ -20,7 +20,9 @@ import { useVoteStore } from '~/stores/VoteStore'
 import {
   passiveRankForChampionLevel,
   clampChampionLevel,
+  championWithStatsForBuild,
   maxChampionLevelForRoles,
+  resolveChampionStatsForBuild,
 } from '~/utils/theorycraftStats'
 import {
   clampDisabledIndicesToActiveLimit,
@@ -782,7 +784,7 @@ export const useBuildStore = defineStore('build', {
         return false
       }
       if (this.currentBuild) {
-        this.currentBuild.champion = champion
+        this.currentBuild.champion = championWithStatsForBuild(champion)
         this.currentBuild.updatedAt = new Date().toISOString()
         if (this.builderSession === 'theorycraft') {
           this.clearTheorycraftStackContext()
@@ -1147,14 +1149,27 @@ export const useBuildStore = defineStore('build', {
       }
     },
 
+    mergeTheorycraftChampionDetail(detail: Record<string, unknown>) {
+      if (this.builderSession !== 'theorycraft' || !this.currentBuild?.champion) return
+      const current = this.currentBuild.champion
+      if (resolveChampionStatsForBuild(current)) return
+
+      const baseStats = detail.baseStats
+      const growthStats = detail.growthStats
+      if (!baseStats || !growthStats) return
+
+      this.currentBuild.champion = championWithStatsForBuild({
+        ...current,
+        baseStats,
+        growthStats,
+      } as Champion)
+      this.recalculateStats()
+    },
+
     recalculateStats() {
       const build = this.displayedBuild ?? this.currentBuild
-      const hasChampionStats = (champion: unknown): boolean => {
-        if (!champion || typeof champion !== 'object') return false
-        const stats = (champion as { stats?: Record<string, unknown> }).stats
-        if (!stats || typeof stats !== 'object') return false
-        return Number.isFinite(Number(stats.hp)) && Number.isFinite(Number(stats.attackdamage))
-      }
+      const hasChampionStats = (champion: unknown): boolean =>
+        resolveChampionStatsForBuild(champion as Champion | null | undefined) != null
 
       if (!build || !build.champion || !hasChampionStats(build.champion)) {
         this.calculatedStats = null
@@ -1168,6 +1183,8 @@ export const useBuildStore = defineStore('build', {
           this.calculatedStats = null
           return
         }
+
+        const championForStats = championWithStatsForBuild(b.champion)
 
         let options: import('@lelanation/builds-stats').CalculateStatsOptions | undefined
         if (this.builderSession === 'theorycraft' && this.theorycraftStackDefinitions.length > 0) {
@@ -1191,7 +1208,7 @@ export const useBuildStore = defineStore('build', {
         }
 
         const stats = calculateStats(
-          b.champion,
+          championForStats,
           this.getTheorycraftItemsForStats(),
           b.runes,
           b.shards,

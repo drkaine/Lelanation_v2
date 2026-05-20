@@ -10,6 +10,8 @@ export interface TheorycraftBuildStats {
   maxMana: number
   critChance: number
   critDamage: number
+  /** Fractional CDR from ability haste (0–1), items + shards. */
+  cooldownReduction?: number
 }
 
 export interface TheorycraftSpellRatio {

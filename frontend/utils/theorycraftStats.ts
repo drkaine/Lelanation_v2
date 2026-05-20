@@ -1,5 +1,30 @@
-import type { CalculatedStats, Champion } from '@lelanation/shared-types'
+import type { CalculatedStats, Champion, ChampionStats } from '@lelanation/shared-types'
 import type { TheorycraftBuildStats } from '~/types/theorycraft'
+
+type TheorycraftChampionExport = Champion & {
+  baseStats?: {
+    hp?: number
+    hpRegen?: number
+    mp?: number
+    mpRegen?: number
+    armor?: number
+    magicResist?: number
+    attackDamage?: number
+    attackSpeed?: number
+    attackRange?: number
+    movespeed?: number
+  }
+  growthStats?: {
+    hp?: number
+    hpRegen?: number
+    mp?: number
+    mpRegen?: number
+    armor?: number
+    magicResist?: number
+    attackDamage?: number
+    attackSpeed?: number
+  }
+}
 
 export const DEFAULT_MAX_CHAMPION_LEVEL = 18
 export const TOP_MAX_CHAMPION_LEVEL = 21
@@ -16,8 +41,61 @@ export function clampChampionLevel(
   return Math.min(maxLevel, Math.max(1, Math.trunc(level)))
 }
 
+function safeNumber(value: unknown): number {
+  return Number.isFinite(Number(value)) ? Number(value) : 0
+}
+
+function hasDdragonStats(stats: ChampionStats | null | undefined): boolean {
+  return stats != null && Number.isFinite(stats.hp) && Number.isFinite(stats.attackdamage)
+}
+
+export function theorycraftExportToChampionStats(
+  baseStats: TheorycraftChampionExport['baseStats'],
+  growthStats: TheorycraftChampionExport['growthStats']
+): ChampionStats | null {
+  if (!baseStats || !growthStats) return null
+  return {
+    hp: safeNumber(baseStats.hp),
+    hpperlevel: safeNumber(growthStats.hp),
+    mp: safeNumber(baseStats.mp),
+    mpperlevel: safeNumber(growthStats.mp),
+    armor: safeNumber(baseStats.armor),
+    armorperlevel: safeNumber(growthStats.armor),
+    spellblock: safeNumber(baseStats.magicResist),
+    spellblockperlevel: safeNumber(growthStats.magicResist),
+    attackdamage: safeNumber(baseStats.attackDamage),
+    attackdamageperlevel: safeNumber(growthStats.attackDamage),
+    attackspeed: safeNumber(baseStats.attackSpeed),
+    attackspeedperlevel: safeNumber(growthStats.attackSpeed),
+    movespeed: safeNumber(baseStats.movespeed),
+    attackrange: safeNumber(baseStats.attackRange),
+    hpregen: safeNumber(baseStats.hpRegen),
+    hpregenperlevel: safeNumber(growthStats.hpRegen),
+    mpregen: safeNumber(baseStats.mpRegen),
+    mpregenperlevel: safeNumber(growthStats.mpRegen),
+    crit: 0,
+    critperlevel: 0,
+  }
+}
+
+export function resolveChampionStatsForBuild(
+  champion: Champion | null | undefined
+): ChampionStats | null {
+  if (!champion) return null
+  if (hasDdragonStats(champion.stats)) return champion.stats
+
+  const exported = champion as TheorycraftChampionExport
+  return theorycraftExportToChampionStats(exported.baseStats, exported.growthStats)
+}
+
+export function championWithStatsForBuild(champion: Champion): Champion {
+  const stats = resolveChampionStatsForBuild(champion)
+  if (!stats) return champion
+  return { ...champion, stats }
+}
+
 function baseAdAtLevel(champion: Champion, level: number): number {
-  const stats = champion.stats
+  const stats = resolveChampionStatsForBuild(champion)
   if (!stats) return 0
   const safe = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0)
   const levelMultiplier = Math.max(0, level - 1)
@@ -25,7 +103,7 @@ function baseAdAtLevel(champion: Champion, level: number): number {
 }
 
 function baseHpAtLevel(champion: Champion, level: number): number {
-  const stats = champion.stats
+  const stats = resolveChampionStatsForBuild(champion)
   if (!stats) return 0
   const safe = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0)
   const levelMultiplier = Math.max(0, level - 1)
@@ -41,21 +119,74 @@ export function passiveRankForChampionLevel(level: number): number {
   return rank
 }
 
+export function applyCooldownReductionToSeconds(
+  baseSeconds: number,
+  cooldownReduction: number
+): number {
+  if (!Number.isFinite(baseSeconds) || baseSeconds <= 0) return baseSeconds
+  const cdr = Math.max(0, Math.min(0.99, cooldownReduction))
+  if (cdr <= 0) return baseSeconds
+  return baseSeconds * (1 - cdr)
+}
+
+function parseNumericStatValue(text: string): number | null {
+  const normalized = String(text ?? '')
+    .trim()
+    .replace(',', '.')
+  const value = Number(normalized)
+  return Number.isFinite(value) ? value : null
+}
+
+export function formatCooldownSeconds(value: number): string {
+  const rounded = Math.round(value * 10) / 10
+  if (Number.isInteger(rounded)) return String(rounded)
+  return String(rounded)
+}
+
 export function resolveHeaderStatAtRank(
   stat: { key: string; label: string; valueText: string; valueHtml?: string },
-  rank: number
+  rank: number,
+  options?: { cooldownReduction?: number }
 ): { key: string; label: string; valueText: string; valueHtml?: string } {
   const text = String(stat.valueText ?? '').trim()
-  if (!text.includes('/')) return stat
-  const parts = text
-    .split('/')
-    .map(part => part.trim())
-    .filter(Boolean)
-  if (parts.length <= 1) return stat
-  const idx = Math.min(Math.max(rank - 1, 0), parts.length - 1)
+  let valueText = text
+  let valueHtml = stat.valueHtml
+
+  if (text.includes('/')) {
+    const parts = text
+      .split('/')
+      .map(part => part.trim())
+      .filter(Boolean)
+    if (parts.length > 1) {
+      const idx = Math.min(Math.max(rank - 1, 0), parts.length - 1)
+      valueText = parts[idx] ?? text
+      valueHtml = undefined
+    }
+  }
+
+  if (stat.key !== 'cooldown') {
+    return valueText === text && valueHtml === stat.valueHtml
+      ? stat
+      : { ...stat, valueText, valueHtml }
+  }
+
+  const cdr = options?.cooldownReduction ?? 0
+  if (cdr <= 0) {
+    return valueText === text && valueHtml === stat.valueHtml
+      ? stat
+      : { ...stat, valueText, valueHtml }
+  }
+
+  const baseCooldown = parseNumericStatValue(valueText)
+  if (baseCooldown == null || baseCooldown <= 0) {
+    return valueText === text && valueHtml === stat.valueHtml
+      ? stat
+      : { ...stat, valueText, valueHtml }
+  }
+
   return {
     ...stat,
-    valueText: parts[idx] ?? text,
+    valueText: formatCooldownSeconds(applyCooldownReductionToSeconds(baseCooldown, cdr)),
     valueHtml: undefined,
   }
 }
@@ -82,5 +213,6 @@ export function toTheorycraftBuildStats(
     maxMana: calculated.mana,
     critChance: calculated.critChance,
     critDamage: calculated.critDamage,
+    cooldownReduction: calculated.cooldownReduction ?? 0,
   }
 }

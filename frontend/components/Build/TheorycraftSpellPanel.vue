@@ -318,7 +318,11 @@ function resolveSpellView(
       ? raw.detailedTexts.map(section => normalizeKaynFormMarkup(String(section ?? '')))
       : [],
     headerStats: Array.isArray(raw.headerStats)
-      ? raw.headerStats.map((stat: SpellHeaderStat) => resolveHeaderStatAtRank(stat, rank))
+      ? raw.headerStats.map((stat: SpellHeaderStat) =>
+          resolveHeaderStatAtRank(stat, rank, {
+            cooldownReduction: props.buildStats?.cooldownReduction ?? 0,
+          })
+        )
       : [],
     isDynamic: resolved.isDynamic,
   }

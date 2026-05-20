@@ -91,4 +91,26 @@ describe('useTheorycraftTooltip', () => {
     expect(html).toContain('150')
     expect(html).toContain('scale-ap')
   })
+
+  it('shows AP ratio percentages even without live build stats', () => {
+    const spell = {
+      tooltipRaw: 'Inflige <magicDamage>{{ totaldamage }} pts de dégâts magiques</magicDamage>.',
+      maxRank: 5,
+      calculations: [
+        {
+          key: 'totaldamage',
+          baseValues: [80, 120, 160, 200, 240],
+          ratios: [{ stat: 'AP', coefficient: [0.5, 0.55, 0.6, 0.65, 0.7], type: 'magic' }],
+        },
+      ],
+      dataValues: [],
+      spellEffects: [],
+    }
+
+    const { html, isDynamic } = resolveTheorycraftSpellDescription(spell, null, 1)
+    expect(isDynamic).toBe(true)
+    expect(html).toContain('80')
+    expect(html).toContain('50% AP')
+    expect(html).not.toMatch(/\{\{/)
+  })
 })
