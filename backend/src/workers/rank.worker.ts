@@ -3,7 +3,11 @@ import { sql } from "../db/client.js";
 import type { RankJobData } from "../dto/match.dto.js";
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
 import { RANK_QUEUE } from "../queues/definitions.js";
-import { rankLimiterMaxDrain, rankLimiterSmoothIntervalMs } from "../queues/rank-backlog-policy.js";
+import {
+  rankLimiterMaxDrain,
+  rankWorkerConcurrencyDrain,
+  rankWorkerLimiterSmooth,
+} from "../queues/rank-backlog-policy.js";
 import { redis } from "../redis/client.js";
 import { RANK_BULLMQ_LIMITER_DURATION_MS } from "../redis/rate-scheduler.js";
 import { RateLimitError, RiotClient } from "../riot/client.js";
@@ -106,10 +110,8 @@ async function runRankJob(data: RankJobData): Promise<RankJobOutcome> {
 }
 
 const drainLimiterMax = rankLimiterMaxDrain();
-const rankWorkerLimiter = {
-  max: 1,
-  duration: rankLimiterSmoothIntervalMs(drainLimiterMax),
-};
+const drainConcurrency = rankWorkerConcurrencyDrain();
+const rankWorkerLimiter = rankWorkerLimiterSmooth(drainLimiterMax, drainConcurrency);
 
 export const rankWorker = new Worker<RankJobData>(
   RANK_QUEUE,
@@ -134,11 +136,11 @@ export const rankWorker = new Worker<RankJobData>(
   },
   {
     connection: redis,
-    concurrency: 1,
+    concurrency: drainConcurrency,
     limiter: rankWorkerLimiter,
   },
 );
 
 console.log(
-  `[rank.worker] started limiter=1/${rankWorkerLimiter.duration}ms (~${drainLimiterMax}/${RANK_BULLMQ_LIMITER_DURATION_MS}ms) concurrency=1`,
+  `[rank.worker] started limiter=${rankWorkerLimiter.max}/${rankWorkerLimiter.duration}ms (~${drainLimiterMax}/${RANK_BULLMQ_LIMITER_DURATION_MS}ms) concurrency=${drainConcurrency}`,
 );

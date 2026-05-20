@@ -38,3 +38,24 @@ export interface TheorycraftSpellData {
   maxRank: number
   damageFormulas: TheorycraftDamageFormula[]
 }
+
+export interface TheorycraftStackStatBonus {
+  stat: 'abilityPower' | 'attackDamage' | 'health' | 'armor' | 'magicResist' | 'attackSpeed'
+  perStackKey: string
+  isPercent?: boolean
+}
+
+export interface TheorycraftStackTooltipVar {
+  key: string
+  perStackKey: string
+}
+
+export interface TheorycraftStackDefinition {
+  id: string
+  scope: 'passive' | 'spell'
+  spellSlot?: string
+  label: string
+  maxStacks?: number
+  statBonuses: TheorycraftStackStatBonus[]
+  tooltipVars: TheorycraftStackTooltipVar[]
+}

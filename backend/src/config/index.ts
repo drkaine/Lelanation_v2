@@ -20,6 +20,9 @@ type Config = {
   RANK_LIMITER_MAX_NORMAL: number;
   /** Débit rank en mode drain (éviter rafales 429 sur League v4). */
   RANK_LIMITER_MAX_DRAIN: number;
+  /** Workers rank parallèles en mode drain (même plafond / 120 s). */
+  RANK_WORKER_CONCURRENCY_DRAIN: number;
+  RANK_WORKER_CONCURRENCY_NORMAL: number;
 };
 
 function parsePositiveInt(raw: string | undefined): number | null {
@@ -93,4 +96,8 @@ export const config: Config = {
     parsePositiveInt(process.env.RANK_LIMITER_MAX_NORMAL) ?? 17,
   RANK_LIMITER_MAX_DRAIN:
     parsePositiveInt(process.env.RANK_LIMITER_MAX_DRAIN) ?? 95,
+  RANK_WORKER_CONCURRENCY_DRAIN:
+    parsePositiveInt(process.env.RANK_WORKER_CONCURRENCY_DRAIN) ?? 4,
+  RANK_WORKER_CONCURRENCY_NORMAL:
+    parsePositiveInt(process.env.RANK_WORKER_CONCURRENCY_NORMAL) ?? 2,
 };

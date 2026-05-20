@@ -61,16 +61,7 @@
       </button>
     </div>
 
-    <!-- Overlay mobile (derrière le panneau filtres) -->
-    <div
-      v-if="showFiltersPanel && filtersOpen"
-      class="fixed inset-0 z-[55] bg-black/60 backdrop-blur-sm lg:hidden"
-      aria-hidden="true"
-      role="presentation"
-      @click="closeFilters"
-    />
-
-    <!-- Filtres + contenu : même hauteur -->
+    <!-- Filtres + contenu -->
     <div class="flex min-h-0 flex-1">
       <button
         v-if="showFiltersPanel"
@@ -97,22 +88,32 @@
           />
         </svg>
       </button>
+      <!-- Overlay mobile : uniquement quand le sheet est ouvert -->
+      <div
+        v-if="showFiltersPanel && filtersOpen && filtersSheetMode"
+        class="fixed inset-0 z-[10050] bg-black/50 lg:hidden"
+        aria-hidden="true"
+        role="presentation"
+        @click="closeFilters"
+      />
       <aside
-        v-if="showFiltersPanel"
+        v-if="showFiltersPanel && (!filtersSheetMode || filtersOpen)"
         :class="[
-          'statistics-filters-panel fixed inset-x-0 bottom-0 top-auto z-[60] flex max-h-[80vh] w-full shrink-0 flex-col overflow-hidden rounded-t-2xl bg-surface/95 shadow-lg transition-transform duration-300 ease-out',
-          'lg:static lg:sticky lg:top-4 lg:z-0 lg:h-auto lg:max-h-[calc(100vh-2rem)] lg:max-w-none lg:self-start lg:overflow-y-auto lg:overflow-x-hidden lg:rounded-lg lg:shadow-none lg:transition-[width,opacity,transform] lg:duration-200',
-          filtersOpen
-            ? 'translate-y-0 lg:w-64 lg:translate-y-0 lg:opacity-100'
-            : 'translate-y-full max-lg:hidden lg:w-0 lg:translate-y-0 lg:opacity-0',
+          'statistics-filters-panel flex shrink-0 flex-col overflow-hidden bg-surface',
+          filtersSheetMode
+            ? 'fixed inset-x-0 bottom-0 top-auto z-[10051] max-h-[85vh] w-full rounded-t-2xl shadow-lg lg:hidden'
+            : [
+                'hidden w-0 opacity-0 transition-[width,opacity] duration-200',
+                'lg:sticky lg:top-4 lg:z-0 lg:flex lg:h-auto lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:overflow-x-hidden lg:rounded-lg lg:shadow-none',
+                filtersOpen ? 'lg:w-64 lg:opacity-100' : 'lg:w-0 lg:opacity-0',
+              ],
         ]"
-        role="dialog"
-        :aria-modal="filtersOpen"
+        :role="filtersSheetMode ? 'dialog' : undefined"
+        :aria-modal="filtersSheetMode ? true : undefined"
         :aria-label="t('statisticsPage.filtersTitle')"
-        @click.stop
       >
         <div
-          class="flex shrink-0 items-center gap-2 border-b border-primary/25 p-2 lg:border-transparent lg:pb-2"
+          class="relative z-[1] flex shrink-0 items-center gap-2 border-b border-primary/25 p-2 lg:border-transparent lg:pb-2"
         >
           <button
             type="button"
@@ -132,27 +133,6 @@
           >
             <span class="iconify i-mdi:refresh" aria-hidden="true" />
             Reset
-          </button>
-          <button
-            type="button"
-            class="flex h-11 min-w-11 shrink-0 touch-manipulation items-center justify-center rounded-lg text-text/90 hover:bg-primary/25 hover:text-text lg:hidden"
-            :aria-label="t('statisticsPage.closeFilters')"
-            @click="closeFilters"
-          >
-            <svg
-              class="h-6 w-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
           </button>
         </div>
         <div class="flex min-h-0 flex-1 flex-col overflow-y-auto p-2 lg:flex-none">
@@ -552,9 +532,11 @@
               </div>
             </div>
           </div>
+        </div>
+        <div class="shrink-0 border-t border-primary/25 p-3 lg:hidden">
           <button
             type="button"
-            class="mt-2 rounded border border-primary/40 bg-black/20 px-3 py-2 text-sm font-semibold text-text/90 hover:bg-primary/20 lg:hidden"
+            class="w-full touch-manipulation rounded-lg border border-primary/40 bg-primary/10 px-4 py-3 text-sm font-semibold text-text hover:bg-primary/20"
             @click="closeFilters"
           >
             {{ t('statisticsPage.closeFilters') }}
@@ -565,10 +547,7 @@
       <!-- Contenu principal : à côté des filtres, même hauteur -->
       <div
         class="min-w-0 flex-1 p-4 lg:px-3 lg:pb-4 lg:pt-0"
-        :class="[
-          showFiltersPanel ? 'max-lg:pb-20' : 'pt-2',
-          showFiltersPanel && filtersOpen ? 'max-lg:pointer-events-none' : '',
-        ]"
+        :class="[showFiltersPanel ? 'max-lg:pb-20' : 'pt-2']"
       >
         <div class="w-full">
           <div v-if="!overviewData" class="mb-6 text-text/80">
@@ -680,6 +659,7 @@ import {
   isRef,
   defineAsyncComponent,
 } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { apiUrl } from '~/utils/apiUrl'
 import { RANK_TIERS } from '~/utils/rankTiers'
@@ -772,6 +752,12 @@ const runesStore = useRunesStore()
 const summonerSpellsStore = useSummonerSpellsStore()
 const versionStore = useVersionStore()
 const statisticsUiStore = useStatisticsUiStore()
+const { filtersOpen } = storeToRefs(statisticsUiStore)
+const filtersSheetMode = ref(false)
+let filtersSheetMq: MediaQueryList | null = null
+const onFiltersSheetMqChange = () => {
+  filtersSheetMode.value = filtersSheetMq?.matches ?? false
+}
 const statisticsCustomStore = useStatisticsCustomStore()
 const { version: gameVersion } = useGameVersion()
 const route = useRoute()
@@ -1018,7 +1004,6 @@ function onChampionSearchFocus(): void {
     championSearchBlurTimer = null
   }
   championSearchFocused.value = true
-  if (isMobileViewport.value) filtersOpen.value = true
 }
 
 function onChampionSearchBlur(): void {
@@ -1373,10 +1358,6 @@ function syncStatisticsStateToQuery(): void {
     isSyncingQueryState.value = false
   })
 }
-const filtersOpen = computed({
-  get: () => statisticsUiStore.filtersOpen,
-  set: value => statisticsUiStore.setFiltersOpen(value),
-})
 const showFiltersPanel = computed(() => activeTab.value !== 'infos')
 
 const activeStatsFiltersCount = computed(() => {
@@ -1398,17 +1379,17 @@ const activeStatsFiltersCount = computed(() => {
   return count
 })
 
-function openFilters() {
-  filtersOpen.value = true
-}
 function closeFilters() {
-  filtersOpen.value = false
+  statisticsUiStore.setFiltersOpen(false)
   if (championSearchBlurTimer) {
     clearTimeout(championSearchBlurTimer)
     championSearchBlurTimer = null
   }
   championSearchFocused.value = false
   championSearchInputEl.value?.blur()
+}
+function openFilters() {
+  statisticsUiStore.setFiltersOpen(true)
 }
 function toggleFiltersOpen() {
   if (filtersOpen.value) closeFilters()
@@ -1417,13 +1398,13 @@ function toggleFiltersOpen() {
 
 function onFiltersEscapeKey(event: KeyboardEvent) {
   if (event.key !== 'Escape' || !filtersOpen.value || !showFiltersPanel.value) return
-  if (!import.meta.client || window.matchMedia('(min-width: 1024px)').matches) return
+  if (!import.meta.client || !filtersSheetMode.value) return
   closeFilters()
 }
 
-watch([filtersOpen, isMobileViewport], () => {
+watch([filtersOpen, filtersSheetMode, showFiltersPanel], () => {
   if (!import.meta.client) return
-  const lock = isMobileViewport.value && filtersOpen.value && showFiltersPanel.value
+  const lock = filtersSheetMode.value && filtersOpen.value && showFiltersPanel.value
   document.body.style.overflow = lock ? 'hidden' : ''
 })
 
@@ -4433,6 +4414,9 @@ watch(progressionFromVersion, () => {
 
 onMounted(async () => {
   document.addEventListener('keydown', onFiltersEscapeKey)
+  filtersSheetMq = window.matchMedia('(max-width: 1023px)')
+  onFiltersSheetMqChange()
+  filtersSheetMq.addEventListener('change', onFiltersSheetMqChange)
   const versionPromise = versionStore.currentVersion
     ? Promise.resolve()
     : versionStore.loadCurrentVersion()
@@ -4472,6 +4456,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   document.removeEventListener('keydown', onFiltersEscapeKey)
+  filtersSheetMq?.removeEventListener('change', onFiltersSheetMqChange)
   if (import.meta.client) document.body.style.overflow = ''
 })
 

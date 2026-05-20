@@ -17,16 +17,48 @@ import { apiUrl } from '~/utils/apiUrl'
 import { serializeBuild, hydrateBuild, isStoredBuild } from '~/utils/buildSerialize'
 import { useVersionStore } from '~/stores/VersionStore'
 import { useVoteStore } from '~/stores/VoteStore'
+import {
+  passiveRankForChampionLevel,
+  clampChampionLevel,
+  maxChampionLevelForRoles,
+} from '~/utils/theorycraftStats'
+import {
+  clampDisabledIndicesToActiveLimit,
+  filterItemsForTheorycraftStats,
+  isWithinActiveItemLimit,
+  remapDisabledItemIndices,
+} from '~/utils/theorycraftItems'
+import type { TheorycraftStackDefinition } from '~/types/theorycraft'
+import type { TheorycraftSpellCalculation } from '~/composables/useTheorycraftTooltip'
 
 const CURRENT_BUILD_STORAGE_KEY = 'lelanation_current_build'
 const EDIT_BUILD_STORAGE_KEY = 'lelanation_current_build_edit'
+const THEORYCRAFT_BUILD_STORAGE_KEY = 'lelanation_theorycraft_draft'
+const THEORYCRAFT_STACKS_STORAGE_KEY = 'lelanation_theorycraft_stacks'
+const THEORYCRAFT_DISABLED_ITEMS_STORAGE_KEY = 'lelanation_theorycraft_disabled_items'
 const BUILDER_STEP_STORAGE_KEY = 'lelanation_builder_step'
+
+export type BuildStoreSession = 'create' | 'theorycraft' | 'edit'
 
 interface BuildState {
   currentBuild: Build | null
   status: 'idle' | 'loading' | 'success' | 'error'
   error: string | null
   calculatedStats: CalculatedStats | null
+  /** Niveau champion utilisé pour recalculateStats (1–18). */
+  statsLevel: number
+  /** Session builder active (draft localStorage isolé pour theorycraft). */
+  builderSession: BuildStoreSession
+  /** Stacks passif/sort pour theorycraft (id définition → nombre). */
+  theorycraftStackCounts: Record<string, number>
+  /** Définitions de stacks exportées pour le champion theorycraft courant. */
+  theorycraftStackDefinitions: TheorycraftStackDefinition[]
+  /** Calculs par source (passive, spell id/slot) pour résoudre les bonus de stacks. */
+  theorycraftStackCalculationsBySource: Record<string, TheorycraftSpellCalculation[]>
+  /** Champion id associé au contexte stacks theorycraft. */
+  theorycraftStackChampionId: string | null
+  /** Indices d'items exclus du calcul de stats en theorycraft. */
+  theorycraftDisabledItemIndices: number[]
   /** Incrémenté à chaque modification de la liste sauvegardée (save/delete/copy) pour forcer le refresh des vues. */
   savedBuildsVersion: number
   /** Variante actuellement affichée dans le builder : 'main' = build principal, number = index dans subBuilds. */
@@ -82,6 +114,13 @@ export const useBuildStore = defineStore('build', {
     status: 'idle',
     error: null,
     calculatedStats: null,
+    statsLevel: 18,
+    builderSession: 'create' as BuildStoreSession,
+    theorycraftStackCounts: {},
+    theorycraftStackDefinitions: [],
+    theorycraftStackCalculationsBySource: {},
+    theorycraftStackChampionId: null,
+    theorycraftDisabledItemIndices: [],
     savedBuildsVersion: 0,
     displayedVariant: 'main',
     pendingChampionChange: null,
@@ -113,6 +152,11 @@ export const useBuildStore = defineStore('build', {
         description: sub.description ?? this.currentBuild.description,
         gameVersion: sub.gameVersion || this.currentBuild.gameVersion,
       } as Build
+    },
+
+    maxStatsLevel(): number {
+      const build = this.displayedBuild ?? this.currentBuild
+      return maxChampionLevelForRoles(build?.roles)
     },
 
     isBuildValid(): boolean {
@@ -339,7 +383,7 @@ export const useBuildStore = defineStore('build', {
     loadCurrentBuildDraft(): boolean {
       if (import.meta.server) return false
       try {
-        const saved = localStorage.getItem(CURRENT_BUILD_STORAGE_KEY)
+        const saved = localStorage.getItem(this.getCurrentDraftStorageKey())
         if (!saved) return false
         const build = JSON.parse(saved) as Build
         this.setCurrentBuild(build)
@@ -347,6 +391,208 @@ export const useBuildStore = defineStore('build', {
       } catch {
         return false
       }
+    },
+
+    enterTheorycraftSession() {
+      this.builderSession = 'theorycraft'
+      this.currentBuild = null
+      this.displayedVariant = 'main'
+      this.pendingChampionChange = null
+      this.editSourceBuildId = null
+      this.status = 'idle'
+      this.error = null
+      this.statsLevel = 18
+      this.clearTheorycraftStackContext()
+      this.loadTheorycraftDisabledItems()
+      if (!this.loadCurrentBuildDraft()) {
+        this.createNewBuild()
+      } else {
+        this.clampTheorycraftActiveItemsForRole()
+        this.recalculateStats()
+      }
+    },
+
+    leaveTheorycraftSession() {
+      if (this.builderSession !== 'theorycraft') return
+      this.builderSession = 'create'
+      this.currentBuild = null
+      this.calculatedStats = null
+      this.displayedVariant = 'main'
+      this.pendingChampionChange = null
+      this.editSourceBuildId = null
+      this.clearTheorycraftStackContext()
+      this.theorycraftDisabledItemIndices = []
+    },
+
+    loadTheorycraftDisabledItems() {
+      if (import.meta.server) return
+      try {
+        const raw = localStorage.getItem(THEORYCRAFT_DISABLED_ITEMS_STORAGE_KEY)
+        if (!raw) {
+          this.theorycraftDisabledItemIndices = []
+          return
+        }
+        const parsed = JSON.parse(raw) as number[]
+        this.theorycraftDisabledItemIndices = Array.isArray(parsed)
+          ? parsed.filter(index => Number.isInteger(index) && index >= 0)
+          : []
+      } catch {
+        this.theorycraftDisabledItemIndices = []
+      }
+    },
+
+    persistTheorycraftDisabledItems() {
+      if (import.meta.server || this.builderSession !== 'theorycraft') return
+      try {
+        localStorage.setItem(
+          THEORYCRAFT_DISABLED_ITEMS_STORAGE_KEY,
+          JSON.stringify(this.theorycraftDisabledItemIndices)
+        )
+      } catch {
+        // ignore persistence errors
+      }
+    },
+
+    remapTheorycraftDisabledItems(previousItems: Item[], nextItems: Item[]) {
+      if (this.builderSession !== 'theorycraft') return
+      this.theorycraftDisabledItemIndices = remapDisabledItemIndices(
+        previousItems,
+        nextItems,
+        this.theorycraftDisabledItemIndices
+      )
+      this.persistTheorycraftDisabledItems()
+    },
+
+    clampTheorycraftActiveItemsForRole() {
+      if (this.builderSession !== 'theorycraft') return
+      const build = this.displayedBuild ?? this.currentBuild
+      if (!build) return
+      const next = clampDisabledIndicesToActiveLimit(
+        build.items,
+        new Set(this.theorycraftDisabledItemIndices),
+        build.roles
+      )
+      if (
+        next.length === this.theorycraftDisabledItemIndices.length &&
+        next.every((value, index) => value === this.theorycraftDisabledItemIndices[index])
+      ) {
+        return
+      }
+      this.theorycraftDisabledItemIndices = next
+      this.persistTheorycraftDisabledItems()
+      this.recalculateStats()
+    },
+
+    toggleTheorycraftItemForStats(index: number): 'enabled' | 'disabled' | 'limit_reached' {
+      if (this.builderSession !== 'theorycraft') return 'limit_reached'
+      const build = this.displayedBuild ?? this.currentBuild
+      if (!build || index < 0 || index >= build.items.length) return 'limit_reached'
+
+      const disabled = new Set(this.theorycraftDisabledItemIndices)
+      if (disabled.has(index)) {
+        disabled.delete(index)
+        if (!isWithinActiveItemLimit(build.items, disabled, build.roles)) {
+          return 'limit_reached'
+        }
+        this.theorycraftDisabledItemIndices = Array.from(disabled)
+        this.persistTheorycraftDisabledItems()
+        this.recalculateStats()
+        return 'enabled'
+      }
+
+      disabled.add(index)
+      this.theorycraftDisabledItemIndices = Array.from(disabled)
+      this.persistTheorycraftDisabledItems()
+      this.recalculateStats()
+      return 'disabled'
+    },
+
+    isTheorycraftItemDisabled(index: number): boolean {
+      return this.theorycraftDisabledItemIndices.includes(index)
+    },
+
+    getTheorycraftItemsForStats(): Item[] {
+      const build = this.displayedBuild ?? this.currentBuild
+      if (!build) return []
+      if (this.builderSession !== 'theorycraft') return build.items
+      return filterItemsForTheorycraftStats(
+        build.items,
+        new Set(this.theorycraftDisabledItemIndices)
+      )
+    },
+
+    clearTheorycraftStackContext() {
+      this.theorycraftStackCounts = {}
+      this.theorycraftStackDefinitions = []
+      this.theorycraftStackCalculationsBySource = {}
+      this.theorycraftStackChampionId = null
+    },
+
+    loadTheorycraftStacksForChampion(championId: string) {
+      try {
+        const raw = localStorage.getItem(THEORYCRAFT_STACKS_STORAGE_KEY)
+        if (!raw) {
+          this.theorycraftStackCounts = {}
+          return
+        }
+        const parsed = JSON.parse(raw) as Record<string, Record<string, number>>
+        this.theorycraftStackCounts = parsed[championId] ?? {}
+      } catch {
+        this.theorycraftStackCounts = {}
+      }
+    },
+
+    persistTheorycraftStacks() {
+      if (this.builderSession !== 'theorycraft' || !this.theorycraftStackChampionId) return
+      try {
+        const raw = localStorage.getItem(THEORYCRAFT_STACKS_STORAGE_KEY)
+        const parsed = raw ? (JSON.parse(raw) as Record<string, Record<string, number>>) : {}
+        parsed[this.theorycraftStackChampionId] = { ...this.theorycraftStackCounts }
+        localStorage.setItem(THEORYCRAFT_STACKS_STORAGE_KEY, JSON.stringify(parsed))
+      } catch {
+        // ignore persistence errors
+      }
+    },
+
+    setTheorycraftStackContext(args: {
+      championId: string
+      definitions: TheorycraftStackDefinition[]
+      calculationsBySource: Record<string, TheorycraftSpellCalculation[]>
+    }) {
+      const championChanged = this.theorycraftStackChampionId !== args.championId
+      this.theorycraftStackChampionId = args.championId
+      this.theorycraftStackDefinitions = args.definitions
+      this.theorycraftStackCalculationsBySource = args.calculationsBySource
+      if (championChanged) {
+        this.loadTheorycraftStacksForChampion(args.championId)
+      }
+      this.recalculateStats()
+    },
+
+    setTheorycraftStackCount(definitionId: string, count: number) {
+      const safe = Math.max(0, Math.trunc(Number.isFinite(count) ? count : 0))
+      this.theorycraftStackCounts = {
+        ...this.theorycraftStackCounts,
+        [definitionId]: safe,
+      }
+      this.persistTheorycraftStacks()
+      this.recalculateStats()
+    },
+
+    setStatsLevel(level: number) {
+      const build = this.displayedBuild ?? this.currentBuild
+      const safe = clampChampionLevel(level, build?.roles)
+      if (this.statsLevel === safe) return
+      this.statsLevel = safe
+      this.recalculateStats()
+    },
+
+    clampStatsLevelForRole() {
+      const build = this.displayedBuild ?? this.currentBuild
+      const safe = clampChampionLevel(this.statsLevel, build?.roles)
+      if (this.statsLevel === safe) return
+      this.statsLevel = safe
+      this.recalculateStats()
     },
 
     /**
@@ -376,6 +622,7 @@ export const useBuildStore = defineStore('build', {
     },
 
     getCurrentDraftStorageKey(): string {
+      if (this.builderSession === 'theorycraft') return THEORYCRAFT_BUILD_STORAGE_KEY
       return this.editSourceBuildId ? EDIT_BUILD_STORAGE_KEY : CURRENT_BUILD_STORAGE_KEY
     },
 
@@ -537,6 +784,9 @@ export const useBuildStore = defineStore('build', {
       if (this.currentBuild) {
         this.currentBuild.champion = champion
         this.currentBuild.updatedAt = new Date().toISOString()
+        if (this.builderSession === 'theorycraft') {
+          this.clearTheorycraftStackContext()
+        }
         this.recalculateStats()
       }
       return true
@@ -550,6 +800,9 @@ export const useBuildStore = defineStore('build', {
         this.currentBuild.champion = null
         this.currentBuild.updatedAt = new Date().toISOString()
         this.pendingChampionChange = null
+        if (this.builderSession === 'theorycraft') {
+          this.clearTheorycraftStackContext()
+        }
         this.recalculateStats()
       }
     },
@@ -562,6 +815,9 @@ export const useBuildStore = defineStore('build', {
       this.currentBuild.updatedAt = new Date().toISOString()
       this.displayedVariant = 'main'
       this.pendingChampionChange = null
+      if (this.builderSession === 'theorycraft') {
+        this.clearTheorycraftStackContext()
+      }
       this.recalculateStats()
     },
 
@@ -599,11 +855,27 @@ export const useBuildStore = defineStore('build', {
       }
       const target = this.getEditableTarget()
       if (!target) return
+      const previousItems =
+        target.type === 'main' ? [...target.build.items] : [...(target.sub.items ?? [])]
       if (target.type === 'main') {
         if (target.build.items.length >= 10) return
         target.build.items.push(item)
       } else {
         target.sub.items = [...(target.sub.items ?? []), item]
+      }
+      const nextItems = target.type === 'main' ? target.build.items : (target.sub.items ?? [])
+      if (this.builderSession === 'theorycraft') {
+        const build = this.displayedBuild ?? this.currentBuild
+        const disabledSet = new Set(
+          remapDisabledItemIndices(previousItems, nextItems, this.theorycraftDisabledItemIndices)
+        )
+        const newIndex = nextItems.length - 1
+        disabledSet.delete(newIndex)
+        if (!isWithinActiveItemLimit(nextItems, disabledSet, build?.roles)) {
+          disabledSet.add(newIndex)
+        }
+        this.theorycraftDisabledItemIndices = Array.from(disabledSet)
+        this.persistTheorycraftDisabledItems()
       }
       this.currentBuild!.updatedAt = new Date().toISOString()
       this.recalculateStats()
@@ -612,10 +884,16 @@ export const useBuildStore = defineStore('build', {
     removeItem(itemId: string) {
       const target = this.getEditableTarget()
       if (!target) return
+      const previousItems =
+        target.type === 'main' ? [...target.build.items] : [...(target.sub.items ?? [])]
       if (target.type === 'main') {
         target.build.items = target.build.items.filter(item => item.id !== itemId)
       } else {
         target.sub.items = (target.sub.items ?? []).filter(item => item.id !== itemId)
+      }
+      const nextItems = target.type === 'main' ? target.build.items : (target.sub.items ?? [])
+      if (this.builderSession === 'theorycraft') {
+        this.remapTheorycraftDisabledItems(previousItems, nextItems)
       }
       this.currentBuild!.updatedAt = new Date().toISOString()
       this.recalculateStats()
@@ -627,10 +905,16 @@ export const useBuildStore = defineStore('build', {
       }
       const target = this.getEditableTarget()
       if (!target) return
+      const previousItems =
+        target.type === 'main' ? [...target.build.items] : [...(target.sub.items ?? [])]
       if (target.type === 'main') {
         target.build.items = items
       } else {
         target.sub.items = items
+      }
+      if (this.builderSession === 'theorycraft') {
+        this.remapTheorycraftDisabledItems(previousItems, items)
+        this.clampTheorycraftActiveItemsForRole()
       }
       this.currentBuild!.updatedAt = new Date().toISOString()
       this.recalculateStats()
@@ -812,6 +1096,8 @@ export const useBuildStore = defineStore('build', {
         }))
       }
       this.currentBuild.updatedAt = new Date().toISOString()
+      this.clampStatsLevelForRole()
+      this.clampTheorycraftActiveItemsForRole()
     },
 
     /** Tags du build principal ou de la variante actuellement affichée. */
@@ -876,13 +1162,42 @@ export const useBuildStore = defineStore('build', {
       }
 
       // Import and use stats calculator
-      import('@lelanation/builds-stats').then(({ calculateStats }) => {
+      import('@lelanation/builds-stats').then(async ({ calculateStats }) => {
         const b = this.displayedBuild ?? this.currentBuild
         if (!b || !b.champion || !hasChampionStats(b.champion)) {
           this.calculatedStats = null
           return
         }
-        const stats = calculateStats(b.champion, b.items, b.runes, b.shards, 18)
+
+        let options: import('@lelanation/builds-stats').CalculateStatsOptions | undefined
+        if (this.builderSession === 'theorycraft' && this.theorycraftStackDefinitions.length > 0) {
+          const { buildPassiveStackStatsProvider, buildPassiveStacksInput } =
+            await import('~/utils/theorycraftStacks')
+          const rankIndex = passiveRankForChampionLevel(this.statsLevel) - 1
+          const passiveStacks = buildPassiveStacksInput(
+            this.theorycraftStackDefinitions,
+            this.theorycraftStackCounts
+          )
+          if (Object.keys(passiveStacks).length > 0) {
+            options = {
+              passiveStacks,
+              getPassiveStackStats: buildPassiveStackStatsProvider(
+                this.theorycraftStackDefinitions,
+                this.theorycraftStackCalculationsBySource,
+                rankIndex
+              ),
+            }
+          }
+        }
+
+        const stats = calculateStats(
+          b.champion,
+          this.getTheorycraftItemsForStats(),
+          b.runes,
+          b.shards,
+          this.statsLevel,
+          options
+        )
         this.calculatedStats = stats
       })
     },

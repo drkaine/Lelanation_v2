@@ -1,5 +1,5 @@
 import pLimit from "p-limit";
-import { Worker } from "bullmq";
+import { DelayedError, Worker } from "bullmq";
 import { config } from "../config/index.js";
 import { sql } from "../db/client.js";
 import type { HydrationJobData, IngestionJobData, ParsedParticipantDto, TeamStatsDto } from "../dto/match.dto.js";
@@ -287,7 +287,10 @@ async function runHydrationJob(data: HydrationJobData): Promise<void> {
     }
 
     if (!matchReadyForAggregation(participants)) {
-      await enqueueRankFetchJobsForParticipants(participants);
+      const rankWaiting = await rankQueue.getWaitingCount();
+      if (!shouldPauseMatchPipelines(rankWaiting)) {
+        await enqueueRankFetchJobsForParticipants(participants);
+      }
       const rankRetryDelay =
         (await rankQueue.getWaitingCount()) > maxRankBacklogBeforePipelinePause()
           ? HYDRATION_RANK_RETRY_DELAY_BACKLOG_MS
@@ -330,7 +333,8 @@ export const hydrationWorker = new Worker<HydrationJobData>(
     hydrationLimit(async () => {
       const rankWaiting = await rankQueue.getWaitingCount();
       if (shouldPauseMatchPipelines(rankWaiting)) {
-        await job.moveToDelayed(Date.now() + HYDRATION_RANK_RETRY_DELAY_BACKLOG_MS);
+        const delayMs = HYDRATION_RANK_RETRY_DELAY_BACKLOG_MS;
+        await job.moveToDelayed(Date.now() + delayMs, job.token);
         console.debug(
           JSON.stringify({
             msg: "hydration_deferred_rank_backlog",
@@ -339,7 +343,9 @@ export const hydrationWorker = new Worker<HydrationJobData>(
             threshold: maxRankBacklogBeforePipelinePause(),
           }),
         );
-        return;
+        throw new DelayedError(
+          `hydration_deferred_rank_backlog delay_ms=${delayMs} matchId=${job.data.matchId}`,
+        );
       }
       await runHydrationJob(job.data);
     }),

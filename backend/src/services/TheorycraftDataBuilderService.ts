@@ -2689,6 +2689,105 @@ function buildSpellTickStats(args: {
   return out
 }
 
+type ExportedStackCalculation = {
+  key: string
+  baseValues: number[]
+  ratios: Array<{ stat: string; coefficient: number[] | number; type: string }>
+}
+
+type ExportedStackDefinition = {
+  id: string
+  scope: 'passive' | 'spell'
+  spellSlot?: string
+  label: string
+  maxStacks: number
+  statBonuses: Array<{
+    stat: 'abilityPower' | 'attackDamage' | 'health' | 'armor' | 'magicResist' | 'attackSpeed'
+    perStackKey: string
+    isPercent?: boolean
+  }>
+  tooltipVars: Array<{ key: string; perStackKey: string }>
+}
+
+function mapPerStackKeyToStat(
+  key: string
+): ExportedStackDefinition['statBonuses'][number]['stat'] | null {
+  const lower = key.toLowerCase()
+  if (lower === 'apperstack' || (lower.includes('ap') && lower.includes('stack'))) return 'abilityPower'
+  if (lower.includes('ad') && lower.includes('stack')) return 'attackDamage'
+  if (lower.includes('hp') && lower.includes('stack')) return 'health'
+  if (lower.includes('armor') && lower.includes('stack') && !lower.includes('magic')) return 'armor'
+  if (lower.includes('magicresist') && lower.includes('stack')) return 'magicResist'
+  if (lower.includes('attackspeed') && lower.includes('stack')) return 'attackSpeed'
+  return null
+}
+
+function findPerStackSourceForTotal(totalKey: string, perStackKeys: string[]): string | null {
+  const normalizedTotal = totalKey.toLowerCase().replace(/^total/, '').replace(/fromstacks$/, '')
+  for (const perStackKey of perStackKeys) {
+    const normalizedPerStack = perStackKey.toLowerCase().replace(/perstack$/, '')
+    if (
+      normalizedTotal.includes(normalizedPerStack) ||
+      normalizedPerStack.includes(normalizedTotal)
+    ) {
+      return perStackKey
+    }
+  }
+  return perStackKeys[0] ?? null
+}
+
+function extractStackDefinition(args: {
+  id: string
+  label: string
+  scope: 'passive' | 'spell'
+  spellSlot?: string
+  calculations: ExportedStackCalculation[]
+}): ExportedStackDefinition | null {
+  const perStackCalcs = args.calculations.filter((calculation) =>
+    /perstack$/i.test(calculation.key)
+  )
+  if (perStackCalcs.length === 0) return null
+
+  const statBonuses = perStackCalcs
+    .map((calculation) => {
+      const stat = mapPerStackKeyToStat(calculation.key)
+      if (!stat) return null
+      return {
+        stat,
+        perStackKey: calculation.key,
+        isPercent: stat === 'attackSpeed',
+      }
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry != null)
+
+  const perStackKeys = perStackCalcs.map((calculation) => calculation.key)
+  const tooltipVars = args.calculations
+    .filter(
+      (calculation) =>
+        /^total.*stack/i.test(calculation.key) &&
+        calculation.baseValues.length > 0 &&
+        calculation.baseValues.every((value) => value === 0)
+    )
+    .map((calculation) => {
+      const perStackKey = findPerStackSourceForTotal(calculation.key, perStackKeys)
+      if (!perStackKey) return null
+      return { key: calculation.key, perStackKey }
+    })
+    .filter((entry): entry is { key: string; perStackKey: string } => entry != null)
+
+  if (statBonuses.length === 0 && tooltipVars.length === 0) return null
+
+  return {
+    id: args.scope === 'passive' ? 'passive' : args.id,
+    scope: args.scope,
+    ...(args.spellSlot ? { spellSlot: args.spellSlot } : {}),
+    label: args.label,
+    maxStacks: 9999,
+    statBonuses,
+    tooltipVars,
+  }
+}
+
 function buildExportedSpell(args: {
   championId: string
   slotIndex: number
@@ -2749,13 +2848,39 @@ function buildExportedSpell(args: {
   const headerStats = buildSpellHeaderStats({ ddSpell, binSpell, championPartype, lang })
   const tickStats = buildSpellTickStats({ ddSpell, binSpell, lang })
 
+  const maxRank =
+    Number(ddSpell.maxrank ?? cdSpell.maxLevel ?? DEFAULT_ABILITY_MAX_RANK) || DEFAULT_ABILITY_MAX_RANK
+  const binDataValues = extractBinDataValues(binSpell ?? {}, maxRank)
+  const calculations = extractBinCalculations(binSpell ?? {}, binDataValues, {
+    maxRank,
+    slotIndex: slotIndex,
+    ddSpell,
+  })
+  const spellEffects = extractSpellEffects(ddSpell, cdSpell, binSpell).map((effect) => ({
+    key: effect.key,
+    values: effect.values,
+  }))
+
   return {
     id: String(ddSpell.id ?? ''),
     slot: resolvedSlot,
     name: String(ddSpell.name ?? ''),
+    maxRank,
     image: {
       full: String(spellImage.full ?? '') || `${championId}${resolvedSlot}.png`,
     },
+    tooltipRaw: mainRaw,
+    tooltipDetailRaws: detailRaws,
+    calculations: calculations.map((calculation) => ({
+      key: calculation.key,
+      baseValues: calculation.baseValues,
+      ratios: calculation.ratios,
+    })),
+    dataValues: binDataValues.map((entry) => ({
+      name: entry.name,
+      values: entry.values,
+    })),
+    spellEffects,
     ...(summaryParsed
       ? {
           summaryHtml: summaryParsed.descriptionParsed,
@@ -3338,6 +3463,146 @@ export class TheorycraftDataBuilderService {
       spells = enrichApheliosSpells(spells, { championBin, stringTable, sharedVars })
     }
 
+    const passiveName = String(passiveRaw.name ?? cdPassive.name ?? '')
+    const passiveDetails = (() => {
+      const passiveSummary = String(cdPassive.description ?? passiveRaw.description ?? '').trim()
+      const passiveBinSpell = findPassiveBinSpell(championBin, championId)
+      const passiveDdSpell: ChampionSpell = {
+        ...passiveRaw,
+        id: `${championId}Passive`,
+        maxrank: PASSIVE_CHAMPION_LEVELS.length,
+      }
+      const passiveContent = resolvePassiveTooltipContent({
+        championId,
+        passiveBinSpell,
+        stringTable,
+      })
+      let passiveMainRaw = passiveContent.main || passiveSummary
+      let passiveTooltip = parseTooltip(
+        passiveMainRaw,
+        passiveDdSpell,
+        cdPassive,
+        passiveBinSpell,
+        sharedVars,
+        { isPassive: true }
+      )
+      if (isBrokenTooltipText(passiveTooltip.descriptionText) && passiveSummary) {
+        passiveMainRaw = passiveSummary
+        passiveTooltip = parseTooltip(
+          passiveMainRaw,
+          passiveDdSpell,
+          cdPassive,
+          passiveBinSpell,
+          sharedVars,
+          { isPassive: true }
+        )
+      }
+      const summaryTooltip = passiveSummary
+        ? parseTooltip(passiveSummary, passiveDdSpell, cdPassive, passiveBinSpell, sharedVars, {
+            isPassive: true,
+          })
+        : null
+      const extendedParsed = passiveContent.extended
+        .map((section) =>
+          parseTooltip(section, passiveDdSpell, cdPassive, passiveBinSpell, sharedVars, {
+            isPassive: true,
+          })
+        )
+        .filter((section) => !isBrokenTooltipText(section.descriptionText))
+      const venomDetail =
+        passiveContent.main || extendedParsed.length > 0
+          ? null
+          : passiveBinSpell
+            ? buildPassiveVenomDetailFromBin(passiveBinSpell, resolvedLang)
+            : null
+      const detailedTexts = [
+        ...buildUniqueSupplementalSections(
+          passiveTooltip.descriptionParsed,
+          extendedParsed.map((section) => section.descriptionParsed)
+        ),
+        ...(venomDetail ? [venomDetail.descriptionHtml] : []),
+      ].filter(Boolean)
+      const passiveMaxRank = PASSIVE_CHAMPION_LEVELS.length
+      const passiveBinDataValues = extractBinDataValues(passiveBinSpell ?? {}, passiveMaxRank)
+      const passiveCalculations = extractBinCalculations(
+        passiveBinSpell ?? {},
+        passiveBinDataValues,
+        {
+          maxRank: passiveMaxRank,
+          isPassive: true,
+          ddSpell: passiveDdSpell,
+        }
+      )
+      const passiveSpellEffects = extractSpellEffects(
+        passiveDdSpell,
+        cdPassive,
+        passiveBinSpell
+      ).map((effect) => ({
+        key: effect.key,
+        values: effect.values,
+      }))
+      return {
+        descriptionHtml: passiveTooltip.descriptionParsed,
+        descriptionParsed: passiveTooltip.descriptionParsed,
+        descriptionText: passiveTooltip.descriptionText,
+        parsedText: passiveTooltip.descriptionText,
+        tooltipRaw: passiveMainRaw,
+        tooltipDetailRaws: passiveContent.extended,
+        maxRank: passiveMaxRank,
+        calculations: passiveCalculations.map((calculation) => ({
+          key: calculation.key,
+          baseValues: calculation.baseValues,
+          ratios: calculation.ratios,
+        })),
+        dataValues: passiveBinDataValues.map((entry) => ({
+          name: entry.name,
+          values: entry.values,
+        })),
+        spellEffects: passiveSpellEffects,
+        ...(summaryTooltip
+          ? {
+              summaryHtml: summaryTooltip.descriptionParsed,
+              summaryText: summaryTooltip.descriptionText,
+            }
+          : {}),
+        ...(detailedTexts.length > 0
+          ? {
+              detailedTexts,
+              detailedText: detailedTexts
+                .map((section) => normalizeTooltipPlainText(section))
+                .join('\n\n'),
+            }
+          : {}),
+      }
+    })()
+
+    const passive = {
+      name: passiveName,
+      image: {
+        full: String(asObject(passiveRaw.image).full ?? `${championId}_Passive.png`),
+      },
+      ...passiveDetails,
+    }
+
+    const stackDefinitions = [
+      extractStackDefinition({
+        id: 'passive',
+        label: passiveName,
+        scope: 'passive',
+        calculations: passive.calculations as ExportedStackCalculation[],
+      }),
+      ...spells.flatMap((spell) => {
+        const definition = extractStackDefinition({
+          id: String(spell.id ?? ''),
+          label: String(spell.name ?? ''),
+          scope: 'spell',
+          spellSlot: String(spell.slot ?? ''),
+          calculations: (spell.calculations as ExportedStackCalculation[]) ?? [],
+        })
+        return definition ? [definition] : []
+      }),
+    ]
+
     return {
       id: String(champion.id ?? ''),
       key: Number(champion.key ?? 0),
@@ -3369,94 +3634,9 @@ export class TheorycraftDataBuilderService {
         attackDamage: Number(stats.attackdamageperlevel ?? 0),
         attackSpeed: Number(stats.attackspeedperlevel ?? 0),
       },
-      passive: {
-        name: String(passiveRaw.name ?? cdPassive.name ?? ''),
-        image: {
-          full: String(asObject(passiveRaw.image).full ?? `${championId}_Passive.png`),
-        },
-        ...(() => {
-          const passiveSummary = String(
-            cdPassive.description ?? passiveRaw.description ?? ''
-          ).trim()
-          const passiveBinSpell = findPassiveBinSpell(championBin, championId)
-          const passiveDdSpell: ChampionSpell = {
-            ...passiveRaw,
-            id: `${championId}Passive`,
-            maxrank: PASSIVE_CHAMPION_LEVELS.length,
-          }
-          const passiveContent = resolvePassiveTooltipContent({
-            championId,
-            passiveBinSpell,
-            stringTable,
-          })
-          let passiveMainRaw = passiveContent.main || passiveSummary
-          let passiveTooltip = parseTooltip(
-            passiveMainRaw,
-            passiveDdSpell,
-            cdPassive,
-            passiveBinSpell,
-            sharedVars,
-            { isPassive: true }
-          )
-          if (isBrokenTooltipText(passiveTooltip.descriptionText) && passiveSummary) {
-            passiveMainRaw = passiveSummary
-            passiveTooltip = parseTooltip(
-              passiveMainRaw,
-              passiveDdSpell,
-              cdPassive,
-              passiveBinSpell,
-              sharedVars,
-              { isPassive: true }
-            )
-          }
-          const summaryTooltip = passiveSummary
-            ? parseTooltip(passiveSummary, passiveDdSpell, cdPassive, passiveBinSpell, sharedVars, {
-                isPassive: true,
-              })
-            : null
-          const extendedParsed = passiveContent.extended
-            .map((section) =>
-              parseTooltip(section, passiveDdSpell, cdPassive, passiveBinSpell, sharedVars, {
-                isPassive: true,
-              })
-            )
-            .filter((section) => !isBrokenTooltipText(section.descriptionText))
-          const venomDetail =
-            passiveContent.main || extendedParsed.length > 0
-              ? null
-              : passiveBinSpell
-                ? buildPassiveVenomDetailFromBin(passiveBinSpell, resolvedLang)
-                : null
-          const detailedTexts = [
-            ...buildUniqueSupplementalSections(
-              passiveTooltip.descriptionParsed,
-              extendedParsed.map((section) => section.descriptionParsed)
-            ),
-            ...(venomDetail ? [venomDetail.descriptionHtml] : []),
-          ].filter(Boolean)
-          return {
-            descriptionHtml: passiveTooltip.descriptionParsed,
-            descriptionParsed: passiveTooltip.descriptionParsed,
-            descriptionText: passiveTooltip.descriptionText,
-            parsedText: passiveTooltip.descriptionText,
-            ...(summaryTooltip
-              ? {
-                  summaryHtml: summaryTooltip.descriptionParsed,
-                  summaryText: summaryTooltip.descriptionText,
-                }
-              : {}),
-            ...(detailedTexts.length > 0
-              ? {
-                  detailedTexts,
-                  detailedText: detailedTexts
-                    .map((section) => normalizeTooltipPlainText(section))
-                    .join('\n\n'),
-                }
-              : {}),
-          }
-        })(),
-      },
+      passive,
       spells,
+      stackDefinitions,
     }
   }
 
@@ -3592,4 +3772,5 @@ export const theorycraftTooltipTestUtils = {
   interpolateByCharLevel,
   championLevelForAbilityRank,
   buildExportedSpell,
+  extractStackDefinition,
 }

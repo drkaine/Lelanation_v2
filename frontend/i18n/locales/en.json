@@ -225,8 +225,58 @@
       }
     }
   },
+  "theorycraft": {
+    "pageTitle": "Theorycraft Lab",
+    "backToBuilds": "← Back to Builds",
+    "panel": {
+      "workspace": "Workspace",
+      "champion": "Champion",
+      "items": "Items",
+      "runes": "Runes",
+      "skillOrder": "Skill order",
+      "spellsTitle": "Spells — Theorycraft",
+      "theorycraftButton": "Theorycraft",
+      "emptyHint": "Click an area on the build card (champion, items, runes) to open the related selector. Skill order is edited directly on the card."
+    },
+    "spells": {
+      "selectChampion": "Select a champion to display spells.",
+      "loading": "Loading spells…",
+      "noSpells": "No spell descriptions available for this champion.",
+      "championLevel": "Champion level",
+      "rank": "Rank",
+      "passive": "P",
+      "stacks": "Stacks",
+      "showDescription": "▶ Show description",
+      "hideDescription": "▼ Hide description",
+      "approximateValues": "Approximate values"
+    },
+    "stats": {
+      "toggle": "Stats",
+      "showStats": "Show total stats",
+      "showBuild": "Show build",
+      "title": "Total stats",
+      "empty": "Select a champion and complete the build to see stats.",
+      "health": "HP",
+      "mana": "Mana",
+      "attackDamage": "AD",
+      "abilityPower": "AP",
+      "armor": "Armor",
+      "magicResist": "MR",
+      "attackSpeed": "Attack speed",
+      "critChance": "Crit chance",
+      "critDamage": "Crit damage",
+      "movementSpeed": "Move speed",
+      "abilityHaste": "Ability haste",
+      "activeItemsNote": "{count} active items",
+      "stacksNote": "{count} passive stacks"
+    }
+  },
   "buildCard": {
     "itemsManagement": "Item management",
+    "itemsClickToToggle": "Click an item to enable or disable it in stats calculations.",
+    "itemsEnabledForStats": "active for stats",
+    "itemsDisabledForStats": "inactive for stats",
+    "itemsActiveLimitReached": "Maximum 6 active items (boots included, except ADC: 6 items + boots).",
     "resetItems": "Reset items",
     "noItems": "No items",
     "variantsTitle": "Variants",

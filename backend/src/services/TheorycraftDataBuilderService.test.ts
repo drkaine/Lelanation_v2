@@ -110,6 +110,47 @@ test('Ornn W export includes header stats and tick stats', () => {
   assert.ok(Array.isArray(exported.detailedTexts) && (exported.detailedTexts as string[]).length > 0)
 })
 
+test('buildExportedSpell exports runtime tooltip and calculations metadata', () => {
+  const { buildExportedSpell } = theorycraftTooltipTestUtils
+  const binPath = join(process.cwd(), 'data/theorycraft-cache/cdragon-bin-ornn.json')
+  const championBin = JSON.parse(readFileSync(binPath, 'utf-8')) as Record<string, unknown>
+  const binSpell = findBinSpellForDDragon(championBin, ['OrnnQ'])
+  assert.ok(binSpell)
+
+  const ddSpell = {
+    id: 'OrnnQ',
+    maxrank: 5,
+    tooltip:
+      'Ornn strikes, dealing <physicalDamage>{{ totaldamage }} physical damage</physicalDamage> and slowing by {{ slowamount }}% for {{ slowduration }} sec.',
+    effect: [null, [20, 45, 70, 95, 120], [1, 1, 1, 1, 1], [4, 4, 4, 4, 4], [0, 0, 0, 0, 0], [40, 40, 40, 40, 40], [2, 2, 2, 2, 2]],
+    vars: [],
+    cooldown: [9, 8.5, 8, 7.5, 7],
+    cost: [45, 45, 45, 45, 45],
+    range: [800, 800, 800, 800, 800],
+  }
+
+  const exported = buildExportedSpell({
+    championId: 'Ornn',
+    slotIndex: 0,
+    ddSpell,
+    cdSpell: { maxLevel: 5, coefficients: { coefficient1: 1.1 }, effectAmounts: {} },
+    binSpell,
+    sharedVars: new Map(),
+    stringTable: {},
+    lang: 'fr_FR',
+  })
+
+  assert.equal(exported.maxRank, 5)
+  assert.ok(String(exported.tooltipRaw ?? '').includes('{{ totaldamage }}'))
+  const calculations = exported.calculations as Array<{ key: string; baseValues: number[] }>
+  assert.ok(Array.isArray(calculations))
+  const totalDamage = calculations.find((entry) => entry.key.toLowerCase() === 'totaldamage')
+  assert.ok(totalDamage)
+  assert.deepEqual(totalDamage?.baseValues, [20, 45, 70, 95, 120])
+  assert.ok(Array.isArray(exported.dataValues))
+  assert.ok(Array.isArray(exported.spellEffects))
+})
+
 test('Ornn E armor and MR ratios use dedicated scale colors in HTML', () => {
   const binPath = join(process.cwd(), 'data/theorycraft-cache/cdragon-bin-ornn.json')
   const championBin = JSON.parse(readFileSync(binPath, 'utf-8')) as Record<string, unknown>
@@ -465,4 +506,56 @@ test('Lee Sin W shield ratio defaults to AP when bin omits mStat', () => {
   assert.ok(shield)
   assert.equal(shield.ratios[0]?.stat, 'AP')
   assert.ok(shield.expression.includes('(+ 80% AP)'))
+})
+
+test('extractStackDefinition exports Veigar passive AP stacks', () => {
+  const { extractStackDefinition } = theorycraftTooltipTestUtils
+  const binPath = join(process.cwd(), 'data/theorycraft-cache/cdragon-bin-veigar.json')
+  const championBin = JSON.parse(readFileSync(binPath, 'utf-8')) as Record<string, unknown>
+  const passiveBin = findPassiveBinSpell(championBin, 'Veigar')
+  assert.ok(passiveBin)
+  const dataValues = extractBinDataValues(passiveBin!, 5)
+  const calculations = extractBinCalculations(passiveBin!, dataValues, {
+    maxRank: 5,
+    isPassive: true,
+  })
+  const definition = extractStackDefinition({
+    id: 'passive',
+    label: 'Phenomenal Evil Power',
+    scope: 'passive',
+    calculations: calculations.map((calculation) => ({
+      key: calculation.key,
+      baseValues: calculation.baseValues,
+      ratios: calculation.ratios,
+    })),
+  })
+  assert.ok(definition)
+  assert.equal(definition!.id, 'passive')
+  assert.ok(definition!.statBonuses.some((bonus) => bonus.stat === 'abilityPower'))
+})
+
+test('extractStackDefinition exports Belveth attack speed stack tooltip vars', () => {
+  const { extractStackDefinition } = theorycraftTooltipTestUtils
+  const binPath = join(process.cwd(), 'data/theorycraft-cache/cdragon-bin-belveth.json')
+  const championBin = JSON.parse(readFileSync(binPath, 'utf-8')) as Record<string, unknown>
+  const passiveBin = findPassiveBinSpell(championBin, 'Belveth')
+  assert.ok(passiveBin)
+  const dataValues = extractBinDataValues(passiveBin!, 5)
+  const calculations = extractBinCalculations(passiveBin!, dataValues, {
+    maxRank: 5,
+    isPassive: true,
+  })
+  const definition = extractStackDefinition({
+    id: 'passive',
+    label: 'Death in Lavender',
+    scope: 'passive',
+    calculations: calculations.map((calculation) => ({
+      key: calculation.key,
+      baseValues: calculation.baseValues,
+      ratios: calculation.ratios,
+    })),
+  })
+  assert.ok(definition)
+  assert.ok(definition!.statBonuses.some((bonus) => bonus.stat === 'attackSpeed'))
+  assert.ok(definition!.tooltipVars.some((entry) => entry.key === 'totalattackspeedfromstacks'))
 })

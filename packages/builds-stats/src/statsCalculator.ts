@@ -95,7 +95,9 @@ export function calculateStats(
       (passiveStackStats.magicResist || 0),
     attackSpeed: calculateAttackSpeed(
       baseStats.attackspeed,
-      (itemStats.attackSpeed || 0) + (shardStats.attackSpeed || 0)
+      (itemStats.attackSpeed || 0) +
+        (shardStats.attackSpeed || 0) +
+        (passiveStackStats.attackSpeed || 0)
     ),
     critChance: (itemStats.critChance || 0) / 100,
     critDamage: 1.75 + (itemStats.critDamage || 0) / 100,

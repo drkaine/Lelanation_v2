@@ -15,7 +15,10 @@
       class="card-top-actions"
     >
       <button
-        v-if="canShowReadonlyDescription || (!readonly && hasChampion)"
+        v-if="
+          (canShowReadonlyDescription || (!readonly && hasChampion)) &&
+          selectionMode !== 'theorycraft'
+        "
         class="card-top-action-button"
         :title="localFlipped ? 'Voir le build' : 'Voir la description'"
         type="button"
@@ -356,10 +359,15 @@
           <!-- Portrait en forme de losange -->
           <div
             class="champion-portrait-container"
-            :class="{
-              'is-splash': showChampionSplashArt,
-              'validation-blink-frame': props.highlightMissingFields && missingFieldChecks.champion,
-            }"
+            :class="[
+              regionSelectionClass('champion'),
+              {
+                'is-splash': showChampionSplashArt,
+                'validation-blink-frame':
+                  props.highlightMissingFields && missingFieldChecks.champion,
+              },
+            ]"
+            @click="onSelectRegion('champion', $event)"
           >
             <template v-if="selectedChampion">
               <img
@@ -404,6 +412,7 @@
               'validation-blink-frame':
                 props.highlightMissingFields && missingFieldChecks.summonerSpells,
             }"
+            @click.stop="onSelectRegion('runes', $event)"
           >
             <template v-for="(spell, index) in filteredSummonerSpells" :key="index">
               <img
@@ -429,7 +438,11 @@
         </div>
 
         <!-- Runes Section - Toujours visible -->
-        <div class="runes-section">
+        <div
+          class="runes-section"
+          :class="regionSelectionClass('runes')"
+          @click="onSelectRegion('runes', $event)"
+        >
           <div class="runes-container">
             <!-- Keystone (grande icône à gauche) - première rune principale -->
             <div
@@ -559,9 +572,13 @@
         <!-- Items Section - Toujours visible -->
         <div
           class="items-section"
-          :class="{
-            'validation-blink-frame': props.highlightMissingFields && missingFieldChecks.items,
-          }"
+          :class="[
+            regionSelectionClass('items'),
+            {
+              'validation-blink-frame': props.highlightMissingFields && missingFieldChecks.items,
+            },
+          ]"
+          @click="onSelectRegion('items', $event)"
         >
           <!-- Starting Items (2) + Boots slot (1) - Toujours visible -->
           <div
@@ -1142,80 +1159,89 @@
         </Teleport>
       </div>
 
-      <!-- Face arrière : description -->
-      <div v-if="canShowReadonlyDescription || (!readonly && hasChampion)" class="build-card-back">
-        <div
-          v-if="showBackHeader"
-          class="back-header"
-          :class="{ 'back-header--without-selector': !showBackVariantSelector }"
-        >
-          <div class="back-header-slot back-header-slot--left">
-            <button
-              v-if="showBackVariantSelector && !forScreenshot"
-              ref="variantsTriggerRef"
-              class="variants-count-indicator variants-count-indicator--back"
-              type="button"
-              @click.stop="toggleVariantsPopover"
-            >
-              <div
-                class="variants-poker-icon"
-                :title="`${totalVariantCount} variante${totalVariantCount > 1 ? 's' : ''}`"
+      <!-- Face arrière : description ou stats theorycraft -->
+      <div v-if="canShowCardBack" class="build-card-back">
+        <TheorycraftCardStatsBack
+          v-if="flipBackFace === 'stats'"
+          :stats="buildStore.calculatedStats"
+          :level="buildStore.statsLevel"
+          :active-item-count="theorycraftActiveItemCount"
+          :stack-count="theorycraftStackCount"
+        />
+        <template v-else>
+          <div
+            v-if="showBackHeader"
+            class="back-header"
+            :class="{ 'back-header--without-selector': !showBackVariantSelector }"
+          >
+            <div class="back-header-slot back-header-slot--left">
+              <button
+                v-if="showBackVariantSelector && !forScreenshot"
+                ref="variantsTriggerRef"
+                class="variants-count-indicator variants-count-indicator--back"
+                type="button"
+                @click.stop="toggleVariantsPopover"
               >
-                <span
-                  v-for="n in Math.max(1, Math.min(totalVariantCount, 4))"
-                  :key="`back-variant-card-${n}`"
-                  class="variants-poker-card"
-                  :style="{
-                    transform: `translateX(${(n - 1) * 4}px) rotate(${(n - 1) * 4}deg)`,
-                    zIndex: n,
-                  }"
+                <div
+                  class="variants-poker-icon"
+                  :title="`${totalVariantCount} variante${totalVariantCount > 1 ? 's' : ''}`"
+                >
+                  <span
+                    v-for="n in Math.max(1, Math.min(totalVariantCount, 4))"
+                    :key="`back-variant-card-${n}`"
+                    class="variants-poker-card"
+                    :style="{
+                      transform: `translateX(${(n - 1) * 4}px) rotate(${(n - 1) * 4}deg)`,
+                      zIndex: n,
+                    }"
+                  />
+                  <span class="variants-poker-badge">
+                    {{ totalVariantCount }}
+                  </span>
+                </div>
+              </button>
+            </div>
+            <span class="back-title">
+              {{ activeDescriptionTitle }}
+            </span>
+            <div class="back-header-slot back-header-slot--right">
+              <label
+                v-if="showDescriptionToggle"
+                class="back-description-toggle"
+                :class="{ 'is-disabled': readonly }"
+              >
+                <input
+                  class="back-description-toggle-input"
+                  type="checkbox"
+                  :checked="descriptionMode === 'single'"
+                  :disabled="readonly"
+                  @change="toggleCommonDescription(($event.target as HTMLInputElement).checked)"
                 />
-                <span class="variants-poker-badge">
-                  {{ totalVariantCount }}
+                <span
+                  class="back-description-toggle-track"
+                  :class="{ 'is-active': descriptionMode === 'single' }"
+                >
+                  <span class="back-description-toggle-thumb" />
                 </span>
-              </div>
-            </button>
+              </label>
+            </div>
           </div>
-          <span class="back-title">
-            {{ activeDescriptionTitle }}
-          </span>
-          <div class="back-header-slot back-header-slot--right">
-            <label
-              v-if="showDescriptionToggle"
-              class="back-description-toggle"
-              :class="{ 'is-disabled': readonly }"
-            >
-              <input
-                class="back-description-toggle-input"
-                type="checkbox"
-                :checked="descriptionMode === 'single'"
-                :disabled="readonly"
-                @change="toggleCommonDescription(($event.target as HTMLInputElement).checked)"
-              />
-              <span
-                class="back-description-toggle-track"
-                :class="{ 'is-active': descriptionMode === 'single' }"
-              >
-                <span class="back-description-toggle-thumb" />
-              </span>
-            </label>
+          <div class="back-description-panel">
+            <DescriptionVideoPreviews
+              v-if="activeDescriptionValue?.trim()"
+              class="back-description-previews"
+              :text="activeDescriptionValue"
+            />
+            <DescriptionEditor
+              v-if="!readonly"
+              :model-value="activeDescriptionValue"
+              @update:model-value="updateActiveDescription"
+            />
+            <!-- eslint-disable vue/no-v-html -->
+            <div v-else class="back-description-readonly" v-html="readonlyDescriptionHtml"></div>
+            <!-- eslint-enable vue/no-v-html -->
           </div>
-        </div>
-        <div class="back-description-panel">
-          <DescriptionVideoPreviews
-            v-if="activeDescriptionValue?.trim()"
-            class="back-description-previews"
-            :text="activeDescriptionValue"
-          />
-          <DescriptionEditor
-            v-if="!readonly"
-            :model-value="activeDescriptionValue"
-            @update:model-value="updateActiveDescription"
-          />
-          <!-- eslint-disable vue/no-v-html -->
-          <div v-else class="back-description-readonly" v-html="readonlyDescriptionHtml"></div>
-          <!-- eslint-enable vue/no-v-html -->
-        </div>
+        </template>
       </div>
     </div>
     <!-- end .flip-container -->
@@ -1242,12 +1268,24 @@
           </button>
         </div>
         <div class="items-manager-header-actions">
+          <span
+            v-if="isTheorycraftItemsToggleMode && buildItems.length > 0"
+            class="items-manager-active-count"
+          >
+            {{ theorycraftActiveItemsLabel }}
+          </span>
           <button class="items-reset-btn" type="button" @click="resetItemsOnly">
             {{ t('buildCard.resetItems') }}
           </button>
         </div>
       </div>
       <div v-if="!showItemStats">
+        <p v-if="isTheorycraftItemsToggleMode && buildItems.length > 0" class="items-manager-hint">
+          {{ t('buildCard.itemsClickToToggle') }}
+        </p>
+        <p v-if="itemsToggleLimitMessage" class="items-manager-limit-message">
+          {{ itemsToggleLimitMessage }}
+        </p>
         <div v-if="buildItems.length === 0" class="items-manager-empty">
           {{ t('buildCard.noItems') }}
         </div>
@@ -1264,13 +1302,10 @@
                     :src="getItemImageUrl(versionForImages, entry.item.image.full)"
                     :alt="entry.item.name"
                     class="items-manager-inline-icon"
-                    :class="{
-                      'items-manager-inline-icon--dragging': draggingItemIndex === entry.index,
-                      'items-manager-inline-icon--drag-over':
-                        dragOverItemIndex === entry.index && draggingItemIndex !== entry.index,
-                    }"
-                    :title="tooltipsEnabled ? getItemDisplayName(entry.item) : undefined"
-                    :draggable="!props.build"
+                    :class="itemManagerIconClass(entry.index)"
+                    :title="itemManagerTitle(entry)"
+                    :draggable="!props.build && !isTheorycraftItemsToggleMode"
+                    @click="onItemManagerClick(entry.index)"
                     @dragstart="onItemDragStart(entry.index, $event)"
                     @dragover="onItemDragOver(entry.index, $event)"
                     @drop="onItemDrop(entry.index, $event)"
@@ -1297,13 +1332,10 @@
                     :src="getItemImageUrl(versionForImages, entry.item.image.full)"
                     :alt="entry.item.name"
                     class="items-manager-inline-icon"
-                    :class="{
-                      'items-manager-inline-icon--dragging': draggingItemIndex === entry.index,
-                      'items-manager-inline-icon--drag-over':
-                        dragOverItemIndex === entry.index && draggingItemIndex !== entry.index,
-                    }"
-                    :title="tooltipsEnabled ? getItemDisplayName(entry.item) : undefined"
-                    :draggable="!props.build"
+                    :class="itemManagerIconClass(entry.index)"
+                    :title="itemManagerTitle(entry)"
+                    :draggable="!props.build && !isTheorycraftItemsToggleMode"
+                    @click="onItemManagerClick(entry.index)"
                     @dragstart="onItemDragStart(entry.index, $event)"
                     @dragover="onItemDragOver(entry.index, $event)"
                     @drop="onItemDrop(entry.index, $event)"
@@ -1330,13 +1362,10 @@
                     :src="getItemImageUrl(versionForImages, entry.item.image.full)"
                     :alt="entry.item.name"
                     class="items-manager-inline-icon"
-                    :class="{
-                      'items-manager-inline-icon--dragging': draggingItemIndex === entry.index,
-                      'items-manager-inline-icon--drag-over':
-                        dragOverItemIndex === entry.index && draggingItemIndex !== entry.index,
-                    }"
-                    :title="tooltipsEnabled ? getItemDisplayName(entry.item) : undefined"
-                    :draggable="!props.build"
+                    :class="itemManagerIconClass(entry.index)"
+                    :title="itemManagerTitle(entry)"
+                    :draggable="!props.build && !isTheorycraftItemsToggleMode"
+                    @click="onItemManagerClick(entry.index)"
                     @dragstart="onItemDragStart(entry.index, $event)"
                     @dragover="onItemDragOver(entry.index, $event)"
                     @drop="onItemDrop(entry.index, $event)"
@@ -1363,13 +1392,10 @@
                     :src="getItemImageUrl(versionForImages, entry.item.image.full)"
                     :alt="entry.item.name"
                     class="items-manager-inline-icon"
-                    :class="{
-                      'items-manager-inline-icon--dragging': draggingItemIndex === entry.index,
-                      'items-manager-inline-icon--drag-over':
-                        dragOverItemIndex === entry.index && draggingItemIndex !== entry.index,
-                    }"
-                    :title="tooltipsEnabled ? getItemDisplayName(entry.item) : undefined"
-                    :draggable="!props.build"
+                    :class="itemManagerIconClass(entry.index)"
+                    :title="itemManagerTitle(entry)"
+                    :draggable="!props.build && !isTheorycraftItemsToggleMode"
+                    @click="onItemManagerClick(entry.index)"
                     @dragstart="onItemDragStart(entry.index, $event)"
                     @dragover="onItemDragOver(entry.index, $event)"
                     @drop="onItemDrop(entry.index, $event)"
@@ -1411,6 +1437,7 @@ import { useI18n } from 'vue-i18n'
 import { isBootsItem, isStarterItem } from '@lelanation/builds-ui'
 import { sumStarterDrainStats, getGoldPer10FromItem } from '@lelanation/builds-stats'
 import type { Build, SubBuild, Item, Role, SkillOrder } from '@lelanation/shared-types'
+import { activeItemLimitLabel } from '~/utils/theorycraftItems'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useItemsStore } from '~/stores/ItemsStore'
@@ -1445,6 +1472,7 @@ import { resolveSummonerSpellFromRef } from '~/utils/summonerSpellResolver'
 import { fixedTooltipStyleFromPointer, type TooltipPointer } from '~/utils/tooltipPosition'
 import { formatRuneTooltipHtml } from '~/utils/formatTooltipMarkupHtml'
 import DescriptionEditor from '~/components/Build/DescriptionEditor.vue'
+import TheorycraftCardStatsBack from '~/components/Build/TheorycraftCardStatsBack.vue'
 import DescriptionVideoPreviews from '~/components/Build/DescriptionVideoPreviews.vue'
 
 interface RegionsPayload {
@@ -1478,6 +1506,14 @@ interface Props {
    * (Une prop `boolean` optionnelle seule se voit appliquer `false` par défaut par Vue → cassait le mode splash.)
    */
   championSplashOverride?: boolean | null
+  /** Mode theorycraft : clic sur une zone émet select-region au lieu de naviguer. */
+  selectionMode?: 'none' | 'theorycraft'
+  /** Région actuellement sélectionnée (surbrillance en mode theorycraft). */
+  activeSelectionRegion?: 'champion' | 'items' | 'runes' | null
+  /** Contenu affiché au verso de la card lors du flip. */
+  flipBackFace?: 'description' | 'stats'
+  /** Contrôle externe du flip (ex. bouton stats theorycraft). */
+  flipped?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -1489,12 +1525,19 @@ const props = withDefaults(defineProps<Props>(), {
   initialDisplayedVariantIndex: null,
   forScreenshot: false,
   championSplashOverride: null,
+  selectionMode: 'none',
+  activeSelectionRegion: null,
+  flipBackFace: 'description',
+  flipped: undefined,
 })
 type BuildTag = NonNullable<Build['tags']>[number]
 
 const emit = defineEmits<{
   /** Émis quand la variante affichée change. null = build principal. */
   'variant-change': [subIndex: number | null]
+  /** Mode theorycraft : clic sur une zone éditable de la card. */
+  'select-region': ['champion' | 'items' | 'runes']
+  'update:flipped': [value: boolean]
 }>()
 
 const buildStore = useBuildStore()
@@ -1507,6 +1550,20 @@ const route = useRoute()
 const { locale, t } = useI18n()
 const { isLayoutScaled } = useLayoutScaled()
 const hideTopActions = computed(() => props.hideTopActions)
+
+function regionSelectionClass(region: 'champion' | 'items' | 'runes'): Record<string, boolean> {
+  return {
+    'build-card-region--selectable': props.selectionMode === 'theorycraft',
+    'build-card-region--active':
+      props.selectionMode === 'theorycraft' && props.activeSelectionRegion === region,
+  }
+}
+
+function onSelectRegion(region: 'champion' | 'items' | 'runes', event?: MouseEvent) {
+  if (props.selectionMode !== 'theorycraft' || props.readonly) return
+  event?.stopPropagation()
+  emit('select-region', region)
+}
 
 // Global tooltip preference (shared state via composable)
 const { tooltipsEnabled } = useTooltipsPreference()
@@ -1522,6 +1579,19 @@ const effectiveSheetTooltips = computed(() => props.sheetTooltips && tooltipsEna
 
 // ── Flip (mode readonly) ──────────────────────────────────────────────────
 const localFlipped = ref(false)
+
+watch(
+  () => props.flipped,
+  value => {
+    if (typeof value !== 'boolean') return
+    if (localFlipped.value !== value) localFlipped.value = value
+  },
+  { immediate: true }
+)
+
+watch(localFlipped, value => {
+  if (typeof props.flipped === 'boolean') emit('update:flipped', value)
+})
 /** Index de la variante affichée localement (null = build principal). Utilisé en mode readonly. */
 const localDisplayedSubIndex = ref<number | null>(null)
 
@@ -1574,10 +1644,21 @@ const descriptionMode = computed(
 const canShowReadonlyDescription = computed(
   () => props.readonly && Boolean(activeDescriptionValue.value?.trim())
 )
+const canShowCardBack = computed(() => {
+  if (props.flipBackFace === 'stats' && props.selectionMode === 'theorycraft') {
+    return hasChampion.value
+  }
+  return canShowReadonlyDescription.value || (!props.readonly && hasChampion.value)
+})
 const isBuilderPage = computed(
   () => route.path.includes('/builds/create') || route.path.includes('/builds/edit/')
 )
-const canEditSkillOrder = computed(() => isBuilderPage.value && !props.readonly && !props.build)
+const canEditSkillOrder = computed(
+  () =>
+    (isBuilderPage.value || props.selectionMode === 'theorycraft') &&
+    !props.readonly &&
+    !props.build
+)
 const showBackHeader = computed(() => isBuilderPage.value || showBackVariantSelector.value)
 const showDescriptionToggle = computed(() => isBuilderPage.value && buildSubBuilds.value.length > 0)
 const showBackVariantSelector = computed(
@@ -2384,9 +2465,76 @@ const buildItems = computed(() => {
     }
   })
 })
+
+const theorycraftActiveItemCount = computed(() => {
+  if (props.selectionMode !== 'theorycraft') return 0
+  const disabled = new Set(buildStore.theorycraftDisabledItemIndices)
+  return buildItems.value.filter((_, index) => !disabled.has(index)).length
+})
+
+const theorycraftStackCount = computed(() =>
+  Object.values(buildStore.theorycraftStackCounts).reduce(
+    (sum, count) => sum + (Number.isFinite(count) && count > 0 ? count : 0),
+    0
+  )
+)
 const showItemStats = ref(false)
 const draggingItemIndex = ref<number | null>(null)
 const dragOverItemIndex = ref<number | null>(null)
+const itemsToggleLimitMessage = ref<string | null>(null)
+let itemsToggleLimitTimer: ReturnType<typeof setTimeout> | null = null
+
+const isTheorycraftItemsToggleMode = computed(() => props.selectionMode === 'theorycraft')
+
+const itemsForManagerStats = computed(() => {
+  if (isTheorycraftItemsToggleMode.value) {
+    return buildStore.getTheorycraftItemsForStats()
+  }
+  return buildItems.value
+})
+
+const theorycraftActiveItemsLabel = computed(() => {
+  if (!isTheorycraftItemsToggleMode.value) return ''
+  const roles = displayBuild.value?.roles ?? []
+  return activeItemLimitLabel(
+    buildItems.value,
+    new Set(buildStore.theorycraftDisabledItemIndices),
+    roles
+  )
+})
+
+function itemManagerIconClass(index: number) {
+  return {
+    'items-manager-inline-icon--dragging': draggingItemIndex.value === index,
+    'items-manager-inline-icon--drag-over':
+      dragOverItemIndex.value === index && draggingItemIndex.value !== index,
+    'items-manager-inline-icon--inactive':
+      isTheorycraftItemsToggleMode.value && buildStore.isTheorycraftItemDisabled(index),
+    'items-manager-inline-icon--toggle': isTheorycraftItemsToggleMode.value,
+  }
+}
+
+function itemManagerTitle(entry: { item: Item; index: number }) {
+  const name = tooltipsEnabled.value ? getItemDisplayName(entry.item) : entry.item.name
+  if (!isTheorycraftItemsToggleMode.value) return name
+  const state = buildStore.isTheorycraftItemDisabled(entry.index)
+    ? t('buildCard.itemsDisabledForStats')
+    : t('buildCard.itemsEnabledForStats')
+  return `${name} — ${state}`
+}
+
+function onItemManagerClick(index: number) {
+  if (!isTheorycraftItemsToggleMode.value) return
+  const result = buildStore.toggleTheorycraftItemForStats(index)
+  if (result === 'limit_reached') {
+    itemsToggleLimitMessage.value = t('buildCard.itemsActiveLimitReached')
+    if (itemsToggleLimitTimer) clearTimeout(itemsToggleLimitTimer)
+    itemsToggleLimitTimer = setTimeout(() => {
+      itemsToggleLimitMessage.value = null
+      itemsToggleLimitTimer = null
+    }, 2500)
+  }
+}
 
 const clearDragState = () => {
   draggingItemIndex.value = null
@@ -2775,6 +2923,7 @@ const resetBuild = () => {
   localDisplayedSubIndex.value = null
   showItemStats.value = false
   buildStore.createNewBuild()
+  if (props.selectionMode === 'theorycraft') return
   navigateTo(localePath('/builds/create/champion'))
 }
 
@@ -2822,7 +2971,7 @@ const itemStatsTotals = computed(() => {
     goldPer10: 0,
   }
 
-  const nonStarter = buildItems.value.filter(item => !isStarterItem(item))
+  const nonStarter = itemsForManagerStats.value.filter(item => !isStarterItem(item))
   let firstBootKept = false
   const itemsForStats = nonStarter.filter(item => {
     if (!isBootsItem(item)) return true
@@ -2876,7 +3025,7 @@ const itemStatsTotals = computed(() => {
       normalizePercentStat((item.stats as any).PercentOmnivamp || 0)
   }
 
-  const starterDrain = sumStarterDrainStats(buildItems.value)
+  const starterDrain = sumStarterDrainStats(itemsForManagerStats.value)
   totals.lifeStealPercent += starterDrain.lifeSteal
   totals.spellVampPercent += starterDrain.spellVamp
   totals.omnivampPercent += starterDrain.omnivamp
@@ -3893,6 +4042,23 @@ defineExpose({
   z-index: 6;
 }
 
+.build-card-region--selectable {
+  cursor: pointer;
+  border-radius: 6px;
+  transition:
+    box-shadow 0.15s ease,
+    outline-color 0.15s ease;
+}
+
+.build-card-region--selectable:hover {
+  box-shadow: 0 0 0 1px rgba(200, 155, 60, 0.45);
+}
+
+.build-card-region--active {
+  box-shadow: 0 0 0 2px rgba(200, 155, 60, 0.85);
+  outline: 1px solid rgba(200, 155, 60, 0.35);
+}
+
 /* Champion Section */
 .champion-section {
   display: flex;
@@ -4431,6 +4597,38 @@ defineExpose({
   font-size: 11px;
   font-weight: 700;
   opacity: 0.85;
+}
+
+.items-manager-inline-icon--inactive {
+  opacity: 0.35;
+  filter: grayscale(1);
+}
+
+.items-manager-inline-icon--toggle {
+  cursor: pointer;
+}
+
+.items-manager-hint,
+.items-manager-limit-message,
+.items-manager-active-count {
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.items-manager-hint {
+  margin: 0 0 8px;
+  color: rgb(255 255 255 / 0.65);
+}
+
+.items-manager-limit-message {
+  margin: 0 0 8px;
+  color: #f87171;
+}
+
+.items-manager-active-count {
+  color: var(--color-gold-300, #c89b3c);
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .items-manager-inline-icon {

@@ -8,6 +8,7 @@ import { hydrationWorker } from "./workers/hydration.worker.js";
 import { ingestionWorker } from "./workers/ingestion.worker.js";
 import { rankWorker } from "./workers/rank.worker.js";
 import { getQueueMetrics } from "./queues/index.js";
+import { syncMatchPipelinePause } from "./queues/pipeline-pause-sync.js";
 import { loadLuaScript, startDrip, stopDrip } from "./redis/rate-scheduler.js";
 import { redis } from "./redis/client.js";
 
@@ -37,6 +38,7 @@ async function getDataLagSeconds(): Promise<number | null> {
 
 async function logMetricsTick(): Promise<void> {
   const startedAt = Date.now();
+  const pipelinesPaused = await syncMatchPipelinePause(hydrationWorker, ingestionWorker);
   const metrics = await getQueueMetrics();
   const lagSeconds = await getDataLagSeconds();
   const tickDurationMs = Date.now() - startedAt;
@@ -56,6 +58,7 @@ async function logMetricsTick(): Promise<void> {
       `hydration(w:${metrics.hydration.waiting},a:${metrics.hydration.active},f:${metrics.hydration.failed}) ` +
       `ingestion(w:${metrics.ingestion.waiting},a:${metrics.ingestion.active},f:${metrics.ingestion.failed}) ` +
       `rank(w:${metrics.rank.waiting},a:${metrics.rank.active},f:${metrics.rank.failed}) ` +
+      `pipelines_paused=${pipelinesPaused} ` +
       `data_lag_seconds=${lagSeconds ?? "n/a"} tick_ms=${tickDurationMs}`,
   );
 }
@@ -135,6 +138,9 @@ async function bootstrap(): Promise<void> {
 
   // Workers are started on import; we only confirm readiness here.
   console.log("[poller-main] workers started: discovery, hydration, ingestion, rank");
+
+  const pipelinesPaused = await syncMatchPipelinePause(hydrationWorker, ingestionWorker);
+  console.log(`[poller-main] match pipelines paused=${pipelinesPaused} (rank backlog policy)`);
 
   await startMonitoring();
 }

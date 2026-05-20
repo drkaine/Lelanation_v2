@@ -225,8 +225,58 @@
       }
     }
   },
+  "theorycraft": {
+    "pageTitle": "Theorycraft Lab",
+    "backToBuilds": "← Retour Builds",
+    "panel": {
+      "workspace": "Espace de travail",
+      "champion": "Champion",
+      "items": "Items",
+      "runes": "Runes",
+      "skillOrder": "Ordre de montée",
+      "spellsTitle": "Sorts — Theorycraft",
+      "theorycraftButton": "Theorycraft",
+      "emptyHint": "Cliquez sur une zone de la build card (champion, items, runes) pour ouvrir le sélecteur correspondant. L'ordre de montée se modifie directement sur la card."
+    },
+    "spells": {
+      "selectChampion": "Sélectionnez un champion pour afficher les sorts.",
+      "loading": "Chargement des sorts…",
+      "noSpells": "Aucune description de sort disponible pour ce champion.",
+      "championLevel": "Niveau champion",
+      "rank": "Rang",
+      "passive": "P",
+      "stacks": "Stacks",
+      "showDescription": "▶ Afficher la description",
+      "hideDescription": "▼ Masquer la description",
+      "approximateValues": "Valeurs approximatives"
+    },
+    "stats": {
+      "toggle": "Stats",
+      "showStats": "Afficher les stats totales",
+      "showBuild": "Afficher le build",
+      "title": "Stats totales",
+      "empty": "Sélectionnez un champion et complétez le build pour voir les stats.",
+      "health": "PV",
+      "mana": "Mana",
+      "attackDamage": "AD",
+      "abilityPower": "AP",
+      "armor": "Armure",
+      "magicResist": "RM",
+      "attackSpeed": "Vitesse d'attaque",
+      "critChance": "Chance de crit",
+      "critDamage": "Dégâts de crit",
+      "movementSpeed": "Vitesse de déplacement",
+      "abilityHaste": "Hâte d'aptitude",
+      "activeItemsNote": "{count} items actifs",
+      "stacksNote": "{count} stacks passifs"
+    }
+  },
   "buildCard": {
     "itemsManagement": "Gestion des items",
+    "itemsClickToToggle": "Cliquez sur un item pour l'activer ou le désactiver dans le calcul des stats.",
+    "itemsEnabledForStats": "actif pour les stats",
+    "itemsDisabledForStats": "inactif pour les stats",
+    "itemsActiveLimitReached": "Maximum 6 objets actifs (bottes incluses, sauf ADC : 6 objets + bottes).",
     "resetItems": "Reset items",
     "noItems": "Aucun item",
     "variantsTitle": "Variantes",
