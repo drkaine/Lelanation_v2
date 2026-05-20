@@ -193,6 +193,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useChampionData } from '~/composables/useChampionData'
 import {
   resolveTheorycraftSpellDescription,
+  resolveTheorycraftSpellDetailRaws,
   type TheorycraftSpellRuntimeData,
   type TheorycraftStackResolveContext,
 } from '~/composables/useTheorycraftTooltip'
@@ -309,14 +310,25 @@ function resolveSpellView(
     stackContext
   )
 
+  const resolvedDetails = resolveTheorycraftSpellDetailRaws(
+    raw,
+    props.buildStats,
+    rank,
+    stackContext
+  )
+  const staticDetails = Array.isArray(raw.detailedTexts)
+    ? raw.detailedTexts.map(section => normalizeKaynFormMarkup(String(section ?? '')))
+    : []
+
   return {
     name: String(raw.name ?? ''),
     maxRank: Math.max(1, Number(raw.maxRank ?? 5)),
     summaryHtml: raw.summaryHtml ? String(raw.summaryHtml) : undefined,
     descriptionHtml: normalizeKaynFormMarkup(resolved.html),
-    detailedTexts: Array.isArray(raw.detailedTexts)
-      ? raw.detailedTexts.map(section => normalizeKaynFormMarkup(String(section ?? '')))
-      : [],
+    detailedTexts:
+      resolvedDetails.length > 0
+        ? resolvedDetails.map(section => normalizeKaynFormMarkup(section))
+        : staticDetails,
     headerStats: Array.isArray(raw.headerStats)
       ? raw.headerStats.map((stat: SpellHeaderStat) =>
           resolveHeaderStatAtRank(stat, rank, {

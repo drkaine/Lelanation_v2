@@ -2707,6 +2707,7 @@ type ExportedStackDefinition = {
     isPercent?: boolean
   }>
   tooltipVars: Array<{ key: string; perStackKey: string }>
+  damageBonuses?: Array<{ targetKey: string; perStackKey: string }>
 }
 
 function mapPerStackKeyToStat(
@@ -2742,6 +2743,7 @@ function extractStackDefinition(args: {
   scope: 'passive' | 'spell'
   spellSlot?: string
   calculations: ExportedStackCalculation[]
+  dataValues?: Array<{ name: string; values: number[] }>
 }): ExportedStackDefinition | null {
   const perStackCalcs = args.calculations.filter((calculation) =>
     /perstack$/i.test(calculation.key)
@@ -2775,7 +2777,26 @@ function extractStackDefinition(args: {
     })
     .filter((entry): entry is { key: string; perStackKey: string } => entry != null)
 
-  if (statBonuses.length === 0 && tooltipVars.length === 0) return null
+  if (statBonuses.length === 0 && tooltipVars.length === 0) {
+    if (args.scope === 'spell') {
+      const basicStacks = args.dataValues?.find(
+        (entry) => String(entry.name).toLowerCase() === 'basicstacks'
+      )
+      if (basicStacks?.values?.length) {
+        return {
+          id: args.id,
+          scope: 'spell',
+          ...(args.spellSlot ? { spellSlot: args.spellSlot } : {}),
+          label: args.label,
+          maxStacks: 9999,
+          statBonuses: [],
+          tooltipVars: [],
+          damageBonuses: [{ targetKey: 'totaldamage', perStackKey: 'basicstacks' }],
+        }
+      }
+    }
+    return null
+  }
 
   return {
     id: args.scope === 'passive' ? 'passive' : args.id,
@@ -2856,6 +2877,21 @@ function buildExportedSpell(args: {
     slotIndex: slotIndex,
     ddSpell,
   })
+  const basicStacksValue = binDataValues.find(
+    (entry) => String(entry.name).toLowerCase() === 'basicstacks'
+  )
+  if (
+    basicStacksValue?.values?.length &&
+    !calculations.some((entry) => entry.key.toLowerCase() === 'basicstacks')
+  ) {
+    calculations.push({
+      key: 'basicstacks',
+      expression: '',
+      expressionHtml: '',
+      baseValues: basicStacksValue.values,
+      ratios: [],
+    })
+  }
   const spellEffects = extractSpellEffects(ddSpell, cdSpell, binSpell).map((effect) => ({
     key: effect.key,
     values: effect.values,
@@ -3590,6 +3626,7 @@ export class TheorycraftDataBuilderService {
         label: passiveName,
         scope: 'passive',
         calculations: passive.calculations as ExportedStackCalculation[],
+        dataValues: (passive.dataValues as Array<{ name: string; values: number[] }>) ?? [],
       }),
       ...spells.flatMap((spell) => {
         const definition = extractStackDefinition({
@@ -3598,10 +3635,11 @@ export class TheorycraftDataBuilderService {
           scope: 'spell',
           spellSlot: String(spell.slot ?? ''),
           calculations: (spell.calculations as ExportedStackCalculation[]) ?? [],
+          dataValues: (spell.dataValues as Array<{ name: string; values: number[] }>) ?? [],
         })
         return definition ? [definition] : []
       }),
-    ]
+    ].filter((entry): entry is ExportedStackDefinition => entry != null)
 
     return {
       id: String(champion.id ?? ''),

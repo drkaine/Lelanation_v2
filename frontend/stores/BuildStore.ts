@@ -30,6 +30,11 @@ import {
   isWithinActiveItemLimit,
   remapDisabledItemIndices,
 } from '~/utils/theorycraftItems'
+import {
+  applyTheorycraftItemModifiers,
+  remapTheorycraftItemStacksByIndex,
+} from '~/utils/theorycraftItemModifiers'
+import type { TheorycraftItemModifierLine } from '~/utils/theorycraftItemModifiers'
 import type { TheorycraftStackDefinition } from '~/types/theorycraft'
 import type { TheorycraftSpellCalculation } from '~/composables/useTheorycraftTooltip'
 
@@ -38,6 +43,8 @@ const EDIT_BUILD_STORAGE_KEY = 'lelanation_current_build_edit'
 const THEORYCRAFT_BUILD_STORAGE_KEY = 'lelanation_theorycraft_draft'
 const THEORYCRAFT_STACKS_STORAGE_KEY = 'lelanation_theorycraft_stacks'
 const THEORYCRAFT_DISABLED_ITEMS_STORAGE_KEY = 'lelanation_theorycraft_disabled_items'
+const THEORYCRAFT_ITEM_STACKS_STORAGE_KEY = 'lelanation_theorycraft_item_stacks'
+const THEORYCRAFT_ITEM_TRANSFORMED_STORAGE_KEY = 'lelanation_theorycraft_item_transformed'
 const BUILDER_STEP_STORAGE_KEY = 'lelanation_builder_step'
 
 export type BuildStoreSession = 'create' | 'theorycraft' | 'edit'
@@ -61,6 +68,12 @@ interface BuildState {
   theorycraftStackChampionId: string | null
   /** Indices d'items exclus du calcul de stats en theorycraft. */
   theorycraftDisabledItemIndices: number[]
+  /** Stacks par index d'item (Mejai, Cœuracier, Larme…). */
+  theorycraftItemStacks: Record<number, number>
+  /** Objet transformé (Séraphin, Muramana…) par index. */
+  theorycraftItemTransformed: Record<number, boolean>
+  /** Détail des bonus % / stacks appliqués au dernier calcul. */
+  theorycraftItemModifierLines: TheorycraftItemModifierLine[]
   /** Incrémenté à chaque modification de la liste sauvegardée (save/delete/copy) pour forcer le refresh des vues. */
   savedBuildsVersion: number
   /** Variante actuellement affichée dans le builder : 'main' = build principal, number = index dans subBuilds. */
@@ -123,6 +136,9 @@ export const useBuildStore = defineStore('build', {
     theorycraftStackCalculationsBySource: {},
     theorycraftStackChampionId: null,
     theorycraftDisabledItemIndices: [],
+    theorycraftItemStacks: {},
+    theorycraftItemTransformed: {},
+    theorycraftItemModifierLines: [],
     savedBuildsVersion: 0,
     displayedVariant: 'main',
     pendingChampionChange: null,
@@ -406,6 +422,7 @@ export const useBuildStore = defineStore('build', {
       this.statsLevel = 18
       this.clearTheorycraftStackContext()
       this.loadTheorycraftDisabledItems()
+      this.loadTheorycraftItemStacks()
       if (!this.loadCurrentBuildDraft()) {
         this.createNewBuild()
       } else {
@@ -424,6 +441,62 @@ export const useBuildStore = defineStore('build', {
       this.editSourceBuildId = null
       this.clearTheorycraftStackContext()
       this.theorycraftDisabledItemIndices = []
+      this.theorycraftItemStacks = {}
+      this.theorycraftItemTransformed = {}
+      this.theorycraftItemModifierLines = []
+    },
+
+    loadTheorycraftItemStacks() {
+      if (import.meta.server) return
+      try {
+        const rawStacks = localStorage.getItem(THEORYCRAFT_ITEM_STACKS_STORAGE_KEY)
+        const rawTransformed = localStorage.getItem(THEORYCRAFT_ITEM_TRANSFORMED_STORAGE_KEY)
+        this.theorycraftItemStacks = rawStacks
+          ? (JSON.parse(rawStacks) as Record<number, number>)
+          : {}
+        this.theorycraftItemTransformed = rawTransformed
+          ? (JSON.parse(rawTransformed) as Record<number, boolean>)
+          : {}
+      } catch {
+        this.theorycraftItemStacks = {}
+        this.theorycraftItemTransformed = {}
+      }
+    },
+
+    persistTheorycraftItemStacks() {
+      if (import.meta.server || this.builderSession !== 'theorycraft') return
+      try {
+        localStorage.setItem(
+          THEORYCRAFT_ITEM_STACKS_STORAGE_KEY,
+          JSON.stringify(this.theorycraftItemStacks)
+        )
+        localStorage.setItem(
+          THEORYCRAFT_ITEM_TRANSFORMED_STORAGE_KEY,
+          JSON.stringify(this.theorycraftItemTransformed)
+        )
+      } catch {
+        // ignore persistence errors
+      }
+    },
+
+    setTheorycraftItemStacks(index: number, stacks: number) {
+      if (this.builderSession !== 'theorycraft') return
+      const next = { ...this.theorycraftItemStacks }
+      if (!Number.isFinite(stacks) || stacks <= 0) delete next[index]
+      else next[index] = Math.max(0, Math.trunc(stacks))
+      this.theorycraftItemStacks = next
+      this.persistTheorycraftItemStacks()
+      this.recalculateStats()
+    },
+
+    toggleTheorycraftItemTransformed(index: number) {
+      if (this.builderSession !== 'theorycraft') return
+      const next = { ...this.theorycraftItemTransformed }
+      if (next[index]) delete next[index]
+      else next[index] = true
+      this.theorycraftItemTransformed = next
+      this.persistTheorycraftItemStacks()
+      this.recalculateStats()
     },
 
     loadTheorycraftDisabledItems() {
@@ -462,7 +535,18 @@ export const useBuildStore = defineStore('build', {
         nextItems,
         this.theorycraftDisabledItemIndices
       )
+      this.theorycraftItemStacks = remapTheorycraftItemStacksByIndex(
+        previousItems,
+        nextItems,
+        this.theorycraftItemStacks
+      )
+      this.theorycraftItemTransformed = remapTheorycraftItemStacksByIndex(
+        previousItems,
+        nextItems,
+        this.theorycraftItemTransformed
+      )
       this.persistTheorycraftDisabledItems()
+      this.persistTheorycraftItemStacks()
     },
 
     clampTheorycraftActiveItemsForRole() {
@@ -1215,6 +1299,33 @@ export const useBuildStore = defineStore('build', {
           this.statsLevel,
           options
         )
+
+        if (this.builderSession === 'theorycraft' && stats) {
+          const activeItems = this.getTheorycraftItemsForStats()
+          const itemStacksById: Record<string, number> = {}
+          const transformedById: Record<string, boolean> = {}
+          for (const [indexStr, stacks] of Object.entries(this.theorycraftItemStacks)) {
+            const item = b.items[Number(indexStr)]
+            if (item) itemStacksById[item.id] = stacks
+          }
+          for (const [indexStr, transformed] of Object.entries(this.theorycraftItemTransformed)) {
+            if (!transformed) continue
+            const item = b.items[Number(indexStr)]
+            if (item) transformedById[item.id] = true
+          }
+          const modifierResult = applyTheorycraftItemModifiers({
+            stats,
+            items: activeItems,
+            itemStacksById,
+            transformedById,
+            labels: {},
+          })
+          this.calculatedStats = modifierResult.stats
+          this.theorycraftItemModifierLines = modifierResult.lines
+          return
+        }
+
+        this.theorycraftItemModifierLines = []
         this.calculatedStats = stats
       })
     },

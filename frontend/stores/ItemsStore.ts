@@ -4,6 +4,7 @@ import { useVersionStore } from './VersionStore'
 import { getFallbackGameVersion } from '~/config/version'
 import { apiUrl } from '~/utils/apiUrl'
 import { getGameDataUrl } from '~/utils/staticDataUrl'
+import { isExcludedGameItemId } from '~/utils/excludedGameItems'
 
 interface ItemsState {
   items: Item[]
@@ -117,12 +118,14 @@ export const useItemsStore = defineStore('items', {
         // We need to inject them into each item so categorisation and selection
         // logic can reliably use item.id across all languages.
         const rawItems = data?.data || {}
-        this.items = Object.entries(rawItems).map(([id, item]) => {
-          return {
-            ...(item as Item),
-            id,
-          }
-        })
+        this.items = Object.entries(rawItems)
+          .filter(([id]) => !isExcludedGameItemId(id))
+          .map(([id, item]) => {
+            return {
+              ...(item as Item),
+              id,
+            }
+          })
         this.status = 'success'
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to load items'

@@ -269,6 +269,19 @@
       "abilityHaste": "Hâte d'aptitude",
       "activeItemsNote": "{count} items actifs",
       "stacksNote": "{count} stacks passifs"
+    },
+    "items": {
+      "modifiersTitle": "Bonus objets (% / stacks)",
+      "stacksInput": "Stacks de l'objet",
+      "transformToggle": "Basculer vers la version transformée (Séraphin, Muramana…)",
+      "transformShort": "T2",
+      "transformed": "Objet transformé",
+      "rabadonAp": "Coiffe de Rabadon (+30% AP total)",
+      "mejai": "Mejai",
+      "heartsteel": "Cœuracier",
+      "tear": "Larme / objet à stacks mana",
+      "archangelAwe": "Effroi (AP via mana)",
+      "manamuneAwe": "Effroi (AD via mana)"
     }
   },
   "buildCard": {

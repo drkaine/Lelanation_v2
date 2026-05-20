@@ -6,6 +6,7 @@ import { ImageService } from './ImageService.js'
 import { CommunityDragonOrnnService } from './CommunityDragonOrnnService.js'
 import { fetchJson, HttpRequestError } from '../utils/httpFetch.js'
 import { enrichSummonerSpellRecord } from '../utils/summonerSpellTooltip.js'
+import { isAlwaysExcludedGameItemId } from '../config/excludedGameItemIds.js'
 
 interface ChampionData {
   [key: string]: {
@@ -467,7 +468,7 @@ export class DataDragonService {
         const itemData = item as any
         
         // Skip if item ID is in excluded list
-        if (excludedItemIds.has(itemId)) {
+        if (excludedItemIds.has(itemId) || isAlwaysExcludedGameItemId(itemId)) {
           continue
         }
 

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { resolveTheorycraftSpellDescription } from '../useTheorycraftTooltip'
+import {
+  resolveTheorycraftSpellDescription,
+  resolveTheorycraftSpellDetailRaws,
+} from '../useTheorycraftTooltip'
 import type { TheorycraftBuildStats } from '~/types/theorycraft'
 
 const baseStats: TheorycraftBuildStats = {
@@ -112,5 +115,101 @@ describe('useTheorycraftTooltip', () => {
     expect(html).toContain('80')
     expect(html).toContain('50% AP')
     expect(html).not.toMatch(/\{\{/)
+  })
+
+  it('resolves Nasus Q crit detail from tooltipDetailRaws with live AD and stacks', () => {
+    const spell = {
+      tooltipRaw:
+        'La prochaine attaque inflige <physicalDamage>{{ totaldamage }} pts de dégâts physiques</physicalDamage>.',
+      tooltipDetailRaws: [
+        'Cette compétence peut être critique et ainsi infliger <physicalDamage>{{ critdamage }} pts de dégâts physiques</physicalDamage>.',
+      ],
+      maxRank: 5,
+      calculations: [
+        {
+          key: 'totaldamage',
+          baseValues: [40, 60, 80, 100, 120],
+          ratios: [{ stat: 'totalAD', coefficient: 1, type: 'physical' }],
+        },
+        {
+          key: 'critdamage',
+          baseValues: [71.75, 106.75, 141.75, 176.75, 211.75],
+          ratios: [
+            { stat: 'critDamage', coefficient: 1, type: 'magic' },
+            { stat: 'totalAD', coefficient: 1, type: 'physical' },
+          ],
+        },
+      ],
+      dataValues: [{ name: 'BasicStacks', values: [3, 3, 3, 3, 3] }],
+      spellEffects: [],
+    }
+
+    const stats: TheorycraftBuildStats = {
+      ...baseStats,
+      totalAD: 200,
+      critDamage: 1.75,
+    }
+
+    const details = resolveTheorycraftSpellDetailRaws(spell, stats, 1, {
+      definition: {
+        id: 'NasusQ',
+        scope: 'spell',
+        spellSlot: 'Q',
+        label: 'Q',
+        statBonuses: [],
+        tooltipVars: [],
+        damageBonuses: [{ targetKey: 'totaldamage', perStackKey: 'basicstacks' }],
+      },
+      stackCount: 100,
+      calculationsBySource: {
+        NasusQ: [
+          { key: 'basicstacks', baseValues: [3, 3, 3, 3, 3], ratios: [] },
+          {
+            key: 'totaldamage',
+            baseValues: [40, 60, 80, 100, 120],
+            ratios: [{ stat: 'totalAD', coefficient: 1, type: 'physical' }],
+          },
+        ],
+      },
+    })
+
+    expect(details).toHaveLength(1)
+    // (40 + 200 + 300 stacks) * 1.75 = 945
+    expect(details[0]).toContain('945')
+    expect(details[0]).not.toMatch(/\{\{/)
+  })
+
+  it('resolves Nasus R storm detail with AP scaling and Q CDR', () => {
+    const spell = {
+      tooltipRaw: 'Ult bonus {{ bonushealth }}',
+      tooltipDetailRaws: [
+        'Dégâts de <magicDamage>{{ damagecalc }} des PV max</magicDamage> et CDR {{ qcdr*100 }}%.',
+      ],
+      maxRank: 3,
+      calculations: [
+        {
+          key: 'damagecalc',
+          baseValues: [0.03, 0.04, 0.05],
+          ratios: [{ stat: 'AP', coefficient: 0.0001, type: 'magic' }],
+        },
+      ],
+      dataValues: [
+        { name: 'BonusHealth', values: [300, 450, 600] },
+        { name: 'QCDR', values: [0.5, 0.5, 0.5] },
+      ],
+      spellEffects: [],
+    }
+
+    const stats: TheorycraftBuildStats = {
+      ...baseStats,
+      AP: 300,
+    }
+
+    const details = resolveTheorycraftSpellDetailRaws(spell, stats, 1)
+    expect(details).toHaveLength(1)
+    expect(details[0]).toContain('0.06')
+    expect(details[0]).toContain('0.01% AP')
+    expect(details[0]).toContain('50')
+    expect(details[0]).not.toMatch(/\{\{/)
   })
 })

@@ -3,6 +3,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { join } from 'path'
 import { DiscordService } from '../services/DiscordService.js'
+import { ALWAYS_EXCLUDED_GAME_ITEM_IDS } from '../config/excludedGameItemIds.js'
 
 /**
  * Script to generate a JSON file listing items to exclude from item.json
@@ -16,7 +17,8 @@ const ALLOWED_ITEM_IDS = new Set([
 
 const EXCLUDED_ITEM_IDS = new Set([
   '2003', '2055', '2031', '667112', '667101', '664011', '663172', '663064',
-  '663060', '663058', '663056', '663039', '2051', '3112', '3177', '3184', 
+  '663060', '663058', '663056', '663039', '2051', '3112', '3177', '3184',
+  ...ALWAYS_EXCLUDED_GAME_ITEM_IDS,
 ])
 
 interface ItemData {

@@ -5,6 +5,7 @@ import { promisify } from 'util'
 import { Result } from '../utils/Result.js'
 import { AppError } from '../utils/errors.js'
 import { FileManager } from '../utils/fileManager.js'
+import { isAlwaysExcludedGameItemId } from '../config/excludedGameItemIds.js'
 
 const execAsync = promisify(exec)
 
@@ -176,7 +177,7 @@ export class StaticAssetsService {
       const itemData = item as any
 
       // Skip if item ID is in excluded list
-      if (excludedItemIds.has(itemId)) {
+      if (excludedItemIds.has(itemId) || isAlwaysExcludedGameItemId(itemId)) {
         continue
       }
 

@@ -1,5 +1,9 @@
 import type { TheorycraftBuildStats, TheorycraftStackDefinition } from '../types/theorycraft'
-import { applyStackTooltipVariables, resolveStackCalculations } from '../utils/theorycraftStacks'
+import {
+  applyStackTooltipVariables,
+  resolveStackCalculations,
+  stackDamageBonusForCalculation,
+} from '../utils/theorycraftStacks'
 import { formatTooltipMarkupHtml } from '../utils/formatTooltipMarkupHtml'
 import { calculateDamageFormula } from './useTheorycraftDamage'
 
@@ -20,6 +24,12 @@ export interface TheorycraftSpellRuntimeData {
   dataValues?: Array<{ name: string; values: number[] }>
   spellEffects?: Array<{ key: string; values: number[] }>
   maxRank?: number
+}
+
+export interface TheorycraftStackResolveContext {
+  definition: TheorycraftStackDefinition
+  stackCount: number
+  calculationsBySource: Record<string, TheorycraftSpellCalculation[]>
 }
 
 function formatResolvedNumber(value: number): string {
@@ -143,6 +153,7 @@ function ratioStatDisplayLabel(stat: string): string {
     totalAD: 'AD',
     bonusAD: 'AD',
     AP: 'AP',
+    critDamage: 'crit',
     bonusArmor: 'bonus Armor',
     armor: 'Armor',
     bonusMagicResist: 'bonus Magic Resist',
@@ -152,6 +163,14 @@ function ratioStatDisplayLabel(stat: string): string {
     maxMana: 'max Mana',
   }
   return labels[stat] ?? stat
+}
+
+function ratioScaleClass(stat: string): string {
+  const normalized = stat.toLowerCase().replace(/[^a-z0-9]/g, '')
+  if (normalized === 'totalad' || normalized === 'bonusad' || normalized === 'attackdamage') {
+    return 'scale-ad'
+  }
+  return 'scale-ap'
 }
 
 function formatRatioPercentSuffix(
@@ -175,10 +194,10 @@ function formatRatioSuffix(
   const coeff = ratioAtRank(ratio.coefficient, rankIndex)
   const statAmount = statValue(stats, ratio.stat) * coeff
   if (statAmount <= 0) {
-    return `<span class="tooltip-tag scale-ap">${percentPart}</span>`
+    return `<span class="tooltip-tag ${ratioScaleClass(ratio.stat)}">${percentPart}</span>`
   }
 
-  return `<span class="tooltip-tag scale-ap">${percentPart} (+ ${formatResolvedNumber(statAmount)})</span>`
+  return `<span class="tooltip-tag ${ratioScaleClass(ratio.stat)}">${percentPart} (+ ${formatResolvedNumber(statAmount)})</span>`
 }
 
 function computeCalculationValue(
@@ -204,10 +223,64 @@ function computeCalculationValue(
   )
 }
 
-export interface TheorycraftStackResolveContext {
-  definition: TheorycraftStackDefinition
-  stackCount: number
-  calculationsBySource: Record<string, TheorycraftSpellCalculation[]>
+function isPercentLikeCalculation(calculation: TheorycraftSpellCalculation): boolean {
+  const key = calculation.key.toLowerCase()
+  if (key.includes('percent') || key.includes('damagecalc') || key.includes('manacalc')) {
+    return true
+  }
+  const base = calculation.baseValues[0]
+  return Number.isFinite(base) && Math.abs(base) > 0 && Math.abs(base) < 1
+}
+
+function formatCalculationRenderedValue(
+  calculation: TheorycraftSpellCalculation,
+  rankIndex: number,
+  stackBonus: number,
+  stats: TheorycraftBuildStats,
+  rank: number,
+  maxRank: number,
+  allCalculations: TheorycraftSpellCalculation[],
+  stackContext?: TheorycraftStackResolveContext | null
+): string {
+  const key = calculation.key.toLowerCase()
+  if (key === 'critdamage') {
+    const totalCalc = allCalculations.find(entry => entry.key.toLowerCase() === 'totaldamage')
+    if (totalCalc) {
+      const totalStackBonus = stackDamageBonusForCalculation('totaldamage', stackContext, rankIndex)
+      const total = computeCalculationValue(totalCalc, stats, rank, maxRank) + totalStackBonus
+      const critMult = statValue(stats, 'critDamage')
+      if (critMult > 0 && total > 0) {
+        return formatResolvedNumber(total * critMult)
+      }
+    }
+  }
+
+  const ratioSuffix = calculation.ratios
+    .map(ratio => formatRatioSuffix(ratio, rankIndex, stats))
+    .filter(Boolean)
+    .join(' ')
+  const base = calculation.baseValues[rankIndex]
+  const hasBase = Number.isFinite(base)
+  const computed = computeCalculationValue(calculation, stats, rank, maxRank) + stackBonus
+
+  if (isPercentLikeCalculation(calculation)) {
+    const totalText = formatResolvedNumber(computed)
+    if (ratioSuffix) return `${totalText} ${ratioSuffix}`.trim()
+    if (hasBase) return formatResolvedNumber(base! + stackBonus)
+    return totalText
+  }
+
+  if (hasBase && ratioSuffix) {
+    const totalBase = formatResolvedNumber(base! + stackBonus)
+    return `${totalBase} ${ratioSuffix}`.trim()
+  }
+  if (hasBase) return formatResolvedNumber(base! + stackBonus)
+  if (ratioSuffix) return ratioSuffix
+  if (calculation.baseValues.length > 0) {
+    const atRank = valueAtRank(calculation.baseValues, rankIndex)
+    return atRank == null ? '' : formatResolvedNumber(atRank)
+  }
+  return formatResolvedNumber(computed)
 }
 
 function buildRuntimeVariableMap(
@@ -244,26 +317,17 @@ function buildRuntimeVariableMap(
 
   const calculations = spell.calculations ?? []
   for (const calculation of calculations) {
-    const value = computeCalculationValue(calculation, stats, rank, maxRank)
-    const ratioSuffix = calculation.ratios
-      .map(ratio => formatRatioSuffix(ratio, rankIndex, stats))
-      .filter(Boolean)
-      .join(' ')
-    const base = calculation.baseValues[rankIndex]
-    const hasBase = Number.isFinite(base)
-    let rendered = ''
-    if (hasBase && ratioSuffix) {
-      rendered = `${formatResolvedNumber(base!)} ${ratioSuffix}`.trim()
-    } else if (hasBase) {
-      rendered = formatResolvedNumber(base!)
-    } else if (ratioSuffix) {
-      rendered = ratioSuffix
-    } else if (calculation.baseValues.length > 0) {
-      const atRank = valueAtRank(calculation.baseValues, rankIndex)
-      rendered = atRank == null ? '' : formatResolvedNumber(atRank)
-    } else {
-      rendered = formatResolvedNumber(value)
-    }
+    const stackBonus = stackDamageBonusForCalculation(calculation.key, stackContext, rankIndex)
+    const rendered = formatCalculationRenderedValue(
+      calculation,
+      rankIndex,
+      stackBonus,
+      stats,
+      rank,
+      maxRank,
+      calculations,
+      stackContext
+    )
     setVar(calculation.key, rendered)
   }
 
@@ -415,6 +479,32 @@ export function resolveTheorycraftTooltipHtml(
 
   parsed = parsed.replace(/___TOOLTIP_BR___/g, '<br />')
   return formatTooltipMarkupHtml(parsed)
+}
+
+export function resolveTheorycraftSpellDetailRaws(
+  spell: TheorycraftSpellRuntimeData,
+  stats: TheorycraftBuildStats | null,
+  rank: number,
+  stackContext?: TheorycraftStackResolveContext | null
+): string[] {
+  const statsForResolve: TheorycraftBuildStats = stats ?? {
+    level: rank,
+    totalAD: 0,
+    bonusAD: 0,
+    AP: 0,
+    totalHP: 0,
+    bonusHP: 0,
+    armor: 0,
+    magicResist: 0,
+    maxMana: 0,
+    critChance: 0,
+    critDamage: 1.75,
+    cooldownReduction: 0,
+  }
+
+  return (spell.tooltipDetailRaws ?? [])
+    .map(raw => resolveTheorycraftTooltipHtml(spell, statsForResolve, rank, raw, stackContext))
+    .filter((html): html is string => Boolean(html))
 }
 
 export function resolveTheorycraftSpellDescription(

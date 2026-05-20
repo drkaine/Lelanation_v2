@@ -4,6 +4,8 @@ import {
   buildPassiveStackStatsProvider,
   computeStackStatBonuses,
   findStackDefinitionForSource,
+  parseStackDefinitions,
+  stackDamageBonusForCalculation,
 } from '../theorycraftStacks'
 import type { TheorycraftStackDefinition } from '~/types/theorycraft'
 
@@ -70,5 +72,37 @@ describe('theorycraftStacks', () => {
     expect(findStackDefinitionForSource(definitions, { scope: 'spell', slot: 'Q' })?.id).toBe(
       'NasusQ'
     )
+  })
+
+  it('infers Nasus Q stack definition from spell dataValues', () => {
+    const champion = {
+      stackDefinitions: [null],
+      spells: [
+        {
+          id: 'NasusQ',
+          slot: 'Q',
+          name: 'Siphoning Strike',
+          dataValues: [{ name: 'BasicStacks', values: [3, 3, 3, 3, 3] }],
+          calculations: [{ key: 'totaldamage', baseValues: [40, 60, 80, 100, 120], ratios: [] }],
+        },
+      ],
+    }
+    const definitions = parseStackDefinitions(champion)
+    expect(definitions.some(def => def.id === 'NasusQ')).toBe(true)
+    const bonus = stackDamageBonusForCalculation(
+      'totaldamage',
+      {
+        definition: definitions.find(def => def.id === 'NasusQ')!,
+        stackCount: 100,
+        calculationsBySource: {
+          NasusQ: [
+            { key: 'basicstacks', baseValues: [3, 3, 3, 3, 3], ratios: [] },
+            { key: 'totaldamage', baseValues: [40, 60, 80, 100, 120], ratios: [] },
+          ],
+        },
+      },
+      0
+    )
+    expect(bonus).toBe(300)
   })
 })

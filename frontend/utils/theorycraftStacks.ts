@@ -31,14 +31,58 @@ export function parseStackDefinitions(
   champion: Record<string, unknown> | null | undefined
 ): TheorycraftStackDefinition[] {
   const raw = champion?.stackDefinitions
-  if (!Array.isArray(raw)) return []
-  return raw.filter((entry): entry is TheorycraftStackDefinition => {
-    if (!entry || typeof entry !== 'object') return false
-    const def = entry as TheorycraftStackDefinition
-    return (
-      typeof def.id === 'string' && Array.isArray(def.statBonuses) && Array.isArray(def.tooltipVars)
+  const fromExport = Array.isArray(raw)
+    ? raw.filter((entry): entry is TheorycraftStackDefinition => {
+        if (!entry || typeof entry !== 'object') return false
+        const def = entry as TheorycraftStackDefinition
+        return (
+          typeof def.id === 'string' &&
+          Array.isArray(def.statBonuses) &&
+          Array.isArray(def.tooltipVars)
+        )
+      })
+    : []
+
+  const inferred = inferStackDefinitionsFromChampion(champion)
+  const byId = new Map<string, TheorycraftStackDefinition>()
+  for (const def of [...fromExport, ...inferred]) {
+    byId.set(`${def.scope}:${def.id}`, def)
+  }
+  return [...byId.values()]
+}
+
+function inferStackDefinitionsFromChampion(
+  champion: Record<string, unknown> | null | undefined
+): TheorycraftStackDefinition[] {
+  const spells = Array.isArray(champion?.spells) ? champion.spells : []
+  const inferred: TheorycraftStackDefinition[] = []
+
+  for (const raw of spells) {
+    if (!raw || typeof raw !== 'object') continue
+    const spell = raw as {
+      id?: string
+      slot?: string
+      name?: string
+      dataValues?: Array<{ name: string; values: number[] }>
+    }
+    const basicStacks = spell.dataValues?.find(
+      entry => String(entry.name).toLowerCase() === 'basicstacks'
     )
-  })
+    if (!basicStacks?.values?.length) continue
+
+    inferred.push({
+      id: String(spell.id ?? ''),
+      scope: 'spell',
+      spellSlot: String(spell.slot ?? ''),
+      label: String(spell.name ?? spell.id ?? 'Stacks'),
+      maxStacks: 9999,
+      statBonuses: [],
+      tooltipVars: [],
+      damageBonuses: [{ targetKey: 'totaldamage', perStackKey: 'basicstacks' }],
+    })
+  }
+
+  return inferred
 }
 
 export function buildStackCalculationsBySource(
@@ -60,12 +104,23 @@ export function buildStackCalculationsBySource(
       id?: string
       slot?: string
       calculations?: TheorycraftSpellCalculation[]
+      dataValues?: Array<{ name: string; values: number[] }>
     }
-    if (!Array.isArray(spell.calculations)) continue
+    const calculations = Array.isArray(spell.calculations) ? [...spell.calculations] : []
+    const basicStacks = spell.dataValues?.find(
+      entry => String(entry.name).toLowerCase() === 'basicstacks'
+    )
+    if (
+      basicStacks?.values?.length &&
+      !calculations.some(entry => entry.key.toLowerCase() === 'basicstacks')
+    ) {
+      calculations.push({ key: 'basicstacks', baseValues: basicStacks.values, ratios: [] })
+    }
+    if (calculations.length === 0) continue
     const id = String(spell.id ?? '')
     const slot = String(spell.slot ?? '')
-    if (id) bySource[id] = spell.calculations
-    if (slot) bySource[slot] = spell.calculations
+    if (id) bySource[id] = calculations
+    if (slot) bySource[slot] = calculations
   }
   return bySource
 }
@@ -146,6 +201,31 @@ export function applyStackTooltipVariables(
     const perStack = perStackValue(calculations, tooltipVar.perStackKey, rankIndex)
     setVar(tooltipVar.key, formatNumber(perStack * safeStacks))
   }
+}
+
+export function stackDamageBonusForCalculation(
+  calculationKey: string,
+  stackContext:
+    | {
+        definition: TheorycraftStackDefinition
+        stackCount: number
+        calculationsBySource: Record<string, TheorycraftSpellCalculation[]>
+      }
+    | null
+    | undefined,
+  rankIndex: number
+): number {
+  if (!stackContext || stackContext.stackCount <= 0) return 0
+  const calculations = resolveStackCalculations(
+    stackContext.definition,
+    stackContext.calculationsBySource
+  )
+  let bonus = 0
+  for (const entry of stackContext.definition.damageBonuses ?? []) {
+    if (entry.targetKey.toLowerCase() !== calculationKey.toLowerCase()) continue
+    bonus += perStackValue(calculations, entry.perStackKey, rankIndex) * stackContext.stackCount
+  }
+  return bonus
 }
 
 export function findStackDefinitionForSource(

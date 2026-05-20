@@ -52,6 +52,11 @@ export interface TheorycraftStackTooltipVar {
   perStackKey: string
 }
 
+export interface TheorycraftStackDamageBonus {
+  targetKey: string
+  perStackKey: string
+}
+
 export interface TheorycraftStackDefinition {
   id: string
   scope: 'passive' | 'spell'
@@ -60,4 +65,5 @@ export interface TheorycraftStackDefinition {
   maxStacks?: number
   statBonuses: TheorycraftStackStatBonus[]
   tooltipVars: TheorycraftStackTooltipVar[]
+  damageBonuses?: TheorycraftStackDamageBonus[]
 }

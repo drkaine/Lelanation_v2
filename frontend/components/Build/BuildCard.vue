@@ -1298,19 +1298,26 @@
                   v-for="(entry, rowIndex) in managerStarterItems"
                   :key="`starter-${entry.index}-${entry.item.id}`"
                 >
-                  <img
-                    :src="getItemImageUrl(versionForImages, entry.item.image.full)"
-                    :alt="entry.item.name"
-                    class="items-manager-inline-icon"
-                    :class="itemManagerIconClass(entry.index)"
-                    :title="itemManagerTitle(entry)"
-                    :draggable="!props.build && !isTheorycraftItemsToggleMode"
-                    @click="onItemManagerClick(entry.index)"
-                    @dragstart="onItemDragStart(entry.index, $event)"
-                    @dragover="onItemDragOver(entry.index, $event)"
-                    @drop="onItemDrop(entry.index, $event)"
-                    @dragend="onItemDragEnd"
-                  />
+                  <div class="items-manager-inline-cell">
+                    <img
+                      :src="getItemImageUrl(versionForImages, entry.item.image.full)"
+                      :alt="entry.item.name"
+                      class="items-manager-inline-icon"
+                      :class="itemManagerIconClass(entry.index)"
+                      :title="itemManagerTitle(entry)"
+                      :draggable="!props.build && !isTheorycraftItemsToggleMode"
+                      @click="onItemManagerClick(entry.index)"
+                      @dragstart="onItemDragStart(entry.index, $event)"
+                      @dragover="onItemDragOver(entry.index, $event)"
+                      @drop="onItemDrop(entry.index, $event)"
+                      @dragend="onItemDragEnd"
+                    />
+                    <TheorycraftItemStackControls
+                      v-if="isTheorycraftItemsToggleMode"
+                      :index="entry.index"
+                      :item-id="entry.item.id"
+                    />
+                  </div>
                   <span
                     v-if="rowIndex < managerStarterItems.length - 1"
                     class="items-manager-inline-separator"
@@ -1328,19 +1335,26 @@
                   v-for="(entry, rowIndex) in managerBootsItems"
                   :key="`boots-${entry.index}-${entry.item.id}`"
                 >
-                  <img
-                    :src="getItemImageUrl(versionForImages, entry.item.image.full)"
-                    :alt="entry.item.name"
-                    class="items-manager-inline-icon"
-                    :class="itemManagerIconClass(entry.index)"
-                    :title="itemManagerTitle(entry)"
-                    :draggable="!props.build && !isTheorycraftItemsToggleMode"
-                    @click="onItemManagerClick(entry.index)"
-                    @dragstart="onItemDragStart(entry.index, $event)"
-                    @dragover="onItemDragOver(entry.index, $event)"
-                    @drop="onItemDrop(entry.index, $event)"
-                    @dragend="onItemDragEnd"
-                  />
+                  <div class="items-manager-inline-cell">
+                    <img
+                      :src="getItemImageUrl(versionForImages, entry.item.image.full)"
+                      :alt="entry.item.name"
+                      class="items-manager-inline-icon"
+                      :class="itemManagerIconClass(entry.index)"
+                      :title="itemManagerTitle(entry)"
+                      :draggable="!props.build && !isTheorycraftItemsToggleMode"
+                      @click="onItemManagerClick(entry.index)"
+                      @dragstart="onItemDragStart(entry.index, $event)"
+                      @dragover="onItemDragOver(entry.index, $event)"
+                      @drop="onItemDrop(entry.index, $event)"
+                      @dragend="onItemDragEnd"
+                    />
+                    <TheorycraftItemStackControls
+                      v-if="isTheorycraftItemsToggleMode"
+                      :index="entry.index"
+                      :item-id="entry.item.id"
+                    />
+                  </div>
                   <span
                     v-if="rowIndex < managerBootsItems.length - 1"
                     class="items-manager-inline-separator"
@@ -1358,19 +1372,26 @@
                   v-for="(entry, rowIndex) in managerCoreItems"
                   :key="`core-${entry.index}-${entry.item.id}`"
                 >
-                  <img
-                    :src="getItemImageUrl(versionForImages, entry.item.image.full)"
-                    :alt="entry.item.name"
-                    class="items-manager-inline-icon"
-                    :class="itemManagerIconClass(entry.index)"
-                    :title="itemManagerTitle(entry)"
-                    :draggable="!props.build && !isTheorycraftItemsToggleMode"
-                    @click="onItemManagerClick(entry.index)"
-                    @dragstart="onItemDragStart(entry.index, $event)"
-                    @dragover="onItemDragOver(entry.index, $event)"
-                    @drop="onItemDrop(entry.index, $event)"
-                    @dragend="onItemDragEnd"
-                  />
+                  <div class="items-manager-inline-cell">
+                    <img
+                      :src="getItemImageUrl(versionForImages, entry.item.image.full)"
+                      :alt="entry.item.name"
+                      class="items-manager-inline-icon"
+                      :class="itemManagerIconClass(entry.index)"
+                      :title="itemManagerTitle(entry)"
+                      :draggable="!props.build && !isTheorycraftItemsToggleMode"
+                      @click="onItemManagerClick(entry.index)"
+                      @dragstart="onItemDragStart(entry.index, $event)"
+                      @dragover="onItemDragOver(entry.index, $event)"
+                      @drop="onItemDrop(entry.index, $event)"
+                      @dragend="onItemDragEnd"
+                    />
+                    <TheorycraftItemStackControls
+                      v-if="isTheorycraftItemsToggleMode"
+                      :index="entry.index"
+                      :item-id="entry.item.id"
+                    />
+                  </div>
                   <span
                     v-if="rowIndex < managerCoreItems.length - 1"
                     class="items-manager-inline-separator"
@@ -1388,19 +1409,26 @@
                   v-for="(entry, rowIndex) in managerFinalItems"
                   :key="`final-${entry.index}-${entry.item.id}`"
                 >
-                  <img
-                    :src="getItemImageUrl(versionForImages, entry.item.image.full)"
-                    :alt="entry.item.name"
-                    class="items-manager-inline-icon"
-                    :class="itemManagerIconClass(entry.index)"
-                    :title="itemManagerTitle(entry)"
-                    :draggable="!props.build && !isTheorycraftItemsToggleMode"
-                    @click="onItemManagerClick(entry.index)"
-                    @dragstart="onItemDragStart(entry.index, $event)"
-                    @dragover="onItemDragOver(entry.index, $event)"
-                    @drop="onItemDrop(entry.index, $event)"
-                    @dragend="onItemDragEnd"
-                  />
+                  <div class="items-manager-inline-cell">
+                    <img
+                      :src="getItemImageUrl(versionForImages, entry.item.image.full)"
+                      :alt="entry.item.name"
+                      class="items-manager-inline-icon"
+                      :class="itemManagerIconClass(entry.index)"
+                      :title="itemManagerTitle(entry)"
+                      :draggable="!props.build && !isTheorycraftItemsToggleMode"
+                      @click="onItemManagerClick(entry.index)"
+                      @dragstart="onItemDragStart(entry.index, $event)"
+                      @dragover="onItemDragOver(entry.index, $event)"
+                      @drop="onItemDrop(entry.index, $event)"
+                      @dragend="onItemDragEnd"
+                    />
+                    <TheorycraftItemStackControls
+                      v-if="isTheorycraftItemsToggleMode"
+                      :index="entry.index"
+                      :item-id="entry.item.id"
+                    />
+                  </div>
                   <span
                     v-if="rowIndex < managerFinalItems.length - 1"
                     class="items-manager-inline-separator"
@@ -1424,6 +1452,22 @@
           <div v-for="row in itemStatsRows" :key="row.key" class="items-manager-stats-row">
             <span class="items-manager-stats-label">{{ row.label }}</span>
             <span class="items-manager-stats-value">{{ row.value }}</span>
+          </div>
+        </div>
+        <div
+          v-if="isTheorycraftItemsToggleMode && theorycraftItemModifierRows.length > 0"
+          class="items-manager-modifiers"
+        >
+          <p class="items-manager-modifiers__title">{{ t('theorycraft.items.modifiersTitle') }}</p>
+          <div class="items-manager-modifiers__grid">
+            <div
+              v-for="(row, index) in theorycraftItemModifierRows"
+              :key="`modifier-${row.itemId}-${index}`"
+              class="items-manager-modifiers__row"
+            >
+              <span class="items-manager-modifiers__label">{{ row.label }}</span>
+              <span class="items-manager-modifiers__value">{{ row.detail }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -1473,6 +1517,7 @@ import { fixedTooltipStyleFromPointer, type TooltipPointer } from '~/utils/toolt
 import { formatRuneTooltipHtml } from '~/utils/formatTooltipMarkupHtml'
 import DescriptionEditor from '~/components/Build/DescriptionEditor.vue'
 import TheorycraftCardStatsBack from '~/components/Build/TheorycraftCardStatsBack.vue'
+import TheorycraftItemStackControls from '~/components/Build/TheorycraftItemStackControls.vue'
 import DescriptionVideoPreviews from '~/components/Build/DescriptionVideoPreviews.vue'
 
 interface RegionsPayload {
@@ -2477,6 +2522,13 @@ const theorycraftStackCount = computed(() =>
     (sum, count) => sum + (Number.isFinite(count) && count > 0 ? count : 0),
     0
   )
+)
+
+const theorycraftItemModifierRows = computed(() =>
+  buildStore.theorycraftItemModifierLines.map(row => ({
+    ...row,
+    label: row.labelKey ? t(row.labelKey) : row.label,
+  }))
 )
 const showItemStats = ref(false)
 const draggingItemIndex = ref<number | null>(null)
@@ -4571,12 +4623,19 @@ defineExpose({
 
 .items-manager-inline {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 4px;
   width: 100%;
   overflow-x: auto;
   white-space: nowrap;
   padding-bottom: 4px;
+}
+
+.items-manager-inline-cell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  vertical-align: top;
 }
 
 .items-manager-groups {
@@ -4695,6 +4754,43 @@ defineExpose({
 .items-manager-stats-value {
   color: var(--color-gold-300);
   font-weight: 600;
+}
+
+.items-manager-modifiers {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgb(200 155 60 / 0.25);
+}
+
+.items-manager-modifiers__title {
+  margin: 0 0 0.5rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgb(252 211 77 / 0.9);
+}
+
+.items-manager-modifiers__grid {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.items-manager-modifiers__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.7rem;
+}
+
+.items-manager-modifiers__label {
+  color: rgb(255 255 255 / 0.7);
+}
+
+.items-manager-modifiers__value {
+  font-weight: 700;
+  color: rgb(196 181 253 / 1);
+  text-align: right;
 }
 
 .core-items-paths {

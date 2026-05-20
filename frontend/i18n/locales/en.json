@@ -269,6 +269,19 @@
       "abilityHaste": "Ability haste",
       "activeItemsNote": "{count} active items",
       "stacksNote": "{count} passive stacks"
+    },
+    "items": {
+      "modifiersTitle": "Item bonuses (% / stacks)",
+      "stacksInput": "Item stacks",
+      "transformToggle": "Toggle transformed item (Seraph, Muramana…)",
+      "transformShort": "T2",
+      "transformed": "Transformed item",
+      "rabadonAp": "Rabadon's Deathcap (+30% total AP)",
+      "mejai": "Mejai's",
+      "heartsteel": "Heartsteel",
+      "tear": "Tear / mana stack item",
+      "archangelAwe": "Awe (AP from mana)",
+      "manamuneAwe": "Awe (AD from mana)"
     }
   },
   "buildCard": {
