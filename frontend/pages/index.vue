@@ -44,6 +44,8 @@
         </div>
       </div>
     </section>
+
+    <HomeBuildCardGuide />
   </div>
 </template>
 

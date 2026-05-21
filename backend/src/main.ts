@@ -1,21 +1,99 @@
 import "dotenv/config";
+import type { Worker } from "bullmq";
 import { config } from "./config/index.js";
 import { healthCheck, sql } from "./db/client.js";
 import { appendUnifiedLog } from "./logging/unifiedAppLog.js";
 import { pollerV2Observability } from "./observability/poller-v2-observability.js";
-import { scheduleDiscoveryRepeatJob, discoveryWorker } from "./workers/discovery.worker.js";
-import { hydrationWorker } from "./workers/hydration.worker.js";
-import { ingestionWorker } from "./workers/ingestion.worker.js";
-import { rankWorker } from "./workers/rank.worker.js";
 import { getQueueMetrics } from "./queues/index.js";
 import { syncMatchPipelinePause } from "./queues/pipeline-pause-sync.js";
 import { loadLuaScript, startDrip, stopDrip } from "./redis/rate-scheduler.js";
 import { redis } from "./redis/client.js";
 
+type PollerWorkers = {
+  discoveryWorker: Worker;
+  hydrationWorker: Worker;
+  ingestionWorker: Worker;
+  rankWorker: Worker;
+  scheduleDiscoveryRepeatJob: () => Promise<void>;
+};
+
+let workers: PollerWorkers | null = null;
 let metricsInterval: NodeJS.Timeout | null = null;
 let summary30mInterval: NodeJS.Timeout | null = null;
 let summary1hInterval: NodeJS.Timeout | null = null;
+let leaderLockRenewInterval: NodeJS.Timeout | null = null;
 let shuttingDown = false;
+
+const POLLER_LEADER_LOCK_KEY = "poller-v2:leader";
+const POLLER_LEADER_LOCK_TTL_SEC = 120;
+
+async function acquirePollerLeaderLock(): Promise<void> {
+  const acquired = await redis.set(
+    POLLER_LEADER_LOCK_KEY,
+    String(process.pid),
+    "EX",
+    POLLER_LEADER_LOCK_TTL_SEC,
+    "NX",
+  );
+  if (acquired !== "OK") {
+    const owner = await redis.get(POLLER_LEADER_LOCK_KEY);
+    throw new Error(
+      `poller_leader_lock_held owner_pid=${owner ?? "unknown"} current_pid=${process.pid} hint=kill_other_poller_first`,
+    );
+  }
+
+  leaderLockRenewInterval = setInterval(() => {
+    void redis
+      .set(POLLER_LEADER_LOCK_KEY, String(process.pid), "EX", POLLER_LEADER_LOCK_TTL_SEC)
+      .catch((error) => {
+        console.error("[poller-main] leader lock renew failed", error);
+      });
+  }, 30_000);
+}
+
+async function releasePollerLeaderLock(): Promise<void> {
+  if (leaderLockRenewInterval) {
+    clearInterval(leaderLockRenewInterval);
+    leaderLockRenewInterval = null;
+  }
+  const owner = await redis.get(POLLER_LEADER_LOCK_KEY);
+  if (owner === String(process.pid)) {
+    await redis.del(POLLER_LEADER_LOCK_KEY);
+  }
+}
+
+async function startWorkers(): Promise<PollerWorkers> {
+  const [discoveryMod, hydrationMod, ingestionMod, rankMod] = await Promise.all([
+    import("./workers/discovery.worker.js"),
+    import("./workers/hydration.worker.js"),
+    import("./workers/ingestion.worker.js"),
+    import("./workers/rank.worker.js"),
+  ]);
+
+  return {
+    discoveryWorker: discoveryMod.discoveryWorker,
+    hydrationWorker: hydrationMod.hydrationWorker,
+    ingestionWorker: ingestionMod.ingestionWorker,
+    rankWorker: rankMod.rankWorker,
+    scheduleDiscoveryRepeatJob: discoveryMod.scheduleDiscoveryRepeatJob,
+  };
+}
+
+async function closeWorkers(activeWorkers: PollerWorkers): Promise<void> {
+  await Promise.all([
+    activeWorkers.discoveryWorker.pause(true),
+    activeWorkers.hydrationWorker.pause(true),
+    activeWorkers.ingestionWorker.pause(true),
+    activeWorkers.rankWorker.pause(true),
+  ]);
+
+  await Promise.all([
+    activeWorkers.discoveryWorker.close(),
+    activeWorkers.hydrationWorker.close(),
+    activeWorkers.ingestionWorker.close(),
+    activeWorkers.rankWorker.close(),
+  ]);
+}
 
 function validateConfig(): void {
   void config.ENV;
@@ -37,8 +115,10 @@ async function getDataLagSeconds(): Promise<number | null> {
 }
 
 async function logMetricsTick(): Promise<void> {
+  if (!workers) return;
+
   const startedAt = Date.now();
-  const pipelinesPaused = await syncMatchPipelinePause(hydrationWorker, ingestionWorker);
+  const pipelinesPaused = await syncMatchPipelinePause(workers.hydrationWorker, workers.ingestionWorker);
   const metrics = await getQueueMetrics();
   const lagSeconds = await getDataLagSeconds();
   const tickDurationMs = Date.now() - startedAt;
@@ -121,6 +201,12 @@ async function bootstrap(): Promise<void> {
   validateConfig();
   console.log(`[poller-main] config validated env=${config.ENV}`);
 
+  await acquirePollerLeaderLock();
+  console.log(`[poller-main] leader lock acquired pid=${process.pid}`);
+
+  workers = await startWorkers();
+  console.log("[poller-main] workers started: discovery, hydration, ingestion, rank");
+
   await loadLuaScript();
   startDrip();
   console.log("[poller-main] scheduled slot rate limiter loaded (drip started)");
@@ -131,15 +217,12 @@ async function bootstrap(): Promise<void> {
   }
   console.log("[poller-main] database health check OK");
 
-  await scheduleDiscoveryRepeatJob();
+  await workers.scheduleDiscoveryRepeatJob();
   console.log(
     `[poller-main] discovery repeat job scheduled (${config.DISCOVERY_INTERVAL_MS}ms, ${config.DISCOVERY_PLAYERS_PER_TICK} players/tick)`,
   );
 
-  // Workers are started on import; we only confirm readiness here.
-  console.log("[poller-main] workers started: discovery, hydration, ingestion, rank");
-
-  const pipelinesPaused = await syncMatchPipelinePause(hydrationWorker, ingestionWorker);
+  const pipelinesPaused = await syncMatchPipelinePause(workers.hydrationWorker, workers.ingestionWorker);
   console.log(`[poller-main] match pipelines paused=${pipelinesPaused} (rank backlog policy)`);
 
   await startMonitoring();
@@ -165,19 +248,12 @@ async function gracefulShutdown(signal: string): Promise<void> {
   stopDrip();
 
   try {
-    await Promise.all([
-      discoveryWorker.pause(true),
-      hydrationWorker.pause(true),
-      ingestionWorker.pause(true),
-      rankWorker.pause(true),
-    ]);
+    await releasePollerLeaderLock();
 
-    await Promise.all([
-      discoveryWorker.close(),
-      hydrationWorker.close(),
-      ingestionWorker.close(),
-      rankWorker.close(),
-    ]);
+    if (workers) {
+      await closeWorkers(workers);
+      workers = null;
+    }
 
     await sql.end();
     await redis.quit();
@@ -199,6 +275,15 @@ process.on("SIGINT", () => {
 
 void bootstrap().catch(async (error) => {
   console.error("[poller-main] bootstrap failed", error);
+  try {
+    if (workers) {
+      await closeWorkers(workers);
+      workers = null;
+    }
+    await releasePollerLeaderLock();
+  } catch {
+    // ignore
+  }
   try {
     await sql.end();
   } catch {

@@ -87,17 +87,17 @@ export const config: Config = {
   DISCOVERY_MIN_QUEUE_DEPTH:
     parsePositiveInt(process.env.DISCOVERY_MIN_QUEUE_DEPTH) ?? 20,
   MAX_HYDRATION_QUEUE_DEPTH:
-    parsePositiveInt(process.env.MAX_HYDRATION_QUEUE_DEPTH) ?? 500,
+    parsePositiveInt(process.env.MAX_HYDRATION_QUEUE_DEPTH) ?? 1_500,
   DISCOVERY_INTERVAL_MS:
     parsePositiveInt(process.env.DISCOVERY_INTERVAL_MS) ?? 45_000,
   MAX_RANK_BACKLOG_PAUSE_PIPELINES:
-    parsePositiveInt(process.env.MAX_RANK_BACKLOG_PAUSE_PIPELINES) ?? 5_000,
+    parsePositiveInt(process.env.MAX_RANK_BACKLOG_PAUSE_PIPELINES) ?? 8_000,
   RANK_LIMITER_MAX_NORMAL:
     parsePositiveInt(process.env.RANK_LIMITER_MAX_NORMAL) ?? 17,
   RANK_LIMITER_MAX_DRAIN:
     parsePositiveInt(process.env.RANK_LIMITER_MAX_DRAIN) ?? 95,
   RANK_WORKER_CONCURRENCY_DRAIN:
-    parsePositiveInt(process.env.RANK_WORKER_CONCURRENCY_DRAIN) ?? 4,
+    parsePositiveInt(process.env.RANK_WORKER_CONCURRENCY_DRAIN) ?? 6,
   RANK_WORKER_CONCURRENCY_NORMAL:
     parsePositiveInt(process.env.RANK_WORKER_CONCURRENCY_NORMAL) ?? 2,
 };

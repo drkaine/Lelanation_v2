@@ -12,10 +12,17 @@ const {
   discoveryTargetRatePerSec,
   hydrationTargetRatePerSec,
   rankTargetRatePerSec,
+  slotBudgetForPipeline,
+  SLOT_BUDGETS_REF,
+  SLOT_COSTS,
+  tokenReleaseIntervalMs,
+  jobReleaseIntervalMs,
+  WINDOW_MS,
   RANK_SLOT_KEY,
   HYDRATION_SLOT_KEY,
   DISCOVERY_SLOT_KEY,
   totalTargetRatePerSec,
+  totalSlotBudgetPer120s,
 } = await import("../src/redis/rate-scheduler.js");
 
 const preferredRedisUrl = process.env.REDIS_TEST_URL || "redis://localhost:6380";
@@ -111,16 +118,35 @@ afterAll(async () => {
 });
 
 describe("budget allocation", () => {
-  test("discovery + hydration Redis somment à totalTargetRate (rank = BullMQ limiter)", () => {
+  test("discovery + hydration + rank Redis = totalSlotBudgetPer120s", () => {
     const total = totalTargetRatePerSec(95);
-    const sum = discoveryTargetRatePerSec(95) + hydrationTargetRatePerSec(95);
+    const sum =
+      discoveryTargetRatePerSec(95) +
+      hydrationTargetRatePerSec(95) +
+      rankTargetRatePerSec(95);
     expect(sum).toBeCloseTo(total, 5);
+    expect(totalSlotBudgetPer120s(95)).toBe(98);
+  });
+
+  test("budgets dev de référence (6/74/18 req/120s)", () => {
+    expect(SLOT_BUDGETS_REF).toEqual({ discovery: 6, hydration: 74, rank: 18 });
+    expect(slotBudgetForPipeline("discovery", 95)).toBe(6);
+    expect(slotBudgetForPipeline("hydration", 95)).toBe(74);
+    expect(slotBudgetForPipeline("rank", 95)).toBe(18);
   });
 
   test("clés Redis de production", () => {
     expect(DISCOVERY_SLOT_KEY).toBe("rl:slots:discovery");
     expect(HYDRATION_SLOT_KEY).toBe("rl:slots:hydration");
     expect(RANK_SLOT_KEY).toBe("rl:slots:rank");
+  });
+
+  test("intervalles drip uniformes dev (6/74/18 req/120s)", () => {
+    expect(WINDOW_MS).toBe(120_000);
+    expect(SLOT_COSTS).toEqual({ discovery: 1, hydration: 2, rank: 1 });
+    expect(tokenReleaseIntervalMs("discovery", 95)).toBe(20_000);
+    expect(tokenReleaseIntervalMs("rank", 95)).toBeCloseTo(WINDOW_MS / 18, 0);
+    expect(jobReleaseIntervalMs("hydration", 95)).toBeCloseTo(WINDOW_MS / (74 / SLOT_COSTS.hydration), 0);
   });
 });
 
@@ -139,7 +165,7 @@ describe("drip accumulator", () => {
     expect(acc).toBeLessThan(1);
   });
 
-  test("~87 slots sur 120s de ticks (pas ~600 avec Math.ceil)", () => {
+  test("~98 slots sur 120s de ticks (budget unifié discovery+hydration+rank)", () => {
     const targetRate = totalTargetRatePerSec(95);
     const ticksIn120s = 120_000 / 200;
     let acc = 0;
@@ -149,8 +175,8 @@ describe("drip accumulator", () => {
       acc = step.accumulator;
       totalSlots += step.slotsToAdd;
     }
-    expect(totalSlots).toBeGreaterThanOrEqual(85);
-    expect(totalSlots).toBeLessThanOrEqual(90);
+    expect(totalSlots).toBeGreaterThanOrEqual(93);
+    expect(totalSlots).toBeLessThanOrEqual(100);
   });
 
   test("la plupart des ticks n’ajoutent aucun slot", () => {
@@ -192,21 +218,22 @@ describe("slow discovery drip (interval > 8s lookahead)", () => {
   test(
     "alimente des créneaux même quand la file Redis est vide",
     async () => {
+      const slowRatePerSec = 10 / 120;
       const slowDiscovery = createLuaRateLimiterForTests({
         redisClient: redis,
         slotKey: "rl:test:slots:slow-discovery",
-        targetRatePerSec: discoveryTargetRatePerSec(95),
+        targetRatePerSec: slowRatePerSec,
       });
       await redis.del("rl:test:slots:slow-discovery");
       await slowDiscovery.loadScript();
       slowDiscovery.startDrip();
-      await new Promise((resolve) => setTimeout(resolve, 10_000));
+      await new Promise((resolve) => setTimeout(resolve, 15_000));
       const count = await redis.zcard("rl:test:slots:slow-discovery");
       slowDiscovery.stopDrip();
       await redis.del("rl:test:slots:slow-discovery");
       expect(count).toBeGreaterThan(0);
     },
-    15_000,
+    20_000,
   );
 });
 

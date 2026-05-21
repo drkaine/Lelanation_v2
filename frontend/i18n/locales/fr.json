@@ -86,7 +86,23 @@
     },
     "ctaTitle": "Prêt à créer votre premier build ?",
     "ctaText": "Rejoignez la communauté Lelanation et partagez vos meilleures configurations",
-    "ctaButton": "Commencer Maintenant"
+    "ctaButton": "Commencer Maintenant",
+    "buildCardGuide": {
+      "title": "Comprendre la fiche build",
+      "intro": "Chaque zone de la carte résume une partie de votre build. Passez la souris sur les éléments interactifs dans le builder pour plus de détails.",
+      "imageAlt": "Exemple de fiche build Lelanation pour Akali",
+      "variants": "Variantes du build : plusieurs configurations pour le même champion (ex. lane, matchup, fun).",
+      "tags": "Étiquettes : Pro, OTP, Exotique ou Troll — indiquent le style ou le niveau du build.",
+      "roles": "Rôles : Top, Jungle, Mid, ADC ou Support — où jouer ce build.",
+      "version": "Version du patch : données items et runes à jour pour cette version du jeu.",
+      "champion": "Champion : portrait et nom du personnage concerné par le build.",
+      "summonerSpells": "Sorts d’invocateur : Flash, Ignite, etc. — choisis pour la partie.",
+      "runes": "Runes : keystone et arbres primaire / secondaire.",
+      "shards": "Fragments de stats : bonus adaptatifs en fin de page runes.",
+      "items": "Objets : départs, bottes et chemins de build (flèches = ordre d’achat).",
+      "firstThreeUps": "Ordre up des premiers niveaux : compétences aux niveaux 1, 2 et 3 (touches A, Z, E — clavier AZERTY).",
+      "skillMaxOrder": "Ordre de max : dans quel ordre maxer ensuite (touches A, Z, E — clavier AZERTY)."
+    }
   },
   "seo": {
     "homeTitle": "Lelanation - Plateforme de builds League of Legends",

@@ -86,7 +86,23 @@
     },
     "ctaTitle": "Ready to create your first build?",
     "ctaText": "Join the Lelanation community and share your best setups",
-    "ctaButton": "Get started"
+    "ctaButton": "Get started",
+    "buildCardGuide": {
+      "title": "Understanding the build sheet",
+      "intro": "Each area of the card summarizes part of your build. Hover interactive elements in the builder for more detail.",
+      "imageAlt": "Sample Lelanation build sheet for Akali",
+      "variants": "Build variants: multiple setups for the same champion (e.g. lane, matchup, fun).",
+      "tags": "Tags: Pro, OTP, Exotic, or Troll — show the style or intent of the build.",
+      "roles": "Roles: Top, Jungle, Mid, ADC, or Support — where to play this build.",
+      "version": "Patch version: item and rune data synced to this game version.",
+      "champion": "Champion: portrait and name of the character this build is for.",
+      "summonerSpells": "Summoner spells: Flash, Ignite, etc. — chosen for the game.",
+      "runes": "Runes: keystone and primary / secondary trees.",
+      "shards": "Stat shards: adaptive bonuses at the bottom of the rune page.",
+      "items": "Items: starters, boots, and build paths (arrows = purchase order).",
+      "firstThreeUps": "First levels skill-up order: abilities at levels 1, 2, and 3 (shown as Q, W, E — QWERTY keyboard).",
+      "skillMaxOrder": "Max order: which abilities to max next (Q, W, E on QWERTY keyboard)."
+    }
   },
   "seo": {
     "homeTitle": "Lelanation - League of Legends builds platform",

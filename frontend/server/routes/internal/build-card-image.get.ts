@@ -8,6 +8,18 @@ import { useRuntimeConfig } from '#imports'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
+/**
+ * Playwright must hit the local Nitro server, not the public HTTPS URL (cert/proxy mismatch).
+ */
+function resolveScreenshotRenderOrigin(): string {
+  const explicit = (process.env.NUXT_SCREENSHOT_ORIGIN || '').trim()
+  if (explicit) return explicit.replace(/\/$/, '')
+  const port = String(process.env.NITRO_PORT || process.env.PORT || '3000')
+  const hostRaw = String(process.env.NITRO_HOST || '127.0.0.1').trim()
+  const host = hostRaw === '0.0.0.0' ? '127.0.0.1' : hostRaw
+  return `http://${host}:${port}`
+}
+
 function resolveApiRoots(event: H3Event): string[] {
   const cfg = useRuntimeConfig(event)
   const fromEnv = (process.env.NUXT_PUBLIC_API_BASE || '').trim()
@@ -127,8 +139,7 @@ export default defineEventHandler(async event => {
     // miss
   }
 
-  const requestUrl = getRequestURL(event)
-  const origin = `${requestUrl.protocol}//${requestUrl.host}`
+  const origin = resolveScreenshotRenderOrigin()
   const renderPath = locale === 'fr' ? '/render/build-card' : '/en/render/build-card'
   const params = new URLSearchParams()
   params.set('id', id)
@@ -143,7 +154,6 @@ export default defineEventHandler(async event => {
     png = await screenshotBuildCardPng({ pageUrl })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    console.error('[build-card-image] Playwright failed:', msg)
     throw createError({
       statusCode: 503,
       statusMessage: `Screenshot failed: ${msg}`,

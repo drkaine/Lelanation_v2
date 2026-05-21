@@ -6,6 +6,10 @@ import { pollerV2Observability } from "../observability/poller-v2-observability.
 import { bullmqJobId } from "../queues/bullmq-job-id.js";
 import { maxRankBacklogBeforePipelinePause, shouldPauseMatchPipelines } from "../queues/rank-backlog-policy.js";
 import { discoveryQueue, hydrationQueue, rankQueue } from "../queues/index.js";
+import {
+  computeRankPrefetchHydrationDelay,
+  prefetchRankJobsForDiscoveryPlayers,
+} from "../queues/rank-jobs.js";
 import { DISCOVERY_QUEUE } from "../queues/definitions.js";
 import { redis } from "../redis/client.js";
 import { waitForDiscoverySlot } from "../redis/rate-scheduler.js";
@@ -140,6 +144,7 @@ async function processDiscoveryPlayer(
   player: PlayerRow,
   patchWindow: { startTimeSec: number },
   nowSec: number,
+  hydrationDelayMs = 0,
 ): Promise<void> {
   pollerV2Observability.recordPlayersPolled(1);
   const lastSeenSec = toEpochSeconds(player.last_seen);
@@ -168,6 +173,9 @@ async function processDiscoveryPlayer(
 
     if (toEnqueue.length > 0) {
       await markMatchIdsQueued(toEnqueue);
+      for (const matchId of toEnqueue) {
+        pollerV2Observability.recordMatchQueuedForPipeline(matchId);
+      }
       await hydrationQueue.addBulk(
         toEnqueue.map((matchId) => ({
           name: "hydrate-match",
@@ -178,6 +186,7 @@ async function processDiscoveryPlayer(
           },
           opts: {
             jobId: bullmqJobId("hydrate", matchId),
+            ...(hydrationDelayMs > 0 ? { delay: hydrationDelayMs } : {}),
           },
         })),
       );
@@ -238,15 +247,31 @@ async function runDiscoveryCycle(): Promise<void> {
     return;
   }
 
+  const rankPrefetchCount = await prefetchRankJobsForDiscoveryPlayers(players);
+  pollerV2Observability.recordDiscoveryRankPrefetch(players.length, rankPrefetchCount);
+  const hydrationDelayMs = computeRankPrefetchHydrationDelay(rankPrefetchCount);
+  if (rankPrefetchCount > 0) {
+    console.debug(
+      JSON.stringify({
+        msg: "discovery_rank_prefetch",
+        rankPrefetchCount,
+        hydrationDelayMs,
+      }),
+    );
+  }
+
   for (const player of players) {
-    await processDiscoveryPlayer(player, patchWindow, nowSec);
+    await processDiscoveryPlayer(player, patchWindow, nowSec, hydrationDelayMs);
   }
 
   const queueDepth = await hydrationQueue.getWaitingCount();
   if (queueDepth < minQueueDepth && players.length === playersPerTick) {
     const bonusPlayer = await getNextPlayer();
     if (bonusPlayer) {
-      await processDiscoveryPlayer(bonusPlayer, patchWindow, nowSec);
+      const bonusPrefetchCount = await prefetchRankJobsForDiscoveryPlayers([bonusPlayer]);
+      pollerV2Observability.recordDiscoveryRankPrefetch(1, bonusPrefetchCount);
+      const bonusHydrationDelayMs = computeRankPrefetchHydrationDelay(bonusPrefetchCount);
+      await processDiscoveryPlayer(bonusPlayer, patchWindow, nowSec, bonusHydrationDelayMs);
     }
   }
 

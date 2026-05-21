@@ -8,9 +8,7 @@
     </a>
     <AppNavbar v-show="!isStreamerMode && !isBuildCardRenderRoute" />
     <div
-      v-show="
-        !isStreamerMode && !isBuildCardRenderRoute && (isHomeRoute || !commandBarHiddenByScroll)
-      "
+      v-show="!isStreamerMode && !isBuildCardRenderRoute && !commandBarHiddenByScroll"
       class="command-bar-fixed-wrapper"
     >
       <button
@@ -370,10 +368,6 @@ const onDocumentPointerDown = (event: MouseEvent) => {
 
 function onWindowScroll() {
   if (!import.meta.client) return
-  if (isHomeRoute.value) {
-    commandBarHiddenByScroll.value = false
-    return
-  }
   commandBarHiddenByScroll.value = window.scrollY > COMMAND_BAR_SCROLL_THRESHOLD
 }
 
@@ -382,7 +376,8 @@ watch(
   isHome => {
     if (isHome) {
       commandsCollapsed.value = false
-      commandBarHiddenByScroll.value = false
+      if (import.meta.client) onWindowScroll()
+      else commandBarHiddenByScroll.value = false
       return
     }
     commandsCollapsed.value = true

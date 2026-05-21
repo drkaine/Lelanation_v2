@@ -1,13 +1,11 @@
 /**
- * Trois drips Redis (discovery / hydration / rank) sur un budget unique :
+ * Trois drips Redis (discovery / hydration / rank) sur 98 req/120s (dev ref) :
  *
- *   TOTAL_RATE = RATE_LIMIT_PER_120S * TARGET_PCT / 120
- *   // dev : 95 * 0.95 / 120 ≈ 0.7521 tokens/s
+ *   tokenReleaseIntervalMs = WINDOW_MS / tokens
+ *   // discovery 1/20s · hydration 1 token/1.6s (job cost 2 ≈ /3.2s) · rank 1/6.7s
  *
- *   discovery 15% · hydration 85% (rank = BullMQ limiter, pas de drip Redis)
- *   // dev : ~0.11/s discovery · ~0.64/s hydration (coût 2)
- *
- * Rank : Worker BullMQ `limiter` (17 / 120s, concurrency 2) — pas de spin Redis.
+ * Production : 1 token par tick de timer (pas de rafale accumulateur).
+ * Cooldown 429 global bloque les 3 pipelines.
  */
 import { readFileSync } from "fs";
 import { dirname, join } from "path";
@@ -21,15 +19,28 @@ const ACQUIRE_SLOT_LUA = readFileSync(join(__dirname, "lua", "acquire-slot.lua")
 
 export const TARGET_PCT = 0.95;
 
-/** Part de TOTAL_RATE pour matchlists discovery (coût 1). */
-export const DISCOVERY_BUDGET_PCT = 0.15;
-/** Part de TOTAL_RATE pour match + timeline (coût 2 par job hydration). */
-export const HYDRATION_BUDGET_PCT = 0.85;
-/** Référence doc / limiter BullMQ rank (~17 appels / 120s en dev). */
-export const RANK_BUDGET_PCT = 0.1;
+/** Fenêtre glissante Riot (ms). */
+export const WINDOW_MS = 120_000;
 
-/** Limiter BullMQ rank.worker — voir rank-backlog-policy (drain vs normal). */
-export const RANK_BULLMQ_LIMITER_DURATION_MS = 120_000;
+/** Tokens API par pipeline sur WINDOW_MS (clé dev ref 95 req/120s). */
+export const SLOT_BUDGETS_REF = {
+  discovery: 6,
+  hydration: 74,
+  rank: 18,
+} as const;
+
+/** Alias explicite Phase 4. */
+export const SLOT_TOKENS = SLOT_BUDGETS_REF;
+
+/** Coût Riot par job worker. */
+export const SLOT_COSTS = {
+  discovery: 1,
+  hydration: 2,
+  rank: 1,
+} as const;
+
+const SLOT_BUDGETS_REF_RATE_LIMIT_120S = 95;
+const SLOT_BUDGET_WINDOW_SEC = WINDOW_MS / 1000;
 
 export const DISCOVERY_SLOT_KEY = "rl:slots:discovery";
 export const HYDRATION_SLOT_KEY = "rl:slots:hydration";
@@ -42,11 +53,11 @@ export const SLOT_KEY = HYDRATION_SLOT_KEY;
 
 const GLOBAL_COOLDOWN_KEY = "rl:app:global-cooldown";
 const MAX_LOOKAHEAD_MS = 8000;
-const DRIP_INTERVAL_MS = 200;
+/** Tick simulateur tests (accumulateur fractionnaire). */
+const TEST_DRIP_TICK_MS = 200;
 
 let acquireSlotSha: string | null = null;
 const dripIntervals: NodeJS.Timeout[] = [];
-const dripAccumulators = new Map<string, number>();
 
 export type RankSlotResult = "ok" | "budget_exhausted";
 
@@ -54,20 +65,61 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+export type SlotPipeline = keyof typeof SLOT_BUDGETS_REF;
+
+export function slotBudgetForPipeline(
+  pipeline: SlotPipeline,
+  rateLimitPer120s = config.RATE_LIMIT_PER_120S,
+): number {
+  const refBudget = SLOT_BUDGETS_REF[pipeline];
+  const scaled =
+    (refBudget * rateLimitPer120s) / SLOT_BUDGETS_REF_RATE_LIMIT_120S;
+  return Math.max(1, Math.round(scaled));
+}
+
+export function totalSlotBudgetPer120s(
+  rateLimitPer120s = config.RATE_LIMIT_PER_120S,
+): number {
+  return (
+    slotBudgetForPipeline("discovery", rateLimitPer120s) +
+    slotBudgetForPipeline("hydration", rateLimitPer120s) +
+    slotBudgetForPipeline("rank", rateLimitPer120s)
+  );
+}
+
 export function totalTargetRatePerSec(rateLimitPer120s = config.RATE_LIMIT_PER_120S): number {
-  return (rateLimitPer120s * TARGET_PCT) / 120;
+  return totalSlotBudgetPer120s(rateLimitPer120s) / SLOT_BUDGET_WINDOW_SEC;
 }
 
 export function discoveryTargetRatePerSec(rateLimitPer120s = config.RATE_LIMIT_PER_120S): number {
-  return totalTargetRatePerSec(rateLimitPer120s) * DISCOVERY_BUDGET_PCT;
+  return slotBudgetForPipeline("discovery", rateLimitPer120s) / SLOT_BUDGET_WINDOW_SEC;
 }
 
 export function hydrationTargetRatePerSec(rateLimitPer120s = config.RATE_LIMIT_PER_120S): number {
-  return totalTargetRatePerSec(rateLimitPer120s) * HYDRATION_BUDGET_PCT;
+  return slotBudgetForPipeline("hydration", rateLimitPer120s) / SLOT_BUDGET_WINDOW_SEC;
 }
 
 export function rankTargetRatePerSec(rateLimitPer120s = config.RATE_LIMIT_PER_120S): number {
-  return totalTargetRatePerSec(rateLimitPer120s) * RANK_BUDGET_PCT;
+  return slotBudgetForPipeline("rank", rateLimitPer120s) / SLOT_BUDGET_WINDOW_SEC;
+}
+
+/** Intervalle entre deux tokens individuels dans le zset Redis. */
+export function tokenReleaseIntervalMs(
+  pipeline: SlotPipeline,
+  rateLimitPer120s = config.RATE_LIMIT_PER_120S,
+): number {
+  const tokens = slotBudgetForPipeline(pipeline, rateLimitPer120s);
+  return WINDOW_MS / tokens;
+}
+
+/** Intervalle entre deux jobs worker (coût SLOT_COSTS). */
+export function jobReleaseIntervalMs(
+  pipeline: SlotPipeline,
+  rateLimitPer120s = config.RATE_LIMIT_PER_120S,
+): number {
+  const tokens = slotBudgetForPipeline(pipeline, rateLimitPer120s);
+  const cost = SLOT_COSTS[pipeline];
+  return WINDOW_MS / (tokens / cost);
 }
 
 function slotIntervalMs(targetRatePerSec: number): number {
@@ -77,7 +129,7 @@ function slotIntervalMs(targetRatePerSec: number): number {
 export function advanceDripAccumulator(
   accumulator: number,
   targetRatePerSec: number,
-  dripIntervalMs = DRIP_INTERVAL_MS,
+  dripIntervalMs = TEST_DRIP_TICK_MS,
 ): { accumulator: number; slotsToAdd: number } {
   const tokensPerInterval = (targetRatePerSec * dripIntervalMs) / 1000;
   const next = accumulator + tokensPerInterval;
@@ -90,6 +142,12 @@ function slotMemberPrefix(slotKey: string): string {
   if (slotKey === HYDRATION_SLOT_KEY) return "h";
   if (slotKey === RANK_SLOT_KEY) return "r";
   return "s";
+}
+
+function pipelineForSlotKey(slotKey: string): SlotPipeline {
+  if (slotKey === DISCOVERY_SLOT_KEY) return "discovery";
+  if (slotKey === HYDRATION_SLOT_KEY) return "hydration";
+  return "rank";
 }
 
 async function evalAcquireSlot(
@@ -121,25 +179,17 @@ async function getGlobalCooldownMs(): Promise<number> {
   return ttl > 0 ? ttl : 0;
 }
 
-async function runDripTick(slotKey: string, targetRatePerSec: number): Promise<void> {
+async function runUniformDripTick(slotKey: string, tokenIntervalMs: number): Promise<void> {
   const now = Date.now();
   const maxFutureTs = now + MAX_LOOKAHEAD_MS;
-  const intervalMs = slotIntervalMs(targetRatePerSec);
 
   const last = await redis.zrange(slotKey, -1, -1, "WITHSCORES");
-  // File vide : ancrer un créneau à `now`. Sinon le 1er slot serait à now+intervalMs,
-  // souvent > MAX_LOOKAHEAD_MS pour discovery/rank → zéro slot ajouté (workers bloqués).
-  let scheduleFromTs = last.length >= 2 ? Number.parseFloat(last[1]!) : now - intervalMs;
-  if (scheduleFromTs + intervalMs > maxFutureTs) {
-    scheduleFromTs = maxFutureTs - intervalMs;
+  let scheduleFromTs = last.length >= 2 ? Number.parseFloat(last[1]!) : now - tokenIntervalMs;
+  if (scheduleFromTs + tokenIntervalMs > maxFutureTs) {
+    scheduleFromTs = maxFutureTs - tokenIntervalMs;
   }
 
-  const { accumulator, slotsToAdd } = advanceDripAccumulator(
-    dripAccumulators.get(slotKey) ?? 0,
-    targetRatePerSec,
-  );
-  dripAccumulators.set(slotKey, accumulator);
-
+  const ts = scheduleFromTs + tokenIntervalMs;
   const queueDepth = await redis.zcard(slotKey);
 
   if (process.env.RATE_SCHEDULER_DEBUG === "1") {
@@ -148,57 +198,46 @@ async function runDripTick(slotKey: string, targetRatePerSec: number): Promise<v
         msg: "drip_tick",
         slotKey,
         scheduleFromTs,
-        slotIntervalMs: Math.round(intervalMs * 100) / 100,
-        slotsToAdd,
+        tokenIntervalMs: Math.round(tokenIntervalMs * 100) / 100,
+        nextTokenTs: ts,
         queueDepth,
-        targetTokensPerSec: targetRatePerSec,
-        dripAccumulator: accumulator,
       }),
     );
   }
 
-  if (slotsToAdd <= 0) {
+  if (ts > maxFutureTs) {
     await redis.zremrangebyscore(slotKey, "-inf", now - 5000);
     return;
   }
 
   const prefix = slotMemberPrefix(slotKey);
-  const zaddArgs: Array<string | number> = [];
-  for (let i = 1; i <= slotsToAdd; i += 1) {
-    const ts = scheduleFromTs + intervalMs * i;
-    if (ts > maxFutureTs) {
-      break;
-    }
-    zaddArgs.push(ts, `${prefix}:${ts.toFixed(0)}:${i}`);
-  }
+  await redis.zadd(slotKey, ts, `${prefix}:${ts.toFixed(0)}:0`);
 
-  if (process.env.RATE_SCHEDULER_DEBUG === "1" && zaddArgs.length > 0) {
+  if (process.env.RATE_SCHEDULER_DEBUG === "1") {
     console.debug(
       JSON.stringify({
         msg: "drip_tick_added",
         slotKey,
-        slotsAdded: zaddArgs.length / 2,
+        slotsAdded: 1,
       }),
     );
-  }
-
-  if (zaddArgs.length > 0) {
-    await redis.zadd(slotKey, ...zaddArgs);
   }
 
   await redis.zremrangebyscore(slotKey, "-inf", now - 5000);
 }
 
-function startDripForKey(slotKey: string, targetRatePerSec: number): void {
-  void runDripTick(slotKey, targetRatePerSec).catch((error) => {
+function startDripForKey(slotKey: string, pipeline: SlotPipeline): void {
+  const tokenIntervalMs = tokenReleaseIntervalMs(pipeline);
+
+  void runUniformDripTick(slotKey, tokenIntervalMs).catch((error) => {
     console.error(`[rate-scheduler] drip tick failed key=${slotKey}`, error);
   });
 
   const interval = setInterval(() => {
-    void runDripTick(slotKey, targetRatePerSec).catch((error) => {
+    void runUniformDripTick(slotKey, tokenIntervalMs).catch((error) => {
       console.error(`[rate-scheduler] drip tick failed key=${slotKey}`, error);
     });
-  }, DRIP_INTERVAL_MS);
+  }, tokenIntervalMs);
 
   dripIntervals.push(interval);
 }
@@ -214,15 +253,29 @@ export function startDrip(): void {
 
   const discoveryRate = discoveryTargetRatePerSec();
   const hydrationRate = hydrationTargetRatePerSec();
+  const rankRate = rankTargetRatePerSec();
 
-  startDripForKey(DISCOVERY_SLOT_KEY, discoveryRate);
-  startDripForKey(HYDRATION_SLOT_KEY, hydrationRate);
+  startDripForKey(DISCOVERY_SLOT_KEY, "discovery");
+  startDripForKey(HYDRATION_SLOT_KEY, "hydration");
+  startDripForKey(RANK_SLOT_KEY, "rank");
+
+  const budgets = {
+    discovery: slotBudgetForPipeline("discovery"),
+    hydration: slotBudgetForPipeline("hydration"),
+    rank: slotBudgetForPipeline("rank"),
+  };
+  const intervals = {
+    discovery: tokenReleaseIntervalMs("discovery"),
+    hydration: jobReleaseIntervalMs("hydration"),
+    rank: tokenReleaseIntervalMs("rank"),
+  };
 
   console.log(
-    `[rate-scheduler] drip started ` +
-      `discovery=${discoveryRate.toFixed(4)}/s hydration=${hydrationRate.toFixed(4)}/s ` +
-      `(budgets ${DISCOVERY_BUDGET_PCT * 100}%/${HYDRATION_BUDGET_PCT * 100}% of ${TARGET_PCT * 100}% cap; ` +
-      `rank via BullMQ limiter (see rank.worker / RANK_LIMITER_MAX_DRAIN)`,
+    `[rate-scheduler] drip started uniform ` +
+      `discovery=${discoveryRate.toFixed(4)}/s token/${(intervals.discovery / 1000).toFixed(1)}s ` +
+      `hydration=${hydrationRate.toFixed(4)}/s job/${(intervals.hydration / 1000).toFixed(1)}s ` +
+      `rank=${rankRate.toFixed(4)}/s token/${(intervals.rank / 1000).toFixed(1)}s ` +
+      `(budgets ${budgets.discovery}/${budgets.hydration}/${budgets.rank} req/120s)`,
   );
 }
 
@@ -233,10 +286,10 @@ export function stopDrip(): void {
       clearInterval(interval);
     }
   }
-  dripAccumulators.clear();
 }
 
 async function waitForScheduledSlot(slotKey: string, cost: 1 | 2): Promise<void> {
+  const pipeline = pipelineForSlotKey(slotKey);
   while (true) {
     const globalCooldownMs = await getGlobalCooldownMs();
     if (globalCooldownMs > 0) {
@@ -249,7 +302,7 @@ async function waitForScheduledSlot(slotKey: string, cost: 1 | 2): Promise<void>
 
     if (allowed === 1) {
       const delay = value - Date.now();
-      pollerV2Observability.recordRateLimitAttempt(cost, true, Math.max(0, delay));
+      pollerV2Observability.recordRateLimitAttempt(cost, true, Math.max(0, delay), pipeline);
       if (delay > 5) {
         await sleep(delay);
       }
@@ -257,7 +310,7 @@ async function waitForScheduledSlot(slotKey: string, cost: 1 | 2): Promise<void>
     }
 
     const waitMs = Math.max(value, 0);
-    pollerV2Observability.recordRateLimitAttempt(cost, false, waitMs);
+    pollerV2Observability.recordRateLimitAttempt(cost, false, waitMs, pipeline);
     await sleep(waitMs);
   }
 }
@@ -287,7 +340,7 @@ export async function acquireRankSlot(): Promise<{ granted: boolean; waitMs: num
 
   if (allowed === 1) {
     const delay = Math.max(0, value - now);
-    pollerV2Observability.recordRateLimitAttempt(1, true, delay);
+    pollerV2Observability.recordRateLimitAttempt(1, true, delay, "rank");
     if (delay > 5) {
       await sleep(delay);
     }
@@ -295,37 +348,13 @@ export async function acquireRankSlot(): Promise<{ granted: boolean; waitMs: num
   }
 
   const waitMs = Math.max(value, 0);
-  pollerV2Observability.recordRateLimitAttempt(1, false, waitMs);
+  pollerV2Observability.recordRateLimitAttempt(1, false, waitMs, "rank");
   return { granted: false, waitMs };
 }
 
-/**
- * rank.worker uniquement (concurrency 2).
- * Un seul essai : pas de spin Redis — file d’attente = BullMQ.
- * @deprecated Préférer acquireRankSlot + waitForRankSlotOrSkip dans rank.worker.
- */
-export async function waitForRankSlot(): Promise<RankSlotResult> {
-  const globalCooldownMs = await getGlobalCooldownMs();
-  if (globalCooldownMs > 0) {
-    return "budget_exhausted";
-  }
-
-  const now = Date.now();
-  const [allowed, value] = await evalAcquireSlot(RANK_SLOT_KEY, 1, now);
-
-  if (allowed !== 1) {
-    const waitMs = Math.max(value, 0);
-    pollerV2Observability.recordRateLimitAttempt(1, false, waitMs);
-    return "budget_exhausted";
-  }
-
-  const delay = value - Date.now();
-  pollerV2Observability.recordRateLimitAttempt(1, true, Math.max(0, delay));
-
-  if (delay > 5) {
-    await sleep(delay);
-  }
-  return "ok";
+/** rank.worker — coût 1, attend le créneau (boucle courte Redis + cooldown 429 global). */
+export async function waitForRankSlot(): Promise<void> {
+  await waitForScheduledSlot(RANK_SLOT_KEY, 1);
 }
 
 /** @deprecated use waitForDiscoverySlot or waitForHydrationSlot */
@@ -342,11 +371,12 @@ export const waitForSlot = waitForMatchSlot;
 
 export async function tryAcquireSlot(cost: 1 | 2): Promise<{ granted: boolean; waitMs: number }> {
   const slotKey = cost === 1 ? DISCOVERY_SLOT_KEY : HYDRATION_SLOT_KEY;
+  const pipeline = pipelineForSlotKey(slotKey);
   const now = Date.now();
   const [allowed, value] = await evalAcquireSlot(slotKey, cost, now);
   const granted = allowed === 1;
   const waitMs = granted ? Math.max(0, value - now) : Math.max(value, 0);
-  pollerV2Observability.recordRateLimitAttempt(cost, granted, waitMs);
+  pollerV2Observability.recordRateLimitAttempt(cost, granted, waitMs, pipeline);
   return { granted, waitMs };
 }
 
@@ -472,7 +502,7 @@ export function createLuaRateLimiterForTests(params: {
       void runTestDripTick();
       testDripInterval = setInterval(() => {
         void runTestDripTick();
-      }, DRIP_INTERVAL_MS);
+      }, TEST_DRIP_TICK_MS);
     },
     stopDrip(): void {
       if (!testDripInterval) {

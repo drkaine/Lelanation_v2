@@ -1,5 +1,25 @@
 import { promises as fs } from "fs";
 import { join } from "path";
+import { config } from "../config/index.js";
+import { maxRankBacklogBeforePipelinePause, rankWorkerConcurrencyDrain } from "../queues/rank-backlog-policy.js";
+
+type SlotPipeline = "discovery" | "hydration" | "rank";
+
+const SLOT_BUDGETS_REF: Record<SlotPipeline, number> = {
+  discovery: 6,
+  hydration: 74,
+  rank: 18,
+};
+const SLOT_BUDGETS_REF_RATE_LIMIT_120S = 95;
+
+function slotBudgetForPipeline(pipeline: SlotPipeline): number {
+  return Math.max(
+    1,
+    Math.round(
+      (SLOT_BUDGETS_REF[pipeline] * config.RATE_LIMIT_PER_120S) / SLOT_BUDGETS_REF_RATE_LIMIT_120S,
+    ),
+  );
+}
 
 type QueueSlice = {
   waiting: number;
@@ -44,6 +64,11 @@ type Totals = {
   rateLimitDeniedCount: number;
   rateLimitDeniedCost: number;
   rateLimitWaitMsTotal: number;
+  rankGatePassedFirstTry: number;
+  rankGateFailedFirstTry: number;
+  hydrationRankRetries: number;
+  discoveryPlayersSelected: number;
+  discoveryPlayersAlreadyRanked: number;
 };
 
 type DurationKey =
@@ -66,6 +91,16 @@ type TokenEvent = {
   granted: boolean;
   cost: number;
   waitMs: number;
+  pipeline: SlotPipeline | null;
+};
+
+type IngestionEvent = {
+  atMs: number;
+};
+
+type PipelineCompleteEvent = {
+  atMs: number;
+  durationSeconds: number;
 };
 
 type ApiEvent = {
@@ -116,6 +151,24 @@ type Snapshot = {
   rankLeagueFetchesPending: number;
   /** Dernier snapshot queue rank — `rank.active` (doit rester ≤ 2). */
   rankWorkerConcurrency: number;
+  /** Métriques Phase 5 — diagnostic pipeline match. */
+  matches_per_hour: number;
+  data_lag_seconds: number | null;
+  rank_gate_pass_rate_pct: number;
+  rank_prefetch_coverage_pct: number;
+  hydration_retry_count_30m: number;
+  avg_match_pipeline_seconds: number;
+  req_per_120s_rolling: number;
+  discovery_tokens_used_pct: number;
+  hydration_tokens_used_pct: number;
+  rank_tokens_used_pct: number;
+  /** Alias jq spec (`queues.hydration.waiting`). */
+  queues: {
+    discovery: QueueSlice;
+    hydration: QueueSlice;
+    ingestion: QueueSlice;
+    rank: QueueSlice;
+  };
   recentErrors: ErrorEvent[];
   summaries: {
     last30m: Record<string, unknown> | null;
@@ -168,6 +221,11 @@ function emptyTotals(): Totals {
     rateLimitDeniedCount: 0,
     rateLimitDeniedCost: 0,
     rateLimitWaitMsTotal: 0,
+    rankGatePassedFirstTry: 0,
+    rankGateFailedFirstTry: 0,
+    hydrationRankRetries: 0,
+    discoveryPlayersSelected: 0,
+    discoveryPlayersAlreadyRanked: 0,
   };
 }
 
@@ -188,6 +246,10 @@ class PollerV2Observability {
   private readonly totals: Totals = emptyTotals();
   private readonly tokenEvents: TokenEvent[] = [];
   private readonly apiEvents: ApiEvent[] = [];
+  private readonly ingestionEvents: IngestionEvent[] = [];
+  private readonly pipelineCompleteEvents: PipelineCompleteEvent[] = [];
+  private readonly matchQueuedAtMs = new Map<string, number>();
+  private readonly rankGateSeenMatchIds = new Set<string>();
   private readonly recentErrors: ErrorEvent[] = [];
   private readonly durations: Record<DurationKey, DurationStat> = {
     discoveryCycleMs: { count: 0, totalMs: 0, maxMs: 0, slowCount: 0, slowThresholdMs: 3_000 },
@@ -232,11 +294,27 @@ class PollerV2Observability {
 
   private pruneRollingWindows(now = nowMs()): void {
     const keepFrom = now - 2 * 60 * 60 * 1000;
+    const ingestionKeepFrom = now - 2 * 60 * 60 * 1000;
+    const pipelineKeepFrom = now - 2 * 60 * 60 * 1000;
     while (this.tokenEvents.length > 0 && this.tokenEvents[0] && this.tokenEvents[0].atMs < keepFrom) {
       this.tokenEvents.shift();
     }
     while (this.apiEvents.length > 0 && this.apiEvents[0] && this.apiEvents[0].atMs < keepFrom) {
       this.apiEvents.shift();
+    }
+    while (
+      this.ingestionEvents.length > 0 &&
+      this.ingestionEvents[0] &&
+      this.ingestionEvents[0].atMs < ingestionKeepFrom
+    ) {
+      this.ingestionEvents.shift();
+    }
+    while (
+      this.pipelineCompleteEvents.length > 0 &&
+      this.pipelineCompleteEvents[0] &&
+      this.pipelineCompleteEvents[0].atMs < pipelineKeepFrom
+    ) {
+      this.pipelineCompleteEvents.shift();
     }
   }
 
@@ -298,6 +376,105 @@ class PollerV2Observability {
     }
   }
 
+  private rolling120sTokenUsage(now = nowMs()): {
+    reqTotal: number;
+    discovery: number;
+    hydration: number;
+    rank: number;
+  } {
+    const from = now - 120_000;
+    let discovery = 0;
+    let hydration = 0;
+    let rank = 0;
+
+    for (const event of this.tokenEvents) {
+      if (event.atMs < from || !event.granted) continue;
+      if (event.pipeline === "discovery") discovery += event.cost;
+      else if (event.pipeline === "hydration") hydration += event.cost;
+      else if (event.pipeline === "rank") rank += event.cost;
+    }
+
+    return {
+      reqTotal: discovery + hydration + rank,
+      discovery,
+      hydration,
+      rank,
+    };
+  }
+
+  private pctUsed(tokensUsed: number, pipeline: SlotPipeline): number {
+    const budget = slotBudgetForPipeline(pipeline);
+    if (budget <= 0) return 0;
+    return Math.round((tokensUsed / budget) * 1000) / 10;
+  }
+
+  private rankGatePassRatePct(): number {
+    const passed = this.totals.rankGatePassedFirstTry;
+    const failed = this.totals.rankGateFailedFirstTry;
+    const total = passed + failed;
+    if (total <= 0) return 0;
+    return Math.round((passed / total) * 1000) / 10;
+  }
+
+  private rankPrefetchCoveragePct(): number {
+    const selected = this.totals.discoveryPlayersSelected;
+    const alreadyRanked = this.totals.discoveryPlayersAlreadyRanked;
+    if (selected <= 0) return 0;
+    return Math.round((alreadyRanked / selected) * 1000) / 10;
+  }
+
+  private matchesPerHour(now = nowMs()): number {
+    const from = now - 3_600_000;
+    let count = 0;
+    for (const event of this.ingestionEvents) {
+      if (event.atMs >= from) count += 1;
+    }
+    return count;
+  }
+
+  private avgMatchPipelineSeconds(now = nowMs()): number {
+    const from = now - 30 * 60_000;
+    const durations = this.pipelineCompleteEvents
+      .filter((event) => event.atMs >= from)
+      .map((event) => event.durationSeconds);
+    if (durations.length === 0) return 0;
+    const avg = durations.reduce((sum, value) => sum + value, 0) / durations.length;
+    return Math.round(avg * 10) / 10;
+  }
+
+  private hydrationRetryCount30m(): number {
+    const delta = this.totals.hydrationRankRetries - this.baseline30m.hydrationRankRetries;
+    return Math.max(0, delta);
+  }
+
+  private buildDiagnostics(now = nowMs()): Pick<
+    Snapshot,
+    | "matches_per_hour"
+    | "data_lag_seconds"
+    | "rank_gate_pass_rate_pct"
+    | "rank_prefetch_coverage_pct"
+    | "hydration_retry_count_30m"
+    | "avg_match_pipeline_seconds"
+    | "req_per_120s_rolling"
+    | "discovery_tokens_used_pct"
+    | "hydration_tokens_used_pct"
+    | "rank_tokens_used_pct"
+  > {
+    const tokenUsage = this.rolling120sTokenUsage(now);
+    return {
+      matches_per_hour: this.matchesPerHour(now),
+      data_lag_seconds: this.lastQueue.dataLagSeconds,
+      rank_gate_pass_rate_pct: this.rankGatePassRatePct(),
+      rank_prefetch_coverage_pct: this.rankPrefetchCoveragePct(),
+      hydration_retry_count_30m: this.hydrationRetryCount30m(),
+      avg_match_pipeline_seconds: this.avgMatchPipelineSeconds(now),
+      req_per_120s_rolling: tokenUsage.reqTotal,
+      discovery_tokens_used_pct: this.pctUsed(tokenUsage.discovery, "discovery"),
+      hydration_tokens_used_pct: this.pctUsed(tokenUsage.hydration, "hydration"),
+      rank_tokens_used_pct: this.pctUsed(tokenUsage.rank, "rank"),
+    };
+  }
+
   private rolling2m(now = nowMs()): Snapshot["rolling2m"] {
     const from = now - 120_000;
     let apiRequests = 0;
@@ -350,6 +527,64 @@ class PollerV2Observability {
 
   recordPlayersAdded(count: number): void {
     this.totals.playersAdded += Math.max(0, count);
+  }
+
+  recordDiscoveryRankPrefetch(selected: number, prefetched: number): void {
+    const safeSelected = Math.max(0, Math.trunc(selected));
+    const safePrefetched = Math.max(0, Math.min(Math.trunc(prefetched), safeSelected));
+    this.totals.discoveryPlayersSelected += safeSelected;
+    this.totals.discoveryPlayersAlreadyRanked += safeSelected - safePrefetched;
+  }
+
+  recordMatchQueuedForPipeline(matchId: string): void {
+    const id = String(matchId ?? "").trim();
+    if (!id) return;
+    if (!this.matchQueuedAtMs.has(id)) {
+      this.matchQueuedAtMs.set(id, nowMs());
+    }
+    if (this.matchQueuedAtMs.size > 20_000) {
+      const oldest = this.matchQueuedAtMs.keys().next().value;
+      if (oldest) this.matchQueuedAtMs.delete(oldest);
+    }
+  }
+
+  recordMatchIngestedForPipeline(matchId: string): void {
+    const id = String(matchId ?? "").trim();
+    if (!id) return;
+    const queuedAt = this.matchQueuedAtMs.get(id);
+    const atMs = nowMs();
+    this.ingestionEvents.push({ atMs });
+    if (queuedAt != null) {
+      this.pipelineCompleteEvents.push({
+        atMs,
+        durationSeconds: Math.max(0, (atMs - queuedAt) / 1000),
+      });
+      this.matchQueuedAtMs.delete(id);
+      this.rankGateSeenMatchIds.delete(id);
+    }
+    this.pruneRollingWindows(atMs);
+  }
+
+  recordHydrationRankGate(matchId: string, passed: boolean): void {
+    const id = String(matchId ?? "").trim();
+    if (!id) return;
+    const isRetry = this.rankGateSeenMatchIds.has(id);
+    if (!passed) {
+      this.totals.hydrationRankRetries += 1;
+      this.rankGateSeenMatchIds.add(id);
+      if (!isRetry) {
+        this.totals.rankGateFailedFirstTry += 1;
+      }
+      return;
+    }
+    if (!isRetry) {
+      this.totals.rankGatePassedFirstTry += 1;
+    }
+    this.rankGateSeenMatchIds.delete(id);
+  }
+
+  recordHydrationRankBacklogDefer(): void {
+    this.totals.hydrationRankRetries += 1;
   }
 
   recordDiscoveryMatches(matchIdsFetched: number, matchesQueuedHydration: number): void {
@@ -419,27 +654,33 @@ class PollerV2Observability {
   }
 
   private logRankQueueAlerts(rank: QueueSlice): void {
-    if (rank.waiting > 5000) {
+    const backlogThreshold = maxRankBacklogBeforePipelinePause();
+    if (rank.waiting > backlogThreshold) {
       console.warn(
         JSON.stringify({
           msg: "rank_queue_backlog_high",
           rankLeagueFetchesPending: rank.waiting,
-          threshold: 5000,
+          threshold: backlogThreshold,
         }),
       );
     }
-    if (rank.active > 2) {
+    if (rank.active > rankWorkerConcurrencyDrain()) {
       console.error(
         JSON.stringify({
           msg: "rank_worker_concurrency_bug",
           rankWorkerConcurrency: rank.active,
-          expectedMax: 2,
+          expectedMax: rankWorkerConcurrencyDrain(),
         }),
       );
     }
   }
 
-  recordRateLimitAttempt(cost: number, granted: boolean, waitMs: number): void {
+  recordRateLimitAttempt(
+    cost: number,
+    granted: boolean,
+    waitMs: number,
+    pipeline: SlotPipeline | null = null,
+  ): void {
     const safeCost = Math.max(0, Math.trunc(cost));
     const safeWait = Math.max(0, Math.trunc(waitMs));
     if (granted) {
@@ -455,6 +696,7 @@ class PollerV2Observability {
       granted,
       cost: safeCost,
       waitMs: safeWait,
+      pipeline,
     });
     this.pruneRollingWindows();
   }
@@ -522,6 +764,7 @@ class PollerV2Observability {
     const tokenRate10m = this.tokenRate10m();
     this.logTokenRateAlerts(tokenRate10m);
     const rankQueue = this.rankQueueMetrics();
+    const diagnostics = this.buildDiagnostics();
     const payload: Record<string, unknown> = {
       window,
       atIso: nowIso,
@@ -533,8 +776,15 @@ class PollerV2Observability {
       avgTokenUsagePctFromWindowDelta,
       tokenRate10m,
       queue: this.lastQueue,
+      queues: {
+        discovery: this.lastQueue.discovery,
+        hydration: this.lastQueue.hydration,
+        ingestion: this.lastQueue.ingestion,
+        rank: this.lastQueue.rank,
+      },
       rankLeagueFetchesPending: rankQueue.rankLeagueFetchesPending,
       rankWorkerConcurrency: rankQueue.rankWorkerConcurrency,
+      ...diagnostics,
     };
     if (window === "30m") {
       payload.rankFetchesQueued = delta.rankJobsStarted;
@@ -559,6 +809,8 @@ class PollerV2Observability {
       }),
     ) as Snapshot["durations"];
     const rankQueue = this.rankQueueMetrics();
+    const diagnostics = this.buildDiagnostics(now);
+    const queue = { ...this.lastQueue };
     return {
       atIso: new Date(now).toISOString(),
       startedAtIso: new Date(this.startedAtMs).toISOString(),
@@ -567,9 +819,16 @@ class PollerV2Observability {
       rolling2m: this.rolling2m(now),
       tokenRate10m: this.tokenRate10m(),
       durations,
-      queue: { ...this.lastQueue },
+      queue,
       rankLeagueFetchesPending: rankQueue.rankLeagueFetchesPending,
       rankWorkerConcurrency: rankQueue.rankWorkerConcurrency,
+      ...diagnostics,
+      queues: {
+        discovery: queue.discovery,
+        hydration: queue.hydration,
+        ingestion: queue.ingestion,
+        rank: queue.rank,
+      },
       recentErrors: [...this.recentErrors].slice(-20).reverse(),
       summaries: {
         last30m: this.last30mSummary,

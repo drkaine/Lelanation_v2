@@ -2168,9 +2168,8 @@ export async function getOverviewDurationWinrateStats(
 
   try {
     const roleSql = roleFilters.champion
-      ? ` AND ac.role = '${statsRoleSqlLiteral(roleFilters.champion)}'`
+      ? ` AND cb.role = '${statsRoleSqlLiteral(roleFilters.champion)}'`
       : ''
-    const acFromDur = await matchVersionedAggFrom('agg_champion_core_stats', pVersion, 'ac')
     const cbFromDur = await matchVersionedAggFrom('agg_champion_bucket', pVersion, 'cb')
     const bucketRows = await queryRawUnsafe<
       Array<{ duration_bucket: number; count_win: bigint; count_game: bigint }>
@@ -2180,8 +2179,7 @@ export async function getOverviewDurationWinrateStats(
         SUM(cb.count_win)::bigint AS count_win,
         SUM(cb.count_game)::bigint AS count_game
       FROM ${cbFromDur}
-      INNER JOIN ${acFromDur} ON ac.id = cb.champion_stat_id
-      WHERE ${buildRawMatchCond(pVersion, rankTier).replace(/\bm\./g, 'ac.')}
+      WHERE ${buildRawMatchCond(pVersion, rankTier).replace(/\bm\./g, 'cb.')}
       ${roleSql}
       GROUP BY cb.duration_bucket
     `)
@@ -2221,7 +2219,6 @@ export async function getDurationWinrateByChampion(
 ): Promise<OverviewDurationWinrateStats | null> {
   if (!isDatabaseConfigured()) return null
   try {
-    const acFromCh = await matchVersionedAggFrom('agg_champion_core_stats', version ?? null, 'ac')
     const cbFromCh = await matchVersionedAggFrom('agg_champion_bucket', version ?? null, 'cb')
     const bucketRows = await queryRawUnsafe<
       Array<{ duration_bucket: number; count_win: bigint; count_game: bigint }>
@@ -2231,9 +2228,8 @@ export async function getDurationWinrateByChampion(
         SUM(cb.count_win)::bigint AS count_win,
         SUM(cb.count_game)::bigint AS count_game
       FROM ${cbFromCh}
-      INNER JOIN ${acFromCh} ON ac.id = cb.champion_stat_id
-      WHERE ac.champion_id = ${championId}
-        AND ${buildRawMatchCond(version ?? null, rankTier).replace(/\bm\./g, 'ac.')}
+      WHERE cb.champion_id = ${championId}
+        AND ${buildRawMatchCond(version ?? null, rankTier).replace(/\bm\./g, 'cb.')}
       GROUP BY cb.duration_bucket
     `)
 
@@ -2291,24 +2287,22 @@ export async function getDurationWinrateByChampionByTier(
   if (!isDatabaseConfigured()) return null
   try {
     const roleNorm = normalizeStatsRoleForChampion(role)
-    const roleSql = roleNorm ? ` AND ac.role = '${statsRoleSqlLiteral(roleNorm)}'` : ''
+    const roleSql = roleNorm ? ` AND cb.role = '${statsRoleSqlLiteral(roleNorm)}'` : ''
 
-    const acFromTier = await matchVersionedAggFrom('agg_champion_core_stats', version ?? null, 'ac')
     const cbFromTier = await matchVersionedAggFrom('agg_champion_bucket', version ?? null, 'cb')
     const rows = await queryRawUnsafe<
       Array<{ rank_tier: string; duration_bucket: number; count_win: bigint; count_game: bigint }>
     >(`
       SELECT
-        ac.rank_tier,
+        cb.rank_tier,
         cb.duration_bucket,
         SUM(cb.count_win)::bigint AS count_win,
         SUM(cb.count_game)::bigint AS count_game
       FROM ${cbFromTier}
-      INNER JOIN ${acFromTier} ON ac.id = cb.champion_stat_id
-      WHERE ac.champion_id = ${championId}
-        AND ${buildRawMatchCond(version ?? null, rankTier).replace(/\bm\./g, 'ac.')}
+      WHERE cb.champion_id = ${championId}
+        AND ${buildRawMatchCond(version ?? null, rankTier).replace(/\bm\./g, 'cb.')}
         ${roleSql}
-      GROUP BY ac.rank_tier, cb.duration_bucket
+      GROUP BY cb.rank_tier, cb.duration_bucket
     `)
 
     const cellMap = new Map<string, { wins: number; games: number }>()

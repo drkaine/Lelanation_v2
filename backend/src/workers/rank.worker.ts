@@ -1,15 +1,11 @@
-import { DelayedError, Worker } from "bullmq";
+import { Worker } from "bullmq";
 import { sql } from "../db/client.js";
 import type { RankJobData } from "../dto/match.dto.js";
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
 import { RANK_QUEUE } from "../queues/definitions.js";
-import {
-  rankLimiterMaxDrain,
-  rankWorkerConcurrencyDrain,
-  rankWorkerLimiterSmooth,
-} from "../queues/rank-backlog-policy.js";
+import { rankWorkerConcurrencyDrain } from "../queues/rank-backlog-policy.js";
 import { redis } from "../redis/client.js";
-import { RANK_BULLMQ_LIMITER_DURATION_MS } from "../redis/rate-scheduler.js";
+import { slotBudgetForPipeline, waitForRankSlot } from "../redis/rate-scheduler.js";
 import { RateLimitError, RiotClient } from "../riot/client.js";
 
 const riotClient = new RiotClient();
@@ -109,27 +105,19 @@ async function runRankJob(data: RankJobData): Promise<RankJobOutcome> {
   }
 }
 
-const drainLimiterMax = rankLimiterMaxDrain();
 const drainConcurrency = rankWorkerConcurrencyDrain();
-const rankWorkerLimiter = rankWorkerLimiterSmooth(drainLimiterMax, drainConcurrency);
+const rankSlotBudget = slotBudgetForPipeline("rank");
 
 export const rankWorker = new Worker<RankJobData>(
   RANK_QUEUE,
   async (job) => {
     pollerV2Observability.recordRankJobStart();
+    await waitForRankSlot();
     try {
       const outcome = await runRankJob(job.data);
       pollerV2Observability.recordRankJobSuccess();
       return outcome;
     } catch (error) {
-      if (error instanceof RateLimitError) {
-        const delayMs = 120_000;
-        await job.moveToDelayed(Date.now() + delayMs, job.token);
-        pollerV2Observability.recordRankJobFailure(error);
-        throw new DelayedError(
-          `rank_rate_limited delay_ms=${delayMs} puuid=${job.data.puuid}`,
-        );
-      }
       pollerV2Observability.recordRankJobFailure(error);
       throw error;
     }
@@ -137,10 +125,9 @@ export const rankWorker = new Worker<RankJobData>(
   {
     connection: redis,
     concurrency: drainConcurrency,
-    limiter: rankWorkerLimiter,
   },
 );
 
 console.log(
-  `[rank.worker] started limiter=${rankWorkerLimiter.max}/${rankWorkerLimiter.duration}ms (~${drainLimiterMax}/${RANK_BULLMQ_LIMITER_DURATION_MS}ms) concurrency=${drainConcurrency}`,
+  `[rank.worker] started drip rank budget=${rankSlotBudget}/120s concurrency=${drainConcurrency}`,
 );

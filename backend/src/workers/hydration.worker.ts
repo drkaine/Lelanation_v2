@@ -5,13 +5,12 @@ import { sql } from "../db/client.js";
 import type { HydrationJobData, IngestionJobData, ParsedParticipantDto, TeamStatsDto } from "../dto/match.dto.js";
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
 import { parseMatch } from "../parsers/match.parser.js";
-import { bullmqJobId } from "../queues/bullmq-job-id.js";
 import { HYDRATION_QUEUE } from "../queues/definitions.js";
-import { hydrationQueue, ingestionQueue } from "../queues/index.js";
+import { ingestionQueue } from "../queues/index.js";
 import { maxRankBacklogBeforePipelinePause, shouldPauseMatchPipelines } from "../queues/rank-backlog-policy.js";
 import { enqueueRankFetchJobsForParticipants } from "../queues/rank-jobs.js";
 import { rankQueue } from "../queues/index.js";
-import { matchReadyForAggregation, participantHasResolvedRank } from "./match-rank-readiness.js";
+import { averageMatchRankTierLabel, matchReadyForAggregation, participantRankKnown } from "./match-rank-readiness.js";
 import { redis } from "../redis/client.js";
 import { waitForHydrationSlot } from "../redis/rate-scheduler.js";
 import { NotFoundError, RiotClient } from "../riot/client.js";
@@ -31,8 +30,15 @@ const riotClient = new RiotClient();
 const hydrationLimit = pLimit(config.HYDRATION_CONCURRENCY);
 const PATCH_SWITCH_GRACE_DAYS = 2;
 /** Ré-hydratation après fetch rank (snapshot du jour requis). */
-const HYDRATION_RANK_RETRY_DELAY_MS = 120_000;
-const HYDRATION_RANK_RETRY_DELAY_BACKLOG_MS = 600_000;
+const HYDRATION_RANK_RETRY_DELAY_MS = 45_000;
+const HYDRATION_RANK_RETRY_DELAY_SMALL_MS = 15_000;
+const HYDRATION_RANK_RETRY_DELAY_BACKLOG_MS = 3 * 60_000;
+const HYDRATION_RANK_RETRY_SMALL_UNRESOLVED_MAX = 2;
+
+type HydrationJobOutcome =
+  | { status: "completed" }
+  | { status: "not_found" }
+  | { status: "deferred_rank"; delayMs: number };
 
 function extractPatch(gameVersion: string): string {
   const [major, minor] = (gameVersion ?? "").split(".");
@@ -59,15 +65,16 @@ function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** League v4 = rang du jour uniquement — pas d’historique antérieur pour enrichir le match. */
-async function loadTodayParticipantRankSnapshot(
+/** Snapshot historique ≤ date du match (stats) ; League v4 du jour = needsRankFetch séparé. */
+async function loadParticipantRankSnapshot(
   participants: ParticipantDto[],
   region: string,
+  matchDate: Date,
 ): Promise<Map<string, PlayerRankRow>> {
   const puuids = Array.from(new Set(participants.map((participant) => participant.puuid).filter(Boolean)));
   if (puuids.length === 0) return new Map();
   const rows = await sql<PlayerRankRow[]>`
-    SELECT
+    SELECT DISTINCT ON (prh.puuid)
       prh.puuid,
       prh.rank_tier,
       prh.rank_division,
@@ -75,7 +82,8 @@ async function loadTodayParticipantRankSnapshot(
     FROM player_rank_history prh
     WHERE prh.puuid = ANY(${sql.array(puuids, 25)})
       AND prh.region = ${region}
-      AND prh.date = ${todayIsoDate()}::date
+      AND prh.date <= ${matchDate.toISOString().slice(0, 10)}::date
+    ORDER BY prh.puuid, prh.date DESC
   `;
   return new Map(rows.map((row) => [row.puuid, row]));
 }
@@ -95,17 +103,31 @@ async function loadTodayRankSnapshotPuuids(puuids: string[], region: string): Pr
 function mergeRankSnapshotIntoMatch(match: MatchDto, rankByPuuid: Map<string, PlayerRankRow>): MatchDto {
   const enrichedParticipants = (match.info.participants ?? []).map((participant) => {
     const snapshot = rankByPuuid.get(participant.puuid);
-    const tier = normalizeTier(snapshot?.rank_tier);
-    if (!tier) return participant;
-    return {
-      ...participant,
-      tier,
-      rankTier: tier,
-      rank: snapshot?.rank_division ?? "",
-      rankDivision: snapshot?.rank_division ?? "",
-      leaguePoints: Number(snapshot?.rank_lp ?? 0),
-      rankLp: Number(snapshot?.rank_lp ?? 0),
-    };
+    if (!snapshot) return participant;
+    const tier = normalizeTier(snapshot.rank_tier);
+    if (tier) {
+      return {
+        ...participant,
+        tier,
+        rankTier: tier,
+        rank: snapshot.rank_division ?? "",
+        rankDivision: snapshot.rank_division ?? "",
+        leaguePoints: Number(snapshot.rank_lp ?? 0),
+        rankLp: Number(snapshot.rank_lp ?? 0),
+      };
+    }
+    if (String(snapshot.rank_tier ?? "").trim().toUpperCase() === "UNRANKED") {
+      return {
+        ...participant,
+        tier: "UNRANKED",
+        rankTier: "UNRANKED",
+        rank: snapshot.rank_division ?? "UNRANKED",
+        rankDivision: snapshot.rank_division ?? "UNRANKED",
+        leaguePoints: Number(snapshot.rank_lp ?? 0),
+        rankLp: Number(snapshot.rank_lp ?? 0),
+      };
+    }
+    return participant;
   });
   return {
     ...match,
@@ -117,11 +139,11 @@ function mergeRankSnapshotIntoMatch(match: MatchDto, rankByPuuid: Map<string, Pl
 }
 
 function deriveMatchRankTier(participants: ParsedParticipantDto[]): string {
-  for (const participant of participants) {
-    const tier = normalizeTier(participant.rankTier);
-    if (tier) return tier;
+  const average = averageMatchRankTierLabel(participants);
+  if (!average) {
+    throw new Error("deriveMatchRankTier_requires_at_least_one_ranked_participant");
   }
-  return "UNRANKED";
+  return average;
 }
 
 async function resolvePatchCutoffStartSec(nowSec: number): Promise<number> {
@@ -246,7 +268,7 @@ function parseTeamStats(
   };
 }
 
-async function runHydrationJob(data: HydrationJobData): Promise<void> {
+async function runHydrationJob(data: HydrationJobData): Promise<HydrationJobOutcome> {
   const startedAt = Date.now();
   pollerV2Observability.recordHydrationStart();
   await waitForHydrationSlot();
@@ -268,12 +290,18 @@ async function runHydrationJob(data: HydrationJobData): Promise<void> {
         `[hydration.worker] skipped_old_patch matchId=${data.matchId} game_end_sec=${gameEndSec} cutoff_sec=${cutoffStartSec}`,
       );
       pollerV2Observability.recordHydrationSkippedOldPatch();
-      return;
+      return { status: "completed" };
     }
 
     const region = String(match.info.platformId ?? data.region ?? "euw1").toLowerCase();
+    const matchDate = new Date(
+      Number(match.info.gameStartTimestamp ?? 0) ||
+        Number(match.info.gameCreation ?? 0) ||
+        Date.now(),
+    );
+    const safeMatchDate = Number.isFinite(matchDate.getTime()) ? matchDate : new Date();
 
-    const rankByPuuid = await loadTodayParticipantRankSnapshot(match.info.participants ?? [], region);
+    const rankByPuuid = await loadParticipantRankSnapshot(match.info.participants ?? [], region, safeMatchDate);
     const enrichedMatch = mergeRankSnapshotIntoMatch(match, rankByPuuid);
 
     const patch = extractPatch(enrichedMatch.info.gameVersion);
@@ -286,39 +314,40 @@ async function runHydrationJob(data: HydrationJobData): Promise<void> {
       participant.needsRankFetch = !withTodaySnapshot.has(participant.puuid);
     }
 
-    if (!matchReadyForAggregation(participants)) {
-      const rankWaiting = await rankQueue.getWaitingCount();
-      if (!shouldPauseMatchPipelines(rankWaiting)) {
-        await enqueueRankFetchJobsForParticipants(participants);
-      }
+    const rankWaiting = await rankQueue.getWaitingCount();
+    if (!shouldPauseMatchPipelines(rankWaiting)) {
+      await enqueueRankFetchJobsForParticipants(participants, { priority: 1 });
+    }
+
+    if (!matchReadyForAggregation(participants, withTodaySnapshot)) {
+      const unresolvedCount = participants.filter(
+        (participant) => !participantRankKnown(participant, withTodaySnapshot),
+      ).length;
+      pollerV2Observability.recordHydrationRankGate(data.matchId, false);
       const rankRetryDelay =
         (await rankQueue.getWaitingCount()) > maxRankBacklogBeforePipelinePause()
           ? HYDRATION_RANK_RETRY_DELAY_BACKLOG_MS
-          : HYDRATION_RANK_RETRY_DELAY_MS;
-      await hydrationQueue.add(
-        "hydrate-match",
-        data,
-        {
-          delay: rankRetryDelay,
-          jobId: bullmqJobId("hydrate-rank-wait", data.matchId),
-        },
-      );
+          : unresolvedCount <= HYDRATION_RANK_RETRY_SMALL_UNRESOLVED_MAX
+            ? HYDRATION_RANK_RETRY_DELAY_SMALL_MS
+            : HYDRATION_RANK_RETRY_DELAY_MS;
       console.info(
-        `[hydration.worker] deferred_ingestion_pending_rank matchId=${data.matchId} region=${region} unresolved=${participants.filter((p) => !participantHasResolvedRank(p)).length}`,
+        `[hydration.worker] deferred_ingestion_pending_rank matchId=${data.matchId} region=${region} unresolved=${participants.filter((p) => !participantRankKnown(p, withTodaySnapshot)).length} retry_ms=${rankRetryDelay}`,
       );
       pollerV2Observability.recordHydrationSuccess(1);
-      return;
+      return { status: "deferred_rank", delayMs: rankRetryDelay };
     }
 
     const teamStats = parseTeamStats(enrichedMatch, participants, timeline, region);
     const payload: IngestionJobData = { participants, teamStats };
+    pollerV2Observability.recordHydrationRankGate(data.matchId, true);
     await ingestionQueue.add("ingest-match", payload);
     pollerV2Observability.recordHydrationSuccess(1);
+    return { status: "completed" };
   } catch (error) {
     if (error instanceof NotFoundError) {
       pollerV2Observability.recordHydrationNotFound();
       console.warn(`[hydration.worker] match_not_found matchId=${data.matchId} region=${data.region}`);
-      return;
+      return { status: "not_found" };
     }
     pollerV2Observability.recordHydrationFailure(error);
     throw error;
@@ -334,6 +363,7 @@ export const hydrationWorker = new Worker<HydrationJobData>(
       const rankWaiting = await rankQueue.getWaitingCount();
       if (shouldPauseMatchPipelines(rankWaiting)) {
         const delayMs = HYDRATION_RANK_RETRY_DELAY_BACKLOG_MS;
+        pollerV2Observability.recordHydrationRankBacklogDefer();
         await job.moveToDelayed(Date.now() + delayMs, job.token);
         console.debug(
           JSON.stringify({
@@ -347,7 +377,13 @@ export const hydrationWorker = new Worker<HydrationJobData>(
           `hydration_deferred_rank_backlog delay_ms=${delayMs} matchId=${job.data.matchId}`,
         );
       }
-      await runHydrationJob(job.data);
+      const outcome = await runHydrationJob(job.data);
+      if (outcome.status === "deferred_rank") {
+        await job.moveToDelayed(Date.now() + outcome.delayMs, job.token);
+        throw new DelayedError(
+          `hydration_deferred_pending_rank delay_ms=${outcome.delayMs} matchId=${job.data.matchId}`,
+        );
+      }
     }),
   {
     connection: redis,

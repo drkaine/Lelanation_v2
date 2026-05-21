@@ -2,7 +2,7 @@ import { Worker } from "bullmq";
 import { config } from "../config/index.js";
 import { sql } from "../db/client.js";
 import { CHAMPION_STATS_METRIC_COLUMNS } from "../constants/championStatsMetricColumns.js";
-import type { IngestionJobData, ParsedParticipantDto } from "../dto/match.dto.js";
+import type { IngestionJobData, ParsedParticipantDto, TeamObjectiveDto } from "../dto/match.dto.js";
 import { championStatsMetricValue } from "../parsers/champion-stats-metric-value.js";
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
 import { INGESTION_QUEUE } from "../queues/definitions.js";
@@ -14,6 +14,7 @@ import {
   averageMatchRankTierLabel,
   matchReadyForAggregation,
   normalizeParticipantRankTier,
+  todaySnapshotSetFromParticipants,
 } from "./match-rank-readiness.js";
 
 class AlreadyProcessedMatchError extends Error {
@@ -105,6 +106,9 @@ async function insertProcessedMatchSentinel(
   const first = payload.participants[0];
   if (!first) throw new Error("ingestion_empty_participants");
   const rankTier = averageMatchRankTierLabel(payload.participants);
+  if (!rankTier) {
+    throw new Error(`processed_match_requires_ranked_average:${payload.teamStats.matchId}`);
+  }
   const inserted = await tx<{ riot_match_id: string }[]>`
     INSERT INTO processed_matches (patch, game_date, riot_match_id, status, rank)
     VALUES (${payload.teamStats.patch}, ${first.gameDate}, ${payload.teamStats.matchId}, 'DONE', ${rankTier})
@@ -908,21 +912,44 @@ async function upsertTierDailySnapshots(tx: any, participants: ParsedParticipant
 async function upsertObjectiveOutcomeHistogram(tx: any, payload: IngestionJobData): Promise<void> {
   for (const objective of payload.teamStats.objectives) {
     const sumTs = Math.max(0, Math.trunc(Number(objective.sumTimestampMs ?? 0)));
+    const dbKey = objectiveHistogramDbKey(objective);
     await tx`
       INSERT INTO objective_outcome_histogram (
-        patch, rank_tier, region, team, objective_type, outcome, obj_count, count_games, sum_timestamp_ms
+        patch, rank_tier, region, team, objective_type, type_drake, is_soul, outcome, obj_count, count_games, sum_timestamp_ms
       )
       VALUES (
         ${payload.teamStats.patch}, ${payload.teamStats.rankTier}, ${payload.teamStats.region},
-        ${objective.team}, ${objective.type}, ${objective.outcome}, ${objective.count}, 1, ${sumTs}
+        ${objective.team}, ${dbKey.objectiveType}, ${dbKey.typeDrake}, ${dbKey.isSoul},
+        ${objective.outcome}, ${objective.count}, 1, ${sumTs}
       )
-      ON CONFLICT (patch, rank_tier, region, team, objective_type, outcome, obj_count)
+      ON CONFLICT (patch, rank_tier, region, team, objective_type, type_drake_key, is_soul, outcome, obj_count)
       DO UPDATE SET
         count_games = objective_outcome_histogram.count_games + 1,
         sum_timestamp_ms = objective_outcome_histogram.sum_timestamp_ms + EXCLUDED.sum_timestamp_ms,
         updated_at = NOW()
     `;
   }
+}
+
+/** Aligne les types parser (`fire_drake`, `fire_soul`, …) sur le schéma SQL (migration 0013). */
+function objectiveHistogramDbKey(objective: TeamObjectiveDto): {
+  objectiveType: string;
+  typeDrake: string | null;
+  isSoul: boolean;
+} {
+  const type = String(objective.type ?? "").trim();
+  const drakeMatch = /^([a-z]+)_drake$/.exec(type);
+  if (drakeMatch) {
+    return { objectiveType: "dragon", typeDrake: drakeMatch[1]!, isSoul: false };
+  }
+  const soulMatch = /^([a-z]+)_soul$/.exec(type);
+  if (soulMatch) {
+    return { objectiveType: "dragon", typeDrake: soulMatch[1]!, isSoul: true };
+  }
+  if (type === "elder") {
+    return { objectiveType: "dragon", typeDrake: "elder", isSoul: false };
+  }
+  return { objectiveType: type, typeDrake: null, isSoul: false };
 }
 
 async function upsertMatchOutcomeStats(tx: any, payload: IngestionJobData): Promise<void> {
@@ -1024,7 +1051,7 @@ async function upsertTeamCoreStat(tx: any, payload: IngestionJobData): Promise<v
 async function runIngestionTransaction(payload: IngestionJobData): Promise<{ insertedPlayers: number; aggregated: boolean }> {
   if (payload.participants.length === 0) return { insertedPlayers: 0, aggregated: false };
 
-  if (!matchReadyForAggregation(payload.participants)) {
+  if (!matchReadyForAggregation(payload.participants, todaySnapshotSetFromParticipants(payload.participants))) {
     let insertedPlayers = 0;
     await sql.begin(async (tx) => {
       insertedPlayers = await upsertPlayersFromParticipants(tx, payload.participants);
@@ -1072,6 +1099,10 @@ export const ingestionWorker = new Worker<IngestionJobData>(
       }
       if (aggregated) {
         pollerV2Observability.recordIngestionSuccess(job.data.participants.length);
+        const matchId = String(job.data.participants[0]?.matchId ?? "").trim();
+        if (matchId) {
+          pollerV2Observability.recordMatchIngestedForPipeline(matchId);
+        }
       }
       if (insertedPlayers > 0) pollerV2Observability.recordPlayersAdded(insertedPlayers);
     } catch (error) {

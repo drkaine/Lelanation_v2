@@ -29,7 +29,17 @@ export function participantHasResolvedRank(participant: ParsedParticipantDto): b
   return normalizeParticipantRankTier(participant.rankTierValue ?? participant.rankTier) != null;
 }
 
-/** Tier « moyen » du match pour processed_matches / agrégats d’équipe. */
+/** Rang connu = tier classé sur le match, ou snapshot League du jour déjà en base (y compris UNRANKED confirmé). */
+export function participantRankKnown(
+  participant: ParsedParticipantDto,
+  todaySnapshotPuuids: Set<string>,
+): boolean {
+  if (participantHasResolvedRank(participant)) return true;
+  const puuid = String(participant.puuid ?? "").trim();
+  return puuid.length > 0 && todaySnapshotPuuids.has(puuid);
+}
+
+/** Tier moyen du match (participants classés uniquement ; les UNRANKED sont ignorés du calcul). */
 export function averageMatchRankTierLabel(participants: ParsedParticipantDto[]): string | null {
   const ordinals: number[] = [];
   for (const participant of participants) {
@@ -45,9 +55,27 @@ export function averageMatchRankTierLabel(participants: ParsedParticipantDto[]):
   return SOLO_TIER_ORDER[rounded - 1] ?? null;
 }
 
-/** Agrégation autorisée seulement si chaque participant a un rang exploitable (pas UNRANKED). */
-export function matchReadyForAggregation(participants: ParsedParticipantDto[]): boolean {
+/**
+ * Agrégation autorisée si :
+ * - chaque joueur a un rang connu (classé ou UNRANKED confirmé via League), et
+ * - au moins un joueur classé → rang moyen du match calculable.
+ * Les joueurs UNRANKED restent en stats individuelles ; le match n’est jamais agrégé comme « UNRANKED ».
+ */
+export function matchReadyForAggregation(
+  participants: ParsedParticipantDto[],
+  todaySnapshotPuuids: Set<string>,
+): boolean {
   if (participants.length === 0) return false;
-  if (!participants.every(participantHasResolvedRank)) return false;
+  if (!participants.every((p) => participantRankKnown(p, todaySnapshotPuuids))) return false;
   return averageMatchRankTierLabel(participants) != null;
+}
+
+export function todaySnapshotSetFromParticipants(participants: ParsedParticipantDto[]): Set<string> {
+  const out = new Set<string>();
+  for (const participant of participants) {
+    if (participant.needsRankFetch) continue;
+    const puuid = String(participant.puuid ?? "").trim();
+    if (puuid) out.add(puuid);
+  }
+  return out;
 }
