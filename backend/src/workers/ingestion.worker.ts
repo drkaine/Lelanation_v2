@@ -8,7 +8,7 @@ import { championStatsMetricValue } from "../parsers/champion-stats-metric-value
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
 import { INGESTION_QUEUE } from "../queues/definitions.js";
 import { enqueueRankFetchJobsForParticipants } from "../queues/rank-jobs.js";
-import { rankQueue } from "../queues/index.js";
+import { getRankBacklogCount } from "../queues/index.js";
 import { shouldPauseMatchPipelines } from "../queues/rank-backlog-policy.js";
 import { redis } from "../redis/client.js";
 import {
@@ -1094,8 +1094,8 @@ export const ingestionWorker = new Worker<IngestionJobData>(
     pollerV2Observability.recordIngestionStart();
     try {
       const { insertedPlayers, aggregated } = await runIngestionTransaction(job.data);
-      const rankWaiting = await rankQueue.getWaitingCount();
-      if (!shouldPauseMatchPipelines(rankWaiting)) {
+      const rankBacklog = await getRankBacklogCount();
+      if (!shouldPauseMatchPipelines(rankBacklog)) {
         await enqueueRankFetchJobsForParticipants(job.data.participants);
       }
       if (aggregated) {

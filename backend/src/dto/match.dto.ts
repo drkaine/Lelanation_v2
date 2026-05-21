@@ -7,6 +7,10 @@ export interface HydrationJobData {
   matchId: string;
   region: string;
   puuid: string;
+  cachedHydration?: {
+    participants: ParsedParticipantDto[];
+    teamStatsBase: Omit<TeamStatsDto, "rankTier">;
+  };
 }
 
 export interface RankJobData {

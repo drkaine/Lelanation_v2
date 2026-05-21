@@ -37,6 +37,8 @@ type Totals = {
   matchIdsFetched: number;
   matchesQueuedHydration: number;
   hydrationJobsStarted: number;
+  hydrationCacheHits: number;
+  hydrationCacheMisses: number;
   hydrationJobsSucceeded: number;
   hydrationJobsSkippedOldPatch: number;
   hydrationJobsNotFound: number;
@@ -158,6 +160,7 @@ type Snapshot = {
   rank_prefetch_coverage_pct: number;
   hydration_retry_count_30m: number;
   avg_match_pipeline_seconds: number;
+  rateLimitAvgWaitMsPerGrant: number;
   req_per_120s_rolling: number;
   discovery_tokens_used_pct: number;
   hydration_tokens_used_pct: number;
@@ -195,6 +198,8 @@ function emptyTotals(): Totals {
     matchIdsFetched: 0,
     matchesQueuedHydration: 0,
     hydrationJobsStarted: 0,
+    hydrationCacheHits: 0,
+    hydrationCacheMisses: 0,
     hydrationJobsSucceeded: 0,
     hydrationJobsSkippedOldPatch: 0,
     hydrationJobsNotFound: 0,
@@ -455,6 +460,7 @@ class PollerV2Observability {
     | "rank_prefetch_coverage_pct"
     | "hydration_retry_count_30m"
     | "avg_match_pipeline_seconds"
+    | "rateLimitAvgWaitMsPerGrant"
     | "req_per_120s_rolling"
     | "discovery_tokens_used_pct"
     | "hydration_tokens_used_pct"
@@ -468,6 +474,10 @@ class PollerV2Observability {
       rank_prefetch_coverage_pct: this.rankPrefetchCoveragePct(),
       hydration_retry_count_30m: this.hydrationRetryCount30m(),
       avg_match_pipeline_seconds: this.avgMatchPipelineSeconds(now),
+      rateLimitAvgWaitMsPerGrant:
+        this.totals.rateLimitGrantedCount > 0
+          ? Math.round((this.totals.rateLimitWaitMsTotal / this.totals.rateLimitGrantedCount) * 10) / 10
+          : 0,
       req_per_120s_rolling: tokenUsage.reqTotal,
       discovery_tokens_used_pct: this.pctUsed(tokenUsage.discovery, "discovery"),
       hydration_tokens_used_pct: this.pctUsed(tokenUsage.hydration, "hydration"),
@@ -594,6 +604,14 @@ class PollerV2Observability {
 
   recordHydrationStart(): void {
     this.totals.hydrationJobsStarted += 1;
+  }
+
+  recordHydrationCacheHit(): void {
+    this.totals.hydrationCacheHits += 1;
+  }
+
+  recordHydrationCacheMiss(): void {
+    this.totals.hydrationCacheMisses += 1;
   }
 
   recordHydrationSuccess(matchesIngested = 1): void {

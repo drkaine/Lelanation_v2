@@ -6,10 +6,9 @@ import type { HydrationJobData, ParsedParticipantDto, TeamStatsDto } from "../dt
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
 import { parseMatch } from "../parsers/match.parser.js";
 import { HYDRATION_QUEUE } from "../queues/definitions.js";
-import { ingestionQueue } from "../queues/index.js";
+import { getRankBacklogCount, ingestionQueue } from "../queues/index.js";
 import { maxRankBacklogBeforePipelinePause, shouldPauseMatchPipelines } from "../queues/rank-backlog-policy.js";
 import { enqueueRankChildJobsForHydration } from "../queues/rank-jobs.js";
-import { rankQueue } from "../queues/index.js";
 import {
   averageMatchRankTierLabel,
   getMissingRankParticipants,
@@ -49,6 +48,8 @@ type PlayerRankRow = {
   rank_lp: number | null;
 };
 
+type TeamStatsBase = Omit<TeamStatsDto, "rankTier">;
+
 function normalizeTier(value: string | null | undefined): string | null {
   const tier = String(value ?? "")
     .trim()
@@ -84,17 +85,20 @@ async function loadParticipantRankSnapshot(
   return new Map(rows.map((row) => [row.puuid, row]));
 }
 
-async function loadTodayRankSnapshotPuuids(puuids: string[], region: string): Promise<Set<string>> {
-  if (puuids.length === 0) return new Set();
+async function loadTodayRankSnapshotRows(
+  puuids: string[],
+  region: string,
+): Promise<Map<string, PlayerRankRow>> {
+  if (puuids.length === 0) return new Map();
   const regionKeys = platformRegionLookupKeys(region);
-  const rows = await sql<{ puuid: string }[]>`
-    SELECT DISTINCT puuid
+  const rows = await sql<PlayerRankRow[]>`
+    SELECT puuid, rank_tier, rank_division, rank_lp
     FROM player_rank_history
     WHERE date = ${todayIsoDate()}::date
       AND puuid = ANY(${sql.array(puuids, 25)})
       AND region = ANY(${sql.array(regionKeys, 25)})
   `;
-  return new Set(rows.map((row) => row.puuid));
+  return new Map(rows.map((row) => [row.puuid, row]));
 }
 
 function mergeRankSnapshotIntoMatch(match: MatchDto, rankByPuuid: Map<string, PlayerRankRow>): MatchDto {
@@ -173,12 +177,12 @@ function resolveTeamStatsRegion(match: MatchDto, queueRegion: string): string {
   return normalizePlatformRegion(String(match.info.platformId ?? queueRegion ?? "euw1"));
 }
 
-function parseTeamStats(
+function parseTeamStatsBase(
   match: MatchDto,
   participants: ParsedParticipantDto[],
   timeline: MatchTimelineDto,
   queueRegion: string,
-): TeamStatsDto {
+): TeamStatsBase {
   const patch = extractPatch(match.info.gameVersion);
   const region = resolveTeamStatsRegion(match, queueRegion);
   const team100 = (match.info.teams ?? []).find((team) => team.teamId === 100);
@@ -242,7 +246,6 @@ function parseTeamStats(
   return {
     matchId: match.metadata.matchId,
     patch,
-    rankTier: deriveMatchRankTier(participants),
     region,
     team100Win,
     objectives,
@@ -255,14 +258,45 @@ function parseTeamStats(
   };
 }
 
+function parseTeamStats(
+  teamStatsBase: TeamStatsBase,
+  participants: ParsedParticipantDto[],
+): TeamStatsDto {
+  return {
+    ...teamStatsBase,
+    rankTier: deriveMatchRankTier(participants),
+  };
+}
+
 async function refreshParticipantsRankState(
   participants: ParsedParticipantDto[],
   region: string,
 ): Promise<Set<string>> {
   const puuids = participants.map((p) => p.puuid).filter(Boolean);
-  const withTodaySnapshot = await loadTodayRankSnapshotPuuids(puuids, region);
+  const rankRows = await loadTodayRankSnapshotRows(puuids, region);
+  const withTodaySnapshot = new Set(rankRows.keys());
   for (const participant of participants) {
-    participant.needsRankFetch = !withTodaySnapshot.has(participant.puuid);
+    const rankRow = rankRows.get(participant.puuid);
+    participant.needsRankFetch = !rankRow;
+    if (!rankRow) {
+      continue;
+    }
+    const normalizedTier = normalizeTier(rankRow.rank_tier);
+    if (normalizedTier) {
+      participant.rankTier = normalizedTier;
+      participant.rankTierValue = normalizedTier;
+      participant.rankDivision = String(rankRow.rank_division ?? "").trim().toUpperCase();
+      participant.lp = Number(rankRow.rank_lp ?? 0);
+      continue;
+    }
+    if (String(rankRow.rank_tier ?? "").trim().toUpperCase() === "UNRANKED") {
+      participant.rankTier = "UNRANKED";
+      participant.rankTierValue = "UNRANKED";
+      participant.rankDivision = String(rankRow.rank_division ?? "UNRANKED")
+        .trim()
+        .toUpperCase();
+      participant.lp = Number(rankRow.rank_lp ?? 0);
+    }
   }
   return withTodaySnapshot;
 }
@@ -287,14 +321,13 @@ async function finalizeHydrationRankGate(
   token: string,
   data: HydrationJobData,
   region: string,
-  enrichedMatch: MatchDto,
-  timeline: MatchTimelineDto,
   participants: ParsedParticipantDto[],
+  teamStatsBase: TeamStatsBase,
 ): Promise<void> {
   let withTodaySnapshot = await refreshParticipantsRankState(participants, region);
 
   if (matchReadyForAggregation(participants, withTodaySnapshot)) {
-    const teamStats = parseTeamStats(enrichedMatch, participants, timeline, region);
+    const teamStats = parseTeamStats(teamStatsBase, participants);
     pollerV2Observability.recordHydrationRankGate(data.matchId, true);
     await ingestionQueue.add("ingest-match", { participants, teamStats });
     pollerV2Observability.recordHydrationSuccess(1);
@@ -325,7 +358,7 @@ async function finalizeHydrationRankGate(
 
   withTodaySnapshot = await refreshParticipantsRankState(participants, region);
   if (matchReadyForAggregation(participants, withTodaySnapshot)) {
-    const teamStats = parseTeamStats(enrichedMatch, participants, timeline, region);
+    const teamStats = parseTeamStats(teamStatsBase, participants);
     pollerV2Observability.recordHydrationRankGate(data.matchId, true);
     await ingestionQueue.add("ingest-match", { participants, teamStats });
     pollerV2Observability.recordHydrationSuccess(1);
@@ -339,54 +372,71 @@ async function runHydrationJob(hydrationJob: Job<HydrationJobData>, token: strin
   const startedAt = Date.now();
   const data = hydrationJob.data;
   pollerV2Observability.recordHydrationStart();
-
-  await waitForHydrationSlot();
+  let region = normalizePlatformRegion(data.region);
+  let participants: ParsedParticipantDto[] = [];
+  let teamStatsBase: TeamStatsBase | null = null;
 
   try {
-    const [match, timeline] = await Promise.all([
-      riotClient.getMatch(data.matchId, data.region),
-      riotClient.getTimeline(data.matchId, data.region),
-    ]);
-    const nowSec = Math.floor(Date.now() / 1000);
-    const cutoffStartSec = await resolvePatchCutoffStartSec(nowSec);
-    const gameEndSec = Math.floor(
-      (Number(match.info.gameEndTimestamp ?? 0) ||
-        Number(match.info.gameStartTimestamp ?? 0) + Number(match.info.gameDuration ?? 0) * 1000) /
-        1000,
-    );
-    if (Number.isFinite(gameEndSec) && gameEndSec > 0 && gameEndSec < cutoffStartSec) {
-      console.info(
-        `[hydration.worker] skipped_old_patch matchId=${data.matchId} game_end_sec=${gameEndSec} cutoff_sec=${cutoffStartSec}`,
+    const cachedHydration = hydrationJob.data.cachedHydration;
+    if (cachedHydration?.participants && cachedHydration.teamStatsBase) {
+      participants = cachedHydration.participants;
+      teamStatsBase = cachedHydration.teamStatsBase;
+      region = normalizePlatformRegion(cachedHydration.teamStatsBase.region ?? region);
+      pollerV2Observability.recordHydrationCacheHit();
+    } else {
+      pollerV2Observability.recordHydrationCacheMiss();
+      await waitForHydrationSlot();
+
+      const [match, timeline] = await Promise.all([
+        riotClient.getMatch(data.matchId, data.region),
+        riotClient.getTimeline(data.matchId, data.region),
+      ]);
+      const nowSec = Math.floor(Date.now() / 1000);
+      const cutoffStartSec = await resolvePatchCutoffStartSec(nowSec);
+      const gameEndSec = Math.floor(
+        (Number(match.info.gameEndTimestamp ?? 0) ||
+          Number(match.info.gameStartTimestamp ?? 0) + Number(match.info.gameDuration ?? 0) * 1000) /
+          1000,
       );
-      pollerV2Observability.recordHydrationSkippedOldPatch();
-      return;
+      if (Number.isFinite(gameEndSec) && gameEndSec > 0 && gameEndSec < cutoffStartSec) {
+        console.info(
+          `[hydration.worker] skipped_old_patch matchId=${data.matchId} game_end_sec=${gameEndSec} cutoff_sec=${cutoffStartSec}`,
+        );
+        pollerV2Observability.recordHydrationSkippedOldPatch();
+        return;
+      }
+
+      region = normalizePlatformRegion(String(match.info.platformId ?? data.region ?? "euw1"));
+      const matchDate = new Date(
+        Number(match.info.gameStartTimestamp ?? 0) ||
+          Number(match.info.gameCreation ?? 0) ||
+          Date.now(),
+      );
+      const safeMatchDate = Number.isFinite(matchDate.getTime()) ? matchDate : new Date();
+
+      const rankByPuuid = await loadParticipantRankSnapshot(match.info.participants ?? [], region, safeMatchDate);
+      const enrichedMatch = mergeRankSnapshotIntoMatch(match, rankByPuuid);
+
+      const patch = extractPatch(enrichedMatch.info.gameVersion);
+      participants = parseMatch(enrichedMatch, timeline, patch, region).filter(
+        (participant): participant is ParsedParticipantDto => participant !== null,
+      );
+      teamStatsBase = parseTeamStatsBase(enrichedMatch, participants, timeline, region);
+
+      await hydrationJob.updateData({
+        ...hydrationJob.data,
+        cachedHydration: {
+          participants,
+          teamStatsBase,
+        },
+      });
     }
 
-    const region = normalizePlatformRegion(String(match.info.platformId ?? data.region ?? "euw1"));
-    const matchDate = new Date(
-      Number(match.info.gameStartTimestamp ?? 0) ||
-        Number(match.info.gameCreation ?? 0) ||
-        Date.now(),
-    );
-    const safeMatchDate = Number.isFinite(matchDate.getTime()) ? matchDate : new Date();
+    if (!teamStatsBase) {
+      throw new Error(`hydration_cache_state_invalid matchId=${data.matchId}`);
+    }
 
-    const rankByPuuid = await loadParticipantRankSnapshot(match.info.participants ?? [], region, safeMatchDate);
-    const enrichedMatch = mergeRankSnapshotIntoMatch(match, rankByPuuid);
-
-    const patch = extractPatch(enrichedMatch.info.gameVersion);
-    const participants = parseMatch(enrichedMatch, timeline, patch, region).filter(
-      (participant): participant is ParsedParticipantDto => participant !== null,
-    );
-
-    await finalizeHydrationRankGate(
-      hydrationJob,
-      token,
-      data,
-      region,
-      enrichedMatch,
-      timeline,
-      participants,
-    );
+    await finalizeHydrationRankGate(hydrationJob, token, data, region, participants, teamStatsBase);
   } catch (error) {
     if (error instanceof NotFoundError) {
       pollerV2Observability.recordHydrationNotFound();
@@ -407,8 +457,8 @@ export const hydrationWorker = new Worker<HydrationJobData>(
   HYDRATION_QUEUE,
   async (job, token) =>
     hydrationLimit(async () => {
-      const rankWaiting = await rankQueue.getWaitingCount();
-      if (shouldPauseMatchPipelines(rankWaiting)) {
+      const rankBacklog = await getRankBacklogCount();
+      if (shouldPauseMatchPipelines(rankBacklog)) {
         const delayMs = HYDRATION_RANK_RETRY_DELAY_BACKLOG_MS;
         pollerV2Observability.recordHydrationRankBacklogDefer();
         await job.moveToDelayed(Date.now() + delayMs, token);
@@ -416,7 +466,7 @@ export const hydrationWorker = new Worker<HydrationJobData>(
           JSON.stringify({
             msg: "hydration_deferred_rank_backlog",
             matchId: job.data.matchId,
-            rankWaiting,
+            rankBacklog,
             threshold: maxRankBacklogBeforePipelinePause(),
           }),
         );

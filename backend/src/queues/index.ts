@@ -32,6 +32,11 @@ export const rankQueue = new Queue<RankJobData>(RANK_QUEUE, {
   defaultJobOptions: RANK_QUEUE_DEFAULT_JOB_OPTIONS,
 });
 
+export async function getRankBacklogCount(): Promise<number> {
+  const counts = await rankQueue.getJobCounts("waiting", "prioritized");
+  return (counts.waiting ?? 0) + (counts.prioritized ?? 0);
+}
+
 export type QueueMetrics = {
   waiting: number;
   active: number;

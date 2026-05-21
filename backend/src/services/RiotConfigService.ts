@@ -159,6 +159,26 @@ export function getPollerPatchRolloutGraceDays(): number {
 }
 
 /**
+ * Rétention poller : supprimer `processed_matches` / `player_rank_history` antérieurs à
+ * `releaseDate(patch courant) − retentionDays` (UTC). Env: POLLER_PATCH_RETENTION_DAYS (défaut 5).
+ */
+export function getPollerPatchRetentionDays(): number {
+  const raw = process.env.POLLER_PATCH_RETENTION_DAYS
+  if (raw == null || raw === '') return 5
+  const n = Number.parseInt(raw, 10)
+  if (!Number.isFinite(n) || n < 0) return 5
+  return Math.min(n, 90)
+}
+
+/** Date ISO (YYYY-MM-DD) : conserver les lignes avec date >= cutoff ; supprimer si date < cutoff. */
+export function patchRetentionCutoffDateIso(releaseDate: string, retentionDays: number): string | null {
+  const releaseStart = releaseDateToStartOfDayUtcSeconds(releaseDate)
+  if (!Number.isFinite(releaseStart)) return null
+  const cutoffSec = releaseStart - retentionDays * 86400
+  return new Date(cutoffSec * 1000).toISOString().slice(0, 10)
+}
+
+/**
  * True si `nowSec` est le même jour release (UTC) ou l’un des `graceDays` jours suivants (UTC).
  * dayIndex 0 = jour du release, …, dayIndex graceDays = dernier jour de grâce.
  */

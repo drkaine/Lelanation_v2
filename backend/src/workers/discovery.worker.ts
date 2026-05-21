@@ -5,7 +5,7 @@ import type { DiscoveryJobData } from "../dto/match.dto.js";
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
 import { bullmqJobId } from "../queues/bullmq-job-id.js";
 import { maxRankBacklogBeforePipelinePause, shouldPauseMatchPipelines } from "../queues/rank-backlog-policy.js";
-import { discoveryQueue, hydrationQueue, rankQueue } from "../queues/index.js";
+import { discoveryQueue, getRankBacklogCount, hydrationQueue } from "../queues/index.js";
 import { enqueueHydrationMatchIfAbsent } from "../queues/hydration-enqueue.js";
 import { DISCOVERY_QUEUE } from "../queues/definitions.js";
 import { redis } from "../redis/client.js";
@@ -190,12 +190,12 @@ async function processDiscoveryPlayer(
 
 async function runDiscoveryCycle(): Promise<void> {
   const startedAt = Date.now();
-  const rankWaiting = await rankQueue.getWaitingCount();
-  if (shouldPauseMatchPipelines(rankWaiting)) {
+  const rankBacklog = await getRankBacklogCount();
+  if (shouldPauseMatchPipelines(rankBacklog)) {
     console.debug(
       JSON.stringify({
         msg: "discovery_paused_rank_backlog",
-        rankWaiting,
+        rankBacklog,
         threshold: maxRankBacklogBeforePipelinePause(),
       }),
     );

@@ -7,6 +7,7 @@ import {
   isWithinPatchRolloutGraceUtc,
   findPreviousPatchEntry,
   resolveLatestPatchPriorityWindow,
+  patchRetentionCutoffDateIso,
 } from './RiotConfigService.js'
 import type { MatchFiltersConfig, GameVersionsRecap } from './RiotConfigService.js'
 
@@ -103,4 +104,10 @@ test('resolveLatestPatchPriorityWindow: after grace, latest only', () => {
   })
   assert.deepEqual(w.allowedPatches, ['16.7'])
   assert.equal(w.matchListStartTime, relStart)
+})
+
+test('patchRetentionCutoffDateIso: release minus retention days', () => {
+  assert.equal(patchRetentionCutoffDateIso('2026-03-31', 5), '2026-03-26')
+  assert.equal(patchRetentionCutoffDateIso('2026-02-19', 5), '2026-02-14')
+  assert.equal(patchRetentionCutoffDateIso('invalid', 5), null)
 })

@@ -1,5 +1,5 @@
 import type { Worker } from "bullmq";
-import { rankQueue } from "./index.js";
+import { getRankBacklogCount } from "./index.js";
 import { shouldPauseMatchPipelines } from "./rank-backlog-policy.js";
 
 /** Pause hydration/ingestion pendant le drain rank (évite locks BullMQ + enqueue inutile). */
@@ -7,8 +7,8 @@ export async function syncMatchPipelinePause(
   hydrationWorker: Worker,
   ingestionWorker: Worker,
 ): Promise<boolean> {
-  const rankWaiting = await rankQueue.getWaitingCount();
-  const pause = shouldPauseMatchPipelines(rankWaiting);
+  const rankBacklog = await getRankBacklogCount();
+  const pause = shouldPauseMatchPipelines(rankBacklog);
 
   if (pause) {
     if (!hydrationWorker.isPaused()) await hydrationWorker.pause(true);

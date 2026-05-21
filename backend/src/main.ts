@@ -6,6 +6,7 @@ import { appendUnifiedLog } from "./logging/unifiedAppLog.js";
 import { pollerV2Observability } from "./observability/poller-v2-observability.js";
 import { getQueueMetrics } from "./queues/index.js";
 import { trimCompletedQueueJobs } from "./queues/queue-cleanup.js";
+import { purgeStaleProcessedMatchesAndRankHistory } from "./services/patch-retention-cleanup.js";
 import { syncMatchPipelinePause } from "./queues/pipeline-pause-sync.js";
 import { loadLuaScript, startDrip, stopDrip } from "./redis/rate-scheduler.js";
 import { redis } from "./redis/client.js";
@@ -22,6 +23,7 @@ let workers: PollerWorkers | null = null;
 let metricsInterval: NodeJS.Timeout | null = null;
 let summary30mInterval: NodeJS.Timeout | null = null;
 let summary1hInterval: NodeJS.Timeout | null = null;
+let patchRetentionInterval: NodeJS.Timeout | null = null;
 let leaderLockRenewInterval: NodeJS.Timeout | null = null;
 let shuttingDown = false;
 
@@ -172,6 +174,24 @@ async function queryDbWindowStats(windowStartMs: number, windowEndMs: number): P
   };
 }
 
+async function runPatchRetentionPurge(): Promise<void> {
+  try {
+    const result = await purgeStaleProcessedMatchesAndRankHistory();
+    if (result.skipped) {
+      console.warn(
+        `[poller-main] patch_retention_purge_skipped reason=${result.skipReason ?? "unknown"} retention_days=${result.retentionDays}`,
+      );
+      return;
+    }
+    console.log(
+      `[poller-main] patch_retention_purge cutoff=${result.cutoffDate} retention_days=${result.retentionDays} ` +
+        `deleted_processed_matches=${result.deletedProcessedMatches} deleted_rank_history=${result.deletedRankHistory}`,
+    );
+  } catch (error) {
+    console.error("[poller-main] patch_retention_purge_failed", error);
+  }
+}
+
 async function emitWindowSummary(window: "30m" | "1h"): Promise<void> {
   const now = Date.now();
   const windowMs = window === "30m" ? 30 * 60_000 : 60 * 60_000;
@@ -223,6 +243,11 @@ async function bootstrap(): Promise<void> {
   }
   console.log("[poller-main] database health check OK");
 
+  await runPatchRetentionPurge();
+  patchRetentionInterval = setInterval(() => {
+    void runPatchRetentionPurge();
+  }, 6 * 60 * 60_000);
+
   await workers.scheduleDiscoveryRepeatJob();
   console.log(
     `[poller-main] discovery repeat job scheduled (${config.DISCOVERY_INTERVAL_MS}ms, ${config.DISCOVERY_PLAYERS_PER_TICK} players/tick)`,
@@ -251,6 +276,10 @@ async function gracefulShutdown(signal: string): Promise<void> {
   if (summary1hInterval) {
     clearInterval(summary1hInterval);
     summary1hInterval = null;
+  }
+  if (patchRetentionInterval) {
+    clearInterval(patchRetentionInterval);
+    patchRetentionInterval = null;
   }
   stopDrip();
 
