@@ -1,69 +1,84 @@
-import { sql } from "../db/client.js";
-import type { ParsedParticipantDto } from "../dto/match.dto.js";
+import type { Job } from "bullmq";
+import type { HydrationJobData, ParsedParticipantDto } from "../dto/match.dto.js";
+import { normalizePlatformRegion } from "../riot/platform-region.js";
 import { bullmqJobId } from "./bullmq-job-id.js";
 import { rankQueue } from "./index.js";
-
-const RANK_PREFETCH_MS_PER_PLAYER = 800;
-const RANK_PREFETCH_MAX_HYDRATION_DELAY_MS = 30_000;
 
 function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function computeRankPrefetchHydrationDelay(prefetchCount: number): number {
-  if (prefetchCount <= 0) {
-    return 0;
-  }
-  return Math.min(prefetchCount * RANK_PREFETCH_MS_PER_PLAYER, RANK_PREFETCH_MAX_HYDRATION_DELAY_MS);
+const RANK_CHILD_JOB_OPTS = {
+  attempts: 2,
+  backoff: { type: "fixed" as const, delay: 30_000 },
+  removeOnComplete: { count: 100 },
+  removeOnFail: { count: 200 },
+} as const;
+
+function rankChildJobId(puuid: string, region: string, today: string): string {
+  return bullmqJobId("rank", region, puuid, today);
 }
 
-/** Joueurs sans snapshot League du jour — prefetch avant hydration discovery. */
-export async function prefetchRankJobsForDiscoveryPlayers(
-  players: Array<{ puuid: string; region: string }>,
+/** Rank jobs enfants d'un job hydration — dédupliqués par région canonique + puuid + jour. */
+export async function enqueueRankChildJobsForHydration(
+  hydrationJob: Job<HydrationJobData>,
+  missingParticipants: ParsedParticipantDto[],
 ): Promise<number> {
-  if (players.length === 0) {
+  if (missingParticipants.length === 0) {
     return 0;
   }
 
   const today = todayIsoDate();
-  const puuids = players.map((player) => player.puuid);
+  const parent = {
+    id: hydrationJob.id!,
+    queue: hydrationJob.queueQualifiedName,
+  };
 
-  const needsRank = await sql<{ puuid: string; region: string }[]>`
-    SELECT p.puuid, p.region
-    FROM players p
-    WHERE p.puuid = ANY(${sql.array(puuids, 25)})
-      AND NOT EXISTS (
-        SELECT 1
-        FROM player_rank_history prh
-        WHERE prh.puuid = p.puuid
-          AND prh.region = p.region
-          AND prh.date = ${today}::date
-      )
-  `;
+  let enqueued = 0;
+  for (const participant of missingParticipants) {
+    const puuid = String(participant.puuid ?? "").trim();
+    if (!puuid) continue;
 
-  if (needsRank.length === 0) {
-    return 0;
+    const region = normalizePlatformRegion(participant.region);
+    const jobId = rankChildJobId(puuid, region, today);
+    const existing = await rankQueue.getJob(jobId);
+    if (existing) {
+      const state = await existing.getState();
+      if (state !== "failed") {
+        continue;
+      }
+      await existing.remove().catch(() => undefined);
+    }
+
+    try {
+      await rankQueue.add(
+        "fetch-rank",
+        { puuid, region, matchDate: today },
+        {
+          ...RANK_CHILD_JOB_OPTS,
+          jobId,
+          priority: 1,
+          parent,
+        },
+      );
+      enqueued += 1;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (
+        message.includes("Job already exists") ||
+        message.includes("cannot be replaced") ||
+        message.includes("-7")
+      ) {
+        continue;
+      }
+      throw error;
+    }
   }
 
-  await rankQueue.addBulk(
-    needsRank.map(({ puuid, region }) => ({
-      name: "fetch-rank",
-      data: { puuid, region, matchDate: today },
-      opts: {
-        jobId: bullmqJobId("rank", puuid, today),
-        priority: 1,
-        attempts: 2,
-        backoff: { type: "fixed" as const, delay: 30_000 },
-        removeOnComplete: true,
-        removeOnFail: { count: 100 },
-      },
-    })),
-  );
-
-  return needsRank.length;
+  return enqueued;
 }
 
-/** Enfile les fetch-rank dédupliqués par joueur et par jour (BullMQ ignore les jobId existants). */
+/** Enfile les fetch-rank dédupliqués (sans parent) — ex. post-ingestion. */
 export async function enqueueRankFetchJobsForParticipants(
   participants: ParsedParticipantDto[],
   options?: { priority?: number },
@@ -73,18 +88,19 @@ export async function enqueueRankFetchJobsForParticipants(
 
   const rankJobs = participants
     .filter((p) => p.needsRankFetch)
-    .map((p) => ({
-      name: "fetch-rank",
-      data: { puuid: p.puuid, region: p.region, matchDate: p.gameDate },
-      opts: {
-        jobId: bullmqJobId("rank", p.puuid, today),
-        priority,
-        attempts: 2,
-        backoff: { type: "fixed" as const, delay: 30_000 },
-        removeOnComplete: { count: 100 },
-        removeOnFail: { count: 100 },
-      },
-    }));
+    .map((p) => {
+      const region = normalizePlatformRegion(p.region);
+      return {
+        name: "fetch-rank",
+        data: { puuid: p.puuid, region, matchDate: p.gameDate },
+        opts: {
+          jobId: rankChildJobId(p.puuid, region, today),
+          priority,
+          ...RANK_CHILD_JOB_OPTS,
+          removeOnComplete: { count: 100 },
+        },
+      };
+    });
 
   if (rankJobs.length > 0) {
     await rankQueue.addBulk(rankJobs);

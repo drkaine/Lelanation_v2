@@ -5,6 +5,7 @@ import { healthCheck, sql } from "./db/client.js";
 import { appendUnifiedLog } from "./logging/unifiedAppLog.js";
 import { pollerV2Observability } from "./observability/poller-v2-observability.js";
 import { getQueueMetrics } from "./queues/index.js";
+import { trimCompletedQueueJobs } from "./queues/queue-cleanup.js";
 import { syncMatchPipelinePause } from "./queues/pipeline-pause-sync.js";
 import { loadLuaScript, startDrip, stopDrip } from "./redis/rate-scheduler.js";
 import { redis } from "./redis/client.js";
@@ -37,9 +38,11 @@ async function acquirePollerLeaderLock(): Promise<void> {
   );
   if (acquired !== "OK") {
     const owner = await redis.get(POLLER_LEADER_LOCK_KEY);
-    throw new Error(
-      `poller_leader_lock_held owner_pid=${owner ?? "unknown"} current_pid=${process.pid} hint=kill_other_poller_first`,
+    console.warn(
+      `[poller-main] leader lock held by pid=${owner ?? "unknown"} (this pid=${process.pid}) — exiting; use a single poller instance only`,
     );
+    await redis.quit().catch(() => undefined);
+    process.exit(0);
   }
 
   leaderLockRenewInterval = setInterval(() => {
@@ -207,6 +210,9 @@ async function bootstrap(): Promise<void> {
   workers = await startWorkers();
   console.log("[poller-main] workers started: discovery, hydration, ingestion, rank");
 
+  await trimCompletedQueueJobs();
+  console.log("[poller-main] stale BullMQ jobs trimmed (completed/failed >5m)");
+
   await loadLuaScript();
   startDrip();
   console.log("[poller-main] scheduled slot rate limiter loaded (drip started)");
@@ -226,6 +232,7 @@ async function bootstrap(): Promise<void> {
   console.log(`[poller-main] match pipelines paused=${pipelinesPaused} (rank backlog policy)`);
 
   await startMonitoring();
+  process.send?.("ready");
 }
 
 async function gracefulShutdown(signal: string): Promise<void> {

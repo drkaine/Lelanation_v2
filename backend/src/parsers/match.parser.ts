@@ -11,6 +11,7 @@ import type {
   MatchTimelineParticipantFrameDto,
   ParticipantDto,
 } from "../riot/types.js";
+import { normalizePlatformRegion } from "../riot/platform-region.js";
 
 const STARTER_WINDOW_MS = 120_000;
 const U15_WINDOW_MS = 900_000;
@@ -327,6 +328,7 @@ export function parseMatch(
   match: MatchDto,
   timeline: MatchTimelineDto,
   patch: string,
+  queueRegion?: string,
 ): Array<ParsedParticipantDto | null> {
   const participants = match.info.participants ?? [];
   const events = getEvents(timeline);
@@ -337,7 +339,7 @@ export function parseMatch(
     Number(match.info.gameEndTimestamp ?? 0) ||
     Number(match.info.gameStartTimestamp ?? 0) + Number(match.info.gameDuration ?? 0) * 1000;
   const gameDate = new Date(gameEndTimestamp).toISOString();
-  const region = String(match.info.platformId ?? "unknown").toLowerCase();
+  const region = normalizePlatformRegion(String(match.info.platformId ?? queueRegion ?? "euw1"));
 
   const team100Sorted = getTeamParticipantsSortedById(match, 100);
   const team200Sorted = getTeamParticipantsSortedById(match, 200);

@@ -288,6 +288,24 @@ export function stopDrip(): void {
   }
 }
 
+const DISCOVERY_POLL_RETRY_CONCURRENCY = 2;
+
+function minPollSleepMs(pipeline: SlotPipeline): number {
+  if (pipeline === "hydration") {
+    return Math.max(250, Math.floor(jobReleaseIntervalMs("hydration") / config.HYDRATION_CONCURRENCY));
+  }
+  if (pipeline === "rank") {
+    return Math.max(
+      250,
+      Math.floor(tokenReleaseIntervalMs("rank") / config.RANK_WORKER_CONCURRENCY_DRAIN),
+    );
+  }
+  return Math.max(
+    250,
+    Math.floor(tokenReleaseIntervalMs("discovery") / DISCOVERY_POLL_RETRY_CONCURRENCY),
+  );
+}
+
 async function waitForScheduledSlot(slotKey: string, cost: 1 | 2): Promise<void> {
   const pipeline = pipelineForSlotKey(slotKey);
   while (true) {
@@ -309,7 +327,7 @@ async function waitForScheduledSlot(slotKey: string, cost: 1 | 2): Promise<void>
       return;
     }
 
-    const waitMs = Math.max(value, 0);
+    const waitMs = Math.max(value, minPollSleepMs(pipeline));
     pollerV2Observability.recordRateLimitAttempt(cost, false, waitMs, pipeline);
     await sleep(waitMs);
   }
@@ -347,7 +365,7 @@ export async function acquireRankSlot(): Promise<{ granted: boolean; waitMs: num
     return { granted: true, waitMs: 0 };
   }
 
-  const waitMs = Math.max(value, 0);
+  const waitMs = Math.max(value, minPollSleepMs("rank"));
   pollerV2Observability.recordRateLimitAttempt(1, false, waitMs, "rank");
   return { granted: false, waitMs };
 }

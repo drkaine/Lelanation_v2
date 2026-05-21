@@ -14,26 +14,27 @@ export type RankQueueJobData = RankJobData;
 export const DISCOVERY_QUEUE_DEFAULT_JOB_OPTIONS: JobsOptions = {
   attempts: 3,
   backoff: { type: "exponential", delay: 5000 },
-  removeOnComplete: { count: 500, age: 3600 },
-  removeOnFail: { count: 1000 },
+  removeOnComplete: { count: 100 },
+  removeOnFail: { count: 200 },
 };
 
 export const HYDRATION_QUEUE_DEFAULT_JOB_OPTIONS: JobsOptions = {
   attempts: 3,
   backoff: { type: "exponential", delay: 2000 },
-  removeOnComplete: { count: 1000, age: 3600 },
-  removeOnFail: { count: 1000 },
+  removeOnComplete: { count: 100 },
+  removeOnFail: { count: 200 },
 };
 
 export const INGESTION_QUEUE_DEFAULT_JOB_OPTIONS: JobsOptions = {
   attempts: 5,
   backoff: { type: "exponential", delay: 1000 },
-  removeOnComplete: { count: 200, age: 1800 },
-  removeOnFail: { count: 500 },
+  removeOnComplete: { count: 100 },
+  removeOnFail: { count: 200 },
 };
 
 export const RANK_QUEUE_DEFAULT_JOB_OPTIONS: JobsOptions = {
   attempts: 2,
-  removeOnComplete: { count: 500 },
-  removeOnFail: { count: 100 },
+  backoff: { type: "fixed", delay: 30_000 },
+  removeOnComplete: { count: 100 },
+  removeOnFail: { count: 200 },
 };

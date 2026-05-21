@@ -1,5 +1,6 @@
 import { Worker } from "bullmq";
 import { config } from "../config/index.js";
+import { normalizePlatformRegion } from "../riot/platform-region.js";
 import { sql } from "../db/client.js";
 import { CHAMPION_STATS_METRIC_COLUMNS } from "../constants/championStatsMetricColumns.js";
 import type { IngestionJobData, ParsedParticipantDto, TeamObjectiveDto } from "../dto/match.dto.js";
@@ -149,7 +150,7 @@ async function upsertPlayersFromParticipants(tx: any, participants: ParsedPartic
 
   for (const participant of orderedParticipants) {
     const puuid = String(participant.puuid).trim();
-    const region = String(participant.region ?? "").trim().toLowerCase();
+    const region = normalizePlatformRegion(participant.region);
     const gameDate = new Date(participant.gameDate);
     const snapshotDate = Number.isFinite(gameDate.getTime()) ? gameDate : new Date();
     const inserted = await tx<{ puuid: string }[]>`
@@ -161,7 +162,7 @@ async function upsertPlayersFromParticipants(tx: any, participants: ParsedPartic
       )
       VALUES (
         ${puuid},
-        ${region || "euw1"},
+        ${region},
         ${config.PLAYER_KEY_VERSION},
         ${snapshotDate}
       )
@@ -173,7 +174,7 @@ async function upsertPlayersFromParticipants(tx: any, participants: ParsedPartic
     await tx`
       UPDATE players
       SET
-        region = ${region || "euw1"},
+        region = ${region},
         last_seen = GREATEST(COALESCE(last_seen, ${snapshotDate}), ${snapshotDate}),
         puuid_key_version = ${config.PLAYER_KEY_VERSION}
       WHERE puuid = ${puuid}
@@ -190,9 +191,9 @@ async function upsertPlayerRankHistoryFromParticipants(
   const latestByDay = new Map<string, ParsedParticipantDto>();
   for (const participant of participants) {
     const puuid = String(participant.puuid ?? "").trim();
-    const region = String(participant.region ?? "").trim().toLowerCase();
+    const region = normalizePlatformRegion(participant.region);
     const gameDate = new Date(participant.gameDate);
-    if (!puuid || !region || !Number.isFinite(gameDate.getTime())) continue;
+    if (!puuid || !Number.isFinite(gameDate.getTime())) continue;
     const dateOnly = gameDate.toISOString().slice(0, 10);
     const key = `${puuid}|${region}|${dateOnly}`;
     const previous = latestByDay.get(key);
@@ -205,7 +206,7 @@ async function upsertPlayerRankHistoryFromParticipants(
     if (participant.needsRankFetch) continue;
 
     const puuid = String(participant.puuid ?? "").trim();
-    const region = String(participant.region ?? "").trim().toLowerCase();
+    const region = normalizePlatformRegion(participant.region);
     const gameDate = new Date(participant.gameDate);
     if (!Number.isFinite(gameDate.getTime())) continue;
     const normalizedTier = normalizeParticipantRankTier(participant.rankTierValue ?? participant.rankTier);

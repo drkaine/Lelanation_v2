@@ -70,6 +70,14 @@ export function matchReadyForAggregation(
   return averageMatchRankTierLabel(participants) != null;
 }
 
+/** Participants sans rang connu (tier match ou snapshot League du jour). */
+export function getMissingRankParticipants(
+  participants: ParsedParticipantDto[],
+  todaySnapshotPuuids: Set<string>,
+): ParsedParticipantDto[] {
+  return participants.filter((participant) => !participantRankKnown(participant, todaySnapshotPuuids));
+}
+
 export function todaySnapshotSetFromParticipants(participants: ParsedParticipantDto[]): Set<string> {
   const out = new Set<string>();
   for (const participant of participants) {

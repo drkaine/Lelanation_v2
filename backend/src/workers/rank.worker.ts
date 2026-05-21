@@ -5,6 +5,7 @@ import { pollerV2Observability } from "../observability/poller-v2-observability.
 import { RANK_QUEUE } from "../queues/definitions.js";
 import { rankWorkerConcurrencyDrain } from "../queues/rank-backlog-policy.js";
 import { redis } from "../redis/client.js";
+import { normalizePlatformRegion } from "../riot/platform-region.js";
 import { slotBudgetForPipeline, waitForRankSlot } from "../redis/rate-scheduler.js";
 import { RateLimitError, RiotClient } from "../riot/client.js";
 
@@ -56,7 +57,7 @@ async function upsertTodayRankSnapshot(
 
 async function runRankJob(data: RankJobData): Promise<RankJobOutcome> {
   const puuid = String(data.puuid ?? "").trim();
-  const region = String(data.region ?? "").trim().toLowerCase();
+  const region = normalizePlatformRegion(data.region);
   if (!puuid || !region) {
     return { skipped: true, reason: "invalid_job" };
   }

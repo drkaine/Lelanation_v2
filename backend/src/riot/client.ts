@@ -1,13 +1,16 @@
 import { config } from "../config/index.js";
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
 import { setGlobalRateLimitCooldown } from "../redis/rate-scheduler.js";
-import type { MatchDto, MatchTimelineDto, MatchlistDto, RankDto } from "./types.js";
+import type { MatchDto, MatchlistDto, MatchTimelineDto, RankDto } from "./types.js";
+import { normalizePlatformRegion } from "./platform-region.js";
 
 const RETRY_DELAYS_MS = [1000, 2000, 4000] as const;
 
 const PLATFORM_BY_REGION: Record<string, string> = {
   euw: "euw1",
   euw1: "euw1",
+  eun: "eun1",
+  eun1: "eun1",
 };
 
 const REGIONAL_BY_REGION: Record<string, string> = {
@@ -58,7 +61,7 @@ function parseRetryAfterMs(value: string | null): number | null {
 }
 
 function normalizeRegion(region: string): string {
-  return region.trim().toLowerCase();
+  return normalizePlatformRegion(region);
 }
 
 function getPlatformHost(region: string): string {
