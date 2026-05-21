@@ -403,3 +403,13 @@ export interface RankDto {
     wins: number;
   };
 }
+
+/** Riot `GET /lol/summoner/v4/summoners/by-puuid/{encryptedPUUID}`. */
+export interface SummonerDto {
+  id: string;
+  accountId?: string;
+  puuid: string;
+  profileIconId?: number;
+  revisionDate?: number;
+  summonerLevel?: number;
+}

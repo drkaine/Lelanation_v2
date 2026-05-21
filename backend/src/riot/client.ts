@@ -1,22 +1,12 @@
 import { config } from "../config/index.js";
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
 import { setGlobalRateLimitCooldown } from "../redis/rate-scheduler.js";
-import type { MatchDto, MatchlistDto, MatchTimelineDto, RankDto } from "./types.js";
-import { normalizePlatformRegion } from "./platform-region.js";
+import { riotRoutingSummary, toPlatformHost, toRegionalHost } from "./hosts.js";
+import type { MatchDto, MatchlistDto, MatchTimelineDto, RankDto, SummonerDto } from "./types.js";
+
+export { riotRoutingSummary, toPlatformHost, toRegionalHost } from "./hosts.js";
 
 const RETRY_DELAYS_MS = [1000, 2000, 4000] as const;
-
-const PLATFORM_BY_REGION: Record<string, string> = {
-  euw: "euw1",
-  euw1: "euw1",
-  eun: "eun1",
-  eun1: "eun1",
-};
-
-const REGIONAL_BY_REGION: Record<string, string> = {
-  euw: "europe",
-  euw1: "europe",
-};
 
 export class ApiError extends Error {
   constructor(
@@ -58,20 +48,6 @@ function parseRetryAfterMs(value: string | null): number | null {
     return diff > 0 ? diff : null;
   }
   return null;
-}
-
-function normalizeRegion(region: string): string {
-  return normalizePlatformRegion(region);
-}
-
-function getPlatformHost(region: string): string {
-  const key = normalizeRegion(region);
-  return `${PLATFORM_BY_REGION[key] ?? key}.api.riotgames.com`;
-}
-
-function getRegionalHost(region: string): string {
-  const key = normalizeRegion(region);
-  return `${REGIONAL_BY_REGION[key] ?? key}.api.riotgames.com`;
 }
 
 async function parseResponseBody(response: Response): Promise<unknown> {
@@ -156,42 +132,59 @@ export class RiotClient {
     throw new ApiError("Unexpected retry loop exit", 0, url);
   }
 
-  async getMatchlist(
+  /** Match-v5 — regional host (europe), Ranked Solo/Duo only. */
+  async getMatchIds(
     puuid: string,
     region: string,
     options?: {
       startTime?: number;
-      endTime?: number;
+      start?: number;
     },
   ): Promise<MatchlistDto> {
     const url = new URL(
-      `https://${getRegionalHost(region)}/lol/match/v5/matches/by-puuid/${encodeURIComponent(puuid)}/ids`,
+      `${toRegionalHost(region)}/lol/match/v5/matches/by-puuid/${encodeURIComponent(puuid)}/ids`,
     );
     url.searchParams.set("queue", "420");
     url.searchParams.set("type", "ranked");
     url.searchParams.set("count", "20");
-    if (options?.startTime && Number.isFinite(options.startTime) && options.startTime > 0) {
+    if (options?.startTime != null && Number.isFinite(options.startTime) && options.startTime > 0) {
       url.searchParams.set("startTime", String(Math.trunc(options.startTime)));
     }
-    if (options?.endTime && Number.isFinite(options.endTime) && options.endTime > 0) {
-      url.searchParams.set("endTime", String(Math.trunc(options.endTime)));
+    if (options?.start != null && Number.isFinite(options.start) && options.start >= 0) {
+      url.searchParams.set("start", String(Math.trunc(options.start)));
     }
     return this.fetch<MatchlistDto>(url.toString());
   }
 
+  /** @deprecated use getMatchIds */
+  async getMatchlist(
+    puuid: string,
+    region: string,
+    options?: { startTime?: number; start?: number },
+  ): Promise<MatchlistDto> {
+    return this.getMatchIds(puuid, region, options);
+  }
+
+  /** Match-v5 — regional host. */
   async getMatch(matchId: string, region: string): Promise<MatchDto> {
-    const url = `https://${getRegionalHost(region)}/lol/match/v5/matches/${encodeURIComponent(matchId)}`;
+    const url = `${toRegionalHost(region)}/lol/match/v5/matches/${encodeURIComponent(matchId)}`;
     return this.fetch<MatchDto>(url);
   }
 
-  async getTimeline(matchId: string, region: string): Promise<MatchTimelineDto> {
-    const url = `https://${getRegionalHost(region)}/lol/match/v5/matches/${encodeURIComponent(matchId)}/timeline`;
+  /** Match-v5 timeline — regional host. */
+  async getMatchTimeline(matchId: string, region: string): Promise<MatchTimelineDto> {
+    const url = `${toRegionalHost(region)}/lol/match/v5/matches/${encodeURIComponent(matchId)}/timeline`;
     return this.fetch<MatchTimelineDto>(url);
   }
 
-  /** Solo queue entry from League v4 (PUUID — `by-summoner` est retiré / 403 pour les clés API courantes). */
+  /** @deprecated use getMatchTimeline */
+  async getTimeline(matchId: string, region: string): Promise<MatchTimelineDto> {
+    return this.getMatchTimeline(matchId, region);
+  }
+
+  /** League-v4 — platform host. */
   async getRank(puuid: string, region: string): Promise<RankDto | null> {
-    const url = `https://${getPlatformHost(region)}/lol/league/v4/entries/by-puuid/${encodeURIComponent(puuid)}`;
+    const url = `${toPlatformHost(region)}/lol/league/v4/entries/by-puuid/${encodeURIComponent(puuid)}`;
     try {
       const entries = await this.fetch<RankDto[]>(url);
       const solo =
@@ -205,4 +198,14 @@ export class RiotClient {
       throw error;
     }
   }
+
+  /** Summoner-v4 — platform host. */
+  async getSummoner(puuid: string, region: string): Promise<SummonerDto> {
+    const url = `${toPlatformHost(region)}/lol/summoner/v4/summoners/by-puuid/${encodeURIComponent(puuid)}`;
+    return this.fetch<SummonerDto>(url);
+  }
+}
+
+export function logRiotRoutingVerified(): void {
+  console.log(`[riot] Routing verified: ${riotRoutingSummary()}`);
 }

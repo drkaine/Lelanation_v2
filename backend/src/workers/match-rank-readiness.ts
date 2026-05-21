@@ -1,4 +1,7 @@
 import type { ParsedParticipantDto } from "../dto/match.dto.js";
+import type { RankSnapshot } from "../db/query.js";
+
+export type { RankSnapshot };
 
 const SOLO_TIER_ORDER = [
   "IRON",
@@ -25,25 +28,24 @@ export function normalizeParticipantRankTier(value: string | null | undefined): 
   return tier;
 }
 
-export function participantHasResolvedRank(participant: ParsedParticipantDto): boolean {
-  return normalizeParticipantRankTier(participant.rankTierValue ?? participant.rankTier) != null;
-}
-
-/** Rang connu = tier classé sur le match, ou snapshot League du jour déjà en base (y compris UNRANKED confirmé). */
+/** Rang connu = snapshot player_rank_history avec date >= game_date du match. */
 export function participantRankKnown(
   participant: ParsedParticipantDto,
-  todaySnapshotPuuids: Set<string>,
+  closestSnapshots: Map<string, RankSnapshot>,
 ): boolean {
-  if (participantHasResolvedRank(participant)) return true;
   const puuid = String(participant.puuid ?? "").trim();
-  return puuid.length > 0 && todaySnapshotPuuids.has(puuid);
+  return puuid.length > 0 && closestSnapshots.has(puuid);
 }
 
-/** Tier moyen du match (participants classés uniquement ; les UNRANKED sont ignorés du calcul). */
-export function averageMatchRankTierLabel(participants: ParsedParticipantDto[]): string | null {
+/** Tier moyen du match (participants classés uniquement ; UNRANKED ignorés). */
+export function averageMatchRankTierLabel(
+  participants: ParsedParticipantDto[],
+  closestSnapshots: Map<string, RankSnapshot>,
+): string | null {
   const ordinals: number[] = [];
   for (const participant of participants) {
-    const tier = normalizeParticipantRankTier(participant.rankTierValue ?? participant.rankTier);
+    const puuid = String(participant.puuid ?? "").trim();
+    const tier = normalizeParticipantRankTier(closestSnapshots.get(puuid)?.rankTier);
     if (!tier) continue;
     const idx = SOLO_TIER_INDEX[tier];
     if (idx == null) continue;
@@ -57,33 +59,44 @@ export function averageMatchRankTierLabel(participants: ParsedParticipantDto[]):
 
 /**
  * Agrégation autorisée si :
- * - chaque joueur a un rang connu (classé ou UNRANKED confirmé via League), et
+ * - chaque joueur a un snapshot date >= game_date (classé ou UNRANKED confirmé), et
  * - au moins un joueur classé → rang moyen du match calculable.
- * Les joueurs UNRANKED restent en stats individuelles ; le match n’est jamais agrégé comme « UNRANKED ».
  */
 export function matchReadyForAggregation(
   participants: ParsedParticipantDto[],
-  todaySnapshotPuuids: Set<string>,
+  closestSnapshots: Map<string, RankSnapshot>,
 ): boolean {
   if (participants.length === 0) return false;
-  if (!participants.every((p) => participantRankKnown(p, todaySnapshotPuuids))) return false;
-  return averageMatchRankTierLabel(participants) != null;
+  if (!participants.every((p) => participantRankKnown(p, closestSnapshots))) return false;
+  return averageMatchRankTierLabel(participants, closestSnapshots) != null;
 }
 
-/** Participants sans rang connu (tier match ou snapshot League du jour). */
+/** Participants sans snapshot valide (date >= game_date). */
 export function getMissingRankParticipants(
   participants: ParsedParticipantDto[],
-  todaySnapshotPuuids: Set<string>,
+  closestSnapshots: Map<string, RankSnapshot>,
 ): ParsedParticipantDto[] {
-  return participants.filter((participant) => !participantRankKnown(participant, todaySnapshotPuuids));
+  return participants.filter((participant) => !participantRankKnown(participant, closestSnapshots));
 }
 
-export function todaySnapshotSetFromParticipants(participants: ParsedParticipantDto[]): Set<string> {
-  const out = new Set<string>();
+/** Reconstruction post-hydration pour le garde-fou ingestion (participants déjà enrichis). */
+export function closestSnapshotsFromParticipants(
+  participants: ParsedParticipantDto[],
+): Map<string, RankSnapshot> {
+  const out = new Map<string, RankSnapshot>();
   for (const participant of participants) {
     if (participant.needsRankFetch) continue;
     const puuid = String(participant.puuid ?? "").trim();
-    if (puuid) out.add(puuid);
+    if (!puuid) continue;
+    const tier = String(participant.rankTierValue ?? participant.rankTier ?? "")
+      .trim()
+      .toUpperCase();
+    out.set(puuid, {
+      rankTier: tier.length > 0 ? tier : "UNRANKED",
+      rankDivision: String(participant.rankDivision ?? "").trim(),
+      rankLp: Number(participant.lp ?? 0),
+      date: new Date(participant.gameDate),
+    });
   }
   return out;
 }

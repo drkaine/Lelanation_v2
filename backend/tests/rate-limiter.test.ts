@@ -10,6 +10,7 @@ const {
   advanceDripAccumulator,
   createLuaRateLimiterForTests,
   discoveryTargetRatePerSec,
+  getEffectiveBudgetBreakdown,
   hydrationTargetRatePerSec,
   rankTargetRatePerSec,
   slotBudgetForPipeline,
@@ -125,14 +126,29 @@ describe("budget allocation", () => {
       hydrationTargetRatePerSec(95) +
       rankTargetRatePerSec(95);
     expect(sum).toBeCloseTo(total, 5);
-    expect(totalSlotBudgetPer120s(95)).toBe(98);
+    expect(totalSlotBudgetPer120s(95)).toBe(94);
   });
 
-  test("budgets dev de référence (6/74/18 req/120s)", () => {
-    expect(SLOT_BUDGETS_REF).toEqual({ discovery: 6, hydration: 74, rank: 18 });
-    expect(slotBudgetForPipeline("discovery", 95)).toBe(6);
-    expect(slotBudgetForPipeline("hydration", 95)).toBe(74);
-    expect(slotBudgetForPipeline("rank", 95)).toBe(18);
+  test("ratio split at budget 95 (4 matchlists / 27 matches / 36 rank)", () => {
+    expect(getEffectiveBudgetBreakdown(95)).toEqual({
+      discoverySlots: 4,
+      hydrationSlots: 27,
+      rankSlots: 36,
+      totalReqPer120s: 94,
+    });
+    expect(SLOT_BUDGETS_REF).toEqual({ discovery: 4, hydration: 54, rank: 36 });
+    expect(slotBudgetForPipeline("discovery", 95)).toBe(4);
+    expect(slotBudgetForPipeline("hydration", 95)).toBe(54);
+    expect(slotBudgetForPipeline("rank", 95)).toBe(36);
+  });
+
+  test("ratio split at budget 100 (personal key)", () => {
+    expect(getEffectiveBudgetBreakdown(100)).toEqual({
+      discoverySlots: 5,
+      hydrationSlots: 28,
+      rankSlots: 38,
+      totalReqPer120s: 99,
+    });
   });
 
   test("clés Redis de production", () => {
@@ -141,12 +157,22 @@ describe("budget allocation", () => {
     expect(RANK_SLOT_KEY).toBe("rl:slots:rank");
   });
 
-  test("intervalles drip uniformes dev (6/74/18 req/120s)", () => {
+  test("intervalles drip uniformes dev (ratio split @ budget 95)", () => {
     expect(WINDOW_MS).toBe(120_000);
     expect(SLOT_COSTS).toEqual({ discovery: 1, hydration: 2, rank: 1 });
-    expect(tokenReleaseIntervalMs("discovery", 95)).toBe(20_000);
-    expect(tokenReleaseIntervalMs("rank", 95)).toBeCloseTo(WINDOW_MS / 18, 0);
-    expect(jobReleaseIntervalMs("hydration", 95)).toBeCloseTo(WINDOW_MS / (74 / SLOT_COSTS.hydration), 0);
+    expect(tokenReleaseIntervalMs("discovery", 95)).toBe(Math.ceil(WINDOW_MS / 4));
+    expect(tokenReleaseIntervalMs("rank", 95)).toBe(Math.ceil(WINDOW_MS / 36));
+    expect(jobReleaseIntervalMs("hydration", 95)).toBe(Math.ceil(WINDOW_MS / 27));
+  });
+
+  test("RANK_DRAIN_MODE does not override ratio drip budgets", () => {
+    const prev = process.env.RANK_DRAIN_MODE;
+    process.env.RANK_DRAIN_MODE = "1";
+    expect(slotBudgetForPipeline("discovery", 95)).toBe(4);
+    expect(slotBudgetForPipeline("hydration", 95)).toBe(54);
+    expect(slotBudgetForPipeline("rank", 95)).toBe(36);
+    if (prev === undefined) delete process.env.RANK_DRAIN_MODE;
+    else process.env.RANK_DRAIN_MODE = prev;
   });
 });
 
@@ -165,7 +191,7 @@ describe("drip accumulator", () => {
     expect(acc).toBeLessThan(1);
   });
 
-  test("~98 slots sur 120s de ticks (budget unifié discovery+hydration+rank)", () => {
+  test("~94 slots sur 120s de ticks (budget unifié discovery+hydration+rank)", () => {
     const targetRate = totalTargetRatePerSec(95);
     const ticksIn120s = 120_000 / 200;
     let acc = 0;
@@ -175,8 +201,8 @@ describe("drip accumulator", () => {
       acc = step.accumulator;
       totalSlots += step.slotsToAdd;
     }
-    expect(totalSlots).toBeGreaterThanOrEqual(93);
-    expect(totalSlots).toBeLessThanOrEqual(100);
+    expect(totalSlots).toBeGreaterThanOrEqual(89);
+    expect(totalSlots).toBeLessThanOrEqual(96);
   });
 
   test("la plupart des ticks n’ajoutent aucun slot", () => {

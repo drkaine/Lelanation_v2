@@ -23,7 +23,8 @@
     "script:league-xp": "tsx src/worker/runScript.ts league-xp",
     "script:riot-live-test": "tsx src/scripts/testRiotApiKeyLive.ts",
     "script:merge-objective-histogram-global": "tsx src/scripts/runMergeObjectiveHistogramGlobal.ts",
-    "test:rate-limiter": "vitest run tests/rate-limiter.test.ts"
+    "test:rate-limiter": "vitest run tests/rate-limiter.test.ts",
+    "seed:eu": "tsx scripts/seed-eu-players.ts"
   },
   "devDependencies": {
     "@types/compression": "^1.8.1",

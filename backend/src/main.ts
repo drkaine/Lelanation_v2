@@ -8,7 +8,8 @@ import { getQueueMetrics } from "./queues/index.js";
 import { trimCompletedQueueJobs } from "./queues/queue-cleanup.js";
 import { purgeStaleProcessedMatchesAndRankHistory } from "./services/patch-retention-cleanup.js";
 import { syncMatchPipelinePause } from "./queues/pipeline-pause-sync.js";
-import { loadLuaScript, startDrip, stopDrip } from "./redis/rate-scheduler.js";
+import { logRiotRoutingVerified } from "./riot/client.js";
+import { loadLuaScript, startDrip, stopDrip, getEffectiveBudgetBreakdown } from "./redis/rate-scheduler.js";
 import { redis } from "./redis/client.js";
 
 type PollerWorkers = {
@@ -123,8 +124,12 @@ async function logMetricsTick(): Promise<void> {
   if (!workers) return;
 
   const startedAt = Date.now();
-  const pipelinesPaused = await syncMatchPipelinePause(workers.hydrationWorker, workers.ingestionWorker);
   const metrics = await getQueueMetrics();
+  const pipelineSync = await syncMatchPipelinePause(
+    workers.hydrationWorker,
+    workers.ingestionWorker,
+    workers.rankWorker,
+  );
   const lagSeconds = await getDataLagSeconds();
   const tickDurationMs = Date.now() - startedAt;
 
@@ -135,6 +140,8 @@ async function logMetricsTick(): Promise<void> {
     rank: metrics.rank,
     dataLagSeconds: lagSeconds,
     tickDurationMs,
+    rankWorkerConfiguredConcurrency: pipelineSync.rankWorkerConfiguredConcurrency,
+    rankBacklog: pipelineSync.rankBacklog,
   });
   await pollerV2Observability.flushSnapshotToDisk();
 
@@ -143,7 +150,7 @@ async function logMetricsTick(): Promise<void> {
       `hydration(w:${metrics.hydration.waiting},a:${metrics.hydration.active},f:${metrics.hydration.failed}) ` +
       `ingestion(w:${metrics.ingestion.waiting},a:${metrics.ingestion.active},f:${metrics.ingestion.failed}) ` +
       `rank(w:${metrics.rank.waiting},a:${metrics.rank.active},f:${metrics.rank.failed}) ` +
-      `pipelines_paused=${pipelinesPaused} ` +
+      `pipelines_paused=${pipelineSync.pipelinesPaused} rank_concurrency=${pipelineSync.rankWorkerConfiguredConcurrency} ` +
       `data_lag_seconds=${lagSeconds ?? "n/a"} tick_ms=${tickDurationMs}`,
   );
 }
@@ -196,7 +203,17 @@ async function emitWindowSummary(window: "30m" | "1h"): Promise<void> {
   const now = Date.now();
   const windowMs = window === "30m" ? 30 * 60_000 : 60 * 60_000;
   const dbWindow = await queryDbWindowStats(now - windowMs, now);
-  const payload = pollerV2Observability.buildWindowSummary(window, dbWindow);
+  const payload = await pollerV2Observability.buildWindowSummary(window, dbWindow);
+  if (window === "30m") {
+    const matchesAggregated = typeof payload.matchesAggregatedWindow === "number" ? payload.matchesAggregatedWindow : 0;
+    const projected = typeof payload.projectedMatchesPerHour === "number" ? payload.projectedMatchesPerHour : 0;
+    const efficiency = typeof payload.apiEfficiencyPct === "number" ? payload.apiEfficiencyPct : 0;
+    const rankBacklog =
+      typeof payload.rankLeagueFetchesPending === "number" ? payload.rankLeagueFetchesPending : 0;
+    console.log(
+      `[poller] 30min summary: ${matchesAggregated} matches aggregated | ${projected}/h projected | efficiency ${efficiency}% | rank backlog: ${rankBacklog}`,
+    );
+  }
   await appendUnifiedLog({
     section: "back",
     type: "info",
@@ -223,6 +240,7 @@ async function startMonitoring(): Promise<void> {
 async function bootstrap(): Promise<void> {
   validateConfig();
   console.log(`[poller-main] config validated env=${config.ENV}`);
+  logRiotRoutingVerified();
 
   await acquirePollerLeaderLock();
   console.log(`[poller-main] leader lock acquired pid=${process.pid}`);
@@ -236,6 +254,12 @@ async function bootstrap(): Promise<void> {
   await loadLuaScript();
   startDrip();
   console.log("[poller-main] scheduled slot rate limiter loaded (drip started)");
+
+  const budgetBreakdown = getEffectiveBudgetBreakdown();
+  console.log(
+    `[poller] Budget 120s: discovery=${budgetBreakdown.discoverySlots} matchlists | ` +
+      `hydration=${budgetBreakdown.hydrationSlots} matches | rank=${budgetBreakdown.rankSlots} snapshots`,
+  );
 
   const dbOk = await healthCheck();
   if (!dbOk) {
@@ -253,8 +277,14 @@ async function bootstrap(): Promise<void> {
     `[poller-main] discovery repeat job scheduled (${config.DISCOVERY_INTERVAL_MS}ms, ${config.DISCOVERY_PLAYERS_PER_TICK} players/tick)`,
   );
 
-  const pipelinesPaused = await syncMatchPipelinePause(workers.hydrationWorker, workers.ingestionWorker);
-  console.log(`[poller-main] match pipelines paused=${pipelinesPaused} (rank backlog policy)`);
+  const pipelineSync = await syncMatchPipelinePause(
+    workers.hydrationWorker,
+    workers.ingestionWorker,
+    workers.rankWorker,
+  );
+  console.log(
+    `[poller-main] match pipelines paused=${pipelineSync.pipelinesPaused} rank_concurrency=${pipelineSync.rankWorkerConfiguredConcurrency} (rank backlog policy)`,
+  );
 
   await startMonitoring();
   process.send?.("ready");

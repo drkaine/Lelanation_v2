@@ -1,24 +1,16 @@
 import { promises as fs } from "fs";
 import { join } from "path";
 import { config } from "../config/index.js";
-import { maxRankBacklogBeforePipelinePause, rankWorkerConcurrencyDrain } from "../queues/rank-backlog-policy.js";
-
-type SlotPipeline = "discovery" | "hydration" | "rank";
-
-const SLOT_BUDGETS_REF: Record<SlotPipeline, number> = {
-  discovery: 6,
-  hydration: 74,
-  rank: 18,
-};
-const SLOT_BUDGETS_REF_RATE_LIMIT_120S = 95;
+import { maxRankBacklogBeforePipelinePause, rankWorkerConcurrency } from "../queues/rank-backlog-policy.js";
+import { apiTokenBudgetForPipeline, type SlotPipeline } from "../redis/rate-budget.js";
+import {
+  countAggregatedMatchesSince,
+  fetchIngestionThroughputMetrics,
+  type IngestionThroughputMetrics,
+} from "../redis/ingestion-metrics.js";
 
 function slotBudgetForPipeline(pipeline: SlotPipeline): number {
-  return Math.max(
-    1,
-    Math.round(
-      (SLOT_BUDGETS_REF[pipeline] * config.RATE_LIMIT_PER_120S) / SLOT_BUDGETS_REF_RATE_LIMIT_120S,
-    ),
-  );
+  return apiTokenBudgetForPipeline(pipeline, config.RATE_LIMIT_PER_120S);
 }
 
 type QueueSlice = {
@@ -151,10 +143,14 @@ type Snapshot = {
   };
   /** Dernier snapshot queue rank — `rank.waiting`. */
   rankLeagueFetchesPending: number;
-  /** Dernier snapshot queue rank — `rank.active` (doit rester ≤ 2). */
+  /** BullMQ worker concurrency configurée (pas `rank.active`). */
   rankWorkerConcurrency: number;
   /** Métriques Phase 5 — diagnostic pipeline match. */
   matches_per_hour: number;
+  matchesLastHour: number;
+  matchesLast10Min: number;
+  projectedMatchesPerHour: number;
+  apiEfficiencyPct: number;
   data_lag_seconds: number | null;
   rank_gate_pass_rate_pct: number;
   rank_prefetch_coverage_pct: number;
@@ -263,6 +259,8 @@ class PollerV2Observability {
     riotHttpMs: { count: 0, totalMs: 0, maxMs: 0, slowCount: 0, slowThresholdMs: 2_000 },
     dbMetricsTickMs: { count: 0, totalMs: 0, maxMs: 0, slowCount: 0, slowThresholdMs: 400 },
   };
+
+  private lastRankWorkerConfiguredConcurrency = 0;
 
   private lastQueue = {
     discovery: { waiting: 0, active: 0, failed: 0, delayed: 0 },
@@ -450,6 +448,68 @@ class PollerV2Observability {
   private hydrationRetryCount30m(): number {
     const delta = this.totals.hydrationRankRetries - this.baseline30m.hydrationRankRetries;
     return Math.max(0, delta);
+  }
+
+  private logIngestionAlerts(metrics: IngestionThroughputMetrics, runtimeSeconds: number): void {
+    if (runtimeSeconds < 600) return;
+
+    if (metrics.apiEfficiencyPct < 20) {
+      console.warn(
+        JSON.stringify({
+          msg: "api_efficiency_low",
+          apiEfficiencyPct: metrics.apiEfficiencyPct,
+          matchesLastHour: metrics.matchesLastHour,
+          matchesLast10Min: metrics.matchesLast10Min,
+        }),
+      );
+    }
+
+    if (metrics.matchesLast10Min === 0) {
+      console.warn(
+        JSON.stringify({
+          msg: "ingestion_stalled",
+          matchesLast10Min: metrics.matchesLast10Min,
+          runtimeSeconds,
+        }),
+      );
+    }
+  }
+
+  private async ingestionThroughputMetrics(now = nowMs()): Promise<IngestionThroughputMetrics> {
+    return fetchIngestionThroughputMetrics(now);
+  }
+
+  private async buildDiagnosticsAsync(
+    now = nowMs(),
+  ): Promise<
+    Pick<
+      Snapshot,
+      | "matches_per_hour"
+      | "matchesLastHour"
+      | "matchesLast10Min"
+      | "projectedMatchesPerHour"
+      | "apiEfficiencyPct"
+      | "data_lag_seconds"
+      | "rank_gate_pass_rate_pct"
+      | "rank_prefetch_coverage_pct"
+      | "hydration_retry_count_30m"
+      | "avg_match_pipeline_seconds"
+      | "rateLimitAvgWaitMsPerGrant"
+      | "req_per_120s_rolling"
+      | "discovery_tokens_used_pct"
+      | "hydration_tokens_used_pct"
+      | "rank_tokens_used_pct"
+    >
+  > {
+    const throughput = await this.ingestionThroughputMetrics(now);
+    return {
+      ...this.buildDiagnostics(now),
+      matches_per_hour: throughput.matchesLastHour,
+      matchesLastHour: throughput.matchesLastHour,
+      matchesLast10Min: throughput.matchesLast10Min,
+      projectedMatchesPerHour: throughput.projectedMatchesPerHour,
+      apiEfficiencyPct: throughput.apiEfficiencyPct,
+    };
   }
 
   private buildDiagnostics(now = nowMs()): Pick<
@@ -671,7 +731,7 @@ class PollerV2Observability {
     this.totals.rankLeagueFetchesFailed += 1;
   }
 
-  private logRankQueueAlerts(rank: QueueSlice): void {
+  private logRankQueueAlerts(rank: QueueSlice, rankBacklog: number): void {
     const backlogThreshold = maxRankBacklogBeforePipelinePause();
     if (rank.waiting > backlogThreshold) {
       console.warn(
@@ -682,12 +742,14 @@ class PollerV2Observability {
         }),
       );
     }
-    if (rank.active > rankWorkerConcurrencyDrain()) {
-      console.error(
+    const expectedConcurrency = rankWorkerConcurrency(rankBacklog);
+    if (this.lastRankWorkerConfiguredConcurrency !== expectedConcurrency) {
+      console.warn(
         JSON.stringify({
-          msg: "rank_worker_concurrency_bug",
-          rankWorkerConcurrency: rank.active,
-          expectedMax: rankWorkerConcurrencyDrain(),
+          msg: "rank_worker_concurrency_mismatch",
+          rankWorkerConcurrency: this.lastRankWorkerConfiguredConcurrency,
+          expectedConcurrency,
+          rankBacklog,
         }),
       );
     }
@@ -749,9 +811,19 @@ class PollerV2Observability {
     rank: QueueSlice;
     dataLagSeconds: number | null;
     tickDurationMs: number | null;
+    rankWorkerConfiguredConcurrency: number;
+    rankBacklog: number;
   }): void {
-    this.lastQueue = { ...payload };
-    this.logRankQueueAlerts(payload.rank);
+    this.lastQueue = {
+      discovery: payload.discovery,
+      hydration: payload.hydration,
+      ingestion: payload.ingestion,
+      rank: payload.rank,
+      dataLagSeconds: payload.dataLagSeconds,
+      tickDurationMs: payload.tickDurationMs,
+    };
+    this.lastRankWorkerConfiguredConcurrency = payload.rankWorkerConfiguredConcurrency;
+    this.logRankQueueAlerts(payload.rank, payload.rankBacklog);
     if (payload.tickDurationMs != null) {
       this.addDuration("dbMetricsTickMs", payload.tickDurationMs);
     }
@@ -761,11 +833,11 @@ class PollerV2Observability {
   private rankQueueMetrics(): { rankLeagueFetchesPending: number; rankWorkerConcurrency: number } {
     return {
       rankLeagueFetchesPending: this.lastQueue.rank.waiting,
-      rankWorkerConcurrency: this.lastQueue.rank.active,
+      rankWorkerConcurrency: this.lastRankWorkerConfiguredConcurrency,
     };
   }
 
-  buildWindowSummary(window: "30m" | "1h", dbWindow: Record<string, unknown>): Record<string, unknown> {
+  async buildWindowSummary(window: "30m" | "1h", dbWindow: Record<string, unknown>): Promise<Record<string, unknown>> {
     const nowIso = new Date().toISOString();
     const baseline = window === "30m" ? this.baseline30m : this.baseline1h;
     const delta = deltaTotals(this.totals, baseline);
@@ -782,7 +854,8 @@ class PollerV2Observability {
     const tokenRate10m = this.tokenRate10m();
     this.logTokenRateAlerts(tokenRate10m);
     const rankQueue = this.rankQueueMetrics();
-    const diagnostics = this.buildDiagnostics();
+    const diagnostics = await this.buildDiagnosticsAsync();
+    const matchesAggregatedWindow = await countAggregatedMatchesSince(Date.now() - windowMinutes * 60_000);
     const payload: Record<string, unknown> = {
       window,
       atIso: nowIso,
@@ -802,6 +875,7 @@ class PollerV2Observability {
       },
       rankLeagueFetchesPending: rankQueue.rankLeagueFetchesPending,
       rankWorkerConcurrency: rankQueue.rankWorkerConcurrency,
+      matchesAggregatedWindow,
       ...diagnostics,
     };
     if (window === "30m") {
@@ -817,7 +891,7 @@ class PollerV2Observability {
     return payload;
   }
 
-  snapshot(): Snapshot {
+  async snapshot(): Promise<Snapshot> {
     const now = nowMs();
     const durations = Object.fromEntries(
       (Object.keys(this.durations) as DurationKey[]).map((key) => {
@@ -827,7 +901,7 @@ class PollerV2Observability {
       }),
     ) as Snapshot["durations"];
     const rankQueue = this.rankQueueMetrics();
-    const diagnostics = this.buildDiagnostics(now);
+    const diagnostics = await this.buildDiagnosticsAsync(now);
     const queue = { ...this.lastQueue };
     return {
       atIso: new Date(now).toISOString(),
@@ -856,7 +930,16 @@ class PollerV2Observability {
   }
 
   async flushSnapshotToDisk(): Promise<void> {
-    const snapshot = this.snapshot();
+    const snapshot = await this.snapshot();
+    this.logIngestionAlerts(
+      {
+        matchesLastHour: snapshot.matchesLastHour,
+        matchesLast10Min: snapshot.matchesLast10Min,
+        projectedMatchesPerHour: snapshot.projectedMatchesPerHour,
+        apiEfficiencyPct: snapshot.apiEfficiencyPct,
+      },
+      snapshot.runtimeSeconds,
+    );
     await fs.mkdir(join(process.cwd(), "..", "logs"), { recursive: true });
     await fs.writeFile(this.snapshotPath, JSON.stringify(snapshot, null, 2), "utf-8");
   }

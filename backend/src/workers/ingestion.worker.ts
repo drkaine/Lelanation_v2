@@ -11,11 +11,12 @@ import { enqueueRankFetchJobsForParticipants } from "../queues/rank-jobs.js";
 import { getRankBacklogCount } from "../queues/index.js";
 import { shouldPauseMatchPipelines } from "../queues/rank-backlog-policy.js";
 import { redis } from "../redis/client.js";
+import { recordAggregatedMatch } from "../redis/ingestion-metrics.js";
 import {
   averageMatchRankTierLabel,
+  closestSnapshotsFromParticipants,
   matchReadyForAggregation,
   normalizeParticipantRankTier,
-  todaySnapshotSetFromParticipants,
 } from "./match-rank-readiness.js";
 
 class AlreadyProcessedMatchError extends Error {
@@ -106,7 +107,8 @@ async function insertProcessedMatchSentinel(
 ): Promise<void> {
   const first = payload.participants[0];
   if (!first) throw new Error("ingestion_empty_participants");
-  const rankTier = averageMatchRankTierLabel(payload.participants);
+  const rankSnapshots = closestSnapshotsFromParticipants(payload.participants);
+  const rankTier = averageMatchRankTierLabel(payload.participants, rankSnapshots);
   if (!rankTier) {
     throw new Error(`processed_match_requires_ranked_average:${payload.teamStats.matchId}`);
   }
@@ -1052,7 +1054,7 @@ async function upsertTeamCoreStat(tx: any, payload: IngestionJobData): Promise<v
 async function runIngestionTransaction(payload: IngestionJobData): Promise<{ insertedPlayers: number; aggregated: boolean }> {
   if (payload.participants.length === 0) return { insertedPlayers: 0, aggregated: false };
 
-  if (!matchReadyForAggregation(payload.participants, todaySnapshotSetFromParticipants(payload.participants))) {
+  if (!matchReadyForAggregation(payload.participants, closestSnapshotsFromParticipants(payload.participants))) {
     let insertedPlayers = 0;
     await sql.begin(async (tx) => {
       insertedPlayers = await upsertPlayersFromParticipants(tx, payload.participants);
@@ -1103,6 +1105,7 @@ export const ingestionWorker = new Worker<IngestionJobData>(
         const matchId = String(job.data.participants[0]?.matchId ?? "").trim();
         if (matchId) {
           pollerV2Observability.recordMatchIngestedForPipeline(matchId);
+          await recordAggregatedMatch(matchId);
         }
       }
       if (insertedPlayers > 0) pollerV2Observability.recordPlayersAdded(insertedPlayers);

@@ -23,9 +23,9 @@ function rankChildJobId(puuid: string, region: string, today: string): string {
 export async function enqueueRankChildJobsForHydration(
   hydrationJob: Job<HydrationJobData>,
   missingParticipants: ParsedParticipantDto[],
-): Promise<number> {
+): Promise<{ enqueued: number; pendingExisting: number }> {
   if (missingParticipants.length === 0) {
-    return 0;
+    return { enqueued: 0, pendingExisting: 0 };
   }
 
   const today = todayIsoDate();
@@ -35,6 +35,7 @@ export async function enqueueRankChildJobsForHydration(
   };
 
   let enqueued = 0;
+  let pendingExisting = 0;
   for (const participant of missingParticipants) {
     const puuid = String(participant.puuid ?? "").trim();
     if (!puuid) continue;
@@ -45,6 +46,7 @@ export async function enqueueRankChildJobsForHydration(
     if (existing) {
       const state = await existing.getState();
       if (state !== "failed") {
+        pendingExisting += 1;
         continue;
       }
       await existing.remove().catch(() => undefined);
@@ -75,7 +77,7 @@ export async function enqueueRankChildJobsForHydration(
     }
   }
 
-  return enqueued;
+  return { enqueued, pendingExisting };
 }
 
 /** Enfile les fetch-rank dédupliqués (sans parent) — ex. post-ingestion. */

@@ -61,6 +61,7 @@
   "scripts": {
     "prepare": "husky",
     "sync:data": "cd backend && npm run sync:data",
+    "seed:eu": "tsx backend/scripts/seed-eu-players.ts",
     "exe-windows": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/exe-windows.ps1"
   },
   "devDependencies": {

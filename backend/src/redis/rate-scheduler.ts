@@ -1,10 +1,8 @@
 /**
- * Trois drips Redis (discovery / hydration / rank) sur 98 req/120s (dev ref) :
+ * Trois drips Redis (discovery / hydration / rank) planifiés sur WINDOW_MS.
  *
- *   tokenReleaseIntervalMs = WINDOW_MS / tokens
- *   // discovery 1/20s · hydration 1 token/1.6s (job cost 2 ≈ /3.2s) · rank 1/6.7s
- *
- * Production : 1 token par tick de timer (pas de rafale accumulateur).
+ * Budget + intervals : computeDripBudgetConfig() in rate-budget.ts (single source).
+ * Drip token ticks use discoveryIntervalMs / hydrationTokenIntervalMs / rankIntervalMs.
  * Cooldown 429 global bloque les 3 pipelines.
  */
 import { readFileSync } from "fs";
@@ -12,34 +10,49 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { config } from "../config/index.js";
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
+import {
+  apiTokenBudgetForPipeline,
+  computeDripBudgetConfig,
+  dripIntervalMsForPipeline,
+  getEffectiveBudgetBreakdown,
+  hydrationJobIntervalMs,
+  SLOT_COSTS,
+  WINDOW_MS,
+  type SlotPipeline,
+} from "./rate-budget.js";
 import { redis } from "./client.js";
+
+export {
+  DISCOVERY_BUDGET_RATIO,
+  HYDRATION_BUDGET_RATIO,
+  RANK_BUDGET_RATIO,
+  computeDripBudgetConfig,
+  getEffectiveBudgetBreakdown,
+  SLOT_COSTS,
+  WINDOW_MS,
+  type DripBudgetConfig,
+  type EffectiveBudgetBreakdown,
+  type SlotPipeline,
+} from "./rate-budget.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ACQUIRE_SLOT_LUA = readFileSync(join(__dirname, "lua", "acquire-slot.lua"), "utf8");
 
 export const TARGET_PCT = 0.95;
 
-/** Fenêtre glissante Riot (ms). */
-export const WINDOW_MS = 120_000;
-
-/** Tokens API par pipeline sur WINDOW_MS (clé dev ref 95 req/120s). */
-export const SLOT_BUDGETS_REF = {
-  discovery: 6,
-  hydration: 74,
-  rank: 18,
-} as const;
+/** API tokens / 120s at dev budget 95 (derived from ratio split). */
+export const SLOT_BUDGETS_REF = (() => {
+  const b = getEffectiveBudgetBreakdown(95);
+  return {
+    discovery: b.discoverySlots,
+    hydration: b.hydrationSlots * SLOT_COSTS.hydration,
+    rank: b.rankSlots,
+  };
+})();
 
 /** Alias explicite Phase 4. */
 export const SLOT_TOKENS = SLOT_BUDGETS_REF;
 
-/** Coût Riot par job worker. */
-export const SLOT_COSTS = {
-  discovery: 1,
-  hydration: 2,
-  rank: 1,
-} as const;
-
-const SLOT_BUDGETS_REF_RATE_LIMIT_120S = 95;
 const SLOT_BUDGET_WINDOW_SEC = WINDOW_MS / 1000;
 
 export const DISCOVERY_SLOT_KEY = "rl:slots:discovery";
@@ -65,26 +78,17 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export type SlotPipeline = keyof typeof SLOT_BUDGETS_REF;
-
 export function slotBudgetForPipeline(
   pipeline: SlotPipeline,
   rateLimitPer120s = config.RATE_LIMIT_PER_120S,
 ): number {
-  const refBudget = SLOT_BUDGETS_REF[pipeline];
-  const scaled =
-    (refBudget * rateLimitPer120s) / SLOT_BUDGETS_REF_RATE_LIMIT_120S;
-  return Math.max(1, Math.round(scaled));
+  return apiTokenBudgetForPipeline(pipeline, rateLimitPer120s);
 }
 
 export function totalSlotBudgetPer120s(
   rateLimitPer120s = config.RATE_LIMIT_PER_120S,
 ): number {
-  return (
-    slotBudgetForPipeline("discovery", rateLimitPer120s) +
-    slotBudgetForPipeline("hydration", rateLimitPer120s) +
-    slotBudgetForPipeline("rank", rateLimitPer120s)
-  );
+  return computeDripBudgetConfig(rateLimitPer120s).totalReqPer120s;
 }
 
 export function totalTargetRatePerSec(rateLimitPer120s = config.RATE_LIMIT_PER_120S): number {
@@ -108,18 +112,18 @@ export function tokenReleaseIntervalMs(
   pipeline: SlotPipeline,
   rateLimitPer120s = config.RATE_LIMIT_PER_120S,
 ): number {
-  const tokens = slotBudgetForPipeline(pipeline, rateLimitPer120s);
-  return WINDOW_MS / tokens;
+  return dripIntervalMsForPipeline(pipeline, rateLimitPer120s);
 }
 
-/** Intervalle entre deux jobs worker (coût SLOT_COSTS). */
+/** Intervalle entre deux jobs worker hydration (coût 2 tokens). */
 export function jobReleaseIntervalMs(
   pipeline: SlotPipeline,
   rateLimitPer120s = config.RATE_LIMIT_PER_120S,
 ): number {
-  const tokens = slotBudgetForPipeline(pipeline, rateLimitPer120s);
-  const cost = SLOT_COSTS[pipeline];
-  return WINDOW_MS / (tokens / cost);
+  if (pipeline === "hydration") {
+    return hydrationJobIntervalMs(rateLimitPer120s);
+  }
+  return tokenReleaseIntervalMs(pipeline, rateLimitPer120s);
 }
 
 function slotIntervalMs(targetRatePerSec: number): number {
@@ -226,9 +230,7 @@ async function runUniformDripTick(slotKey: string, tokenIntervalMs: number): Pro
   await redis.zremrangebyscore(slotKey, "-inf", now - 5000);
 }
 
-function startDripForKey(slotKey: string, pipeline: SlotPipeline): void {
-  const tokenIntervalMs = tokenReleaseIntervalMs(pipeline);
-
+function startDripForKey(slotKey: string, tokenIntervalMs: number): void {
   void runUniformDripTick(slotKey, tokenIntervalMs).catch((error) => {
     console.error(`[rate-scheduler] drip tick failed key=${slotKey}`, error);
   });
@@ -251,31 +253,18 @@ export function startDrip(): void {
     return;
   }
 
-  const discoveryRate = discoveryTargetRatePerSec();
-  const hydrationRate = hydrationTargetRatePerSec();
-  const rankRate = rankTargetRatePerSec();
+  const cfg = computeDripBudgetConfig();
 
-  startDripForKey(DISCOVERY_SLOT_KEY, "discovery");
-  startDripForKey(HYDRATION_SLOT_KEY, "hydration");
-  startDripForKey(RANK_SLOT_KEY, "rank");
-
-  const budgets = {
-    discovery: slotBudgetForPipeline("discovery"),
-    hydration: slotBudgetForPipeline("hydration"),
-    rank: slotBudgetForPipeline("rank"),
-  };
-  const intervals = {
-    discovery: tokenReleaseIntervalMs("discovery"),
-    hydration: jobReleaseIntervalMs("hydration"),
-    rank: tokenReleaseIntervalMs("rank"),
-  };
+  startDripForKey(DISCOVERY_SLOT_KEY, cfg.discoveryIntervalMs);
+  startDripForKey(HYDRATION_SLOT_KEY, cfg.hydrationTokenIntervalMs);
+  startDripForKey(RANK_SLOT_KEY, cfg.rankIntervalMs);
 
   console.log(
-    `[rate-scheduler] drip started uniform ` +
-      `discovery=${discoveryRate.toFixed(4)}/s token/${(intervals.discovery / 1000).toFixed(1)}s ` +
-      `hydration=${hydrationRate.toFixed(4)}/s job/${(intervals.hydration / 1000).toFixed(1)}s ` +
-      `rank=${rankRate.toFixed(4)}/s token/${(intervals.rank / 1000).toFixed(1)}s ` +
-      `(budgets ${budgets.discovery}/${budgets.hydration}/${budgets.rank} req/120s)`,
+    `[rate-scheduler] drip started:\n` +
+      `  discovery=${cfg.discoverySlots} slots → 1 token/${cfg.discoveryIntervalMs}ms\n` +
+      `  hydration=${cfg.hydrationSlots} matches → 1 job/${cfg.hydrationIntervalMs}ms\n` +
+      `  rank=${cfg.rankSlots} tokens → 1 token/${cfg.rankIntervalMs}ms\n` +
+      `  total req/120s budget=${cfg.budget} (allocated ${cfg.totalReqPer120s})`,
   );
 }
 

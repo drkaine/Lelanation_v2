@@ -149,7 +149,7 @@ async function processDiscoveryPlayer(
   const startTime = Math.min(discoveryStartTime, nowSec);
 
   await waitForDiscoverySlot();
-  const matchIds = await riotClient.getMatchlist(player.puuid, player.region, { startTime });
+  const matchIds = await riotClient.getMatchIds(player.puuid, player.region, { startTime });
 
   await sql.begin(async (tx) => {
     const knownRows =

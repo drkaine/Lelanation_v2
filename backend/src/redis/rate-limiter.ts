@@ -33,4 +33,6 @@ export {
   tryAcquireSlot,
   setGlobalRateLimitCooldown,
   createLuaRateLimiterForTests,
+  getEffectiveBudgetBreakdown,
+  type EffectiveBudgetBreakdown,
 } from "./rate-scheduler.js";

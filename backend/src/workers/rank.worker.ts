@@ -3,7 +3,7 @@ import { sql } from "../db/client.js";
 import type { RankJobData } from "../dto/match.dto.js";
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
 import { RANK_QUEUE } from "../queues/definitions.js";
-import { rankWorkerConcurrencyDrain } from "../queues/rank-backlog-policy.js";
+import { rankWorkerConcurrencyNormal } from "../queues/rank-backlog-policy.js";
 import { redis } from "../redis/client.js";
 import { normalizePlatformRegion } from "../riot/platform-region.js";
 import { slotBudgetForPipeline, waitForRankSlot } from "../redis/rate-scheduler.js";
@@ -106,29 +106,41 @@ async function runRankJob(data: RankJobData): Promise<RankJobOutcome> {
   }
 }
 
-const drainConcurrency = rankWorkerConcurrencyDrain();
+const normalConcurrency = rankWorkerConcurrencyNormal();
 const rankSlotBudget = slotBudgetForPipeline("rank");
 
-export const rankWorker = new Worker<RankJobData>(
-  RANK_QUEUE,
-  async (job) => {
-    pollerV2Observability.recordRankJobStart();
-    await waitForRankSlot();
-    try {
-      const outcome = await runRankJob(job.data);
-      pollerV2Observability.recordRankJobSuccess();
-      return outcome;
-    } catch (error) {
-      pollerV2Observability.recordRankJobFailure(error);
-      throw error;
-    }
-  },
-  {
-    connection: redis,
-    concurrency: drainConcurrency,
-  },
-);
+let rankWorkerInstance: Worker<RankJobData> | null = null;
 
-console.log(
-  `[rank.worker] started drip rank budget=${rankSlotBudget}/120s concurrency=${drainConcurrency}`,
-);
+function createRankWorker(): Worker<RankJobData> {
+  if (rankWorkerInstance) {
+    throw new Error("rank worker already initialized");
+  }
+
+  rankWorkerInstance = new Worker<RankJobData>(
+    RANK_QUEUE,
+    async (job) => {
+      pollerV2Observability.recordRankJobStart();
+      await waitForRankSlot();
+      try {
+        const outcome = await runRankJob(job.data);
+        pollerV2Observability.recordRankJobSuccess();
+        return outcome;
+      } catch (error) {
+        pollerV2Observability.recordRankJobFailure(error);
+        throw error;
+      }
+    },
+    {
+      connection: redis,
+      concurrency: normalConcurrency,
+    },
+  );
+
+  console.log(
+    `[rank.worker] started drip rank budget=${rankSlotBudget}/120s concurrency=${normalConcurrency}`,
+  );
+
+  return rankWorkerInstance;
+}
+
+export const rankWorker = createRankWorker();
