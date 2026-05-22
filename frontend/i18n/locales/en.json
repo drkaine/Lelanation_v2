@@ -259,12 +259,17 @@
       "loading": "Loading spells…",
       "noSpells": "No spell descriptions available for this champion.",
       "championLevel": "Champion level",
+      "level": "Level",
       "rank": "Rank",
       "passive": "P",
       "stacks": "Stacks",
       "showDescription": "▶ Show description",
       "hideDescription": "▼ Hide description",
       "approximateValues": "Approximate values"
+    },
+    "description": {
+      "showDescription": "Show description",
+      "showBuild": "Show build"
     },
     "stats": {
       "toggle": "Stats",
@@ -291,6 +296,8 @@
       "modifiersTitle": "Item bonuses (% / stacks)",
       "stacksInput": "Item stacks",
       "transformToggle": "Toggle transformed item (Seraph, Muramana…)",
+      "fullStack": "Max stacks (360) and transformed version",
+      "fullStackShort": "Max",
       "transformShort": "T2",
       "transformed": "Transformed item",
       "rabadonAp": "Rabadon's Deathcap (+30% total AP)",

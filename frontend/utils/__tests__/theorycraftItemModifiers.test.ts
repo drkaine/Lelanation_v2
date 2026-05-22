@@ -3,7 +3,10 @@ import type { CalculatedStats, Item } from '@lelanation/shared-types'
 import {
   applyTheorycraftItemModifiers,
   getTheorycraftItemStackStats,
+  getTheorycraftTransformDisplayItemId,
   isTheorycraftStackableItem,
+  resolveTheorycraftItemImageFull,
+  shouldShowTheorycraftTransformedImage,
 } from '../theorycraftItemModifiers'
 
 const baseStats: CalculatedStats = {
@@ -59,6 +62,27 @@ describe('theorycraftItemModifiers', () => {
     })
     expect(result.stats.abilityPower).toBe(390)
     expect(result.lines.some(line => line.itemId === '3089')).toBe(true)
+  })
+
+  it('resolves Seraphin image for transformed archangel', () => {
+    const archangelWithImage = {
+      id: '3003',
+      image: { full: '3003.png' },
+    } as Item
+
+    expect(getTheorycraftTransformDisplayItemId('3003')).toBe('3040')
+    expect(getTheorycraftTransformDisplayItemId('3004')).toBe('3042')
+    expect(getTheorycraftTransformDisplayItemId('3070', ['3004'])).toBe('3042')
+
+    expect(shouldShowTheorycraftTransformedImage('3003', 0, true)).toBe(true)
+    expect(shouldShowTheorycraftTransformedImage('3003', 360, false)).toBe(true)
+    expect(shouldShowTheorycraftTransformedImage('3003', 100, false)).toBe(false)
+
+    expect(
+      resolveTheorycraftItemImageFull(archangelWithImage, { stacks: 360, transformed: true }, id =>
+        id === '3040' ? { image: { full: '3040.png' } } : null
+      )
+    ).toBe('3040.png')
   })
 
   it('applies tear mana stacks and archangel transform delta', () => {

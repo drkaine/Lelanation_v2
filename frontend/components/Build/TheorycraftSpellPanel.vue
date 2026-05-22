@@ -50,7 +50,7 @@
               type="number"
               min="0"
               :max="passiveStackDefinition.maxStacks ?? undefined"
-              class="border-border h-7 w-20 rounded border bg-surface px-2 text-sm text-text"
+              class="theorycraft-stack-input border-border rounded border bg-surface text-text"
               :value="stackCount(passiveStackDefinition.id)"
               @input="onStackInput(passiveStackDefinition.id, $event)"
             />
@@ -136,7 +136,7 @@
               type="number"
               min="0"
               :max="stackDefinitionForSpell(spell.id, spell.slot)?.maxStacks ?? undefined"
-              class="border-border h-7 w-20 rounded border bg-surface px-2 text-sm text-text"
+              class="theorycraft-stack-input border-border rounded border bg-surface text-text"
               :value="stackCount(stackDefinitionForSpell(spell.id, spell.slot)!.id)"
               @input="onStackInput(stackDefinitionForSpell(spell.id, spell.slot)!.id, $event)"
             />
@@ -556,6 +556,28 @@ summary::-webkit-details-marker {
 
 .spell-entry-row {
   overflow: visible;
+}
+
+.theorycraft-stack-input {
+  box-sizing: border-box;
+  width: 2em;
+  min-width: 1.125rem;
+  max-width: 2.5rem;
+  height: 1.2em;
+  padding: 0 0.125em;
+  font: inherit;
+  line-height: 1;
+  text-align: center;
+  vertical-align: baseline;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.theorycraft-stack-input::-webkit-outer-spin-button,
+.theorycraft-stack-input::-webkit-inner-spin-button {
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .spell-header-stats__label {

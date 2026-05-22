@@ -259,12 +259,17 @@
       "loading": "Chargement des sorts…",
       "noSpells": "Aucune description de sort disponible pour ce champion.",
       "championLevel": "Niveau champion",
+      "level": "Niveau",
       "rank": "Rang",
       "passive": "P",
       "stacks": "Stacks",
       "showDescription": "▶ Afficher la description",
       "hideDescription": "▼ Masquer la description",
       "approximateValues": "Valeurs approximatives"
+    },
+    "description": {
+      "showDescription": "Afficher la description",
+      "showBuild": "Afficher le build"
     },
     "stats": {
       "toggle": "Stats",
@@ -291,6 +296,8 @@
       "modifiersTitle": "Bonus objets (% / stacks)",
       "stacksInput": "Stacks de l'objet",
       "transformToggle": "Basculer vers la version transformée (Séraphin, Muramana…)",
+      "fullStack": "Stack max (360) et version transformée",
+      "fullStackShort": "Max",
       "transformShort": "T2",
       "transformed": "Objet transformé",
       "rabadonAp": "Coiffe de Rabadon (+30% AP total)",

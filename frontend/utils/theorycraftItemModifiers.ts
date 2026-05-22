@@ -1,5 +1,7 @@
 import type { CalculatedStats, Item } from '@lelanation/shared-types'
 
+export type TheorycraftItemImageLookup = (itemId: string) => Pick<Item, 'image'> | null | undefined
+
 export interface TheorycraftPercentModifier {
   itemIds: string[]
   stat: 'abilityPower' | 'attackDamage' | 'health'
@@ -76,6 +78,63 @@ const TRANSFORMED_ITEM_STATS: Record<
   '3070': { mana: 360 },
   '3003': { mana: 860, abilityPower: 80 },
   '3004': { mana: 860, attackDamage: 35 },
+}
+
+/** Item IDs affichés au verso T2 / stack max (Séraphin, Muramana…). */
+const THEORYCRAFT_TRANSFORM_DISPLAY_ID: Record<string, string> = {
+  '3003': '3040',
+  '3004': '3042',
+}
+
+export function getTheorycraftTransformDisplayItemId(
+  itemId: string,
+  buildItemIds: readonly string[] = []
+): string | null {
+  const normalized = String(itemId)
+  const direct = THEORYCRAFT_TRANSFORM_DISPLAY_ID[normalized]
+  if (direct) return direct
+
+  if (normalized !== '3070') return null
+
+  const ids = new Set(buildItemIds.map(id => String(id)))
+  if (ids.has('3004')) return '3042'
+  if (ids.has('3003')) return '3040'
+  return '3040'
+}
+
+export function shouldShowTheorycraftTransformedImage(
+  itemId: string,
+  stacks: number,
+  transformed: boolean
+): boolean {
+  const config = getTheorycraftStackableItemConfig(itemId)
+  if (!config?.supportsTransform) return false
+  if (transformed) return true
+  const threshold = config.transformThreshold ?? config.maxStacks
+  return stacks >= threshold
+}
+
+export function resolveTheorycraftItemImageFull(
+  item: Pick<Item, 'id' | 'image'>,
+  options: {
+    stacks: number
+    transformed: boolean
+    buildItemIds?: readonly string[]
+  },
+  lookupItem?: TheorycraftItemImageLookup
+): string {
+  const buildItemIds = options.buildItemIds ?? []
+  if (!shouldShowTheorycraftTransformedImage(item.id, options.stacks, options.transformed)) {
+    return item.image.full
+  }
+
+  const displayId = getTheorycraftTransformDisplayItemId(item.id, buildItemIds)
+  if (!displayId) return item.image.full
+
+  const resolved = lookupItem?.(displayId)
+  if (resolved?.image?.full) return resolved.image.full
+
+  return `${displayId}.png`
 }
 
 export function getTheorycraftStackableItemConfig(

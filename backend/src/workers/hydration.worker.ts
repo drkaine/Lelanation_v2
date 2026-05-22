@@ -9,7 +9,7 @@ import { parseMatch } from "../parsers/match.parser.js";
 import { HYDRATION_QUEUE } from "../queues/definitions.js";
 import { getRankBacklogCount, ingestionQueue } from "../queues/index.js";
 import { maxRankBacklogBeforePipelinePause, shouldPauseMatchPipelines } from "../queues/rank-backlog-policy.js";
-import { enqueueRankChildJobsForHydration } from "../queues/rank-jobs.js";
+import { enqueueRankChildJobsForHydration, computeRankExistingJobsDelayMs } from "../queues/rank-jobs.js";
 import {
   averageMatchRankTierLabel,
   getMissingRankParticipants,
@@ -35,8 +35,6 @@ const riotClient = new RiotClient();
 const hydrationLimit = pLimit(config.HYDRATION_CONCURRENCY);
 const PATCH_SWITCH_GRACE_DAYS = 2;
 const HYDRATION_RANK_RETRY_DELAY_BACKLOG_MS = 3 * 60_000;
-const HYDRATION_RANK_EXISTING_RETRY_DELAY_MS = 15_000;
-
 function extractPatch(gameVersion: string): string {
   const [major, minor] = (gameVersion ?? "").split(".");
   if (!major || !minor) return "unknown";
@@ -319,6 +317,27 @@ async function waitForRankChildrenOrProceed(
   }
 }
 
+async function delayForExistingRankJobs(
+  hydrationJob: Job<HydrationJobData>,
+  token: string,
+  matchId: string,
+  pendingCount: number,
+): Promise<never> {
+  const delayMs = computeRankExistingJobsDelayMs(pendingCount);
+  await hydrationJob.moveToDelayed(Date.now() + delayMs, token);
+  console.log(
+    JSON.stringify({
+      msg: "hydration_waiting_existing_rank_jobs",
+      matchId,
+      pendingCount,
+      delayMs,
+    }),
+  );
+  throw new DelayedError(
+    `hydration_waiting_existing_rank_jobs delay_ms=${delayMs} matchId=${matchId}`,
+  );
+}
+
 async function finalizeHydrationRankGate(
   hydrationJob: Job<HydrationJobData>,
   token: string,
@@ -362,14 +381,14 @@ async function finalizeHydrationRankGate(
     return;
   }
 
-  const { enqueued, pendingExisting } = await enqueueRankChildJobsForHydration(hydrationJob, missing);
+  const { enqueued, alreadyPending } = await enqueueRankChildJobsForHydration(hydrationJob, missing);
+
+  if (enqueued === 0 && alreadyPending > 0) {
+    await delayForExistingRankJobs(hydrationJob, token, data.matchId, alreadyPending);
+  }
+
   if (enqueued > 0) {
     await waitForRankChildrenOrProceed(hydrationJob, token, data.matchId, missing.length);
-  } else if (pendingExisting > 0) {
-    await hydrationJob.moveToDelayed(Date.now() + HYDRATION_RANK_EXISTING_RETRY_DELAY_MS, token);
-    throw new DelayedError(
-      `hydration_waiting_existing_rank_jobs delay_ms=${HYDRATION_RANK_EXISTING_RETRY_DELAY_MS} matchId=${data.matchId}`,
-    );
   }
 
   closestSnapshots = await refreshParticipantsRankState(participants, gameDate);
@@ -381,11 +400,8 @@ async function finalizeHydrationRankGate(
     return;
   }
 
-  if (pendingExisting > 0) {
-    await hydrationJob.moveToDelayed(Date.now() + HYDRATION_RANK_EXISTING_RETRY_DELAY_MS, token);
-    throw new DelayedError(
-      `hydration_waiting_existing_rank_jobs_post_children delay_ms=${HYDRATION_RANK_EXISTING_RETRY_DELAY_MS} matchId=${data.matchId}`,
-    );
+  if (alreadyPending > 0) {
+    await delayForExistingRankJobs(hydrationJob, token, data.matchId, alreadyPending);
   }
 
   throw new Error(`rank_gate_still_blocked matchId=${data.matchId}`);

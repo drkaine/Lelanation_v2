@@ -32,6 +32,7 @@ import {
 } from '~/utils/theorycraftItems'
 import {
   applyTheorycraftItemModifiers,
+  getTheorycraftStackableItemConfig,
   remapTheorycraftItemStacksByIndex,
 } from '~/utils/theorycraftItemModifiers'
 import type { TheorycraftItemModifierLine } from '~/utils/theorycraftItemModifiers'
@@ -489,14 +490,30 @@ export const useBuildStore = defineStore('build', {
       this.recalculateStats()
     },
 
-    toggleTheorycraftItemTransformed(index: number) {
+    setTheorycraftItemTransformed(index: number, transformed: boolean) {
       if (this.builderSession !== 'theorycraft') return
       const next = { ...this.theorycraftItemTransformed }
-      if (next[index]) delete next[index]
-      else next[index] = true
+      if (transformed) next[index] = true
+      else delete next[index]
       this.theorycraftItemTransformed = next
       this.persistTheorycraftItemStacks()
       this.recalculateStats()
+    },
+
+    toggleTheorycraftItemTransformed(index: number) {
+      if (this.builderSession !== 'theorycraft') return
+      const nextActive = !this.theorycraftItemTransformed[index]
+      this.setTheorycraftItemTransformed(index, nextActive)
+      if (!nextActive) return
+      const item = this.currentBuild?.items?.[index]
+      if (!item) return
+      const config = getTheorycraftStackableItemConfig(item.id)
+      if (!config?.supportsTransform) return
+      const threshold = config.transformThreshold ?? config.maxStacks
+      const current = this.theorycraftItemStacks[index] ?? 0
+      if (current < threshold) {
+        this.setTheorycraftItemStacks(index, threshold)
+      }
     },
 
     loadTheorycraftDisabledItems() {

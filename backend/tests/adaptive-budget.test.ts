@@ -156,3 +156,15 @@ describe("rank fill phase", () => {
     expect(computeRankFillCount(8, { discovery: 8, hydration: 20, rank: 14, totalReq: 62 })).toBe(4);
   });
 });
+
+describe("rank existing jobs delay", () => {
+  test("scales with pending count and rank allocation", async () => {
+    const { computeRankExistingJobsDelayMs } = await import("../src/queues/rank-jobs.js");
+    const { applyCurrentBudgetAllocation } = await import("../src/redis/budget-allocation-ref.js");
+    applyCurrentBudgetAllocation({ discovery: 8, hydration: 20, rank: 30, totalReq: 88 });
+    const small = computeRankExistingJobsDelayMs(2);
+    const large = computeRankExistingJobsDelayMs(20);
+    expect(small).toBeGreaterThanOrEqual(5_000);
+    expect(large).toBeGreaterThan(small);
+  });
+});

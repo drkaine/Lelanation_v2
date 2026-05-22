@@ -597,7 +597,7 @@
               @mouseleave="onSheetElementLeave"
             >
               <img
-                :src="getItemImageUrl(versionForImages, item.image.full)"
+                :src="getBuildItemImageUrl(item, buildItems.indexOf(item))"
                 :alt="item.name"
                 class="item-icon"
                 :title="sheetTooltip(getItemDisplayName(item), 'Item')"
@@ -614,7 +614,7 @@
               <!-- Une seule paire de bottes : icône complète -->
               <img
                 v-if="bootsItems.length === 1 && bootsItems[0]"
-                :src="getItemImageUrl(versionForImages, bootsItems[0].image.full)"
+                :src="getBuildItemImageUrl(bootsItems[0], buildItems.indexOf(bootsItems[0]))"
                 :alt="bootsItems[0].name"
                 class="boots-icon-single"
                 :title="
@@ -671,7 +671,7 @@
                   @mouseleave="onSheetElementLeave"
                 >
                   <img
-                    :src="getItemImageUrl(versionForImages, item.image.full)"
+                    :src="getBuildItemImageUrl(item, buildItems.indexOf(item))"
                     :alt="item.name"
                     class="item-icon"
                     :title="sheetTooltip(getItemDisplayName(item), 'Item')"
@@ -701,7 +701,7 @@
                   @mouseleave="onSheetElementLeave"
                 >
                   <img
-                    :src="getItemImageUrl(versionForImages, item.image.full)"
+                    :src="getBuildItemImageUrl(item, buildItems.indexOf(item))"
                     :alt="item.name"
                     class="item-icon"
                     :title="sheetTooltip(getItemDisplayName(item), 'Item')"
@@ -1301,7 +1301,7 @@
                 >
                   <div class="items-manager-inline-cell">
                     <img
-                      :src="getItemImageUrl(versionForImages, entry.item.image.full)"
+                      :src="getBuildItemImageUrl(entry.item, entry.index)"
                       :alt="entry.item.name"
                       class="items-manager-inline-icon"
                       :class="itemManagerIconClass(entry.index)"
@@ -1338,7 +1338,7 @@
                 >
                   <div class="items-manager-inline-cell">
                     <img
-                      :src="getItemImageUrl(versionForImages, entry.item.image.full)"
+                      :src="getBuildItemImageUrl(entry.item, entry.index)"
                       :alt="entry.item.name"
                       class="items-manager-inline-icon"
                       :class="itemManagerIconClass(entry.index)"
@@ -1375,7 +1375,7 @@
                 >
                   <div class="items-manager-inline-cell">
                     <img
-                      :src="getItemImageUrl(versionForImages, entry.item.image.full)"
+                      :src="getBuildItemImageUrl(entry.item, entry.index)"
                       :alt="entry.item.name"
                       class="items-manager-inline-icon"
                       :class="itemManagerIconClass(entry.index)"
@@ -1412,7 +1412,7 @@
                 >
                   <div class="items-manager-inline-cell">
                     <img
-                      :src="getItemImageUrl(versionForImages, entry.item.image.full)"
+                      :src="getBuildItemImageUrl(entry.item, entry.index)"
                       :alt="entry.item.name"
                       class="items-manager-inline-icon"
                       :class="itemManagerIconClass(entry.index)"
@@ -1483,6 +1483,7 @@ import { isBootsItem, isStarterItem } from '@lelanation/builds-ui'
 import { sumStarterDrainStats, getGoldPer10FromItem } from '@lelanation/builds-stats'
 import type { Build, SubBuild, Item, Role, SkillOrder } from '@lelanation/shared-types'
 import { activeItemLimitLabel } from '~/utils/theorycraftItems'
+import { resolveTheorycraftItemImageFull } from '~/utils/theorycraftItemModifiers'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useItemsStore } from '~/stores/ItemsStore'
@@ -1691,7 +1692,7 @@ const canShowReadonlyDescription = computed(
   () => props.readonly && Boolean(activeDescriptionValue.value?.trim())
 )
 const canShowCardBack = computed(() => {
-  if (props.flipBackFace === 'stats' && props.selectionMode === 'theorycraft') {
+  if (props.selectionMode === 'theorycraft') {
     return hasChampion.value
   }
   return canShowReadonlyDescription.value || (!props.readonly && hasChampion.value)
@@ -1705,7 +1706,12 @@ const canEditSkillOrder = computed(
     !props.readonly &&
     !props.build
 )
-const showBackHeader = computed(() => isBuilderPage.value || showBackVariantSelector.value)
+const showBackHeader = computed(
+  () =>
+    isBuilderPage.value ||
+    showBackVariantSelector.value ||
+    (props.selectionMode === 'theorycraft' && props.flipBackFace === 'description')
+)
 const showDescriptionToggle = computed(() => isBuilderPage.value && buildSubBuilds.value.length > 0)
 const showBackVariantSelector = computed(
   () => buildSubBuilds.value.length > 0 && descriptionMode.value === 'multiple'
@@ -2512,6 +2518,31 @@ const buildItems = computed(() => {
   })
 })
 
+const theorycraftBuildItemIds = computed(() => buildItems.value.map(item => item.id))
+
+function getBuildItemImageUrl(item: Item, buildIndex?: number): string {
+  let imageFull = item.image.full
+  if (props.selectionMode === 'theorycraft') {
+    const index =
+      typeof buildIndex === 'number' && buildIndex >= 0
+        ? buildIndex
+        : buildItems.value.findIndex(candidate => candidate === item)
+    const stackIndex =
+      index >= 0 ? index : buildItems.value.findIndex(candidate => candidate.id === item.id)
+    const lookupIndex = stackIndex >= 0 ? stackIndex : 0
+    imageFull = resolveTheorycraftItemImageFull(
+      item,
+      {
+        stacks: buildStore.theorycraftItemStacks[lookupIndex] ?? 0,
+        transformed: Boolean(buildStore.theorycraftItemTransformed[lookupIndex]),
+        buildItemIds: theorycraftBuildItemIds.value,
+      },
+      id => itemsStore.items.find(candidate => candidate.id === id) ?? null
+    )
+  }
+  return getItemImageUrl(versionForImages.value, imageFull)
+}
+
 const theorycraftActiveItemCount = computed(() => {
   if (props.selectionMode !== 'theorycraft') return 0
   const disabled = new Set(buildStore.theorycraftDisabledItemIndices)
@@ -2987,8 +3018,9 @@ const resetItemsOnly = () => {
 
 const getBootBackgroundStyle = (item?: Item | null) => {
   if (!item) return {}
+  const index = buildItems.value.indexOf(item)
   return {
-    backgroundImage: `url(${getItemImageUrl(versionForImages.value, item.image.full)})`,
+    backgroundImage: `url(${getBuildItemImageUrl(item, index >= 0 ? index : undefined)})`,
   }
 }
 

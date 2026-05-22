@@ -176,11 +176,11 @@ describe("budget allocation", () => {
     else process.env.RANK_DRAIN_MODE = prev;
   });
 
-  test("getDripSleepMs adapts when allocation changes", () => {
+  test("getDripSleepMs scales with allocation", () => {
     const lowRank = getDripSleepMs("rank", { discovery: 8, hydration: 20, rank: 14, totalReq: 62 });
     const highRank = getDripSleepMs("rank", { discovery: 8, hydration: 20, rank: 35, totalReq: 90 });
     expect(highRank).toBeLessThan(lowRank);
-    expect(lowRank).toBeGreaterThanOrEqual(100);
+    expect(lowRank).toBeGreaterThanOrEqual(250);
     expect(lowRank).toBeLessThanOrEqual(15_000);
   });
 });

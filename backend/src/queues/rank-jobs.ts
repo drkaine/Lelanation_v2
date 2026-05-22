@@ -1,5 +1,7 @@
 import type { Job } from "bullmq";
 import type { HydrationJobData, ParsedParticipantDto } from "../dto/match.dto.js";
+import { currentBudgetAllocationRef } from "../redis/budget-allocation-ref.js";
+import { WINDOW_MS } from "../redis/rate-budget.js";
 import { normalizePlatformRegion } from "../riot/platform-region.js";
 import { bullmqJobId } from "./bullmq-job-id.js";
 import { rankQueue } from "./index.js";
@@ -19,13 +21,63 @@ function rankChildJobId(puuid: string, region: string, today: string): string {
   return bullmqJobId("rank", region, puuid, today);
 }
 
-/** Rank jobs enfants d'un job hydration — dédupliqués par région canonique + puuid + jour. */
+export function computeRankExistingJobsDelayMs(pendingCount: number): number {
+  const safeCount = Math.max(1, Math.trunc(pendingCount));
+  const rankAlloc = Math.max(1, currentBudgetAllocationRef.rank);
+  const rankDripMs = WINDOW_MS / rankAlloc;
+  return Math.max(5_000, Math.min(120_000, Math.floor(safeCount * rankDripMs * 0.5)));
+}
+
+export type RankChildEnqueuePlan = {
+  toAdd: ParsedParticipantDto[];
+  alreadyPending: ParsedParticipantDto[];
+};
+
+/** Classe les participants sans rank : nouveaux jobs vs jobs rank déjà en cours ailleurs. */
+export async function planRankChildJobsForHydration(
+  missingParticipants: ParsedParticipantDto[],
+): Promise<RankChildEnqueuePlan> {
+  const toAdd: ParsedParticipantDto[] = [];
+  const alreadyPending: ParsedParticipantDto[] = [];
+  const today = todayIsoDate();
+
+  for (const participant of missingParticipants) {
+    const puuid = String(participant.puuid ?? "").trim();
+    if (!puuid) continue;
+
+    const region = normalizePlatformRegion(participant.region);
+    const jobId = rankChildJobId(puuid, region, today);
+    const existing = await rankQueue.getJob(jobId);
+    if (!existing) {
+      toAdd.push(participant);
+      continue;
+    }
+
+    const state = await existing.getState();
+    if (state === "failed") {
+      await existing.remove().catch(() => undefined);
+      toAdd.push(participant);
+      continue;
+    }
+
+    if (state === "completed") {
+      continue;
+    }
+
+    alreadyPending.push(participant);
+  }
+
+  return { toAdd, alreadyPending };
+}
+
+/** Enfile uniquement les rank jobs qui n'existent pas encore (enfants liés au job hydration). */
 export async function enqueueRankChildJobsForHydration(
   hydrationJob: Job<HydrationJobData>,
   missingParticipants: ParsedParticipantDto[],
-): Promise<{ enqueued: number; pendingExisting: number }> {
-  if (missingParticipants.length === 0) {
-    return { enqueued: 0, pendingExisting: 0 };
+): Promise<{ enqueued: number; alreadyPending: number; plan: RankChildEnqueuePlan }> {
+  const plan = await planRankChildJobsForHydration(missingParticipants);
+  if (plan.toAdd.length === 0) {
+    return { enqueued: 0, alreadyPending: plan.alreadyPending.length, plan };
   }
 
   const today = todayIsoDate();
@@ -35,22 +87,12 @@ export async function enqueueRankChildJobsForHydration(
   };
 
   let enqueued = 0;
-  let pendingExisting = 0;
-  for (const participant of missingParticipants) {
+  for (const participant of plan.toAdd) {
     const puuid = String(participant.puuid ?? "").trim();
     if (!puuid) continue;
 
     const region = normalizePlatformRegion(participant.region);
     const jobId = rankChildJobId(puuid, region, today);
-    const existing = await rankQueue.getJob(jobId);
-    if (existing) {
-      const state = await existing.getState();
-      if (state !== "failed") {
-        pendingExisting += 1;
-        continue;
-      }
-      await existing.remove().catch(() => undefined);
-    }
 
     try {
       await rankQueue.add(
@@ -71,13 +113,14 @@ export async function enqueueRankChildJobsForHydration(
         message.includes("cannot be replaced") ||
         message.includes("-7")
       ) {
+        plan.alreadyPending.push(participant);
         continue;
       }
       throw error;
     }
   }
 
-  return { enqueued, pendingExisting };
+  return { enqueued, alreadyPending: plan.alreadyPending.length, plan };
 }
 
 /** Enfile les fetch-rank dédupliqués (sans parent) — ex. post-ingestion. */

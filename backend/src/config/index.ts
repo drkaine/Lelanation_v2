@@ -99,5 +99,5 @@ export const config: Config = {
   RANK_WORKER_CONCURRENCY_DRAIN:
     parsePositiveInt(process.env.RANK_WORKER_CONCURRENCY_DRAIN) ?? 6,
   RANK_WORKER_CONCURRENCY_NORMAL:
-    parsePositiveInt(process.env.RANK_WORKER_CONCURRENCY_NORMAL) ?? 2,
+    parsePositiveInt(process.env.RANK_WORKER_CONCURRENCY_NORMAL) ?? 6,
 };

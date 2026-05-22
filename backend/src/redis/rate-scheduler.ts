@@ -361,18 +361,6 @@ export function stopDrip(): void {
   activeDrips.clear();
 }
 
-const DISCOVERY_POLL_RETRY_CONCURRENCY = 2;
-
-function pipelineWorkerConcurrency(pipeline: SlotPipeline): number {
-  if (pipeline === "discovery") {
-    return DISCOVERY_POLL_RETRY_CONCURRENCY;
-  }
-  if (pipeline === "hydration") {
-    return config.HYDRATION_CONCURRENCY;
-  }
-  return config.RANK_WORKER_CONCURRENCY_NORMAL;
-}
-
 /** Sleep entre tentatives acquireSlot — lit l'allocation courante à chaque appel. */
 export function getDripSleepMs(
   pipeline: SlotPipeline,
@@ -382,16 +370,16 @@ export function getDripSleepMs(
     pipeline === "hydration"
       ? Math.max(1, allocation.hydration * SLOT_COSTS.hydration)
       : Math.max(1, allocation[pipeline]);
-  const concurrency = Math.max(1, pipelineWorkerConcurrency(pipeline));
   const msPerToken = WINDOW_MS / tokensPer120s;
-  const sleepMs = Math.floor(msPerToken / concurrency / 2);
-  return Math.max(100, Math.min(15_000, sleepMs));
+  return Math.max(250, Math.min(15_000, Math.floor(msPerToken * 0.85)));
 }
 
-function dripSleepWithJitter(pipeline: SlotPipeline): number {
-  const sleepMs = getDripSleepMs(pipeline);
-  const jitter = Math.floor(Math.random() * sleepMs * 0.2);
-  return sleepMs + jitter;
+function deniedSlotWaitMs(pipeline: SlotPipeline, luaWaitMs: number): number {
+  const safeLuaWait = Math.max(0, Math.trunc(luaWaitMs));
+  const dripWait = getDripSleepMs(pipeline);
+  const base = Math.max(safeLuaWait, dripWait);
+  const jitter = Math.floor(Math.random() * base * 0.2);
+  return base + jitter;
 }
 
 async function waitForScheduledSlot(slotKey: string, cost: 1 | 2): Promise<void> {
@@ -427,7 +415,7 @@ async function waitForScheduledSlot(slotKey: string, cost: 1 | 2): Promise<void>
     }
 
     attempts += 1;
-    const waitMs = dripSleepWithJitter(pipeline);
+    const waitMs = deniedSlotWaitMs(pipeline, value);
     pollerV2Observability.recordRateLimitAttempt(cost, false, waitMs, pipeline);
     await sleep(waitMs);
   }
@@ -465,9 +453,10 @@ export async function acquireRankSlot(): Promise<{ granted: boolean; waitMs: num
     return { granted: true, waitMs: 0 };
   }
 
-  const waitMs = dripSleepWithJitter("rank");
+  const waitMs = deniedSlotWaitMs("rank", value);
   pollerV2Observability.recordRateLimitAttempt(1, false, waitMs, "rank");
-  return { granted: false, waitMs };
+  await sleep(waitMs);
+  return { granted: false, waitMs: 0 };
 }
 
 /** rank.worker — coût 1, attend le créneau (boucle courte Redis + cooldown 429 global). */
@@ -493,7 +482,9 @@ export async function tryAcquireSlot(cost: 1 | 2): Promise<{ granted: boolean; w
   const now = Date.now();
   const [allowed, value] = await evalAcquireSlot(slotKey, cost, now);
   const granted = allowed === 1;
-  const waitMs = granted ? Math.max(0, value - now) : Math.max(value, 0);
+  const waitMs = granted
+    ? Math.max(0, value - now)
+    : deniedSlotWaitMs(pipeline, value);
   pollerV2Observability.recordRateLimitAttempt(cost, granted, waitMs, pipeline);
   return { granted, waitMs };
 }
