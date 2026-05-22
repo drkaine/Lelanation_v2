@@ -315,6 +315,46 @@ test('Malphite W strips %i:scaleArmor% and unresolved f1/f2 parentheticals', () 
   assert.ok(!tooltip.unresolvedVariables.includes('f2'))
 })
 
+test('Akali Q resolves split AD/AP tooltip tokens', async () => {
+  const { parseTooltip, findBinSpellForDDragon } = theorycraftTooltipTestUtils
+  const championFullPath = join(process.cwd(), 'data', 'game', '16.10.1', 'fr_FR', 'championFull.json')
+  const championFull = JSON.parse(readFileSync(championFullPath, 'utf-8')) as {
+    data: { Akali: { spells: Array<Record<string, unknown>> } }
+  }
+  const ddSpell = championFull.data.Akali.spells[0]
+  assert.ok(ddSpell)
+  const binPath = join(process.cwd(), 'data/theorycraft-cache/cdragon-bin-akali.json')
+  const championBin = JSON.parse(readFileSync(binPath, 'utf-8')) as Record<string, unknown>
+  const binSpell = findBinSpellForDDragon(championBin, [String(ddSpell.id ?? ''), 'AkaliQ'])
+  assert.ok(binSpell)
+  const raw =
+    'Lance des kunais dans un arc de cercle, infligeant <magicDamage>{{ BaseDamageNamed }} <scaleAD>(+{{ ADDamage }})</scaleAD> <scaleAP>(+{{ APDamage }})</scaleAP> pts de dégâts magiques</magicDamage>.'
+  const parsed = parseTooltip(raw, ddSpell, {}, binSpell)
+  assert.ok(parsed.descriptionText.includes('45'))
+  assert.ok(parsed.descriptionText.includes('65% AD'))
+  assert.ok(parsed.descriptionText.includes('60% AP'))
+  assert.ok(!parsed.descriptionText.includes('(+)'))
+  assert.ok(!parsed.unresolvedVariables.includes('ADDamage'))
+  assert.ok(!parsed.unresolvedVariables.includes('APDamage'))
+})
+
+test('Akali passive bin spell is discovered from AkaliP script name', async () => {
+  const { findPassiveBinSpell, extractBinCalculations, extractBinDataValues } =
+    theorycraftTooltipTestUtils
+  const binPath = join(process.cwd(), 'data/theorycraft-cache/cdragon-bin-akali.json')
+  const championBin = JSON.parse(readFileSync(binPath, 'utf-8')) as Record<string, unknown>
+  const passiveBin = findPassiveBinSpell(championBin, 'Akali')
+  assert.ok(passiveBin)
+  const dataValues = extractBinDataValues(passiveBin, 18)
+  const calculations = extractBinCalculations(passiveBin, dataValues, {
+    maxRank: 18,
+    isPassive: true,
+    ddSpell: { id: 'AkaliPassive', maxrank: 18 },
+  })
+  assert.ok(calculations.some((entry) => entry.key.toLowerCase() === 'damage'))
+  assert.ok(calculations.some((entry) => entry.key.toLowerCase() === 'passivespeedbonus'))
+})
+
 test('Akali passive uses detailed stringtable tooltip with damage values', async () => {
   const { resolvePassiveTooltipContent, parseTooltip } = theorycraftTooltipTestUtils
   const stringTableRes = await fetch(
@@ -558,4 +598,48 @@ test('extractStackDefinition exports Belveth attack speed stack tooltip vars', (
   assert.ok(definition)
   assert.ok(definition!.statBonuses.some((bonus) => bonus.stat === 'attackSpeed'))
   assert.ok(definition!.tooltipVars.some((entry) => entry.key === 'totalattackspeedfromstacks'))
+})
+
+test('Aatrox passive PDamage exports displayAsPercent for tooltip suffix', () => {
+  const binPath = '/tmp/aatrox.bin.json'
+  const championBin = JSON.parse(readFileSync(binPath, 'utf-8')) as Record<string, unknown>
+  const passiveBin = findPassiveBinSpell(championBin, 'Aatrox')
+  assert.ok(passiveBin)
+
+  const dataValues = extractBinDataValues(passiveBin!, 18)
+  const calculations = extractBinCalculations(passiveBin!, dataValues, {
+    maxRank: 18,
+    isPassive: true,
+    ddSpell: { id: 'AatroxPassive', maxrank: 18 },
+  })
+  const pDamage = calculations.find((entry) => entry.key.toLowerCase() === 'pdamage')
+  assert.ok(pDamage)
+  assert.equal(pDamage!.displayAsPercent, true)
+  assert.ok(pDamage!.expression.includes('%'))
+})
+
+test('Aatrox Q omits duplicate tooltipextended detail raw', () => {
+  const { resolveSpellTooltipContent, buildChampionSharedVariableMap } =
+    theorycraftTooltipTestUtils
+  const bin = JSON.parse(readFileSync('/tmp/aatrox.bin.json', 'utf-8')) as Record<string, unknown>
+  const dd = JSON.parse(readFileSync('/tmp/aatrox-dd.json', 'utf-8')).data.Aatrox
+  const stringTable = (JSON.parse(readFileSync('/tmp/lol.stringtable.json', 'utf-8')) as {
+    entries?: Record<string, string>
+  }).entries ?? {}
+  const qSpell = dd.spells[0]
+  const binSpell = findBinSpellForDDragon(bin, ['AatroxQ'])
+  assert.ok(binSpell)
+  const sharedVars = buildChampionSharedVariableMap(bin)
+  const content = resolveSpellTooltipContent({
+    ddSpell: qSpell,
+    cdSpell: {},
+    binSpell,
+    stringTable,
+    sharedVars,
+  })
+  assert.ok(content.main.includes('QDamage') || content.main.includes('{{ qdamage }}'))
+  assert.equal(
+    content.detailRaws.some((section) => section.includes('relancée 2 fois de plus')),
+    false
+  )
 })

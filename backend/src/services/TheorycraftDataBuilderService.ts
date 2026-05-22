@@ -954,6 +954,18 @@ function calculationUsesPercentDisplay(key: string, calculation: Record<string, 
   )
 }
 
+function findRawBinCalculation(
+  calculations: Record<string, unknown>,
+  key: string
+): Record<string, unknown> {
+  if (calculations[key]) return asObject(calculations[key])
+  const normalized = key.toLowerCase()
+  for (const [calcKey, raw] of Object.entries(calculations)) {
+    if (calcKey.toLowerCase() === normalized) return asObject(raw)
+  }
+  return {}
+}
+
 function extractBinCalculations(
   binSpell: Record<string, unknown>,
   dataValues: Array<{ name: string; values: number[] }>,
@@ -964,6 +976,7 @@ function extractBinCalculations(
   expressionHtml: string
   baseValues: number[]
   ratios: Array<{ stat: string; coefficient: number[]; type: 'physical' | 'magic' | 'true' }>
+  displayAsPercent: boolean
 }> {
   const out: Array<{
     key: string
@@ -971,6 +984,7 @@ function extractBinCalculations(
     expressionHtml: string
     baseValues: number[]
     ratios: Array<{ stat: string; coefficient: number[]; type: 'physical' | 'magic' | 'true' }>
+    displayAsPercent: boolean
   }> = []
   const calculations = asObject(binSpell.mSpellCalculations)
   const spellBin = asObject(binSpell.mSpell ?? binSpell)
@@ -1114,7 +1128,12 @@ function extractBinCalculations(
   }
 
   for (const [key, built] of builtByKey.entries()) {
-    out.push({ key, ...built })
+    const rawCalculation = findRawBinCalculation(calculations, key)
+    out.push({
+      key,
+      ...built,
+      displayAsPercent: calculationUsesPercentDisplay(key, rawCalculation),
+    })
   }
   return out
 }
@@ -1246,6 +1265,116 @@ function extractSpellEffects(
   return Array.from(out.entries()).map(([key, values]) => ({ key, values }))
 }
 
+function formatRatioComponentLabel(
+  ratio: {
+    stat: string
+    coefficient: number[]
+  },
+  rankIndex = 0
+): string {
+  const coeffs = ratio.coefficient.filter((c) => Number.isFinite(c) && c !== 0)
+  if (coeffs.length === 0) return ''
+  const coeff = coeffs[Math.min(rankIndex, coeffs.length - 1)] ?? coeffs[0]!
+  const pct = formatResolvedNumber(coeff * 100)
+  return `${pct}% ${ratioStatDisplayLabel(ratio.stat)}`
+}
+
+function isAdStatKey(stat: string): boolean {
+  const normalized = stat.toLowerCase().replace(/[^a-z0-9]/g, '')
+  return normalized === 'totalad' || normalized === 'bonusad' || normalized === 'attackdamage'
+}
+
+function isApStatKey(stat: string): boolean {
+  const normalized = stat.toLowerCase().replace(/[^a-z0-9]/g, '')
+  return normalized === 'ap' || normalized === 'abilitypower' || normalized === 'spelldamage'
+}
+
+function applySplitDamageComponentAliases(
+  setVar: (key: string, value: string) => void,
+  calculations: Array<{
+    key: string
+    baseValues: number[]
+    ratios: Array<{ stat: string; coefficient: number[] }>
+  }>,
+  dataValues: Array<{ name: string; values: number[] }>,
+  rankIndex = 0
+): void {
+  const findCalc = (...keys: string[]) =>
+    calculations.find((entry) => keys.some((key) => entry.key.toLowerCase() === key.toLowerCase()))
+
+  const applyFromCalculation = (
+    calculation:
+      | {
+          key: string
+          baseValues: number[]
+          ratios: Array<{ stat: string; coefficient: number[] }>
+        }
+      | undefined,
+    suffix: '' | 'extra'
+  ) => {
+    if (!calculation) return
+    for (const ratio of calculation.ratios ?? []) {
+      const key = suffix === 'extra'
+        ? isAdStatKey(ratio.stat)
+          ? 'addamageextra'
+          : isApStatKey(ratio.stat)
+            ? 'apdamageextra'
+            : null
+        : isAdStatKey(ratio.stat)
+          ? 'addamage'
+          : isApStatKey(ratio.stat)
+            ? 'apdamage'
+            : null
+      if (!key) continue
+      const rendered = formatRatioComponentLabel(ratio, rankIndex)
+      if (rendered) setVar(key, rendered)
+    }
+  }
+
+  applyFromCalculation(
+    findCalc('damage', 'totaldamage', 'cast1damage', 'e1damage'),
+    ''
+  )
+  applyFromCalculation(findCalc('miniondamage', 'bonusminiondamage'), 'extra')
+
+  const firstScalar = (name: string): number | null => {
+    const entry = dataValues.find((value) => value.name.toLowerCase() === name.toLowerCase())
+    if (!entry || entry.values.length === 0) return null
+    const value = Number(entry.values[Math.min(rankIndex, entry.values.length - 1)])
+    return Number.isFinite(value) ? value : null
+  }
+
+  const adRatioValue =
+    firstScalar('tadratio') ?? firstScalar('totaladratio') ?? firstScalar('passivebadratio')
+  if (adRatioValue != null && adRatioValue > 0) {
+    const adStat = firstScalar('totaladratio') != null ? 'totalAD' : 'bonusAD'
+    const rendered = formatRatioComponentLabel(
+      { stat: adStat, coefficient: [adRatioValue] },
+      rankIndex
+    )
+    if (rendered) setVar('addamage', rendered)
+  }
+
+  const apRatioValue =
+    firstScalar('apratio') ?? firstScalar('totalapratio') ?? firstScalar('passiveapratio')
+  if (apRatioValue != null && apRatioValue > 0) {
+    const rendered = formatRatioComponentLabel({ stat: 'AP', coefficient: [apRatioValue] }, rankIndex)
+    if (rendered) setVar('apdamage', rendered)
+  }
+
+  const baseDamage = firstScalar('basedamage')
+  if (baseDamage != null) {
+    setVar('basedamage1', formatResolvedNumber(baseDamage))
+  }
+
+  const passiveSpeed = findCalc('passivespeedbonus')
+  if (passiveSpeed && passiveSpeed.baseValues.length > 0) {
+    const base = passiveSpeed.baseValues[Math.min(rankIndex, passiveSpeed.baseValues.length - 1)]!
+    const pct = Math.abs(base) <= 1 ? base * 100 : base
+    setVar('passivespeedbonus', `${formatResolvedNumber(pct)}%`)
+  }
+}
+
 function buildSpellVariableMap(
   ddSpell: ChampionSpell,
   cdSpell: CDragonChampionSpell,
@@ -1343,6 +1472,7 @@ function buildSpellVariableMap(
       setVar(calculation.key, rendered)
     }
   })
+  applySplitDamageComponentAliases(setVar, calculations, binDataValues)
   const cooldown = trimByMaxRank(parseNumberArray(ddSpell.cooldown), maxRank)
   if (cooldown.length > 0) setVar('cooldown', formatValueSeries(cooldown))
   const cost = trimByMaxRank(parseNumberArray(ddSpell.cost), maxRank)
@@ -1431,7 +1561,7 @@ type StringTableEntries = Record<string, string>
 
 function extractPassiveTooltipLocKeys(
   binSpell: Record<string, unknown> | null | undefined
-): { tooltipKey?: string; extendedKey?: string; summaryKey?: string } {
+): { tooltipKey?: string; extendedKey?: string; summaryKey?: string; keyName?: string } {
   if (!binSpell) return {}
   const client = asObject(binSpell.mClientData)
   const tooltipData = asObject(client.mTooltipData)
@@ -1442,6 +1572,7 @@ function extractPassiveTooltipLocKeys(
       String(locKeys.keyTooltipExtendedBelowLine ?? locKeys.keyTooltipExtended ?? '').trim() ||
       undefined,
     summaryKey: String(locKeys.keySummary ?? locKeys.keyTooltipSimple ?? '').trim() || undefined,
+    keyName: String(locKeys.keyName ?? '').trim() || undefined,
   }
 }
 
@@ -1913,6 +2044,17 @@ function isNearDuplicateTooltipSection(mainHtml: string, sectionHtml: string): b
   if (mainFirst.length < 30 || sectionFirst.length < 30) return false
   if (mainFirst === sectionFirst) return true
   if (mainPlain.includes(sectionFirst) || sectionPlain.includes(mainFirst)) return true
+
+  const sharedOpening = 18
+  if (
+    mainPlain.length > 80 &&
+    sectionPlain.length > 80 &&
+    mainPlain.slice(0, sharedOpening) === sectionPlain.slice(0, sharedOpening) &&
+    (/r[eé]activ/i.test(mainPlain) || /recast/i.test(mainPlain)) &&
+    (/r[eé]activ/i.test(sectionPlain) || /recast/i.test(sectionPlain) || /relanc/i.test(sectionPlain))
+  ) {
+    return true
+  }
   return false
 }
 
@@ -2029,6 +2171,14 @@ function resolveSpellTooltipContent(args: {
     if (!key) continue
     const candidate = lookupStringTableEntry(stringTable, key)
     if (!candidate || isMetaDdragonTooltip(candidate) || detailRaws.includes(candidate)) continue
+    const normalized = normalizeStringTableTooltipSection(candidate, stringTable, gameMode)
+    if (
+      main &&
+      (isNearDuplicateTooltipSection(main, normalized) ||
+        isDuplicateTooltipSection(main, normalized))
+    ) {
+      continue
+    }
     detailRaws.push(candidate)
   }
 
@@ -2036,7 +2186,17 @@ function resolveSpellTooltipContent(args: {
     main,
     detailRaws: detailRaws
       .map((section) => normalizeStringTableTooltipSection(section, stringTable, gameMode))
-      .filter((section) => section.length > 0 && !isMetaDdragonTooltip(section)),
+      .filter((section) => {
+        if (!section || isMetaDdragonTooltip(section)) return false
+        if (
+          main &&
+          (isNearDuplicateTooltipSection(main, section) ||
+            isDuplicateTooltipSection(main, section))
+        ) {
+          return false
+        }
+        return true
+      }),
   }
 }
 
@@ -2055,7 +2215,14 @@ function findPassiveBinSpell(
     if (Object.keys(spell).length === 0) continue
     const locKeys = extractPassiveTooltipLocKeys(spell)
     const tooltipKey = String(locKeys.tooltipKey ?? '').toLowerCase()
-    if (!tooltipKey || !tooltipKey.includes('passive')) continue
+    const keyName = String(locKeys.keyName ?? '').toLowerCase()
+    const championPassiveTooltip = `spell_${id}p_tooltip`
+    const isPassiveTooltip =
+      tooltipKey.includes('passive') ||
+      keyName.startsWith('passive_') ||
+      tooltipKey === championPassiveTooltip ||
+      tooltipKey.endsWith(`${id}p_tooltip`)
+    if (!tooltipKey || !isPassiveTooltip) continue
     if (tooltipKey.endsWith('_summary') || tooltipKey.endsWith('summary')) continue
     let score = 6
     if (tooltipKey.includes('_tooltip')) score += 8
@@ -2074,7 +2241,9 @@ function findPassiveBinSpell(
 
   const direct = findBinSpellForDDragon(championBin, [
     `${championId}Passive`,
+    `${championId}P`,
     `${id}passive`,
+    `${id}p`,
     'Passive',
     'DeadlyVenom',
     'Deadly_Venom',
@@ -2890,6 +3059,7 @@ function buildExportedSpell(args: {
       expressionHtml: '',
       baseValues: basicStacksValue.values,
       ratios: [],
+      displayAsPercent: false,
     })
   }
   const spellEffects = extractSpellEffects(ddSpell, cdSpell, binSpell).map((effect) => ({
@@ -2911,13 +3081,16 @@ function buildExportedSpell(args: {
       key: calculation.key,
       baseValues: calculation.baseValues,
       ratios: calculation.ratios,
+      displayAsPercent: calculation.displayAsPercent,
     })),
     dataValues: binDataValues.map((entry) => ({
       name: entry.name,
       values: entry.values,
     })),
     spellEffects,
-    ...(summaryParsed
+    ...(summaryParsed &&
+    !isNearDuplicateTooltipSection(mainTooltip.descriptionParsed, summaryParsed.descriptionParsed) &&
+    !isDuplicateTooltipSection(mainTooltip.descriptionParsed, summaryParsed.descriptionParsed)
       ? {
           summaryHtml: summaryParsed.descriptionParsed,
           summaryText: summaryParsed.descriptionText,
@@ -3589,13 +3762,19 @@ export class TheorycraftDataBuilderService {
           key: calculation.key,
           baseValues: calculation.baseValues,
           ratios: calculation.ratios,
+          displayAsPercent: calculation.displayAsPercent,
         })),
         dataValues: passiveBinDataValues.map((entry) => ({
           name: entry.name,
           values: entry.values,
         })),
         spellEffects: passiveSpellEffects,
-        ...(summaryTooltip
+        ...(summaryTooltip &&
+        !isNearDuplicateTooltipSection(
+          passiveTooltip.descriptionParsed,
+          summaryTooltip.descriptionParsed
+        ) &&
+        !isDuplicateTooltipSection(passiveTooltip.descriptionParsed, summaryTooltip.descriptionParsed)
           ? {
               summaryHtml: summaryTooltip.descriptionParsed,
               summaryText: summaryTooltip.descriptionText,

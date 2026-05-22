@@ -129,6 +129,84 @@ export function applyCooldownReductionToSeconds(
   return baseSeconds * (1 - cdr)
 }
 
+export type ChampionResourceKind = 'none' | 'mana' | 'energy' | 'other'
+
+export function normalizeChampionPartype(partype: string | undefined | null): string {
+  return String(partype ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+}
+
+export function resolveChampionResourceKind(
+  partype: string | undefined | null
+): ChampionResourceKind {
+  const normalized = normalizeChampionPartype(partype)
+  if (!normalized || normalized === 'none' || normalized === 'aucune') return 'none'
+  if (normalized === 'energy' || normalized === 'energie') return 'energy'
+  if (normalized === 'mana') return 'mana'
+  return 'other'
+}
+
+export function formatStatPoolValue(current: number, max: number, decimals = 0): string {
+  const format = (value: number) => {
+    if (!Number.isFinite(value)) return '0'
+    const factor = 10 ** decimals
+    return String(Math.round(value * factor) / factor)
+  }
+  return `${format(current)}/${format(max)}`
+}
+
+export function formatHealthPoolValue(totalHealth: number): string {
+  const value = Math.max(0, totalHealth)
+  return formatStatPoolValue(value, value)
+}
+
+export function formatResourcePoolValue(
+  resourcePool: number,
+  partype: string | undefined | null
+): string {
+  if (resolveChampionResourceKind(partype) === 'none') {
+    return formatStatPoolValue(0, 0)
+  }
+  const max = Math.max(0, resourcePool)
+  return formatStatPoolValue(max, max)
+}
+
+const RESOURCE_LABEL_BY_PARTYPE: Record<string, { fr: string; en: string }> = {
+  mana: { fr: 'Mana', en: 'Mana' },
+  energy: { fr: 'Énergie', en: 'Energy' },
+  energie: { fr: 'Énergie', en: 'Energy' },
+  fury: { fr: 'Fureur', en: 'Fury' },
+  rage: { fr: 'Rage', en: 'Rage' },
+  ferocity: { fr: 'Férocité', en: 'Ferocity' },
+  heat: { fr: 'Chaleur', en: 'Heat' },
+  flow: { fr: 'Flux', en: 'Flow' },
+  courage: { fr: 'Courage', en: 'Courage' },
+  bloodwell: { fr: 'Puits de sang', en: 'Blood Well' },
+  runicpower: { fr: 'Puissance runique', en: 'Runic Power' },
+  gnarfury: { fr: 'Fureur', en: 'Fury' },
+  shields: { fr: 'Bouclier', en: 'Shield' },
+  wind: { fr: 'Vents', en: 'Wind' },
+}
+
+export function resolveResourceStatLabel(
+  partype: string | undefined | null,
+  locale: 'fr' | 'en'
+): string {
+  const kind = resolveChampionResourceKind(partype)
+  if (kind === 'energy') return RESOURCE_LABEL_BY_PARTYPE.energy![locale]
+  if (kind === 'mana' || kind === 'none') return RESOURCE_LABEL_BY_PARTYPE.mana![locale]
+
+  const normalized = normalizeChampionPartype(partype)
+  const mapped = RESOURCE_LABEL_BY_PARTYPE[normalized]
+  if (mapped) return mapped[locale]
+
+  const raw = String(partype ?? '').trim()
+  return raw || RESOURCE_LABEL_BY_PARTYPE.mana![locale]
+}
+
 function parseNumericStatValue(text: string): number | null {
   const normalized = String(text ?? '')
     .trim()

@@ -72,6 +72,20 @@ const TEST_DRIP_TICK_MS = 200;
 let acquireSlotSha: string | null = null;
 const dripIntervals: NodeJS.Timeout[] = [];
 
+type ActiveDrip = {
+  slotKey: string;
+  interval: NodeJS.Timeout;
+  tokenIntervalMs: number;
+};
+
+const activeDrips = new Map<SlotPipeline, ActiveDrip>();
+let currentBudgetAllocation: {
+  discovery: number;
+  hydration: number;
+  rank: number;
+  totalReq: number;
+} | null = null;
+
 export type RankSlotResult = "ok" | "budget_exhausted";
 
 function sleep(ms: number): Promise<void> {
@@ -112,6 +126,10 @@ export function tokenReleaseIntervalMs(
   pipeline: SlotPipeline,
   rateLimitPer120s = config.RATE_LIMIT_PER_120S,
 ): number {
+  const active = activeDrips.get(pipeline);
+  if (active) {
+    return active.tokenIntervalMs;
+  }
   return dripIntervalMsForPipeline(pipeline, rateLimitPer120s);
 }
 
@@ -121,6 +139,10 @@ export function jobReleaseIntervalMs(
   rateLimitPer120s = config.RATE_LIMIT_PER_120S,
 ): number {
   if (pipeline === "hydration") {
+    const active = activeDrips.get("hydration");
+    if (active) {
+      return active.tokenIntervalMs * SLOT_COSTS.hydration;
+    }
     return hydrationJobIntervalMs(rateLimitPer120s);
   }
   return tokenReleaseIntervalMs(pipeline, rateLimitPer120s);
@@ -230,6 +252,23 @@ async function runUniformDripTick(slotKey: string, tokenIntervalMs: number): Pro
   await redis.zremrangebyscore(slotKey, "-inf", now - 5000);
 }
 
+function slotKeyForPipeline(pipeline: SlotPipeline): string {
+  if (pipeline === "discovery") return DISCOVERY_SLOT_KEY;
+  if (pipeline === "hydration") return HYDRATION_SLOT_KEY;
+  return RANK_SLOT_KEY;
+}
+
+function stopPipelineDrip(pipeline: SlotPipeline): void {
+  const active = activeDrips.get(pipeline);
+  if (!active) return;
+  clearInterval(active.interval);
+  activeDrips.delete(pipeline);
+  const idx = dripIntervals.indexOf(active.interval);
+  if (idx >= 0) {
+    dripIntervals.splice(idx, 1);
+  }
+}
+
 function startDripForKey(slotKey: string, tokenIntervalMs: number): void {
   void runUniformDripTick(slotKey, tokenIntervalMs).catch((error) => {
     console.error(`[rate-scheduler] drip tick failed key=${slotKey}`, error);
@@ -244,6 +283,46 @@ function startDripForKey(slotKey: string, tokenIntervalMs: number): void {
   dripIntervals.push(interval);
 }
 
+function startDripForPipeline(pipeline: SlotPipeline, tokenIntervalMs: number): void {
+  stopPipelineDrip(pipeline);
+  const slotKey = slotKeyForPipeline(pipeline);
+  startDripForKey(slotKey, tokenIntervalMs);
+  const interval = dripIntervals[dripIntervals.length - 1];
+  if (interval) {
+    activeDrips.set(pipeline, { slotKey, interval, tokenIntervalMs });
+  }
+}
+
+/** Met à jour le drip d'un pipeline (units/120s ; hydration = matchs, pas req). */
+export function setDripRate(
+  pipeline: SlotPipeline,
+  unitsPer120s: number,
+  costPerJob: 1 | 2 = SLOT_COSTS[pipeline],
+): void {
+  const safeUnits = Math.max(1, Math.trunc(unitsPer120s));
+  const tokensPer120s = pipeline === "hydration" ? safeUnits * costPerJob : safeUnits;
+  const tokenIntervalMs = Math.ceil(WINDOW_MS / tokensPer120s);
+  startDripForPipeline(pipeline, tokenIntervalMs);
+}
+
+export type RuntimeBudgetAllocation = {
+  discovery: number;
+  hydration: number;
+  rank: number;
+  totalReq: number;
+};
+
+export async function applyBudgetAllocation(alloc: RuntimeBudgetAllocation): Promise<void> {
+  setDripRate("discovery", alloc.discovery, 1);
+  setDripRate("hydration", alloc.hydration, 2);
+  setDripRate("rank", alloc.rank, 1);
+  currentBudgetAllocation = { ...alloc };
+}
+
+export function getCurrentBudgetAllocation(): RuntimeBudgetAllocation | null {
+  return currentBudgetAllocation ? { ...currentBudgetAllocation } : null;
+}
+
 export async function loadLuaScript(): Promise<void> {
   acquireSlotSha = (await redis.script("LOAD", ACQUIRE_SLOT_LUA)) as string;
 }
@@ -254,10 +333,15 @@ export function startDrip(): void {
   }
 
   const cfg = computeDripBudgetConfig();
-
-  startDripForKey(DISCOVERY_SLOT_KEY, cfg.discoveryIntervalMs);
-  startDripForKey(HYDRATION_SLOT_KEY, cfg.hydrationTokenIntervalMs);
-  startDripForKey(RANK_SLOT_KEY, cfg.rankIntervalMs);
+  setDripRate("discovery", cfg.discoverySlots, 1);
+  setDripRate("hydration", cfg.hydrationSlots, 2);
+  setDripRate("rank", cfg.rankSlots, 1);
+  currentBudgetAllocation = {
+    discovery: cfg.discoverySlots,
+    hydration: cfg.hydrationSlots,
+    rank: cfg.rankSlots,
+    totalReq: cfg.totalReqPer120s,
+  };
 
   console.log(
     `[rate-scheduler] drip started:\n` +
@@ -269,12 +353,16 @@ export function startDrip(): void {
 }
 
 export function stopDrip(): void {
+  for (const pipeline of ["discovery", "hydration", "rank"] as SlotPipeline[]) {
+    stopPipelineDrip(pipeline);
+  }
   while (dripIntervals.length > 0) {
     const interval = dripIntervals.pop();
     if (interval) {
       clearInterval(interval);
     }
   }
+  activeDrips.clear();
 }
 
 const DISCOVERY_POLL_RETRY_CONCURRENCY = 2;

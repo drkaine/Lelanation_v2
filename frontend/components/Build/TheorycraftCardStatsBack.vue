@@ -30,15 +30,22 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { CalculatedStats } from '@lelanation/shared-types'
+import {
+  formatHealthPoolValue,
+  formatResourcePoolValue,
+  resolveChampionResourceKind,
+  resolveResourceStatLabel,
+} from '~/utils/theorycraftStats'
 
 const props = defineProps<{
   stats: CalculatedStats | null
   level: number
+  partype?: string | null
   activeItemCount?: number
   stackCount?: number
 }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 function formatNumber(value: number, decimals = 0): string {
   if (!Number.isFinite(value)) return '0'
@@ -50,13 +57,32 @@ function formatPercent(value: number): string {
   return `${formatNumber(value * 100, 1)}%`
 }
 
+const resourceLocale = computed<'fr' | 'en'>(() =>
+  String(locale.value).startsWith('fr') ? 'fr' : 'en'
+)
+
+function resourceLabel(): string {
+  const kind = resolveChampionResourceKind(props.partype)
+  if (kind === 'energy') return t('theorycraft.stats.energy')
+  if (kind === 'mana' || kind === 'none') return t('theorycraft.stats.mana')
+  return resolveResourceStatLabel(props.partype, resourceLocale.value)
+}
+
 const rows = computed(() => {
   const stats = props.stats
   if (!stats) return []
 
   return [
-    { key: 'health', label: t('theorycraft.stats.health'), value: formatNumber(stats.health) },
-    { key: 'mana', label: t('theorycraft.stats.mana'), value: formatNumber(stats.mana) },
+    {
+      key: 'health',
+      label: t('theorycraft.stats.health'),
+      value: formatHealthPoolValue(stats.health),
+    },
+    {
+      key: 'resource',
+      label: resourceLabel(),
+      value: formatResourcePoolValue(stats.mana, props.partype),
+    },
     {
       key: 'attackDamage',
       label: t('theorycraft.stats.attackDamage'),

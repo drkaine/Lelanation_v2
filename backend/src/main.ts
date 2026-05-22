@@ -2,14 +2,26 @@ import "dotenv/config";
 import type { Worker } from "bullmq";
 import { config } from "./config/index.js";
 import { healthCheck, sql } from "./db/client.js";
+import {
+  AdaptiveBudgetScheduler,
+  DEFAULT_INITIAL_ALLOCATION,
+  type BudgetAllocation,
+  type Pipeline,
+  type PipelineSnapshot,
+} from "./lib/adaptiveBudget.js";
 import { appendUnifiedLog } from "./logging/unifiedAppLog.js";
 import { pollerV2Observability } from "./observability/poller-v2-observability.js";
-import { getQueueMetrics } from "./queues/index.js";
+import { discoveryQueue, getQueueMetrics } from "./queues/index.js";
 import { trimCompletedQueueJobs } from "./queues/queue-cleanup.js";
 import { purgeStaleProcessedMatchesAndRankHistory } from "./services/patch-retention-cleanup.js";
 import { syncMatchPipelinePause } from "./queues/pipeline-pause-sync.js";
 import { logRiotRoutingVerified } from "./riot/client.js";
-import { loadLuaScript, startDrip, stopDrip, getEffectiveBudgetBreakdown } from "./redis/rate-scheduler.js";
+import {
+  applyBudgetAllocation,
+  getCurrentBudgetAllocation,
+  loadLuaScript,
+  stopDrip,
+} from "./redis/rate-scheduler.js";
 import { redis } from "./redis/client.js";
 
 type PollerWorkers = {
@@ -26,6 +38,7 @@ let summary30mInterval: NodeJS.Timeout | null = null;
 let summary1hInterval: NodeJS.Timeout | null = null;
 let patchRetentionInterval: NodeJS.Timeout | null = null;
 let leaderLockRenewInterval: NodeJS.Timeout | null = null;
+let adaptiveScheduler: AdaptiveBudgetScheduler | null = null;
 let shuttingDown = false;
 
 const POLLER_LEADER_LOCK_KEY = "poller-v2:leader";
@@ -106,6 +119,37 @@ function validateConfig(): void {
   void config.REDIS_URL;
   void config.DATABASE_URL;
   void config.RIOT_API_KEY;
+}
+
+async function getPipelineSnapshots(): Promise<Record<Pipeline, PipelineSnapshot>> {
+  const metrics = await getQueueMetrics();
+  const tokenUsage = pollerV2Observability.getRollingTokenUsage();
+  const current = adaptiveScheduler?.getCurrentAllocation() ?? getCurrentBudgetAllocation() ?? DEFAULT_INITIAL_ALLOCATION;
+
+  return {
+    discovery: {
+      queueWaiting: metrics.discovery.waiting,
+      queueActive: metrics.discovery.active,
+      tokensUsed120s: tokenUsage.discovery,
+      currentAlloc: current.discovery,
+    },
+    hydration: {
+      queueWaiting: metrics.hydration.waiting,
+      queueActive: metrics.hydration.active,
+      tokensUsed120s: tokenUsage.hydration,
+      currentAlloc: current.hydration,
+    },
+    rank: {
+      queueWaiting: metrics.rank.waiting,
+      queueActive: metrics.rank.active,
+      tokensUsed120s: tokenUsage.rank,
+      currentAlloc: current.rank,
+    },
+  };
+}
+
+async function applyBudgetAllocationFromScheduler(alloc: BudgetAllocation): Promise<void> {
+  await applyBudgetAllocation(alloc);
 }
 
 async function getDataLagSeconds(): Promise<number | null> {
@@ -252,13 +296,24 @@ async function bootstrap(): Promise<void> {
   console.log("[poller-main] stale BullMQ jobs trimmed (completed/failed >5m)");
 
   await loadLuaScript();
-  startDrip();
-  console.log("[poller-main] scheduled slot rate limiter loaded (drip started)");
 
-  const budgetBreakdown = getEffectiveBudgetBreakdown();
+  adaptiveScheduler = new AdaptiveBudgetScheduler(
+    getPipelineSnapshots,
+    applyBudgetAllocationFromScheduler,
+    30_000,
+    DEFAULT_INITIAL_ALLOCATION,
+  );
+  pollerV2Observability.setAdaptiveBudgetStateProvider(() =>
+    adaptiveScheduler?.getObservabilityState() ?? null,
+  );
+  adaptiveScheduler.start();
+  console.log("[poller-main] adaptive budget scheduler started (tick=30s, drip active)");
+
+  const initialBudget = adaptiveScheduler.getCurrentAllocation();
   console.log(
-    `[poller] Budget 120s: discovery=${budgetBreakdown.discoverySlots} matchlists | ` +
-      `hydration=${budgetBreakdown.hydrationSlots} matches | rank=${budgetBreakdown.rankSlots} snapshots`,
+    `[poller] Budget 120s (adaptive initial): discovery=${initialBudget.discovery} matchlists | ` +
+      `hydration=${initialBudget.hydration} matches | rank=${initialBudget.rank} snapshots | ` +
+      `totalReq=${initialBudget.totalReq}`,
   );
 
   const dbOk = await healthCheck();
@@ -273,6 +328,10 @@ async function bootstrap(): Promise<void> {
   }, 6 * 60 * 60_000);
 
   await workers.scheduleDiscoveryRepeatJob();
+  if (await discoveryQueue.isPaused()) {
+    await discoveryQueue.resume();
+    console.log("[poller-main] discovery queue resumed (was paused in Redis)");
+  }
   console.log(
     `[poller-main] discovery repeat job scheduled (${config.DISCOVERY_INTERVAL_MS}ms, ${config.DISCOVERY_PLAYERS_PER_TICK} players/tick)`,
   );
@@ -310,6 +369,10 @@ async function gracefulShutdown(signal: string): Promise<void> {
   if (patchRetentionInterval) {
     clearInterval(patchRetentionInterval);
     patchRetentionInterval = null;
+  }
+  if (adaptiveScheduler) {
+    await adaptiveScheduler.stop();
+    adaptiveScheduler = null;
   }
   stopDrip();
 

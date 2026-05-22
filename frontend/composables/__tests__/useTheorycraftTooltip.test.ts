@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  filterSupplementalTooltipSections,
   resolveTheorycraftSpellDescription,
   resolveTheorycraftSpellDetailRaws,
+  shouldShowSupplementalTooltipSummary,
 } from '../useTheorycraftTooltip'
 import type { TheorycraftBuildStats } from '~/types/theorycraft'
 
@@ -117,66 +119,144 @@ describe('useTheorycraftTooltip', () => {
     expect(html).not.toMatch(/\{\{/)
   })
 
-  it('resolves Nasus Q crit detail from tooltipDetailRaws with live AD and stacks', () => {
+  it('resolves Akali Q split AD/AP damage tokens', () => {
     const spell = {
       tooltipRaw:
-        'La prochaine attaque inflige <physicalDamage>{{ totaldamage }} pts de dégâts physiques</physicalDamage>.',
-      tooltipDetailRaws: [
-        'Cette compétence peut être critique et ainsi infliger <physicalDamage>{{ critdamage }} pts de dégâts physiques</physicalDamage>.',
-      ],
+        'Inflige <magicDamage>{{ BaseDamageNamed }} <scaleAD>(+{{ ADDamage }})</scaleAD> <scaleAP>(+{{ APDamage }})</scaleAP> pts de dégâts magiques</magicDamage>.',
       maxRank: 5,
       calculations: [
         {
-          key: 'totaldamage',
-          baseValues: [40, 60, 80, 100, 120],
-          ratios: [{ stat: 'totalAD', coefficient: 1, type: 'physical' }],
-        },
-        {
-          key: 'critdamage',
-          baseValues: [71.75, 106.75, 141.75, 176.75, 211.75],
+          key: 'damage',
+          baseValues: [45, 70, 95, 120, 145],
           ratios: [
-            { stat: 'critDamage', coefficient: 1, type: 'magic' },
-            { stat: 'totalAD', coefficient: 1, type: 'physical' },
+            { stat: 'bonusAD', coefficient: 0.65, type: 'physical' },
+            { stat: 'AP', coefficient: 0.6, type: 'magic' },
           ],
         },
       ],
-      dataValues: [{ name: 'BasicStacks', values: [3, 3, 3, 3, 3] }],
+      dataValues: [
+        { name: 'BaseDamageNamed', values: [45, 70, 95, 120, 145] },
+        { name: 'tADRatio', values: [0.65, 0.65, 0.65, 0.65, 0.65] },
+        { name: 'APRatio', values: [0.6, 0.6, 0.6, 0.6, 0.6] },
+      ],
+      spellEffects: [],
+    }
+
+    const { html, isDynamic } = resolveTheorycraftSpellDescription(spell, baseStats, 1)
+    expect(isDynamic).toBe(true)
+    expect(html).toContain('45')
+    expect(html).toContain('13')
+    expect(html).toContain('0')
+    expect(html).not.toContain('60% AP')
+    expect(html).not.toContain('65% AD')
+    expect(html).not.toMatch(/\(\+\s*\)/)
+    expect(html).not.toMatch(/\{\{/)
+  })
+
+  it('omits ratio percent when live stat scaling is available', () => {
+    const spell = {
+      tooltipRaw:
+        'Inflige <magicDamage>{{ damage }} pts de dégâts magiques supplémentaires</magicDamage>.',
+      maxRank: 5,
+      calculations: [
+        {
+          key: 'damage',
+          baseValues: [35, 47, 71, 107, 167],
+          ratios: [
+            { stat: 'bonusAD', coefficient: 0.6, type: 'physical' },
+            { stat: 'AP', coefficient: 0.55, type: 'magic' },
+          ],
+        },
+      ],
+      dataValues: [],
       spellEffects: [],
     }
 
     const stats: TheorycraftBuildStats = {
       ...baseStats,
-      totalAD: 200,
-      critDamage: 1.75,
+      bonusAD: 10.8,
+      AP: 0,
     }
 
-    const details = resolveTheorycraftSpellDetailRaws(spell, stats, 1, {
-      definition: {
-        id: 'NasusQ',
-        scope: 'spell',
-        spellSlot: 'Q',
-        label: 'Q',
-        statBonuses: [],
-        tooltipVars: [],
-        damageBonuses: [{ targetKey: 'totaldamage', perStackKey: 'basicstacks' }],
-      },
-      stackCount: 100,
-      calculationsBySource: {
-        NasusQ: [
-          { key: 'basicstacks', baseValues: [3, 3, 3, 3, 3], ratios: [] },
-          {
-            key: 'totaldamage',
-            baseValues: [40, 60, 80, 100, 120],
-            ratios: [{ stat: 'totalAD', coefficient: 1, type: 'physical' }],
-          },
-        ],
-      },
-    })
+    const { html, isDynamic } = resolveTheorycraftSpellDescription(spell, stats, 5)
+    expect(isDynamic).toBe(true)
+    expect(html).toContain('167')
+    expect(html).toContain('6.48')
+    expect(html).toContain('0')
+    expect(html).not.toContain('55% AP')
+    expect(html).not.toContain('60% AD')
+    expect(html).not.toMatch(/60% AD.*6\.48|6\.48.*60% AD/)
+  })
 
-    expect(details).toHaveLength(1)
-    // (40 + 200 + 300 stacks) * 1.75 = 945
-    expect(details[0]).toContain('945')
-    expect(details[0]).not.toMatch(/\{\{/)
+  it('appends percent suffix for displayAsPercent calculations like Aatrox passive', () => {
+    const spell = {
+      tooltipRaw:
+        "Les attaques d'Aatrox infligent <magicDamage>{{ PDamage }} des PV max en dégâts magiques</magicDamage> supplémentaires.",
+      maxRank: 18,
+      calculations: [
+        {
+          key: 'PDamage',
+          baseValues: [4, 5.41, 6.82, 8.24, 9.65],
+          ratios: [],
+          displayAsPercent: true,
+        },
+      ],
+      dataValues: [],
+      spellEffects: [],
+    }
+
+    const { html, isDynamic } = resolveTheorycraftSpellDescription(spell, baseStats, 5)
+    expect(isDynamic).toBe(true)
+    expect(html).toContain('9.65%')
+    expect(html).toContain('des PV max')
+    expect(html).not.toMatch(/9\.65(?![%]) des PV max/)
+  })
+
+  it('appends Aatrox Q recast damage from QRampBonus', () => {
+    const spell = {
+      tooltipRaw:
+        'Aatrox abat son épée, infligeant <physicalDamage>{{ qdamage }} pts de dégâts physiques</physicalDamage>. Cette compétence peut être <recast>réactivée</recast> deux fois.',
+      maxRank: 5,
+      calculations: [
+        {
+          key: 'QDamage',
+          baseValues: [10, 25, 40, 55, 70],
+          ratios: [{ stat: 'totalAD', coefficient: 0.9, type: 'physical' }],
+        },
+        {
+          key: 'QEdgeDamage',
+          baseValues: [17, 42.5, 68, 93.5, 119],
+          ratios: [],
+        },
+      ],
+      dataValues: [{ name: 'QRampBonus', values: [0.25, 0.25, 0.25, 0.25, 0.25] }],
+      spellEffects: [],
+    }
+
+    const { html, isDynamic } = resolveTheorycraftSpellDescription(spell, baseStats, 5)
+    expect(isDynamic).toBe(true)
+    expect(html).toContain('70')
+    expect(html).toContain('2e coup')
+    expect(html).toContain('3e coup')
+    expect(html).toContain('166.25')
+    expect(html).toContain('207.81')
+  })
+
+  it('filters duplicate supplemental tooltip sections', () => {
+    const main =
+      'Aatrox abat son épée, infligeant 70 pts de dégâts physiques. Cette compétence peut être réactivée deux fois.'
+    const duplicate =
+      'Aatrox abat son épée devant lui, infligeant 70 pts de dégâts physiques. Cette compétence peut être relancée 2 fois de plus.'
+    const unique = '<span class="tooltip-rules">Inflige 55 pts de dégâts aux sbires.</span>'
+
+    expect(filterSupplementalTooltipSections(main, [duplicate, unique])).toEqual([unique])
+    expect(shouldShowSupplementalTooltipSummary('Résumé court', main)).toBe(true)
+    expect(
+      shouldShowSupplementalTooltipSummary(
+        'Aatrox abat son épée, infligeant 70 pts de dégâts physiques.',
+        main
+      )
+    ).toBe(false)
   })
 
   it('resolves Nasus R storm detail with AP scaling and Q CDR', () => {
@@ -208,7 +288,7 @@ describe('useTheorycraftTooltip', () => {
     const details = resolveTheorycraftSpellDetailRaws(spell, stats, 1)
     expect(details).toHaveLength(1)
     expect(details[0]).toContain('0.06')
-    expect(details[0]).toContain('0.01% AP')
+    expect(details[0]).not.toContain('0.01% AP')
     expect(details[0]).toContain('50')
     expect(details[0]).not.toMatch(/\{\{/)
   })

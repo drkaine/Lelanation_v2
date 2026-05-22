@@ -28,6 +28,9 @@ type PlayerRow = {
 const riotClient = new RiotClient();
 const PATCH_SWITCH_GRACE_DAYS = 2;
 const QUEUED_MATCH_TTL_SEC = 86_400;
+/** Max matchs enfilés par joueur par cycle — évite monopolisation discovery/hydration. */
+const MAX_MATCHES_PER_PLAYER_PER_TICK = 20;
+const RIOT_MATCHLIST_PAGE_SIZE = 20;
 
 function queuedMatchKey(matchId: string): string {
   return `rl:queued:${matchId}`;
@@ -137,6 +140,56 @@ async function getNextPlayer(): Promise<PlayerRow | null> {
   return rows[0] ?? null;
 }
 
+async function resolveMatchGameStartEpoch(matchId: string, region: string): Promise<number | null> {
+  try {
+    const match = await riotClient.getMatch(matchId, region);
+    const gameStartMs =
+      Number(match.info.gameStartTimestamp ?? 0) ||
+      Number(match.info.gameCreation ?? 0);
+    if (!Number.isFinite(gameStartMs) || gameStartMs <= 0) {
+      return null;
+    }
+    return Math.floor(gameStartMs / 1000);
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        msg: "discovery_match_timestamp_failed",
+        matchId,
+        region,
+        reason: error instanceof Error ? error.message : String(error),
+      }),
+    );
+    return null;
+  }
+}
+
+async function resolveLastSeenUpdate(
+  matchIds: string[],
+  newMatchIds: string[],
+  toQueue: string[],
+  skipped: number,
+  region: string,
+): Promise<Date | null> {
+  if (toQueue.length > 0) {
+    const mightHaveMorePages = matchIds.length >= RIOT_MATCHLIST_PAGE_SIZE;
+    if (skipped > 0 || mightHaveMorePages) {
+      const lastQueuedMatchId = toQueue[toQueue.length - 1]!;
+      const gameStartSec = await resolveMatchGameStartEpoch(lastQueuedMatchId, region);
+      if (gameStartSec != null) {
+        return new Date(gameStartSec * 1000);
+      }
+      return null;
+    }
+    return new Date();
+  }
+
+  if (newMatchIds.length === 0) {
+    return new Date();
+  }
+
+  return null;
+}
+
 async function processDiscoveryPlayer(
   player: PlayerRow,
   patchWindow: { startTimeSec: number },
@@ -151,41 +204,62 @@ async function processDiscoveryPlayer(
   await waitForDiscoverySlot();
   const matchIds = await riotClient.getMatchIds(player.puuid, player.region, { startTime });
 
-  await sql.begin(async (tx) => {
-    const knownRows =
-      matchIds.length > 0
-        ? await tx<{ riot_match_id: string }[]>`
-            SELECT riot_match_id
-            FROM processed_matches
-            WHERE riot_match_id = ANY(${tx.array(matchIds, 25)})
-          `
-        : [];
+  const knownRows =
+    matchIds.length > 0
+      ? await sql<{ riot_match_id: string }[]>`
+          SELECT riot_match_id
+          FROM processed_matches
+          WHERE riot_match_id = ANY(${sql.array(matchIds, 25)})
+        `
+      : [];
 
-    const knownIds = new Set(knownRows.map((row) => row.riot_match_id));
-    const newMatchIds = matchIds.filter((matchId) => !knownIds.has(matchId));
-    const toEnqueue = await filterMatchIdsNotAlreadyQueued(newMatchIds);
+  const knownIds = new Set(knownRows.map((row) => row.riot_match_id));
+  const newMatchIds = matchIds.filter((matchId) => !knownIds.has(matchId));
+  const notQueued = await filterMatchIdsNotAlreadyQueued(newMatchIds);
+  const toQueue = notQueued.slice(0, MAX_MATCHES_PER_PLAYER_PER_TICK);
+  const skipped = notQueued.length - toQueue.length;
 
-    pollerV2Observability.recordDiscoveryMatches(matchIds.length, toEnqueue.length);
+  pollerV2Observability.recordDiscoveryMatches(matchIds.length, toQueue.length);
 
-    if (toEnqueue.length > 0) {
-      await markMatchIdsQueued(toEnqueue);
-      for (const matchId of toEnqueue) {
-        const enqueued = await enqueueHydrationMatchIfAbsent(matchId, player.region, player.puuid);
-        if (enqueued) {
-          pollerV2Observability.recordMatchQueuedForPipeline(matchId);
-        }
+  if (skipped > 0) {
+    console.log(
+      JSON.stringify({
+        msg: "discovery_player_capped",
+        puuid: player.puuid,
+        totalNew: notQueued.length,
+        queued: toQueue.length,
+        skipped,
+      }),
+    );
+  }
+
+  if (toQueue.length > 0) {
+    await markMatchIdsQueued(toQueue);
+    for (const matchId of toQueue) {
+      const enqueued = await enqueueHydrationMatchIfAbsent(matchId, player.region, player.puuid);
+      if (enqueued) {
+        pollerV2Observability.recordMatchQueuedForPipeline(matchId);
       }
     }
+  }
 
-    await tx`
+  const lastSeenUpdate = await resolveLastSeenUpdate(
+    matchIds,
+    newMatchIds,
+    toQueue,
+    skipped,
+    player.region,
+  );
+  if (lastSeenUpdate) {
+    await sql`
       UPDATE players
       SET
-        last_seen = NOW(),
+        last_seen = ${lastSeenUpdate},
         puuid_key_version = ${config.PLAYER_KEY_VERSION}
       WHERE puuid = ${player.puuid}
     `;
     pollerV2Observability.recordPlayersUpdated(1);
-  });
+  }
 }
 
 async function runDiscoveryCycle(): Promise<void> {

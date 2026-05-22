@@ -274,6 +274,7 @@
       "empty": "Select a champion and complete the build to see stats.",
       "health": "HP",
       "mana": "Mana",
+      "energy": "Energy",
       "attackDamage": "AD",
       "abilityPower": "AP",
       "armor": "Armor",

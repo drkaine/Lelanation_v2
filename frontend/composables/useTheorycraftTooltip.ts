@@ -15,6 +15,7 @@ export interface TheorycraftSpellCalculation {
     coefficient: number[] | number
     type?: string
   }>
+  displayAsPercent?: boolean
 }
 
 export interface TheorycraftSpellRuntimeData {
@@ -104,6 +105,141 @@ function statValue(stats: TheorycraftBuildStats, key: string): number {
   return Number.isFinite(value) ? Number(value) : 0
 }
 
+function isAdStat(stat: string): boolean {
+  const normalized = stat.toLowerCase().replace(/[^a-z0-9]/g, '')
+  return normalized === 'totalad' || normalized === 'bonusad' || normalized === 'attackdamage'
+}
+
+function isApStat(stat: string): boolean {
+  const normalized = stat.toLowerCase().replace(/[^a-z0-9]/g, '')
+  return normalized === 'ap' || normalized === 'abilitypower' || normalized === 'spelldamage'
+}
+
+function formatRatioComponentValue(
+  ratio: { stat: string; coefficient: number[] | number },
+  rankIndex: number,
+  stats: TheorycraftBuildStats,
+  useLiveBuildStats = false
+): string {
+  const coeff = ratioAtRank(ratio.coefficient, rankIndex)
+  if (coeff === 0) return ''
+  const amount = statValue(stats, ratio.stat) * coeff
+  if (useLiveBuildStats || amount > 0) return formatResolvedNumber(amount)
+  const pct = formatResolvedNumber(coeff * 100)
+  return `${pct}% ${ratioStatDisplayLabel(ratio.stat)}`
+}
+
+function findPrimaryDamageCalculation(
+  calculations: TheorycraftSpellCalculation[]
+): TheorycraftSpellCalculation | undefined {
+  const preferred = ['damage', 'totaldamage', 'cast1damage', 'e1damage']
+  for (const key of preferred) {
+    const found = calculations.find(entry => entry.key.toLowerCase() === key)
+    if (found) return found
+  }
+  return calculations.find(entry => (entry.ratios?.length ?? 0) > 0)
+}
+
+function findExtraDamageCalculation(
+  calculations: TheorycraftSpellCalculation[]
+): TheorycraftSpellCalculation | undefined {
+  const preferred = ['miniondamage', 'bonusminiondamage']
+  for (const key of preferred) {
+    const found = calculations.find(entry => entry.key.toLowerCase() === key)
+    if (found) return found
+  }
+  return undefined
+}
+
+function valueFromDataValues(
+  dataValues: Array<{ name: string; values: number[] }> | undefined,
+  name: string,
+  rankIndex: number
+): number | null {
+  const entry = dataValues?.find(item => item.name.toLowerCase() === name.toLowerCase())
+  return entry ? valueAtRank(entry.values, rankIndex) : null
+}
+
+function applySplitDamageComponentAliases(
+  setVar: (key: string, value: string) => void,
+  calculations: TheorycraftSpellCalculation[],
+  stats: TheorycraftBuildStats,
+  rankIndex: number,
+  dataValues?: Array<{ name: string; values: number[] }>,
+  useLiveBuildStats = false
+): void {
+  const applyFromCalculation = (
+    calculation: TheorycraftSpellCalculation | undefined,
+    suffix: '' | 'extra'
+  ) => {
+    if (!calculation) return
+    for (const ratio of calculation.ratios ?? []) {
+      const key =
+        suffix === 'extra'
+          ? isAdStat(ratio.stat)
+            ? 'addamageextra'
+            : isApStat(ratio.stat)
+              ? 'apdamageextra'
+              : null
+          : isAdStat(ratio.stat)
+            ? 'addamage'
+            : isApStat(ratio.stat)
+              ? 'apdamage'
+              : null
+      if (!key) continue
+      const rendered = formatRatioComponentValue(ratio, rankIndex, stats, useLiveBuildStats)
+      if (rendered) setVar(key, rendered)
+    }
+  }
+
+  applyFromCalculation(findPrimaryDamageCalculation(calculations), '')
+  applyFromCalculation(findExtraDamageCalculation(calculations), 'extra')
+
+  const adRatioValue =
+    valueFromDataValues(dataValues, 'tadratio', rankIndex) ??
+    valueFromDataValues(dataValues, 'totaladratio', rankIndex) ??
+    valueFromDataValues(dataValues, 'passivebadratio', rankIndex)
+  if (adRatioValue != null && adRatioValue > 0) {
+    const adStat =
+      valueFromDataValues(dataValues, 'totaladratio', rankIndex) != null ? 'totalAD' : 'bonusAD'
+    const rendered = formatRatioComponentValue(
+      { stat: adStat, coefficient: adRatioValue },
+      rankIndex,
+      stats,
+      useLiveBuildStats
+    )
+    if (rendered) setVar('addamage', rendered)
+  }
+
+  const apRatioValue =
+    valueFromDataValues(dataValues, 'apratio', rankIndex) ??
+    valueFromDataValues(dataValues, 'totalapratio', rankIndex) ??
+    valueFromDataValues(dataValues, 'passiveapratio', rankIndex)
+  if (apRatioValue != null && apRatioValue > 0) {
+    const rendered = formatRatioComponentValue(
+      { stat: 'AP', coefficient: apRatioValue },
+      rankIndex,
+      stats,
+      useLiveBuildStats
+    )
+    if (rendered) setVar('apdamage', rendered)
+  }
+
+  const baseDamage = valueFromDataValues(dataValues, 'basedamage', rankIndex)
+  if (baseDamage != null) {
+    setVar('basedamage1', formatResolvedNumber(baseDamage))
+  }
+
+  const passiveSpeed = calculations.find(entry => entry.key.toLowerCase() === 'passivespeedbonus')
+  if (passiveSpeed) {
+    const base = valueAtRank(passiveSpeed.baseValues, rankIndex)
+    if (base != null) {
+      const pct = Math.abs(base) <= 1 ? base * 100 : base
+      setVar('passivespeedbonus', `${formatResolvedNumber(pct)}%`)
+    }
+  }
+}
+
 function applyScalingTooltipAliases(
   setVar: (key: string, value: string) => void,
   calculations: TheorycraftSpellCalculation[],
@@ -186,18 +322,22 @@ function formatRatioPercentSuffix(
 function formatRatioSuffix(
   ratio: { stat: string; coefficient: number[] | number },
   rankIndex: number,
-  stats: TheorycraftBuildStats
+  stats: TheorycraftBuildStats,
+  useLiveBuildStats = false
 ): string {
-  const percentPart = formatRatioPercentSuffix(ratio, rankIndex)
-  if (!percentPart) return ''
-
   const coeff = ratioAtRank(ratio.coefficient, rankIndex)
+  if (coeff === 0) return ''
+
   const statAmount = statValue(stats, ratio.stat) * coeff
-  if (statAmount <= 0) {
-    return `<span class="tooltip-tag ${ratioScaleClass(ratio.stat)}">${percentPart}</span>`
+  const scaleClass = ratioScaleClass(ratio.stat)
+
+  if (useLiveBuildStats || statAmount > 0) {
+    return `<span class="tooltip-tag ${scaleClass}">(+ ${formatResolvedNumber(statAmount)})</span>`
   }
 
-  return `<span class="tooltip-tag ${ratioScaleClass(ratio.stat)}">${percentPart} (+ ${formatResolvedNumber(statAmount)})</span>`
+  const percentPart = formatRatioPercentSuffix(ratio, rankIndex)
+  if (!percentPart) return ''
+  return `<span class="tooltip-tag ${scaleClass}">${percentPart}</span>`
 }
 
 function computeCalculationValue(
@@ -232,6 +372,32 @@ function isPercentLikeCalculation(calculation: TheorycraftSpellCalculation): boo
   return Number.isFinite(base) && Math.abs(base) > 0 && Math.abs(base) < 1
 }
 
+function calculationShouldDisplayWithPercentSuffix(
+  calculation: TheorycraftSpellCalculation
+): boolean {
+  if (calculation.displayAsPercent === true) return true
+  if (calculation.displayAsPercent === false) return false
+
+  const key = calculation.key.toLowerCase()
+  if (key.includes('damagecalc') || key.includes('manacalc')) return false
+  if (/passivemanacalctooltip|manacalctooltip/.test(key)) return true
+  if (
+    /attackspeed|attack speed|msbuff|movementspeed|percentms|slowpercent|percenthp|percentmax|percent/.test(
+      key
+    )
+  ) {
+    return true
+  }
+  if (/^pdamage$/i.test(key)) return true
+  return false
+}
+
+function withPercentSuffix(text: string): string {
+  const trimmed = String(text ?? '').trim()
+  if (!trimmed || trimmed.endsWith('%')) return trimmed
+  return `${trimmed}%`
+}
+
 function formatCalculationRenderedValue(
   calculation: TheorycraftSpellCalculation,
   rankIndex: number,
@@ -240,7 +406,8 @@ function formatCalculationRenderedValue(
   rank: number,
   maxRank: number,
   allCalculations: TheorycraftSpellCalculation[],
-  stackContext?: TheorycraftStackResolveContext | null
+  stackContext?: TheorycraftStackResolveContext | null,
+  useLiveBuildStats = false
 ): string {
   const key = calculation.key.toLowerCase()
   if (key === 'critdamage') {
@@ -256,12 +423,19 @@ function formatCalculationRenderedValue(
   }
 
   const ratioSuffix = calculation.ratios
-    .map(ratio => formatRatioSuffix(ratio, rankIndex, stats))
+    .map(ratio => formatRatioSuffix(ratio, rankIndex, stats, useLiveBuildStats))
     .filter(Boolean)
     .join(' ')
   const base = calculation.baseValues[rankIndex]
   const hasBase = Number.isFinite(base)
   const computed = computeCalculationValue(calculation, stats, rank, maxRank) + stackBonus
+
+  if (calculationShouldDisplayWithPercentSuffix(calculation)) {
+    const totalText = formatResolvedNumber(computed)
+    if (ratioSuffix) return `${withPercentSuffix(totalText)} ${ratioSuffix}`.trim()
+    if (hasBase) return withPercentSuffix(formatResolvedNumber(base! + stackBonus))
+    return withPercentSuffix(totalText)
+  }
 
   if (isPercentLikeCalculation(calculation)) {
     const totalText = formatResolvedNumber(computed)
@@ -283,11 +457,128 @@ function formatCalculationRenderedValue(
   return formatResolvedNumber(computed)
 }
 
+function applyRecastRampDamageAliases(
+  setVar: (key: string, value: string) => void,
+  spell: TheorycraftSpellRuntimeData,
+  calculations: TheorycraftSpellCalculation[],
+  stats: TheorycraftBuildStats,
+  rank: number,
+  rankIndex: number,
+  maxRank: number,
+  stackContext?: TheorycraftStackResolveContext | null
+): void {
+  const rampRaw = valueFromDataValues(spell.dataValues, 'qrampbonus', rankIndex)
+  if (rampRaw == null || rampRaw <= 0) return
+
+  const setRamped = (calcKey: string, outKey: string, hitIndex: 2 | 3) => {
+    const calculation = calculations.find(entry => entry.key.toLowerCase() === calcKey)
+    if (!calculation) return
+    const stackBonus = stackDamageBonusForCalculation(calculation.key, stackContext, rankIndex)
+    const total = computeCalculationValue(calculation, stats, rank, maxRank) + stackBonus
+    const multiplier = (1 + rampRaw) ** (hitIndex - 1)
+    setVar(outKey, formatResolvedNumber(total * multiplier))
+  }
+
+  setRamped('qdamage', 'qdamage2', 2)
+  setRamped('qdamage', 'qdamage3', 3)
+  setRamped('qedgedamage', 'qedgedamage2', 2)
+  setRamped('qedgedamage', 'qedgedamage3', 3)
+}
+
+function appendRecastRampDamageNote(html: string, vars: Map<string, string>): string {
+  const secondHit = vars.get('qdamage2')
+  const thirdHit = vars.get('qdamage3')
+  if (!secondHit || !thirdHit) return html
+  if (html.includes(secondHit) && html.includes(thirdHit)) return html
+  if (!/r[eé]activ/i.test(html) && !/recast/i.test(html)) return html
+
+  const edgeSecond = vars.get('qedgedamage2')
+  const edgeThird = vars.get('qedgedamage3')
+
+  let extra = `<br /><br />2e coup : <physicalDamage>${secondHit}</physicalDamage> pts de dégâts physiques`
+  if (edgeSecond) {
+    extra += ` (tranchant : <physicalDamage>${edgeSecond}</physicalDamage>)`
+  }
+  extra += `<br />3e coup : <physicalDamage>${thirdHit}</physicalDamage> pts de dégâts physiques`
+  if (edgeThird) {
+    extra += ` (tranchant : <physicalDamage>${edgeThird}</physicalDamage>)`
+  }
+  return html + extra
+}
+
+function normalizeTooltipPlainForCompare(html: string): string {
+  return String(html ?? '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+}
+
+function isSupplementalTooltipDuplicate(mainHtml: string, sectionHtml: string): boolean {
+  const mainPlain = normalizeTooltipPlainForCompare(mainHtml)
+  const sectionPlain = normalizeTooltipPlainForCompare(sectionHtml)
+  if (!sectionPlain) return true
+  if (!mainPlain) return false
+  if (sectionPlain === mainPlain) return true
+  if (mainPlain.includes(sectionPlain)) return true
+  if (sectionPlain.includes(mainPlain) && mainPlain.length > 80) return true
+
+  const stripDigits = (value: string) =>
+    value
+      .replace(/\d+(?:[.,]\d+)?/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+  const mainCompare = stripDigits(mainPlain)
+  const sectionCompare = stripDigits(sectionPlain)
+  const prefixLen = Math.min(90, mainCompare.length, sectionCompare.length)
+  if (prefixLen >= 50 && mainCompare.slice(0, prefixLen) === sectionCompare.slice(0, prefixLen)) {
+    return true
+  }
+
+  const sharedOpening = 18
+  if (
+    mainPlain.length > 80 &&
+    sectionPlain.length > 80 &&
+    mainPlain.slice(0, sharedOpening) === sectionPlain.slice(0, sharedOpening) &&
+    (/r[eé]activ/i.test(mainPlain) || /recast/i.test(mainPlain)) &&
+    (/r[eé]activ/i.test(sectionPlain) ||
+      /recast/i.test(sectionPlain) ||
+      /relanc/i.test(sectionPlain))
+  ) {
+    return true
+  }
+
+  return false
+}
+
+export function filterSupplementalTooltipSections(mainHtml: string, sections: string[]): string[] {
+  const seen = new Set<string>()
+  return sections.filter(section => {
+    const plain = normalizeTooltipPlainForCompare(section)
+    if (!plain || seen.has(plain)) return false
+    if (isSupplementalTooltipDuplicate(mainHtml, section)) return false
+    seen.add(plain)
+    return true
+  })
+}
+
+export function shouldShowSupplementalTooltipSummary(
+  summaryHtml?: string | null,
+  descriptionHtml?: string | null
+): boolean {
+  const summary = String(summaryHtml ?? '').trim()
+  if (!summary) return false
+  const description = String(descriptionHtml ?? '').trim()
+  if (!description) return true
+  return !isSupplementalTooltipDuplicate(description, summary)
+}
+
 function buildRuntimeVariableMap(
   spell: TheorycraftSpellRuntimeData,
   stats: TheorycraftBuildStats,
   rank: number,
-  stackContext?: TheorycraftStackResolveContext | null
+  stackContext?: TheorycraftStackResolveContext | null,
+  useLiveBuildStats = false
 ): Map<string, string> {
   const maxRank = Math.max(1, spell.maxRank ?? 5)
   const rankIndex = Math.min(Math.max(rank - 1, 0), maxRank - 1)
@@ -326,12 +617,31 @@ function buildRuntimeVariableMap(
       rank,
       maxRank,
       calculations,
-      stackContext
+      stackContext,
+      useLiveBuildStats
     )
     setVar(calculation.key, rendered)
   }
 
   applyScalingTooltipAliases(setVar, calculations, stats, rankIndex)
+  applySplitDamageComponentAliases(
+    setVar,
+    calculations,
+    stats,
+    rankIndex,
+    spell.dataValues,
+    useLiveBuildStats
+  )
+  applyRecastRampDamageAliases(
+    setVar,
+    spell,
+    calculations,
+    stats,
+    rank,
+    rankIndex,
+    maxRank,
+    stackContext
+  )
 
   if (stackContext && stackContext.stackCount > 0) {
     const calculations = resolveStackCalculations(
@@ -456,12 +766,13 @@ export function resolveTheorycraftTooltipHtml(
   stats: TheorycraftBuildStats,
   rank: number,
   rawTemplate?: string,
-  stackContext?: TheorycraftStackResolveContext | null
+  stackContext?: TheorycraftStackResolveContext | null,
+  useLiveBuildStats = false
 ): string | null {
   const template = String(rawTemplate ?? spell.tooltipRaw ?? '').trim()
   if (!template) return null
 
-  const vars = buildRuntimeVariableMap(spell, stats, rank, stackContext)
+  const vars = buildRuntimeVariableMap(spell, stats, rank, stackContext, useLiveBuildStats)
   let parsed = template.replace(/<\s*br\s*\/?>/gi, '___TOOLTIP_BR___')
 
   parsed = parsed.replace(/\{\{\s*([^}]+)\s*\}\}/g, (_match, expression: string) => {
@@ -478,7 +789,8 @@ export function resolveTheorycraftTooltipHtml(
   })
 
   parsed = parsed.replace(/___TOOLTIP_BR___/g, '<br />')
-  return formatTooltipMarkupHtml(parsed)
+  const formatted = formatTooltipMarkupHtml(parsed)
+  return appendRecastRampDamageNote(formatted, vars)
 }
 
 export function resolveTheorycraftSpellDetailRaws(
@@ -502,8 +814,19 @@ export function resolveTheorycraftSpellDetailRaws(
     cooldownReduction: 0,
   }
 
+  const useLiveBuildStats = stats != null
+
   return (spell.tooltipDetailRaws ?? [])
-    .map(raw => resolveTheorycraftTooltipHtml(spell, statsForResolve, rank, raw, stackContext))
+    .map(raw =>
+      resolveTheorycraftTooltipHtml(
+        spell,
+        statsForResolve,
+        rank,
+        raw,
+        stackContext,
+        useLiveBuildStats
+      )
+    )
     .filter((html): html is string => Boolean(html))
 }
 
@@ -530,12 +853,14 @@ export function resolveTheorycraftSpellDescription(
   }
 
   if (spell.tooltipRaw) {
+    const useLiveBuildStats = stats != null
     const dynamic = resolveTheorycraftTooltipHtml(
       spell,
       statsForResolve,
       rank,
       undefined,
-      stackContext
+      stackContext,
+      useLiveBuildStats
     )
     if (dynamic) {
       return { html: dynamic, isDynamic: true }

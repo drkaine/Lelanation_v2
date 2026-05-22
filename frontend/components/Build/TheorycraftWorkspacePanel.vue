@@ -3,10 +3,6 @@
     class="theorycraft-workspace rounded-xl bg-surface p-4"
     :class="{ 'theorycraft-workspace--spells': activePanel === 'theorycraft' }"
   >
-    <div v-if="headerTitle" class="mb-4">
-      <h2 class="text-lg font-semibold text-text">{{ headerTitle }}</h2>
-    </div>
-
     <TheorycraftSpellPanel
       v-if="activePanel === 'theorycraft'"
       :champion-id="championId"
@@ -37,7 +33,6 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
 import ChampionSelector from '~/components/Build/ChampionSelector.vue'
 import ItemSelector from '~/components/Build/ItemSelector.vue'
 import RuneSelector from '~/components/Build/RuneSelector.vue'
@@ -46,7 +41,7 @@ import type { TheorycraftBuildStats } from '~/types/theorycraft'
 
 export type TheorycraftPanel = 'champion' | 'items' | 'runes' | 'theorycraft' | null
 
-const props = defineProps<{
+defineProps<{
   activePanel: TheorycraftPanel
   championId: string | null
   championData: Record<string, unknown> | null
@@ -55,25 +50,16 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
-
-const headerTitle = computed(() => {
-  switch (props.activePanel) {
-    case 'theorycraft':
-      return ''
-    case 'champion':
-      return t('theorycraft.panel.champion')
-    case 'items':
-      return t('theorycraft.panel.items')
-    case 'runes':
-      return t('theorycraft.panel.runes')
-    default:
-      return ''
-  }
-})
 </script>
 
 <style scoped>
+.theorycraft-workspace {
+  min-height: 0;
+}
+
 .theorycraft-workspace--spells {
-  padding-top: 0.75rem;
+  padding: 0.5rem 0 0.5rem 0.5rem;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
 }
 </style>

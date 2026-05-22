@@ -116,6 +116,18 @@ type TokenRate10m = {
   tokenRateMax10m: number;
 };
 
+type AdaptiveBudgetObservability = {
+  discovery_alloc: number;
+  hydration_alloc: number;
+  rank_alloc: number;
+  total_req: number;
+  rebalances_last_1h: number;
+  last_rebalance_ago_s: number | null;
+  rank_fills_last_1h: number;
+  last_rank_fill_count: number;
+  last_rank_fill_ago_s: number | null;
+};
+
 type Snapshot = {
   atIso: string;
   startedAtIso: string;
@@ -161,6 +173,7 @@ type Snapshot = {
   discovery_tokens_used_pct: number;
   hydration_tokens_used_pct: number;
   rank_tokens_used_pct: number;
+  adaptive_budget: AdaptiveBudgetObservability | null;
   /** Alias jq spec (`queues.hydration.waiting`). */
   queues: {
     discovery: QueueSlice;
@@ -275,6 +288,7 @@ class PollerV2Observability {
   private baseline1h = cloneTotals(this.totals);
   private last30mSummary: Record<string, unknown> | null = null;
   private last1hSummary: Record<string, unknown> | null = null;
+  private adaptiveBudgetStateProvider: (() => AdaptiveBudgetObservability | null) | null = null;
 
   /** Snapshots tokenUsagePct toutes les 30 s (max 20 = 10 min). */
   private readonly rateHistory: number[] = [];
@@ -581,6 +595,21 @@ class PollerV2Observability {
 
   incDiscoveryCycle(): void {
     this.totals.discoveryCycles += 1;
+  }
+
+  setAdaptiveBudgetStateProvider(
+    provider: (() => AdaptiveBudgetObservability | null) | null,
+  ): void {
+    this.adaptiveBudgetStateProvider = provider;
+  }
+
+  getRollingTokenUsage(): {
+    reqTotal: number;
+    discovery: number;
+    hydration: number;
+    rank: number;
+  } {
+    return this.rolling120sTokenUsage();
   }
 
   incDiscoveryNoPlayerCycle(): void {
@@ -915,6 +944,7 @@ class PollerV2Observability {
       rankLeagueFetchesPending: rankQueue.rankLeagueFetchesPending,
       rankWorkerConcurrency: rankQueue.rankWorkerConcurrency,
       ...diagnostics,
+      adaptive_budget: this.adaptiveBudgetStateProvider?.() ?? null,
       queues: {
         discovery: queue.discovery,
         hydration: queue.hydration,

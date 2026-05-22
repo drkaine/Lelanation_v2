@@ -16,10 +16,6 @@
     </div>
 
     <template v-else>
-      <p v-if="buildStats" class="text-muted text-xs">
-        AD {{ formatStat(buildStats.totalAD) }} · AP {{ formatStat(buildStats.AP) }}
-      </p>
-
       <p
         v-if="!passive && spells.length === 0"
         class="border-border/60 text-muted rounded-lg border p-3 text-sm"
@@ -27,15 +23,25 @@
         {{ t('theorycraft.spells.noSpells') }}
       </p>
 
-      <div v-if="passive" class="border-border/60 rounded-lg border p-3">
-        <div class="spell-entry-row flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span
-            class="inline-flex h-3.5 min-w-[14px] items-center justify-center rounded bg-accent/20 px-1 text-[9px] font-bold leading-none text-accent"
-          >
-            {{ t('theorycraft.spells.passive') }}
+      <details v-if="passive" class="border-border/60 group rounded-lg border p-1.5" open>
+        <summary
+          class="spell-entry-row flex cursor-pointer list-none flex-wrap items-center gap-x-2 gap-y-1 marker:content-none"
+        >
+          <span class="text-muted shrink-0 text-[10px] leading-none" aria-hidden="true">
+            <span class="group-open:hidden">▶</span>
+            <span class="hidden group-open:inline">▼</span>
           </span>
+          <div v-if="passive.imageUrl" class="theorycraft-spell-icon shrink-0">
+            <img
+              :src="passive.imageUrl"
+              :alt="passive.name"
+              class="theorycraft-spell-icon__img"
+              loading="lazy"
+            />
+            <span class="theorycraft-spell-icon__key">P</span>
+          </div>
           <h3 class="text-sm font-semibold leading-tight text-text">{{ passive.name }}</h3>
-        </div>
+        </summary>
 
         <div v-if="passiveStackDefinition" class="mt-2 flex flex-wrap items-center gap-2 text-xs">
           <label class="text-muted flex items-center gap-1.5">
@@ -52,45 +58,49 @@
         </div>
 
         <!-- eslint-disable vue/no-v-html -->
-        <details class="group mt-2" open>
-          <summary
-            class="text-muted mb-2 cursor-pointer list-none text-sm font-semibold marker:content-none"
-          >
-            <span class="group-open:hidden">{{ t('theorycraft.spells.showDescription') }}</span>
-            <span class="hidden group-open:inline">{{
-              t('theorycraft.spells.hideDescription')
-            }}</span>
-          </summary>
+        <div
+          v-if="passive.summaryHtml && passive.showSummary"
+          class="tooltip-spell-description tooltip-game-description text-muted mb-2 mt-2 text-sm"
+          v-html="passive.summaryHtml"
+        />
 
-          <div
-            v-if="passive.summaryHtml"
-            class="tooltip-spell-description tooltip-game-description text-muted mb-2 text-sm"
-            v-html="passive.summaryHtml"
-          />
+        <div
+          v-if="passive.descriptionHtml"
+          class="tooltip-spell-description tooltip-game-description text-sm"
+          v-html="passive.descriptionHtml"
+        />
 
-          <div
-            v-if="passive.descriptionHtml"
-            class="tooltip-spell-description tooltip-game-description text-sm"
-            v-html="passive.descriptionHtml"
-          />
-
-          <div
-            v-for="(detail, index) in passive.detailedTexts ?? []"
-            :key="`passive-detail-${index}`"
-            class="tooltip-spell-description tooltip-game-description border-border/40 mt-3 border-t pt-3 text-sm"
-            v-html="detail"
-          />
-        </details>
+        <div
+          v-for="(detail, index) in passive.detailedTexts ?? []"
+          :key="`passive-detail-${index}`"
+          class="tooltip-spell-description tooltip-game-description border-border/40 mt-2 border-t pt-1.5 text-sm"
+          v-html="detail"
+        />
         <!-- eslint-enable vue/no-v-html -->
-      </div>
+      </details>
 
-      <div v-for="spell in spells" :key="spell.id" class="border-border/60 rounded-lg border p-3">
-        <div class="spell-entry-row flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span
-            class="inline-flex h-3.5 min-w-[14px] items-center justify-center rounded bg-accent/20 px-1 text-[9px] font-bold leading-none text-accent"
-          >
-            {{ spell.slot }}
+      <details
+        v-for="spell in spells"
+        :key="spell.id"
+        class="border-border/60 group rounded-lg border p-1.5"
+        open
+      >
+        <summary
+          class="spell-entry-row flex cursor-pointer list-none flex-wrap items-center gap-x-2 gap-y-1 marker:content-none"
+        >
+          <span class="text-muted shrink-0 text-[10px] leading-none" aria-hidden="true">
+            <span class="group-open:hidden">▶</span>
+            <span class="hidden group-open:inline">▼</span>
           </span>
+          <div v-if="spell.imageUrl" class="theorycraft-spell-icon shrink-0">
+            <img
+              :src="spell.imageUrl"
+              :alt="spell.name"
+              class="theorycraft-spell-icon__img"
+              loading="lazy"
+            />
+            <span class="theorycraft-spell-icon__key">{{ displaySpellSlot(spell.slot) }}</span>
+          </div>
           <h3 class="text-sm font-semibold leading-tight text-text">{{ spell.name }}</h3>
           <span
             v-if="!spell.isDynamic"
@@ -98,7 +108,7 @@
           >
             {{ t('theorycraft.spells.approximateValues') }}
           </span>
-          <div class="spell-rank-buttons ml-auto flex items-center gap-0.5">
+          <div class="spell-rank-buttons ml-auto flex items-center gap-0.5" @click.stop>
             <button
               v-for="rank in spell.maxRank"
               :key="`${spell.id}-rank-${rank}`"
@@ -114,7 +124,7 @@
               {{ rank }}
             </button>
           </div>
-        </div>
+        </summary>
 
         <div
           v-if="stackDefinitionForSpell(spell.id, spell.slot)"
@@ -136,12 +146,12 @@
         <!-- eslint-disable vue/no-v-html -->
         <dl
           v-if="spell.headerStats?.length"
-          class="spell-header-stats mb-3 mt-2 grid gap-1 text-xs sm:grid-cols-2"
+          class="spell-header-stats mb-2 mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs"
         >
           <div
             v-for="stat in spell.headerStats"
             :key="stat.key"
-            class="spell-header-stats__row flex gap-2"
+            class="spell-header-stats__row inline-flex items-baseline gap-1 whitespace-nowrap"
           >
             <dt class="spell-header-stats__label shrink-0 font-semibold uppercase tracking-wide">
               {{ stat.label }}:
@@ -153,37 +163,26 @@
           </div>
         </dl>
 
-        <details class="group" open>
-          <summary
-            class="text-muted mb-2 cursor-pointer list-none text-sm font-semibold marker:content-none"
-          >
-            <span class="group-open:hidden">{{ t('theorycraft.spells.showDescription') }}</span>
-            <span class="hidden group-open:inline">{{
-              t('theorycraft.spells.hideDescription')
-            }}</span>
-          </summary>
+        <div
+          v-if="spell.summaryHtml && spell.showSummary"
+          class="tooltip-spell-description tooltip-game-description text-muted mb-2 text-sm"
+          v-html="spell.summaryHtml"
+        />
 
-          <div
-            v-if="spell.summaryHtml"
-            class="tooltip-spell-description tooltip-game-description text-muted mb-2 text-sm"
-            v-html="spell.summaryHtml"
-          />
+        <div
+          v-if="spell.descriptionHtml"
+          class="tooltip-spell-description tooltip-game-description text-sm"
+          v-html="spell.descriptionHtml"
+        />
 
-          <div
-            v-if="spell.descriptionHtml"
-            class="tooltip-spell-description tooltip-game-description text-sm"
-            v-html="spell.descriptionHtml"
-          />
-
-          <div
-            v-for="(detail, index) in spell.detailedTexts ?? []"
-            :key="`${spell.id}-detail-${index}`"
-            class="tooltip-spell-description tooltip-game-description border-border/40 mt-3 border-t pt-3 text-sm"
-            v-html="detail"
-          />
-        </details>
+        <div
+          v-for="(detail, index) in spell.detailedTexts ?? []"
+          :key="`${spell.id}-detail-${index}`"
+          class="tooltip-spell-description tooltip-game-description border-border/40 mt-2 border-t pt-1.5 text-sm"
+          v-html="detail"
+        />
         <!-- eslint-enable vue/no-v-html -->
-      </div>
+      </details>
     </template>
   </section>
 </template>
@@ -192,8 +191,10 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useChampionData } from '~/composables/useChampionData'
 import {
+  filterSupplementalTooltipSections,
   resolveTheorycraftSpellDescription,
   resolveTheorycraftSpellDetailRaws,
+  shouldShowSupplementalTooltipSummary,
   type TheorycraftSpellRuntimeData,
   type TheorycraftStackResolveContext,
 } from '~/composables/useTheorycraftTooltip'
@@ -206,6 +207,7 @@ import {
   findStackDefinitionForSource,
   parseStackDefinitions,
 } from '~/utils/theorycraftStacks'
+import { getImageUrl } from '~/utils/imageUrl'
 
 interface SpellHeaderStat {
   key: string
@@ -214,15 +216,31 @@ interface SpellHeaderStat {
   valueHtml?: string
 }
 
+interface SpellImageRef {
+  full?: string
+}
+
 interface ResolvedSpellView {
   id: string
   slot: string
   name: string
   maxRank: number
+  imageUrl?: string
   summaryHtml?: string
+  showSummary: boolean
   descriptionHtml: string
   detailedTexts?: string[]
   headerStats?: SpellHeaderStat[]
+  isDynamic: boolean
+}
+
+interface ResolvedPassiveView {
+  name: string
+  imageUrl?: string
+  summaryHtml?: string
+  showSummary: boolean
+  descriptionHtml: string
+  detailedTexts?: string[]
   isDynamic: boolean
 }
 
@@ -233,7 +251,7 @@ const props = defineProps<{
   buildStats: TheorycraftBuildStats | null
 }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const { loadChampion, error: loadError } = useChampionData()
 const buildStore = useBuildStore()
 
@@ -279,8 +297,59 @@ function buildStackContext(source: {
   }
 }
 
-function formatStat(value: number): string {
-  return Number.isFinite(value) ? String(Math.round(value * 10) / 10) : '0'
+const QWERTY_TO_AZERTY: Record<string, string> = {
+  Q: 'A',
+  W: 'Z',
+  E: 'E',
+  R: 'R',
+}
+
+function displaySpellSlot(slot: string): string {
+  const normalized = String(slot ?? '')
+    .trim()
+    .toUpperCase()
+  if (locale.value === 'fr') {
+    return QWERTY_TO_AZERTY[normalized] ?? normalized
+  }
+  return normalized
+}
+
+function championIdForImages(): string {
+  const champion = props.championData ?? loadedChampion.value
+  return String(props.championId ?? champion?.id ?? '').trim()
+}
+
+function spellImageRef(raw: Record<string, unknown>): SpellImageRef | null {
+  const image = raw.image
+  if (!image || typeof image !== 'object') return null
+  return image as SpellImageRef
+}
+
+function resolveSpellImageUrl(imageFull: string, isPassive = false): string {
+  const filename = String(imageFull ?? '').trim()
+  if (!filename) return ''
+  const subPath = isPassive ? 'passive' : championIdForImages()
+  if (!isPassive && !subPath) return ''
+  return getImageUrl('champion-spell', 'latest', filename, subPath)
+}
+
+function resolvePassiveImageUrl(passiveRaw: Record<string, unknown>): string {
+  const imageFull = String(spellImageRef(passiveRaw)?.full ?? '').trim()
+  if (imageFull) return resolveSpellImageUrl(imageFull, true)
+  const championId = championIdForImages()
+  if (!championId) return ''
+  return resolveSpellImageUrl(`${championId}_P.png`, true)
+}
+
+function resolveAbilityImageUrl(spellRaw: Record<string, unknown>): string {
+  const imageFull = String(spellImageRef(spellRaw)?.full ?? '').trim()
+  if (imageFull) return resolveSpellImageUrl(imageFull, false)
+  const championId = championIdForImages()
+  const slot = String(spellRaw.slot ?? '')
+    .trim()
+    .toUpperCase()
+  if (!championId || !slot) return ''
+  return resolveSpellImageUrl(`${championId}${slot}.png`, false)
 }
 
 function activeRank(spellId: string): number {
@@ -320,15 +389,20 @@ function resolveSpellView(
     ? raw.detailedTexts.map(section => normalizeKaynFormMarkup(String(section ?? '')))
     : []
 
+  const summaryHtml = raw.summaryHtml ? String(raw.summaryHtml) : undefined
+  const descriptionHtml = normalizeKaynFormMarkup(resolved.html)
+  const detailCandidates =
+    resolvedDetails.length > 0
+      ? resolvedDetails.map(section => normalizeKaynFormMarkup(section))
+      : staticDetails
+
   return {
     name: String(raw.name ?? ''),
     maxRank: Math.max(1, Number(raw.maxRank ?? 5)),
-    summaryHtml: raw.summaryHtml ? String(raw.summaryHtml) : undefined,
-    descriptionHtml: normalizeKaynFormMarkup(resolved.html),
-    detailedTexts:
-      resolvedDetails.length > 0
-        ? resolvedDetails.map(section => normalizeKaynFormMarkup(section))
-        : staticDetails,
+    summaryHtml,
+    showSummary: shouldShowSupplementalTooltipSummary(summaryHtml, descriptionHtml),
+    descriptionHtml,
+    detailedTexts: filterSupplementalTooltipSections(descriptionHtml, detailCandidates),
     headerStats: Array.isArray(raw.headerStats)
       ? raw.headerStats.map((stat: SpellHeaderStat) =>
           resolveHeaderStatAtRank(stat, rank, {
@@ -369,7 +443,7 @@ watch(
   { immediate: true }
 )
 
-const passive = computed(() => {
+const passive = computed((): ResolvedPassiveView | null => {
   const champion = loadedChampion.value
   const passiveRaw = champion?.passive
   if (!passiveRaw || typeof passiveRaw !== 'object') return null
@@ -380,7 +454,9 @@ const passive = computed(() => {
 
   return {
     name: resolved.name,
+    imageUrl: resolvePassiveImageUrl(passiveData),
     summaryHtml: resolved.summaryHtml,
+    showSummary: resolved.showSummary,
     descriptionHtml: resolved.descriptionHtml,
     detailedTexts: resolved.detailedTexts,
     isDynamic: resolved.isDynamic,
@@ -405,6 +481,7 @@ const spells = computed<ResolvedSpellView[]>(() => {
     return {
       id,
       slot: String(spell.slot ?? ''),
+      imageUrl: resolveAbilityImageUrl(spell),
       ...resolved,
     }
   })
@@ -441,6 +518,46 @@ summary::-webkit-details-marker {
   display: none;
 }
 
+.theorycraft-spell-icon {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.theorycraft-spell-icon__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 4px;
+  border: 2px solid #000;
+  background: #000;
+  object-fit: cover;
+}
+
+.theorycraft-spell-icon__key {
+  position: absolute;
+  bottom: -5px;
+  right: -5px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.9);
+  color: var(--color-gold-300);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.spell-entry-row {
+  overflow: visible;
+}
+
 .spell-header-stats__label {
   color: rgb(252 211 77 / 0.95);
 }
@@ -448,6 +565,7 @@ summary::-webkit-details-marker {
 .spell-header-stats__value {
   font-weight: 700;
   color: rgb(255 255 255 / 0.92);
+  white-space: nowrap;
 }
 
 :deep(.tooltip-spell-description .dmg-physical),

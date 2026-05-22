@@ -1165,6 +1165,7 @@
           v-if="flipBackFace === 'stats'"
           :stats="buildStore.calculatedStats"
           :level="buildStore.statsLevel"
+          :partype="(selectedChampion as { partype?: string } | null)?.partype"
           :active-item-count="theorycraftActiveItemCount"
           :stack-count="theorycraftStackCount"
         />

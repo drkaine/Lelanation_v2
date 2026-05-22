@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest'
 import type { Champion } from '@lelanation/shared-types'
 import {
   championWithStatsForBuild,
+  formatHealthPoolValue,
+  formatResourcePoolValue,
   resolveChampionStatsForBuild,
   resolveHeaderStatAtRank,
+  resolveResourceStatLabel,
   theorycraftExportToChampionStats,
 } from '../theorycraftStats'
 
@@ -86,5 +89,22 @@ describe('theorycraftStats', () => {
 
     const withStats = championWithStatsForBuild(champion)
     expect(withStats.stats.hp).toBe(580)
+  })
+
+  it('formats health and resource pools as current/max', () => {
+    expect(formatHealthPoolValue(2147)).toBe('2147/2147')
+    expect(formatResourcePoolValue(1320, 'Mana')).toBe('1320/1320')
+    expect(formatResourcePoolValue(200, 'Energy')).toBe('200/200')
+    expect(formatResourcePoolValue(200, 'Énergie')).toBe('200/200')
+    expect(formatResourcePoolValue(500, 'None')).toBe('0/0')
+    expect(formatResourcePoolValue(500, 'Aucune')).toBe('0/0')
+  })
+
+  it('resolves resource labels from champion partype', () => {
+    expect(resolveResourceStatLabel('Mana', 'fr')).toBe('Mana')
+    expect(resolveResourceStatLabel('Energy', 'en')).toBe('Energy')
+    expect(resolveResourceStatLabel('Énergie', 'fr')).toBe('Énergie')
+    expect(resolveResourceStatLabel('None', 'en')).toBe('Mana')
+    expect(resolveResourceStatLabel('Fury', 'fr')).toBe('Fureur')
   })
 })

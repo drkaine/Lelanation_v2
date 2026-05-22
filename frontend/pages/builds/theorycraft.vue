@@ -1,7 +1,7 @@
 <template>
-  <div class="theorycraft-page min-h-screen p-4 text-text">
-    <div class="max-w-8xl mx-auto px-2">
-      <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+  <div class="theorycraft-page min-h-screen py-4 pl-4 pr-0 text-text">
+    <div class="theorycraft-page__shell">
+      <div class="mb-4 flex flex-wrap items-center justify-between gap-3 pr-4">
         <div class="theorycraft-header-actions">
           <button
             type="button"
@@ -10,17 +10,6 @@
             @click="activePanel = 'theorycraft'"
           >
             {{ t('theorycraft.panel.theorycraftButton') }}
-          </button>
-          <button
-            type="button"
-            class="theorycraft-header-actions__stats"
-            :class="{ 'theorycraft-header-actions__stats--active': cardFlipped }"
-            :title="
-              cardFlipped ? t('theorycraft.stats.showBuild') : t('theorycraft.stats.showStats')
-            "
-            @click="cardFlipped = !cardFlipped"
-          >
-            {{ t('theorycraft.stats.toggle') }}
           </button>
         </div>
         <NuxtLink
@@ -40,6 +29,31 @@
             <div class="build-card-toolbar__save">
               <BuildSaveButton @highlight-missing="highlightMissingFields = $event" />
             </div>
+            <button
+              type="button"
+              class="build-card-toolbar__flip"
+              :class="{ 'build-card-toolbar__flip--active': cardFlipped }"
+              :title="cardFlipToggleTitle"
+              :aria-label="cardFlipToggleTitle"
+              @click="cardFlipped = !cardFlipped"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+                <path d="M21 3v5h-5" />
+                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+                <path d="M8 16H3v5" />
+              </svg>
+            </button>
             <label class="build-card-toolbar__level">
               <span class="build-card-toolbar__level-label">{{
                 t('theorycraft.spells.championLevel')
@@ -65,7 +79,7 @@
           />
         </div>
 
-        <div class="w-full flex-1 md:order-2">
+        <div class="theorycraft-workspace-col w-full min-w-0 flex-1 md:order-2">
           <TheorycraftWorkspacePanel
             :active-panel="activePanel"
             :champion-id="championId"
@@ -107,6 +121,10 @@ const theorycraftLevel = ref(18)
 const cardFlipped = ref(false)
 const highlightMissingFields = ref(false)
 const championData = ref<Record<string, unknown> | null>(null)
+
+const cardFlipToggleTitle = computed(() =>
+  cardFlipped.value ? t('theorycraft.stats.showBuild') : t('theorycraft.stats.showStats')
+)
 
 const championId = computed(() => buildStore.currentBuild?.champion?.id ?? null)
 
@@ -175,6 +193,15 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.theorycraft-page__shell {
+  width: 100%;
+  max-width: 100%;
+}
+
+.theorycraft-workspace-col {
+  margin-right: 0;
+}
+
 .build-layout {
   --build-card-width: 293.9px;
 }
@@ -195,7 +222,7 @@ onUnmounted(() => {
 }
 
 .theorycraft-header-actions__panel,
-.theorycraft-header-actions__stats {
+.theorycraft-header-actions__panel--active {
   height: 38px;
   border-radius: 0.5rem;
   border: 1px solid rgb(200 155 60 / 0.5);
@@ -212,14 +239,12 @@ onUnmounted(() => {
     color 0.15s ease;
 }
 
-.theorycraft-header-actions__panel:hover,
-.theorycraft-header-actions__stats:hover {
+.theorycraft-header-actions__panel:hover {
   border-color: var(--color-accent, #c89b3c);
   color: var(--color-accent, #c89b3c);
 }
 
-.theorycraft-header-actions__panel--active,
-.theorycraft-header-actions__stats--active {
+.theorycraft-header-actions__panel--active {
   border-color: var(--color-accent, #c89b3c);
   background: rgb(200 155 60 / 0.15);
   color: var(--color-accent, #c89b3c);
@@ -247,6 +272,34 @@ onUnmounted(() => {
   width: 100%;
   max-width: none;
   min-height: 38px;
+}
+
+.build-card-toolbar__flip {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 0.5rem;
+  border: 1px solid rgb(200 155 60 / 0.5);
+  background: var(--color-background, #0a1428);
+  color: rgb(255 255 255 / 0.85);
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.build-card-toolbar__flip:hover {
+  border-color: var(--color-accent, #c89b3c);
+  color: var(--color-accent, #c89b3c);
+}
+
+.build-card-toolbar__flip--active {
+  border-color: var(--color-accent, #c89b3c);
+  background: rgb(200 155 60 / 0.15);
+  color: var(--color-accent, #c89b3c);
 }
 
 .build-card-toolbar__level {

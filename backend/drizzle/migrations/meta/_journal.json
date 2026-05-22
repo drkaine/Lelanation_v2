@@ -71,6 +71,41 @@
       "when": 1748092800000,
       "tag": "0009_champion_stats_drop_sum_snowballs_hit",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1748179200000,
+      "tag": "0010_champion_bans_by_banner_outcome",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1748265600000,
+      "tag": "0011_backfill_ban_outcome_split",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1748352000000,
+      "tag": "0012_fix_team_surrender_per_side",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1748438400000,
+      "tag": "0013_objective_histogram_drake_cols",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1748524800000,
+      "tag": "0014_rank_fill_player_indexes",
+      "breakpoints": true
     }
   ]
 }
