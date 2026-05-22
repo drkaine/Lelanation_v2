@@ -28,6 +28,17 @@ describe('theorycraftItemProcs', () => {
     expect(lines[0]!.damageType).toBe('physical')
   })
 
+  it('skips proc items when passive toggle is off', () => {
+    const lines = computeTheorycraftItemProcLines({
+      items: [{ id: '3057', name: 'Brillance' } as never],
+      itemsWithIndex: [{ index: 0, item: { id: '3057', name: 'Brillance' } as never }],
+      activePassivesByIndex: { 0: false },
+      buildStats: stats,
+      labels: {},
+    })
+    expect(lines).toHaveLength(0)
+  })
+
   it('computes Nashor on-hit with AP scaling', () => {
     const lines = computeTheorycraftItemProcLines({
       items: [{ id: '3115', name: 'Dent de Nashor' } as never],

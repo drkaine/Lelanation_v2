@@ -76,7 +76,6 @@
               {{ t('buildsPage.createBuild') }}
             </NuxtLink>
             <NuxtLink
-              v-if="isAdminLoggedIn"
               :to="theorycraftLink"
               :title="t('nav.theorycraft')"
               class="version builds-submenu-link"
@@ -103,16 +102,6 @@
           @click="toggleMenu"
         >
           {{ t('nav.map') }}
-        </NuxtLink>
-        <NuxtLink
-          v-if="isAdminLoggedIn"
-          :to="theorycraftLink"
-          :title="t('nav.theorycraft')"
-          class="version"
-          :class="{ 'router-link-active': isTheorycraftActive }"
-          @click="toggleMenu"
-        >
-          {{ t('nav.theorycraft') }}
         </NuxtLink>
         <NuxtLink
           :to="statisticsIndexLink"
@@ -213,7 +202,6 @@
               {{ t('buildsPage.createBuild') }}
             </NuxtLink>
             <NuxtLink
-              v-if="isAdminLoggedIn"
               :to="theorycraftLink"
               :title="t('nav.theorycraft')"
               class="builds-submenu-link"
@@ -234,15 +222,6 @@
           class="version"
         >
           {{ t('nav.map') }}
-        </NuxtLink>
-        <NuxtLink
-          v-if="isAdminLoggedIn"
-          :to="theorycraftLink"
-          :title="t('nav.theorycraft')"
-          class="version"
-          :class="{ 'router-link-active': isTheorycraftActive }"
-        >
-          {{ t('nav.theorycraft') }}
         </NuxtLink>
         <NuxtLink
           :to="statisticsIndexLink"

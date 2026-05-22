@@ -212,10 +212,9 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useChampionData } from '~/composables/useChampionData'
 import {
-  filterSupplementalTooltipSections,
+  finalizeTooltipDisplay,
   resolveTheorycraftSpellDescription,
   resolveTheorycraftSpellDetailRaws,
-  shouldShowSupplementalTooltipSummary,
   type TheorycraftSpellRuntimeData,
   type TheorycraftStackResolveContext,
 } from '~/composables/useTheorycraftTooltip'
@@ -430,20 +429,24 @@ function resolveSpellView(
     ? raw.detailedTexts.map(section => normalizeKaynFormMarkup(String(section ?? '')))
     : []
 
-  const summaryHtml = raw.summaryHtml ? String(raw.summaryHtml) : undefined
-  const descriptionHtml = normalizeKaynFormMarkup(resolved.html)
   const detailCandidates =
     resolvedDetails.length > 0
       ? resolvedDetails.map(section => normalizeKaynFormMarkup(section))
       : staticDetails
 
+  const finalized = finalizeTooltipDisplay({
+    summaryHtml: raw.summaryHtml ? String(raw.summaryHtml) : undefined,
+    descriptionHtml: normalizeKaynFormMarkup(resolved.html),
+    detailedTexts: detailCandidates,
+  })
+
   return {
     name: String(raw.name ?? ''),
     maxRank: Math.max(1, Number(raw.maxRank ?? 5)),
-    summaryHtml,
-    showSummary: shouldShowSupplementalTooltipSummary(summaryHtml, descriptionHtml),
-    descriptionHtml,
-    detailedTexts: filterSupplementalTooltipSections(descriptionHtml, detailCandidates),
+    summaryHtml: finalized.summaryHtml,
+    showSummary: finalized.showSummary,
+    descriptionHtml: finalized.descriptionHtml,
+    detailedTexts: finalized.detailedTexts,
     headerStats: Array.isArray(raw.headerStats)
       ? raw.headerStats.map((stat: SpellHeaderStat) =>
           resolveHeaderStatAtRank(stat, rank, {

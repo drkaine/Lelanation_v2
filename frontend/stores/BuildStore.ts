@@ -30,14 +30,24 @@ import {
   filterItemsForTheorycraftStats,
   isWithinActiveItemLimit,
   remapDisabledItemIndices,
+  resolveBuildItemsWithCatalog,
 } from '~/utils/theorycraftItems'
+import { useItemsStore } from '~/stores/ItemsStore'
 import {
   applyTheorycraftItemModifiers,
   remapTheorycraftItemStacksByIndex,
 } from '~/utils/theorycraftItemModifiers'
+import {
+  applyTheorycraftRuneModifiers,
+  listSelectedRuneIds,
+  resolveTheorycraftAdaptiveForBuild,
+} from '~/utils/theorycraftRuneModifiers'
+import type { TheorycraftRuneModifierLine } from '~/utils/theorycraftRuneModifiers'
 import type { TheorycraftItemModifierLine } from '~/utils/theorycraftItemModifiers'
 import { computeTheorycraftItemProcLines } from '~/utils/theorycraftItemProcs'
 import type { TheorycraftItemProcLine } from '~/utils/theorycraftItemProcs'
+import { applyTheorycraftItemPassives } from '~/utils/theorycraftItemPassives'
+import type { TheorycraftItemPassiveLine } from '~/utils/theorycraftItemPassives'
 import {
   applyTheorycraftSpellBuffs,
   type TheorycraftSpellBuffLine,
@@ -53,6 +63,9 @@ const THEORYCRAFT_STACKS_STORAGE_KEY = 'lelanation_theorycraft_stacks'
 const THEORYCRAFT_DISABLED_ITEMS_STORAGE_KEY = 'lelanation_theorycraft_disabled_items'
 const THEORYCRAFT_ITEM_STACKS_STORAGE_KEY = 'lelanation_theorycraft_item_stacks'
 const THEORYCRAFT_ITEM_TRANSFORMED_STORAGE_KEY = 'lelanation_theorycraft_item_transformed'
+const THEORYCRAFT_RUNE_STACKS_STORAGE_KEY = 'lelanation_theorycraft_rune_stacks'
+const THEORYCRAFT_GAME_DURATION_STORAGE_KEY = 'lelanation_theorycraft_game_duration'
+const THEORYCRAFT_ACTIVE_ITEM_PASSIVES_STORAGE_KEY = 'lelanation_theorycraft_active_item_passives'
 const BUILDER_STEP_STORAGE_KEY = 'lelanation_builder_step'
 
 export type BuildStoreSession = 'create' | 'theorycraft' | 'edit'
@@ -92,6 +105,16 @@ interface BuildState {
   theorycraftSpellBuffLines: TheorycraftSpellBuffLine[]
   /** Dégâts on-hit / proc des objets équipés. */
   theorycraftItemProcLines: TheorycraftItemProcLine[]
+  /** Passif d'objet activé manuellement (Jak'Sho, Brillance…) par index. */
+  theorycraftActiveItemPassives: Record<number, boolean>
+  /** Bonus passifs d'objets actifs appliqués aux stats. */
+  theorycraftItemPassiveLines: TheorycraftItemPassiveLine[]
+  /** Stacks de runes (Ruban de mana, Légende, Moisson noire…). */
+  theorycraftRuneStacks: Record<number, number>
+  /** Durée de partie en minutes (Tempête menaçante). */
+  theorycraftGameDurationMinutes: number
+  /** Lignes de bonus runes / shards appliqués au dernier calcul. */
+  theorycraftRuneModifierLines: TheorycraftRuneModifierLine[]
   /** Incrémenté à chaque modification de la liste sauvegardée (save/delete/copy) pour forcer le refresh des vues. */
   savedBuildsVersion: number
   /** Variante actuellement affichée dans le builder : 'main' = build principal, number = index dans subBuilds. */
@@ -162,6 +185,11 @@ export const useBuildStore = defineStore('build', {
     theorycraftSpellRanks: {},
     theorycraftSpellBuffLines: [],
     theorycraftItemProcLines: [],
+    theorycraftActiveItemPassives: {},
+    theorycraftItemPassiveLines: [],
+    theorycraftRuneStacks: {},
+    theorycraftGameDurationMinutes: 30,
+    theorycraftRuneModifierLines: [],
     savedBuildsVersion: 0,
     displayedVariant: 'main',
     pendingChampionChange: null,
@@ -446,6 +474,8 @@ export const useBuildStore = defineStore('build', {
       this.clearTheorycraftStackContext()
       this.loadTheorycraftDisabledItems()
       this.loadTheorycraftItemStacks()
+      this.loadTheorycraftActiveItemPassives()
+      this.loadTheorycraftRuneStacks()
       if (!this.loadCurrentBuildDraft()) {
         this.createNewBuild()
       } else {
@@ -472,6 +502,95 @@ export const useBuildStore = defineStore('build', {
       this.theorycraftSpellRanks = {}
       this.theorycraftSpellBuffLines = []
       this.theorycraftItemProcLines = []
+      this.theorycraftActiveItemPassives = {}
+      this.theorycraftItemPassiveLines = []
+      this.theorycraftRuneStacks = {}
+      this.theorycraftGameDurationMinutes = 30
+      this.theorycraftRuneModifierLines = []
+    },
+
+    loadTheorycraftActiveItemPassives() {
+      if (import.meta.server) return
+      try {
+        const raw = localStorage.getItem(THEORYCRAFT_ACTIVE_ITEM_PASSIVES_STORAGE_KEY)
+        this.theorycraftActiveItemPassives = raw ? (JSON.parse(raw) as Record<number, boolean>) : {}
+      } catch {
+        this.theorycraftActiveItemPassives = {}
+      }
+    },
+
+    persistTheorycraftActiveItemPassives() {
+      if (import.meta.server || this.builderSession !== 'theorycraft') return
+      try {
+        localStorage.setItem(
+          THEORYCRAFT_ACTIVE_ITEM_PASSIVES_STORAGE_KEY,
+          JSON.stringify(this.theorycraftActiveItemPassives)
+        )
+      } catch {
+        // ignore
+      }
+    },
+
+    toggleTheorycraftActiveItemPassive(index: number) {
+      if (this.builderSession !== 'theorycraft') return
+      const next = { ...this.theorycraftActiveItemPassives }
+      next[index] = !next[index]
+      if (!next[index]) delete next[index]
+      this.theorycraftActiveItemPassives = next
+      this.persistTheorycraftActiveItemPassives()
+      this.recalculateStats()
+    },
+
+    loadTheorycraftRuneStacks() {
+      if (import.meta.server) return
+      try {
+        const rawStacks = localStorage.getItem(THEORYCRAFT_RUNE_STACKS_STORAGE_KEY)
+        const rawDuration = localStorage.getItem(THEORYCRAFT_GAME_DURATION_STORAGE_KEY)
+        this.theorycraftRuneStacks = rawStacks
+          ? (JSON.parse(rawStacks) as Record<number, number>)
+          : {}
+        const duration = rawDuration ? Number(JSON.parse(rawDuration)) : 30
+        this.theorycraftGameDurationMinutes = Number.isFinite(duration)
+          ? Math.max(0, Math.min(90, Math.trunc(duration)))
+          : 30
+      } catch {
+        this.theorycraftRuneStacks = {}
+        this.theorycraftGameDurationMinutes = 30
+      }
+    },
+
+    persistTheorycraftRuneStacks() {
+      if (import.meta.server || this.builderSession !== 'theorycraft') return
+      try {
+        localStorage.setItem(
+          THEORYCRAFT_RUNE_STACKS_STORAGE_KEY,
+          JSON.stringify(this.theorycraftRuneStacks)
+        )
+        localStorage.setItem(
+          THEORYCRAFT_GAME_DURATION_STORAGE_KEY,
+          JSON.stringify(this.theorycraftGameDurationMinutes)
+        )
+      } catch {
+        // ignore
+      }
+    },
+
+    setTheorycraftRuneStacks(runeId: number, stacks: number) {
+      if (this.builderSession !== 'theorycraft') return
+      const next = { ...this.theorycraftRuneStacks }
+      if (!Number.isFinite(stacks) || stacks <= 0) delete next[runeId]
+      else next[runeId] = Math.max(0, Math.trunc(stacks))
+      this.theorycraftRuneStacks = next
+      this.persistTheorycraftRuneStacks()
+      this.recalculateStats()
+    },
+
+    setTheorycraftGameDurationMinutes(minutes: number) {
+      if (this.builderSession !== 'theorycraft') return
+      const value = Number.isFinite(minutes) ? Math.max(0, Math.min(90, Math.trunc(minutes))) : 0
+      this.theorycraftGameDurationMinutes = value
+      this.persistTheorycraftRuneStacks()
+      this.recalculateStats()
     },
 
     loadTheorycraftItemStacks() {
@@ -573,8 +692,14 @@ export const useBuildStore = defineStore('build', {
         nextItems,
         this.theorycraftItemTransformed
       )
+      this.theorycraftActiveItemPassives = remapTheorycraftItemStacksByIndex(
+        previousItems,
+        nextItems,
+        this.theorycraftActiveItemPassives
+      )
       this.persistTheorycraftDisabledItems()
       this.persistTheorycraftItemStacks()
+      this.persistTheorycraftActiveItemPassives()
     },
 
     clampTheorycraftActiveItemsForRole() {
@@ -629,10 +754,36 @@ export const useBuildStore = defineStore('build', {
       const build = this.displayedBuild ?? this.currentBuild
       if (!build) return []
       if (this.builderSession !== 'theorycraft') return build.items
-      return filterItemsForTheorycraftStats(
+
+      const active = filterItemsForTheorycraftStats(
         build.items,
         new Set(this.theorycraftDisabledItemIndices)
       )
+      const itemsStore = useItemsStore()
+      if (itemsStore.items.length === 0) return active
+
+      return resolveBuildItemsWithCatalog(active, id =>
+        itemsStore.items.find(candidate => candidate.id === id)
+      )
+    },
+
+    getTheorycraftActiveItemsWithIndex(): { index: number; item: Item }[] {
+      const build = this.displayedBuild ?? this.currentBuild
+      if (!build || this.builderSession !== 'theorycraft') return []
+
+      const disabled = new Set(this.theorycraftDisabledItemIndices)
+      const itemsStore = useItemsStore()
+      const lookup = (id: string) => itemsStore.items.find(candidate => candidate.id === id)
+
+      const entries: { index: number; item: Item }[] = []
+      for (let index = 0; index < build.items.length; index++) {
+        if (disabled.has(index)) continue
+        const raw = build.items[index]
+        if (!raw?.id) continue
+        const [item] = resolveBuildItemsWithCatalog([raw], lookup)
+        if (item) entries.push({ index, item })
+      }
+      return entries
     },
 
     clearTheorycraftStackContext() {
@@ -645,6 +796,8 @@ export const useBuildStore = defineStore('build', {
       this.theorycraftSpellRanks = {}
       this.theorycraftSpellBuffLines = []
       this.theorycraftItemProcLines = []
+      this.theorycraftActiveItemPassives = {}
+      this.theorycraftItemPassiveLines = []
     },
 
     loadTheorycraftStacksForChampion(championId: string) {
@@ -1321,24 +1474,32 @@ export const useBuildStore = defineStore('build', {
         }
 
         const championForStats = championWithStatsForBuild(b.champion)
+        const activeItemsForCalc =
+          this.builderSession === 'theorycraft' ? this.getTheorycraftItemsForStats() : b.items
 
         let options: import('@lelanation/builds-stats').CalculateStatsOptions | undefined
-        if (this.builderSession === 'theorycraft' && this.theorycraftStackDefinitions.length > 0) {
-          const { buildPassiveStackStatsProvider, buildPassiveStacksInput } =
-            await import('~/utils/theorycraftStacks')
-          const rankIndex = passiveRankForChampionLevel(this.statsLevel) - 1
-          const passiveStacks = buildPassiveStacksInput(
-            this.theorycraftStackDefinitions,
-            this.theorycraftStackCounts
-          )
-          if (Object.keys(passiveStacks).length > 0) {
-            options = {
-              passiveStacks,
-              getPassiveStackStats: buildPassiveStackStatsProvider(
-                this.theorycraftStackDefinitions,
-                this.theorycraftStackCalculationsBySource,
-                rankIndex
-              ),
+        if (this.builderSession === 'theorycraft') {
+          options = {
+            adaptiveStat: resolveTheorycraftAdaptiveForBuild(championForStats, activeItemsForCalc),
+          }
+          if (this.theorycraftStackDefinitions.length > 0) {
+            const { buildPassiveStackStatsProvider, buildPassiveStacksInput } =
+              await import('~/utils/theorycraftStacks')
+            const rankIndex = passiveRankForChampionLevel(this.statsLevel) - 1
+            const passiveStacks = buildPassiveStacksInput(
+              this.theorycraftStackDefinitions,
+              this.theorycraftStackCounts
+            )
+            if (Object.keys(passiveStacks).length > 0) {
+              options = {
+                ...options,
+                passiveStacks,
+                getPassiveStackStats: buildPassiveStackStatsProvider(
+                  this.theorycraftStackDefinitions,
+                  this.theorycraftStackCalculationsBySource,
+                  rankIndex
+                ),
+              }
             }
           }
         }
@@ -1373,13 +1534,26 @@ export const useBuildStore = defineStore('build', {
             labels: {},
           })
 
+          const adaptive = resolveTheorycraftAdaptiveForBuild(championForStats, activeItems)
+          const runeIds = listSelectedRuneIds(b.runes)
+          const runeModifierResult = applyTheorycraftRuneModifiers({
+            stats: modifierResult.stats,
+            runes: b.runes,
+            shards: b.shards,
+            runeStacksById: this.theorycraftRuneStacks,
+            level: this.statsLevel,
+            gameDurationMinutes: runeIds.includes(8236) ? this.theorycraftGameDurationMinutes : 0,
+            adaptive,
+            labels: {},
+          })
+
           const activeSpellIds = new Set(
             Object.entries(this.theorycraftActiveSpells)
               .filter(([, enabled]) => enabled)
               .map(([id]) => id)
           )
           const buffResult = applyTheorycraftSpellBuffs({
-            stats: modifierResult.stats,
+            stats: runeModifierResult.stats,
             spells: this.theorycraftChampionSpells,
             activeSpellIds,
             spellRanks: this.theorycraftSpellRanks,
@@ -1387,26 +1561,42 @@ export const useBuildStore = defineStore('build', {
             labels: {},
           })
 
+          const itemsWithIndex = this.getTheorycraftActiveItemsWithIndex()
+          const passiveResult = applyTheorycraftItemPassives({
+            stats: buffResult.stats,
+            champion: championForStats,
+            level: this.statsLevel,
+            itemsWithIndex,
+            activeByIndex: this.theorycraftActiveItemPassives,
+            labels: {},
+          })
+
           const buildStats = toTheorycraftBuildStats(
-            buffResult.stats,
+            passiveResult.stats,
             championForStats,
             this.statsLevel
           )
           this.theorycraftItemProcLines = computeTheorycraftItemProcLines({
             items: activeItems,
+            itemsWithIndex,
+            activePassivesByIndex: this.theorycraftActiveItemPassives,
             buildStats,
             labels: {},
           })
 
-          this.calculatedStats = buffResult.stats
+          this.calculatedStats = passiveResult.stats
           this.theorycraftItemModifierLines = modifierResult.lines
+          this.theorycraftRuneModifierLines = runeModifierResult.lines
           this.theorycraftSpellBuffLines = buffResult.lines
+          this.theorycraftItemPassiveLines = passiveResult.lines
           return
         }
 
         this.theorycraftItemModifierLines = []
+        this.theorycraftRuneModifierLines = []
         this.theorycraftSpellBuffLines = []
         this.theorycraftItemProcLines = []
+        this.theorycraftItemPassiveLines = []
         this.calculatedStats = stats
       })
     },

@@ -52,6 +52,53 @@ describe('theorycraftItemModifiers', () => {
     expect(bonus.abilityPower).toBe(100)
   })
 
+  it('adds Mejai base AP and HP when item stats are missing', () => {
+    const mejai = { id: '3041', name: "Mejai's" } as Item
+    const result = applyTheorycraftItemModifiers({
+      stats: baseStats,
+      items: [mejai],
+      itemStacksById: {},
+      transformedById: {},
+      labels: {},
+    })
+    expect(result.stats.abilityPower).toBe(320)
+    expect(result.stats.health).toBe(2100)
+  })
+
+  it('does not double-count Mejai base AP when catalog stats are present', () => {
+    const mejai = {
+      id: '3041',
+      name: "Mejai's",
+      stats: { FlatMagicDamageMod: 20, FlatHPPoolMod: 100 },
+    } as Item
+    const result = applyTheorycraftItemModifiers({
+      stats: { ...baseStats, abilityPower: 320, health: 2100 },
+      items: [mejai],
+      itemStacksById: {},
+      transformedById: {},
+      labels: {},
+    })
+    expect(result.stats.abilityPower).toBe(320)
+    expect(result.stats.health).toBe(2100)
+  })
+
+  it('adds Dark Seal base AP even with zero stacks', () => {
+    const darkSeal = {
+      id: '1082',
+      name: 'Dark Seal',
+      stats: { FlatMagicDamageMod: 15, FlatHPPoolMod: 50 },
+    } as Item
+    const result = applyTheorycraftItemModifiers({
+      stats: baseStats,
+      items: [darkSeal],
+      itemStacksById: {},
+      transformedById: {},
+      labels: {},
+    })
+    expect(result.stats.abilityPower).toBe(315)
+    expect(result.stats.health).toBe(2050)
+  })
+
   it('adds Dark Seal AP per glory stack', () => {
     expect(isTheorycraftStackableItem('1082')).toBe(true)
     const bonus = getTheorycraftItemStackStats('1082', 10)

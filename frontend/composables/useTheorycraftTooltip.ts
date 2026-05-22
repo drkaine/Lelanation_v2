@@ -514,6 +514,58 @@ function normalizeTooltipPlainForCompare(html: string): string {
     .toLowerCase()
 }
 
+/** Retire titres client (titleLeft) et aides clavier déjà affichés dans l’UI. */
+export function stripClientTooltipChrome(html: string): string {
+  return String(html ?? '')
+    .replace(/<titleLeft>[\s\S]*?<\/titleLeft>/gi, '')
+    .replace(/<titleRight>[\s\S]*?<\/titleRight>/gi, '')
+    .replace(/<subtitleLeft>[\s\S]*?<\/subtitleLeft>/gi, '')
+    .replace(/<subtitleRight>[\s\S]*?<\/subtitleRight>/gi, '')
+    .replace(/<infoArea>[\s\S]*?<\/infoArea>/gi, '')
+    .replace(/(?:<br\s*\/?>\s*){3,}/gi, '<br><br>')
+    .trim()
+}
+
+export function splitTooltipParagraphs(html: string): string[] {
+  return stripClientTooltipChrome(html)
+    .split(/<br\s*\/?>\s*<br\s*\/?>/gi)
+    .map(paragraph => paragraph.trim())
+    .filter(Boolean)
+}
+
+/** Supprime les paragraphes répétés (ex. passif Ornn — forge / chef-d’œuvre). */
+export function dedupeTooltipParagraphs(html: string): string {
+  const paragraphs = splitTooltipParagraphs(html)
+  const unique: string[] = []
+
+  for (const paragraph of paragraphs) {
+    const plain = normalizeTooltipPlainForCompare(paragraph)
+    if (!plain || plain.length < 8) continue
+
+    let skip = false
+    for (let index = 0; index < unique.length; index += 1) {
+      const existing = unique[index]!
+      const existingPlain = normalizeTooltipPlainForCompare(existing)
+      if (existingPlain === plain) {
+        skip = true
+        break
+      }
+      if (existingPlain.includes(plain) && plain.length >= 24) {
+        skip = true
+        break
+      }
+      if (plain.includes(existingPlain) && existingPlain.length >= 24) {
+        unique[index] = paragraph
+        skip = true
+        break
+      }
+    }
+    if (!skip) unique.push(paragraph)
+  }
+
+  return unique.join('<br><br>')
+}
+
 function isSupplementalTooltipDuplicate(mainHtml: string, sectionHtml: string): boolean {
   const mainPlain = normalizeTooltipPlainForCompare(mainHtml)
   const sectionPlain = normalizeTooltipPlainForCompare(sectionHtml)
@@ -553,24 +605,81 @@ function isSupplementalTooltipDuplicate(mainHtml: string, sectionHtml: string): 
 
 export function filterSupplementalTooltipSections(mainHtml: string, sections: string[]): string[] {
   const seen = new Set<string>()
-  return sections.filter(section => {
-    const plain = normalizeTooltipPlainForCompare(section)
-    if (!plain || seen.has(plain)) return false
-    if (isSupplementalTooltipDuplicate(mainHtml, section)) return false
+  const accepted: string[] = []
+  for (const section of sections) {
+    const cleaned = dedupeTooltipParagraphs(stripClientTooltipChrome(section))
+    const plain = normalizeTooltipPlainForCompare(cleaned)
+    if (!plain || seen.has(plain)) continue
+    if (isSupplementalTooltipDuplicate(mainHtml, cleaned)) continue
+    if (accepted.some(previous => isSupplementalTooltipDuplicate(previous, cleaned))) continue
     seen.add(plain)
-    return true
-  })
+    accepted.push(cleaned)
+  }
+  return accepted
 }
 
 export function shouldShowSupplementalTooltipSummary(
   summaryHtml?: string | null,
   descriptionHtml?: string | null
 ): boolean {
-  const summary = String(summaryHtml ?? '').trim()
+  const summary = stripClientTooltipChrome(String(summaryHtml ?? '')).trim()
   if (!summary) return false
-  const description = String(descriptionHtml ?? '').trim()
+  const description = stripClientTooltipChrome(String(descriptionHtml ?? '')).trim()
   if (!description) return true
-  return !isSupplementalTooltipDuplicate(description, summary)
+  if (isSupplementalTooltipDuplicate(description, summary)) return false
+
+  const summaryParagraphs = splitTooltipParagraphs(summary).filter(
+    paragraph => normalizeTooltipPlainForCompare(paragraph).length >= 20
+  )
+  if (summaryParagraphs.length === 0) return true
+
+  const descriptionPlain = normalizeTooltipPlainForCompare(description)
+  const hasUniqueSummaryParagraph = summaryParagraphs.some(
+    paragraph => !descriptionPlain.includes(normalizeTooltipPlainForCompare(paragraph))
+  )
+  return hasUniqueSummaryParagraph
+}
+
+function uniqueSummaryParagraphs(summaryHtml: string, descriptionHtml: string): string {
+  const descriptionPlain = normalizeTooltipPlainForCompare(descriptionHtml)
+  return splitTooltipParagraphs(summaryHtml)
+    .filter(paragraph => {
+      const plain = normalizeTooltipPlainForCompare(paragraph)
+      return plain.length >= 16 && !descriptionPlain.includes(plain)
+    })
+    .join('<br><br>')
+}
+
+export function finalizeTooltipDisplay(args: {
+  summaryHtml?: string | null
+  descriptionHtml: string
+  detailedTexts?: string[]
+}): {
+  summaryHtml?: string
+  showSummary: boolean
+  descriptionHtml: string
+  detailedTexts: string[]
+} {
+  const descriptionHtml = dedupeTooltipParagraphs(stripClientTooltipChrome(args.descriptionHtml))
+  const summaryUnique = args.summaryHtml
+    ? uniqueSummaryParagraphs(
+        dedupeTooltipParagraphs(stripClientTooltipChrome(args.summaryHtml)),
+        descriptionHtml
+      )
+    : ''
+  const showSummary =
+    Boolean(summaryUnique) && shouldShowSupplementalTooltipSummary(summaryUnique, descriptionHtml)
+  const detailedTexts = filterSupplementalTooltipSections(
+    descriptionHtml,
+    (args.detailedTexts ?? []).map(section => stripClientTooltipChrome(section))
+  )
+
+  return {
+    summaryHtml: showSummary ? summaryUnique : undefined,
+    showSummary,
+    descriptionHtml,
+    detailedTexts,
+  }
 }
 
 function buildRuntimeVariableMap(

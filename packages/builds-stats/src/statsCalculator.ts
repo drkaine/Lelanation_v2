@@ -12,7 +12,11 @@ import type {
   CalculatedStats,
 } from "@lelanation/shared-types";
 
+export type AdaptiveStatChoice = "ad" | "ap";
+
 export interface CalculateStatsOptions {
+  /** Adaptive shard (5008) grants AD or AP. Default: ad. */
+  adaptiveStat?: AdaptiveStatChoice;
   /** Item ID -> stack count for stackable items (Mejai, Manamune, etc.) */
   itemStacks?: Record<string, number>;
   /** Stack type -> stack count for champion passives (Veigar Q, Sion passive, etc.) */
@@ -62,7 +66,7 @@ export function calculateStats(
   itemStats.spellVamp += starterDrain.spellVamp;
   itemStats.omnivamp += starterDrain.omnivamp;
   const runeStats = calculateRuneStats(runes);
-  const shardStats = calculateShardStats(shards, level);
+  const shardStats = calculateShardStats(shards, level, options?.adaptiveStat);
   const passiveStackStats = calculatePassiveStackStats(champion.id, options);
 
   const finalStats: CalculatedStats = {
@@ -396,18 +400,26 @@ function calculateRuneStats(
   return {};
 }
 
+function applyAdaptiveShardStat(
+  stats: Record<string, number>,
+  adaptiveStat?: AdaptiveStatChoice
+): void {
+  if (adaptiveStat === "ap") stats.abilityPower = (stats.abilityPower || 0) + 9;
+  else stats.attackDamage = (stats.attackDamage || 0) + 5.4;
+}
+
 function calculateShardStats(
   shards: ShardSelection | null,
-  level: number
+  level: number,
+  adaptiveStat?: AdaptiveStatChoice
 ): Record<string, number> {
   if (!shards) return {};
   const stats: Record<string, number> = {};
-  if (shards.slot1 === 5008) stats.attackDamage = 5.4;
+  if (shards.slot1 === 5008) applyAdaptiveShardStat(stats, adaptiveStat);
   else if (shards.slot1 === 5005) stats.attackSpeed = 0.1;
   else if (shards.slot1 === 5007) stats.abilityHaste = 8;
 
-  if (shards.slot2 === 5008)
-    stats.attackDamage = (stats.attackDamage || 0) + 5.4;
+  if (shards.slot2 === 5008) applyAdaptiveShardStat(stats, adaptiveStat);
   else if (shards.slot2 === 5006 || shards.slot2 === 5010)
     stats.percentMovementSpeed = 2.5;
   else if (shards.slot2 === 5002 || shards.slot2 === 5001)

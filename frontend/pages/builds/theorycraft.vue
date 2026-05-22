@@ -1,23 +1,16 @@
 <template>
   <div class="theorycraft-page min-h-screen py-4 pl-4 pr-0 text-text">
     <div class="theorycraft-page__shell">
-      <div class="mb-4 flex flex-wrap items-center justify-between gap-3 pr-4">
-        <div class="theorycraft-header-actions">
-          <button
-            type="button"
-            class="theorycraft-header-actions__panel"
-            :class="{ 'theorycraft-header-actions__panel--active': activePanel === 'theorycraft' }"
-            @click="activePanel = 'theorycraft'"
-          >
-            {{ t('theorycraft.panel.theorycraftButton') }}
-          </button>
-        </div>
-        <NuxtLink
-          :to="localePath('/builds')"
-          class="rounded-lg bg-surface px-4 py-2 text-text transition-colors hover:bg-primary hover:text-white"
+      <div class="theorycraft-page-header mb-4 pr-4">
+        <button
+          type="button"
+          class="theorycraft-header-actions__panel"
+          :class="{ 'theorycraft-header-actions__panel--active': activePanel === 'theorycraft' }"
+          @click="activePanel = 'theorycraft'"
         >
-          {{ t('theorycraft.backToBuilds') }}
-        </NuxtLink>
+          {{ t('theorycraft.panel.theorycraftButton') }}
+        </button>
+        <TheorycraftRuneStackPanel variant="header" />
       </div>
 
       <div
@@ -28,11 +21,11 @@
           <div class="build-card-toolbar">
             <button
               type="button"
-              class="build-card-toolbar__flip"
-              :class="{ 'build-card-toolbar__flip--active': cardFlipped }"
-              :title="flipCycleTitle"
-              :aria-label="flipCycleTitle"
-              @click="cycleCardFlip"
+              class="build-card-toolbar__flip build-card-toolbar__stats"
+              :class="{ 'build-card-toolbar__flip--active': statsFlipActive }"
+              :title="statsFlipTitle"
+              :aria-label="statsFlipTitle"
+              @click="toggleStatsFlip"
             >
               <svg
                 width="14"
@@ -45,10 +38,10 @@
                 stroke-linejoin="round"
                 aria-hidden="true"
               >
-                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-                <path d="M21 3v5h-5" />
-                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-                <path d="M8 16H3v5" />
+                <path d="M4 20V10" />
+                <path d="M10 20V4" />
+                <path d="M16 20v-6" />
+                <path d="M22 20V8" />
               </svg>
             </button>
             <div class="build-card-toolbar__save">
@@ -73,9 +66,9 @@
             :highlight-missing-fields="highlightMissingFields"
             selection-mode="theorycraft"
             :flip-back-face="cardBackFace"
-            hide-top-actions
             :active-selection-region="activePanel === 'theorycraft' ? null : activePanel"
             @select-region="onSelectRegion"
+            @toggle-description-flip="toggleDescriptionFlip"
           />
         </div>
 
@@ -98,12 +91,14 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import BuildCard from '~/components/Build/BuildCard.vue'
 import BuildSaveButton from '~/components/Build/BuildSaveButton.vue'
+import TheorycraftRuneStackPanel from '~/components/Build/TheorycraftRuneStackPanel.vue'
 import TheorycraftWorkspacePanel, {
   type TheorycraftPanel,
 } from '~/components/Build/TheorycraftWorkspacePanel.vue'
 import { useChampionData } from '~/composables/useChampionData'
 import { useLayoutScaled } from '~/composables/useLayoutScaled'
 import { useBuildStore } from '~/stores/BuildStore'
+import { useItemsStore } from '~/stores/ItemsStore'
 import { toTheorycraftBuildStats } from '~/utils/theorycraftStats'
 
 definePageMeta({
@@ -111,28 +106,40 @@ definePageMeta({
 })
 
 const { t } = useI18n()
-const localePath = useLocalePath()
 const buildStore = useBuildStore()
+const itemsStore = useItemsStore()
 const { loadChampion } = useChampionData()
 const { isLayoutScaled } = useLayoutScaled()
 
 const activePanel = ref<TheorycraftPanel>('theorycraft')
 const theorycraftLevel = ref(18)
 const cardFlipped = ref(false)
-const cardBackFace = ref<'description'>('description')
+const cardBackFace = ref<'stats' | 'description'>('stats')
 const highlightMissingFields = ref(false)
 const championData = ref<Record<string, unknown> | null>(null)
 
-const flipCycleTitle = computed(() =>
-  cardFlipped.value
-    ? t('theorycraft.stats.showBuild')
-    : t('theorycraft.description.showDescription')
+const statsFlipActive = computed(() => cardFlipped.value && cardBackFace.value === 'stats')
+
+const statsFlipTitle = computed(() =>
+  statsFlipActive.value ? t('theorycraft.stats.showBuild') : t('theorycraft.stats.showStats')
 )
 
-/** Build ↔ description (les stats sont dans Gestion sous la card). */
-function cycleCardFlip() {
-  cardFlipped.value = !cardFlipped.value
-  if (cardFlipped.value) cardBackFace.value = 'description'
+function toggleDescriptionFlip() {
+  if (cardFlipped.value && cardBackFace.value === 'description') {
+    cardFlipped.value = false
+    return
+  }
+  cardBackFace.value = 'description'
+  cardFlipped.value = true
+}
+
+function toggleStatsFlip() {
+  if (statsFlipActive.value) {
+    cardFlipped.value = false
+    return
+  }
+  cardBackFace.value = 'stats'
+  cardFlipped.value = true
 }
 
 const championId = computed(() => buildStore.currentBuild?.champion?.id ?? null)
@@ -189,6 +196,15 @@ watch(maxChampionLevel, max => {
   }
 })
 
+watch(
+  () => itemsStore.items.length,
+  (length, previous) => {
+    if (length > 0 && (previous ?? 0) === 0) {
+      buildStore.recalculateStats()
+    }
+  }
+)
+
 onMounted(async () => {
   buildStore.enterTheorycraftSession()
   theorycraftLevel.value = buildStore.statsLevel
@@ -224,10 +240,11 @@ onUnmounted(() => {
   margin-top: 0;
 }
 
-.theorycraft-header-actions {
+.theorycraft-page-header {
   display: flex;
-  align-items: stretch;
-  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
 }
 
 .theorycraft-header-actions__panel,

@@ -2009,6 +2009,28 @@ function normalizeStringTableTooltipSection(
   return normalizeAtVariablesToMustache(out)
 }
 
+function splitTooltipParagraphsForCompare(html: string): string[] {
+  return String(html ?? '')
+    .replace(/<titleLeft>[\s\S]*?<\/titleLeft>/gi, '')
+    .replace(/<infoArea>[\s\S]*?<\/infoArea>/gi, '')
+    .split(/<br\s*\/?>\s*<br\s*\/?>/gi)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+}
+
+function areAllTooltipParagraphsContainedIn(containerHtml: string, sectionHtml: string): boolean {
+  const containerPlain = normalizeTooltipPlainText(containerHtml).replace(/\s+/g, ' ').trim()
+  if (!containerPlain) return false
+  const paragraphs = splitTooltipParagraphsForCompare(sectionHtml)
+  if (paragraphs.length === 0) return false
+  for (const paragraph of paragraphs) {
+    const plain = normalizeTooltipPlainText(paragraph).replace(/\s+/g, ' ').trim()
+    if (plain.length < 16) continue
+    if (!containerPlain.includes(plain)) return false
+  }
+  return true
+}
+
 function isDuplicateTooltipSection(mainHtml: string, sectionHtml: string): boolean {
   const mainPlain = normalizeTooltipPlainText(mainHtml).replace(/\s+/g, ' ').trim()
   const sectionPlain = normalizeTooltipPlainText(sectionHtml).replace(/\s+/g, ' ').trim()
@@ -3770,6 +3792,10 @@ export class TheorycraftDataBuilderService {
         })),
         spellEffects: passiveSpellEffects,
         ...(summaryTooltip &&
+        !areAllTooltipParagraphsContainedIn(
+          passiveTooltip.descriptionParsed,
+          summaryTooltip.descriptionParsed
+        ) &&
         !isNearDuplicateTooltipSection(
           passiveTooltip.descriptionParsed,
           summaryTooltip.descriptionParsed

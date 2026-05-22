@@ -297,7 +297,6 @@ import { useGameVersion } from '~/composables/useGameVersion'
 import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 import { formatSummonerSpellTooltipHtml } from '~/utils/gameTooltipFormatter'
 import { formatRuneTooltipHtml } from '~/utils/formatTooltipMarkupHtml'
-
 const { version } = useGameVersion()
 const { locale, t } = useI18n()
 const { tooltipsEnabled } = useTooltipsPreference()

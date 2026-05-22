@@ -85,11 +85,24 @@ export function computeTheorycraftItemProcLines(args: {
   items: readonly Item[]
   buildStats: TheorycraftBuildStats
   labels: Record<string, string>
+  /** When set, proc passives (Brillance, Nashor…) only count if index is active. */
+  itemsWithIndex?: readonly { index: number; item: Item }[]
+  activePassivesByIndex?: Record<number, boolean>
 }): TheorycraftItemProcLine[] {
   const lines: TheorycraftItemProcLine[] = []
   const seen = new Set<string>()
 
-  for (const item of args.items) {
+  const entries = args.itemsWithIndex ?? args.items.map((item, index) => ({ index, item }))
+
+  for (const { index, item } of entries) {
+    if (
+      args.activePassivesByIndex &&
+      isTheorycraftItemWithProc(item.id) &&
+      !args.activePassivesByIndex[index]
+    ) {
+      continue
+    }
+
     const configs = THEORYCRAFT_ITEM_PROCS.filter(config => config.itemIds.includes(item.id))
     for (const config of configs) {
       const dedupeKey = `${item.id}:${config.labelKey}`

@@ -68,6 +68,33 @@ export const THEORYCRAFT_STACKABLE_ITEMS: TheorycraftStackableItemConfig[] = [
   },
 ]
 
+/** Flat base stats for glory items when missing from build refs or excluded as starters (1082). */
+const GLORY_ITEM_BASE_STATS: Record<string, { abilityPower?: number; health?: number }> = {
+  '1082': { abilityPower: 15, health: 50 },
+  '3041': { abilityPower: 20, health: 100 },
+}
+
+function applyGloryItemBaseStats(stats: CalculatedStats, item: Item): void {
+  const base = GLORY_ITEM_BASE_STATS[item.id]
+  if (!base) return
+
+  if (item.id === '1082') {
+    if (base.abilityPower) stats.abilityPower += base.abilityPower
+    if (base.health) stats.health += base.health
+    return
+  }
+
+  if (item.id !== '3041') return
+
+  const itemStats = item.stats as Record<string, number | undefined> | undefined
+  const hasCatalogBase =
+    (itemStats?.FlatMagicDamageMod ?? 0) > 0 || (itemStats?.FlatHPPoolMod ?? 0) > 0
+  if (hasCatalogBase) return
+
+  if (base.abilityPower) stats.abilityPower += base.abilityPower
+  if (base.health) stats.health += base.health
+}
+
 const ITEM_FLAT_STATS: Record<
   string,
   { mana?: number; abilityPower?: number; attackDamage?: number }
@@ -202,6 +229,8 @@ export function applyTheorycraftItemModifiers(args: {
   for (const item of items) {
     const config = getTheorycraftStackableItemConfig(item.id)
     if (!config) continue
+
+    applyGloryItemBaseStats(stats, item)
 
     const stacks = clampStacks(itemStacksById[item.id] ?? 0, config.maxStacks)
     const transformed = Boolean(transformedById[item.id])

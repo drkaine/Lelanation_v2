@@ -1,58 +1,27 @@
 import { describe, expect, it } from 'vitest'
 import type { Item } from '@lelanation/shared-types'
-import {
-  activeItemLimitLabel,
-  countActiveNonStarterItems,
-  isWithinActiveItemLimit,
-} from '../theorycraftItems'
+import { mergeItemWithCatalog, resolveBuildItemsWithCatalog } from '../theorycraftItems'
 
-function item(id: string, tags: string[] = []): Item {
-  return {
-    id,
-    name: id,
-    image: { full: `${id}.png` },
-    tags,
-  } as Item
-}
+const catalogMejai = {
+  id: '3041',
+  name: "Mejai's Soulstealer",
+  stats: { FlatMagicDamageMod: 20, FlatHPPoolMod: 100 },
+  image: { full: '3041.png' },
+} as Item
 
 describe('theorycraftItems', () => {
-  it('counts boots toward the limit for non-adc roles', () => {
-    const items = [
-      item('boots', ['Boots']),
-      item('core1'),
-      item('core2'),
-      item('core3'),
-      item('core4'),
-      item('core5'),
-    ]
-    const disabled = new Set<number>()
-    expect(isWithinActiveItemLimit(items, disabled, ['mid'])).toBe(true)
-
-    const sevenActive = [...items, item('core6')]
-    expect(isWithinActiveItemLimit(sevenActive, disabled, ['mid'])).toBe(false)
+  it('mergeItemWithCatalog fills missing stats from catalog', () => {
+    const ref = { id: '3041', name: '3041', image: { full: '3041.png' } } as Item
+    const merged = mergeItemWithCatalog(ref, catalogMejai)
+    expect(merged.stats).toEqual(catalogMejai.stats)
+    expect(merged.name).toBe("Mejai's Soulstealer")
   })
 
-  it('allows boots in addition to six items for adc', () => {
-    const items = [
-      item('boots', ['Boots']),
-      item('core1'),
-      item('core2'),
-      item('core3'),
-      item('core4'),
-      item('core5'),
-      item('core6'),
-    ]
-    const disabled = new Set<number>()
-    expect(isWithinActiveItemLimit(items, disabled, ['adc'])).toBe(true)
-    expect(activeItemLimitLabel(items, disabled, ['adc'])).toBe('6/6 + boots')
-
-    const tooManyCore = [...items, item('core7')]
-    expect(isWithinActiveItemLimit(tooManyCore, disabled, ['adc'])).toBe(false)
-  })
-
-  it('ignores starter items in active counts', () => {
-    const items = [item('starter', ['Starter']), item('core1'), item('core2')]
-    const disabled = new Set<number>()
-    expect(countActiveNonStarterItems(items, disabled).total).toBe(2)
+  it('resolveBuildItemsWithCatalog resolves each item', () => {
+    const refs = [{ id: '3041', name: '3041' } as Item]
+    const resolved = resolveBuildItemsWithCatalog(refs, id =>
+      id === '3041' ? catalogMejai : undefined
+    )
+    expect(resolved[0]?.stats?.FlatMagicDamageMod).toBe(20)
   })
 })

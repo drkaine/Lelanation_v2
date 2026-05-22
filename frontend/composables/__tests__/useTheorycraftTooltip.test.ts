@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  dedupeTooltipParagraphs,
   filterSupplementalTooltipSections,
+  finalizeTooltipDisplay,
   resolveTheorycraftSpellDescription,
   resolveTheorycraftSpellDetailRaws,
   shouldShowSupplementalTooltipSummary,
@@ -240,6 +242,31 @@ describe('useTheorycraftTooltip', () => {
     expect(html).toContain('3e coup')
     expect(html).toContain('166.25')
     expect(html).toContain('207.81')
+  })
+
+  it('dedupes repeated passive paragraphs like Ornn forge rules', () => {
+    const forge =
+      "Ornn peut dépenser des PO pour forger des objets non consommables n'importe où sur la carte."
+    const masterwork =
+      "Quand Ornn atteint le niveau 13, il améliore l'un de ses objets légendaires en chef-d'œuvre."
+    const html = `${forge}<br><br>${forge}<br><br>${masterwork}`
+    const deduped = dedupeTooltipParagraphs(html)
+    expect(deduped.match(/Ornn peut dépenser/g)?.length).toBe(1)
+    expect(deduped).toContain('niveau 13')
+  })
+
+  it('hides summary paragraphs already present in main description', () => {
+    const forge =
+      "Ornn peut dépenser des PO pour forger des objets non consommables n'importe où sur la carte."
+    const armor = "Ornn augmente tous ses bonus d'armure et de résistance magique."
+    const result = finalizeTooltipDisplay({
+      summaryHtml: `${armor}<br><br>${forge}`,
+      descriptionHtml: `${forge}<br><br>Quand Ornn atteint le niveau 13, il améliore un objet.`,
+      detailedTexts: [],
+    })
+    expect(result.showSummary).toBe(true)
+    expect(result.summaryHtml).toContain('armure')
+    expect(result.summaryHtml).not.toContain('dépenser des PO')
   })
 
   it('filters duplicate supplemental tooltip sections', () => {

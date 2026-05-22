@@ -2,6 +2,27 @@ import type { Item } from '@lelanation/shared-types'
 
 export const MAX_ACTIVE_ITEMS = 6
 
+/** Merge build item refs with catalog entries so stat calculation sees Data Dragon stats. */
+export function mergeItemWithCatalog(item: Item, catalogItem: Item | undefined): Item {
+  if (!catalogItem) return item
+  return {
+    ...catalogItem,
+    ...item,
+    stats: catalogItem.stats ?? item.stats,
+    gold: catalogItem.gold ?? item.gold,
+    image: item.image?.full ? item.image : catalogItem.image,
+    tags: catalogItem.tags ?? item.tags,
+    name: catalogItem.name ?? item.name,
+  }
+}
+
+export function resolveBuildItemsWithCatalog(
+  items: readonly Item[],
+  lookup: (id: string) => Item | undefined
+): Item[] {
+  return items.map(item => mergeItemWithCatalog(item, lookup(item.id)))
+}
+
 function isStarterItem(item: Item): boolean {
   return (item.tags ?? []).some(tag => tag.toLowerCase() === 'starter')
 }
