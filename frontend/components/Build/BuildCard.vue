@@ -592,6 +592,10 @@
               v-for="item in startingItems"
               :key="`starter-${item.id}`"
               class="item-wrapper"
+              :class="{
+                'item-wrapper--theorycraft-stack':
+                  selectionMode === 'theorycraft' && isTheorycraftStackableItem(item.id),
+              }"
               @mouseenter="onSheetElementEnter($event, 'item', item, 'Item')"
               @mousemove="onSheetElementMove"
               @mouseleave="onSheetElementLeave"
@@ -601,6 +605,11 @@
                 :alt="item.name"
                 class="item-icon"
                 :title="sheetTooltip(getItemDisplayName(item), 'Item')"
+              />
+              <TheorycraftItemStackControls
+                v-if="selectionMode === 'theorycraft' && isTheorycraftStackableItem(item.id)"
+                :index="buildItems.indexOf(item)"
+                :item-id="item.id"
               />
             </div>
             <div
@@ -666,6 +675,10 @@
               <template v-for="(item, index) in coreItemsPath1" :key="`path1-${item.id}`">
                 <div
                   class="item-wrapper"
+                  :class="{
+                    'item-wrapper--theorycraft-stack':
+                      selectionMode === 'theorycraft' && isTheorycraftStackableItem(item.id),
+                  }"
                   @mouseenter="onSheetElementEnter($event, 'item', item, 'Item')"
                   @mousemove="onSheetElementMove"
                   @mouseleave="onSheetElementLeave"
@@ -675,6 +688,11 @@
                     :alt="item.name"
                     class="item-icon"
                     :title="sheetTooltip(getItemDisplayName(item), 'Item')"
+                  />
+                  <TheorycraftItemStackControls
+                    v-if="selectionMode === 'theorycraft' && isTheorycraftStackableItem(item.id)"
+                    :index="buildItems.indexOf(item)"
+                    :item-id="item.id"
                   />
                 </div>
                 <span v-if="index < coreItemsPath1.length - 1" class="arrow-right">→</span>
@@ -696,6 +714,10 @@
               <template v-for="(item, index) in coreItemsPath2" :key="`path2-${item.id}`">
                 <div
                   class="item-wrapper"
+                  :class="{
+                    'item-wrapper--theorycraft-stack':
+                      selectionMode === 'theorycraft' && isTheorycraftStackableItem(item.id),
+                  }"
                   @mouseenter="onSheetElementEnter($event, 'item', item, 'Item')"
                   @mousemove="onSheetElementMove"
                   @mouseleave="onSheetElementLeave"
@@ -705,6 +727,11 @@
                     :alt="item.name"
                     class="item-icon"
                     :title="sheetTooltip(getItemDisplayName(item), 'Item')"
+                  />
+                  <TheorycraftItemStackControls
+                    v-if="selectionMode === 'theorycraft' && isTheorycraftStackableItem(item.id)"
+                    :index="buildItems.indexOf(item)"
+                    :item-id="item.id"
                   />
                 </div>
                 <span v-if="index < coreItemsPath2.length - 1" class="arrow-right">→</span>
@@ -1159,17 +1186,93 @@
         </Teleport>
       </div>
 
-      <!-- Face arrière : description ou stats theorycraft -->
+      <!-- Face arrière : description (theorycraft : stats uniquement dans Gestion) -->
       <div v-if="canShowCardBack" class="build-card-back">
-        <TheorycraftCardStatsBack
-          v-if="flipBackFace === 'stats'"
-          :stats="buildStore.calculatedStats"
-          :level="buildStore.statsLevel"
-          :partype="(selectedChampion as { partype?: string } | null)?.partype"
-          :active-item-count="theorycraftActiveItemCount"
-          :stack-count="theorycraftStackCount"
-        />
-        <template v-else>
+        <template v-if="selectionMode !== 'theorycraft'">
+          <TheorycraftCardStatsBack
+            v-if="flipBackFace === 'stats'"
+            :stats="buildStore.calculatedStats"
+            :level="buildStore.statsLevel"
+            :partype="(selectedChampion as { partype?: string } | null)?.partype"
+            :active-item-count="theorycraftActiveItemCount"
+            :stack-count="theorycraftStackCount"
+          />
+          <template v-else>
+            <div
+              v-if="showBackHeader"
+              class="back-header"
+              :class="{ 'back-header--without-selector': !showBackVariantSelector }"
+            >
+              <div class="back-header-slot back-header-slot--left">
+                <button
+                  v-if="showBackVariantSelector && !forScreenshot"
+                  ref="variantsTriggerRef"
+                  class="variants-count-indicator variants-count-indicator--back"
+                  type="button"
+                  @click.stop="toggleVariantsPopover"
+                >
+                  <div
+                    class="variants-poker-icon"
+                    :title="`${totalVariantCount} variante${totalVariantCount > 1 ? 's' : ''}`"
+                  >
+                    <span
+                      v-for="n in Math.max(1, Math.min(totalVariantCount, 4))"
+                      :key="`back-variant-card-${n}`"
+                      class="variants-poker-card"
+                      :style="{
+                        transform: `translateX(${(n - 1) * 4}px) rotate(${(n - 1) * 4}deg)`,
+                        zIndex: n,
+                      }"
+                    />
+                    <span class="variants-poker-badge">
+                      {{ totalVariantCount }}
+                    </span>
+                  </div>
+                </button>
+              </div>
+              <span class="back-title">
+                {{ activeDescriptionTitle }}
+              </span>
+              <div class="back-header-slot back-header-slot--right">
+                <label
+                  v-if="showDescriptionToggle"
+                  class="back-description-toggle"
+                  :class="{ 'is-disabled': readonly }"
+                >
+                  <input
+                    class="back-description-toggle-input"
+                    type="checkbox"
+                    :checked="descriptionMode === 'single'"
+                    :disabled="readonly"
+                    @change="toggleCommonDescription(($event.target as HTMLInputElement).checked)"
+                  />
+                  <span
+                    class="back-description-toggle-track"
+                    :class="{ 'is-active': descriptionMode === 'single' }"
+                  >
+                    <span class="back-description-toggle-thumb" />
+                  </span>
+                </label>
+              </div>
+            </div>
+            <div class="back-description-panel">
+              <DescriptionVideoPreviews
+                v-if="activeDescriptionValue?.trim()"
+                class="back-description-previews"
+                :text="activeDescriptionValue"
+              />
+              <DescriptionEditor
+                v-if="!readonly"
+                :model-value="activeDescriptionValue"
+                @update:model-value="updateActiveDescription"
+              />
+              <!-- eslint-disable vue/no-v-html -->
+              <div v-else class="back-description-readonly" v-html="readonlyDescriptionHtml"></div>
+              <!-- eslint-enable vue/no-v-html -->
+            </div>
+          </template>
+        </template>
+        <div v-else class="build-card-back-description-only">
           <div
             v-if="showBackHeader"
             class="back-header"
@@ -1242,7 +1345,7 @@
             <div v-else class="back-description-readonly" v-html="readonlyDescriptionHtml"></div>
             <!-- eslint-enable vue/no-v-html -->
           </div>
-        </template>
+        </div>
       </div>
     </div>
     <!-- end .flip-container -->
@@ -1265,7 +1368,7 @@
             type="button"
             @click="showItemStats = true"
           >
-            Stats items
+            {{ t('buildCard.itemsStatsTab') }}
           </button>
         </div>
         <div class="items-manager-header-actions">
@@ -1314,7 +1417,9 @@
                       @dragend="onItemDragEnd"
                     />
                     <TheorycraftItemStackControls
-                      v-if="isTheorycraftItemsToggleMode"
+                      v-if="
+                        isTheorycraftItemsToggleMode && isTheorycraftStackableItem(entry.item.id)
+                      "
                       :index="entry.index"
                       :item-id="entry.item.id"
                     />
@@ -1351,7 +1456,9 @@
                       @dragend="onItemDragEnd"
                     />
                     <TheorycraftItemStackControls
-                      v-if="isTheorycraftItemsToggleMode"
+                      v-if="
+                        isTheorycraftItemsToggleMode && isTheorycraftStackableItem(entry.item.id)
+                      "
                       :index="entry.index"
                       :item-id="entry.item.id"
                     />
@@ -1388,7 +1495,9 @@
                       @dragend="onItemDragEnd"
                     />
                     <TheorycraftItemStackControls
-                      v-if="isTheorycraftItemsToggleMode"
+                      v-if="
+                        isTheorycraftItemsToggleMode && isTheorycraftStackableItem(entry.item.id)
+                      "
                       :index="entry.index"
                       :item-id="entry.item.id"
                     />
@@ -1425,7 +1534,9 @@
                       @dragend="onItemDragEnd"
                     />
                     <TheorycraftItemStackControls
-                      v-if="isTheorycraftItemsToggleMode"
+                      v-if="
+                        isTheorycraftItemsToggleMode && isTheorycraftStackableItem(entry.item.id)
+                      "
                       :index="entry.index"
                       :item-id="entry.item.id"
                     />
@@ -1443,13 +1554,34 @@
         </div>
       </div>
       <div v-else class="items-manager-stats">
-        <p class="items-manager-stats-note">
+        <TheorycraftCardStatsBack
+          v-if="isTheorycraftItemsToggleMode"
+          class="items-manager-total-stats"
+          :stats="buildStore.calculatedStats"
+          :level="buildStore.statsLevel"
+          :partype="(selectedChampion as { partype?: string } | null)?.partype"
+          :active-item-count="theorycraftActiveItemCount"
+          :stack-count="theorycraftStackCount"
+        />
+        <template v-if="!isTheorycraftItemsToggleMode">
+          <p class="items-manager-stats-note">
+            {{ t('buildCard.itemsStatsNote') }}
+          </p>
+          <div v-if="itemStatsRows.length === 0" class="items-manager-empty">
+            {{ t('buildCard.itemsStatsEmpty') }}
+          </div>
+        </template>
+        <p
+          v-else-if="itemStatsRows.length > 0"
+          class="items-manager-stats-note items-manager-stats-note--theorycraft"
+        >
           {{ t('buildCard.itemsStatsNote') }}
         </p>
-        <div v-if="itemStatsRows.length === 0" class="items-manager-empty">
-          {{ t('buildCard.itemsStatsEmpty') }}
-        </div>
-        <div v-else class="items-manager-stats-grid">
+        <div
+          v-if="itemStatsRows.length > 0"
+          class="items-manager-stats-grid"
+          :class="{ 'items-manager-stats-grid--theorycraft': isTheorycraftItemsToggleMode }"
+        >
           <div v-for="row in itemStatsRows" :key="row.key" class="items-manager-stats-row">
             <span class="items-manager-stats-label">{{ row.label }}</span>
             <span class="items-manager-stats-value">{{ row.value }}</span>
@@ -1471,6 +1603,42 @@
             </div>
           </div>
         </div>
+        <div
+          v-if="isTheorycraftItemsToggleMode && theorycraftSpellBuffRows.length > 0"
+          class="items-manager-modifiers"
+        >
+          <p class="items-manager-modifiers__title">{{ t('theorycraft.spells.buffsTitle') }}</p>
+          <div class="items-manager-modifiers__grid">
+            <div
+              v-for="(row, index) in theorycraftSpellBuffRows"
+              :key="`spell-buff-${row.spellId}-${index}`"
+              class="items-manager-modifiers__row"
+            >
+              <span class="items-manager-modifiers__label">{{ row.label }}</span>
+              <span class="items-manager-modifiers__value">{{ row.detail }}</span>
+            </div>
+          </div>
+        </div>
+        <div
+          v-if="isTheorycraftItemsToggleMode && theorycraftItemProcRows.length > 0"
+          class="items-manager-modifiers"
+        >
+          <p class="items-manager-modifiers__title">{{ t('theorycraft.items.procsTitle') }}</p>
+          <div class="items-manager-modifiers__grid">
+            <div
+              v-for="(row, index) in theorycraftItemProcRows"
+              :key="`proc-${row.itemId}-${index}`"
+              class="items-manager-modifiers__row"
+            >
+              <span class="items-manager-modifiers__label">{{ row.label }}</span>
+              <span
+                class="items-manager-modifiers__value"
+                :class="`items-manager-modifiers__value--${row.damageType}`"
+                >{{ row.detail }}</span
+              >
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1483,7 +1651,10 @@ import { isBootsItem, isStarterItem } from '@lelanation/builds-ui'
 import { sumStarterDrainStats, getGoldPer10FromItem } from '@lelanation/builds-stats'
 import type { Build, SubBuild, Item, Role, SkillOrder } from '@lelanation/shared-types'
 import { activeItemLimitLabel } from '~/utils/theorycraftItems'
-import { resolveTheorycraftItemImageFull } from '~/utils/theorycraftItemModifiers'
+import {
+  isTheorycraftStackableItem,
+  resolveTheorycraftItemImageFull,
+} from '~/utils/theorycraftItemModifiers'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useItemsStore } from '~/stores/ItemsStore'
@@ -1708,9 +1879,7 @@ const canEditSkillOrder = computed(
 )
 const showBackHeader = computed(
   () =>
-    isBuilderPage.value ||
-    showBackVariantSelector.value ||
-    (props.selectionMode === 'theorycraft' && props.flipBackFace === 'description')
+    isBuilderPage.value || showBackVariantSelector.value || props.selectionMode === 'theorycraft'
 )
 const showDescriptionToggle = computed(() => isBuilderPage.value && buildSubBuilds.value.length > 0)
 const showBackVariantSelector = computed(
@@ -2558,6 +2727,13 @@ const theorycraftStackCount = computed(() =>
 
 const theorycraftItemModifierRows = computed(() =>
   buildStore.theorycraftItemModifierLines.map(row => ({
+    ...row,
+    label: row.labelKey ? t(row.labelKey) : row.label,
+  }))
+)
+const theorycraftSpellBuffRows = computed(() => buildStore.theorycraftSpellBuffLines)
+const theorycraftItemProcRows = computed(() =>
+  buildStore.theorycraftItemProcLines.map(row => ({
     ...row,
     label: row.labelKey ? t(row.labelKey) : row.label,
   }))
@@ -3629,6 +3805,8 @@ defineExpose({
   width: 300px;
   height: 450px;
   perspective: 900px;
+  overflow: hidden;
+  border-radius: 6px;
 }
 
 .flip-container .build-card {
@@ -3641,15 +3819,18 @@ defineExpose({
 
 .flip-container.flipped .build-card {
   transform: rotateY(-180deg);
+  z-index: 1;
 }
 
 .build-card-back {
   position: absolute;
   top: 0;
   left: 0;
+  z-index: 0;
   width: 300px;
   height: 450px;
-  background: var(--gradient-primary-mirror);
+  background-color: var(--color-blue-500, #0a1428);
+  background-image: var(--gradient-primary-mirror);
   border: 2px solid transparent;
   border-image: var(--card-border-gradient-strong) 1;
   border-radius: 6px;
@@ -3657,17 +3838,70 @@ defineExpose({
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
   transform: rotateY(180deg);
-  transition: transform 0.45s cubic-bezier(0.4, 0.2, 0.2, 1);
+  transition:
+    transform 0.45s cubic-bezier(0.4, 0.2, 0.2, 1),
+    opacity 0.2s ease,
+    visibility 0.2s ease;
   transform-style: preserve-3d;
   display: flex;
   flex-direction: column;
   gap: 12px;
   font-family: var(--font-beaufort, ui-sans-serif, system-ui, sans-serif);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .flip-container.flipped .build-card-back {
   transform: rotateY(0deg);
+  z-index: 2;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.build-card-back-cycle {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.45s cubic-bezier(0.4, 0.2, 0.2, 1);
+  transform: rotateY(0deg);
+}
+
+.build-card-back-cycle--description {
+  transform: rotateY(180deg);
+}
+
+.build-card-back-cycle__face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: auto;
+  background-color: var(--color-blue-500, #0a1428);
+  background-image: var(--gradient-primary-mirror);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.build-card-back-cycle__face--description :deep(.description-editor) {
+  background: rgba(10, 20, 40, 0.88);
+}
+
+.build-card-back-cycle__face--description :deep(.description-editor-body) {
+  background: rgba(10, 20, 40, 0.45);
+}
+
+.build-card-back-cycle__face--stats {
+  transform: rotateY(0deg);
+}
+
+.build-card-back-cycle__face--description {
+  transform: rotateY(180deg);
 }
 
 .back-header {
@@ -4826,6 +5060,36 @@ defineExpose({
   text-align: right;
 }
 
+.items-manager-modifiers__value--physical {
+  color: rgb(248 113 113 / 1);
+}
+
+.items-manager-modifiers__value--magic {
+  color: rgb(196 181 253 / 1);
+}
+
+.items-manager-modifiers__value--true {
+  color: rgb(226 232 240 / 1);
+}
+
+.items-manager-total-stats {
+  margin-bottom: 0.75rem;
+  padding: 0;
+}
+
+.items-manager-total-stats :deep(.theorycraft-card-stats-back) {
+  padding: 0;
+  height: auto;
+}
+
+.items-manager-stats-grid--theorycraft {
+  margin-top: 0.25rem;
+}
+
+.items-manager-stats-note--theorycraft {
+  margin-top: 0.5rem;
+}
+
 .core-items-paths {
   display: flex;
   flex-direction: column;
@@ -4843,6 +5107,12 @@ defineExpose({
 .item-wrapper {
   position: relative;
   cursor: default;
+}
+
+.item-wrapper--theorycraft-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .item-icon {

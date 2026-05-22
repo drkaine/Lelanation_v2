@@ -52,6 +52,12 @@ describe('theorycraftItemModifiers', () => {
     expect(bonus.abilityPower).toBe(100)
   })
 
+  it('adds Dark Seal AP per glory stack', () => {
+    expect(isTheorycraftStackableItem('1082')).toBe(true)
+    const bonus = getTheorycraftItemStackStats('1082', 10)
+    expect(bonus.abilityPower).toBe(50)
+  })
+
   it('applies Rabadon percent AP bonus', () => {
     const result = applyTheorycraftItemModifiers({
       stats: baseStats,

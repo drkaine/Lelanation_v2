@@ -23,7 +23,7 @@
         {{ t('theorycraft.spells.noSpells') }}
       </p>
 
-      <details v-if="passive" class="border-border/60 group rounded-lg border p-1.5" open>
+      <details v-if="passive" class="theorycraft-spell-entry group p-1.5" open>
         <summary
           class="spell-entry-row flex cursor-pointer list-none flex-wrap items-center gap-x-2 gap-y-1 marker:content-none"
         >
@@ -51,6 +51,7 @@
               min="0"
               :max="passiveStackDefinition.maxStacks ?? undefined"
               class="theorycraft-stack-input border-border rounded border bg-surface text-text"
+              :size="stackInputSize(passiveStackDefinition, stackCount(passiveStackDefinition.id))"
               :value="stackCount(passiveStackDefinition.id)"
               @input="onStackInput(passiveStackDefinition.id, $event)"
             />
@@ -82,7 +83,7 @@
       <details
         v-for="spell in spells"
         :key="spell.id"
-        class="border-border/60 group rounded-lg border p-1.5"
+        class="theorycraft-spell-entry group p-1.5"
         open
       >
         <summary
@@ -108,7 +109,21 @@
           >
             {{ t('theorycraft.spells.approximateValues') }}
           </span>
-          <div class="spell-rank-buttons ml-auto flex items-center gap-0.5" @click.stop>
+          <button
+            v-if="spell.hasActivatableBuff"
+            type="button"
+            class="theorycraft-spell-active-toggle ml-auto shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide transition-colors"
+            :class="
+              isSpellActive(spell.id)
+                ? 'border-accent bg-accent/25 text-accent'
+                : 'border-border text-text/70 hover:border-accent/50'
+            "
+            :title="t('theorycraft.spells.toggleActive')"
+            @click.stop="toggleSpellActive(spell.id)"
+          >
+            {{ t('theorycraft.spells.active') }}
+          </button>
+          <div class="spell-rank-buttons flex items-center gap-0.5" @click.stop>
             <button
               v-for="rank in spell.maxRank"
               :key="`${spell.id}-rank-${rank}`"
@@ -137,6 +152,12 @@
               min="0"
               :max="stackDefinitionForSpell(spell.id, spell.slot)?.maxStacks ?? undefined"
               class="theorycraft-stack-input border-border rounded border bg-surface text-text"
+              :size="
+                stackInputSize(
+                  stackDefinitionForSpell(spell.id, spell.slot)!,
+                  stackCount(stackDefinitionForSpell(spell.id, spell.slot)!.id)
+                )
+              "
               :value="stackCount(stackDefinitionForSpell(spell.id, spell.slot)!.id)"
               @input="onStackInput(stackDefinitionForSpell(spell.id, spell.slot)!.id, $event)"
             />
@@ -207,6 +228,7 @@ import {
   findStackDefinitionForSource,
   parseStackDefinitions,
 } from '~/utils/theorycraftStacks'
+import { spellHasActivatableBuff } from '~/utils/theorycraftSpellBuffs'
 import { getImageUrl } from '~/utils/imageUrl'
 
 interface SpellHeaderStat {
@@ -232,6 +254,7 @@ interface ResolvedSpellView {
   detailedTexts?: string[]
   headerStats?: SpellHeaderStat[]
   isDynamic: boolean
+  hasActivatableBuff: boolean
 }
 
 interface ResolvedPassiveView {
@@ -279,6 +302,15 @@ function stackCount(definitionId: string): number {
 function onStackInput(definitionId: string, event: Event) {
   const value = Number((event.target as HTMLInputElement).value)
   buildStore.setTheorycraftStackCount(definitionId, value)
+}
+
+function stackInputSize(
+  definition: Pick<TheorycraftStackDefinition, 'maxStacks'>,
+  value: number
+): number {
+  const maxLen = String(definition.maxStacks ?? 9999).length
+  const valueLen = String(value || 0).length
+  return Math.max(2, maxLen, valueLen) + 1
 }
 
 function buildStackContext(source: {
@@ -358,6 +390,15 @@ function activeRank(spellId: string): number {
 
 function setRank(spellId: string, rank: number) {
   rankBySpellId[spellId] = rank
+  buildStore.setTheorycraftSpellRank(spellId, rank)
+}
+
+function isSpellActive(spellId: string): boolean {
+  return Boolean(buildStore.theorycraftActiveSpells[spellId])
+}
+
+function toggleSpellActive(spellId: string) {
+  buildStore.toggleTheorycraftActiveSpell(spellId)
 }
 
 function resolveSpellView(
@@ -471,7 +512,11 @@ const spells = computed<ResolvedSpellView[]>(() => {
     const spell = raw as TheorycraftSpellRuntimeData & Record<string, unknown>
     const id = String(spell.id ?? '')
     const maxRank = Math.max(1, Number(spell.maxRank ?? 5))
-    const rank = Math.min(Math.max(rankBySpellId[id] ?? 1, 1), maxRank)
+    const storeRank = buildStore.theorycraftSpellRanks[id]
+    if (storeRank != null && rankBySpellId[id] !== storeRank) {
+      rankBySpellId[id] = storeRank
+    }
+    const rank = Math.min(Math.max(rankBySpellId[id] ?? storeRank ?? 1, 1), maxRank)
     const resolved = resolveSpellView(
       spell,
       rank,
@@ -482,6 +527,7 @@ const spells = computed<ResolvedSpellView[]>(() => {
       id,
       slot: String(spell.slot ?? ''),
       imageUrl: resolveAbilityImageUrl(spell),
+      hasActivatableBuff: spellHasActivatableBuff(spell),
       ...resolved,
     }
   })
@@ -499,10 +545,12 @@ watch(
     const champion = props.championData ?? loadedChampion.value
     const championId = props.championId ?? String(champion?.id ?? '')
     if (!championId || stackDefinitions.value.length === 0) return
+    const spells = Array.isArray(champion?.spells) ? champion.spells : []
     buildStore.setTheorycraftStackContext({
       championId,
       definitions: stackDefinitions.value,
       calculationsBySource: stackCalculationsBySource.value,
+      spells: spells as TheorycraftSpellRuntimeData[],
     })
   },
   { immediate: true }
@@ -514,6 +562,19 @@ watch(loadError, value => {
 </script>
 
 <style scoped>
+.theorycraft-spell-entry {
+  --spell-entry-border-gradient: var(
+    --card-border-gradient-strong,
+    linear-gradient(130deg, #bba077 0%, #9a8468 45%, #1e2328 100%)
+  );
+  border: 2px solid transparent;
+  border-radius: 6px;
+  background:
+    linear-gradient(var(--color-blue-500), var(--color-blue-500)) padding-box,
+    var(--spell-entry-border-gradient) border-box;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.35);
+}
+
 summary::-webkit-details-marker {
   display: none;
 }
@@ -531,7 +592,12 @@ summary::-webkit-details-marker {
   width: 100%;
   height: 100%;
   border-radius: 4px;
-  border: 2px solid #000;
+  border: 2px solid transparent;
+  border-image: var(
+      --card-border-gradient-strong,
+      linear-gradient(130deg, #bba077 0%, #9a8468 45%, #1e2328 100%)
+    )
+    1;
   background: #000;
   object-fit: cover;
 }
@@ -560,15 +626,15 @@ summary::-webkit-details-marker {
 
 .theorycraft-stack-input {
   box-sizing: border-box;
-  width: 2em;
-  min-width: 1.125rem;
-  max-width: 2.5rem;
+  width: auto;
+  min-width: 2ch;
   height: 1.2em;
-  padding: 0 0.125em;
+  padding: 0 0.35em;
   font: inherit;
   line-height: 1;
   text-align: center;
   vertical-align: baseline;
+  field-sizing: content;
   appearance: textfield;
   -moz-appearance: textfield;
 }

@@ -259,6 +259,29 @@ describe('useTheorycraftTooltip', () => {
     ).toBe(false)
   })
 
+  it('resolves Nasus passive lifesteal from Spell.NasusPassive:LifestealTooltip', () => {
+    const spell = {
+      tooltipRaw:
+        'Nasus gagne +{{ Spell.NasusPassive:LifestealTooltip }}% de vol de vie supplémentaires.',
+      maxRank: 5,
+      calculations: [
+        {
+          key: 'lifestealtooltip',
+          baseValues: [12, 12, 18, 24, 24],
+          ratios: [],
+        },
+      ],
+      dataValues: [],
+      spellEffects: [],
+    }
+
+    const { html, isDynamic } = resolveTheorycraftSpellDescription(spell, baseStats, 5)
+    expect(isDynamic).toBe(true)
+    expect(html).toContain('24')
+    expect(html).not.toMatch(/\+\s*%/)
+    expect(html).not.toMatch(/\{\{/)
+  })
+
   it('resolves Nasus R storm detail with AP scaling and Q CDR', () => {
     const spell = {
       tooltipRaw: 'Ult bonus {{ bonushealth }}',

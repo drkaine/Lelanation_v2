@@ -26,63 +26,31 @@
       >
         <div class="build-card-wrapper w-full flex-shrink-0 md:order-1">
           <div class="build-card-toolbar">
-            <div class="build-card-toolbar__backs">
-              <button
-                type="button"
-                class="build-card-toolbar__flip"
-                :class="{
-                  'build-card-toolbar__flip--active': cardFlipped && cardBackFace === 'description',
-                }"
-                :title="descriptionBackTitle"
-                :aria-label="descriptionBackTitle"
-                @click="toggleCardBack('description')"
+            <button
+              type="button"
+              class="build-card-toolbar__flip"
+              :class="{ 'build-card-toolbar__flip--active': cardFlipped }"
+              :title="flipCycleTitle"
+              :aria-label="flipCycleTitle"
+              @click="cycleCardFlip"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
               >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                  <path d="M14 2v6h6" />
-                  <path d="M16 13H8" />
-                  <path d="M16 17H8" />
-                  <path d="M10 9H8" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                class="build-card-toolbar__flip"
-                :class="{
-                  'build-card-toolbar__flip--active': cardFlipped && cardBackFace === 'stats',
-                }"
-                :title="statsBackTitle"
-                :aria-label="statsBackTitle"
-                @click="toggleCardBack('stats')"
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-                  <path d="M21 3v5h-5" />
-                  <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-                  <path d="M8 16H3v5" />
-                </svg>
-              </button>
-            </div>
+                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+                <path d="M21 3v5h-5" />
+                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+                <path d="M8 16H3v5" />
+              </svg>
+            </button>
             <div class="build-card-toolbar__save">
               <BuildSaveButton @highlight-missing="highlightMissingFields = $event" />
             </div>
@@ -151,29 +119,20 @@ const { isLayoutScaled } = useLayoutScaled()
 const activePanel = ref<TheorycraftPanel>('theorycraft')
 const theorycraftLevel = ref(18)
 const cardFlipped = ref(false)
-const cardBackFace = ref<'stats' | 'description'>('stats')
+const cardBackFace = ref<'description'>('description')
 const highlightMissingFields = ref(false)
 const championData = ref<Record<string, unknown> | null>(null)
 
-const descriptionBackTitle = computed(() =>
-  cardFlipped.value && cardBackFace.value === 'description'
-    ? t('theorycraft.description.showBuild')
+const flipCycleTitle = computed(() =>
+  cardFlipped.value
+    ? t('theorycraft.stats.showBuild')
     : t('theorycraft.description.showDescription')
 )
 
-const statsBackTitle = computed(() =>
-  cardFlipped.value && cardBackFace.value === 'stats'
-    ? t('theorycraft.stats.showBuild')
-    : t('theorycraft.stats.showStats')
-)
-
-function toggleCardBack(face: 'stats' | 'description') {
-  if (cardFlipped.value && cardBackFace.value === face) {
-    cardFlipped.value = false
-    return
-  }
-  cardBackFace.value = face
-  cardFlipped.value = true
+/** Build ↔ description (les stats sont dans Gestion sous la card). */
+function cycleCardFlip() {
+  cardFlipped.value = !cardFlipped.value
+  if (cardFlipped.value) cardBackFace.value = 'description'
 }
 
 const championId = computed(() => buildStore.currentBuild?.champion?.id ?? null)
@@ -322,12 +281,6 @@ onUnmounted(() => {
   width: 100%;
   max-width: none;
   min-height: 38px;
-}
-
-.build-card-toolbar__backs {
-  display: flex;
-  flex-shrink: 0;
-  gap: 0.375rem;
 }
 
 .build-card-toolbar__flip {

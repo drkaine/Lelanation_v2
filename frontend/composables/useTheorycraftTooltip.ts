@@ -663,12 +663,34 @@ function buildRuntimeVariableMap(
 
 function lookupVar(vars: Map<string, string>, expression: string): string | null {
   const base = expression.trim()
+  const lower = base.toLowerCase()
   const candidates = new Set<string>([
     base,
-    base.toLowerCase(),
+    lower,
     base.replace(/[^a-zA-Z0-9_]/g, ''),
-    base.toLowerCase().replace(/[^a-z0-9]/g, ''),
+    lower.replace(/[^a-z0-9]/g, ''),
   ])
+
+  const baseWithoutDecimalSuffix = lower.replace(/\.\d+$/, '')
+  if (baseWithoutDecimalSuffix !== lower) {
+    candidates.add(baseWithoutDecimalSuffix)
+    candidates.add(baseWithoutDecimalSuffix.replace(/[^a-z0-9]/g, ''))
+  }
+
+  const colonIndex = lower.lastIndexOf(':')
+  if (colonIndex >= 0 && colonIndex < lower.length - 1) {
+    const tail = lower.slice(colonIndex + 1)
+    candidates.add(tail)
+    candidates.add(tail.replace(/[^a-z0-9]/g, ''))
+  }
+
+  const dotIndex = lower.lastIndexOf('.')
+  if (dotIndex >= 0 && dotIndex < lower.length - 1) {
+    const tail = lower.slice(dotIndex + 1)
+    candidates.add(tail)
+    candidates.add(tail.replace(/[^a-z0-9]/g, ''))
+  }
+
   for (const candidate of candidates) {
     const value = vars.get(candidate.toLowerCase())
     if (value != null) return value

@@ -41,6 +41,12 @@ export const THEORYCRAFT_PERCENT_MODIFIERS: TheorycraftPercentModifier[] = [
 
 export const THEORYCRAFT_STACKABLE_ITEMS: TheorycraftStackableItemConfig[] = [
   {
+    itemIds: ['1082'],
+    labelKey: 'theorycraft.items.darkSeal',
+    maxStacks: 10,
+    stackUnit: 'glory',
+  },
+  {
     itemIds: ['3041'],
     labelKey: 'theorycraft.items.mejai',
     maxStacks: 25,
@@ -168,6 +174,7 @@ export function getTheorycraftItemStackStats(
 ): Record<string, number> {
   const count = clampStacks(stacks, getTheorycraftStackableItemConfig(itemId)?.maxStacks ?? 0)
   switch (itemId) {
+    case '1082':
     case '3041':
       return count > 0 ? { abilityPower: count * 5 } : {}
     case '3084':

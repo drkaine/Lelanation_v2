@@ -23,6 +23,7 @@ import {
   championWithStatsForBuild,
   maxChampionLevelForRoles,
   resolveChampionStatsForBuild,
+  toTheorycraftBuildStats,
 } from '~/utils/theorycraftStats'
 import {
   clampDisabledIndicesToActiveLimit,
@@ -32,10 +33,16 @@ import {
 } from '~/utils/theorycraftItems'
 import {
   applyTheorycraftItemModifiers,
-  getTheorycraftStackableItemConfig,
   remapTheorycraftItemStacksByIndex,
 } from '~/utils/theorycraftItemModifiers'
 import type { TheorycraftItemModifierLine } from '~/utils/theorycraftItemModifiers'
+import { computeTheorycraftItemProcLines } from '~/utils/theorycraftItemProcs'
+import type { TheorycraftItemProcLine } from '~/utils/theorycraftItemProcs'
+import {
+  applyTheorycraftSpellBuffs,
+  type TheorycraftSpellBuffLine,
+  type TheorycraftSpellRuntime,
+} from '~/utils/theorycraftSpellBuffs'
 import type { TheorycraftStackDefinition } from '~/types/theorycraft'
 import type { TheorycraftSpellCalculation } from '~/composables/useTheorycraftTooltip'
 
@@ -75,6 +82,16 @@ interface BuildState {
   theorycraftItemTransformed: Record<number, boolean>
   /** Détail des bonus % / stacks appliqués au dernier calcul. */
   theorycraftItemModifierLines: TheorycraftItemModifierLine[]
+  /** Sorts du champion export theorycraft (pour buffs actifs). */
+  theorycraftChampionSpells: TheorycraftSpellRuntime[]
+  /** Sort actif (buff temporaire) par id de sort. */
+  theorycraftActiveSpells: Record<string, boolean>
+  /** Rang sélectionné par sort (panneau theorycraft). */
+  theorycraftSpellRanks: Record<string, number>
+  /** Lignes de buffs de sorts actifs appliqués aux stats. */
+  theorycraftSpellBuffLines: TheorycraftSpellBuffLine[]
+  /** Dégâts on-hit / proc des objets équipés. */
+  theorycraftItemProcLines: TheorycraftItemProcLine[]
   /** Incrémenté à chaque modification de la liste sauvegardée (save/delete/copy) pour forcer le refresh des vues. */
   savedBuildsVersion: number
   /** Variante actuellement affichée dans le builder : 'main' = build principal, number = index dans subBuilds. */
@@ -140,6 +157,11 @@ export const useBuildStore = defineStore('build', {
     theorycraftItemStacks: {},
     theorycraftItemTransformed: {},
     theorycraftItemModifierLines: [],
+    theorycraftChampionSpells: [],
+    theorycraftActiveSpells: {},
+    theorycraftSpellRanks: {},
+    theorycraftSpellBuffLines: [],
+    theorycraftItemProcLines: [],
     savedBuildsVersion: 0,
     displayedVariant: 'main',
     pendingChampionChange: null,
@@ -445,6 +467,11 @@ export const useBuildStore = defineStore('build', {
       this.theorycraftItemStacks = {}
       this.theorycraftItemTransformed = {}
       this.theorycraftItemModifierLines = []
+      this.theorycraftChampionSpells = []
+      this.theorycraftActiveSpells = {}
+      this.theorycraftSpellRanks = {}
+      this.theorycraftSpellBuffLines = []
+      this.theorycraftItemProcLines = []
     },
 
     loadTheorycraftItemStacks() {
@@ -498,22 +525,6 @@ export const useBuildStore = defineStore('build', {
       this.theorycraftItemTransformed = next
       this.persistTheorycraftItemStacks()
       this.recalculateStats()
-    },
-
-    toggleTheorycraftItemTransformed(index: number) {
-      if (this.builderSession !== 'theorycraft') return
-      const nextActive = !this.theorycraftItemTransformed[index]
-      this.setTheorycraftItemTransformed(index, nextActive)
-      if (!nextActive) return
-      const item = this.currentBuild?.items?.[index]
-      if (!item) return
-      const config = getTheorycraftStackableItemConfig(item.id)
-      if (!config?.supportsTransform) return
-      const threshold = config.transformThreshold ?? config.maxStacks
-      const current = this.theorycraftItemStacks[index] ?? 0
-      if (current < threshold) {
-        this.setTheorycraftItemStacks(index, threshold)
-      }
     },
 
     loadTheorycraftDisabledItems() {
@@ -629,6 +640,11 @@ export const useBuildStore = defineStore('build', {
       this.theorycraftStackDefinitions = []
       this.theorycraftStackCalculationsBySource = {}
       this.theorycraftStackChampionId = null
+      this.theorycraftChampionSpells = []
+      this.theorycraftActiveSpells = {}
+      this.theorycraftSpellRanks = {}
+      this.theorycraftSpellBuffLines = []
+      this.theorycraftItemProcLines = []
     },
 
     loadTheorycraftStacksForChampion(championId: string) {
@@ -661,14 +677,33 @@ export const useBuildStore = defineStore('build', {
       championId: string
       definitions: TheorycraftStackDefinition[]
       calculationsBySource: Record<string, TheorycraftSpellCalculation[]>
+      spells?: TheorycraftSpellRuntime[]
     }) {
       const championChanged = this.theorycraftStackChampionId !== args.championId
       this.theorycraftStackChampionId = args.championId
       this.theorycraftStackDefinitions = args.definitions
       this.theorycraftStackCalculationsBySource = args.calculationsBySource
+      this.theorycraftChampionSpells = args.spells ?? []
       if (championChanged) {
         this.loadTheorycraftStacksForChampion(args.championId)
+        this.theorycraftActiveSpells = {}
+        this.theorycraftSpellRanks = {}
       }
+      this.recalculateStats()
+    },
+
+    setTheorycraftSpellRank(spellId: string, rank: number) {
+      if (this.builderSession !== 'theorycraft') return
+      const safe = Math.max(1, Math.trunc(Number.isFinite(rank) ? rank : 1))
+      this.theorycraftSpellRanks = { ...this.theorycraftSpellRanks, [spellId]: safe }
+      this.recalculateStats()
+    },
+
+    toggleTheorycraftActiveSpell(spellId: string) {
+      if (this.builderSession !== 'theorycraft') return
+      const next = { ...this.theorycraftActiveSpells }
+      next[spellId] = !next[spellId]
+      this.theorycraftActiveSpells = next
       this.recalculateStats()
     },
 
@@ -1337,12 +1372,41 @@ export const useBuildStore = defineStore('build', {
             transformedById,
             labels: {},
           })
-          this.calculatedStats = modifierResult.stats
+
+          const activeSpellIds = new Set(
+            Object.entries(this.theorycraftActiveSpells)
+              .filter(([, enabled]) => enabled)
+              .map(([id]) => id)
+          )
+          const buffResult = applyTheorycraftSpellBuffs({
+            stats: modifierResult.stats,
+            spells: this.theorycraftChampionSpells,
+            activeSpellIds,
+            spellRanks: this.theorycraftSpellRanks,
+            level: this.statsLevel,
+            labels: {},
+          })
+
+          const buildStats = toTheorycraftBuildStats(
+            buffResult.stats,
+            championForStats,
+            this.statsLevel
+          )
+          this.theorycraftItemProcLines = computeTheorycraftItemProcLines({
+            items: activeItems,
+            buildStats,
+            labels: {},
+          })
+
+          this.calculatedStats = buffResult.stats
           this.theorycraftItemModifierLines = modifierResult.lines
+          this.theorycraftSpellBuffLines = buffResult.lines
           return
         }
 
         this.theorycraftItemModifierLines = []
+        this.theorycraftSpellBuffLines = []
+        this.theorycraftItemProcLines = []
         this.calculatedStats = stats
       })
     },

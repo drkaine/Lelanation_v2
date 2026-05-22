@@ -5,29 +5,19 @@
       min="0"
       :max="config.maxStacks"
       class="theorycraft-item-stack__input"
+      :size="stackInputSize"
       :value="stacks"
       :title="t('theorycraft.items.stacksInput')"
       @input="onInput"
     />
     <button
-      v-if="config.supportsTransform"
       type="button"
       class="theorycraft-item-stack__full"
       :class="{ 'theorycraft-item-stack__full--active': isFullStack }"
-      :title="t('theorycraft.items.fullStack')"
+      :title="fullStackTitle"
       @click="setFullStack"
     >
       {{ t('theorycraft.items.fullStackShort') }}
-    </button>
-    <button
-      v-if="config.supportsTransform"
-      type="button"
-      class="theorycraft-item-stack__transform"
-      :class="{ 'theorycraft-item-stack__transform--active': transformed }"
-      :title="t('theorycraft.items.transformToggle')"
-      @click="buildStore.toggleTheorycraftItemTransformed(index)"
-    >
-      {{ t('theorycraft.items.transformShort') }}
     </button>
   </div>
 </template>
@@ -49,12 +39,25 @@ const config = computed(() => getTheorycraftStackableItemConfig(props.itemId))
 
 const stacks = computed(() => buildStore.theorycraftItemStacks[props.index] ?? 0)
 
-const transformed = computed(() => Boolean(buildStore.theorycraftItemTransformed[props.index]))
+const stackInputSize = computed(() => {
+  const maxLen = String(config.value?.maxStacks ?? 0).length
+  const valueLen = String(stacks.value || 0).length
+  return Math.max(2, maxLen, valueLen) + 1
+})
+
+const fullStackTitle = computed(() => {
+  if (!config.value) return ''
+  if (config.value.supportsTransform) return t('theorycraft.items.fullStack')
+  return t('theorycraft.items.fullStackGlory', { max: config.value.maxStacks })
+})
 
 const isFullStack = computed(() => {
-  if (!config.value?.supportsTransform) return false
-  const threshold = config.value.transformThreshold ?? config.value.maxStacks
-  return stacks.value >= threshold && transformed.value
+  if (!config.value) return false
+  if (config.value.supportsTransform) {
+    const threshold = config.value.transformThreshold ?? config.value.maxStacks
+    return stacks.value >= threshold && Boolean(buildStore.theorycraftItemTransformed[props.index])
+  }
+  return stacks.value >= config.value.maxStacks
 })
 
 function onInput(event: Event) {
@@ -66,12 +69,18 @@ function setFullStack() {
   if (!config.value) return
   if (isFullStack.value) {
     buildStore.setTheorycraftItemStacks(props.index, 0)
-    buildStore.setTheorycraftItemTransformed(props.index, false)
+    if (config.value.supportsTransform) {
+      buildStore.setTheorycraftItemTransformed(props.index, false)
+    }
     return
   }
-  const threshold = config.value.transformThreshold ?? config.value.maxStacks
-  buildStore.setTheorycraftItemStacks(props.index, threshold)
-  buildStore.setTheorycraftItemTransformed(props.index, true)
+  if (config.value.supportsTransform) {
+    const threshold = config.value.transformThreshold ?? config.value.maxStacks
+    buildStore.setTheorycraftItemStacks(props.index, threshold)
+    buildStore.setTheorycraftItemTransformed(props.index, true)
+    return
+  }
+  buildStore.setTheorycraftItemStacks(props.index, config.value.maxStacks)
 }
 </script>
 
@@ -88,18 +97,20 @@ function setFullStack() {
 
 .theorycraft-item-stack__input {
   box-sizing: border-box;
-  width: 2em;
-  min-width: 1.125rem;
+  width: auto;
+  min-width: 2ch;
+  max-width: 100%;
   height: 1.2em;
   border-radius: 0.2em;
   border: 1px solid rgb(200 155 60 / 0.45);
   background: rgb(10 20 40 / 0.95);
-  padding: 0 0.125em;
+  padding: 0 0.35em;
   font-size: inherit;
   font-weight: 600;
   line-height: 1;
   color: rgb(255 255 255 / 0.9);
   text-align: center;
+  field-sizing: content;
   appearance: textfield;
   -moz-appearance: textfield;
 }
@@ -125,25 +136,6 @@ function setFullStack() {
 }
 
 .theorycraft-item-stack__full--active {
-  border-color: var(--color-accent, #c89b3c);
-  color: var(--color-accent, #c89b3c);
-  background: rgb(200 155 60 / 0.12);
-}
-
-.theorycraft-item-stack__transform {
-  border-radius: 0.25rem;
-  border: 1px solid rgb(200 155 60 / 0.35);
-  background: transparent;
-  padding: 0 0.25rem;
-  font-size: 0.55rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: rgb(255 255 255 / 0.65);
-  line-height: 1.2;
-}
-
-.theorycraft-item-stack__transform--active {
   border-color: var(--color-accent, #c89b3c);
   color: var(--color-accent, #c89b3c);
   background: rgb(200 155 60 / 0.12);

@@ -2,6 +2,7 @@
   <div
     class="theorycraft-workspace rounded-xl bg-surface p-4"
     :class="{ 'theorycraft-workspace--spells': activePanel === 'theorycraft' }"
+    :style="borderThemeVars"
   >
     <TheorycraftSpellPanel
       v-if="activePanel === 'theorycraft'"
@@ -41,7 +42,7 @@ import type { TheorycraftBuildStats } from '~/types/theorycraft'
 
 export type TheorycraftPanel = 'champion' | 'items' | 'runes' | 'theorycraft' | null
 
-defineProps<{
+const props = defineProps<{
   activePanel: TheorycraftPanel
   championId: string | null
   championData: Record<string, unknown> | null
@@ -50,6 +51,7 @@ defineProps<{
 }>()
 
 const { t } = useI18n()
+const { themeVars: borderThemeVars } = useBuildCardBorderTheme(() => props.championId)
 </script>
 
 <style scoped>
