@@ -15,6 +15,8 @@ import type {
 export type AdaptiveStatChoice = "ad" | "ap";
 
 export interface CalculateStatsOptions {
+  /** Include starter items (Doran’s, etc.) in item stat totals. Default: false. */
+  includeStarterItems?: boolean;
   /** Adaptive shard (5008) grants AD or AP. Default: ad. */
   adaptiveStat?: AdaptiveStatChoice;
   /** Item ID -> stack count for stackable items (Mejai, Manamune, etc.) */
@@ -43,6 +45,14 @@ export function filterItemsForStats(items: Item[]): Item[] {
   return [...nonStarterNonBoots, ...bootsForStats];
 }
 
+/** Like {@link filterItemsForStats} but keeps lane starters (theorycraft / full build preview). */
+export function filterItemsForStatsWithStarters(items: Item[]): Item[] {
+  const bootsItems = items.filter((i) => isBootsItem(i));
+  const nonBoots = items.filter((i) => !isBootsItem(i));
+  const bootsForStats: Item[] = bootsItems.length > 0 ? [bootsItems[0]!] : [];
+  return [...nonBoots, ...bootsForStats];
+}
+
 /**
  * Calculate final statistics for a build.
  * Takes into account: champion base stats, items, runes, shards, optional item/passive stacks.
@@ -59,12 +69,17 @@ export function calculateStats(
   if (!champion) return null;
 
   const baseStats = calculateChampionStatsAtLevel(champion.stats, level);
-  const filteredItems = filterItemsForStats(items);
+  const includeStarters = options?.includeStarterItems === true;
+  const filteredItems = includeStarters
+    ? filterItemsForStatsWithStarters(items)
+    : filterItemsForStats(items);
   const itemStats = calculateItemStats(filteredItems, options);
-  const starterDrain = sumStarterDrainStats(items);
-  itemStats.lifeSteal += starterDrain.lifeSteal;
-  itemStats.spellVamp += starterDrain.spellVamp;
-  itemStats.omnivamp += starterDrain.omnivamp;
+  if (!includeStarters) {
+    const starterDrain = sumStarterDrainStats(items);
+    itemStats.lifeSteal += starterDrain.lifeSteal;
+    itemStats.spellVamp += starterDrain.spellVamp;
+    itemStats.omnivamp += starterDrain.omnivamp;
+  }
   const runeStats = calculateRuneStats(runes);
   const shardStats = calculateShardStats(shards, level, options?.adaptiveStat);
   const passiveStackStats = calculatePassiveStackStats(champion.id, options);

@@ -8,7 +8,7 @@
       {{ t('theorycraft.runes.stacksTitle') }}
     </p>
 
-    <label v-if="hasGatheringStorm" class="theorycraft-rune-panel__duration">
+    <label v-if="usesGameDuration" class="theorycraft-rune-panel__duration">
       <span>{{ t('theorycraft.runes.gameDuration') }}</span>
       <input
         type="number"
@@ -31,7 +31,7 @@
         :label="runeLabel(entry.runeId)"
       />
     </div>
-    <p v-else-if="variant !== 'header' && !hasGatheringStorm" class="theorycraft-rune-panel__empty">
+    <p v-else-if="variant !== 'header' && !usesGameDuration" class="theorycraft-rune-panel__empty">
       {{ t('theorycraft.runes.noStackableRunes') }}
     </p>
   </div>
@@ -44,6 +44,7 @@ import { useRunesStore } from '~/stores/RunesStore'
 import TheorycraftRuneStackControls from '~/components/Build/TheorycraftRuneStackControls.vue'
 import {
   listSelectedRuneIds,
+  runeSelectionUsesGameDuration,
   selectedTheorycraftStackableRunes,
 } from '~/utils/theorycraftRuneModifiers'
 
@@ -64,10 +65,12 @@ const runes = computed(() => buildStore.displayedBuild?.runes ?? buildStore.curr
 
 const stackableRunes = computed(() => selectedTheorycraftStackableRunes(runes.value))
 
-const hasGatheringStorm = computed(() => listSelectedRuneIds(runes.value).includes(8236))
+const selectedRuneIds = computed(() => listSelectedRuneIds(runes.value))
+
+const usesGameDuration = computed(() => runeSelectionUsesGameDuration(selectedRuneIds.value))
 
 const showPanel = computed(
-  () => hasGatheringStorm.value || stackableRunes.value.length > 0 || props.variant !== 'header'
+  () => usesGameDuration.value || stackableRunes.value.length > 0 || props.variant !== 'header'
 )
 
 function runeLabel(runeId: number): string {

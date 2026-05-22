@@ -1701,9 +1701,18 @@
 import { ref, computed, watch, nextTick, onUnmounted, onMounted, type CSSProperties } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { isBootsItem, isStarterItem } from '@lelanation/builds-ui'
-import { sumStarterDrainStats, getGoldPer10FromItem } from '@lelanation/builds-stats'
+import {
+  sumStarterDrainStats,
+  getGoldPer10FromItem,
+  filterItemsForStats,
+  filterItemsForStatsWithStarters,
+} from '@lelanation/builds-stats'
 import type { Build, SubBuild, Item, Role, SkillOrder } from '@lelanation/shared-types'
-import { activeItemLimitLabel } from '~/utils/theorycraftItems'
+import {
+  activeItemLimitLabel,
+  countActiveNonStarterItems,
+  isAdcRole,
+} from '~/utils/theorycraftItems'
 import {
   isTheorycraftStackableItem,
   resolveTheorycraftItemImageFull,
@@ -2784,7 +2793,9 @@ function getBuildItemImageUrl(item: Item, buildIndex?: number): string {
 const theorycraftActiveItemCount = computed(() => {
   if (props.selectionMode !== 'theorycraft') return 0
   const disabled = new Set(buildStore.theorycraftDisabledItemIndices)
-  return buildItems.value.filter((_, index) => !disabled.has(index)).length
+  const roles = displayBuild.value?.roles ?? []
+  const { nonBoots, total } = countActiveNonStarterItems(buildItems.value, disabled)
+  return isAdcRole(roles) ? nonBoots : total
 })
 
 const theorycraftStackCount = computed(() =>
@@ -3319,14 +3330,9 @@ const itemStatsTotals = computed(() => {
     goldPer10: 0,
   }
 
-  const nonStarter = itemsForManagerStats.value.filter(item => !isStarterItem(item))
-  let firstBootKept = false
-  const itemsForStats = nonStarter.filter(item => {
-    if (!isBootsItem(item)) return true
-    if (firstBootKept) return false
-    firstBootKept = true
-    return true
-  })
+  const itemsForStats = isTheorycraftItemsToggleMode.value
+    ? filterItemsForStatsWithStarters(itemsForManagerStats.value)
+    : filterItemsForStats(itemsForManagerStats.value)
 
   for (const item of itemsForStats) {
     totals.goldPer10 += getGoldPer10FromItem(item)
@@ -3373,10 +3379,12 @@ const itemStatsTotals = computed(() => {
       normalizePercentStat((item.stats as any).PercentOmnivamp || 0)
   }
 
-  const starterDrain = sumStarterDrainStats(itemsForManagerStats.value)
-  totals.lifeStealPercent += starterDrain.lifeSteal
-  totals.spellVampPercent += starterDrain.spellVamp
-  totals.omnivampPercent += starterDrain.omnivamp
+  if (!isTheorycraftItemsToggleMode.value) {
+    const starterDrain = sumStarterDrainStats(itemsForManagerStats.value)
+    totals.lifeStealPercent += starterDrain.lifeSteal
+    totals.spellVampPercent += starterDrain.spellVamp
+    totals.omnivampPercent += starterDrain.omnivamp
+  }
 
   return totals
 })
@@ -3485,13 +3493,7 @@ watch(
   () => buildStore.currentBuild,
   newBuild => {
     if (newBuild && !props.build) {
-      // Sauvegarder automatiquement dans localStorage seulement si on utilise currentBuild
-      try {
-        const buildData = JSON.stringify(newBuild)
-        localStorage.setItem(buildStore.getCurrentDraftStorageKey(), buildData)
-      } catch (error) {
-        // Ignore storage errors
-      }
+      buildStore.persistCurrentBuildDraft()
     }
   },
   { deep: true }
@@ -3518,7 +3520,7 @@ onMounted(() => {
   if (summonerSpellsStore.status === 'idle' || summonerSpellsStore.spells.length === 0) {
     summonerSpellsStore.loadSummonerSpells(locale).catch(() => undefined)
   }
-  if (!props.build && !buildStore.currentBuild) {
+  if (!props.build && !buildStore.currentBuild && props.selectionMode !== 'theorycraft') {
     buildStore.ensureCurrentBuild()
   }
   document.addEventListener('mousedown', onDocumentPointerDown)
@@ -3895,10 +3897,11 @@ defineExpose({
 /* ── Flip animation ── */
 .flip-container {
   position: relative;
+  z-index: 2;
   width: 300px;
   height: 450px;
   perspective: 900px;
-  overflow: hidden;
+  overflow: visible;
   border-radius: 6px;
 }
 
@@ -4230,6 +4233,7 @@ defineExpose({
   position: relative;
   width: 300px;
   height: 450px;
+  overflow: hidden;
   background:
     linear-gradient(var(--color-blue-500), var(--color-blue-500)) padding-box,
     var(--card-border-gradient-strong) border-box;
@@ -4911,6 +4915,8 @@ defineExpose({
 
 /* Items manager (below card) */
 .items-manager {
+  position: relative;
+  z-index: 1;
   width: var(--build-card-width);
   box-sizing: border-box;
   padding: 10px;
@@ -5352,6 +5358,7 @@ defineExpose({
   position: absolute;
   right: 20px; /* Décalé de 20px du bord droit */
   top: 303px; /* Descendu pour s'aligner avec les items */
+  z-index: 20;
 }
 
 .skill-order-vertical {
@@ -5427,7 +5434,7 @@ defineExpose({
   position: absolute;
   top: 100%;
   left: 0;
-  z-index: 15;
+  z-index: 30;
   min-width: 84px;
   padding: 4px;
   border: 1px solid transparent;
@@ -5478,6 +5485,13 @@ defineExpose({
 .skill-slot-dropdown-label {
   font-size: 11px;
   font-weight: 700;
+}
+
+/* Skill order (droite) : menu vers la gauche pour ne pas passer sous la gestion items */
+.skill-order-section .skill-slot-dropdown {
+  top: 0;
+  left: auto;
+  right: calc(100% + 4px);
 }
 
 .arrow-down {

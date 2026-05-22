@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { Item } from '@lelanation/shared-types'
-import { mergeItemWithCatalog, resolveBuildItemsWithCatalog } from '../theorycraftItems'
+import {
+  countActiveNonStarterItems,
+  isWithinActiveItemLimit,
+  mergeItemWithCatalog,
+  resolveBuildItemsWithCatalog,
+} from '../theorycraftItems'
 
 const catalogMejai = {
   id: '3041',
@@ -15,6 +20,24 @@ describe('theorycraftItems', () => {
     const merged = mergeItemWithCatalog(ref, catalogMejai)
     expect(merged.stats).toEqual(catalogMejai.stats)
     expect(merged.name).toBe("Mejai's Soulstealer")
+  })
+
+  it('starters do not count toward the 6 active item limit', () => {
+    const doran = { id: '1055', tags: ['Starter'] } as Item
+    const core = (id: string) => ({ id, tags: ['Damage'] }) as Item
+    const items = [doran, ...Array.from({ length: 6 }, (_, i) => core(`core-${i}`))]
+    const disabled = new Set<number>()
+    expect(countActiveNonStarterItems(items, disabled).total).toBe(6)
+    expect(isWithinActiveItemLimit(items, disabled, ['top'])).toBe(true)
+    expect(isWithinActiveItemLimit(items, disabled, ['adc'])).toBe(true)
+  })
+
+  it('enabling a starter does not hit the 6-item limit when 6 core items are active', () => {
+    const doran = { id: '1055', tags: ['Starter'] } as Item
+    const core = (id: string) => ({ id, tags: ['Damage'] }) as Item
+    const items = [doran, ...Array.from({ length: 6 }, (_, i) => core(`core-${i}`))]
+    const disabled = new Set([0])
+    expect(isWithinActiveItemLimit(items, disabled, ['top'])).toBe(true)
   })
 
   it('resolveBuildItemsWithCatalog resolves each item', () => {

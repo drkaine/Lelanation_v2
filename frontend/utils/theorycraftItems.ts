@@ -23,11 +23,11 @@ export function resolveBuildItemsWithCatalog(
   return items.map(item => mergeItemWithCatalog(item, lookup(item.id)))
 }
 
-function isStarterItem(item: Item): boolean {
+export function isStarterItem(item: Item): boolean {
   return (item.tags ?? []).some(tag => tag.toLowerCase() === 'starter')
 }
 
-function isBootsItem(item: Item): boolean {
+export function isBootsItem(item: Item): boolean {
   return (item.tags ?? []).some(tag => tag.toLowerCase() === 'boots')
 }
 

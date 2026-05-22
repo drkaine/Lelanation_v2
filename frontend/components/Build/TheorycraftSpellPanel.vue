@@ -541,13 +541,14 @@ watch(
     [
       props.championId,
       props.championData,
+      loadedChampion.value,
       stackDefinitions.value,
       stackCalculationsBySource.value,
     ] as const,
   () => {
     const champion = props.championData ?? loadedChampion.value
     const championId = props.championId ?? String(champion?.id ?? '')
-    if (!championId || stackDefinitions.value.length === 0) return
+    if (!championId) return
     const spells = Array.isArray(champion?.spells) ? champion.spells : []
     buildStore.setTheorycraftStackContext({
       championId,

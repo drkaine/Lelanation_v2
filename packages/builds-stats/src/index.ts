@@ -1,6 +1,7 @@
 export {
   calculateStats,
   filterItemsForStats,
+  filterItemsForStatsWithStarters,
   sumStarterDrainStats,
   getGoldPer10FromItem,
   type CalculateStatsOptions,

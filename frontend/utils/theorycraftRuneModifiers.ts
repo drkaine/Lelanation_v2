@@ -74,8 +74,19 @@ export const THEORYCRAFT_STACKABLE_RUNES: TheorycraftStackableRuneConfig[] = [
 ]
 
 const GATHERING_STORM_RUNE_ID = 8236
+const CONDITIONING_RUNE_ID = 8453
 const ABSOLUTE_FOCUS_RUNE_ID = 8233
 const TRANSCENDENCE_RUNE_ID = 8210
+
+/** Runes whose effect depends on `gameDurationMinutes` in theorycraft. */
+export const THEORYCRAFT_GAME_DURATION_RUNE_IDS = [
+  GATHERING_STORM_RUNE_ID,
+  CONDITIONING_RUNE_ID,
+] as const
+
+export function runeSelectionUsesGameDuration(runeIds: readonly number[]): boolean {
+  return THEORYCRAFT_GAME_DURATION_RUNE_IDS.some(id => runeIds.includes(id))
+}
 
 const GATHERING_STORM_TIERS: { minutes: number; ad: number; ap: number }[] = [
   { minutes: 10, ad: 5, ap: 8 },
@@ -153,6 +164,29 @@ function addAbilityHaste(stats: CalculatedStats, bonusHaste: number): void {
   if (bonusHaste <= 0) return
   const totalHaste = hasteFromCdr(stats.cooldownReduction) + bonusHaste
   stats.cooldownReduction = cdrFromHaste(totalHaste)
+}
+
+const CONDITIONING_UNLOCK_MINUTES = 12
+const CONDITIONING_FLAT_RESISTS = 8
+const CONDITIONING_TOTAL_RESIST_PERCENT = 0.03
+
+function conditioningBonus(
+  stats: CalculatedStats,
+  gameDurationMinutes: number
+): { armor: number; magicResist: number } | null {
+  const minutes = Math.max(0, Math.trunc(gameDurationMinutes))
+  if (minutes < CONDITIONING_UNLOCK_MINUTES) return null
+
+  const armorBefore = stats.armor
+  const mrBefore = stats.magicResist
+  stats.armor = (armorBefore + CONDITIONING_FLAT_RESISTS) * (1 + CONDITIONING_TOTAL_RESIST_PERCENT)
+  stats.magicResist =
+    (mrBefore + CONDITIONING_FLAT_RESISTS) * (1 + CONDITIONING_TOTAL_RESIST_PERCENT)
+
+  return {
+    armor: Math.round((stats.armor - armorBefore) * 10) / 10,
+    magicResist: Math.round((stats.magicResist - mrBefore) * 10) / 10,
+  }
 }
 
 function gatheringStormBonus(
@@ -283,6 +317,18 @@ function applyFlatRuneBonuses(args: {
           ? `+${bonus.abilityPower} AP (${gameDurationMinutes} min)`
           : `+${bonus.attackDamage} AD (${gameDurationMinutes} min)`,
     })
+  }
+
+  if (idSet.has(CONDITIONING_RUNE_ID) && gameDurationMinutes > 0) {
+    const bonus = conditioningBonus(stats, gameDurationMinutes)
+    if (bonus) {
+      lines.push({
+        runeId: CONDITIONING_RUNE_ID,
+        label: labels['theorycraft.runes.conditioning'] ?? 'Conditioning',
+        labelKey: 'theorycraft.runes.conditioning',
+        detail: `+${bonus.armor} armure / +${bonus.magicResist} RM (+${CONDITIONING_FLAT_RESISTS} & +${CONDITIONING_TOTAL_RESIST_PERCENT * 100}% total, ${gameDurationMinutes} min)`,
+      })
+    }
   }
 }
 

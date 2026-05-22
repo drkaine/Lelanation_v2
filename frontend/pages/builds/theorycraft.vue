@@ -88,7 +88,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import BuildCard from '~/components/Build/BuildCard.vue'
 import BuildSaveButton from '~/components/Build/BuildSaveButton.vue'
 import TheorycraftRuneStackPanel from '~/components/Build/TheorycraftRuneStackPanel.vue'
@@ -99,6 +100,7 @@ import { useChampionData } from '~/composables/useChampionData'
 import { useLayoutScaled } from '~/composables/useLayoutScaled'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useItemsStore } from '~/stores/ItemsStore'
+import { isTheorycraftRoutePath } from '~/utils/theorycraftRoute'
 import { toTheorycraftBuildStats } from '~/utils/theorycraftStats'
 
 definePageMeta({
@@ -107,6 +109,11 @@ definePageMeta({
 
 const { t } = useI18n()
 const buildStore = useBuildStore()
+
+if (import.meta.client) {
+  buildStore.enterTheorycraftSession()
+}
+
 const itemsStore = useItemsStore()
 const { loadChampion } = useChampionData()
 const { isLayoutScaled } = useLayoutScaled()
@@ -206,13 +213,12 @@ watch(
 )
 
 onMounted(async () => {
-  buildStore.enterTheorycraftSession()
   theorycraftLevel.value = buildStore.statsLevel
-
   await loadChampionDataForPanel()
 })
 
-onUnmounted(() => {
+onBeforeRouteLeave(to => {
+  if (isTheorycraftRoutePath(to.path)) return
   buildStore.leaveTheorycraftSession()
 })
 </script>

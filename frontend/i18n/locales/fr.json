@@ -320,7 +320,8 @@
       "legendBloodline": "Légende : sangsue",
       "transcendence": "Transcendance",
       "absoluteFocus": "Concentration absolue",
-      "gatheringStorm": "Tempête menaçante"
+      "gatheringStorm": "Tempête menaçante",
+      "conditioning": "Conditionnement"
     },
     "shards": {
       "adaptive": "Force adaptive",
@@ -405,7 +406,7 @@
     "editorPreviewShort": "Prévisualiser",
     "editorEdit": "Éditer",
     "editorEditShort": "Éditer",
-    "itemsStatsNote": "Stats des items (hors starters, et 1 seule botte prise en compte).",
+    "itemsStatsNote": "Stats des objets activés (starters inclus s'ils sont activés ; hors limite des 6 ; 1 seule botte).",
     "itemsStatsEmpty": "Aucune stat item détectée"
   },
   "statisticsPage": {

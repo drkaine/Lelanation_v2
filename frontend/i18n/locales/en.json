@@ -320,7 +320,8 @@
       "legendBloodline": "Legend: Bloodline",
       "transcendence": "Transcendence",
       "absoluteFocus": "Absolute Focus",
-      "gatheringStorm": "Gathering Storm"
+      "gatheringStorm": "Gathering Storm",
+      "conditioning": "Conditioning"
     },
     "shards": {
       "adaptive": "Adaptive Force",
@@ -405,7 +406,7 @@
     "editorPreviewShort": "Preview",
     "editorEdit": "Edit",
     "editorEditShort": "Edit",
-    "itemsStatsNote": "Item stats (excluding starters, and only one pair of boots is counted).",
+    "itemsStatsNote": "Stats from enabled items (starters included when enabled; not counted toward the 6-item limit; one pair of boots).",
     "itemsStatsEmpty": "No item stats detected"
   },
   "statisticsPage": {

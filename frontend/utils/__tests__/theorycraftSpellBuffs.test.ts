@@ -37,19 +37,19 @@ const baseStats: CalculatedStats = {
 }
 
 const rammusW = {
-  id: 'PowerBallDefense',
+  id: 'DefensiveBallCurl',
   slot: 'W',
   maxRank: 5,
   tooltipRaw: 'gagnant <scaleArmor>+{{ bonusarmortooltip }} armure</scaleArmor>',
   calculations: [
     {
       key: 'bonusarmortooltip',
-      baseValues: [35, 44, 54, 64, 75],
+      baseValues: [35.4, 44.375, 54.1, 64.575, 75.8],
       ratios: [],
     },
     {
       key: 'bonusmrtooltip',
-      baseValues: [26, 34, 43, 53, 64],
+      baseValues: [26.3, 34.75, 43.95, 53.9, 64.6],
       ratios: [],
     },
   ],
@@ -66,20 +66,20 @@ describe('theorycraftSpellBuffs', () => {
     expect(spellHasActivatableBuff(rammusW)).toBe(true)
   })
 
-  it('computes armor and MR from dataValues at rank 5', () => {
-    const bonuses = computeSpellBuffBonuses(rammusW, 5, baseStats, 18)
+  it('prefers tooltip calculations over raw dataValues (Rammus W)', () => {
+    const bonuses = computeSpellBuffBonuses(rammusW, 1, baseStats, 18)
     const armor = bonuses.find(b => b.stat === 'armor')
     const mr = bonuses.find(b => b.stat === 'magicResist')
-    expect(armor?.amount).toBeCloseTo(47 + 0.6 * 100, 1)
-    expect(mr?.amount).toBeCloseTo(40 + 0.6 * 60, 1)
+    expect(armor?.amount).toBeCloseTo(35.4, 1)
+    expect(mr?.amount).toBeCloseTo(26.3, 1)
   })
 
   it('applies buffs when spell is active', () => {
     const result = applyTheorycraftSpellBuffs({
       stats: baseStats,
       spells: [rammusW],
-      activeSpellIds: new Set(['PowerBallDefense']),
-      spellRanks: { PowerBallDefense: 5 },
+      activeSpellIds: new Set(['DefensiveBallCurl']),
+      spellRanks: { DefensiveBallCurl: 1 },
       level: 18,
       labels: {},
     })
@@ -93,7 +93,7 @@ describe('theorycraftSpellBuffs', () => {
       stats: baseStats,
       spells: [rammusW],
       activeSpellIds: new Set(),
-      spellRanks: { PowerBallDefense: 5 },
+      spellRanks: { DefensiveBallCurl: 5 },
       level: 18,
       labels: {},
     })

@@ -40,6 +40,7 @@ import {
 import {
   applyTheorycraftRuneModifiers,
   listSelectedRuneIds,
+  runeSelectionUsesGameDuration,
   resolveTheorycraftAdaptiveForBuild,
 } from '~/utils/theorycraftRuneModifiers'
 import type { TheorycraftRuneModifierLine } from '~/utils/theorycraftRuneModifiers'
@@ -454,7 +455,8 @@ export const useBuildStore = defineStore('build', {
       try {
         const saved = localStorage.getItem(this.getCurrentDraftStorageKey())
         if (!saved) return false
-        const build = JSON.parse(saved) as Build
+        const parsed = JSON.parse(saved) as Build | ReturnType<typeof serializeBuild>
+        const build = isStoredBuild(parsed) ? hydrateBuild(parsed) : (parsed as Build)
         this.setCurrentBuild(build)
         return true
       } catch {
@@ -462,30 +464,61 @@ export const useBuildStore = defineStore('build', {
       }
     },
 
+    persistCurrentBuildDraft() {
+      if (import.meta.server || !this.currentBuild) return
+      try {
+        localStorage.setItem(
+          this.getCurrentDraftStorageKey(),
+          JSON.stringify(serializeBuild(this.currentBuild))
+        )
+      } catch {
+        // ignore persistence errors
+      }
+    },
+
     enterTheorycraftSession() {
+      const keepInMemory = this.builderSession === 'theorycraft' && this.currentBuild !== null
+
       this.builderSession = 'theorycraft'
-      this.currentBuild = null
       this.displayedVariant = 'main'
       this.pendingChampionChange = null
       this.editSourceBuildId = null
       this.status = 'idle'
       this.error = null
-      this.statsLevel = 18
-      this.clearTheorycraftStackContext()
       this.loadTheorycraftDisabledItems()
       this.loadTheorycraftItemStacks()
       this.loadTheorycraftActiveItemPassives()
       this.loadTheorycraftRuneStacks()
+
+      if (keepInMemory) {
+        this.recalculateStats()
+        return
+      }
+
+      this.clearTheorycraftStackContext()
+      this.currentBuild = null
       if (!this.loadCurrentBuildDraft()) {
+        this.statsLevel = 18
         this.createNewBuild()
       } else {
         this.clampTheorycraftActiveItemsForRole()
+        this.clampStatsLevelForRole()
         this.recalculateStats()
       }
     },
 
     leaveTheorycraftSession() {
       if (this.builderSession !== 'theorycraft') return
+      if (this.currentBuild) {
+        try {
+          localStorage.setItem(
+            THEORYCRAFT_BUILD_STORAGE_KEY,
+            JSON.stringify(serializeBuild(this.currentBuild))
+          )
+        } catch {
+          // ignore persistence errors
+        }
+      }
       this.builderSession = 'create'
       this.currentBuild = null
       this.calculatedStats = null
@@ -1480,6 +1513,7 @@ export const useBuildStore = defineStore('build', {
         let options: import('@lelanation/builds-stats').CalculateStatsOptions | undefined
         if (this.builderSession === 'theorycraft') {
           options = {
+            includeStarterItems: true,
             adaptiveStat: resolveTheorycraftAdaptiveForBuild(championForStats, activeItemsForCalc),
           }
           if (this.theorycraftStackDefinitions.length > 0) {
@@ -1506,7 +1540,7 @@ export const useBuildStore = defineStore('build', {
 
         const stats = calculateStats(
           championForStats,
-          this.getTheorycraftItemsForStats(),
+          activeItemsForCalc,
           b.runes,
           b.shards,
           this.statsLevel,
@@ -1542,7 +1576,9 @@ export const useBuildStore = defineStore('build', {
             shards: b.shards,
             runeStacksById: this.theorycraftRuneStacks,
             level: this.statsLevel,
-            gameDurationMinutes: runeIds.includes(8236) ? this.theorycraftGameDurationMinutes : 0,
+            gameDurationMinutes: runeSelectionUsesGameDuration(runeIds)
+              ? this.theorycraftGameDurationMinutes
+              : 0,
             adaptive,
             labels: {},
           })

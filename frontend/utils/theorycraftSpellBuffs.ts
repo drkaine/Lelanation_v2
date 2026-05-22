@@ -171,23 +171,46 @@ export function computeSpellBuffBonuses(
     bonuses.push({ stat, amount, labelKey })
   }
 
-  let armorFromDataValues = false
-  let mrFromDataValues = false
+  let armorFromTooltipCalc = false
+  let mrFromTooltipCalc = false
 
-  const flatArmor = dataValueAtRank(dataValues, 'FlatBonusArmor', rankIndex)
-  const pctArmor = dataValueAtRank(dataValues, 'BonusArmorPercent', rankIndex)
-  if (flatArmor != null || pctArmor != null) {
-    const amount = (flatArmor ?? 0) + (pctArmor ?? 0) * stats.armor
+  const tooltipArmorCalc = (spell.calculations ?? []).find(
+    c => c.key.toLowerCase() === 'bonusarmortooltip'
+  )
+  const tooltipMrCalc = (spell.calculations ?? []).find(
+    c => c.key.toLowerCase() === 'bonusmrtooltip'
+  )
+
+  if (tooltipArmorCalc) {
+    const amount = calcValue(tooltipArmorCalc, stats, safeRank, maxRank, level)
     pushBonus('armor', amount, 'theorycraft.spells.buffArmor')
-    armorFromDataValues = true
+    armorFromTooltipCalc = true
   }
 
-  const flatMr = dataValueAtRank(dataValues, 'FlatBonusMR', rankIndex)
-  const pctMr = dataValueAtRank(dataValues, 'BonusMRPercent', rankIndex)
-  if (flatMr != null || pctMr != null) {
-    const amount = (flatMr ?? 0) + (pctMr ?? 0) * stats.magicResist
+  if (tooltipMrCalc) {
+    const amount = calcValue(tooltipMrCalc, stats, safeRank, maxRank, level)
     pushBonus('magicResist', amount, 'theorycraft.spells.buffMr')
-    mrFromDataValues = true
+    mrFromTooltipCalc = true
+  }
+
+  if (!armorFromTooltipCalc) {
+    const flatArmor = dataValueAtRank(dataValues, 'FlatBonusArmor', rankIndex)
+    const pctArmor = dataValueAtRank(dataValues, 'BonusArmorPercent', rankIndex)
+    if (flatArmor != null || pctArmor != null) {
+      const amount = (flatArmor ?? 0) + (pctArmor ?? 0) * stats.armor
+      pushBonus('armor', amount, 'theorycraft.spells.buffArmor')
+      armorFromTooltipCalc = true
+    }
+  }
+
+  if (!mrFromTooltipCalc) {
+    const flatMr = dataValueAtRank(dataValues, 'FlatBonusMR', rankIndex)
+    const pctMr = dataValueAtRank(dataValues, 'BonusMRPercent', rankIndex)
+    if (flatMr != null || pctMr != null) {
+      const amount = (flatMr ?? 0) + (pctMr ?? 0) * stats.magicResist
+      pushBonus('magicResist', amount, 'theorycraft.spells.buffMr')
+      mrFromTooltipCalc = true
+    }
   }
 
   const bonusHealth = dataValueAtRank(dataValues, 'BonusHealth', rankIndex)
@@ -202,16 +225,22 @@ export function computeSpellBuffBonuses(
   if (initialResistGain != null && initialResistGain > 0) {
     pushBonus('armor', initialResistGain, 'theorycraft.spells.buffArmor')
     pushBonus('magicResist', initialResistGain, 'theorycraft.spells.buffMr')
-    armorFromDataValues = true
-    mrFromDataValues = true
+    armorFromTooltipCalc = true
+    mrFromTooltipCalc = true
   }
 
   for (const calculation of spell.calculations ?? []) {
     if (!isStatBuffCalculationKey(calculation.key)) continue
     const stat = mapBuffKeyToStat(calculation.key)
     if (!stat) continue
-    if (stat === 'armor' && armorFromDataValues) continue
-    if (stat === 'magicResist' && mrFromDataValues) continue
+    if (stat === 'armor' && armorFromTooltipCalc) continue
+    if (stat === 'magicResist' && mrFromTooltipCalc) continue
+    if (
+      calculation.key.toLowerCase() === 'bonusarmortooltip' ||
+      calculation.key.toLowerCase() === 'bonusmrtooltip'
+    ) {
+      continue
+    }
     const amount = calcValue(calculation, stats, safeRank, maxRank, level)
     const labelKey =
       stat === 'armor'
