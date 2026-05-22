@@ -124,7 +124,7 @@ function validateConfig(): void {
 async function getPipelineSnapshots(): Promise<Record<Pipeline, PipelineSnapshot>> {
   const metrics = await getQueueMetrics();
   const tokenUsage = pollerV2Observability.getRollingTokenUsage();
-  const current = adaptiveScheduler?.getCurrentAllocation() ?? getCurrentBudgetAllocation() ?? DEFAULT_INITIAL_ALLOCATION;
+  const current = getCurrentBudgetAllocation();
 
   return {
     discovery: {
@@ -138,6 +138,7 @@ async function getPipelineSnapshots(): Promise<Record<Pipeline, PipelineSnapshot
       queueActive: metrics.hydration.active,
       tokensUsed120s: tokenUsage.hydration,
       currentAlloc: current.hydration,
+      hydrationWaitingChildren: metrics.hydration.waitingChildren ?? 0,
     },
     rank: {
       queueWaiting: metrics.rank.waiting,
@@ -303,9 +304,17 @@ async function bootstrap(): Promise<void> {
     30_000,
     DEFAULT_INITIAL_ALLOCATION,
   );
-  pollerV2Observability.setAdaptiveBudgetStateProvider(() =>
-    adaptiveScheduler?.getObservabilityState() ?? null,
-  );
+  pollerV2Observability.setAdaptiveBudgetStateProvider(() => {
+    const base = adaptiveScheduler?.getObservabilityState();
+    if (!base) return null;
+    const usage = pollerV2Observability.getRollingTokenUsage();
+    return {
+      ...base,
+      discovery_actual_req_120s: usage.discovery,
+      hydration_actual_req_120s: usage.hydration,
+      rank_actual_req_120s: usage.rank,
+    };
+  });
   adaptiveScheduler.start();
   console.log("[poller-main] adaptive budget scheduler started (tick=30s, drip active)");
 

@@ -52,6 +52,8 @@ export interface PipelineSnapshot {
   queueActive: number;
   tokensUsed120s: number;
   currentAlloc: number;
+  /** Jobs hydration bloqués en attente de rank enfants (BullMQ waiting-children). */
+  hydrationWaitingChildren?: number;
 }
 
 export interface BudgetAllocation {
@@ -244,6 +246,7 @@ export function scorePipelines(
   snapshots: Record<Pipeline, PipelineSnapshot>,
 ): Record<Pipeline, number> {
   const { hydration, rank } = snapshots;
+  const waitingChildren = hydration.hydrationWaitingChildren ?? 0;
 
   let discoveryScore: number;
   if (hydration.queueWaiting < HYDRATION_QUEUE.STARVED) {
@@ -268,21 +271,18 @@ export function scorePipelines(
   }
 
   let rankScore: number;
-  if (rank.queueWaiting > RANK_QUEUE.CRITICAL) {
+  if (waitingChildren > 30) {
     rankScore = 1.0;
+  } else if (waitingChildren > 10) {
+    rankScore = 0.75;
+  } else if (waitingChildren > 3) {
+    rankScore = 0.5;
   } else if (rank.queueWaiting > RANK_QUEUE.BACKLOG) {
     rankScore = 0.7;
   } else if (rank.queueWaiting > RANK_QUEUE.EMPTY) {
-    rankScore = 0.4;
-  } else if (rank.queueActive > 0) {
-    rankScore = 0.2;
+    rankScore = 0.3;
   } else {
     rankScore = 0.1;
-  }
-
-  const hydrationBlocked = hydration.queueActive > 4 && rank.queueWaiting === 0;
-  if (hydrationBlocked) {
-    rankScore = Math.min(1.0, rankScore + 0.3);
   }
 
   return {
@@ -352,6 +352,7 @@ export class AdaptiveBudgetScheduler {
   private rankFillTimestampsMs: number[] = [];
   private lastRankFillCount = 0;
   private lastRankFillAtMs: number | null = null;
+  private lastHydrationWaitingChildren = 0;
 
   constructor(
     private readonly getSnapshots: () => Promise<Record<Pipeline, PipelineSnapshot>>,
@@ -376,6 +377,7 @@ export class AdaptiveBudgetScheduler {
     rank_fills_last_1h: number;
     last_rank_fill_count: number;
     last_rank_fill_ago_s: number | null;
+    hydration_waiting_children: number;
   } {
     const oneHourAgo = nowMs - 3_600_000;
     this.rebalanceTimestampsMs = this.rebalanceTimestampsMs.filter((ts) => ts >= oneHourAgo);
@@ -396,6 +398,7 @@ export class AdaptiveBudgetScheduler {
         this.lastRankFillAtMs == null
           ? null
           : Math.max(0, Math.floor((nowMs - this.lastRankFillAtMs) / 1000)),
+      hydration_waiting_children: this.lastHydrationWaitingChildren,
     };
   }
 
@@ -434,7 +437,9 @@ export class AdaptiveBudgetScheduler {
   private async tick(): Promise<void> {
     try {
       const snapshots = await this.getSnapshots();
+      this.lastHydrationWaitingChildren = snapshots.hydration.hydrationWaitingChildren ?? 0;
       const newAlloc = computeAllocation(snapshots);
+      const scores = scorePipelines(snapshots);
       const prev = this.currentAllocation;
 
       if (isSignificantAllocationChange(prev, newAlloc)) {
@@ -461,8 +466,11 @@ export class AdaptiveBudgetScheduler {
             },
             signals: {
               hydrationWaiting: snapshots.hydration.queueWaiting,
+              hydrationWaitingChildren: this.lastHydrationWaitingChildren,
               rankWaiting: snapshots.rank.queueWaiting,
               hydrationActive: snapshots.hydration.queueActive,
+              rankScore: scores.rank,
+              discoveryScore: scores.discovery,
             },
           }),
         );

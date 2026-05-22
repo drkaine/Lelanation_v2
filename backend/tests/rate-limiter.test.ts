@@ -11,6 +11,7 @@ const {
   createLuaRateLimiterForTests,
   discoveryTargetRatePerSec,
   getEffectiveBudgetBreakdown,
+  getDripSleepMs,
   hydrationTargetRatePerSec,
   rankTargetRatePerSec,
   slotBudgetForPipeline,
@@ -173,6 +174,14 @@ describe("budget allocation", () => {
     expect(slotBudgetForPipeline("rank", 95)).toBe(36);
     if (prev === undefined) delete process.env.RANK_DRAIN_MODE;
     else process.env.RANK_DRAIN_MODE = prev;
+  });
+
+  test("getDripSleepMs adapts when allocation changes", () => {
+    const lowRank = getDripSleepMs("rank", { discovery: 8, hydration: 20, rank: 14, totalReq: 62 });
+    const highRank = getDripSleepMs("rank", { discovery: 8, hydration: 20, rank: 35, totalReq: 90 });
+    expect(highRank).toBeLessThan(lowRank);
+    expect(lowRank).toBeGreaterThanOrEqual(100);
+    expect(lowRank).toBeLessThanOrEqual(15_000);
   });
 });
 

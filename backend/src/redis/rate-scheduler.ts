@@ -9,7 +9,12 @@ import { readFileSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { config } from "../config/index.js";
+import type { BudgetAllocation } from "../lib/adaptiveBudget.js";
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
+import {
+  applyCurrentBudgetAllocation,
+  currentBudgetAllocationRef,
+} from "./budget-allocation-ref.js";
 import {
   apiTokenBudgetForPipeline,
   computeDripBudgetConfig,
@@ -79,12 +84,6 @@ type ActiveDrip = {
 };
 
 const activeDrips = new Map<SlotPipeline, ActiveDrip>();
-let currentBudgetAllocation: {
-  discovery: number;
-  hydration: number;
-  rank: number;
-  totalReq: number;
-} | null = null;
 
 export type RankSlotResult = "ok" | "budget_exhausted";
 
@@ -305,23 +304,20 @@ export function setDripRate(
   startDripForPipeline(pipeline, tokenIntervalMs);
 }
 
-export type RuntimeBudgetAllocation = {
-  discovery: number;
-  hydration: number;
-  rank: number;
-  totalReq: number;
-};
+export type RuntimeBudgetAllocation = BudgetAllocation;
 
 export async function applyBudgetAllocation(alloc: RuntimeBudgetAllocation): Promise<void> {
+  applyCurrentBudgetAllocation(alloc);
   setDripRate("discovery", alloc.discovery, 1);
   setDripRate("hydration", alloc.hydration, 2);
   setDripRate("rank", alloc.rank, 1);
-  currentBudgetAllocation = { ...alloc };
 }
 
-export function getCurrentBudgetAllocation(): RuntimeBudgetAllocation | null {
-  return currentBudgetAllocation ? { ...currentBudgetAllocation } : null;
+export function getCurrentBudgetAllocation(): BudgetAllocation {
+  return currentBudgetAllocationRef;
 }
+
+export { currentBudgetAllocationRef } from "./budget-allocation-ref.js";
 
 export async function loadLuaScript(): Promise<void> {
   acquireSlotSha = (await redis.script("LOAD", ACQUIRE_SLOT_LUA)) as string;
@@ -336,12 +332,12 @@ export function startDrip(): void {
   setDripRate("discovery", cfg.discoverySlots, 1);
   setDripRate("hydration", cfg.hydrationSlots, 2);
   setDripRate("rank", cfg.rankSlots, 1);
-  currentBudgetAllocation = {
+  applyCurrentBudgetAllocation({
     discovery: cfg.discoverySlots,
     hydration: cfg.hydrationSlots,
     rank: cfg.rankSlots,
     totalReq: cfg.totalReqPer120s,
-  };
+  });
 
   console.log(
     `[rate-scheduler] drip started:\n` +
@@ -367,24 +363,41 @@ export function stopDrip(): void {
 
 const DISCOVERY_POLL_RETRY_CONCURRENCY = 2;
 
-function minPollSleepMs(pipeline: SlotPipeline): number {
+function pipelineWorkerConcurrency(pipeline: SlotPipeline): number {
+  if (pipeline === "discovery") {
+    return DISCOVERY_POLL_RETRY_CONCURRENCY;
+  }
   if (pipeline === "hydration") {
-    return Math.max(250, Math.floor(jobReleaseIntervalMs("hydration") / config.HYDRATION_CONCURRENCY));
+    return config.HYDRATION_CONCURRENCY;
   }
-  if (pipeline === "rank") {
-    return Math.max(
-      250,
-      Math.floor(tokenReleaseIntervalMs("rank") / config.RANK_WORKER_CONCURRENCY_DRAIN),
-    );
-  }
-  return Math.max(
-    250,
-    Math.floor(tokenReleaseIntervalMs("discovery") / DISCOVERY_POLL_RETRY_CONCURRENCY),
-  );
+  return config.RANK_WORKER_CONCURRENCY_NORMAL;
+}
+
+/** Sleep entre tentatives acquireSlot — lit l'allocation courante à chaque appel. */
+export function getDripSleepMs(
+  pipeline: SlotPipeline,
+  allocation: BudgetAllocation = currentBudgetAllocationRef,
+): number {
+  const tokensPer120s =
+    pipeline === "hydration"
+      ? Math.max(1, allocation.hydration * SLOT_COSTS.hydration)
+      : Math.max(1, allocation[pipeline]);
+  const concurrency = Math.max(1, pipelineWorkerConcurrency(pipeline));
+  const msPerToken = WINDOW_MS / tokensPer120s;
+  const sleepMs = Math.floor(msPerToken / concurrency / 2);
+  return Math.max(100, Math.min(15_000, sleepMs));
+}
+
+function dripSleepWithJitter(pipeline: SlotPipeline): number {
+  const sleepMs = getDripSleepMs(pipeline);
+  const jitter = Math.floor(Math.random() * sleepMs * 0.2);
+  return sleepMs + jitter;
 }
 
 async function waitForScheduledSlot(slotKey: string, cost: 1 | 2): Promise<void> {
   const pipeline = pipelineForSlotKey(slotKey);
+  let attempts = 0;
+
   while (true) {
     const globalCooldownMs = await getGlobalCooldownMs();
     if (globalCooldownMs > 0) {
@@ -398,13 +411,23 @@ async function waitForScheduledSlot(slotKey: string, cost: 1 | 2): Promise<void>
     if (allowed === 1) {
       const delay = value - Date.now();
       pollerV2Observability.recordRateLimitAttempt(cost, true, Math.max(0, delay), pipeline);
+      if (attempts > 0 && process.env.RATE_SCHEDULER_DEBUG === "1") {
+        console.debug(
+          JSON.stringify({
+            msg: "slot_acquired",
+            pipeline,
+            attempts,
+          }),
+        );
+      }
       if (delay > 5) {
         await sleep(delay);
       }
       return;
     }
 
-    const waitMs = Math.max(value, minPollSleepMs(pipeline));
+    attempts += 1;
+    const waitMs = dripSleepWithJitter(pipeline);
     pollerV2Observability.recordRateLimitAttempt(cost, false, waitMs, pipeline);
     await sleep(waitMs);
   }
@@ -442,7 +465,7 @@ export async function acquireRankSlot(): Promise<{ granted: boolean; waitMs: num
     return { granted: true, waitMs: 0 };
   }
 
-  const waitMs = Math.max(value, minPollSleepMs("rank"));
+  const waitMs = dripSleepWithJitter("rank");
   pollerV2Observability.recordRateLimitAttempt(1, false, waitMs, "rank");
   return { granted: false, waitMs };
 }

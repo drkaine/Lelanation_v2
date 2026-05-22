@@ -42,6 +42,7 @@ export type QueueMetrics = {
   active: number;
   failed: number;
   delayed: number;
+  waitingChildren?: number;
 };
 
 export async function getQueueMetrics(): Promise<
@@ -49,7 +50,7 @@ export async function getQueueMetrics(): Promise<
 > {
   const [discoveryCounts, hydrationCounts, ingestionCounts, rankCounts] = await Promise.all([
     discoveryQueue.getJobCounts("waiting", "active", "failed", "delayed"),
-    hydrationQueue.getJobCounts("waiting", "active", "failed", "delayed"),
+    hydrationQueue.getJobCounts("waiting", "active", "failed", "delayed", "waiting-children"),
     ingestionQueue.getJobCounts("waiting", "active", "failed", "delayed"),
     rankQueue.getJobCounts("waiting", "active", "failed", "delayed"),
   ]);
@@ -66,6 +67,7 @@ export async function getQueueMetrics(): Promise<
       active: hydrationCounts.active ?? 0,
       failed: hydrationCounts.failed ?? 0,
       delayed: hydrationCounts.delayed ?? 0,
+      waitingChildren: hydrationCounts["waiting-children"] ?? 0,
     },
     [INGESTION_QUEUE]: {
       waiting: ingestionCounts.waiting ?? 0,

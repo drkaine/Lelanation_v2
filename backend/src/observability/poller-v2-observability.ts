@@ -1,16 +1,19 @@
 import { promises as fs } from "fs";
 import { join } from "path";
-import { config } from "../config/index.js";
 import { maxRankBacklogBeforePipelinePause, rankWorkerConcurrency } from "../queues/rank-backlog-policy.js";
-import { apiTokenBudgetForPipeline, type SlotPipeline } from "../redis/rate-budget.js";
+import { currentBudgetAllocationRef } from "../redis/budget-allocation-ref.js";
+import { SLOT_COSTS, type SlotPipeline } from "../redis/rate-budget.js";
 import {
   countAggregatedMatchesSince,
   fetchIngestionThroughputMetrics,
   type IngestionThroughputMetrics,
 } from "../redis/ingestion-metrics.js";
 
-function slotBudgetForPipeline(pipeline: SlotPipeline): number {
-  return apiTokenBudgetForPipeline(pipeline, config.RATE_LIMIT_PER_120S);
+function allocatedTokensForPipeline(pipeline: SlotPipeline): number {
+  const alloc = currentBudgetAllocationRef;
+  if (pipeline === "discovery") return Math.max(1, alloc.discovery);
+  if (pipeline === "hydration") return Math.max(1, alloc.hydration * SLOT_COSTS.hydration);
+  return Math.max(1, alloc.rank);
 }
 
 type QueueSlice = {
@@ -126,6 +129,10 @@ type AdaptiveBudgetObservability = {
   rank_fills_last_1h: number;
   last_rank_fill_count: number;
   last_rank_fill_ago_s: number | null;
+  hydration_waiting_children: number;
+  discovery_actual_req_120s: number;
+  hydration_actual_req_120s: number;
+  rank_actual_req_120s: number;
 };
 
 type Snapshot = {
@@ -420,7 +427,7 @@ class PollerV2Observability {
   }
 
   private pctUsed(tokensUsed: number, pipeline: SlotPipeline): number {
-    const budget = slotBudgetForPipeline(pipeline);
+    const budget = allocatedTokensForPipeline(pipeline);
     if (budget <= 0) return 0;
     return Math.round((tokensUsed / budget) * 1000) / 10;
   }

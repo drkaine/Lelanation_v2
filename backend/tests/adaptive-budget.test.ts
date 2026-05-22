@@ -60,6 +60,18 @@ describe("computeAllocation", () => {
     expect(critical.rank).toBeGreaterThan(idle.rank);
   });
 
+  test("boosts rank when hydration waitingChildren is high", () => {
+    const idle = computeAllocation(snapshots(), 90);
+    const blocked = computeAllocation(
+      snapshots({
+        hydration: { hydrationWaitingChildren: 35, queueWaiting: 40 },
+        rank: { queueWaiting: 0 },
+      }),
+      90,
+    );
+    expect(blocked.rank).toBeGreaterThan(idle.rank);
+  });
+
   test("guarantees pipeline minimums", () => {
     const alloc = computeAllocation(
       snapshots({ hydration: { queueWaiting: 500 }, rank: { queueWaiting: 200 } }),
@@ -78,6 +90,16 @@ describe("scorePipelines", () => {
     );
     expect(scores.discovery).toBeLessThan(0.2);
     expect(scores.hydration).toBeGreaterThan(0.8);
+  });
+
+  test("waitingChildren boosts rank score when rank queue is empty", () => {
+    const scores = scorePipelines(
+      snapshots({
+        hydration: { hydrationWaitingChildren: 35, queueWaiting: 40 },
+        rank: { queueWaiting: 0, queueActive: 0 },
+      }),
+    );
+    expect(scores.rank).toBe(1.0);
   });
 });
 
