@@ -378,6 +378,7 @@
     "itemsEnabledForStats": "actif pour les stats",
     "itemsDisabledForStats": "inactif pour les stats",
     "itemsActiveLimitReached": "Maximum 6 objets actifs (bottes incluses, sauf ADC : 6 objets + bottes).",
+    "atlasUpgradeRequired": "Build support : ajoutez une amélioration d’Atlas dans les objets du build.",
     "resetItems": "Reset items",
     "noItems": "Aucun item",
     "variantsTitle": "Variantes",

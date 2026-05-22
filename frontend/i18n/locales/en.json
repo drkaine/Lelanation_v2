@@ -378,6 +378,7 @@
     "itemsEnabledForStats": "active for stats",
     "itemsDisabledForStats": "inactive for stats",
     "itemsActiveLimitReached": "Maximum 6 active items (boots included, except ADC: 6 items + boots).",
+    "atlasUpgradeRequired": "Support build: add a World Atlas upgrade to the build items.",
     "resetItems": "Reset items",
     "noItems": "No items",
     "variantsTitle": "Variants",

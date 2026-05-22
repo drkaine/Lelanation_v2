@@ -33,6 +33,36 @@ describe('buildItemRules', () => {
     expect(result.map(i => i.id)).toEqual(['3865', '2003'])
   })
 
+  it('replaces the only starter with Atlas without growing the build', () => {
+    const lookup = (id: string) => item(id, ['starter'])
+    const result = normalizeBuildItemsAfterChange(
+      [item('1055', ['starter']), item('1001', ['boots']), item('3089')],
+      ['support'],
+      lookup
+    )
+    expect(result.map(i => i.id)).toEqual(['3865', '1001', '3089'])
+  })
+
+  it('keeps a second starter after Atlas when support role is active', () => {
+    const lookup = (id: string) => item(id, ['starter'])
+    const result = normalizeBuildItemsAfterChange(
+      [item('3865', ['starter']), item('2003', ['Consumable']), item('3089')],
+      ['support'],
+      lookup
+    )
+    expect(result.map(i => i.id)).toEqual(['3865', '2003', '3089'])
+  })
+
+  it('keeps support line as second starter after Atlas is auto-added', () => {
+    const lookup = (id: string) => item(id, ['starter'])
+    const result = normalizeBuildItemsAfterChange(
+      [item('3865', ['starter']), item('3867', ['starter']), item('3089')],
+      ['support'],
+      lookup
+    )
+    expect(result.map(i => i.id)).toEqual(['3865', '3867', '3089'])
+  })
+
   it('replaces first starter with Atlas when two starters and support line added', () => {
     const lookup = (id: string) => item(id, ['starter'])
     const result = normalizeBuildItemsAfterChange(
@@ -62,7 +92,17 @@ describe('buildItemRules', () => {
   it('adds green jungle pet when jungle role is set', () => {
     const lookup = (id: string) => item(id, ['starter'])
     const result = ensureJunglePetInItems([item('1055', ['starter'])], ['jungle'], lookup)
-    expect(result[0]?.id).toBe('1103')
+    expect(result.map(i => i.id)).toEqual(['1103'])
+  })
+
+  it('replaces the only starter with jungle pet without growing the build', () => {
+    const lookup = (id: string) => item(id, ['starter'])
+    const result = ensureJunglePetInItems(
+      [item('1055', ['starter']), item('1001', ['boots']), item('3089')],
+      ['jungle'],
+      lookup
+    )
+    expect(result.map(i => i.id)).toEqual(['1103', '1001', '3089'])
   })
 
   it('replaces first starter with jungle pet and does not move displaced starter to core', () => {
@@ -73,6 +113,27 @@ describe('buildItemRules', () => {
       lookup
     )
     expect(result.map(i => i.id)).toEqual(['1103', '2003', '3089'])
+  })
+
+  it('uses real Data Dragon tags when replacing starters for jungle role', () => {
+    const lookup = (id: string) =>
+      ({
+        '1103': item('1103', ['Jungle']),
+        '1055': item('1055', ['Health', 'Damage', 'LifeSteal', 'SpellVamp', 'Lane']),
+        '2003': item('2003', ['HealthRegen', 'Consumable', 'Lane', 'Jungle']),
+      })[id]
+    const cores = ['3006', '3089', '3135', '3026', '3031', '3036'].map(id => item(id, []))
+    const result = normalizeBuildItemsAfterChange(
+      [
+        item('1055', ['Health', 'Damage', 'LifeSteal', 'SpellVamp', 'Lane']),
+        item('2003', ['HealthRegen', 'Consumable', 'Lane', 'Jungle']),
+        ...cores,
+      ],
+      ['jungle'],
+      id => lookup(id)
+    )
+    expect(result.map(i => i.id)).toEqual(['1103', '2003', ...cores.map(i => i.id)])
+    expect(result).toHaveLength(8)
   })
 
   it('drops overflow starters from core when support atlas is applied', () => {
@@ -94,6 +155,38 @@ describe('buildItemRules', () => {
     const lookup = (id: string) => item(id, ['starter'])
     const result = normalizeBuildItemsAfterChange(
       [item('1103', ['starter']), item('3865', ['starter']), item('3089')],
+      ['top'],
+      lookup
+    )
+    expect(result.map(i => i.id)).toEqual(['3089'])
+  })
+
+  it('removes jungle pet when jungle role is removed but support stays', () => {
+    const lookup = (id: string) => item(id, ['starter'])
+    const result = normalizeBuildItemsAfterChange(
+      [item('1103', ['Jungle']), item('3865', []), item('3089')],
+      ['support'],
+      lookup
+    )
+    expect(result.map(i => i.id)).toEqual(['3865', '3089'])
+  })
+
+  it('removes atlas when support role is removed but jungle stays', () => {
+    const lookup = (id: string) => item(id, ['starter'])
+    const result = normalizeBuildItemsAfterChange(
+      [item('1103', ['Jungle']), item('3865', []), item('3089')],
+      ['jungle'],
+      lookup
+    )
+    expect(result.map(i => i.id)).toEqual(['1103', '3089'])
+  })
+
+  it('removes role-linked items stored with numeric ids when role is removed', () => {
+    const lookup = (id: string) => item(id, ['starter'])
+    const numericItem = (id: number, tags: string[] = []) =>
+      ({ id, name: String(id), tags }) as Item
+    const result = normalizeBuildItemsAfterChange(
+      [numericItem(1103, ['Jungle']), numericItem(3865, []), item('3089')],
       ['top'],
       lookup
     )

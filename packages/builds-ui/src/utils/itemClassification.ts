@@ -6,9 +6,10 @@ const BOOT_IDS = new Set([
 ])
 
 export function isBootsItem(item: Item): boolean {
+  const id = String(item.id ?? '').trim()
   if (item.tags?.includes('Boots')) return true
-  if (BOOT_IDS.has(item.id)) return true
-  if (item.from?.some(parentId => BOOT_IDS.has(parentId))) return true
+  if (BOOT_IDS.has(id)) return true
+  if (item.from?.some(parentId => BOOT_IDS.has(String(parentId).trim()))) return true
   return false
 }
 
@@ -30,8 +31,9 @@ const STARTER_NAME_PATTERNS = [
 const ATLAS_UPGRADE_IDS = new Set(['3869', '3870', '3871', '3876', '3877'])
 
 export function isStarterItem(item: Item): boolean {
-  if (ATLAS_UPGRADE_IDS.has(item.id)) return false
-  if (STARTER_IDS.has(item.id)) return true
+  const id = String(item.id ?? '').trim()
+  if (ATLAS_UPGRADE_IDS.has(id)) return false
+  if (STARTER_IDS.has(id)) return true
   const lower = (item.name ?? '').toLowerCase()
   return (
     STARTER_NAME_PATTERNS.some(p => lower.includes(p)) ||

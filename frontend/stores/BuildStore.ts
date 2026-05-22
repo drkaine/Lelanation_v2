@@ -37,6 +37,7 @@ import {
   atlasUpgradeMissing,
   findSmiteSpell,
   isSmiteSpell,
+  lookupCatalogItem,
   normalizeBuildItemsAfterChange,
   stripSmiteFromSummonerSpells,
 } from '~/utils/buildItemRules'
@@ -468,6 +469,7 @@ export const useBuildStore = defineStore('build', {
         const parsed = JSON.parse(saved) as Build | ReturnType<typeof serializeBuild>
         const build = isStoredBuild(parsed) ? hydrateBuild(parsed) : (parsed as Build)
         this.setCurrentBuild(build)
+        this.setRoles(this.currentBuild?.roles ?? [])
         return true
       } catch {
         return false
@@ -806,9 +808,7 @@ export const useBuildStore = defineStore('build', {
       const itemsStore = useItemsStore()
       if (itemsStore.items.length === 0) return active
 
-      return resolveBuildItemsWithCatalog(active, id =>
-        itemsStore.items.find(candidate => candidate.id === id)
-      )
+      return resolveBuildItemsWithCatalog(active, id => lookupCatalogItem(itemsStore.items, id))
     },
 
     getTheorycraftActiveItemsWithIndex(): { index: number; item: Item }[] {
@@ -817,7 +817,7 @@ export const useBuildStore = defineStore('build', {
 
       const disabled = new Set(this.theorycraftDisabledItemIndices)
       const itemsStore = useItemsStore()
-      const lookup = (id: string) => itemsStore.items.find(candidate => candidate.id === id)
+      const lookup = (id: string) => lookupCatalogItem(itemsStore.items, id)
 
       const entries: { index: number; item: Item }[] = []
       for (let index = 0; index < build.items.length; index++) {
@@ -1237,7 +1237,7 @@ export const useBuildStore = defineStore('build', {
       const build = this.displayedBuild ?? this.currentBuild
       const itemsStore = useItemsStore()
       const normalized = normalizeBuildItemsAfterChange(items, build?.roles ?? [], id =>
-        itemsStore.items.find(candidate => candidate.id === id)
+        lookupCatalogItem(itemsStore.items, id)
       )
       const previousItems =
         target.type === 'main' ? [...target.build.items] : [...(target.sub.items ?? [])]
@@ -1434,7 +1434,7 @@ export const useBuildStore = defineStore('build', {
       }
 
       const itemsStore = useItemsStore()
-      const itemLookup = (id: string) => itemsStore.items.find(candidate => candidate.id === id)
+      const itemLookup = (id: string) => lookupCatalogItem(itemsStore.items, id)
       const normalizeItemsForRole = (items: Item[]) =>
         normalizeBuildItemsAfterChange(items, roles, itemLookup)
 

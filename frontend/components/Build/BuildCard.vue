@@ -612,7 +612,9 @@
           :class="[
             regionSelectionClass('items'),
             {
-              'validation-blink-frame': props.highlightMissingFields && missingFieldChecks.items,
+              'validation-blink-frame':
+                props.highlightMissingFields &&
+                (missingFieldChecks.items || missingFieldChecks.atlasUpgrade),
             },
           ]"
           @click="onSelectRegion('items', $event)"
@@ -1397,6 +1399,9 @@
         <p v-if="itemsToggleLimitMessage" class="items-manager-limit-message">
           {{ itemsToggleLimitMessage }}
         </p>
+        <p v-if="supportAtlasUpgradeMissing" class="items-manager-warning">
+          {{ t('buildCard.atlasUpgradeRequired') }}
+        </p>
         <div v-if="buildItems.length === 0" class="items-manager-empty">
           {{ t('buildCard.noItems') }}
         </div>
@@ -1703,6 +1708,7 @@ import {
   countActiveNonStarterItems,
   isAdcRole,
 } from '~/utils/theorycraftItems'
+import { atlasUpgradeMissing } from '~/utils/buildItemRules'
 import {
   isTheorycraftStackableItem,
   resolveTheorycraftItemImageFull,
@@ -2443,7 +2449,14 @@ const missingFieldChecks = computed(() => {
     ),
     firstThreeUps: firstThreeUps.length !== 3 || firstThreeUps.some(skillKey => !skillKey),
     skillUpOrder: skillUpOrder.length !== 3 || skillUpOrder.some(skillKey => !skillKey),
+    atlasUpgrade: atlasUpgradeMissing(items, roles),
   }
+})
+
+const supportAtlasUpgradeMissing = computed(() => {
+  const build = displayBuild.value ?? (props.build || buildStore.currentBuild)
+  if (!build) return false
+  return atlasUpgradeMissing(build.items ?? [], build.roles ?? [])
 })
 
 const normalizePercentStat = (value: number | undefined): number => {
@@ -5106,6 +5119,7 @@ defineExpose({
 
 .items-manager-hint,
 .items-manager-limit-message,
+.items-manager-warning,
 .items-manager-active-count {
   font-size: 11px;
   line-height: 1.3;
@@ -5119,6 +5133,11 @@ defineExpose({
 .items-manager-limit-message {
   margin: 0 0 8px;
   color: #f87171;
+}
+
+.items-manager-warning {
+  margin: 0 0 8px;
+  color: var(--color-gold-300, #c89b3c);
 }
 
 .items-manager-active-count {

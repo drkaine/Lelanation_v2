@@ -33,6 +33,10 @@
       </button>
     </div>
 
+    <p v-if="supportAtlasUpgradeMissing" class="item-selector-warning mb-3">
+      {{ t('buildCard.atlasUpgradeRequired') }}
+    </p>
+
     <div v-if="itemsStore.status === 'loading'" class="py-8 text-center">
       <p class="text-text">{{ t('item.selector.loading') }}</p>
     </div>
@@ -163,7 +167,12 @@ import { getItemImageUrl } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 import { formatTooltipMarkupHtml } from '~/utils/formatTooltipMarkupHtml'
-import { isJunglePetItem, isSmiteSpell, isSupportLineStarter } from '~/utils/buildItemRules'
+import {
+  atlasUpgradeMissing,
+  isJunglePetItem,
+  isSmiteSpell,
+  isSupportLineStarter,
+} from '~/utils/buildItemRules'
 
 const props = withDefaults(defineProps<{ includeMasterwork?: boolean }>(), {
   includeMasterwork: false,
@@ -644,6 +653,12 @@ const hasSupportRole = (): boolean => {
   return roles.includes('support')
 }
 
+const supportAtlasUpgradeMissing = computed(() => {
+  const build = buildStore.displayedBuild ?? buildStore.currentBuild
+  if (!build) return false
+  return atlasUpgradeMissing(build.items ?? [], build.roles ?? [])
+})
+
 const hasMidRole = (): boolean => {
   const roles = buildStore.currentBuild?.roles || []
   return roles.includes('mid')
@@ -746,13 +761,13 @@ const toggleItem = (item: Item) => {
     if (isStarterItem(item)) {
       const cleanCore = coreItems.filter(i => !isStarterItem(i))
       const alreadyHas = starterItems.some(entry => entry.id === item.id)
-      if (isSupportLineStarter(item) || isJunglePetItem(item)) {
+      if (isSupportLineStarter(item) || isJunglePetItem(item) || isAtlas(item)) {
         if (alreadyHas) return
         let newStarters: Item[]
         if (starterItems.length >= 2) {
           newStarters = [item, starterItems[1]!]
         } else if (starterItems.length === 1) {
-          newStarters = isJunglePetItem(item) ? [item, starterItems[0]!] : [...starterItems, item]
+          newStarters = isJunglePetItem(item) || isAtlas(item) ? [item] : [...starterItems, item]
         } else {
           newStarters = [item]
         }
@@ -921,6 +936,13 @@ watch(locale, () => {
 <style scoped>
 .item-selector {
   background: transparent !important;
+}
+
+.item-selector-warning {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  color: var(--color-gold-300, #c89b3c);
 }
 
 .items-list {
