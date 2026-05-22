@@ -184,6 +184,8 @@
       "noResults": "No items found",
       "validation": {
         "junglePetRequiresSmite": "Jungle companions require Smite.",
+        "junglePetRequiresJungle": "Jungle companions require the Jungle role.",
+        "smiteRequiresJungle": "Smite is only available with the Jungle role.",
         "tier3BootsRequiresMid": "Tier 3 boots can only be selected with the Mid role.",
         "atlasRequiresSupport": "World Atlas and its upgrades require the Support role.",
         "atlasUpgradeSingle": "You can only have one World Atlas upgrade.",

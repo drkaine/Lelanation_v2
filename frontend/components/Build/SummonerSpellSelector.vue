@@ -39,6 +39,7 @@ import { useI18n } from 'vue-i18n'
 import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import { useBuildStore } from '~/stores/BuildStore'
 import type { SummonerSpell } from '~/types/build'
+import { isSmiteSpell } from '~/utils/buildItemRules'
 import { getSpellImageUrl } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
 
@@ -66,7 +67,13 @@ const isSelected = (spell: SummonerSpell): boolean => {
   )
 }
 
+const hasJungleRole = computed(() => buildStore.currentBuild?.roles?.includes('jungle') ?? false)
+
 const isDisabled = (spell: SummonerSpell): boolean => {
+  if (isSmiteSpell(spell) && !hasJungleRole.value) {
+    return true
+  }
+
   // Disable if already selected in both slots
   const spells = buildStore.displayedBuild?.summonerSpells
   const isInSlot0 = spells?.[0]?.id === spell.id || spells?.[0]?.key === spell.key
@@ -92,6 +99,10 @@ const getSpellSlot = (spell: SummonerSpell): number => {
 }
 
 const selectSpell = (spell: SummonerSpell) => {
+  if (isSmiteSpell(spell) && !hasJungleRole.value) {
+    return
+  }
+
   const spells = buildStore.displayedBuild?.summonerSpells
 
   // If spell is already selected, remove it

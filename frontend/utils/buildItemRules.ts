@@ -91,20 +91,47 @@ export function atlasUpgradeMissing(
   return requiresAtlasUpgradeForBuild(items, roles) && !hasAtlasUpgradeInItems(items)
 }
 
+export function stripJunglePetFromItems(items: readonly Item[]): Item[] {
+  const filtered = items.filter(item => !isJunglePetItem(item))
+  const { starterItems, bootsItems, coreItems } = bucketBuildItems(filtered)
+  return [...starterItems, ...bootsItems, ...stripStartersFromCore(coreItems)]
+}
+
+export function stripAtlasStarterFromItems(items: readonly Item[]): Item[] {
+  const filtered = items.filter(item => !isAtlasStarter(item))
+  const { starterItems, bootsItems, coreItems } = bucketBuildItems(filtered)
+  return [...starterItems, ...bootsItems, ...stripStartersFromCore(coreItems)]
+}
+
 export function ensureSupportAtlasInItems(
   items: readonly Item[],
+  roles: readonly Role[] | null | undefined,
   lookup: (id: string) => Item | undefined
 ): Item[] {
-  const { starterItems, bootsItems, coreItems } = bucketBuildItems(items)
-  const supportLines = starterItems.filter(isSupportLineStarter)
-  if (supportLines.length === 0) return [...items]
+  if (!roles?.includes('support')) return [...items]
 
+  const { starterItems, bootsItems, coreItems } = bucketBuildItems(items)
   const atlasFromBuild = starterItems.find(isAtlasStarter)
   const atlas = atlasFromBuild ?? lookup(ATLAS_ITEM_ID)
   if (!atlas) return [...items]
 
-  const newStarters = [atlas, supportLines[0]!].slice(0, 2)
-  return [...newStarters, ...bootsItems, ...stripStartersFromCore(coreItems)]
+  const supportLines = starterItems.filter(isSupportLineStarter)
+  const otherStarters = starterItems.filter(
+    item => !isAtlasStarter(item) && !isSupportLineStarter(item)
+  )
+
+  let newStarters: Item[]
+  if (supportLines.length > 0) {
+    newStarters = [atlas, supportLines[0]!]
+  } else if (otherStarters.length >= 2) {
+    newStarters = [atlas, otherStarters[1]!]
+  } else if (otherStarters.length === 1) {
+    newStarters = [atlas, otherStarters[0]!]
+  } else {
+    newStarters = [atlas]
+  }
+
+  return [...newStarters.slice(0, 2), ...bootsItems, ...stripStartersFromCore(coreItems)]
 }
 
 export function ensureJunglePetInItems(
@@ -141,29 +168,65 @@ export function normalizeBuildItemsAfterChange(
   roles: readonly Role[] | null | undefined,
   lookup: (id: string) => Item | undefined
 ): Item[] {
-  let next = ensureSupportAtlasInItems(items, lookup)
+  let next = [...items]
+  if (!roles?.includes('jungle')) {
+    next = stripJunglePetFromItems(next)
+  }
+  if (!roles?.includes('support')) {
+    next = stripAtlasStarterFromItems(next)
+  }
+  next = ensureSupportAtlasInItems(next, roles, lookup)
   next = ensureJunglePetInItems(next, roles, lookup)
   return next
 }
 
+export function isSmiteSpell(spell: SummonerSpell | null | undefined): boolean {
+  if (!spell) return false
+  const spellId = String(spell.id ?? '')
+    .trim()
+    .toLowerCase()
+  const spellKey = String(spell.key ?? '')
+    .trim()
+    .toLowerCase()
+  if (spellId === '11' || spellKey === '11') return true
+  if (
+    spellId === 'summonersmite' ||
+    spellKey === 'summonersmite' ||
+    spellId.includes('smite') ||
+    spellKey.includes('smite')
+  ) {
+    return true
+  }
+  const name = (spell.name ?? '').toLowerCase().trim()
+  return name.includes('smite') || name.includes('punition') || name.includes('châtiment')
+}
+
 export function findSmiteSpell(spells: readonly SummonerSpell[]): SummonerSpell | undefined {
-  return spells.find(spell => {
-    const spellId = String(spell.id ?? '')
-      .trim()
-      .toLowerCase()
-    const spellKey = String(spell.key ?? '')
-      .trim()
-      .toLowerCase()
-    if (spellId === '11' || spellKey === '11') return true
-    if (
-      spellId === 'summonersmite' ||
-      spellKey === 'summonersmite' ||
-      spellId.includes('smite') ||
-      spellKey.includes('smite')
-    ) {
-      return true
-    }
-    const name = (spell.name ?? '').toLowerCase().trim()
-    return name.includes('smite') || name.includes('punition') || name.includes('châtiment')
-  })
+  return spells.find(spell => isSmiteSpell(spell))
+}
+
+export function stripSmiteFromSummonerSpells(
+  spells: [SummonerSpell | null, SummonerSpell | null] | null | undefined
+): [SummonerSpell | null, SummonerSpell | null] {
+  const next: [SummonerSpell | null, SummonerSpell | null] = [
+    spells?.[0] ?? null,
+    spells?.[1] ?? null,
+  ]
+  if (isSmiteSpell(next[0])) next[0] = null
+  if (isSmiteSpell(next[1])) next[1] = null
+  return next
+}
+
+export function applyJungleSmiteToSummonerSpells(
+  spells: [SummonerSpell | null, SummonerSpell | null] | null | undefined,
+  smite: SummonerSpell | undefined
+): [SummonerSpell | null, SummonerSpell | null] {
+  const next: [SummonerSpell | null, SummonerSpell | null] = [
+    spells?.[0] ?? null,
+    spells?.[1] ?? null,
+  ]
+  if (!smite) return next
+  if (isSmiteSpell(next[0]) || isSmiteSpell(next[1])) return next
+  next[0] = smite
+  return next
 }

@@ -5,7 +5,7 @@ import { rankChildJobId, RANK_CHILD_JOB_OPTS } from "../queues/rank-jobs-shared.
 import { normalizePlatformRegion, platformRegionLookupKeys } from "../riot/platform-region.js";
 
 const POLL_MS = 500;
-const MAX_WAIT_MS = 120_000;
+const MAX_WAIT_MS = 45_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

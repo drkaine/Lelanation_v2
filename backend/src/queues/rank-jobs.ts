@@ -1,7 +1,7 @@
 import type { Job } from "bullmq";
 import type { HydrationJobData, ParsedParticipantDto } from "../dto/match.dto.js";
-import { currentBudgetAllocationRef } from "../redis/budget-allocation-ref.js";
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
+import { currentBudgetAllocationRef } from "../redis/budget-allocation-ref.js";
 import { ensureRankSnapshot } from "../services/rank-inflight.js";
 import { normalizePlatformRegion } from "../riot/platform-region.js";
 import { rankQueue } from "./index.js";
@@ -64,51 +64,44 @@ export async function planRankChildJobsForHydration(
 }
 
 export type EnsureRankSnapshotsResult = {
+  /** @deprecated Always 0 — hydration no longer uses BullMQ parent-child links. */
   childJobsLinked: number;
   dedupHits: number;
   awaitedExisting: number;
+  readyImmediate: number;
 };
 
 /**
- * Déduplique les rank fetches in-flight et lie des enfants BullMQ quand possible.
- * Remplace l'ancien pattern delay 5s sur jobs rank orphelins.
+ * Résout les ranks manquants en parallèle via dedup in-flight (sans parent BullMQ).
+ * Évite waiting-children qui bloquait 1000+ jobs hydration.
  */
 export async function ensureRankSnapshotsForHydration(
   hydrationJob: Job<HydrationJobData>,
   missingParticipants: ParsedParticipantDto[],
   matchDateIso: string,
 ): Promise<EnsureRankSnapshotsResult> {
-  const parent = {
-    id: hydrationJob.id!,
-    queue: hydrationJob.queueQualifiedName,
-  };
-
-  let childJobsLinked = 0;
   let dedupHits = 0;
   let awaitedExisting = 0;
-  let linkedParent = false;
+  let readyImmediate = 0;
 
-  for (const participant of missingParticipants) {
-    const puuid = String(participant.puuid ?? "").trim();
-    if (!puuid) continue;
+  await Promise.all(
+    missingParticipants.map(async (participant) => {
+      const puuid = String(participant.puuid ?? "").trim();
+      if (!puuid) return;
 
-    const region = normalizePlatformRegion(participant.region);
-    const result = await ensureRankSnapshot(puuid, region, {
-      matchDateIso,
-      parent: linkedParent ? undefined : parent,
-      priority: 1,
-    });
+      const region = normalizePlatformRegion(participant.region);
+      const result = await ensureRankSnapshot(puuid, region, {
+        matchDateIso,
+        priority: 1,
+      });
 
-    if (result.dedupHit) {
-      dedupHits += 1;
-    }
-    if (result.status === "child_enqueued") {
-      childJobsLinked += 1;
-      linkedParent = true;
-    } else if (result.status === "awaited") {
-      awaitedExisting += 1;
-    }
-  }
+      if (result.dedupHit) dedupHits += 1;
+      if (result.status === "ready") readyImmediate += 1;
+      if (result.status === "awaited" || result.status === "child_enqueued") {
+        awaitedExisting += 1;
+      }
+    }),
+  );
 
   if (dedupHits > 0 || awaitedExisting > 0) {
     console.log(
@@ -117,26 +110,13 @@ export async function ensureRankSnapshotsForHydration(
         matchId: hydrationJob.data.matchId,
         dedupHits,
         awaitedExisting,
-        childJobsLinked,
+        readyImmediate,
+        childJobsLinked: 0,
       }),
     );
   }
 
-  return { childJobsLinked, dedupHits, awaitedExisting };
-}
-
-/** @deprecated Prefer ensureRankSnapshotsForHydration. */
-export async function enqueueRankChildJobsForHydration(
-  hydrationJob: Job<HydrationJobData>,
-  missingParticipants: ParsedParticipantDto[],
-): Promise<{ enqueued: number; alreadyPending: number; plan: RankChildEnqueuePlan }> {
-  const matchDateIso = missingParticipants[0]?.gameDate?.slice(0, 10) ?? todayIsoDate();
-  const result = await ensureRankSnapshotsForHydration(hydrationJob, missingParticipants, matchDateIso);
-  return {
-    enqueued: result.childJobsLinked,
-    alreadyPending: result.awaitedExisting,
-    plan: await planRankChildJobsForHydration(missingParticipants),
-  };
+  return { childJobsLinked: 0, dedupHits, awaitedExisting, readyImmediate };
 }
 
 /** Enfile un rank prefetch depuis discovery (priorité haute, sans parent). */

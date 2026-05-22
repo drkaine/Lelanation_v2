@@ -354,24 +354,9 @@ async function refreshParticipantsRankState(
   return closestSnapshots;
 }
 
-async function waitForRankChildrenOrProceed(
-  hydrationJob: Job<HydrationJobData>,
-  token: string,
-  matchId: string,
-  unresolvedCount: number,
-): Promise<void> {
-  const movedToWaitingChildren = await hydrationJob.moveToWaitingChildren(token);
-  if (movedToWaitingChildren) {
-    console.info(
-      `[hydration.worker] deferred_ingestion_pending_rank matchId=${matchId} unresolved=${unresolvedCount} mode=waiting_children`,
-    );
-    throw new WaitingChildrenError();
-  }
-}
-
 async function finalizeHydrationRankGate(
   hydrationJob: Job<HydrationJobData>,
-  token: string,
+  _token: string,
   data: HydrationJobData,
   region: string,
   gameDate: Date,
@@ -394,7 +379,7 @@ async function finalizeHydrationRankGate(
   }
 
   pollerV2Observability.recordHydrationRankGate(data.matchId, false);
-  const missing = getMissingRankParticipants(participants, closestSnapshots);
+  let missing = getMissingRankParticipants(participants, closestSnapshots);
 
   if (missing.length === 0) {
     console.info(
@@ -404,24 +389,8 @@ async function finalizeHydrationRankGate(
     return;
   }
 
-  const jobState = await hydrationJob.getState();
-  if (jobState !== "active") {
-    if (jobState === "waiting-children") {
-      throw new WaitingChildrenError();
-    }
-    return;
-  }
-
   const matchDateIso = gameDate.toISOString().slice(0, 10);
-  const { childJobsLinked } = await ensureRankSnapshotsForHydration(
-    hydrationJob,
-    missing,
-    matchDateIso,
-  );
-
-  if (childJobsLinked > 0) {
-    await waitForRankChildrenOrProceed(hydrationJob, token, data.matchId, missing.length);
-  }
+  await ensureRankSnapshotsForHydration(hydrationJob, missing, matchDateIso);
 
   closestSnapshots = await refreshParticipantsRankState(participants, gameDate);
   if (matchReadyForAggregation(participants, closestSnapshots)) {
@@ -430,6 +399,13 @@ async function finalizeHydrationRankGate(
     await ingestionQueue.add("ingest-match", { participants, teamStats });
     pollerV2Observability.recordHydrationSuccess(1);
     return;
+  }
+
+  missing = getMissingRankParticipants(participants, closestSnapshots);
+  if (missing.length > 0) {
+    throw new Error(
+      `rank_gate_still_blocked matchId=${data.matchId} missing=${missing.length} puuids=${missing.map((p) => p.puuid).slice(0, 3).join(",")}`,
+    );
   }
 
   throw new Error(`rank_gate_still_blocked matchId=${data.matchId}`);

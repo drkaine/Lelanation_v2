@@ -4,7 +4,9 @@ import {
   atlasUpgradeMissing,
   ensureJunglePetInItems,
   ensureSupportAtlasInItems,
+  isSmiteSpell,
   normalizeBuildItemsAfterChange,
+  stripSmiteFromSummonerSpells,
 } from '../buildItemRules'
 import { selectTheorycraftItemsForStats } from '../theorycraftItems'
 
@@ -15,9 +17,20 @@ describe('buildItemRules', () => {
     const lookup = (id: string) => item(id, ['starter'])
     const result = ensureSupportAtlasInItems(
       [item('1055', ['starter']), item('3867', ['starter'])],
+      ['support'],
       lookup
     )
     expect(result.map(i => i.id)).toEqual(['3865', '3867'])
+  })
+
+  it('adds Atlas when support role is set without support line starter', () => {
+    const lookup = (id: string) => item(id, ['starter'])
+    const result = normalizeBuildItemsAfterChange(
+      [item('1055', ['starter']), item('2003', ['starter'])],
+      ['support'],
+      lookup
+    )
+    expect(result.map(i => i.id)).toEqual(['3865', '2003'])
   })
 
   it('replaces first starter with Atlas when two starters and support line added', () => {
@@ -71,9 +84,30 @@ describe('buildItemRules', () => {
         item('2003', ['starter']),
         item('3089'),
       ],
+      ['support'],
       lookup
     )
     expect(result.map(i => i.id)).toEqual(['3865', '3867', '3089'])
+  })
+
+  it('removes jungle pet and atlas when roles are cleared', () => {
+    const lookup = (id: string) => item(id, ['starter'])
+    const result = normalizeBuildItemsAfterChange(
+      [item('1103', ['starter']), item('3865', ['starter']), item('3089')],
+      ['top'],
+      lookup
+    )
+    expect(result.map(i => i.id)).toEqual(['3089'])
+  })
+
+  it('strips smite from summoner spells when jungle role is removed', () => {
+    const smite = {
+      id: 'SummonerSmite',
+      key: '11',
+      name: 'Smite',
+    } as import('@lelanation/shared-types').SummonerSpell
+    expect(isSmiteSpell(smite)).toBe(true)
+    expect(stripSmiteFromSummonerSpells([smite, null])).toEqual([null, null])
   })
 })
 

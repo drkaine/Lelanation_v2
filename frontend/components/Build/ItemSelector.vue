@@ -163,7 +163,7 @@ import { getItemImageUrl } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 import { formatTooltipMarkupHtml } from '~/utils/formatTooltipMarkupHtml'
-import { isJunglePetItem, isSupportLineStarter } from '~/utils/buildItemRules'
+import { isJunglePetItem, isSmiteSpell, isSupportLineStarter } from '~/utils/buildItemRules'
 
 const props = withDefaults(defineProps<{ includeMasterwork?: boolean }>(), {
   includeMasterwork: false,
@@ -634,47 +634,9 @@ const isAtlasUpgrade = (item: Item): boolean => {
   return atlasUpgradeIds.includes(item.id)
 }
 
-const hasSmite = (): boolean => {
+const hasSmiteInBuild = (): boolean => {
   const spells = buildStore.displayedBuild?.summonerSpells || []
-  if (!spells || spells.length === 0) return false
-
-  return spells.some(spell => {
-    if (!spell) return false
-
-    // Dans Data Dragon API: id="11", key="SummonerSmite"
-    // Dans builds sauvegardés: id="SummonerSmite", key="11"
-    // On doit vérifier les deux champs dans les deux sens
-
-    const spellId = String(spell.id || '')
-      .trim()
-      .toLowerCase()
-    const spellKey = String(spell.key || '')
-      .trim()
-      .toLowerCase()
-
-    // Vérifier si id ou key contient "11" (ID numérique de Smite)
-    if (spellId === '11' || spellKey === '11') {
-      return true
-    }
-
-    // Vérifier si id ou key contient "summonersmite" (clé de Smite)
-    if (
-      spellId === 'summonersmite' ||
-      spellKey === 'summonersmite' ||
-      spellId.includes('smite') ||
-      spellKey.includes('smite')
-    ) {
-      return true
-    }
-
-    // Vérifier le nom (name) - "smite" ou "punition" (FR) / "châtiment" (FR)
-    const name = (spell.name || '').toLowerCase().trim()
-    if (name.includes('smite') || name.includes('punition') || name.includes('châtiment')) {
-      return true
-    }
-
-    return false
-  })
+  return spells.some(spell => isSmiteSpell(spell))
 }
 
 const hasSupportRole = (): boolean => {
@@ -718,8 +680,13 @@ const hasAtlasUpgrade = (excludeItemId?: string): boolean => {
 }
 
 const getItemValidationError = (item: Item): string | null => {
-  if (isJunglePet(item) && !hasSmite()) {
-    return t('item.selector.validation.junglePetRequiresSmite')
+  if (isJunglePet(item)) {
+    if (!buildStore.currentBuild?.roles?.includes('jungle')) {
+      return t('item.selector.validation.junglePetRequiresJungle')
+    }
+    if (!hasSmiteInBuild()) {
+      return t('item.selector.validation.junglePetRequiresSmite')
+    }
   }
 
   if (isTier3Boots(item) && !hasMidRole()) {

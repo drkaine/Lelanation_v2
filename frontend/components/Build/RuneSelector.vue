@@ -88,7 +88,9 @@
                   'summoner-button',
                   isSummonerSpellSelected(spell) ? 'selected' : '',
                   selectedSummonerSpellsCount === 0 ? 'bright' : '',
+                  isSummonerSpellDisabled(spell) ? 'disabled' : '',
                 ]"
+                :disabled="isSummonerSpellDisabled(spell)"
                 @click="selectSummonerSpell(spell)"
                 @mouseenter="e => handleSpellHover(spell, e)"
                 @mouseleave="handleRuneLeave"
@@ -297,6 +299,7 @@ import { useGameVersion } from '~/composables/useGameVersion'
 import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 import { formatSummonerSpellTooltipHtml } from '~/utils/gameTooltipFormatter'
 import { formatRuneTooltipHtml } from '~/utils/formatTooltipMarkupHtml'
+import { isSmiteSpell } from '~/utils/buildItemRules'
 const { version } = useGameVersion()
 const { locale, t } = useI18n()
 const { tooltipsEnabled } = useTooltipsPreference()
@@ -417,7 +420,16 @@ const isSummonerSpellSelected = (spell: SummonerSpell): boolean => {
   )
 }
 
+const hasJungleRole = computed(() => buildStore.currentBuild?.roles?.includes('jungle') ?? false)
+
+const isSummonerSpellDisabled = (spell: SummonerSpell): boolean =>
+  isSmiteSpell(spell) && !hasJungleRole.value
+
 const selectSummonerSpell = (spell: SummonerSpell) => {
+  if (isSummonerSpellDisabled(spell)) {
+    return
+  }
+
   const index0 =
     selectedSummonerSpells.value[0]?.id === spell.id ||
     selectedSummonerSpells.value[0]?.key === spell.key
@@ -1070,6 +1082,13 @@ watch(locale, () => {
 
 .summoner-button.bright {
   opacity: 1; /* Brillant quand moins de 2 sélectionnés */
+}
+
+.summoner-button.disabled,
+.summoner-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .summoner-button:hover {

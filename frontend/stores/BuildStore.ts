@@ -33,9 +33,12 @@ import {
   selectTheorycraftItemsForStats,
 } from '~/utils/theorycraftItems'
 import {
+  applyJungleSmiteToSummonerSpells,
   atlasUpgradeMissing,
   findSmiteSpell,
+  isSmiteSpell,
   normalizeBuildItemsAfterChange,
+  stripSmiteFromSummonerSpells,
 } from '~/utils/buildItemRules'
 import { useItemsStore } from '~/stores/ItemsStore'
 import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
@@ -1285,6 +1288,9 @@ export const useBuildStore = defineStore('build', {
       if (!this.currentBuild) {
         this.createNewBuild()
       }
+      if (spell && isSmiteSpell(spell) && !this.currentBuild!.roles?.includes('jungle')) {
+        return
+      }
       const target = this.getEditableTarget()
       if (!target) return
       if (target.type === 'main') {
@@ -1427,30 +1433,40 @@ export const useBuildStore = defineStore('build', {
         }))
       }
 
-      if (roles.includes('jungle')) {
-        const spellsStore = useSummonerSpellsStore()
-        const smite = findSmiteSpell(spellsStore.spells)
-        if (smite) {
-          const target = this.getEditableTarget()
-          if (target?.type === 'main') {
-            target.build.summonerSpells = target.build.summonerSpells ?? [null, null]
-            target.build.summonerSpells[0] = smite
-          } else if (target?.type === 'sub') {
-            target.sub.summonerSpells = target.sub.summonerSpells ?? [null, null]
-            target.sub.summonerSpells[0] = smite
-          }
-        }
+      const itemsStore = useItemsStore()
+      const itemLookup = (id: string) => itemsStore.items.find(candidate => candidate.id === id)
+      const normalizeItemsForRole = (items: Item[]) =>
+        normalizeBuildItemsAfterChange(items, roles, itemLookup)
+
+      const spellsStore = useSummonerSpellsStore()
+      const smite = findSmiteSpell(spellsStore.spells)
+      const applySpellsForRole = (
+        spells: [SummonerSpell | null, SummonerSpell | null] | null | undefined
+      ) =>
+        roles.includes('jungle')
+          ? applyJungleSmiteToSummonerSpells(spells, smite)
+          : stripSmiteFromSummonerSpells(spells)
+
+      const build = this.currentBuild
+      const previousMainItems = [...(build.items ?? [])]
+      build.items = normalizeItemsForRole(previousMainItems)
+      build.summonerSpells = applySpellsForRole(build.summonerSpells)
+
+      const subs = (build.subBuilds as SubBuild[] | undefined) ?? []
+      for (const sub of subs) {
+        const previousSubItems = [...(sub.items ?? [])]
+        sub.items = normalizeItemsForRole(previousSubItems)
+        sub.summonerSpells = applySpellsForRole(sub.summonerSpells)
       }
 
-      const target = this.getEditableTarget()
-      if (target) {
-        const currentItems = target.type === 'main' ? target.build.items : (target.sub.items ?? [])
-        this.setItems(currentItems)
+      if (this.builderSession === 'theorycraft') {
+        this.remapTheorycraftDisabledItems(previousMainItems, build.items)
       }
 
       this.currentBuild.updatedAt = new Date().toISOString()
       this.clampStatsLevelForRole()
       this.clampTheorycraftActiveItemsForRole()
+      this.recalculateStats()
     },
 
     /** Tags du build principal ou de la variante actuellement affichée. */

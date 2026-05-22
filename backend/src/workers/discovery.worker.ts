@@ -5,7 +5,7 @@ import type { DiscoveryJobData } from "../dto/match.dto.js";
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
 import { bullmqJobId } from "../queues/bullmq-job-id.js";
 import { maxRankBacklogBeforePipelinePause, shouldPauseMatchPipelines } from "../queues/rank-backlog-policy.js";
-import { discoveryQueue, getRankBacklogCount, hydrationQueue } from "../queues/index.js";
+import { discoveryQueue, getQueueMetrics, getRankBacklogCount, hydrationQueue } from "../queues/index.js";
 import { enqueueHydrationMatchIfAbsent } from "../queues/hydration-enqueue.js";
 import { enqueueRankPrefetchJob } from "../queues/rank-jobs.js";
 import { hasTodayRankSnapshot } from "../services/rank-inflight.js";
@@ -29,6 +29,8 @@ type PlayerRow = {
 
 const riotClient = new RiotClient();
 const PATCH_SWITCH_GRACE_DAYS = 2;
+const HYDRATION_RANK_BACKPRESSURE_WC = 150;
+const HYDRATION_RANK_BACKPRESSURE_TOTAL = 400;
 const QUEUED_MATCH_TTL_SEC = 86_400;
 /** Max matchs enfilés par joueur par cycle — évite monopolisation discovery/hydration. */
 const MAX_MATCHES_PER_PLAYER_PER_TICK = 20;
@@ -287,6 +289,27 @@ async function runDiscoveryCycle(): Promise<void> {
 
   const hydrationWaiting = await hydrationQueue.getWaitingCount();
   const maxHydrationQueueDepth = config.MAX_HYDRATION_QUEUE_DEPTH;
+  const queueMetrics = await getQueueMetrics();
+  const hydrationWaitingChildren = queueMetrics.hydration.waitingChildren ?? 0;
+  const hydrationPressure = hydrationWaiting + hydrationWaitingChildren;
+
+  if (
+    hydrationWaitingChildren > HYDRATION_RANK_BACKPRESSURE_WC ||
+    hydrationPressure > HYDRATION_RANK_BACKPRESSURE_TOTAL
+  ) {
+    console.log(
+      JSON.stringify({
+        msg: "discovery_paused_hydration_backpressure",
+        hydrationWaiting,
+        hydrationWaitingChildren,
+        hydrationPressure,
+        wcThreshold: HYDRATION_RANK_BACKPRESSURE_WC,
+        totalThreshold: HYDRATION_RANK_BACKPRESSURE_TOTAL,
+      }),
+    );
+    pollerV2Observability.recordDuration("discoveryCycleMs", Date.now() - startedAt);
+    return;
+  }
 
   if (hydrationWaiting > maxHydrationQueueDepth) {
     console.debug(
