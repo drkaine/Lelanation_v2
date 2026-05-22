@@ -48,6 +48,25 @@ describe('theorycraftRuneModifiers', () => {
     expect(listSelectedRuneIds(sampleRunes)).toContain(8236)
   })
 
+  it('coerces string rune ids from persisted builds', () => {
+    const runes = {
+      primary: {
+        pathId: 8400,
+        keystone: '8437',
+        slot1: '8446',
+        slot2: '8451',
+        slot3: 0,
+      },
+      secondary: {
+        pathId: 8100,
+        slot1: '9111',
+        slot2: '8429',
+      },
+    } as unknown as RuneSelection
+    expect(listSelectedRuneIds(runes)).toContain(8429)
+    expect(runeSelectionUsesGameDuration(listSelectedRuneIds(runes))).toBe(true)
+  })
+
   it('adds manaflow mana per stack', () => {
     expect(getTheorycraftRuneStackStats(8226, 10, 18, 'ap').mana).toBe(250)
   })
@@ -62,14 +81,14 @@ describe('theorycraftRuneModifiers', () => {
 
   it('detects runes that use game duration', () => {
     expect(runeSelectionUsesGameDuration([8236])).toBe(true)
-    expect(runeSelectionUsesGameDuration([8453])).toBe(true)
+    expect(runeSelectionUsesGameDuration([8429])).toBe(true)
     expect(runeSelectionUsesGameDuration([8226])).toBe(false)
   })
 
   it('applies conditioning after 12 minutes', () => {
     const runes: RuneSelection = {
-      primary: { pathId: 8400, keystone: 8437, slot1: 8446, slot2: 8453, slot3: 8451 },
-      secondary: { pathId: 8100, slot1: 9111, slot2: 9104 },
+      primary: { pathId: 8400, keystone: 8437, slot1: 8446, slot2: 8451, slot3: 8444 },
+      secondary: { pathId: 8100, slot1: 9111, slot2: 8429 },
     }
     const before12 = applyTheorycraftRuneModifiers({
       stats: baseStats,
@@ -82,7 +101,7 @@ describe('theorycraftRuneModifiers', () => {
       labels: {},
     })
     expect(before12.stats.armor).toBe(baseStats.armor)
-    expect(before12.lines.some(line => line.runeId === 8453)).toBe(false)
+    expect(before12.lines.some(line => line.runeId === 8429)).toBe(false)
 
     const at12 = applyTheorycraftRuneModifiers({
       stats: baseStats,
@@ -96,7 +115,7 @@ describe('theorycraftRuneModifiers', () => {
     })
     expect(at12.stats.armor).toBeGreaterThan(baseStats.armor)
     expect(at12.stats.magicResist).toBeGreaterThan(baseStats.magicResist)
-    expect(at12.lines.some(line => line.runeId === 8453)).toBe(true)
+    expect(at12.lines.some(line => line.runeId === 8429)).toBe(true)
   })
 
   it('applies rune stacks and gathering storm in modifier pass', () => {

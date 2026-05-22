@@ -187,7 +187,8 @@
         "tier3BootsRequiresMid": "Les bottes de niveau 3 ne sont disponibles qu’avec le rôle Mid.",
         "atlasRequiresSupport": "Atlas et ses améliorations nécessitent le rôle Support.",
         "atlasUpgradeSingle": "Une seule amélioration d’Atlas est autorisée.",
-        "atlasUpgradeNeedsStarter": "Placez Atlas dans les objets de départ pour choisir une amélioration."
+        "atlasUpgradeNeedsStarter": "Placez Atlas dans les objets de départ pour choisir une amélioration.",
+        "atlasUpgradeRequiredSave": "Sélectionnez une amélioration d’Atlas pour sauvegarder ce build support."
       }
     }
   },

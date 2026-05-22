@@ -8,6 +8,7 @@ import {
   fetchIngestionThroughputMetrics,
   type IngestionThroughputMetrics,
 } from "../redis/ingestion-metrics.js";
+import { getRiotTokenBucketSnapshot } from "../redis/riot-token-bucket.js";
 
 function allocatedTokensForPipeline(pipeline: SlotPipeline): number {
   const alloc = currentBudgetAllocationRef;
@@ -66,6 +67,12 @@ type Totals = {
   hydrationRankRetries: number;
   discoveryPlayersSelected: number;
   discoveryPlayersAlreadyRanked: number;
+  rankDedupHits: number;
+  rankPrefetchHits: number;
+  rankCacheL1Hits: number;
+  rankCacheRedisHits: number;
+  rankPrefetchEnqueued: number;
+  rankPrefetchSkippedExisting: number;
 };
 
 type DurationKey =
@@ -180,6 +187,14 @@ type Snapshot = {
   discovery_tokens_used_pct: number;
   hydration_tokens_used_pct: number;
   rank_tokens_used_pct: number;
+  rank_dedup_hits: number;
+  rank_prefetch_hits: number;
+  rank_cache_l1_hits: number;
+  rank_cache_redis_hits: number;
+  hydration_cache_hit_rate_pct: number;
+  rank_cache_hit_rate_pct: number;
+  bucket_1s_remaining: number;
+  bucket_120s_remaining: number;
   adaptive_budget: AdaptiveBudgetObservability | null;
   /** Alias jq spec (`queues.hydration.waiting`). */
   queues: {
@@ -247,6 +262,12 @@ function emptyTotals(): Totals {
     hydrationRankRetries: 0,
     discoveryPlayersSelected: 0,
     discoveryPlayersAlreadyRanked: 0,
+    rankDedupHits: 0,
+    rankPrefetchHits: 0,
+    rankCacheL1Hits: 0,
+    rankCacheRedisHits: 0,
+    rankPrefetchEnqueued: 0,
+    rankPrefetchSkippedExisting: 0,
   };
 }
 
@@ -642,6 +663,45 @@ class PollerV2Observability {
     this.totals.discoveryPlayersAlreadyRanked += safeSelected - safePrefetched;
   }
 
+  recordRankDedupHit(): void {
+    this.totals.rankDedupHits += 1;
+  }
+
+  recordRankPrefetchHit(): void {
+    this.totals.rankPrefetchHits += 1;
+  }
+
+  recordRankCacheL1Hit(): void {
+    this.totals.rankCacheL1Hits += 1;
+  }
+
+  recordRankCacheRedisHit(): void {
+    this.totals.rankCacheRedisHits += 1;
+  }
+
+  recordRankPrefetchEnqueued(): void {
+    this.totals.rankPrefetchEnqueued += 1;
+  }
+
+  recordRankPrefetchSkippedExisting(): void {
+    this.totals.rankPrefetchSkippedExisting += 1;
+  }
+
+  private hydrationCacheHitRatePct(): number {
+    const hits = this.totals.hydrationCacheHits;
+    const total = hits + this.totals.hydrationCacheMisses;
+    if (total <= 0) return 0;
+    return Math.round((hits / total) * 1000) / 10;
+  }
+
+  private rankCacheHitRatePct(): number {
+    const hits = this.totals.rankCacheL1Hits + this.totals.rankCacheRedisHits;
+    const misses = Math.max(0, this.totals.rankPrefetchHits + this.totals.rankDedupHits);
+    const total = hits + misses;
+    if (total <= 0) return 0;
+    return Math.round((hits / total) * 1000) / 10;
+  }
+
   recordMatchQueuedForPipeline(matchId: string): void {
     const id = String(matchId ?? "").trim();
     if (!id) return;
@@ -938,6 +998,7 @@ class PollerV2Observability {
     ) as Snapshot["durations"];
     const rankQueue = this.rankQueueMetrics();
     const diagnostics = await this.buildDiagnosticsAsync(now);
+    const bucket = getRiotTokenBucketSnapshot();
     const queue = { ...this.lastQueue };
     return {
       atIso: new Date(now).toISOString(),
@@ -951,6 +1012,14 @@ class PollerV2Observability {
       rankLeagueFetchesPending: rankQueue.rankLeagueFetchesPending,
       rankWorkerConcurrency: rankQueue.rankWorkerConcurrency,
       ...diagnostics,
+      rank_dedup_hits: this.totals.rankDedupHits,
+      rank_prefetch_hits: this.totals.rankPrefetchHits,
+      rank_cache_l1_hits: this.totals.rankCacheL1Hits,
+      rank_cache_redis_hits: this.totals.rankCacheRedisHits,
+      hydration_cache_hit_rate_pct: this.hydrationCacheHitRatePct(),
+      rank_cache_hit_rate_pct: this.rankCacheHitRatePct(),
+      bucket_1s_remaining: bucket.bucket_1s_remaining,
+      bucket_120s_remaining: bucket.bucket_120s_remaining,
       adaptive_budget: this.adaptiveBudgetStateProvider?.() ?? null,
       queues: {
         discovery: queue.discovery,

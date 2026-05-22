@@ -27,20 +27,24 @@ import {
 } from '~/utils/theorycraftStats'
 import {
   clampDisabledIndicesToActiveLimit,
-  filterItemsForTheorycraftStats,
   isWithinActiveItemLimit,
   remapDisabledItemIndices,
   resolveBuildItemsWithCatalog,
+  selectTheorycraftItemsForStats,
 } from '~/utils/theorycraftItems'
+import {
+  atlasUpgradeMissing,
+  findSmiteSpell,
+  normalizeBuildItemsAfterChange,
+} from '~/utils/buildItemRules'
 import { useItemsStore } from '~/stores/ItemsStore'
+import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import {
   applyTheorycraftItemModifiers,
   remapTheorycraftItemStacksByIndex,
 } from '~/utils/theorycraftItemModifiers'
 import {
   applyTheorycraftRuneModifiers,
-  listSelectedRuneIds,
-  runeSelectionUsesGameDuration,
   resolveTheorycraftAdaptiveForBuild,
 } from '~/utils/theorycraftRuneModifiers'
 import type { TheorycraftRuneModifierLine } from '~/utils/theorycraftRuneModifiers'
@@ -142,6 +146,7 @@ function isBuildPayloadValid(build: BuildLikeForValidation | null | undefined): 
     return false
   }
   if (!build.items.some((it: Item) => isStarterItem(it))) return false
+  if (atlasUpgradeMissing(build.items, build.roles)) return false
 
   if (!build.runes) return false
   if (!build.runes.primary.pathId || !build.runes.primary.keystone) return false
@@ -294,6 +299,8 @@ export const useBuildStore = defineStore('build', {
         errors.push('Maximum 10 items allowed')
       } else if (!build.items.some((it: Item) => isStarterItem(it))) {
         errors.push('At least one starter item must be selected')
+      } else if (atlasUpgradeMissing(build.items, build.roles)) {
+        errors.push('An Atlas upgrade must be selected for this support build')
       }
 
       if (!build.runes) {
@@ -788,9 +795,10 @@ export const useBuildStore = defineStore('build', {
       if (!build) return []
       if (this.builderSession !== 'theorycraft') return build.items
 
-      const active = filterItemsForTheorycraftStats(
+      const active = selectTheorycraftItemsForStats(
         build.items,
-        new Set(this.theorycraftDisabledItemIndices)
+        new Set(this.theorycraftDisabledItemIndices),
+        build.roles
       )
       const itemsStore = useItemsStore()
       if (itemsStore.items.length === 0) return active
@@ -1181,28 +1189,22 @@ export const useBuildStore = defineStore('build', {
       if (!target) return
       const previousItems =
         target.type === 'main' ? [...target.build.items] : [...(target.sub.items ?? [])]
-      if (target.type === 'main') {
-        if (target.build.items.length >= 10) return
-        target.build.items.push(item)
-      } else {
-        target.sub.items = [...(target.sub.items ?? []), item]
-      }
-      const nextItems = target.type === 'main' ? target.build.items : (target.sub.items ?? [])
+      if (previousItems.length >= 10) return
+      this.setItems([...previousItems, item])
       if (this.builderSession === 'theorycraft') {
         const build = this.displayedBuild ?? this.currentBuild
-        const disabledSet = new Set(
-          remapDisabledItemIndices(previousItems, nextItems, this.theorycraftDisabledItemIndices)
-        )
+        const nextItems = target.type === 'main' ? target.build.items : (target.sub.items ?? [])
+        const disabledSet = new Set(this.theorycraftDisabledItemIndices)
         const newIndex = nextItems.length - 1
-        disabledSet.delete(newIndex)
-        if (!isWithinActiveItemLimit(nextItems, disabledSet, build?.roles)) {
-          disabledSet.add(newIndex)
+        if (newIndex >= 0) {
+          disabledSet.delete(newIndex)
+          if (!isWithinActiveItemLimit(nextItems, disabledSet, build?.roles)) {
+            disabledSet.add(newIndex)
+          }
+          this.theorycraftDisabledItemIndices = Array.from(disabledSet)
+          this.persistTheorycraftDisabledItems()
         }
-        this.theorycraftDisabledItemIndices = Array.from(disabledSet)
-        this.persistTheorycraftDisabledItems()
       }
-      this.currentBuild!.updatedAt = new Date().toISOString()
-      this.recalculateStats()
     },
 
     removeItem(itemId: string) {
@@ -1229,15 +1231,20 @@ export const useBuildStore = defineStore('build', {
       }
       const target = this.getEditableTarget()
       if (!target) return
+      const build = this.displayedBuild ?? this.currentBuild
+      const itemsStore = useItemsStore()
+      const normalized = normalizeBuildItemsAfterChange(items, build?.roles ?? [], id =>
+        itemsStore.items.find(candidate => candidate.id === id)
+      )
       const previousItems =
         target.type === 'main' ? [...target.build.items] : [...(target.sub.items ?? [])]
       if (target.type === 'main') {
-        target.build.items = items
+        target.build.items = normalized
       } else {
-        target.sub.items = items
+        target.sub.items = normalized
       }
       if (this.builderSession === 'theorycraft') {
-        this.remapTheorycraftDisabledItems(previousItems, items)
+        this.remapTheorycraftDisabledItems(previousItems, normalized)
         this.clampTheorycraftActiveItemsForRole()
       }
       this.currentBuild!.updatedAt = new Date().toISOString()
@@ -1419,6 +1426,28 @@ export const useBuildStore = defineStore('build', {
           roles,
         }))
       }
+
+      if (roles.includes('jungle')) {
+        const spellsStore = useSummonerSpellsStore()
+        const smite = findSmiteSpell(spellsStore.spells)
+        if (smite) {
+          const target = this.getEditableTarget()
+          if (target?.type === 'main') {
+            target.build.summonerSpells = target.build.summonerSpells ?? [null, null]
+            target.build.summonerSpells[0] = smite
+          } else if (target?.type === 'sub') {
+            target.sub.summonerSpells = target.sub.summonerSpells ?? [null, null]
+            target.sub.summonerSpells[0] = smite
+          }
+        }
+      }
+
+      const target = this.getEditableTarget()
+      if (target) {
+        const currentItems = target.type === 'main' ? target.build.items : (target.sub.items ?? [])
+        this.setItems(currentItems)
+      }
+
       this.currentBuild.updatedAt = new Date().toISOString()
       this.clampStatsLevelForRole()
       this.clampTheorycraftActiveItemsForRole()
@@ -1569,16 +1598,13 @@ export const useBuildStore = defineStore('build', {
           })
 
           const adaptive = resolveTheorycraftAdaptiveForBuild(championForStats, activeItems)
-          const runeIds = listSelectedRuneIds(b.runes)
           const runeModifierResult = applyTheorycraftRuneModifiers({
             stats: modifierResult.stats,
             runes: b.runes,
             shards: b.shards,
             runeStacksById: this.theorycraftRuneStacks,
             level: this.statsLevel,
-            gameDurationMinutes: runeSelectionUsesGameDuration(runeIds)
-              ? this.theorycraftGameDurationMinutes
-              : 0,
+            gameDurationMinutes: this.theorycraftGameDurationMinutes,
             adaptive,
             labels: {},
           })

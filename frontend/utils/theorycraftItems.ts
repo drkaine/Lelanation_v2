@@ -68,6 +68,37 @@ export function filterItemsForTheorycraftStats(
   return items.filter((_, index) => !disabledIndices.has(index))
 }
 
+/** Active items for stat totals: 6 slots (boots included except ADC: 6 core + 1 boot). */
+export function selectTheorycraftItemsForStats(
+  items: readonly Item[],
+  disabledIndices: ReadonlySet<number>,
+  roles: readonly string[] | null | undefined
+): Item[] {
+  const starters: Item[] = []
+  const nonStartersInOrder: Item[] = []
+
+  items.forEach((item, index) => {
+    if (disabledIndices.has(index)) return
+    if (isStarterItem(item)) starters.push(item)
+    else nonStartersInOrder.push(item)
+  })
+
+  if (isAdcRole(roles)) {
+    const nonBoots: Item[] = []
+    const boots: Item[] = []
+    for (const item of nonStartersInOrder) {
+      if (isBootsItem(item)) boots.push(item)
+      else nonBoots.push(item)
+    }
+    const limitedCore = nonBoots.slice(0, MAX_ACTIVE_ITEMS)
+    const bootForStats = boots.length > 0 ? [boots[0]!] : []
+    return [...starters, ...limitedCore, ...bootForStats]
+  }
+
+  const limitedNonStarters = nonStartersInOrder.slice(0, MAX_ACTIVE_ITEMS)
+  return [...starters, ...limitedNonStarters]
+}
+
 export function activeItemLimitLabel(
   items: readonly Item[],
   disabledIndices: ReadonlySet<number>,

@@ -32,6 +32,15 @@ describe('theorycraftItems', () => {
     expect(isWithinActiveItemLimit(items, disabled, ['adc'])).toBe(true)
   })
 
+  it('boots count toward the 6 active slots for non-ADC roles', () => {
+    const boot = { id: '1001', tags: ['Boots'] } as Item
+    const core = (id: string) => ({ id, tags: ['Damage'] }) as Item
+    const items = [boot, ...Array.from({ length: 6 }, (_, i) => core(`core-${i}`))]
+    const disabled = new Set<number>()
+    expect(countActiveNonStarterItems(items, disabled).total).toBe(7)
+    expect(isWithinActiveItemLimit(items, disabled, ['top'])).toBe(false)
+  })
+
   it('enabling a starter does not hit the 6-item limit when 6 core items are active', () => {
     const doran = { id: '1055', tags: ['Starter'] } as Item
     const core = (id: string) => ({ id, tags: ['Damage'] }) as Item

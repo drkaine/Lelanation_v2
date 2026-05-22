@@ -7,6 +7,8 @@ import { bullmqJobId } from "../queues/bullmq-job-id.js";
 import { maxRankBacklogBeforePipelinePause, shouldPauseMatchPipelines } from "../queues/rank-backlog-policy.js";
 import { discoveryQueue, getRankBacklogCount, hydrationQueue } from "../queues/index.js";
 import { enqueueHydrationMatchIfAbsent } from "../queues/hydration-enqueue.js";
+import { enqueueRankPrefetchJob } from "../queues/rank-jobs.js";
+import { hasTodayRankSnapshot } from "../services/rank-inflight.js";
 import { DISCOVERY_QUEUE } from "../queues/definitions.js";
 import { redis } from "../redis/client.js";
 import { waitForDiscoverySlot } from "../redis/rate-scheduler.js";
@@ -203,6 +205,12 @@ async function processDiscoveryPlayer(
 
   await waitForDiscoverySlot();
   const matchIds = await riotClient.getMatchIds(player.puuid, player.region, { startTime });
+
+  const alreadyRankedToday = await hasTodayRankSnapshot(player.puuid, player.region);
+  pollerV2Observability.recordDiscoveryRankPrefetch(1, alreadyRankedToday ? 0 : 1);
+  if (!alreadyRankedToday) {
+    await enqueueRankPrefetchJob(player.puuid, player.region);
+  }
 
   const knownRows =
     matchIds.length > 0

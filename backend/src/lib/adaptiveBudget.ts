@@ -71,6 +71,9 @@ export const DEFAULT_INITIAL_ALLOCATION: BudgetAllocation = {
 };
 
 export const MIN_ALLOC_CHANGE = 2;
+export const MIN_REBALANCE_INTERVAL_MS = 3 * 60_000;
+export const MIN_ALLOC_CHANGE_PCT = 0.2;
+export const SIGNAL_EMA_ALPHA = 0.3;
 
 /** Req/120s idle minimum avant d'enfiler des rank fills. */
 export const RANK_FILL_IDLE_THRESHOLD = 10;
@@ -332,12 +335,52 @@ export function computeAllocation(
   return { discovery, hydration, rank, totalReq };
 }
 
+export function smoothPipelineSnapshots(
+  raw: Record<Pipeline, PipelineSnapshot>,
+  ema: Record<Pipeline, Partial<PipelineSnapshot>>,
+  alpha = SIGNAL_EMA_ALPHA,
+): Record<Pipeline, PipelineSnapshot> {
+  const smooth = (prev: number, next: number): number =>
+    alpha * next + (1 - alpha) * prev;
+
+  const out = {} as Record<Pipeline, PipelineSnapshot>;
+  for (const pipeline of ["discovery", "hydration", "rank"] as const) {
+    const prev = ema[pipeline] ?? {};
+    const snap = raw[pipeline];
+    const queueWaiting = smooth(prev.queueWaiting ?? snap.queueWaiting, snap.queueWaiting);
+    const hydrationWaitingChildren = smooth(
+      prev.hydrationWaitingChildren ?? snap.hydrationWaitingChildren ?? 0,
+      snap.hydrationWaitingChildren ?? 0,
+    );
+    ema[pipeline] = {
+      queueWaiting,
+      hydrationWaitingChildren,
+      queueActive: snap.queueActive,
+    };
+    out[pipeline] = {
+      ...snap,
+      queueWaiting: Math.round(queueWaiting),
+      hydrationWaitingChildren: Math.round(hydrationWaitingChildren),
+    };
+  }
+  return out;
+}
+
 export function isSignificantAllocationChange(
   prev: BudgetAllocation,
   next: BudgetAllocation,
   minDelta = MIN_ALLOC_CHANGE,
+  minPct = MIN_ALLOC_CHANGE_PCT,
 ): boolean {
+  const pctChanged = (field: keyof Pick<BudgetAllocation, "discovery" | "hydration" | "rank">) => {
+    const base = Math.max(1, prev[field]);
+    return Math.abs(next[field] - prev[field]) / base >= minPct;
+  };
+
   return (
+    pctChanged("discovery") ||
+    pctChanged("hydration") ||
+    pctChanged("rank") ||
     Math.abs(next.discovery - prev.discovery) >= minDelta ||
     Math.abs(next.hydration - prev.hydration) >= minDelta ||
     Math.abs(next.rank - prev.rank) >= minDelta
@@ -353,6 +396,11 @@ export class AdaptiveBudgetScheduler {
   private lastRankFillCount = 0;
   private lastRankFillAtMs: number | null = null;
   private lastHydrationWaitingChildren = 0;
+  private readonly emaSignals: Record<Pipeline, Partial<PipelineSnapshot>> = {
+    discovery: {},
+    hydration: {},
+    rank: {},
+  };
 
   constructor(
     private readonly getSnapshots: () => Promise<Record<Pipeline, PipelineSnapshot>>,
@@ -436,16 +484,20 @@ export class AdaptiveBudgetScheduler {
 
   private async tick(): Promise<void> {
     try {
-      const snapshots = await this.getSnapshots();
-      this.lastHydrationWaitingChildren = snapshots.hydration.hydrationWaitingChildren ?? 0;
+      const rawSnapshots = await this.getSnapshots();
+      this.lastHydrationWaitingChildren = rawSnapshots.hydration.hydrationWaitingChildren ?? 0;
+      const snapshots = smoothPipelineSnapshots(rawSnapshots, this.emaSignals);
       const newAlloc = computeAllocation(snapshots);
       const scores = scorePipelines(snapshots);
       const prev = this.currentAllocation;
+      const now = Date.now();
+      const rebalanceDue =
+        this.lastRebalanceAtMs == null ||
+        now - this.lastRebalanceAtMs >= MIN_REBALANCE_INTERVAL_MS;
 
-      if (isSignificantAllocationChange(prev, newAlloc)) {
+      if (rebalanceDue && isSignificantAllocationChange(prev, newAlloc)) {
         await this.applyAllocation(newAlloc);
         this.currentAllocation = newAlloc;
-        const now = Date.now();
         this.lastRebalanceAtMs = now;
         this.rebalanceTimestampsMs.push(now);
 

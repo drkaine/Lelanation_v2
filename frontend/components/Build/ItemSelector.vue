@@ -163,6 +163,7 @@ import { getItemImageUrl } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 import { formatTooltipMarkupHtml } from '~/utils/formatTooltipMarkupHtml'
+import { isJunglePetItem, isSupportLineStarter } from '~/utils/buildItemRules'
 
 const props = withDefaults(defineProps<{ includeMasterwork?: boolean }>(), {
   includeMasterwork: false,
@@ -776,11 +777,21 @@ const toggleItem = (item: Item) => {
 
     // Check if we can add this item
     if (isStarterItem(item)) {
-      // Max 2 starter items
-      if (starterItems.length < 2) {
-        // Insert at the beginning (positions 0-1)
-        const newItems = [...starterItems, item, ...bootsItems, ...coreItems]
-        buildStore.setItems(newItems)
+      const cleanCore = coreItems.filter(i => !isStarterItem(i))
+      const alreadyHas = starterItems.some(entry => entry.id === item.id)
+      if (isSupportLineStarter(item) || isJunglePetItem(item)) {
+        if (alreadyHas) return
+        let newStarters: Item[]
+        if (starterItems.length >= 2) {
+          newStarters = [item, starterItems[1]!]
+        } else if (starterItems.length === 1) {
+          newStarters = isJunglePetItem(item) ? [item, starterItems[0]!] : [...starterItems, item]
+        } else {
+          newStarters = [item]
+        }
+        buildStore.setItems([...newStarters.slice(0, 2), ...bootsItems, ...cleanCore])
+      } else if (!alreadyHas && starterItems.length < 2) {
+        buildStore.setItems([...starterItems, item, ...bootsItems, ...cleanCore])
       }
     } else if (isBootsItem(item)) {
       // Max 2 boots in their dedicated section.
@@ -790,7 +801,6 @@ const toggleItem = (item: Item) => {
         buildStore.setItems(newItems)
       }
     } else if (coreItems.length < 6) {
-      // Core section is always capped at 6 items.
       const newItems = [...starterItems, ...bootsItems, ...coreItems, item]
       buildStore.setItems(newItems)
     }

@@ -4,6 +4,7 @@ import type { RankJobData } from "../dto/match.dto.js";
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
 import { RANK_QUEUE } from "../queues/definitions.js";
 import { rankWorkerConcurrencyNormal } from "../queues/rank-backlog-policy.js";
+import { writeRankCacheRedis } from "../redis/rank-cache.js";
 import { redis } from "../redis/client.js";
 import { normalizePlatformRegion } from "../riot/platform-region.js";
 import { slotBudgetForPipeline, waitForRankSlot } from "../redis/rate-scheduler.js";
@@ -79,18 +80,39 @@ async function runRankJob(data: RankJobData): Promise<RankJobOutcome> {
     const rank = await riotClient.getRank(puuid, region);
     if (!rank) {
       await upsertTodayRankSnapshot(puuid, region, "UNRANKED", "UNRANKED", 0);
+      await writeRankCacheRedis(puuid, region, {
+        rankTier: "UNRANKED",
+        rankDivision: "UNRANKED",
+        rankLp: 0,
+        snapshotDate: today,
+        cachedAtMs: Date.now(),
+      });
       return { skipped: true, reason: "unranked" };
     }
 
     const normalizedTier = normalizeTier(rank.tier);
     if (!normalizedTier) {
       await upsertTodayRankSnapshot(puuid, region, "UNRANKED", "UNRANKED", 0);
+      await writeRankCacheRedis(puuid, region, {
+        rankTier: "UNRANKED",
+        rankDivision: "UNRANKED",
+        rankLp: 0,
+        snapshotDate: today,
+        cachedAtMs: Date.now(),
+      });
       return { skipped: true, reason: "unranked" };
     }
 
     const rankDivision = String(rank.rank ?? "").trim().toUpperCase() || "UNRANKED";
     const rankLp = clampRankLp(rank.leaguePoints ?? 0);
     await upsertTodayRankSnapshot(puuid, region, normalizedTier, rankDivision, rankLp);
+    await writeRankCacheRedis(puuid, region, {
+      rankTier: normalizedTier,
+      rankDivision,
+      rankLp,
+      snapshotDate: today,
+      cachedAtMs: Date.now(),
+    });
     pollerV2Observability.recordRankLeagueFetchSucceeded();
     return { success: true };
   } catch (error) {

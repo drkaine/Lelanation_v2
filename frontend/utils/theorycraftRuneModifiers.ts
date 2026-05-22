@@ -74,7 +74,8 @@ export const THEORYCRAFT_STACKABLE_RUNES: TheorycraftStackableRuneConfig[] = [
 ]
 
 const GATHERING_STORM_RUNE_ID = 8236
-const CONDITIONING_RUNE_ID = 8453
+/** Resolve row 2 — Conditioning (not Revitalize 8453). */
+const CONDITIONING_RUNE_ID = 8429
 const ABSOLUTE_FOCUS_RUNE_ID = 8233
 const TRANSCENDENCE_RUNE_ID = 8210
 
@@ -97,9 +98,14 @@ const GATHERING_STORM_TIERS: { minutes: number; ad: number; ap: number }[] = [
   { minutes: 60, ad: 101, ap: 168 },
 ]
 
+function normalizeRuneId(value: unknown): number {
+  const id = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(id) && id > 0 ? Math.trunc(id) : 0
+}
+
 export function listSelectedRuneIds(runes: RuneSelection | null | undefined): number[] {
   if (!runes) return []
-  const ids = [
+  const raw = [
     runes.primary.keystone,
     runes.primary.slot1,
     runes.primary.slot2,
@@ -107,7 +113,11 @@ export function listSelectedRuneIds(runes: RuneSelection | null | undefined): nu
     runes.secondary.slot1,
     runes.secondary.slot2,
   ]
-  return ids.filter(id => Number.isFinite(id) && id > 0)
+  return raw.map(normalizeRuneId).filter(id => id > 0)
+}
+
+export function hasConditioningRune(runes: RuneSelection | null | undefined): boolean {
+  return listSelectedRuneIds(runes).includes(CONDITIONING_RUNE_ID)
 }
 
 export function getTheorycraftStackableRuneConfig(
@@ -319,7 +329,7 @@ function applyFlatRuneBonuses(args: {
     })
   }
 
-  if (idSet.has(CONDITIONING_RUNE_ID) && gameDurationMinutes > 0) {
+  if (idSet.has(CONDITIONING_RUNE_ID)) {
     const bonus = conditioningBonus(stats, gameDurationMinutes)
     if (bonus) {
       lines.push({

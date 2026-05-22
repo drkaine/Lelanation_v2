@@ -71,6 +71,8 @@ export class RiotClient {
   }
 
   private async fetch<T>(url: string): Promise<T> {
+    const { acquireRiotAppToken } = await import("../redis/riot-token-bucket.js");
+    await acquireRiotAppToken();
     for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt += 1) {
       const startedAt = Date.now();
       const response = await fetch(url, {

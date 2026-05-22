@@ -5,6 +5,7 @@
     :class="{
       'build-card-wrapper--streamer-scaled': isLayoutScaled,
       'build-card-wrapper--screenshot': props.forScreenshot,
+      'build-card-wrapper--skill-picker-open': Boolean(openSkillDropdown),
     }"
     :style="buildCardThemeVars"
   >
@@ -270,8 +271,17 @@
       </div>
     </div>
     <!-- Flip container (only in readonly mode with sub-builds) -->
-    <div class="flip-container" :class="{ flipped: localFlipped }">
-      <div class="build-card">
+    <div
+      class="flip-container"
+      :class="{
+        flipped: localFlipped,
+        'flip-container--skill-picker-open': Boolean(openSkillDropdown),
+      }"
+    >
+      <div
+        class="build-card"
+        :class="{ 'build-card--skill-picker-open': Boolean(openSkillDropdown) }"
+      >
         <!-- Version (top right) -->
         <div class="build-version">{{ version }}</div>
 
@@ -767,7 +777,7 @@
               <div
                 class="skill-icon-wrapper skill-slot-trigger"
                 :class="{ 'skill-slot-trigger--editable': canEditSkillOrder }"
-                @click.stop="toggleSkillDropdown(`first-${index}`)"
+                @click.stop="toggleSkillDropdown(`first-${index}`, $event)"
               >
                 <img
                   v-if="slot.spell"
@@ -794,46 +804,6 @@
                 </span>
                 <span class="level-badge">{{ index + 1 }}</span>
               </div>
-              <div
-                v-if="canEditSkillOrder && openSkillDropdown === `first-${index}`"
-                class="skill-slot-dropdown"
-                @click.stop
-              >
-                <button
-                  v-for="spell in availableSkillSpells"
-                  :key="spell.key"
-                  type="button"
-                  class="skill-slot-dropdown-option"
-                  :class="{
-                    'is-active': slot.key === spell.key,
-                    'is-disabled': isFirstThreeUpSelected(spell.key, index),
-                  }"
-                  :disabled="isFirstThreeUpSelected(spell.key, index)"
-                  :title="
-                    tooltipsEnabled
-                      ? slot.key === spell.key
-                        ? t('skills.clickToDeselect')
-                        : isFirstThreeUpSelected(spell.key, index)
-                          ? t('skills.alreadyUsedElsewhere')
-                          : t('skills.select')
-                      : undefined
-                  "
-                  @click="toggleFirstThreeUp(index, spell.key)"
-                >
-                  <img
-                    :src="
-                      getChampionSpellImageUrl(
-                        versionForImages,
-                        selectedChampion?.id || '',
-                        spell.image.full
-                      )
-                    "
-                    :alt="spell.name"
-                    class="skill-slot-dropdown-icon"
-                  />
-                  <span class="skill-slot-dropdown-label">{{ t(`skills.key.${spell.key}`) }}</span>
-                </button>
-              </div>
               <span v-if="index < 2 && !forScreenshot" class="arrow-down">↓</span>
             </div>
           </div>
@@ -852,7 +822,7 @@
               <div
                 class="skill-icon-wrapper skill-slot-trigger"
                 :class="{ 'skill-slot-trigger--editable': canEditSkillOrder }"
-                @click.stop="toggleSkillDropdown(`order-${index}`)"
+                @click.stop="toggleSkillDropdown(`order-${index}`, $event)"
               >
                 <img
                   v-if="slot.spell"
@@ -879,52 +849,72 @@
                 </span>
                 <span class="max-badge">MAX</span>
               </div>
-              <div
-                v-if="canEditSkillOrder && openSkillDropdown === `order-${index}`"
-                class="skill-slot-dropdown"
-                @click.stop
-              >
-                <button
-                  v-for="spell in availableSkillSpells"
-                  :key="spell.key"
-                  type="button"
-                  class="skill-slot-dropdown-option"
-                  :class="{
-                    'is-active': slot.key === spell.key,
-                    'is-disabled': isSkillUpOrderSelected(spell.key, index),
-                  }"
-                  :disabled="isSkillUpOrderSelected(spell.key, index)"
-                  :title="
-                    tooltipsEnabled
-                      ? slot.key === spell.key
-                        ? t('skills.clickToDeselect')
-                        : isSkillUpOrderSelected(spell.key, index)
-                          ? t('skills.alreadyUsedElsewhere')
-                          : t('skills.select')
-                      : undefined
-                  "
-                  @click="toggleSkillUpOrder(index, spell.key)"
-                >
-                  <img
-                    :src="
-                      getChampionSpellImageUrl(
-                        versionForImages,
-                        selectedChampion?.id || '',
-                        spell.image.full
-                      )
-                    "
-                    :alt="spell.name"
-                    class="skill-slot-dropdown-icon"
-                  />
-                  <span class="skill-slot-dropdown-label">{{ t(`skills.key.${spell.key}`) }}</span>
-                </button>
-              </div>
             </div>
           </div>
         </div>
 
         <!-- Lelanation (bottom left) -->
         <div class="build-footer">lelanation.fr</div>
+
+        <!-- Skill picker (Teleport: au-dessus des cases Q/W/E/R et du reste de la carte) -->
+        <Teleport to="body">
+          <div
+            v-if="canEditSkillOrder && activeSkillDropdown && skillDropdownFixedStyle"
+            class="skill-slot-dropdown skill-slot-dropdown--fixed"
+            :style="skillDropdownFixedStyle"
+            @click.stop
+          >
+            <button
+              v-for="spell in availableSkillSpells"
+              :key="`${activeSkillDropdown.kind}-${activeSkillDropdown.index}-${spell.key}`"
+              type="button"
+              class="skill-slot-dropdown-option"
+              :class="{
+                'is-active': activeSkillDropdown.slot.key === spell.key,
+                'is-disabled':
+                  activeSkillDropdown.kind === 'first'
+                    ? isFirstThreeUpSelected(spell.key, activeSkillDropdown.index)
+                    : isSkillUpOrderSelected(spell.key, activeSkillDropdown.index),
+              }"
+              :disabled="
+                activeSkillDropdown.kind === 'first'
+                  ? isFirstThreeUpSelected(spell.key, activeSkillDropdown.index)
+                  : isSkillUpOrderSelected(spell.key, activeSkillDropdown.index)
+              "
+              :title="
+                tooltipsEnabled
+                  ? activeSkillDropdown.slot.key === spell.key
+                    ? t('skills.clickToDeselect')
+                    : activeSkillDropdown.kind === 'first'
+                      ? isFirstThreeUpSelected(spell.key, activeSkillDropdown.index)
+                        ? t('skills.alreadyUsedElsewhere')
+                        : t('skills.select')
+                      : isSkillUpOrderSelected(spell.key, activeSkillDropdown.index)
+                        ? t('skills.alreadyUsedElsewhere')
+                        : t('skills.select')
+                  : undefined
+              "
+              @click="
+                activeSkillDropdown.kind === 'first'
+                  ? toggleFirstThreeUp(activeSkillDropdown.index, spell.key)
+                  : toggleSkillUpOrder(activeSkillDropdown.index, spell.key)
+              "
+            >
+              <img
+                :src="
+                  getChampionSpellImageUrl(
+                    versionForImages,
+                    selectedChampion?.id || '',
+                    spell.image.full
+                  )
+                "
+                :alt="spell.name"
+                class="skill-slot-dropdown-icon"
+              />
+              <span class="skill-slot-dropdown-label">{{ t(`skills.key.${spell.key}`) }}</span>
+            </button>
+          </div>
+        </Teleport>
 
         <!-- Tooltip (rendered via Teleport to body to avoid z-index issues with grid stacking context) -->
         <Teleport to="body">
@@ -1899,6 +1889,12 @@ const copyPickerOpen = ref(false)
 const copySource = ref<'main' | number>('main')
 const copyDestinations = ref<('main' | number)[]>([])
 const openSkillDropdown = ref<string | null>(null)
+const skillDropdownAnchorRect = ref<DOMRect | null>(null)
+
+const SKILL_DROPDOWN_WIDTH = 88
+const SKILL_DROPDOWN_ROW_HEIGHT = 28
+const SKILL_DROPDOWN_PADDING = 8
+
 const copySelection = ref({
   items: true,
   runes: true,
@@ -2128,7 +2124,7 @@ function onDocumentPointerDown(event: MouseEvent) {
     !targetElement.closest('.skill-slot-dropdown') &&
     !targetElement.closest('.skill-slot-trigger')
   ) {
-    openSkillDropdown.value = null
+    closeSkillDropdown()
   }
 
   if (!variantsPopoverOpen.value) return
@@ -3046,10 +3042,72 @@ const skillOrderSlots = computed<SkillSlotState[]>(() => {
   })
 })
 
-const toggleSkillDropdown = (slotId: string) => {
+const activeSkillDropdown = computed(() => {
+  const id = openSkillDropdown.value
+  if (!id) return null
+  if (id.startsWith('first-')) {
+    const index = Number.parseInt(id.replace('first-', ''), 10)
+    if (!Number.isFinite(index)) return null
+    return {
+      kind: 'first' as const,
+      index,
+      slot: firstThreeUpSlots.value[index],
+    }
+  }
+  if (id.startsWith('order-')) {
+    const index = Number.parseInt(id.replace('order-', ''), 10)
+    if (!Number.isFinite(index)) return null
+    return {
+      kind: 'order' as const,
+      index,
+      slot: skillOrderSlots.value[index],
+    }
+  }
+  return null
+})
+
+const skillDropdownFixedStyle = computed((): CSSProperties | null => {
+  const rect = skillDropdownAnchorRect.value
+  const active = activeSkillDropdown.value
+  if (!rect || !active) return null
+
+  const menuHeight =
+    availableSkillSpells.value.length * SKILL_DROPDOWN_ROW_HEIGHT + SKILL_DROPDOWN_PADDING
+
+  if (active.kind === 'order') {
+    return {
+      position: 'fixed',
+      top: `${rect.top}px`,
+      left: `${rect.left - SKILL_DROPDOWN_WIDTH - 4}px`,
+      zIndex: 10000,
+      minWidth: `${SKILL_DROPDOWN_WIDTH}px`,
+    }
+  }
+
+  return {
+    position: 'fixed',
+    top: `${rect.top - menuHeight - 4}px`,
+    left: `${rect.left}px`,
+    zIndex: 10000,
+    minWidth: `${SKILL_DROPDOWN_WIDTH}px`,
+  }
+})
+
+const closeSkillDropdown = () => {
+  openSkillDropdown.value = null
+  skillDropdownAnchorRect.value = null
+}
+
+const toggleSkillDropdown = (slotId: string, event: MouseEvent) => {
   if (!canEditSkillOrder.value || !selectedChampion.value) return
   ensureSkillOrderInitialized()
-  openSkillDropdown.value = openSkillDropdown.value === slotId ? null : slotId
+  if (openSkillDropdown.value === slotId) {
+    closeSkillDropdown()
+    return
+  }
+  const trigger = event.currentTarget as HTMLElement | null
+  skillDropdownAnchorRect.value = trigger?.getBoundingClientRect() ?? null
+  openSkillDropdown.value = slotId
 }
 
 const toggleFirstThreeUp = (index: number, ability: AbilityKey) => {
@@ -3065,7 +3123,7 @@ const toggleFirstThreeUp = (index: number, ability: AbilityKey) => {
     ...skillOrder,
     firstThreeUps: nextFirstThreeUps as SkillOrder['firstThreeUps'],
   })
-  openSkillDropdown.value = null
+  closeSkillDropdown()
 }
 
 const toggleSkillUpOrder = (index: number, ability: AbilityKey) => {
@@ -3081,7 +3139,7 @@ const toggleSkillUpOrder = (index: number, ability: AbilityKey) => {
     ...skillOrder,
     skillUpOrder: nextSkillUpOrder as SkillOrder['skillUpOrder'],
   })
-  openSkillDropdown.value = null
+  closeSkillDropdown()
 }
 
 // Règle : un même spell ne peut pas être monté deux niveaux consécutifs (1==2 ou 2==3 interdit),
@@ -3560,6 +3618,11 @@ defineExpose({
   --card-border-color-soft: rgb(0 90 130 / 0.45);
 }
 
+.build-card-wrapper--skill-picker-open {
+  z-index: 80;
+  overflow: visible;
+}
+
 .build-card-wrapper--streamer-scaled .flip-container {
   zoom: 1.3;
   transform-origin: top left;
@@ -3905,6 +3968,10 @@ defineExpose({
   border-radius: 6px;
 }
 
+.flip-container--skill-picker-open {
+  z-index: 80;
+}
+
 .flip-container .build-card {
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
@@ -4244,6 +4311,10 @@ defineExpose({
   flex-direction: column;
   font-family: var(--font-beaufort, ui-sans-serif, system-ui, sans-serif);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.build-card--skill-picker-open {
+  overflow: visible;
 }
 
 .validation-blink-frame {
@@ -4916,7 +4987,7 @@ defineExpose({
 /* Items manager (below card) */
 .items-manager {
   position: relative;
-  z-index: 1;
+  z-index: 0;
   width: var(--build-card-width);
   box-sizing: border-box;
   padding: 10px;
@@ -5260,7 +5331,7 @@ defineExpose({
   position: absolute;
   left: 200px; /* Positionné pour avoir le même espace entre items (~120px) et skill order (~280px) */
   top: 303px; /* Descendu pour s'aligner avec les items */
-  z-index: 10;
+  z-index: 40;
 }
 
 .first-three-ups-vertical {
@@ -5358,7 +5429,7 @@ defineExpose({
   position: absolute;
   right: 20px; /* Décalé de 20px du bord droit */
   top: 303px; /* Descendu pour s'aligner avec les items */
-  z-index: 20;
+  z-index: 50;
 }
 
 .skill-order-vertical {
@@ -5431,10 +5502,6 @@ defineExpose({
 }
 
 .skill-slot-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  z-index: 30;
   min-width: 84px;
   padding: 4px;
   border: 1px solid transparent;
@@ -5442,6 +5509,14 @@ defineExpose({
   border-radius: 8px;
   background: rgba(8, 16, 31, 0.98);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.38);
+  /* Teleport sur body : couleur explicite (sinon hérite du texte noir de la page) */
+  color: var(--color-blue-50, #cdfafa);
+}
+
+.skill-slot-dropdown--fixed {
+  position: fixed;
+  z-index: 10000;
+  pointer-events: auto;
 }
 
 .skill-slot-dropdown-option {
@@ -5453,7 +5528,7 @@ defineExpose({
   border-radius: 6px;
   background: transparent;
   border: none;
-  color: inherit;
+  color: var(--color-blue-50, #cdfafa);
   cursor: pointer;
   text-align: left;
   transition: background 0.15s ease;
@@ -5485,13 +5560,7 @@ defineExpose({
 .skill-slot-dropdown-label {
   font-size: 11px;
   font-weight: 700;
-}
-
-/* Skill order (droite) : menu vers la gauche pour ne pas passer sous la gestion items */
-.skill-order-section .skill-slot-dropdown {
-  top: 0;
-  left: auto;
-  right: calc(100% + 4px);
+  color: var(--color-blue-50, #cdfafa);
 }
 
 .arrow-down {
