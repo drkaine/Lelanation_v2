@@ -12,7 +12,9 @@ export interface TheorycraftPercentModifier {
 export interface TheorycraftStackableItemConfig {
   itemIds: string[]
   labelKey: string
-  maxStacks: number
+  maxStacks?: number
+  unlimitedStacks?: boolean
+  presetStacks?: number
   stackUnit: 'stacks' | 'mana' | 'glory'
   supportsTransform?: boolean
   transformThreshold?: number
@@ -55,7 +57,8 @@ export const THEORYCRAFT_STACKABLE_ITEMS: TheorycraftStackableItemConfig[] = [
   {
     itemIds: ['3084'],
     labelKey: 'theorycraft.items.heartsteel',
-    maxStacks: 999,
+    unlimitedStacks: true,
+    presetStacks: 150,
     stackUnit: 'stacks',
   },
   {
@@ -190,16 +193,21 @@ export function getTheorycraftPercentModifiersForItems(
   )
 }
 
-function clampStacks(value: number, max: number): number {
+function resolveItemStackCount(value: number, config: TheorycraftStackableItemConfig): number {
   if (!Number.isFinite(value)) return 0
-  return Math.max(0, Math.min(Math.trunc(value), max))
+  const safe = Math.max(0, Math.trunc(value))
+  if (config.unlimitedStacks) return safe
+  const max = config.maxStacks ?? 0
+  if (max <= 0) return safe
+  return Math.min(safe, max)
 }
 
 export function getTheorycraftItemStackStats(
   itemId: string,
   stacks: number
 ): Record<string, number> {
-  const count = clampStacks(stacks, getTheorycraftStackableItemConfig(itemId)?.maxStacks ?? 0)
+  const config = getTheorycraftStackableItemConfig(itemId)
+  const count = config ? resolveItemStackCount(stacks, config) : Math.max(0, Math.trunc(stacks))
   switch (itemId) {
     case '1082':
     case '3041':
@@ -232,7 +240,7 @@ export function applyTheorycraftItemModifiers(args: {
 
     applyGloryItemBaseStats(stats, item)
 
-    const stacks = clampStacks(itemStacksById[item.id] ?? 0, config.maxStacks)
+    const stacks = resolveItemStackCount(itemStacksById[item.id] ?? 0, config)
     const transformed = Boolean(transformedById[item.id])
     const label = labels[config.labelKey] ?? item.name
 

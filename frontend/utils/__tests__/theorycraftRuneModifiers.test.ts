@@ -55,6 +55,10 @@ describe('theorycraftRuneModifiers', () => {
     expect(getTheorycraftRuneStackStats(8437, 12, 18, 'ad').health).toBe(60)
   })
 
+  it('does not cap grasp stacks above the old UI limit', () => {
+    expect(getTheorycraftRuneStackStats(8437, 80, 18, 'ad').health).toBe(400)
+  })
+
   it('applies rune stacks and gathering storm in modifier pass', () => {
     const result = applyTheorycraftRuneModifiers({
       stats: baseStats,

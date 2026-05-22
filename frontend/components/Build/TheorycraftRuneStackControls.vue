@@ -4,7 +4,7 @@
     <input
       type="number"
       min="0"
-      :max="config.maxStacks"
+      :max="inputMax"
       class="theorycraft-rune-stack__input"
       :size="stackInputSize"
       :value="stacks"
@@ -12,11 +12,12 @@
       @input="onInput"
     />
     <button
+      v-if="showPresetButton"
       type="button"
       class="theorycraft-rune-stack__full"
-      :class="{ 'theorycraft-rune-stack__full--active': isFullStack }"
-      :title="fullStackTitle"
-      @click="setFullStack"
+      :class="{ 'theorycraft-rune-stack__full--active': isPresetActive }"
+      :title="presetTitle"
+      @click="setPresetStacks"
     >
       {{ t('theorycraft.items.fullStackShort') }}
     </button>
@@ -44,32 +45,47 @@ const label = computed(
 
 const stacks = computed(() => buildStore.theorycraftRuneStacks[props.runeId] ?? 0)
 
+const inputMax = computed(() =>
+  config.value?.unlimitedStacks ? undefined : config.value?.maxStacks
+)
+
+const presetStacks = computed(() => {
+  if (!config.value) return 0
+  if (config.value.unlimitedStacks) return config.value.presetStacks ?? 0
+  return config.value.maxStacks ?? 0
+})
+
+const showPresetButton = computed(() => presetStacks.value > 0)
+
 const stackInputSize = computed(() => {
-  const maxLen = String(config.value?.maxStacks ?? 0).length
+  const maxLen = config.value?.unlimitedStacks
+    ? String(stacks.value || 0).length
+    : String(config.value?.maxStacks ?? 0).length
   const valueLen = String(stacks.value || 0).length
   return Math.max(2, maxLen, valueLen) + 1
 })
 
-const fullStackTitle = computed(() =>
-  t('theorycraft.runes.fullStack', { max: config.value?.maxStacks ?? 0 })
-)
+const presetTitle = computed(() => {
+  if (!config.value?.unlimitedStacks) {
+    return t('theorycraft.runes.fullStack', { max: presetStacks.value })
+  }
+  return t('theorycraft.runes.presetStack', { count: presetStacks.value })
+})
 
-const isFullStack = computed(
-  () => stacks.value >= (config.value?.maxStacks ?? 0) && (config.value?.maxStacks ?? 0) > 0
-)
+const isPresetActive = computed(() => presetStacks.value > 0 && stacks.value >= presetStacks.value)
 
 function onInput(event: Event) {
   const value = Number((event.target as HTMLInputElement).value)
   buildStore.setTheorycraftRuneStacks(props.runeId, value)
 }
 
-function setFullStack() {
-  if (!config.value) return
-  if (isFullStack.value) {
+function setPresetStacks() {
+  if (!config.value || presetStacks.value <= 0) return
+  if (isPresetActive.value) {
     buildStore.setTheorycraftRuneStacks(props.runeId, 0)
     return
   }
-  buildStore.setTheorycraftRuneStacks(props.runeId, config.value.maxStacks)
+  buildStore.setTheorycraftRuneStacks(props.runeId, presetStacks.value)
 }
 </script>
 

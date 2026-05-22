@@ -307,6 +307,7 @@
       "stacksTitle": "Rune stacks",
       "stacksInput": "Rune stacks",
       "fullStack": "Max stacks ({max})",
+      "presetStack": "Preset stacks ({count})",
       "gameDuration": "Game duration",
       "minutes": "min",
       "noStackableRunes": "No stackable runes in this build.",

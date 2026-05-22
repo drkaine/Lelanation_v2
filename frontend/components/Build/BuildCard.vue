@@ -1425,7 +1425,7 @@
                     :image-url="getBuildItemImageUrl(entry.item, entry.index)"
                     :icon-class="itemManagerIconClass(entry.index)"
                     :title="itemManagerTitle(entry)"
-                    :draggable="!props.build && !isTheorycraftItemsToggleMode"
+                    :draggable="!props.build"
                     :show-stacks="
                       isTheorycraftItemsToggleMode && isTheorycraftStackableItem(entry.item.id)
                     "
@@ -1465,7 +1465,7 @@
                     :image-url="getBuildItemImageUrl(entry.item, entry.index)"
                     :icon-class="itemManagerIconClass(entry.index)"
                     :title="itemManagerTitle(entry)"
-                    :draggable="!props.build && !isTheorycraftItemsToggleMode"
+                    :draggable="!props.build"
                     :show-stacks="
                       isTheorycraftItemsToggleMode && isTheorycraftStackableItem(entry.item.id)
                     "
@@ -1505,7 +1505,7 @@
                     :image-url="getBuildItemImageUrl(entry.item, entry.index)"
                     :icon-class="itemManagerIconClass(entry.index)"
                     :title="itemManagerTitle(entry)"
-                    :draggable="!props.build && !isTheorycraftItemsToggleMode"
+                    :draggable="!props.build"
                     :show-stacks="
                       isTheorycraftItemsToggleMode && isTheorycraftStackableItem(entry.item.id)
                     "
@@ -1545,7 +1545,7 @@
                     :image-url="getBuildItemImageUrl(entry.item, entry.index)"
                     :icon-class="itemManagerIconClass(entry.index)"
                     :title="itemManagerTitle(entry)"
-                    :draggable="!props.build && !isTheorycraftItemsToggleMode"
+                    :draggable="!props.build"
                     :show-stacks="
                       isTheorycraftItemsToggleMode && isTheorycraftStackableItem(entry.item.id)
                     "
@@ -2824,6 +2824,7 @@ const draggingItemIndex = ref<number | null>(null)
 const dragOverItemIndex = ref<number | null>(null)
 const itemsToggleLimitMessage = ref<string | null>(null)
 let itemsToggleLimitTimer: ReturnType<typeof setTimeout> | null = null
+const itemManagerDragMoved = ref(false)
 
 const isTheorycraftItemsToggleMode = computed(() => props.selectionMode === 'theorycraft')
 
@@ -2865,7 +2866,7 @@ function itemManagerTitle(entry: { item: Item; index: number }) {
 }
 
 function onItemManagerClick(index: number) {
-  if (!isTheorycraftItemsToggleMode.value) return
+  if (!isTheorycraftItemsToggleMode.value || itemManagerDragMoved.value) return
   const result = buildStore.toggleTheorycraftItemForStats(index)
   if (result === 'limit_reached') {
     itemsToggleLimitMessage.value = t('buildCard.itemsActiveLimitReached')
@@ -2884,6 +2885,7 @@ const clearDragState = () => {
 
 const onItemDragStart = (index: number, event: DragEvent) => {
   if (props.readonly || props.build) return
+  itemManagerDragMoved.value = false
   draggingItemIndex.value = index
   dragOverItemIndex.value = index
   if (event.dataTransfer) {
@@ -2894,6 +2896,7 @@ const onItemDragStart = (index: number, event: DragEvent) => {
 
 const onItemDragOver = (index: number, event: DragEvent) => {
   if (props.readonly || props.build || draggingItemIndex.value === null) return
+  itemManagerDragMoved.value = true
   event.preventDefault()
   if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
   dragOverItemIndex.value = index
@@ -2923,6 +2926,9 @@ const onItemDrop = (index: number, event: DragEvent) => {
 
 const onItemDragEnd = () => {
   clearDragState()
+  nextTick(() => {
+    itemManagerDragMoved.value = false
+  })
 }
 
 // isBootsItem and isStarterItem imported from @lelanation/builds-ui
@@ -5012,13 +5018,13 @@ defineExpose({
   opacity: 0.85;
 }
 
-.items-manager-inline-icon--inactive {
+.items-manager-inline-cell :deep(.items-manager-inline-icon--inactive) {
   opacity: 0.35;
   filter: grayscale(1);
 }
 
-.items-manager-inline-icon--toggle {
-  cursor: pointer;
+.items-manager-inline-cell :deep(.items-manager-inline-icon--toggle) {
+  cursor: grab;
 }
 
 .items-manager-hint,
@@ -5044,7 +5050,7 @@ defineExpose({
   white-space: nowrap;
 }
 
-.items-manager-inline-icon {
+.items-manager-inline-cell :deep(.items-manager-inline-icon) {
   width: 25px;
   height: 25px;
   margin-top: 5px;
@@ -5059,12 +5065,12 @@ defineExpose({
     box-shadow 0.12s ease;
 }
 
-.items-manager-inline-icon--dragging {
+.items-manager-inline-cell :deep(.items-manager-inline-icon--dragging) {
   opacity: 0.45;
   cursor: grabbing;
 }
 
-.items-manager-inline-icon--drag-over {
+.items-manager-inline-cell :deep(.items-manager-inline-icon--drag-over) {
   box-shadow: 0 0 0 1px var(--color-gold-300);
 }
 

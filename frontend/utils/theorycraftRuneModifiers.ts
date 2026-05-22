@@ -27,17 +27,29 @@ export type TheorycraftRuneStackUnit = 'stacks' | 'souls' | 'legend' | 'mana' | 
 export interface TheorycraftStackableRuneConfig {
   runeIds: number[]
   labelKey: string
-  maxStacks: number
+  /** Absent when `unlimitedStacks` — no cap in game or in theorycraft. */
+  maxStacks?: number
+  /** Stacks without upper bound (Grasp, Overgrowth…). */
+  unlimitedStacks?: boolean
+  /** Value for the « Max » shortcut when stacks are unlimited. */
+  presetStacks?: number
   stackUnit: TheorycraftRuneStackUnit
 }
 
 export const THEORYCRAFT_STACKABLE_RUNES: TheorycraftStackableRuneConfig[] = [
   { runeIds: [8226], labelKey: 'theorycraft.runes.manaflow', maxStacks: 10, stackUnit: 'mana' },
-  { runeIds: [8437], labelKey: 'theorycraft.runes.grasp', maxStacks: 50, stackUnit: 'hp' },
+  {
+    runeIds: [8437],
+    labelKey: 'theorycraft.runes.grasp',
+    unlimitedStacks: true,
+    presetStacks: 50,
+    stackUnit: 'hp',
+  },
   {
     runeIds: [8451],
     labelKey: 'theorycraft.runes.overgrowth',
-    maxStacks: 120,
+    unlimitedStacks: true,
+    presetStacks: 120,
     stackUnit: 'stacks',
   },
   { runeIds: [8128], labelKey: 'theorycraft.runes.darkHarvest', maxStacks: 25, stackUnit: 'souls' },
@@ -114,6 +126,18 @@ function clampStacks(value: number, max: number): number {
   return Math.max(0, Math.min(Math.trunc(value), max))
 }
 
+export function resolveTheorycraftStackCount(
+  value: number,
+  config: Pick<TheorycraftStackableRuneConfig, 'maxStacks' | 'unlimitedStacks'>
+): number {
+  if (!Number.isFinite(value)) return 0
+  const safe = Math.max(0, Math.trunc(value))
+  if (config.unlimitedStacks) return safe
+  const max = config.maxStacks ?? 0
+  if (max <= 0) return safe
+  return Math.min(safe, max)
+}
+
 function hasteFromCdr(cdr: number): number {
   if (!Number.isFinite(cdr) || cdr <= 0) return 0
   if (cdr >= 1) return 999
@@ -172,7 +196,10 @@ export function getTheorycraftRuneStackStats(
   _level: number,
   _adaptive: TheorycraftAdaptiveStat
 ): Record<string, number> {
-  const count = clampStacks(stacks, getTheorycraftStackableRuneConfig(runeId)?.maxStacks ?? 0)
+  const config = getTheorycraftStackableRuneConfig(runeId)
+  const count = config
+    ? resolveTheorycraftStackCount(stacks, config)
+    : Math.max(0, Math.trunc(stacks))
   switch (runeId) {
     case 8226:
       return count > 0 ? { mana: count * 25 } : {}
@@ -334,7 +361,7 @@ export function applyTheorycraftRuneModifiers(args: {
     const config = getTheorycraftStackableRuneConfig(runeId)
     if (!config) continue
 
-    const stacks = clampStacks(args.runeStacksById[runeId] ?? 0, config.maxStacks)
+    const stacks = resolveTheorycraftStackCount(args.runeStacksById[runeId] ?? 0, config)
     const label = args.labels[config.labelKey] ?? String(runeId)
 
     if (runeId === 8128) {

@@ -3,7 +3,7 @@
     <input
       type="number"
       min="0"
-      :max="config.maxStacks"
+      :max="inputMax"
       class="theorycraft-item-stack__input"
       :size="stackInputSize"
       :value="stacks"
@@ -39,8 +39,23 @@ const config = computed(() => getTheorycraftStackableItemConfig(props.itemId))
 
 const stacks = computed(() => buildStore.theorycraftItemStacks[props.index] ?? 0)
 
+const inputMax = computed(() =>
+  config.value?.unlimitedStacks ? undefined : config.value?.maxStacks
+)
+
+const targetStacks = computed(() => {
+  if (!config.value) return 0
+  if (config.value.supportsTransform) {
+    return config.value.transformThreshold ?? config.value.maxStacks ?? 0
+  }
+  if (config.value.unlimitedStacks) return config.value.presetStacks ?? 0
+  return config.value.maxStacks ?? 0
+})
+
 const stackInputSize = computed(() => {
-  const maxLen = String(config.value?.maxStacks ?? 0).length
+  const maxLen = config.value?.unlimitedStacks
+    ? String(stacks.value || 0).length
+    : String(config.value?.maxStacks ?? 0).length
   const valueLen = String(stacks.value || 0).length
   return Math.max(2, maxLen, valueLen) + 1
 })
@@ -48,16 +63,21 @@ const stackInputSize = computed(() => {
 const fullStackTitle = computed(() => {
   if (!config.value) return ''
   if (config.value.supportsTransform) return t('theorycraft.items.fullStack')
+  if (config.value.unlimitedStacks) {
+    return t('theorycraft.runes.presetStack', { count: targetStacks.value })
+  }
   return t('theorycraft.items.fullStackGlory', { max: config.value.maxStacks })
 })
 
 const isFullStack = computed(() => {
-  if (!config.value) return false
+  if (!config.value || targetStacks.value <= 0) return false
   if (config.value.supportsTransform) {
-    const threshold = config.value.transformThreshold ?? config.value.maxStacks
-    return stacks.value >= threshold && Boolean(buildStore.theorycraftItemTransformed[props.index])
+    return (
+      stacks.value >= targetStacks.value &&
+      Boolean(buildStore.theorycraftItemTransformed[props.index])
+    )
   }
-  return stacks.value >= config.value.maxStacks
+  return stacks.value >= targetStacks.value
 })
 
 function onInput(event: Event) {
@@ -75,12 +95,11 @@ function setFullStack() {
     return
   }
   if (config.value.supportsTransform) {
-    const threshold = config.value.transformThreshold ?? config.value.maxStacks
-    buildStore.setTheorycraftItemStacks(props.index, threshold)
+    buildStore.setTheorycraftItemStacks(props.index, targetStacks.value)
     buildStore.setTheorycraftItemTransformed(props.index, true)
     return
   }
-  buildStore.setTheorycraftItemStacks(props.index, config.value.maxStacks)
+  buildStore.setTheorycraftItemStacks(props.index, targetStacks.value)
 }
 </script>
 
