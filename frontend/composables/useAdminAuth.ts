@@ -3,6 +3,8 @@
  * API calls to /api/admin/* must send Authorization: Basic <base64>.
  */
 
+import { onMounted } from 'vue'
+
 const ADMIN_AUTH_KEY = 'adminAuth'
 
 function getStoredToken(): string | null {
@@ -19,16 +21,16 @@ function getStoredToken(): string | null {
 }
 
 export function useAdminAuth() {
-  const isLoggedIn = useState<boolean>('adminLoggedIn', () => {
-    if (import.meta.client) {
-      return !!getStoredToken()
-    }
-    return false
-  })
+  const isLoggedIn = useState<boolean>('adminLoggedIn', () => false)
+  const initialized = useState<boolean>('admin-auth-initialized', () => false)
 
-  // Sync côté client à chaque appel (navigation SPA, nouvel onglet)
+  // IMPORTANT: do not read localStorage before hydration, or SSR/CSR can diverge.
   if (import.meta.client) {
-    isLoggedIn.value = !!getStoredToken()
+    onMounted(() => {
+      if (initialized.value) return
+      initialized.value = true
+      isLoggedIn.value = !!getStoredToken()
+    })
   }
 
   function getAuthHeader(): { Authorization: string } | null {

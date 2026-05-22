@@ -102,7 +102,7 @@ function baseAdAtLevel(champion: Champion, level: number): number {
   return safe(stats.attackdamage) + safe(stats.attackdamageperlevel) * levelMultiplier
 }
 
-function baseHpAtLevel(champion: Champion, level: number): number {
+export function baseHpAtLevel(champion: Champion, level: number): number {
   const stats = resolveChampionStatsForBuild(champion)
   if (!stats) return 0
   const safe = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0)

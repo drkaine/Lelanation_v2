@@ -831,7 +831,7 @@ watch(locale, () => {
   box-sizing: border-box;
   width: 100%;
   max-width: 100%;
-  margin: 0.5em auto 1em;
+  margin: 0 auto 1em;
   text-align: center;
   --path-size: var(--selector-path-size, clamp(44px, calc(28px + 1.6vw), 72px));
   --rune-size: var(--selector-rune-size, clamp(48px, calc(30px + 1.8vw), 72px));

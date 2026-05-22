@@ -1,6 +1,6 @@
 <template>
   <div
-    class="theorycraft-workspace rounded-xl bg-surface p-4"
+    class="theorycraft-workspace rounded-xl bg-surface px-4 pb-4 pt-0"
     :class="{ 'theorycraft-workspace--spells': activePanel === 'theorycraft' }"
     :style="borderThemeVars"
   >
@@ -59,8 +59,12 @@ const { themeVars: borderThemeVars } = useBuildCardBorderTheme(() => props.champ
   min-height: 0;
 }
 
+.theorycraft-workspace :deep(.paths-container) {
+  justify-content: flex-start;
+}
+
 .theorycraft-workspace--spells {
-  padding: 0.5rem 0 0.5rem 0.5rem;
+  padding: 0 0 0.5rem 0.5rem;
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
 }

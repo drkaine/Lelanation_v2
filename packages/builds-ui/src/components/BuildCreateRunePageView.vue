@@ -9,7 +9,7 @@
         class="rune-layout mb-6 flex flex-col items-start gap-4 md:flex-row"
         :class="{ 'rune-layout--streamer': isStreamerMode }"
       >
-        <div class="w-full flex-1 md:order-2">
+        <div class="builder-selector-col w-full flex-1 md:order-2">
           <div class="runes-step-content">
             <component :is="runeSelectorComponent" />
           </div>
@@ -69,23 +69,25 @@ const emit = defineEmits<{
   margin-top: 0;
 }
 
+.builder-selector-col {
+  align-self: flex-start;
+}
+
 @media (min-width: 768px) {
   .rune-layout {
-    align-items: stretch;
+    align-items: flex-start;
   }
 
   .runes-step-content {
-    min-height: var(--rune-card-height);
+    min-height: 0;
     --selector-path-size: calc(44px * var(--rune-selector-scale));
     --selector-rune-size: calc(48px * var(--rune-selector-scale));
     --selector-square-size: calc(48px * var(--rune-selector-scale));
     --selector-gap-size: calc(0.25rem * var(--rune-selector-scale));
   }
 
-  .runes-step-content :deep(.runesPage),
-  .runes-step-content :deep(.wrap),
   .runes-step-content :deep(.paths-container) {
-    height: 100%;
+    justify-content: flex-start;
   }
 }
 

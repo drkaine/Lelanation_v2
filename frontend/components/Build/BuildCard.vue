@@ -1709,6 +1709,7 @@ import {
   isAdcRole,
 } from '~/utils/theorycraftItems'
 import { atlasUpgradeMissing } from '~/utils/buildItemRules'
+import { loadBuildCardRegionsPayload } from '~/utils/buildCardBorderTheme'
 import {
   isTheorycraftStackableItem,
   resolveTheorycraftItemImageFull,
@@ -1758,15 +1759,6 @@ interface RegionsPayload {
 }
 
 const DEFAULT_REGION_COLORS: [string, string] = ['#BBA077', '#1E2328']
-let regionsPayloadPromise: Promise<RegionsPayload | null> | null = null
-
-const loadRegionsPayload = (): Promise<RegionsPayload | null> => {
-  if (!import.meta.client) return Promise.resolve(null)
-  if (!regionsPayloadPromise) {
-    regionsPayloadPromise = $fetch<RegionsPayload>('/data/regions.json').catch(() => null)
-  }
-  return regionsPayloadPromise
-}
 
 interface Props {
   build?: Build | null // Build optionnel - si non fourni, utilise currentBuild du store
@@ -2479,7 +2471,7 @@ const selectedChampion = computed(() => {
 watch(
   () => [selectedChampion.value?.id, riotLocale.value] as const,
   ([championId, lang]) => {
-    if (!championId) return
+    if (!championId || props.selectionMode === 'theorycraft') return
     championsStore.loadChampionDetails(championId, lang).catch(() => undefined)
   },
   { immediate: true }
@@ -3572,7 +3564,7 @@ watch(
 
 // Charger le build sauvegardé au montage (seulement si pas de build en prop)
 onMounted(() => {
-  loadRegionsPayload().then(payload => {
+  loadBuildCardRegionsPayload().then(payload => {
     regionsPayload.value = payload
   })
 

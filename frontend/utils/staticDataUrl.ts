@@ -28,10 +28,11 @@ export function getChampionDetailUrl(
 }
 
 /**
- * Get static version info URL
+ * Current game patch (single version string).
+ * Do not confuse with `/data/game/versions.json` (patch history recap for stats).
  */
 export function getVersionUrl(): string {
-  return '/data/game/versions.json'
+  return '/data/game/version.json'
 }
 
 /**

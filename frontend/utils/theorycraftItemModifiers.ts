@@ -98,6 +98,29 @@ function applyGloryItemBaseStats(stats: CalculatedStats, item: Item): void {
   if (base.health) stats.health += base.health
 }
 
+const HEARTSTEEL_ITEM_ID = '3084'
+/** In-game: each proc grants 20% of bonus health (max HP − base HP at level). */
+const HEARTSTEEL_BONUS_HEALTH_PERCENT = 0.2
+
+function applyHeartsteelCompounding(
+  stats: CalculatedStats,
+  stacks: number,
+  championBaseHealth: number
+): number {
+  if (stacks <= 0) return 0
+  let health = stats.health
+  let totalGain = 0
+  for (let i = 0; i < stacks; i++) {
+    const bonusHealth = Math.max(0, health - championBaseHealth)
+    const gain = Math.round(bonusHealth * HEARTSTEEL_BONUS_HEALTH_PERCENT)
+    if (gain <= 0) break
+    health += gain
+    totalGain += gain
+  }
+  stats.health = health
+  return totalGain
+}
+
 const ITEM_FLAT_STATS: Record<
   string,
   { mana?: number; abilityPower?: number; attackDamage?: number }
@@ -213,7 +236,7 @@ export function getTheorycraftItemStackStats(
     case '3041':
       return count > 0 ? { abilityPower: count * 5 } : {}
     case '3084':
-      return count > 0 ? { health: count * 20 } : {}
+      return {}
     case '3070':
     case '3003':
     case '3004':
@@ -229,8 +252,10 @@ export function applyTheorycraftItemModifiers(args: {
   itemStacksById: Record<string, number>
   transformedById: Record<string, boolean>
   labels: Record<string, string>
+  /** Champion base HP at current level (for Heartsteel bonus-health ratio). */
+  championBaseHealth?: number
 }): TheorycraftItemModifierResult {
-  const { items, itemStacksById, transformedById, labels } = args
+  const { items, itemStacksById, transformedById, labels, championBaseHealth } = args
   const stats: CalculatedStats = { ...args.stats }
   const lines: TheorycraftItemModifierLine[] = []
 
@@ -266,6 +291,8 @@ export function applyTheorycraftItemModifiers(args: {
     }
 
     if (stacks <= 0) continue
+
+    if (item.id === HEARTSTEEL_ITEM_ID) continue
 
     const bonus = getTheorycraftItemStackStats(item.id, stacks)
     if (bonus.mana) stats.mana += bonus.mana
@@ -318,6 +345,25 @@ export function applyTheorycraftItemModifiers(args: {
       labelKey: modifier.labelKey,
       detail: `+${Math.round(bonus * 10) / 10} (${Math.round(modifier.percent * 100)}%)`,
     })
+  }
+
+  const heartsteelItem = items.find(item => item.id === HEARTSTEEL_ITEM_ID)
+  if (heartsteelItem && championBaseHealth != null && championBaseHealth > 0) {
+    const config = getTheorycraftStackableItemConfig(HEARTSTEEL_ITEM_ID)
+    const stacks = config
+      ? resolveItemStackCount(itemStacksById[HEARTSTEEL_ITEM_ID] ?? 0, config)
+      : Math.max(0, Math.trunc(itemStacksById[HEARTSTEEL_ITEM_ID] ?? 0))
+    if (stacks > 0) {
+      const gain = applyHeartsteelCompounding(stats, stacks, championBaseHealth)
+      if (gain > 0) {
+        lines.push({
+          itemId: HEARTSTEEL_ITEM_ID,
+          label: labels['theorycraft.items.heartsteel'] ?? heartsteelItem.name,
+          labelKey: 'theorycraft.items.heartsteel',
+          detail: `+${stacks} stacks (+${gain} PV, 20% bonus HP/stack)`,
+        })
+      }
+    }
   }
 
   return { stats, lines }

@@ -20,6 +20,7 @@ import { useVoteStore } from '~/stores/VoteStore'
 import {
   passiveRankForChampionLevel,
   clampChampionLevel,
+  baseHpAtLevel,
   championWithStatsForBuild,
   maxChampionLevelForRoles,
   resolveChampionStatsForBuild,
@@ -1519,17 +1520,37 @@ export const useBuildStore = defineStore('build', {
     mergeTheorycraftChampionDetail(detail: Record<string, unknown>) {
       if (this.builderSession !== 'theorycraft' || !this.currentBuild?.champion) return
       const current = this.currentBuild.champion
-      if (resolveChampionStatsForBuild(current)) return
+      let next: Champion = { ...current }
+      let changed = false
 
-      const baseStats = detail.baseStats
-      const growthStats = detail.growthStats
-      if (!baseStats || !growthStats) return
+      if (!resolveChampionStatsForBuild(current)) {
+        const baseStats = detail.baseStats
+        const growthStats = detail.growthStats
+        if (baseStats && growthStats) {
+          next = championWithStatsForBuild({ ...next, baseStats, growthStats } as Champion)
+          changed = true
+        }
+      }
 
-      this.currentBuild.champion = championWithStatsForBuild({
-        ...current,
-        baseStats,
-        growthStats,
-      } as Champion)
+      const detailSpells = detail.spells
+      if (
+        Array.isArray(detailSpells) &&
+        detailSpells.length > 0 &&
+        (!Array.isArray(next.spells) || next.spells.length === 0)
+      ) {
+        next = { ...next, spells: detailSpells as Champion['spells'] }
+        changed = true
+      }
+
+      const detailPassive = detail.passive
+      if (detailPassive && typeof detailPassive === 'object' && !next.passive) {
+        next = { ...next, passive: detailPassive as Champion['passive'] }
+        changed = true
+      }
+
+      if (!changed) return
+
+      this.currentBuild.champion = next
       this.recalculateStats()
     },
 
@@ -1611,6 +1632,7 @@ export const useBuildStore = defineStore('build', {
             itemStacksById,
             transformedById,
             labels: {},
+            championBaseHealth: baseHpAtLevel(championForStats, this.statsLevel),
           })
 
           const adaptive = resolveTheorycraftAdaptiveForBuild(championForStats, activeItems)

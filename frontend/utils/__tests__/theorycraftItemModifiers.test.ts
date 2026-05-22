@@ -138,6 +138,23 @@ describe('theorycraftItemModifiers', () => {
     ).toBe('3040.png')
   })
 
+  it('compounds Heartsteel stacks as 20% of bonus health per proc', () => {
+    const heartsteel = { id: '3084', name: 'Heartsteel' } as Item
+    const result = applyTheorycraftItemModifiers({
+      stats: baseStats,
+      items: [heartsteel],
+      itemStacksById: { '3084': 2 },
+      transformedById: {},
+      labels: {},
+      championBaseHealth: 1000,
+    })
+    // bonus HP before stacks = 1000 → stack1 +200, stack2 +240 (20% of 1200)
+    expect(result.stats.health).toBe(2440)
+    expect(
+      result.lines.some(line => line.itemId === '3084' && line.detail.includes('+440 PV'))
+    ).toBe(true)
+  })
+
   it('applies tear mana stacks and archangel transform delta', () => {
     const result = applyTheorycraftItemModifiers({
       stats: baseStats,

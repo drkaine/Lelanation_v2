@@ -9,7 +9,7 @@
         class="build-layout mb-6 flex flex-col items-start gap-4 md:flex-row"
         :class="{ 'build-layout--streamer': isStreamerMode }"
       >
-        <div class="w-full flex-1 md:order-2">
+        <div class="builder-selector-col w-full flex-1 md:order-2">
           <component :is="itemSelectorComponent" />
         </div>
 
@@ -61,6 +61,10 @@ const emit = defineEmits<{
 .build-card-wrapper {
   width: var(--build-card-width);
   margin-top: 0;
+}
+
+.builder-selector-col {
+  align-self: flex-start;
 }
 
 @media (max-width: 768px) {

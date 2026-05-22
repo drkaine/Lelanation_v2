@@ -231,6 +231,7 @@ onBeforeRouteLeave(to => {
 
 .theorycraft-workspace-col {
   margin-right: 0;
+  align-self: flex-start;
 }
 
 .build-layout {

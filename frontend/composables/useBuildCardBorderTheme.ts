@@ -1,4 +1,4 @@
-import { computed, ref, watch, type CSSProperties, type MaybeRefOrGetter, toValue } from 'vue'
+import { computed, ref, type CSSProperties, type MaybeRefOrGetter, toValue } from 'vue'
 import {
   buildCardBorderCssVars,
   loadBuildCardRegionsPayload,
@@ -11,20 +11,9 @@ export function useBuildCardBorderTheme(championId: MaybeRefOrGetter<string | nu
 
   if (import.meta.client) {
     loadBuildCardRegionsPayload().then(payload => {
-      regionsPayload.value = payload
+      if (payload) regionsPayload.value = payload
     })
   }
-
-  watch(
-    () => toValue(championId),
-    () => {
-      if (!import.meta.client || regionsPayload.value) return
-      loadBuildCardRegionsPayload().then(payload => {
-        regionsPayload.value = payload
-      })
-    },
-    { immediate: true }
-  )
 
   const themeVars = computed<CSSProperties>(() => {
     const colors = resolveRegionColorsForChampion(toValue(championId), regionsPayload.value)
