@@ -574,6 +574,42 @@ test('extractStackDefinition exports Veigar passive AP stacks', () => {
   assert.ok(definition!.statBonuses.some((bonus) => bonus.stat === 'abilityPower'))
 })
 
+test('extractStackDefinition exports Cho Gath R feast HP stacks', () => {
+  const { extractStackDefinition } = theorycraftTooltipTestUtils
+  const binPath = join(process.cwd(), 'data/theorycraft-cache/cdragon-bin-chogath.json')
+  const championBin = JSON.parse(readFileSync(binPath, 'utf-8')) as Record<string, unknown>
+  const feastBin = findBinSpellForDDragon(championBin, ['Feast', 'ChogathR'])
+  assert.ok(feastBin)
+  const dataValues = extractBinDataValues(feastBin!, 3)
+  const calculations = extractBinCalculations(feastBin!, dataValues, {
+    maxRank: 3,
+    ddSpell: { id: 'Feast', maxrank: 3 },
+  })
+  const definition = extractStackDefinition({
+    id: 'Feast',
+    label: 'Feast',
+    scope: 'spell',
+    spellSlot: 'R',
+    calculations: calculations.map((calculation) => ({
+      key: calculation.key,
+      baseValues: calculation.baseValues,
+      ratios: calculation.ratios,
+    })),
+    dataValues,
+  })
+  assert.ok(definition)
+  assert.equal(definition!.id, 'Feast')
+  assert.ok(definition!.statBonuses.some((bonus) => bonus.stat === 'health'))
+  assert.ok(
+    definition!.statBonuses.some((bonus) => bonus.perStackKey.toLowerCase() === 'rhealthperstack')
+  )
+  assert.ok(
+    definition!.tooltipVars.some(
+      (entry) => entry.key.toLowerCase() === 'f1' && entry.perStackKey.toLowerCase() === 'rhealthperstack'
+    )
+  )
+})
+
 test('extractStackDefinition exports Belveth attack speed stack tooltip vars', () => {
   const { extractStackDefinition } = theorycraftTooltipTestUtils
   const binPath = join(process.cwd(), 'data/theorycraft-cache/cdragon-bin-belveth.json')

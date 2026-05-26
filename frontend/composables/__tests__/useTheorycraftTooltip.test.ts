@@ -342,4 +342,62 @@ describe('useTheorycraftTooltip', () => {
     expect(details[0]).toContain('50')
     expect(details[0]).not.toMatch(/\{\{/)
   })
+
+  it('resolves Cho Gath feast tooltip with stack HP and minion stack count', () => {
+    const feastExtended =
+      '<rules>Effets cumulés via les sbires et les monstres non épiques :</rules> <statTracking>{{ f3 }}/{{ RMinionMaxStacks }}</statTracking><br>' +
+      "<rules>Les attaques de Cho'Gath et <spellName>Festin</spellName> gagnent en portée selon le nombre d'effets cumulés :<br>" +
+      "+{{ AttackRangePerStack }} portée d'attaque par effet cumulé (+{{ MaxBonusAttackRange }} max).<br>" +
+      "+{{ CastRangePerStack }} portée d'incantation par effet cumulé (+{{ MaxBonusCastRange }} max).</rules>"
+
+    const spell = {
+      tooltipRaw:
+        "Cho'Gath octroie <healing>+{{ RHealthPerStack }} PV max</healing> par effet Festin.",
+      tooltipDetailRaws: [feastExtended],
+      maxRank: 3,
+      calculations: [
+        { key: 'RDamage', baseValues: [300, 475, 650], ratios: [] },
+        { key: 'RHealthPerStack', baseValues: [40, 80, 120], ratios: [] },
+      ],
+      dataValues: [
+        { name: 'RHealthPerStack', values: [40, 80, 120] },
+        { name: 'RMinionMaxStacks', values: [6, 6, 6] },
+        { name: 'AttackRangePerStack', values: [4.7, 6.2, 7.7] },
+        { name: 'MaxBonusAttackRange', values: [75, 75, 75] },
+        { name: 'CastRangePerStack', values: [2.5, 2.5, 2.5] },
+        { name: 'MaxBonusCastRange', values: [25, 25, 25] },
+      ],
+      spellEffects: [],
+    }
+
+    const stackContext = {
+      definition: {
+        id: 'Feast',
+        scope: 'spell' as const,
+        spellSlot: 'R',
+        label: 'Feast',
+        statBonuses: [{ stat: 'health' as const, perStackKey: 'RHealthPerStack' }],
+        tooltipVars: [{ key: 'f1', perStackKey: 'RHealthPerStack' }],
+      },
+      stackCount: 4,
+      calculationsBySource: {
+        Feast: [{ key: 'RHealthPerStack', baseValues: [40, 80, 120], ratios: [] }],
+      },
+    }
+
+    const { html } = resolveTheorycraftSpellDescription(
+      spell,
+      baseStats,
+      3,
+      undefined,
+      stackContext
+    )
+    expect(html).toContain('120')
+
+    const details = resolveTheorycraftSpellDetailRaws(spell, baseStats, 3, stackContext)
+    expect(details[0]).toContain('4/6')
+    expect(details[0]).toContain('7.7')
+    expect(details[0]).toContain('2.5')
+    expect(details[0]).not.toMatch(/\{\{/)
+  })
 })

@@ -1597,7 +1597,8 @@ export const useBuildStore = defineStore('build', {
                 getPassiveStackStats: buildPassiveStackStatsProvider(
                   this.theorycraftStackDefinitions,
                   this.theorycraftStackCalculationsBySource,
-                  rankIndex
+                  rankIndex,
+                  this.theorycraftSpellRanks
                 ),
               }
             }

@@ -2914,6 +2914,36 @@ function mapPerStackKeyToStat(
   return null
 }
 
+function mapStackDataValueToStat(
+  name: string
+): ExportedStackDefinition['statBonuses'][number]['stat'] | null {
+  const lower = name.toLowerCase()
+  if (/healthperstack$|hpperstack$|maxhealthperstack$/.test(lower)) return 'health'
+  if (lower === 'apperstack' || (lower.includes('ap') && lower.includes('stack'))) return 'abilityPower'
+  if (lower.includes('ad') && lower.includes('stack')) return 'attackDamage'
+  if (lower.includes('armor') && lower.includes('stack') && !lower.includes('magic')) return 'armor'
+  if (lower.includes('magicresist') && lower.includes('stack')) return 'magicResist'
+  if (lower.includes('attackspeed') && lower.includes('stack')) return 'attackSpeed'
+  return null
+}
+
+function statBonusesFromDataValues(
+  dataValues?: Array<{ name: string; values: number[] }>
+): ExportedStackDefinition['statBonuses'] {
+  if (!dataValues) return []
+  return dataValues
+    .map((entry) => {
+      const stat = mapStackDataValueToStat(String(entry.name))
+      if (!stat || !entry.values?.length) return null
+      return {
+        stat,
+        perStackKey: String(entry.name),
+        isPercent: stat === 'attackSpeed',
+      }
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry != null)
+}
+
 function findPerStackSourceForTotal(totalKey: string, perStackKeys: string[]): string | null {
   const normalizedTotal = totalKey.toLowerCase().replace(/^total/, '').replace(/fromstacks$/, '')
   for (const perStackKey of perStackKeys) {
@@ -2939,9 +2969,8 @@ function extractStackDefinition(args: {
   const perStackCalcs = args.calculations.filter((calculation) =>
     /perstack$/i.test(calculation.key)
   )
-  if (perStackCalcs.length === 0) return null
 
-  const statBonuses = perStackCalcs
+  const statBonusesFromCalcs = perStackCalcs
     .map((calculation) => {
       const stat = mapPerStackKeyToStat(calculation.key)
       if (!stat) return null
@@ -2953,7 +2982,13 @@ function extractStackDefinition(args: {
     })
     .filter((entry): entry is NonNullable<typeof entry> => entry != null)
 
-  const perStackKeys = perStackCalcs.map((calculation) => calculation.key)
+  const statBonusesByKey = new Map<string, ExportedStackDefinition['statBonuses'][number]>()
+  for (const bonus of [...statBonusesFromCalcs, ...statBonusesFromDataValues(args.dataValues)]) {
+    statBonusesByKey.set(bonus.perStackKey.toLowerCase(), bonus)
+  }
+  const statBonuses = [...statBonusesByKey.values()]
+
+  const perStackKeys = statBonuses.map((bonus) => bonus.perStackKey)
   const tooltipVars = args.calculations
     .filter(
       (calculation) =>
@@ -2967,6 +3002,13 @@ function extractStackDefinition(args: {
       return { key: calculation.key, perStackKey }
     })
     .filter((entry): entry is { key: string; perStackKey: string } => entry != null)
+
+  for (const bonus of statBonuses) {
+    if (bonus.stat !== 'health') continue
+    if (tooltipVars.some((entry) => entry.key.toLowerCase() === 'f1')) break
+    tooltipVars.push({ key: 'f1', perStackKey: bonus.perStackKey })
+    break
+  }
 
   if (statBonuses.length === 0 && tooltipVars.length === 0) {
     if (args.scope === 'spell') {

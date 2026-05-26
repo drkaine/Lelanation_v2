@@ -763,7 +763,8 @@ function buildRuntimeVariableMap(
       calculations,
       stackContext.stackCount,
       rankIndex,
-      formatResolvedNumber
+      formatResolvedNumber,
+      spell.dataValues
     )
   }
 
@@ -900,7 +901,9 @@ export function resolveTheorycraftTooltipHtml(
   stackContext?: TheorycraftStackResolveContext | null,
   useLiveBuildStats = false
 ): string | null {
-  const template = String(rawTemplate ?? spell.tooltipRaw ?? '').trim()
+  const template = String(rawTemplate ?? spell.tooltipRaw ?? '')
+    .trim()
+    .replace(/@([a-zA-Z0-9_.:]+(?:\*[.\d-]+)?)@/gi, '{{ $1 }}')
   if (!template) return null
 
   const vars = buildRuntimeVariableMap(spell, stats, rank, stackContext, useLiveBuildStats)

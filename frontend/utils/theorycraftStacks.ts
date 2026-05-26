@@ -9,6 +9,39 @@ type CalculatedStatKey =
   | 'magicResist'
   | 'attackSpeed'
 
+const HEALTH_PER_STACK_DATA_VALUE = /healthperstack$|hpperstack$|maxhealthperstack$/i
+
+function isHealthPerStackDataValue(name: string): boolean {
+  return HEALTH_PER_STACK_DATA_VALUE.test(String(name))
+}
+
+function findHealthPerStackDataValue(
+  dataValues?: Array<{ name: string; values: number[] }>
+): { name: string; values: number[] } | undefined {
+  return dataValues?.find(entry => isHealthPerStackDataValue(String(entry.name)))
+}
+
+function appendStackDataValueCalculations(
+  calculations: TheorycraftSpellCalculation[],
+  dataValues?: Array<{ name: string; values: number[] }>
+): TheorycraftSpellCalculation[] {
+  const next = [...calculations]
+  for (const entry of dataValues ?? []) {
+    const key = String(entry.name)
+    if (!isHealthPerStackDataValue(key) || !entry.values?.length) continue
+    if (next.some(calc => calc.key.toLowerCase() === key.toLowerCase())) continue
+    next.push({ key, baseValues: entry.values, ratios: [] })
+  }
+  const basicStacks = dataValues?.find(entry => String(entry.name).toLowerCase() === 'basicstacks')
+  if (
+    basicStacks?.values?.length &&
+    !next.some(entry => entry.key.toLowerCase() === 'basicstacks')
+  ) {
+    next.push({ key: 'basicstacks', baseValues: basicStacks.values, ratios: [] })
+  }
+  return next
+}
+
 function perStackValue(
   calculations: TheorycraftSpellCalculation[],
   perStackKey: string,
@@ -68,18 +101,31 @@ function inferStackDefinitionsFromChampion(
     const basicStacks = spell.dataValues?.find(
       entry => String(entry.name).toLowerCase() === 'basicstacks'
     )
-    if (!basicStacks?.values?.length) continue
+    if (basicStacks?.values?.length) {
+      inferred.push({
+        id: String(spell.id ?? ''),
+        scope: 'spell',
+        spellSlot: String(spell.slot ?? ''),
+        label: String(spell.name ?? spell.id ?? 'Stacks'),
+        maxStacks: 9999,
+        statBonuses: [],
+        tooltipVars: [],
+        damageBonuses: [{ targetKey: 'totaldamage', perStackKey: 'basicstacks' }],
+      })
+    }
 
-    inferred.push({
-      id: String(spell.id ?? ''),
-      scope: 'spell',
-      spellSlot: String(spell.slot ?? ''),
-      label: String(spell.name ?? spell.id ?? 'Stacks'),
-      maxStacks: 9999,
-      statBonuses: [],
-      tooltipVars: [],
-      damageBonuses: [{ targetKey: 'totaldamage', perStackKey: 'basicstacks' }],
-    })
+    const healthPerStack = findHealthPerStackDataValue(spell.dataValues)
+    if (healthPerStack?.values?.length) {
+      inferred.push({
+        id: String(spell.id ?? ''),
+        scope: 'spell',
+        spellSlot: String(spell.slot ?? ''),
+        label: String(spell.name ?? spell.id ?? 'Stacks'),
+        maxStacks: 9999,
+        statBonuses: [{ stat: 'health', perStackKey: String(healthPerStack.name) }],
+        tooltipVars: [{ key: 'f1', perStackKey: String(healthPerStack.name) }],
+      })
+    }
   }
 
   return inferred
@@ -106,16 +152,10 @@ export function buildStackCalculationsBySource(
       calculations?: TheorycraftSpellCalculation[]
       dataValues?: Array<{ name: string; values: number[] }>
     }
-    const calculations = Array.isArray(spell.calculations) ? [...spell.calculations] : []
-    const basicStacks = spell.dataValues?.find(
-      entry => String(entry.name).toLowerCase() === 'basicstacks'
+    const calculations = appendStackDataValueCalculations(
+      Array.isArray(spell.calculations) ? spell.calculations : [],
+      spell.dataValues
     )
-    if (
-      basicStacks?.values?.length &&
-      !calculations.some(entry => entry.key.toLowerCase() === 'basicstacks')
-    ) {
-      calculations.push({ key: 'basicstacks', baseValues: basicStacks.values, ratios: [] })
-    }
     if (calculations.length === 0) continue
     const id = String(spell.id ?? '')
     const slot = String(spell.slot ?? '')
@@ -166,12 +206,18 @@ export function computeStackStatBonuses(
 export function buildPassiveStackStatsProvider(
   definitions: TheorycraftStackDefinition[],
   calculationsBySource: Record<string, TheorycraftSpellCalculation[]>,
-  rankIndex: number
+  passiveRankIndex: number,
+  spellRanks: Record<string, number> = {}
 ) {
   return (_championId: string, stackType: string, stacks: number): Record<string, number> => {
     const definition = definitions.find(entry => entry.id === stackType)
     if (!definition) return {}
     const calculations = resolveStackCalculations(definition, calculationsBySource)
+    let rankIndex = passiveRankIndex
+    if (definition.scope === 'spell') {
+      const spellRank = spellRanks[definition.id] ?? 1
+      rankIndex = Math.max(0, spellRank - 1)
+    }
     return computeStackStatBonuses(definition, calculations, stacks, rankIndex)
   }
 }
@@ -188,18 +234,36 @@ export function buildPassiveStacksInput(
   return out
 }
 
+function dataValueAtRank(
+  dataValues: Array<{ name: string; values: number[] }> | undefined,
+  name: string,
+  rankIndex: number
+): number | null {
+  const entry = dataValues?.find(value => String(value.name).toLowerCase() === name.toLowerCase())
+  if (!entry?.values?.length) return null
+  const idx = Math.min(Math.max(rankIndex, 0), entry.values.length - 1)
+  const value = entry.values[idx]
+  return Number.isFinite(value) ? Number(value) : null
+}
+
 export function applyStackTooltipVariables(
   setVar: (key: string, value: string) => void,
   definition: TheorycraftStackDefinition,
   calculations: TheorycraftSpellCalculation[],
   stackCount: number,
   rankIndex: number,
-  formatNumber: (value: number) => string
+  formatNumber: (value: number) => string,
+  dataValues?: Array<{ name: string; values: number[] }>
 ): void {
   const safeStacks = Math.max(0, stackCount)
   for (const tooltipVar of definition.tooltipVars) {
     const perStack = perStackValue(calculations, tooltipVar.perStackKey, rankIndex)
     setVar(tooltipVar.key, formatNumber(perStack * safeStacks))
+  }
+
+  const minionMaxStacks = dataValueAtRank(dataValues, 'RMinionMaxStacks', rankIndex)
+  if (minionMaxStacks != null && minionMaxStacks > 0) {
+    setVar('f3', formatNumber(Math.min(safeStacks, minionMaxStacks)))
   }
 }
 

@@ -58,6 +58,64 @@ describe('theorycraftStacks', () => {
     expect(setVars.get('totalattackspeedfromstacks')).toBe('2.8')
   })
 
+  it('resolves Cho Gath feast minion stack count and total HP tooltip vars', () => {
+    const feastStack: TheorycraftStackDefinition = {
+      id: 'Feast',
+      scope: 'spell',
+      spellSlot: 'R',
+      label: 'Feast',
+      maxStacks: 9999,
+      statBonuses: [{ stat: 'health', perStackKey: 'RHealthPerStack' }],
+      tooltipVars: [{ key: 'f1', perStackKey: 'RHealthPerStack' }],
+    }
+    const calculations = [{ key: 'RHealthPerStack', baseValues: [40, 80, 120], ratios: [] }]
+    const dataValues = [{ name: 'RMinionMaxStacks', values: [6, 6, 6] }]
+    const setVars = new Map<string, string>()
+    applyStackTooltipVariables(
+      (key, value) => setVars.set(key.toLowerCase(), value),
+      feastStack,
+      calculations,
+      8,
+      2,
+      (value: number) => String(value),
+      dataValues
+    )
+    expect(setVars.get('f1')).toBe('960')
+    expect(setVars.get('f3')).toBe('6')
+  })
+
+  it('infers Cho Gath R feast stacks from RHealthPerStack dataValues', () => {
+    const champion = {
+      spells: [
+        {
+          id: 'Feast',
+          slot: 'R',
+          name: 'Feast',
+          dataValues: [{ name: 'RHealthPerStack', values: [40, 80, 120] }],
+          calculations: [
+            { key: 'RDamage', baseValues: [300, 475, 650], ratios: [] },
+            { key: 'RMonsterDamage', baseValues: [300, 475, 650], ratios: [] },
+          ],
+        },
+      ],
+    }
+    const definitions = parseStackDefinitions(champion)
+    const feastDef = definitions.find(def => def.id === 'Feast')
+    expect(feastDef?.statBonuses).toEqual([{ stat: 'health', perStackKey: 'RHealthPerStack' }])
+    expect(feastDef?.tooltipVars).toEqual([{ key: 'f1', perStackKey: 'RHealthPerStack' }])
+
+    const provider = buildPassiveStackStatsProvider(
+      definitions,
+      {
+        Feast: [{ key: 'RHealthPerStack', baseValues: [40, 80, 120], ratios: [] }],
+        R: [{ key: 'RHealthPerStack', baseValues: [40, 80, 120], ratios: [] }],
+      },
+      0,
+      { Feast: 2 }
+    )
+    expect(provider('Chogath', 'Feast', 6)).toEqual({ health: 480 })
+  })
+
   it('finds stack definition by passive or spell source', () => {
     const spellStack: TheorycraftStackDefinition = {
       id: 'NasusQ',
