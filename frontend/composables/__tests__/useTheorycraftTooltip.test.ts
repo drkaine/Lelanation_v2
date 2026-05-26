@@ -400,4 +400,70 @@ describe('useTheorycraftTooltip', () => {
     expect(details[0]).toContain('2.5')
     expect(details[0]).not.toMatch(/\{\{/)
   })
+
+  it('resolves Corki passive Hextech Munitions tooltip variables', () => {
+    const spell = {
+      tooltipRaw:
+        'Les attaques de Corki infligent <trueDamage>{{ AttackConversion*100 }}% de dégâts bruts bonus</trueDamage>.<br>Attaques : <trueDamage>{{ BasicAttackTOOLTIP }}</trueDamage>.<br>Coups critiques : <trueDamage>{{ CriticalStrikeTOOLTIP }}</trueDamage>.',
+      maxRank: 18,
+      calculations: [
+        {
+          key: 'basicattacktooltip',
+          baseValues: [],
+          ratios: [{ stat: 'totalAD', coefficient: 0.2, type: 'true' }],
+        },
+        {
+          key: 'criticalstriketooltip',
+          baseValues: [],
+          ratios: [{ stat: 'totalAD', coefficient: 0.2, type: 'true' }],
+        },
+      ],
+      dataValues: [{ name: 'AttackConversion', values: [0.2] }],
+      spellEffects: [],
+    }
+
+    const { html, isDynamic } = resolveTheorycraftSpellDescription(spell, baseStats, 1)
+    expect(isDynamic).toBe(true)
+    expect(html).toContain('20%')
+    expect(html).toContain('14')
+    expect(html).not.toMatch(/Attaques[^<]*<[^>]*>\s*\./)
+  })
+
+  it('resolves Darius passive Hemorrhage tooltip variables', () => {
+    const spell = {
+      tooltipRaw:
+        'Inflige <physicalDamage>{{ BleedDamagePerStack }} pts</physicalDamage> en {{ BleedDuration }} sec (cumulable {{ MaxStacks }}). Bonus <scaleAD>+{{ NoxianMightBonusAD }} AD</scaleAD>.',
+      tooltipDetailRaws: [
+        '<span class="tooltip-rules">Inflige {{ MonsterMod*100 }}% aux monstres.</span>',
+      ],
+      maxRank: 5,
+      calculations: [
+        {
+          key: 'bleeddamageperstack',
+          baseValues: [13, 17, 21, 25, 29],
+          ratios: [{ stat: 'totalAD', coefficient: 0.3, type: 'physical' }],
+        },
+        {
+          key: 'noxianmightbonusad',
+          baseValues: [30, 50, 70, 105, 205],
+          ratios: [],
+        },
+      ],
+      dataValues: [
+        { name: 'BleedDuration', values: [5, 5, 5, 5, 5] },
+        { name: 'MaxStacks', values: [5, 5, 5, 5, 5] },
+        { name: 'MonsterMod', values: [2.5, 2.5, 2.5, 2.5, 2.5] },
+      ],
+      spellEffects: [],
+    }
+
+    const { html, isDynamic } = resolveTheorycraftSpellDescription(spell, baseStats, 5)
+    expect(isDynamic).toBe(true)
+    expect(html).toContain('29')
+    expect(html).toContain('5 sec')
+    expect(html).toContain('+205')
+
+    const details = resolveTheorycraftSpellDetailRaws(spell, baseStats, 5)
+    expect(details[0]).toContain('250%')
+  })
 })

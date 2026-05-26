@@ -57,6 +57,13 @@ export interface TheorycraftStackDamageBonus {
   perStackKey: string
 }
 
+export interface TheorycraftStackFormulaVar {
+  key: string
+  formula: 'areaToRadiusPercent'
+  areaPerStack: number
+  baseRadius: number
+}
+
 export interface TheorycraftStackDefinition {
   id: string
   scope: 'passive' | 'spell'
@@ -66,4 +73,7 @@ export interface TheorycraftStackDefinition {
   statBonuses: TheorycraftStackStatBonus[]
   tooltipVars: TheorycraftStackTooltipVar[]
   damageBonuses?: TheorycraftStackDamageBonus[]
+  formulaVars?: TheorycraftStackFormulaVar[]
+  /** Champion ID for hardcoded custom tooltip var computation (e.g. Bard). */
+  customVarsChampionId?: string
 }

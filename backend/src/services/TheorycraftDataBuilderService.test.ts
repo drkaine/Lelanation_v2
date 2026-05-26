@@ -679,3 +679,48 @@ test('Aatrox Q omits duplicate tooltipextended detail raw', () => {
     false
   )
 })
+
+test('Corki passive resolves RapidReload bin calculations for tooltip variables', async () => {
+  const { findPassiveBinSpell, findPassiveBinSpellForTooltip, extractBinDataValues, extractBinCalculations } =
+    theorycraftTooltipTestUtils
+
+  const data = await (await fetch('https://raw.communitydragon.org/latest/game/data/characters/corki/corki.bin.json')).json()
+  const passiveMainRaw =
+    'Les attaques de Corki infligent <trueDamage>{{ AttackConversion*100 }}% de dégâts bruts bonus</trueDamage>.<br>Attaques : <trueDamage>{{ BasicAttackTOOLTIP }}</trueDamage>.<br>Coups critiques : <trueDamage>{{ CriticalStrikeTOOLTIP }}</trueDamage>.'
+
+  assert.equal(findPassiveBinSpell(data, 'Corki'), null)
+
+  const passiveBin = findPassiveBinSpellForTooltip(data, passiveMainRaw)
+  assert.ok(passiveBin)
+
+  const dataValues = extractBinDataValues(passiveBin!, 18)
+  const calculations = extractBinCalculations(passiveBin!, dataValues, {
+    maxRank: 18,
+    isPassive: true,
+  })
+
+  assert.ok(dataValues.some((entry) => entry.name.toLowerCase() === 'attackconversion'))
+  assert.ok(calculations.some((entry) => entry.key.toLowerCase() === 'basicattacktooltip'))
+  assert.ok(calculations.some((entry) => entry.key.toLowerCase() === 'criticalstriketooltip'))
+})
+
+test('Darius passive bin spell is discovered from DariusHemoMarker script name', async () => {
+  const { findPassiveBinSpell, extractBinDataValues, extractBinCalculations } =
+    theorycraftTooltipTestUtils
+
+  const data = await (await fetch('https://raw.communitydragon.org/latest/game/data/characters/darius/darius.bin.json')).json()
+  const passiveBin = findPassiveBinSpell(data, 'Darius')
+  assert.ok(passiveBin)
+
+  const dataValues = extractBinDataValues(passiveBin!, 5)
+  const calculations = extractBinCalculations(passiveBin!, dataValues, {
+    maxRank: 5,
+    isPassive: true,
+  })
+
+  assert.ok(dataValues.some((entry) => entry.name.toLowerCase() === 'bleedduration'))
+  assert.ok(dataValues.some((entry) => entry.name.toLowerCase() === 'maxstacks'))
+  assert.ok(dataValues.some((entry) => entry.name.toLowerCase() === 'monstermod'))
+  assert.ok(calculations.some((entry) => entry.key.toLowerCase() === 'bleeddamageperstack'))
+  assert.ok(calculations.some((entry) => entry.key.toLowerCase() === 'noxianmightbonusad'))
+})

@@ -397,4 +397,6 @@ export interface CalculatedStats {
   attackRange: number
   /** Passive gold per 10 s from items (e.g. support quest line). */
   goldPer10: number
+  /** Flat damage reduction percent from spell buffs (0–1). Multiplicative with armor/MR mitigation. */
+  damageReduction?: number
 }

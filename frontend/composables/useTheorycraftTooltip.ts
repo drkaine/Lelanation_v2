@@ -431,9 +431,11 @@ function formatCalculationRenderedValue(
   const computed = computeCalculationValue(calculation, stats, rank, maxRank) + stackBonus
 
   if (calculationShouldDisplayWithPercentSuffix(calculation)) {
-    const totalText = formatResolvedNumber(computed)
+    const needsScale = calculation.displayAsPercent === true && hasBase && Math.abs(base!) < 1
+    const scale = needsScale ? 100 : 1
+    const totalText = formatResolvedNumber(computed * scale)
     if (ratioSuffix) return `${withPercentSuffix(totalText)} ${ratioSuffix}`.trim()
-    if (hasBase) return withPercentSuffix(formatResolvedNumber(base! + stackBonus))
+    if (hasBase) return withPercentSuffix(formatResolvedNumber((base! + stackBonus) * scale))
     return withPercentSuffix(totalText)
   }
 
@@ -909,18 +911,22 @@ export function resolveTheorycraftTooltipHtml(
   const vars = buildRuntimeVariableMap(spell, stats, rank, stackContext, useLiveBuildStats)
   let parsed = template.replace(/<\s*br\s*\/?>/gi, '___TOOLTIP_BR___')
 
+  let unresolvedVars = 0
   parsed = parsed.replace(/\{\{\s*([^}]+)\s*\}\}/g, (_match, expression: string) => {
+    const exp = expression.trim()
+    if (exp.toLowerCase().includes('spellmodifier') || exp.toLowerCase().includes('append')) {
+      return ''
+    }
     const resolved = resolveExpression(vars, String(expression))
     if (resolved == null) {
-      const exp = expression.trim()
-      if (exp.toLowerCase().includes('spellmodifier') || exp.toLowerCase().includes('append')) {
-        return ''
-      }
       if (exp.includes('{{') || exp.includes('}}')) return ''
+      unresolvedVars++
       return ''
     }
     return resolved
   })
+
+  if (unresolvedVars > 0) return null
 
   parsed = parsed.replace(/___TOOLTIP_BR___/g, '<br />')
   const formatted = formatTooltipMarkupHtml(parsed)

@@ -183,3 +183,42 @@ describe('activatable buff detection', () => {
     expect(spellHasActivatableBuff(ahriQ)).toBe(false)
   })
 })
+
+const alistarR = {
+  id: 'FerociousHowl',
+  slot: 'R',
+  maxRank: 3,
+  tooltipRaw: 'réduit les dégâts de {{ RDamageReduction }}%',
+  calculations: [],
+  dataValues: [
+    { name: 'RDuration', values: [7, 7, 7] },
+    { name: 'RDamageReduction', values: [55, 65, 75] },
+  ],
+}
+
+describe('Alistar R damage reduction', () => {
+  it('detects as activatable', () => {
+    expect(spellHasActivatableBuff(alistarR)).toBe(true)
+  })
+
+  it('computes 75% DR at rank 3', () => {
+    const bonuses = computeSpellBuffBonuses(alistarR, 3, baseStats, 18)
+    expect(bonuses).toHaveLength(1)
+    expect(bonuses[0]!.stat).toBe('damageReduction')
+    expect(bonuses[0]!.amount).toBeCloseTo(0.75)
+  })
+
+  it('applies DR multiplicatively', () => {
+    const result = applyTheorycraftSpellBuffs({
+      stats: baseStats,
+      spells: [alistarR],
+      activeSpellIds: new Set(['FerociousHowl']),
+      spellRanks: { FerociousHowl: 3 },
+      level: 18,
+      labels: {},
+    })
+    expect(result.stats.damageReduction).toBeCloseTo(0.75)
+    expect(result.lines).toHaveLength(1)
+    expect(result.lines[0]!.detail).toContain('75%')
+  })
+})

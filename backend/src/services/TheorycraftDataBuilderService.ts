@@ -436,7 +436,12 @@ function formatCalculationValuesAsText(
   options: BinCalculationBuildOptions
 ): string {
   if (values.length === 0) return ''
-  const series = formatValueSeries(values, ' / ')
+  const needsScale =
+    options.displayAsPercent &&
+    values.length > 0 &&
+    values.every((v) => Math.abs(v) < 1)
+  const scaled = needsScale ? values.map((v) => Number((v * 100).toFixed(4))) : values
+  const series = formatValueSeries(scaled, ' / ')
   return options.displayAsPercent && series ? `${series}%` : series
 }
 
@@ -812,7 +817,7 @@ function buildBinCalculationExpression(
     }
     if (partType === 'BuffCounterByNamedDataValueCalculationPart') {
       const values = firstValuesFromDataValues(dataValues, String(part.mDataValue ?? ''))
-      if (values && values.length > 0) {
+      if (values && values.length > 0 && baseValues.length === 0) {
         const coeff = Number(part.mCoefficient ?? 1)
         const scaled =
           Number.isFinite(coeff) && coeff !== 1 ? values.map((v) => v * coeff) : values
@@ -1083,10 +1088,13 @@ function extractBinCalculations(
       if (!existing) continue
       const multiplier = evaluateCalculationPartValues(multiplierPart, dataValues, buildOptions)
       const multSeries = multiplier.length > 0 ? multiplier : [1]
+      const scalePrecision = buildOptions.displayAsPercent
+        ? Math.max((buildOptions.precision ?? 2) + 2, 6)
+        : (buildOptions.precision ?? 2)
       const scaledValues = scaleCalculationValues(
         existing.baseValues.length > 0 ? existing.baseValues : [10],
         multSeries,
-        buildOptions.precision ?? 2
+        scalePrecision
       )
       const expression = formatCalculationValuesAsText(scaledValues, buildOptions) || existing.expression
       builtByKey.set(key.toLowerCase(), {
@@ -1939,7 +1947,8 @@ function isMetaDdragonTooltip(raw: string): boolean {
   if (/spell_[a-z0-9]+_tooltip/i.test(text)) return true
   if (/\{\{\s*spell_[a-z0-9_]+_tooltip/i.test(text)) return true
   if (/@gamemodeinteger@/i.test(text)) return true
-  if (/spellmodifierdescriptionappend/i.test(text)) return true
+  const withoutSpellModAppend = text.replace(/\{\{\s*spellmodifierdescriptionappend\s*\}\}/gi, '').trim()
+  if (!withoutSpellModAppend || /^\s*$/.test(withoutSpellModAppend)) return true
   if (/\{\{[^{}]*\{\{/.test(text)) return true
   return false
 }
@@ -2141,8 +2150,11 @@ function resolveSpellTooltipContent(args: {
   sharedVars: Map<string, string>
 }): { main: string; detailRaws: string[] } {
   const { ddSpell, cdSpell, binSpell, stringTable, sharedVars } = args
-  const ddSections = splitTooltipSections(String(ddSpell.tooltip ?? ''))
-  const ddMain = (ddSections[0] ?? String(ddSpell.tooltip ?? '')).trim()
+  const rawTooltip = String(ddSpell.tooltip ?? '')
+    .replace(/\{\{\s*spellmodifierdescriptionappend\s*\}\}/gi, '')
+    .trim()
+  const ddSections = splitTooltipSections(rawTooltip)
+  const ddMain = (ddSections[0] ?? rawTooltip).trim()
   const ddDetailRaws = ddSections.slice(1)
 
   const ddParsed = ddMain
@@ -2151,14 +2163,34 @@ function resolveSpellTooltipContent(args: {
   const needsStringTable =
     !ddMain || isMetaDdragonTooltip(ddMain) || isBrokenTooltipText(ddParsed.descriptionText)
 
+  const spellId = String(ddSpell.id ?? '').trim().toLowerCase()
+  const scriptName = String(binSpell?.mScriptName ?? '').trim().toLowerCase()
+
   if (!needsStringTable) {
-    return { main: ddMain, detailRaws: ddDetailRaws }
+    const gameMode = resolveGameModeInteger(binSpell)
+    const extendedDetailRaws = [...ddDetailRaws]
+    for (const key of [
+      `spell_${spellId}_tooltipextended`,
+      scriptName ? `spell_${scriptName}_tooltipextended` : '',
+      extractPassiveTooltipLocKeys(binSpell).extendedKey ?? '',
+    ]) {
+      if (!key) continue
+      const candidate = lookupStringTableEntry(stringTable, key)
+      if (!candidate || isMetaDdragonTooltip(candidate) || extendedDetailRaws.includes(candidate))
+        continue
+      const normalized = normalizeStringTableTooltipSection(candidate, stringTable, gameMode)
+      if (
+        isNearDuplicateTooltipSection(ddMain, normalized) ||
+        isDuplicateTooltipSection(ddMain, normalized)
+      )
+        continue
+      extendedDetailRaws.push(normalized)
+    }
+    return { main: ddMain, detailRaws: extendedDetailRaws }
   }
 
   const gameMode = resolveGameModeInteger(binSpell)
   const lookupKeys = buildSpellStringTableLookupKeys(ddSpell, binSpell, gameMode)
-  const spellId = String(ddSpell.id ?? '').trim().toLowerCase()
-  const scriptName = String(binSpell?.mScriptName ?? '').trim().toLowerCase()
 
   let main = ''
   let bestScore = -1
@@ -2273,6 +2305,9 @@ function findPassiveBinSpell(
   ])
   if (direct) return direct
 
+  const byScript = findPassiveBinSpellByChampionScriptPattern(championBin, championId)
+  if (byScript) return byScript
+
   let venomBestSpell: Record<string, unknown> | null = null
   let venomBestScore = -1
   for (const value of Object.values(championBin)) {
@@ -2294,6 +2329,88 @@ function findPassiveBinSpell(
     }
   }
   return venomBestSpell
+}
+
+function findPassiveBinSpellByChampionScriptPattern(
+  championBin: ChampionBinJson | null,
+  championId: string
+): Record<string, unknown> | null {
+  if (!championBin) return null
+  const idToken = normalizeLookupToken(normalizeChampionBinId(championId))
+  let bestSpell: Record<string, unknown> | null = null
+  let bestScore = -1
+  for (const value of Object.values(championBin)) {
+    if (!value || typeof value !== 'object') continue
+    const wrapper = asObject(value)
+    const scriptName = normalizeLookupToken(String(wrapper.mScriptName ?? ''))
+    if (!scriptName.includes(idToken)) continue
+    const isPassiveLike = /passive|hemomarker|passivebuff|innate|rapidreload/i.test(scriptName)
+    if (!isPassiveLike) continue
+    const spell = asObject(wrapper.mSpell)
+    if (Object.keys(spell).length === 0) continue
+    const calcCount = Object.keys(asObject(spell.mSpellCalculations)).length
+    const dvCount = extractBinDataValues(spell, DEFAULT_ABILITY_MAX_RANK).length
+    if (calcCount + dvCount === 0) continue
+    const score = calcCount * 3 + dvCount
+    if (score > bestScore) {
+      bestScore = score
+      bestSpell = spell
+    }
+  }
+  return bestSpell
+}
+
+function extractTooltipVariableNames(tooltipRaw: string): Set<string> {
+  const names = new Set<string>()
+  const template = String(tooltipRaw ?? '')
+  for (const match of template.matchAll(/\{\{\s*([^}]+)\s*\}\}/g)) {
+    const expression = match[1].trim()
+    if (!expression || /spellmodifier/i.test(expression)) continue
+    const normalized = expression.toLowerCase().replace(/[^a-z0-9]/g, '')
+    if (normalized) names.add(normalized)
+    const baseToken = expression
+      .split(/[*+\-/]/)[0]
+      ?.trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '')
+    if (baseToken) names.add(baseToken)
+  }
+  return names
+}
+
+function findPassiveBinSpellForTooltip(
+  championBin: ChampionBinJson | null,
+  tooltipRaw: string
+): Record<string, unknown> | null {
+  if (!championBin) return null
+  const varNames = extractTooltipVariableNames(tooltipRaw)
+  if (varNames.size === 0) return null
+
+  let bestSpell: Record<string, unknown> | null = null
+  let bestScore = -1
+  for (const value of Object.values(championBin)) {
+    if (!value || typeof value !== 'object') continue
+    const spell = asObject(asObject(value).mSpell)
+    if (Object.keys(spell).length === 0) continue
+    const calculations = Object.keys(asObject(spell.mSpellCalculations)).map((key) =>
+      key.toLowerCase()
+    )
+    const dataValues = extractBinDataValues(spell, DEFAULT_ABILITY_MAX_RANK).map((entry) =>
+      entry.name.toLowerCase()
+    )
+    let score = 0
+    for (const name of varNames) {
+      if (calculations.some((key) => key === name)) score += 4
+      else if (calculations.some((key) => key.includes(name) || name.includes(key))) score += 2
+      if (dataValues.some((key) => key === name)) score += 3
+      else if (dataValues.some((key) => key.includes(name) || name.includes(key))) score += 1
+    }
+    if (score > bestScore) {
+      bestScore = score
+      bestSpell = spell
+    }
+  }
+  return bestScore > 0 ? bestSpell : null
 }
 
 const PASSIVE_VENOM_LABELS: Record<
@@ -3739,7 +3856,7 @@ export class TheorycraftDataBuilderService {
     const passiveName = String(passiveRaw.name ?? cdPassive.name ?? '')
     const passiveDetails = (() => {
       const passiveSummary = String(cdPassive.description ?? passiveRaw.description ?? '').trim()
-      const passiveBinSpell = findPassiveBinSpell(championBin, championId)
+      let passiveBinSpell = findPassiveBinSpell(championBin, championId)
       const passiveDdSpell: ChampionSpell = {
         ...passiveRaw,
         id: `${championId}Passive`,
@@ -3751,6 +3868,12 @@ export class TheorycraftDataBuilderService {
         stringTable,
       })
       let passiveMainRaw = passiveContent.main || passiveSummary
+      if (!passiveBinSpell) {
+        passiveBinSpell = findPassiveBinSpellForTooltip(
+          championBin,
+          [passiveMainRaw, ...passiveContent.extended].filter(Boolean).join('\n')
+        )
+      }
       let passiveTooltip = parseTooltip(
         passiveMainRaw,
         passiveDdSpell,
@@ -4046,6 +4169,7 @@ export const theorycraftTooltipTestUtils = {
   extractSpellRatios,
   normalizeRiotInlineIconTokens,
   findPassiveBinSpell,
+  findPassiveBinSpellForTooltip,
   resolvePassiveTooltipContent,
   resolveSpellTooltipContent,
   lookupStringTableEntry,

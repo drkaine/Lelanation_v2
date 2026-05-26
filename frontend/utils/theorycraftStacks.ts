@@ -1,5 +1,9 @@
 import type { TheorycraftSpellCalculation } from '~/composables/useTheorycraftTooltip'
-import type { TheorycraftStackDefinition, TheorycraftStackStatBonus } from '~/types/theorycraft'
+import type {
+  TheorycraftStackDefinition,
+  TheorycraftStackFormulaVar,
+  TheorycraftStackStatBonus,
+} from '~/types/theorycraft'
 
 type CalculatedStatKey =
   | 'abilityPower'
@@ -84,11 +88,208 @@ export function parseStackDefinitions(
   return [...byId.values()]
 }
 
+function mapPassivePerStackToStat(name: string): TheorycraftStackStatBonus['stat'] | null {
+  const lower = name.toLowerCase()
+  if (/adperstack/.test(lower)) return 'attackDamage'
+  if (/apperstack|apparatio/.test(lower)) return 'abilityPower'
+  if (/armorperstack/.test(lower)) return 'armor'
+  if (/ahperstack/.test(lower)) return null
+  if (/attackspeedperstack|enrageasperstack/.test(lower)) return 'attackSpeed'
+  return null
+}
+
+function inferPassiveStackDefinition(
+  champion: Record<string, unknown> | null | undefined
+): TheorycraftStackDefinition | null {
+  const passive = champion?.passive
+  if (!passive || typeof passive !== 'object') return null
+
+  const p = passive as {
+    name?: string
+    dataValues?: Array<{ name: string; values: number[] }>
+    calculations?: TheorycraftSpellCalculation[]
+  }
+
+  const passiveDvs = p.dataValues ?? []
+  const perStackDvs = passiveDvs.filter(entry => /perstack$/i.test(String(entry.name)))
+  if (perStackDvs.length === 0) return null
+
+  const passiveCalcs = p.calculations ?? []
+
+  const statBonuses: TheorycraftStackStatBonus[] = []
+  const tooltipVars: { key: string; perStackKey: string }[] = []
+
+  for (const dv of perStackDvs) {
+    const stat = mapPassivePerStackToStat(dv.name)
+    if (stat) {
+      statBonuses.push({
+        stat,
+        perStackKey: dv.name,
+        isPercent: stat === 'attackSpeed',
+      })
+    }
+  }
+
+  for (const calc of passiveCalcs) {
+    if (calc.baseValues.length === 0) continue
+    const allSame = calc.baseValues.every(v => v === calc.baseValues[0])
+    if (!allSame) continue
+    const constVal = calc.baseValues[0]
+    if (constVal === 0) continue
+    const matchingDv = passiveDvs.find(dv => {
+      const dvFirst = dv.values?.[0]
+      return dvFirst != null && Math.abs(dvFirst - constVal) < 1e-8
+    })
+    if (matchingDv) {
+      tooltipVars.push({ key: calc.key, perStackKey: calc.key })
+    }
+  }
+
+  const formulaVars: TheorycraftStackFormulaVar[] = []
+  const spells = Array.isArray((champion as Record<string, unknown>)?.spells)
+    ? ((champion as Record<string, unknown>).spells as Array<{
+        slot?: string
+        dataValues?: Array<{ name: string; values: number[] }>
+      }>)
+    : []
+
+  const AREA_PER_STACK_KEYS = [
+    'outerradiusareaperstack',
+    'innerradiusareaperstack',
+    'areaperpassivestack',
+  ]
+  const SLOT_TO_FVAR: Record<string, string> = { W: 'f2', E: 'f3', R: 'f4' }
+
+  for (const spell of spells) {
+    const slot = String(spell.slot ?? '')
+    const fKey = SLOT_TO_FVAR[slot]
+    if (!fKey) continue
+    const dvs = spell.dataValues ?? []
+    const areaEntry = dvs.find(d => AREA_PER_STACK_KEYS.includes(String(d.name).toLowerCase()))
+    const radiusEntry = dvs.find(d => /^startingradius$/i.test(String(d.name)))
+    if (areaEntry?.values?.[0] && radiusEntry?.values?.[0]) {
+      formulaVars.push({
+        key: fKey,
+        formula: 'areaToRadiusPercent',
+        areaPerStack: areaEntry.values[0],
+        baseRadius: radiusEntry.values[0],
+      })
+    }
+  }
+
+  if (statBonuses.length === 0 && tooltipVars.length === 0 && formulaVars.length === 0) return null
+
+  return {
+    id: 'passive',
+    scope: 'passive',
+    label: String(p.name ?? 'Passive'),
+    maxStacks: 9999,
+    statBonuses,
+    tooltipVars,
+    ...(formulaVars.length > 0 ? { formulaVars } : {}),
+  }
+}
+
+interface BardChimeBreakpoint {
+  chimes: number
+  slow: number
+  maxMeeps: number
+  rechargeTime: number
+}
+
+const BARD_CHIME_BREAKPOINTS: BardChimeBreakpoint[] = [
+  { chimes: 0, slow: 0, maxMeeps: 1, rechargeTime: 8 },
+  { chimes: 5, slow: 25, maxMeeps: 1, rechargeTime: 8 },
+  { chimes: 10, slow: 25, maxMeeps: 2, rechargeTime: 8 },
+  { chimes: 15, slow: 25, maxMeeps: 2, rechargeTime: 8 },
+  { chimes: 20, slow: 25, maxMeeps: 2, rechargeTime: 7 },
+  { chimes: 25, slow: 35, maxMeeps: 2, rechargeTime: 7 },
+  { chimes: 30, slow: 35, maxMeeps: 3, rechargeTime: 7 },
+  { chimes: 35, slow: 35, maxMeeps: 3, rechargeTime: 7 },
+  { chimes: 40, slow: 35, maxMeeps: 3, rechargeTime: 6 },
+  { chimes: 45, slow: 45, maxMeeps: 3, rechargeTime: 6 },
+  { chimes: 50, slow: 45, maxMeeps: 4, rechargeTime: 6 },
+  { chimes: 55, slow: 45, maxMeeps: 4, rechargeTime: 5 },
+  { chimes: 60, slow: 55, maxMeeps: 4, rechargeTime: 5 },
+  { chimes: 65, slow: 55, maxMeeps: 5, rechargeTime: 5 },
+  { chimes: 70, slow: 55, maxMeeps: 5, rechargeTime: 4 },
+  { chimes: 75, slow: 65, maxMeeps: 5, rechargeTime: 4 },
+  { chimes: 80, slow: 65, maxMeeps: 6, rechargeTime: 4 },
+  { chimes: 85, slow: 75, maxMeeps: 6, rechargeTime: 4 },
+  { chimes: 90, slow: 75, maxMeeps: 7, rechargeTime: 4 },
+  { chimes: 95, slow: 75, maxMeeps: 8, rechargeTime: 4 },
+  { chimes: 100, slow: 75, maxMeeps: 9, rechargeTime: 4 },
+]
+
+function bardMeepBaseDamage(chimes: number): number {
+  return 35 + Math.floor(chimes / 5) * 10
+}
+
+function bardBreakpointAt(chimes: number): BardChimeBreakpoint {
+  let best = BARD_CHIME_BREAKPOINTS[0]
+  for (const bp of BARD_CHIME_BREAKPOINTS) {
+    if (bp.chimes <= chimes) best = bp
+    else break
+  }
+  return best
+}
+
+function bardChimesUntilNext(chimes: number): { chimesNeeded: number; nextDamageBonus: number } {
+  const nextThreshold = (Math.floor(chimes / 5) + 1) * 5
+  return { chimesNeeded: nextThreshold - chimes, nextDamageBonus: 10 }
+}
+
+export function computeBardChimeTooltipVars(
+  chimes: number,
+  formatNumber: (value: number) => string
+): Record<string, string> {
+  const bp = bardBreakpointAt(chimes)
+  const { chimesNeeded, nextDamageBonus } = bardChimesUntilNext(chimes)
+  return {
+    f1: formatNumber(bardMeepBaseDamage(chimes)),
+    f2: formatNumber(bp.slow),
+    f3: formatNumber(1),
+    f4: formatNumber(bp.maxMeeps),
+    f5: formatNumber(bp.rechargeTime),
+    f7: formatNumber(chimesNeeded),
+    f10: formatNumber(chimes),
+    f11: formatNumber(nextDamageBonus),
+  }
+}
+
+function hardcodedPassiveStackDefinition(
+  champion: Record<string, unknown> | null | undefined
+): TheorycraftStackDefinition | null {
+  const id = String(champion?.id ?? '')
+  if (id === 'Bard') {
+    return {
+      id: 'passive',
+      scope: 'passive',
+      label: String(
+        (champion?.passive as { name?: string } | undefined)?.name ?? 'Instinct du voyageur'
+      ),
+      maxStacks: 9999,
+      statBonuses: [],
+      tooltipVars: [],
+      customVarsChampionId: 'Bard',
+    }
+  }
+  return null
+}
+
 function inferStackDefinitionsFromChampion(
   champion: Record<string, unknown> | null | undefined
 ): TheorycraftStackDefinition[] {
   const spells = Array.isArray(champion?.spells) ? champion.spells : []
   const inferred: TheorycraftStackDefinition[] = []
+
+  const hardcoded = hardcodedPassiveStackDefinition(champion)
+  if (hardcoded) {
+    inferred.push(hardcoded)
+  } else {
+    const passiveDef = inferPassiveStackDefinition(champion)
+    if (passiveDef) inferred.push(passiveDef)
+  }
 
   for (const raw of spells) {
     if (!raw || typeof raw !== 'object') continue
@@ -136,12 +337,19 @@ export function buildStackCalculationsBySource(
 ): Record<string, TheorycraftSpellCalculation[]> {
   const bySource: Record<string, TheorycraftSpellCalculation[]> = {}
   const passive = champion?.passive
-  if (
-    passive &&
-    typeof passive === 'object' &&
-    Array.isArray((passive as { calculations?: unknown }).calculations)
-  ) {
-    bySource.passive = (passive as { calculations: TheorycraftSpellCalculation[] }).calculations
+  if (passive && typeof passive === 'object') {
+    const passiveCalcs = Array.isArray((passive as { calculations?: unknown }).calculations)
+      ? [...(passive as { calculations: TheorycraftSpellCalculation[] }).calculations]
+      : []
+    const passiveDvs = (passive as { dataValues?: Array<{ name: string; values: number[] }> })
+      .dataValues
+    for (const dv of passiveDvs ?? []) {
+      if (!/perstack$/i.test(String(dv.name))) continue
+      if (!dv.values?.length) continue
+      if (passiveCalcs.some(c => c.key.toLowerCase() === dv.name.toLowerCase())) continue
+      passiveCalcs.push({ key: dv.name, baseValues: dv.values, ratios: [] })
+    }
+    if (passiveCalcs.length > 0) bySource.passive = passiveCalcs
   }
   const spells = Array.isArray(champion?.spells) ? champion.spells : []
   for (const raw of spells) {
@@ -256,9 +464,31 @@ export function applyStackTooltipVariables(
   dataValues?: Array<{ name: string; values: number[] }>
 ): void {
   const safeStacks = Math.max(0, stackCount)
+
+  if (definition.customVarsChampionId === 'Bard') {
+    const vars = computeBardChimeTooltipVars(safeStacks, formatNumber)
+    for (const [key, value] of Object.entries(vars)) {
+      setVar(key, value)
+    }
+    return
+  }
+
+  if (!definition.tooltipVars.some(v => v.key.toLowerCase() === 'f1')) {
+    setVar('f1', formatNumber(safeStacks))
+  }
+
   for (const tooltipVar of definition.tooltipVars) {
     const perStack = perStackValue(calculations, tooltipVar.perStackKey, rankIndex)
     setVar(tooltipVar.key, formatNumber(perStack * safeStacks))
+  }
+
+  for (const fVar of definition.formulaVars ?? []) {
+    if (fVar.formula === 'areaToRadiusPercent') {
+      const baseArea = fVar.baseRadius * fVar.baseRadius * Math.PI
+      const newRadius = Math.sqrt((baseArea + fVar.areaPerStack * safeStacks) / Math.PI)
+      const pct = (newRadius / fVar.baseRadius - 1) * 100
+      setVar(fVar.key, formatNumber(Math.round(pct * 10) / 10))
+    }
   }
 
   const minionMaxStacks = dataValueAtRank(dataValues, 'RMinionMaxStacks', rankIndex)

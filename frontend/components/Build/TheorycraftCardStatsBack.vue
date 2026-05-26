@@ -124,6 +124,15 @@ const rows = computed(() => {
       label: t('theorycraft.stats.abilityHaste'),
       value: formatPercent(stats.cooldownReduction ?? 0),
     },
+    ...((stats.damageReduction ?? 0) > 0
+      ? [
+          {
+            key: 'damageReduction',
+            label: t('theorycraft.stats.damageReduction'),
+            value: formatPercent(stats.damageReduction!),
+          },
+        ]
+      : []),
   ]
 })
 

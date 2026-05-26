@@ -12,17 +12,20 @@ export interface TheorycraftSpellRuntime {
   maxRank?: number
 }
 
+export type SpellBuffStat = keyof Pick<
+  CalculatedStats,
+  | 'armor'
+  | 'magicResist'
+  | 'attackDamage'
+  | 'abilityPower'
+  | 'health'
+  | 'attackSpeed'
+  | 'movementSpeed'
+  | 'damageReduction'
+>
+
 export interface TheorycraftSpellBuffBonus {
-  stat: keyof Pick<
-    CalculatedStats,
-    | 'armor'
-    | 'magicResist'
-    | 'attackDamage'
-    | 'abilityPower'
-    | 'health'
-    | 'attackSpeed'
-    | 'movementSpeed'
-  >
+  stat: SpellBuffStat
   amount: number
   labelKey: string
 }
@@ -174,15 +177,24 @@ function isDualResistCalculationKey(key: string): boolean {
   )
 }
 
-function labelKeyForStat(stat: TheorycraftSpellBuffBonus['stat']): string {
+function labelKeyForStat(stat: SpellBuffStat): string {
   if (stat === 'armor') return 'theorycraft.spells.buffArmor'
   if (stat === 'magicResist') return 'theorycraft.spells.buffMr'
   if (stat === 'attackDamage') return 'theorycraft.spells.buffAd'
   if (stat === 'abilityPower') return 'theorycraft.spells.buffAp'
   if (stat === 'health') return 'theorycraft.spells.buffHp'
   if (stat === 'attackSpeed') return 'theorycraft.spells.buffAs'
+  if (stat === 'damageReduction') return 'theorycraft.spells.buffDr'
   return 'theorycraft.spells.buffMs'
 }
+
+const SELF_BUFF_DR_KEYS = [
+  'RDamageReduction',
+  'DRPercent',
+  'DamageReduction',
+  'DamageReductionBase',
+  'BaseDamageReduction',
+]
 
 function normalizeAttackSpeedBonus(amount: number): number {
   if (amount > 10) return amount / 100
@@ -305,7 +317,8 @@ export function computeSpellBuffBonuses(
 
   const percentMoveSpeed =
     dataValueAtRank(dataValues, 'RMovementSpeedBonus', rankIndex) ??
-    dataValueAtRank(dataValues, 'ExtraMoveSpeedPercent', rankIndex)
+    dataValueAtRank(dataValues, 'ExtraMoveSpeedPercent', rankIndex) ??
+    dataValueAtRank(dataValues, 'BerserkMS', rankIndex)
   if (percentMoveSpeed != null && percentMoveSpeed > 0) {
     pushBonus('movementSpeed', percentMoveSpeed * stats.movementSpeed, 'theorycraft.spells.buffMs')
   }
@@ -329,11 +342,21 @@ export function computeSpellBuffBonuses(
     armorFromTooltipCalc = true
   }
 
-  const attackSpeedBonus = dataValueAtRank(dataValues, 'AttackSpeed', rankIndex)
+  const attackSpeedBonus =
+    dataValueAtRank(dataValues, 'AttackSpeed', rankIndex) ??
+    dataValueAtRank(dataValues, 'BerserkAS', rankIndex)
   if (attackSpeedBonus != null && attackSpeedBonus > 0) {
     const normalized =
       attackSpeedBonus > 1 && attackSpeedBonus <= 100 ? attackSpeedBonus / 100 : attackSpeedBonus
     pushBonus('attackSpeed', normalized, 'theorycraft.spells.buffAs')
+  }
+
+  for (const drKey of SELF_BUFF_DR_KEYS) {
+    const raw = dataValueAtRank(dataValues, drKey, rankIndex)
+    if (raw == null || raw <= 0) continue
+    const drPercent = raw > 1 ? raw / 100 : raw
+    pushBonus('damageReduction', drPercent, 'theorycraft.spells.buffDr')
+    break
   }
 
   for (const calculation of spell.calculations ?? []) {
@@ -408,9 +431,16 @@ export function applyTheorycraftSpellBuffs(args: {
 
     const parts: string[] = []
     for (const bonus of bonuses) {
-      next[bonus.stat] = (next[bonus.stat] ?? 0) + bonus.amount
-      const label = args.labels[bonus.labelKey] ?? bonus.stat
-      parts.push(`+${Math.round(bonus.amount * 10) / 10} ${label}`)
+      if (bonus.stat === 'damageReduction') {
+        const current = next.damageReduction ?? 0
+        next.damageReduction = 1 - (1 - current) * (1 - bonus.amount)
+        const label = args.labels[bonus.labelKey] ?? bonus.stat
+        parts.push(`${Math.round(bonus.amount * 100)}% ${label}`)
+      } else {
+        next[bonus.stat] = (next[bonus.stat] ?? 0) + bonus.amount
+        const label = args.labels[bonus.labelKey] ?? bonus.stat
+        parts.push(`+${Math.round(bonus.amount * 10) / 10} ${label}`)
+      }
     }
 
     const spellName = String((spell as { name?: string }).name ?? spell.slot ?? spellId)

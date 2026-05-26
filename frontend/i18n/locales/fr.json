@@ -278,7 +278,8 @@
       "buffAp": "AP",
       "buffHp": "PV",
       "buffAs": "VdA",
-      "buffMs": "VdM"
+      "buffMs": "VdM",
+      "buffDr": "réduction dégâts"
     },
     "description": {
       "showDescription": "Afficher la description",
@@ -302,6 +303,7 @@
       "critDamage": "Dégâts de crit",
       "movementSpeed": "Vitesse de déplacement",
       "abilityHaste": "Hâte d'aptitude",
+      "damageReduction": "Réduction de dégâts",
       "activeItemsNote": "{count} items actifs",
       "stacksNote": "{count} stacks passifs"
     },

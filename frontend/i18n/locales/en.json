@@ -278,7 +278,8 @@
       "buffAp": "AP",
       "buffHp": "HP",
       "buffAs": "AS",
-      "buffMs": "MS"
+      "buffMs": "MS",
+      "buffDr": "damage reduction"
     },
     "description": {
       "showDescription": "Show description",
@@ -302,6 +303,7 @@
       "critDamage": "Crit damage",
       "movementSpeed": "Move speed",
       "abilityHaste": "Ability haste",
+      "damageReduction": "Damage reduction",
       "activeItemsNote": "{count} active items",
       "stacksNote": "{count} passive stacks"
     },
