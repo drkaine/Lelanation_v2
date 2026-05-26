@@ -98,6 +98,20 @@ function mapPassivePerStackToStat(name: string): TheorycraftStackStatBonus['stat
   return null
 }
 
+function resolveMaxStacksFromDataValues(
+  dataValues?: Array<{ name: string; values: number[] }>
+): number {
+  if (!dataValues) return 9999
+  const keys = ['maxstacks', 'maxstack', 'stackcap', 'maximumstacks', 'maxcharges']
+  for (const key of keys) {
+    const entry = dataValues?.find(value => String(value.name).toLowerCase() === key)
+    if (!entry?.values?.length) continue
+    const raw = entry.values[0]
+    if (Number.isFinite(raw) && raw > 0) return Math.floor(raw)
+  }
+  return 9999
+}
+
 function inferPassiveStackDefinition(
   champion: Record<string, unknown> | null | undefined
 ): TheorycraftStackDefinition | null {
@@ -183,7 +197,7 @@ function inferPassiveStackDefinition(
     id: 'passive',
     scope: 'passive',
     label: String(p.name ?? 'Passive'),
-    maxStacks: 9999,
+    maxStacks: resolveMaxStacksFromDataValues(passiveDvs),
     statBonuses,
     tooltipVars,
     ...(formulaVars.length > 0 ? { formulaVars } : {}),
@@ -308,7 +322,7 @@ function inferStackDefinitionsFromChampion(
         scope: 'spell',
         spellSlot: String(spell.slot ?? ''),
         label: String(spell.name ?? spell.id ?? 'Stacks'),
-        maxStacks: 9999,
+        maxStacks: resolveMaxStacksFromDataValues(spell.dataValues),
         statBonuses: [],
         tooltipVars: [],
         damageBonuses: [{ targetKey: 'totaldamage', perStackKey: 'basicstacks' }],
@@ -322,7 +336,7 @@ function inferStackDefinitionsFromChampion(
         scope: 'spell',
         spellSlot: String(spell.slot ?? ''),
         label: String(spell.name ?? spell.id ?? 'Stacks'),
-        maxStacks: 9999,
+        maxStacks: resolveMaxStacksFromDataValues(spell.dataValues),
         statBonuses: [{ stat: 'health', perStackKey: String(healthPerStack.name) }],
         tooltipVars: [{ key: 'f1', perStackKey: String(healthPerStack.name) }],
       })

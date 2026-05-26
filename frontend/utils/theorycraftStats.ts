@@ -27,7 +27,7 @@ type TheorycraftChampionExport = Champion & {
 }
 
 export const DEFAULT_MAX_CHAMPION_LEVEL = 18
-export const TOP_MAX_CHAMPION_LEVEL = 21
+export const TOP_MAX_CHAMPION_LEVEL = 20
 
 export function maxChampionLevelForRoles(roles: readonly string[] | null | undefined): number {
   return roles?.includes('top') ? TOP_MAX_CHAMPION_LEVEL : DEFAULT_MAX_CHAMPION_LEVEL

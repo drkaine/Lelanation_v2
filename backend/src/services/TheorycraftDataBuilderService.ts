@@ -3075,6 +3075,20 @@ function findPerStackSourceForTotal(totalKey: string, perStackKeys: string[]): s
   return perStackKeys[0] ?? null
 }
 
+function resolveMaxStacksFromDataValues(
+  dataValues?: Array<{ name: string; values: number[] }>
+): number {
+  if (!dataValues) return 9999
+  const keys = ['maxstacks', 'maxstack', 'stackcap', 'maximumstacks', 'maxcharges']
+  for (const key of keys) {
+    const entry = dataValues.find((value) => String(value.name).toLowerCase() === key)
+    if (!entry?.values?.length) continue
+    const raw = entry.values[0]
+    if (Number.isFinite(raw) && raw > 0) return Math.floor(raw)
+  }
+  return 9999
+}
+
 function extractStackDefinition(args: {
   id: string
   label: string
@@ -3138,7 +3152,7 @@ function extractStackDefinition(args: {
           scope: 'spell',
           ...(args.spellSlot ? { spellSlot: args.spellSlot } : {}),
           label: args.label,
-          maxStacks: 9999,
+          maxStacks: resolveMaxStacksFromDataValues(args.dataValues),
           statBonuses: [],
           tooltipVars: [],
           damageBonuses: [{ targetKey: 'totaldamage', perStackKey: 'basicstacks' }],
@@ -3153,7 +3167,7 @@ function extractStackDefinition(args: {
     scope: args.scope,
     ...(args.spellSlot ? { spellSlot: args.spellSlot } : {}),
     label: args.label,
-    maxStacks: 9999,
+    maxStacks: resolveMaxStacksFromDataValues(args.dataValues),
     statBonuses,
     tooltipVars,
   }

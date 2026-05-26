@@ -119,10 +119,6 @@ definePageMeta({
 const { t } = useI18n()
 const buildStore = useBuildStore()
 
-if (import.meta.client) {
-  buildStore.enterTheorycraftSession()
-}
-
 const itemsStore = useItemsStore()
 const { loadChampion } = useChampionData()
 const { isLayoutScaled } = useLayoutScaled()
@@ -226,6 +222,7 @@ watch(
 )
 
 onMounted(async () => {
+  buildStore.enterTheorycraftSession()
   theorycraftLevel.value = buildStore.statsLevel
   await loadChampionDataForPanel()
 })

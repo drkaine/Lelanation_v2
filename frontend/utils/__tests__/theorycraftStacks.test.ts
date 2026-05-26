@@ -259,6 +259,30 @@ describe('theorycraftStacks', () => {
     expect(passiveDef!.customVarsChampionId).toBe('Bard')
   })
 
+  it('infers Ezreal passive max stacks from MaxStacks data value', () => {
+    const champion = {
+      id: 'Ezreal',
+      passive: {
+        name: 'Force grandissante',
+        dataValues: [
+          { name: 'AttackSpeedPerStack', values: [0.1, 0.1, 0.1, 0.1, 0.1] },
+          { name: 'MaxStacks', values: [5, 5, 5, 5, 5] },
+        ],
+        calculations: [],
+      },
+      spells: [],
+    }
+    const definitions = parseStackDefinitions(champion)
+    const passiveDef = definitions.find(def => def.id === 'passive')
+    expect(passiveDef).toBeDefined()
+    expect(passiveDef!.maxStacks).toBe(5)
+    expect(passiveDef!.statBonuses).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ stat: 'attackSpeed', perStackKey: 'AttackSpeedPerStack' }),
+      ])
+    )
+  })
+
   it('computes Bard meep tooltip vars at various chime counts', () => {
     const fmt = (v: number) => String(v)
     const at0 = computeBardChimeTooltipVars(0, fmt)

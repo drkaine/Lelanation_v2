@@ -165,6 +165,7 @@ function onDurationInput(event: Event) {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  padding-top: 10px;
 }
 
 .theorycraft-rune-panel--header .theorycraft-rune-panel__stacks {
