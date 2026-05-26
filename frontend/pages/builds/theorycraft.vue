@@ -1,15 +1,7 @@
 <template>
-  <div class="theorycraft-page min-h-screen py-4 pl-4 pr-0 text-text">
+  <div class="theorycraft-page min-h-screen text-text">
     <div class="theorycraft-page__shell">
       <div class="theorycraft-page-header mb-4 pr-4">
-        <button
-          type="button"
-          class="theorycraft-header-actions__panel"
-          :class="{ 'theorycraft-header-actions__panel--active': activePanel === 'theorycraft' }"
-          @click="activePanel = 'theorycraft'"
-        >
-          {{ t('theorycraft.panel.theorycraftButton') }}
-        </button>
         <TheorycraftRuneStackPanel variant="header" />
       </div>
 
@@ -19,31 +11,48 @@
       >
         <div class="build-card-wrapper w-full flex-shrink-0 md:order-1">
           <div class="build-card-toolbar">
-            <button
-              type="button"
-              class="build-card-toolbar__flip build-card-toolbar__stats"
-              :class="{ 'build-card-toolbar__flip--active': statsFlipActive }"
-              :title="statsFlipTitle"
-              :aria-label="statsFlipTitle"
-              @click="toggleStatsFlip"
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
+            <div class="build-card-toolbar__actions">
+              <button
+                type="button"
+                class="build-card-toolbar__flip build-card-toolbar__stats"
+                :class="{ 'build-card-toolbar__flip--active': statsFlipActive }"
+                :title="statsFlipTitle"
+                :aria-label="statsFlipTitle"
+                @click="toggleStatsFlip"
               >
-                <path d="M4 20V10" />
-                <path d="M10 20V4" />
-                <path d="M16 20v-6" />
-                <path d="M22 20V8" />
-              </svg>
-            </button>
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M4 20V10" />
+                  <path d="M10 20V4" />
+                  <path d="M16 20v-6" />
+                  <path d="M22 20V8" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                class="build-card-toolbar__flip build-card-toolbar__theorycraft"
+                :class="{ 'build-card-toolbar__flip--active': theorycraftPanelActive }"
+                :title="theorycraftPanelTitle"
+                :aria-label="theorycraftPanelTitle"
+                @click="activePanel = 'theorycraft'"
+              >
+                <img
+                  src="/icons/theorycraft.png"
+                  alt=""
+                  class="build-card-toolbar__theorycraft-icon"
+                  aria-hidden="true"
+                />
+              </button>
+            </div>
             <div class="build-card-toolbar__save">
               <BuildSaveButton @highlight-missing="highlightMissingFields = $event" />
             </div>
@@ -130,6 +139,10 @@ const statsFlipActive = computed(() => cardFlipped.value && cardBackFace.value =
 const statsFlipTitle = computed(() =>
   statsFlipActive.value ? t('theorycraft.stats.showBuild') : t('theorycraft.stats.showStats')
 )
+
+const theorycraftPanelActive = computed(() => activePanel.value === 'theorycraft')
+
+const theorycraftPanelTitle = computed(() => t('theorycraft.panel.theorycraftButton'))
 
 function toggleDescriptionFlip() {
   if (cardFlipped.value && cardBackFace.value === 'description') {
@@ -254,35 +267,6 @@ onBeforeRouteLeave(to => {
   gap: 0.75rem 1rem;
 }
 
-.theorycraft-header-actions__panel,
-.theorycraft-header-actions__panel--active {
-  height: 38px;
-  border-radius: 0.5rem;
-  border: 1px solid rgb(200 155 60 / 0.5);
-  background: var(--color-background, #0a1428);
-  padding: 0 1rem;
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: rgb(255 255 255 / 0.85);
-  transition:
-    border-color 0.15s ease,
-    background 0.15s ease,
-    color 0.15s ease;
-}
-
-.theorycraft-header-actions__panel:hover {
-  border-color: var(--color-accent, #c89b3c);
-  color: var(--color-accent, #c89b3c);
-}
-
-.theorycraft-header-actions__panel--active {
-  border-color: var(--color-accent, #c89b3c);
-  background: rgb(200 155 60 / 0.15);
-  color: var(--color-accent, #c89b3c);
-}
-
 .build-card-toolbar {
   display: flex;
   gap: 0.5rem;
@@ -305,6 +289,20 @@ onBeforeRouteLeave(to => {
   width: 100%;
   max-width: none;
   min-height: 38px;
+}
+
+.build-card-toolbar__actions {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.build-card-toolbar__theorycraft-icon {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  display: block;
 }
 
 .build-card-toolbar__flip {
@@ -337,9 +335,9 @@ onBeforeRouteLeave(to => {
 
 .build-card-toolbar__level {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: center;
-  gap: 0.375rem;
+  gap: 0.125rem;
   flex-shrink: 0;
 }
 
@@ -354,7 +352,7 @@ onBeforeRouteLeave(to => {
 }
 
 .build-card-toolbar__level-select {
-  height: 28px;
+  height: 24px;
   width: 2.75rem;
   min-width: 0;
   border-radius: 0.375rem;

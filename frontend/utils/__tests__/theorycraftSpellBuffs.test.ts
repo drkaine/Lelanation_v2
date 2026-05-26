@@ -132,3 +132,54 @@ describe('Nasus R sandstorm buffs', () => {
     expect(result.lines[0]?.detail).toContain('70')
   })
 })
+
+const aatroxR = {
+  id: 'AatroxR',
+  slot: 'R',
+  maxRank: 3,
+  tooltipRaw:
+    "gagnant <speed>+{{ rmovementspeedbonus*100 }}% de vitesse de déplacement</speed> et <scaleAD>+{{ rtotaladamp*100 }}% de dégâts d'attaque</scaleAD>.",
+  calculations: [],
+  dataValues: [
+    { name: 'RTotalADAmp', values: [0.2, 0.3, 0.4] },
+    { name: 'RMovementSpeedBonus', values: [0.6, 0.8, 1] },
+  ],
+}
+
+describe('Aatrox R World Ender buffs', () => {
+  it('is activatable and applies percent AD and move speed at rank 3', () => {
+    expect(spellHasActivatableBuff(aatroxR)).toBe(true)
+    const bonuses = computeSpellBuffBonuses(aatroxR, 3, baseStats, 18)
+    expect(bonuses.find(b => b.stat === 'attackDamage')?.amount).toBeCloseTo(48, 1)
+    expect(bonuses.find(b => b.stat === 'movementSpeed')?.amount).toBeCloseTo(340, 1)
+  })
+
+  it('applies buffs when active', () => {
+    const result = applyTheorycraftSpellBuffs({
+      stats: baseStats,
+      spells: [aatroxR],
+      activeSpellIds: new Set(['AatroxR']),
+      spellRanks: { AatroxR: 3 },
+      level: 18,
+      labels: {},
+    })
+    expect(result.stats.attackDamage).toBeGreaterThan(baseStats.attackDamage)
+    expect(result.stats.movementSpeed).toBeGreaterThan(baseStats.movementSpeed)
+    expect(result.lines.length).toBe(1)
+  })
+})
+
+describe('activatable buff detection', () => {
+  it('does not treat damage spells with scale ratios as activatable buffs', () => {
+    const ahriQ = {
+      id: 'AhriQ',
+      slot: 'Q',
+      maxRank: 5,
+      tooltipRaw:
+        'Inflige {{ Effect1Amount }} <scaleAP>(+{{ CharAbilityPower }})</scaleAP> pts de dégâts magiques.',
+      calculations: [{ key: 'totaldamage', baseValues: [40, 65, 90, 115, 140], ratios: [] }],
+      dataValues: [{ name: 'BaseDamage', values: [40, 65, 90, 115, 140] }],
+    }
+    expect(spellHasActivatableBuff(ahriQ)).toBe(false)
+  })
+})

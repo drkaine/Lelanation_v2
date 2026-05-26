@@ -94,60 +94,104 @@ function calcValue(
 }
 
 const DAMAGE_CALC_PATTERN =
-  /damagecalc|totaldamage|initialdamage|pulsedamage|monsterdamage|returndamage/i
+  /damagecalc|totaldamage|initialdamage|pulsedamage|monsterdamage|returndamage|pertickdamage|totalshield|shieldamount|heal|fury/i
+
+const REFERENCE_STATS: CalculatedStats = {
+  health: 2000,
+  mana: 800,
+  attackDamage: 200,
+  abilityPower: 100,
+  armor: 100,
+  magicResist: 60,
+  attackSpeed: 1,
+  critChance: 0,
+  critDamage: 1.75,
+  lifeSteal: 0,
+  spellVamp: 0,
+  cooldownReduction: 0,
+  movementSpeed: 340,
+  healthRegen: 5,
+  manaRegen: 5,
+  armorPenetration: 0,
+  flatArmorPenetration: 0,
+  magicPenetration: 0,
+  flatMagicPenetration: 0,
+  tenacity: 0,
+  lethality: 0,
+  percentLethality: 0,
+  omnivamp: 0,
+  shield: 0,
+  healShieldPower: 0,
+  attackRange: 125,
+  goldPer10: 0,
+}
 
 function isStatBuffCalculationKey(key: string): boolean {
   const normalized = key.toLowerCase()
   if (DAMAGE_CALC_PATTERN.test(normalized)) return false
+  if (
+    /grantedally|allyarmor|allymr|rangedformshred|shred|slow|penetration|lethality/i.test(
+      normalized
+    )
+  ) {
+    return false
+  }
   return (
-    /bonusarmortooltip|totalbonusarmor|bonusarmor(?!pen)/i.test(normalized) ||
-    /bonusmrtooltip|totalbonusmr|bonusspellblock|bonusmagicresist/i.test(normalized) ||
-    /bonusadtooltip|bonusattackdamage|bonusphysicaldamage/i.test(normalized) ||
+    /bonusarmortooltip|totalbonusarmor|bonusarmor(?!pen)|basearmor|grantedbraumarmor/i.test(
+      normalized
+    ) ||
+    /bonusmrtooltip|totalbonusmr|bonusspellblock|bonusmagicresist|bonusmr(?!grant)|basemr|grantedbraummr/i.test(
+      normalized
+    ) ||
+    /bonusadtooltip|bonusattackdamage|totalad|^ad$|bonusphysicaldamage/i.test(normalized) ||
     /bonusaptooltip|bonusabilitypower|bonusap(?!ratio)/i.test(normalized) ||
     /bonushptooltip|bonushealth|bonushp(?!regen)/i.test(normalized) ||
-    /attackspeedbonus|bonusattackspeed/i.test(normalized) ||
-    /msbuff|movementspeedbonus|bonusms/i.test(normalized)
+    /attackspeedbonus|bonusattackspeed|bonusattackspeedcalc/i.test(normalized) ||
+    /msbuff|movementspeedbonus|bonusms|mrgrant|totalresists|resistsfortooltip|^resists$/i.test(
+      normalized
+    )
   )
 }
 
 function mapBuffKeyToStat(key: string): TheorycraftSpellBuffBonus['stat'] | null {
   const normalized = key.toLowerCase()
-  if (/armor/.test(normalized) && !/mr|magic|spellblock/.test(normalized)) return 'armor'
-  if (/mr|magicresist|spellblock/.test(normalized)) return 'magicResist'
-  if (/attackdamage|physicaldamage|bonusad/.test(normalized)) return 'attackDamage'
+  if (/^ad$|attackdamage|physicaldamage|bonusad|totalad/.test(normalized)) return 'attackDamage'
   if (/abilitypower|bonusap/.test(normalized)) return 'abilityPower'
   if (/health|bonushp/.test(normalized)) return 'health'
   if (/attackspeed/.test(normalized)) return 'attackSpeed'
-  if (/ms|movementspeed|speedbuff/.test(normalized)) return 'movementSpeed'
+  if (/ms|movementspeed|speedbuff|mrgrant/.test(normalized)) return 'magicResist'
+  if (/mr|magicresist|spellblock|totalresists|^resists$|resistsfortooltip/.test(normalized)) {
+    return 'magicResist'
+  }
+  if (/armor/.test(normalized)) return 'armor'
   return null
 }
 
-function tooltipSuggestsStatBuff(tooltipRaw: string): boolean {
-  const raw = String(tooltipRaw ?? '')
-  if (!raw) return false
-  return /scaleArmor|scaleMR|scaleAD|scaleAP|scaleHealth|scaleAS|scaleAttackSpeed/i.test(raw)
+function isDualResistCalculationKey(key: string): boolean {
+  const normalized = key.toLowerCase()
+  return (
+    normalized === 'totalresists' || normalized === 'resists' || normalized === 'resistsfortooltip'
+  )
 }
 
-function hasFlatStatBuffDataValues(dataValues: DataValues): boolean {
-  const keys = [
-    'FlatBonusArmor',
-    'BonusArmorPercent',
-    'FlatBonusMR',
-    'BonusMRPercent',
-    'BonusHealth',
-    'InitialResistGain',
-    'BonusResist',
-    'ResistGain',
-  ]
-  return keys.some(name => dataValueAtRank(dataValues, name, 0) != null)
+function labelKeyForStat(stat: TheorycraftSpellBuffBonus['stat']): string {
+  if (stat === 'armor') return 'theorycraft.spells.buffArmor'
+  if (stat === 'magicResist') return 'theorycraft.spells.buffMr'
+  if (stat === 'attackDamage') return 'theorycraft.spells.buffAd'
+  if (stat === 'abilityPower') return 'theorycraft.spells.buffAp'
+  if (stat === 'health') return 'theorycraft.spells.buffHp'
+  if (stat === 'attackSpeed') return 'theorycraft.spells.buffAs'
+  return 'theorycraft.spells.buffMs'
+}
+
+function normalizeAttackSpeedBonus(amount: number): number {
+  if (amount > 10) return amount / 100
+  return amount
 }
 
 export function spellHasActivatableBuff(spell: TheorycraftSpellRuntime): boolean {
-  const calculations = spell.calculations ?? []
-  if (calculations.some(c => isStatBuffCalculationKey(c.key))) return true
-  const dv = spell.dataValues ?? []
-  if (hasFlatStatBuffDataValues(dv)) return true
-  return tooltipSuggestsStatBuff(spell.tooltipRaw ?? '')
+  const maxRank = Math.max(1, Number(spell.maxRank ?? 5))
+  return computeSpellBuffBonuses(spell, maxRank, REFERENCE_STATS, 18).length > 0
 }
 
 export function computeSpellBuffBonuses(
@@ -229,34 +273,114 @@ export function computeSpellBuffBonuses(
     mrFromTooltipCalc = true
   }
 
+  const flatResists =
+    dataValueAtRank(dataValues, 'Resists', rankIndex) ??
+    dataValueAtRank(dataValues, 'KennenRDefenses', rankIndex) ??
+    dataValueAtRank(dataValues, 'BaseResists', rankIndex)
+  if (flatResists != null && flatResists > 0) {
+    pushBonus('armor', flatResists, 'theorycraft.spells.buffArmor')
+    pushBonus('magicResist', flatResists, 'theorycraft.spells.buffMr')
+    armorFromTooltipCalc = true
+    mrFromTooltipCalc = true
+  }
+
+  const flatAd =
+    dataValueAtRank(dataValues, 'FlatAD', rankIndex) ??
+    dataValueAtRank(dataValues, 'BonusAD', rankIndex)
+  if (flatAd != null && flatAd > 0) {
+    pushBonus('attackDamage', flatAd, 'theorycraft.spells.buffAd')
+  }
+
+  const maximumBonusAd = dataValueAtRank(dataValues, 'MaximumBonusAD', rankIndex)
+  if (maximumBonusAd != null && maximumBonusAd > 0) {
+    pushBonus('attackDamage', maximumBonusAd, 'theorycraft.spells.buffAd')
+  }
+
+  const percentTotalAdAmp =
+    dataValueAtRank(dataValues, 'RTotalADAmp', rankIndex) ??
+    dataValueAtRank(dataValues, 'PercentTotalADAmp', rankIndex)
+  if (percentTotalAdAmp != null && percentTotalAdAmp > 0) {
+    pushBonus('attackDamage', percentTotalAdAmp * stats.attackDamage, 'theorycraft.spells.buffAd')
+  }
+
+  const percentMoveSpeed =
+    dataValueAtRank(dataValues, 'RMovementSpeedBonus', rankIndex) ??
+    dataValueAtRank(dataValues, 'ExtraMoveSpeedPercent', rankIndex)
+  if (percentMoveSpeed != null && percentMoveSpeed > 0) {
+    pushBonus('movementSpeed', percentMoveSpeed * stats.movementSpeed, 'theorycraft.spells.buffMs')
+  }
+
+  const statAmount = dataValueAtRank(dataValues, 'StatAmount', rankIndex)
+  if (statAmount != null && statAmount > 0) {
+    pushBonus('abilityPower', statAmount, 'theorycraft.spells.buffAp')
+    pushBonus('armor', statAmount, 'theorycraft.spells.buffArmor')
+    pushBonus('magicResist', statAmount, 'theorycraft.spells.buffMr')
+    pushBonus('movementSpeed', statAmount, 'theorycraft.spells.buffMs')
+    armorFromTooltipCalc = true
+    mrFromTooltipCalc = true
+  }
+
+  const armorPerStack = dataValueAtRank(dataValues, 'ArmorPerStack', rankIndex)
+  const maxStacks = dataValueAtRank(dataValues, 'MaxStacks', rankIndex)
+  const hasStackedResists =
+    armorPerStack != null && maxStacks != null && armorPerStack > 0 && maxStacks > 0
+  if (hasStackedResists) {
+    pushBonus('armor', armorPerStack * maxStacks, 'theorycraft.spells.buffArmor')
+    armorFromTooltipCalc = true
+  }
+
+  const attackSpeedBonus = dataValueAtRank(dataValues, 'AttackSpeed', rankIndex)
+  if (attackSpeedBonus != null && attackSpeedBonus > 0) {
+    const normalized =
+      attackSpeedBonus > 1 && attackSpeedBonus <= 100 ? attackSpeedBonus / 100 : attackSpeedBonus
+    pushBonus('attackSpeed', normalized, 'theorycraft.spells.buffAs')
+  }
+
   for (const calculation of spell.calculations ?? []) {
     if (!isStatBuffCalculationKey(calculation.key)) continue
+    const normalizedKey = calculation.key.toLowerCase()
+    if (
+      normalizedKey === 'bonusarmortooltip' ||
+      normalizedKey === 'bonusmrtooltip' ||
+      (normalizedKey === 'mrgrant' && hasStackedResists)
+    ) {
+      continue
+    }
+
+    let amount = calcValue(calculation, stats, safeRank, maxRank, level)
+    if (normalizedKey === 'resistsfortooltip' && amount < 1) {
+      amount = dataValueAtRank(dataValues, 'ResistMax', rankIndex) ?? amount
+    }
+
+    if (isDualResistCalculationKey(calculation.key)) {
+      if (!armorFromTooltipCalc) {
+        pushBonus('armor', amount, 'theorycraft.spells.buffArmor')
+        armorFromTooltipCalc = true
+      }
+      if (!mrFromTooltipCalc) {
+        pushBonus('magicResist', amount, 'theorycraft.spells.buffMr')
+        mrFromTooltipCalc = true
+      }
+      continue
+    }
+
     const stat = mapBuffKeyToStat(calculation.key)
     if (!stat) continue
     if (stat === 'armor' && armorFromTooltipCalc) continue
     if (stat === 'magicResist' && mrFromTooltipCalc) continue
-    if (
-      calculation.key.toLowerCase() === 'bonusarmortooltip' ||
-      calculation.key.toLowerCase() === 'bonusmrtooltip'
-    ) {
-      continue
+    if (stat === 'attackSpeed') {
+      amount = normalizeAttackSpeedBonus(amount)
     }
-    const amount = calcValue(calculation, stats, safeRank, maxRank, level)
-    const labelKey =
-      stat === 'armor'
-        ? 'theorycraft.spells.buffArmor'
-        : stat === 'magicResist'
-          ? 'theorycraft.spells.buffMr'
-          : stat === 'attackDamage'
-            ? 'theorycraft.spells.buffAd'
-            : stat === 'abilityPower'
-              ? 'theorycraft.spells.buffAp'
-              : stat === 'health'
-                ? 'theorycraft.spells.buffHp'
-                : stat === 'attackSpeed'
-                  ? 'theorycraft.spells.buffAs'
-                  : 'theorycraft.spells.buffMs'
-    pushBonus(stat, amount, labelKey)
+
+    pushBonus(stat, amount, labelKeyForStat(stat))
+  }
+
+  if (hasStackedResists) {
+    const mrGrantCalc = (spell.calculations ?? []).find(c => c.key.toLowerCase() === 'mrgrant')
+    if (mrGrantCalc && !mrFromTooltipCalc) {
+      const mrPerStack = calcValue(mrGrantCalc, stats, safeRank, maxRank, level)
+      pushBonus('magicResist', mrPerStack * maxStacks, 'theorycraft.spells.buffMr')
+    }
   }
 
   return bonuses

@@ -109,34 +109,36 @@
           >
             {{ t('theorycraft.spells.approximateValues') }}
           </span>
-          <button
-            v-if="spell.hasActivatableBuff"
-            type="button"
-            class="theorycraft-spell-active-toggle ml-auto shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide transition-colors"
-            :class="
-              isSpellActive(spell.id)
-                ? 'border-accent bg-accent/25 text-accent'
-                : 'border-border text-text/70 hover:border-accent/50'
-            "
-            :title="t('theorycraft.spells.toggleActive')"
-            @click.stop="toggleSpellActive(spell.id)"
-          >
-            {{ t('theorycraft.spells.active') }}
-          </button>
-          <div class="spell-rank-buttons flex items-center gap-0.5" @click.stop>
+          <div class="spell-entry-controls flex shrink-0 flex-wrap items-center gap-1" @click.stop>
+            <div class="spell-rank-buttons flex items-center gap-0.5">
+              <button
+                v-for="rank in spell.maxRank"
+                :key="`${spell.id}-rank-${rank}`"
+                type="button"
+                class="inline-flex h-3.5 min-w-[14px] items-center justify-center rounded border px-0.5 text-[9px] font-semibold leading-none transition-colors"
+                :class="
+                  activeRank(spell.id) === rank
+                    ? 'border-accent bg-accent/20 text-accent'
+                    : 'border-border text-text hover:border-accent/60'
+                "
+                @click="setRank(spell.id, rank)"
+              >
+                {{ rank }}
+              </button>
+            </div>
             <button
-              v-for="rank in spell.maxRank"
-              :key="`${spell.id}-rank-${rank}`"
+              v-if="spell.hasActivatableBuff"
               type="button"
-              class="inline-flex h-3.5 min-w-[14px] items-center justify-center rounded border px-0.5 text-[9px] font-semibold leading-none transition-colors"
+              class="theorycraft-spell-active-toggle shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide transition-colors"
               :class="
-                activeRank(spell.id) === rank
-                  ? 'border-accent bg-accent/20 text-accent'
-                  : 'border-border text-text hover:border-accent/60'
+                isSpellActive(spell.id)
+                  ? 'border-accent bg-accent/25 text-accent'
+                  : 'border-border text-text/70 hover:border-accent/50'
               "
-              @click="setRank(spell.id, rank)"
+              :title="t('theorycraft.spells.toggleActive')"
+              @click="toggleSpellActive(spell.id)"
             >
-              {{ rank }}
+              {{ t('theorycraft.spells.active') }}
             </button>
           </div>
         </summary>
