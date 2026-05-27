@@ -6,6 +6,18 @@ import { normalizePlatformRegion } from "../riot/platform-region.js";
 
 const TARGET_PCT = 0.95;
 
+function parseOptionalPositiveInt(raw: string | undefined): number | null {
+  if (!raw) return null;
+  const value = Number.parseInt(raw, 10);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return value;
+}
+
+const DISCOVERY_ALLOC_OVERRIDE = parseOptionalPositiveInt(process.env.DISCOVERY_ALLOC_OVERRIDE) ?? 6;
+const HYDRATION_ALLOC_OVERRIDE = parseOptionalPositiveInt(process.env.HYDRATION_ALLOC_OVERRIDE) ?? 7;
+const RANK_ALLOC_OVERRIDE = parseOptionalPositiveInt(process.env.RANK_ALLOC_OVERRIDE) ?? 70;
+const FORCE_ALLOC_OVERRIDE = process.env.FORCE_ALLOC_OVERRIDE !== "0";
+
 /** Budget total req/120s — marge ~5 % sous la limite Riot. */
 const REF_BUDGET = 90;
 
@@ -64,10 +76,12 @@ export interface BudgetAllocation {
 }
 
 export const DEFAULT_INITIAL_ALLOCATION: BudgetAllocation = {
-  discovery: 8,
-  hydration: 20,
-  rank: 14,
-  totalReq: 8 + 20 * 2 + 14,
+  discovery: FORCE_ALLOC_OVERRIDE ? DISCOVERY_ALLOC_OVERRIDE : 8,
+  hydration: FORCE_ALLOC_OVERRIDE ? HYDRATION_ALLOC_OVERRIDE : 20,
+  rank: FORCE_ALLOC_OVERRIDE ? RANK_ALLOC_OVERRIDE : 14,
+  totalReq: FORCE_ALLOC_OVERRIDE
+    ? DISCOVERY_ALLOC_OVERRIDE + HYDRATION_ALLOC_OVERRIDE * 2 + RANK_ALLOC_OVERRIDE
+    : 8 + 20 * 2 + 14,
 };
 
 export const MIN_ALLOC_CHANGE = 2;
@@ -332,6 +346,24 @@ export function computeAllocation(
     totalReq = discovery + hydration * 2 + rank;
   }
 
+  if (FORCE_ALLOC_OVERRIDE) {
+    discovery = DISCOVERY_ALLOC_OVERRIDE;
+    hydration = HYDRATION_ALLOC_OVERRIDE;
+    rank = RANK_ALLOC_OVERRIDE;
+    totalReq = discovery + hydration * 2 + rank;
+    if (totalReq > totalBudget) {
+      const overflow = totalReq - totalBudget;
+      const hydrationReduce = Math.ceil(overflow / 2);
+      hydration = Math.max(1, hydration - hydrationReduce);
+      totalReq = discovery + hydration * 2 + rank;
+      if (totalReq > totalBudget) {
+        const remainingOverflow = totalReq - totalBudget;
+        discovery = Math.max(1, discovery - remainingOverflow);
+        totalReq = discovery + hydration * 2 + rank;
+      }
+    }
+  }
+
   return { discovery, hydration, rank, totalReq };
 }
 
@@ -463,6 +495,13 @@ export class AdaptiveBudgetScheduler {
         msg: "adaptive_budget_scheduler_started",
         tickMs: this.tickMs,
         initial: this.currentAllocation,
+        forceOverride: FORCE_ALLOC_OVERRIDE
+          ? {
+              discovery: DISCOVERY_ALLOC_OVERRIDE,
+              hydration: HYDRATION_ALLOC_OVERRIDE,
+              rank: RANK_ALLOC_OVERRIDE,
+            }
+          : null,
       }),
     );
 

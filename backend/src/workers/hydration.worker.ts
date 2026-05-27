@@ -1,7 +1,7 @@
 import pLimit from "p-limit";
 import { DelayedError, WaitingChildrenError, Worker, type Job } from "bullmq";
 import { config } from "../config/index.js";
-import { getClosestRankSnapshotsAtOrAfter, type RankSnapshot } from "../db/query.js";
+import { getBestEffortRankSnapshotsForMatch, type RankSnapshot } from "../db/query.js";
 import { sql } from "../db/client.js";
 import type { HydrationJobData, ParsedParticipantDto, TeamStatsDto } from "../dto/match.dto.js";
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
@@ -40,6 +40,7 @@ const riotClient = new RiotClient();
 const hydrationLimit = pLimit(config.HYDRATION_CONCURRENCY);
 const PATCH_SWITCH_GRACE_DAYS = 2;
 const HYDRATION_RANK_RETRY_DELAY_BACKLOG_MS = 3 * 60_000;
+const RANK_GATE_TIMEOUT_MS = 10 * 60_000;
 function extractPatch(gameVersion: string): string {
   const [major, minor] = (gameVersion ?? "").split(".");
   if (!major || !minor) return "unknown";
@@ -322,7 +323,7 @@ async function refreshParticipantsRankState(
 ): Promise<Map<string, RankSnapshot>> {
   const puuids = participants.map((p) => p.puuid).filter(Boolean);
   const cachedSnapshots = await applyRankCacheToParticipants(participants, gameDate);
-  const closestSnapshots = await getClosestRankSnapshotsAtOrAfter(puuids, gameDate);
+  const closestSnapshots = await getBestEffortRankSnapshotsForMatch(puuids, gameDate);
   for (const [puuid, snapshot] of cachedSnapshots) {
     if (!closestSnapshots.has(puuid)) {
       closestSnapshots.set(puuid, snapshot);
@@ -352,6 +353,31 @@ async function refreshParticipantsRankState(
     }
   }
   return closestSnapshots;
+}
+
+function materializeMissingRanksAsUnranked(
+  participants: ParsedParticipantDto[],
+  closestSnapshots: Map<string, RankSnapshot>,
+  gameDate: Date,
+): void {
+  for (const participant of participants) {
+    const puuid = String(participant.puuid ?? "").trim();
+    if (!puuid) continue;
+    if (closestSnapshots.has(puuid)) continue;
+
+    const snapshot: RankSnapshot = {
+      rankTier: "UNRANKED",
+      rankDivision: "UNRANKED",
+      rankLp: 0,
+      date: gameDate,
+    };
+    closestSnapshots.set(puuid, snapshot);
+    participant.needsRankFetch = false;
+    participant.rankTier = "UNRANKED";
+    participant.rankTierValue = "UNRANKED";
+    participant.rankDivision = "UNRANKED";
+    participant.lp = 0;
+  }
 }
 
 async function finalizeHydrationRankGate(
@@ -389,6 +415,23 @@ async function finalizeHydrationRankGate(
     return;
   }
 
+  const blockedSince = hydrationJob.data.rankGateBlockedSince ?? Date.now();
+  if (!hydrationJob.data.rankGateBlockedSince) {
+    await hydrationJob.updateData({ ...hydrationJob.data, rankGateBlockedSince: blockedSince });
+  }
+  const blockedForMs = Date.now() - blockedSince;
+  if (blockedForMs >= RANK_GATE_TIMEOUT_MS) {
+    console.warn(
+      `[hydration.worker] rank_gate_timeout_bypass matchId=${data.matchId} blocked_ms=${blockedForMs} missing=${missing.length}`,
+    );
+    materializeMissingRanksAsUnranked(participants, closestSnapshots, gameDate);
+    const teamStats = parseTeamStats(teamStatsBase, participants, closestSnapshots);
+    pollerV2Observability.recordHydrationRankGate(data.matchId, true);
+    await ingestionQueue.add("ingest-match", { participants, teamStats });
+    pollerV2Observability.recordHydrationSuccess(1);
+    return;
+  }
+
   const matchDateIso = gameDate.toISOString().slice(0, 10);
   await ensureRankSnapshotsForHydration(hydrationJob, missing, matchDateIso);
 
@@ -403,6 +446,18 @@ async function finalizeHydrationRankGate(
 
   missing = getMissingRankParticipants(participants, closestSnapshots);
   if (missing.length > 0) {
+    const blockedForMsNow = Date.now() - blockedSince;
+    if (blockedForMsNow >= RANK_GATE_TIMEOUT_MS) {
+      console.warn(
+        `[hydration.worker] rank_gate_timeout_bypass matchId=${data.matchId} blocked_ms=${blockedForMsNow} missing=${missing.length}`,
+      );
+      materializeMissingRanksAsUnranked(participants, closestSnapshots, gameDate);
+      const teamStats = parseTeamStats(teamStatsBase, participants, closestSnapshots);
+      pollerV2Observability.recordHydrationRankGate(data.matchId, true);
+      await ingestionQueue.add("ingest-match", { participants, teamStats });
+      pollerV2Observability.recordHydrationSuccess(1);
+      return;
+    }
     throw new Error(
       `rank_gate_still_blocked matchId=${data.matchId} missing=${missing.length} puuids=${missing.map((p) => p.puuid).slice(0, 3).join(",")}`,
     );

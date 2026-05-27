@@ -7,6 +7,8 @@ export interface HydrationJobData {
   matchId: string;
   region: string;
   puuid: string;
+  /** Timestamp ms du premier blocage rank gate pour timeout bypass. */
+  rankGateBlockedSince?: number;
   cachedHydration?: {
     participants: ParsedParticipantDto[];
     teamStatsBase: Omit<TeamStatsDto, "rankTier">;

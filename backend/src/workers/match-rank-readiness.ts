@@ -28,7 +28,7 @@ export function normalizeParticipantRankTier(value: string | null | undefined): 
   return tier;
 }
 
-/** Rang connu = snapshot player_rank_history avec date >= game_date du match. */
+/** Rang connu = snapshot best-effort player_rank_history (exact, avant, ou après game_date). */
 export function participantRankKnown(
   participant: ParsedParticipantDto,
   closestSnapshots: Map<string, RankSnapshot>,
@@ -37,7 +37,7 @@ export function participantRankKnown(
   return puuid.length > 0 && closestSnapshots.has(puuid);
 }
 
-/** Tier moyen du match (participants classés uniquement ; UNRANKED ignorés). */
+/** Tier moyen du match (participants classés ; fallback UNRANKED si aucun classé connu). */
 export function averageMatchRankTierLabel(
   participants: ParsedParticipantDto[],
   closestSnapshots: Map<string, RankSnapshot>,
@@ -51,7 +51,13 @@ export function averageMatchRankTierLabel(
     if (idx == null) continue;
     ordinals.push(idx);
   }
-  if (ordinals.length === 0) return null;
+  if (ordinals.length === 0) {
+    const hasKnownSnapshot = participants.some((participant) => {
+      const puuid = String(participant.puuid ?? "").trim();
+      return puuid.length > 0 && closestSnapshots.has(puuid);
+    });
+    return hasKnownSnapshot ? "UNRANKED" : null;
+  }
   const mean = ordinals.reduce((a, b) => a + b, 0) / ordinals.length;
   const rounded = Math.min(SOLO_TIER_ORDER.length, Math.max(1, Math.round(mean)));
   return SOLO_TIER_ORDER[rounded - 1] ?? null;
@@ -71,7 +77,7 @@ export function matchReadyForAggregation(
   return averageMatchRankTierLabel(participants, closestSnapshots) != null;
 }
 
-/** Participants sans snapshot valide (date >= game_date). */
+/** Participants sans snapshot best-effort. */
 export function getMissingRankParticipants(
   participants: ParsedParticipantDto[],
   closestSnapshots: Map<string, RankSnapshot>,

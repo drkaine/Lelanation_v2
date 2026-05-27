@@ -42,6 +42,7 @@ export class MatchListFetcher {
           `/lol/match/v5/matches/by-puuid/${encodeURIComponent(player.puuid)}/ids`,
           {
             queue: '420',
+            type: 'ranked',
             count: '20',
             start: '0',
             startTime: String(since),

@@ -13,13 +13,6 @@ import { DISCOVERY_QUEUE } from "../queues/definitions.js";
 import { redis } from "../redis/client.js";
 import { waitForDiscoverySlot } from "../redis/rate-scheduler.js";
 import { RiotClient } from "../riot/client.js";
-import {
-  findPreviousPatchEntry,
-  getPatchFromVersion,
-  loadCurrentGameVersion,
-  loadGameVersionsRecap,
-  releaseDateToStartOfDayUtcSeconds,
-} from "../services/RiotConfigService.js";
 
 type PlayerRow = {
   puuid: string;
@@ -28,13 +21,14 @@ type PlayerRow = {
 };
 
 const riotClient = new RiotClient();
-const PATCH_SWITCH_GRACE_DAYS = 2;
 const HYDRATION_RANK_BACKPRESSURE_WC = 150;
 const HYDRATION_RANK_BACKPRESSURE_TOTAL = 400;
 const QUEUED_MATCH_TTL_SEC = 86_400;
 /** Max matchs enfilés par joueur par cycle — évite monopolisation discovery/hydration. */
 const MAX_MATCHES_PER_PLAYER_PER_TICK = 20;
 const RIOT_MATCHLIST_PAGE_SIZE = 20;
+const MATCHLIST_WINDOW_24H_SEC = 24 * 60 * 60;
+const EUROPE_PLATFORM_KEYS = ["euw1", "euw", "eun1", "eune", "tr1", "tr", "ru"] as const;
 
 function queuedMatchKey(matchId: string): string {
   return `rl:queued:${matchId}`;
@@ -45,43 +39,6 @@ function toEpochSeconds(value: Date | string | null): number | null {
   const ms = value instanceof Date ? value.getTime() : Date.parse(value);
   if (!Number.isFinite(ms)) return null;
   return Math.floor(ms / 1000);
-}
-
-async function resolveDiscoveryPatchStart(nowSec: number): Promise<{ startTimeSec: number }> {
-  const fallbackStart = nowSec - 14 * 86400;
-  const currentRes = await loadCurrentGameVersion();
-  if (currentRes.isErr()) {
-    return { startTimeSec: fallbackStart };
-  }
-  const current = currentRes.unwrap();
-  if (!current) {
-    return { startTimeSec: fallbackStart };
-  }
-  const currentPatch = getPatchFromVersion(current.currentVersion);
-  const currentReleaseStart = releaseDateToStartOfDayUtcSeconds(String(current.releaseDate ?? ""));
-  if (!Number.isFinite(currentReleaseStart)) {
-    return { startTimeSec: fallbackStart };
-  }
-
-  const currentPatchCutoff = currentReleaseStart + PATCH_SWITCH_GRACE_DAYS * 86400;
-  let effectiveReleaseStart = currentReleaseStart;
-
-  if (nowSec < currentPatchCutoff && currentPatch) {
-    const recapRes = await loadGameVersionsRecap();
-    if (!recapRes.isErr()) {
-      const previous = findPreviousPatchEntry(recapRes.unwrap(), currentPatch);
-      if (previous) {
-        const previousReleaseStart = releaseDateToStartOfDayUtcSeconds(previous.releaseDate);
-        if (Number.isFinite(previousReleaseStart)) {
-          effectiveReleaseStart = previousReleaseStart;
-        }
-      }
-    }
-  }
-
-  return {
-    startTimeSec: effectiveReleaseStart + PATCH_SWITCH_GRACE_DAYS * 86400,
-  };
 }
 
 async function filterMatchIdsNotAlreadyQueued(matchIds: string[]): Promise<string[]> {
@@ -123,6 +80,7 @@ async function selectPlayersBatch(limit: number): Promise<PlayerRow[]> {
       SELECT puuid, region, last_seen
       FROM players
       WHERE LENGTH(TRIM(puuid)) > 0
+        AND LOWER(TRIM(COALESCE(region, ''))) = ANY(${sql.array([...EUROPE_PLATFORM_KEYS], 25)})
       ORDER BY last_seen ASC NULLS FIRST
       LIMIT ${limit}
       FOR UPDATE SKIP LOCKED
@@ -136,6 +94,7 @@ async function getNextPlayer(): Promise<PlayerRow | null> {
       SELECT puuid, region, last_seen
       FROM players
       WHERE LENGTH(TRIM(puuid)) > 0
+        AND LOWER(TRIM(COALESCE(region, ''))) = ANY(${sql.array([...EUROPE_PLATFORM_KEYS], 25)})
       ORDER BY last_seen ASC NULLS FIRST
       LIMIT 1
       FOR UPDATE SKIP LOCKED
@@ -196,13 +155,13 @@ async function resolveLastSeenUpdate(
 
 async function processDiscoveryPlayer(
   player: PlayerRow,
-  patchWindow: { startTimeSec: number },
+  windowStartTimeSec: number,
   nowSec: number,
 ): Promise<void> {
   pollerV2Observability.recordPlayersPolled(1);
   const lastSeenSec = toEpochSeconds(player.last_seen);
   const discoveryStartTime =
-    lastSeenSec == null || lastSeenSec < patchWindow.startTimeSec ? patchWindow.startTimeSec : lastSeenSec;
+    lastSeenSec == null ? windowStartTimeSec : Math.max(lastSeenSec, windowStartTimeSec);
   const startTime = Math.min(discoveryStartTime, nowSec);
 
   await waitForDiscoverySlot();
@@ -324,7 +283,7 @@ async function runDiscoveryCycle(): Promise<void> {
   }
 
   const nowSec = Math.floor(startedAt / 1000);
-  const patchWindow = await resolveDiscoveryPatchStart(nowSec);
+  const windowStartTimeSec = nowSec - MATCHLIST_WINDOW_24H_SEC;
   const playersPerTick = config.DISCOVERY_PLAYERS_PER_TICK;
   const minQueueDepth = config.DISCOVERY_MIN_QUEUE_DEPTH;
 
@@ -338,14 +297,14 @@ async function runDiscoveryCycle(): Promise<void> {
   }
 
   for (const player of players) {
-    await processDiscoveryPlayer(player, patchWindow, nowSec);
+    await processDiscoveryPlayer(player, windowStartTimeSec, nowSec);
   }
 
   const queueDepth = await hydrationQueue.getWaitingCount();
   if (queueDepth < minQueueDepth && players.length === playersPerTick) {
     const bonusPlayer = await getNextPlayer();
     if (bonusPlayer) {
-      await processDiscoveryPlayer(bonusPlayer, patchWindow, nowSec);
+      await processDiscoveryPlayer(bonusPlayer, windowStartTimeSec, nowSec);
     }
   }
 
