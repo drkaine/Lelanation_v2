@@ -41,6 +41,14 @@
             <span class="theorycraft-spell-icon__key">P</span>
           </div>
           <h3 class="text-sm font-semibold leading-tight text-text">{{ passive.name }}</h3>
+          <span
+            v-if="passive.damageVsChampion != null"
+            class="spell-vs-damage-badge"
+            :class="{ 'spell-vs-damage-badge--lethal': passive.lethalVsChampion }"
+          >
+            {{ Math.round(passive.damageVsChampion) }}
+            <span v-if="passive.lethalVsChampion" aria-hidden="true">☠</span>
+          </span>
         </summary>
 
         <div v-if="passiveStackDefinition" class="mt-2 flex flex-wrap items-center gap-2 text-xs">
@@ -126,6 +134,14 @@
                 {{ rank }}
               </button>
             </div>
+            <span
+              v-if="spell.damageVsChampion != null"
+              class="spell-vs-damage-badge"
+              :class="{ 'spell-vs-damage-badge--lethal': spell.lethalVsChampion }"
+            >
+              {{ Math.round(spell.damageVsChampion) }}
+              <span v-if="spell.lethalVsChampion" aria-hidden="true">☠</span>
+            </span>
             <button
               v-if="spell.hasActivatableBuff"
               type="button"
@@ -220,6 +236,7 @@ import {
   type TheorycraftSpellRuntimeData,
   type TheorycraftStackResolveContext,
 } from '~/composables/useTheorycraftTooltip'
+import { calculateDamageFormula } from '~/composables/useTheorycraftDamage'
 import { useBuildStore } from '~/stores/BuildStore'
 import type { TheorycraftBuildStats, TheorycraftStackDefinition } from '~/types/theorycraft'
 import { normalizeKaynFormMarkup } from '~/utils/kaynFormTooltipMarkup'
@@ -256,6 +273,8 @@ interface ResolvedSpellView {
   headerStats?: SpellHeaderStat[]
   isDynamic: boolean
   hasActivatableBuff: boolean
+  damageVsChampion?: number | null
+  lethalVsChampion?: boolean
 }
 
 interface ResolvedPassiveView {
@@ -266,6 +285,8 @@ interface ResolvedPassiveView {
   descriptionHtml: string
   detailedTexts?: string[]
   isDynamic: boolean
+  damageVsChampion?: number | null
+  lethalVsChampion?: boolean
 }
 
 const props = defineProps<{
@@ -273,6 +294,8 @@ const props = defineProps<{
   championData?: Record<string, unknown> | null
   level: number
   buildStats: TheorycraftBuildStats | null
+  opponentBuildStats?: TheorycraftBuildStats | null
+  opponentRawStats?: Record<string, number> | null
 }>()
 
 const { t, locale } = useI18n()
@@ -402,6 +425,94 @@ function toggleSpellActive(spellId: string) {
   buildStore.toggleTheorycraftActiveSpell(spellId)
 }
 
+function isDamageCalculationKey(key: string): boolean {
+  const normalized = key.toLowerCase()
+  if (/shield|heal|mana|cost|cooldown|cdr|speed|slow|buff|bonus|resist|armor|mr/.test(normalized)) {
+    return false
+  }
+  return /damage|dmg|execute|detonate|impact|blast|burn|bleed|onhit|proc/.test(normalized)
+}
+
+function reduceDamageByDefenses(
+  rawDamage: number,
+  damageType: 'physical' | 'magic' | 'true',
+  target: { armor?: number; magicResist?: number; damageReduction?: number }
+): number {
+  const safeRaw = Math.max(0, rawDamage)
+  if (!Number.isFinite(safeRaw) || safeRaw <= 0) return 0
+  let mitigated = safeRaw
+  if (damageType === 'physical') {
+    const armor = Number(target.armor ?? 0)
+    mitigated = armor >= 0 ? safeRaw * (100 / (100 + armor)) : safeRaw * (2 - 100 / (100 - armor))
+  } else if (damageType === 'magic') {
+    const mr = Number(target.magicResist ?? 0)
+    mitigated = mr >= 0 ? safeRaw * (100 / (100 + mr)) : safeRaw * (2 - 100 / (100 - mr))
+  }
+  const dr = Number(target.damageReduction ?? 0)
+  const clampedDr = Math.min(Math.max(dr, 0), 0.95)
+  mitigated *= 1 - clampedDr
+  return Math.max(0, mitigated)
+}
+
+function computeDamageVsChampion(
+  raw: TheorycraftSpellRuntimeData & Record<string, unknown>,
+  rank: number
+): { damage: number; lethal: boolean } | null {
+  const attacker = props.buildStats
+  const defender = props.opponentBuildStats
+  const defenderRaw = props.opponentRawStats
+  if (!attacker || !defender || !defenderRaw) return null
+  const maxRank = Math.max(1, Number(raw.maxRank ?? 5))
+  const formulas = (raw.calculations ?? []).filter(entry =>
+    isDamageCalculationKey(String(entry.key ?? ''))
+  )
+  if (formulas.length === 0) return null
+
+  const totalMitigated = formulas.reduce((sum, formula) => {
+    const exact = calculateDamageFormula(
+      {
+        label: formula.key,
+        baseValues: formula.baseValues,
+        ratios: (formula.ratios ?? []).map(ratio => ({
+          stat: ratio.stat,
+          coefficient: ratio.coefficient,
+          type: (ratio.type as 'physical' | 'magic' | 'true') ?? 'physical',
+        })),
+      },
+      attacker,
+      rank,
+      maxRank,
+      { exactValues: true }
+    )
+    const damageType = (((formula.ratios ?? [])[0]?.type as 'physical' | 'magic' | 'true') ??
+      'physical') as 'physical' | 'magic' | 'true'
+    return sum + reduceDamageByDefenses(exact, damageType, defenderRaw)
+  }, 0)
+
+  const targetShield = Number(defenderRaw.shield ?? 0)
+  const targetHp = Number(defender.totalHP ?? 0)
+  const effectiveTargetHp = Math.max(0, targetHp + Math.max(0, targetShield))
+  const lethal = effectiveTargetHp > 0 && totalMitigated >= effectiveTargetHp
+  return { damage: totalMitigated, lethal }
+}
+
+function annotateExecuteThresholdWithHp(
+  html: string,
+  targetMaxHp: number | null | undefined
+): string {
+  if (!html) return html
+  if (!Number.isFinite(targetMaxHp) || (targetMaxHp ?? 0) <= 0) return html
+  return html.replace(
+    /(\d+(?:[.,]\d+)?)%\s*(de ses PV|de sa vie|max health|maximum health)(?!\s*\()/gi,
+    (_match, percentRaw: string, suffix: string) => {
+      const pct = Number(String(percentRaw).replace(',', '.'))
+      if (!Number.isFinite(pct)) return `${percentRaw}% ${suffix}`
+      const hpValue = Math.round((targetMaxHp! * pct) / 100)
+      return `${percentRaw}% (${hpValue} PV) ${suffix}`
+    }
+  )
+}
+
 function resolveSpellView(
   raw: TheorycraftSpellRuntimeData & Record<string, unknown>,
   rank: number,
@@ -441,14 +552,23 @@ function resolveSpellView(
     descriptionHtml: normalizeKaynFormMarkup(resolved.html),
     detailedTexts: detailCandidates,
   })
+  const damageVs = computeDamageVsChampion(raw, rank)
+  const targetMaxHp = Number(props.opponentBuildStats?.totalHP ?? NaN)
+  const summaryHtml = finalized.summaryHtml
+    ? annotateExecuteThresholdWithHp(finalized.summaryHtml, targetMaxHp)
+    : undefined
+  const descriptionHtml = annotateExecuteThresholdWithHp(finalized.descriptionHtml, targetMaxHp)
+  const detailedTexts = (finalized.detailedTexts ?? []).map(section =>
+    annotateExecuteThresholdWithHp(section, targetMaxHp)
+  )
 
   return {
     name: String(raw.name ?? ''),
     maxRank: Math.max(1, Number(raw.maxRank ?? 5)),
-    summaryHtml: finalized.summaryHtml,
+    summaryHtml,
     showSummary: finalized.showSummary,
-    descriptionHtml: finalized.descriptionHtml,
-    detailedTexts: finalized.detailedTexts,
+    descriptionHtml,
+    detailedTexts,
     headerStats: Array.isArray(raw.headerStats)
       ? raw.headerStats.map((stat: SpellHeaderStat) =>
           resolveHeaderStatAtRank(stat, rank, {
@@ -457,6 +577,8 @@ function resolveSpellView(
         )
       : [],
     isDynamic: resolved.isDynamic,
+    damageVsChampion: damageVs?.damage ?? null,
+    lethalVsChampion: damageVs?.lethal ?? false,
   }
 }
 
@@ -506,6 +628,8 @@ const passive = computed((): ResolvedPassiveView | null => {
     descriptionHtml: resolved.descriptionHtml,
     detailedTexts: resolved.detailedTexts,
     isDynamic: resolved.isDynamic,
+    damageVsChampion: resolved.damageVsChampion,
+    lethalVsChampion: resolved.lethalVsChampion,
   }
 })
 
@@ -660,6 +784,26 @@ summary::-webkit-details-marker {
   font-weight: 700;
   color: rgb(255 255 255 / 0.92);
   white-space: nowrap;
+}
+
+.spell-vs-damage-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  border: 1px solid rgb(200 155 60 / 0.55);
+  border-radius: 0.35rem;
+  background: rgb(200 155 60 / 0.12);
+  color: rgb(255 231 163 / 0.95);
+  padding: 0.05rem 0.35rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.spell-vs-damage-badge--lethal {
+  border-color: rgb(248 113 113 / 0.7);
+  background: rgb(127 29 29 / 0.25);
+  color: rgb(254 202 202 / 0.98);
 }
 
 :deep(.tooltip-spell-description .dmg-physical),

@@ -16,7 +16,7 @@ function parseOptionalPositiveInt(raw: string | undefined): number | null {
 const DISCOVERY_ALLOC_OVERRIDE = parseOptionalPositiveInt(process.env.DISCOVERY_ALLOC_OVERRIDE) ?? 6;
 const HYDRATION_ALLOC_OVERRIDE = parseOptionalPositiveInt(process.env.HYDRATION_ALLOC_OVERRIDE) ?? 7;
 const RANK_ALLOC_OVERRIDE = parseOptionalPositiveInt(process.env.RANK_ALLOC_OVERRIDE) ?? 70;
-const FORCE_ALLOC_OVERRIDE = process.env.FORCE_ALLOC_OVERRIDE !== "0";
+const FORCE_ALLOC_OVERRIDE = process.env.FORCE_ALLOC_OVERRIDE === "1";
 
 /** Budget total req/120s — marge ~5 % sous la limite Riot. */
 const REF_BUDGET = 90;
@@ -359,6 +359,25 @@ export function computeAllocation(
       if (totalReq > totalBudget) {
         const remainingOverflow = totalReq - totalBudget;
         discovery = Math.max(1, discovery - remainingOverflow);
+        totalReq = discovery + hydration * 2 + rank;
+      }
+    }
+  }
+
+  // If rank queue is empty and rank throughput is far below its allocation,
+  // shift budget back to hydration so backlog can drain.
+  const rankUnderused = snapshots.rank.tokensUsed120s < rank * 0.3;
+  if (!FORCE_ALLOC_OVERRIDE && snapshots.rank.queueWaiting === 0 && rankUnderused && snapshots.hydration.queueWaiting > 0) {
+    const targetRank = Math.max(min.rank, Math.min(rank, Math.ceil(snapshots.rank.tokensUsed120s * 1.5)));
+    const freed = Math.max(0, rank - targetRank);
+    if (freed > 0) {
+      rank -= freed;
+      const hydrationAdd = Math.floor(freed / 2);
+      hydration = clamp(hydration + hydrationAdd, min.hydration, max.hydration);
+      totalReq = discovery + hydration * 2 + rank;
+      if (totalReq > totalBudget) {
+        const overflow = totalReq - totalBudget;
+        hydration = Math.max(min.hydration, hydration - Math.ceil(overflow / 2));
         totalReq = discovery + hydration * 2 + rank;
       }
     }

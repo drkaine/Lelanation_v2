@@ -19,7 +19,10 @@
 
       <div
         class="build-layout mb-6 flex flex-col items-start gap-4 md:flex-row"
-        :class="{ 'build-layout--streamer': isLayoutScaled }"
+        :class="{
+          'build-layout--streamer': isLayoutScaled,
+          'build-layout--versus': showVersus,
+        }"
       >
         <div
           class="build-card-wrapper w-full flex-shrink-0 md:order-1"
@@ -88,7 +91,7 @@
             v-model:flipped="allyCardFlipped"
             :sheet-tooltips="true"
             :highlight-missing-fields="highlightMissingFields"
-            :readonly="showVersus && activeSide !== 'ally'"
+            :readonly="false"
             :build="showVersus && activeSide !== 'ally' ? sideBuilds.ally : null"
             selection-mode="theorycraft"
             :flip-back-face="allyCardBackFace"
@@ -111,6 +114,8 @@
             :champion-data="championData"
             :level="theorycraftLevel"
             :build-stats="theorycraftStats"
+            :opponent-build-stats="opponentTheorycraftStats"
+            :opponent-raw-stats="opponentRawStats"
             @set-panel="activePanel = $event"
           />
         </div>
@@ -188,7 +193,7 @@
             v-model:flipped="enemyCardFlipped"
             :sheet-tooltips="true"
             :highlight-missing-fields="highlightMissingFields"
-            :readonly="activeSide !== 'enemy'"
+            :readonly="false"
             :build="activeSide !== 'enemy' ? sideBuilds.enemy : null"
             selection-mode="theorycraft"
             :flip-back-face="enemyCardBackFace"
@@ -233,12 +238,24 @@ const { loadChampion } = useChampionData()
 const { isLayoutScaled } = useLayoutScaled()
 
 type TheorycraftSide = 'ally' | 'enemy'
+const THEORYCRAFT_VS_STATE_STORAGE_KEY = 'lelanation_theorycraft_vs_state_v1'
+
+interface TheorycraftVsStoredState {
+  ally: Build | null
+  enemy: Build | null
+  showVersus: boolean
+  activeSide: TheorycraftSide
+}
 
 const activePanel = ref<TheorycraftPanel>('theorycraft')
 const theorycraftLevel = ref(18)
 const activeSide = ref<TheorycraftSide>('ally')
 const showVersus = ref(false)
 const sideBuilds = ref<Record<TheorycraftSide, Build | null>>({
+  ally: null,
+  enemy: null,
+})
+const sideCalculatedStats = ref<Record<TheorycraftSide, Record<string, number> | null>>({
   ally: null,
   enemy: null,
 })
@@ -279,7 +296,12 @@ const theorycraftPanelTitle = computed(() => t('theorycraft.panel.theorycraftBut
 function cloneBuild(build: Build | null): Build | null {
   if (!build) return null
   try {
-    return JSON.parse(JSON.stringify(toRaw(build))) as Build
+    const cloned = JSON.parse(JSON.stringify(toRaw(build))) as Build
+    return {
+      ...cloned,
+      subBuilds: [],
+      descriptionMode: 'single',
+    } as Build
   } catch {
     return null
   }
@@ -322,15 +344,55 @@ function persistActiveSideBuild() {
   sideBuilds.value[activeSide.value] = cloneBuild(buildStore.currentBuild)
 }
 
+function persistActiveSideStats() {
+  sideCalculatedStats.value[activeSide.value] = buildStore.calculatedStats
+    ? ({ ...buildStore.calculatedStats } as Record<string, number>)
+    : null
+}
+
 function loadSideBuild(side: TheorycraftSide) {
   const target = cloneBuild(sideBuilds.value[side])
   if (!target) return
   buildStore.setCurrentBuild(target)
 }
 
+function persistVsState() {
+  if (import.meta.server) return
+  try {
+    const payload: TheorycraftVsStoredState = {
+      ally: cloneBuild(sideBuilds.value.ally),
+      enemy: cloneBuild(sideBuilds.value.enemy),
+      showVersus: showVersus.value,
+      activeSide: activeSide.value,
+    }
+    localStorage.setItem(THEORYCRAFT_VS_STATE_STORAGE_KEY, JSON.stringify(payload))
+  } catch {
+    // ignore persistence errors
+  }
+}
+
+function loadVsState(): TheorycraftVsStoredState | null {
+  if (import.meta.server) return null
+  try {
+    const raw = localStorage.getItem(THEORYCRAFT_VS_STATE_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<TheorycraftVsStoredState>
+    const active = parsed.activeSide === 'enemy' ? 'enemy' : 'ally'
+    return {
+      ally: cloneBuild((parsed.ally as Build | null) ?? null),
+      enemy: cloneBuild((parsed.enemy as Build | null) ?? null),
+      showVersus: Boolean(parsed.showVersus),
+      activeSide: active,
+    }
+  } catch {
+    return null
+  }
+}
+
 function activateSide(side: TheorycraftSide) {
   if (activeSide.value === side) return
   persistActiveSideBuild()
+  persistActiveSideStats()
   sidePanels.value[activeSide.value] = activePanel.value
   activeSide.value = side
   activePanel.value = sidePanels.value[side] ?? 'theorycraft'
@@ -404,6 +466,25 @@ const theorycraftStats = computed(() => {
   return toTheorycraftBuildStats(stats, build.champion, theorycraftLevel.value)
 })
 
+const opponentTheorycraftStats = computed(() => {
+  if (!showVersus.value) return null
+  const opponentSide: TheorycraftSide = activeSide.value === 'ally' ? 'enemy' : 'ally'
+  const opponentBuild = sideBuilds.value[opponentSide]
+  const opponentRaw = sideCalculatedStats.value[opponentSide]
+  if (!opponentBuild?.champion || !opponentRaw) return null
+  return toTheorycraftBuildStats(
+    opponentRaw as any,
+    opponentBuild.champion as any,
+    theorycraftLevel.value
+  )
+})
+
+const opponentRawStats = computed(() => {
+  if (!showVersus.value) return null
+  const opponentSide: TheorycraftSide = activeSide.value === 'ally' ? 'enemy' : 'ally'
+  return sideCalculatedStats.value[opponentSide]
+})
+
 function onSelectRegion(side: TheorycraftSide, region: 'champion' | 'items' | 'runes') {
   if (activeSide.value !== side) activateSide(side)
   activePanel.value = region
@@ -444,6 +525,24 @@ watch(
   { deep: true }
 )
 
+watch(
+  () => buildStore.calculatedStats,
+  stats => {
+    sideCalculatedStats.value[activeSide.value] = stats
+      ? ({ ...stats } as Record<string, number>)
+      : null
+  },
+  { deep: true }
+)
+
+watch(
+  [sideBuilds, showVersus, activeSide],
+  () => {
+    persistVsState()
+  },
+  { deep: true }
+)
+
 watch(activePanel, panel => {
   sidePanels.value[activeSide.value] = panel
 })
@@ -473,8 +572,25 @@ watch(
 onMounted(async () => {
   buildStore.enterTheorycraftSession()
   theorycraftLevel.value = buildStore.statsLevel
-  sideBuilds.value.ally = cloneBuild(buildStore.currentBuild)
-  sideBuilds.value.enemy = null
+  const storedVs = loadVsState()
+  sideBuilds.value.ally = storedVs?.ally ?? cloneBuild(buildStore.currentBuild)
+  sideBuilds.value.enemy = storedVs?.enemy ?? null
+  sideCalculatedStats.value.ally = buildStore.calculatedStats
+    ? ({ ...buildStore.calculatedStats } as Record<string, number>)
+    : null
+  sideCalculatedStats.value.enemy = null
+  showVersus.value = Boolean(
+    storedVs?.showVersus && sideBuilds.value.ally && sideBuilds.value.enemy
+  )
+  if (showVersus.value && storedVs?.activeSide === 'enemy' && sideBuilds.value.enemy) {
+    activeSide.value = 'enemy'
+    activePanel.value = sidePanels.value.enemy ?? 'theorycraft'
+    loadSideBuild('enemy')
+  } else {
+    activeSide.value = 'ally'
+    activePanel.value = sidePanels.value.ally ?? 'theorycraft'
+    if (sideBuilds.value.ally) loadSideBuild('ally')
+  }
   await loadChampionDataForPanel()
 })
 
@@ -515,6 +631,7 @@ onBeforeRouteLeave(to => {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem 1rem;
+  padding-top: 5px;
 }
 
 .theorycraft-vs-toggle {
@@ -566,8 +683,8 @@ onBeforeRouteLeave(to => {
 }
 
 .build-card-toolbar__side-label--active {
-  color: #00ff9d;
-  text-shadow: 0 0 12px rgb(0 255 170 / 0.55);
+  color: #c89b3c;
+  text-shadow: 0 0 12px rgb(200 155 60 / 0.6);
 }
 
 .build-card-toolbar__save {
@@ -667,6 +784,15 @@ onBeforeRouteLeave(to => {
   .build-card-wrapper {
     width: 100%;
     max-width: 100%;
+  }
+}
+
+@media (min-width: 768px) {
+  .build-layout--versus {
+    display: grid !important;
+    grid-template-columns: var(--build-card-width) minmax(0, 1fr) var(--build-card-width);
+    align-items: start;
+    gap: 1rem;
   }
 }
 </style>

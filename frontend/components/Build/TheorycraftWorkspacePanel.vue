@@ -10,6 +10,8 @@
       :champion-data="championData"
       :level="level"
       :build-stats="buildStats"
+      :opponent-build-stats="opponentBuildStats"
+      :opponent-raw-stats="opponentRawStats"
     />
 
     <div v-else-if="activePanel === 'champion'">
@@ -48,6 +50,8 @@ const props = defineProps<{
   championData: Record<string, unknown> | null
   level: number
   buildStats: TheorycraftBuildStats | null
+  opponentBuildStats?: TheorycraftBuildStats | null
+  opponentRawStats?: Record<string, number> | null
 }>()
 
 const { t } = useI18n()

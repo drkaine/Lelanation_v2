@@ -9,7 +9,6 @@ import { parseMatch } from "../parsers/match.parser.js";
 import { HYDRATION_QUEUE } from "../queues/definitions.js";
 import { getRankBacklogCount, ingestionQueue } from "../queues/index.js";
 import { maxRankBacklogBeforePipelinePause, shouldPauseMatchPipelines } from "../queues/rank-backlog-policy.js";
-import { ensureRankSnapshotsForHydration } from "../queues/rank-jobs.js";
 import {
   averageMatchRankTierLabel,
   getMissingRankParticipants,
@@ -22,7 +21,7 @@ import {
   readRankCacheRedis,
   writeRankCacheRedis,
 } from "../redis/rank-cache.js";
-import { waitForHydrationSlot, waitForRankSlot } from "../redis/rate-scheduler.js";
+import { waitForHydrationSlot } from "../redis/rate-scheduler.js";
 import { NotFoundError, RiotClient } from "../riot/client.js";
 import { normalizePlatformRegion, platformRegionLookupKeys } from "../riot/platform-region.js";
 import { sumObjectiveTimestampMsByTeamAndKey } from "../parsers/objective-timestamp-sums.js";
@@ -41,7 +40,6 @@ const riotClient = new RiotClient();
 const hydrationLimit = pLimit(config.HYDRATION_CONCURRENCY);
 const PATCH_SWITCH_GRACE_DAYS = 2;
 const HYDRATION_RANK_RETRY_DELAY_BACKLOG_MS = 3 * 60_000;
-const RANK_GATE_TIMEOUT_MS = 10 * 60_000;
 function extractPatch(gameVersion: string): string {
   const [major, minor] = (gameVersion ?? "").split(".");
   if (!major || !minor) return "unknown";
@@ -409,7 +407,6 @@ async function fetchMissingRanksFromRiot(
     const participant = byPuuid.get(puuid) ?? missingParticipant;
     const normalizedRegion = normalizePlatformRegion(participant.region);
     if (!normalizedRegion) continue;
-    await waitForRankSlot();
     try {
       await fetchAndPersistRankSnapshotNow(puuid, normalizedRegion);
     } catch (error) {
@@ -446,7 +443,7 @@ function materializeMissingRanksAsUnranked(
 }
 
 async function finalizeHydrationRankGate(
-  hydrationJob: Job<HydrationJobData>,
+  _hydrationJob: Job<HydrationJobData>,
   _token: string,
   data: HydrationJobData,
   region: string,
@@ -480,26 +477,7 @@ async function finalizeHydrationRankGate(
     return;
   }
 
-  const blockedSince = hydrationJob.data.rankGateBlockedSince ?? Date.now();
-  if (!hydrationJob.data.rankGateBlockedSince) {
-    await hydrationJob.updateData({ ...hydrationJob.data, rankGateBlockedSince: blockedSince });
-  }
-  const blockedForMs = Date.now() - blockedSince;
-  if (blockedForMs >= RANK_GATE_TIMEOUT_MS) {
-    console.warn(
-      `[hydration.worker] rank_gate_timeout_bypass matchId=${data.matchId} blocked_ms=${blockedForMs} missing=${missing.length}`,
-    );
-    materializeMissingRanksAsUnranked(participants, closestSnapshots, gameDate);
-    const teamStats = parseTeamStats(teamStatsBase, participants, closestSnapshots);
-    pollerV2Observability.recordHydrationRankGate(data.matchId, true);
-    await ingestionQueue.add("ingest-match", { participants, teamStats });
-    pollerV2Observability.recordHydrationSuccess(1);
-    return;
-  }
-
-  const matchDateIso = gameDate.toISOString().slice(0, 10);
-  await ensureRankSnapshotsForHydration(hydrationJob, missing, matchDateIso);
-
+  await fetchMissingRanksFromRiot(participants, missing);
   closestSnapshots = await refreshParticipantsRankState(participants, region, gameDate);
   if (matchReadyForAggregation(participants, closestSnapshots)) {
     const teamStats = parseTeamStats(teamStatsBase, participants, closestSnapshots);
@@ -511,14 +489,8 @@ async function finalizeHydrationRankGate(
 
   missing = getMissingRankParticipants(participants, closestSnapshots);
   if (missing.length > 0) {
-    await fetchMissingRanksFromRiot(participants, missing);
-    closestSnapshots = await refreshParticipantsRankState(participants, region, gameDate);
-    missing = getMissingRankParticipants(participants, closestSnapshots);
-  }
-  if (missing.length > 0) {
-    const blockedForMsNow = Date.now() - blockedSince;
     console.warn(
-      `[hydration.worker] rank_gate_fallback_unranked matchId=${data.matchId} blocked_ms=${blockedForMsNow} missing=${missing.length}`,
+      `[hydration.worker] rank_gate_fallback_unranked matchId=${data.matchId} missing=${missing.length}`,
     );
     materializeMissingRanksAsUnranked(participants, closestSnapshots, gameDate);
     const teamStats = parseTeamStats(teamStatsBase, participants, closestSnapshots);
@@ -527,8 +499,10 @@ async function finalizeHydrationRankGate(
     pollerV2Observability.recordHydrationSuccess(1);
     return;
   }
-
-  throw new Error(`rank_gate_still_blocked matchId=${data.matchId}`);
+  const teamStats = parseTeamStats(teamStatsBase, participants, closestSnapshots);
+  pollerV2Observability.recordHydrationRankGate(data.matchId, true);
+  await ingestionQueue.add("ingest-match", { participants, teamStats });
+  pollerV2Observability.recordHydrationSuccess(1);
 }
 
 async function runHydrationJob(hydrationJob: Job<HydrationJobData>, token: string): Promise<void> {
