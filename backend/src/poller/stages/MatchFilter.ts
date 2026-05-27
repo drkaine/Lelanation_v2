@@ -1,4 +1,5 @@
 import { filterNewMatches, insertPendingMatches } from '../../db/queries/matches.js'
+import { metrics } from '../../observability/MetricsCollector.js'
 import { QueueClosedError, type AsyncQueue } from '../AsyncQueue.js'
 import { currentPatch } from '../PatchConfig.js'
 import { platformToRegionalHost } from '../routing.js'
@@ -21,11 +22,13 @@ export class MatchFilter {
       let job: MatchListJob
       try {
         job = await this.input.dequeue()
+        metrics.recordQueueDepth({ stage: 'MatchFilter', depth: this.input.size() })
       } catch (error) {
         if (error instanceof QueueClosedError) return
         throw error
       }
 
+      const startedAt = Date.now()
       try {
         const patch = await currentPatch()
         const newMatchIds = await filterNewMatches(job.matchIds, patch)
@@ -40,7 +43,15 @@ export class MatchFilter {
             rankTier: job.rankTier,
           })
         }
+        metrics.recordStageItem({ stage: 'MatchFilter', success: true, durationMs: Date.now() - startedAt })
       } catch (error) {
+        metrics.recordStageItem({ stage: 'MatchFilter', success: false, durationMs: Date.now() - startedAt })
+        metrics.recordError({
+          stage: 'MatchFilter',
+          error: error instanceof Error ? error : new Error(String(error)),
+          context: { puuid: job.puuid },
+          puuid: job.puuid,
+        })
         console.warn(
           JSON.stringify({
             stage: 'MatchFilter',

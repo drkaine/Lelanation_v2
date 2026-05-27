@@ -1,4 +1,5 @@
 import type { RateLimitGateway } from '../../gateway/RateLimitGateway.js'
+import { metrics } from '../../observability/MetricsCollector.js'
 import { QueueClosedError, type AsyncQueue } from '../AsyncQueue.js'
 import { platformToRegionalHost } from '../routing.js'
 import type { MatchListJob, RankedPlayerJob } from '../types.js'
@@ -26,11 +27,13 @@ export class MatchListFetcher {
       let player: RankedPlayerJob
       try {
         player = await this.input.dequeue()
+        metrics.recordQueueDepth({ stage: 'MatchListFetcher', depth: this.input.size() })
       } catch (error) {
         if (error instanceof QueueClosedError) return
         throw error
       }
 
+      const startedAt = Date.now()
       try {
         const regionalHost = platformToRegionalHost(player.region)
         const since = Math.floor((Date.now() - 24 * 60 * 60 * 1000) / 1000)
@@ -47,7 +50,15 @@ export class MatchListFetcher {
 
         if (matchIds.length === 0) continue
         await this.output.enqueue({ ...player, matchIds })
+        metrics.recordStageItem({ stage: 'MatchListFetcher', success: true, durationMs: Date.now() - startedAt })
       } catch (error) {
+        metrics.recordStageItem({ stage: 'MatchListFetcher', success: false, durationMs: Date.now() - startedAt })
+        metrics.recordError({
+          stage: 'MatchListFetcher',
+          error: error instanceof Error ? error : new Error(String(error)),
+          context: { puuid: player.puuid },
+          puuid: player.puuid,
+        })
         console.warn(
           JSON.stringify({
             stage: 'MatchListFetcher',

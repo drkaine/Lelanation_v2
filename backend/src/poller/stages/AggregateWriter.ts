@@ -1,6 +1,7 @@
 import { parseMatch } from '../../parsers/match.parser.js'
 import { updateMatchStatus } from '../../db/queries/matches.js'
 import { writeBanAggregates, writeParticipantAggregates, writeTeamAggregates } from '../../db/queries/aggregates.js'
+import { metrics } from '../../observability/MetricsCollector.js'
 import { QueueClosedError, type AsyncQueue } from '../AsyncQueue.js'
 import type { MatchDataJob } from '../types.js'
 
@@ -32,6 +33,7 @@ export class AggregateWriter {
       let job: MatchDataJob
       try {
         job = await this.input.dequeue()
+        metrics.recordQueueDepth({ stage: 'AggregateWriter', depth: this.input.size() })
       } catch (error) {
         if (error instanceof QueueClosedError) return
         throw error
@@ -49,17 +51,44 @@ export class AggregateWriter {
         )
 
         for (const participant of parsedParticipants) {
+          const dbStartedAt = Date.now()
           await writeParticipantAggregates({
             participant,
             patch: job.patch,
             rankTier,
             region,
           })
+          metrics.recordDBWrite({
+            table: 'champion_stats',
+            rows: 1,
+            durationMs: Date.now() - dbStartedAt,
+          })
         }
 
+        const teamDbStartedAt = Date.now()
         await writeTeamAggregates({ ...job, rankTier, region })
+        metrics.recordDBWrite({
+          table: 'team_core_stat',
+          rows: 2,
+          durationMs: Date.now() - teamDbStartedAt,
+        })
+
+        const bansDbStartedAt = Date.now()
         await writeBanAggregates({ ...job, rankTier, region })
+        metrics.recordDBWrite({
+          table: 'champion_bans_by_banner',
+          rows: 1,
+          durationMs: Date.now() - bansDbStartedAt,
+        })
+
+        const statusDbStartedAt = Date.now()
         await updateMatchStatus(job.matchId, job.patch, 'done')
+        metrics.recordDBWrite({
+          table: 'processed_matches',
+          rows: 1,
+          durationMs: Date.now() - statusDbStartedAt,
+        })
+        metrics.recordStageItem({ stage: 'AggregateWriter', success: true, durationMs: Date.now() - startedAt })
 
         console.log(
           JSON.stringify({
@@ -72,6 +101,14 @@ export class AggregateWriter {
         )
       } catch (error) {
         await updateMatchStatus(job.matchId, job.patch, 'error')
+        metrics.recordDBError('processed_matches', error instanceof Error ? error : new Error(String(error)))
+        metrics.recordStageItem({ stage: 'AggregateWriter', success: false, durationMs: Date.now() - startedAt })
+        metrics.recordError({
+          stage: 'AggregateWriter',
+          error: error instanceof Error ? error : new Error(String(error)),
+          context: { matchId: job.matchId },
+          matchId: job.matchId,
+        })
         console.error(
           JSON.stringify({
             stage: 'AggregateWriter',

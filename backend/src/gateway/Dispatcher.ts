@@ -3,6 +3,7 @@ import { RequestQueue } from './RequestQueue.js'
 import { SlidingWindowCounter } from './SlidingWindowCounter.js'
 import { RiotHttpClient } from './RiotHttpClient.js'
 import type { DispatcherConfig, GatewayRequest, RateLimitState } from './types.js'
+import { metrics } from '../observability/MetricsCollector.js'
 
 type DispatcherHooks = {
   onRateLimitState?: (state: RateLimitState) => void
@@ -50,6 +51,7 @@ export class Dispatcher {
   }
 
   async tick(): Promise<void> {
+    metrics.recordQueueDepth({ stage: 'Gateway', depth: this.queue.size() })
     if (this.isDispatching) return
     if (this.queue.isEmpty()) return
     if (!this.counter.canSend(this.config.targetRpm)) return
@@ -65,8 +67,10 @@ export class Dispatcher {
   }
 
   private async dispatch(req: GatewayRequest): Promise<void> {
+    const startedAt = Date.now()
     try {
       const response = await this.client.fetch(req.region, req.path, req.params)
+      const durationMs = Date.now() - startedAt
       const parsed = parseRateLimitHeaders(response.headers)
       if (
         parsed.appLimit != null &&
@@ -77,22 +81,45 @@ export class Dispatcher {
       ) {
         this.counter.syncFromHeaders(parsed as RateLimitState)
         this.hooks.onRateLimitState?.(parsed as RateLimitState)
+        metrics.recordHeaderSync({
+          appCount: parsed.appCount,
+          appLimit: parsed.appLimit,
+          windowMs: parsed.windowMs,
+        })
       }
+
+      metrics.recordRequest({
+        region: req.region,
+        path: req.path,
+        status: response.status,
+        durationMs,
+        windowCount: parsed.appCount ?? 0,
+        windowLimit: parsed.appLimit ?? 100,
+      })
 
       if (response.status >= 200 && response.status < 300) {
         this.counter.add()
+        metrics.recordStageItem({ stage: 'Gateway', success: true, durationMs })
         req.resolve(response as unknown)
         return
       }
 
       if (response.status === 429) {
+        const retryAfterMs = parseRetryAfterMs(response.headers)
         this.hooks.on429?.()
+        metrics.record429({
+          region: req.region,
+          path: req.path,
+          retryAfterMs,
+        })
+        metrics.recordStageItem({ stage: 'Gateway', success: false, durationMs })
         this.queue.enqueueFront(req)
-        this.pauseForRetryAfter(parseRetryAfterMs(response.headers))
+        this.pauseForRetryAfter(retryAfterMs)
         return
       }
 
       if (response.status >= 500) {
+        metrics.recordStageItem({ stage: 'Gateway', success: false, durationMs })
         req.attempts += 1
         if (req.attempts < 3) {
           this.queue.enqueueFront(req)
@@ -102,8 +129,16 @@ export class Dispatcher {
         return
       }
 
+      metrics.recordStageItem({ stage: 'Gateway', success: false, durationMs })
       req.reject(new Error(`Riot API request failed with status ${response.status}`))
     } catch (error) {
+      const durationMs = Date.now() - startedAt
+      metrics.recordStageItem({ stage: 'Gateway', success: false, durationMs })
+      metrics.recordError({
+        stage: 'Gateway',
+        error: error instanceof Error ? error : new Error(String(error)),
+        context: { path: req.path, region: req.region },
+      })
       req.attempts += 1
       if (req.attempts < 3) {
         this.queue.enqueueFront(req)

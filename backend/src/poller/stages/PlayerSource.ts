@@ -1,4 +1,5 @@
 import { fetchNextPlayerBatch } from '../../db/queries/players.js'
+import { metrics } from '../../observability/MetricsCollector.js'
 import type { AsyncQueue } from '../AsyncQueue.js'
 import type { PlayerJob } from '../types.js'
 
@@ -28,7 +29,21 @@ export class PlayerSource {
 
       for (const player of players) {
         if (!this.running) return
-        await this.queue.enqueue(player)
+        const startedAt = Date.now()
+        try {
+          await this.queue.enqueue(player)
+          metrics.recordStageItem({ stage: 'PlayerSource', success: true, durationMs: Date.now() - startedAt })
+          metrics.recordQueueDepth({ stage: 'PlayerSource', depth: this.queue.size() })
+        } catch (error) {
+          metrics.recordStageItem({ stage: 'PlayerSource', success: false, durationMs: Date.now() - startedAt })
+          metrics.recordError({
+            stage: 'PlayerSource',
+            error: error instanceof Error ? error : new Error(String(error)),
+            context: { puuid: player.puuid },
+            puuid: player.puuid,
+          })
+          throw error
+        }
       }
     }
   }

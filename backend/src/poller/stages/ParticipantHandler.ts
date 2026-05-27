@@ -3,6 +3,7 @@ import type { RateLimitGateway } from '../../gateway/RateLimitGateway.js'
 import { upsertPlayersIfMissing } from '../../db/queries/players.js'
 import { getMissingRanksToday, insertRankHistory } from '../../db/queries/ranks.js'
 import type { RankDto } from '../../riot/types.js'
+import { metrics } from '../../observability/MetricsCollector.js'
 import { QueueClosedError, type AsyncQueue } from '../AsyncQueue.js'
 import type { MatchDataJob } from '../types.js'
 
@@ -30,11 +31,13 @@ export class ParticipantHandler {
       let job: MatchDataJob
       try {
         job = await this.input.dequeue()
+        metrics.recordQueueDepth({ stage: 'ParticipantHandler', depth: this.input.size() })
       } catch (error) {
         if (error instanceof QueueClosedError) return
         throw error
       }
 
+      const startedAt = Date.now()
       try {
         const participants = job.matchData.info.participants ?? []
         const puuids = Array.from(
@@ -83,7 +86,15 @@ export class ParticipantHandler {
         )
 
         await this.output.enqueue(job)
+        metrics.recordStageItem({ stage: 'ParticipantHandler', success: true, durationMs: Date.now() - startedAt })
       } catch (error) {
+        metrics.recordStageItem({ stage: 'ParticipantHandler', success: false, durationMs: Date.now() - startedAt })
+        metrics.recordError({
+          stage: 'ParticipantHandler',
+          error: error instanceof Error ? error : new Error(String(error)),
+          context: { matchId: job.matchId },
+          matchId: job.matchId,
+        })
         console.warn(
           JSON.stringify({
             stage: 'ParticipantHandler',

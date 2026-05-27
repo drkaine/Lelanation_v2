@@ -2,6 +2,7 @@ import type { RateLimitGateway } from '../../gateway/RateLimitGateway.js'
 import { hasRankToday, insertRankHistory } from '../../db/queries/ranks.js'
 import { updatePlayerLastSeen } from '../../db/queries/players.js'
 import type { RankDto } from '../../riot/types.js'
+import { metrics } from '../../observability/MetricsCollector.js'
 import { QueueClosedError, type AsyncQueue } from '../AsyncQueue.js'
 import type { PlayerJob, RankedPlayerJob } from '../types.js'
 
@@ -28,11 +29,13 @@ export class RankFetcher {
       let player: PlayerJob
       try {
         player = await this.input.dequeue()
+        metrics.recordQueueDepth({ stage: 'RankFetcher', depth: this.input.size() })
       } catch (error) {
         if (error instanceof QueueClosedError) return
         throw error
       }
 
+      const startedAt = Date.now()
       try {
         const entries = await this.gateway.execute<RankDto[]>(
           player.region,
@@ -68,7 +71,15 @@ export class RankFetcher {
           rankLp: Math.max(0, Math.trunc(Number(soloEntry.leaguePoints ?? 0))),
           rankedAt: new Date(),
         })
+        metrics.recordStageItem({ stage: 'RankFetcher', success: true, durationMs: Date.now() - startedAt })
       } catch (error) {
+        metrics.recordStageItem({ stage: 'RankFetcher', success: false, durationMs: Date.now() - startedAt })
+        metrics.recordError({
+          stage: 'RankFetcher',
+          error: error instanceof Error ? error : new Error(String(error)),
+          context: { puuid: player.puuid },
+          puuid: player.puuid,
+        })
         console.warn(
           JSON.stringify({
             stage: 'RankFetcher',

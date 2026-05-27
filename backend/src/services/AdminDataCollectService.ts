@@ -143,7 +143,10 @@ export async function getAdminDataCollectStats(): Promise<AdminDataCollectStats>
       trackedMatchesPendingOver1h: parseInt(pmPendingOver1h.rows[0]?.c ?? '0', 10),
       trackedOldestPendingCreatedAt: pmOldestPending.rows[0]?.d?.toISOString() ?? null,
       trackedAggregateStatus: Object.fromEntries(
-        pmAggByStatus.rows.map((r) => [r.aggregate_status, parseInt(r.c ?? '0', 10)]),
+        pmAggByStatus.rows.map((r: { aggregate_status: string; c: string }) => [
+          r.aggregate_status,
+          parseInt(r.c ?? '0', 10),
+        ]),
       ),
       trackedLastAggregatedAt: pmLastAggregated.rows[0]?.d?.toISOString() ?? null,
       playersCreatedLast1h: parseInt(playersCreated1h.rows[0]?.c ?? '0', 10),

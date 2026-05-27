@@ -1,4 +1,7 @@
 import { RateLimitGateway } from '../gateway/RateLimitGateway.js'
+import { startDashboard, stopDashboard } from '../observability/DashboardServer.js'
+import { startMetricsFlush, stopMetricsFlush } from '../observability/MetricsFlush.js'
+import { startTerminalSummary, stopTerminalSummary } from '../observability/TerminalSummary.js'
 import { AsyncQueue } from './AsyncQueue.js'
 import type { MatchDataJob, MatchListJob, NewMatchJob, PlayerJob, RankedPlayerJob } from './types.js'
 import { PlayerSource } from './stages/PlayerSource.js'
@@ -19,6 +22,10 @@ export type PollerRuntime = {
 }
 
 export async function startPoller(apiKey: string): Promise<PollerRuntime> {
+  startDashboard(9090)
+  startTerminalSummary()
+  startMetricsFlush()
+
   const gateway = RateLimitGateway.getInstance(apiKey)
 
   const q1 = new AsyncQueue<PlayerJob>(50)
@@ -69,6 +76,9 @@ export async function startPoller(apiKey: string): Promise<PollerRuntime> {
       q6.close()
       gateway.gracefulShutdown('Poller orchestrator stopped')
       await Promise.allSettled(stagePromises)
+      stopMetricsFlush()
+      stopTerminalSummary()
+      stopDashboard()
     },
   }
 }
