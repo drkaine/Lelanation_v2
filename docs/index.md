@@ -41,6 +41,7 @@ Lelanation is a League of Legends build configuration and statistics website. Th
 
 ### Data & Models
 - [Data Models](./data-models.md) ✓
+- [Schéma base de données](./schema_db.md) – Schéma PostgreSQL réel (`lelanation_statistiques`) : tables, PK, partitionnement, index
 - [Accès à la base de données](./database-access.md) – Connexion PostgreSQL, Prisma Studio, psql, clients graphiques
 - [Sources de données et versions](./data-sources-and-versions.md) – Community Dragon en backend, shared-builds, versions.json (recap patches + dates)
 - [Riot API – Collecte de matchs](./riot-api-match-collection.md) – Workflow, limites, file PUUID, TOS

@@ -2,28 +2,13 @@
  * HTTP client for Riot API: key resolution (env), rate limiting, 429/400 handling.
  */
 import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
-import { RiotRateLimiter, RIOT_429_MIN_PENALTY_MS } from './RiotRateLimiter.js'
+import { RiotRateLimiter } from './RiotRateLimiter.js'
 import type { RiotPollerLogger } from '../utils/riotPollerLogger.js'
-import { riotGateway, type RiotGatewayError } from './RiotGateway.js'
+import { RateLimitGateway } from '../gateway/RateLimitGateway.js'
+import type { RiotRegion } from '../gateway/types.js'
 
 const RIOT_API_KEY_ENV = 'RIOT_API_KEY'
 const RIOT_PUUID_KEY_VERSION_ENV = 'RIOT_PUUID_KEY_VERSION'
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function getRiotNetworkRetryMax(): number {
-  const raw = Number.parseInt(process.env.RIOT_NETWORK_RETRY_MAX ?? '', 10)
-  if (!Number.isFinite(raw) || raw < 0) return 2
-  return Math.min(10, raw)
-}
-
-function getRiotNetworkRetryDelayMs(): number {
-  const raw = Number.parseInt(process.env.RIOT_NETWORK_RETRY_DELAY_MS ?? '', 10)
-  if (!Number.isFinite(raw) || raw < 100) return 1_500
-  return Math.min(60_000, raw)
-}
 
 function resolvePuuidKeyVersionFromEnv(): string {
   const raw = process.env[RIOT_PUUID_KEY_VERSION_ENV]
@@ -47,6 +32,22 @@ function getPlatformBase(platform: string): string {
 function getRegionalBase(platform: string): string {
   const region = REGIONAL_BY_PLATFORM[platform] ?? 'europe'
   return `https://${region}.api.riotgames.com`
+}
+
+function parseGatewayArgsFromUrl(rawUrl: string): {
+  region: RiotRegion
+  path: string
+  params: Record<string, string>
+} {
+  const url = new URL(rawUrl)
+  const hostPrefix = url.hostname.split('.')[0]
+  const params: Record<string, string> = {}
+  for (const [key, value] of url.searchParams.entries()) params[key] = value
+  return {
+    region: hostPrefix,
+    path: url.pathname,
+    params,
+  }
 }
 
 /** Riot documents these on every response; use to compare with our local throttle. */
@@ -85,13 +86,10 @@ function pickRiotRateLimitHeaders(
   return out
 }
 
-function normalizeHeaders(
-  headers: Record<string, string | undefined> | undefined
-): Record<string, string> {
-  if (!headers) return {}
+function normalizeHeadersFromFetchHeaders(headers: Headers): Record<string, string> {
   const out: Record<string, string> = {}
-  for (const [k, v] of Object.entries(headers)) {
-    if (typeof v === 'string' && v.length > 0) out[k.toLowerCase()] = v
+  for (const [k, v] of headers.entries()) {
+    if (v.length > 0) out[k.toLowerCase()] = v
   }
   return out
 }
@@ -237,6 +235,7 @@ export type RiotHttpResponseObserver = (info: {
 
 export class RiotHttpClient {
   private platform: string = 'euw1'
+  private readonly gateway: RateLimitGateway
   private onInvalidKey?: () => void
   /** Optional: poller uses this to count every Riot HTTP response (accurate request totals). */
   private onHttpResponse?: RiotHttpResponseObserver
@@ -258,7 +257,11 @@ export class RiotHttpClient {
     private readonly rateLimiter: RiotRateLimiter,
     private readonly _log: RiotPollerLogger,
     private readonly apiLogScript: string = 'poller'
-  ) {}
+  ) {
+    const apiKey = process.env[RIOT_API_KEY_ENV]?.trim()
+    if (!apiKey) throw new Error('No RIOT_API_KEY in env')
+    this.gateway = RateLimitGateway.getInstance(apiKey)
+  }
 
   /** Count every Riot API HTTP response (200, 429, etc.); each 429 retry is another response. */
   setOnHttpResponse(cb: RiotHttpResponseObserver | undefined): void {
@@ -271,7 +274,15 @@ export class RiotHttpClient {
   }
 
   getRateLimiterStats() {
-    return this.rateLimiter.getStats()
+    const gatewayStats = this.gateway.getStats()
+    const legacyStats = this.rateLimiter.getStats()
+    return {
+      ...legacyStats,
+      queueSize: gatewayStats.queueSize,
+      windowCount: gatewayStats.windowCount,
+      lastSync: gatewayStats.lastSync,
+      http429PauseCount: gatewayStats.http429Count,
+    }
   }
 
   private updateCountPeaks(
@@ -369,7 +380,6 @@ export class RiotHttpClient {
 
   setPlatform(platform: string): void {
     this.platform = PLATFORM_BY_REGION[platform] ?? platform
-    riotGateway.setPlatform(this.platform)
   }
 
   setKey(key: string, source: RiotKeySource, clefType: string | null): void {
@@ -390,76 +400,30 @@ export class RiotHttpClient {
     url: string,
     options?: RiotRequestOptions
   ): Promise<{ ok: true; data: T; status: number } | { ok: false; status: number; message?: string; body?: unknown }> {
-    // Bail out before queuing in Bottleneck so the poller can shut down
-    // without waiting for a penalized reservoir to restore.
     if (options?.shouldAbort?.()) {
       return { ok: false, status: 0, message: RIOT_INGEST_ABORTED_MESSAGE }
     }
 
     let status = 0
-    let data: unknown
+    let data: unknown = null
     let headers: Record<string, string> = {}
     try {
-      const res = await riotGateway.call<T>(method, url)
+      const req = parseGatewayArgsFromUrl(url)
+      const res = await this.gateway.executeWithMeta<T>(req.region, req.path, req.params)
       status = res.status
       data = res.data
-      headers = normalizeHeaders(res.headers as Record<string, string | undefined>)
+      headers = normalizeHeadersFromFetchHeaders(res.headers)
     } catch (err) {
-      const gwError = err as Partial<RiotGatewayError>
-      status = typeof gwError.status === 'number' ? gwError.status : 0
-      headers = normalizeHeaders(gwError.headers)
-      data = gwError.body
-      if (status === 0) {
-        const msg = err instanceof Error ? err.message : String(err)
-        void this._log.error('Riot API request failed', msg, url)
-        const retryCount = options?.retryCount ?? 0
-        const maxRetry = getRiotNetworkRetryMax()
-        if (retryCount < maxRetry && !options?.shouldAbort?.()) {
-          await sleep(getRiotNetworkRetryDelayMs())
-          return this.request<T>(method, bucket, url, { ...options, retryCount: retryCount + 1 })
-        }
-        return { ok: false, status: 0, message: msg }
-      }
+      const msg = err instanceof Error ? err.message : String(err)
+      void this._log.error('Riot API request failed', msg, url)
+      return { ok: false, status: 0, message: msg }
     }
+
+    void method
 
     const retryAfterRaw = Number.parseInt(headers['retry-after'] ?? '', 10)
     const retryAfterSec = Number.isFinite(retryAfterRaw) ? retryAfterRaw : undefined
     this.onHttpResponse?.({ bucket, httpStatus: status, retryAfterSec })
-
-    if (status === 429) {
-      const riotHeaders = pickRiotRateLimitHeaders(headers)
-      const effectiveRetryAfterSec =
-        retryAfterSec != null && Number.isFinite(retryAfterSec) && retryAfterSec > 0 ? retryAfterSec : 1
-      const effectiveRetryMs =
-        Number.isFinite(effectiveRetryAfterSec) && effectiveRetryAfterSec > 0
-          ? effectiveRetryAfterSec * 1000
-          : RIOT_429_MIN_PENALTY_MS
-      void appendUnifiedLog({
-        section: 'back',
-        type: 'warning',
-        script: this.apiLogScript,
-        message: 'Riot API HTTP 429',
-        json: {
-          httpStatus: status,
-          origin: 'riot_http_response',
-          bucket,
-          url,
-          retryAfterSec: effectiveRetryAfterSec,
-          effectiveRetryMs,
-          riotRateLimitHeaders: riotHeaders,
-        },
-      })
-      this.rateLimiter.penalize429(effectiveRetryAfterSec)
-      if (options?.shouldAbort?.()) {
-        return { ok: false, status: 429, message: RIOT_INGEST_ABORTED_MESSAGE, body: data }
-      }
-      const retryCount = options?.retryCount ?? 0
-      const infinite = options?.infinite429Retry === true
-      if (infinite || retryCount < 5) {
-        return this.request<T>(method, bucket, url, { ...options, retryCount: retryCount + 1 })
-      }
-      return { ok: false, status: 429, message: 'Rate limit exceeded (max retries)', body: data }
-    }
 
     if (status === 401) {
       this.onInvalidKey?.()
@@ -471,12 +435,6 @@ export class RiotHttpClient {
         : undefined
       return { ok: false, status, message: msg, body: data }
     }
-
-    this.rateLimiter.syncFromResponseHeaders({
-      get(name: string): string | null {
-        return headers[name.toLowerCase()] ?? null
-      },
-    })
 
     const riotHeaders = pickRiotRateLimitHeaders(headers)
     if (Object.keys(riotHeaders).length > 0) {
@@ -547,6 +505,10 @@ export class RiotHttpClient {
           },
         })
       }
+    }
+
+    if (options?.shouldAbort?.()) {
+      return { ok: false, status: 0, message: RIOT_INGEST_ABORTED_MESSAGE }
     }
 
     return { ok: true, data: data as T, status }
