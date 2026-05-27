@@ -1,7 +1,7 @@
 import pLimit from "p-limit";
 import { DelayedError, WaitingChildrenError, Worker, type Job } from "bullmq";
 import { config } from "../config/index.js";
-import { getBestEffortRankSnapshotsForMatch, type RankSnapshot } from "../db/query.js";
+import { getRankSnapshotsAtOrAfterForMatch, type RankSnapshot } from "../db/query.js";
 import { sql } from "../db/client.js";
 import type { HydrationJobData, ParsedParticipantDto, TeamStatsDto } from "../dto/match.dto.js";
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
@@ -20,8 +20,9 @@ import {
   cachedRankValidForMatchDate,
   readRankCacheL1,
   readRankCacheRedis,
+  writeRankCacheRedis,
 } from "../redis/rank-cache.js";
-import { waitForHydrationSlot } from "../redis/rate-scheduler.js";
+import { waitForHydrationSlot, waitForRankSlot } from "../redis/rate-scheduler.js";
 import { NotFoundError, RiotClient } from "../riot/client.js";
 import { normalizePlatformRegion, platformRegionLookupKeys } from "../riot/platform-region.js";
 import { sumObjectiveTimestampMsByTeamAndKey } from "../parsers/objective-timestamp-sums.js";
@@ -319,11 +320,12 @@ async function applyRankCacheToParticipants(
 
 async function refreshParticipantsRankState(
   participants: ParsedParticipantDto[],
+  region: string,
   gameDate: Date,
 ): Promise<Map<string, RankSnapshot>> {
   const puuids = participants.map((p) => p.puuid).filter(Boolean);
   const cachedSnapshots = await applyRankCacheToParticipants(participants, gameDate);
-  const closestSnapshots = await getBestEffortRankSnapshotsForMatch(puuids, gameDate);
+  const closestSnapshots = await getRankSnapshotsAtOrAfterForMatch(puuids, region, gameDate);
   for (const [puuid, snapshot] of cachedSnapshots) {
     if (!closestSnapshots.has(puuid)) {
       closestSnapshots.set(puuid, snapshot);
@@ -353,6 +355,69 @@ async function refreshParticipantsRankState(
     }
   }
   return closestSnapshots;
+}
+
+async function fetchAndPersistRankSnapshotNow(puuid: string, region: string): Promise<void> {
+  const today = new Date().toISOString().slice(0, 10);
+  const rank = await riotClient.getRank(puuid, region);
+  if (!rank) {
+    await sql`
+      INSERT INTO player_rank_history (puuid, date, region, rank_tier, rank_division, rank_lp)
+      VALUES (${puuid}, ${today}::date, ${region}, 'UNRANKED', 'UNRANKED', 0)
+      ON CONFLICT (puuid, date, region) DO NOTHING
+    `;
+    await writeRankCacheRedis(puuid, region, {
+      rankTier: "UNRANKED",
+      rankDivision: "UNRANKED",
+      rankLp: 0,
+      snapshotDate: today,
+      cachedAtMs: Date.now(),
+    });
+    return;
+  }
+
+  const tier = normalizeTier(rank.tier) ?? "UNRANKED";
+  const rankDivision = String(rank.rank ?? "UNRANKED").trim().toUpperCase() || "UNRANKED";
+  const rankLp = Math.max(0, Math.trunc(Number(rank.leaguePoints ?? 0)));
+  await sql`
+    INSERT INTO player_rank_history (puuid, date, region, rank_tier, rank_division, rank_lp)
+    VALUES (${puuid}, ${today}::date, ${region}, ${tier}, ${rankDivision}, ${rankLp})
+    ON CONFLICT (puuid, date, region) DO NOTHING
+  `;
+  await writeRankCacheRedis(puuid, region, {
+    rankTier: tier,
+    rankDivision,
+    rankLp,
+    snapshotDate: today,
+    cachedAtMs: Date.now(),
+  });
+}
+
+async function fetchMissingRanksFromRiot(
+  participants: ParsedParticipantDto[],
+  missing: ParsedParticipantDto[],
+): Promise<void> {
+  const byPuuid = new Map<string, ParsedParticipantDto>();
+  for (const participant of participants) {
+    const puuid = String(participant.puuid ?? "").trim();
+    if (puuid) byPuuid.set(puuid, participant);
+  }
+
+  for (const missingParticipant of missing) {
+    const puuid = String(missingParticipant.puuid ?? "").trim();
+    if (!puuid) continue;
+    const participant = byPuuid.get(puuid) ?? missingParticipant;
+    const normalizedRegion = normalizePlatformRegion(participant.region);
+    if (!normalizedRegion) continue;
+    await waitForRankSlot();
+    try {
+      await fetchAndPersistRankSnapshotNow(puuid, normalizedRegion);
+    } catch (error) {
+      console.warn(
+        `[hydration.worker] rank_fetch_direct_failed puuid=${puuid} region=${normalizedRegion} reason=${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
 }
 
 function materializeMissingRanksAsUnranked(
@@ -389,7 +454,7 @@ async function finalizeHydrationRankGate(
   participants: ParsedParticipantDto[],
   teamStatsBase: TeamStatsBase,
 ): Promise<void> {
-  let closestSnapshots = await refreshParticipantsRankState(participants, gameDate);
+  let closestSnapshots = await refreshParticipantsRankState(participants, region, gameDate);
   const resolvedCount = participants.filter((p) => closestSnapshots.has(p.puuid)).length;
   const needFetch = participants.filter((p) => p.needsRankFetch).length;
   console.log(
@@ -435,7 +500,7 @@ async function finalizeHydrationRankGate(
   const matchDateIso = gameDate.toISOString().slice(0, 10);
   await ensureRankSnapshotsForHydration(hydrationJob, missing, matchDateIso);
 
-  closestSnapshots = await refreshParticipantsRankState(participants, gameDate);
+  closestSnapshots = await refreshParticipantsRankState(participants, region, gameDate);
   if (matchReadyForAggregation(participants, closestSnapshots)) {
     const teamStats = parseTeamStats(teamStatsBase, participants, closestSnapshots);
     pollerV2Observability.recordHydrationRankGate(data.matchId, true);
@@ -446,21 +511,21 @@ async function finalizeHydrationRankGate(
 
   missing = getMissingRankParticipants(participants, closestSnapshots);
   if (missing.length > 0) {
+    await fetchMissingRanksFromRiot(participants, missing);
+    closestSnapshots = await refreshParticipantsRankState(participants, region, gameDate);
+    missing = getMissingRankParticipants(participants, closestSnapshots);
+  }
+  if (missing.length > 0) {
     const blockedForMsNow = Date.now() - blockedSince;
-    if (blockedForMsNow >= RANK_GATE_TIMEOUT_MS) {
-      console.warn(
-        `[hydration.worker] rank_gate_timeout_bypass matchId=${data.matchId} blocked_ms=${blockedForMsNow} missing=${missing.length}`,
-      );
-      materializeMissingRanksAsUnranked(participants, closestSnapshots, gameDate);
-      const teamStats = parseTeamStats(teamStatsBase, participants, closestSnapshots);
-      pollerV2Observability.recordHydrationRankGate(data.matchId, true);
-      await ingestionQueue.add("ingest-match", { participants, teamStats });
-      pollerV2Observability.recordHydrationSuccess(1);
-      return;
-    }
-    throw new Error(
-      `rank_gate_still_blocked matchId=${data.matchId} missing=${missing.length} puuids=${missing.map((p) => p.puuid).slice(0, 3).join(",")}`,
+    console.warn(
+      `[hydration.worker] rank_gate_fallback_unranked matchId=${data.matchId} blocked_ms=${blockedForMsNow} missing=${missing.length}`,
     );
+    materializeMissingRanksAsUnranked(participants, closestSnapshots, gameDate);
+    const teamStats = parseTeamStats(teamStatsBase, participants, closestSnapshots);
+    pollerV2Observability.recordHydrationRankGate(data.matchId, true);
+    await ingestionQueue.add("ingest-match", { participants, teamStats });
+    pollerV2Observability.recordHydrationSuccess(1);
+    return;
   }
 
   throw new Error(`rank_gate_still_blocked matchId=${data.matchId}`);

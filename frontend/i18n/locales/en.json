@@ -255,6 +255,11 @@
       "skillOrder": "Skill order",
       "spellsTitle": "Spells — Theorycraft",
       "theorycraftButton": "Theorycraft",
+      "vsButton": "VS",
+      "vsEnable": "Enable VS mode",
+      "vsDisable": "Disable VS mode",
+      "allyCard": "You",
+      "enemyCard": "Enemy",
       "emptyHint": "Click an area on the build card (champion, items, runes) to open the related selector. Skill order is edited directly on the card."
     },
     "spells": {

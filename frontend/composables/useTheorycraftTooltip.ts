@@ -82,6 +82,9 @@ function statValue(stats: TheorycraftBuildStats, key: string): number {
     bonusad: 'bonusAD',
     bonusattackdamage: 'bonusAD',
     totalhp: 'totalHP',
+    maxhp: 'totalHP',
+    maxhealth: 'totalHP',
+    totalhealth: 'totalHP',
     health: 'totalHP',
     bonushp: 'bonusHP',
     bonushealth: 'bonusHP',
@@ -285,6 +288,7 @@ function ratioAtRank(coefficient: number[] | number, rankIndex: number): number 
 }
 
 function ratioStatDisplayLabel(stat: string): string {
+  const normalized = stat.toLowerCase().replace(/[^a-z0-9]/g, '')
   const labels: Record<string, string> = {
     totalAD: 'AD',
     bonusAD: 'AD',
@@ -298,6 +302,9 @@ function ratioStatDisplayLabel(stat: string): string {
     bonusHP: 'bonusHP',
     maxMana: 'max Mana',
   }
+  if (normalized === 'maxhp' || normalized === 'maxhealth' || normalized === 'totalhealth') {
+    return 'max Health'
+  }
   return labels[stat] ?? stat
 }
 
@@ -305,6 +312,17 @@ function ratioScaleClass(stat: string): string {
   const normalized = stat.toLowerCase().replace(/[^a-z0-9]/g, '')
   if (normalized === 'totalad' || normalized === 'bonusad' || normalized === 'attackdamage') {
     return 'scale-ad'
+  }
+  if (
+    normalized === 'totalhp' ||
+    normalized === 'maxhp' ||
+    normalized === 'maxhealth' ||
+    normalized === 'health' ||
+    normalized === 'totalhealth' ||
+    normalized === 'bonushp' ||
+    normalized === 'bonushealth'
+  ) {
+    return 'scale-hp'
   }
   return 'scale-ap'
 }

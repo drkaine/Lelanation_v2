@@ -466,4 +466,29 @@ describe('useTheorycraftTooltip', () => {
     const details = resolveTheorycraftSpellDetailRaws(spell, baseStats, 5)
     expect(details[0]).toContain('250%')
   })
+
+  it('resolves max health ratios with HP scaling color (Urgot passive)', () => {
+    const spell = {
+      tooltipRaw:
+        'Les attaques de base infligent <physicalDamage>{{ totaldamage }}</physicalDamage> dégâts physiques.',
+      maxRank: 1,
+      calculations: [
+        {
+          key: 'totaldamage',
+          baseValues: [29.52],
+          ratios: [{ stat: 'maxHealth', coefficient: 0.02, type: 'physical' }],
+        },
+      ],
+      dataValues: [],
+      spellEffects: [],
+    }
+
+    const { html, isDynamic } = resolveTheorycraftSpellDescription(spell, baseStats, 1)
+    expect(isDynamic).toBe(true)
+    expect(html).toContain('29.52')
+    expect(html).toContain('40')
+    expect(html).toContain('scale-hp')
+    expect(html).not.toContain('scale-ap')
+    expect(html).not.toContain('2% max Health')
+  })
 })

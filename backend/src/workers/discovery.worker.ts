@@ -22,7 +22,7 @@ type PlayerRow = {
 
 const riotClient = new RiotClient();
 const HYDRATION_RANK_BACKPRESSURE_WC = 150;
-const HYDRATION_RANK_BACKPRESSURE_TOTAL = 400;
+const HYDRATION_RANK_BACKPRESSURE_TOTAL = 2_000;
 const QUEUED_MATCH_TTL_SEC = 86_400;
 /** Max matchs enfilés par joueur par cycle — évite monopolisation discovery/hydration. */
 const MAX_MATCHES_PER_PLAYER_PER_TICK = 20;

@@ -2,6 +2,18 @@
   <div class="theorycraft-page min-h-screen text-text">
     <div class="theorycraft-page__shell">
       <div class="theorycraft-page-header mb-4 pr-4">
+        <button
+          type="button"
+          class="theorycraft-vs-toggle"
+          :class="{ 'theorycraft-vs-toggle--active': showVersus }"
+          :title="showVersus ? t('theorycraft.panel.vsDisable') : t('theorycraft.panel.vsEnable')"
+          :aria-label="
+            showVersus ? t('theorycraft.panel.vsDisable') : t('theorycraft.panel.vsEnable')
+          "
+          @click="toggleVersus"
+        >
+          {{ t('theorycraft.panel.vsButton') }}
+        </button>
         <TheorycraftRuneStackPanel variant="header" />
       </div>
 
@@ -9,16 +21,19 @@
         class="build-layout mb-6 flex flex-col items-start gap-4 md:flex-row"
         :class="{ 'build-layout--streamer': isLayoutScaled }"
       >
-        <div class="build-card-wrapper w-full flex-shrink-0 md:order-1">
+        <div
+          class="build-card-wrapper w-full flex-shrink-0 md:order-1"
+          @click="activateSide('ally')"
+        >
           <div class="build-card-toolbar">
             <div class="build-card-toolbar__actions">
               <button
                 type="button"
                 class="build-card-toolbar__flip build-card-toolbar__stats"
-                :class="{ 'build-card-toolbar__flip--active': statsFlipActive }"
-                :title="statsFlipTitle"
-                :aria-label="statsFlipTitle"
-                @click="toggleStatsFlip"
+                :class="{ 'build-card-toolbar__flip--active': statsFlipActive('ally') }"
+                :title="statsFlipTitle('ally')"
+                :aria-label="statsFlipTitle('ally')"
+                @click="toggleStatsFlip('ally')"
               >
                 <svg
                   width="14"
@@ -40,10 +55,10 @@
               <button
                 type="button"
                 class="build-card-toolbar__flip build-card-toolbar__theorycraft"
-                :class="{ 'build-card-toolbar__flip--active': theorycraftPanelActive }"
+                :class="{ 'build-card-toolbar__flip--active': theorycraftPanelActive('ally') }"
                 :title="theorycraftPanelTitle"
                 :aria-label="theorycraftPanelTitle"
-                @click="activePanel = 'theorycraft'"
+                @click="activateTheorycraft('ally')"
               >
                 <img
                   src="/icons/theorycraft.png"
@@ -70,14 +85,22 @@
             </label>
           </div>
           <BuildCard
-            v-model:flipped="cardFlipped"
+            v-model:flipped="allyCardFlipped"
             :sheet-tooltips="true"
             :highlight-missing-fields="highlightMissingFields"
+            :readonly="showVersus && activeSide !== 'ally'"
+            :build="showVersus && activeSide !== 'ally' ? sideBuilds.ally : null"
             selection-mode="theorycraft"
-            :flip-back-face="cardBackFace"
-            :active-selection-region="activePanel === 'theorycraft' ? null : activePanel"
-            @select-region="onSelectRegion"
-            @toggle-description-flip="toggleDescriptionFlip"
+            :flip-back-face="allyCardBackFace"
+            :active-selection-region="
+              showVersus && activeSide !== 'ally'
+                ? null
+                : activePanel === 'theorycraft'
+                  ? null
+                  : activePanel
+            "
+            @select-region="onSelectRegion('ally', $event)"
+            @toggle-description-flip="toggleDescriptionFlip('ally')"
           />
         </div>
 
@@ -91,14 +114,100 @@
             @set-panel="activePanel = $event"
           />
         </div>
+
+        <div
+          v-if="showVersus"
+          class="build-card-wrapper w-full flex-shrink-0 md:order-3"
+          @click="activateSide('enemy')"
+        >
+          <div class="build-card-toolbar">
+            <div class="build-card-toolbar__actions">
+              <button
+                type="button"
+                class="build-card-toolbar__flip build-card-toolbar__stats"
+                :class="{ 'build-card-toolbar__flip--active': statsFlipActive('enemy') }"
+                :title="statsFlipTitle('enemy')"
+                :aria-label="statsFlipTitle('enemy')"
+                @click="toggleStatsFlip('enemy')"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M4 20V10" />
+                  <path d="M10 20V4" />
+                  <path d="M16 20v-6" />
+                  <path d="M22 20V8" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                class="build-card-toolbar__flip build-card-toolbar__theorycraft"
+                :class="{ 'build-card-toolbar__flip--active': theorycraftPanelActive('enemy') }"
+                :title="theorycraftPanelTitle"
+                :aria-label="theorycraftPanelTitle"
+                @click="activateTheorycraft('enemy')"
+              >
+                <img
+                  src="/icons/theorycraft.png"
+                  alt=""
+                  class="build-card-toolbar__theorycraft-icon"
+                  aria-hidden="true"
+                />
+              </button>
+            </div>
+            <div class="build-card-toolbar__save">
+              <span
+                class="build-card-toolbar__side-label"
+                :class="{ 'build-card-toolbar__side-label--active': activeSide === 'enemy' }"
+              >
+                {{ t('theorycraft.panel.enemyCard') }}
+              </span>
+            </div>
+            <label class="build-card-toolbar__level">
+              <span class="build-card-toolbar__level-label">{{
+                t('theorycraft.spells.level')
+              }}</span>
+              <select
+                :value="theorycraftLevel"
+                class="build-card-toolbar__level-select"
+                @change="onLevelSelectChange"
+              >
+                <option v-for="lvl in maxChampionLevel" :key="lvl" :value="lvl">{{ lvl }}</option>
+              </select>
+            </label>
+          </div>
+          <BuildCard
+            v-model:flipped="enemyCardFlipped"
+            :sheet-tooltips="true"
+            :highlight-missing-fields="highlightMissingFields"
+            :readonly="activeSide !== 'enemy'"
+            :build="activeSide !== 'enemy' ? sideBuilds.enemy : null"
+            selection-mode="theorycraft"
+            :flip-back-face="enemyCardBackFace"
+            :active-selection-region="
+              activeSide !== 'enemy' ? null : activePanel === 'theorycraft' ? null : activePanel
+            "
+            @select-region="onSelectRegion('enemy', $event)"
+            @toggle-description-flip="toggleDescriptionFlip('enemy')"
+          />
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, toRaw, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
+import type { Build } from '@lelanation/shared-types'
 import BuildCard from '~/components/Build/BuildCard.vue'
 import BuildSaveButton from '~/components/Build/BuildSaveButton.vue'
 import TheorycraftRuneStackPanel from '~/components/Build/TheorycraftRuneStackPanel.vue'
@@ -123,39 +232,165 @@ const itemsStore = useItemsStore()
 const { loadChampion } = useChampionData()
 const { isLayoutScaled } = useLayoutScaled()
 
+type TheorycraftSide = 'ally' | 'enemy'
+
 const activePanel = ref<TheorycraftPanel>('theorycraft')
 const theorycraftLevel = ref(18)
-const cardFlipped = ref(false)
-const cardBackFace = ref<'stats' | 'description'>('stats')
+const activeSide = ref<TheorycraftSide>('ally')
+const showVersus = ref(false)
+const sideBuilds = ref<Record<TheorycraftSide, Build | null>>({
+  ally: null,
+  enemy: null,
+})
+const sidePanels = ref<Record<TheorycraftSide, TheorycraftPanel>>({
+  ally: 'theorycraft',
+  enemy: 'theorycraft',
+})
+const sideFlipped = ref<Record<TheorycraftSide, boolean>>({
+  ally: false,
+  enemy: false,
+})
+const sideBackFace = ref<Record<TheorycraftSide, 'stats' | 'description'>>({
+  ally: 'stats',
+  enemy: 'stats',
+})
 const highlightMissingFields = ref(false)
 const championData = ref<Record<string, unknown> | null>(null)
 
-const statsFlipActive = computed(() => cardFlipped.value && cardBackFace.value === 'stats')
+const allyCardFlipped = computed({
+  get: () => sideFlipped.value.ally,
+  set: value => {
+    sideFlipped.value = { ...sideFlipped.value, ally: value }
+  },
+})
 
-const statsFlipTitle = computed(() =>
-  statsFlipActive.value ? t('theorycraft.stats.showBuild') : t('theorycraft.stats.showStats')
-)
+const enemyCardFlipped = computed({
+  get: () => sideFlipped.value.enemy,
+  set: value => {
+    sideFlipped.value = { ...sideFlipped.value, enemy: value }
+  },
+})
 
-const theorycraftPanelActive = computed(() => activePanel.value === 'theorycraft')
+const allyCardBackFace = computed(() => sideBackFace.value.ally)
+const enemyCardBackFace = computed(() => sideBackFace.value.enemy)
 
 const theorycraftPanelTitle = computed(() => t('theorycraft.panel.theorycraftButton'))
 
-function toggleDescriptionFlip() {
-  if (cardFlipped.value && cardBackFace.value === 'description') {
-    cardFlipped.value = false
-    return
+function cloneBuild(build: Build | null): Build | null {
+  if (!build) return null
+  try {
+    return JSON.parse(JSON.stringify(toRaw(build))) as Build
+  } catch {
+    return null
   }
-  cardBackFace.value = 'description'
-  cardFlipped.value = true
 }
 
-function toggleStatsFlip() {
-  if (statsFlipActive.value) {
-    cardFlipped.value = false
+function createEmptyTheorycraftBuild(name: string): Build {
+  const now = new Date().toISOString()
+  return {
+    id: crypto.randomUUID(),
+    name,
+    author: '',
+    description: '',
+    visibility: 'public',
+    champion: null,
+    items: [],
+    runes: null,
+    shards: {
+      slot1: 5008,
+      slot2: 5008,
+      slot3: 5011,
+    },
+    summonerSpells: [null, null],
+    skillOrder: {
+      firstThreeUps: [null as any, null as any, null as any],
+      skillUpOrder: [null as any, null as any, null as any],
+    },
+    roles: [],
+    tags: [],
+    upvote: 0,
+    downvote: 0,
+    gameVersion: '',
+    createdAt: now,
+    updatedAt: now,
+    subBuilds: [],
+    descriptionMode: 'single',
+  } as Build
+}
+
+function persistActiveSideBuild() {
+  sideBuilds.value[activeSide.value] = cloneBuild(buildStore.currentBuild)
+}
+
+function loadSideBuild(side: TheorycraftSide) {
+  const target = cloneBuild(sideBuilds.value[side])
+  if (!target) return
+  buildStore.setCurrentBuild(target)
+}
+
+function activateSide(side: TheorycraftSide) {
+  if (activeSide.value === side) return
+  persistActiveSideBuild()
+  sidePanels.value[activeSide.value] = activePanel.value
+  activeSide.value = side
+  activePanel.value = sidePanels.value[side] ?? 'theorycraft'
+  if (!sideBuilds.value[side]) {
+    sideBuilds.value[side] = createEmptyTheorycraftBuild(
+      side === 'enemy' ? t('theorycraft.panel.enemyCard') : 'Build'
+    )
+  }
+  loadSideBuild(side)
+}
+
+function toggleVersus() {
+  if (showVersus.value) {
+    if (activeSide.value === 'enemy') activateSide('ally')
+    showVersus.value = false
     return
   }
-  cardBackFace.value = 'stats'
-  cardFlipped.value = true
+  persistActiveSideBuild()
+  if (!sideBuilds.value.enemy) {
+    sideBuilds.value.enemy = createEmptyTheorycraftBuild(t('theorycraft.panel.enemyCard'))
+  }
+  showVersus.value = true
+}
+
+function statsFlipActive(side: TheorycraftSide): boolean {
+  return sideFlipped.value[side] && sideBackFace.value[side] === 'stats'
+}
+
+function statsFlipTitle(side: TheorycraftSide): string {
+  return statsFlipActive(side) ? t('theorycraft.stats.showBuild') : t('theorycraft.stats.showStats')
+}
+
+function theorycraftPanelActive(side: TheorycraftSide): boolean {
+  return activeSide.value === side && activePanel.value === 'theorycraft'
+}
+
+function toggleDescriptionFlip(side: TheorycraftSide) {
+  if (activeSide.value !== side) activateSide(side)
+  if (sideFlipped.value[side] && sideBackFace.value[side] === 'description') {
+    sideFlipped.value = { ...sideFlipped.value, [side]: false }
+    return
+  }
+  sideBackFace.value = { ...sideBackFace.value, [side]: 'description' }
+  sideFlipped.value = { ...sideFlipped.value, [side]: true }
+}
+
+function toggleStatsFlip(side: TheorycraftSide) {
+  if (activeSide.value !== side) activateSide(side)
+  if (statsFlipActive(side)) {
+    sideFlipped.value = { ...sideFlipped.value, [side]: false }
+    return
+  }
+  sideBackFace.value = { ...sideBackFace.value, [side]: 'stats' }
+  sideFlipped.value = { ...sideFlipped.value, [side]: true }
+}
+
+function activateTheorycraft(side: TheorycraftSide) {
+  if (activeSide.value !== side) activateSide(side)
+  activePanel.value = 'theorycraft'
+  sidePanels.value[side] = 'theorycraft'
 }
 
 const championId = computed(() => buildStore.currentBuild?.champion?.id ?? null)
@@ -169,8 +404,10 @@ const theorycraftStats = computed(() => {
   return toTheorycraftBuildStats(stats, build.champion, theorycraftLevel.value)
 })
 
-function onSelectRegion(region: 'champion' | 'items' | 'runes') {
+function onSelectRegion(side: TheorycraftSide, region: 'champion' | 'items' | 'runes') {
+  if (activeSide.value !== side) activateSide(side)
   activePanel.value = region
+  sidePanels.value[side] = region
 }
 
 function onLevelChange(level: number) {
@@ -200,6 +437,18 @@ watch(championId, () => {
 })
 
 watch(
+  () => buildStore.currentBuild,
+  build => {
+    sideBuilds.value[activeSide.value] = cloneBuild(build)
+  },
+  { deep: true }
+)
+
+watch(activePanel, panel => {
+  sidePanels.value[activeSide.value] = panel
+})
+
+watch(
   () => buildStore.statsLevel,
   level => {
     theorycraftLevel.value = level
@@ -224,6 +473,8 @@ watch(
 onMounted(async () => {
   buildStore.enterTheorycraftSession()
   theorycraftLevel.value = buildStore.statsLevel
+  sideBuilds.value.ally = cloneBuild(buildStore.currentBuild)
+  sideBuilds.value.enemy = null
   await loadChampionDataForPanel()
 })
 
@@ -237,6 +488,7 @@ onBeforeRouteLeave(to => {
 .theorycraft-page__shell {
   width: 100%;
   max-width: 100%;
+  overflow-x: clip;
 }
 
 .theorycraft-workspace-col {
@@ -246,6 +498,7 @@ onBeforeRouteLeave(to => {
 
 .build-layout {
   --build-card-width: 293.9px;
+  flex-wrap: wrap;
 }
 
 .build-layout--streamer {
@@ -264,6 +517,37 @@ onBeforeRouteLeave(to => {
   gap: 0.75rem 1rem;
 }
 
+.theorycraft-vs-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  height: 38px;
+  padding: 0 0.7rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgb(200 155 60 / 0.5);
+  background: var(--color-background, #0a1428);
+  color: rgb(255 255 255 / 0.9);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.theorycraft-vs-toggle:hover {
+  border-color: var(--color-accent, #c89b3c);
+  color: var(--color-accent, #c89b3c);
+}
+
+.theorycraft-vs-toggle--active {
+  border-color: var(--color-accent, #c89b3c);
+  background: rgb(200 155 60 / 0.15);
+  color: var(--color-accent, #c89b3c);
+}
+
 .build-card-toolbar {
   display: flex;
   gap: 0.5rem;
@@ -272,7 +556,25 @@ onBeforeRouteLeave(to => {
   align-items: center;
 }
 
+.build-card-toolbar__side-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgb(255 255 255 / 0.65);
+  flex-shrink: 0;
+}
+
+.build-card-toolbar__side-label--active {
+  color: #00ff9d;
+  text-shadow: 0 0 12px rgb(0 255 170 / 0.55);
+}
+
 .build-card-toolbar__save {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
   flex: 1;
   min-width: 0;
 }

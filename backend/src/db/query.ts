@@ -2,6 +2,7 @@
  * Raw SQL helpers for `lelanation_statistiques` (postgres.js).
  */
 import { sql } from "./client.js";
+import { platformRegionLookupKeys } from "../riot/platform-region.js";
 
 export function isDatabaseConfigured(): boolean {
   return Boolean(process.env.DATABASE_URL?.trim());
@@ -90,6 +91,43 @@ export async function getBestEffortRankSnapshotsForMatch(
       END ASC,
       CASE WHEN date < ${matchDateIso}::date THEN date END DESC,
       CASE WHEN date >= ${matchDateIso}::date THEN date END ASC
+  `;
+
+  const out = new Map<string, RankSnapshot>();
+  for (const row of rows) {
+    const tier = String(row.rank_tier ?? "")
+      .trim()
+      .toUpperCase();
+    out.set(row.puuid, {
+      rankTier: tier.length > 0 ? tier : "UNRANKED",
+      rankDivision: String(row.rank_division ?? "").trim(),
+      rankLp: Number(row.rank_lp ?? 0),
+      date: row.date instanceof Date ? row.date : new Date(row.date),
+    });
+  }
+  return out;
+}
+
+/** Earliest region-aware snapshot with date >= matchDate (one per puuid). */
+export async function getRankSnapshotsAtOrAfterForMatch(
+  puuids: string[],
+  region: string,
+  matchDate: Date,
+): Promise<Map<string, RankSnapshot>> {
+  if (puuids.length === 0) {
+    return new Map();
+  }
+
+  const matchDateIso = matchDate.toISOString().slice(0, 10);
+  const regionKeys = platformRegionLookupKeys(region);
+  const rows = await sql<RankHistoryRow[]>`
+    SELECT DISTINCT ON (puuid)
+      puuid, rank_tier, rank_division, rank_lp, date
+    FROM player_rank_history
+    WHERE puuid = ANY(${sql.array(puuids, 25)})
+      AND region = ANY(${sql.array(regionKeys, 25)})
+      AND date >= ${matchDateIso}::date
+    ORDER BY puuid, date ASC
   `;
 
   const out = new Map<string, RankSnapshot>();

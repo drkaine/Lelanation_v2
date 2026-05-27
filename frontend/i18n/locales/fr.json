@@ -255,6 +255,11 @@
       "skillOrder": "Ordre de montée",
       "spellsTitle": "Sorts — Theorycraft",
       "theorycraftButton": "Theorycraft",
+      "vsButton": "VS",
+      "vsEnable": "Activer le mode VS",
+      "vsDisable": "Désactiver le mode VS",
+      "allyCard": "Vous",
+      "enemyCard": "Adversaire",
       "emptyHint": "Cliquez sur une zone de la build card (champion, items, runes) pour ouvrir le sélecteur correspondant. L'ordre de montée se modifie directement sur la card."
     },
     "spells": {
