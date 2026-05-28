@@ -46,7 +46,14 @@
             class="spell-vs-damage-badge"
             :class="{ 'spell-vs-damage-badge--lethal': passive.lethalVsChampion }"
           >
-            {{ Math.round(passive.damageVsChampion) }}
+            {{ Math.round(passive.damageVsChampion) }} PV en moins
+            <span
+              v-if="passive.damageVsTooltip"
+              class="spell-vs-damage-info"
+              :title="passive.damageVsTooltip"
+              aria-label="Détail du calcul"
+              >i</span
+            >
             <span v-if="passive.lethalVsChampion" aria-hidden="true">☠</span>
           </span>
         </summary>
@@ -139,7 +146,14 @@
               class="spell-vs-damage-badge"
               :class="{ 'spell-vs-damage-badge--lethal': spell.lethalVsChampion }"
             >
-              {{ Math.round(spell.damageVsChampion) }}
+              {{ Math.round(spell.damageVsChampion) }} PV en moins
+              <span
+                v-if="spell.damageVsTooltip"
+                class="spell-vs-damage-info"
+                :title="spell.damageVsTooltip"
+                aria-label="Détail du calcul"
+                >i</span
+              >
               <span v-if="spell.lethalVsChampion" aria-hidden="true">☠</span>
             </span>
             <button
@@ -236,7 +250,6 @@ import {
   type TheorycraftSpellRuntimeData,
   type TheorycraftStackResolveContext,
 } from '~/composables/useTheorycraftTooltip'
-import { calculateDamageFormula } from '~/composables/useTheorycraftDamage'
 import { useBuildStore } from '~/stores/BuildStore'
 import type { TheorycraftBuildStats, TheorycraftStackDefinition } from '~/types/theorycraft'
 import { normalizeKaynFormMarkup } from '~/utils/kaynFormTooltipMarkup'
@@ -275,6 +288,7 @@ interface ResolvedSpellView {
   hasActivatableBuff: boolean
   damageVsChampion?: number | null
   lethalVsChampion?: boolean
+  damageVsTooltip?: string
 }
 
 interface ResolvedPassiveView {
@@ -287,6 +301,7 @@ interface ResolvedPassiveView {
   isDynamic: boolean
   damageVsChampion?: number | null
   lethalVsChampion?: boolean
+  damageVsTooltip?: string
 }
 
 const props = defineProps<{
@@ -454,10 +469,64 @@ function reduceDamageByDefenses(
   return Math.max(0, mitigated)
 }
 
+function formatDamageValue(value: number): string {
+  const rounded = Math.round(value * 10) / 10
+  if (!Number.isFinite(rounded)) return '0'
+  if (Number.isInteger(rounded)) return String(rounded)
+  return String(rounded)
+}
+
+function ratioCoefficientAtRank(coefficient: number[] | number, rankIndex: number): number {
+  if (Array.isArray(coefficient)) {
+    if (coefficient.length === 0) return 0
+    const value = coefficient[Math.min(Math.max(rankIndex, 0), coefficient.length - 1)]
+    return Number.isFinite(value) ? value : 0
+  }
+  return Number.isFinite(coefficient) ? coefficient : 0
+}
+
+function ratioStatValueForVsDamage(
+  stat: string,
+  attacker: TheorycraftBuildStats,
+  defender: TheorycraftBuildStats
+): number {
+  const normalized = String(stat ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+
+  const fromAttacker: Record<string, number> = {
+    totalad: attacker.totalAD,
+    bonusad: attacker.bonusAD,
+    attackdamage: attacker.totalAD,
+    ap: attacker.AP,
+    abilitypower: attacker.AP,
+    totalhp: attacker.totalHP,
+    bonushp: attacker.bonusHP,
+    bonushealth: attacker.bonusHP,
+    armor: attacker.armor,
+    magicresist: attacker.magicResist,
+    maxmana: attacker.maxMana,
+    mana: attacker.maxMana,
+  }
+
+  const fromDefender: Record<string, number> = {
+    targetmaxhealth: defender.totalHP,
+    targethealth: defender.totalHP,
+    enemytotalhp: defender.totalHP,
+    enemymxhp: defender.totalHP,
+    maxhealth: defender.totalHP,
+    maxhp: defender.totalHP,
+  }
+
+  if (normalized in fromDefender) return Number(fromDefender[normalized] ?? 0)
+  if (normalized in fromAttacker) return Number(fromAttacker[normalized] ?? 0)
+  return 0
+}
+
 function computeDamageVsChampion(
   raw: TheorycraftSpellRuntimeData & Record<string, unknown>,
   rank: number
-): { damage: number; lethal: boolean } | null {
+): { damage: number; lethal: boolean; tooltip: string } | null {
   const attacker = props.buildStats
   const defender = props.opponentBuildStats
   const defenderRaw = props.opponentRawStats
@@ -468,32 +537,33 @@ function computeDamageVsChampion(
   )
   if (formulas.length === 0) return null
 
+  const rankIndex = Math.min(Math.max(rank, 1), maxRank) - 1
+  const breakdownLines: string[] = []
   const totalMitigated = formulas.reduce((sum, formula) => {
-    const exact = calculateDamageFormula(
-      {
-        label: formula.key,
-        baseValues: formula.baseValues,
-        ratios: (formula.ratios ?? []).map(ratio => ({
-          stat: ratio.stat,
-          coefficient: ratio.coefficient,
-          type: (ratio.type as 'physical' | 'magic' | 'true') ?? 'physical',
-        })),
-      },
-      attacker,
-      rank,
-      maxRank,
-      { exactValues: true }
-    )
+    const base = Number(formula.baseValues?.[rankIndex] ?? 0)
+    const ratioPart = (formula.ratios ?? []).reduce((ratioSum, ratio) => {
+      const coeff = ratioCoefficientAtRank(ratio.coefficient, rankIndex)
+      const statValue = ratioStatValueForVsDamage(String(ratio.stat ?? ''), attacker, defender)
+      return ratioSum + coeff * statValue
+    }, 0)
+    const exact = Math.max(0, base + ratioPart)
     const damageType = (((formula.ratios ?? [])[0]?.type as 'physical' | 'magic' | 'true') ??
       'physical') as 'physical' | 'magic' | 'true'
-    return sum + reduceDamageByDefenses(exact, damageType, defenderRaw)
+    const mitigated = reduceDamageByDefenses(exact, damageType, defenderRaw)
+    breakdownLines.push(
+      `${formula.key}: ${formatDamageValue(base)} + ${formatDamageValue(ratioPart)} = ${formatDamageValue(exact)} brut -> ${formatDamageValue(mitigated)} mitigé`
+    )
+    return sum + mitigated
   }, 0)
 
   const targetShield = Number(defenderRaw.shield ?? 0)
   const targetHp = Number(defender.totalHP ?? 0)
   const effectiveTargetHp = Math.max(0, targetHp + Math.max(0, targetShield))
   const lethal = effectiveTargetHp > 0 && totalMitigated >= effectiveTargetHp
-  return { damage: totalMitigated, lethal }
+  breakdownLines.push(
+    `Total: ${formatDamageValue(totalMitigated)} | Cible: ${formatDamageValue(targetHp)} PV + ${formatDamageValue(Math.max(0, targetShield))} bouclier`
+  )
+  return { damage: totalMitigated, lethal, tooltip: breakdownLines.join('\n') }
 }
 
 function annotateExecuteThresholdWithHp(
@@ -579,6 +649,7 @@ function resolveSpellView(
     isDynamic: resolved.isDynamic,
     damageVsChampion: damageVs?.damage ?? null,
     lethalVsChampion: damageVs?.lethal ?? false,
+    damageVsTooltip: damageVs?.tooltip ?? '',
   }
 }
 
@@ -630,6 +701,7 @@ const passive = computed((): ResolvedPassiveView | null => {
     isDynamic: resolved.isDynamic,
     damageVsChampion: resolved.damageVsChampion,
     lethalVsChampion: resolved.lethalVsChampion,
+    damageVsTooltip: resolved.damageVsTooltip,
   }
 })
 
@@ -804,6 +876,21 @@ summary::-webkit-details-marker {
   border-color: rgb(248 113 113 / 0.7);
   background: rgb(127 29 29 / 0.25);
   color: rgb(254 202 202 / 0.98);
+}
+
+.spell-vs-damage-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.35);
+  font-size: 0.58rem;
+  font-weight: 700;
+  line-height: 1;
+  color: rgb(255 255 255 / 0.9);
+  cursor: help;
 }
 
 :deep(.tooltip-spell-description .dmg-physical),

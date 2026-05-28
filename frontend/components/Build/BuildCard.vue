@@ -1187,8 +1187,8 @@
         >
           <div class="build-card-back-cycle__face build-card-back-cycle__face--stats">
             <TheorycraftCardStatsBack
-              :stats="buildStore.calculatedStats"
-              :level="buildStore.statsLevel"
+              :stats="resolvedCalculatedStats"
+              :level="resolvedStatsLevel"
               :partype="(selectedChampion as { partype?: string } | null)?.partype"
               :active-item-count="theorycraftActiveItemCount"
               :stack-count="theorycraftStackCount"
@@ -1272,8 +1272,8 @@
         <template v-else>
           <TheorycraftCardStatsBack
             v-if="flipBackFace === 'stats'"
-            :stats="buildStore.calculatedStats"
-            :level="buildStore.statsLevel"
+            :stats="resolvedCalculatedStats"
+            :level="resolvedStatsLevel"
             :partype="(selectedChampion as { partype?: string } | null)?.partype"
             :active-item-count="theorycraftActiveItemCount"
             :stack-count="theorycraftStackCount"
@@ -1573,8 +1573,8 @@
         <TheorycraftCardStatsBack
           v-if="isTheorycraftItemsToggleMode"
           class="items-manager-total-stats"
-          :stats="buildStore.calculatedStats"
-          :level="buildStore.statsLevel"
+          :stats="resolvedCalculatedStats"
+          :level="resolvedStatsLevel"
           :partype="(selectedChampion as { partype?: string } | null)?.partype"
           :active-item-count="theorycraftActiveItemCount"
           :stack-count="theorycraftStackCount"
@@ -1762,6 +1762,8 @@ const DEFAULT_REGION_COLORS: [string, string] = ['#BBA077', '#1E2328']
 
 interface Props {
   build?: Build | null // Build optionnel - si non fourni, utilise currentBuild du store
+  calculatedStats?: Record<string, number> | null
+  statsLevel?: number | null
   readonly?: boolean // Si true, désactive les interactions (bouton reset, toggle rôles, etc.)
   sheetTooltips?: boolean // Active les tooltips de la sheet (summoners/runes/shards/items)
   hideTopActions?: boolean
@@ -1787,6 +1789,8 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   build: null,
+  calculatedStats: null,
+  statsLevel: null,
   readonly: false,
   sheetTooltips: false,
   hideTopActions: false,
@@ -1815,6 +1819,9 @@ const championsStore = useChampionsStore()
 const itemsStore = useItemsStore()
 const runesStore = useRunesStore()
 const summonerSpellsStore = useSummonerSpellsStore()
+
+const resolvedCalculatedStats = computed(() => props.calculatedStats ?? buildStore.calculatedStats)
+const resolvedStatsLevel = computed(() => props.statsLevel ?? buildStore.statsLevel)
 const localePath = useLocalePath()
 const route = useRoute()
 const { locale, t } = useI18n()
@@ -2471,7 +2478,7 @@ const selectedChampion = computed(() => {
 watch(
   () => [selectedChampion.value?.id, riotLocale.value] as const,
   ([championId, lang]) => {
-    if (!championId || props.selectionMode === 'theorycraft') return
+    if (!championId) return
     championsStore.loadChampionDetails(championId, lang).catch(() => undefined)
   },
   { immediate: true }

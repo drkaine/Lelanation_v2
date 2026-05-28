@@ -108,16 +108,32 @@ export async function getBestEffortRankSnapshotsForMatch(
   return out;
 }
 
-/** Earliest region-aware snapshot with date >= matchDate (one per puuid). */
+/**
+ * Fenêtre de tolérance (en jours) pour accepter un snapshot rank antérieur au match.
+ * Évite un fetch direct pour chaque participant non-tracké : un snapshot < {@link RANK_GATE_GRACE_DAYS} jours suffit.
+ * Le rang évolue lentement → impact négligeable sur l'agrégation tier.
+ */
+export const RANK_GATE_GRACE_DAYS = 7;
+
+/**
+ * Best-effort région-aware: préfère snapshot `date >= matchDate` (le plus proche),
+ * fallback sur snapshot `date in [matchDate - RANK_GATE_GRACE_DAYS, matchDate)` (le plus récent).
+ *
+ * Hier `date >= matchDate` strict → 99.8 % de fail au premier passage du rank gate
+ * (→ 30 k fetches directs/16h saturant le bucket 120 s). Avec grace window,
+ * un snapshot fetché dans la semaine couvre le rank gate sans appel Riot supplémentaire.
+ */
 export async function getRankSnapshotsAtOrAfterForMatch(
   puuids: string[],
   region: string,
   matchDate: Date,
+  options: { graceDays?: number } = {},
 ): Promise<Map<string, RankSnapshot>> {
   if (puuids.length === 0) {
     return new Map();
   }
 
+  const graceDays = Math.max(0, Math.trunc(options.graceDays ?? RANK_GATE_GRACE_DAYS));
   const matchDateIso = matchDate.toISOString().slice(0, 10);
   const regionKeys = platformRegionLookupKeys(region);
   const rows = await sql<RankHistoryRow[]>`
@@ -126,8 +142,12 @@ export async function getRankSnapshotsAtOrAfterForMatch(
     FROM player_rank_history
     WHERE puuid = ANY(${sql.array(puuids, 25)})
       AND region = ANY(${sql.array(regionKeys, 25)})
-      AND date >= ${matchDateIso}::date
-    ORDER BY puuid, date ASC
+      AND date >= ${matchDateIso}::date - (${graceDays}::int || ' days')::interval
+    ORDER BY
+      puuid,
+      CASE WHEN date >= ${matchDateIso}::date THEN 0 ELSE 1 END ASC,
+      CASE WHEN date >= ${matchDateIso}::date THEN date END ASC,
+      CASE WHEN date < ${matchDateIso}::date THEN date END DESC
   `;
 
   const out = new Map<string, RankSnapshot>();

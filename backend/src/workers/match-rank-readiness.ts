@@ -65,8 +65,12 @@ export function averageMatchRankTierLabel(
 
 /**
  * Agrégation autorisée si :
- * - chaque joueur a un snapshot date >= game_date (classé ou UNRANKED confirmé), et
+ * - chaque joueur a un snapshot best-effort (classé ou UNRANKED confirmé), et
  * - au moins un joueur classé → rang moyen du match calculable.
+ *
+ * Cas full-UNRANKED : `averageMatchRankTierLabel` retourne "UNRANKED" (utile pour le fallback
+ * materialize), mais cette fonction reste à `false` pour bloquer l'ingestion : on ne veut pas
+ * de stats agrégées sur un match sans aucun classé.
  */
 export function matchReadyForAggregation(
   participants: ParsedParticipantDto[],
@@ -74,7 +78,13 @@ export function matchReadyForAggregation(
 ): boolean {
   if (participants.length === 0) return false;
   if (!participants.every((p) => participantRankKnown(p, closestSnapshots))) return false;
-  return averageMatchRankTierLabel(participants, closestSnapshots) != null;
+  return participants.some((participant) => {
+    const puuid = String(participant.puuid ?? "").trim();
+    if (!puuid) return false;
+    const snapshot = closestSnapshots.get(puuid);
+    if (!snapshot) return false;
+    return normalizeParticipantRankTier(snapshot.rankTier) != null;
+  });
 }
 
 /** Participants sans snapshot best-effort. */

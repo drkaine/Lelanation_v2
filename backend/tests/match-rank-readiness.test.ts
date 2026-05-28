@@ -85,6 +85,13 @@ describe("match-rank-readiness", () => {
     expect(matchReadyForAggregation(participants, missing)).toBe(false);
   });
 
+  test("matchReadyForAggregation falls back to averageMatchRankTierLabel UNRANKED for materialize", () => {
+    const participants = [participant("a"), participant("b")];
+    const allUnranked = new Map([snapshot("a", "UNRANKED"), snapshot("b", "UNRANKED")]);
+    expect(averageMatchRankTierLabel(participants, allUnranked)).toBe("UNRANKED");
+    expect(matchReadyForAggregation(participants, allUnranked)).toBe(false);
+  });
+
   test("getMissingRankParticipants lists unknown puuids", () => {
     const participants = [participant("a"), participant("b")];
     const snapshots = new Map([snapshot("a", "GOLD")]);

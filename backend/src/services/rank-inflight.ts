@@ -1,4 +1,5 @@
 import { sql } from "../db/client.js";
+import { RANK_GATE_GRACE_DAYS } from "../db/query.js";
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
 import { rankQueue } from "../queues/index.js";
 import { rankChildJobId, RANK_CHILD_JOB_OPTS } from "../queues/rank-jobs-shared.js";
@@ -21,18 +22,27 @@ export function rankInflightKey(puuid: string, region: string, date = todayIsoDa
 
 const inFlightRankFetches = new Map<string, Promise<void>>();
 
+/**
+ * Snapshot dispo si :
+ *  - un row existe avec `date >= matchDateIso` (idéal), OU
+ *  - un row existe dans la fenêtre `[matchDate - RANK_GATE_GRACE_DAYS, matchDate)` (best-effort).
+ *
+ * Aligné avec `getRankSnapshotsAtOrAfterForMatch` côté gate hydration.
+ */
 export async function hasRankSnapshotForMatchDate(
   puuid: string,
   region: string,
   matchDateIso: string,
+  graceDays = RANK_GATE_GRACE_DAYS,
 ): Promise<boolean> {
   const regionKeys = platformRegionLookupKeys(region);
+  const safeGraceDays = Math.max(0, Math.trunc(graceDays));
   const rows = await sql<{ exists: number }[]>`
     SELECT 1 AS exists
     FROM player_rank_history
     WHERE puuid = ${puuid}
       AND region = ANY(${sql.array(regionKeys, 25)})
-      AND date >= ${matchDateIso}::date
+      AND date >= ${matchDateIso}::date - (${safeGraceDays}::int || ' days')::interval
     LIMIT 1
   `;
   return rows.length > 0;

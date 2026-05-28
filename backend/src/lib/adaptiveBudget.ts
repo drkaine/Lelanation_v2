@@ -264,6 +264,11 @@ export function scorePipelines(
 ): Record<Pipeline, number> {
   const { hydration, rank } = snapshots;
   const waitingChildren = hydration.hydrationWaitingChildren ?? 0;
+  const rankSaturated = rank.tokensUsed120s >= Math.max(1, rank.currentAlloc * 0.8);
+  const hydrationStarvedByRank =
+    hydration.queueWaiting > HYDRATION_QUEUE.HEALTHY_LO &&
+    hydration.tokensUsed120s < Math.max(2, hydration.currentAlloc * 0.2) &&
+    rankSaturated;
 
   let discoveryScore: number;
   if (hydration.queueWaiting < HYDRATION_QUEUE.STARVED) {
@@ -300,6 +305,16 @@ export function scorePipelines(
     rankScore = 0.3;
   } else {
     rankScore = 0.1;
+  }
+
+  // When hydration backlog is high and rank budget is saturated,
+  // rank becomes the hidden bottleneck even if rank queue is near zero.
+  if (hydration.queueWaiting > HYDRATION_QUEUE.HEALTHY_LO && rankSaturated) {
+    rankScore = Math.max(rankScore, 0.9);
+  }
+  if (hydrationStarvedByRank) {
+    rankScore = Math.max(rankScore, 1.1);
+    hydrationScore = Math.min(hydrationScore, 0.35);
   }
 
   return {
@@ -366,8 +381,17 @@ export function computeAllocation(
 
   // If rank queue is empty and rank throughput is far below its allocation,
   // shift budget back to hydration so backlog can drain.
+  // Exception : `hydration.waitingChildren` élevé signale que hydration est BLOQUÉE en attente
+  // de jobs rank enfants → le rank n'est pas "underused", il est juste différé. Ne pas le réduire.
   const rankUnderused = snapshots.rank.tokensUsed120s < rank * 0.3;
-  if (!FORCE_ALLOC_OVERRIDE && snapshots.rank.queueWaiting === 0 && rankUnderused && snapshots.hydration.queueWaiting > 0) {
+  const hydrationBlockedByRank = (snapshots.hydration.hydrationWaitingChildren ?? 0) > 3;
+  if (
+    !FORCE_ALLOC_OVERRIDE &&
+    !hydrationBlockedByRank &&
+    snapshots.rank.queueWaiting === 0 &&
+    rankUnderused &&
+    snapshots.hydration.queueWaiting > 0
+  ) {
     const targetRank = Math.max(min.rank, Math.min(rank, Math.ceil(snapshots.rank.tokensUsed120s * 1.5)));
     const freed = Math.max(0, rank - targetRank);
     if (freed > 0) {
@@ -381,6 +405,66 @@ export function computeAllocation(
         totalReq = discovery + hydration * 2 + rank;
       }
     }
+  }
+
+  // If discovery is significantly underused while hydration has backlog,
+  // reclaim part of discovery budget for hydration throughput.
+  const discoveryUnderused = snapshots.discovery.tokensUsed120s < discovery * 0.5;
+  if (
+    !FORCE_ALLOC_OVERRIDE &&
+    discoveryUnderused &&
+    snapshots.hydration.queueWaiting > HYDRATION_QUEUE.HEALTHY_LO
+  ) {
+    const targetDiscovery = Math.max(
+      min.discovery,
+      Math.min(discovery, Math.ceil(snapshots.discovery.tokensUsed120s * 1.5)),
+    );
+    const freed = Math.max(0, discovery - targetDiscovery);
+    if (freed > 0) {
+      discovery -= freed;
+      const hydrationAdd = Math.floor(freed / 2);
+      hydration = clamp(hydration + hydrationAdd, min.hydration, max.hydration);
+      totalReq = discovery + hydration * 2 + rank;
+      if (totalReq > totalBudget) {
+        const overflow = totalReq - totalBudget;
+        hydration = Math.max(min.hydration, hydration - Math.ceil(overflow / 2));
+        totalReq = discovery + hydration * 2 + rank;
+      }
+    }
+  }
+
+  // Try to consume most of the available budget when hydration has backlog.
+  if (!FORCE_ALLOC_OVERRIDE && snapshots.hydration.queueWaiting > HYDRATION_QUEUE.STARVED && totalReq < totalBudget) {
+    let spareReq = totalBudget - totalReq;
+
+    if (spareReq > 0) {
+      const hydrationHeadroomReq = Math.max(0, (max.hydration - hydration) * 2);
+      const hydrationReqAdd = Math.min(spareReq, hydrationHeadroomReq);
+      const hydrationJobsAdd = Math.floor(hydrationReqAdd / 2);
+      if (hydrationJobsAdd > 0) {
+        hydration = clamp(hydration + hydrationJobsAdd, min.hydration, max.hydration);
+        spareReq -= hydrationJobsAdd * 2;
+      }
+    }
+
+    if (spareReq > 0) {
+      const rankHeadroom = Math.max(0, max.rank - rank);
+      const rankAdd = Math.min(spareReq, rankHeadroom);
+      if (rankAdd > 0) {
+        rank += rankAdd;
+        spareReq -= rankAdd;
+      }
+    }
+
+    if (spareReq > 0) {
+      const discoveryHeadroom = Math.max(0, max.discovery - discovery);
+      const discoveryAdd = Math.min(spareReq, discoveryHeadroom);
+      if (discoveryAdd > 0) {
+        discovery += discoveryAdd;
+      }
+    }
+
+    totalReq = discovery + hydration * 2 + rank;
   }
 
   return { discovery, hydration, rank, totalReq };

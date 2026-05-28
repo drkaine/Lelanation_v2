@@ -72,6 +72,17 @@ describe("computeAllocation", () => {
     expect(blocked.rank).toBeGreaterThan(idle.rank);
   });
 
+  test("does not reclaim rank budget when hydration is blocked on rank children", () => {
+    const blocked = computeAllocation(
+      snapshots({
+        hydration: { hydrationWaitingChildren: 35, queueWaiting: 40, tokensUsed120s: 1 },
+        rank: { queueWaiting: 0, queueActive: 0, tokensUsed120s: 0 },
+      }),
+      90,
+    );
+    expect(blocked.rank).toBeGreaterThanOrEqual(20);
+  });
+
   test("guarantees pipeline minimums", () => {
     const alloc = computeAllocation(
       snapshots({ hydration: { queueWaiting: 500 }, rank: { queueWaiting: 200 } }),

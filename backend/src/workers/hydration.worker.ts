@@ -9,6 +9,7 @@ import { parseMatch } from "../parsers/match.parser.js";
 import { HYDRATION_QUEUE } from "../queues/definitions.js";
 import { getRankBacklogCount, ingestionQueue } from "../queues/index.js";
 import { maxRankBacklogBeforePipelinePause, shouldPauseMatchPipelines } from "../queues/rank-backlog-policy.js";
+import { ensureRankSnapshotsForHydration } from "../queues/rank-jobs.js";
 import {
   averageMatchRankTierLabel,
   getMissingRankParticipants,
@@ -19,7 +20,6 @@ import {
   cachedRankValidForMatchDate,
   readRankCacheL1,
   readRankCacheRedis,
-  writeRankCacheRedis,
 } from "../redis/rank-cache.js";
 import { waitForHydrationSlot } from "../redis/rate-scheduler.js";
 import { NotFoundError, RiotClient } from "../riot/client.js";
@@ -355,66 +355,23 @@ async function refreshParticipantsRankState(
   return closestSnapshots;
 }
 
-async function fetchAndPersistRankSnapshotNow(puuid: string, region: string): Promise<void> {
-  const today = new Date().toISOString().slice(0, 10);
-  const rank = await riotClient.getRank(puuid, region);
-  if (!rank) {
-    await sql`
-      INSERT INTO player_rank_history (puuid, date, region, rank_tier, rank_division, rank_lp)
-      VALUES (${puuid}, ${today}::date, ${region}, 'UNRANKED', 'UNRANKED', 0)
-      ON CONFLICT (puuid, date, region) DO NOTHING
-    `;
-    await writeRankCacheRedis(puuid, region, {
-      rankTier: "UNRANKED",
-      rankDivision: "UNRANKED",
-      rankLp: 0,
-      snapshotDate: today,
-      cachedAtMs: Date.now(),
-    });
-    return;
-  }
-
-  const tier = normalizeTier(rank.tier) ?? "UNRANKED";
-  const rankDivision = String(rank.rank ?? "UNRANKED").trim().toUpperCase() || "UNRANKED";
-  const rankLp = Math.max(0, Math.trunc(Number(rank.leaguePoints ?? 0)));
-  await sql`
-    INSERT INTO player_rank_history (puuid, date, region, rank_tier, rank_division, rank_lp)
-    VALUES (${puuid}, ${today}::date, ${region}, ${tier}, ${rankDivision}, ${rankLp})
-    ON CONFLICT (puuid, date, region) DO NOTHING
-  `;
-  await writeRankCacheRedis(puuid, region, {
-    rankTier: tier,
-    rankDivision,
-    rankLp,
-    snapshotDate: today,
-    cachedAtMs: Date.now(),
-  });
-}
-
-async function fetchMissingRanksFromRiot(
-  participants: ParsedParticipantDto[],
+/**
+ * Résout les rangs manquants via la queue rank (rank.worker → drip + bucket 120 s).
+ * Remplace l'ancien `fetchMissingRanksFromRiot` qui appelait Riot en direct, hors limiter,
+ * saturait le bucket 120 s et générait ~30 k req/16h depuis l'hydration.
+ *
+ * `ensureRankSnapshotsForHydration` :
+ *  - enqueue un rank job dédupliqué par puuid + jour ;
+ *  - bloque jusqu'à snapshot dispo (max 45 s) ;
+ *  - retourne dès que le snapshot DB couvre matchDate (grace window appliquée par `hasRankSnapshotForMatchDate`).
+ */
+async function fetchMissingRanksViaRankQueue(
+  hydrationJob: Job<HydrationJobData>,
   missing: ParsedParticipantDto[],
+  matchDateIso: string,
 ): Promise<void> {
-  const byPuuid = new Map<string, ParsedParticipantDto>();
-  for (const participant of participants) {
-    const puuid = String(participant.puuid ?? "").trim();
-    if (puuid) byPuuid.set(puuid, participant);
-  }
-
-  for (const missingParticipant of missing) {
-    const puuid = String(missingParticipant.puuid ?? "").trim();
-    if (!puuid) continue;
-    const participant = byPuuid.get(puuid) ?? missingParticipant;
-    const normalizedRegion = normalizePlatformRegion(participant.region);
-    if (!normalizedRegion) continue;
-    try {
-      await fetchAndPersistRankSnapshotNow(puuid, normalizedRegion);
-    } catch (error) {
-      console.warn(
-        `[hydration.worker] rank_fetch_direct_failed puuid=${puuid} region=${normalizedRegion} reason=${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
+  if (missing.length === 0) return;
+  await ensureRankSnapshotsForHydration(hydrationJob, missing, matchDateIso);
 }
 
 function materializeMissingRanksAsUnranked(
@@ -477,7 +434,7 @@ async function finalizeHydrationRankGate(
     return;
   }
 
-  await fetchMissingRanksFromRiot(participants, missing);
+  await fetchMissingRanksViaRankQueue(_hydrationJob, missing, gameDate.toISOString().slice(0, 10));
   closestSnapshots = await refreshParticipantsRankState(participants, region, gameDate);
   if (matchReadyForAggregation(participants, closestSnapshots)) {
     const teamStats = parseTeamStats(teamStatsBase, participants, closestSnapshots);
