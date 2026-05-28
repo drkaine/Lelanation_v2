@@ -218,7 +218,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, toRaw, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
-import type { Build } from '@lelanation/shared-types'
+import type { Build, CalculatedStats } from '@lelanation/shared-types'
 import BuildCard from '~/components/Build/BuildCard.vue'
 import BuildSaveButton from '~/components/Build/BuildSaveButton.vue'
 import TheorycraftRuneStackPanel from '~/components/Build/TheorycraftRuneStackPanel.vue'
@@ -261,7 +261,7 @@ const sideBuilds = ref<Record<TheorycraftSide, Build | null>>({
   ally: null,
   enemy: null,
 })
-const sideCalculatedStats = ref<Record<TheorycraftSide, Record<string, number> | null>>({
+const sideCalculatedStats = ref<Record<TheorycraftSide, CalculatedStats | null>>({
   ally: null,
   enemy: null,
 })
@@ -352,7 +352,7 @@ function persistActiveSideBuild() {
 
 function persistActiveSideStats() {
   sideCalculatedStats.value[activeSide.value] = buildStore.calculatedStats
-    ? ({ ...buildStore.calculatedStats } as Record<string, number>)
+    ? ({ ...buildStore.calculatedStats } as CalculatedStats)
     : null
 }
 
@@ -534,9 +534,7 @@ watch(
 watch(
   () => buildStore.calculatedStats,
   stats => {
-    sideCalculatedStats.value[activeSide.value] = stats
-      ? ({ ...stats } as Record<string, number>)
-      : null
+    sideCalculatedStats.value[activeSide.value] = stats ? ({ ...stats } as CalculatedStats) : null
   },
   { deep: true }
 )
@@ -582,7 +580,7 @@ onMounted(async () => {
   sideBuilds.value.ally = storedVs?.ally ?? cloneBuild(buildStore.currentBuild)
   sideBuilds.value.enemy = storedVs?.enemy ?? null
   sideCalculatedStats.value.ally = buildStore.calculatedStats
-    ? ({ ...buildStore.calculatedStats } as Record<string, number>)
+    ? ({ ...buildStore.calculatedStats } as CalculatedStats)
     : null
   sideCalculatedStats.value.enemy = null
   showVersus.value = Boolean(

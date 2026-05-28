@@ -1189,6 +1189,7 @@
             <TheorycraftCardStatsBack
               :stats="resolvedCalculatedStats"
               :level="resolvedStatsLevel"
+              :items="buildItems"
               :partype="(selectedChampion as { partype?: string } | null)?.partype"
               :active-item-count="theorycraftActiveItemCount"
               :stack-count="theorycraftStackCount"
@@ -1274,6 +1275,7 @@
             v-if="flipBackFace === 'stats'"
             :stats="resolvedCalculatedStats"
             :level="resolvedStatsLevel"
+            :items="buildItems"
             :partype="(selectedChampion as { partype?: string } | null)?.partype"
             :active-item-count="theorycraftActiveItemCount"
             :stack-count="theorycraftStackCount"
@@ -1575,6 +1577,7 @@
           class="items-manager-total-stats"
           :stats="resolvedCalculatedStats"
           :level="resolvedStatsLevel"
+          :items="buildItems"
           :partype="(selectedChampion as { partype?: string } | null)?.partype"
           :active-item-count="theorycraftActiveItemCount"
           :stack-count="theorycraftStackCount"
@@ -1702,7 +1705,14 @@ import {
   filterItemsForStats,
   filterItemsForStatsWithStarters,
 } from '@lelanation/builds-stats'
-import type { Build, SubBuild, Item, Role, SkillOrder } from '@lelanation/shared-types'
+import type {
+  Build,
+  SubBuild,
+  Item,
+  Role,
+  SkillOrder,
+  CalculatedStats,
+} from '@lelanation/shared-types'
 import {
   activeItemLimitLabel,
   countActiveNonStarterItems,
@@ -1762,7 +1772,7 @@ const DEFAULT_REGION_COLORS: [string, string] = ['#BBA077', '#1E2328']
 
 interface Props {
   build?: Build | null // Build optionnel - si non fourni, utilise currentBuild du store
-  calculatedStats?: Record<string, number> | null
+  calculatedStats?: CalculatedStats | null
   statsLevel?: number | null
   readonly?: boolean // Si true, désactive les interactions (bouton reset, toggle rôles, etc.)
   sheetTooltips?: boolean // Active les tooltips de la sheet (summoners/runes/shards/items)

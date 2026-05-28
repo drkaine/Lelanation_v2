@@ -16,6 +16,103 @@
     </div>
 
     <template v-else>
+      <div
+        v-if="hasVersusTarget() && simulatedTarget"
+        class="border-border/60 mb-2 flex flex-wrap items-center gap-2 rounded-lg border p-2 text-xs"
+      >
+        <span class="font-semibold text-text">
+          Cible: {{ Math.round(simulatedTarget.hp) }} PV
+          <span v-if="simulatedTarget.shield > 0">
+            + {{ Math.round(simulatedTarget.shield) }} bouclier</span
+          >
+        </span>
+        <span class="text-muted">({{ Math.round(effectiveTargetHp) }} effectifs)</span>
+        <span class="text-muted">
+          CC combo: hard {{ simulatedControl.hardCcSeconds.toFixed(2) }}s / slow
+          {{ simulatedControl.slowSeconds.toFixed(2) }}s
+        </span>
+        <span class="text-muted">
+          actif: hard {{ activeHardCcRemaining.toFixed(2) }}s / slow
+          {{ activeSlowRemaining.toFixed(2) }}s
+        </span>
+        <span class="text-muted">lock {{ actionLockRemaining().toFixed(2) }}s</span>
+        <span v-if="simulatedResource" class="text-muted">
+          {{ simulatedResource.kind }} {{ simulatedResource.current.toFixed(0) }}/{{
+            simulatedResource.max.toFixed(0)
+          }}
+        </span>
+        <label class="text-muted inline-flex items-center gap-1">
+          t={{ timelineNowSeconds.toFixed(1) }}s
+          <input
+            v-model.number="timelineStepSeconds"
+            type="number"
+            min="0.05"
+            step="0.05"
+            class="theorycraft-stack-input border-border rounded border bg-surface text-text"
+            style="width: 4.8ch"
+            title="Pas de temps auto après chaque action"
+          />
+        </label>
+        <button
+          type="button"
+          class="border-border rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text/80 hover:border-accent/60"
+          :disabled="autoRemainingCooldown() > 0.001"
+          @click="useAutoAttack"
+        >
+          AA
+          <span v-if="autoRemainingCooldown() > 0.001"
+            >({{ autoRemainingCooldown().toFixed(1) }}s)</span
+          >
+        </button>
+        <button
+          type="button"
+          class="border-border rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text/80 hover:border-accent/60"
+          @click="enqueueAutoAttack"
+        >
+          Queue AA
+        </button>
+        <button
+          type="button"
+          class="border-border rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text/80 hover:border-accent/60"
+          @click="waitTimelineStep"
+        >
+          Wait +{{ timelineStepSeconds.toFixed(2) }}s
+        </button>
+        <button
+          type="button"
+          class="border-border rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text/80 hover:border-accent/60"
+          :disabled="actionQueue.length === 0"
+          @click="runQueuedActions"
+        >
+          Run Queue ({{ actionQueue.length }})
+        </button>
+        <button
+          type="button"
+          class="border-border rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text/80 hover:border-accent/60"
+          :disabled="actionQueue.length === 0"
+          @click="clearQueue"
+        >
+          Clear Queue
+        </button>
+        <button
+          type="button"
+          class="border-border rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text/80 hover:border-accent/60"
+          @click="resetSimulation"
+        >
+          Reset PV
+        </button>
+      </div>
+
+      <div
+        v-if="hasVersusTarget() && killHints.length > 0"
+        class="border-border/40 mb-2 rounded border px-2 py-1.5 text-[11px] text-text/85"
+      >
+        <p class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-text/65">
+          Estimations kill
+        </p>
+        <p v-for="(hint, index) in killHints" :key="`kill-hint-${index}`">{{ hint }}</p>
+      </div>
+
       <p
         v-if="!passive && spells.length === 0"
         class="border-border/60 text-muted rounded-lg border p-3 text-sm"
@@ -56,6 +153,25 @@
             >
             <span v-if="passive.lethalVsChampion" aria-hidden="true">☠</span>
           </span>
+          <span
+            v-if="(passive.controlDurationVsChampion ?? 0) > 0"
+            class="spell-vs-damage-badge"
+            :title="passive.controlVsTooltip"
+          >
+            CC {{ passive.controlDurationVsChampion?.toFixed(2) }}s
+            <span class="text-[9px] opacity-80">
+              (H {{ passive.hardControlDurationVsChampion?.toFixed(2) }} / S
+              {{ passive.slowDurationVsChampion?.toFixed(2) }})
+            </span>
+          </span>
+          <button
+            v-if="passive.damageVsChampion != null"
+            type="button"
+            class="border-border rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-text/80 hover:border-accent/60"
+            @click.stop="usePassiveDamage(passive)"
+          >
+            Lancer
+          </button>
         </summary>
 
         <div v-if="passiveStackDefinition" class="mt-2 flex flex-wrap items-center gap-2 text-xs">
@@ -156,6 +272,44 @@
               >
               <span v-if="spell.lethalVsChampion" aria-hidden="true">☠</span>
             </span>
+            <span
+              v-if="(spell.controlDurationVsChampion ?? 0) > 0"
+              class="spell-vs-damage-badge"
+              :title="spell.controlVsTooltip"
+            >
+              CC {{ spell.controlDurationVsChampion?.toFixed(2) }}s
+              <span class="text-[9px] opacity-80">
+                (H {{ spell.hardControlDurationVsChampion?.toFixed(2) }} / S
+                {{ spell.slowDurationVsChampion?.toFixed(2) }})
+              </span>
+            </span>
+            <button
+              v-if="spell.damageVsChampion != null || (spell.controlDurationVsChampion ?? 0) > 0"
+              type="button"
+              class="border-border rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-text/80 hover:border-accent/60"
+              :disabled="
+                spellRemainingCooldown(spell.id) > 0.001 ||
+                (simulatedResource != null &&
+                  (spell.resourceCost ?? 0) > simulatedResource.current + 1e-6)
+              "
+              @click="useSpellDamage(spell)"
+            >
+              Lancer
+              <span v-if="spellRemainingCooldown(spell.id) > 0.001">
+                ({{ spellRemainingCooldown(spell.id).toFixed(1) }}s)
+              </span>
+              <span v-else-if="(spell.resourceCost ?? 0) > 0">
+                ({{ spell.resourceCost?.toFixed(0) }} {{ simulatedResource?.kind ?? 'mana' }})
+              </span>
+            </button>
+            <button
+              v-if="spell.damageVsChampion != null || (spell.controlDurationVsChampion ?? 0) > 0"
+              type="button"
+              class="border-border rounded border px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-text/80 hover:border-accent/60"
+              @click="enqueueSpell(spell)"
+            >
+              Queue
+            </button>
             <button
               v-if="spell.hasActivatableBuff"
               type="button"
@@ -236,6 +390,16 @@
         />
         <!-- eslint-enable vue/no-v-html -->
       </details>
+
+      <div
+        v-if="simulationLog.length > 0"
+        class="border-border/40 mt-2 rounded border px-2 py-1.5 text-[11px] text-text/85"
+      >
+        <p class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-text/65">
+          Historique combo
+        </p>
+        <p v-for="(line, index) in simulationLog" :key="`sim-log-${index}`">{{ line }}</p>
+      </div>
     </template>
   </section>
 </template>
@@ -247,6 +411,7 @@ import {
   finalizeTooltipDisplay,
   resolveTheorycraftSpellDescription,
   resolveTheorycraftSpellDetailRaws,
+  type TheorycraftSpellCalculation,
   type TheorycraftSpellRuntimeData,
   type TheorycraftStackResolveContext,
 } from '~/composables/useTheorycraftTooltip'
@@ -289,6 +454,13 @@ interface ResolvedSpellView {
   damageVsChampion?: number | null
   lethalVsChampion?: boolean
   damageVsTooltip?: string
+  controlDurationVsChampion?: number | null
+  hardControlDurationVsChampion?: number | null
+  slowDurationVsChampion?: number | null
+  controlVsTooltip?: string
+  cooldownSeconds?: number
+  resourceCost?: number
+  hitDelaySeconds?: number
 }
 
 interface ResolvedPassiveView {
@@ -302,6 +474,45 @@ interface ResolvedPassiveView {
   damageVsChampion?: number | null
   lethalVsChampion?: boolean
   damageVsTooltip?: string
+  controlDurationVsChampion?: number | null
+  hardControlDurationVsChampion?: number | null
+  slowDurationVsChampion?: number | null
+  controlVsTooltip?: string
+}
+
+interface SimulatedTargetState {
+  hp: number
+  shield: number
+}
+
+interface SimulatedControlState {
+  hardCcSeconds: number
+  slowSeconds: number
+}
+
+interface SimulatedResourceState {
+  kind: 'mana' | 'energy'
+  current: number
+  max: number
+}
+
+interface TimeWindow {
+  start: number
+  end: number
+}
+
+interface QueuedAction {
+  type: 'aa' | 'spell'
+  spellId?: string
+  label: string
+}
+
+interface PendingHitEvent {
+  at: number
+  label: string
+  damage: number
+  hardCc: number
+  slowCc: number
 }
 
 const props = defineProps<{
@@ -329,6 +540,20 @@ const stackCalculationsBySource = computed(() =>
 const passiveStackDefinition = computed(() =>
   findStackDefinitionForSource(stackDefinitions.value, { scope: 'passive' })
 )
+const simulatedTarget = ref<SimulatedTargetState | null>(null)
+const simulatedControl = ref<SimulatedControlState>({ hardCcSeconds: 0, slowSeconds: 0 })
+const simulatedResource = ref<SimulatedResourceState | null>(null)
+const timelineNowSeconds = ref(0)
+const timelineStepSeconds = ref(0.4)
+const hardControlWindows = ref<TimeWindow[]>([])
+const slowControlWindows = ref<TimeWindow[]>([])
+const spellReadyAt = reactive<Record<string, number>>({})
+const autoReadyAt = ref(0)
+const castLockUntil = ref(0)
+const gcdLockUntil = ref(0)
+const actionQueue = ref<QueuedAction[]>([])
+const pendingHitEvents = ref<PendingHitEvent[]>([])
+const simulationLog = ref<string[]>([])
 
 function stackDefinitionForSpell(id: string, slot: string): TheorycraftStackDefinition | null {
   return findStackDefinitionForSource(stackDefinitions.value, { scope: 'spell', id, slot })
@@ -440,12 +665,474 @@ function toggleSpellActive(spellId: string) {
   buildStore.toggleTheorycraftActiveSpell(spellId)
 }
 
+function hasVersusTarget(): boolean {
+  return Boolean(props.opponentBuildStats && props.opponentRawStats)
+}
+
+function targetMaxHp(): number {
+  return Number(props.opponentBuildStats?.totalHP ?? 0)
+}
+
+function targetInitialShield(): number {
+  return Math.max(0, Number(props.opponentRawStats?.shield ?? 0))
+}
+
+function resolveResourceKind(): 'mana' | 'energy' {
+  const partype = String((props.championData as { partype?: string } | null)?.partype ?? '')
+    .trim()
+    .toLowerCase()
+  return partype.includes('energy') ? 'energy' : 'mana'
+}
+
+function maxResourcePool(): number {
+  const stats = props.buildStats
+  if (!stats) return 0
+  if (resolveResourceKind() === 'energy') return 200
+  return Math.max(0, Number(stats.maxMana ?? 0))
+}
+
+function resetSimulation() {
+  if (!hasVersusTarget()) {
+    simulatedTarget.value = null
+    simulationLog.value = []
+    return
+  }
+  simulatedTarget.value = {
+    hp: Math.max(0, targetMaxHp()),
+    shield: targetInitialShield(),
+  }
+  const maxResource = maxResourcePool()
+  simulatedResource.value = {
+    kind: resolveResourceKind(),
+    current: maxResource,
+    max: maxResource,
+  }
+  timelineNowSeconds.value = 0
+  simulatedControl.value = { hardCcSeconds: 0, slowSeconds: 0 }
+  hardControlWindows.value = []
+  slowControlWindows.value = []
+  Object.keys(spellReadyAt).forEach(key => {
+    delete spellReadyAt[key]
+  })
+  autoReadyAt.value = 0
+  castLockUntil.value = 0
+  gcdLockUntil.value = 0
+  actionQueue.value = []
+  pendingHitEvents.value = []
+  simulationLog.value = []
+}
+
+function ensureSimulationState(): SimulatedTargetState | null {
+  if (!hasVersusTarget()) return null
+  if (!simulatedTarget.value) resetSimulation()
+  return simulatedTarget.value
+}
+
+function applyDamageToSimulation(amount: number, sourceLabel: string) {
+  const target = ensureSimulationState()
+  if (!target) return
+  const damage = Math.max(0, Number(amount) || 0)
+  if (damage <= 0) return
+
+  let remaining = damage
+  if (target.shield > 0) {
+    const absorbed = Math.min(target.shield, remaining)
+    target.shield -= absorbed
+    remaining -= absorbed
+  }
+  if (remaining > 0) {
+    target.hp = Math.max(0, target.hp - remaining)
+  }
+  recordTimelineEvent(
+    `${sourceLabel}: -${formatDamageValue(damage)} (${formatDamageValue(target.hp)} PV restants)`
+  )
+}
+
+function recordTimelineEvent(message: string) {
+  simulationLog.value = [
+    `t=${formatDamageValue(timelineNowSeconds.value)}s • ${message}`,
+    ...simulationLog.value,
+  ].slice(0, 12)
+}
+
+function advanceTimeline(seconds?: number) {
+  const step = Number(seconds ?? timelineStepSeconds.value)
+  if (!Number.isFinite(step) || step <= 0) return
+  timelineNowSeconds.value += step
+  if (simulatedResource.value) {
+    const regenPerSecond = simulatedResource.value.kind === 'energy' ? 10 : 8
+    simulatedResource.value.current = Math.min(
+      simulatedResource.value.max,
+      simulatedResource.value.current + regenPerSecond * step
+    )
+  }
+  processPendingHitEvents()
+}
+
+function waitTimelineStep() {
+  advanceTimeline()
+}
+
+function autoAttackIntervalSeconds(): number {
+  const asFromStats = Number(buildStore.calculatedStats?.attackSpeed ?? NaN)
+  const attackSpeed = Number.isFinite(asFromStats) && asFromStats > 0 ? asFromStats : 0.7
+  return 1 / attackSpeed
+}
+
+function spellRemainingCooldown(spellId: string): number {
+  const readyAt = Number(spellReadyAt[spellId] ?? 0)
+  return Math.max(0, readyAt - timelineNowSeconds.value)
+}
+
+function autoRemainingCooldown(): number {
+  return Math.max(0, autoReadyAt.value - timelineNowSeconds.value)
+}
+
+function actionLockRemaining(): number {
+  const now = timelineNowSeconds.value
+  return Math.max(0, castLockUntil.value - now, gcdLockUntil.value - now)
+}
+
+function applyActionRecovery(castTimeSeconds: number, gcdSeconds = 0.1) {
+  const now = timelineNowSeconds.value
+  castLockUntil.value = Math.max(castLockUntil.value, now + Math.max(0, castTimeSeconds))
+  gcdLockUntil.value = Math.max(gcdLockUntil.value, now + Math.max(0, gcdSeconds))
+}
+
+function queueHitEvent(event: PendingHitEvent) {
+  pendingHitEvents.value = [...pendingHitEvents.value, event].sort((a, b) => a.at - b.at)
+}
+
+function processPendingHitEvents() {
+  if (pendingHitEvents.value.length === 0) return
+  const now = timelineNowSeconds.value
+  const due = pendingHitEvents.value.filter(event => event.at <= now + 1e-6)
+  if (due.length === 0) return
+  pendingHitEvents.value = pendingHitEvents.value.filter(event => event.at > now + 1e-6)
+  for (const event of due) {
+    if (event.damage > 0) applyDamageToSimulation(event.damage, event.label)
+    if (event.hardCc > 0) addControlWindow('hard', event.hardCc)
+    if (event.slowCc > 0) addControlWindow('slow', event.slowCc)
+    if (event.hardCc > 0 || event.slowCc > 0) {
+      recordTimelineEvent(
+        `${event.label}: CC impact (hard ${formatDamageValue(event.hardCc)} / slow ${formatDamageValue(event.slowCc)})`
+      )
+    }
+  }
+}
+
+function mergeTimeWindows(windows: TimeWindow[]): TimeWindow[] {
+  if (windows.length <= 1) return windows
+  const sorted = [...windows].sort((a, b) => a.start - b.start)
+  const merged: TimeWindow[] = [sorted[0]!]
+  for (let index = 1; index < sorted.length; index += 1) {
+    const current = sorted[index]!
+    const last = merged[merged.length - 1]!
+    if (current.start <= last.end) {
+      last.end = Math.max(last.end, current.end)
+    } else {
+      merged.push({ ...current })
+    }
+  }
+  return merged
+}
+
+function addControlWindow(kind: 'hard' | 'slow', durationSeconds: number) {
+  const duration = Math.max(0, Number(durationSeconds) || 0)
+  if (duration <= 0) return
+  const start = timelineNowSeconds.value
+  const end = start + duration
+  if (kind === 'hard') {
+    hardControlWindows.value = mergeTimeWindows([...hardControlWindows.value, { start, end }])
+  } else {
+    slowControlWindows.value = mergeTimeWindows([...slowControlWindows.value, { start, end }])
+  }
+}
+
+function totalWindowDuration(windows: TimeWindow[]): number {
+  return windows.reduce((sum, window) => sum + Math.max(0, window.end - window.start), 0)
+}
+
+function useSpellDamage(spell: ResolvedSpellView) {
+  if (spell.damageVsChampion == null && spell.controlDurationVsChampion == null) return
+  const actionLock = actionLockRemaining()
+  if (actionLock > 0.001) {
+    recordTimelineEvent(
+      `${displaySpellSlot(spell.slot)} ${spell.name} bloqué (${formatDamageValue(actionLock)}s)`
+    )
+    return
+  }
+  const remaining = spellRemainingCooldown(spell.id)
+  if (remaining > 0.001) {
+    recordTimelineEvent(
+      `${displaySpellSlot(spell.slot)} ${spell.name} indisponible (${formatDamageValue(remaining)}s CD)`
+    )
+    return
+  }
+  const cost = Math.max(0, Number(spell.resourceCost ?? 0))
+  if (cost > 0 && simulatedResource.value) {
+    if (simulatedResource.value.current + 1e-6 < cost) {
+      recordTimelineEvent(
+        `${displaySpellSlot(spell.slot)} ${spell.name} impossible (coût ${formatDamageValue(cost)} ${simulatedResource.value.kind})`
+      )
+      return
+    }
+    simulatedResource.value.current = Math.max(0, simulatedResource.value.current - cost)
+  }
+  const slot = displaySpellSlot(spell.slot)
+  const hardCc = Number(spell.hardControlDurationVsChampion ?? 0)
+  const slowCc = Number(spell.slowDurationVsChampion ?? 0)
+  const hitDelay = Math.max(0, Number(spell.hitDelaySeconds ?? 0))
+  queueHitEvent({
+    at: timelineNowSeconds.value + hitDelay,
+    label: `${slot} ${spell.name}`,
+    damage: Math.max(0, Number(spell.damageVsChampion ?? 0)),
+    hardCc: Math.max(0, hardCc),
+    slowCc: Math.max(0, slowCc),
+  })
+  recordTimelineEvent(`${slot} ${spell.name} cast (impact +${formatDamageValue(hitDelay)}s)`)
+  const cooldown = Math.max(0, Number(spell.cooldownSeconds ?? 0))
+  if (cooldown > 0) {
+    spellReadyAt[spell.id] = timelineNowSeconds.value + cooldown
+  }
+  applyActionRecovery(0.25, 0.1)
+  advanceTimeline(0.25)
+}
+
+function usePassiveDamage(passiveView: ResolvedPassiveView) {
+  if (passiveView.damageVsChampion != null) {
+    applyDamageToSimulation(passiveView.damageVsChampion, `P ${passiveView.name}`)
+  }
+  const hardCc = Number(passiveView.hardControlDurationVsChampion ?? 0)
+  const slowCc = Number(passiveView.slowDurationVsChampion ?? 0)
+  if (hardCc > 0 || slowCc > 0) {
+    addControlWindow('hard', hardCc)
+    addControlWindow('slow', slowCc)
+  }
+  if ((passiveView.controlDurationVsChampion ?? 0) > 0) {
+    recordTimelineEvent(
+      `P ${passiveView.name}: CC ${formatDamageValue(passiveView.controlDurationVsChampion ?? 0)}s (hard ${formatDamageValue(hardCc)} / slow ${formatDamageValue(slowCc)})`
+    )
+  }
+  advanceTimeline()
+}
+
+function estimatedAutoAttackDamage(): number | null {
+  const attacker = props.buildStats
+  const defenderRaw = props.opponentRawStats
+  if (!attacker || !defenderRaw) return null
+  return reduceDamageByDefenses(attacker.totalAD, 'physical', defenderRaw)
+}
+
+function useAutoAttack() {
+  const actionLock = actionLockRemaining()
+  if (actionLock > 0.001) {
+    recordTimelineEvent(`AA bloquée (${formatDamageValue(actionLock)}s)`)
+    return
+  }
+  const remaining = autoRemainingCooldown()
+  if (remaining > 0.001) {
+    recordTimelineEvent(`AA indisponible (${formatDamageValue(remaining)}s)`)
+    return
+  }
+  const damage = estimatedAutoAttackDamage()
+  if (damage == null) return
+  queueHitEvent({
+    at: timelineNowSeconds.value + 0.1,
+    label: 'AA',
+    damage,
+    hardCc: 0,
+    slowCc: 0,
+  })
+  recordTimelineEvent('AA lancé (impact +0.1s)')
+  autoReadyAt.value = timelineNowSeconds.value + autoAttackIntervalSeconds()
+  applyActionRecovery(0.15, 0.1)
+  advanceTimeline(0.15)
+}
+
+const effectiveTargetHp = computed(() => {
+  const state = simulatedTarget.value
+  if (!state) return 0
+  return Math.max(0, state.hp + state.shield)
+})
+
+const activeHardCcRemaining = computed(() => {
+  const now = timelineNowSeconds.value
+  const active = hardControlWindows.value.find(window => now >= window.start && now < window.end)
+  return active ? active.end - now : 0
+})
+
+const activeSlowRemaining = computed(() => {
+  const now = timelineNowSeconds.value
+  const active = slowControlWindows.value.find(window => now >= window.start && now < window.end)
+  return active ? active.end - now : 0
+})
+
+watch([hardControlWindows, slowControlWindows], () => {
+  simulatedControl.value = {
+    hardCcSeconds: totalWindowDuration(hardControlWindows.value),
+    slowSeconds: totalWindowDuration(slowControlWindows.value),
+  }
+})
+
+function castsToKill(targetHp: number, perCastDamage: number | null | undefined): number | null {
+  const damage = Number(perCastDamage ?? 0)
+  if (!Number.isFinite(targetHp) || targetHp <= 0) return 0
+  if (!Number.isFinite(damage) || damage <= 0) return null
+  return Math.max(1, Math.ceil(targetHp / damage))
+}
+
+const autoAttackTiming = computed(() => {
+  const hits = castsToKill(effectiveTargetHp.value, estimatedAutoAttackDamage())
+  const secondsPerAttack = autoAttackIntervalSeconds()
+  const timeToKill = hits == null ? null : Math.max(0, (hits - 1) * secondsPerAttack)
+  return { hits, timeToKill }
+})
+
+function enqueueAutoAttack() {
+  actionQueue.value.push({ type: 'aa', label: 'AA' })
+}
+
+function enqueueSpell(spell: ResolvedSpellView) {
+  actionQueue.value.push({
+    type: 'spell',
+    spellId: spell.id,
+    label: `${displaySpellSlot(spell.slot)} ${spell.name}`,
+  })
+}
+
+function clearQueue() {
+  actionQueue.value = []
+}
+
+function runQueuedActions() {
+  let guard = 0
+  while (actionQueue.value.length > 0 && guard < 200) {
+    guard += 1
+    const action = actionQueue.value[0]!
+    const lock = actionLockRemaining()
+    const aaCd = action.type === 'aa' ? autoRemainingCooldown() : 0
+    const spellCd =
+      action.type === 'spell' ? spellRemainingCooldown(String(action.spellId ?? '')) : 0
+    const wait = Math.max(lock, aaCd, spellCd)
+    if (wait > 0.001) {
+      advanceTimeline(wait)
+    }
+    if (action.type === 'aa') {
+      useAutoAttack()
+      actionQueue.value.shift()
+      continue
+    }
+    const spell = spells.value.find(entry => entry.id === action.spellId)
+    if (!spell) {
+      recordTimelineEvent(`Action ignorée: ${action.label}`)
+      actionQueue.value.shift()
+      continue
+    }
+    useSpellDamage(spell)
+    actionQueue.value.shift()
+  }
+}
+
+function resolveSpellCooldownSeconds(
+  raw: TheorycraftSpellRuntimeData & Record<string, unknown>,
+  rank: number
+): number {
+  const maxRank = Math.max(1, Number(raw.maxRank ?? 5))
+  const rankIndex = Math.min(Math.max(rank, 1), maxRank) - 1
+  const cdEntry = (raw.dataValues ?? []).find(entry =>
+    /cooldown|cd|recasttime|chargetime/i.test(String(entry.name ?? ''))
+  )
+  if (cdEntry) {
+    const value = Number(cdEntry.values?.[rankIndex] ?? cdEntry.values?.[0] ?? 0)
+    if (Number.isFinite(value) && value > 0) return value
+  }
+  const cdCalc = (raw.calculations ?? []).find(calc => /cooldown|cd/i.test(String(calc.key ?? '')))
+  if (cdCalc) {
+    const value = Number(cdCalc.baseValues?.[rankIndex] ?? cdCalc.baseValues?.[0] ?? 0)
+    if (Number.isFinite(value) && value > 0) return value
+  }
+  return 0
+}
+
+function resolveSpellResourceCost(
+  raw: TheorycraftSpellRuntimeData & Record<string, unknown>,
+  rank: number
+): number {
+  const maxRank = Math.max(1, Number(raw.maxRank ?? 5))
+  const rankIndex = Math.min(Math.max(rank, 1), maxRank) - 1
+  const costEntry = (raw.dataValues ?? []).find(entry =>
+    /cost|manacost|energycost|resourcecost/i.test(String(entry.name ?? ''))
+  )
+  if (costEntry) {
+    const value = Number(costEntry.values?.[rankIndex] ?? costEntry.values?.[0] ?? 0)
+    if (Number.isFinite(value) && value > 0) return value
+  }
+  const costCalc = (raw.calculations ?? []).find(calc => /cost|manacost|energycost/i.test(calc.key))
+  if (costCalc) {
+    const value = Number(costCalc.baseValues?.[rankIndex] ?? costCalc.baseValues?.[0] ?? 0)
+    if (Number.isFinite(value) && value > 0) return value
+  }
+  return 0
+}
+
+function resolveSpellHitDelaySeconds(
+  raw: TheorycraftSpellRuntimeData & Record<string, unknown>,
+  rank: number
+): number {
+  const maxRank = Math.max(1, Number(raw.maxRank ?? 5))
+  const rankIndex = Math.min(Math.max(rank, 1), maxRank) - 1
+  const delayEntry = (raw.dataValues ?? []).find(entry =>
+    /delay|casttime|traveltime|missile|impacttime/i.test(String(entry.name ?? ''))
+  )
+  if (delayEntry) {
+    const value = Number(delayEntry.values?.[rankIndex] ?? delayEntry.values?.[0] ?? 0)
+    if (Number.isFinite(value) && value >= 0 && value <= 3) return value
+  }
+  const slot = String(raw.slot ?? '')
+    .trim()
+    .toUpperCase()
+  if (slot === 'R') return 0.2
+  return 0.1
+}
+
 function isDamageCalculationKey(key: string): boolean {
   const normalized = key.toLowerCase()
   if (/shield|heal|mana|cost|cooldown|cdr|speed|slow|buff|bonus|resist|armor|mr/.test(normalized)) {
     return false
   }
   return /damage|dmg|execute|detonate|impact|blast|burn|bleed|onhit|proc/.test(normalized)
+}
+
+type DamageType = 'physical' | 'magic' | 'true'
+
+function normalizeDamageType(value: unknown): DamageType | null {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
+  if (normalized === 'physical' || normalized === 'magic' || normalized === 'true')
+    return normalized
+  return null
+}
+
+function inferFormulaBaseDamageType(
+  formula: TheorycraftSpellCalculation,
+  raw: TheorycraftSpellRuntimeData & Record<string, unknown>
+): DamageType {
+  const ratioTypes = (formula.ratios ?? [])
+    .map((ratio: { type?: unknown }) => normalizeDamageType(ratio.type))
+    .filter((ratioType): ratioType is DamageType => Boolean(ratioType))
+  if (
+    ratioTypes.length > 0 &&
+    ratioTypes.every((ratioType: DamageType) => ratioType === ratioTypes[0])
+  ) {
+    return ratioTypes[0]!
+  }
+
+  const haystack = `${String(formula.key ?? '')} ${String(raw.tooltipRaw ?? '')}`.toLowerCase()
+  if (/truedamage|true damage|dégâts bruts|degats bruts/.test(haystack)) return 'true'
+  if (/magicdamage|magic damage|dégâts magiques|degats magiques/.test(haystack)) return 'magic'
+  return 'physical'
 }
 
 function reduceDamageByDefenses(
@@ -480,7 +1167,7 @@ function ratioCoefficientAtRank(coefficient: number[] | number, rankIndex: numbe
   if (Array.isArray(coefficient)) {
     if (coefficient.length === 0) return 0
     const value = coefficient[Math.min(Math.max(rankIndex, 0), coefficient.length - 1)]
-    return Number.isFinite(value) ? value : 0
+    return Number.isFinite(value ?? NaN) ? Number(value) : 0
   }
   return Number.isFinite(coefficient) ? coefficient : 0
 }
@@ -540,30 +1227,113 @@ function computeDamageVsChampion(
   const rankIndex = Math.min(Math.max(rank, 1), maxRank) - 1
   const breakdownLines: string[] = []
   const totalMitigated = formulas.reduce((sum, formula) => {
-    const base = Number(formula.baseValues?.[rankIndex] ?? 0)
-    const ratioPart = (formula.ratios ?? []).reduce((ratioSum, ratio) => {
+    const base = Math.max(0, Number(formula.baseValues?.[rankIndex] ?? 0))
+    const baseType = inferFormulaBaseDamageType(formula, raw)
+    const components: Record<DamageType, number> = {
+      physical: baseType === 'physical' ? base : 0,
+      magic: baseType === 'magic' ? base : 0,
+      true: baseType === 'true' ? base : 0,
+    }
+
+    for (const ratio of formula.ratios ?? []) {
       const coeff = ratioCoefficientAtRank(ratio.coefficient, rankIndex)
       const statValue = ratioStatValueForVsDamage(String(ratio.stat ?? ''), attacker, defender)
-      return ratioSum + coeff * statValue
-    }, 0)
-    const exact = Math.max(0, base + ratioPart)
-    const damageType = (((formula.ratios ?? [])[0]?.type as 'physical' | 'magic' | 'true') ??
-      'physical') as 'physical' | 'magic' | 'true'
-    const mitigated = reduceDamageByDefenses(exact, damageType, defenderRaw)
+      const ratioType = normalizeDamageType((ratio as { type?: unknown }).type) ?? baseType
+      components[ratioType] += Math.max(0, coeff * statValue)
+    }
+
+    const physicalMitigated = reduceDamageByDefenses(components.physical, 'physical', defenderRaw)
+    const magicMitigated = reduceDamageByDefenses(components.magic, 'magic', defenderRaw)
+    const trueMitigated = reduceDamageByDefenses(components.true, 'true', defenderRaw)
+    const exact = components.physical + components.magic + components.true
+    const mitigated = physicalMitigated + magicMitigated + trueMitigated
+    const ratioPart = exact - base
     breakdownLines.push(
-      `${formula.key}: ${formatDamageValue(base)} + ${formatDamageValue(ratioPart)} = ${formatDamageValue(exact)} brut -> ${formatDamageValue(mitigated)} mitigé`
+      `${formula.key}: ${formatDamageValue(base)} + ${formatDamageValue(ratioPart)} = ${formatDamageValue(exact)} brut -> ${formatDamageValue(mitigated)} mitigé (P:${formatDamageValue(physicalMitigated)} M:${formatDamageValue(magicMitigated)} T:${formatDamageValue(trueMitigated)})`
     )
     return sum + mitigated
   }, 0)
 
   const targetShield = Number(defenderRaw.shield ?? 0)
   const targetHp = Number(defender.totalHP ?? 0)
-  const effectiveTargetHp = Math.max(0, targetHp + Math.max(0, targetShield))
-  const lethal = effectiveTargetHp > 0 && totalMitigated >= effectiveTargetHp
+  const currentEffectiveTargetHp = Math.max(
+    0,
+    effectiveTargetHp.value || targetHp + Math.max(0, targetShield)
+  )
+  const lethal = currentEffectiveTargetHp > 0 && totalMitigated >= currentEffectiveTargetHp
   breakdownLines.push(
     `Total: ${formatDamageValue(totalMitigated)} | Cible: ${formatDamageValue(targetHp)} PV + ${formatDamageValue(Math.max(0, targetShield))} bouclier`
   )
   return { damage: totalMitigated, lethal, tooltip: breakdownLines.join('\n') }
+}
+
+type ControlKind = 'hard' | 'airborne' | 'slow'
+
+function detectControlKind(name: string): ControlKind | null {
+  const normalized = name.toLowerCase()
+  if (/airborne|knockup|knockback|pull|launch/.test(normalized)) return 'airborne'
+  if (/slow/.test(normalized)) return 'slow'
+  if (
+    /stun|snare|root|taunt|fear|charm|sleep|silence|suppress|suppression|stasis|cc/.test(normalized)
+  ) {
+    return 'hard'
+  }
+  return null
+}
+
+function computeControlVsChampion(
+  raw: TheorycraftSpellRuntimeData & Record<string, unknown>,
+  rank: number
+): { duration: number; hardDuration: number; slowDuration: number; tooltip: string } | null {
+  const defender = props.opponentBuildStats
+  if (!defender) return null
+  const defenderRaw = props.opponentRawStats
+  const maxRank = Math.max(1, Number(raw.maxRank ?? 5))
+  const rankIndex = Math.min(Math.max(rank, 1), maxRank) - 1
+  const tenacity = Math.min(Math.max(Number(defenderRaw?.tenacity ?? 0), 0), 0.95)
+  const entries: Array<{ label: string; duration: number; kind: ControlKind }> = []
+
+  for (const entry of raw.dataValues ?? []) {
+    const name = String(entry.name ?? '')
+    const kind = detectControlKind(name)
+    if (!kind) continue
+    const lowered = name.toLowerCase()
+    if (!/duration|time|seconds|sec|slow/.test(lowered)) continue
+    const value = Number(entry.values?.[rankIndex] ?? entry.values?.[0] ?? 0)
+    if (!Number.isFinite(value) || value <= 0) continue
+    entries.push({
+      label: name,
+      duration: kind === 'airborne' ? value : value * (1 - tenacity),
+      kind,
+    })
+  }
+
+  for (const calculation of raw.calculations ?? []) {
+    const kind = detectControlKind(calculation.key)
+    if (!kind) continue
+    const lowered = calculation.key.toLowerCase()
+    if (!/duration|time|seconds|sec|slow/.test(lowered)) continue
+    const value = Number(calculation.baseValues?.[rankIndex] ?? calculation.baseValues?.[0] ?? 0)
+    if (!Number.isFinite(value) || value <= 0) continue
+    entries.push({
+      label: calculation.key,
+      duration: kind === 'airborne' ? value : value * (1 - tenacity),
+      kind,
+    })
+  }
+
+  if (entries.length === 0) return null
+  const total = entries.reduce((sum, entry) => sum + entry.duration, 0)
+  const hardDuration = entries
+    .filter(entry => entry.kind === 'hard' || entry.kind === 'airborne')
+    .reduce((sum, entry) => sum + entry.duration, 0)
+  const slowDuration = entries
+    .filter(entry => entry.kind === 'slow')
+    .reduce((sum, entry) => sum + entry.duration, 0)
+  const lines = entries.map(
+    entry => `${entry.label}: ${formatDamageValue(entry.duration)}s (${entry.kind})`
+  )
+  return { duration: total, hardDuration, slowDuration, tooltip: lines.join('\n') }
 }
 
 function annotateExecuteThresholdWithHp(
@@ -623,6 +1393,7 @@ function resolveSpellView(
     detailedTexts: detailCandidates,
   })
   const damageVs = computeDamageVsChampion(raw, rank)
+  const controlVs = computeControlVsChampion(raw, rank)
   const targetMaxHp = Number(props.opponentBuildStats?.totalHP ?? NaN)
   const summaryHtml = finalized.summaryHtml
     ? annotateExecuteThresholdWithHp(finalized.summaryHtml, targetMaxHp)
@@ -647,9 +1418,17 @@ function resolveSpellView(
         )
       : [],
     isDynamic: resolved.isDynamic,
+    hasActivatableBuff: spellHasActivatableBuff(raw),
     damageVsChampion: damageVs?.damage ?? null,
     lethalVsChampion: damageVs?.lethal ?? false,
     damageVsTooltip: damageVs?.tooltip ?? '',
+    controlDurationVsChampion: controlVs?.duration ?? null,
+    hardControlDurationVsChampion: controlVs?.hardDuration ?? null,
+    slowDurationVsChampion: controlVs?.slowDuration ?? null,
+    controlVsTooltip: controlVs?.tooltip ?? '',
+    cooldownSeconds: resolveSpellCooldownSeconds(raw, rank),
+    resourceCost: resolveSpellResourceCost(raw, rank),
+    hitDelaySeconds: resolveSpellHitDelaySeconds(raw, rank),
   }
 }
 
@@ -682,6 +1461,15 @@ watch(
   { immediate: true }
 )
 
+watch(
+  () =>
+    [props.opponentBuildStats?.totalHP, props.opponentRawStats?.shield, props.championId] as const,
+  () => {
+    resetSimulation()
+  },
+  { immediate: true }
+)
+
 const passive = computed((): ResolvedPassiveView | null => {
   const champion = loadedChampion.value
   const passiveRaw = champion?.passive
@@ -702,6 +1490,10 @@ const passive = computed((): ResolvedPassiveView | null => {
     damageVsChampion: resolved.damageVsChampion,
     lethalVsChampion: resolved.lethalVsChampion,
     damageVsTooltip: resolved.damageVsTooltip,
+    controlDurationVsChampion: resolved.controlDurationVsChampion,
+    hardControlDurationVsChampion: resolved.hardControlDurationVsChampion,
+    slowDurationVsChampion: resolved.slowDurationVsChampion,
+    controlVsTooltip: resolved.controlVsTooltip,
   }
 })
 
@@ -728,10 +1520,42 @@ const spells = computed<ResolvedSpellView[]>(() => {
       id,
       slot: String(spell.slot ?? ''),
       imageUrl: resolveAbilityImageUrl(spell),
-      hasActivatableBuff: spellHasActivatableBuff(spell),
       ...resolved,
     }
   })
+})
+
+const killHints = computed(() => {
+  const hints: string[] = []
+  const hp = effectiveTargetHp.value
+  if (!Number.isFinite(hp) || hp <= 0) {
+    hints.push('La cible est déjà éliminée.')
+    return hints
+  }
+
+  const aaHits = autoAttackTiming.value.hits
+  if (aaHits != null) {
+    const seconds = autoAttackTiming.value.timeToKill ?? 0
+    hints.push(`AA: ${aaHits} coups pour tuer (~${formatDamageValue(seconds)}s).`)
+  } else {
+    hints.push('AA: dégâts insuffisants pour estimer le kill.')
+  }
+
+  const topSpells = spells.value
+    .filter(spell => (spell.damageVsChampion ?? 0) > 0)
+    .sort((a, b) => Number(b.damageVsChampion ?? 0) - Number(a.damageVsChampion ?? 0))
+    .slice(0, 4)
+  for (const spell of topSpells) {
+    const count = castsToKill(hp, spell.damageVsChampion)
+    if (count == null) continue
+    const slot = displaySpellSlot(spell.slot)
+    hints.push(`${slot} ${spell.name}: ${count} casts pour tuer la cible.`)
+  }
+
+  if (hints.length === 1 && topSpells.length === 0) {
+    hints.push('Aucun sort avec dégâts calculables pour cette cible.')
+  }
+  return hints
 })
 
 watch(
