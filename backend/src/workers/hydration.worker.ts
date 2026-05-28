@@ -363,7 +363,7 @@ async function refreshParticipantsRankState(
  * `ensureRankSnapshotsForHydration` :
  *  - enqueue un rank job dédupliqué par puuid + jour ;
  *  - bloque jusqu'à snapshot dispo (max 45 s) ;
- *  - retourne dès que le snapshot DB couvre matchDate (grace window appliquée par `hasRankSnapshotForMatchDate`).
+ *  - retourne dès que le snapshot DB couvre matchDate (`date >= matchDate`).
  */
 async function fetchMissingRanksViaRankQueue(
   hydrationJob: Job<HydrationJobData>,
@@ -462,6 +462,26 @@ async function finalizeHydrationRankGate(
   pollerV2Observability.recordHydrationSuccess(1);
 }
 
+/**
+ * Pre-check anti-doublon : si le match est déjà ingéré (status='DONE'), skip toute
+ * la pipeline. Économise 2 req Riot (match + timeline) + ~7 ranks par match dup.
+ *
+ * Cas couverts :
+ *  - race condition discovery (rare) si DB ack arrive après l'enqueue
+ *  - jobs hydration orphelins persistés post-crash/restart
+ *  - retries après ingestion réussie mais avant `removeOnComplete`
+ */
+async function isMatchAlreadyIngested(matchId: string): Promise<boolean> {
+  const rows = await sql<{ riot_match_id: string }[]>`
+    SELECT riot_match_id
+    FROM processed_matches
+    WHERE riot_match_id = ${matchId}
+      AND status = 'DONE'
+    LIMIT 1
+  `;
+  return rows.length > 0;
+}
+
 async function runHydrationJob(hydrationJob: Job<HydrationJobData>, token: string): Promise<void> {
   const startedAt = Date.now();
   const data = hydrationJob.data;
@@ -472,6 +492,14 @@ async function runHydrationJob(hydrationJob: Job<HydrationJobData>, token: strin
   let gameDate = resolveMatchGameDate([]);
 
   try {
+    if (await isMatchAlreadyIngested(data.matchId)) {
+      pollerV2Observability.recordHydrationSkippedAlreadyDone();
+      console.info(
+        `[hydration.worker] skipped_already_done matchId=${data.matchId} region=${data.region}`,
+      );
+      return;
+    }
+
     const cachedHydration = hydrationJob.data.cachedHydration;
     if (cachedHydration?.participants && cachedHydration.teamStatsBase) {
       participants = cachedHydration.participants;

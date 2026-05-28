@@ -83,78 +83,6 @@ describe("computeAllocation", () => {
     expect(blocked.rank).toBeGreaterThanOrEqual(20);
   });
 
-  test("detects hidden rank bottleneck when hydration active but token-starved", () => {
-    // Simule l'état post-fix `ensureRankSnapshotsForHydration` :
-    //  - hydration.queueWaiting=0 (workers slurpent vite)
-    //  - hydration.queueActive>=2 (jobs en cours)
-    //  - hydration.tokensUsed < 50% alloc (bloqués en await rank)
-    //  - rank saturé à 100 %
-    const baseline = computeAllocation(snapshots(), 90);
-    const bottlenecked = computeAllocation(
-      snapshots({
-        discovery: { tokensUsed120s: 19, currentAlloc: 20 },
-        hydration: {
-          queueWaiting: 0,
-          queueActive: 3,
-          tokensUsed120s: 8,
-          currentAlloc: 18,
-        },
-        rank: {
-          queueWaiting: 0,
-          queueActive: 6,
-          tokensUsed120s: 9,
-          currentAlloc: 9,
-        },
-      }),
-      90,
-    );
-    expect(bottlenecked.rank).toBeGreaterThan(baseline.rank);
-    expect(bottlenecked.discovery).toBeLessThanOrEqual(baseline.discovery);
-  });
-
-  test("scorePipelines boosts rank score on hidden bottleneck", () => {
-    const scores = scorePipelines(
-      snapshots({
-        hydration: {
-          queueWaiting: 0,
-          queueActive: 3,
-          tokensUsed120s: 5,
-          currentAlloc: 18,
-        },
-        rank: {
-          queueWaiting: 0,
-          queueActive: 6,
-          tokensUsed120s: 9,
-          currentAlloc: 9,
-        },
-      }),
-    );
-    expect(scores.rank).toBeGreaterThanOrEqual(1.3);
-    expect(scores.discovery).toBeLessThanOrEqual(0.2);
-  });
-
-  test("scorePipelines boosts rank on over-saturation regardless of hydration state", () => {
-    // rank consomme 15/120s pour une alloc de 9 → 167 % → signal rankOverSaturated
-    const scores = scorePipelines(
-      snapshots({
-        hydration: {
-          queueWaiting: 0,
-          queueActive: 0,
-          tokensUsed120s: 0,
-          currentAlloc: 18,
-        },
-        rank: {
-          queueWaiting: 0,
-          queueActive: 6,
-          tokensUsed120s: 15,
-          currentAlloc: 9,
-        },
-      }),
-    );
-    expect(scores.rank).toBeGreaterThanOrEqual(1.4);
-    expect(scores.discovery).toBeLessThanOrEqual(0.3);
-  });
-
   test("guarantees pipeline minimums", () => {
     const alloc = computeAllocation(
       snapshots({ hydration: { queueWaiting: 500 }, rank: { queueWaiting: 200 } }),
@@ -230,6 +158,25 @@ describe("rank fill phase", () => {
       rank: { queueWaiting: 0, queueActive: 0 },
     });
     expect(shouldTriggerRankFill(snap, 40)).toBe(false);
+  });
+
+  test("fills when rank workers are active but queue not saturated (steady-state)", () => {
+    // Cas typique en runtime : 6 rank workers tournent en continu mais la queue
+    // se vide à mesure. On doit quand même fill pour viser 94-98 req/120s constant.
+    const snap = snapshots({
+      hydration: { queueWaiting: 0, queueActive: 2, tokensUsed120s: 10 },
+      rank: { queueWaiting: 0, queueActive: 6, tokensUsed120s: 12 },
+      discovery: { tokensUsed120s: 18 },
+    });
+    expect(shouldTriggerRankFill(snap, 50)).toBe(true);
+  });
+
+  test("does not fill when rank queue is critically backlogged", () => {
+    const snap = snapshots({
+      hydration: { queueWaiting: 0 },
+      rank: { queueWaiting: 150 },
+    });
+    expect(shouldTriggerRankFill(snap, 50)).toBe(false);
   });
 
   test("caps fill count to half idle budget and rank alloc", () => {

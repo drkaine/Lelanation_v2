@@ -10,6 +10,7 @@
       :champion-data="championData"
       :level="level"
       :build-stats="buildStats"
+      :attacker-raw-stats="attackerRawStats"
       :opponent-build-stats="opponentBuildStats"
       :opponent-raw-stats="opponentRawStats"
     />
@@ -40,6 +41,7 @@ import ChampionSelector from '~/components/Build/ChampionSelector.vue'
 import ItemSelector from '~/components/Build/ItemSelector.vue'
 import RuneSelector from '~/components/Build/RuneSelector.vue'
 import TheorycraftSpellPanel from '~/components/Build/TheorycraftSpellPanel.vue'
+import { useBuildCardBorderTheme } from '~/composables/useBuildCardBorderTheme'
 import type { TheorycraftBuildStats } from '~/types/theorycraft'
 
 export type TheorycraftPanel = 'champion' | 'items' | 'runes' | 'theorycraft' | null
@@ -50,6 +52,7 @@ const props = defineProps<{
   championData: Record<string, unknown> | null
   level: number
   buildStats: TheorycraftBuildStats | null
+  attackerRawStats?: Record<string, number> | null
   opponentBuildStats?: TheorycraftBuildStats | null
   opponentRawStats?: Record<string, number> | null
 }>()

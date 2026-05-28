@@ -18,7 +18,17 @@ type PlayerRow = {
   puuid: string;
   region: string;
   last_seen: Date | string | null;
+  created_at: Date | string;
 };
+
+/** Prefetch rank discovery réservé aux joueurs ajoutés aujourd'hui (corpus bootstrap). */
+export function isNewlyAddedPlayer(player: Pick<PlayerRow, "created_at">, now = new Date()): boolean {
+  const created =
+    player.created_at instanceof Date ? player.created_at : new Date(String(player.created_at));
+  if (!Number.isFinite(created.getTime())) return false;
+  const todayIso = now.toISOString().slice(0, 10);
+  return created.toISOString().slice(0, 10) === todayIso;
+}
 
 const riotClient = new RiotClient();
 const HYDRATION_RANK_BACKPRESSURE_WC = 150;
@@ -77,11 +87,11 @@ async function markMatchIdsQueued(matchIds: string[]): Promise<void> {
 async function selectPlayersBatch(limit: number): Promise<PlayerRow[]> {
   return sql.begin(async (tx) => {
     return tx<PlayerRow[]>`
-      SELECT puuid, region, last_seen
+      SELECT puuid, region, last_seen, created_at
       FROM players
       WHERE LENGTH(TRIM(puuid)) > 0
         AND LOWER(TRIM(COALESCE(region, ''))) = ANY(${sql.array([...EUROPE_PLATFORM_KEYS], 25)})
-      ORDER BY last_seen ASC NULLS FIRST
+      ORDER BY last_seen DESC NULLS LAST
       LIMIT ${limit}
       FOR UPDATE SKIP LOCKED
     `;
@@ -91,11 +101,11 @@ async function selectPlayersBatch(limit: number): Promise<PlayerRow[]> {
 async function getNextPlayer(): Promise<PlayerRow | null> {
   const rows = await sql.begin(async (tx) => {
     return tx<PlayerRow[]>`
-      SELECT puuid, region, last_seen
+      SELECT puuid, region, last_seen, created_at
       FROM players
       WHERE LENGTH(TRIM(puuid)) > 0
         AND LOWER(TRIM(COALESCE(region, ''))) = ANY(${sql.array([...EUROPE_PLATFORM_KEYS], 25)})
-      ORDER BY last_seen ASC NULLS FIRST
+      ORDER BY last_seen DESC NULLS LAST
       LIMIT 1
       FOR UPDATE SKIP LOCKED
     `;
@@ -167,10 +177,13 @@ async function processDiscoveryPlayer(
   await waitForDiscoverySlot();
   const matchIds = await riotClient.getMatchIds(player.puuid, player.region, { startTime });
 
-  const alreadyRankedToday = await hasTodayRankSnapshot(player.puuid, player.region);
-  pollerV2Observability.recordDiscoveryRankPrefetch(1, alreadyRankedToday ? 0 : 1);
-  if (!alreadyRankedToday) {
-    await enqueueRankPrefetchJob(player.puuid, player.region);
+  const shouldPrefetchRank = isNewlyAddedPlayer(player);
+  if (shouldPrefetchRank) {
+    const alreadyRankedToday = await hasTodayRankSnapshot(player.puuid, player.region);
+    pollerV2Observability.recordDiscoveryRankPrefetch(1, alreadyRankedToday ? 0 : 1);
+    if (!alreadyRankedToday) {
+      await enqueueRankPrefetchJob(player.puuid, player.region);
+    }
   }
 
   const knownRows =

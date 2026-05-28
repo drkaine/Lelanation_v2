@@ -39,10 +39,19 @@ export function pipelineConstraintsForBudget(
   totalBudget = totalBudgetReq120s(),
 ): Record<Pipeline, PipelineConstraints> {
   const scale = Math.max(1, totalBudget / REF_BUDGET);
+  /**
+   * Floors choisis pour respecter la cible 94-98 req/120s **constant** :
+   *  - rank min=15 : couvre ~7 ranks/match × 2 matches/cycle, et absorbe les
+   *    pics sans dépendre de signaux de saturation (la queue rank se vide
+   *    rapidement avec 6 workers, donc `queueWaiting` est un mauvais signal).
+   *  - hydration min=10 : ≥ 5 workers actifs en continu.
+   *  - discovery min=4 : 2 cycles/min suffisent pour drainer le pool players.
+   * Total mins = 4 + 20 + 15 = 39, laisse 56 req/120s en flex pour l'adaptive.
+   */
   return {
     discovery: { min: 4, max: Math.max(20, Math.floor(20 * scale)), costPerJob: 1 },
     hydration: { min: 10, max: Math.max(35, Math.floor(35 * scale)), costPerJob: 2 },
-    rank: { min: 6, max: Math.max(35, Math.floor(35 * scale)), costPerJob: 1 },
+    rank: { min: 15, max: Math.max(35, Math.floor(35 * scale)), costPerJob: 1 },
   };
 }
 
@@ -76,29 +85,16 @@ export interface BudgetAllocation {
 }
 
 export const DEFAULT_INITIAL_ALLOCATION: BudgetAllocation = {
-  discovery: FORCE_ALLOC_OVERRIDE ? DISCOVERY_ALLOC_OVERRIDE : 8,
-  hydration: FORCE_ALLOC_OVERRIDE ? HYDRATION_ALLOC_OVERRIDE : 20,
-  rank: FORCE_ALLOC_OVERRIDE ? RANK_ALLOC_OVERRIDE : 14,
+  discovery: FORCE_ALLOC_OVERRIDE ? DISCOVERY_ALLOC_OVERRIDE : 10,
+  hydration: FORCE_ALLOC_OVERRIDE ? HYDRATION_ALLOC_OVERRIDE : 18,
+  rank: FORCE_ALLOC_OVERRIDE ? RANK_ALLOC_OVERRIDE : 22,
   totalReq: FORCE_ALLOC_OVERRIDE
     ? DISCOVERY_ALLOC_OVERRIDE + HYDRATION_ALLOC_OVERRIDE * 2 + RANK_ALLOC_OVERRIDE
-    : 8 + 20 * 2 + 14,
+    : 10 + 18 * 2 + 22,
 };
 
 export const MIN_ALLOC_CHANGE = 2;
 export const MIN_REBALANCE_INTERVAL_MS = 3 * 60_000;
-export const URGENT_REBALANCE_INTERVAL_MS = 60_000;
-export const RANK_STICKY_BOOST_MS = 5 * 60_000;
-export const RANK_STICKY_BOOST_FLOOR = 25;
-
-/**
- * Signal "urgent" autorisant un rebalance plus rapide (1 min vs 3 min) quand le
- * système détecte un bottleneck sévère qu'il faut adresser vite (e.g., rank
- * over-saturé en rolling 120s).
- */
-export function isUrgentRebalanceSignal(snapshots: Record<Pipeline, PipelineSnapshot>): boolean {
-  const { rank } = snapshots;
-  return rank.tokensUsed120s >= 5 && rank.tokensUsed120s >= rank.currentAlloc * 1.5;
-}
 export const MIN_ALLOC_CHANGE_PCT = 0.2;
 export const SIGNAL_EMA_ALPHA = 0.3;
 
@@ -136,17 +132,28 @@ export function computeIdleBudgetReq120s(
   return totalBudget - computeUsedReq120s(snapshots);
 }
 
+/**
+ * Idle-fill : déclenché dès qu'on a du slack budget pour viser une consommation
+ * constante 94-98 req/120s. Le fill enfile des rank prefetch pour des joueurs
+ * sans snapshot today → bénéfice immédiat sur les prochains matches (gate rank
+ * passe sans fetch supplémentaire).
+ *
+ * Gardes (anti-overload) :
+ *  - hydration pas en backlog significatif (sinon on prive le rank gate)
+ *  - rank queue pas déjà saturée (sinon les jobs s'accumulent sans drainage)
+ */
 export function shouldTriggerRankFill(
   snapshots: Record<Pipeline, PipelineSnapshot>,
   idleBudget: number,
   fillThreshold = RANK_FILL_IDLE_THRESHOLD,
 ): boolean {
-  const hydrationIdle =
-    snapshots.hydration.queueWaiting < HYDRATION_QUEUE.STARVED &&
-    snapshots.hydration.queueActive < 4;
-  const rankIdle =
-    snapshots.rank.queueWaiting === 0 && snapshots.rank.queueActive < 2;
-  return hydrationIdle && rankIdle && idleBudget >= fillThreshold;
+  if (snapshots.hydration.queueWaiting >= HYDRATION_QUEUE.HEALTHY_LO) {
+    return false;
+  }
+  if (snapshots.rank.queueWaiting >= RANK_QUEUE.CRITICAL) {
+    return false;
+  }
+  return idleBudget >= fillThreshold;
 }
 
 export function computeRankFillCount(
@@ -283,31 +290,6 @@ export function scorePipelines(
     hydration.tokensUsed120s < Math.max(2, hydration.currentAlloc * 0.2) &&
     rankSaturated;
 
-  /**
-   * Hidden bottleneck rank : workers hydration ACTIFS mais throughput tokens faible.
-   *
-   * Cas typique post-fix `ensureRankSnapshotsForHydration` :
-   *  - hydration.queueWaiting=0 (workers slurpent vite)
-   *  - hydration.queueActive>0 (jobs en cours)
-   *  - hydration.tokensUsed << alloc (jobs bloqués dans `await ensureRankSnapshot`)
-   *  - rank saturé à 100 % avec petite alloc → drip 9/120s vs besoin 25-30/120s
-   *
-   * `queueWaiting`-only ne détecte PAS ce cas. On regarde `queueActive` + `tokensUsed`.
-   */
-  const hydrationActiveStarved =
-    hydration.queueActive >= 1 &&
-    hydration.tokensUsed120s < Math.max(4, hydration.currentAlloc * 0.5) &&
-    rankSaturated;
-
-  /**
-   * Rank over-saturated : la consommation rolling 120s dépasse l'alloc d'au moins 20 %.
-   * Signal robuste indépendant de l'état hydration : le drip est sous-dimensionné,
-   * il faut grandir le budget rank. Garde-fou `tokensUsed >= 3` pour éviter les faux
-   * positifs sur état idle (où alloc=0).
-   */
-  const rankOverSaturated =
-    rank.tokensUsed120s >= 3 && rank.tokensUsed120s >= rank.currentAlloc * 1.2;
-
   let discoveryScore: number;
   if (hydration.queueWaiting < HYDRATION_QUEUE.STARVED) {
     discoveryScore = 1.0;
@@ -354,40 +336,12 @@ export function scorePipelines(
     rankScore = Math.max(rankScore, 1.1);
     hydrationScore = Math.min(hydrationScore, 0.35);
   }
-  // Nouveau : hidden bottleneck via `await ensureRankSnapshot` (queueWaiting=0 trompeur)
-  if (hydrationActiveStarved) {
-    rankScore = Math.max(rankScore, 1.3);
-    discoveryScore = Math.min(discoveryScore, 0.2);
-    hydrationScore = Math.max(hydrationScore, 0.4);
-  }
-  // Signal direct : rank consomme plus que son budget alloué (>1.2× rolling)
-  if (rankOverSaturated) {
-    rankScore = Math.max(rankScore, 1.4);
-    discoveryScore = Math.min(discoveryScore, 0.3);
-  }
 
   return {
     discovery: discoveryScore,
     hydration: hydrationScore,
     rank: rankScore,
   };
-}
-
-/**
- * Détecte si rank est en réalité un bottleneck caché — soit parce que hydration est
- * active-starved (workers actifs mais token-throughput bas), soit parce que rank consomme
- * plus que son alloc en rolling 120s. Utilisé pour empêcher la reprise de budget rank.
- */
-function isHydrationActiveStarvedByRank(snapshots: Record<Pipeline, PipelineSnapshot>): boolean {
-  const { hydration, rank } = snapshots;
-  const rankSaturated = rank.tokensUsed120s >= Math.max(1, rank.currentAlloc * 0.8);
-  const activeStarved =
-    hydration.queueActive >= 1 &&
-    hydration.tokensUsed120s < Math.max(4, hydration.currentAlloc * 0.5) &&
-    rankSaturated;
-  const rankOverSaturated =
-    rank.tokensUsed120s >= 3 && rank.tokensUsed120s >= rank.currentAlloc * 1.2;
-  return activeStarved || rankOverSaturated;
 }
 
 export function computeAllocation(
@@ -447,13 +401,10 @@ export function computeAllocation(
 
   // If rank queue is empty and rank throughput is far below its allocation,
   // shift budget back to hydration so backlog can drain.
-  // Exceptions (rank ≠ underused, juste différé) :
-  //  - `waitingChildren > 3` (BullMQ parent-child pattern)
-  //  - hydration active-starved par rank (path `ensureRankSnapshot` await-based)
+  // Exception : `waitingChildren > 3` (BullMQ parent-child pattern) signale rank
+  // différé, pas underused.
   const rankUnderused = snapshots.rank.tokensUsed120s < rank * 0.3;
-  const hydrationBlockedByRank =
-    (snapshots.hydration.hydrationWaitingChildren ?? 0) > 3 ||
-    isHydrationActiveStarvedByRank(snapshots);
+  const hydrationBlockedByRank = (snapshots.hydration.hydrationWaitingChildren ?? 0) > 3;
   if (
     !FORCE_ALLOC_OVERRIDE &&
     !hydrationBlockedByRank &&
@@ -473,21 +424,6 @@ export function computeAllocation(
         hydration = Math.max(min.hydration, hydration - Math.ceil(overflow / 2));
         totalReq = discovery + hydration * 2 + rank;
       }
-    }
-  }
-
-  // Hidden bottleneck rank : reclaim discovery → rank quand hydration est active-starved
-  // (discovery sur-utilisé alors que rank étrangle l'aval).
-  if (
-    !FORCE_ALLOC_OVERRIDE &&
-    isHydrationActiveStarvedByRank(snapshots) &&
-    discovery > min.discovery
-  ) {
-    const reclaimFromDiscovery = Math.min(discovery - min.discovery, max.rank - rank, 10);
-    if (reclaimFromDiscovery > 0) {
-      discovery -= reclaimFromDiscovery;
-      rank += reclaimFromDiscovery;
-      totalReq = discovery + hydration * 2 + rank;
     }
   }
 
@@ -614,12 +550,6 @@ export class AdaptiveBudgetScheduler {
   private rankFillTimestampsMs: number[] = [];
   private lastRankFillCount = 0;
   private lastRankFillAtMs: number | null = null;
-  /**
-   * Sticky rank boost : timestamp jusqu'auquel on doit forcer un floor élevé sur rank,
-   * pour absorber les oscillations de la rolling 120s window (queue rank qui se vide
-   * brièvement laisse penser "rank underused" alors que la demande effective est forte).
-   */
-  private rankBoostUntilMs = 0;
   private lastHydrationWaitingChildren = 0;
   private readonly emaSignals: Record<Pipeline, Partial<PipelineSnapshot>> = {
     discovery: {},
@@ -719,44 +649,13 @@ export class AdaptiveBudgetScheduler {
       const rawSnapshots = await this.getSnapshots();
       this.lastHydrationWaitingChildren = rawSnapshots.hydration.hydrationWaitingChildren ?? 0;
       const snapshots = smoothPipelineSnapshots(rawSnapshots, this.emaSignals);
-      const now = Date.now();
-
-      // Sticky rank boost : extend window quand rank est over-saturated.
-      // Évite l'oscillation alloc rank=35 ↔ 10 quand la queue rank se vide brièvement.
-      if (
-        rawSnapshots.rank.tokensUsed120s >= 3 &&
-        rawSnapshots.rank.tokensUsed120s >= rawSnapshots.rank.currentAlloc * 1.2
-      ) {
-        this.rankBoostUntilMs = now + RANK_STICKY_BOOST_MS;
-      }
-      const stickyRankActive = now < this.rankBoostUntilMs;
-
-      let newAlloc = computeAllocation(snapshots);
-      if (stickyRankActive && newAlloc.rank < RANK_STICKY_BOOST_FLOOR) {
-        const deficit = RANK_STICKY_BOOST_FLOOR - newAlloc.rank;
-        const fromDisc = Math.min(deficit, Math.max(0, newAlloc.discovery - 6));
-        let remaining = deficit - fromDisc;
-        const fromHydr = Math.min(remaining, Math.max(0, newAlloc.hydration - 10));
-        remaining -= fromHydr;
-        const moved = fromDisc + fromHydr;
-        if (moved > 0) {
-          newAlloc = {
-            discovery: newAlloc.discovery - fromDisc,
-            hydration: newAlloc.hydration - fromHydr,
-            rank: newAlloc.rank + moved,
-            totalReq: 0,
-          };
-          newAlloc.totalReq = newAlloc.discovery + newAlloc.hydration * 2 + newAlloc.rank;
-        }
-      }
-
+      const newAlloc = computeAllocation(snapshots);
       const scores = scorePipelines(snapshots);
       const prev = this.currentAllocation;
-      const minInterval = isUrgentRebalanceSignal(snapshots)
-        ? URGENT_REBALANCE_INTERVAL_MS
-        : MIN_REBALANCE_INTERVAL_MS;
+      const now = Date.now();
       const rebalanceDue =
-        this.lastRebalanceAtMs == null || now - this.lastRebalanceAtMs >= minInterval;
+        this.lastRebalanceAtMs == null ||
+        now - this.lastRebalanceAtMs >= MIN_REBALANCE_INTERVAL_MS;
 
       if (rebalanceDue && isSignificantAllocationChange(prev, newAlloc)) {
         await this.applyAllocation(newAlloc);

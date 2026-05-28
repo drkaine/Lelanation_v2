@@ -37,6 +37,8 @@ type Totals = {
   hydrationCacheMisses: number;
   hydrationJobsSucceeded: number;
   hydrationJobsSkippedOldPatch: number;
+  /** Match déjà en `processed_matches` avec status='DONE' (économie 2 req Riot). */
+  hydrationJobsSkippedAlreadyDone: number;
   hydrationJobsNotFound: number;
   hydrationJobsFailed: number;
   ingestionJobsStarted: number;
@@ -233,6 +235,7 @@ function emptyTotals(): Totals {
     hydrationCacheMisses: 0,
     hydrationJobsSucceeded: 0,
     hydrationJobsSkippedOldPatch: 0,
+    hydrationJobsSkippedAlreadyDone: 0,
     hydrationJobsNotFound: 0,
     hydrationJobsFailed: 0,
     ingestionJobsStarted: 0,
@@ -773,6 +776,10 @@ class PollerV2Observability {
   recordHydrationSuccess(matchesIngested = 1): void {
     this.totals.hydrationJobsSucceeded += 1;
     this.totals.matchesIngested += Math.max(0, matchesIngested);
+  }
+
+  recordHydrationSkippedAlreadyDone(): void {
+    this.totals.hydrationJobsSkippedAlreadyDone += 1;
   }
 
   recordHydrationSkippedOldPatch(): void {

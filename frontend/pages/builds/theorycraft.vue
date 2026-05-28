@@ -118,6 +118,7 @@
             :champion-data="championData"
             :level="theorycraftLevel"
             :build-stats="theorycraftStats"
+            :attacker-raw-stats="attackerRawStats"
             :opponent-build-stats="opponentTheorycraftStats"
             :opponent-raw-stats="opponentRawStats"
             @set-panel="activePanel = $event"
@@ -490,6 +491,8 @@ const opponentRawStats = computed(() => {
   const opponentSide: TheorycraftSide = activeSide.value === 'ally' ? 'enemy' : 'ally'
   return sideCalculatedStats.value[opponentSide]
 })
+
+const attackerRawStats = computed(() => sideCalculatedStats.value[activeSide.value] ?? null)
 
 function onSelectRegion(side: TheorycraftSide, region: 'champion' | 'items' | 'runes') {
   if (activeSide.value !== side) activateSide(side)

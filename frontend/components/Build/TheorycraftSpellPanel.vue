@@ -520,6 +520,7 @@ const props = defineProps<{
   championData?: Record<string, unknown> | null
   level: number
   buildStats: TheorycraftBuildStats | null
+  attackerRawStats?: Record<string, number> | null
   opponentBuildStats?: TheorycraftBuildStats | null
   opponentRawStats?: Record<string, number> | null
 }>()
@@ -774,7 +775,7 @@ function waitTimelineStep() {
 }
 
 function autoAttackIntervalSeconds(): number {
-  const asFromStats = Number(buildStore.calculatedStats?.attackSpeed ?? NaN)
+  const asFromStats = Number(props.attackerRawStats?.attackSpeed ?? NaN)
   const attackSpeed = Number.isFinite(asFromStats) && asFromStats > 0 ? asFromStats : 0.7
   return 1 / attackSpeed
 }
@@ -921,7 +922,7 @@ function estimatedAutoAttackDamage(): number | null {
   const attacker = props.buildStats
   const defenderRaw = props.opponentRawStats
   if (!attacker || !defenderRaw) return null
-  return reduceDamageByDefenses(attacker.totalAD, 'physical', defenderRaw)
+  return reduceDamageByDefenses(attacker.totalAD, 'physical', defenderRaw, props.attackerRawStats)
 }
 
 function useAutoAttack() {
@@ -1138,17 +1139,40 @@ function inferFormulaBaseDamageType(
 function reduceDamageByDefenses(
   rawDamage: number,
   damageType: 'physical' | 'magic' | 'true',
-  target: { armor?: number; magicResist?: number; damageReduction?: number }
+  target: { armor?: number; magicResist?: number; damageReduction?: number },
+  attackerRaw?: Record<string, number> | null
 ): number {
   const safeRaw = Math.max(0, rawDamage)
   if (!Number.isFinite(safeRaw) || safeRaw <= 0) return 0
   let mitigated = safeRaw
   if (damageType === 'physical') {
-    const armor = Number(target.armor ?? 0)
-    mitigated = armor >= 0 ? safeRaw * (100 / (100 + armor)) : safeRaw * (2 - 100 / (100 - armor))
+    const baseArmor = Number(target.armor ?? 0)
+    const armorPenPct = Math.min(Math.max(Number(attackerRaw?.armorPenetration ?? 0), 0), 1)
+    const flatArmorPen = Math.max(0, Number(attackerRaw?.flatArmorPenetration ?? 0))
+    const lethality = Math.max(0, Number(attackerRaw?.lethality ?? 0))
+    const attackerLevel = Math.min(
+      Math.max(Number(props.buildStats?.level ?? props.level ?? 1), 1),
+      18
+    )
+    const lethalityPct = Math.min(Math.max(Number(attackerRaw?.percentLethality ?? 0), 0), 1)
+    const effectiveLethality = lethality * (0.6 + 0.4 * (attackerLevel / 18)) * (1 + lethalityPct)
+    const effectiveArmor = Math.max(
+      0,
+      (1 - armorPenPct) * baseArmor - flatArmorPen - effectiveLethality
+    )
+    mitigated =
+      effectiveArmor >= 0
+        ? safeRaw * (100 / (100 + effectiveArmor))
+        : safeRaw * (2 - 100 / (100 - effectiveArmor))
   } else if (damageType === 'magic') {
-    const mr = Number(target.magicResist ?? 0)
-    mitigated = mr >= 0 ? safeRaw * (100 / (100 + mr)) : safeRaw * (2 - 100 / (100 - mr))
+    const baseMr = Number(target.magicResist ?? 0)
+    const magicPenPct = Math.min(Math.max(Number(attackerRaw?.magicPenetration ?? 0), 0), 1)
+    const flatMagicPen = Math.max(0, Number(attackerRaw?.flatMagicPenetration ?? 0))
+    const effectiveMr = Math.max(0, (1 - magicPenPct) * baseMr - flatMagicPen)
+    mitigated =
+      effectiveMr >= 0
+        ? safeRaw * (100 / (100 + effectiveMr))
+        : safeRaw * (2 - 100 / (100 - effectiveMr))
   }
   const dr = Number(target.damageReduction ?? 0)
   const clampedDr = Math.min(Math.max(dr, 0), 0.95)
@@ -1242,9 +1266,24 @@ function computeDamageVsChampion(
       components[ratioType] += Math.max(0, coeff * statValue)
     }
 
-    const physicalMitigated = reduceDamageByDefenses(components.physical, 'physical', defenderRaw)
-    const magicMitigated = reduceDamageByDefenses(components.magic, 'magic', defenderRaw)
-    const trueMitigated = reduceDamageByDefenses(components.true, 'true', defenderRaw)
+    const physicalMitigated = reduceDamageByDefenses(
+      components.physical,
+      'physical',
+      defenderRaw,
+      props.attackerRawStats
+    )
+    const magicMitigated = reduceDamageByDefenses(
+      components.magic,
+      'magic',
+      defenderRaw,
+      props.attackerRawStats
+    )
+    const trueMitigated = reduceDamageByDefenses(
+      components.true,
+      'true',
+      defenderRaw,
+      props.attackerRawStats
+    )
     const exact = components.physical + components.magic + components.true
     const mitigated = physicalMitigated + magicMitigated + trueMitigated
     const ratioPart = exact - base

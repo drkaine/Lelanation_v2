@@ -98,7 +98,7 @@ describe("rank cache", () => {
     ).toBe(true);
   });
 
-  test("accepts snapshot up to RANK_CACHE_GRACE_DAYS days before matchDate", () => {
+  test("rejects snapshot strictly older than matchDate (politique stricte 'jour du match')", () => {
     const snapshot = {
       rankTier: "PLATINUM",
       rankDivision: "I",
@@ -106,20 +106,8 @@ describe("rank cache", () => {
       snapshotDate: "2026-05-22",
       cachedAtMs: 0,
     };
-    expect(cachedRankValidForMatchDate(snapshot, "2026-05-25")).toBe(true);
-    expect(cachedRankValidForMatchDate(snapshot, "2026-05-29")).toBe(true);
-    expect(cachedRankValidForMatchDate(snapshot, "2026-05-30")).toBe(false);
-  });
-
-  test("custom graceDays override", () => {
-    const snapshot = {
-      rankTier: "DIAMOND",
-      rankDivision: "II",
-      rankLp: 10,
-      snapshotDate: "2026-05-20",
-      cachedAtMs: 0,
-    };
-    expect(cachedRankValidForMatchDate(snapshot, "2026-05-23", 2)).toBe(false);
-    expect(cachedRankValidForMatchDate(snapshot, "2026-05-22", 2)).toBe(true);
+    expect(cachedRankValidForMatchDate(snapshot, "2026-05-22")).toBe(true);
+    expect(cachedRankValidForMatchDate(snapshot, "2026-05-21")).toBe(true);
+    expect(cachedRankValidForMatchDate(snapshot, "2026-05-23")).toBe(false);
   });
 });

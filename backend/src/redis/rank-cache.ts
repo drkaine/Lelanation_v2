@@ -86,30 +86,16 @@ export async function writeRankCacheRedis(
 }
 
 /**
- * Tolérance temporelle (jours) miroir de `RANK_GATE_GRACE_DAYS` côté DB.
- * Un snapshot fetché dans cette fenêtre couvre matchDate sans nouvel appel Riot.
- */
-export const RANK_CACHE_GRACE_DAYS = 7;
-
-function daysBetween(aIso: string, bIso: string): number {
-  const a = Date.parse(`${aIso}T00:00:00Z`);
-  const b = Date.parse(`${bIso}T00:00:00Z`);
-  if (!Number.isFinite(a) || !Number.isFinite(b)) return Number.POSITIVE_INFINITY;
-  return Math.abs(a - b) / 86_400_000;
-}
-
-/**
- * Snapshot valide pour matchDate si :
- *  - `snapshotDate >= matchDateIso` (idéal, fetch postérieur au match), OU
- *  - `snapshotDate` antérieur ≤ `RANK_CACHE_GRACE_DAYS` jours (best-effort, rang évolue lentement).
+ * Snapshot valide si `snapshotDate >= matchDateIso`.
+ *
+ * Politique : 1 fetch rank par puuid par jour. Un snapshot fetché aujourd'hui
+ * (snapshotDate = today) couvre tous les matches passés (today >= matchDate).
  */
 export function cachedRankValidForMatchDate(
   snapshot: CachedRankSnapshot,
   matchDateIso: string,
-  graceDays = RANK_CACHE_GRACE_DAYS,
 ): boolean {
-  if (snapshot.snapshotDate >= matchDateIso) return true;
-  return daysBetween(snapshot.snapshotDate, matchDateIso) <= graceDays;
+  return snapshot.snapshotDate >= matchDateIso;
 }
 
 export function clearRankCacheL1ForTests(): void {

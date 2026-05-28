@@ -109,31 +109,22 @@ export async function getBestEffortRankSnapshotsForMatch(
 }
 
 /**
- * Fenêtre de tolérance (en jours) pour accepter un snapshot rank antérieur au match.
- * Évite un fetch direct pour chaque participant non-tracké : un snapshot < {@link RANK_GATE_GRACE_DAYS} jours suffit.
- * Le rang évolue lentement → impact négligeable sur l'agrégation tier.
- */
-export const RANK_GATE_GRACE_DAYS = 7;
-
-/**
- * Best-effort région-aware: préfère snapshot `date >= matchDate` (le plus proche),
- * fallback sur snapshot `date in [matchDate - RANK_GATE_GRACE_DAYS, matchDate)` (le plus récent).
+ * Plus proche snapshot `date >= matchDate` par puuid (région-aware).
  *
- * Hier `date >= matchDate` strict → 99.8 % de fail au premier passage du rank gate
- * (→ 30 k fetches directs/16h saturant le bucket 120 s). Avec grace window,
- * un snapshot fetché dans la semaine couvre le rank gate sans appel Riot supplémentaire.
+ * Politique : on fetche le rank de chaque puuid une fois par jour. Un snapshot
+ * `date = today` couvre TOUS les matches dans le passé (today >= matchDate).
+ * Si le gate échoue, c'est qu'on n'a pas encore fetché le puuid aujourd'hui →
+ * le hydration worker enfile un rank job dédupliqué (via `ensureRankSnapshot`).
  */
 export async function getRankSnapshotsAtOrAfterForMatch(
   puuids: string[],
   region: string,
   matchDate: Date,
-  options: { graceDays?: number } = {},
 ): Promise<Map<string, RankSnapshot>> {
   if (puuids.length === 0) {
     return new Map();
   }
 
-  const graceDays = Math.max(0, Math.trunc(options.graceDays ?? RANK_GATE_GRACE_DAYS));
   const matchDateIso = matchDate.toISOString().slice(0, 10);
   const regionKeys = platformRegionLookupKeys(region);
   const rows = await sql<RankHistoryRow[]>`
@@ -142,12 +133,8 @@ export async function getRankSnapshotsAtOrAfterForMatch(
     FROM player_rank_history
     WHERE puuid = ANY(${sql.array(puuids, 25)})
       AND region = ANY(${sql.array(regionKeys, 25)})
-      AND date >= ${matchDateIso}::date - (${graceDays}::int || ' days')::interval
-    ORDER BY
-      puuid,
-      CASE WHEN date >= ${matchDateIso}::date THEN 0 ELSE 1 END ASC,
-      CASE WHEN date >= ${matchDateIso}::date THEN date END ASC,
-      CASE WHEN date < ${matchDateIso}::date THEN date END DESC
+      AND date >= ${matchDateIso}::date
+    ORDER BY puuid, date ASC
   `;
 
   const out = new Map<string, RankSnapshot>();
