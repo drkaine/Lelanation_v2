@@ -5,7 +5,7 @@ import { rankChildJobId, RANK_CHILD_JOB_OPTS } from "../queues/rank-jobs-shared.
 import { normalizePlatformRegion, platformRegionLookupKeys } from "../riot/platform-region.js";
 
 const POLL_MS = 500;
-const MAX_WAIT_MS = 45_000;
+const DEFAULT_MAX_WAIT_MS = 45_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -50,19 +50,22 @@ export async function hasTodayRankSnapshot(puuid: string, region: string): Promi
   return hasRankSnapshotForMatchDate(puuid, region, todayIsoDate());
 }
 
-async function waitForBullMqRankJob(jobId: string, puuid: string, region: string, matchDateIso: string): Promise<void> {
+async function waitForBullMqRankJob(
+  jobId: string,
+  puuid: string,
+  region: string,
+  matchDateIso: string,
+  maxWaitMs = DEFAULT_MAX_WAIT_MS,
+): Promise<void> {
   const job = await rankQueue.getJob(jobId);
   if (!job) return;
 
-  const deadline = Date.now() + MAX_WAIT_MS;
+  const deadline = Date.now() + maxWaitMs;
   while (Date.now() < deadline) {
     if (await hasRankSnapshotForMatchDate(puuid, region, matchDateIso)) {
       return;
     }
     const state = await job.getState();
-    if (state === "completed") {
-      return;
-    }
     if (state === "failed") {
       return;
     }
@@ -74,6 +77,7 @@ export type EnsureRankOptions = {
   matchDateIso: string;
   parent?: { id: string; queue: string };
   priority?: number;
+  maxWaitMs?: number;
 };
 
 export type EnsureRankResult = {
@@ -147,7 +151,13 @@ export async function ensureRankSnapshot(
       }
 
       if (job) {
-        await waitForBullMqRankJob(jobId, safePuuid, normalizedRegion, options.matchDateIso);
+        await waitForBullMqRankJob(
+          jobId,
+          safePuuid,
+          normalizedRegion,
+          options.matchDateIso,
+          options.maxWaitMs ?? DEFAULT_MAX_WAIT_MS,
+        );
       }
     })();
 

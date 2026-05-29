@@ -35,7 +35,7 @@ import {
   type PollerLogSource,
 } from '../services/PollerMetricsFromLog.js'
 import { computePollerV2Dashboard } from '../services/PollerV2DashboardService.js'
-import { resolveRiotApiKey } from '../services/RiotHttpClient.js'
+import { resolveRiotApiKey } from '../services/RiotGateway.js'
 import { riotGateway } from '../services/RiotGateway.js'
 export type { AdminDataCollectStats } from '../services/AdminDataCollectService.js'
 

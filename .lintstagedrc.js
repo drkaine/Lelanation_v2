@@ -32,10 +32,20 @@ module.exports = {
   'backend/**/*.ts': (filenames) => {
     const projectRoot = process.cwd()
     const backendDir = path.join(projectRoot, 'backend')
-    
-    // TypeScript type checking for backend (runs on all files, not just staged)
+    const normalized = filenames.map((f) => f.replace(/\\/g, '/'))
+
+    const touchesSrc = normalized.some((f) => f.includes('/backend/src/'))
+    const touchesUnitTests = normalized.some(
+      (f) => f.includes('/backend/tests/') && !f.includes('/integration/'),
+    )
+
+    // Skip hook when only live integration tests are staged (they require RIOT_API_KEY).
+    if (!touchesSrc && !touchesUnitTests) {
+      return []
+    }
+
     return [
-      `bash -c 'cd "${backendDir}" && npm run typecheck'`
+      `bash -c 'cd "${backendDir}" && npm run typecheck'`,
     ]
   }
 }

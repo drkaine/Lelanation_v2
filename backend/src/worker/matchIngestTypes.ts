@@ -1,4 +1,4 @@
-import type { RiotMatchTimelineDto } from '../services/RiotHttpClient.js'
+import type { RiotMatchTimelineDto } from './riotIngestTypes.js'
 
 /** Shared across a batch of match ingests: one DB round-trip for max(game_date) + player rows. */
 export type MatchIngestDbPreload = {

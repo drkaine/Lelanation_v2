@@ -43,7 +43,7 @@ export {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ACQUIRE_SLOT_LUA = readFileSync(join(__dirname, "lua", "acquire-slot.lua"), "utf8");
 
-export const TARGET_PCT = 0.95;
+export const TARGET_PCT = 0.98;
 
 /** API tokens / 120s at dev budget 95 (derived from ratio split). */
 export const SLOT_BUDGETS_REF = (() => {

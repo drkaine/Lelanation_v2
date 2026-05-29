@@ -3,6 +3,25 @@ import { riotLogger } from './RiotLogger.js'
 
 const RIOT_API_KEY_ENV = 'RIOT_API_KEY'
 const RIOT_PUUID_KEY_VERSION_ENV = 'RIOT_PUUID_KEY_VERSION'
+
+export type RiotKeySource = 'env'
+
+function resolvePuuidKeyVersionFromEnv(): string {
+  const raw = process.env[RIOT_PUUID_KEY_VERSION_ENV]
+  const value = typeof raw === 'string' ? raw.trim() : ''
+  return value || 'perso'
+}
+
+/** Resolve API key from env only. */
+export async function resolveRiotApiKey(): Promise<
+  { ok: true; key: string; source: RiotKeySource; clefType: string | null } | { ok: false; error: string }
+> {
+  const envKey = process.env[RIOT_API_KEY_ENV]?.trim()
+  if (envKey) {
+    return { ok: true, key: envKey, source: 'env', clefType: resolvePuuidKeyVersionFromEnv() }
+  }
+  return { ok: false, error: 'No RIOT_API_KEY in env' }
+}
 // Keep a safer headroom under Riot app cap (100/120s) to reduce recurring 429.
 const RIOT_TARGET_REQUESTS_PER_WINDOW = 90
 const RIOT_WINDOW_MS = 125_000
@@ -250,6 +269,31 @@ class RiotGateway {
     return this.call(
       'GET',
       `${this.getPlatformBase()}/lol/league/v4/entries/by-summoner/${encodeURIComponent(summonerId)}`
+    )
+  }
+
+  async getLeagueEntries(
+    queue: string,
+    tier: string,
+    division: string,
+    page = 1,
+    platform = this.platform
+  ): Promise<RiotGatewayResponse<Array<{ puuid?: string }>>> {
+    return this.call(
+      'GET',
+      `${this.getPlatformBase(platform)}/lol/league/v4/entries/${encodeURIComponent(queue)}/${encodeURIComponent(tier)}/${encodeURIComponent(division)}?page=${page}`
+    )
+  }
+
+  async getAccountByRiotId(
+    gameName: string,
+    tagLine: string,
+    region: 'europe' = 'europe'
+  ): Promise<RiotGatewayResponse<{ puuid?: string }>> {
+    const base = region === 'europe' ? this.getRegionalBase() : this.getPlatformBase()
+    return this.call(
+      'GET',
+      `${base}/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`
     )
   }
 }

@@ -1,13 +1,17 @@
 import type { Job } from "bullmq";
+import pLimit from "p-limit";
 import type { HydrationJobData, ParsedParticipantDto } from "../dto/match.dto.js";
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
 import { currentBudgetAllocationRef } from "../redis/budget-allocation-ref.js";
-import { ensureRankSnapshot } from "../services/rank-inflight.js";
+import { ensureRankSnapshot, hasRankSnapshotForMatchDate } from "../services/rank-inflight.js";
 import { normalizePlatformRegion } from "../riot/platform-region.js";
 import { rankQueue } from "./index.js";
 import {
   computeRankExistingJobsDelayMs,
   RANK_CHILD_JOB_OPTS,
+  RANK_GATE_BATCH_POLL_MS,
+  RANK_GATE_ENQUEUE_WAIT_MS,
+  RANK_GATE_PRIORITY,
   RANK_PREFETCH_PRIORITY,
   rankChildJobId,
   todayIsoDate,
@@ -71,37 +75,108 @@ export type EnsureRankSnapshotsResult = {
   readyImmediate: number;
 };
 
+/** Enfile les rank jobs gate (sans bloquer le worker hydration). */
+export async function enqueueRankGateJobsForParticipants(
+  missingParticipants: ParsedParticipantDto[],
+  matchRegion: string,
+): Promise<{ enqueued: number; alreadyPending: number }> {
+  const today = todayIsoDate();
+  const normalizedMatchRegion = normalizePlatformRegion(matchRegion);
+  let enqueued = 0;
+  let alreadyPending = 0;
+
+  for (const participant of missingParticipants) {
+    const puuid = String(participant.puuid ?? "").trim();
+    if (!puuid) continue;
+
+    const jobId = rankChildJobId(puuid, normalizedMatchRegion, today);
+    const existing = await rankQueue.getJob(jobId);
+    if (existing) {
+      const state = await existing.getState();
+      if (state !== "failed") {
+        alreadyPending += 1;
+        continue;
+      }
+      await existing.remove().catch(() => undefined);
+    }
+
+    try {
+      await rankQueue.add(
+        "fetch-rank",
+        { puuid, region: normalizedMatchRegion, matchDate: today },
+        {
+          ...RANK_CHILD_JOB_OPTS,
+          jobId,
+          priority: RANK_GATE_PRIORITY,
+        },
+      );
+      enqueued += 1;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (
+        message.includes("Job already exists") ||
+        message.includes("cannot be replaced") ||
+        message.includes("-7")
+      ) {
+        alreadyPending += 1;
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  return { enqueued, alreadyPending };
+}
+
 /**
- * Résout les ranks manquants en parallèle via dedup in-flight (sans parent BullMQ).
- * Évite waiting-children qui bloquait 1000+ jobs hydration.
+ * @deprecated Préférer enqueueRankGateJobsForParticipants — ne bloque plus le worker.
  */
 export async function ensureRankSnapshotsForHydration(
   hydrationJob: Job<HydrationJobData>,
   missingParticipants: ParsedParticipantDto[],
   matchDateIso: string,
+  matchRegion: string,
 ): Promise<EnsureRankSnapshotsResult> {
   let dedupHits = 0;
   let awaitedExisting = 0;
   let readyImmediate = 0;
+  const normalizedMatchRegion = normalizePlatformRegion(matchRegion);
+  const gateLimit = pLimit(3);
 
   await Promise.all(
-    missingParticipants.map(async (participant) => {
-      const puuid = String(participant.puuid ?? "").trim();
-      if (!puuid) return;
+    missingParticipants.map((participant) =>
+      gateLimit(async () => {
+        const puuid = String(participant.puuid ?? "").trim();
+        if (!puuid) return;
 
-      const region = normalizePlatformRegion(participant.region);
-      const result = await ensureRankSnapshot(puuid, region, {
-        matchDateIso,
-        priority: 1,
-      });
+        const result = await ensureRankSnapshot(puuid, normalizedMatchRegion, {
+          matchDateIso,
+          priority: RANK_GATE_PRIORITY,
+          maxWaitMs: RANK_GATE_ENQUEUE_WAIT_MS,
+        });
 
-      if (result.dedupHit) dedupHits += 1;
-      if (result.status === "ready") readyImmediate += 1;
-      if (result.status === "awaited" || result.status === "child_enqueued") {
-        awaitedExisting += 1;
-      }
-    }),
+        if (result.dedupHit) dedupHits += 1;
+        if (result.status === "ready") readyImmediate += 1;
+        if (result.status === "awaited" || result.status === "child_enqueued") {
+          awaitedExisting += 1;
+        }
+      }),
+    ),
   );
+
+  const batchDeadline = Date.now() + RANK_GATE_BATCH_POLL_MS;
+  while (Date.now() < batchDeadline) {
+    let pending = 0;
+    for (const participant of missingParticipants) {
+      const puuid = String(participant.puuid ?? "").trim();
+      if (!puuid) continue;
+      if (!(await hasRankSnapshotForMatchDate(puuid, normalizedMatchRegion, matchDateIso))) {
+        pending += 1;
+      }
+    }
+    if (pending === 0) break;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
 
   if (dedupHits > 0 || awaitedExisting > 0) {
     console.log(

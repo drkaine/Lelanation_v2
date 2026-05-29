@@ -1,5 +1,5 @@
 import { sql } from '../client.js'
-import type { PlayerJob } from '../../poller/types.js'
+import type { PlayerJob } from '../../poller/jobTypes.js'
 
 type PlayerRow = {
   puuid: string

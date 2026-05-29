@@ -338,7 +338,12 @@ export function parseMatch(
   const gameEndTimestamp =
     Number(match.info.gameEndTimestamp ?? 0) ||
     Number(match.info.gameStartTimestamp ?? 0) + Number(match.info.gameDuration ?? 0) * 1000;
-  const gameDate = new Date(gameEndTimestamp).toISOString();
+  const gameStartTimestamp =
+    Number(match.info.gameStartTimestamp ?? 0) || Number(match.info.gameCreation ?? 0);
+  // Rank gate + agrégats : jour UTC de début de partie (pas gameEnd qui peut basculer J+1).
+  const gameDate = new Date(
+    gameStartTimestamp > 0 ? gameStartTimestamp : gameEndTimestamp,
+  ).toISOString();
   const region = normalizePlatformRegion(String(match.info.platformId ?? queueRegion ?? "euw1"));
 
   const team100Sorted = getTeamParticipantsSortedById(match, 100);

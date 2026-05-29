@@ -1,4 +1,4 @@
-import type { RiotMatchDto, RiotMatchTimelineDto, RiotParticipantDto } from '../services/RiotHttpClient.js'
+import type { RiotMatchDto, RiotMatchTimelineDto, RiotParticipantDto } from './riotIngestTypes.js'
 
 export function buildMatchTeamData(
   matchId: bigint,

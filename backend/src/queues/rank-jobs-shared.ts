@@ -29,3 +29,30 @@ export function computeRankExistingJobsDelayMs(
   const rankDripMs = WINDOW_MS / safeRankAlloc;
   return Math.max(5_000, Math.min(120_000, Math.floor(safeCount * rankDripMs * 0.5)));
 }
+
+/** Délai defer hydration = temps drip pour couvrir les ranks manquants restants. */
+export function computeRankGateDeferDelayMs(pendingCount: number, rankAlloc: number): number {
+  const safeCount = Math.max(1, Math.trunc(pendingCount));
+  const safeRankAlloc = Math.max(1, Math.trunc(rankAlloc));
+  const rankDripMs = WINDOW_MS / safeRankAlloc;
+  return Math.max(15_000, Math.min(120_000, Math.floor(safeCount * rankDripMs * 1.15)));
+}
+
+/** Attente courte par rank gate — le job hydration defer si pas prêt (ne pas bloquer 2 min). */
+export const RANK_GATE_ENQUEUE_WAIT_MS = 5_000;
+export const RANK_GATE_BATCH_POLL_MS = 20_000;
+
+/** Attente max pour un seul rank gate (1 slot drip + marge file). */
+export function computeRankSingleGateWaitMs(rankAlloc: number): number {
+  const safeRankAlloc = Math.max(1, Math.trunc(rankAlloc));
+  const rankDripMs = WINDOW_MS / safeRankAlloc;
+  return Math.max(20_000, Math.min(90_000, Math.floor(rankDripMs * 6)));
+}
+
+/** Attente max par rank gate (séquentiel) — alignée sur le drip rank courant. */
+export function computeRankGateWaitMs(pendingCount: number, rankAlloc: number): number {
+  const safeCount = Math.max(1, Math.trunc(pendingCount));
+  const safeRankAlloc = Math.max(1, Math.trunc(rankAlloc));
+  const rankDripMs = WINDOW_MS / safeRankAlloc;
+  return Math.max(45_000, Math.min(120_000, Math.floor(safeCount * rankDripMs * 1.2)));
+}

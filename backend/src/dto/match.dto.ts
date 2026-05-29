@@ -12,6 +12,8 @@ export interface HydrationJobData {
   cachedHydration?: {
     participants: ParsedParticipantDto[];
     teamStatsBase: Omit<TeamStatsDto, "rankTier">;
+    /** Jour UTC de début de match — évite mismatch gate rank sur cache hit. */
+    matchGameDateIso?: string;
   };
 }
 

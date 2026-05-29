@@ -135,15 +135,15 @@ describe("isSignificantAllocationChange", () => {
 });
 
 describe("totalBudgetReq120s", () => {
-  test("applies 95% margin on dev budget", () => {
-    expect(totalBudgetReq120s(95)).toBe(90);
+  test("applies 98% margin on dev budget", () => {
+    expect(totalBudgetReq120s(95)).toBe(93);
   });
 });
 
 describe("rank fill phase", () => {
   test("detects idle budget and calm queues", () => {
     const snap = snapshots({
-      hydration: { queueWaiting: 5, queueActive: 2, tokensUsed120s: 10 },
+      hydration: { queueWaiting: 0, queueActive: 2, tokensUsed120s: 10 },
       rank: { queueWaiting: 0, queueActive: 0, tokensUsed120s: 5 },
       discovery: { tokensUsed120s: 10 },
     });
@@ -152,12 +152,29 @@ describe("rank fill phase", () => {
     expect(shouldTriggerRankFill(snap, idle)).toBe(true);
   });
 
-  test("does not fill when hydration is busy", () => {
+  test("does not fill when hydration has any waiting backlog", () => {
+    const snap = snapshots({
+      hydration: { queueWaiting: 5, queueActive: 8 },
+      rank: { queueWaiting: 0, queueActive: 0 },
+    });
+    expect(shouldTriggerRankFill(snap, 40)).toBe(false);
+  });
+
+  test("does not fill when hydration is heavily backlogged", () => {
     const snap = snapshots({
       hydration: { queueWaiting: 100, queueActive: 8 },
       rank: { queueWaiting: 0, queueActive: 0 },
     });
     expect(shouldTriggerRankFill(snap, 40)).toBe(false);
+  });
+
+  test("does not fill when hydration pipeline is fully idle (no match supply)", () => {
+    const snap = snapshots({
+      hydration: { queueWaiting: 0, queueActive: 0, tokensUsed120s: 0 },
+      rank: { queueWaiting: 0, queueActive: 6, tokensUsed120s: 12 },
+      discovery: { tokensUsed120s: 18 },
+    });
+    expect(shouldTriggerRankFill(snap, 50)).toBe(false);
   });
 
   test("fills when rank workers are active but queue not saturated (steady-state)", () => {
@@ -189,10 +206,13 @@ describe("rank fill phase", () => {
 
 describe("rank existing jobs delay", () => {
   test("scales with pending count and rank allocation", async () => {
-    const { computeRankExistingJobsDelayMs } = await import("../src/queues/rank-jobs-shared.js");
+    const { computeRankExistingJobsDelayMs, computeRankGateWaitMs } = await import(
+      "../src/queues/rank-jobs-shared.js"
+    );
     const small = computeRankExistingJobsDelayMs(2, 30);
     const large = computeRankExistingJobsDelayMs(20, 30);
     expect(small).toBeGreaterThanOrEqual(5_000);
     expect(large).toBeGreaterThan(small);
+    expect(computeRankGateWaitMs(8, 30)).toBeGreaterThanOrEqual(45_000);
   });
 });

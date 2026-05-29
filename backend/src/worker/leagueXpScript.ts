@@ -12,8 +12,8 @@ import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
 import { sql } from '../db/client.js'
 import { isDatabaseConfigured } from '../db/query.js'
 import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
-import { RiotRateLimiter } from '../services/RiotRateLimiter.js'
-import { RiotHttpClient } from '../services/RiotHttpClient.js'
+import { riotGateway, type RiotGatewayError } from '../services/RiotGateway.js'
+import type { RiotLeagueEntryDto } from './riotIngestTypes.js'
 
 export interface LeagueXpOptions {
   /** Riot queue type, e.g. 'RANKED_SOLO_5x5' or 'RANKED_FLEX_SR'. Default: 'RANKED_SOLO_5x5'. */
@@ -108,15 +108,12 @@ export async function runLeagueXpScript(
   const logger = createRiotPollerLogger('league_xp')
 
   try {
-    // Init Riot API client
-    const rateLimiter = new RiotRateLimiter()
-    const client = new RiotHttpClient(rateLimiter, logger, 'league_xp')
+    riotGateway.setPlatform(region)
 
-    const activeKeyInfo = client.getActiveKeyInfo()
-    if (!activeKeyInfo) {
+    const activeKeyInfo = riotGateway.getActiveKeyInfo()
+    if (!process.env.RIOT_API_KEY?.trim()) {
       throw new Error('No Riot API key configured: No RIOT_API_KEY in env')
     }
-    client.setPlatform(region)
 
     await appendUnifiedLog({
       section: 'back',
@@ -132,22 +129,24 @@ export async function runLeagueXpScript(
     let lastRequestCount = 0
 
     for (let page = 1; page <= maxPages && !isShouldStop(); page++) {
-      const res = await client.getLeagueEntries(queue, tier, division, page)
-      _status.requestCount++
-
-      if (!res.ok) {
-        if (res.status === 429) {
+      let entries: RiotLeagueEntryDto[]
+      try {
+        const res = await riotGateway.getLeagueEntries(queue, tier, division, page, region)
+        _status.requestCount++
+        entries = res.data
+      } catch (err) {
+        _status.requestCount++
+        const status = (err as RiotGatewayError).status
+        if (status === 429) {
           _status.error429Count++
           await logger.info('429 rate limit hit, retrying', { page })
-          // Rate limiter handles the wait; retry the same page
           page--
           continue
         }
-        await logger.error('League entries request failed', { status: res.status, page })
+        await logger.error('League entries request failed', { status, page })
         break
       }
 
-      const entries = res.data
       if (!entries.length) {
         await logger.step('No more entries, stopping early', { page })
         break
@@ -157,7 +156,7 @@ export async function runLeagueXpScript(
       _status.pagesProcessed++
 
       // Collect PUUIDs from this page
-      const puuids = entries.map((e) => e.puuid).filter((p): p is string => Boolean(p))
+      const puuids = entries.map((e: RiotLeagueEntryDto) => e.puuid).filter((p): p is string => Boolean(p))
       if (puuids.length === 0) {
         onUpdate?.(_status)
         continue
@@ -169,7 +168,7 @@ export async function runLeagueXpScript(
       `
       const existingSet = new Set(existing.map((p) => p.puuid))
 
-      const newEntries = entries.filter((e) => e.puuid && !existingSet.has(e.puuid))
+      const newEntries = entries.filter((e: RiotLeagueEntryDto) => e.puuid && !existingSet.has(e.puuid))
       for (const e of newEntries) {
         if (!e.puuid) continue
         try {

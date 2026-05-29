@@ -1,61 +1,67 @@
-import "dotenv/config";
-import type { Worker } from "bullmq";
-import { config } from "./config/index.js";
-import { healthCheck, sql } from "./db/client.js";
-import {
-  AdaptiveBudgetScheduler,
-  DEFAULT_INITIAL_ALLOCATION,
-  type BudgetAllocation,
-  type Pipeline,
-  type PipelineSnapshot,
-} from "./lib/adaptiveBudget.js";
-import { appendUnifiedLog } from "./logging/unifiedAppLog.js";
-import { pollerV2Observability } from "./observability/poller-v2-observability.js";
-import { discoveryQueue, getQueueMetrics } from "./queues/index.js";
-import { trimCompletedQueueJobs } from "./queues/queue-cleanup.js";
-import { purgeStaleProcessedMatchesAndRankHistory } from "./services/patch-retention-cleanup.js";
-import { syncMatchPipelinePause } from "./queues/pipeline-pause-sync.js";
-import { logRiotRoutingVerified } from "./riot/client.js";
-import {
-  applyBudgetAllocation,
-  getCurrentBudgetAllocation,
-  loadLuaScript,
-  stopDrip,
-} from "./redis/rate-scheduler.js";
-import { redis } from "./redis/client.js";
+import 'dotenv/config';
+import type { Worker } from 'bullmq';
+import { config } from './config/index.js';
+import { healthCheck, sql } from './db/client.js';
+import { appendUnifiedLog } from './logging/unifiedAppLog.js';
+import { pollerV2Observability } from './observability/poller-v2-observability.js';
+import { fetchNextPlayerBatch } from './db/queries/players.js';
+import { PollerDbConsumer, PollerEngine } from './poller/index.js';
+import type { Platform, Player } from './poller/types.js';
+import { getQueueMetrics } from './queues/index.js';
+import { trimCompletedQueueJobs } from './queues/queue-cleanup.js';
+import { purgeStaleProcessedMatchesAndRankHistory } from './services/patch-retention-cleanup.js';
+import { initRiotGateway, logRiotRoutingVerified, shutdownRiotGateway } from './riot/client.js';
+import { RiotGateway } from './riot-gateway/index.js';
+import { normalizePlatformRegion } from './riot/platform-region.js';
+import { redis } from './redis/client.js';
 
-type PollerWorkers = {
-  discoveryWorker: Worker;
-  hydrationWorker: Worker;
-  ingestionWorker: Worker;
-  rankWorker: Worker;
-  scheduleDiscoveryRepeatJob: () => Promise<void>;
-};
+const POLLER_LEADER_LOCK_KEY = 'poller-v2:leader';
+const POLLER_LEADER_LOCK_TTL_SEC = 120;
 
-let workers: PollerWorkers | null = null;
+let ingestionWorker: Worker | null = null;
 let metricsInterval: NodeJS.Timeout | null = null;
 let summary30mInterval: NodeJS.Timeout | null = null;
 let summary1hInterval: NodeJS.Timeout | null = null;
 let patchRetentionInterval: NodeJS.Timeout | null = null;
 let leaderLockRenewInterval: NodeJS.Timeout | null = null;
-let adaptiveScheduler: AdaptiveBudgetScheduler | null = null;
+let discoveryInterval: NodeJS.Timeout | null = null;
+let dbConsumer: PollerDbConsumer | null = null;
+let discoveryRunning = false;
 let shuttingDown = false;
 
-const POLLER_LEADER_LOCK_KEY = "poller-v2:leader";
-const POLLER_LEADER_LOCK_TTL_SEC = 120;
+function resolvePollSinceTimestamp(): number {
+  const days = Number.parseInt(process.env.POLLER_SINCE_DAYS ?? '14', 10);
+  const safeDays = Number.isFinite(days) && days > 0 ? days : 14;
+  return Math.floor(Date.now() / 1000) - safeDays * 24 * 3600;
+}
+
+function toPlatform(region: string): Platform {
+  return normalizePlatformRegion(region).toLowerCase() as Platform;
+}
+
+function buildPollConfig() {
+  return {
+    sinceTimestamp: resolvePollSinceTimestamp(),
+    matchIdsPerPage: Number.parseInt(process.env.POLLER_MATCH_IDS_PER_PAGE ?? '100', 10),
+    maxConcurrentPlayers: Number.parseInt(process.env.POLLER_MAX_CONCURRENT_PLAYERS ?? '3', 10),
+    maxConcurrentMatchFetches: Number.parseInt(process.env.POLLER_MAX_CONCURRENT_MATCH_FETCHES ?? '5', 10),
+    resolveParticipantRanks: process.env.POLLER_RESOLVE_PARTICIPANT_RANKS !== 'false',
+    participantRankConcurrency: Number.parseInt(process.env.POLLER_PARTICIPANT_RANK_CONCURRENCY ?? '5', 10),
+  };
+}
 
 async function acquirePollerLeaderLock(): Promise<void> {
   const acquired = await redis.set(
     POLLER_LEADER_LOCK_KEY,
     String(process.pid),
-    "EX",
+    'EX',
     POLLER_LEADER_LOCK_TTL_SEC,
-    "NX",
+    'NX',
   );
-  if (acquired !== "OK") {
+  if (acquired !== 'OK') {
     const owner = await redis.get(POLLER_LEADER_LOCK_KEY);
     console.warn(
-      `[poller-main] leader lock held by pid=${owner ?? "unknown"} (this pid=${process.pid}) — exiting; use a single poller instance only`,
+      `[poller-main] leader lock held by pid=${owner ?? 'unknown'} (this pid=${process.pid}) — exiting; use a single poller instance only`,
     );
     await redis.quit().catch(() => undefined);
     process.exit(0);
@@ -63,9 +69,9 @@ async function acquirePollerLeaderLock(): Promise<void> {
 
   leaderLockRenewInterval = setInterval(() => {
     void redis
-      .set(POLLER_LEADER_LOCK_KEY, String(process.pid), "EX", POLLER_LEADER_LOCK_TTL_SEC)
+      .set(POLLER_LEADER_LOCK_KEY, String(process.pid), 'EX', POLLER_LEADER_LOCK_TTL_SEC)
       .catch((error) => {
-        console.error("[poller-main] leader lock renew failed", error);
+        console.error('[poller-main] leader lock renew failed', error);
       });
   }, 30_000);
 }
@@ -81,76 +87,9 @@ async function releasePollerLeaderLock(): Promise<void> {
   }
 }
 
-async function startWorkers(): Promise<PollerWorkers> {
-  const [discoveryMod, hydrationMod, ingestionMod, rankMod] = await Promise.all([
-    import("./workers/discovery.worker.js"),
-    import("./workers/hydration.worker.js"),
-    import("./workers/ingestion.worker.js"),
-    import("./workers/rank.worker.js"),
-  ]);
-
-  return {
-    discoveryWorker: discoveryMod.discoveryWorker,
-    hydrationWorker: hydrationMod.hydrationWorker,
-    ingestionWorker: ingestionMod.ingestionWorker,
-    rankWorker: rankMod.rankWorker,
-    scheduleDiscoveryRepeatJob: discoveryMod.scheduleDiscoveryRepeatJob,
-  };
-}
-
-async function closeWorkers(activeWorkers: PollerWorkers): Promise<void> {
-  await Promise.all([
-    activeWorkers.discoveryWorker.pause(true),
-    activeWorkers.hydrationWorker.pause(true),
-    activeWorkers.ingestionWorker.pause(true),
-    activeWorkers.rankWorker.pause(true),
-  ]);
-
-  await Promise.all([
-    activeWorkers.discoveryWorker.close(),
-    activeWorkers.hydrationWorker.close(),
-    activeWorkers.ingestionWorker.close(),
-    activeWorkers.rankWorker.close(),
-  ]);
-}
-
-function validateConfig(): void {
-  void config.ENV;
-  void config.REDIS_URL;
-  void config.DATABASE_URL;
-  void config.RIOT_API_KEY;
-}
-
-async function getPipelineSnapshots(): Promise<Record<Pipeline, PipelineSnapshot>> {
-  const metrics = await getQueueMetrics();
-  const tokenUsage = pollerV2Observability.getRollingTokenUsage();
-  const current = getCurrentBudgetAllocation();
-
-  return {
-    discovery: {
-      queueWaiting: metrics.discovery.waiting,
-      queueActive: metrics.discovery.active,
-      tokensUsed120s: tokenUsage.discovery,
-      currentAlloc: current.discovery,
-    },
-    hydration: {
-      queueWaiting: metrics.hydration.waiting,
-      queueActive: metrics.hydration.active,
-      tokensUsed120s: tokenUsage.hydration,
-      currentAlloc: current.hydration,
-      hydrationWaitingChildren: metrics.hydration.waitingChildren ?? 0,
-    },
-    rank: {
-      queueWaiting: metrics.rank.waiting,
-      queueActive: metrics.rank.active,
-      tokensUsed120s: tokenUsage.rank,
-      currentAlloc: current.rank,
-    },
-  };
-}
-
-async function applyBudgetAllocationFromScheduler(alloc: BudgetAllocation): Promise<void> {
-  await applyBudgetAllocation(alloc);
+async function startIngestionWorker(): Promise<Worker> {
+  const mod = await import('./workers/ingestion.worker.js');
+  return mod.ingestionWorker;
 }
 
 async function getDataLagSeconds(): Promise<number | null> {
@@ -166,17 +105,10 @@ async function getDataLagSeconds(): Promise<number | null> {
 }
 
 async function logMetricsTick(): Promise<void> {
-  if (!workers) return;
-
   const startedAt = Date.now();
   const metrics = await getQueueMetrics();
-  const pipelineSync = await syncMatchPipelinePause(
-    workers.hydrationWorker,
-    workers.ingestionWorker,
-    workers.rankWorker,
-  );
+  const gateway = RiotGateway.getInstance().getStatus();
   const lagSeconds = await getDataLagSeconds();
-  const tickDurationMs = Date.now() - startedAt;
 
   pollerV2Observability.recordQueueSnapshot({
     discovery: metrics.discovery,
@@ -184,19 +116,17 @@ async function logMetricsTick(): Promise<void> {
     ingestion: metrics.ingestion,
     rank: metrics.rank,
     dataLagSeconds: lagSeconds,
-    tickDurationMs,
-    rankWorkerConfiguredConcurrency: pipelineSync.rankWorkerConfiguredConcurrency,
-    rankBacklog: pipelineSync.rankBacklog,
+    tickDurationMs: Date.now() - startedAt,
+    rankWorkerConfiguredConcurrency: 0,
+    rankBacklog: (metrics.rank.waiting ?? 0) + (metrics.rank.active ?? 0),
   });
   await pollerV2Observability.flushSnapshotToDisk();
 
+  const bucket120 = gateway.buckets.find((b) => b.windowMs === 120_000);
   console.log(
-    `[poller-main] queues discovery(w:${metrics.discovery.waiting},a:${metrics.discovery.active},f:${metrics.discovery.failed}) ` +
-      `hydration(w:${metrics.hydration.waiting},a:${metrics.hydration.active},f:${metrics.hydration.failed}) ` +
-      `ingestion(w:${metrics.ingestion.waiting},a:${metrics.ingestion.active},f:${metrics.ingestion.failed}) ` +
-      `rank(w:${metrics.rank.waiting},a:${metrics.rank.active},f:${metrics.rank.failed}) ` +
-      `pipelines_paused=${pipelineSync.pipelinesPaused} rank_concurrency=${pipelineSync.rankWorkerConfiguredConcurrency} ` +
-      `data_lag_seconds=${lagSeconds ?? "n/a"} tick_ms=${tickDurationMs}`,
+    `[poller-main] ingestion(w:${metrics.ingestion.waiting},a:${metrics.ingestion.active},f:${metrics.ingestion.failed}) ` +
+      `gateway_r429=${gateway.metrics.totals.r429} bucket120=${bucket120?.available ?? 'n/a'}/${bucket120?.limit ?? 'n/a'} ` +
+      `data_lag_seconds=${lagSeconds ?? 'n/a'}`,
   );
 }
 
@@ -231,7 +161,7 @@ async function runPatchRetentionPurge(): Promise<void> {
     const result = await purgeStaleProcessedMatchesAndRankHistory();
     if (result.skipped) {
       console.warn(
-        `[poller-main] patch_retention_purge_skipped reason=${result.skipReason ?? "unknown"} retention_days=${result.retentionDays}`,
+        `[poller-main] patch_retention_purge_skipped reason=${result.skipReason ?? 'unknown'} retention_days=${result.retentionDays}`,
       );
       return;
     }
@@ -240,30 +170,20 @@ async function runPatchRetentionPurge(): Promise<void> {
         `deleted_processed_matches=${result.deletedProcessedMatches} deleted_rank_history=${result.deletedRankHistory}`,
     );
   } catch (error) {
-    console.error("[poller-main] patch_retention_purge_failed", error);
+    console.error('[poller-main] patch_retention_purge_failed', error);
   }
 }
 
-async function emitWindowSummary(window: "30m" | "1h"): Promise<void> {
+async function emitWindowSummary(window: '30m' | '1h'): Promise<void> {
   const now = Date.now();
-  const windowMs = window === "30m" ? 30 * 60_000 : 60 * 60_000;
+  const windowMs = window === '30m' ? 30 * 60_000 : 60 * 60_000;
   const dbWindow = await queryDbWindowStats(now - windowMs, now);
   const payload = await pollerV2Observability.buildWindowSummary(window, dbWindow);
-  if (window === "30m") {
-    const matchesAggregated = typeof payload.matchesAggregatedWindow === "number" ? payload.matchesAggregatedWindow : 0;
-    const projected = typeof payload.projectedMatchesPerHour === "number" ? payload.projectedMatchesPerHour : 0;
-    const efficiency = typeof payload.apiEfficiencyPct === "number" ? payload.apiEfficiencyPct : 0;
-    const rankBacklog =
-      typeof payload.rankLeagueFetchesPending === "number" ? payload.rankLeagueFetchesPending : 0;
-    console.log(
-      `[poller] 30min summary: ${matchesAggregated} matches aggregated | ${projected}/h projected | efficiency ${efficiency}% | rank backlog: ${rankBacklog}`,
-    );
-  }
   await appendUnifiedLog({
-    section: "back",
-    type: "info",
-    script: window === "30m" ? "poller_v2_30m" : "poller_v2_hourly",
-    message: `poller-v2 summary ${window}`,
+    section: 'back',
+    type: 'info',
+    script: window === '30m' ? 'poller_v2_30m' : 'poller_v2_hourly',
+    message: `poller-v3 summary ${window}`,
     json: payload,
   });
   await pollerV2Observability.flushSnapshotToDisk();
@@ -275,87 +195,96 @@ async function startMonitoring(): Promise<void> {
     void logMetricsTick();
   }, 30_000);
   summary30mInterval = setInterval(() => {
-    void emitWindowSummary("30m");
+    void emitWindowSummary('30m');
   }, 30 * 60_000);
   summary1hInterval = setInterval(() => {
-    void emitWindowSummary("1h");
+    void emitWindowSummary('1h');
   }, 60 * 60_000);
 }
 
+async function runDiscoveryCycle(): Promise<void> {
+  if (discoveryRunning || shuttingDown) return;
+  discoveryRunning = true;
+  try {
+    const batch = await fetchNextPlayerBatch(config.DISCOVERY_PLAYERS_PER_TICK);
+    if (batch.length === 0) {
+      pollerV2Observability.incDiscoveryNoPlayerCycle();
+      console.log('[poller-main] discovery tick: no players in queue');
+      return;
+    }
+
+    const players: Player[] = batch.map((row) => ({
+      puuid: row.puuid,
+      platform: toPlatform(row.region),
+    }));
+
+    pollerV2Observability.incDiscoveryCycle();
+    const engine = PollerEngine.getInstance();
+    dbConsumer?.resetSessionState();
+    const { stats } = await engine.poll(players, buildPollConfig());
+    pollerV2Observability.recordDiscoveryMatches(stats.matchIdsDiscovered, stats.matchesFetched);
+    console.log(
+      `[poller-main] poll complete players=${stats.playersCompleted}/${stats.playersTotal} ` +
+        `matches=${stats.matchesFetched} match_ids=${stats.matchIdsDiscovered} errors=${stats.errors.length}`,
+    );
+  } catch (error) {
+    console.error('[poller-main] discovery cycle failed', error);
+  } finally {
+    discoveryRunning = false;
+  }
+}
+
+function startDiscoveryLoop(): void {
+  void runDiscoveryCycle();
+  discoveryInterval = setInterval(() => {
+    void runDiscoveryCycle();
+  }, config.DISCOVERY_INTERVAL_MS);
+}
+
 async function bootstrap(): Promise<void> {
-  validateConfig();
+  void config.ENV;
+  void config.REDIS_URL;
+  void config.DATABASE_URL;
+  void config.RIOT_API_KEY;
+
   console.log(`[poller-main] config validated env=${config.ENV}`);
   logRiotRoutingVerified();
+  initRiotGateway();
 
   await acquirePollerLeaderLock();
   console.log(`[poller-main] leader lock acquired pid=${process.pid}`);
 
-  workers = await startWorkers();
-  console.log("[poller-main] workers started: discovery, hydration, ingestion, rank");
+  ingestionWorker = await startIngestionWorker();
+  console.log('[poller-main] ingestion worker started');
+
+  const engine = PollerEngine.getInstance();
+  dbConsumer = new PollerDbConsumer({
+    resolveParticipantRanks: buildPollConfig().resolveParticipantRanks,
+  });
+  dbConsumer.attach(engine.getEventBus());
+  console.log('[poller-main] PollerDbConsumer attached to event bus');
 
   await trimCompletedQueueJobs();
-  console.log("[poller-main] stale BullMQ jobs trimmed (completed/failed >5m)");
-
-  await loadLuaScript();
-
-  adaptiveScheduler = new AdaptiveBudgetScheduler(
-    getPipelineSnapshots,
-    applyBudgetAllocationFromScheduler,
-    30_000,
-    DEFAULT_INITIAL_ALLOCATION,
-  );
-  pollerV2Observability.setAdaptiveBudgetStateProvider(() => {
-    const base = adaptiveScheduler?.getObservabilityState();
-    if (!base) return null;
-    const usage = pollerV2Observability.getRollingTokenUsage();
-    return {
-      ...base,
-      discovery_actual_req_120s: usage.discovery,
-      hydration_actual_req_120s: usage.hydration,
-      rank_actual_req_120s: usage.rank,
-    };
-  });
-  adaptiveScheduler.start();
-  console.log("[poller-main] adaptive budget scheduler started (tick=30s, drip active)");
-
-  const initialBudget = adaptiveScheduler.getCurrentAllocation();
-  console.log(
-    `[poller] Budget 120s (adaptive initial): discovery=${initialBudget.discovery} matchlists | ` +
-      `hydration=${initialBudget.hydration} matches | rank=${initialBudget.rank} snapshots | ` +
-      `totalReq=${initialBudget.totalReq}`,
-  );
+  console.log('[poller-main] stale BullMQ jobs trimmed (completed/failed >5m)');
 
   const dbOk = await healthCheck();
   if (!dbOk) {
-    throw new Error("database_healthcheck_failed");
+    throw new Error('database_healthcheck_failed');
   }
-  console.log("[poller-main] database health check OK");
+  console.log('[poller-main] database health check OK');
 
   await runPatchRetentionPurge();
   patchRetentionInterval = setInterval(() => {
     void runPatchRetentionPurge();
   }, 6 * 60 * 60_000);
 
-  await workers.scheduleDiscoveryRepeatJob();
-  if (await discoveryQueue.isPaused()) {
-    await discoveryQueue.resume();
-    console.log("[poller-main] discovery queue resumed (was paused in Redis)");
-  }
+  startDiscoveryLoop();
   console.log(
-    `[poller-main] discovery repeat job scheduled (${config.DISCOVERY_INTERVAL_MS}ms, ${config.DISCOVERY_PLAYERS_PER_TICK} players/tick)`,
-  );
-
-  const pipelineSync = await syncMatchPipelinePause(
-    workers.hydrationWorker,
-    workers.ingestionWorker,
-    workers.rankWorker,
-  );
-  console.log(
-    `[poller-main] match pipelines paused=${pipelineSync.pipelinesPaused} rank_concurrency=${pipelineSync.rankWorkerConfiguredConcurrency} (rank backlog policy)`,
+    `[poller-main] discovery loop started (${config.DISCOVERY_INTERVAL_MS}ms, ${config.DISCOVERY_PLAYERS_PER_TICK} players/tick)`,
   );
 
   await startMonitoring();
-  process.send?.("ready");
+  process.send?.('ready');
 }
 
 async function gracefulShutdown(signal: string): Promise<void> {
@@ -363,6 +292,10 @@ async function gracefulShutdown(signal: string): Promise<void> {
   shuttingDown = true;
   console.log(`[poller-main] ${signal} received, starting graceful shutdown`);
 
+  if (discoveryInterval) {
+    clearInterval(discoveryInterval);
+    discoveryInterval = null;
+  }
   if (metricsInterval) {
     clearInterval(metricsInterval);
     metricsInterval = null;
@@ -379,46 +312,51 @@ async function gracefulShutdown(signal: string): Promise<void> {
     clearInterval(patchRetentionInterval);
     patchRetentionInterval = null;
   }
-  if (adaptiveScheduler) {
-    await adaptiveScheduler.stop();
-    adaptiveScheduler = null;
-  }
-  stopDrip();
 
   try {
     await releasePollerLeaderLock();
+    await PollerEngine.resetInstance();
+    dbConsumer = null;
 
-    if (workers) {
-      await closeWorkers(workers);
-      workers = null;
+    if (ingestionWorker) {
+      await ingestionWorker.pause(true);
+      await ingestionWorker.close();
+      ingestionWorker = null;
     }
 
+    await shutdownRiotGateway();
     await sql.end();
     await redis.quit();
-    console.log("[poller-main] graceful shutdown completed");
+    console.log('[poller-main] graceful shutdown completed');
     process.exit(0);
   } catch (error) {
-    console.error("[poller-main] graceful shutdown failed", error);
+    console.error('[poller-main] graceful shutdown failed', error);
     process.exit(1);
   }
 }
 
-process.on("SIGTERM", () => {
-  void gracefulShutdown("SIGTERM");
+process.on('SIGTERM', () => {
+  void gracefulShutdown('SIGTERM');
 });
 
-process.on("SIGINT", () => {
-  void gracefulShutdown("SIGINT");
+process.on('SIGINT', () => {
+  void gracefulShutdown('SIGINT');
 });
 
 void bootstrap().catch(async (error) => {
-  console.error("[poller-main] bootstrap failed", error);
+  console.error('[poller-main] bootstrap failed', error);
   try {
-    if (workers) {
-      await closeWorkers(workers);
-      workers = null;
+    if (ingestionWorker) {
+      await ingestionWorker.pause(true);
+      await ingestionWorker.close();
+      ingestionWorker = null;
     }
     await releasePollerLeaderLock();
+  } catch {
+    // ignore
+  }
+  try {
+    await shutdownRiotGateway();
   } catch {
     // ignore
   }

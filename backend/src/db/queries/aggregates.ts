@@ -1,6 +1,6 @@
 import { sql } from '../client.js'
 import type { ParsedParticipantDto } from '../../dto/match.dto.js'
-import type { MatchDataJob } from '../../poller/types.js'
+import type { MatchDataJob } from '../../poller/jobTypes.js'
 
 type ParticipantAggregateInput = {
   participant: ParsedParticipantDto

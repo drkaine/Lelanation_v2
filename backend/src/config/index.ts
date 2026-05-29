@@ -56,7 +56,7 @@ const configByEnv: Record<
   dev: {
     RATE_LIMIT_PER_1S: 10,
     RATE_LIMIT_PER_120S: 95,
-    HYDRATION_CONCURRENCY: 8,
+    HYDRATION_CONCURRENCY: 3,
   },
   prod: {
     RATE_LIMIT_PER_1S: 100,

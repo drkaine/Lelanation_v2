@@ -1,4 +1,4 @@
-import type { RiotMatchDto } from '../services/RiotHttpClient.js'
+import type { RiotMatchDto } from './riotIngestTypes.js'
 
 /** Canonical `riot_match_id` used in DB: trimmed queue id, else metadata.matchId, else info.gameId string. */
 export function resolveRiotMatchIdForIngest(queueRiotMatchId: string, dto: RiotMatchDto): string {

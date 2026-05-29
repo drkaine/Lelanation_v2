@@ -83,9 +83,9 @@ export async function runPuuidMigrationScript(
       return
     }
 
-    const { client, clefType, requestCountRef } = init
+    const { clefType, requestCountRef } = init
 
-    await runPuuidKeySyncPhase2(client, logger, clefType, isShouldStop, requestCountRef)
+    await runPuuidKeySyncPhase2(logger, clefType, isShouldStop, requestCountRef)
 
     _status = {
       ..._status,

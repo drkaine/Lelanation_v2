@@ -1051,7 +1051,7 @@ async function upsertTeamCoreStat(tx: any, payload: IngestionJobData): Promise<v
   `;
 }
 
-async function runIngestionTransaction(payload: IngestionJobData): Promise<{ insertedPlayers: number; aggregated: boolean }> {
+export async function runIngestionTransaction(payload: IngestionJobData): Promise<{ insertedPlayers: number; aggregated: boolean }> {
   if (payload.participants.length === 0) return { insertedPlayers: 0, aggregated: false };
 
   if (!matchReadyForAggregation(payload.participants, closestSnapshotsFromParticipants(payload.participants))) {

@@ -5,21 +5,18 @@ import { sql } from '../db/client.js'
 import { isDatabaseConfigured } from '../db/query.js'
 import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
 import { loadMatchFilters, loadCurrentGameVersion } from '../services/RiotConfigService.js'
-import { RiotRateLimiter } from '../services/RiotRateLimiter.js'
-import { RiotHttpClient } from '../services/RiotHttpClient.js'
+import { riotGateway, type RiotGatewayError } from '../services/RiotGateway.js'
 import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
 
 const SUMMARY_30M_MS = 30 * 60 * 1000
 
 export type PuuidMigrationRiotInit =
-  | { ok: true; client: RiotHttpClient; clefType: string | null; requestCountRef: { n: number } }
+  | { ok: true; clefType: string | null; requestCountRef: { n: number } }
   | { ok: false }
 
 export async function initRiotClientForPuuidMigration(): Promise<PuuidMigrationRiotInit> {
   if (!isDatabaseConfigured()) return { ok: false }
   const logger = createRiotPollerLogger('puuid_migration')
-  const rateLimiter = new RiotRateLimiter()
-  const client = new RiotHttpClient(rateLimiter, logger, 'puuid-migration')
   const requestCountRef = { n: 0 }
 
   const filtersRes = await loadMatchFilters()
@@ -30,27 +27,19 @@ export async function initRiotClientForPuuidMigration(): Promise<PuuidMigrationR
   void filtersRes.unwrap()
   await loadCurrentGameVersion()
 
-  const activeKeyInfo = client.getActiveKeyInfo()
-  if (!activeKeyInfo) {
+  const activeKeyInfo = riotGateway.getActiveKeyInfo()
+  if (!activeKeyInfo || !process.env.RIOT_API_KEY?.trim()) {
     await logger.error('No API key configured', 'No RIOT_API_KEY in env')
     return { ok: false }
   }
 
-  client.setOnHttpResponse(() => {
-    requestCountRef.n += 1
-  })
-  client.setOnInvalidKey(() => {
-    void logger.error('API key invalid or expired', {})
-  })
-
-  return { ok: true, client, clefType: activeKeyInfo.clefType ?? null, requestCountRef }
+  return { ok: true, clefType: activeKeyInfo.clefType ?? null, requestCountRef }
 }
 
 /**
  * Sync players whose `puuid_key_version` ≠ current key via Riot account-v1 when game_name/tag_name exist.
  */
 export async function runPuuidKeySyncPhase2(
-  client: RiotHttpClient,
   logger: ReturnType<typeof createRiotPollerLogger>,
   clefType: string | null,
   shouldStop: () => boolean,
@@ -104,8 +93,21 @@ export async function runPuuidKeySyncPhase2(
       const tag = String(row.tag_name ?? '').trim()
       if (!gn || !tag) continue
 
-      const accountRes = await client.getAccountByRiotId(gn, tag, 'europe')
-      if (!accountRes.ok || !accountRes.data?.puuid) {
+      let accountPuuid: string | undefined
+      try {
+        const accountRes = await riotGateway.getAccountByRiotId(gn, tag, 'europe')
+        requestCountRef.n += 1
+        accountPuuid = accountRes.data?.puuid
+      } catch (err) {
+        requestCountRef.n += 1
+        const status = (err as RiotGatewayError).status
+        if (status === 403 || status === 401) {
+          await logger.error('API key invalid or expired', {})
+        }
+        accountPuuid = undefined
+      }
+
+      if (!accountPuuid) {
         await sql`
           UPDATE players SET puuid_key_version = 'perdu', updated_at = NOW()
           WHERE puuid = ${row.puuid}
@@ -117,7 +119,7 @@ export async function runPuuidKeySyncPhase2(
       try {
         await sql`
           UPDATE players SET
-            puuid = ${accountRes.data.puuid},
+            puuid = ${accountPuuid},
             puuid_key_version = ${clefType},
             updated_at = NOW()
           WHERE puuid = ${row.puuid}

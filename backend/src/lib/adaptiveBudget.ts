@@ -4,7 +4,7 @@ import { bullmqJobId } from "../queues/bullmq-job-id.js";
 import { rankQueue } from "../queues/index.js";
 import { normalizePlatformRegion } from "../riot/platform-region.js";
 
-const TARGET_PCT = 0.95;
+const TARGET_PCT = 0.98;
 
 function parseOptionalPositiveInt(raw: string | undefined): number | null {
   if (!raw) return null;
@@ -51,7 +51,7 @@ export function pipelineConstraintsForBudget(
   return {
     discovery: { min: 4, max: Math.max(20, Math.floor(20 * scale)), costPerJob: 1 },
     hydration: { min: 10, max: Math.max(35, Math.floor(35 * scale)), costPerJob: 2 },
-    rank: { min: 15, max: Math.max(35, Math.floor(35 * scale)), costPerJob: 1 },
+    rank: { min: 22, max: Math.max(40, Math.floor(40 * scale)), costPerJob: 1 },
   };
 }
 
@@ -84,14 +84,21 @@ export interface BudgetAllocation {
   totalReq: number;
 }
 
-export const DEFAULT_INITIAL_ALLOCATION: BudgetAllocation = {
-  discovery: FORCE_ALLOC_OVERRIDE ? DISCOVERY_ALLOC_OVERRIDE : 10,
-  hydration: FORCE_ALLOC_OVERRIDE ? HYDRATION_ALLOC_OVERRIDE : 18,
-  rank: FORCE_ALLOC_OVERRIDE ? RANK_ALLOC_OVERRIDE : 22,
-  totalReq: FORCE_ALLOC_OVERRIDE
-    ? DISCOVERY_ALLOC_OVERRIDE + HYDRATION_ALLOC_OVERRIDE * 2 + RANK_ALLOC_OVERRIDE
-    : 10 + 18 * 2 + 22,
-};
+export const DEFAULT_INITIAL_ALLOCATION: BudgetAllocation = (() => {
+  const totalReq = totalBudgetReq120s();
+  const discovery = FORCE_ALLOC_OVERRIDE ? DISCOVERY_ALLOC_OVERRIDE : 10;
+  const hydration = FORCE_ALLOC_OVERRIDE ? HYDRATION_ALLOC_OVERRIDE : 18;
+  const rank = FORCE_ALLOC_OVERRIDE ? RANK_ALLOC_OVERRIDE : 22;
+  if (FORCE_ALLOC_OVERRIDE) {
+    return {
+      discovery,
+      hydration,
+      rank,
+      totalReq: discovery + hydration * 2 + rank,
+    };
+  }
+  return { discovery, hydration, rank, totalReq };
+})();
 
 export const MIN_ALLOC_CHANGE = 2;
 export const MIN_REBALANCE_INTERVAL_MS = 3 * 60_000;
@@ -147,10 +154,20 @@ export function shouldTriggerRankFill(
   idleBudget: number,
   fillThreshold = RANK_FILL_IDLE_THRESHOLD,
 ): boolean {
-  if (snapshots.hydration.queueWaiting >= HYDRATION_QUEUE.HEALTHY_LO) {
+  // Tant que hydration a du backlog, ne pas voler le budget rank pour du fill idle.
+  if (snapshots.hydration.queueWaiting > 0) {
     return false;
   }
   if (snapshots.rank.queueWaiting >= RANK_QUEUE.CRITICAL) {
+    return false;
+  }
+  // Ne pas brûler le budget rank en backfill quand le pipeline match est totalement
+  // à l'arrêt (discovery ne produit plus de hydration jobs).
+  if (
+    snapshots.hydration.queueWaiting === 0 &&
+    snapshots.hydration.queueActive === 0 &&
+    (snapshots.hydration.hydrationWaitingChildren ?? 0) === 0
+  ) {
     return false;
   }
   return idleBudget >= fillThreshold;
@@ -409,6 +426,7 @@ export function computeAllocation(
     !FORCE_ALLOC_OVERRIDE &&
     !hydrationBlockedByRank &&
     snapshots.rank.queueWaiting === 0 &&
+    snapshots.rank.queueActive === 0 &&
     rankUnderused &&
     snapshots.hydration.queueWaiting > 0
   ) {
@@ -453,9 +471,18 @@ export function computeAllocation(
     }
   }
 
-  // Try to consume most of the available budget when hydration has backlog.
-  if (!FORCE_ALLOC_OVERRIDE && snapshots.hydration.queueWaiting > HYDRATION_QUEUE.STARVED && totalReq < totalBudget) {
+  // Consommer le budget restant quand hydration a du backlog (gate rank inclus).
+  if (!FORCE_ALLOC_OVERRIDE && snapshots.hydration.queueWaiting > 0 && totalReq < totalBudget) {
     let spareReq = totalBudget - totalReq;
+
+    if (spareReq > 0) {
+      const rankHeadroom = Math.max(0, max.rank - rank);
+      const rankAdd = Math.min(spareReq, rankHeadroom);
+      if (rankAdd > 0) {
+        rank += rankAdd;
+        spareReq -= rankAdd;
+      }
+    }
 
     if (spareReq > 0) {
       const hydrationHeadroomReq = Math.max(0, (max.hydration - hydration) * 2);
@@ -464,15 +491,6 @@ export function computeAllocation(
       if (hydrationJobsAdd > 0) {
         hydration = clamp(hydration + hydrationJobsAdd, min.hydration, max.hydration);
         spareReq -= hydrationJobsAdd * 2;
-      }
-    }
-
-    if (spareReq > 0) {
-      const rankHeadroom = Math.max(0, max.rank - rank);
-      const rankAdd = Math.min(spareReq, rankHeadroom);
-      if (rankAdd > 0) {
-        rank += rankAdd;
-        spareReq -= rankAdd;
       }
     }
 

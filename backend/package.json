@@ -24,6 +24,16 @@
     "script:riot-live-test": "tsx src/scripts/testRiotApiKeyLive.ts",
     "script:merge-objective-histogram-global": "tsx src/scripts/runMergeObjectiveHistogramGlobal.ts",
     "test:rate-limiter": "vitest run tests/rate-limiter.test.ts",
+    "test:gateway": "vitest run --config vitest.config.ts",
+    "test:gateway:integration": "vitest run --config vitest.integration.config.ts",
+    "test:gateway:throughput": "vitest run --config vitest.integration.config.ts tests/riot-gateway/integration/liveThroughput.test.ts",
+    "test:precommit": "npm run test:gateway && npm run test:poller:unit",
+    "test:poller:unit": "vitest run --config vitest.poller.unit.config.ts",
+    "test:poller:e2e": "vitest run --config vitest.poller.e2e.config.ts",
+    "test:poller:integration": "vitest run --config vitest.poller.integration.config.ts",
+    "test:poller:stability": "vitest run --config vitest.poller.stability.config.ts",
+    "test:poller:all": "npm run test:poller:unit && npm run test:poller:e2e",
+    "test:poller": "npm run test:poller:all",
     "seed:eu": "tsx scripts/seed-eu-players.ts"
   },
   "devDependencies": {
@@ -51,7 +61,9 @@
     "p-limit": "^3.1.0",
     "pg": "^8.18.0",
     "pino": "^10.3.1",
+    "pino-pretty": "^11.3.0",
     "postgres": "^3.4.9",
-    "sharp": "^0.33.5"
+    "sharp": "^0.33.5",
+    "undici": "^6.21.0"
   }
 }
