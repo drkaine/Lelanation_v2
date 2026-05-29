@@ -31,7 +31,6 @@ const searchQuery = computed(() =>
     .trim()
     .toLowerCase()
 )
-const previousPatch = computed<string | null>(() => p.balanceFrameworkData?.previousPatch ?? null)
 const rules = computed(() => p.balanceFrameworkData?.rules ?? null)
 const abrByLevel = computed<{
   average: number
@@ -405,10 +404,6 @@ function globalTooltip(row: BalanceRow): string {
           {{ p.balanceFrameworkData.currentPatch }}
         </span>
       </div>
-
-      <p v-if="previousPatch" class="text-xs text-text/60">
-        {{ p.t('statisticsPage.balanceDeltaReference', { patch: previousPatch }) }}
-      </p>
     </template>
   </div>
 </template>

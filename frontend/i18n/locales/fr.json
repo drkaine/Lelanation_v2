@@ -724,7 +724,6 @@
     "balanceStatusUnderpowered": "Sous-puissant",
     "balanceStatusBalanced": "Équilibré",
     "balanceGlobalStatus": "Statut global",
-    "balanceDeltaReference": "Delta calculé vs le patch précédent ({patch}).",
     "balanceTooltipChampion": "Champion évalué selon les règles Balance.",
     "balanceTooltipRole": "Rôle principal du champion pour les filtres actifs.",
     "balanceTooltipAverage": "Average = tiers Iron à Gold. Statut + valeurs (WR/BR/PRÉS) et position vis-à-vis des seuils.",

@@ -392,13 +392,6 @@ function deltaLabelClass(v: number | null | undefined): string {
 
 <template>
   <div class="space-y-4">
-    <p v-if="hasComparison && !p.overviewDetailBaselinePending" class="text-xs text-text/60">
-      {{
-        p.t('statisticsPage.balanceDeltaReference', {
-          patch: p.championGlobalPatchDeltaRefLabel ?? p.overviewDetailComparisonVersion,
-        })
-      }}
-    </p>
     <div v-if="p.overviewDetailPending" class="text-text/70">
       {{ p.t('statisticsPage.loading') }}
     </div>

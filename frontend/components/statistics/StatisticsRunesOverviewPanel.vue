@@ -181,10 +181,23 @@ function deltaClass(cur: number, old: number | undefined): string {
   return 'text-text/55'
 }
 
+/** Plancher de parties pour les cartes sets — adapté au volume filtré (comme ItemStatsFastSection). */
+function runeSetsValidForHighlights(
+  sets: NonNullable<DetailPayload['runeSets']>,
+  totalParticipants: number
+): NonNullable<DetailPayload['runeSets']> {
+  const preferMin = Math.min(800, Math.max(15, Math.floor(totalParticipants * 0.0008)))
+  const thresholds = [preferMin, Math.max(10, Math.floor(preferMin * 0.5)), 20, 10, 5, 1]
+  for (const minG of thresholds) {
+    const valid = sets.filter(s => s.games >= minG)
+    if (valid.length > 0) return valid
+  }
+  return []
+}
+
 const runeSetsHighlights = computed(() => {
   const sets = props.data?.runeSets ?? []
-  const minG = 80
-  const valid = sets.filter(s => s.games >= minG)
+  const valid = runeSetsValidForHighlights(sets, props.data?.totalParticipants ?? 0)
   if (valid.length === 0) {
     return {
       topPick: [] as typeof sets,

@@ -723,7 +723,6 @@
     "balanceStatusUnderpowered": "Underpowered",
     "balanceStatusBalanced": "Balanced",
     "balanceGlobalStatus": "Global status",
-    "balanceDeltaReference": "Delta computed against previous patch ({patch}).",
     "balanceTooltipChampion": "Champion evaluated with Balance rules.",
     "balanceTooltipRole": "Champion main role for the active filters.",
     "balanceTooltipAverage": "Average = Iron to Gold tiers. Status + values (WR/BR/PRESENCE) and threshold position.",
