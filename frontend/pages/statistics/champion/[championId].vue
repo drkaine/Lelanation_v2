@@ -58,7 +58,7 @@
     <div class="flex min-h-0 w-full min-w-0 flex-1">
       <button
         type="button"
-        class="filters-collapse-floating hidden lg:sticky lg:top-4 lg:z-20 lg:mr-2 lg:flex lg:shrink-0 lg:self-start"
+        class="filters-collapse-floating hidden shrink-0 lg:sticky lg:top-4 lg:z-20 lg:mr-2 lg:inline-flex lg:self-start"
         :aria-label="
           championFiltersOpen ? t('statisticsPage.closeFilters') : t('statisticsPage.openFilters')
         "
@@ -4013,7 +4013,6 @@ useHead({
 .filters-collapse-floating {
   width: 24px;
   height: 24px;
-  display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 1px solid rgb(var(--rgb-accent) / 0.28);

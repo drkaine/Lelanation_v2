@@ -36,7 +36,7 @@
       <button
         v-if="showFiltersPanel"
         type="button"
-        class="filters-collapse-floating mt-0.5 flex shrink-0 touch-manipulation lg:hidden"
+        class="filters-collapse-floating mt-0.5 inline-flex shrink-0 touch-manipulation lg:hidden"
         :aria-label="
           filtersOpen ? t('statisticsPage.closeFilters') : t('statisticsPage.openFilters')
         "
@@ -66,7 +66,7 @@
       <button
         v-if="showFiltersPanel"
         type="button"
-        class="filters-collapse-floating hidden lg:sticky lg:top-4 lg:z-20 lg:mr-2 lg:flex lg:shrink-0 lg:self-start"
+        class="filters-collapse-floating hidden shrink-0 touch-manipulation lg:sticky lg:top-4 lg:z-20 lg:mr-2 lg:inline-flex lg:self-start"
         :aria-label="
           filtersOpen ? t('statisticsPage.closeFilters') : t('statisticsPage.openFilters')
         "
@@ -1916,8 +1916,26 @@ function dedupedStatsFetch<T>(key: string, run: () => Promise<T>): Promise<T> {
 function appendProgressionSinceVersion(params: URLSearchParams): void {
   const since = statsVersionFilter.value.trim()
   const oldest = progressionFromVersion.value?.trim() ?? ''
-  if (since && (!oldest || since !== oldest)) {
+  if (!oldest) return
+
+  const sincePatch = patchFromVersion(since)
+  const oldestPatch = patchFromVersion(oldest)
+
+  if (since && sincePatch && oldestPatch && sincePatch !== oldestPatch) {
     params.set('sinceVersion', since)
+    return
+  }
+
+  // Filtre patch = référence « depuis » : borner au patch le plus récent (strictement après la ref)
+  if (since && sincePatch && oldestPatch && sincePatch === oldestPatch) {
+    const newer = statsVersionOptions.value
+      .find(v => {
+        if (Number(v.matchCount ?? 0) <= 0) return false
+        const p = patchFromVersion(v.version)
+        return p != null && comparePatchMajorMinor(p, oldestPatch) > 0
+      })
+      ?.version?.trim()
+    if (newer) params.set('sinceVersion', newer)
   }
 }
 
@@ -2342,12 +2360,30 @@ const progressionFullByPickrate = computed(() => {
 })
 const progressionSinceSlices = computed(() => {
   const list = progressionFullData.value?.champions ?? []
-  const topWinrate = [...list].sort((a, b) => b.deltaWr - a.deltaWr).slice(0, 5)
-  const topPickrate = [...list].sort((a, b) => b.deltaPick - a.deltaPick).slice(0, 5)
-  const topBanrate = [...list].sort((a, b) => b.deltaBan - a.deltaBan).slice(0, 5)
-  const bottomWinrate = [...list].sort((a, b) => a.deltaWr - b.deltaWr).slice(0, 5)
-  const bottomPickrate = [...list].sort((a, b) => a.deltaPick - b.deltaPick).slice(0, 5)
-  const bottomBanrate = [...list].sort((a, b) => a.deltaBan - b.deltaBan).slice(0, 5)
+  const topWinrate = [...list]
+    .filter(c => c.deltaWr !== 0)
+    .sort((a, b) => b.deltaWr - a.deltaWr)
+    .slice(0, 5)
+  const topPickrate = [...list]
+    .filter(c => c.deltaPick !== 0)
+    .sort((a, b) => b.deltaPick - a.deltaPick)
+    .slice(0, 5)
+  const topBanrate = [...list]
+    .filter(c => c.deltaBan !== 0)
+    .sort((a, b) => b.deltaBan - a.deltaBan)
+    .slice(0, 5)
+  const bottomWinrate = [...list]
+    .filter(c => c.deltaWr !== 0)
+    .sort((a, b) => a.deltaWr - b.deltaWr)
+    .slice(0, 5)
+  const bottomPickrate = [...list]
+    .filter(c => c.deltaPick !== 0)
+    .sort((a, b) => a.deltaPick - b.deltaPick)
+    .slice(0, 5)
+  const bottomBanrate = [...list]
+    .filter(c => c.deltaBan !== 0)
+    .sort((a, b) => a.deltaBan - b.deltaBan)
+    .slice(0, 5)
   return { topWinrate, topPickrate, topBanrate, bottomWinrate, bottomPickrate, bottomBanrate }
 })
 const overviewTopWinrateSince = computed(() => progressionSinceSlices.value.topWinrate)
@@ -4099,6 +4135,14 @@ function patchFromVersion(version: string | null | undefined): string | null {
   return `${major}.${minor}`
 }
 
+function comparePatchMajorMinor(a: string | null, b: string | null): number {
+  if (!a || !b) return 0
+  const [aM, aMi] = a.split('.').map(Number)
+  const [bM, bMi] = b.split('.').map(Number)
+  if (aM !== bM) return aM - bM
+  return aMi - bMi
+}
+
 /** Version de référence pour les Δ (progression ou patch précédent avec des matchs). */
 function resolveStatsBaselineVersion(): string | null {
   const mainVer = (statsVersionFilter.value || gameVersion.value || '').trim()
@@ -4318,6 +4362,7 @@ watch(activeTab, async tab => {
   if (tab === 'overview') {
     loadOverview()
     loadChampions()
+    loadObjectivesBaseline()
   }
   if (tab === 'objectives') {
     if (!overviewData.value?.matchesByVersion?.length) await loadOverview()
@@ -4426,7 +4471,10 @@ onMounted(async () => {
   statsPerfEnd('version', tVersion)
   await loadVersionsWithMatches()
   await loadOverview()
-  if (activeTab.value === 'overview') loadChampions()
+  if (activeTab.value === 'overview') {
+    loadChampions()
+    loadObjectivesBaseline()
+  }
   // Apply default version only after first overview call, so we can prefer patches
   // that actually have matches (matchesByVersion), not only catalog versions.
   const defaultVersionApplied = applyDefaultVersionFiltersFromKnownVersions()
@@ -4813,7 +4861,6 @@ if (__statisticsVm?.proxy) {
 .filters-collapse-floating {
   width: 24px;
   height: 24px;
-  display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 1px solid rgb(var(--rgb-accent) / 0.28);
@@ -5049,6 +5096,17 @@ if (__statisticsVm?.proxy) {
   margin-left: 0 !important;
   margin-right: 0 !important;
   align-self: stretch;
+}
+
+/* Donuts drake/soul : hauteur libre, pas de scroll interne. */
+.statistics .fast-stat-card.fast-stat-card-distribution {
+  width: min(100%, 420px) !important;
+  min-width: 0 !important;
+  max-width: 420px !important;
+  height: auto !important;
+  min-height: 0 !important;
+  flex: 0 1 auto;
+  overflow: visible;
 }
 
 /* Onglet Objets : pas de hauteur fixe (cartes items). */

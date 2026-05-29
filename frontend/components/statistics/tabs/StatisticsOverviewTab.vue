@@ -41,43 +41,51 @@ function banrateEntries(
   })
 }
 
-function banPctForCount(count: number, matchCount: number, bansPerMatch: number): number {
-  if (matchCount <= 0 || bansPerMatch <= 0) return 0
-  return Math.round((10000 * count) / (bansPerMatch * matchCount)) / 100
+function totalBansTop20(
+  data: { bans?: { top20Total?: Array<{ count?: number }> } } | null | undefined
+): number {
+  return (data?.bans?.top20Total ?? []).reduce((s, r) => s + Number(r.count ?? 0), 0)
+}
+
+function banSharePercent(count: number, totalBans: number): number {
+  if (totalBans <= 0) return 0
+  return Math.round((count / totalBans) * 1000) / 10
+}
+
+function parseBanRatePercent(value: string | undefined): number | null {
+  if (!value || value === '—') return null
+  const n = parseFloat(String(value).replace('%', '').trim())
+  return Number.isFinite(n) ? n : null
 }
 
 function bansOutcomeDeltaPct(championId: number, outcome: 'win' | 'loss'): number | null {
-  const currMc = Number(p.overviewTeamsData?.matchCount ?? 0)
-  const refMc = Number(p.overviewTeamsBaselineData?.matchCount ?? 0)
-  if (currMc <= 0 || refMc <= 0) return null
+  const baseline = p.overviewTeamsBaselineData
+  if (!baseline) return null
 
   const currentRows =
     outcome === 'win'
       ? (p.overviewTeamsData?.bans?.byWin ?? [])
       : (p.overviewTeamsData?.bans?.byLoss ?? [])
   const baselineRows =
-    outcome === 'win'
-      ? (p.overviewTeamsBaselineData?.bans?.byWin ?? [])
-      : (p.overviewTeamsBaselineData?.bans?.byLoss ?? [])
+    outcome === 'win' ? (baseline.bans?.byWin ?? []) : (baseline.bans?.byLoss ?? [])
 
-  const currentMap = new Map<number, number>(
-    currentRows.map((row: { championId: number; count: number }) => [
-      Number(row.championId),
-      Number(row.count ?? 0),
-    ])
+  const currTotal = totalBansTop20(p.overviewTeamsData)
+  const refTotal = totalBansTop20(baseline)
+  if (currTotal <= 0 || refTotal <= 0) return null
+
+  const currRow = currentRows.find(
+    (row: { championId: number }) => Number(row.championId) === championId
   )
-  const baselineMap = new Map<number, number>(
-    baselineRows.map((row: { championId: number; count: number }) => [
-      Number(row.championId),
-      Number(row.count ?? 0),
-    ])
+  const refRow = baselineRows.find(
+    (row: { championId: number }) => Number(row.championId) === championId
   )
 
-  const currCount = currentMap.get(championId) ?? 0
-  const refCount = baselineMap.get(championId) ?? 0
-  const currPct = banPctForCount(currCount, currMc, 2)
-  const refPct = banPctForCount(refCount, refMc, 2)
-  return Math.round((currPct - refPct) * 100) / 100
+  const currCount = Number(currRow?.count ?? 0)
+  const refCount = Number(refRow?.count ?? 0)
+  const currPct =
+    parseBanRatePercent(currRow?.banRatePercent) ?? banSharePercent(currCount, currTotal)
+  const refPct = parseBanRatePercent(refRow?.banRatePercent) ?? banSharePercent(refCount, refTotal)
+  return Math.round((currPct - refPct) * 10) / 10
 }
 
 function pctDeltaClass(delta: number): string {

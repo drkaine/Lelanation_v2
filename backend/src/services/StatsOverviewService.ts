@@ -20,8 +20,12 @@ import { mergeLegacyStatShardAggregates } from '../utils/statShardLegacyMerge.js
 import { isBootsItem, loadItemMeta } from '../worker/itemBuildSelection.js'
 import {
   invalidateAggArchivePartitionCache,
+  buildProgressionOldestOnlySql,
+  buildProgressionSinceSql,
+  listDistinctPatchVersions,
   matchVersionedAggFrom,
   normalizePatchMajorMinor,
+  progressionHasComparableSinceRange,
   sqlAggUnionAllLiveAndArchives,
 } from './statsAggArchive.js'
 import { normalizeGameVersionToMajorMinor } from '../utils/gameVersion.js'
@@ -365,6 +369,8 @@ export interface OverviewSidesApiStats {
         winrateRed?: number | null
         distributionByBlue?: Record<string, number>
         distributionByRed?: Record<string, number>
+        distributionWinsByBlue?: Record<string, number>
+        distributionWinsByRed?: Record<string, number>
       }
     >
     souls: Record<string, { byBlue: number; byRed: number; winrateBlue?: number | null; winrateRed?: number | null }>
@@ -393,6 +399,8 @@ export interface OverviewSidesApiStats {
           killsByRed?: number
           distributionByBlue?: Record<string, number>
           distributionByRed?: Record<string, number>
+          distributionWinsByBlue?: Record<string, number>
+          distributionWinsByRed?: Record<string, number>
         }
       | undefined
   }
@@ -2371,28 +2379,23 @@ export async function getOverviewProgressionStats(
   const roleFilters = resolveOverviewRoleFilters(role)
   const pRankKey = rankTierCacheKey(rankTier)
   const voRaw = String(versionOldest).trim()
-  const vo = escapeSqlLikePrefix(voRaw)
-  const sinceRaw =
-    sinceVersionPrefix != null && String(sinceVersionPrefix).trim() !== ''
-      ? String(sinceVersionPrefix).trim()
-      : ''
-  const sinceEsc =
-    sinceRaw !== '' && sinceRaw !== voRaw ? escapeSqlLikePrefix(sinceRaw) : null
+  const sinceCap = progressionSinceCap(sinceVersionPrefix)
   const now = Date.now()
-  const cacheKey = `progwr2|${vo}|${pRankKey ?? ''}|${roleFilters.cacheKey}|${sinceEsc ?? 'after'}`
+  const cacheKey = `progwr4|${voRaw}|${pRankKey ?? ''}|${roleFilters.cacheKey}|${sinceCap ?? 'open'}`
   const cached = overviewProgressionCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
 
   try {
+    const availablePatches = await listDistinctPatchVersions()
+    if (!progressionHasComparableSinceRange(voRaw, sinceCap, availablePatches)) {
+      return { oldestVersion: versionOldest, gainers: [], losers: [] }
+    }
     const roleFilterSql = roleFilters.champion
       ? ` AND ac.role = '${statsRoleSqlLiteral(roleFilters.champion)}'`
       : ''
     const rawCond = buildRawMatchCond(undefined, rankTier).replace(/\bm\./g, 'ac.')
-    const oldestClause = `ac.game_version LIKE '${vo}%'`
-    const sinceClause =
-      sinceEsc != null && sinceEsc !== ''
-        ? `ac.game_version LIKE '${sinceEsc}%'`
-        : `ac.game_version NOT LIKE '${vo}%'`
+    const oldestClause = buildProgressionOldestOnlySql('ac', voRaw)
+    const sinceClause = buildProgressionSinceSql('ac', voRaw, sinceCap, availablePatches)
 
     const oldestFrom = await matchVersionedAggFrom('agg_champion_core_stats', versionOldest, 'ac')
     const sinceFrom = await sqlAggUnionAllLiveAndArchives('agg_champion_core_stats', 'ac')
@@ -2482,19 +2485,17 @@ export async function getOverviewProgressionFullStats(
   const roleFilters = resolveOverviewRoleFilters(role)
   const pRankKey = rankTierCacheKey(rankTier)
   const voRaw = String(versionOldest).trim()
-  const vo = escapeSqlLikePrefix(voRaw)
-  const sinceRaw =
-    sinceVersionPrefix != null && String(sinceVersionPrefix).trim() !== ''
-      ? String(sinceVersionPrefix).trim()
-      : ''
-  const sinceEsc =
-    sinceRaw !== '' && sinceRaw !== voRaw ? escapeSqlLikePrefix(sinceRaw) : null
+  const sinceCap = progressionSinceCap(sinceVersionPrefix)
   const now = Date.now()
-  const cacheKey = `progfull2|${vo}|${pRankKey ?? ''}|${roleFilters.cacheKey}|${sinceEsc ?? 'after'}`
+  const cacheKey = `progfull4|${voRaw}|${pRankKey ?? ''}|${roleFilters.cacheKey}|${sinceCap ?? 'open'}`
   const cached = overviewProgressionFullCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
 
   try {
+    const availablePatches = await listDistinctPatchVersions()
+    if (!progressionHasComparableSinceRange(voRaw, sinceCap, availablePatches)) {
+      return { oldestVersion: versionOldest, champions: [] }
+    }
     const roleFilterSql = roleFilters.champion
       ? ` AND ac.role = '${statsRoleSqlLiteral(roleFilters.champion)}'`
       : ''
@@ -2504,21 +2505,12 @@ export async function getOverviewProgressionFullStats(
     const rawCond = buildRawMatchCond(undefined, rankTier).replace(/\bm\./g, 'ac.')
     const rawCondMv = buildRawMatchCond(undefined, rankTier).replace(/\bm\./g, 'mv.')
     const rawCondMo = buildRawMatchCond(undefined, rankTier).replace(/\bm\./g, 'mo.')
-    const oldestClauseAc = `ac.game_version LIKE '${vo}%'`
-    const sinceClauseAc =
-      sinceEsc != null && sinceEsc !== ''
-        ? `ac.game_version LIKE '${sinceEsc}%'`
-        : `ac.game_version NOT LIKE '${vo}%'`
-    const oldestClauseMv = `mv.game_version LIKE '${vo}%'`
-    const sinceClauseMv =
-      sinceEsc != null && sinceEsc !== ''
-        ? `mv.game_version LIKE '${sinceEsc}%'`
-        : `mv.game_version NOT LIKE '${vo}%'`
-    const oldestClauseMo = `mo.game_version LIKE '${vo}%'`
-    const sinceClauseMo =
-      sinceEsc != null && sinceEsc !== ''
-        ? `mo.game_version LIKE '${sinceEsc}%'`
-        : `mo.game_version NOT LIKE '${vo}%'`
+    const oldestClauseAc = buildProgressionOldestOnlySql('ac', voRaw)
+    const sinceClauseAc = buildProgressionSinceSql('ac', voRaw, sinceCap, availablePatches)
+    const oldestClauseMv = buildProgressionOldestOnlySql('mv', voRaw)
+    const sinceClauseMv = buildProgressionSinceSql('mv', voRaw, sinceCap, availablePatches)
+    const oldestClauseMo = buildProgressionOldestOnlySql('mo', voRaw)
+    const sinceClauseMo = buildProgressionSinceSql('mo', voRaw, sinceCap, availablePatches)
 
     const oldestFromFull = await matchVersionedAggFrom('agg_champion_core_stats', versionOldest, 'ac')
     const sinceFromFull = await sqlAggUnionAllLiveAndArchives('agg_champion_core_stats', 'ac')
@@ -2926,6 +2918,16 @@ function minGamesPerChampForProgressionSlice(totalGamesInSlice: number): number 
 
 function escapeSqlLikePrefix(v: string): string {
   return v.replace(/'/g, "''")
+}
+
+function progressionSinceCap(
+  sinceVersionPrefix: string | null | undefined,
+): string | null {
+  const raw =
+    sinceVersionPrefix != null && String(sinceVersionPrefix).trim() !== ''
+      ? String(sinceVersionPrefix).trim()
+      : ''
+  return raw !== '' ? normalizePatchMajorMinor(raw) : null
 }
 
 const CHAMPION_STATS_FIRST_BLOOD =
@@ -3527,6 +3529,20 @@ export type ObjectiveDistributionSides = {
   redWins: Record<string, number>
 }
 
+function sideDistributionFields(dist: ObjectiveDistributionSides): {
+  distributionByBlue: Record<string, number>
+  distributionByRed: Record<string, number>
+  distributionWinsByBlue: Record<string, number>
+  distributionWinsByRed: Record<string, number>
+} {
+  return {
+    distributionByBlue: dist.blue,
+    distributionByRed: dist.red,
+    distributionWinsByBlue: dist.blueWins,
+    distributionWinsByRed: dist.redWins,
+  }
+}
+
 function firstBucketWinrateBySide(dist: ObjectiveDistributionSides): {
   blue: number | null
   red: number | null
@@ -3944,18 +3960,32 @@ export async function getOverviewSidesStats(
     drakesBySide.souls.chem.byRed = firstGamesFromSideDistribution(distChemSoul.red)
     drakesBySide.types.elder.distributionByBlue = distElder.blue
     drakesBySide.types.elder.distributionByRed = distElder.red
+    drakesBySide.types.elder.distributionWinsByBlue = distElder.blueWins
+    drakesBySide.types.elder.distributionWinsByRed = distElder.redWins
     drakesBySide.types.earth.distributionByBlue = distEarthDrake.blue
     drakesBySide.types.earth.distributionByRed = distEarthDrake.red
+    drakesBySide.types.earth.distributionWinsByBlue = distEarthDrake.blueWins
+    drakesBySide.types.earth.distributionWinsByRed = distEarthDrake.redWins
     drakesBySide.types.water.distributionByBlue = distWaterDrake.blue
     drakesBySide.types.water.distributionByRed = distWaterDrake.red
+    drakesBySide.types.water.distributionWinsByBlue = distWaterDrake.blueWins
+    drakesBySide.types.water.distributionWinsByRed = distWaterDrake.redWins
     drakesBySide.types.wind.distributionByBlue = distWindDrake.blue
     drakesBySide.types.wind.distributionByRed = distWindDrake.red
+    drakesBySide.types.wind.distributionWinsByBlue = distWindDrake.blueWins
+    drakesBySide.types.wind.distributionWinsByRed = distWindDrake.redWins
     drakesBySide.types.fire.distributionByBlue = distFireDrake.blue
     drakesBySide.types.fire.distributionByRed = distFireDrake.red
+    drakesBySide.types.fire.distributionWinsByBlue = distFireDrake.blueWins
+    drakesBySide.types.fire.distributionWinsByRed = distFireDrake.redWins
     drakesBySide.types.hextec.distributionByBlue = distHextecDrake.blue
     drakesBySide.types.hextec.distributionByRed = distHextecDrake.red
+    drakesBySide.types.hextec.distributionWinsByBlue = distHextecDrake.blueWins
+    drakesBySide.types.hextec.distributionWinsByRed = distHextecDrake.redWins
     drakesBySide.types.chem.distributionByBlue = distChemDrake.blue
     drakesBySide.types.chem.distributionByRed = distChemDrake.red
+    drakesBySide.types.chem.distributionWinsByBlue = distChemDrake.blueWins
+    drakesBySide.types.chem.distributionWinsByRed = distChemDrake.redWins
     const wrElder = objectiveSecuredWinrateBySide(distElder)
     drakesBySide.types.elder.winrateBlue = wrElder.blue
     drakesBySide.types.elder.winrateRed = wrElder.red
@@ -3999,16 +4029,57 @@ export async function getOverviewSidesStats(
       firstBlood: {
         firstByBlue: objectivesBySide.blue.firstBlood,
         firstByRed: objectivesBySide.red.firstBlood,
-        distributionByBlue: distFirstBloodSides.blue,
-        distributionByRed: distFirstBloodSides.red,
+        ...sideDistributionFields(distFirstBloodSides),
       },
-      baron: { firstByBlue: objectivesBySide.blue.baronFirst, firstByRed: objectivesBySide.red.baronFirst, killsByBlue: objectivesBySide.blue.baronKills, killsByRed: objectivesBySide.red.baronKills, distributionByBlue: distBaron.blue, distributionByRed: distBaron.red },
-      dragon: { firstByBlue: objectivesBySide.blue.dragonFirst, firstByRed: objectivesBySide.red.dragonFirst, killsByBlue: objectivesBySide.blue.dragonKills, killsByRed: objectivesBySide.red.dragonKills, distributionByBlue: distDragon.blue, distributionByRed: distDragon.red },
-      elder: { firstByBlue: objectivesBySide.blue.elderFirst, firstByRed: objectivesBySide.red.elderFirst, killsByBlue: objectivesBySide.blue.elderKills, killsByRed: objectivesBySide.red.elderKills, distributionByBlue: distElder.blue, distributionByRed: distElder.red },
-      tower: { firstByBlue: objectivesBySide.blue.towerFirst, firstByRed: objectivesBySide.red.towerFirst, killsByBlue: objectivesBySide.blue.towerKills, killsByRed: objectivesBySide.red.towerKills, distributionByBlue: distTower.blue, distributionByRed: distTower.red },
-      inhibitor: { firstByBlue: objectivesBySide.blue.inhibitorFirst, firstByRed: objectivesBySide.red.inhibitorFirst, killsByBlue: objectivesBySide.blue.inhibitorKills, killsByRed: objectivesBySide.red.inhibitorKills, distributionByBlue: distInhibitor.blue, distributionByRed: distInhibitor.red },
-      riftHerald: { firstByBlue: objectivesBySide.blue.riftHeraldFirst, firstByRed: objectivesBySide.red.riftHeraldFirst, killsByBlue: objectivesBySide.blue.riftHeraldKills, killsByRed: objectivesBySide.red.riftHeraldKills, distributionByBlue: distRiftHerald.blue, distributionByRed: distRiftHerald.red },
-      horde: { firstByBlue: objectivesBySide.blue.hordeFirst, firstByRed: objectivesBySide.red.hordeFirst, killsByBlue: objectivesBySide.blue.hordeKills, killsByRed: objectivesBySide.red.hordeKills, distributionByBlue: distHorde.blue, distributionByRed: distHorde.red },
+      baron: {
+        firstByBlue: objectivesBySide.blue.baronFirst,
+        firstByRed: objectivesBySide.red.baronFirst,
+        killsByBlue: objectivesBySide.blue.baronKills,
+        killsByRed: objectivesBySide.red.baronKills,
+        ...sideDistributionFields(distBaron),
+      },
+      dragon: {
+        firstByBlue: objectivesBySide.blue.dragonFirst,
+        firstByRed: objectivesBySide.red.dragonFirst,
+        killsByBlue: objectivesBySide.blue.dragonKills,
+        killsByRed: objectivesBySide.red.dragonKills,
+        ...sideDistributionFields(distDragon),
+      },
+      elder: {
+        firstByBlue: objectivesBySide.blue.elderFirst,
+        firstByRed: objectivesBySide.red.elderFirst,
+        killsByBlue: objectivesBySide.blue.elderKills,
+        killsByRed: objectivesBySide.red.elderKills,
+        ...sideDistributionFields(distElder),
+      },
+      tower: {
+        firstByBlue: objectivesBySide.blue.towerFirst,
+        firstByRed: objectivesBySide.red.towerFirst,
+        killsByBlue: objectivesBySide.blue.towerKills,
+        killsByRed: objectivesBySide.red.towerKills,
+        ...sideDistributionFields(distTower),
+      },
+      inhibitor: {
+        firstByBlue: objectivesBySide.blue.inhibitorFirst,
+        firstByRed: objectivesBySide.red.inhibitorFirst,
+        killsByBlue: objectivesBySide.blue.inhibitorKills,
+        killsByRed: objectivesBySide.red.inhibitorKills,
+        ...sideDistributionFields(distInhibitor),
+      },
+      riftHerald: {
+        firstByBlue: objectivesBySide.blue.riftHeraldFirst,
+        firstByRed: objectivesBySide.red.riftHeraldFirst,
+        killsByBlue: objectivesBySide.blue.riftHeraldKills,
+        killsByRed: objectivesBySide.red.riftHeraldKills,
+        ...sideDistributionFields(distRiftHerald),
+      },
+      horde: {
+        firstByBlue: objectivesBySide.blue.hordeFirst,
+        firstByRed: objectivesBySide.red.hordeFirst,
+        killsByBlue: objectivesBySide.blue.hordeKills,
+        killsByRed: objectivesBySide.red.hordeKills,
+        ...sideDistributionFields(distHorde),
+      },
     }
 
     const result: OverviewSidesApiStats = {
@@ -4168,31 +4239,20 @@ export async function getOverviewSidesProgressionFullStats(
   if (!versionOldest || versionOldest === '') {
     return { oldestVersion: null, blue: [], red: [] }
   }
-  const voRaw = String(versionOldest).trim()
-  const vo = escapeSqlLikePrefix(voRaw)
-  const pRankKey = rankTierCacheKey(rankTier)
   const roleFilters = resolveOverviewRoleFilters(role)
-  const sinceRaw =
-    sinceVersionPrefix != null && String(sinceVersionPrefix).trim() !== ''
-      ? String(sinceVersionPrefix).trim()
-      : ''
-  /** If filtres « patch courant » = même préfixe que la progression, LIKE serait identique → deltas 0. On retrouve alors le mode « tout sauf le patch de référence ». */
-  const sinceEsc =
-    sinceRaw !== '' && sinceRaw !== voRaw ? escapeSqlLikePrefix(sinceRaw) : null
+  const pRankKey = rankTierCacheKey(rankTier)
+  const voRaw = String(versionOldest).trim()
+  const sinceCap = progressionSinceCap(sinceVersionPrefix)
   const now = Date.now()
-  // Cache key v2: base match condition must not include versionOldest — oldest/since filters are
-  // oldestClause / sinceClause only; including both produced contradictory WHERE (no rows).
-  const cacheKey = `sidesprog3|${vo}|${pRankKey ?? ''}|${roleFilters.cacheKey}|${sinceEsc ?? 'all'}`
+  const cacheKey = `sidesprog4|${voRaw}|${pRankKey ?? ''}|${roleFilters.cacheKey}|${sinceCap ?? 'open'}`
   const cached = overviewSidesProgressionCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
 
   try {
     const rawMatchCond = buildRawMatchCond(null, rankTier).replace(/\bm\./g, 'mv.')
-    const oldestClause = `mv.game_version LIKE '${vo}%'`
-    const sinceClause =
-      sinceEsc != null && sinceEsc !== ''
-        ? `mv.game_version LIKE '${sinceEsc}%'`
-        : `mv.game_version NOT LIKE '${vo}%'`
+    const availablePatches = await listDistinctPatchVersions()
+    const oldestClause = buildProgressionOldestOnlySql('mv', voRaw)
+    const sinceClause = buildProgressionSinceSql('mv', voRaw, sinceCap, availablePatches)
     const rSql = roleSqlClause(roleFilters.champion)
 
     const oldestSideFrom = await matchVersionedAggFrom('agg_champion_side_stats', voRaw, 'mv')

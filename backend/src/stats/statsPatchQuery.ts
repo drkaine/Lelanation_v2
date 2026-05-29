@@ -15,6 +15,82 @@ export function normalizePatchMajorMinor(version: string): string {
   return '0.0'
 }
 
+/** Semver-style compare on major.minor patch labels (16.10 < 16.11). */
+export function comparePatchMajorMinor(a: string, b: string): number {
+  const [aMajRaw, aMinRaw] = normalizePatchMajorMinor(a).split('.')
+  const [bMajRaw, bMinRaw] = normalizePatchMajorMinor(b).split('.')
+  const aMaj = Number(aMajRaw)
+  const aMin = Number(aMinRaw)
+  const bMaj = Number(bMajRaw)
+  const bMin = Number(bMinRaw)
+  if (aMaj !== bMaj) return aMaj - bMaj
+  return aMin - bMin
+}
+
+function escapePatchSqlLiteral(patch: string): string {
+  return patch.replace(/'/g, "''")
+}
+
+/** Winrate on the reference patch only (not cumulative). */
+export function buildProgressionOldestOnlySql(alias: string, refPatch: string): string {
+  const esc = escapePatchSqlLiteral(normalizePatchMajorMinor(refPatch))
+  return `(${alias}.game_version = '${esc}' OR ${alias}.game_version LIKE '${esc}.%')`
+}
+
+/**
+ * Cumulative patches from refPatch onward (inclusive), optionally capped at capPatch.
+ * Matches tooltips: « depuis 16.11 » = 16.11 + 16.12 + …
+ */
+export function patchesInProgressionSinceRange(
+  refPatch: string,
+  capPatch: string | null,
+  availablePatches: string[],
+): string[] {
+  const ref = normalizePatchMajorMinor(refPatch)
+  const cap = capPatch ? normalizePatchMajorMinor(capPatch) : null
+  return [...new Set(availablePatches.map(normalizePatchMajorMinor))]
+    .filter((p) => comparePatchMajorMinor(p, ref) >= 0)
+    .filter((p) => !cap || comparePatchMajorMinor(p, cap) <= 0)
+}
+
+/** True when « depuis ref » can differ from « ref seul » (au moins un patch strictement plus récent dans la fenêtre). */
+export function progressionHasComparableSinceRange(
+  refPatch: string,
+  capPatch: string | null,
+  availablePatches: string[],
+): boolean {
+  const ref = normalizePatchMajorMinor(refPatch)
+  const sincePatches = patchesInProgressionSinceRange(refPatch, capPatch, availablePatches)
+  return sincePatches.some((p) => comparePatchMajorMinor(p, ref) > 0)
+}
+
+export function buildProgressionSinceSql(
+  alias: string,
+  refPatch: string,
+  capPatch: string | null,
+  availablePatches: string[],
+): string {
+  const patches = patchesInProgressionSinceRange(refPatch, capPatch, availablePatches)
+  if (patches.length === 0) return 'FALSE'
+  const parts = patches.map((p) => {
+    const esc = escapePatchSqlLiteral(p)
+    return `(${alias}.game_version = '${esc}' OR ${alias}.game_version LIKE '${esc}.%')`
+  })
+  return `(${parts.join(' OR ')})`
+}
+
+export async function listDistinctPatchVersions(): Promise<string[]> {
+  const union = await sqlAggUnionAllLiveAndArchives('agg_match_outcome_stats', 'mo')
+  const { queryRawUnsafe } = await import('../db/query.js')
+  const rows = await queryRawUnsafe<Array<{ game_version: string }>>(`
+    SELECT DISTINCT mo.game_version
+    FROM ${union}
+    WHERE mo.game_version IS NOT NULL AND TRIM(mo.game_version) <> ''
+    ORDER BY mo.game_version
+  `)
+  return rows.map((r) => String(r.game_version ?? '').trim()).filter(Boolean)
+}
+
 export function invalidateAggArchivePartitionCache(): void {
   /* no-op — partitions LIST(patch), no archive cache */
 }

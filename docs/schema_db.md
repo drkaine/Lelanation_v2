@@ -4,7 +4,7 @@ Ce document décrit le schéma **réel** de la base PostgreSQL utilisée par le 
 
 Sources de vérité :
 - `backend/drizzle/migrations/0001_statistiques_partition_by_patch.sql`
-- migrations incrémentales `0002` à `0014`
+- migrations incrémentales `0002` à `0016`
 
 ---
 
@@ -46,6 +46,9 @@ erDiagram
     date game_date
     text status
     text rank
+    text participant1_puuid
+    text participant1_game_name
+    text participant1_tag_name
   }
 
   champion_stats {
@@ -159,6 +162,18 @@ erDiagram
     int count_ban
   }
 
+  item_tier_daily_snapshots {
+    text patch PK
+    text rank_tier PK
+    text region PK
+    int item_id PK
+    date date_of_game PK
+    int games
+    int wins
+    jsonb order
+    bigint sum_achat_tmps
+  }
+
   champion_bans_by_banner {
     text patch PK
     text rank_tier PK
@@ -222,9 +237,14 @@ erDiagram
 - PK: `(patch, riot_match_id)`
 - Rôle: suivi ingestion match (pending/done/error + rang match).
 - Colonnes clés: `patch`, `riot_match_id`, `game_date`, `status`, `rank`, `created_at`.
+- Participants (migration `0016`) — pour chaque slot `1` à `10` :
+  - `participant{n}_puuid` (`TEXT`, nullable)
+  - `participant{n}_game_name` (`TEXT`, nullable)
+  - `participant{n}_tag_name` (`TEXT`, nullable)
 - Migrations:
   - `0006`: suppression colonnes `aggregate_*`
   - `0007`: `rank` converti en `TEXT`
+  - `0016`: colonnes `participant{1..10}_{puuid,game_name,tag_name}`
 
 ---
 
@@ -260,6 +280,8 @@ Indexes notables :
 - `idx_champion_tier_snapshot_champ`
 - `idx_champion_tier_snapshot_tier`
 - `idx_champion_vs_dims`
+- `idx_item_tier_snapshot_item`
+- `idx_item_tier_snapshot_tier`
 
 ---
 
@@ -281,6 +303,10 @@ Indexes notables :
 
 ## Tables bans & snapshots
 
+- `item_tier_daily_snapshots` *(migration `0016`, partitionnée par `patch`)*
+  - PK: `(patch, rank_tier, region, item_id, date_of_game)`
+  - Rôle: tendances item par patch / tier / région / jour (patch notes tracker).
+  - Colonnes: `games`, `wins`, `"order"` (JSONB — clé = ordre d'achat sérialisé, valeur = nombre de wins), `sum_achat_tmps` (somme des timestamps ms d'achat pour timing moyen).
 - `champion_bans_by_banner`
   - PK: `(patch, rank_tier, region, banned_champion_id)`
   - Migration `0004`: `banned_champion_id` en `INTEGER`
