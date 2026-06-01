@@ -1,0 +1,235 @@
+import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { PollerEventBus } from '../../../src/poller/PollerEventBus.js';
+import {
+  buildMatchDataEvent,
+  buildPlayerRankEvent,
+} from '../helpers/pipelineFixtures.js';
+
+vi.hoisted(() => {
+  process.env.ENV = 'dev';
+  process.env.REDIS_URL = 'redis://127.0.0.1:6379';
+  process.env.DATABASE_URL = 'postgresql://lelanation:lelanation@localhost:5434/lelanation_statistiques';
+  process.env.RIOT_API_KEY = 'RGAPI-test-key';
+});
+
+const insertRankHistory = vi.fn();
+const insertPendingProcessedMatch = vi.fn();
+const updateProcessedMatchRank = vi.fn();
+const markProcessedMatchError = vi.fn();
+const ingestionAdd = vi.fn();
+const buildPayload = vi.fn();
+const updateLastSeen = vi.fn();
+const upsertParticipants = vi.fn();
+const extractFromMatch = vi.fn();
+
+vi.mock('../../../src/db/queries/ranks.js', () => ({ insertRankHistory }));
+vi.mock('../../../src/poll-orchestration/processedMatchWrite.js', () => ({
+  insertPendingProcessedMatch,
+  updateProcessedMatchRank,
+  markProcessedMatchError,
+  extractPatchFromMatch: () => '16.11',
+}));
+vi.mock('../../../src/queues/index.js', () => ({
+  ingestionQueue: { add: ingestionAdd },
+}));
+vi.mock('../../../src/services/matchIngestionPayload.js', () => ({
+  buildIngestionPayloadFromMatchData: buildPayload,
+}));
+vi.mock('../../../src/poll-orchestration/ParticipantDiscovery.js', () => ({
+  ParticipantDiscovery: class {
+    extractFromMatch = extractFromMatch;
+    upsertParticipants = upsertParticipants;
+  },
+}));
+vi.mock('../../../src/poll-orchestration/PlayerDiscovery.js', () => ({
+  PlayerDiscovery: class {
+    updateLastSeen = updateLastSeen;
+  },
+}));
+
+async function createConsumer(resolveRanks: boolean) {
+  const { PollerDbConsumer } = await import('../../../src/poll-orchestration/PollerDbConsumer.js');
+  const { ParticipantDiscovery } = await import('../../../src/poll-orchestration/ParticipantDiscovery.js');
+  const { PlayerDiscovery } = await import('../../../src/poll-orchestration/PlayerDiscovery.js');
+  const bus = new PollerEventBus();
+  const consumer = new PollerDbConsumer(
+    new ParticipantDiscovery(),
+    new PlayerDiscovery(),
+    { currentPatch: '16.11', rankTierForUnranked: 'UNRANKED', resolveParticipantRanks: resolveRanks },
+    bus,
+  );
+  consumer.subscribe();
+  return { consumer, bus };
+}
+
+describe('PollerDbConsumer', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    insertRankHistory.mockResolvedValue(undefined);
+    insertPendingProcessedMatch.mockResolvedValue(true);
+    updateProcessedMatchRank.mockResolvedValue(undefined);
+    markProcessedMatchError.mockResolvedValue(undefined);
+    ingestionAdd.mockResolvedValue({});
+    buildPayload.mockResolvedValue({
+      participants: [{ puuid: 'p1' }],
+      teamStats: { matchId: 'EUW1_1', rankTier: 'GOLD' },
+    });
+    updateLastSeen.mockResolvedValue(undefined);
+    upsertParticipants.mockResolvedValue(0);
+    extractFromMatch.mockReturnValue([]);
+  });
+
+  test('T1 onPlayerRank inserts rank history', async () => {
+    const { bus } = await createConsumer(false);
+    bus.emit('player:rank', buildPlayerRankEvent('player-a'));
+    await vi.waitFor(() => expect(insertRankHistory).toHaveBeenCalled());
+  });
+
+  test('T2 onPlayerRank without solo queue stores UNRANKED tier', async () => {
+    const { bus } = await createConsumer(false);
+    bus.emit('player:rank', {
+      ...buildPlayerRankEvent('player-a'),
+      entries: [{ queueType: 'RANKED_FLEX_SR', tier: 'SILVER' }],
+    });
+    await vi.waitFor(() => expect(insertRankHistory).toHaveBeenCalled());
+    const row = vi.mocked(insertRankHistory).mock.calls[0]?.[0];
+    expect(row?.rankTier).toBe('UNRANKED');
+  });
+
+  test('T3 participant fromCache empty skips rank insert', async () => {
+    const { bus } = await createConsumer(true);
+    bus.emit('participant:rank', {
+      sessionId: 's',
+      triggerMatchId: 'EUW1_1',
+      participant: { puuid: 'p-cache', platform: 'euw1' },
+      entries: [],
+      fromCache: true,
+      fetchedAt: Date.now(),
+    });
+    await Promise.resolve();
+    expect(insertRankHistory).not.toHaveBeenCalled();
+  });
+
+  test('T4 participant rank stores history when not from cache', async () => {
+    const { bus } = await createConsumer(true);
+    bus.emit('participant:rank', {
+      sessionId: 's',
+      triggerMatchId: 'EUW1_1',
+      participant: { puuid: 'p-new', platform: 'euw1' },
+      entries: [{ queueType: 'RANKED_SOLO_5x5', tier: 'PLATINUM' }],
+      fromCache: false,
+      fetchedAt: Date.now(),
+    });
+    await vi.waitFor(() => expect(insertRankHistory).toHaveBeenCalled());
+  });
+
+  test('T5 onMatchData happy path enqueues ingestion', async () => {
+    const participants = Array.from({ length: 10 }, (_, i) => `part-${i}`);
+    const { bus } = await createConsumer(false);
+    bus.emit('player:rank', buildPlayerRankEvent('player-a', 'GOLD'));
+    bus.emit('match:data', buildMatchDataEvent('EUW1_1', 'player-a', participants));
+    await vi.waitFor(() => expect(ingestionAdd).toHaveBeenCalled());
+    expect(insertPendingProcessedMatch).toHaveBeenCalled();
+    expect(updateProcessedMatchRank).toHaveBeenCalled();
+    expect(upsertParticipants).toHaveBeenCalled();
+    expect(ingestionAdd).toHaveBeenCalledWith(
+      'ingest-match',
+      expect.any(Object),
+      expect.objectContaining({ jobId: 'EUW1_1' }),
+    );
+  });
+
+  test('T6 onMatchData conflict skips queue', async () => {
+    insertPendingProcessedMatch.mockResolvedValueOnce(false);
+    const { bus } = await createConsumer(false);
+    bus.emit('match:data', buildMatchDataEvent('EUW1_9', 'player-a', ['p1']));
+    await Promise.resolve();
+    expect(ingestionAdd).not.toHaveBeenCalled();
+  });
+
+  test('T7 uses participant rank when player rank missing', async () => {
+    const { bus } = await createConsumer(true);
+    bus.emit('participant:rank', {
+      sessionId: 's',
+      triggerMatchId: 'EUW1_2',
+      participant: { puuid: 'part-0', platform: 'euw1' },
+      entries: [{ queueType: 'RANKED_SOLO_5x5', tier: 'DIAMOND' }],
+      fromCache: false,
+      fetchedAt: Date.now(),
+    });
+    bus.emit('match:data', buildMatchDataEvent('EUW1_2', 'player-b', ['part-0']));
+    await vi.waitFor(() => expect(ingestionAdd).toHaveBeenCalled());
+    expect(updateProcessedMatchRank).toHaveBeenCalledWith(expect.any(String), 'EUW1_2', 'DIAMOND');
+  });
+
+  test('T8 fallback UNRANKED when no ranks in cache', async () => {
+    const { bus } = await createConsumer(false);
+    bus.emit('match:data', buildMatchDataEvent('EUW1_3', 'player-x', ['part-0']));
+    await vi.waitFor(() => expect(insertPendingProcessedMatch).toHaveBeenCalled());
+    const call = vi.mocked(insertPendingProcessedMatch).mock.calls[0]?.[0];
+    expect(call?.rank).toBe('UNRANKED');
+  });
+
+  test('T9 ingestion failure marks error without throwing', async () => {
+    ingestionAdd.mockRejectedValueOnce(new Error('queue down'));
+    const { bus } = await createConsumer(false);
+    bus.emit('player:rank', buildPlayerRankEvent('player-a'));
+    bus.emit('match:data', buildMatchDataEvent('EUW1_4', 'player-a', ['part-0']));
+    await vi.waitFor(() => expect(markProcessedMatchError).toHaveBeenCalled());
+  });
+
+  test('T10 onPlayerComplete updates last_seen', async () => {
+    const { bus } = await createConsumer(false);
+    bus.emit('player:complete', {
+      sessionId: 's',
+      player: { puuid: 'player-a', platform: 'euw1' },
+      stats: {
+        matchIdsDiscovered: 1,
+        matchIdsSkipped: 0,
+        matchesFetched: 1,
+        participantRanksFetched: 0,
+        elapsedMs: 1,
+        errors: [],
+      },
+    });
+    await vi.waitFor(() => expect(updateLastSeen).toHaveBeenCalledWith('player-a'));
+  });
+
+  test('T11 onSessionComplete clears pending state', async () => {
+    const { consumer, bus } = await createConsumer(true);
+    bus.emit('match:data', buildMatchDataEvent('EUW1_5', 'player-a', ['part-0']));
+    bus.emit('session:complete', {
+      sessionId: 's',
+      status: 'completed',
+      stats: {
+        playersTotal: 1,
+        playersCompleted: 1,
+        playersFailed: 0,
+        matchIdsDiscovered: 1,
+        matchIdsSkipped: 0,
+        matchesFetched: 0,
+        timelinesFetched: 0,
+        participantRanksFetched: 0,
+        participantRanksFromCache: 0,
+        errors: [],
+        startedAt: Date.now(),
+        elapsedMs: 1,
+      },
+    });
+    await vi.waitFor(() => expect(ingestionAdd).toHaveBeenCalled());
+    consumer.resetSessionState();
+    ingestionAdd.mockClear();
+    bus.emit('match:data', buildMatchDataEvent('EUW1_6', 'player-a', ['part-0']));
+    await Promise.resolve();
+    expect(ingestionAdd).not.toHaveBeenCalled();
+  });
+
+  test('T12 rank in cache before match uses player rank not fallback', async () => {
+    insertPendingProcessedMatch.mockClear();
+    const { bus } = await createConsumer(false);
+    bus.emit('player:rank', buildPlayerRankEvent('player-a', 'MASTER'));
+    bus.emit('match:data', buildMatchDataEvent('EUW1_7', 'player-a', ['part-0']));
+    await vi.waitFor(() => expect(insertPendingProcessedMatch).toHaveBeenCalled());
+    expect(insertPendingProcessedMatch.mock.calls[0]?.[0]?.rank).toBe('MASTER');
+  });
+});

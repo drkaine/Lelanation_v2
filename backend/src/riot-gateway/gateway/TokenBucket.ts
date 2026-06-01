@@ -23,13 +23,27 @@ export class TokenBucket {
   }
 
   isBlocked(now = Date.now()): boolean {
-    if (this.saturatedUntil !== undefined && now < this.saturatedUntil) return true;
-    return false;
+    if (this.saturatedUntil === undefined) return false;
+    if (now > this.saturatedUntil) {
+      gatewayLogger.debug(
+        {
+          component: 'TokenBucket',
+          event: 'saturation_expired',
+          bucketId: this.bucketId,
+          expiredMs: now - this.saturatedUntil,
+        },
+        'bucket saturation expired — clearing',
+      );
+      this.saturatedUntil = undefined;
+      return false;
+    }
+    return true;
   }
 
   available(inFlight: number, safetyMargin: number, now = Date.now()): number {
     if (this.isBlocked(now)) return 0;
-    return this.safeLimit(safetyMargin) - this.used - inFlight;
+    const effectiveUsed = now >= this.resetAt ? 0 : this.used;
+    return this.safeLimit(safetyMargin) - effectiveUsed - inFlight;
   }
 
   pctUsed(safetyMargin: number): number {
@@ -39,7 +53,7 @@ export class TokenBucket {
   }
 
   msUntilReset(now = Date.now()): number {
-    if (this.saturatedUntil !== undefined && now < this.saturatedUntil) {
+    if (this.saturatedUntil !== undefined) {
       return Math.max(0, this.saturatedUntil - now);
     }
     return Math.max(0, this.resetAt - now);
@@ -88,19 +102,22 @@ export class TokenBucket {
     windowMs: number;
     resetInMs: number;
     saturatedUntil?: number;
+    isBlocked: boolean;
     pctUsed: number;
   } {
     const safe = this.safeLimit(safetyMargin);
+    const now = Date.now();
     return {
       bucketId: this.bucketId,
       limit: this.limit,
       used: this.used,
       inFlight,
-      available: this.available(inFlight, safetyMargin),
+      available: this.available(inFlight, safetyMargin, now),
       safeLimit: safe,
       windowMs: this.windowMs,
-      resetInMs: this.msUntilReset(),
+      resetInMs: this.msUntilReset(now),
       saturatedUntil: this.saturatedUntil,
+      isBlocked: this.isBlocked(now),
       pctUsed: this.pctUsed(safetyMargin),
     };
   }

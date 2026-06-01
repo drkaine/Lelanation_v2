@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { recordPollSession } from '../observability/poller-metrics/instrumentation.js';
 import { pollerLogger } from './logger.js';
 import { ParticipantRankCache } from './ParticipantRankCache.js';
 import { PlayerPoller } from './PlayerPoller.js';
@@ -126,6 +127,14 @@ export class PollSession {
       sessionId: this.sessionId,
       status: this.status,
       stats: this.stats,
+    });
+
+    recordPollSession({
+      sessionId: this.sessionId,
+      durationMs: this.stats.elapsedMs ?? 0,
+      playersPolled: this.stats.playersTotal,
+      playersCompleted: this.stats.playersCompleted,
+      playersFailed: this.stats.playersFailed,
     });
 
     pollerLogger.info(

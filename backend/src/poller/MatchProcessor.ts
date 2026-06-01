@@ -1,3 +1,7 @@
+import {
+  recordMatchFetch,
+  recordRank,
+} from '../observability/poller-metrics/instrumentation.js';
 import { fetchLeagueEntriesByPUUID, fetchMatch, fetchMatchTimeline } from './gatewayRoutes.js';
 import { pollerLogger } from './logger.js';
 import type { ParticipantRankCache } from './ParticipantRankCache.js';
@@ -5,6 +9,14 @@ import type { PollerEventBus } from './PollerEventBus.js';
 import { parsePlatformFromMatchId } from './utils/parseMatchId.js';
 import { asyncPool } from './utils/asyncPool.js';
 import type { Platform, Player, PollConfig, PollStage, SessionError } from './types.js';
+
+function patchFromGameVersion(gameVersion: string | undefined): string {
+  const parts = String(gameVersion ?? '').split('.');
+  if (parts.length >= 2 && parts[0] && parts[1]) {
+    return `${parts[0]}.${parts[1]}`;
+  }
+  return '0.0';
+}
 
 export class MatchProcessor {
   constructor(
@@ -38,6 +50,15 @@ export class MatchProcessor {
       const stage: PollStage = timelineError && !matchError ? 'match_timeline' : 'match_data';
       const error = (timelineError ?? matchError) as unknown;
       const message = error instanceof Error ? error.message : String(error);
+      const errorType =
+        matchError && timelineError ? 'both' : timelineError ? 'timeline_fetch' : 'match_fetch';
+      recordMatchFetch({
+        matchId,
+        patch: '0.0',
+        success: false,
+        latencyMs: Date.now() - startedAt,
+        errorType,
+      });
       pollerLogger.warn(
         {
           component: 'MatchProcessor',
@@ -63,6 +84,13 @@ export class MatchProcessor {
 
     match = matchResult.value;
     timeline = timelineResult.value;
+    const patch = patchFromGameVersion(String(match.info?.gameVersion ?? ''));
+    recordMatchFetch({
+      matchId,
+      patch,
+      success: true,
+      latencyMs: Date.now() - startedAt,
+    });
     this.onMatchPairFetched();
     this.eventBus.emit('match:data', {
       sessionId: this.sessionId,
@@ -100,6 +128,26 @@ export class MatchProcessor {
         cachedPuuids.push(puuid);
         continue;
       }
+
+      const matchPlatform = parsePlatformFromMatchId(matchId);
+      if (this.config.rankFilter) {
+        const alreadyKnown = await this.config.rankFilter(puuid, matchPlatform);
+        if (alreadyKnown) {
+          this.rankCache.reserve(puuid);
+          this.rankCache.set(puuid, []);
+          this.onParticipantRankFetched(true);
+          this.eventBus.emit('participant:rank', {
+            sessionId: this.sessionId,
+            triggerMatchId: matchId,
+            participant: { puuid, platform: matchPlatform },
+            entries: [],
+            fromCache: true,
+            fetchedAt: Date.now(),
+          });
+          continue;
+        }
+      }
+
       this.rankCache.reserve(puuid);
       toFetch.push(puuid);
     }
@@ -116,7 +164,12 @@ export class MatchProcessor {
       'participant rank batch',
     );
 
-    const matchPlatform = parsePlatformFromMatchId(matchId);
+    let matchPlatform: Platform;
+    try {
+      matchPlatform = parsePlatformFromMatchId(matchId);
+    } catch {
+      matchPlatform = this.player.platform;
+    }
 
     await asyncPool(this.config.participantRankConcurrency, toFetch, async (puuid) => {
       try {
@@ -133,6 +186,11 @@ export class MatchProcessor {
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        recordRank({
+          type: 'failed',
+          puuid,
+          platform: matchPlatform,
+        });
         pollerLogger.warn(
           {
             component: 'MatchProcessor',

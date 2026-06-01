@@ -44,6 +44,15 @@ export class RateLimitTracker {
     return this.globalInFlight;
   }
 
+  /** Sum of all in-flight requests (alias for watchdog / diagnostics). */
+  getTotalInFlight(): number {
+    return this.globalInFlight;
+  }
+
+  getInFlightByMethod(): Record<string, number> {
+    return Object.fromEntries(this.methodInFlight.entries());
+  }
+
   getMethodInFlight(methodKey: string): number {
     return this.methodInFlight.get(methodKey) ?? 0;
   }

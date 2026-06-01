@@ -1,6 +1,6 @@
-# Poller Engine (pollerv3 prompt #2)
+# Poller Engine (pollerv3)
 
-Event-driven polling layer on top of `riot-gateway`. The poller itself has **no database** — it emits typed events via `PollerEventBus`. Production persistence is handled by `PollerDbConsumer` (attached in `src/main.ts`).
+Event-driven polling on top of `riot-gateway`. The engine has **no direct DB imports** — it emits events via `PollerEventBus`. Production orchestration lives in `src/poll-orchestration/` and `src/main.ts`.
 
 ## Workflow
 
@@ -13,10 +13,15 @@ PollerEngine.poll([players])
               └── MatchProcessor → match:data + participant:rank
         → session:complete
 
-PollerDbConsumer (downstream)
-  ├── player:rank / participant:rank → player_rank_history
-  ├── match:data → parseMatch + rank gate → ingestion queue
-  └── player:complete → players.last_seen
+poll-orchestration (downstream)
+  ├── PatchResolver → sinceTimestamp from data/game/versions.json
+  ├── PlayerDiscovery → SELECT FOR UPDATE SKIP LOCKED
+  ├── MatchFilter / RankFilter → pre-filter before Riot API
+  ├── BackpressureMonitor → pause when ingestion queue > threshold
+  └── PollerDbConsumer
+        ├── player:rank / participant:rank → player_rank_history
+        ├── match:data → processed_matches (pending) + ingestion queue
+        └── player:complete → players.last_seen
 ```
 
 ## Usage
@@ -68,15 +73,49 @@ Always passed as Riot `startTime` (epoch seconds). Default is **now** — only m
 | `STABILITY_DURATION_MINUTES` | `20` | Duration for live stability (T4 §16). |
 | `STABILITY_SESSIONS` | `10` | Mock stability: repeated session count. |
 
+### Observability (`src/observability/poller-metrics/`)
+
+Ring-buffer metrics, live token display (5s), aggregate reports (10m–24h), JSON snapshot persistence, and alerts (429, ingestion lag, rank gap, DB slow, etc.). Started from `main.ts` via `ObservabilityOrchestrator`.
+
+### Self-tuning (`src/tuner/`)
+
+`PollerTuner` reads **live rate limits** from `RiotGateway.getStatus().buckets` (not `API_KEY_TYPE` alone) and recomputes before every discovery iteration:
+
+- `batchSize`, `maxConcurrentPlayers`, `maxConcurrentMatchFetches`, `participantRankConcurrency`
+- `discoveryIntervalMs` from token utilization and ingestion queue depth
+
+EMAs adapt from session feedback (`req/player`, `req/match`, participant rank cache hit rate). `LimitChangeDetector` logs limit changes (e.g. personal → production) and resets EMAs when limits jump more than 2×.
+
+Still configured manually: `SAFETY_MARGIN`, `BACKPRESSURE_THRESHOLD`, `API_KEY_TYPE`, `TUNER_*` seeds.
+
+### Poll orchestration (`src/poll-orchestration/`)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DISCOVERY_IDLE_SLEEP_MS` | `30000` | Sleep when no players were claimed. |
+| `TUNER_WARMUP_SESSIONS` | `5` | Conservative batch/concurrency for first N sessions. |
+| `TUNER_SESSION_DURATION_S` | `30` | Target session length used for batch sizing. |
+| `TUNER_EMA_ALPHA` | `0.3` | EMA smoothing for req/player estimates. |
+| `BACKPRESSURE_THRESHOLD` | `500` | Pause discovery when ingestion queue depth exceeds this. |
+| `BACKPRESSURE_POLL_INTERVAL_MS` | `5000` | Poll interval while waiting for headroom. |
+| `RESOLVE_PARTICIPANT_RANKS` | `true` | Same as `POLLER_RESOLVE_PARTICIPANT_RANKS`. |
+
 ## Tests
 
 ```bash
-npm run test:poller:unit          # unit (incl. PollerDbConsumer)
-npm run test:poller:e2e            # 8 mock full-loop scenarios
-npm run test:poller:stability      # mock memory / dedup / stall
-npm run test:poller:integration    # live API smoke (3 tests)
-npm run test:poller:stability:live # live 20 min (requires RIOT_API_KEY)
-npm run test:poller:all            # unit + e2e
-npm run test:gateway               # riot-gateway unit
-npm run test:gateway:integration   # riot-gateway live
+npm run test:poller:unit              # poller unit
+npm run test:poller:e2e               # poller mock full-loop
+npm run test:poller:integration       # poller live API smoke
+npm run test:orchestration:unit       # MatchFilter, RankFilter, PollerDbConsumer, …
+npm run test:orchestration:e2e        # full pipeline + backpressure (mock DB)
+npm run test:orchestration:integration # live pipeline (RIOT_API_KEY + DATABASE_URL)
+npm run test:observability            # poller-metrics unit
+npm run test:tuner                    # PollerTuner unit
+npm run test:tuner:e2e                # tuner + poller loop
+npm run test:poller:all               # poller + orchestration + tuner unit
+npm run test:all                      # gateway + poller:all + orchestration integration
+npm run test:poller:stability         # mock memory / dedup / stall
+npm run test:poller:stability:live    # live 20 min (requires RIOT_API_KEY)
+npm run test:gateway                  # riot-gateway unit
+npm run test:gateway:integration      # riot-gateway live
 ```

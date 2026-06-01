@@ -17,6 +17,7 @@ import {
   RiotNetworkError,
   RiotShutdownError,
 } from '../types.js';
+import { recordGatewayRequest, recordSaturation } from '../../observability/poller-metrics/instrumentation.js';
 import { detectThroughputAnomaly, MetricsCollector } from './MetricsCollector.js';
 import { observabilityBus, ObservabilityBus } from './ObservabilityBus.js';
 import { RateLimitTracker } from './RateLimitTracker.js';
@@ -34,11 +35,15 @@ export class RiotGateway {
   private readonly tracker = new RateLimitTracker();
   private readonly metrics = new MetricsCollector();
   private readonly startedAt = Date.now();
-  private flushTimer: NodeJS.Timeout | null = null;
+  private pendingFlushTimer: NodeJS.Timeout | null = null;
+  private pendingFlushAt = 0;
+  private watchdogTimer: NodeJS.Timeout | null = null;
   private shuttingDown = false;
   private activeDispatches = 0;
   private isFlushing = false;
+  private lastDispatchAt = 0;
   private lastRpsCheckAt = Date.now();
+  private readonly MIN_FLUSH_INTERVAL_MS = 100;
 
   private constructor() {
     const validation = validateConfig();
@@ -71,6 +76,7 @@ export class RiotGateway {
       () => this.queue.size(),
       () => this.tracker.getGlobalInFlight(),
     );
+    this.startWatchdog();
   }
 
   static getInstance(): RiotGateway {
@@ -139,7 +145,7 @@ export class RiotGateway {
         },
         'Request enqueued',
       );
-      this.scheduleFlush(0, 'post_response');
+      this.scheduleFlush('post_response', 0);
     });
   }
 
@@ -187,7 +193,8 @@ export class RiotGateway {
     observabilityBus.emitEvent('gateway:shutdown_start', { timeoutMs });
     gatewayLogger.info({ component: 'RiotGateway', event: 'gateway_shutdown_start', timeoutMs }, 'Gateway shutdown started');
 
-    this.clearFlushTimer();
+    this.stopWatchdog();
+    this.clearPendingFlushTimer();
     this.metrics.stop();
 
     const pending = this.queue.clear();
@@ -211,27 +218,100 @@ export class RiotGateway {
     return { reason, flushed: 0, rejected: pending.length };
   }
 
-  private scheduleFlush(waitMs: number, reason: FlushReason): void {
-    const dueAt = Date.now() + waitMs;
-    if (this.flushTimer) {
-      const currentDueAt = (this.flushTimer as NodeJS.Timeout & { dueAt?: number }).dueAt;
-      if (currentDueAt !== undefined && currentDueAt <= dueAt) {
-        return;
-      }
-      clearTimeout(this.flushTimer);
+  private scheduleFlush(reason: FlushReason, waitMs = 0): void {
+    if (waitMs <= 0) {
+      setImmediate(() => this.flushQueue(reason));
+      return;
     }
-
-    this.flushTimer = setTimeout(() => {
-      this.flushTimer = null;
-      this.flushQueue(reason);
-    }, waitMs + 1);
-    (this.flushTimer as NodeJS.Timeout & { dueAt?: number }).dueAt = dueAt;
+    this.scheduleFlushTimer(waitMs);
   }
 
-  private clearFlushTimer(): void {
-    if (this.flushTimer) {
-      clearTimeout(this.flushTimer);
-      this.flushTimer = null;
+  private scheduleFlushTimer(waitMs: number): void {
+    const safeWaitMs = Math.max(this.MIN_FLUSH_INTERVAL_MS, waitMs);
+    const fireAt = Date.now() + safeWaitMs;
+
+    if (this.pendingFlushTimer && fireAt >= this.pendingFlushAt) {
+      return;
+    }
+
+    this.clearPendingFlushTimer();
+
+    this.pendingFlushTimer = setTimeout(() => {
+      this.pendingFlushTimer = null;
+      this.pendingFlushAt = 0;
+      this.flushQueue('timer_expired');
+    }, safeWaitMs);
+
+    this.pendingFlushAt = fireAt;
+  }
+
+  private clearPendingFlushTimer(): void {
+    if (this.pendingFlushTimer) {
+      clearTimeout(this.pendingFlushTimer);
+      this.pendingFlushTimer = null;
+      this.pendingFlushAt = 0;
+    }
+  }
+
+  private startWatchdog(): void {
+    this.watchdogTimer = setInterval(() => {
+      if (this.shuttingDown) return;
+
+      const queueSize = this.queue.size();
+      const inFlight = this.tracker.getTotalInFlight();
+      const idleMs = this.lastDispatchAt > 0 ? Date.now() - this.lastDispatchAt : Number.POSITIVE_INFINITY;
+
+      const flushAlreadyScheduled = this.pendingFlushTimer !== null;
+      const queueBlocked =
+        queueSize > 0 && inFlight === 0 && this.activeDispatches === 0 && idleMs > 2_000;
+
+      if (queueBlocked && !flushAlreadyScheduled) {
+        const buckets = this.tracker.getAllBucketStates();
+        const payload = {
+          queueSize,
+          inFlight,
+          inFlightByMethod: this.tracker.getInFlightByMethod(),
+          idleMs,
+          buckets: buckets.map((b) => ({
+            id: b.bucketId,
+            used: b.used,
+            limit: b.limit,
+            effectiveUsed: b.resetInMs === 0 ? 0 : b.used,
+            available: b.available,
+            resetInMs: b.resetInMs,
+            saturatedUntil: b.saturatedUntil,
+            isBlocked: b.isBlocked,
+          })),
+          pendingFlushTimer: false,
+          pendingFlushAt: 0,
+        };
+
+        gatewayLogger.warn(
+          { component: 'RiotGateway', event: 'watchdog_flush', ...payload },
+          'watchdog: genuine stale queue — forcing flush',
+        );
+        observabilityBus.emitEvent('gateway:watchdog_triggered', payload);
+        this.flushQueue('watchdog');
+      } else if (queueBlocked && flushAlreadyScheduled) {
+        gatewayLogger.trace(
+          {
+            component: 'RiotGateway',
+            event: 'watchdog_skip',
+            queueSize,
+            inFlight,
+            idleMs,
+            pendingFlushInMs: Math.max(0, this.pendingFlushAt - Date.now()),
+          },
+          'watchdog: timer already scheduled, skipping',
+        );
+      }
+    }, 1_000);
+  }
+
+  private stopWatchdog(): void {
+    if (this.watchdogTimer) {
+      clearInterval(this.watchdogTimer);
+      this.watchdogTimer = null;
     }
   }
 
@@ -249,7 +329,7 @@ export class RiotGateway {
 
       const check = this.tracker.canDispatch(peekMethodKey);
       if (!check.allowed) {
-        this.scheduleFlush(check.waitMs ?? 0, 'timer_expired');
+        this.scheduleFlushTimer(check.waitMs ?? 0);
         observabilityBus.emitEvent('queue:backpressure', {
           queueSize: this.queue.size(),
           waitMs: check.waitMs,
@@ -272,7 +352,6 @@ export class RiotGateway {
         'Request dequeued',
       );
 
-      this.tracker.incrementInFlight(request.methodKey);
       this.activeDispatches += 1;
       dispatchedThisFlush += 1;
       void this.dispatchRequest(request, reason);
@@ -281,11 +360,11 @@ export class RiotGateway {
     gatewayLogger.debug(
       {
         component: 'RiotGateway',
-        event: 'flush_triggered',
+        event: 'flush_complete',
         reason,
-        queueSize: this.queue.size(),
-        dispatched_this_flush: dispatchedThisFlush,
-        remaining_in_queue: this.queue.size(),
+        dispatched: dispatchedThisFlush,
+        remaining: this.queue.size(),
+        inFlight: this.tracker.getTotalInFlight(),
       },
       'Queue flush completed',
     );
@@ -322,11 +401,19 @@ export class RiotGateway {
     );
     observabilityBus.emitEvent('request:dispatched', { requestId: request.id, methodKey: request.methodKey, url });
 
+    this.tracker.incrementInFlight(request.methodKey);
     try {
+      this.lastDispatchAt = Date.now();
       const response = await riotFetch(request.baseUrl, request.path, request.queryParams, request.abortController.signal);
       this.tracker.updateFromHeaders(request.methodKey, response.headers);
 
       if (response.statusCode === 429) {
+        recordGatewayRequest({
+          latencyMs: response.latencyMs,
+          methodKey: request.methodKey,
+          statusCode: 429,
+          buckets: this.tracker.getAllBucketStates(),
+        });
         await this.handle429(request, response.headers, url);
         return;
       }
@@ -337,6 +424,12 @@ export class RiotGateway {
       }
 
       if (response.statusCode >= 400) {
+        recordGatewayRequest({
+          latencyMs: response.latencyMs,
+          methodKey: request.methodKey,
+          statusCode: response.statusCode,
+          buckets: this.tracker.getAllBucketStates(),
+        });
         this.metrics.record('error', response.latencyMs);
         request.reject(new RiotHttpError(response.statusCode, url, `Riot HTTP ${response.statusCode}`, response.body));
         observabilityBus.emitEvent('request:failed', { requestId: request.id, statusCode: response.statusCode });
@@ -344,6 +437,12 @@ export class RiotGateway {
       }
 
       this.metrics.record('success', response.latencyMs);
+      recordGatewayRequest({
+        latencyMs: response.latencyMs,
+        methodKey: request.methodKey,
+        statusCode: response.statusCode,
+        buckets: this.tracker.getAllBucketStates(),
+      });
       if (response.latencyMs > 3_000) {
         gatewayLogger.warn(
           {
@@ -415,13 +514,18 @@ export class RiotGateway {
     } finally {
       this.tracker.decrementInFlight(request.methodKey);
       this.activeDispatches = Math.max(0, this.activeDispatches - 1);
-      this.scheduleFlush(0, 'post_response');
+      this.scheduleFlush('post_response', 0);
     }
   }
 
   private async handle429(request: QueuedRequest, headers: Record<string, string>, url: string): Promise<void> {
     const retryAfterMs = parseRetryAfterMs(headers);
     const includeApp = !headers['x-method-rate-limit'];
+    recordSaturation({
+      windowMs: includeApp ? 120_000 : 1_000,
+      methodKey: includeApp ? 'app' : request.methodKey,
+      waitMs: retryAfterMs,
+    });
     this.tracker.saturate(request.methodKey, Date.now() + retryAfterMs, includeApp);
     this.metrics.record('429');
     observabilityBus.emitEvent('ratelimit:429', { requestId: request.id, retryAfterMs });
@@ -501,7 +605,7 @@ export class RiotGateway {
     request.priority = 'high';
     request.lastAttemptAt = Date.now();
     this.queue.enqueue(request);
-    this.scheduleFlush(backoffMs, reason === '429' ? 'retry_ready' : 'timer_expired');
+    this.scheduleFlush(reason === '429' ? 'retry_ready' : 'timer_expired', backoffMs);
   }
 
   private checkThroughputAnomaly(): void {

@@ -4,6 +4,11 @@ import { MatchIdPaginator } from './MatchIdPaginator.js';
 import { MatchProcessor } from './MatchProcessor.js';
 import type { ParticipantRankCache } from './ParticipantRankCache.js';
 import type { PollerEventBus } from './PollerEventBus.js';
+import {
+  recordMatchDiscovery,
+  recordPlayer,
+  recordRank,
+} from '../observability/poller-metrics/instrumentation.js';
 import { asyncPool } from './utils/asyncPool.js';
 import type { Player, PlayerPollStats, PollConfig, SessionError } from './types.js';
 
@@ -37,32 +42,59 @@ export class PlayerPoller {
     };
 
     try {
+      recordPlayer({ type: 'polled', puuid: this.player.puuid, platform: this.player.platform });
       try {
-        const entries = await fetchLeagueEntriesByPUUID(this.player.puuid, this.player.platform, 'high');
-        this.rankCache.reserve(this.player.puuid);
-        this.rankCache.set(this.player.puuid, entries);
-        this.eventBus.emit('player:rank', {
-          sessionId: this.sessionId,
-          player: this.player,
-          entries,
-          fetchedAt: Date.now(),
-        });
-        const solo = entries.find((e) => e.queueType === 'RANKED_SOLO_5x5');
-        pollerLogger.info(
-          {
-            component: 'PlayerPoller',
+        let skipPlayerRankFetch = false;
+        if (this.config.rankFilter) {
+          const alreadyKnown = await this.config.rankFilter(this.player.puuid, this.player.platform);
+          if (alreadyKnown) {
+            recordRank({
+              type: 'skipped_db',
+              puuid: this.player.puuid,
+              platform: this.player.platform,
+            });
+            skipPlayerRankFetch = true;
+            this.rankCache.reserve(this.player.puuid);
+            this.rankCache.set(this.player.puuid, []);
+            pollerLogger.debug(
+              { component: 'PlayerPoller', sessionId: this.sessionId, puuid: this.player.puuid },
+              'player rank already in DB today, skipping fetch',
+            );
+          }
+        }
+
+        if (!skipPlayerRankFetch) {
+          const entries = await fetchLeagueEntriesByPUUID(this.player.puuid, this.player.platform, 'high');
+          this.rankCache.reserve(this.player.puuid);
+          this.rankCache.set(this.player.puuid, entries);
+          this.eventBus.emit('player:rank', {
             sessionId: this.sessionId,
-            puuid: this.player.puuid,
-            platform: this.player.platform,
-            tier: solo?.tier,
-            rank: solo?.rank,
-            lp: solo?.leaguePoints,
-            queueType: solo?.queueType,
-          },
-          'player rank fetched',
-        );
+            player: this.player,
+            entries,
+            fetchedAt: Date.now(),
+          });
+          const solo = entries.find((e) => e.queueType === 'RANKED_SOLO_5x5');
+          pollerLogger.info(
+            {
+              component: 'PlayerPoller',
+              sessionId: this.sessionId,
+              puuid: this.player.puuid,
+              platform: this.player.platform,
+              tier: solo?.tier,
+              rank: solo?.rank,
+              lp: solo?.leaguePoints,
+              queueType: solo?.queueType,
+            },
+            'player rank fetched',
+          );
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        recordRank({
+          type: 'failed',
+          puuid: this.player.puuid,
+          platform: this.player.platform,
+        });
         pollerLogger.warn(
           {
             component: 'PlayerPoller',
@@ -91,8 +123,43 @@ export class PlayerPoller {
       const matchIds = await paginator.fetchAll();
       this.onStatsDelta({ matchIdsDiscovered: matchIds.length });
 
-      const newMatchIds = matchIds.filter((id) => !this.processedMatchIds.has(id));
-      const skipped = matchIds.length - newMatchIds.length;
+      for (const matchId of matchIds) {
+        if (this.processedMatchIds.has(matchId)) {
+          recordMatchDiscovery({
+            puuid: this.player.puuid,
+            matchId,
+            type: 'skipped_memory',
+          });
+        }
+      }
+
+      let newMatchIds = matchIds.filter((id) => !this.processedMatchIds.has(id));
+      const memorySkipped = matchIds.length - newMatchIds.length;
+      let dbSkipped = 0;
+
+      if (this.config.matchFilter) {
+        const beforeFilter = newMatchIds.length;
+        const afterFilter = await this.config.matchFilter(newMatchIds);
+        for (const matchId of newMatchIds) {
+          if (!afterFilter.includes(matchId)) {
+            recordMatchDiscovery({ puuid: this.player.puuid, matchId, type: 'skipped_db' });
+          }
+        }
+        newMatchIds = afterFilter;
+        dbSkipped = beforeFilter - newMatchIds.length;
+        pollerLogger.debug(
+          {
+            component: 'PlayerPoller',
+            sessionId: this.sessionId,
+            puuid: this.player.puuid,
+            dbFiltered: dbSkipped,
+            beforeFilter,
+          },
+          'db match filter applied',
+        );
+      }
+
+      const skipped = memorySkipped + dbSkipped;
       newMatchIds.forEach((id) => this.processedMatchIds.add(id));
 
       const toProcess =
@@ -112,7 +179,9 @@ export class PlayerPoller {
         'dedup result',
       );
 
-      this.onStatsDelta({ matchIdsSkipped: skipped });
+      if (skipped > 0) {
+        this.onStatsDelta({ matchIdsSkipped: skipped });
+      }
 
       pollerLogger.info(
         {

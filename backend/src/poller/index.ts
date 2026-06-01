@@ -1,6 +1,16 @@
 export { PollerEngine } from './PollerEngine.js';
-export { PollerDbConsumer } from './consumer/index.js';
-export type { PollerDbConsumerOptions } from './consumer/index.js';
+export {
+  PollerDbConsumer,
+  attachPollerDbConsumer,
+  PatchResolver,
+  PlayerDiscovery,
+  MatchFilter,
+  RankFilter,
+  ParticipantDiscovery,
+  BackpressureMonitor,
+  loadPollOrchestrationEnv,
+} from '../poll-orchestration/index.js';
+export type { PollerDbConsumerConfig, DiscoveryPlayer, PollOrchestrationEnv } from '../poll-orchestration/index.js';
 export { PollSession } from './PollSession.js';
 export { PollerEventBus } from './PollerEventBus.js';
 export { ParticipantRankCache } from './ParticipantRankCache.js';

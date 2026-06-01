@@ -1,0 +1,276 @@
+{
+  "10m": {
+    "ts": 1780304037683,
+    "uptime_ms": 600014,
+    "window": "10m",
+    "gateway": {
+      "window": "10m",
+      "avg_req_per_120s": 57.29201680672269,
+      "peak_req_per_120s": 144,
+      "total_requests": 476,
+      "times_limit_reached": 27,
+      "total_429s": 27,
+      "total_wait_ms_from_429": 48000,
+      "latency_p50_ms": 65,
+      "latency_p95_ms": 282,
+      "latency_p99_ms": 388,
+      "avg_token_pct_120s": 60.833333333333336,
+      "avg_token_pct_1s": 42.208333333333336
+    },
+    "poll": {
+      "window": "10m",
+      "players_polled": 11,
+      "players_new_added": 21,
+      "ranks_fetched": 354,
+      "ranks_skipped_db": 1,
+      "ranks_skipped_cache": 56,
+      "ranks_failed": 0,
+      "rank_skip_rate_pct": 13.86861313868613,
+      "match_ids_discovered": 57,
+      "match_ids_skipped_memory": 0,
+      "match_ids_skipped_db": 0,
+      "match_ids_new": 57,
+      "match_skip_rate_pct": 0,
+      "matches_fetched_success": 41,
+      "matches_fetched_failed": 0,
+      "match_fetch_latency_p50_ms": 441,
+      "match_fetch_latency_p95_ms": 9098
+    },
+    "ingestion": {
+      "window": "10m",
+      "matches_queued": 40,
+      "matches_skipped_total": 0,
+      "skip_breakdown": {
+        "missing_rank": 0,
+        "missing_participants": 0,
+        "missing_timeline": 0,
+        "conflict_already_done": 0,
+        "queue_add_failed": 0
+      },
+      "queue_skip_rate_pct": 0,
+      "matches_ingested": 0,
+      "matches_failed": 0,
+      "ingestion_success_rate_pct": 0,
+      "ingestion_latency_p50_ms": 0,
+      "ingestion_latency_p95_ms": 0,
+      "ingestion_latency_p99_ms": 0,
+      "db_op_latency_p50_ms": 1,
+      "db_op_latency_p95_ms": 25,
+      "slowest_db_ops": [
+        {
+          "operation": "player_discovery_fetch",
+          "p95_ms": 45
+        },
+        {
+          "operation": "update_last_seen",
+          "p95_ms": 41
+        },
+        {
+          "operation": "rank_filter_query",
+          "p95_ms": 21
+        },
+        {
+          "operation": "match_filter_query",
+          "p95_ms": 7
+        }
+      ],
+      "queue_depth_avg": 0,
+      "queue_depth_peak": 0
+    },
+    "ratios": {
+      "matches_ingested_vs_fetched_pct": 0,
+      "matches_skipped_vs_discovered_pct": 0,
+      "ranks_coverage_pct": 99.71830985915493,
+      "token_efficiency_pct": 60.833333333333336
+    },
+    "active_alerts": [
+      {
+        "type": "too_many_429s",
+        "severity": "error",
+        "message": "429s detected in last 10 minutes",
+        "since": 1780304037684,
+        "data": {
+          "count": 27,
+          "total_wait_ms": 48000
+        }
+      }
+    ]
+  },
+  "30m": {
+    "ts": 1780301411033,
+    "uptime_ms": 3600008,
+    "window": "30m",
+    "gateway": {
+      "window": "30m",
+      "avg_req_per_120s": 0,
+      "peak_req_per_120s": 0,
+      "total_requests": 0,
+      "times_limit_reached": 0,
+      "total_429s": 0,
+      "total_wait_ms_from_429": 0,
+      "latency_p50_ms": 0,
+      "latency_p95_ms": 0,
+      "latency_p99_ms": 0,
+      "avg_token_pct_120s": 21,
+      "avg_token_pct_1s": 100
+    },
+    "poll": {
+      "window": "30m",
+      "players_polled": 0,
+      "players_new_added": 0,
+      "ranks_fetched": 0,
+      "ranks_skipped_db": 0,
+      "ranks_skipped_cache": 0,
+      "ranks_failed": 0,
+      "rank_skip_rate_pct": 0,
+      "match_ids_discovered": 0,
+      "match_ids_skipped_memory": 0,
+      "match_ids_skipped_db": 0,
+      "match_ids_new": 0,
+      "match_skip_rate_pct": 0,
+      "matches_fetched_success": 0,
+      "matches_fetched_failed": 0,
+      "match_fetch_latency_p50_ms": 0,
+      "match_fetch_latency_p95_ms": 0
+    },
+    "ingestion": {
+      "window": "30m",
+      "matches_queued": 0,
+      "matches_skipped_total": 0,
+      "skip_breakdown": {
+        "missing_rank": 0,
+        "missing_participants": 0,
+        "missing_timeline": 0,
+        "conflict_already_done": 0,
+        "queue_add_failed": 0
+      },
+      "queue_skip_rate_pct": 0,
+      "matches_ingested": 0,
+      "matches_failed": 0,
+      "ingestion_success_rate_pct": 0,
+      "ingestion_latency_p50_ms": 0,
+      "ingestion_latency_p95_ms": 0,
+      "ingestion_latency_p99_ms": 0,
+      "db_op_latency_p50_ms": 0,
+      "db_op_latency_p95_ms": 0,
+      "slowest_db_ops": [],
+      "queue_depth_avg": 0,
+      "queue_depth_peak": 0
+    },
+    "ratios": {
+      "matches_ingested_vs_fetched_pct": 100,
+      "matches_skipped_vs_discovered_pct": 0,
+      "ranks_coverage_pct": 0,
+      "token_efficiency_pct": 21
+    },
+    "active_alerts": [
+      {
+        "type": "poll_stall",
+        "severity": "error",
+        "message": "no poll session completed in 5 minutes",
+        "since": 1780298411037,
+        "data": {
+          "last_session_ago_ms": 599573,
+          "last_session_id": "a45bdecc-d588-45ff-94d1-1c551a6eac4e"
+        }
+      }
+    ]
+  },
+  "1h": {
+    "ts": 1780301411031,
+    "uptime_ms": 3600006,
+    "window": "1h",
+    "gateway": {
+      "window": "1h",
+      "avg_req_per_120s": 20,
+      "peak_req_per_120s": 39,
+      "total_requests": 39,
+      "times_limit_reached": 0,
+      "total_429s": 0,
+      "total_wait_ms_from_429": 0,
+      "latency_p50_ms": 86,
+      "latency_p95_ms": 281,
+      "latency_p99_ms": 312,
+      "avg_token_pct_120s": 20.804166666666667,
+      "avg_token_pct_1s": 99.06944444444444
+    },
+    "poll": {
+      "window": "1h",
+      "players_polled": 2,
+      "players_new_added": 0,
+      "ranks_fetched": 21,
+      "ranks_skipped_db": 0,
+      "ranks_skipped_cache": 2,
+      "ranks_failed": 0,
+      "rank_skip_rate_pct": 8.695652173913043,
+      "match_ids_discovered": 14,
+      "match_ids_skipped_memory": 0,
+      "match_ids_skipped_db": 0,
+      "match_ids_new": 14,
+      "match_skip_rate_pct": 0,
+      "matches_fetched_success": 8,
+      "matches_fetched_failed": 0,
+      "match_fetch_latency_p50_ms": 372,
+      "match_fetch_latency_p95_ms": 518
+    },
+    "ingestion": {
+      "window": "1h",
+      "matches_queued": 2,
+      "matches_skipped_total": 0,
+      "skip_breakdown": {
+        "missing_rank": 0,
+        "missing_participants": 0,
+        "missing_timeline": 0,
+        "conflict_already_done": 0,
+        "queue_add_failed": 0
+      },
+      "queue_skip_rate_pct": 0,
+      "matches_ingested": 2,
+      "matches_failed": 0,
+      "ingestion_success_rate_pct": 100,
+      "ingestion_latency_p50_ms": 1137,
+      "ingestion_latency_p95_ms": 1137,
+      "ingestion_latency_p99_ms": 1137,
+      "db_op_latency_p50_ms": 2,
+      "db_op_latency_p95_ms": 19,
+      "slowest_db_ops": [
+        {
+          "operation": "player_discovery_fetch",
+          "p95_ms": 24
+        },
+        {
+          "operation": "rank_filter_query",
+          "p95_ms": 17
+        },
+        {
+          "operation": "match_filter_query",
+          "p95_ms": 9
+        },
+        {
+          "operation": "update_last_seen",
+          "p95_ms": 3
+        }
+      ],
+      "queue_depth_avg": 0,
+      "queue_depth_peak": 0
+    },
+    "ratios": {
+      "matches_ingested_vs_fetched_pct": 25,
+      "matches_skipped_vs_discovered_pct": 0,
+      "ranks_coverage_pct": 100,
+      "token_efficiency_pct": 20.804166666666667
+    },
+    "active_alerts": [
+      {
+        "type": "poll_stall",
+        "severity": "error",
+        "message": "no poll session completed in 5 minutes",
+        "since": 1780298411037,
+        "data": {
+          "last_session_ago_ms": 599573,
+          "last_session_id": "a45bdecc-d588-45ff-94d1-1c551a6eac4e"
+        }
+      }
+    ]
+  }
+}

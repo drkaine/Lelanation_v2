@@ -1,0 +1,152 @@
+import { beforeEach, describe, expect, test } from 'vitest';
+import { AggregateComputer } from '../../../src/observability/poller-metrics/AggregateComputer.js';
+import { MetricsStore } from '../../../src/observability/poller-metrics/MetricsStore.js';
+
+describe('AggregateComputer', () => {
+  beforeEach(() => {
+    MetricsStore.resetInstance();
+  });
+
+  test('T1 total_requests counts gateway events', () => {
+    const store = MetricsStore.getInstance();
+    const now = Date.now();
+    for (let i = 0; i < 5; i += 1) {
+      store.pushGatewayRequest({
+        ts: now - i * 1000,
+        latencyMs: 100,
+        methodKey: 'm',
+        statusCode: 200,
+        is429: false,
+        isError: false,
+        tokensUsed_120s: 1,
+        tokensUsed_1s: 1,
+        limit_120s: 99,
+        limit_1s: 19,
+      });
+    }
+    const agg = new AggregateComputer(store).computeGateway('10m', 99);
+    expect(agg.total_requests).toBe(5);
+  });
+
+  test('T5 skip_breakdown from ingestion queue events', () => {
+    const store = MetricsStore.getInstance();
+    const now = Date.now();
+    store.pushIngestionQueue({
+      ts: now,
+      matchId: 'M1',
+      patch: '16.11',
+      rank: 'GOLD',
+      type: 'skipped',
+      skipReason: 'missing_rank',
+    });
+    store.pushIngestionQueue({
+      ts: now,
+      matchId: 'M2',
+      patch: '16.11',
+      rank: 'GOLD',
+      type: 'queued',
+    });
+    const ing = new AggregateComputer(store).computeIngestion('10m');
+    expect(ing.skip_breakdown.missing_rank).toBe(1);
+    expect(ing.matches_queued).toBe(1);
+  });
+
+  test('T2 total_429s counts gateway 429 events', () => {
+    const store = MetricsStore.getInstance();
+    const now = Date.now();
+    store.pushGatewayRequest({
+      ts: now,
+      latencyMs: 1,
+      methodKey: 'm',
+      statusCode: 429,
+      is429: true,
+      isError: true,
+      tokensUsed_120s: 0,
+      tokensUsed_1s: 0,
+      limit_120s: 99,
+      limit_1s: 19,
+    });
+    store.pushGatewayRequest({
+      ts: now,
+      latencyMs: 1,
+      methodKey: 'm',
+      statusCode: 200,
+      is429: false,
+      isError: false,
+      tokensUsed_120s: 1,
+      tokensUsed_1s: 1,
+      limit_120s: 99,
+      limit_1s: 19,
+    });
+    const agg = new AggregateComputer(store).computeGateway('10m', 99);
+    expect(agg.total_429s).toBe(1);
+  });
+
+  test('T6 match_skip_rate 100% when all skipped', () => {
+    const store = MetricsStore.getInstance();
+    const now = Date.now();
+    store.pushMatchDiscovery({ ts: now, puuid: 'p', matchId: 'M1', type: 'skipped_db' });
+    store.pushMatchDiscovery({ ts: now, puuid: 'p', matchId: 'M2', type: 'skipped_memory' });
+    const poll = new AggregateComputer(store).computePoll('10m');
+    expect(poll.match_skip_rate_pct).toBe(100);
+  });
+
+  test('T7 match_skip_rate 0% when all new', () => {
+    const store = MetricsStore.getInstance();
+    const now = Date.now();
+    store.pushMatchDiscovery({ ts: now, puuid: 'p', matchId: 'M1', type: 'new' });
+    store.pushMatchDiscovery({ ts: now, puuid: 'p', matchId: 'M2', type: 'new' });
+    const poll = new AggregateComputer(store).computePoll('10m');
+    expect(poll.match_skip_rate_pct).toBe(0);
+  });
+
+  test('T8 matches_ingested_vs_fetched ratio', () => {
+    const store = MetricsStore.getInstance();
+    const now = Date.now();
+    for (let i = 0; i < 10; i += 1) {
+      store.pushMatchFetch({
+        ts: now,
+        matchId: `M${i}`,
+        patch: '16.11',
+        success: true,
+        latencyMs: 100,
+      });
+    }
+    for (let i = 0; i < 9; i += 1) {
+      store.pushIngestionWorker({
+        ts: now,
+        matchId: `M${i}`,
+        patch: '16.11',
+        rank: 'GOLD',
+        type: 'completed',
+        durationMs: 50,
+      });
+    }
+    const snap = new AggregateComputer(store).computeFull('10m', 99, 19, []);
+    expect(snap.poll.matches_fetched_success).toBe(10);
+    expect(snap.ingestion.matches_ingested).toBe(9);
+    expect(snap.ratios.matches_ingested_vs_fetched_pct).toBe(90);
+  });
+
+  test('T9 slowest_db_ops sorted by p95', () => {
+    const store = MetricsStore.getInstance();
+    const now = Date.now();
+    for (let i = 0; i < 10; i += 1) {
+      store.pushDbOperation({ ts: now, operation: 'fast_op', durationMs: 10, success: true });
+    }
+    for (let i = 0; i < 10; i += 1) {
+      store.pushDbOperation({ ts: now, operation: 'slow_op', durationMs: 2000, success: true });
+    }
+    const ing = new AggregateComputer(store).computeIngestion('10m');
+    expect(ing.slowest_db_ops[0]?.operation).toBe('slow_op');
+    expect(ing.slowest_db_ops.length).toBeLessThanOrEqual(5);
+  });
+
+  test('T10 empty window has zero counts', () => {
+    const store = MetricsStore.getInstance();
+    const snap = new AggregateComputer(store).computeFull('10m', 99, 19, []);
+    expect(snap.gateway.total_requests).toBe(0);
+    expect(snap.poll.players_polled).toBe(0);
+    expect(snap.ingestion.matches_ingested).toBe(0);
+  });
+});

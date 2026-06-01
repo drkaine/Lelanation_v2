@@ -147,6 +147,191 @@ describe('RiotGateway', () => {
     expect(gateway.getStatus().inFlight.global).toBe(0);
   });
 
+  test('in-flight counter is 0 after riotFetch throws', async () => {
+    vi.mocked(riotFetch).mockRejectedValueOnce(new Error('network boom'));
+
+    const gateway = RiotGateway.getInstance();
+    await expect(gateway.request<string[]>(BASE, METHOD, { puuid: 'fail' })).rejects.toThrow();
+    expect(gateway.getStatus().inFlight.global).toBe(0);
+  });
+
+  test('in-flight counter is 0 after updateFromHeaders throws', async () => {
+    vi.mocked(riotFetch).mockResolvedValueOnce(okResponse());
+    const gateway = RiotGateway.getInstance();
+    const internal = gateway as unknown as { tracker: { updateFromHeaders: (a: string, b: Record<string, string>) => void } };
+    vi.spyOn(internal.tracker, 'updateFromHeaders').mockImplementation(() => {
+      throw new Error('header parse failed');
+    });
+
+    await expect(gateway.request<string[]>(BASE, METHOD, { puuid: 'hdr' })).rejects.toThrow('header parse failed');
+    expect(gateway.getStatus().inFlight.global).toBe(0);
+  });
+
+  test('watchdog recovers stale queue', async () => {
+    vi.useFakeTimers();
+    vi.mocked(riotFetch).mockResolvedValue(okResponse());
+
+    let allowDispatch = false;
+    const gateway = RiotGateway.getInstance();
+    const internal = gateway as unknown as {
+      lastDispatchAt: number;
+      tracker: { canDispatch: (methodKey: string) => { allowed: boolean; waitMs?: number } };
+      flushQueue: (reason: string) => void;
+    };
+    const originalCanDispatch = internal.tracker.canDispatch.bind(internal.tracker);
+    vi.spyOn(internal.tracker, 'canDispatch').mockImplementation((methodKey: string) => {
+      if (!allowDispatch) {
+        return { allowed: false, waitMs: 60_000 };
+      }
+      return originalCanDispatch(methodKey);
+    });
+
+    void gateway.request<string[]>(BASE, METHOD, { puuid: 'watchdog' }).catch(() => undefined);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(gateway.getStatus().queue.size).toBeGreaterThan(0);
+
+    internal.lastDispatchAt = Date.now() - 5_000;
+    (gateway as unknown as { clearPendingFlushTimer: () => void }).clearPendingFlushTimer();
+    const flushSpy = vi.spyOn(internal, 'flushQueue');
+
+    await vi.advanceTimersByTimeAsync(1_100);
+    expect(flushSpy.mock.calls.some((call) => call[0] === 'watchdog')).toBe(true);
+
+    allowDispatch = true;
+    vi.useRealTimers();
+    await gateway.request<string[]>(BASE, METHOD, { puuid: 'watchdog-cleanup' }).catch(() => undefined);
+  });
+
+  test('T_bug2_a scheduleFlushTimer uses minimum 100ms delay', () => {
+    vi.useFakeTimers();
+    const gateway = RiotGateway.getInstance();
+    const internal = gateway as unknown as { scheduleFlushTimer: (ms: number) => void };
+    const timeoutSpy = vi.spyOn(global, 'setTimeout');
+
+    internal.scheduleFlushTimer(0);
+    const delay = timeoutSpy.mock.calls.at(-1)?.[1] as number;
+    expect(delay).toBeGreaterThanOrEqual(100);
+
+    vi.useRealTimers();
+    timeoutSpy.mockRestore();
+  });
+
+  test('T_bug2_b scheduleFlushTimer deduplicates rapid calls', () => {
+    vi.useFakeTimers();
+    const gateway = RiotGateway.getInstance();
+    const internal = gateway as unknown as {
+      scheduleFlushTimer: (ms: number) => void;
+      pendingFlushTimer: NodeJS.Timeout | null;
+    };
+    const timeoutSpy = vi.spyOn(global, 'setTimeout');
+
+    for (let i = 0; i < 100; i += 1) {
+      internal.scheduleFlushTimer(5);
+    }
+    expect(timeoutSpy.mock.calls.length).toBe(1);
+    expect(internal.pendingFlushTimer).not.toBeNull();
+
+    vi.useRealTimers();
+    timeoutSpy.mockRestore();
+  });
+
+  test('T_bug2_c watchdog does not flush when pendingFlushTimer is set', async () => {
+    vi.useFakeTimers();
+    vi.mocked(riotFetch).mockResolvedValue(okResponse());
+    const gateway = RiotGateway.getInstance();
+    const internal = gateway as unknown as {
+      lastDispatchAt: number;
+      flushQueue: (reason: string) => void;
+      pendingFlushTimer: NodeJS.Timeout | null;
+    };
+
+    void gateway.request<string[]>(BASE, METHOD, { puuid: 'wd-skip' }).catch(() => undefined);
+    await vi.advanceTimersByTimeAsync(1);
+
+    internal.pendingFlushTimer = setTimeout(() => undefined, 10_000) as unknown as NodeJS.Timeout;
+    internal.lastDispatchAt = Date.now() - 5_000;
+    const flushSpy = vi.spyOn(internal, 'flushQueue');
+
+    await vi.advanceTimersByTimeAsync(1_100);
+    expect(flushSpy.mock.calls.filter((call) => call[0] === 'watchdog')).toHaveLength(0);
+
+    vi.useRealTimers();
+    clearTimeout(internal.pendingFlushTimer!);
+  });
+
+  test('T_bug2_d watchdog flushes when no timer and queue is stale', async () => {
+    vi.useFakeTimers();
+    vi.mocked(riotFetch).mockResolvedValue(okResponse());
+    const gateway = RiotGateway.getInstance();
+    const internal = gateway as unknown as {
+      lastDispatchAt: number;
+      flushQueue: (reason: string) => void;
+      clearPendingFlushTimer: () => void;
+    };
+
+    let allowDispatch = false;
+    const tracker = (gateway as unknown as { tracker: { canDispatch: (k: string) => { allowed: boolean; waitMs?: number } } })
+      .tracker;
+    const originalCanDispatch = tracker.canDispatch.bind(tracker);
+    vi.spyOn(tracker, 'canDispatch').mockImplementation((methodKey: string) => {
+      if (!allowDispatch) return { allowed: false, waitMs: 60_000 };
+      return originalCanDispatch(methodKey);
+    });
+
+    void gateway.request<string[]>(BASE, METHOD, { puuid: 'wd-flush' }).catch(() => undefined);
+    await vi.advanceTimersByTimeAsync(1);
+    internal.clearPendingFlushTimer();
+    internal.lastDispatchAt = Date.now() - 5_000;
+    const flushSpy = vi.spyOn(internal, 'flushQueue');
+
+    await vi.advanceTimersByTimeAsync(1_100);
+    expect(flushSpy.mock.calls.some((call) => call[0] === 'watchdog')).toBe(true);
+
+    allowDispatch = true;
+    vi.useRealTimers();
+    await gateway.request<string[]>(BASE, METHOD, { puuid: 'wd-flush-cleanup' }).catch(() => undefined);
+  });
+
+  test('T_bug2_e expired 1s window unblocks queue on flush', async () => {
+    vi.mocked(riotFetch).mockResolvedValue(okResponse());
+    const gateway = RiotGateway.getInstance();
+    type TrackerInternal = {
+      tracker: {
+        appBuckets: Array<{ windowMs: number; update: (u: number, l: number) => void; resetAt: number }>;
+      };
+    };
+    const tracker = (gateway as unknown as TrackerInternal).tracker;
+    const bucket = tracker.appBuckets.find((b) => b.windowMs === 1_000);
+    expect(bucket).toBeDefined();
+    bucket!.update(20, 20);
+    bucket!.resetAt = Date.now() - 1;
+
+    const promises = Array.from({ length: 5 }, (_, i) =>
+      gateway.request<string[]>(BASE, METHOD, { puuid: `exp-${i}` }),
+    );
+
+    await Promise.all(promises);
+    expect(vi.mocked(riotFetch).mock.calls.length).toBeGreaterThanOrEqual(1);
+    expect(gateway.getStatus().queue.size).toBe(0);
+    expect(gateway.getStatus().inFlight.global).toBe(0);
+  });
+
+  test('session 1 then session 2: no in-flight leak between sessions', async () => {
+    vi.mocked(riotFetch).mockImplementation(async () => okResponse());
+
+    const gateway = RiotGateway.getInstance();
+    await Promise.all(
+      Array.from({ length: 10 }, (_, i) => gateway.request<string[]>(BASE, METHOD, { puuid: `s1-${i}` })),
+    );
+    expect(gateway.getStatus().inFlight.global).toBe(0);
+
+    await Promise.all(
+      Array.from({ length: 10 }, (_, i) => gateway.request<string[]>(BASE, METHOD, { puuid: `s2-${i}` })),
+    );
+    expect(gateway.getStatus().inFlight.global).toBe(0);
+    expect(gateway.getStatus().queue.size).toBe(0);
+  });
+
   test('throughput anomaly warning fires when rps drops 20%', async () => {
     const gateway = RiotGateway.getInstance();
     const metrics = (gateway as unknown as { metrics: { record: (e: string, n?: number) => void; getRPS: () => { current: number; avg60s: number } } }).metrics;

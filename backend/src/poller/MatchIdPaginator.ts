@@ -1,3 +1,4 @@
+import { recordMatchDiscovery } from '../observability/poller-metrics/instrumentation.js';
 import { fetchMatchIdsByPUUID } from './gatewayRoutes.js';
 import { pollerLogger } from './logger.js';
 import type { PollerEventBus } from './PollerEventBus.js';
@@ -39,6 +40,9 @@ export class MatchIdPaginator {
         });
 
         all.push(...batch);
+        for (const matchId of batch) {
+          recordMatchDiscovery({ puuid: this.player.puuid, matchId, type: 'new' });
+        }
         this.eventBus.emit('match:ids', {
           sessionId: this.sessionId,
           player: this.player,

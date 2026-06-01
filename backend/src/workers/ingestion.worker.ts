@@ -5,6 +5,7 @@ import { sql } from "../db/client.js";
 import { CHAMPION_STATS_METRIC_COLUMNS } from "../constants/championStatsMetricColumns.js";
 import type { IngestionJobData, ParsedParticipantDto, TeamObjectiveDto } from "../dto/match.dto.js";
 import { championStatsMetricValue } from "../parsers/champion-stats-metric-value.js";
+import { recordIngestionWorker } from "../observability/poller-metrics/instrumentation.js";
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
 import { INGESTION_QUEUE } from "../queues/definitions.js";
 import { enqueueRankFetchJobsForParticipants } from "../queues/rank-jobs.js";
@@ -1093,9 +1094,25 @@ export const ingestionWorker = new Worker<IngestionJobData>(
   INGESTION_QUEUE,
   async (job) => {
     const startedAt = Date.now();
+    const matchId = String(job.data.participants[0]?.matchId ?? "").trim();
+    const patch = String(job.data.participants[0]?.patch ?? "").trim();
+    const rank = String(job.data.participants[0]?.rankTier ?? "UNRANKED").trim();
+    recordIngestionWorker({ matchId, patch, rank, type: "started" });
     pollerV2Observability.recordIngestionStart();
     try {
       const { insertedPlayers, aggregated } = await runIngestionTransaction(job.data);
+      const durationMs = Date.now() - startedAt;
+      recordIngestionWorker({
+        matchId,
+        patch,
+        rank,
+        type: "completed",
+        durationMs,
+        tablesWritten: {
+          processed_matches_update: aggregated ? 1 : 0,
+          participants: insertedPlayers,
+        },
+      });
       const rankBacklog = await getRankBacklogCount();
       if (!shouldPauseMatchPipelines(rankBacklog)) {
         await enqueueRankFetchJobsForParticipants(job.data.participants);
@@ -1114,6 +1131,14 @@ export const ingestionWorker = new Worker<IngestionJobData>(
         pollerV2Observability.recordIngestionDuplicate();
         return;
       }
+      recordIngestionWorker({
+        matchId,
+        patch,
+        rank,
+        type: "failed",
+        durationMs: Date.now() - startedAt,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
       pollerV2Observability.recordIngestionFailure(error);
       throw error;
     } finally {

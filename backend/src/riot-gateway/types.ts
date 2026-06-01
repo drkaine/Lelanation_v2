@@ -3,7 +3,7 @@ export type HttpMethod = 'GET';
 export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 export type RequestPriority = 'high' | 'normal';
 export type RetryReason = '429' | '5xx' | 'network';
-export type FlushReason = 'post_response' | 'timer_expired' | 'retry_ready';
+export type FlushReason = 'post_response' | 'timer_expired' | 'retry_ready' | 'watchdog';
 export type ShutdownReason = 'graceful' | 'timeout';
 
 export type GatewayEvent =
@@ -22,7 +22,8 @@ export type GatewayEvent =
   | 'bucket:near_limit'
   | 'metrics:snapshot'
   | 'gateway:shutdown_start'
-  | 'gateway:shutdown_complete';
+  | 'gateway:shutdown_complete'
+  | 'gateway:watchdog_triggered';
 
 export interface RateLimitWindow {
   limit: number;
@@ -42,6 +43,7 @@ export interface BucketState {
   windowMs: number;
   resetInMs: number;
   saturatedUntil?: number;
+  isBlocked?: boolean;
   pctUsed: number;
 }
 
