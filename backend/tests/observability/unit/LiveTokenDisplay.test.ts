@@ -43,4 +43,10 @@ describe('LiveTokenDisplay', () => {
     expect(tokenBar(50)).toContain('░');
     expect(tokenBar(100)).toMatch(/^\[█{40}\]$/);
   });
+
+  test('T3 token bar clamps overflow (no RangeError)', () => {
+    expect(() => tokenBar(104)).not.toThrow();
+    expect(tokenBar(104)).toMatch(/^\[█{40}\]$/);
+    expect(tokenBar(-5)).toMatch(/^\[░{40}\]$/);
+  });
 });

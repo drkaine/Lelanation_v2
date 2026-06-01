@@ -13,6 +13,45 @@ test('delta label smoke', () => {
   assert.equal(__testOnly.deltaLabel('OVERPOWERED', 'BALANCED'), 'BALANCED -> OVERPOWERED')
 })
 
+test('collapse to main role per champion', () => {
+  const rows = [
+    {
+      championId: 1,
+      role: 'TOP',
+      average: { games: 10, winrate: 50, pickrate: 2, banrate: 1, presence: 3, status: 'BALANCED' as const, previousStatus: null, delta: null },
+      skilled: { games: 10, winrate: 50, pickrate: 2, banrate: 1, presence: 3, status: 'BALANCED' as const, previousStatus: null, delta: null },
+      elite: { games: 10, winrate: 50, pickrate: 2, banrate: 1, presence: 3, status: 'BALANCED' as const, previousStatus: null, delta: null },
+      globalStatus: 'BALANCED' as const,
+      previousGlobalStatus: null,
+      globalDelta: null,
+    },
+    {
+      championId: 1,
+      role: 'JUNGLE',
+      average: { games: 80, winrate: 50, pickrate: 5, banrate: 1, presence: 6, status: 'BALANCED' as const, previousStatus: null, delta: null },
+      skilled: { games: 80, winrate: 50, pickrate: 5, banrate: 1, presence: 6, status: 'BALANCED' as const, previousStatus: null, delta: null },
+      elite: { games: 80, winrate: 50, pickrate: 5, banrate: 1, presence: 6, status: 'BALANCED' as const, previousStatus: null, delta: null },
+      globalStatus: 'BALANCED' as const,
+      previousGlobalStatus: null,
+      globalDelta: null,
+    },
+    {
+      championId: 2,
+      role: 'MIDDLE',
+      average: { games: 50, winrate: 50, pickrate: 3, banrate: 1, presence: 4, status: 'BALANCED' as const, previousStatus: null, delta: null },
+      skilled: { games: 50, winrate: 50, pickrate: 3, banrate: 1, presence: 4, status: 'BALANCED' as const, previousStatus: null, delta: null },
+      elite: { games: 50, winrate: 50, pickrate: 3, banrate: 1, presence: 4, status: 'BALANCED' as const, previousStatus: null, delta: null },
+      globalStatus: 'BALANCED' as const,
+      previousGlobalStatus: null,
+      globalDelta: null,
+    },
+  ]
+  const collapsed = __testOnly.collapseBalanceRowsToMainRole(rows)
+  assert.equal(collapsed.length, 2)
+  const ahri = collapsed.find(r => r.championId === 1)
+  assert.equal(ahri?.role, 'JUNGLE')
+})
+
 test('global status aggregation', () => {
   assert.equal(
     __testOnly.computeGlobalStatus({

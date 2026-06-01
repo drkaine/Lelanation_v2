@@ -11,6 +11,9 @@ function playerKeyVersionForAdminStats(): string {
   return 'dev'
 }
 
+/** Statuts considérés « en attente » (hors DONE / error). */
+const PROCESSED_MATCH_PENDING_SQL = `LOWER(TRIM(status)) IN ('pending', 'p')`
+
 export type AdminDataCollectStats = {
   adminDataSource: 'statistiques_db'
   totalPlayers: number
@@ -23,7 +26,9 @@ export type AdminDataCollectStats = {
   trackedMatchesPendingNow: number
   trackedMatchesPendingOver1h: number
   trackedOldestPendingCreatedAt: string | null
+  /** Répartition par `processed_matches.status` (ex. pending, DONE, error). */
   trackedAggregateStatus: Record<string, number>
+  /** Dernier match marqué DONE (proxy « dernière agrégation »). */
   trackedLastAggregatedAt: string | null
   playersCreatedLast1h: number
   playersLastSeenLast1h: number
@@ -58,7 +63,6 @@ function emptyStats(): AdminDataCollectStats {
 export async function getAdminDataCollectStats(): Promise<AdminDataCollectStats> {
   if (!isStatistiquesDatabaseConfigured()) return emptyStats()
 
-  const empty = emptyStats()
   const since1h = new Date(Date.now() - 60 * 60 * 1000)
   const pool = getStatistiquesPool()
   try {
@@ -72,8 +76,8 @@ export async function getAdminDataCollectStats(): Promise<AdminDataCollectStats>
       pmPendingNow,
       pmPendingOver1h,
       pmOldestPending,
-      pmAggByStatus,
-      pmLastAggregated,
+      pmByStatus,
+      pmLastDone,
       playersWrongKeyVersion,
       playersCreated1h,
       playersLastSeen1h,
@@ -92,21 +96,21 @@ export async function getAdminDataCollectStats(): Promise<AdminDataCollectStats>
         [since1h],
       ),
       pool.query<{ c: string }>(
-        `SELECT COUNT(*)::text AS c FROM processed_matches WHERE aggregate_status = 'PENDING'`,
+        `SELECT COUNT(*)::text AS c FROM processed_matches WHERE ${PROCESSED_MATCH_PENDING_SQL}`,
       ),
       pool.query<{ c: string }>(
         `SELECT COUNT(*)::text AS c FROM processed_matches
-         WHERE aggregate_status = 'PENDING' AND created_at < $1`,
+         WHERE ${PROCESSED_MATCH_PENDING_SQL} AND created_at < $1`,
         [since1h],
       ),
       pool.query<{ d: Date | null }>(
-        `SELECT MIN(created_at) AS d FROM processed_matches WHERE aggregate_status = 'PENDING'`,
+        `SELECT MIN(created_at) AS d FROM processed_matches WHERE ${PROCESSED_MATCH_PENDING_SQL}`,
       ),
-      pool.query<{ aggregate_status: string; c: string }>(
-        `SELECT aggregate_status, COUNT(*)::text AS c FROM processed_matches GROUP BY aggregate_status`,
+      pool.query<{ status: string; c: string }>(
+        `SELECT status, COUNT(*)::text AS c FROM processed_matches GROUP BY status`,
       ),
       pool.query<{ d: Date | null }>(
-        `SELECT MAX(aggregated_at) AS d FROM processed_matches`,
+        `SELECT MAX(created_at) AS d FROM processed_matches WHERE UPPER(TRIM(status)) = 'DONE'`,
       ),
       pool.query<{ c: string }>(
         `SELECT COUNT(*)::text AS c FROM players WHERE puuid_key_version IS DISTINCT FROM $1`,
@@ -126,7 +130,7 @@ export async function getAdminDataCollectStats(): Promise<AdminDataCollectStats>
       ),
       pool.query<{ c: string }>(
         `SELECT COUNT(*)::text AS c FROM processed_matches
-         WHERE COALESCE(status, '') = 'DEFERRED_RANK_PENDING' AND aggregate_status = 'PENDING'`,
+         WHERE UPPER(TRIM(status)) = 'DEFERRED_RANK_PENDING'`,
       ),
     ])
     const lp = lastPlayer.rows[0]
@@ -143,19 +147,20 @@ export async function getAdminDataCollectStats(): Promise<AdminDataCollectStats>
       trackedMatchesPendingOver1h: parseInt(pmPendingOver1h.rows[0]?.c ?? '0', 10),
       trackedOldestPendingCreatedAt: pmOldestPending.rows[0]?.d?.toISOString() ?? null,
       trackedAggregateStatus: Object.fromEntries(
-        pmAggByStatus.rows.map((r: { aggregate_status: string; c: string }) => [
-          r.aggregate_status,
-          parseInt(r.c ?? '0', 10),
-        ]),
+        pmByStatus.rows.map((r) => [r.status, parseInt(r.c ?? '0', 10)]),
       ),
-      trackedLastAggregatedAt: pmLastAggregated.rows[0]?.d?.toISOString() ?? null,
+      trackedLastAggregatedAt: pmLastDone.rows[0]?.d?.toISOString() ?? null,
       playersCreatedLast1h: parseInt(playersCreated1h.rows[0]?.c ?? '0', 10),
       playersLastSeenLast1h: parseInt(playersLastSeen1h.rows[0]?.c ?? '0', 10),
       playersUpdatedLast1h: parseInt(playersUpdated1h.rows[0]?.c ?? '0', 10),
       matchIngestRaw: null,
       trackedMatchesDeferredRankPending: parseInt(pmDeferredRank.rows[0]?.c ?? '0', 10),
     }
-  } catch {
-    return empty
+  } catch (error) {
+    console.error(
+      '[AdminDataCollectService] query failed:',
+      error instanceof Error ? error.message : String(error),
+    )
+    return emptyStats()
   }
 }

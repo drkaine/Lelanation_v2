@@ -6,8 +6,10 @@ import { getLatestResolvedSince } from '../../poll-orchestration/sinceContext.js
 import type { ResolvedSince, TokenSnapshotEvent } from './types.js';
 
 export function tokenBar(pct: number): string {
-  const filled = Math.round((pct / 100) * 40);
-  return `[${'█'.repeat(filled)}${'░'.repeat(40 - filled)}]`;
+  const clamped = Number.isFinite(pct) ? Math.min(100, Math.max(0, pct)) : 0;
+  const filled = Math.min(40, Math.round((clamped / 100) * 40));
+  const empty = 40 - filled;
+  return `[${'█'.repeat(filled)}${'░'.repeat(empty)}]`;
 }
 
 export class LiveTokenDisplay {

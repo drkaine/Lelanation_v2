@@ -22,18 +22,18 @@
             class="flex w-full items-center gap-3 p-3 text-left"
             @click="toggleBanCardExpanded(row.championId)"
           >
-            <StatisticsChampionPortrait
+            <img
               v-if="p.gameVersion && p.championByKey(row.championId)"
               :src="
                 p.getChampionImageUrl(p.gameVersion, p.championByKey(row.championId)!.image.full)
               "
               :alt="p.championName(row.championId) || ''"
-              :champion-id="row.championId"
-              :champion-name="p.championName(row.championId) || ''"
-              :size="48"
+              class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover"
+              width="50"
+              height="50"
             />
             <div class="min-w-0 flex-1">
-              <div class="truncate font-semibold text-accent">
+              <div class="truncate text-[12px] font-medium text-text/90">
                 <StatisticsChampionNameHighlight
                   :name="String(p.championName(row.championId) || row.championId)"
                   :query="p.championSearchQuery"
@@ -74,16 +74,16 @@
       </div>
 
       <div
-        class="statistics-overview-surface hidden w-full overflow-x-auto rounded-lg border border-primary/30 md:block"
+        class="tier-list-mobile-rotate statistics-overview-surface hidden w-full overflow-x-auto rounded-lg border border-primary/30 md:block"
       >
-        <div class="tier-list-lolalytics w-full min-w-0 text-[13px]">
-          <table class="w-full min-w-[520px] text-left text-sm">
+        <div class="tier-list-lolalytics w-full min-w-0 text-[13px] max-lg:min-w-[720px]">
+          <table class="w-full min-w-[520px] text-left text-[13px]">
             <thead
               class="sticky top-0 z-10 border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
             >
               <tr>
-                <th class="px-3 py-1.5 font-semibold text-text">
-                  {{ p.t('statisticsPage.champion') }}
+                <th class="min-w-[220px] px-2 py-1.5 text-left font-semibold text-text">
+                  {{ p.t('statisticsPage.tierListColChampion') }}
                 </th>
                 <th class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text">
                   <div class="flex items-center gap-1">
@@ -214,8 +214,8 @@
                 class="cursor-pointer text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
                 @click="navigateTo(p.localePath('/statistics/champion/' + row.championId))"
               >
-                <td class="px-3 py-1 font-medium text-text">
-                  <div class="flex items-center gap-2">
+                <td class="min-w-[220px] py-0.5 pl-2 pr-0">
+                  <div class="flex min-h-[60px] items-center gap-2">
                     <img
                       v-if="p.gameVersion && p.championByKey(row.championId)"
                       :src="
@@ -225,178 +225,186 @@
                         )
                       "
                       :alt="p.championName(row.championId) || ''"
-                      class="h-5 w-5 rounded-full object-cover"
+                      class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover"
+                      width="50"
+                      height="50"
+                      loading="lazy"
+                      decoding="async"
                     />
-                    <span class="text-accent underline-offset-2 hover:underline">{{
-                      p.championName(row.championId) || row.championId
+                    <span class="min-w-0 truncate text-[12px] text-text/90">
+                      <StatisticsChampionNameHighlight
+                        :name="String(p.championName(row.championId) || row.championId)"
+                        :query="p.championSearchQuery"
+                      />
+                    </span>
+                  </div>
+                </td>
+                <td class="px-1 py-0.5 align-middle">
+                  <div
+                    class="flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight"
+                  >
+                    <span>{{
+                      p.banRateForBansRow(row, p.bansTableData?.matchCount ?? 0).toFixed(2)
                     }}</span>
+                    <span
+                      v-if="p.bansDeltaPct(row, 'bansTotal', 2) != null"
+                      class="text-[10px] leading-none"
+                      :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansTotal', 2)!)"
+                    >
+                      {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansTotal', 2)!) }}
+                    </span>
                   </div>
                 </td>
-                <td class="px-3 py-1 tabular-nums text-text/90">
-                  {{ p.banRateForBansRow(row, p.bansTableData?.matchCount ?? 0).toFixed(2) }}%
+                <td v-show="p.showBansOutcomeColumns" class="px-1 py-0.5 align-middle">
                   <div
-                    v-if="p.bansDeltaPct(row, 'bansTotal', 2) != null"
-                    class="text-[11px]"
-                    :class="p.pctDeltaClass(p.bansDeltaPct(row, 'bansTotal', 2)!)"
+                    class="flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight"
                   >
-                    {{
-                      (p.bansDeltaPct(row, 'bansTotal', 2)! > 0 ? '+' : '') +
-                      p.bansDeltaPct(row, 'bansTotal', 2)!.toFixed(2)
-                    }}%
+                    <span>{{ p.bansOutcomePct(row.championId, 'win').toFixed(2) }}</span>
+                    <span
+                      v-if="p.bansOutcomeDeltaPct(row.championId, 'win') != null"
+                      class="text-[10px] leading-none"
+                      :class="
+                        p.tierListPatchDeltaClass(p.bansOutcomeDeltaPct(row.championId, 'win')!)
+                      "
+                    >
+                      {{ formatBansPatchDeltaPct(p.bansOutcomeDeltaPct(row.championId, 'win')!) }}
+                    </span>
                   </div>
                 </td>
-                <td v-show="p.showBansOutcomeColumns" class="px-3 py-1 tabular-nums text-text/90">
-                  {{ p.bansOutcomePct(row.championId, 'win').toFixed(2) }}%
+                <td v-show="p.showBansOutcomeColumns" class="px-1 py-0.5 align-middle">
                   <div
-                    v-if="p.bansOutcomeDeltaPct(row.championId, 'win') != null"
-                    class="text-[11px]"
-                    :class="p.pctDeltaClass(p.bansOutcomeDeltaPct(row.championId, 'win')!)"
+                    class="flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight"
                   >
-                    {{
-                      (p.bansOutcomeDeltaPct(row.championId, 'win')! > 0 ? '+' : '') +
-                      p.bansOutcomeDeltaPct(row.championId, 'win')!.toFixed(2)
-                    }}%
+                    <span>{{ p.bansOutcomePct(row.championId, 'loss').toFixed(2) }}</span>
+                    <span
+                      v-if="p.bansOutcomeDeltaPct(row.championId, 'loss') != null"
+                      class="text-[10px] leading-none"
+                      :class="
+                        p.tierListPatchDeltaClass(p.bansOutcomeDeltaPct(row.championId, 'loss')!)
+                      "
+                    >
+                      {{ formatBansPatchDeltaPct(p.bansOutcomeDeltaPct(row.championId, 'loss')!) }}
+                    </span>
                   </div>
                 </td>
-                <td v-show="p.showBansOutcomeColumns" class="px-3 py-1 tabular-nums text-text/90">
-                  {{ p.bansOutcomePct(row.championId, 'loss').toFixed(2) }}%
+                <td v-show="p.showBansSideColumns" class="px-1 py-0.5 align-middle">
                   <div
-                    v-if="p.bansOutcomeDeltaPct(row.championId, 'loss') != null"
-                    class="text-[11px]"
-                    :class="p.pctDeltaClass(p.bansOutcomeDeltaPct(row.championId, 'loss')!)"
+                    class="flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight text-blue-300/95"
                   >
-                    {{
-                      (p.bansOutcomeDeltaPct(row.championId, 'loss')! > 0 ? '+' : '') +
-                      p.bansOutcomeDeltaPct(row.championId, 'loss')!.toFixed(2)
-                    }}%
+                    <span>{{
+                      p.banPctForCount(row.bansBlue, p.bansTableData?.matchCount ?? 0, 1).toFixed(2)
+                    }}</span>
+                    <span
+                      v-if="p.bansDeltaPct(row, 'bansBlue', 1) != null"
+                      class="text-[10px] leading-none"
+                      :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansBlue', 1)!)"
+                    >
+                      {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansBlue', 1)!) }}
+                    </span>
                   </div>
                 </td>
-                <td v-show="p.showBansSideColumns" class="px-3 py-1 tabular-nums text-text/90">
-                  {{
-                    p.banPctForCount(row.bansBlue, p.bansTableData?.matchCount ?? 0, 1).toFixed(2)
-                  }}%
+                <td v-show="p.showBansSideColumns" class="px-1 py-0.5 align-middle">
                   <div
-                    v-if="p.bansDeltaPct(row, 'bansBlue', 1) != null"
-                    class="text-[11px]"
-                    :class="p.pctDeltaClass(p.bansDeltaPct(row, 'bansBlue', 1)!)"
+                    class="flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight text-red-300/95"
                   >
-                    {{
-                      (p.bansDeltaPct(row, 'bansBlue', 1)! > 0 ? '+' : '') +
-                      p.bansDeltaPct(row, 'bansBlue', 1)!.toFixed(2)
-                    }}%
+                    <span>{{
+                      p.banPctForCount(row.bansRed, p.bansTableData?.matchCount ?? 0, 1).toFixed(2)
+                    }}</span>
+                    <span
+                      v-if="p.bansDeltaPct(row, 'bansRed', 1) != null"
+                      class="text-[10px] leading-none"
+                      :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansRed', 1)!)"
+                    >
+                      {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansRed', 1)!) }}
+                    </span>
                   </div>
                 </td>
-                <td v-show="p.showBansSideColumns" class="px-3 py-1 tabular-nums text-text/90">
-                  {{
-                    p.banPctForCount(row.bansRed, p.bansTableData?.matchCount ?? 0, 1).toFixed(2)
-                  }}%
+                <td v-show="p.showBansRoleColumn('top')" class="px-1 py-0.5 align-middle">
                   <div
-                    v-if="p.bansDeltaPct(row, 'bansRed', 1) != null"
-                    class="text-[11px]"
-                    :class="p.pctDeltaClass(p.bansDeltaPct(row, 'bansRed', 1)!)"
+                    class="flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight"
                   >
-                    {{
-                      (p.bansDeltaPct(row, 'bansRed', 1)! > 0 ? '+' : '') +
-                      p.bansDeltaPct(row, 'bansRed', 1)!.toFixed(2)
-                    }}%
+                    <span>{{
+                      p.banPctForCount(row.bansTop, p.bansTableData?.matchCount ?? 0, 1).toFixed(2)
+                    }}</span>
+                    <span
+                      v-if="p.bansDeltaPct(row, 'bansTop', 1) != null"
+                      class="text-[10px] leading-none"
+                      :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansTop', 1)!)"
+                    >
+                      {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansTop', 1)!) }}
+                    </span>
                   </div>
                 </td>
-                <td
-                  v-show="p.showBansRoleColumn('top')"
-                  class="px-3 py-1 tabular-nums text-text/90"
-                >
-                  {{
-                    p.banPctForCount(row.bansTop, p.bansTableData?.matchCount ?? 0, 1).toFixed(2)
-                  }}%
+                <td v-show="p.showBansRoleColumn('jungle')" class="px-1 py-0.5 align-middle">
                   <div
-                    v-if="p.bansDeltaPct(row, 'bansTop', 1) != null"
-                    class="text-[11px]"
-                    :class="p.pctDeltaClass(p.bansDeltaPct(row, 'bansTop', 1)!)"
+                    class="flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight"
                   >
-                    {{
-                      (p.bansDeltaPct(row, 'bansTop', 1)! > 0 ? '+' : '') +
-                      p.bansDeltaPct(row, 'bansTop', 1)!.toFixed(2)
-                    }}%
+                    <span>{{
+                      p
+                        .banPctForCount(row.bansJungle, p.bansTableData?.matchCount ?? 0, 1)
+                        .toFixed(2)
+                    }}</span>
+                    <span
+                      v-if="p.bansDeltaPct(row, 'bansJungle', 1) != null"
+                      class="text-[10px] leading-none"
+                      :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansJungle', 1)!)"
+                    >
+                      {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansJungle', 1)!) }}
+                    </span>
                   </div>
                 </td>
-                <td
-                  v-show="p.showBansRoleColumn('jungle')"
-                  class="px-3 py-1 tabular-nums text-text/90"
-                >
-                  {{
-                    p
-                      .banPctForCount(row.bansJungle, p.bansTableData?.matchCount ?? 0, 1)
-                      .toFixed(2)
-                  }}%
+                <td v-show="p.showBansRoleColumn('middle')" class="px-1 py-0.5 align-middle">
                   <div
-                    v-if="p.bansDeltaPct(row, 'bansJungle', 1) != null"
-                    class="text-[11px]"
-                    :class="p.pctDeltaClass(p.bansDeltaPct(row, 'bansJungle', 1)!)"
+                    class="flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight"
                   >
-                    {{
-                      (p.bansDeltaPct(row, 'bansJungle', 1)! > 0 ? '+' : '') +
-                      p.bansDeltaPct(row, 'bansJungle', 1)!.toFixed(2)
-                    }}%
+                    <span>{{
+                      p
+                        .banPctForCount(row.bansMiddle, p.bansTableData?.matchCount ?? 0, 1)
+                        .toFixed(2)
+                    }}</span>
+                    <span
+                      v-if="p.bansDeltaPct(row, 'bansMiddle', 1) != null"
+                      class="text-[10px] leading-none"
+                      :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansMiddle', 1)!)"
+                    >
+                      {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansMiddle', 1)!) }}
+                    </span>
                   </div>
                 </td>
-                <td
-                  v-show="p.showBansRoleColumn('middle')"
-                  class="px-3 py-1 tabular-nums text-text/90"
-                >
-                  {{
-                    p
-                      .banPctForCount(row.bansMiddle, p.bansTableData?.matchCount ?? 0, 1)
-                      .toFixed(2)
-                  }}%
+                <td v-show="p.showBansRoleColumn('bottom')" class="px-1 py-0.5 align-middle">
                   <div
-                    v-if="p.bansDeltaPct(row, 'bansMiddle', 1) != null"
-                    class="text-[11px]"
-                    :class="p.pctDeltaClass(p.bansDeltaPct(row, 'bansMiddle', 1)!)"
+                    class="flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight"
                   >
-                    {{
-                      (p.bansDeltaPct(row, 'bansMiddle', 1)! > 0 ? '+' : '') +
-                      p.bansDeltaPct(row, 'bansMiddle', 1)!.toFixed(2)
-                    }}%
+                    <span>{{
+                      p
+                        .banPctForCount(row.bansBottom, p.bansTableData?.matchCount ?? 0, 1)
+                        .toFixed(2)
+                    }}</span>
+                    <span
+                      v-if="p.bansDeltaPct(row, 'bansBottom', 1) != null"
+                      class="text-[10px] leading-none"
+                      :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansBottom', 1)!)"
+                    >
+                      {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansBottom', 1)!) }}
+                    </span>
                   </div>
                 </td>
-                <td
-                  v-show="p.showBansRoleColumn('bottom')"
-                  class="px-3 py-1 tabular-nums text-text/90"
-                >
-                  {{
-                    p
-                      .banPctForCount(row.bansBottom, p.bansTableData?.matchCount ?? 0, 1)
-                      .toFixed(2)
-                  }}%
+                <td v-show="p.showBansRoleColumn('support')" class="px-1 py-0.5 align-middle">
                   <div
-                    v-if="p.bansDeltaPct(row, 'bansBottom', 1) != null"
-                    class="text-[11px]"
-                    :class="p.pctDeltaClass(p.bansDeltaPct(row, 'bansBottom', 1)!)"
+                    class="flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight"
                   >
-                    {{
-                      (p.bansDeltaPct(row, 'bansBottom', 1)! > 0 ? '+' : '') +
-                      p.bansDeltaPct(row, 'bansBottom', 1)!.toFixed(2)
-                    }}%
-                  </div>
-                </td>
-                <td
-                  v-show="p.showBansRoleColumn('support')"
-                  class="px-3 py-1 tabular-nums text-text/90"
-                >
-                  {{
-                    p
-                      .banPctForCount(row.bansSupport, p.bansTableData?.matchCount ?? 0, 1)
-                      .toFixed(2)
-                  }}%
-                  <div
-                    v-if="p.bansDeltaPct(row, 'bansSupport', 1) != null"
-                    class="text-[11px]"
-                    :class="p.pctDeltaClass(p.bansDeltaPct(row, 'bansSupport', 1)!)"
-                  >
-                    {{
-                      (p.bansDeltaPct(row, 'bansSupport', 1)! > 0 ? '+' : '') +
-                      p.bansDeltaPct(row, 'bansSupport', 1)!.toFixed(2)
-                    }}%
+                    <span>{{
+                      p
+                        .banPctForCount(row.bansSupport, p.bansTableData?.matchCount ?? 0, 1)
+                        .toFixed(2)
+                    }}</span>
+                    <span
+                      v-if="p.bansDeltaPct(row, 'bansSupport', 1) != null"
+                      class="text-[10px] leading-none"
+                      :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansSupport', 1)!)"
+                    >
+                      {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansSupport', 1)!) }}
+                    </span>
                   </div>
                 </td>
               </tr>
@@ -472,6 +480,11 @@ function onPageSizeChange(event: Event): void {
   const target = event.target as HTMLSelectElement | null
   const fallback = unref(p.championsPageSize)
   p.onBansPageSizeUpdated(Number(target?.value ?? fallback))
+}
+
+function formatBansPatchDeltaPct(pp: number): string {
+  const sign = pp > 0 ? '+' : ''
+  return `${sign}${pp.toFixed(2)}%`
 }
 
 const roleHeaders: Array<{ key: BansSortCol; deltaKey: BansSortCol; icon: string; alt: string }> = [

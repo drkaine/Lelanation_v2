@@ -302,23 +302,7 @@ withDefaults(
                 }}</span
               >
             </div>
-            <div
-              class="tier-list-lolalytics-td flex w-[220px] shrink-0 items-center gap-2 px-2 max-lg:w-[56px] max-lg:justify-center max-lg:gap-0 max-lg:px-0.5"
-            >
-              <img
-                v-if="p.gameVersion && p.championByKey(row.championId)"
-                :src="
-                  p.getChampionImageUrl(p.gameVersion, p.championByKey(row.championId)!.image.full)
-                "
-                :alt="p.championName(row.championId) || ''"
-                class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover max-lg:h-10 max-lg:w-10"
-                width="50"
-                height="50"
-              />
-              <span class="min-w-0 truncate text-[12px] text-text/90 max-lg:hidden">
-                {{ p.championName(row.championId) || String(row.championId) }}
-              </span>
-            </div>
+            <StatisticsTierListChampionCell :champion-id="row.championId" />
             <div
               class="tier-list-lolalytics-td flex w-10 shrink-0 items-center justify-center max-lg:w-auto max-lg:px-1"
             >

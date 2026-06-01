@@ -3205,52 +3205,47 @@ function sidesObjectiveDistributionPercentages(
     | undefined
   if (!obj) return []
   const dist = byBlue ? obj.distributionByBlue : obj.distributionByRed
-  if (!dist) return []
   const total = data.matchCount
-  const capHorde = key === 'horde'
-  const capRiftHerald = key === 'riftHerald'
-  const aggregated: Record<number, number> = {}
-  for (const [k, n] of Object.entries(dist)) {
-    const count = parseInt(k, 10) || 0
-    let displayCount = count
-    if (capHorde && count > HORDE_DISPLAY_MAX) displayCount = HORDE_DISPLAY_MAX
-    else if (capRiftHerald && count > RIFT_HERALD_DISPLAY_MAX)
-      displayCount = RIFT_HERALD_DISPLAY_MAX
-    aggregated[displayCount] = (aggregated[displayCount] ?? 0) + Number(n)
-  }
+  const aggregated = aggregateObjectiveHistogramDist(key, dist)
   return Object.entries(aggregated)
     .map(([countStr, n]) => ({
       count: parseInt(countStr, 10) || 0,
       percent: Math.round((Number(n) / total) * 10000) / 100,
     }))
-    .filter(({ percent }) => percent > 0)
+    .filter(({ count, percent }) => count > 0 && percent > 0)
     .sort((a, b) => a.count - b.count)
 }
 function sidesObjectiveCounts(key: string): number[] {
-  const blue = sidesObjectiveDistributionPercentages(key, true)
-  const red = sidesObjectiveDistributionPercentages(key, false)
-  const set = new Set<number>([...blue.map(r => r.count), ...red.map(r => r.count)])
-  const sorted = [...set].sort((a, b) => a - b)
-  if (key === 'horde') return sorted.filter(c => c <= HORDE_DISPLAY_MAX)
-  if (key === 'riftHerald') return sorted.filter(c => c <= RIFT_HERALD_DISPLAY_MAX)
-  return sorted
+  return collectObjectiveDisplayCounts(key)
 }
 function percentForCountSides(key: string, count: number, byBlue: boolean): string {
-  const rows = sidesObjectiveDistributionPercentages(key, byBlue)
-  const row = rows.find(r => r.count === count)
-  return row ? Number(row.percent).toFixed(2) + '%' : '—'
+  const data = overviewSidesData.value
+  if (!data?.matchCount) return '—'
+  const obj = data.objectivesBySideTable?.[key as keyof typeof data.objectivesBySideTable] as
+    | { distributionByBlue?: Record<string, number>; distributionByRed?: Record<string, number> }
+    | undefined
+  if (!obj) return '—'
+  const dist = byBlue ? obj.distributionByBlue : obj.distributionByRed
+  const games = aggregateObjectiveHistogramDist(key, dist)[count] ?? 0
+  return formatObjectiveObtentionPercent(games, data.matchCount)
 }
 function distributionPercentRows(
   dist: Record<string, number> | undefined,
-  total: number
+  total: number,
+  objectiveKey?: string
 ): Array<{ count: number; percent: number }> {
-  if (!dist || typeof dist !== 'object' || !total) return []
-  return Object.entries(dist)
+  if (!total) return []
+  const aggregated = objectiveKey
+    ? aggregateObjectiveHistogramDist(objectiveKey, dist)
+    : Object.fromEntries(
+        Object.entries(dist ?? {}).map(([k, n]) => [parseInt(k, 10) || 0, Number(n)])
+      )
+  return Object.entries(aggregated)
     .map(([countStr, n]) => ({
       count: parseInt(countStr, 10) || 0,
       percent: Math.round((Number(n) / total) * 10000) / 100,
     }))
-    .filter(({ percent }) => percent > 0)
+    .filter(({ count, percent }) => count > 0 && percent > 0)
     .sort((a, b) => a.count - b.count)
 }
 function drakeTypeDistributionPercentages(
@@ -3262,7 +3257,7 @@ function drakeTypeDistributionPercentages(
   const row = drakeTypeRows.value.find(r => r.key === key)
   if (!row) return []
   const dist = byWin ? row.distributionByWin : row.distributionByLoss
-  return distributionPercentRows(dist, data.matchCount)
+  return distributionPercentRows(dist, data.matchCount, key)
 }
 function drakeTypeDistributionPercentagesSides(
   key: string,
@@ -3273,7 +3268,7 @@ function drakeTypeDistributionPercentagesSides(
   const row = sidesDrakeTypeRows.value.find(r => r.key === key)
   if (!row) return []
   const dist = byBlue ? row.distributionByBlue : row.distributionByRed
-  return distributionPercentRows(dist, data.matchCount)
+  return distributionPercentRows(dist, data.matchCount, key)
 }
 function drakeTypeCounts(key: string): number[] {
   const byWin = drakeTypeDistributionPercentages(key, true)
@@ -3289,14 +3284,22 @@ function drakeTypeCounts(key: string): number[] {
   return [...set].sort((a, b) => a - b)
 }
 function drakeTypePercentForCount(key: string, count: number, byWin: boolean): string {
-  const rows = drakeTypeDistributionPercentages(key, byWin)
-  const row = rows.find(r => r.count === count)
-  return row ? Number(row.percent).toFixed(2) + '%' : '—'
+  const data = overviewTeamsData.value
+  if (!data?.matchCount) return '—'
+  const row = drakeTypeRows.value.find(r => r.key === key)
+  if (!row) return '—'
+  const dist = byWin ? row.distributionByWin : row.distributionByLoss
+  const games = aggregateObjectiveHistogramDist(key, dist)[count] ?? 0
+  return formatObjectiveObtentionPercent(games, data.matchCount)
 }
 function drakeTypePercentForCountSides(key: string, count: number, byBlue: boolean): string {
-  const rows = drakeTypeDistributionPercentagesSides(key, byBlue)
-  const row = rows.find(r => r.count === count)
-  return row ? Number(row.percent).toFixed(2) + '%' : '—'
+  const data = overviewSidesData.value
+  if (!data?.matchCount) return '—'
+  const row = sidesDrakeTypeRows.value.find(r => r.key === key)
+  if (!row) return '—'
+  const dist = byBlue ? row.distributionByBlue : row.distributionByRed
+  const games = aggregateObjectiveHistogramDist(key, dist)[count] ?? 0
+  return formatObjectiveObtentionPercent(games, data.matchCount)
 }
 function sidesQueryParams(opts?: { version?: string | null }): string {
   const params = new URLSearchParams()
@@ -3560,6 +3563,31 @@ const HORDE_DISPLAY_MAX = 3
 /** Max count for Rift Herald: 1 per team per game. */
 const RIFT_HERALD_DISPLAY_MAX = 1
 
+/** Regroupe les buckets histogramme (4+ voidgrubs → 3, etc.). */
+function aggregateObjectiveHistogramDist(
+  key: string,
+  dist: Record<string, number> | undefined
+): Record<number, number> {
+  const aggregated: Record<number, number> = {}
+  if (!dist || typeof dist !== 'object') return aggregated
+  const capHorde = key === 'horde'
+  const capRiftHerald = key === 'riftHerald'
+  for (const [k, n] of Object.entries(dist)) {
+    const raw = parseInt(k, 10) || 0
+    let displayCount = raw
+    if (capHorde && raw > HORDE_DISPLAY_MAX) displayCount = HORDE_DISPLAY_MAX
+    else if (capRiftHerald && raw > RIFT_HERALD_DISPLAY_MAX) displayCount = RIFT_HERALD_DISPLAY_MAX
+    aggregated[displayCount] = (aggregated[displayCount] ?? 0) + Number(n)
+  }
+  return aggregated
+}
+
+function formatObjectiveObtentionPercent(games: number, matchCount: number): string {
+  if (!matchCount) return '—'
+  const pct = games <= 0 ? 0 : Math.round((games / matchCount) * 10000) / 100
+  return `${pct.toFixed(2)}%`
+}
+
 /** Distribution as % of matches, sorted by count. For horde cap 3, for riftHerald cap 1. */
 function objectiveDistributionPercentages(
   key: string,
@@ -3572,44 +3600,65 @@ function objectiveDistributionPercentages(
   const dist = byWin
     ? (obj as { distributionByWin: Record<string, number> }).distributionByWin
     : (obj as { distributionByLoss: Record<string, number> }).distributionByLoss
-  if (!dist || typeof dist !== 'object') return []
   const total = data.matchCount
-  const capHorde = key === 'horde'
-  const capRiftHerald = key === 'riftHerald'
-  const aggregated: Record<number, number> = {}
-  for (const [k, n] of Object.entries(dist)) {
-    const count = parseInt(k, 10) || 0
-    let displayCount = count
-    if (capHorde && count > HORDE_DISPLAY_MAX) displayCount = HORDE_DISPLAY_MAX
-    else if (capRiftHerald && count > RIFT_HERALD_DISPLAY_MAX)
-      displayCount = RIFT_HERALD_DISPLAY_MAX
-    aggregated[displayCount] = (aggregated[displayCount] ?? 0) + Number(n)
-  }
+  const aggregated = aggregateObjectiveHistogramDist(key, dist)
   return Object.entries(aggregated)
     .map(([countStr, n]) => ({
       count: parseInt(countStr, 10) || 0,
       percent: Math.round((Number(n) / total) * 10000) / 100,
     }))
-    .filter(({ percent }) => percent > 0)
+    .filter(({ count, percent }) => count > 0 && percent > 0)
     .sort((a, b) => a.count - b.count)
 }
-/** All counts for an objective. For horde 0–3, for riftHerald 0–1. */
-function objectiveCounts(key: string): number[] {
-  const win = objectiveDistributionPercentages(key, true)
-  const loss = objectiveDistributionPercentages(key, false)
-  const set = new Set<number>([...win.map(r => r.count), ...loss.map(r => r.count)])
+
+function collectObjectiveDisplayCounts(key: string): number[] {
+  const set = new Set<number>()
+  const addBuckets = (dist: Record<string, number> | undefined) => {
+    const agg = aggregateObjectiveHistogramDist(key, dist)
+    for (const [countStr, games] of Object.entries(agg)) {
+      const count = parseInt(countStr, 10) || 0
+      if (count > 0 && Number(games) > 0) set.add(count)
+    }
+  }
+  const teams = overviewTeamsData.value
+  const sides = overviewSidesData.value
+  const obj = teams?.objectives?.[key as keyof typeof teams.objectives]
+  if (obj && 'distributionByWin' in obj) {
+    addBuckets((obj as { distributionByWin: Record<string, number> }).distributionByWin)
+    addBuckets((obj as { distributionByLoss: Record<string, number> }).distributionByLoss)
+  }
+  const sideObj = sides?.objectivesBySideTable?.[
+    key as keyof typeof sides.objectivesBySideTable
+  ] as { distributionByBlue?: Record<string, number>; distributionByRed?: Record<string, number> }
+  if (sideObj) {
+    addBuckets(sideObj.distributionByBlue)
+    addBuckets(sideObj.distributionByRed)
+  }
   const sorted = [...set].sort((a, b) => a - b)
   if (key === 'horde') return sorted.filter(c => c <= HORDE_DISPLAY_MAX)
   if (key === 'riftHerald') return sorted.filter(c => c <= RIFT_HERALD_DISPLAY_MAX)
   return sorted
 }
-/** Percent for a given count and team (for dropdown content). */
-function percentForCount(key: string, count: number, byWin: boolean): string {
-  const rows = objectiveDistributionPercentages(key, byWin)
-  const row = rows.find(r => r.count === count)
-  return row ? Number(row.percent).toFixed(2) + '%' : '—'
+
+/** Tous les N présents dans au moins une colonne (win / loss / blue / red). */
+function objectiveCounts(key: string): number[] {
+  return collectObjectiveDisplayCounts(key)
 }
-const objectiveKeysWithKills = [
+
+/** % de matchs avec exactement N prises sur ce segment (0 % si aucune partie, pas « — »). */
+function percentForCount(key: string, count: number, byWin: boolean): string {
+  const data = overviewTeamsData.value
+  if (!data?.matchCount) return '—'
+  const obj = data.objectives[key as keyof typeof data.objectives]
+  if (!obj || !('distributionByWin' in obj)) return '—'
+  const dist = byWin
+    ? (obj as { distributionByWin: Record<string, number> }).distributionByWin
+    : (obj as { distributionByLoss: Record<string, number> }).distributionByLoss
+  const games = aggregateObjectiveHistogramDist(key, dist)[count] ?? 0
+  return formatObjectiveObtentionPercent(games, data.matchCount)
+}
+/** Ordre d’affichage dans le tableau objectifs (obtention / winrate). */
+const objectiveKeysOrdered = [
   'baron',
   'dragon',
   'tower',
@@ -3617,6 +3666,17 @@ const objectiveKeysWithKills = [
   'riftHerald',
   'horde',
 ] as const
+/** Objectifs avec répartition par nombre de prises (dropdown). Héraut exclu : max 1 / partie. */
+const objectiveKeysWithKillDropdown = new Set<string>([
+  'baron',
+  'dragon',
+  'tower',
+  'inhibitor',
+  'horde',
+])
+function objectiveHasKillDropdown(key: string): boolean {
+  return objectiveKeysWithKillDropdown.has(key)
+}
 const openObjectiveKeys = ref<Set<string>>(new Set())
 function toggleObjective(key: string) {
   const next = new Set(openObjectiveKeys.value)
@@ -3893,11 +3953,16 @@ const championGlobalTableData = ref<{
 const championGlobalTableRefById = ref(new Map<number, ChampionGlobalTableRow>())
 const championGlobalTableRefMatchCount = ref(0)
 
-/** Tableau champion : toutes les colonnes visibles (plus de groupes repliables). */
+/** Largeur minimale du tableau champion (scroll) selon les groupes de colonnes affichés. */
 const championGlobalTableMinWidthPx = computed(() => {
-  const wChamp = 110
-  const wDual = 48
-  return wChamp + 4 * wDual + 8 * wDual + 3 * wDual
+  const wChamp = 220
+  const wStat = 48
+  const wKda = 160
+  let statCols = 0
+  if (showChampionSideColumns.value) statCols += 4
+  if (showChampionDealtColumns.value) statCols += 4
+  if (showChampionTakenColumns.value) statCols += 4
+  return wChamp + statCols * wStat + wKda
 })
 
 const championGlobalPage = ref(1)
@@ -4633,7 +4698,8 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   drakeTypePercentForCountSides,
   objectiveCounts,
   objectiveIconSrc,
-  objectiveKeysWithKills,
+  objectiveKeysOrdered,
+  objectiveHasKillDropdown,
   objectiveRow,
   objectiveRowSides,
   objectivesPanelTab,

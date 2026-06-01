@@ -325,6 +325,23 @@ async function buildPatchSnapshot(
   return { patch, levels }
 }
 
+/** Parties max (average / skilled / elite) pour comparer les rôles d’un même champion. */
+export function balanceRowGamesScore(row: Pick<BalanceApiRow, 'average' | 'skilled' | 'elite'>): number {
+  return Math.max(row.average.games, row.skilled.games, row.elite.games)
+}
+
+/** Filtre « tous les rôles » : une ligne par champion, rôle le plus joué (comme la tier list). */
+export function collapseBalanceRowsToMainRole(rows: BalanceApiRow[]): BalanceApiRow[] {
+  const byChampion = new Map<number, BalanceApiRow>()
+  for (const row of rows) {
+    const existing = byChampion.get(row.championId)
+    if (!existing || balanceRowGamesScore(row) > balanceRowGamesScore(existing)) {
+      byChampion.set(row.championId, row)
+    }
+  }
+  return [...byChampion.values()]
+}
+
 function computeGlobalStatus(statuses: Record<BalanceLevelKey, BalanceStatus>): BalanceStatus {
   if (statuses.average === 'OVERPOWERED' || statuses.skilled === 'OVERPOWERED' || statuses.elite === 'OVERPOWERED') {
     return 'OVERPOWERED'
@@ -509,4 +526,6 @@ export const __testOnly = {
   patchLabel,
   deltaLabel,
   computeGlobalStatus,
+  balanceRowGamesScore,
+  collapseBalanceRowsToMainRole,
 }

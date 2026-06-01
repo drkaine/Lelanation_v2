@@ -149,8 +149,30 @@ function isOtpRoleRow(row: BalanceRow): boolean {
   return pickMax < 1
 }
 
+function rowGamesScore(row: BalanceRow): number {
+  return Math.max(
+    Number(row.average?.games ?? 0),
+    Number(row.skilled?.games ?? 0),
+    Number(row.elite?.games ?? 0)
+  )
+}
+
+/** Sans filtre rôle : une ligne par champion (rôle le plus joué). */
+function collapseToMainRolePerChampion(list: BalanceRow[]): BalanceRow[] {
+  const byChampion = new Map<number, BalanceRow>()
+  for (const row of list) {
+    const prev = byChampion.get(row.championId)
+    if (!prev || rowGamesScore(row) > rowGamesScore(prev)) {
+      byChampion.set(row.championId, row)
+    }
+  }
+  return [...byChampion.values()]
+}
+
 const filteredRows = computed<BalanceRow[]>(() => {
-  const out = rows.value.filter(row => {
+  const roleFilter = String(p.statsRoleFilter ?? '').trim()
+  const source = roleFilter ? rows.value : collapseToMainRolePerChampion(rows.value)
+  const out = source.filter(row => {
     if (searchQuery.value) {
       const champ = String(p.championName(row.championId) ?? '').toLowerCase()
       const role = String(row.role ?? '').toLowerCase()

@@ -756,6 +756,7 @@
     "overviewDetailWinRate": "WR",
     "itemsTypeFilter": "Type",
     "itemsTypeAll": "All",
+    "itemsTypeLegendary": "Legendary (+ starters)",
     "itemsColType": "Type",
     "itemsColDeltaPick": "Δ pick",
     "itemsColDeltaWin": "Δ WR",

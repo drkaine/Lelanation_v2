@@ -2150,6 +2150,7 @@ export async function getOverviewTeamsStats(
       applyChampionStatsObtentionToOverviewTeams(result, csObjectives)
       applyChampionStatsWinratesToOverviewTeams(result, csObjectives)
     }
+    capOverviewTeamsObtentionCounts(result)
     overviewTeamsCache.set(cacheKey, { data: result, expiresAt: now + OVERVIEW_CACHE_TTL_MS })
     return result
   } catch (err) {
@@ -3012,7 +3013,65 @@ type ChampionStatsTeamObjectives = {
 
 function winrateFromInvolved(wins: number, games: number): number | null {
   if (games <= 0) return null
-  return (wins / games) * 100
+  const wr = (Math.min(wins, games) / games) * 100
+  return Math.min(100, Math.max(0, wr))
+}
+
+function capCountToMatchCount(count: number, matchCount: number): number {
+  const n = Number(count) || 0
+  const mc = Number(matchCount) || 0
+  if (mc <= 0 || n <= 0) return 0
+  return Math.min(n, mc)
+}
+
+/** Borne les comptages « first » d'obtention (agrégats parfois > nombre de matchs). */
+function capOverviewTeamsObtentionCounts(result: OverviewTeamsStats): void {
+  const mc = result.matchCount
+  if (mc <= 0) return
+  for (const key of Object.keys(result.objectives) as Array<keyof typeof result.objectives>) {
+    const o = result.objectives[key]
+    if (!o || typeof o !== 'object') continue
+    if ('firstByWin' in o && 'firstByLoss' in o) {
+      o.firstByWin = capCountToMatchCount(o.firstByWin, mc)
+      o.firstByLoss = capCountToMatchCount(o.firstByLoss, mc)
+    }
+  }
+  for (const key of Object.keys(result.drakes.souls) as Array<keyof typeof result.drakes.souls>) {
+    const s = result.drakes.souls[key]
+    if (!s) continue
+    s.byWin = capCountToMatchCount(s.byWin, mc)
+    s.byLoss = capCountToMatchCount(s.byLoss, mc)
+  }
+  for (const key of Object.keys(result.drakes.types) as Array<keyof typeof result.drakes.types>) {
+    const t = result.drakes.types[key]
+    if (!t) continue
+    t.byWin = capCountToMatchCount(t.byWin, mc)
+    t.byLoss = capCountToMatchCount(t.byLoss, mc)
+  }
+}
+
+function capOverviewSidesObtentionCounts(result: OverviewSidesApiStats): void {
+  const mc = result.matchCount
+  if (mc <= 0 || !result.objectivesBySideTable) return
+  for (const row of Object.values(result.objectivesBySideTable)) {
+    if (!row) continue
+    row.firstByBlue = capCountToMatchCount(row.firstByBlue ?? 0, mc)
+    row.firstByRed = capCountToMatchCount(row.firstByRed ?? 0, mc)
+  }
+  if (result.drakesBySide?.types) {
+    for (const row of Object.values(result.drakesBySide.types)) {
+      if (!row) continue
+      row.byBlue = capCountToMatchCount(row.byBlue, mc)
+      row.byRed = capCountToMatchCount(row.byRed, mc)
+    }
+  }
+  if (result.drakesBySide?.souls) {
+    for (const row of Object.values(result.drakesBySide.souls)) {
+      if (!row) continue
+      row.byBlue = capCountToMatchCount(row.byBlue, mc)
+      row.byRed = capCountToMatchCount(row.byRed, mc)
+    }
+  }
 }
 
 async function loadChampionStatsTeamObjectives(
@@ -3507,7 +3566,8 @@ function firstBucketWinrateFromOutcome(dist: {
   const l = Number(dist.loss['1'] ?? 0)
   const t = w + l
   if (t <= 0) return null
-  return (w / t) * 100
+  const wr = (w / t) * 100
+  return Math.min(100, Math.max(0, wr))
 }
 
 /** Winrate quand l'équipe a sécurisé l'objectif (tous buckets >= 1). */
@@ -3519,7 +3579,8 @@ function securedWinrateFromOutcome(dist: {
   const securedLosses = securedGamesFromOutcome(dist.loss)
   const total = securedWins + securedLosses
   if (total <= 0) return null
-  return (securedWins / total) * 100
+  const wr = (securedWins / total) * 100
+  return Math.min(100, Math.max(0, wr))
 }
 
 export type ObjectiveDistributionSides = {
@@ -3551,9 +3612,14 @@ function firstBucketWinrateBySide(dist: ObjectiveDistributionSides): {
   const bW = Number(dist.blueWins['1'] ?? 0)
   const rG = Number(dist.red['1'] ?? 0)
   const rW = Number(dist.redWins['1'] ?? 0)
+  const clampWr = (w: number, g: number): number | null => {
+    if (g <= 0) return null
+    const wr = (Math.min(w, g) / g) * 100
+    return Math.min(100, Math.max(0, wr))
+  }
   return {
-    blue: bG > 0 ? (bW / bG) * 100 : null,
-    red: rG > 0 ? (rW / rG) * 100 : null,
+    blue: clampWr(bW, bG),
+    red: clampWr(rW, rG),
   }
 }
 
@@ -4170,6 +4236,7 @@ export async function getOverviewSidesStats(
       applyChampionStatsObtentionToOverviewSides(result, csSidesObjectives)
       applyChampionStatsWinratesToOverviewSides(result, csSidesObjectives)
     }
+    capOverviewSidesObtentionCounts(result)
     overviewSidesCache.set(cacheKey, { data: result, expiresAt: now + OVERVIEW_CACHE_TTL_MS })
     return result
   } catch (err) {

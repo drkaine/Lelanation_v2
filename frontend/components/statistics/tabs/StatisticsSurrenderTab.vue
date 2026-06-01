@@ -43,10 +43,27 @@ type Row = {
   rankTier: string
   team: 'ALL' | 100 | 200
   matchCount: number
+  surrenderCount: number
+  earlySurrenderCount: number
   surrenderRate: number
   earlySurrenderRate: number
   surrenderDelta: number | null
   earlySurrenderDelta: number | null
+}
+
+function surrenderOnlyCount(row: Row | null | undefined): number {
+  if (!row) return 0
+  return Math.max(0, Number(row.surrenderCount ?? 0) - Number(row.earlySurrenderCount ?? 0))
+}
+
+function playedCount(row: Row | null | undefined): number {
+  if (!row) return 0
+  return Math.max(0, Number(row.matchCount ?? 0) - Number(row.surrenderCount ?? 0))
+}
+
+function outcomePct(part: number, total: number): string {
+  if (!total || total <= 0) return '0.00'
+  return ((part / total) * 100).toFixed(2)
 }
 
 const groupedRows = computed(() => {
@@ -95,111 +112,283 @@ function rankIcon(rank: string): string {
       <div v-else-if="groupedRows.length === 0" class="text-sm text-text/70">
         {{ p.t('statisticsPage.noData') }}
       </div>
-      <div v-else class="w-full min-w-0 overflow-x-auto">
-        <table class="objectives-zebra-cols w-full min-w-[640px] text-left text-sm">
-          <thead>
-            <tr class="border-b border-primary/30 text-text/70">
-              <th class="py-1.5 pr-2 font-medium">
-                {{ p.t('statisticsPage.overviewMatchesByDivision') }}
-              </th>
-              <th class="px-1 py-1.5 text-center font-medium">
-                {{ p.t('statisticsPage.abandonsSurrenderRate') }}
-              </th>
-              <th class="px-1 py-1.5 text-center font-medium">
-                {{ p.t('statisticsPage.abandonsEarlySurrenderRate') }}
-              </th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-primary/20 text-text/85">
-            <template v-for="group in groupedRows" :key="`rank-${group.rank}`">
-              <tr>
-                <td class="py-1.5 pr-2">
-                  <button
-                    type="button"
-                    class="flex items-center gap-2 font-medium text-text/90 hover:text-text"
-                    @click="toggleRank(group.rank)"
-                  >
-                    <span
-                      class="inline-block transition-transform duration-200"
-                      :class="openRanks.has(group.rank) ? 'rotate-180' : ''"
-                      aria-hidden
-                      >▼</span
-                    >
-                    <img
-                      :src="rankIcon(group.rank)"
-                      :alt="rankLabel(group.rank)"
-                      class="h-4 w-4 object-contain"
-                      loading="lazy"
-                    />
-                    <span>{{ rankLabel(group.rank) }}</span>
-                  </button>
-                </td>
-                <td class="px-1 py-1.5 text-center tabular-nums">
-                  {{ pct(group.all?.surrenderRate) }}
+      <div v-else class="w-full min-w-0">
+        <!-- Mobile : une carte « Répartition des parties » par division -->
+        <div class="statistics-surrender-mobile-list space-y-3 md:hidden">
+          <article
+            v-for="group in groupedRows"
+            :key="`surrender-mobile-${group.rank}`"
+            class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-3"
+          >
+            <button
+              type="button"
+              class="mb-2 flex w-full items-center gap-2 text-left"
+              @click="toggleRank(group.rank)"
+            >
+              <span
+                class="inline-block shrink-0 text-xs text-text/60 transition-transform duration-200"
+                :class="openRanks.has(group.rank) ? 'rotate-180' : ''"
+                aria-hidden
+                >▼</span
+              >
+              <img
+                :src="rankIcon(group.rank)"
+                :alt="rankLabel(group.rank)"
+                class="h-5 w-5 shrink-0 object-contain"
+                loading="lazy"
+              />
+              <h3 class="min-w-0 flex-1 text-sm font-semibold leading-snug text-amber-300">
+                {{ rankLabel(group.rank) }}
+              </h3>
+              <span v-if="group.all?.matchCount" class="shrink-0 text-xs tabular-nums text-text/60">
+                {{ Number(group.all.matchCount).toLocaleString() }}
+                {{ p.t('statisticsPage.overviewDurationWinrateTooltipMatches') }}
+              </span>
+            </button>
+
+            <div
+              v-if="group.all && Number(group.all.matchCount) > 0"
+              class="flex flex-col items-center gap-3 border-t border-primary/20 pt-3"
+            >
+              <StatisticsMatchOutcomeDonut
+                :total="Number(group.all.matchCount)"
+                :early="Number(group.all.earlySurrenderCount)"
+                :surrender-only="surrenderOnlyCount(group.all)"
+                :played="playedCount(group.all)"
+              />
+              <div class="w-full min-w-0 space-y-1 text-xs">
+                <div class="font-medium text-text">
+                  {{ p.t('statisticsPage.overviewMatchOutcomesTitle') }}
+                </div>
+                <div class="flex items-center gap-2 text-text/85">
+                  <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-300" />
+                  &lt;15 min surrender:
+                  {{ Number(group.all.earlySurrenderCount).toLocaleString() }} ({{
+                    outcomePct(Number(group.all.earlySurrenderCount), Number(group.all.matchCount))
+                  }}%)
                   <span
-                    v-if="delta(group.all?.surrenderDelta)"
-                    :class="deltaClass(group.all?.surrenderDelta)"
+                    v-if="delta(group.all.earlySurrenderDelta)"
+                    :class="deltaClass(group.all.earlySurrenderDelta)"
+                    class="tabular-nums"
                   >
-                    {{ delta(group.all?.surrenderDelta) }}
+                    {{ delta(group.all.earlySurrenderDelta) }}
                   </span>
-                </td>
-                <td class="px-1 py-1.5 text-center tabular-nums">
-                  {{ pct(group.all?.earlySurrenderRate) }}
+                </div>
+                <div class="flex items-center gap-2 text-text/85">
+                  <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-100" />
+                  {{ p.t('statisticsPage.abandonsSurrenderRate') }}:
+                  {{ surrenderOnlyCount(group.all).toLocaleString() }} ({{
+                    outcomePct(surrenderOnlyCount(group.all), Number(group.all.matchCount))
+                  }}%)
                   <span
-                    v-if="delta(group.all?.earlySurrenderDelta)"
-                    :class="deltaClass(group.all?.earlySurrenderDelta)"
+                    v-if="delta(group.all.surrenderDelta)"
+                    :class="deltaClass(group.all.surrenderDelta)"
+                    class="tabular-nums"
                   >
-                    {{ delta(group.all?.earlySurrenderDelta) }}
+                    {{ delta(group.all.surrenderDelta) }}
                   </span>
-                </td>
+                </div>
+                <div class="flex items-center gap-2 text-text/85">
+                  <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-blue-400" />
+                  Jouées: {{ playedCount(group.all).toLocaleString() }} ({{
+                    outcomePct(playedCount(group.all), Number(group.all.matchCount))
+                  }}%)
+                </div>
+              </div>
+            </div>
+            <div v-else class="border-t border-primary/20 py-3 text-center text-xs text-text/60">
+              {{ p.t('statisticsPage.noData') }}
+            </div>
+
+            <div
+              v-if="openRanks.has(group.rank) && (group.blue || group.red)"
+              class="mt-3 space-y-3 border-t border-primary/20 pt-3"
+            >
+              <div
+                v-if="group.blue && Number(group.blue.matchCount) > 0"
+                class="rounded-lg border border-sky-400/40 bg-sky-500/5 p-2"
+              >
+                <div class="mb-2 text-xs font-semibold text-sky-300">{{ teamLabel(100) }}</div>
+                <div class="flex flex-col items-center gap-2 sm:flex-row sm:items-center">
+                  <StatisticsMatchOutcomeDonut
+                    side-accent="blue"
+                    :total="Number(group.blue.matchCount)"
+                    :early="Number(group.blue.earlySurrenderCount)"
+                    :surrender-only="surrenderOnlyCount(group.blue)"
+                    :played="playedCount(group.blue)"
+                  />
+                  <div class="w-full min-w-0 space-y-1 text-[11px] text-text/85">
+                    <div>
+                      {{ p.t('statisticsPage.abandonsSurrenderRate') }}:
+                      {{ pct(group.blue.surrenderRate) }}
+                      <span
+                        v-if="delta(group.blue.surrenderDelta)"
+                        :class="deltaClass(group.blue.surrenderDelta)"
+                      >
+                        {{ delta(group.blue.surrenderDelta) }}
+                      </span>
+                    </div>
+                    <div>
+                      {{ p.t('statisticsPage.abandonsEarlySurrenderRate') }}:
+                      {{ pct(group.blue.earlySurrenderRate) }}
+                      <span
+                        v-if="delta(group.blue.earlySurrenderDelta)"
+                        :class="deltaClass(group.blue.earlySurrenderDelta)"
+                      >
+                        {{ delta(group.blue.earlySurrenderDelta) }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div
+                v-if="group.red && Number(group.red.matchCount) > 0"
+                class="rounded-lg border border-rose-400/40 bg-rose-500/5 p-2"
+              >
+                <div class="mb-2 text-xs font-semibold text-rose-300">{{ teamLabel(200) }}</div>
+                <div class="flex flex-col items-center gap-2 sm:flex-row sm:items-center">
+                  <StatisticsMatchOutcomeDonut
+                    side-accent="red"
+                    :total="Number(group.red.matchCount)"
+                    :early="Number(group.red.earlySurrenderCount)"
+                    :surrender-only="surrenderOnlyCount(group.red)"
+                    :played="playedCount(group.red)"
+                  />
+                  <div class="w-full min-w-0 space-y-1 text-[11px] text-text/85">
+                    <div>
+                      {{ p.t('statisticsPage.abandonsSurrenderRate') }}:
+                      {{ pct(group.red.surrenderRate) }}
+                      <span
+                        v-if="delta(group.red.surrenderDelta)"
+                        :class="deltaClass(group.red.surrenderDelta)"
+                      >
+                        {{ delta(group.red.surrenderDelta) }}
+                      </span>
+                    </div>
+                    <div>
+                      {{ p.t('statisticsPage.abandonsEarlySurrenderRate') }}:
+                      {{ pct(group.red.earlySurrenderRate) }}
+                      <span
+                        v-if="delta(group.red.earlySurrenderDelta)"
+                        :class="deltaClass(group.red.earlySurrenderDelta)"
+                      >
+                        {{ delta(group.red.earlySurrenderDelta) }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <!-- Desktop : tableau -->
+        <div class="hidden w-full min-w-0 overflow-x-auto md:block">
+          <table class="objectives-zebra-cols w-full min-w-[640px] text-left text-sm">
+            <thead>
+              <tr class="border-b border-primary/30 text-text/70">
+                <th class="py-1.5 pr-2 font-medium">
+                  {{ p.t('statisticsPage.overviewMatchesByDivision') }}
+                </th>
+                <th class="px-1 py-1.5 text-center font-medium">
+                  {{ p.t('statisticsPage.abandonsSurrenderRate') }}
+                </th>
+                <th class="px-1 py-1.5 text-center font-medium">
+                  {{ p.t('statisticsPage.abandonsEarlySurrenderRate') }}
+                </th>
               </tr>
-              <template v-if="openRanks.has(group.rank)">
-                <tr v-if="group.blue" class="bg-surface/30">
-                  <td class="py-1 pl-8 pr-2 text-text/75">{{ teamLabel(100) }}</td>
-                  <td class="px-1 py-1 text-center tabular-nums text-text/80">
-                    {{ pct(group.blue.surrenderRate) }}
-                    <span
-                      v-if="delta(group.blue.surrenderDelta)"
-                      :class="deltaClass(group.blue.surrenderDelta)"
+            </thead>
+            <tbody class="divide-y divide-primary/20 text-text/85">
+              <template v-for="group in groupedRows" :key="`rank-${group.rank}`">
+                <tr>
+                  <td class="py-1.5 pr-2">
+                    <button
+                      type="button"
+                      class="flex items-center gap-2 font-medium text-text/90 hover:text-text"
+                      @click="toggleRank(group.rank)"
                     >
-                      {{ delta(group.blue.surrenderDelta) }}
+                      <span
+                        class="inline-block transition-transform duration-200"
+                        :class="openRanks.has(group.rank) ? 'rotate-180' : ''"
+                        aria-hidden
+                        >▼</span
+                      >
+                      <img
+                        :src="rankIcon(group.rank)"
+                        :alt="rankLabel(group.rank)"
+                        class="h-4 w-4 object-contain"
+                        loading="lazy"
+                      />
+                      <span>{{ rankLabel(group.rank) }}</span>
+                    </button>
+                  </td>
+                  <td class="px-1 py-1.5 text-center tabular-nums">
+                    {{ pct(group.all?.surrenderRate) }}
+                    <span
+                      v-if="delta(group.all?.surrenderDelta)"
+                      :class="deltaClass(group.all?.surrenderDelta)"
+                    >
+                      {{ delta(group.all?.surrenderDelta) }}
                     </span>
                   </td>
-                  <td class="px-1 py-1 text-center tabular-nums text-text/80">
-                    {{ pct(group.blue.earlySurrenderRate) }}
+                  <td class="px-1 py-1.5 text-center tabular-nums">
+                    {{ pct(group.all?.earlySurrenderRate) }}
                     <span
-                      v-if="delta(group.blue.earlySurrenderDelta)"
-                      :class="deltaClass(group.blue.earlySurrenderDelta)"
+                      v-if="delta(group.all?.earlySurrenderDelta)"
+                      :class="deltaClass(group.all?.earlySurrenderDelta)"
                     >
-                      {{ delta(group.blue.earlySurrenderDelta) }}
+                      {{ delta(group.all?.earlySurrenderDelta) }}
                     </span>
                   </td>
                 </tr>
-                <tr v-if="group.red" class="bg-surface/30">
-                  <td class="py-1 pl-8 pr-2 text-text/75">{{ teamLabel(200) }}</td>
-                  <td class="px-1 py-1 text-center tabular-nums text-text/80">
-                    {{ pct(group.red.surrenderRate) }}
-                    <span
-                      v-if="delta(group.red.surrenderDelta)"
-                      :class="deltaClass(group.red.surrenderDelta)"
-                    >
-                      {{ delta(group.red.surrenderDelta) }}
-                    </span>
-                  </td>
-                  <td class="px-1 py-1 text-center tabular-nums text-text/80">
-                    {{ pct(group.red.earlySurrenderRate) }}
-                    <span
-                      v-if="delta(group.red.earlySurrenderDelta)"
-                      :class="deltaClass(group.red.earlySurrenderDelta)"
-                    >
-                      {{ delta(group.red.earlySurrenderDelta) }}
-                    </span>
-                  </td>
-                </tr>
+                <template v-if="openRanks.has(group.rank)">
+                  <tr v-if="group.blue" class="bg-surface/30">
+                    <td class="py-1 pl-8 pr-2 text-text/75">{{ teamLabel(100) }}</td>
+                    <td class="px-1 py-1 text-center tabular-nums text-text/80">
+                      {{ pct(group.blue.surrenderRate) }}
+                      <span
+                        v-if="delta(group.blue.surrenderDelta)"
+                        :class="deltaClass(group.blue.surrenderDelta)"
+                      >
+                        {{ delta(group.blue.surrenderDelta) }}
+                      </span>
+                    </td>
+                    <td class="px-1 py-1 text-center tabular-nums text-text/80">
+                      {{ pct(group.blue.earlySurrenderRate) }}
+                      <span
+                        v-if="delta(group.blue.earlySurrenderDelta)"
+                        :class="deltaClass(group.blue.earlySurrenderDelta)"
+                      >
+                        {{ delta(group.blue.earlySurrenderDelta) }}
+                      </span>
+                    </td>
+                  </tr>
+                  <tr v-if="group.red" class="bg-surface/30">
+                    <td class="py-1 pl-8 pr-2 text-text/75">{{ teamLabel(200) }}</td>
+                    <td class="px-1 py-1 text-center tabular-nums text-text/80">
+                      {{ pct(group.red.surrenderRate) }}
+                      <span
+                        v-if="delta(group.red.surrenderDelta)"
+                        :class="deltaClass(group.red.surrenderDelta)"
+                      >
+                        {{ delta(group.red.surrenderDelta) }}
+                      </span>
+                    </td>
+                    <td class="px-1 py-1 text-center tabular-nums text-text/80">
+                      {{ pct(group.red.earlySurrenderRate) }}
+                      <span
+                        v-if="delta(group.red.earlySurrenderDelta)"
+                        :class="deltaClass(group.red.earlySurrenderDelta)"
+                      >
+                        {{ delta(group.red.earlySurrenderDelta) }}
+                      </span>
+                    </td>
+                  </tr>
+                </template>
               </template>
-            </template>
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>

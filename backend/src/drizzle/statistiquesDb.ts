@@ -1,7 +1,17 @@
 /**
  * Pool PostgreSQL + client Drizzle pour `lelanation_statistiques`.
- * Uses `DATABASE_URL` (same as poller / API).
+ * Uses `DATABASE_URL_STATISTIQUES` if set, else `DATABASE_URL` (same as poller).
  */
+function resolveStatistiquesDatabaseUrl(): string {
+  const url =
+    process.env.DATABASE_URL_STATISTIQUES?.trim() || process.env.DATABASE_URL?.trim() || ''
+  if (!url) {
+    throw new Error(
+      'DATABASE_URL_STATISTIQUES or DATABASE_URL is required for lelanation_statistiques.',
+    )
+  }
+  return url
+}
 import { drizzle } from 'drizzle-orm/node-postgres'
 import pg from 'pg'
 import * as statistiquesSchema from './statistiquesSchema.js'
@@ -13,11 +23,7 @@ type StatistiquesDb = ReturnType<typeof drizzle<typeof statistiquesSchema>>
 const poolMax = Math.max(1, Math.min(20, parseInt(process.env.DRIZZLE_STATISTIQUES_POOL_MAX ?? '5', 10) || 5))
 
 function createPool(): pg.Pool {
-  const url = process.env.DATABASE_URL?.trim()
-  if (!url) {
-    throw new Error('DATABASE_URL is not set. Required for lelanation_statistiques.')
-  }
-  return new pg.Pool({ connectionString: url, max: poolMax })
+  return new pg.Pool({ connectionString: resolveStatistiquesDatabaseUrl(), max: poolMax })
 }
 
 let pool: pg.Pool | undefined
@@ -36,7 +42,9 @@ export function getStatistiquesDb(): StatistiquesDb {
 }
 
 export function isStatistiquesDatabaseConfigured(): boolean {
-  return Boolean(process.env.DATABASE_URL?.trim())
+  return Boolean(
+    process.env.DATABASE_URL_STATISTIQUES?.trim() || process.env.DATABASE_URL?.trim(),
+  )
 }
 
 /** @deprecated use isStatistiquesDatabaseConfigured — single DB now */

@@ -4,7 +4,7 @@ import { computed, inject, ref, watch, unref } from 'vue'
 const p = inject('statisticsPageCtx') as any
 
 type ItemType = 'starter' | 'core' | 'boots' | 'final'
-type ItemTypeFilter = 'all' | ItemType
+type ItemTypeFilter = 'all' | ItemType | 'legendary'
 type SortKey = 'item' | 'type' | 'pickrate' | 'winrate' | 'deltaPick' | 'deltaWin'
 
 type RawItemRow = {
@@ -99,10 +99,13 @@ const itemSearchQuery = computed(() =>
 )
 
 const filteredRows = computed<TableRow[]>(() => {
-  const byType =
-    itemTypeFilter.value === 'all'
-      ? tableRows.value
-      : tableRows.value.filter(r => r.type === itemTypeFilter.value)
+  const byType = (() => {
+    if (itemTypeFilter.value === 'all') return tableRows.value
+    if (itemTypeFilter.value === 'legendary') {
+      return tableRows.value.filter(r => r.type === 'starter' || r.type === 'core')
+    }
+    return tableRows.value.filter(r => r.type === itemTypeFilter.value)
+  })()
   const q = itemSearchQuery.value
   if (!q) return byType
   return byType.filter(r => {
@@ -252,6 +255,7 @@ function deltaClass(value: number | null | undefined): string {
                 class="mt-1 w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-normal text-text"
               >
                 <option value="all">{{ p.t('statisticsPage.itemsTypeAll') }}</option>
+                <option value="legendary">{{ p.t('statisticsPage.itemsTypeLegendary') }}</option>
                 <option value="starter">{{ p.t('statisticsPage.itemKindStarter') }}</option>
                 <option value="core">{{ p.t('statisticsPage.itemKindCore') }}</option>
                 <option value="boots">{{ p.t('statisticsPage.itemKindBoots') }}</option>

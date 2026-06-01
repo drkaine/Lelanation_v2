@@ -43,6 +43,48 @@ const activeRoleLabel = computed(() => {
   const roles = (p.roles as Array<{ value: string; label: string }>) ?? []
   return roles.find(r => r.value === role)?.label ?? role
 })
+
+const STAT_COL_MIN_PX = 48
+const CHAMPION_COL_MIN_PX = 220
+const KDA_COL_MIN_PX = 160
+
+/** Colonnes stats (hors champion / KDA) actuellement affichées. */
+const visibleStatColumnCount = computed(() => {
+  let n = 0
+  if (p.showChampionSideColumns) n += 4
+  if (p.showChampionDealtColumns) {
+    n += 1
+    if (showChampionDealtBreakdown.value) n += 3
+  }
+  if (p.showChampionTakenColumns) {
+    n += 1
+    if (showChampionTakenBreakdown.value) n += 3
+  }
+  return n
+})
+
+const championTableMinWidthPx = computed(() => {
+  const statCols = visibleStatColumnCount.value
+  return CHAMPION_COL_MIN_PX + statCols * STAT_COL_MIN_PX + KDA_COL_MIN_PX
+})
+
+/** Variables CSS : colonnes restantes s’élargissent quand d’autres sont masquées. */
+const championTableLayoutStyle = computed(() => {
+  const statCols = visibleStatColumnCount.value
+  const statMaxPx = statCols <= 3 ? 112 : statCols <= 6 ? 88 : statCols <= 9 ? 72 : STAT_COL_MIN_PX
+  const championFlex = statCols <= 8 ? 1 : 0
+  const kdaFlex = statCols <= 6 ? 1 : 0
+  return {
+    width: '100%',
+    minWidth: `${championTableMinWidthPx.value}px`,
+    '--cg-stat-min': `${STAT_COL_MIN_PX}px`,
+    '--cg-stat-max': `${statMaxPx}px`,
+    '--cg-champion-min': `${CHAMPION_COL_MIN_PX}px`,
+    '--cg-champion-flex': String(championFlex),
+    '--cg-kda-min': `${KDA_COL_MIN_PX}px`,
+    '--cg-kda-flex': String(kdaFlex),
+  } as Record<string, string>
+})
 </script>
 
 <template>
@@ -212,25 +254,25 @@ const activeRoleLabel = computed(() => {
 
       <!-- Desktop : tableau -->
       <div
-        class="statistics-overview-surface hidden w-full overflow-x-auto rounded-lg border border-primary/30 md:block"
+        class="tier-list-mobile-rotate statistics-overview-surface hidden w-full overflow-x-auto rounded-lg border border-primary/30 md:block"
       >
         <div
           class="tier-list-lolalytics champion-global-table w-full min-w-0 text-[13px] text-text-primary/90"
-          :style="{ minWidth: p.championGlobalTableMinWidthPx + 'px' }"
+          :style="championTableLayoutStyle"
         >
           <div
-            class="tier-list-lolalytics-head sticky top-0 z-10 flex h-auto min-h-8 w-full items-stretch justify-between border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
+            class="tier-list-lolalytics-head sticky top-0 z-10 flex h-auto min-h-8 w-full items-stretch justify-start border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
           >
             <div
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[110px] shrink-0 items-center justify-start border-b border-black px-1.5"
+              class="champion-global-champ-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex items-center justify-start border-b border-black px-2 max-lg:w-[56px] max-lg:flex-none max-lg:shrink-0 max-lg:justify-center max-lg:px-0.5"
               :title="p.t('statisticsPage.championTableTooltipChampion')"
             >
-              {{ p.t('statisticsPage.tierListColChampion') }}
+              <span class="max-lg:hidden">{{ p.t('statisticsPage.tierListColChampion') }}</span>
             </div>
             <!-- Bleu : couleur uniquement sur le texte des titres -->
             <div
               v-show="p.showChampionSideColumns"
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
             >
               <button
                 type="button"
@@ -256,7 +298,7 @@ const activeRoleLabel = computed(() => {
             </div>
             <div
               v-show="p.showChampionSideColumns"
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
             >
               <button
                 type="button"
@@ -283,7 +325,7 @@ const activeRoleLabel = computed(() => {
             <!-- Rouge -->
             <div
               v-show="p.showChampionSideColumns"
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
             >
               <button
                 type="button"
@@ -309,7 +351,7 @@ const activeRoleLabel = computed(() => {
             </div>
             <div
               v-show="p.showChampionSideColumns"
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
             >
               <button
                 type="button"
@@ -336,7 +378,7 @@ const activeRoleLabel = computed(() => {
             <!-- Dégâts infligés -->
             <div
               v-show="p.showChampionDealtColumns"
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
             >
               <button
                 type="button"
@@ -367,7 +409,7 @@ const activeRoleLabel = computed(() => {
             </div>
             <div
               v-show="p.showChampionDealtColumns && showChampionDealtBreakdown"
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
             >
               <button
                 type="button"
@@ -390,7 +432,7 @@ const activeRoleLabel = computed(() => {
             </div>
             <div
               v-show="p.showChampionDealtColumns && showChampionDealtBreakdown"
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
             >
               <button
                 type="button"
@@ -413,7 +455,7 @@ const activeRoleLabel = computed(() => {
             </div>
             <div
               v-show="p.showChampionDealtColumns && showChampionDealtBreakdown"
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
             >
               <button
                 type="button"
@@ -437,7 +479,7 @@ const activeRoleLabel = computed(() => {
             <!-- Dégâts subis -->
             <div
               v-show="p.showChampionTakenColumns"
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
             >
               <button
                 type="button"
@@ -468,7 +510,7 @@ const activeRoleLabel = computed(() => {
             </div>
             <div
               v-show="p.showChampionTakenColumns && showChampionTakenBreakdown"
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
             >
               <button
                 type="button"
@@ -491,7 +533,7 @@ const activeRoleLabel = computed(() => {
             </div>
             <div
               v-show="p.showChampionTakenColumns && showChampionTakenBreakdown"
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
             >
               <button
                 type="button"
@@ -514,7 +556,7 @@ const activeRoleLabel = computed(() => {
             </div>
             <div
               v-show="p.showChampionTakenColumns && showChampionTakenBreakdown"
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
             >
               <button
                 type="button"
@@ -537,7 +579,7 @@ const activeRoleLabel = computed(() => {
             </div>
             <!-- KDA compact -->
             <div
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-40 shrink-0 flex-col items-stretch justify-center border-b border-black px-1 py-1"
+              class="champion-global-kda-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-col items-stretch justify-center border-b border-black px-1 py-1"
             >
               <div class="text-center text-[10px] font-semibold leading-tight text-text/90">
                 K / D / A
@@ -574,43 +616,21 @@ const activeRoleLabel = computed(() => {
           <div
             v-for="row in p.paginatedChampionGlobalRows"
             :key="row.championId"
-            class="tier-list-lolalytics-row flex min-h-[60px] w-full flex-nowrap items-center justify-between py-0.5 text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25"
+            class="tier-list-lolalytics-row flex min-h-[60px] w-full cursor-pointer flex-nowrap items-center justify-start py-0.5 text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
+            role="button"
+            tabindex="0"
+            @click="navigateTo(p.localePath('/statistics/champion/' + row.championId))"
+            @keydown.enter="navigateTo(p.localePath('/statistics/champion/' + row.championId))"
           >
-            <div
-              class="tier-list-lolalytics-td flex w-[110px] shrink-0 flex-col items-center justify-center gap-0.5 px-1 py-0.5 text-center"
-            >
-              <NuxtLink
-                v-if="p.gameVersion && p.championByKey(row.championId)"
-                :to="
-                  p.localePath(`/statistics/champion/${encodeURIComponent(String(row.championId))}`)
-                "
-                class="inline-flex rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
-                :title="p.championName(row.championId) || String(row.championId)"
-              >
-                <StatisticsChampionPortrait
-                  :src="
-                    p.getChampionImageUrl(
-                      p.gameVersion,
-                      p.championByKey(row.championId)!.image.full
-                    )
-                  "
-                  :alt="p.championName(row.championId) || ''"
-                  :champion-id="row.championId"
-                  :champion-name="p.championName(row.championId) || ''"
-                  :size="32"
-                />
-              </NuxtLink>
-              <span
-                class="line-clamp-2 max-w-full text-[10px] font-medium leading-tight text-accent"
-                :title="p.championName(row.championId) || String(row.championId)"
-                ><StatisticsChampionNameHighlight
-                  :name="String(p.championName(row.championId) || row.championId)"
-                  :query="p.championSearchQuery"
-              /></span>
-            </div>
+            <StatisticsTierListChampionCell
+              :champion-id="row.championId"
+              :highlight-query="p.championSearchQuery"
+              width-class="champion-global-champ-col max-lg:w-[56px]"
+              allow-grow
+            />
             <div
               v-show="p.showChampionSideColumns"
-              class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
+              class="champion-global-stat-col tier-list-lolalytics-td flex flex-col items-center justify-center gap-0 text-center leading-tight"
             >
               <span
                 :class="row.blue.games ? p.tierListWinrateClass(row.blue.winrate) : 'text-text/55'"
@@ -642,7 +662,7 @@ const activeRoleLabel = computed(() => {
             </div>
             <div
               v-show="p.showChampionSideColumns"
-              class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
+              class="champion-global-stat-col tier-list-lolalytics-td flex flex-col items-center justify-center gap-0 text-center leading-tight"
             >
               <span
                 :class="
@@ -676,7 +696,7 @@ const activeRoleLabel = computed(() => {
             </div>
             <div
               v-show="p.showChampionSideColumns"
-              class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
+              class="champion-global-stat-col tier-list-lolalytics-td flex flex-col items-center justify-center gap-0 text-center leading-tight"
             >
               <span
                 :class="row.red.games ? p.tierListWinrateClass(row.red.winrate) : 'text-text/55'"
@@ -708,7 +728,7 @@ const activeRoleLabel = computed(() => {
             </div>
             <div
               v-show="p.showChampionSideColumns"
-              class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
+              class="champion-global-stat-col tier-list-lolalytics-td flex flex-col items-center justify-center gap-0 text-center leading-tight"
             >
               <span
                 :class="
@@ -742,7 +762,7 @@ const activeRoleLabel = computed(() => {
             </div>
             <div
               v-show="p.showChampionDealtColumns"
-              class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
+              class="champion-global-stat-col tier-list-lolalytics-td flex flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
             >
               <span class="font-medium">{{
                 p.formatChampionGlobalNum(row.avgDamageToChamps)
@@ -772,7 +792,7 @@ const activeRoleLabel = computed(() => {
             </div>
             <div
               v-show="p.showChampionDealtColumns && showChampionDealtBreakdown"
-              class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
+              class="champion-global-stat-col tier-list-lolalytics-td flex flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
             >
               <span class="font-medium text-amber-300">{{
                 p.formatChampionGlobalNum(row.avgDamageToChampsPhys)
@@ -802,7 +822,7 @@ const activeRoleLabel = computed(() => {
             </div>
             <div
               v-show="p.showChampionDealtColumns && showChampionDealtBreakdown"
-              class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
+              class="champion-global-stat-col tier-list-lolalytics-td flex flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
             >
               <span class="font-medium text-violet-300">{{
                 p.formatChampionGlobalNum(row.avgDamageToChampsMagic)
@@ -832,7 +852,7 @@ const activeRoleLabel = computed(() => {
             </div>
             <div
               v-show="p.showChampionDealtColumns && showChampionDealtBreakdown"
-              class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
+              class="champion-global-stat-col tier-list-lolalytics-td flex flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
             >
               <span class="font-medium text-slate-200">{{
                 p.formatChampionGlobalNum(row.avgDamageToChampsTrue)
@@ -862,7 +882,7 @@ const activeRoleLabel = computed(() => {
             </div>
             <div
               v-show="p.showChampionTakenColumns"
-              class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
+              class="champion-global-stat-col tier-list-lolalytics-td flex flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
             >
               <span class="font-medium">{{
                 p.formatChampionGlobalNum(row.avgDamageTakenTotal)
@@ -893,7 +913,7 @@ const activeRoleLabel = computed(() => {
             </div>
             <div
               v-show="p.showChampionTakenColumns && showChampionTakenBreakdown"
-              class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
+              class="champion-global-stat-col tier-list-lolalytics-td flex flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
             >
               <span class="font-medium text-amber-300">{{
                 p.formatChampionGlobalNum(row.avgDamageTakenPhys)
@@ -924,7 +944,7 @@ const activeRoleLabel = computed(() => {
             </div>
             <div
               v-show="p.showChampionTakenColumns && showChampionTakenBreakdown"
-              class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
+              class="champion-global-stat-col tier-list-lolalytics-td flex flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
             >
               <span class="font-medium text-violet-300">{{
                 p.formatChampionGlobalNum(row.avgDamageTakenMagic)
@@ -955,7 +975,7 @@ const activeRoleLabel = computed(() => {
             </div>
             <div
               v-show="p.showChampionTakenColumns && showChampionTakenBreakdown"
-              class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
+              class="champion-global-stat-col tier-list-lolalytics-td flex flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
             >
               <span class="font-medium text-slate-200">{{
                 p.formatChampionGlobalNum(row.avgDamageTakenTrue)
@@ -985,7 +1005,7 @@ const activeRoleLabel = computed(() => {
               >
             </div>
             <div
-              class="tier-list-lolalytics-td flex w-40 shrink-0 flex-col items-center justify-center gap-0.5 font-mono text-[13px] leading-tight"
+              class="champion-global-kda-col tier-list-lolalytics-td flex flex-col items-center justify-center gap-0.5 font-mono text-[13px] leading-tight"
             >
               <span class="font-semibold">
                 {{ p.formatChampionGlobalNum(row.avgKills) }} /
@@ -1118,3 +1138,24 @@ const activeRoleLabel = computed(() => {
     </template>
   </div>
 </template>
+
+<style scoped>
+.champion-global-table :deep(.champion-global-stat-col) {
+  flex: 1 1 var(--cg-stat-min, 3rem);
+  min-width: var(--cg-stat-min, 3rem);
+  max-width: var(--cg-stat-max, 3rem);
+  width: auto;
+}
+
+.champion-global-table :deep(.champion-global-champ-col) {
+  flex: var(--cg-champion-flex, 0) 1 var(--cg-champion-min, 220px);
+  min-width: var(--cg-champion-min, 220px);
+  width: auto;
+}
+
+.champion-global-table :deep(.champion-global-kda-col) {
+  flex: var(--cg-kda-flex, 0) 1 var(--cg-kda-min, 10rem);
+  min-width: var(--cg-kda-min, 10rem);
+  width: auto;
+}
+</style>

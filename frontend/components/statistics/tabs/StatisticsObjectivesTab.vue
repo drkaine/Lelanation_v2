@@ -22,7 +22,15 @@ function pct(count: number, total: number): number | null {
 
 function formatPct(value: number | null): string {
   if (value == null) return '—'
-  return `${value.toFixed(2)}%`
+  const v = Math.min(100, Math.max(0, value))
+  return `${v.toFixed(2)}%`
+}
+
+/** Limite un comptage d'obtention au nombre de matchs (évite affichage > 100 %). */
+function cappedObtentionCount(raw: number, matchCount: number): number {
+  const n = Number(raw) || 0
+  if (n <= 0 || matchCount <= 0) return 0
+  return Math.min(n, matchCount)
 }
 
 /** Limite les comptages soul agrégés (évite >100 % si chevauchement des types). */
@@ -51,20 +59,22 @@ function teamFirstPctParts(
   if (!curData || curData.matchCount <= 0)
     return { current: '—', delta: '', deltaClass: 'text-text/80' }
   const curObj = curData.objectives?.[objectiveKey] ?? {}
-  const curCount = side === 'win' ? Number(curObj.firstByWin ?? 0) : Number(curObj.firstByLoss ?? 0)
-  const curPct = pct(curCount, Number(curData.matchCount))
+  const matchCount = Number(curData.matchCount)
+  const rawCount = side === 'win' ? Number(curObj.firstByWin ?? 0) : Number(curObj.firstByLoss ?? 0)
+  const curCount = cappedObtentionCount(rawCount, matchCount)
+  const curPct = pct(curCount, matchCount)
   const baseData = p.overviewTeamsBaselineData
   const baseObj = baseData?.objectives?.[objectiveKey] ?? null
-  const baseCount =
+  const baseMatchCount = baseData ? Number(baseData.matchCount) : 0
+  const baseRaw =
     baseObj == null
       ? null
       : side === 'win'
         ? Number(baseObj.firstByWin ?? 0)
         : Number(baseObj.firstByLoss ?? 0)
-  const basePct =
-    baseData && baseData.matchCount > 0 && baseCount != null
-      ? pct(baseCount, Number(baseData.matchCount))
-      : null
+  const baseCount =
+    baseRaw != null && baseMatchCount > 0 ? cappedObtentionCount(baseRaw, baseMatchCount) : null
+  const basePct = baseMatchCount > 0 && baseCount != null ? pct(baseCount, baseMatchCount) : null
   const delta = curPct != null && basePct != null ? curPct - basePct : null
   return {
     current: formatPct(curPct),
@@ -81,21 +91,23 @@ function sideFirstPctParts(
   if (!curData || curData.matchCount <= 0)
     return { current: '—', delta: '', deltaClass: 'text-text/80' }
   const curObj = curData.objectivesBySideTable?.[objectiveKey] ?? {}
-  const curCount =
+  const matchCount = Number(curData.matchCount)
+  const rawCount =
     side === 'blue' ? Number(curObj.firstByBlue ?? 0) : Number(curObj.firstByRed ?? 0)
-  const curPct = pct(curCount, Number(curData.matchCount))
+  const curCount = cappedObtentionCount(rawCount, matchCount)
+  const curPct = pct(curCount, matchCount)
   const baseData = p.overviewSidesBaselineData
   const baseObj = baseData?.objectivesBySideTable?.[objectiveKey] ?? null
-  const baseCount =
+  const baseMatchCount = baseData ? Number(baseData.matchCount) : 0
+  const baseRaw =
     baseObj == null
       ? null
       : side === 'blue'
         ? Number(baseObj.firstByBlue ?? 0)
         : Number(baseObj.firstByRed ?? 0)
-  const basePct =
-    baseData && baseData.matchCount > 0 && baseCount != null
-      ? pct(baseCount, Number(baseData.matchCount))
-      : null
+  const baseCount =
+    baseRaw != null && baseMatchCount > 0 ? cappedObtentionCount(baseRaw, baseMatchCount) : null
+  const basePct = baseMatchCount > 0 && baseCount != null ? pct(baseCount, baseMatchCount) : null
   const delta = curPct != null && basePct != null ? curPct - basePct : null
   return {
     current: formatPct(curPct),
@@ -118,14 +130,17 @@ function formatFirstObjectiveWr(value: number | null | undefined): string {
 type WrParts = { current: string; delta: string; deltaClass: string }
 
 function wrPartsFromValues(cur: number | null, base: number | null): WrParts {
-  const delta = cur != null && base != null ? cur - base : null
+  const curClamped = cur != null ? clampSoulWinrate(cur) : null
+  const baseClamped = base != null ? clampSoulWinrate(base) : null
+  const delta = curClamped != null && baseClamped != null ? curClamped - baseClamped : null
   return {
-    current: formatFirstObjectiveWr(cur),
+    current: formatFirstObjectiveWr(curClamped),
     delta: formatDelta(delta),
     deltaClass: deltaColorClass(delta),
   }
 }
 
+/** WR parmi les matchs avec exactement `count` prises (win + loss dans l’histogramme). */
 function winrateFromOutcomeDist(
   winDist: Record<string, number> | undefined,
   lossDist: Record<string, number> | undefined,
@@ -432,22 +447,26 @@ function drakeSoulPctParts(
     return { current: '—', delta: '', deltaClass: 'text-text/80' }
   }
   const curRow = p.drakeSoulRows.find((r: { key: string }) => r.key === key)
-  const curCount = side === 'win' ? Number(curRow?.byWin ?? 0) : Number(curRow?.byLoss ?? 0)
+  const matchCount = Number(curData.matchCount)
+  const curCount = cappedObtentionCount(
+    side === 'win' ? Number(curRow?.byWin ?? 0) : Number(curRow?.byLoss ?? 0),
+    matchCount
+  )
   if (curCount <= 0) return { current: '—', delta: '', deltaClass: 'text-text/80' }
-  const curPct = pct(curCount, Number(curData.matchCount))
+  const curPct = pct(curCount, matchCount)
 
   const baseData = p.overviewTeamsBaselineData
   const baseSoul = baseData?.drakes?.souls?.[key]
-  const baseCount =
+  const baseMatchCount = baseData ? Number(baseData.matchCount) : 0
+  const baseRaw =
     baseSoul == null
       ? null
       : side === 'win'
         ? Number(baseSoul.byWin ?? 0)
         : Number(baseSoul.byLoss ?? 0)
-  const basePct =
-    baseData && baseData.matchCount > 0 && baseCount != null
-      ? pct(baseCount, Number(baseData.matchCount))
-      : null
+  const baseCount =
+    baseRaw != null && baseMatchCount > 0 ? cappedObtentionCount(baseRaw, baseMatchCount) : null
+  const basePct = baseMatchCount > 0 && baseCount != null ? pct(baseCount, baseMatchCount) : null
 
   const delta = curPct != null && basePct != null ? curPct - basePct : null
   return {
@@ -466,22 +485,26 @@ function drakeSoulPctPartsSides(
     return { current: '—', delta: '', deltaClass: 'text-text/80' }
   }
   const curSoul = sidesDrakeSoulByKey(key)
-  const curCount = side === 'blue' ? Number(curSoul.byBlue ?? 0) : Number(curSoul.byRed ?? 0)
+  const matchCount = Number(curData.matchCount)
+  const curCount = cappedObtentionCount(
+    side === 'blue' ? Number(curSoul.byBlue ?? 0) : Number(curSoul.byRed ?? 0),
+    matchCount
+  )
   if (curCount <= 0) return { current: '—', delta: '', deltaClass: 'text-text/80' }
-  const curPct = pct(curCount, Number(curData.matchCount))
+  const curPct = pct(curCount, matchCount)
 
   const baseData = p.overviewSidesBaselineData
   const baseSoul = baseData?.drakesBySide?.souls?.[key]
-  const baseCount =
+  const baseMatchCount = baseData ? Number(baseData.matchCount) : 0
+  const baseRaw =
     baseSoul == null
       ? null
       : side === 'blue'
         ? Number(baseSoul.byBlue ?? 0)
         : Number(baseSoul.byRed ?? 0)
-  const basePct =
-    baseData && baseData.matchCount > 0 && baseCount != null
-      ? pct(baseCount, Number(baseData.matchCount))
-      : null
+  const baseCount =
+    baseRaw != null && baseMatchCount > 0 ? cappedObtentionCount(baseRaw, baseMatchCount) : null
+  const basePct = baseMatchCount > 0 && baseCount != null ? pct(baseCount, baseMatchCount) : null
 
   const delta = curPct != null && basePct != null ? curPct - basePct : null
   return {
@@ -1008,10 +1031,11 @@ const drakeSoulWinrateRows = computed(() =>
                 </span>
               </td>
             </tr>
-            <template v-for="key in p.objectiveKeysWithKills" :key="key">
+            <template v-for="key in p.objectiveKeysOrdered" :key="key">
               <tr>
                 <td class="py-1.5 pr-2">
                   <button
+                    v-if="p.objectiveHasKillDropdown(key)"
                     type="button"
                     class="flex items-center gap-1 font-medium text-text/90 hover:text-text"
                     @click="syncToggleObjective(key)"
@@ -1033,6 +1057,18 @@ const drakeSoulWinrateRows = computed(() =>
                     />
                     {{ p.t('statisticsPage.overviewTeamsObjective_' + key) }}
                   </button>
+                  <div v-else class="flex items-center gap-1 font-medium text-text/90">
+                    <img
+                      v-if="p.objectiveIconSrc(key)"
+                      :src="p.objectiveIconSrc(key)"
+                      :alt="p.t('statisticsPage.overviewTeamsObjective_' + key)"
+                      class="h-4 w-4 object-contain"
+                      loading="lazy"
+                      decoding="async"
+                      @error="p.onObjectiveIconError($event, key)"
+                    />
+                    {{ p.t('statisticsPage.overviewTeamsObjective_' + key) }}
+                  </div>
                 </td>
                 <td class="px-1 py-1.5 text-center">
                   {{ teamFirstPctParts(key, 'win').current }}
@@ -1059,7 +1095,7 @@ const drakeSoulWinrateRows = computed(() =>
                   </span>
                 </td>
               </tr>
-              <template v-if="p.openObjectiveKeys.has(key)">
+              <template v-if="p.objectiveHasKillDropdown(key) && p.openObjectiveKeys.has(key)">
                 <tr
                   v-for="count in p.objectiveCounts(key)"
                   :key="key + '-' + count"
@@ -1435,10 +1471,11 @@ const drakeSoulWinrateRows = computed(() =>
                 <template v-else>—</template>
               </td>
             </tr>
-            <template v-for="key in p.objectiveKeysWithKills" :key="'first-wr-' + key">
+            <template v-for="key in p.objectiveKeysOrdered" :key="'first-wr-' + key">
               <tr>
                 <td class="py-1.5 pr-2">
                   <button
+                    v-if="p.objectiveHasKillDropdown(key)"
                     type="button"
                     class="flex items-center gap-1 font-medium text-text/90 hover:text-text"
                     @click="syncToggleObjective(key)"
@@ -1460,6 +1497,18 @@ const drakeSoulWinrateRows = computed(() =>
                     />
                     {{ p.t('statisticsPage.overviewTeamsObjective_' + key) }}
                   </button>
+                  <div v-else class="flex items-center gap-1 font-medium text-text/90">
+                    <img
+                      v-if="p.objectiveIconSrc(key)"
+                      :src="p.objectiveIconSrc(key)"
+                      :alt="p.t('statisticsPage.overviewTeamsObjective_' + key)"
+                      class="h-4 w-4 object-contain"
+                      loading="lazy"
+                      decoding="async"
+                      @error="p.onObjectiveIconError($event, key)"
+                    />
+                    {{ p.t('statisticsPage.overviewTeamsObjective_' + key) }}
+                  </div>
                 </td>
                 <td class="px-1 py-1.5 text-center">
                   <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
@@ -1489,7 +1538,7 @@ const drakeSoulWinrateRows = computed(() =>
                   <template v-else>—</template>
                 </td>
               </tr>
-              <template v-if="p.openObjectiveKeys.has(key)">
+              <template v-if="p.objectiveHasKillDropdown(key) && p.openObjectiveKeys.has(key)">
                 <tr
                   v-for="count in p.objectiveCounts(key)"
                   :key="key + '-wr-' + count"

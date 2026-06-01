@@ -51,7 +51,10 @@ import {
 import { getChampionSpellOrders } from '../services/StatsChampionSpellOrdersService.js'
 import { getChampionTierSnapshotsForCharts } from '../services/ChampionTierDailySnapshotService.js'
 import { getChampionObjectivesSummary } from '../services/StatsChampionObjectivesService.js'
-import { getBalanceFramework } from '../services/StatsBalanceService.js'
+import {
+  collapseBalanceRowsToMainRole,
+  getBalanceFramework,
+} from '../services/StatsBalanceService.js'
 import {
   getBotlaneDuoOverallTierTable,
   getBotlaneDuoVsDuoTierTable,
@@ -1591,7 +1594,13 @@ router.get('/balance-framework', async (req: Request, res: Response) => {
       abrByLevel: { average: 0, skilled: 0, elite: 0 },
       rows: [],
     }
-  response.rows = filterBalanceRowsByOtp(response.rows ?? [], otpMode, Boolean(role))
+  let balanceRows = response.rows ?? []
+  const roleScoped = Boolean(role?.trim())
+  if (!roleScoped) {
+    balanceRows = collapseBalanceRowsToMainRole(balanceRows)
+  }
+  // Après réduction au rôle principal, pickrate = exposition réelle (pas ×5).
+  response.rows = filterBalanceRowsByOtp(balanceRows, otpMode, true)
   return res.json(response)
 })
 
