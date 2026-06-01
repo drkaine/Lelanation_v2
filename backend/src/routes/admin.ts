@@ -34,7 +34,10 @@ import {
   aggregatePollerMetricsFromUnifiedLog,
   type PollerLogSource,
 } from '../services/PollerMetricsFromLog.js'
-import { computePollerV2Dashboard } from '../services/PollerV2DashboardService.js'
+import {
+  loadPollerObservabilityAdminResponse,
+  readPollerProcessLogTail,
+} from '../services/PollerMetricsAdminService.js'
 import { resolveRiotApiKey } from '../services/RiotGateway.js'
 import { riotGateway } from '../services/RiotGateway.js'
 export type { AdminDataCollectStats } from '../services/AdminDataCollectService.js'
@@ -278,42 +281,58 @@ router.get('/riot-poller/status', async (_req, res) => {
   return res.json(payload)
 })
 
-/** GET /api/admin/poller-v2/observability — latest poller-v2 runtime snapshot (written by poller-v2 process). */
+/** GET /api/admin/poller/observability — snapshots poller-metrics + files d’attente live. */
+router.get('/poller/observability', async (_req, res) => {
+  const payload = await loadPollerObservabilityAdminResponse(backendRoot, ROOT_LOGS_DIR)
+  return res.json(payload)
+})
+
+/** @deprecated use GET /api/admin/poller/observability */
 router.get('/poller-v2/observability', async (_req, res) => {
-  const filePath = join(process.cwd(), '..', 'logs', 'poller-v2-observability.json')
+  const payload = await loadPollerObservabilityAdminResponse(backendRoot, ROOT_LOGS_DIR)
+  return res.json(payload)
+})
+
+/** @deprecated alias */
+router.get('/poller-v3/metrics', async (_req, res) => {
+  const payload = await loadPollerObservabilityAdminResponse(backendRoot, ROOT_LOGS_DIR)
+  return res.json(payload)
+})
+
+/** GET /api/admin/riot-poller/process-logs — tail PM2 stdout/stderr du process poller. */
+router.get('/riot-poller/process-logs', async (req, res) => {
+  const linesParam = Number(req.query.lines)
+  const lines = Number.isFinite(linesParam) && linesParam > 0 ? Math.min(linesParam, 1000) : 200
+  const stream =
+    req.query.stream === 'error' ? 'error' : req.query.stream === 'out' ? 'out' : 'both'
   try {
-    const raw = await fs.readFile(filePath, 'utf-8')
-    const data = JSON.parse(raw) as Record<string, unknown>
-    const atIso = typeof data['atIso'] === 'string' ? data['atIso'] : null
-    const ageMs = atIso ? Date.now() - new Date(atIso).getTime() : null
-    const stale = typeof ageMs === 'number' ? ageMs > 2 * 60_000 : true
-    const dashboard = computePollerV2Dashboard(data)
-    return res.json({
-      ok: true,
-      stale,
-      ageMs,
-      data,
-      dashboard,
-    })
+    const { log, files } = await readPollerProcessLogTail(ROOT_LOGS_DIR, { stream, lines })
+    return res.json({ log, files, logDir: 'logs' })
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code
-    if (code === 'ENOENT') {
-      return res.json({ ok: false, stale: true, ageMs: null, data: null })
-    }
-    return res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) })
+    return res.status(500).json({
+      error: err instanceof Error ? err.message : String(err),
+      log: [],
+    })
   }
 })
 
-/** GET /api/admin/riot-poller/metrics — agrégation des résumés poller-v2 dans le log unifié (`source=both` inclut l’ancien poller). */
+/** GET /api/admin/riot-poller/metrics — agrégation des résumés poller_v3_* dans le log unifié. */
 router.get('/riot-poller/metrics', async (req, res) => {
   try {
     const granularity = req.query.granularity === 'day' ? 'day' : 'hour'
-    const sourceParam = typeof req.query.source === 'string' ? req.query.source.trim() : 'v2'
-    let sources: PollerLogSource[] = ['poller_v2_hourly', 'poller_v2_30m']
-    if (sourceParam === 'both') {
-      sources = ['poller_hourly', 'poller_30m', 'poller_v2_hourly', 'poller_v2_30m']
-    } else if (sourceParam === 'hourly') sources = ['poller_v2_hourly']
-    else if (sourceParam === '30m' || sourceParam === 'poller_30m') sources = ['poller_v2_30m']
+    const sourceParam = typeof req.query.source === 'string' ? req.query.source.trim() : 'v3'
+    const legacy =
+      sourceParam === 'legacy' || process.env.ADMIN_POLLER_LEGACY_LOG_SCRIPTS === '1'
+    let sources: PollerLogSource[] = ['poller_v3_1h', 'poller_v3_30m', 'poller_v3_10m']
+    if (legacy) {
+      sources = ['poller_hourly', 'poller_30m', 'poller_v3_1h', 'poller_v3_30m']
+    } else if (sourceParam === '1h' || sourceParam === 'hourly') {
+      sources = ['poller_v3_1h']
+    } else if (sourceParam === '30m') {
+      sources = ['poller_v3_30m']
+    } else if (sourceParam === '10m') {
+      sources = ['poller_v3_10m']
+    }
 
     const now = new Date()
     const toIso =
@@ -445,11 +464,12 @@ router.get('/riot-poller/logs', async (req, res) => {
     for (const line of allLines) {
       const p = parseUnifiedLogLine(line, 0)
       if (!p) continue
-      const isV2 = p.script.startsWith('poller_v2')
-      const isLegacyPoller =
-        includeLegacyScripts &&
-        (p.script === 'poller' || p.script === 'poller_30m' || p.script === 'poller_hourly')
-      if (!(isV2 || isLegacyPoller)) continue
+      const isPoller =
+        p.script.startsWith('poller_v3_') ||
+        p.script.startsWith('poller_db_') ||
+        (includeLegacyScripts &&
+          (p.script === 'poller' || p.script === 'poller_30m' || p.script === 'poller_hourly'))
+      if (!isPoller) continue
       pollerLines.push(line)
     }
     const log = sort === 'asc' ? pollerLines.slice(-lines) : pollerLines.slice(-lines).reverse()

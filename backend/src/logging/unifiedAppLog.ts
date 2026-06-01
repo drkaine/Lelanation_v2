@@ -134,16 +134,16 @@ export async function readUnifiedLogTail(maxBytes = 4 * 1024 * 1024): Promise<st
   }
 }
 
-/** Inclure `poller_30m` / `poller_hourly` (ancien poller in-process) dans les résumés admin. */
+/** Inclure `poller_30m` / `poller_hourly` (très ancien poller in-process) dans les résumés admin. */
 const POLLER_LEGACY_UNIFIED_LOG = process.env.ADMIN_POLLER_LEGACY_LOG_SCRIPTS === '1'
 const POLLER_30M_SCRIPTS = POLLER_LEGACY_UNIFIED_LOG
-  ? new Set(['poller_30m', 'poller_v2_30m'])
-  : new Set(['poller_v2_30m'])
+  ? new Set(['poller_30m', 'poller_v3_30m'])
+  : new Set(['poller_v3_30m'])
 const POLLER_HOURLY_SCRIPTS = POLLER_LEGACY_UNIFIED_LOG
-  ? new Set(['poller_hourly', 'poller_v2_hourly'])
-  : new Set(['poller_v2_hourly'])
+  ? new Set(['poller_hourly', 'poller_v3_1h'])
+  : new Set(['poller_v3_1h'])
 
-/** Derniers résumés 30m / horaire dans le log unifié (poller-v2 par défaut). */
+/** Derniers résumés 30m / horaire dans le log unifié (poller-metrics v3). */
 export async function findLatestPollerSummaryEntries(): Promise<{
   last30m: ParsedUnifiedLogEntry | null
   lastHourly: ParsedUnifiedLogEntry | null

@@ -1,14 +1,34 @@
-import { rename, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { mkdir, rename, writeFile } from 'node:fs/promises';
+import { dirname, join, resolve, isAbsolute } from 'node:path';
 import { pollerMetricsLogger } from './logger.js';
 import type { FullSnapshot, WindowLabel } from './types.js';
 
+function resolvePrimarySnapshotPath(filePath: string): string {
+  const trimmed = filePath.trim();
+  if (isAbsolute(trimmed)) return trimmed;
+  return resolve(trimmed);
+}
+
+/** Mirror path for admin API (`logs/poller-observability.json` at project root). */
+function resolveMirrorSnapshotPath(primaryPath: string): string | null {
+  if (process.env.OBSERVABILITY_SNAPSHOT_MIRROR === '0') return null;
+  const mirrorEnv = process.env.OBSERVABILITY_SNAPSHOT_MIRROR_PATH?.trim();
+  if (mirrorEnv) return resolve(mirrorEnv);
+  const parts = primaryPath.split(/[/\\]/);
+  const backendIdx = parts.lastIndexOf('backend');
+  if (backendIdx === -1) return null;
+  const projectRoot = parts.slice(0, backendIdx).join('/') || join(...parts.slice(0, backendIdx));
+  return join(projectRoot, 'logs', 'poller-observability.json');
+}
+
 export class SnapshotPersistence {
   private readonly filePath: string;
+  private readonly mirrorPath: string | null;
   private data: Partial<Record<WindowLabel, FullSnapshot>> = {};
 
   constructor(filePath = process.env.OBSERVABILITY_SNAPSHOT_PATH ?? './poller-observability.json') {
-    this.filePath = resolve(filePath);
+    this.filePath = resolvePrimarySnapshotPath(filePath);
+    this.mirrorPath = resolveMirrorSnapshotPath(this.filePath);
   }
 
   async load(): Promise<void> {
@@ -37,15 +57,25 @@ export class SnapshotPersistence {
 
   async save(window: WindowLabel, snapshot: FullSnapshot): Promise<void> {
     this.data[window] = snapshot;
-    const tmp = `${this.filePath}.tmp`;
-    try {
-      await writeFile(tmp, JSON.stringify(this.data, null, 2), 'utf8');
-      await rename(tmp, this.filePath);
-    } catch (error) {
-      pollerMetricsLogger.warn(
-        { component: 'SnapshotPersistence', window, error: error instanceof Error ? error.message : String(error) },
-        'failed to persist snapshot',
-      );
+    const payload = JSON.stringify(this.data, null, 2);
+    const targets = [this.filePath, ...(this.mirrorPath ? [this.mirrorPath] : [])];
+    for (const target of targets) {
+      const tmp = `${target}.tmp`;
+      try {
+        await mkdir(dirname(target), { recursive: true });
+        await writeFile(tmp, payload, 'utf8');
+        await rename(tmp, target);
+      } catch (error) {
+        pollerMetricsLogger.warn(
+          {
+            component: 'SnapshotPersistence',
+            window,
+            target,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          'failed to persist snapshot',
+        );
+      }
     }
   }
 

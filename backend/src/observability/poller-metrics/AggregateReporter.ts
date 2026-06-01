@@ -1,10 +1,11 @@
+import { appendUnifiedLog } from '../../logging/unifiedAppLog.js';
 import type { RiotGateway } from '../../riot-gateway/gateway/RiotGateway.js';
 import type { AlertDetector } from './AlertDetector.js';
 import type { AggregateComputer } from './AggregateComputer.js';
 import { pollerMetricsLogger } from './logger.js';
 import type { SnapshotPersistence } from './SnapshotPersistence.js';
 import { getLatestResolvedSince } from '../../poll-orchestration/sinceContext.js';
-import type { WindowLabel } from './types.js';
+import type { FullSnapshot, WindowLabel } from './types.js';
 
 const REPORT_INTERVALS: Record<WindowLabel, number> = {
   '10m': 10 * 60 * 1000,
@@ -57,17 +58,40 @@ export class AggregateReporter {
     }
 
     const resolved = getLatestResolvedSince();
+    const enriched: FullSnapshot = resolved
+      ? {
+          ...snapshot,
+          since: {
+            mode: resolved.mode,
+            sinceTimestamp: resolved.sinceTimestamp,
+            reason: resolved.reason,
+          },
+        }
+      : snapshot;
+
     pollerMetricsLogger.info({
       component: 'aggregate-reporter',
       window,
       since_mode: resolved?.mode ?? 'unknown',
-      gateway: snapshot.gateway,
-      poll: snapshot.poll,
-      ingestion: snapshot.ingestion,
-      ratios: snapshot.ratios,
-      active_alerts: snapshot.active_alerts,
+      gateway: enriched.gateway,
+      poll: enriched.poll,
+      ingestion: enriched.ingestion,
+      ratios: enriched.ratios,
+      active_alerts: enriched.active_alerts,
     });
 
-    await this.persistence.save(window, snapshot);
+    if (window === '10m' || window === '30m' || window === '1h') {
+      await appendUnifiedLog({
+        section: 'back',
+        type: enriched.active_alerts.some((a) => a.severity === 'error' || a.severity === 'fatal')
+          ? 'warning'
+          : 'info',
+        script: `poller_v3_${window}`,
+        message: `poller-v3 aggregate ${window}`,
+        json: enriched as unknown as Record<string, unknown>,
+      });
+    }
+
+    await this.persistence.save(window, enriched);
   }
 }

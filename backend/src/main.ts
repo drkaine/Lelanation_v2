@@ -3,7 +3,6 @@ import type { Worker } from 'bullmq';
 import { config } from './config/index.js';
 import { healthCheck, sql } from './db/client.js';
 import { appendUnifiedLog } from './logging/unifiedAppLog.js';
-import { pollerV2Observability } from './observability/poller-v2-observability.js';
 import {
   BackpressureMonitor,
   MatchFilter,
@@ -30,7 +29,7 @@ import { orchestrationLogger } from './poll-orchestration/logger.js';
 import { ObservabilityOrchestrator } from './observability/poller-metrics/index.js';
 import { PollerTuner, TUNER_MAX_DISCOVERY_FETCH } from './tuner/index.js';
 
-const POLLER_LEADER_LOCK_KEY = 'poller-v2:leader';
+const POLLER_LEADER_LOCK_KEY = 'poller:leader';
 const POLLER_LEADER_LOCK_TTL_SEC = 120;
 
 const orchEnv = loadPollOrchestrationEnv();
@@ -114,27 +113,15 @@ async function getDataLagSeconds(): Promise<number | null> {
 }
 
 async function logMetricsTick(): Promise<void> {
-  const startedAt = Date.now();
   const metrics = await getQueueMetrics();
   const gateway = RiotGateway.getInstance().getStatus();
   const lagSeconds = await getDataLagSeconds();
-
-  pollerV2Observability.recordQueueSnapshot({
-    discovery: metrics.discovery,
-    hydration: metrics.hydration,
-    ingestion: metrics.ingestion,
-    rank: metrics.rank,
-    dataLagSeconds: lagSeconds,
-    tickDurationMs: Date.now() - startedAt,
-    rankWorkerConfiguredConcurrency: 0,
-    rankBacklog: (metrics.rank.waiting ?? 0) + (metrics.rank.active ?? 0),
-  });
-  await pollerV2Observability.flushSnapshotToDisk();
-
   const bucket120 = gateway.buckets.find((b) => b.windowMs === 120_000);
   console.log(
     `[poller-main] ingestion(w:${metrics.ingestion.waiting},a:${metrics.ingestion.active}) ` +
-      `gateway_r429=${gateway.metrics.totals.r429} bucket120=${bucket120?.available ?? 'n/a'}/${bucket120?.limit ?? 'n/a'}`,
+      `hydration(w:${metrics.hydration.waiting},a:${metrics.hydration.active}) ` +
+      `lag_s=${lagSeconds ?? 'n/a'} gateway_r429=${gateway.metrics.totals.r429} ` +
+      `bucket120=${bucket120?.available ?? 'n/a'}/${bucket120?.limit ?? 'n/a'}`,
   );
 }
 
@@ -179,26 +166,24 @@ async function runPatchRetentionPurge(): Promise<void> {
   }
 }
 
-async function emitWindowSummary(window: '30m' | '1h'): Promise<void> {
+async function emitDbWindowSummary(window: '30m' | '1h'): Promise<void> {
   const now = Date.now();
   const windowMs = window === '30m' ? 30 * 60_000 : 60 * 60_000;
   const dbWindow = await queryDbWindowStats(now - windowMs, now);
-  const payload = await pollerV2Observability.buildWindowSummary(window, dbWindow);
   await appendUnifiedLog({
     section: 'back',
     type: 'info',
-    script: window === '30m' ? 'poller_v2_30m' : 'poller_v2_hourly',
-    message: `poller-v3 summary ${window}`,
-    json: payload,
+    script: `poller_db_${window}`,
+    message: `poller db window ${window}`,
+    json: { window, atIso: new Date().toISOString(), dbWindow },
   });
-  await pollerV2Observability.flushSnapshotToDisk();
 }
 
 async function startMonitoring(): Promise<void> {
   await logMetricsTick();
   metricsInterval = setInterval(() => void logMetricsTick(), 30_000);
-  summary30mInterval = setInterval(() => void emitWindowSummary('30m'), 30 * 60_000);
-  summary1hInterval = setInterval(() => void emitWindowSummary('1h'), 60 * 60_000);
+  summary30mInterval = setInterval(() => void emitDbWindowSummary('30m'), 30 * 60_000);
+  summary1hInterval = setInterval(() => void emitDbWindowSummary('1h'), 60 * 60_000);
 }
 
 async function discoveryLoop(): Promise<void> {
@@ -274,7 +259,6 @@ async function discoveryLoop(): Promise<void> {
         platform: toPlatform(p.region),
       }));
 
-      pollerV2Observability.incDiscoveryCycle();
       const engine = PollerEngine.getInstance();
       dbConsumer?.resetSessionState();
       rankFilter.clearCache();
@@ -282,7 +266,6 @@ async function discoveryLoop(): Promise<void> {
       requestsAtSessionStart = gateway.getStatus().metrics.totals.requests;
 
       const { sessionId, stats } = await engine.poll(pollerPlayers, pollConfig);
-      pollerV2Observability.recordDiscoveryMatches(stats.matchIdsDiscovered, stats.matchesFetched);
 
       const requestsUsed =
         gateway.getStatus().metrics.totals.requests - requestsAtSessionStart;

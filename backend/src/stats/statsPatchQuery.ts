@@ -38,8 +38,10 @@ export function buildProgressionOldestOnlySql(alias: string, refPatch: string): 
 }
 
 /**
- * Cumulative patches from refPatch onward (inclusive), optionally capped at capPatch.
- * Matches tooltips: « depuis 16.11 » = 16.11 + 16.12 + …
+ * Patches for the « since » side of progression stats.
+ * - Sans plafond (`capPatch` null) : ref inclus → cumul depuis ref (16.10 + 16.11 + …).
+ * - Avec plafond (`sinceVersion` = patch filtre) : strictement après ref jusqu’au plafond
+ *   (ex. ref 16.10, cap 16.11 → 16.11 seul), pour ne pas mélanger ref dans les deux colonnes.
  */
 export function patchesInProgressionSinceRange(
   refPatch: string,
@@ -48,8 +50,9 @@ export function patchesInProgressionSinceRange(
 ): string[] {
   const ref = normalizePatchMajorMinor(refPatch)
   const cap = capPatch ? normalizePatchMajorMinor(capPatch) : null
+  const afterRefOnly = cap != null
   return [...new Set(availablePatches.map(normalizePatchMajorMinor))]
-    .filter((p) => comparePatchMajorMinor(p, ref) >= 0)
+    .filter((p) => (afterRefOnly ? comparePatchMajorMinor(p, ref) > 0 : comparePatchMajorMinor(p, ref) >= 0))
     .filter((p) => !cap || comparePatchMajorMinor(p, cap) <= 0)
 }
 

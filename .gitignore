@@ -30,6 +30,8 @@ backend/.env
 backend/.env.local
 backend/data/
 backend/data/images/
+backend/poller-observability.json
+backend/poller-observability.json.tmp
 
 # Frontend static game data (copied from backend during sync)
 frontend/public/data/game/

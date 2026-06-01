@@ -1456,10 +1456,22 @@ function setVersionsWithMatches(
     .sort((a, b) => compareVersionsDesc(a.version, b.version))
 }
 
+/** Met à jour les compteurs sans retirer les autres patchs (l’overview filtré ne renvoie qu’une version). */
 function mergeKnownVersions(
   rows: Array<{ version: string; matchCount: number }> | null | undefined
 ): void {
-  setVersionsWithMatches(rows)
+  if (!rows?.length) return
+  const byVersion = new Map(statsKnownVersions.value.map(v => [v.version, { ...v }] as const))
+  for (const row of rows) {
+    if (!row?.version || Number(row.matchCount) <= 0) continue
+    byVersion.set(row.version, {
+      version: row.version,
+      matchCount: Number(row.matchCount),
+    })
+  }
+  statsKnownVersions.value = [...byVersion.values()].sort((a, b) =>
+    compareVersionsDesc(a.version, b.version)
+  )
 }
 
 async function loadVersionsWithMatches(): Promise<void> {
@@ -1936,6 +1948,20 @@ function appendProgressionSinceVersion(params: URLSearchParams): void {
       })
       ?.version?.trim()
     if (newer) params.set('sinceVersion', newer)
+    return
+  }
+
+  // Sans filtre patch : borner « since » au patch le plus récent pour une comparaison ref vs patch suivant.
+  if (!since) {
+    const newest = statsVersionOptions.value
+      .find(v => Number(v.matchCount ?? 0) > 0)
+      ?.version?.trim()
+    if (newest && oldestPatch) {
+      const newestPatch = patchFromVersion(newest)
+      if (newestPatch && comparePatchMajorMinor(newestPatch, oldestPatch) > 0) {
+        params.set('sinceVersion', newest)
+      }
+    }
   }
 }
 
@@ -2358,30 +2384,36 @@ const progressionFullByPickrate = computed(() => {
   const list = progressionFullData.value?.champions ?? []
   return [...list].sort((a, b) => b.deltaPick - a.deltaPick)
 })
+const PROGRESSION_DELTA_EPS = 0.01
+
+function hasMeaningfulProgressionDelta(value: number): boolean {
+  return Number.isFinite(value) && Math.abs(value) >= PROGRESSION_DELTA_EPS
+}
+
 const progressionSinceSlices = computed(() => {
   const list = progressionFullData.value?.champions ?? []
   const topWinrate = [...list]
-    .filter(c => c.deltaWr !== 0)
+    .filter(c => hasMeaningfulProgressionDelta(c.deltaWr))
     .sort((a, b) => b.deltaWr - a.deltaWr)
     .slice(0, 5)
   const topPickrate = [...list]
-    .filter(c => c.deltaPick !== 0)
+    .filter(c => hasMeaningfulProgressionDelta(c.deltaPick))
     .sort((a, b) => b.deltaPick - a.deltaPick)
     .slice(0, 5)
   const topBanrate = [...list]
-    .filter(c => c.deltaBan !== 0)
+    .filter(c => hasMeaningfulProgressionDelta(c.deltaBan))
     .sort((a, b) => b.deltaBan - a.deltaBan)
     .slice(0, 5)
   const bottomWinrate = [...list]
-    .filter(c => c.deltaWr !== 0)
+    .filter(c => hasMeaningfulProgressionDelta(c.deltaWr))
     .sort((a, b) => a.deltaWr - b.deltaWr)
     .slice(0, 5)
   const bottomPickrate = [...list]
-    .filter(c => c.deltaPick !== 0)
+    .filter(c => hasMeaningfulProgressionDelta(c.deltaPick))
     .sort((a, b) => a.deltaPick - b.deltaPick)
     .slice(0, 5)
   const bottomBanrate = [...list]
-    .filter(c => c.deltaBan !== 0)
+    .filter(c => hasMeaningfulProgressionDelta(c.deltaBan))
     .sort((a, b) => a.deltaBan - b.deltaBan)
     .slice(0, 5)
   return { topWinrate, topPickrate, topBanrate, bottomWinrate, bottomPickrate, bottomBanrate }

@@ -29,7 +29,7 @@ async function main(): Promise<void> {
     console.log(JSON.stringify({ queue: name, before, status: "obliterated" }));
   }
 
-  const leaderLockDeleted = await redis.del("poller-v2:leader");
+  const leaderLockDeleted = await redis.del("poller:leader");
   const rlQueuedDeleted = await scanDelete("rl:queued:*");
   const deferDeleted = await scanDelete("hydration:defer:*");
   await redis.del("rl:slots:discovery", "rl:slots:hydration", "rl:slots:rank", "rl:app:global-cooldown");

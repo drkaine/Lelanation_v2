@@ -4,13 +4,13 @@ import {
   findLatestPollerSummaryEntries,
   type ParsedUnifiedLogEntry,
 } from '../logging/unifiedAppLog.js'
+import type { FullSnapshot } from '../observability/poller-metrics/types.js'
 
-/** No recent poller summary line ⇒ treat as inactive (override with POLLER_ADMIN_LOG_STALE_MS, min 90 min). */
 const envStale = process.env.POLLER_ADMIN_LOG_STALE_MS
 const envStaleMs = envStale != null && envStale !== '' ? parseInt(envStale, 10) : NaN
 const UNIFIED_LOG_STALE_MS = Math.max(
   90 * 60 * 1000,
-  Number.isFinite(envStaleMs) && envStaleMs > 0 ? envStaleMs : 3.5 * 60 * 60 * 1000
+  Number.isFinite(envStaleMs) && envStaleMs > 0 ? envStaleMs : 3.5 * 60 * 60 * 1000,
 )
 
 export type RiotPollerAdminPayload = {
@@ -32,14 +32,11 @@ export type RiotPollerAdminPayload = {
   requestsPerMinute: number | null
   requestsPer2Min: number | null
   latestPlayerLastSeenAt: string | null
-  /** Ingestion runs in PM2 (`lelanation-poller-v2`); this payload is always from unified log summaries. */
   statusSource: 'unified_log' | 'unified_log_stale'
   snapshotUpdatedAt: string | null
   snapshotAgeMs: number | null
   heartbeatStale: boolean
   pollerExternal: boolean
-  nearLimitPauseCount?: number
-  http429PauseCount?: number
 }
 
 function statusFromBase(isRunning: boolean, lastError: string | null): 'running' | 'stopped' | 'error' {
@@ -57,82 +54,32 @@ function num(v: unknown): number {
   return 0
 }
 
-/** Résumés poller-v2 (delta + dbWindow) sans bloc `totals` legacy — aligné sur `poller-v2-observability`. */
-function totalsFromV2Delta(d: Record<string, unknown>): Record<string, unknown> {
-  const api4xx = num(d['api4xx'])
-  const api429 = num(d['api429'])
-  return {
-    httpRequests: num(d['apiRequests']),
-    requests: num(d['apiRequests']),
-    error429: api429,
-    error400: Math.max(0, api4xx - api429),
-    matchesInsertedDb: num(d['matchesIngested']),
-    matches: num(d['matchesIngested']),
-    newPlayers: num(d['playersAdded']),
-    playersPolled: num(d['playersPolled']),
-    participants: num(d['participantsIngested']),
-  }
+function windowHours(script: string): number {
+  if (script.endsWith('_1h') || script === 'poller_hourly') return 1
+  if (script.endsWith('_30m') || script === 'poller_30m') return 0.5
+  if (script.endsWith('_10m')) return 10 / 60
+  return 1
 }
 
-function resolvePollerSummaryJson(j: Record<string, unknown>): {
-  totals: Record<string, unknown>
-  winStart: string | null
-  winEnd: string | null
-  requestsPerHour: number
-} {
-  const rawTotals = (j['totals'] as Record<string, unknown>) ?? {}
-  const hasLegacyHttp = num(rawTotals['httpRequests']) + num(rawTotals['requests']) > 0
-  let totals: Record<string, unknown> = { ...rawTotals }
-  if (!hasLegacyHttp && j['delta'] && typeof j['delta'] === 'object' && j['delta'] !== null) {
-    totals = totalsFromV2Delta(j['delta'] as Record<string, unknown>)
-  }
-  const db = (j['dbWindow'] as Record<string, unknown>) ?? {}
-  const winStart =
-    typeof j['windowStartIso'] === 'string'
-      ? j['windowStartIso']
-      : typeof db['windowStartIso'] === 'string'
-        ? (db['windowStartIso'] as string)
-        : null
-  const winEnd =
-    typeof j['windowEndIso'] === 'string'
-      ? j['windowEndIso']
-      : typeof db['windowEndIso'] === 'string'
-        ? (db['windowEndIso'] as string)
-        : null
-  let requestsPerHour = num(j['requestsPerHour'])
-  if (requestsPerHour <= 0) {
-    const http = num(totals['httpRequests']) || num(totals['requests'])
-    const win = j['window']
-    const hours = win === '1h' ? 1 : win === '30m' ? 0.5 : 0
-    if (hours > 0 && http > 0) {
-      requestsPerHour = Math.round((http / hours) * 100) / 100
-    }
-  }
-  return { totals, winStart, winEnd, requestsPerHour }
-}
-
-function pickNewerSummary(
-  a: ParsedUnifiedLogEntry | null,
-  b: ParsedUnifiedLogEntry | null
-): ParsedUnifiedLogEntry | null {
-  if (!a) return b
-  if (!b) return a
-  return a.atIso >= b.atIso ? a : b
-}
-
-function payloadFromUnifiedLogEntry(
-  e: ParsedUnifiedLogEntry,
+function payloadFromV3Snapshot(
+  snap: FullSnapshot,
+  atIso: string,
   now: number,
-  latestPlayerLastSeenAt: string | null
+  latestPlayerLastSeenAt: string | null,
+  script: string,
 ): RiotPollerAdminPayload {
-  const j = (e.json ?? {}) as Record<string, unknown>
-  const { totals, winStart, winEnd, requestsPerHour } = resolvePollerSummaryJson(j)
+  const gw = snap.gateway
+  const poll = snap.poll
+  const ing = snap.ingestion
+  const hours = windowHours(script)
+  const requests = num(gw.total_requests)
+  const requestsPerHour = hours > 0 ? Math.round((requests / hours) * 100) / 100 : 0
   const requestsPerMinute =
     requestsPerHour > 0 ? Math.round((requestsPerHour / 60) * 10) / 10 : null
   const requestsPer2Min =
     requestsPerHour > 0 ? Math.round((requestsPerHour / 30) * 10) / 10 : null
 
-  const atMs = new Date(e.atIso).getTime()
+  const atMs = new Date(atIso).getTime()
   const ageMs = Number.isFinite(atMs) ? now - atMs : Infinity
   const fresh = ageMs < UNIFIED_LOG_STALE_MS
 
@@ -140,19 +87,15 @@ function payloadFromUnifiedLogEntry(
     isRunning: fresh,
     status: statusFromBase(fresh, null),
     lastError: null,
-    lastLoopStartedAt: winStart,
-    lastLoopFinishedAt: winEnd,
-    requestCount:
-      typeof totals['httpRequests'] === 'number' ? num(totals['httpRequests']) : num(totals['requests']),
-    error429Count: num(totals['error429']),
-    error400Count: num(totals['error400']),
-    matchesFetched:
-      typeof totals['matchesInsertedDb'] === 'number'
-        ? num(totals['matchesInsertedDb'])
-        : num(totals['matches']),
-    playersFetched: num(totals['newPlayers']),
-    playersPolled: num(totals['playersPolled']),
-    participantsFetched: num(totals['participants']),
+    lastLoopStartedAt: new Date(snap.ts - snap.uptime_ms).toISOString(),
+    lastLoopFinishedAt: new Date(snap.ts).toISOString(),
+    requestCount: requests,
+    error429Count: num(gw.total_429s),
+    error400Count: 0,
+    matchesFetched: num(ing.matches_ingested),
+    playersFetched: num(poll.players_new_added),
+    playersPolled: num(poll.players_polled),
+    participantsFetched: 0,
     matchesRankFixed: 0,
     participantsRankFixed: 0,
     participantsRoleFixed: 0,
@@ -160,13 +103,20 @@ function payloadFromUnifiedLogEntry(
     requestsPer2Min,
     latestPlayerLastSeenAt,
     statusSource: fresh ? 'unified_log' : 'unified_log_stale',
-    snapshotUpdatedAt: e.atIso,
+    snapshotUpdatedAt: atIso,
     snapshotAgeMs: Number.isFinite(ageMs) ? ageMs : null,
     heartbeatStale: !fresh,
     pollerExternal: true,
-    nearLimitPauseCount: num(j['rateLimitRefreshPauses']),
-    http429PauseCount: num(j['rateLimit429Pauses']),
   }
+}
+
+function pickNewerSummary(
+  a: ParsedUnifiedLogEntry | null,
+  b: ParsedUnifiedLogEntry | null,
+): ParsedUnifiedLogEntry | null {
+  if (!a) return b
+  if (!b) return a
+  return a.atIso >= b.atIso ? a : b
 }
 
 function emptyPayload(latestPlayerLastSeenAt: string | null): RiotPollerAdminPayload {
@@ -213,6 +163,12 @@ export async function buildRiotPollerAdminPayload(): Promise<RiotPollerAdminPayl
 
   const { last30m, lastHourly } = await findLatestPollerSummaryEntries()
   const e = pickNewerSummary(last30m, lastHourly)
-  if (!e) return emptyPayload(latestPlayerLastSeenAt)
-  return payloadFromUnifiedLogEntry(e, now, latestPlayerLastSeenAt)
+  if (!e?.json) return emptyPayload(latestPlayerLastSeenAt)
+
+  const j = e.json as Record<string, unknown>
+  if (j.gateway && j.poll && j.ingestion) {
+    return payloadFromV3Snapshot(j as unknown as FullSnapshot, e.atIso, now, latestPlayerLastSeenAt, e.script)
+  }
+
+  return emptyPayload(latestPlayerLastSeenAt)
 }

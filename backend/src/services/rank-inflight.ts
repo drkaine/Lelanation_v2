@@ -1,5 +1,4 @@
 import { sql } from "../db/client.js";
-import { pollerV2Observability } from "../observability/poller-v2-observability.js";
 import { rankQueue } from "../queues/index.js";
 import { rankChildJobId, RANK_CHILD_JOB_OPTS } from "../queues/rank-jobs-shared.js";
 import { normalizePlatformRegion, platformRegionLookupKeys } from "../riot/platform-region.js";
@@ -109,7 +108,6 @@ export async function ensureRankSnapshot(
 
   const existing = inFlightRankFetches.get(inflightKey);
   if (existing) {
-    pollerV2Observability.recordRankDedupHit();
     await existing;
     return { status: "awaited", dedupHit: true };
   }

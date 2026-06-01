@@ -8,18 +8,6 @@ import {
   type IngestionJobDeps,
 } from '../../../src/workers/ingestion.worker.js';
 
-vi.mock('../../../src/observability/poller-v2-observability.js', () => ({
-  pollerV2Observability: {
-    recordIngestionStart: vi.fn(),
-    recordIngestionSuccess: vi.fn(),
-    recordIngestionDuplicate: vi.fn(),
-    recordIngestionFailure: vi.fn(),
-    recordMatchIngestedForPipeline: vi.fn(),
-    recordPlayersAdded: vi.fn(),
-    recordDuration: vi.fn(),
-  },
-}));
-
 vi.mock('../../../src/queues/index.js', () => ({
   getRankBacklogCount: vi.fn().mockResolvedValue(0),
 }));

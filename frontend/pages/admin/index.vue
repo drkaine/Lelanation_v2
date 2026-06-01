@@ -558,435 +558,142 @@
           </div>
         </div>
 
-        <!-- Section 3: Poller d’ingestion v2 -->
+        <!-- Section 3: Poller d’ingestion -->
         <div class="rounded-lg border border-primary/30 bg-surface/30">
           <button
             type="button"
             class="flex w-full items-center justify-between p-4 text-left"
             @click="dataSectionPoller = !dataSectionPoller"
           >
-            <h2 class="text-lg font-semibold text-text">Poller d’ingestion (v2)</h2>
+            <h2 class="text-lg font-semibold text-text">Poller d’ingestion</h2>
             <span class="text-text/60">{{ dataSectionPoller ? '▼' : '▶' }}</span>
           </button>
           <div v-show="dataSectionPoller" class="border-t border-primary/20 px-4 pb-4 pt-2">
             <p class="mb-2 text-xs text-text/70">
-              L’ingestion des matchs tourne dans le process PM2
+              Process PM2
               <code class="rounded bg-background px-1">lelanation-poller-v2</code>
               — contrôle :
               <code class="rounded bg-background px-1">pm2 stop|restart lelanation-poller-v2</code>.
-            </p>
-            <p
-              v-if="pollerV2Observability?.stale"
-              class="mb-2 text-xs text-amber-700 dark:text-amber-400"
-            >
-              Snapshot observabilité poller-v2 ancien (&gt; 2 min) — le process PM2 est peut-être
-              arrêté ou le fichier
-              <code class="rounded bg-background px-1">logs/poller-v2-observability.json</code>
-              n’est pas à jour.
-              <span v-if="pollerV2Observability?.ageMs != null" class="text-text/60">
-                (âge {{ Math.round(pollerV2Observability.ageMs / 1000) }} s)
-              </span>
+              Métriques : <code class="rounded bg-background px-1">poller-observability.json</code>.
             </p>
             <div class="mb-3 rounded border border-primary/20 bg-background/30 p-3">
-              <div class="mb-2 flex items-center justify-between gap-2">
-                <h3 class="text-sm font-semibold text-text">
-                  Observabilité poller-v2 (temps réel)
-                </h3>
+              <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <h3 class="text-sm font-semibold text-text">Observabilité poller</h3>
                 <span
                   class="rounded px-2 py-0.5 text-xs"
                   :class="
-                    pollerV2Observability?.stale
+                    pollerObservability?.stale
                       ? 'bg-amber-500/20 text-amber-700 dark:text-amber-400'
                       : 'bg-green-600/20 text-green-700 dark:text-green-400'
                   "
                 >
-                  {{ pollerV2Observability?.stale ? 'stale' : 'live' }}
+                  {{ pollerObservability?.stale ? 'stale' : 'live' }}
                 </span>
               </div>
-              <p class="mb-2 text-xs text-text/60">
-                Âge snapshot:
-                {{
-                  pollerV2Observability?.ageMs != null
-                    ? `${Math.round(pollerV2Observability.ageMs / 1000)}s`
-                    : '—'
-                }}
-              </p>
-
-              <div
-                v-if="pollerV2Observability?.dashboard"
-                class="mb-4 rounded border border-emerald-600/25 bg-emerald-600/5 p-3 dark:border-emerald-500/30 dark:bg-emerald-500/10"
+              <p
+                v-if="pollerObservability?.stale"
+                class="mb-2 text-xs text-amber-700 dark:text-amber-400"
               >
-                <h4 class="mb-1 text-sm font-semibold text-text">
-                  Tableau de bord volume (poller-v2)
-                </h4>
-                <p class="mb-3 text-xs text-text/60">
-                  Moyennes « / min » et « / 2 min » sur les fenêtres 30 min / 1 h : calcul à partir
-                  du
-                  <strong>delta</strong> du dernier tick d’observabilité (durée réelle ≈ 30 min ou 1
-                  h entre deux resets). La ligne « 2 min glissant » compte les requêtes HTTP Riot
-                  sur les 120 dernières secondes côté process.
-                </p>
-
-                <div
-                  v-if="pollerV2Observability.dashboard.rolling2m"
-                  class="mb-4 rounded border border-primary/20 bg-background/40 p-2"
-                >
-                  <div class="mb-1 text-xs font-medium uppercase tracking-wide text-text/55">
-                    Fenêtre glissante 2 min
-                  </div>
-                  <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    <div class="rounded border border-primary/15 bg-background/50 p-2">
-                      <div class="text-[11px] text-text/65">Requêtes HTTP (total 2 min)</div>
-                      <div class="text-lg font-semibold text-text">
-                        {{
-                          formatDashInt(pollerV2Observability.dashboard.rolling2m.httpRequestsTotal)
-                        }}
-                      </div>
-                    </div>
-                    <div class="rounded border border-primary/15 bg-background/50 p-2">
-                      <div class="text-[11px] text-text/65">Moyenne / minute</div>
-                      <div class="text-lg font-semibold text-text">
-                        {{
-                          formatDashRate(
-                            pollerV2Observability.dashboard.rolling2m.httpRequestsPerMinuteAvg
-                          )
-                        }}
-                      </div>
-                    </div>
-                    <div class="rounded border border-primary/15 bg-background/50 p-2">
-                      <div class="text-[11px] text-text/65">HTTP 429 (2 min)</div>
-                      <div class="text-lg font-semibold text-text">
-                        {{ formatDashInt(pollerV2Observability.data?.rolling2m?.api429) }}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="grid gap-3 lg:grid-cols-2">
-                  <div
-                    v-for="w in pollerDashWindows"
-                    :key="w.key"
-                    class="rounded border border-primary/20 bg-background/40 p-3"
-                  >
-                    <div class="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-                      <span class="text-sm font-semibold text-text">{{ w.labelFr }}</span>
-                      <span v-if="w.atIso" class="font-mono text-[10px] text-text/50">{{
-                        w.atIso
-                      }}</span>
-                    </div>
-                    <p class="mb-2 text-[11px] text-text/55">HTTP Riot</p>
-                    <div class="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                      <div class="rounded border border-primary/15 bg-background/50 p-2">
-                        <div class="text-[10px] text-text/60">Total période</div>
-                        <div class="font-semibold text-text">
-                          {{ formatDashInt(w.httpRequestsTotal) }}
-                        </div>
-                      </div>
-                      <div class="rounded border border-primary/15 bg-background/50 p-2">
-                        <div class="text-[10px] text-text/60">Moy. / min</div>
-                        <div class="font-semibold text-text">
-                          {{ formatDashRate(w.httpRequestsPerMinuteAvg) }}
-                        </div>
-                      </div>
-                      <div class="rounded border border-primary/15 bg-background/50 p-2">
-                        <div class="text-[10px] text-text/60">Moy. / 2 min</div>
-                        <div class="font-semibold text-text">
-                          {{ formatDashRate(w.httpRequestsPerTwoMinuteAvg) }}
-                        </div>
-                      </div>
-                      <div class="rounded border border-primary/15 bg-background/50 p-2">
-                        <div class="text-[10px] text-text/60">Minutes (réf.)</div>
-                        <div class="font-semibold text-text">{{ w.windowMinutes }}</div>
-                      </div>
-                    </div>
-                    <p class="mb-2 text-[11px] text-text/55">
-                      Limiter Redis (coût accordé) — « % charge moy. » = delta sur la fenêtre /
-                      tranches de 2 min / plafond (comparable au % pic 2 min du bloc résumé).
-                    </p>
-                    <div class="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                      <div class="rounded border border-primary/15 bg-background/50 p-2">
-                        <div class="text-[10px] text-text/60">Coût accordé (Δ)</div>
-                        <div class="font-semibold text-text">
-                          {{ formatDashInt(w.rateLimitGrantedCostDelta) }}
-                        </div>
-                      </div>
-                      <div class="rounded border border-primary/15 bg-background/50 p-2">
-                        <div class="text-[10px] text-text/60">Plafond 120 s</div>
-                        <div class="font-semibold text-text">
-                          {{ formatDashInt(w.tokenBudget120) }}
-                        </div>
-                      </div>
-                      <div class="rounded border border-primary/15 bg-background/50 p-2">
-                        <div class="text-[10px] text-text/60">% charge moy. (fenêtre)</div>
-                        <div class="font-semibold text-text">
-                          {{ formatDashRate(w.avgTokenLoadPct) }}%
-                        </div>
-                      </div>
-                      <div class="rounded border border-primary/15 bg-background/50 p-2">
-                        <div class="text-[10px] text-text/60">% pic 2 min (tick)</div>
-                        <div class="font-semibold text-text">
-                          {{ pollerSummaryRollingTokenUsagePctLabel(w.key) }}
-                        </div>
-                      </div>
-                    </div>
-                    <p class="mb-2 text-[11px] text-text/55">Joueurs (delta poller / agrégat DB)</p>
-                    <div class="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                      <div class="rounded border border-primary/15 bg-background/50 p-2">
-                        <div class="text-[10px] text-text/60">Pollés (Δ)</div>
-                        <div class="font-semibold text-text">
-                          {{ formatDashInt(w.playersPolledDelta) }}
-                        </div>
-                      </div>
-                      <div class="rounded border border-primary/15 bg-background/50 p-2">
-                        <div class="text-[10px] text-text/60">MAJ (Δ)</div>
-                        <div class="font-semibold text-text">
-                          {{ formatDashInt(w.playersUpdatedDelta) }}
-                        </div>
-                      </div>
-                      <div class="rounded border border-primary/15 bg-background/50 p-2">
-                        <div class="text-[10px] text-text/60">Ajoutés (Δ)</div>
-                        <div class="font-semibold text-text">
-                          {{ formatDashInt(w.playersAddedDelta) }}
-                        </div>
-                      </div>
-                      <div class="rounded border border-primary/15 bg-background/50 p-2">
-                        <div class="text-[10px] text-text/60">Pollés (DB)</div>
-                        <div class="font-semibold text-text">
-                          {{ formatDashInt(w.playersPolledDb ?? undefined) }}
-                        </div>
-                      </div>
-                      <div class="rounded border border-primary/15 bg-background/50 p-2">
-                        <div class="text-[10px] text-text/60">MAJ (DB)</div>
-                        <div class="font-semibold text-text">
-                          {{ formatDashInt(w.playersUpdatedDb ?? undefined) }}
-                        </div>
-                      </div>
-                      <div class="rounded border border-primary/15 bg-background/50 p-2">
-                        <div class="text-[10px] text-text/60">Matchs aj. (DB)</div>
-                        <div class="font-semibold text-text">
-                          {{ formatDashInt(w.matchesAddedDb ?? undefined) }}
-                        </div>
-                      </div>
-                    </div>
-                    <p class="mb-2 text-[11px] text-text/55">Rangs League API (by-puuid)</p>
-                    <div class="mb-3 grid grid-cols-2 gap-2">
-                      <div class="rounded border border-primary/15 bg-background/50 p-2">
-                        <div class="text-[10px] text-text/60">Récupérés OK</div>
-                        <div class="font-semibold text-text">
-                          {{ formatDashInt(w.rankLeagueFetchesSucceeded) }}
-                        </div>
-                      </div>
-                      <div class="rounded border border-primary/15 bg-background/50 p-2">
-                        <div class="text-[10px] text-text/60">Échecs</div>
-                        <div class="font-semibold text-text">
-                          {{ formatDashInt(w.rankLeagueFetchesFailed) }}
-                        </div>
-                      </div>
-                    </div>
-                    <p class="mb-2 text-[11px] text-text/55">
-                      Matchs (découverte → hydratation → ingestion)
-                    </p>
-                    <div class="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                      <div class="rounded border border-primary/15 bg-background/50 p-2">
-                        <div class="text-[10px] text-text/60">IDs découverts</div>
-                        <div class="font-semibold text-text">
-                          {{ formatDashInt(w.matchIdsFetched) }}
-                        </div>
-                      </div>
-                      <div class="rounded border border-primary/15 bg-background/50 p-2">
-                        <div class="text-[10px] text-text/60">File hydratation</div>
-                        <div class="font-semibold text-text">
-                          {{ formatDashInt(w.matchesQueuedHydration) }}
-                        </div>
-                      </div>
-                      <div class="rounded border border-primary/15 bg-background/50 p-2">
-                        <div class="text-[10px] text-text/60">Hydrat. OK</div>
-                        <div class="font-semibold text-text">
-                          {{ formatDashInt(w.hydrationJobsSucceeded) }}
-                        </div>
-                      </div>
-                      <div class="rounded border border-primary/15 bg-background/50 p-2">
-                        <div class="text-[10px] text-text/60">Ingestion OK (ligne en base)</div>
-                        <div class="font-semibold text-text">
-                          {{ formatDashInt(w.ingestionJobsSucceeded) }}
-                        </div>
-                      </div>
-                      <div class="rounded border border-primary/15 bg-background/50 p-2">
-                        <div class="text-[10px] text-text/60">404 Riot</div>
-                        <div class="font-semibold text-text">
-                          {{ formatDashInt(w.hydrationJobsNotFound) }}
-                        </div>
-                      </div>
-                    </div>
-                    <p
-                      class="mb-2 text-[11px] font-medium text-amber-800/90 dark:text-amber-300/90"
-                    >
-                      Gaspillage / cas limites (delta)
-                    </p>
-                    <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                      <div
-                        class="rounded border border-amber-600/25 bg-amber-500/10 p-2 dark:border-amber-500/30"
-                      >
-                        <div class="text-[10px] text-text/65">
-                          Ingestion duplicate (déjà en base)
-                        </div>
-                        <div class="font-semibold text-text">
-                          {{ formatDashInt(w.wasteIngestionDuplicate) }}
-                        </div>
-                        <div class="mt-0.5 text-[10px] text-text/55">
-                          API match+timeline déjà consommées en amont.
-                        </div>
-                      </div>
-                      <div
-                        class="rounded border border-amber-600/25 bg-amber-500/10 p-2 dark:border-amber-500/30"
-                      >
-                        <div class="text-[10px] text-text/65">Ignorés (patch trop ancien)</div>
-                        <div class="font-semibold text-text">
-                          {{ formatDashInt(w.wasteSkippedOldPatch) }}
-                        </div>
-                        <div class="mt-0.5 text-[10px] text-text/55">
-                          GET match + timeline puis abandon.
-                        </div>
-                      </div>
-                      <div
-                        class="rounded border border-amber-600/25 bg-amber-500/10 p-2 dark:border-amber-500/30"
-                      >
-                        <div class="text-[10px] text-text/65">Hydrat. erreur</div>
-                        <div class="font-semibold text-text">
-                          {{ formatDashInt(w.hydrationJobsFailed) }}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3 lg:grid-cols-6">
-                <div class="rounded border border-primary/20 bg-background/40 p-2">
-                  <div class="text-text/70">Tokens / 2 min</div>
-                  <div class="font-semibold text-text">
-                    {{ pollerV2Observability?.data?.rolling2m?.rateLimitGrantedCost ?? '—' }}
-                    /
-                    {{ pollerV2Observability?.data?.rolling2m?.tokenBudget120 ?? '—' }}
-                  </div>
-                </div>
-                <div class="rounded border border-primary/20 bg-background/40 p-2">
-                  <div class="text-text/70">Utilisation quota 2min</div>
-                  <div class="font-semibold text-text">
-                    {{
-                      pollerV2Observability?.data?.rolling2m?.tokenUsagePct != null
-                        ? `${pollerV2Observability.data.rolling2m.tokenUsagePct}%`
-                        : '—'
-                    }}
-                  </div>
-                  <div class="mt-0.5 text-[9px] leading-tight text-text/50">
-                    Dénominateur
-                    {{ pollerV2Observability?.data?.rolling2m?.tokenBudget120 ?? '—' }} = plafond
-                    local 120&nbsp;s (dev), pas une cible à atteindre.
-                  </div>
-                </div>
-                <div class="rounded border border-primary/20 bg-background/40 p-2">
-                  <div class="text-text/70">HTTP req / 2 min</div>
-                  <div class="font-semibold text-text">
-                    {{ pollerV2Observability?.data?.rolling2m?.apiRequests ?? '—' }}
-                  </div>
-                </div>
-                <div class="rounded border border-primary/20 bg-background/40 p-2">
-                  <div class="text-text/70">HTTP 429 / 2 min</div>
-                  <div class="font-semibold text-text">
-                    {{ pollerV2Observability?.data?.rolling2m?.api429 ?? '—' }}
-                  </div>
-                </div>
-                <div class="rounded border border-primary/20 bg-background/40 p-2">
-                  <div class="text-text/70">Rate-limit denied / 2 min</div>
-                  <div class="font-semibold text-text">
-                    {{ pollerV2Observability?.data?.rolling2m?.rateLimitDeniedCount ?? '—' }}
-                  </div>
-                </div>
-                <div class="rounded border border-primary/20 bg-background/40 p-2">
-                  <div class="text-text/70">Wait ms total / 2 min</div>
-                  <div class="font-semibold text-text">
-                    {{ pollerV2Observability?.data?.rolling2m?.rateLimitWaitMsTotal ?? '—' }}
-                  </div>
-                </div>
-              </div>
-              <p class="mt-1.5 text-[10px] leading-snug text-text/55">
-                Le % quota est une moyenne instantanée sur les 2 dernières minutes (pas sur l’heure
-                ni depuis le démarrage). Après une rafale ou un cooldown Riot, il peut être très bas
-                alors que le résumé 30 min reste élevé. Les 429 « application » sur league/entries
-                sont une limite Riot distincte du bucket dev affiché ici. Un pourcentage proche de
-                100&nbsp;% signifierait saturer en continu le plafond ({{
-                  pollerV2Observability?.data?.rolling2m?.tokenBudget120 ?? '—'
-                }}
-                coût / 120&nbsp;s) — ce n’est ni requis ni souhaitable en fonctionnement normal.
+                Snapshot &gt; 15 min — process arrêté ou fichier absent.
+                <span v-if="pollerObservability?.ageMs != null">
+                  (âge {{ Math.round(pollerObservability.ageMs / 1000) }} s)
+                </span>
               </p>
-
-              <div class="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-                <div class="rounded border border-primary/20 bg-background/40 p-2">
-                  <div class="text-text/70">
-                    Résumé 30 min (players pollés / update / ajoutés / matchs)
-                  </div>
+              <p class="mb-2 text-xs text-text/60">
+                Source:
+                <code class="rounded bg-background px-1">{{
+                  pollerObservability?.filePath ?? 'poller-observability.json'
+                }}</code>
+              </p>
+              <p v-if="pollerObservability?.latest10m?.since" class="mb-2 text-xs text-text/70">
+                Mode since:
+                <strong>{{ pollerObservability.latest10m.since.mode }}</strong>
+                ({{ formatPollerSince(pollerObservability.latest10m.since.sinceTimestamp) }})
+              </p>
+              <div
+                v-if="pollerObservability?.live"
+                class="mb-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4"
+              >
+                <div class="rounded border border-primary/15 bg-background/50 p-2">
+                  <div class="text-[10px] text-text/60">Lag données</div>
                   <div class="font-semibold text-text">
-                    {{
-                      pollerV2Observability?.data?.summaries?.last30m?.dbWindow?.playersPolled ??
-                      '—'
-                    }}
-                    /
-                    {{
-                      pollerV2Observability?.data?.summaries?.last30m?.dbWindow?.playersUpdated ??
-                      '—'
-                    }}
-                    /
-                    {{
-                      pollerV2Observability?.data?.summaries?.last30m?.dbWindow?.playersAdded ?? '—'
-                    }}
-                    /
-                    {{
-                      pollerV2Observability?.data?.summaries?.last30m?.dbWindow?.matchesAdded ?? '—'
+                    {{ pollerObservability.live.dataLagSeconds ?? '—' }} s
+                  </div>
+                </div>
+                <div class="rounded border border-primary/15 bg-background/50 p-2">
+                  <div class="text-[10px] text-text/60">Hydratation (w/a)</div>
+                  <div class="font-semibold text-text">
+                    {{ pollerObservability.live.queue.hydration.waiting }}/{{
+                      pollerObservability.live.queue.hydration.active
                     }}
                   </div>
                 </div>
-                <div class="rounded border border-primary/20 bg-background/40 p-2">
-                  <div class="text-text/70">
-                    Résumé 1 h (players pollés / update / ajoutés / matchs)
-                  </div>
+                <div class="rounded border border-primary/15 bg-background/50 p-2">
+                  <div class="text-[10px] text-text/60">Ingestion (w/a)</div>
                   <div class="font-semibold text-text">
-                    {{
-                      pollerV2Observability?.data?.summaries?.last1h?.dbWindow?.playersPolled ?? '—'
-                    }}
-                    /
-                    {{
-                      pollerV2Observability?.data?.summaries?.last1h?.dbWindow?.playersUpdated ??
-                      '—'
-                    }}
-                    /
-                    {{
-                      pollerV2Observability?.data?.summaries?.last1h?.dbWindow?.playersAdded ?? '—'
-                    }}
-                    /
-                    {{
-                      pollerV2Observability?.data?.summaries?.last1h?.dbWindow?.matchesAdded ?? '—'
+                    {{ pollerObservability.live.queue.ingestion.waiting }}/{{
+                      pollerObservability.live.queue.ingestion.active
                     }}
                   </div>
                 </div>
-                <div class="rounded border border-primary/20 bg-background/40 p-2">
-                  <div class="text-text/70">Queue (w/a/f) discovery</div>
+                <div class="rounded border border-primary/15 bg-background/50 p-2">
+                  <div class="text-[10px] text-text/60">Discovery (w/a)</div>
                   <div class="font-semibold text-text">
-                    {{ pollerV2Observability?.data?.queue?.discovery?.waiting ?? '—' }}/{{
-                      pollerV2Observability?.data?.queue?.discovery?.active ?? '—'
-                    }}/{{ pollerV2Observability?.data?.queue?.discovery?.failed ?? '—' }}
+                    {{ pollerObservability.live.queue.discovery.waiting }}/{{
+                      pollerObservability.live.queue.discovery.active
+                    }}
                   </div>
                 </div>
-                <div class="rounded border border-primary/20 bg-background/40 p-2">
-                  <div class="text-text/70">Queue (w/a/f) hydration</div>
-                  <div class="font-semibold text-text">
-                    {{ pollerV2Observability?.data?.queue?.hydration?.waiting ?? '—' }}/{{
-                      pollerV2Observability?.data?.queue?.hydration?.active ?? '—'
-                    }}/{{ pollerV2Observability?.data?.queue?.hydration?.failed ?? '—' }}
-                  </div>
+              </div>
+              <div class="grid gap-3 lg:grid-cols-3">
+                <div
+                  v-for="w in pollerMetricWindows"
+                  :key="w.label"
+                  class="rounded border border-primary/20 bg-background/40 p-3 text-xs"
+                >
+                  <div class="mb-2 font-semibold text-text">{{ w.label }}</div>
+                  <template v-if="w.snap">
+                    <div class="grid grid-cols-2 gap-1.5">
+                      <div>HTTP / 429</div>
+                      <div class="font-medium text-text">
+                        {{ w.snap.gateway?.total_requests ?? 0 }} /
+                        {{ w.snap.gateway?.total_429s ?? 0 }}
+                      </div>
+                      <div>Tokens %</div>
+                      <div class="font-medium text-text">
+                        {{ formatDashRate(w.snap.gateway?.avg_token_pct_120s) }}%
+                      </div>
+                      <div>Joueurs</div>
+                      <div class="font-medium text-text">
+                        {{ w.snap.poll?.players_polled ?? 0 }}
+                      </div>
+                      <div>Matchs OK</div>
+                      <div class="font-medium text-text">
+                        {{ w.snap.poll?.matches_fetched_success ?? 0 }}
+                      </div>
+                      <div>Ingestion</div>
+                      <div class="font-medium text-text">
+                        {{ w.snap.ingestion?.matches_ingested ?? 0 }}
+                        <span class="text-[10px] text-text/55">
+                          ({{ w.snap.ingestion?.ingested_processed ?? 0 }}n /
+                          {{ w.snap.ingestion?.ingested_already_done ?? 0 }}d)
+                        </span>
+                      </div>
+                    </div>
+                    <ul
+                      v-if="w.snap.active_alerts?.length"
+                      class="mt-2 list-inside list-disc text-[10px] text-amber-800 dark:text-amber-300"
+                    >
+                      <li v-for="(a, i) in w.snap.active_alerts" :key="i">
+                        {{ a.type }} — {{ a.message }}
+                      </li>
+                    </ul>
+                  </template>
+                  <p v-else class="text-text/55">Pas encore de rapport.</p>
                 </div>
               </div>
             </div>
+
             <div class="flex flex-wrap gap-2">
               <button
                 type="button"
@@ -994,7 +701,15 @@
                 :disabled="riotPollerLogsLoading"
                 @click="openRiotPollerLogs"
               >
-                {{ riotPollerLogsLoading ? '…' : 'Logs unifiés (poller-v2)' }}
+                {{ riotPollerLogsLoading ? '…' : 'Logs unifiés (résumés)' }}
+              </button>
+              <button
+                type="button"
+                class="rounded border border-primary/40 bg-surface/60 px-3 py-1.5 text-sm font-medium text-text transition-colors hover:bg-primary/20 disabled:opacity-50"
+                :disabled="riotPollerPm2LogsLoading"
+                @click="openRiotPollerPm2Logs"
+              >
+                {{ riotPollerPm2LogsLoading ? '…' : 'Logs PM2 (stdout/stderr)' }}
               </button>
             </div>
             <p class="mt-2 text-xs text-text/60">
@@ -1006,22 +721,29 @@
 
         <!-- Modal: Riot Poller logs -->
         <div
-          v-show="riotPollerLogsOpen"
+          v-show="riotPollerLogsOpen || riotPollerPm2LogsOpen"
           class="fixed inset-0 z-50 flex items-center justify-center bg-black p-4"
-          @click.self="riotPollerLogsOpen = false"
+          @click.self="closeRiotPollerLogModals"
         >
           <div
             class="max-h-[80vh] w-full max-w-3xl overflow-hidden rounded-lg border border-primary/30 bg-background shadow-xl"
           >
             <div class="flex items-center justify-between border-b border-primary/20 px-4 py-2">
               <div>
-                <h3 class="font-semibold text-text">Logs Riot Poller</h3>
-                <p class="text-xs text-text/60">Répertoire: logs (racine du projet)</p>
+                <h3 class="font-semibold text-text">
+                  {{ riotPollerPm2LogsOpen ? 'Logs PM2 poller' : 'Logs unifiés poller' }}
+                </h3>
+                <p class="text-xs text-text/60">
+                  {{
+                    riotPollerPm2LogSource ??
+                    'Répertoire: logs (lelanation-unified.log — résumés poller_v3_*)'
+                  }}
+                </p>
               </div>
               <button
                 type="button"
                 class="rounded border border-primary/40 px-2 py-1 text-sm text-text hover:bg-primary/20"
-                @click="riotPollerLogsOpen = false"
+                @click="closeRiotPollerLogModals"
               >
                 Fermer
               </button>
@@ -1029,11 +751,13 @@
             <div
               class="max-h-[60vh] overflow-auto whitespace-pre-wrap break-all p-4 font-mono text-xs text-text/90"
             >
-              <p v-if="riotPollerLogsLoading" class="text-text/70">Chargement…</p>
+              <p v-if="riotPollerLogsLoading || riotPollerPm2LogsLoading" class="text-text/70">
+                Chargement…
+              </p>
               <p v-else-if="riotPollerLogsError" class="text-error">{{ riotPollerLogsError }}</p>
-              <template v-else-if="riotPollerLogs.length === 0">Aucun log.</template>
+              <template v-else-if="activeRiotPollerLogLines.length === 0">Aucun log.</template>
               <template v-else>
-                <div v-for="(line, i) in riotPollerLogs" :key="i">{{ line }}</div>
+                <div v-for="(line, i) in activeRiotPollerLogLines" :key="i">{{ line }}</div>
               </template>
             </div>
           </div>
@@ -1582,8 +1306,9 @@
                 <option value="youtube" />
                 <option value="community_dragon" />
                 <option value="mv_refresh" />
-                <option value="poller_v2_hourly" />
-                <option value="poller_v2_30m" />
+                <option value="poller_v3_10m" />
+                <option value="poller_v3_30m" />
+                <option value="poller_v3_1h" />
                 <option value="puuid_migration" />
                 <option value="league_xp" />
                 <option value="frontend" />
@@ -2030,125 +1755,65 @@ const balanceRulesForm = ref<BalanceRulesForm>({
   eliteBanrateTwoPatchAvgMin: 50,
   elitePresenceMax: 7.5,
 })
-type PollerV2DashboardWindowClient = {
-  key: string
-  labelFr: string
-  windowMinutes: number
-  atIso: string | null
-  httpRequestsTotal: number
-  httpRequestsPerMinuteAvg: number
-  httpRequestsPerTwoMinuteAvg: number
-  rateLimitGrantedCostDelta: number
-  tokenBudget120: number
-  avgTokenLoadPct: number
-  playersPolledDelta: number
-  playersUpdatedDelta: number
-  playersAddedDelta: number
-  playersPolledDb: number | null
-  playersUpdatedDb: number | null
-  playersAddedDb: number | null
-  matchesAddedDb: number | null
-  rankLeagueFetchesSucceeded: number
-  rankLeagueFetchesFailed: number
-  matchIdsFetched: number
-  matchesQueuedHydration: number
-  hydrationJobsSucceeded: number
-  hydrationJobsSkippedOldPatch: number
-  hydrationJobsNotFound: number
-  hydrationJobsFailed: number
-  ingestionJobsSucceeded: number
-  ingestionJobsDuplicate: number
-  wasteIngestionDuplicate: number
-  wasteSkippedOldPatch: number
+type PollerSnapshotClient = {
+  ts?: number
+  window?: string
+  since?: { mode?: string; sinceTimestamp?: number; reason?: string }
+  gateway?: {
+    total_requests?: number
+    total_429s?: number
+    avg_token_pct_120s?: number
+    latency_p95_ms?: number
+  }
+  poll?: {
+    players_polled?: number
+    players_new_added?: number
+    matches_fetched_success?: number
+    match_ids_discovered?: number
+  }
+  ingestion?: {
+    matches_ingested?: number
+    ingested_processed?: number
+    ingested_already_done?: number
+    matches_failed?: number
+  }
+  ratios?: Record<string, number>
+  active_alerts?: Array<{ type?: string; severity?: string; message?: string }>
 }
 
-const pollerV2Observability = ref<{
+const pollerObservability = ref<{
   ok: boolean
   stale: boolean
   ageMs: number | null
-  dashboard?: {
-    rolling2m: {
-      windowMinutes: number
-      httpRequestsTotal: number
-      httpRequestsPerMinuteAvg: number
-    } | null
-    last30m: PollerV2DashboardWindowClient | null
-    last1h: PollerV2DashboardWindowClient | null
-  }
-  data: {
-    runtimeSeconds?: number
-    rolling2m?: {
-      apiRequests?: number
-      api429?: number
-      rateLimitGrantedCost?: number
-      rateLimitDeniedCount?: number
-      rateLimitWaitMsTotal?: number
-      tokenBudget120?: number
-      tokenUsagePct?: number
-    }
-    queue?: {
-      discovery?: { waiting?: number; active?: number; failed?: number }
-      hydration?: { waiting?: number; active?: number; failed?: number }
-      ingestion?: { waiting?: number; active?: number; failed?: number }
-      dataLagSeconds?: number | null
-      tickDurationMs?: number | null
-    }
-    totals?: {
-      playersPolled?: number
-      playersUpdated?: number
-      playersAdded?: number
-      matchesQueuedHydration?: number
-      matchesIngested?: number
-      apiRequests?: number
-      api429?: number
-      rateLimitGrantedCost?: number
-      rateLimitDeniedCount?: number
-    }
-    summaries?: {
-      last30m?: {
-        dbWindow?: {
-          playersPolled?: number
-          playersUpdated?: number
-          playersAdded?: number
-          matchesAdded?: number
-        }
-      } | null
-      last1h?: {
-        dbWindow?: {
-          playersPolled?: number
-          playersUpdated?: number
-          playersAdded?: number
-          matchesAdded?: number
-        }
-      } | null
+  filePath: string | null
+  latest10m: PollerSnapshotClient | null
+  latest30m: PollerSnapshotClient | null
+  latest1h: PollerSnapshotClient | null
+  live: {
+    dataLagSeconds: number | null
+    queue: {
+      discovery: { waiting: number; active: number; failed: number }
+      hydration: { waiting: number; active: number; failed: number }
+      ingestion: { waiting: number; active: number; failed: number }
+      rank: { waiting: number; active: number; failed: number }
     }
   } | null
 } | null>(null)
 
-function formatPollerCompact(n: number): string {
-  if (!Number.isFinite(n)) return '0'
-  const x = Math.round(n)
-  if (x >= 1_000_000) return `${(x / 1_000_000).toFixed(1)}M`
-  if (x >= 10_000) return `${Math.round(x / 1000)}k`
-  if (x >= 1000) return `${(x / 1000).toFixed(1)}k`
-  return String(x)
-}
-
-const pollerDashWindows = computed(() => {
-  const dash = pollerV2Observability.value?.dashboard
-  if (!dash) return [] as PollerV2DashboardWindowClient[]
-  return [dash.last1h, dash.last30m].filter((w): w is PollerV2DashboardWindowClient => w != null)
+const pollerMetricWindows = computed(() => {
+  const p = pollerObservability.value
+  if (!p) return []
+  return [
+    { label: '10 min', snap: p.latest10m },
+    { label: '30 min', snap: p.latest30m },
+    { label: '1 h', snap: p.latest1h },
+  ]
 })
 
-function pollerSummaryRollingTokenUsagePctLabel(windowKey: string): string {
-  if (windowKey !== 'last30m' && windowKey !== 'last1h') return '—'
-  const raw = pollerV2Observability.value?.data?.summaries?.[windowKey]
-  if (!raw || typeof raw !== 'object') return '—'
-  const rolling = (raw as { rolling2m?: { tokenUsagePct?: number } }).rolling2m
-  const n = rolling?.tokenUsagePct
-  if (n == null || !Number.isFinite(n)) return '—'
-  const x = Math.round(n * 10) / 10
-  return `${Number.isInteger(x) ? String(x) : x.toFixed(1)}%`
+function formatPollerSince(ts: number | undefined): string {
+  if (ts == null || !Number.isFinite(ts)) return '—'
+  const ms = ts > 1e12 ? ts : ts * 1000
+  return new Date(ms).toISOString().slice(0, 19).replace('T', ' ')
 }
 
 function formatDashRate(n: number | undefined | null): string {
@@ -2157,15 +1822,23 @@ function formatDashRate(n: number | undefined | null): string {
   return Number.isInteger(x) ? String(x) : x.toFixed(1)
 }
 
-function formatDashInt(n: number | undefined | null): string {
-  if (n == null || !Number.isFinite(n)) return '—'
-  return formatPollerCompact(Math.trunc(n))
-}
-
 const riotPollerLogsOpen = ref(false)
+const riotPollerPm2LogsOpen = ref(false)
 const riotPollerLogs = ref<string[]>([])
+const riotPollerPm2Logs = ref<string[]>([])
+const riotPollerPm2LogSource = ref<string | null>(null)
 const riotPollerLogsLoading = ref(false)
+const riotPollerPm2LogsLoading = ref(false)
 const riotPollerLogsError = ref<string | null>(null)
+
+const activeRiotPollerLogLines = computed(() =>
+  riotPollerPm2LogsOpen.value ? riotPollerPm2Logs.value : riotPollerLogs.value
+)
+
+function closeRiotPollerLogModals() {
+  riotPollerLogsOpen.value = false
+  riotPollerPm2LogsOpen.value = false
+}
 
 async function loadDataStats() {
   dataStatsLoading.value = true
@@ -2910,7 +2583,7 @@ async function loadCron() {
 }
 
 async function refreshDataTabPoller() {
-  await Promise.all([loadDataStats(), loadPollerV2Observability()])
+  await Promise.all([loadDataStats(), loadPollerObservability()])
 }
 
 async function triggerSyncData() {
@@ -2938,22 +2611,57 @@ async function triggerSyncData() {
   }
 }
 
-async function loadPollerV2Observability() {
+async function loadPollerObservability() {
   try {
-    const res = await fetchWithAuth(apiUrl('/api/admin/poller-v2/observability'))
+    const res = await fetchWithAuth(apiUrl('/api/admin/poller/observability'))
     if (res.status === 401) return
     const data = await res.json().catch(() => null)
-    pollerV2Observability.value = data
+    pollerObservability.value = data
   } catch {
     // keep previous value
   }
 }
 
+async function openRiotPollerPm2Logs() {
+  riotPollerPm2LogsOpen.value = true
+  riotPollerLogsOpen.value = false
+  riotPollerPm2LogsLoading.value = true
+  riotPollerLogsError.value = null
+  riotPollerPm2Logs.value = []
+  riotPollerPm2LogSource.value = null
+  try {
+    const res = await fetchWithAuth(
+      apiUrl('/api/admin/riot-poller/process-logs?lines=400&stream=both')
+    )
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json().catch(() => ({}))
+    if (Array.isArray(data?.log)) {
+      riotPollerPm2Logs.value = data.log
+      riotPollerPm2LogSource.value = Array.isArray(data?.files)
+        ? data.files.join(', ')
+        : 'logs/poller-v2-out.log'
+    } else {
+      riotPollerLogsError.value = res.ok ? 'Format de réponse inattendu' : `Erreur ${res.status}`
+    }
+  } catch (e) {
+    riotPollerLogsError.value =
+      e instanceof Error ? e.message : 'Impossible de charger les logs PM2'
+  } finally {
+    riotPollerPm2LogsLoading.value = false
+  }
+}
+
 async function openRiotPollerLogs() {
   riotPollerLogsOpen.value = true
+  riotPollerPm2LogsOpen.value = false
   riotPollerLogsLoading.value = true
   riotPollerLogsError.value = null
   riotPollerLogs.value = []
+  riotPollerPm2LogSource.value = null
   try {
     const res = await fetchWithAuth(apiUrl('/api/admin/riot-poller/logs?lines=300&sort=desc'))
     if (res.status === 401) {

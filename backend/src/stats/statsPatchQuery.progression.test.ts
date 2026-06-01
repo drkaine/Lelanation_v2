@@ -31,7 +31,7 @@ test('buildProgressionSinceSql cumulative from ref without cap', () => {
   assert.match(sql, /16\.12/)
 })
 
-test('buildProgressionSinceSql cumulative from ref with cap', () => {
+test('buildProgressionSinceSql with cap excludes ref patch from since slice', () => {
   const sql = buildProgressionSinceSql('ac', '16.10', '16.11', [
     '16.9.1',
     '16.10.1',
@@ -39,7 +39,7 @@ test('buildProgressionSinceSql cumulative from ref with cap', () => {
     '16.12.1',
   ])
   assert.doesNotMatch(sql, /16\.9/)
-  assert.match(sql, /16\.10/)
+  assert.doesNotMatch(sql, /16\.10/)
   assert.match(sql, /16\.11/)
   assert.doesNotMatch(sql, /16\.12/)
 })

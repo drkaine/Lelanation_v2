@@ -1,7 +1,6 @@
 import type { Job } from "bullmq";
 import pLimit from "p-limit";
 import type { HydrationJobData, ParsedParticipantDto } from "../dto/match.dto.js";
-import { pollerV2Observability } from "../observability/poller-v2-observability.js";
 import { currentBudgetAllocationRef } from "../redis/budget-allocation-ref.js";
 import { ensureRankSnapshot, hasRankSnapshotForMatchDate } from "../services/rank-inflight.js";
 import { normalizePlatformRegion } from "../riot/platform-region.js";
@@ -206,7 +205,6 @@ export async function enqueueRankPrefetchJob(puuid: string, region: string): Pro
   if (existing) {
     const state = await existing.getState();
     if (state !== "failed") {
-      pollerV2Observability.recordRankPrefetchSkippedExisting();
       return false;
     }
     await existing.remove().catch(() => undefined);
@@ -222,7 +220,6 @@ export async function enqueueRankPrefetchJob(puuid: string, region: string): Pro
         priority: RANK_PREFETCH_PRIORITY,
       },
     );
-    pollerV2Observability.recordRankPrefetchEnqueued();
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -231,7 +228,6 @@ export async function enqueueRankPrefetchJob(puuid: string, region: string): Pro
       message.includes("cannot be replaced") ||
       message.includes("-7")
     ) {
-      pollerV2Observability.recordRankPrefetchSkippedExisting();
       return false;
     }
     throw error;

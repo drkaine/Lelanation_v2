@@ -203,6 +203,12 @@ export interface FullSnapshot {
   ts: number;
   uptime_ms: number;
   window: WindowLabel;
+  /** Dernier mode `since` connu au moment du rapport (discovery). */
+  since?: {
+    mode: SinceMode | 'unknown';
+    sinceTimestamp: number;
+    reason: string;
+  };
   gateway: GatewayAggregate;
   poll: PollAggregate;
   ingestion: IngestionAggregate;

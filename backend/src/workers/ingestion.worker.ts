@@ -6,7 +6,6 @@ import { CHAMPION_STATS_METRIC_COLUMNS } from "../constants/championStatsMetricC
 import type { IngestionJobData, ParsedParticipantDto, TeamObjectiveDto } from "../dto/match.dto.js";
 import { championStatsMetricValue } from "../parsers/champion-stats-metric-value.js";
 import { recordIngestionWorker } from "../observability/poller-metrics/instrumentation.js";
-import { pollerV2Observability } from "../observability/poller-v2-observability.js";
 import { INGESTION_QUEUE } from "../queues/definitions.js";
 import { enqueueRankFetchJobsForParticipants } from "../queues/rank-jobs.js";
 import { getRankBacklogCount } from "../queues/index.js";
@@ -1109,7 +1108,6 @@ export async function processIngestionJob(
   const patch = String(job.data.participants[0]?.patch ?? "").trim();
   const rank = String(job.data.participants[0]?.rankTier ?? "UNRANKED").trim();
   recordIngestionWorker({ matchId, patch, rank, type: "started" });
-  pollerV2Observability.recordIngestionStart();
   try {
     const { insertedPlayers, aggregated } = await deps.runTransaction(job.data);
     const durationMs = Date.now() - startedAt;
@@ -1130,14 +1128,11 @@ export async function processIngestionJob(
       await enqueueRankFetchJobsForParticipants(job.data.participants);
     }
     if (aggregated) {
-      pollerV2Observability.recordIngestionSuccess(job.data.participants.length);
       const aggregatedMatchId = String(job.data.participants[0]?.matchId ?? "").trim();
       if (aggregatedMatchId) {
-        pollerV2Observability.recordMatchIngestedForPipeline(aggregatedMatchId);
         await recordAggregatedMatch(aggregatedMatchId);
       }
     }
-    if (insertedPlayers > 0) pollerV2Observability.recordPlayersAdded(insertedPlayers);
   } catch (error) {
     if (error instanceof AlreadyProcessedMatchError) {
       recordIngestionWorker({
@@ -1148,7 +1143,6 @@ export async function processIngestionJob(
         durationMs: Date.now() - startedAt,
         completedReason: "already_done",
       });
-      pollerV2Observability.recordIngestionDuplicate();
       return;
     }
     recordIngestionWorker({
@@ -1159,10 +1153,7 @@ export async function processIngestionJob(
       durationMs: Date.now() - startedAt,
       errorMessage: error instanceof Error ? error.message : String(error),
     });
-    pollerV2Observability.recordIngestionFailure(error);
     throw error;
-  } finally {
-    pollerV2Observability.recordDuration("ingestionJobMs", Date.now() - startedAt);
   }
 }
 

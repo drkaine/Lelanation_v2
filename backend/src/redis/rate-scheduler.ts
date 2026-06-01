@@ -10,7 +10,6 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { config } from "../config/index.js";
 import type { BudgetAllocation } from "../lib/adaptiveBudget.js";
-import { pollerV2Observability } from "../observability/poller-v2-observability.js";
 import {
   applyCurrentBudgetAllocation,
   currentBudgetAllocationRef,
@@ -398,7 +397,6 @@ async function waitForScheduledSlot(slotKey: string, cost: 1 | 2): Promise<void>
 
     if (allowed === 1) {
       const delay = value - Date.now();
-      pollerV2Observability.recordRateLimitAttempt(cost, true, Math.max(0, delay), pipeline);
       if (attempts > 0 && process.env.RATE_SCHEDULER_DEBUG === "1") {
         console.debug(
           JSON.stringify({
@@ -416,7 +414,6 @@ async function waitForScheduledSlot(slotKey: string, cost: 1 | 2): Promise<void>
 
     attempts += 1;
     const waitMs = deniedSlotWaitMs(pipeline, value);
-    pollerV2Observability.recordRateLimitAttempt(cost, false, waitMs, pipeline);
     await sleep(waitMs);
   }
 }
@@ -446,7 +443,6 @@ export async function acquireRankSlot(): Promise<{ granted: boolean; waitMs: num
 
   if (allowed === 1) {
     const delay = Math.max(0, value - now);
-    pollerV2Observability.recordRateLimitAttempt(1, true, delay, "rank");
     if (delay > 5) {
       await sleep(delay);
     }
@@ -454,7 +450,6 @@ export async function acquireRankSlot(): Promise<{ granted: boolean; waitMs: num
   }
 
   const waitMs = deniedSlotWaitMs("rank", value);
-  pollerV2Observability.recordRateLimitAttempt(1, false, waitMs, "rank");
   await sleep(waitMs);
   return { granted: false, waitMs: 0 };
 }
@@ -485,7 +480,6 @@ export async function tryAcquireSlot(cost: 1 | 2): Promise<{ granted: boolean; w
   const waitMs = granted
     ? Math.max(0, value - now)
     : deniedSlotWaitMs(pipeline, value);
-  pollerV2Observability.recordRateLimitAttempt(cost, granted, waitMs, pipeline);
   return { granted, waitMs };
 }
 

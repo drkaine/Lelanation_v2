@@ -1,6 +1,5 @@
 import { insertRankHistory } from '../db/queries/ranks.js';
 import { ingestionQueue } from '../queues/index.js';
-import { pollerV2Observability } from '../observability/poller-v2-observability.js';
 import { normalizePlatformRegion } from '../riot/platform-region.js';
 import type { LeagueEntryDto } from '../riot-gateway/routes/dto.js';
 import type { PollerEventBus } from '../poller/PollerEventBus.js';
@@ -206,7 +205,6 @@ export class PollerDbConsumer {
           skipReason: 'conflict_already_done',
         });
         orchestrationLogger.debug({ component: 'PollerDbConsumer', matchId }, 'match already in processed_matches, skipping');
-        pollerV2Observability.recordHydrationSkippedAlreadyDone();
         return;
       }
 
@@ -241,8 +239,6 @@ export class PollerDbConsumer {
         backoff: { type: 'exponential', delay: 2000 },
       });
 
-      pollerV2Observability.recordHydrationSuccess(1);
-      pollerV2Observability.recordHydrationRankGate(matchId, true);
       recordIngestionQueue({ matchId, patch, rank, type: 'queued' });
       orchestrationLogger.info(
         { component: 'PollerDbConsumer', matchId, patch, rank, queueJobId: matchId },
@@ -270,7 +266,6 @@ export class PollerDbConsumer {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      pollerV2Observability.recordHydrationFailure(error);
       orchestrationLogger.error({ component: 'PollerDbConsumer', matchId, error: message, stage: 'onMatchData' }, 'onMatchData failed');
       try {
         await markProcessedMatchError(patch, matchId);
