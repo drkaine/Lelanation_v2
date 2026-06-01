@@ -1,4 +1,4 @@
-import { Worker } from "bullmq";
+import { Worker, type Job } from "bullmq";
 import { config } from "../config/index.js";
 import { normalizePlatformRegion } from "../riot/platform-region.js";
 import { sql } from "../db/client.js";
@@ -20,7 +20,7 @@ import {
   normalizeParticipantRankTier,
 } from "./match-rank-readiness.js";
 
-class AlreadyProcessedMatchError extends Error {
+export class AlreadyProcessedMatchError extends Error {
   constructor(matchId: string) {
     super(`match_already_processed:${matchId}`);
     this.name = "AlreadyProcessedMatchError";
@@ -1090,61 +1090,85 @@ export async function runIngestionTransaction(payload: IngestionJobData): Promis
   return { insertedPlayers, aggregated: true };
 }
 
-export const ingestionWorker = new Worker<IngestionJobData>(
-  INGESTION_QUEUE,
-  async (job) => {
-    const startedAt = Date.now();
-    const matchId = String(job.data.participants[0]?.matchId ?? "").trim();
-    const patch = String(job.data.participants[0]?.patch ?? "").trim();
-    const rank = String(job.data.participants[0]?.rankTier ?? "UNRANKED").trim();
-    recordIngestionWorker({ matchId, patch, rank, type: "started" });
-    pollerV2Observability.recordIngestionStart();
-    try {
-      const { insertedPlayers, aggregated } = await runIngestionTransaction(job.data);
-      const durationMs = Date.now() - startedAt;
+export interface IngestionJobDeps {
+  runTransaction: (
+    payload: IngestionJobData,
+  ) => Promise<{ insertedPlayers: number; aggregated: boolean }>;
+}
+
+const defaultIngestionJobDeps: IngestionJobDeps = {
+  runTransaction: (payload) => runIngestionTransaction(payload),
+};
+
+export async function processIngestionJob(
+  job: Job<IngestionJobData>,
+  deps: IngestionJobDeps = defaultIngestionJobDeps,
+): Promise<void> {
+  const startedAt = Date.now();
+  const matchId = String(job.data.participants[0]?.matchId ?? "").trim();
+  const patch = String(job.data.participants[0]?.patch ?? "").trim();
+  const rank = String(job.data.participants[0]?.rankTier ?? "UNRANKED").trim();
+  recordIngestionWorker({ matchId, patch, rank, type: "started" });
+  pollerV2Observability.recordIngestionStart();
+  try {
+    const { insertedPlayers, aggregated } = await deps.runTransaction(job.data);
+    const durationMs = Date.now() - startedAt;
+    recordIngestionWorker({
+      matchId,
+      patch,
+      rank,
+      type: "completed",
+      durationMs,
+      completedReason: "processed",
+      tablesWritten: {
+        processed_matches_update: aggregated ? 1 : 0,
+        participants: insertedPlayers,
+      },
+    });
+    const rankBacklog = await getRankBacklogCount();
+    if (!shouldPauseMatchPipelines(rankBacklog)) {
+      await enqueueRankFetchJobsForParticipants(job.data.participants);
+    }
+    if (aggregated) {
+      pollerV2Observability.recordIngestionSuccess(job.data.participants.length);
+      const aggregatedMatchId = String(job.data.participants[0]?.matchId ?? "").trim();
+      if (aggregatedMatchId) {
+        pollerV2Observability.recordMatchIngestedForPipeline(aggregatedMatchId);
+        await recordAggregatedMatch(aggregatedMatchId);
+      }
+    }
+    if (insertedPlayers > 0) pollerV2Observability.recordPlayersAdded(insertedPlayers);
+  } catch (error) {
+    if (error instanceof AlreadyProcessedMatchError) {
       recordIngestionWorker({
         matchId,
         patch,
         rank,
         type: "completed",
-        durationMs,
-        tablesWritten: {
-          processed_matches_update: aggregated ? 1 : 0,
-          participants: insertedPlayers,
-        },
-      });
-      const rankBacklog = await getRankBacklogCount();
-      if (!shouldPauseMatchPipelines(rankBacklog)) {
-        await enqueueRankFetchJobsForParticipants(job.data.participants);
-      }
-      if (aggregated) {
-        pollerV2Observability.recordIngestionSuccess(job.data.participants.length);
-        const matchId = String(job.data.participants[0]?.matchId ?? "").trim();
-        if (matchId) {
-          pollerV2Observability.recordMatchIngestedForPipeline(matchId);
-          await recordAggregatedMatch(matchId);
-        }
-      }
-      if (insertedPlayers > 0) pollerV2Observability.recordPlayersAdded(insertedPlayers);
-    } catch (error) {
-      if (error instanceof AlreadyProcessedMatchError) {
-        pollerV2Observability.recordIngestionDuplicate();
-        return;
-      }
-      recordIngestionWorker({
-        matchId,
-        patch,
-        rank,
-        type: "failed",
         durationMs: Date.now() - startedAt,
-        errorMessage: error instanceof Error ? error.message : String(error),
+        completedReason: "already_done",
       });
-      pollerV2Observability.recordIngestionFailure(error);
-      throw error;
-    } finally {
-      pollerV2Observability.recordDuration("ingestionJobMs", Date.now() - startedAt);
+      pollerV2Observability.recordIngestionDuplicate();
+      return;
     }
-  },
+    recordIngestionWorker({
+      matchId,
+      patch,
+      rank,
+      type: "failed",
+      durationMs: Date.now() - startedAt,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+    pollerV2Observability.recordIngestionFailure(error);
+    throw error;
+  } finally {
+    pollerV2Observability.recordDuration("ingestionJobMs", Date.now() - startedAt);
+  }
+}
+
+export const ingestionWorker = new Worker<IngestionJobData>(
+  INGESTION_QUEUE,
+  (job) => processIngestionJob(job),
   {
     connection: redis,
     concurrency: 5,

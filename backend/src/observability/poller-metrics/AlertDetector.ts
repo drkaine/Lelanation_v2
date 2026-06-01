@@ -1,3 +1,4 @@
+import { getLatestResolvedSince } from '../../poll-orchestration/sinceContext.js';
 import { PollerTuner } from '../../tuner/PollerTuner.js';
 import { pollerMetricsLogger } from './logger.js';
 import type { MetricsStore } from './MetricsStore.js';
@@ -23,6 +24,7 @@ function warmupSessions(): number {
 export class AlertDetector {
   private readonly active = new Map<AlertType, Alert>();
   private prevQueueDepthAvg = 0;
+  private fullHistoryAlertFired = false;
 
   constructor(private readonly store: MetricsStore) {}
 
@@ -51,8 +53,23 @@ export class AlertDetector {
     this.checkPollStall();
     this.checkDbSlow(ing.slowest_db_ops);
     this.checkIngestionMissingData(ing.skip_breakdown);
+    this.checkFullHistoryModeReached();
 
     snapshot.active_alerts = this.getActive();
+  }
+
+  private checkFullHistoryModeReached(): void {
+    const currentMode = getLatestResolvedSince()?.mode;
+    if (currentMode === 'prod_full_history' && !this.fullHistoryAlertFired) {
+      this.fullHistoryAlertFired = true;
+      pollerMetricsLogger.info(
+        {
+          component: 'AlertDetector',
+          event: 'full_history_mode_reached',
+        },
+        'All players polled within 24h — now fetching full history since FULL_HISTORY_SINCE_DATE',
+      );
+    }
   }
 
   private raise(type: AlertType, severity: AlertSeverity, message: string, data: Record<string, unknown>): void {

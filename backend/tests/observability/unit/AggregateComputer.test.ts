@@ -148,5 +148,81 @@ describe('AggregateComputer', () => {
     expect(snap.gateway.total_requests).toBe(0);
     expect(snap.poll.players_polled).toBe(0);
     expect(snap.ingestion.matches_ingested).toBe(0);
+    expect(snap.ingestion.ingested_processed).toBe(0);
+    expect(snap.ingestion.ingested_already_done).toBe(0);
+  });
+
+  test('T_ingestion_1 matches_ingested counts both processed and already_done', () => {
+    const store = MetricsStore.getInstance();
+    const now = Date.now();
+    for (let i = 0; i < 3; i += 1) {
+      store.pushIngestionWorker({
+        ts: now,
+        matchId: `P${i}`,
+        patch: '16.11',
+        rank: 'GOLD',
+        type: 'completed',
+        completedReason: 'processed',
+        durationMs: 10,
+      });
+    }
+    for (let i = 0; i < 2; i += 1) {
+      store.pushIngestionWorker({
+        ts: now,
+        matchId: `A${i}`,
+        patch: '16.11',
+        rank: 'GOLD',
+        type: 'completed',
+        completedReason: 'already_done',
+        durationMs: 5,
+      });
+    }
+    store.pushIngestionWorker({
+      ts: now,
+      matchId: 'F0',
+      patch: '16.11',
+      rank: 'GOLD',
+      type: 'failed',
+      durationMs: 1,
+      errorMessage: 'err',
+    });
+    const result = new AggregateComputer(store).computeIngestion('10m');
+    expect(result.matches_ingested).toBe(5);
+    expect(result.ingested_processed).toBe(3);
+    expect(result.ingested_already_done).toBe(2);
+    expect(result.matches_failed).toBe(1);
+    expect(result.ingestion_success_rate_pct).toBeCloseTo(83.3, 1);
+  });
+
+  test('T_ingestion_2 matches_ingested is 0 when only started events', () => {
+    const store = MetricsStore.getInstance();
+    const now = Date.now();
+    for (let i = 0; i < 3; i += 1) {
+      store.pushIngestionWorker({
+        ts: now,
+        matchId: `S${i}`,
+        patch: '16.11',
+        rank: 'GOLD',
+        type: 'started',
+      });
+    }
+    const result = new AggregateComputer(store).computeIngestion('10m');
+    expect(result.matches_ingested).toBe(0);
+  });
+
+  test('T_ingestion_3 completedReason undefined treated as processed', () => {
+    const store = MetricsStore.getInstance();
+    const now = Date.now();
+    store.pushIngestionWorker({
+      ts: now,
+      matchId: 'M1',
+      patch: '16.11',
+      rank: 'GOLD',
+      type: 'completed',
+      durationMs: 10,
+    });
+    const result = new AggregateComputer(store).computeIngestion('10m');
+    expect(result.ingested_processed).toBe(1);
+    expect(result.ingested_already_done).toBe(0);
   });
 });

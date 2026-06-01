@@ -1,6 +1,6 @@
 import { sql } from '../db/client.js';
 import { timedDbOp } from '../observability/poller-metrics/timedDbOp.js';
-import type { DiscoveryPlayer } from './types.js';
+import type { DiscoveryPlayer, LastSeenStats } from './types.js';
 import { orchestrationLogger } from './logger.js';
 
 export class PlayerDiscovery {
@@ -37,6 +37,25 @@ export class PlayerDiscovery {
       puuid: row.puuid,
       region: String(row.region ?? '').trim().toLowerCase(),
     }));
+  }
+
+  async getOldestLastSeenStats(): Promise<LastSeenStats> {
+    const rows = await timedDbOp('get_oldest_last_seen', () =>
+      sql<Array<{ oldest_last_seen: Date | string | null; never_seen_count: number | string }>>`
+        SELECT
+          MIN(last_seen) AS oldest_last_seen,
+          COUNT(*) FILTER (WHERE last_seen IS NULL)::int AS never_seen_count
+        FROM players
+        WHERE region IS NOT NULL
+      `,
+    );
+
+    const row = rows[0];
+    const raw = row?.oldest_last_seen;
+    return {
+      oldestLastSeen: raw != null ? new Date(raw) : null,
+      neverSeenCount: Number(row?.never_seen_count ?? 0),
+    };
   }
 
   async updateLastSeen(puuid: string): Promise<void> {

@@ -1,6 +1,6 @@
 import type { BucketState } from '../../riot-gateway/types.js';
 import { MetricsStore } from './MetricsStore.js';
-import type { IngestionSkipReason, RankEvent } from './types.js';
+import type { IngestionCompletedReason, IngestionSkipReason, RankEvent } from './types.js';
 
 function appLimits(buckets: BucketState[]): {
   used120: number;
@@ -104,6 +104,7 @@ export function recordIngestionWorker(params: {
   rank: string;
   type: 'started' | 'completed' | 'failed';
   durationMs?: number;
+  completedReason?: IngestionCompletedReason;
   errorMessage?: string;
   tablesWritten?: Record<string, number>;
 }): void {

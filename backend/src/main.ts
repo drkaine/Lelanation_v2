@@ -12,8 +12,12 @@ import {
   PlayerDiscovery,
   PollerDbConsumer,
   RankFilter,
+  SinceTimestampResolver,
+  applySinceModeTransition,
   loadPollOrchestrationEnv,
+  setLatestResolvedSince,
 } from './poll-orchestration/index.js';
+import type { SinceMode } from './poll-orchestration/SinceTimestampResolver.js';
 import { PollerEngine } from './poller/PollerEngine.js';
 import type { Platform, Player, PollConfig } from './poller/types.js';
 import { ingestionQueue, getQueueMetrics } from './queues/index.js';
@@ -42,6 +46,7 @@ let observability: ObservabilityOrchestrator | null = null;
 let shuttingDown = false;
 
 const playerDiscovery = new PlayerDiscovery();
+const sinceResolver = new SinceTimestampResolver(playerDiscovery);
 const matchFilter = new MatchFilter();
 const rankFilter = new RankFilter();
 const participantDiscovery = new ParticipantDiscovery();
@@ -206,6 +211,7 @@ async function discoveryLoop(): Promise<void> {
   const tuner = PollerTuner.getInstance();
   const gateway = RiotGateway.getInstance();
   let requestsAtSessionStart = 0;
+  let previousSinceMode: SinceMode | null = null;
 
   while (!shuttingDown) {
     try {
@@ -238,18 +244,22 @@ async function discoveryLoop(): Promise<void> {
       );
 
       const patchInfo = await PatchResolver.resolveCurrentPatchInfo();
-      const sinceTimestamp = patchInfo.startTimestamp;
+      const resolved = await sinceResolver.resolve();
+      setLatestResolvedSince(resolved);
+      previousSinceMode = applySinceModeTransition(previousSinceMode, resolved);
 
       orchestrationLogger.info(
         {
           patch: patchInfo.patch,
-          since: new Date(sinceTimestamp * 1000).toISOString(),
+          since: new Date(resolved.sinceTimestamp * 1000).toISOString(),
+          sinceMode: resolved.mode,
+          sinceReason: resolved.reason,
         },
         'polling patch',
       );
 
       const pollConfig: Partial<PollConfig> = {
-        sinceTimestamp,
+        sinceTimestamp: resolved.sinceTimestamp,
         matchIdsPerPage: Number.parseInt(process.env.POLLER_MATCH_IDS_PER_PAGE ?? '100', 10),
         resolveParticipantRanks: orchEnv.resolveParticipantRanks,
         maxConcurrentPlayers: tuned.maxConcurrentPlayers,
@@ -344,9 +354,13 @@ async function bootstrap(): Promise<void> {
   }, engine.getEventBus());
   dbConsumer.subscribe();
 
-  PollerTuner.getInstance();
+  const gateway = RiotGateway.getInstance();
+  const tuner = PollerTuner.getInstance();
+  gateway.getObservabilityBus().on('ratelimit:429', () => {
+    tuner.onRateLimitHit();
+  });
 
-  observability = ObservabilityOrchestrator.getInstance(RiotGateway.getInstance(), ingestionQueue);
+  observability = ObservabilityOrchestrator.getInstance(gateway, ingestionQueue);
   await observability.start();
 
   orchestrationLogger.info(

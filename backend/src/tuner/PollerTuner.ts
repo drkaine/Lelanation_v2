@@ -11,6 +11,9 @@ const WARMUP_SESSIONS = Number.parseInt(process.env.TUNER_WARMUP_SESSIONS ?? '5'
 const TARGET_SESSION_DURATION = Number.parseInt(process.env.TUNER_SESSION_DURATION_S ?? '30', 10);
 const EMA_ALPHA = Number.parseFloat(process.env.TUNER_EMA_ALPHA ?? '0.3');
 const WARMUP_MULTIPLIER = 0.5;
+const RATCHET_STEP = Number.parseFloat(process.env.TUNER_RATCHET_STEP ?? '0.02');
+const RATCHET_MAX = Number.parseFloat(process.env.TUNER_RATCHET_MAX ?? '0.20');
+const RATCHET_DECAY_SESSIONS = Number.parseInt(process.env.TUNER_RATCHET_DECAY ?? '10', 10);
 const MIN_BATCH_SIZE = 1;
 const MAX_BATCH_SIZE = 200;
 const MIN_CONCURRENT = 1;
@@ -64,6 +67,8 @@ export class PollerTuner {
   private sessionCount = 0;
   private lastComputedParams: TuningParams | null = null;
   private consecutiveMinParams = 0;
+  private effectiveSafetyMargin = riotConfig.safetyMargin;
+  private sessionsWithout429 = 0;
 
   private constructor() {
     this.reqPerPlayerEma = new ExponentialMovingAverage(EMA_ALPHA, REQ_PER_PLAYER_SEED);
@@ -131,7 +136,7 @@ export class PollerTuner {
       }
     }
 
-    const safety = riotConfig.safetyMargin;
+    const safety = this.effectiveSafetyMargin;
     const safeTokens120s = Math.floor(limit120s * (1 - safety));
     const safeTokens1s = Math.floor(limit1s * (1 - safety));
     const rps120s = safeTokens120s / 120;
@@ -200,7 +205,7 @@ export class PollerTuner {
 
     const rpsPerPlayer = reqPerPlayer / TARGET_SESSION_DURATION;
     const maxConcurrentPlayers = clamp(
-      Math.ceil(targetRps / Math.max(0.01, rpsPerPlayer)),
+      Math.floor(Math.ceil(targetRps / Math.max(0.01, rpsPerPlayer)) * effectiveMultiplier),
       MIN_CONCURRENT,
       Math.min(MAX_CONCURRENT_PLAYERS, batchSize),
     );
@@ -210,14 +215,16 @@ export class PollerTuner {
     const rpsPerMatch = reqPerMatch / TARGET_SESSION_DURATION;
 
     const maxConcurrentMatchFetches = clamp(
-      Math.ceil(rpsPerPlayerBudget / Math.max(0.01, rpsPerMatch)),
+      Math.floor(Math.ceil(rpsPerPlayerBudget / Math.max(0.01, rpsPerMatch)) * effectiveMultiplier),
       MIN_CONCURRENT,
       MAX_CONCURRENT_MATCHES,
     );
 
     const cacheHitRate = clamp(this.cacheHitRateEma.value, 0, 1);
     const participantRankConcurrency = clamp(
-      Math.ceil(maxConcurrentMatchFetches * (1 - cacheHitRate) * 10),
+      Math.floor(
+        Math.ceil(maxConcurrentMatchFetches * (1 - cacheHitRate) * 10) * effectiveMultiplier,
+      ),
       MIN_CONCURRENT,
       MAX_CONCURRENT_RANKS,
     );
@@ -266,16 +273,20 @@ export class PollerTuner {
 
     tunerLogger.info(
       {
-        component: 'PollerTuner',
+        component: 'poller-tuner',
+        event: 'params_computed',
+        warmupActive,
+        effectiveMultiplier,
         batchSize: params.batchSize,
         maxConcurrentPlayers: params.maxConcurrentPlayers,
         maxConcurrentMatchFetches: params.maxConcurrentMatchFetches,
         participantRankConcurrency: params.participantRankConcurrency,
         targetRps: params.targetRps,
-        detectedLimit120s: params.detectedLimit120s,
-        detectedLimit1s: params.detectedLimit1s,
-        estimatedReqPerPlayer: params.estimatedReqPerPlayer,
-        warmupActive: params.warmupActive,
+        detectedLimit120s: limit120s,
+        detectedLimit1s: limit1s,
+        estimatedReqPerPlayer: this.reqPerPlayerEma.value,
+        sessionsSinceStart: this.sessionCount,
+        effectiveSafetyMargin: this.effectiveSafetyMargin,
         discoveryIntervalMs: params.discoveryIntervalMs,
         availablePlayers: ctx.availablePlayers,
         queueDepth: ctx.queueDepth,
@@ -284,6 +295,26 @@ export class PollerTuner {
     );
 
     return params;
+  }
+
+  onRateLimitHit(): void {
+    const previous = this.effectiveSafetyMargin;
+    this.effectiveSafetyMargin = Math.min(
+      RATCHET_MAX,
+      this.effectiveSafetyMargin + RATCHET_STEP,
+    );
+    this.sessionsWithout429 = 0;
+
+    tunerLogger.warn(
+      {
+        component: 'poller-tuner',
+        event: 'safety_margin_ratchet_up',
+        previous: previous.toFixed(3),
+        current: this.effectiveSafetyMargin.toFixed(3),
+        step: RATCHET_STEP,
+      },
+      'safety margin increased after 429',
+    );
   }
 
   recordSession(feedback: SessionFeedback): void {
@@ -333,6 +364,28 @@ export class PollerTuner {
 
     this.sessionCount += 1;
 
+    this.sessionsWithout429 += 1;
+    if (this.sessionsWithout429 >= RATCHET_DECAY_SESSIONS) {
+      const floor = riotConfig.safetyMargin;
+      if (this.effectiveSafetyMargin > floor) {
+        const previous = this.effectiveSafetyMargin;
+        this.effectiveSafetyMargin = Math.max(
+          floor,
+          this.effectiveSafetyMargin - RATCHET_STEP,
+        );
+        this.sessionsWithout429 = 0;
+        tunerLogger.info(
+          {
+            component: 'poller-tuner',
+            event: 'safety_margin_ratchet_down',
+            previous: previous.toFixed(3),
+            current: this.effectiveSafetyMargin.toFixed(3),
+          },
+          'safety margin decayed — no 429s in last sessions',
+        );
+      }
+    }
+
     tunerLogger.debug(
       {
         component: 'PollerTuner',
@@ -350,6 +403,7 @@ export class PollerTuner {
   }
 
   getSnapshot(): TunerSnapshot {
+    const floor = riotConfig.safetyMargin;
     return {
       params: this.lastComputedParams,
       ema: {
@@ -359,6 +413,12 @@ export class PollerTuner {
       },
       limitHistory: this.limitDetector.getHistory(),
       sessionCount: this.sessionCount,
+      ratchet: {
+        effectiveSafetyMargin: this.effectiveSafetyMargin,
+        configuredFloor: floor,
+        sessionsWithout429: this.sessionsWithout429,
+        ratchetActive: this.effectiveSafetyMargin > floor,
+      },
     };
   }
 }

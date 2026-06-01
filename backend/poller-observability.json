@@ -1,44 +1,44 @@
 {
   "10m": {
-    "ts": 1780304037683,
-    "uptime_ms": 600014,
+    "ts": 1780306559039,
+    "uptime_ms": 600018,
     "window": "10m",
     "gateway": {
       "window": "10m",
-      "avg_req_per_120s": 57.29201680672269,
-      "peak_req_per_120s": 144,
-      "total_requests": 476,
-      "times_limit_reached": 27,
-      "total_429s": 27,
-      "total_wait_ms_from_429": 48000,
-      "latency_p50_ms": 65,
-      "latency_p95_ms": 282,
-      "latency_p99_ms": 388,
-      "avg_token_pct_120s": 60.833333333333336,
-      "avg_token_pct_1s": 42.208333333333336
+      "avg_req_per_120s": 62.18407960199005,
+      "peak_req_per_120s": 159,
+      "total_requests": 402,
+      "times_limit_reached": 55,
+      "total_429s": 55,
+      "total_wait_ms_from_429": 373000,
+      "latency_p50_ms": 59,
+      "latency_p95_ms": 232,
+      "latency_p99_ms": 304,
+      "avg_token_pct_120s": 61.391666666666666,
+      "avg_token_pct_1s": 45.541666666666664
     },
     "poll": {
       "window": "10m",
       "players_polled": 11,
-      "players_new_added": 21,
-      "ranks_fetched": 354,
-      "ranks_skipped_db": 1,
-      "ranks_skipped_cache": 56,
+      "players_new_added": 18,
+      "ranks_fetched": 274,
+      "ranks_skipped_db": 27,
+      "ranks_skipped_cache": 20,
       "ranks_failed": 0,
-      "rank_skip_rate_pct": 13.86861313868613,
-      "match_ids_discovered": 57,
+      "rank_skip_rate_pct": 14.641744548286603,
+      "match_ids_discovered": 35,
       "match_ids_skipped_memory": 0,
-      "match_ids_skipped_db": 0,
-      "match_ids_new": 57,
-      "match_skip_rate_pct": 0,
-      "matches_fetched_success": 41,
+      "match_ids_skipped_db": 2,
+      "match_ids_new": 33,
+      "match_skip_rate_pct": 5.714285714285714,
+      "matches_fetched_success": 31,
       "matches_fetched_failed": 0,
-      "match_fetch_latency_p50_ms": 441,
-      "match_fetch_latency_p95_ms": 9098
+      "match_fetch_latency_p50_ms": 494,
+      "match_fetch_latency_p95_ms": 4525
     },
     "ingestion": {
       "window": "10m",
-      "matches_queued": 40,
+      "matches_queued": 31,
       "matches_skipped_total": 0,
       "skip_breakdown": {
         "missing_rank": 0,
@@ -48,50 +48,52 @@
         "queue_add_failed": 0
       },
       "queue_skip_rate_pct": 0,
-      "matches_ingested": 0,
+      "matches_ingested": 31,
+      "ingested_processed": 0,
+      "ingested_already_done": 31,
       "matches_failed": 0,
-      "ingestion_success_rate_pct": 0,
-      "ingestion_latency_p50_ms": 0,
-      "ingestion_latency_p95_ms": 0,
-      "ingestion_latency_p99_ms": 0,
+      "ingestion_success_rate_pct": 100,
+      "ingestion_latency_p50_ms": 4,
+      "ingestion_latency_p95_ms": 31,
+      "ingestion_latency_p99_ms": 50,
       "db_op_latency_p50_ms": 1,
-      "db_op_latency_p95_ms": 25,
+      "db_op_latency_p95_ms": 27,
       "slowest_db_ops": [
         {
           "operation": "player_discovery_fetch",
-          "p95_ms": 45
+          "p95_ms": 85
         },
         {
           "operation": "update_last_seen",
-          "p95_ms": 41
+          "p95_ms": 79
         },
         {
           "operation": "rank_filter_query",
-          "p95_ms": 21
+          "p95_ms": 23
         },
         {
           "operation": "match_filter_query",
-          "p95_ms": 7
+          "p95_ms": 9
         }
       ],
       "queue_depth_avg": 0,
       "queue_depth_peak": 0
     },
     "ratios": {
-      "matches_ingested_vs_fetched_pct": 0,
-      "matches_skipped_vs_discovered_pct": 0,
-      "ranks_coverage_pct": 99.71830985915493,
-      "token_efficiency_pct": 60.833333333333336
+      "matches_ingested_vs_fetched_pct": 100,
+      "matches_skipped_vs_discovered_pct": 5.714285714285714,
+      "ranks_coverage_pct": 91.0299003322259,
+      "token_efficiency_pct": 61.391666666666666
     },
     "active_alerts": [
       {
         "type": "too_many_429s",
         "severity": "error",
         "message": "429s detected in last 10 minutes",
-        "since": 1780304037684,
+        "since": 1780306559040,
         "data": {
-          "count": 27,
-          "total_wait_ms": 48000
+          "count": 55,
+          "total_wait_ms": 373000
         }
       }
     ]

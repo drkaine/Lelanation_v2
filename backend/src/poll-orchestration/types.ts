@@ -3,6 +3,11 @@ export interface DiscoveryPlayer {
   region: string;
 }
 
+export interface LastSeenStats {
+  oldestLastSeen: Date | null;
+  neverSeenCount: number;
+}
+
 export interface PollerDbConsumerConfig {
   currentPatch: string;
   rankTierForUnranked: string;

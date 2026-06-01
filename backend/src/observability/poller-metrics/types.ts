@@ -1,4 +1,7 @@
+import type { ResolvedSince, SinceMode } from '../../poll-orchestration/SinceTimestampResolver.js';
 import type { TunerSnapshot } from '../../tuner/types.js';
+
+export type { ResolvedSince, SinceMode };
 
 export interface GatewayRequestEvent {
   ts: number;
@@ -23,6 +26,7 @@ export interface TokenSnapshotEvent {
   pct_1s: number;
   in_flight: number;
   queue_depth: number;
+  sinceMode: SinceMode | 'unknown';
 }
 
 export interface RateLimitSaturationEvent {
@@ -96,6 +100,8 @@ export interface IngestionQueueEvent {
   skipReason?: IngestionSkipReason;
 }
 
+export type IngestionCompletedReason = 'processed' | 'already_done';
+
 export interface IngestionWorkerEvent {
   ts: number;
   matchId: string;
@@ -103,6 +109,7 @@ export interface IngestionWorkerEvent {
   rank: string;
   type: 'started' | 'completed' | 'failed';
   durationMs?: number;
+  completedReason?: IngestionCompletedReason;
   errorMessage?: string;
   tablesWritten?: Record<string, number>;
 }
@@ -178,6 +185,8 @@ export interface IngestionAggregate {
   skip_breakdown: Record<IngestionSkipReason, number>;
   queue_skip_rate_pct: number;
   matches_ingested: number;
+  ingested_processed: number;
+  ingested_already_done: number;
   matches_failed: number;
   ingestion_success_rate_pct: number;
   ingestion_latency_p50_ms: number;

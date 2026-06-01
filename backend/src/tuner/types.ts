@@ -39,6 +39,13 @@ export interface LimitChangeEvent {
   ratio: number;
 }
 
+export interface TunerRatchetSnapshot {
+  effectiveSafetyMargin: number;
+  configuredFloor: number;
+  sessionsWithout429: number;
+  ratchetActive: boolean;
+}
+
 export interface TunerSnapshot {
   params: TuningParams | null;
   ema: {
@@ -48,4 +55,5 @@ export interface TunerSnapshot {
   };
   limitHistory: LimitChangeEvent[];
   sessionCount: number;
+  ratchet: TunerRatchetSnapshot;
 }

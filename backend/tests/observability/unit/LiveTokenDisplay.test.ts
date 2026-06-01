@@ -34,6 +34,7 @@ describe('LiveTokenDisplay', () => {
     expect(snap?.used_120s).toBe(10);
     expect(snap?.limit_120s).toBe(99);
     expect(snap?.queue_depth).toBe(6);
+    expect(snap?.sinceMode).toBe('unknown');
   });
 
   test('T2 token bar renders 0%, 50%, 100%', () => {

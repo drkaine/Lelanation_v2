@@ -3,6 +3,7 @@ import type { AlertDetector } from './AlertDetector.js';
 import type { AggregateComputer } from './AggregateComputer.js';
 import { pollerMetricsLogger } from './logger.js';
 import type { SnapshotPersistence } from './SnapshotPersistence.js';
+import { getLatestResolvedSince } from '../../poll-orchestration/sinceContext.js';
 import type { WindowLabel } from './types.js';
 
 const REPORT_INTERVALS: Record<WindowLabel, number> = {
@@ -55,9 +56,11 @@ export class AggregateReporter {
       snapshot.active_alerts = this.alertDetector.getActive();
     }
 
+    const resolved = getLatestResolvedSince();
     pollerMetricsLogger.info({
       component: 'aggregate-reporter',
       window,
+      since_mode: resolved?.mode ?? 'unknown',
       gateway: snapshot.gateway,
       poll: snapshot.poll,
       ingestion: snapshot.ingestion,

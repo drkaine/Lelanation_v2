@@ -162,3 +162,6 @@ export interface MetricsSnapshot {
   }
   alerts: ActiveAlert[]
 }
+
+/** Re-export for dashboards — live token snapshots use poller-metrics TokenSnapshotEvent.sinceMode */
+export type { SinceMode } from '../poll-orchestration/SinceTimestampResolver.js';

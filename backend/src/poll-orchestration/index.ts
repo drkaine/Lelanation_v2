@@ -1,6 +1,11 @@
 export { PatchResolver } from './PatchResolver.js';
 export type { PatchInfo } from './PatchResolver.js';
 export { PlayerDiscovery } from './PlayerDiscovery.js';
+export { SinceTimestampResolver } from './SinceTimestampResolver.js';
+export type { ResolvedSince, SinceMode } from './SinceTimestampResolver.js';
+export { setLatestResolvedSince, getLatestResolvedSince } from './sinceContext.js';
+export { applySinceModeTransition } from './sinceModeTransition.js';
+export type { LastSeenStats } from './types.js';
 export { MatchFilter } from './MatchFilter.js';
 export { RankFilter } from './RankFilter.js';
 export { ParticipantDiscovery } from './ParticipantDiscovery.js';

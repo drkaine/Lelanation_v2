@@ -344,4 +344,119 @@ describe('PollerTuner', () => {
     });
     expect(() => JSON.stringify(tuner.getSnapshot())).not.toThrow();
   });
+
+  test('T_warmup_concurrency_1 maxConcurrentMatchFetches is scaled by warmup multiplier', () => {
+    const tuner = PollerTuner.getInstance();
+    const warmupParams = tuner.compute(ctx(buildGatewayStatus(100, 20), 20));
+    expect(warmupParams.warmupActive).toBe(true);
+
+    for (let i = 0; i < 5; i += 1) {
+      tuner.recordSession(feedback());
+    }
+    const fullParams = tuner.compute(ctx(buildGatewayStatus(100, 20), 20));
+    expect(warmupParams.maxConcurrentMatchFetches).toBeLessThanOrEqual(
+      Math.ceil(fullParams.maxConcurrentMatchFetches * 0.5) + 1,
+    );
+    expect(warmupParams.maxConcurrentMatchFetches).toBeLessThan(fullParams.maxConcurrentMatchFetches);
+  });
+
+  test('T_warmup_concurrency_2 participantRankConcurrency is scaled by warmup multiplier', () => {
+    const tightCtx = ctx(buildGatewayStatus(12, 2), 1);
+    const warmupTuner = PollerTuner.getInstance();
+    const warmupParams = warmupTuner.compute(tightCtx);
+
+    PollerTuner.resetInstance();
+    const fullTuner = PollerTuner.getInstance();
+    for (let i = 0; i < 5; i += 1) {
+      fullTuner.recordSession(feedback());
+    }
+    const fullParams = fullTuner.compute(tightCtx);
+    expect(warmupParams.participantRankConcurrency).toBeLessThanOrEqual(
+      Math.ceil(fullParams.participantRankConcurrency * 0.5) + 1,
+    );
+    expect(warmupParams.participantRankConcurrency).toBeLessThan(
+      fullParams.participantRankConcurrency,
+    );
+  });
+
+  test('T_warmup_concurrency_3 after warmup concurrencies return to full computed value', () => {
+    const tuner = PollerTuner.getInstance();
+    const warmupParams = tuner.compute(ctx(buildGatewayStatus(100, 20), 20));
+
+    for (let i = 0; i < 5; i += 1) {
+      tuner.recordSession(feedback());
+    }
+    const fullParams = tuner.compute(ctx(buildGatewayStatus(100, 20), 20));
+    expect(fullParams.maxConcurrentMatchFetches).toBeGreaterThan(
+      warmupParams.maxConcurrentMatchFetches,
+    );
+  });
+
+  test('T_warmup_concurrency_4 MIN_CONCURRENT respected with warmup multiplier', () => {
+    const tuner = PollerTuner.getInstance();
+    const params = tuner.compute(ctx(buildGatewayStatus(1, 1, 99), 1));
+    expect(params.maxConcurrentMatchFetches).toBeGreaterThanOrEqual(1);
+    expect(params.participantRankConcurrency).toBeGreaterThanOrEqual(1);
+    expect(params.maxConcurrentPlayers).toBeGreaterThanOrEqual(1);
+  });
+
+  test('T_ratchet_1 onRateLimitHit increases effectiveSafetyMargin by RATCHET_STEP', () => {
+    const tuner = PollerTuner.getInstance();
+    const floor = tuner.getSnapshot().ratchet.configuredFloor;
+    const before = tuner.compute(ctx(buildGatewayStatus(100, 20), 20)).targetRps;
+    tuner.onRateLimitHit();
+    expect(tuner.getSnapshot().ratchet.effectiveSafetyMargin).toBeCloseTo(floor + 0.02, 5);
+    const after = tuner.compute(ctx(buildGatewayStatus(100, 20), 20)).targetRps;
+    expect(after).toBeLessThan(before);
+  });
+
+  test('T_ratchet_2 effectiveSafetyMargin never exceeds RATCHET_MAX (0.20)', () => {
+    const tuner = PollerTuner.getInstance();
+    for (let i = 0; i < 20; i += 1) {
+      tuner.onRateLimitHit();
+    }
+    expect(tuner.getSnapshot().ratchet.effectiveSafetyMargin).toBe(0.2);
+  });
+
+  test('T_ratchet_3 margin decays after RATCHET_DECAY_SESSIONS sessions without 429', () => {
+    const tuner = PollerTuner.getInstance();
+    const floor = tuner.getSnapshot().ratchet.configuredFloor;
+    tuner.onRateLimitHit();
+    expect(tuner.getSnapshot().ratchet.effectiveSafetyMargin).toBeCloseTo(floor + 0.02, 5);
+
+    for (let i = 0; i < 10; i += 1) {
+      tuner.recordSession(feedback());
+    }
+    expect(tuner.getSnapshot().ratchet.effectiveSafetyMargin).toBeCloseTo(floor, 5);
+  });
+
+  test('T_ratchet_4 margin never decays below configured floor', () => {
+    const tuner = PollerTuner.getInstance();
+    const floor = tuner.getSnapshot().ratchet.configuredFloor;
+    tuner.onRateLimitHit();
+    for (let i = 0; i < 100; i += 1) {
+      tuner.recordSession(feedback());
+    }
+    expect(tuner.getSnapshot().ratchet.effectiveSafetyMargin).toBeGreaterThanOrEqual(floor);
+  });
+
+  test('T_ratchet_5 ratchetActive reflects margin vs floor', () => {
+    const tuner = PollerTuner.getInstance();
+    expect(tuner.getSnapshot().ratchet.ratchetActive).toBe(false);
+    tuner.onRateLimitHit();
+    expect(tuner.getSnapshot().ratchet.ratchetActive).toBe(true);
+    for (let i = 0; i < 10; i += 1) {
+      tuner.recordSession(feedback());
+    }
+    expect(tuner.getSnapshot().ratchet.ratchetActive).toBe(false);
+  });
+
+  test('T_ratchet_6 compute uses effectiveSafetyMargin not config floor', () => {
+    const tuner = PollerTuner.getInstance();
+    const floorRps = tuner.compute(ctx(buildGatewayStatus(100, 20), 20)).targetRps;
+    tuner.onRateLimitHit();
+    tuner.onRateLimitHit();
+    const ratchetedRps = tuner.compute(ctx(buildGatewayStatus(100, 20), 20)).targetRps;
+    expect(ratchetedRps).toBeLessThan(floorRps);
+  });
 });
