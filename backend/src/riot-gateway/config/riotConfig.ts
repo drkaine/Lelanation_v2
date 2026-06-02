@@ -35,10 +35,22 @@ export const riotConfig = {
     return envStr('LOG_LEVEL', 'debug') as LogLevel;
   },
   get maxConcurrency(): number {
+    if (this.apiKeyType === 'personal') {
+      return envInt('PERSONAL_MAX_CONCURRENCY', 1);
+    }
     return envInt('MAX_CONCURRENCY', 10);
   },
   get safetyMargin(): number {
+    if (this.apiKeyType === 'personal') {
+      return envFloat('PERSONAL_SAFETY_MARGIN', envFloat('SAFETY_MARGIN', 0.02));
+    }
     return envFloat('SAFETY_MARGIN', 0.05);
+  },
+  get maxDispatchesPerFlush(): number {
+    if (this.apiKeyType === 'personal') {
+      return envInt('PERSONAL_MAX_DISPATCHES_PER_FLUSH', 1);
+    }
+    return envInt('MAX_DISPATCHES_PER_FLUSH', 50);
   },
   maxRetries: 3,
   get soakDurationMinutes(): number {

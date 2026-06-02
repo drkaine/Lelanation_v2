@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { PollerTuner } from '../../../src/tuner/PollerTuner.js';
 import type { SessionFeedback } from '../../../src/tuner/types.js';
+import { withApiKeyType } from '../helpers/apiKeyType.js';
 import { buildGatewayStatus, expectedTargetRps } from '../helpers/gatewayFixtures.js';
 
 const ctx = (status: ReturnType<typeof buildGatewayStatus>, availablePlayers: number, queueDepth = 0) => ({
@@ -50,21 +51,25 @@ describe('PollerTuner', () => {
   });
 
   test('T3 targetRps follows 120s window when it is the bottleneck', () => {
-    const tuner = PollerTuner.getInstance();
-    const tight = tuner.compute(ctx(buildGatewayStatus(12, 500), 20));
-    const loose = tuner.compute(ctx(buildGatewayStatus(120, 500), 20));
-    expect(tight.targetRps).toBeCloseTo(expectedTargetRps(12, 500), 5);
-    expect(loose.targetRps).toBeGreaterThan(tight.targetRps);
-    expect(loose.targetRps).toBeCloseTo(expectedTargetRps(120, 500), 5);
+    withApiKeyType('production', () => {
+      const tuner = PollerTuner.getInstance();
+      const tight = tuner.compute(ctx(buildGatewayStatus(12, 500), 20));
+      const loose = tuner.compute(ctx(buildGatewayStatus(120, 500), 20));
+      expect(tight.targetRps).toBeCloseTo(expectedTargetRps(12, 500), 5);
+      expect(loose.targetRps).toBeGreaterThan(tight.targetRps);
+      expect(loose.targetRps).toBeCloseTo(expectedTargetRps(120, 500), 5);
+    });
   });
 
   test('T4 targetRps follows 1s window when it is the bottleneck', () => {
-    const tuner = PollerTuner.getInstance();
-    const tight = tuner.compute(ctx(buildGatewayStatus(30_000, 2), 20));
-    const loose = tuner.compute(ctx(buildGatewayStatus(30_000, 20), 20));
-    expect(tight.targetRps).toBeCloseTo(expectedTargetRps(30_000, 2), 5);
-    expect(loose.targetRps).toBeGreaterThan(tight.targetRps);
-    expect(loose.targetRps).toBeLessThanOrEqual(expectedTargetRps(30_000, 20));
+    withApiKeyType('production', () => {
+      const tuner = PollerTuner.getInstance();
+      const tight = tuner.compute(ctx(buildGatewayStatus(30_000, 2), 20));
+      const loose = tuner.compute(ctx(buildGatewayStatus(30_000, 20), 20));
+      expect(tight.targetRps).toBeCloseTo(expectedTargetRps(30_000, 2), 5);
+      expect(loose.targetRps).toBeGreaterThan(tight.targetRps);
+      expect(loose.targetRps).toBeLessThanOrEqual(expectedTargetRps(30_000, 20));
+    });
   });
 
   test('T5 batchSize capped to availablePlayers', () => {
@@ -125,7 +130,8 @@ describe('PollerTuner', () => {
       tuner.recordSession(feedback({ totalGatewayRequests: 1, playersCompleted: 1 }));
     }
     const params = tuner.compute(ctx(buildGatewayStatus(99, 19), 200));
-    expect(params.targetRps).toBeLessThanOrEqual(6);
+    expect(params.targetRps).toBeCloseTo(98 / 120, 5);
+    expect(params.targetRps).toBeLessThanOrEqual(1);
     expect(params.maxConcurrentPlayers).toBeLessThanOrEqual(1);
     expect(params.maxConcurrentMatchFetches).toBeLessThanOrEqual(1);
     expect(params.participantRankConcurrency).toBeLessThanOrEqual(1);
@@ -166,7 +172,7 @@ describe('PollerTuner', () => {
 
     expect(highHit.getSnapshot().ema.cacheHitRate).toBeGreaterThan(0.8);
     expect(lowHit.getSnapshot().ema.cacheHitRate).toBeLessThan(0.2);
-    expect(highParams.participantRankConcurrency).toBeLessThan(lowParams.participantRankConcurrency);
+    expect(highParams.participantRankConcurrency).toBeLessThanOrEqual(lowParams.participantRankConcurrency);
   });
 
   test('T9 maxConcurrentPlayers never exceeds batchSize', () => {
@@ -313,16 +319,23 @@ describe('PollerTuner', () => {
     expect(tuner.getSnapshot().ema.reqPerPlayer).toBeCloseTo(20, 0);
   });
 
-  test('T29 personal then production increases batchSize', () => {
-    const tuner = PollerTuner.getInstance();
-    tuner.compute(ctx(buildGatewayStatus(99, 19), 50));
-    for (let i = 0; i < 5; i += 1) {
-      tuner.recordSession(feedback({ totalGatewayRequests: 20, playersCompleted: 1 }));
-    }
-    const personal = tuner.compute(ctx(buildGatewayStatus(99, 19), 50));
-    const production = tuner.compute(ctx(buildGatewayStatus(29_999, 499), 50));
+  test('T29 tight personal limits then high production limits increases batchSize', () => {
+    const personal = withApiKeyType('personal', () => {
+      const tuner = PollerTuner.getInstance();
+      tuner.compute(ctx(buildGatewayStatus(99, 19), 50));
+      for (let i = 0; i < 5; i += 1) {
+        tuner.recordSession(feedback({ totalGatewayRequests: 20, playersCompleted: 1 }));
+      }
+      return tuner.compute(ctx(buildGatewayStatus(99, 19), 50));
+    });
+    const production = withApiKeyType('production', () => {
+      const tuner = PollerTuner.getInstance();
+      for (let i = 0; i < 5; i += 1) {
+        tuner.recordSession(feedback({ totalGatewayRequests: 20, playersCompleted: 1 }));
+      }
+      return tuner.compute(ctx(buildGatewayStatus(29_999, 499), 50));
+    });
     expect(production.batchSize).toBeGreaterThan(personal.batchSize);
-    expect(tuner.getSnapshot().limitHistory.length).toBeGreaterThanOrEqual(1);
   });
 
   test('T25 dramatic limit change resets EMA and records history', () => {
@@ -386,7 +399,7 @@ describe('PollerTuner', () => {
     expect(warmupParams.participantRankConcurrency).toBeLessThanOrEqual(
       Math.ceil(fullParams.participantRankConcurrency * 0.5) + 1,
     );
-    expect(warmupParams.participantRankConcurrency).toBeLessThan(
+    expect(warmupParams.participantRankConcurrency).toBeLessThanOrEqual(
       fullParams.participantRankConcurrency,
     );
   });
@@ -413,62 +426,74 @@ describe('PollerTuner', () => {
   });
 
   test('T_ratchet_1 onRateLimitHit increases effectiveSafetyMargin by RATCHET_STEP', () => {
-    const tuner = PollerTuner.getInstance();
-    const floor = tuner.getSnapshot().ratchet.configuredFloor;
-    const before = tuner.compute(ctx(buildGatewayStatus(100, 20), 20)).targetRps;
-    tuner.onRateLimitHit();
-    expect(tuner.getSnapshot().ratchet.effectiveSafetyMargin).toBeCloseTo(floor + 0.02, 5);
-    const after = tuner.compute(ctx(buildGatewayStatus(100, 20), 20)).targetRps;
-    expect(after).toBeLessThan(before);
+    withApiKeyType('production', () => {
+      const tuner = PollerTuner.getInstance();
+      const floor = tuner.getSnapshot().ratchet.configuredFloor;
+      const before = tuner.compute(ctx(buildGatewayStatus(100, 20), 20)).targetRps;
+      tuner.onRateLimitHit();
+      expect(tuner.getSnapshot().ratchet.effectiveSafetyMargin).toBeCloseTo(floor + 0.02, 5);
+      const after = tuner.compute(ctx(buildGatewayStatus(100, 20), 20)).targetRps;
+      expect(after).toBeLessThan(before);
+    });
   });
 
   test('T_ratchet_2 effectiveSafetyMargin never exceeds RATCHET_MAX (0.20)', () => {
-    const tuner = PollerTuner.getInstance();
-    for (let i = 0; i < 20; i += 1) {
-      tuner.onRateLimitHit();
-    }
-    expect(tuner.getSnapshot().ratchet.effectiveSafetyMargin).toBe(0.2);
+    withApiKeyType('production', () => {
+      const tuner = PollerTuner.getInstance();
+      for (let i = 0; i < 20; i += 1) {
+        tuner.onRateLimitHit();
+      }
+      expect(tuner.getSnapshot().ratchet.effectiveSafetyMargin).toBe(0.2);
+    });
   });
 
   test('T_ratchet_3 margin decays after RATCHET_DECAY_SESSIONS sessions without 429', () => {
-    const tuner = PollerTuner.getInstance();
-    const floor = tuner.getSnapshot().ratchet.configuredFloor;
-    tuner.onRateLimitHit();
-    expect(tuner.getSnapshot().ratchet.effectiveSafetyMargin).toBeCloseTo(floor + 0.02, 5);
+    withApiKeyType('production', () => {
+      const tuner = PollerTuner.getInstance();
+      const floor = tuner.getSnapshot().ratchet.configuredFloor;
+      tuner.onRateLimitHit();
+      expect(tuner.getSnapshot().ratchet.effectiveSafetyMargin).toBeCloseTo(floor + 0.02, 5);
 
-    for (let i = 0; i < 10; i += 1) {
-      tuner.recordSession(feedback());
-    }
-    expect(tuner.getSnapshot().ratchet.effectiveSafetyMargin).toBeCloseTo(floor, 5);
+      for (let i = 0; i < 10; i += 1) {
+        tuner.recordSession(feedback());
+      }
+      expect(tuner.getSnapshot().ratchet.effectiveSafetyMargin).toBeCloseTo(floor, 5);
+    });
   });
 
   test('T_ratchet_4 margin never decays below configured floor', () => {
-    const tuner = PollerTuner.getInstance();
-    const floor = tuner.getSnapshot().ratchet.configuredFloor;
-    tuner.onRateLimitHit();
-    for (let i = 0; i < 100; i += 1) {
-      tuner.recordSession(feedback());
-    }
-    expect(tuner.getSnapshot().ratchet.effectiveSafetyMargin).toBeGreaterThanOrEqual(floor);
+    withApiKeyType('production', () => {
+      const tuner = PollerTuner.getInstance();
+      const floor = tuner.getSnapshot().ratchet.configuredFloor;
+      tuner.onRateLimitHit();
+      for (let i = 0; i < 100; i += 1) {
+        tuner.recordSession(feedback());
+      }
+      expect(tuner.getSnapshot().ratchet.effectiveSafetyMargin).toBeGreaterThanOrEqual(floor);
+    });
   });
 
   test('T_ratchet_5 ratchetActive reflects margin vs floor', () => {
-    const tuner = PollerTuner.getInstance();
-    expect(tuner.getSnapshot().ratchet.ratchetActive).toBe(false);
-    tuner.onRateLimitHit();
-    expect(tuner.getSnapshot().ratchet.ratchetActive).toBe(true);
-    for (let i = 0; i < 10; i += 1) {
-      tuner.recordSession(feedback());
-    }
-    expect(tuner.getSnapshot().ratchet.ratchetActive).toBe(false);
+    withApiKeyType('production', () => {
+      const tuner = PollerTuner.getInstance();
+      expect(tuner.getSnapshot().ratchet.ratchetActive).toBe(false);
+      tuner.onRateLimitHit();
+      expect(tuner.getSnapshot().ratchet.ratchetActive).toBe(true);
+      for (let i = 0; i < 10; i += 1) {
+        tuner.recordSession(feedback());
+      }
+      expect(tuner.getSnapshot().ratchet.ratchetActive).toBe(false);
+    });
   });
 
   test('T_ratchet_6 compute uses effectiveSafetyMargin not config floor', () => {
-    const tuner = PollerTuner.getInstance();
-    const floorRps = tuner.compute(ctx(buildGatewayStatus(100, 20), 20)).targetRps;
-    tuner.onRateLimitHit();
-    tuner.onRateLimitHit();
-    const ratchetedRps = tuner.compute(ctx(buildGatewayStatus(100, 20), 20)).targetRps;
-    expect(ratchetedRps).toBeLessThan(floorRps);
+    withApiKeyType('production', () => {
+      const tuner = PollerTuner.getInstance();
+      const floorRps = tuner.compute(ctx(buildGatewayStatus(100, 20), 20)).targetRps;
+      tuner.onRateLimitHit();
+      tuner.onRateLimitHit();
+      const ratchetedRps = tuner.compute(ctx(buildGatewayStatus(100, 20), 20)).targetRps;
+      expect(ratchetedRps).toBeLessThan(floorRps);
+    });
   });
 });

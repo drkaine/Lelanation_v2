@@ -17,7 +17,8 @@ import {
 } from '../utils/statsFilters.js'
 import { buildRawMatchCond } from './ChampionGlobalTableService.js'
 import { mergeLegacyStatShardAggregates } from '../utils/statShardLegacyMerge.js'
-import { isBootsItem, loadItemMeta } from '../worker/itemBuildSelection.js'
+import { isBootsTier2Or3ItemId } from '../parsers/bootItemClassification.js'
+import { loadItemMeta } from '../worker/itemBuildSelection.js'
 import {
   invalidateAggArchivePartitionCache,
   buildProgressionOldestOnlySql,
@@ -1282,8 +1283,8 @@ export async function getOverviewDetailStats(
       .sort((a, b) => b.games - a.games)
 
     // Per-item aggregation (tous achats + découpes starter / core / reste des 6 slots)
-    const itemMeta = await loadItemMeta()
-    const isBootItemId = (itemId: number) => isBootsItem(itemMeta.get(itemId), itemId)
+    await loadItemMeta()
+    const isBootItemId = (itemId: number) => isBootsTier2Or3ItemId(itemId)
 
     type ItemSliceAgg = { w: number; g: number }
     const mergeItemSlice = (

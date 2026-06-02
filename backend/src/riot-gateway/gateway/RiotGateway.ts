@@ -322,8 +322,14 @@ export class RiotGateway {
     observabilityBus.emitEvent('queue:flush_attempt', { reason, queueSize: this.queue.size() });
     let dispatchedThisFlush = 0;
 
+    const maxDispatchesPerFlush = riotConfig.maxDispatchesPerFlush;
+
     try {
-    while (!this.queue.isEmpty() && this.activeDispatches < riotConfig.maxConcurrency) {
+    while (
+      !this.queue.isEmpty() &&
+      this.activeDispatches < riotConfig.maxConcurrency &&
+      dispatchedThisFlush < maxDispatchesPerFlush
+    ) {
       const peekMethodKey = this.queue.snapshot()[0]?.methodKey;
       if (!peekMethodKey) break;
 

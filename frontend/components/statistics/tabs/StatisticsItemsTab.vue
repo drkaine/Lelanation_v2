@@ -119,11 +119,24 @@ function isCompleteLegendary(item: Item | undefined): boolean {
   return hasFrom && !hasInto
 }
 
-function isBootsTier2Or3(item: Item | undefined): boolean {
-  if (!item) return false
-  if (!item.tags?.includes('Boots')) return false
-  if (item.id === '1001') return false
-  return item.depth >= 2
+const BOOT_PARENT_IDS = new Set([
+  '1001',
+  '3005',
+  '3006',
+  '3009',
+  '3010',
+  '3020',
+  '3047',
+  '3111',
+  '3117',
+  '3158',
+])
+
+function isBootsTier2Or3(item: Item | undefined, itemId: number): boolean {
+  if (itemId === 1001) return false
+  if (item?.tags?.includes('Boots') && item.id !== '1001') return true
+  if (item?.from?.some(parentId => BOOT_PARENT_IDS.has(parentId))) return true
+  return false
 }
 
 const filteredRows = computed<TableRow[]>(() => {
@@ -131,14 +144,20 @@ const filteredRows = computed<TableRow[]>(() => {
     ? tableRows.value.filter(r => {
         if (r.type === 'starter') return false
         const item = itemById.value.get(r.itemId)
-        if (r.type === 'boots') return isBootsTier2Or3(item)
+        if (r.type === 'boots') return isBootsTier2Or3(item, r.itemId)
         return isCompleteLegendary(item)
       })
     : tableRows.value
   const byType =
     itemTypeFilter.value === 'all'
       ? byLegendary
-      : byLegendary.filter(r => r.type === itemTypeFilter.value)
+      : byLegendary.filter(r => {
+          if (r.type !== itemTypeFilter.value) return false
+          if (itemTypeFilter.value === 'boots') {
+            return isBootsTier2Or3(itemById.value.get(r.itemId), r.itemId)
+          }
+          return true
+        })
   const q = itemSearchQuery.value
   if (!q) return byType
   return byType.filter(r => {

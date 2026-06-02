@@ -47,7 +47,12 @@ export class AlertDetector {
     this.checkTokenUnderutilized(g.avg_token_pct_120s, tuner.sessionCount, tuner.ema.reqPerPlayer);
     this.checkTokenNearLimit(g.avg_token_pct_120s, g.peak_req_per_120s, g.times_limit_reached);
     this.checkIngestionLag(ing.queue_depth_peak, ing.queue_depth_avg, ing.matches_queued, ing.matches_ingested);
-    this.checkIngestionFailureRate(ing.ingestion_success_rate_pct, ing.matches_ingested, ing.matches_failed);
+    this.checkIngestionFailureRate(
+      ing.ingestion_success_rate_pct,
+      ing.matches_ingested,
+      ing.matches_failed_terminal,
+      ing.matches_failed_attempts,
+    );
     this.checkRankGap(p.ranks_failed, p.ranks_fetched);
     this.checkMatchSkipRateHigh(p.match_skip_rate_pct, p.match_ids_discovered, p.match_ids_new);
     this.checkPollStall();
@@ -141,15 +146,21 @@ export class AlertDetector {
     }
   }
 
-  private checkIngestionFailureRate(successPct: number, ingested: number, failed: number): void {
-    const total = ingested + failed;
-    if (successPct < 95 && total > 10) {
+  private checkIngestionFailureRate(
+    successPct: number,
+    ingested: number,
+    terminalFailed: number,
+    failedAttempts: number,
+  ): void {
+    const total = ingested + terminalFailed;
+    if (successPct < 95 && total > 10 && terminalFailed > 0) {
       this.raise('ingestion_failure_rate', 'error', 'ingestion failure rate above threshold', {
         success_rate_pct: successPct,
-        failures: failed,
+        failures_terminal: terminalFailed,
+        failures_attempts: failedAttempts,
         sample_size: total,
       });
-    } else if (successPct >= 98) {
+    } else if (successPct >= 98 || terminalFailed === 0) {
       this.clear('ingestion_failure_rate');
     }
   }

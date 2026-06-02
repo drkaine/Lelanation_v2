@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { isBootsItemId } from '../parsers/bootItemClassification.js'
 import {
   isStarterItemId,
   STARTER_PURCHASE_WINDOW_MS,
@@ -31,7 +32,6 @@ export type MatchPlayerItemRowInput = {
   timestampMs: number
 }
 
-const BOOT_IDS = new Set(['1001', '3005', '3006', '3009', '3010', '3020', '3047', '3111', '3117', '3158'])
 const FORCED_LEGENDARY_IDS = new Set(['2526'])
 const TRINKET_IDS = new Set(['3340', '3363', '3364'])
 
@@ -84,10 +84,9 @@ export async function loadItemMeta(): Promise<Map<number, ItemMeta>> {
 }
 
 function isBoots(item: ItemMeta | undefined, itemId: number): boolean {
-  const id = String(itemId)
+  if (isBootsItemId(itemId)) return true
   if (item?.tags?.includes('Boots')) return true
-  if (BOOT_IDS.has(id)) return true
-  if (item?.from?.some((parentId) => BOOT_IDS.has(parentId))) return true
+  if (item?.from?.some((parentId) => isBootsItemId(Number(parentId)))) return true
   return false
 }
 

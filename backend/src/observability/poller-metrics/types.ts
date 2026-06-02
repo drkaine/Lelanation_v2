@@ -188,6 +188,11 @@ export interface IngestionAggregate {
   ingested_processed: number;
   ingested_already_done: number;
   matches_failed: number;
+  /** BullMQ retry attempts; may exceed terminal failures. */
+  matches_failed_attempts: number;
+  /** Failed matchIds with no successful completion in window. */
+  matches_failed_terminal: number;
+  failure_top_errors: Array<{ message: string; count: number }>;
   ingestion_success_rate_pct: number;
   ingestion_latency_p50_ms: number;
   ingestion_latency_p95_ms: number;

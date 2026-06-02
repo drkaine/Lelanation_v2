@@ -46,7 +46,7 @@ CREATE INDEX IF NOT EXISTS idx_item_tier_snapshot_tier
   ON item_tier_daily_snapshots (rank_tier, date_of_game DESC);
 
 COMMENT ON COLUMN item_tier_daily_snapshots."order" IS
-  'JSON ordre d''achat → nombre de wins (ex. {"1-2-3": 42})';
+  'JSON position d''achat (starters + légendaires) → { "1": {"games": N, "wins": W}, ... }';
 
 COMMENT ON COLUMN item_tier_daily_snapshots.sum_achat_tmps IS
   'Somme des timestamps (ms) d''achat pour timing moyen';

@@ -1,6 +1,4 @@
 import { CHAMPION_STATS_METRIC_COLUMN_SET } from "../constants/championStatsMetricColumns.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import type { ParsedItemDto, ParsedParticipantDto } from "../dto/match.dto.js";
 import { mapChampionStatsRiotMetrics } from "./champion-stats-riot-metrics.js";
 import { timelineChampionObjectiveMetrics } from "./champion-stats-timeline-objectives.js";
@@ -14,97 +12,10 @@ import type {
   ParticipantDto,
 } from "../riot/types.js";
 import { normalizePlatformRegion } from "../riot/platform-region.js";
-import { isStarterItemId, isStarterPurchase } from "./starterItemClassification.js";
+import { isBootsTier2Or3ItemId } from "./bootItemClassification.js";
+import { isLegendaryCompleteItem } from "./itemLegendaryClassification.js";
+import { isStarterPurchase } from "./starterItemClassification.js";
 const U15_WINDOW_MS = 900_000;
-const CONSUMABLE_IDS = new Set([2003, 2009, 2010, 2031, 2032, 2033, 2055, 2060]);
-const BOOTS_IDS = new Set([1001, 3005, 3006, 3009, 3010, 3020, 3047, 3111, 3117, 3158]);
-const FORCED_LEGENDARY_IDS = new Set([2526]);
-
-type ItemMetaLite = {
-  id: string;
-  tags?: string[];
-  from?: string[];
-  into?: string[];
-  isMasterwork?: boolean;
-};
-
-let itemMetaLiteCache: Map<number, ItemMetaLite> | null = null;
-
-function getItemMetaLiteMap(): Map<number, ItemMetaLite> {
-  if (itemMetaLiteCache) return itemMetaLiteCache;
-  const candidates = [
-    join(process.cwd(), "data", "game", "version.json"),
-    join(process.cwd(), "..", "frontend", "public", "data", "game", "version.json"),
-  ];
-  let version = "";
-  for (const path of candidates) {
-    try {
-      const raw = JSON.parse(readFileSync(path, "utf-8")) as { currentVersion?: string };
-      if (raw.currentVersion) {
-        version = String(raw.currentVersion);
-        break;
-      }
-    } catch {
-      // try next path
-    }
-  }
-  if (!version) {
-    itemMetaLiteCache = new Map();
-    return itemMetaLiteCache;
-  }
-  const itemPaths = [
-    join(process.cwd(), "data", "game", version, "fr_FR", "item.json"),
-    join(process.cwd(), "..", "frontend", "public", "data", "game", version, "fr_FR", "item.json"),
-    join(process.cwd(), "data", "game", version, "en_US", "item.json"),
-    join(process.cwd(), "..", "frontend", "public", "data", "game", version, "en_US", "item.json"),
-  ];
-  for (const path of itemPaths) {
-    try {
-      const raw = JSON.parse(readFileSync(path, "utf-8")) as {
-        data?: Record<string, Omit<ItemMetaLite, "id">>;
-      };
-      const out = new Map<number, ItemMetaLite>();
-      for (const [id, item] of Object.entries(raw.data ?? {})) {
-        const num = Number(id);
-        if (!Number.isFinite(num)) continue;
-        out.set(num, { id, ...item });
-      }
-      itemMetaLiteCache = out;
-      return out;
-    } catch {
-      // try next path
-    }
-  }
-  itemMetaLiteCache = new Map();
-  return itemMetaLiteCache;
-}
-
-function hasItemMetaLite(): boolean {
-  return getItemMetaLiteMap().size > 0;
-}
-
-function isLegendaryCompleteItem(itemId: number, finalInventorySet?: ReadonlySet<number>): boolean {
-  if (!Number.isFinite(itemId) || itemId <= 0) return false;
-  if (CONSUMABLE_IDS.has(itemId)) return false;
-  if (FORCED_LEGENDARY_IDS.has(itemId)) return true;
-  if (itemId !== 1001 && BOOTS_IDS.has(itemId)) return true; // T2/T3 boots exception
-  if (!hasItemMetaLite()) {
-    // Fallback sans Data Dragon: on prend uniquement les items présents en inventaire final.
-    return Boolean(
-      finalInventorySet?.has(itemId) &&
-      itemId !== 1001 &&
-      !isStarterItemId(itemId)
-    );
-  }
-  const item = getItemMetaLiteMap().get(itemId);
-  if (!item) return false;
-  if (item.tags?.includes("Consumable")) return false;
-  if (item.id !== "1001" && item.tags?.includes("Boots")) return true;
-  if (item.isMasterwork) return true;
-  const hasFrom = Array.isArray(item.from) && item.from.length > 0;
-  const hasInto = Array.isArray(item.into) && item.into.length > 0;
-  return hasFrom && !hasInto;
-}
 
 function extractPatchFromVersion(gameVersion: string): string {
   const [major, minor] = (gameVersion ?? "").split(".");
@@ -264,8 +175,27 @@ function classifyPurchasePhases(items: ParsedItemDto[], finalInventorySet: Reado
   });
 }
 
-function isBootsItem(itemId: number): boolean {
-  return BOOTS_IDS.has(itemId);
+/** Bottes T2/T3 en fin de partie sans événement ITEM_PURCHASED (upgrade sur place). */
+function mergeFinalBootItemsIntoPurchases(
+  phasedPurchases: ParsedItemDto[],
+  finalIds: number[],
+  firstPurchaseTsByItem: Map<number, number>,
+  win: boolean,
+): ParsedItemDto[] {
+  const purchasedIds = new Set(phasedPurchases.map((p) => p.itemId));
+  const extras: ParsedItemDto[] = [];
+  for (const itemId of finalIds) {
+    if (!isBootsTier2Or3ItemId(itemId)) continue;
+    if (purchasedIds.has(itemId)) continue;
+    extras.push({
+      itemId,
+      phase: "final",
+      timestampMs: firstPurchaseTsByItem.get(itemId) ?? 0,
+      win,
+    });
+  }
+  if (extras.length === 0) return phasedPurchases;
+  return [...phasedPurchases, ...extras];
 }
 
 /**
@@ -482,8 +412,6 @@ export function parseMatch(
       Number(participant.item5 ?? 0),
     ].filter((id) => id > 0);
     const finalInventorySet = new Set(finalIds);
-    const phasedPurchases = classifyPurchasePhases(purchases, finalInventorySet);
-    const bootsIds = finalIds.filter((itemId) => isBootsItem(itemId));
     const firstPurchaseTsByItem = new Map<number, number>();
     for (const purchase of purchases) {
       const existing = firstPurchaseTsByItem.get(purchase.itemId);
@@ -491,6 +419,13 @@ export function parseMatch(
         firstPurchaseTsByItem.set(purchase.itemId, purchase.timestampMs);
       }
     }
+    const phasedPurchases = mergeFinalBootItemsIntoPurchases(
+      classifyPurchasePhases(purchases, finalInventorySet),
+      finalIds,
+      firstPurchaseTsByItem,
+      participant.win,
+    );
+    const bootsIds = finalIds.filter((itemId) => isBootsTier2Or3ItemId(itemId));
     const uniqueFinalIdsByFirstPurchase = Array.from(new Set(finalIds)).sort((a, b) => {
       const ta = firstPurchaseTsByItem.get(a) ?? Number.MAX_SAFE_INTEGER;
       const tb = firstPurchaseTsByItem.get(b) ?? Number.MAX_SAFE_INTEGER;

@@ -18,6 +18,8 @@ import {
   matchReadyForAggregation,
   normalizeParticipantRankTier,
 } from "./match-rank-readiness.js";
+import { buildStarterLegendaryOrderByItemId } from "../parsers/itemOrderSnapshot.js";
+import { rehydrateParticipantRanksForIngestion } from "../services/matchIngestionPayload.js";
 
 export class AlreadyProcessedMatchError extends Error {
   constructor(matchId: string) {
@@ -924,6 +926,59 @@ async function upsertTierDailySnapshots(tx: any, participants: ParsedParticipant
   }
 }
 
+async function upsertItemTierDailySnapshots(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
+  for (const participant of participants) {
+    const gameDate = new Date(participant.gameDate);
+    if (!Number.isFinite(gameDate.getTime())) continue;
+    const dateOfGame = gameDate.toISOString().slice(0, 10);
+
+    const orderByItemId = buildStarterLegendaryOrderByItemId(participant.items);
+    if (orderByItemId.size === 0) continue;
+
+    const firstTsByItem = new Map<number, number>();
+    for (const row of participant.items) {
+      const itemId = Number(row.itemId ?? 0);
+      if (!Number.isFinite(itemId) || itemId <= 0) continue;
+      const ts = Math.max(0, Math.trunc(Number(row.timestampMs ?? 0)));
+      const prev = firstTsByItem.get(itemId);
+      if (prev == null || ts < prev) firstTsByItem.set(itemId, ts);
+    }
+
+    const winCount = participantWinCount(participant);
+    for (const [itemId, orderPos] of orderByItemId) {
+      const orderKey = String(orderPos);
+      const orderJson = JSON.stringify({ [orderKey]: { games: 1, wins: winCount } });
+      const ts = firstTsByItem.get(itemId) ?? 0;
+      await tx`
+        INSERT INTO item_tier_daily_snapshots (
+          patch, rank_tier, region, item_id, date_of_game,
+          games, wins, "order", sum_achat_tmps
+        )
+        VALUES (
+          ${participant.patch}, ${participant.rankTier}, ${participant.region}, ${itemId}, ${dateOfGame}::date,
+          1, ${winCount}, ${orderJson}::jsonb, ${ts}
+        )
+        ON CONFLICT (patch, rank_tier, region, item_id, date_of_game)
+        DO UPDATE SET
+          games = item_tier_daily_snapshots.games + EXCLUDED.games,
+          wins = item_tier_daily_snapshots.wins + EXCLUDED.wins,
+          "order" = jsonb_set(
+            COALESCE(item_tier_daily_snapshots."order", '{}'::jsonb),
+            ARRAY[${orderKey}]::text[],
+            jsonb_build_object(
+              'games',
+              COALESCE((item_tier_daily_snapshots."order"->${orderKey}->>'games')::bigint, 0) + 1,
+              'wins',
+              COALESCE((item_tier_daily_snapshots."order"->${orderKey}->>'wins')::bigint, 0) + ${winCount}
+            ),
+            true
+          ),
+          sum_achat_tmps = item_tier_daily_snapshots.sum_achat_tmps + EXCLUDED.sum_achat_tmps
+      `;
+    }
+  }
+}
+
 async function upsertObjectiveOutcomeHistogram(tx: any, payload: IngestionJobData): Promise<void> {
   for (const objective of payload.teamStats.objectives) {
     const sumTs = Math.max(0, Math.trunc(Number(objective.sumTimestampMs ?? 0)));
@@ -1066,6 +1121,8 @@ async function upsertTeamCoreStat(tx: any, payload: IngestionJobData): Promise<v
 export async function runIngestionTransaction(payload: IngestionJobData): Promise<{ insertedPlayers: number; aggregated: boolean }> {
   if (payload.participants.length === 0) return { insertedPlayers: 0, aggregated: false };
 
+  await rehydrateParticipantRanksForIngestion(payload);
+
   if (!matchReadyForAggregation(payload.participants, closestSnapshotsFromParticipants(payload.participants))) {
     let insertedPlayers = 0;
     await sql.begin(async (tx) => {
@@ -1093,6 +1150,7 @@ export async function runIngestionTransaction(payload: IngestionJobData): Promis
     await upsertChampionBucket(tx, payload.participants);
     await upsertBotlaneDuoVsDuoStats(tx, payload);
     await upsertTierDailySnapshots(tx, payload.participants);
+    await upsertItemTierDailySnapshots(tx, payload.participants);
     await upsertObjectiveOutcomeHistogram(tx, payload);
     await upsertMatchOutcomeStats(tx, payload);
     await upsertTeamCoreStat(tx, payload);

@@ -24,7 +24,9 @@ const QUEUE_PRESSURE_FACTOR = 0.7;
 const REQ_PER_PLAYER_SEED = 25;
 const REQ_PER_MATCH_SEED = 3;
 const CACHE_HIT_RATE_SEED = 0.5;
-const PERSONAL_MAX_TARGET_RPS = Number.parseFloat(process.env.PERSONAL_MAX_TARGET_RPS ?? '6');
+/** Sustained app-bucket target for personal keys (~98/120s on limit 99). */
+const PERSONAL_TARGET_TOKENS_120S = Number.parseFloat(process.env.PERSONAL_TARGET_TOKENS_120S ?? '98');
+const PERSONAL_MAX_TARGET_RPS = Number.parseFloat(process.env.PERSONAL_MAX_TARGET_RPS ?? '1');
 const PERSONAL_MAX_CONCURRENT_PLAYERS = Number.parseInt(process.env.PERSONAL_MAX_CONCURRENT_PLAYERS ?? '1', 10);
 const PERSONAL_MAX_CONCURRENT_MATCH_FETCHES = Number.parseInt(process.env.PERSONAL_MAX_CONCURRENT_MATCH_FETCHES ?? '1', 10);
 const PERSONAL_MAX_PARTICIPANT_RANK_CONCURRENCY = Number.parseInt(
@@ -150,7 +152,11 @@ export class PollerTuner {
     const rps1s = safeTokens1s;
     let targetRps = Math.min(rps120s, rps1s);
     if (riotConfig.apiKeyType === 'personal') {
-      targetRps = Math.min(targetRps, PERSONAL_MAX_TARGET_RPS);
+      const personalTargetRps = Math.min(
+        PERSONAL_TARGET_TOKENS_120S / 120,
+        limit120s / 120,
+      );
+      targetRps = Math.min(personalTargetRps, PERSONAL_MAX_TARGET_RPS);
     }
 
     const threshold = backpressureThreshold();

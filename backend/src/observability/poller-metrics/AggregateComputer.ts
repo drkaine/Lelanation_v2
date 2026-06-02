@@ -8,6 +8,7 @@ import type {
   PollAggregate,
   WindowLabel,
 } from './types.js';
+import { computeIngestionOutcomeStats } from './ingestionOutcomeStats.js';
 import { WINDOW_MS, emptySkipBreakdown } from './types.js';
 
 export class AggregateComputer {
@@ -89,7 +90,7 @@ export class AggregateComputer {
     }
 
     const completed = workers.filter((e) => e.type === 'completed');
-    const failed = workers.filter((e) => e.type === 'failed');
+    const outcomeStats = computeIngestionOutcomeStats(workers);
     const ingested_processed = completed.filter(
       (e) => e.completedReason === 'processed' || e.completedReason === undefined,
     ).length;
@@ -97,7 +98,7 @@ export class AggregateComputer {
       (e) => e.completedReason === 'already_done',
     ).length;
     const ingested = ingested_processed + ingested_already_done;
-    const failedCount = failed.length;
+    const failedCount = outcomeStats.matches_failed_terminal;
     const ingestionLatencies = completed.map((e) => e.durationMs ?? 0);
     const dbLatencies = dbOps.filter((e) => e.success).map((e) => e.durationMs);
 
@@ -128,6 +129,9 @@ export class AggregateComputer {
       ingested_processed,
       ingested_already_done,
       matches_failed: failedCount,
+      matches_failed_attempts: outcomeStats.matches_failed_attempts,
+      matches_failed_terminal: outcomeStats.matches_failed_terminal,
+      failure_top_errors: outcomeStats.failure_top_errors,
       ingestion_success_rate_pct: ingested / Math.max(1, ingested + failedCount) * 100,
       ingestion_latency_p50_ms: percentileOf(ingestionLatencies, 0.5),
       ingestion_latency_p95_ms: percentileOf(ingestionLatencies, 0.95),

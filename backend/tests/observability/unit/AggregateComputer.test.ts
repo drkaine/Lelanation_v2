@@ -191,7 +191,37 @@ describe('AggregateComputer', () => {
     expect(result.ingested_processed).toBe(3);
     expect(result.ingested_already_done).toBe(2);
     expect(result.matches_failed).toBe(1);
+    expect(result.matches_failed_attempts).toBe(1);
+    expect(result.matches_failed_terminal).toBe(1);
     expect(result.ingestion_success_rate_pct).toBeCloseTo(83.3, 1);
+  });
+
+  test('T_ingestion_4 retry failure then success is not terminal failure', () => {
+    const store = MetricsStore.getInstance();
+    const now = Date.now();
+    store.pushIngestionWorker({
+      ts: now - 2000,
+      matchId: 'M-retry',
+      patch: '16.11',
+      rank: 'GOLD',
+      type: 'failed',
+      durationMs: 100,
+      errorMessage: 'transient',
+    });
+    store.pushIngestionWorker({
+      ts: now,
+      matchId: 'M-retry',
+      patch: '16.11',
+      rank: 'GOLD',
+      type: 'completed',
+      completedReason: 'processed',
+      durationMs: 50,
+    });
+    const result = new AggregateComputer(store).computeIngestion('10m');
+    expect(result.matches_failed_attempts).toBe(1);
+    expect(result.matches_failed_terminal).toBe(0);
+    expect(result.matches_ingested).toBe(1);
+    expect(result.ingestion_success_rate_pct).toBe(100);
   });
 
   test('T_ingestion_2 matches_ingested is 0 when only started events', () => {

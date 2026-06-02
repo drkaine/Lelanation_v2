@@ -1,5 +1,5 @@
 import type { RankSnapshot } from '../db/query.js';
-import { getRankSnapshotsAtOrAfterForMatch } from '../db/query.js';
+import { getBestEffortRankSnapshotsForMatch, getRankSnapshotsAtOrAfterForMatch } from '../db/query.js';
 import type { IngestionJobData, ParsedParticipantDto, TeamStatsDto } from '../dto/match.dto.js';
 import { resolveGameFirstObjective } from '../parsers/game-first-objective.js';
 import { parseMatch } from '../parsers/match.parser.js';
@@ -10,7 +10,6 @@ import type { MatchDto, MatchTimelineDto } from '../riot/types.js';
 import type { LeagueEntryDto } from '../riot-gateway/routes/dto.js';
 import {
   averageMatchRankTierLabel,
-  closestSnapshotsFromParticipants,
   getMissingRankParticipants,
   matchReadyForAggregation,
   normalizeParticipantRankTier,
@@ -238,7 +237,31 @@ async function buildClosestSnapshots(
   for (const [puuid, snapshot] of fromEvents) {
     fromDb.set(puuid, snapshot);
   }
+
+  const missingPuuids = puuids.filter((puuid) => !fromDb.has(puuid));
+  if (missingPuuids.length > 0) {
+    const bestEffort = await getBestEffortRankSnapshotsForMatch(missingPuuids, gameDate);
+    for (const [puuid, snapshot] of bestEffort) {
+      fromDb.set(puuid, snapshot);
+    }
+  }
   return fromDb;
+}
+
+/** Recharge les rangs participants depuis la DB avant agrégation (jobs déjà en file, clé perso). */
+export async function rehydrateParticipantRanksForIngestion(payload: IngestionJobData): Promise<void> {
+  const participants = payload.participants;
+  if (participants.length === 0) return;
+
+  const region = normalizePlatformRegion(participants[0].region);
+  const gameDate = resolveMatchGameDate(participants);
+  const closestSnapshots = await buildClosestSnapshots(participants, region, gameDate, new Map());
+  applySnapshotsToParticipants(participants, closestSnapshots);
+
+  const rankTier = averageMatchRankTierLabel(participants, closestSnapshots);
+  if (rankTier) {
+    payload.teamStats.rankTier = rankTier;
+  }
 }
 
 export async function buildIngestionPayloadFromMatchData(input: {
@@ -259,12 +282,14 @@ export async function buildIngestionPayloadFromMatchData(input: {
   const teamStatsBase = buildTeamStatsBase(enrichedMatch, participants, input.timeline, region);
   const gameDate = resolveMatchGameDate(participants, enrichedMatch);
 
-  let closestSnapshots: Map<string, RankSnapshot>;
-  if (input.resolveParticipantRanks) {
-    closestSnapshots = await buildClosestSnapshots(participants, region, gameDate, input.rankByPuuid);
-  } else {
-    closestSnapshots = closestSnapshotsFromParticipants(participants);
-  }
+  // Toujours résoudre via DB (+ cache poller). resolveParticipantRanks=false désactive
+  // seulement les fetch API live par participant, pas l'historique player_rank_history.
+  const closestSnapshots = await buildClosestSnapshots(
+    participants,
+    region,
+    gameDate,
+    input.rankByPuuid,
+  );
 
   applySnapshotsToParticipants(participants, closestSnapshots);
 
