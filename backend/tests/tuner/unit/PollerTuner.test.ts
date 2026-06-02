@@ -130,7 +130,7 @@ describe('PollerTuner', () => {
       tuner.recordSession(feedback({ totalGatewayRequests: 1, playersCompleted: 1 }));
     }
     const params = tuner.compute(ctx(buildGatewayStatus(99, 19), 200));
-    expect(params.targetRps).toBeCloseTo(98 / 120, 5);
+    expect(params.targetRps).toBeCloseTo(Math.floor(99 * 0.95) / 120, 5);
     expect(params.targetRps).toBeLessThanOrEqual(1);
     expect(params.maxConcurrentPlayers).toBeLessThanOrEqual(1);
     expect(params.maxConcurrentMatchFetches).toBeLessThanOrEqual(1);
@@ -186,19 +186,30 @@ describe('PollerTuner', () => {
   });
 
   test('T14 utilization 75% sets 1000ms interval', () => {
-    const tuner = PollerTuner.getInstance();
-    const params = tuner.compute(ctx(buildGatewayStatus(99, 19, 75), 10));
-    expect(params.discoveryIntervalMs).toBe(1000);
+    withApiKeyType('production', () => {
+      const tuner = PollerTuner.getInstance();
+      const params = tuner.compute(ctx(buildGatewayStatus(99, 19, 75), 10));
+      expect(params.discoveryIntervalMs).toBe(1000);
+    });
   });
 
   test('T13 high utilization sets 3000ms interval', () => {
-    const tuner = PollerTuner.getInstance();
-    const params = tuner.compute({
-      gatewayStatus: buildGatewayStatus(99, 19, 95),
-      queueDepth: 0,
-      availablePlayers: 10,
+    withApiKeyType('production', () => {
+      const tuner = PollerTuner.getInstance();
+      const params = tuner.compute({
+        gatewayStatus: buildGatewayStatus(99, 19, 95),
+        queueDepth: 0,
+        availablePlayers: 10,
+      });
+      expect(params.discoveryIntervalMs).toBe(3000);
     });
-    expect(params.discoveryIntervalMs).toBe(3000);
+  });
+
+  test('personal high utilization throttles discovery only above 96%', () => {
+    const tuner = PollerTuner.getInstance();
+    expect(tuner.compute(ctx(buildGatewayStatus(99, 19, 75), 10)).discoveryIntervalMs).toBe(0);
+    expect(tuner.compute(ctx(buildGatewayStatus(99, 19, 97), 10)).discoveryIntervalMs).toBe(1000);
+    expect(tuner.compute(ctx(buildGatewayStatus(99, 19, 99), 10)).discoveryIntervalMs).toBe(3000);
   });
 
   test('T15 low utilization and queue gives 0 interval', () => {

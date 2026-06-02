@@ -9,6 +9,7 @@ import { normalizePlatformRegion } from '../riot/platform-region.js';
 import type { MatchDto, MatchTimelineDto } from '../riot/types.js';
 import type { LeagueEntryDto } from '../riot-gateway/routes/dto.js';
 import {
+  applyMatchRankFallbackToParticipants,
   averageMatchRankTierLabel,
   getMissingRankParticipants,
   matchReadyForAggregation,
@@ -176,10 +177,12 @@ function buildTeamStats(
 function applySnapshotsToParticipants(
   participants: ParsedParticipantDto[],
   closestSnapshots: Map<string, RankSnapshot>,
+  options?: { preserveRanked?: boolean },
 ): void {
   for (const participant of participants) {
     const puuid = String(participant.puuid ?? '').trim();
     const snapshot = closestSnapshots.get(puuid);
+    const existingRank = normalizeParticipantRankTier(participant.rankTierValue ?? participant.rankTier);
     participant.needsRankFetch = !snapshot;
     if (!snapshot) continue;
     const normalizedTier = normalizeParticipantRankTier(snapshot.rankTier);
@@ -190,10 +193,71 @@ function applySnapshotsToParticipants(
       participant.lp = snapshot.rankLp;
       continue;
     }
+    if (options?.preserveRanked && existingRank) {
+      continue;
+    }
     participant.rankTier = 'UNRANKED';
     participant.rankTierValue = 'UNRANKED';
     participant.rankDivision = String(snapshot.rankDivision ?? 'UNRANKED').trim().toUpperCase();
     participant.lp = snapshot.rankLp;
+  }
+}
+
+async function fetchProcessedMatchRankTier(payload: IngestionJobData): Promise<string | null> {
+  const matchId = String(payload.teamStats.matchId ?? '').trim();
+  const patch = String(payload.teamStats.patch ?? '').trim();
+  if (!matchId || !patch) return null;
+  const { sql } = await import('../db/client.js');
+  const rows = await sql<{ rank: string | null }[]>`
+    SELECT rank
+    FROM processed_matches
+    WHERE patch = ${patch}
+      AND riot_match_id = ${matchId}
+    LIMIT 1
+  `;
+  return normalizeParticipantRankTier(rows[0]?.rank);
+}
+
+function resolveMatchRankTierForPayload(
+  payload: IngestionJobData,
+  closestSnapshots: Map<string, RankSnapshot>,
+  processedMatchRank: string | null,
+): string | null {
+  return (
+    processedMatchRank ??
+    normalizeParticipantRankTier(payload.teamStats.rankTier) ??
+    normalizeParticipantRankTier(averageMatchRankTierLabel(payload.participants, closestSnapshots))
+  );
+}
+
+function finalizeParticipantRanksForAggregation(
+  payload: IngestionJobData,
+  closestSnapshots: Map<string, RankSnapshot>,
+  gameDate: Date,
+  processedMatchRank: string | null,
+): void {
+  const missing = getMissingRankParticipants(payload.participants, closestSnapshots);
+  if (missing.length > 0) {
+    materializeMissingRanksAsUnranked(payload.participants, closestSnapshots, gameDate);
+    applySnapshotsToParticipants(payload.participants, closestSnapshots, { preserveRanked: true });
+  }
+
+  const matchRankTier = resolveMatchRankTierForPayload(payload, closestSnapshots, processedMatchRank);
+  if (!matchRankTier) return;
+
+  applyMatchRankFallbackToParticipants(payload.participants, matchRankTier);
+  payload.teamStats.rankTier = matchRankTier;
+
+  for (const participant of payload.participants) {
+    const puuid = String(participant.puuid ?? '').trim();
+    const tier = normalizeParticipantRankTier(participant.rankTierValue ?? participant.rankTier);
+    if (!puuid || !tier) continue;
+    closestSnapshots.set(puuid, {
+      rankTier: tier,
+      rankDivision: String(participant.rankDivision ?? '').trim(),
+      rankLp: Number(participant.lp ?? 0),
+      date: gameDate,
+    });
   }
 }
 
@@ -255,13 +319,10 @@ export async function rehydrateParticipantRanksForIngestion(payload: IngestionJo
 
   const region = normalizePlatformRegion(participants[0].region);
   const gameDate = resolveMatchGameDate(participants);
+  const processedMatchRank = await fetchProcessedMatchRankTier(payload);
   const closestSnapshots = await buildClosestSnapshots(participants, region, gameDate, new Map());
-  applySnapshotsToParticipants(participants, closestSnapshots);
-
-  const rankTier = averageMatchRankTierLabel(participants, closestSnapshots);
-  if (rankTier) {
-    payload.teamStats.rankTier = rankTier;
-  }
+  applySnapshotsToParticipants(participants, closestSnapshots, { preserveRanked: true });
+  finalizeParticipantRanksForAggregation(payload, closestSnapshots, gameDate, processedMatchRank);
 }
 
 export async function buildIngestionPayloadFromMatchData(input: {
@@ -305,9 +366,20 @@ export async function buildIngestionPayloadFromMatchData(input: {
     }
   }
 
+  const teamStats = buildTeamStats(teamStatsBase, participants, closestSnapshots);
+  finalizeParticipantRanksForAggregation(
+    { participants, teamStats },
+    closestSnapshots,
+    gameDate,
+    null,
+  );
+  if (!matchReadyForAggregation(participants, closestSnapshots, teamStats.rankTier)) {
+    return null;
+  }
+
   return {
     participants,
-    teamStats: buildTeamStats(teamStatsBase, participants, closestSnapshots),
+    teamStats,
   };
 }
 

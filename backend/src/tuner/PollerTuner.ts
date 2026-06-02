@@ -24,9 +24,9 @@ const QUEUE_PRESSURE_FACTOR = 0.7;
 const REQ_PER_PLAYER_SEED = 25;
 const REQ_PER_MATCH_SEED = 3;
 const CACHE_HIT_RATE_SEED = 0.5;
-/** Sustained app-bucket target for personal keys (~98/120s on limit 99). */
-const PERSONAL_TARGET_TOKENS_120S = Number.parseFloat(process.env.PERSONAL_TARGET_TOKENS_120S ?? '98');
 const PERSONAL_MAX_TARGET_RPS = Number.parseFloat(process.env.PERSONAL_MAX_TARGET_RPS ?? '1');
+const PERSONAL_WARMUP_MULTIPLIER = Number.parseFloat(process.env.PERSONAL_WARMUP_MULTIPLIER ?? '0.9');
+const PERSONAL_DISCOVERY_THROTTLE_PCT = Number.parseFloat(process.env.PERSONAL_DISCOVERY_THROTTLE_PCT ?? '96');
 const PERSONAL_MAX_CONCURRENT_PLAYERS = Number.parseInt(process.env.PERSONAL_MAX_CONCURRENT_PLAYERS ?? '1', 10);
 const PERSONAL_MAX_CONCURRENT_MATCH_FETCHES = Number.parseInt(process.env.PERSONAL_MAX_CONCURRENT_MATCH_FETCHES ?? '1', 10);
 const PERSONAL_MAX_PARTICIPANT_RANK_CONCURRENCY = Number.parseInt(
@@ -152,10 +152,8 @@ export class PollerTuner {
     const rps1s = safeTokens1s;
     let targetRps = Math.min(rps120s, rps1s);
     if (riotConfig.apiKeyType === 'personal') {
-      const personalTargetRps = Math.min(
-        PERSONAL_TARGET_TOKENS_120S / 120,
-        limit120s / 120,
-      );
+      const targetTokens = riotConfig.personalTargetTokens120s(limit120s);
+      const personalTargetRps = targetTokens / 120;
       targetRps = Math.min(personalTargetRps, PERSONAL_MAX_TARGET_RPS);
     }
 
@@ -216,7 +214,9 @@ export class PollerTuner {
       );
     }
 
-    const effectiveMultiplier = warmupActive ? WARMUP_MULTIPLIER : 1;
+    const warmupMultiplier =
+      riotConfig.apiKeyType === 'personal' ? PERSONAL_WARMUP_MULTIPLIER : WARMUP_MULTIPLIER;
+    const effectiveMultiplier = warmupActive ? warmupMultiplier : 1;
     const batchSize = Math.max(MIN_BATCH_SIZE, Math.floor(rawBatchSize * effectiveMultiplier));
 
     const rpsPerPlayer = reqPerPlayer / TARGET_SESSION_DURATION;
@@ -259,7 +259,15 @@ export class PollerTuner {
 
     const utilPct = maxAppUtilizationPct(ctx.gatewayStatus);
     let discoveryIntervalMs = 0;
-    if (utilPct > 90) {
+    if (riotConfig.apiKeyType === 'personal') {
+      if (utilPct > PERSONAL_DISCOVERY_THROTTLE_PCT + 2) {
+        discoveryIntervalMs = 3000;
+      } else if (utilPct > PERSONAL_DISCOVERY_THROTTLE_PCT) {
+        discoveryIntervalMs = 1000;
+      } else if (ctx.queueDepth > threshold * 0.8) {
+        discoveryIntervalMs = 2000;
+      }
+    } else if (utilPct > 90) {
       discoveryIntervalMs = 3000;
     } else if (utilPct > 70) {
       discoveryIntervalMs = 1000;

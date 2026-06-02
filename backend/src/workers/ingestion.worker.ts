@@ -20,6 +20,7 @@ import {
 } from "./match-rank-readiness.js";
 import { buildStarterLegendaryOrderByItemId } from "../parsers/itemOrderSnapshot.js";
 import { rehydrateParticipantRanksForIngestion } from "../services/matchIngestionPayload.js";
+import { riotConfig } from "../riot-gateway/config/riotConfig.js";
 
 export class AlreadyProcessedMatchError extends Error {
   constructor(matchId: string) {
@@ -963,13 +964,25 @@ async function upsertItemTierDailySnapshots(tx: any, participants: ParsedPartici
           games = item_tier_daily_snapshots.games + EXCLUDED.games,
           wins = item_tier_daily_snapshots.wins + EXCLUDED.wins,
           "order" = jsonb_set(
-            COALESCE(item_tier_daily_snapshots."order", '{}'::jsonb),
+            CASE
+              WHEN jsonb_typeof(COALESCE(item_tier_daily_snapshots."order", '{}'::jsonb)) = 'object'
+              THEN COALESCE(item_tier_daily_snapshots."order", '{}'::jsonb)
+              ELSE '{}'::jsonb
+            END,
             ARRAY[${orderKey}]::text[],
             jsonb_build_object(
               'games',
-              COALESCE((item_tier_daily_snapshots."order"->${orderKey}->>'games')::bigint, 0) + 1,
+              CASE
+                WHEN jsonb_typeof(item_tier_daily_snapshots."order") = 'object'
+                THEN COALESCE((item_tier_daily_snapshots."order"->${orderKey}->>'games')::bigint, 0) + 1
+                ELSE 1
+              END,
               'wins',
-              COALESCE((item_tier_daily_snapshots."order"->${orderKey}->>'wins')::bigint, 0) + ${winCount}
+              CASE
+                WHEN jsonb_typeof(item_tier_daily_snapshots."order") = 'object'
+                THEN COALESCE((item_tier_daily_snapshots."order"->${orderKey}->>'wins')::bigint, 0) + ${winCount}
+                ELSE ${winCount}
+              END
             ),
             true
           ),
@@ -1123,7 +1136,13 @@ export async function runIngestionTransaction(payload: IngestionJobData): Promis
 
   await rehydrateParticipantRanksForIngestion(payload);
 
-  if (!matchReadyForAggregation(payload.participants, closestSnapshotsFromParticipants(payload.participants))) {
+  if (
+    !matchReadyForAggregation(
+      payload.participants,
+      closestSnapshotsFromParticipants(payload.participants),
+      payload.teamStats.rankTier,
+    )
+  ) {
     let insertedPlayers = 0;
     await sql.begin(async (tx) => {
       insertedPlayers = await upsertPlayersFromParticipants(tx, payload.participants);
@@ -1232,6 +1251,6 @@ export const ingestionWorker = new Worker<IngestionJobData>(
   (job) => processIngestionJob(job),
   {
     connection: redis,
-    concurrency: 5,
+    concurrency: riotConfig.ingestionWorkerConcurrency,
   },
 );

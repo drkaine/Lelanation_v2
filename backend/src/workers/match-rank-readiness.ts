@@ -28,6 +28,31 @@ export function normalizeParticipantRankTier(value: string | null | undefined): 
   return tier;
 }
 
+/** Rang effectif pour les agrégats : individuel si connu, sinon rang moyen du match (clé perso). */
+export function effectiveParticipantRankTier(
+  participant: ParsedParticipantDto,
+  matchRankTier: string | null | undefined,
+): string {
+  const individual = normalizeParticipantRankTier(participant.rankTierValue ?? participant.rankTier);
+  if (individual) return individual;
+  const match = normalizeParticipantRankTier(matchRankTier);
+  return match ?? "UNRANKED";
+}
+
+/** Propage le rang moyen du match sur les participants sans rang solo connu. */
+export function applyMatchRankFallbackToParticipants(
+  participants: ParsedParticipantDto[],
+  matchRankTier: string | null | undefined,
+): void {
+  const matchTier = normalizeParticipantRankTier(matchRankTier);
+  if (!matchTier) return;
+  for (const participant of participants) {
+    if (normalizeParticipantRankTier(participant.rankTierValue ?? participant.rankTier)) continue;
+    participant.rankTier = matchTier;
+    participant.rankTierValue = matchTier;
+  }
+}
+
 /** Rang connu = snapshot best-effort player_rank_history (exact, avant, ou après game_date). */
 export function participantRankKnown(
   participant: ParsedParticipantDto,
@@ -75,16 +100,18 @@ export function averageMatchRankTierLabel(
 export function matchReadyForAggregation(
   participants: ParsedParticipantDto[],
   closestSnapshots: Map<string, RankSnapshot>,
+  matchRankTier?: string | null,
 ): boolean {
   if (participants.length === 0) return false;
   if (!participants.every((p) => participantRankKnown(p, closestSnapshots))) return false;
-  return participants.some((participant) => {
+  const hasRankedParticipant = participants.some((participant) => {
     const puuid = String(participant.puuid ?? "").trim();
     if (!puuid) return false;
-    const snapshot = closestSnapshots.get(puuid);
-    if (!snapshot) return false;
-    return normalizeParticipantRankTier(snapshot.rankTier) != null;
+    if (normalizeParticipantRankTier(closestSnapshots.get(puuid)?.rankTier)) return true;
+    return normalizeParticipantRankTier(participant.rankTierValue ?? participant.rankTier) != null;
   });
+  if (hasRankedParticipant) return true;
+  return normalizeParticipantRankTier(matchRankTier) != null;
 }
 
 /** Participants sans snapshot best-effort. */

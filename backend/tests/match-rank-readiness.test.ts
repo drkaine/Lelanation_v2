@@ -2,8 +2,10 @@ import { describe, expect, test } from "vitest";
 import type { ParsedParticipantDto } from "../src/dto/match.dto.js";
 import type { RankSnapshot } from "../src/db/query.js";
 import {
+  applyMatchRankFallbackToParticipants,
   averageMatchRankTierLabel,
   closestSnapshotsFromParticipants,
+  effectiveParticipantRankTier,
   getMissingRankParticipants,
   matchReadyForAggregation,
   participantRankKnown,
@@ -97,6 +99,23 @@ describe("match-rank-readiness", () => {
     const snapshots = new Map([snapshot("a", "GOLD")]);
     expect(getMissingRankParticipants(participants, snapshots)).toHaveLength(1);
     expect(getMissingRankParticipants(participants, snapshots)[0]?.puuid).toBe("b");
+  });
+
+  test("matchReadyForAggregation accepts match-level rank when snapshots are all UNRANKED", () => {
+    const participants = [participant("a"), participant("b", { rankTier: "UNRANKED" })];
+    const allUnranked = new Map([snapshot("a", "UNRANKED"), snapshot("b", "UNRANKED")]);
+    expect(matchReadyForAggregation(participants, allUnranked)).toBe(false);
+    expect(matchReadyForAggregation(participants, allUnranked, "GOLD")).toBe(true);
+  });
+
+  test("applyMatchRankFallbackToParticipants fills unknown players", () => {
+    const participants = [
+      participant("a", { rankTier: "PLATINUM", rankTierValue: "PLATINUM" }),
+      participant("b", { rankTier: "UNRANKED", rankTierValue: "UNRANKED" }),
+    ];
+    applyMatchRankFallbackToParticipants(participants, "GOLD");
+    expect(effectiveParticipantRankTier(participants[0], "GOLD")).toBe("PLATINUM");
+    expect(effectiveParticipantRankTier(participants[1], "GOLD")).toBe("GOLD");
   });
 
   test("closestSnapshotsFromParticipants skips needsRankFetch", () => {

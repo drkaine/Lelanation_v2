@@ -52,6 +52,30 @@ export const riotConfig = {
     }
     return envInt('MAX_DISPATCHES_PER_FLUSH', 50);
   },
+  /** Target share of the 120s app bucket (default 95 → ~94/99 tokens). */
+  get personalTargetUtilizationPct(): number {
+    return envFloat('PERSONAL_TARGET_UTILIZATION_PCT', 95) / 100;
+  },
+  personalTargetTokens120s(limit120s: number): number {
+    const explicit = envStr('PERSONAL_TARGET_TOKENS_120S');
+    if (explicit) {
+      const parsed = Number.parseFloat(explicit);
+      if (Number.isFinite(parsed) && parsed > 0) return Math.min(parsed, limit120s);
+    }
+    return Math.max(1, Math.floor(limit120s * this.personalTargetUtilizationPct));
+  },
+  personalDispatchSpacingMs(limit120s: number): number {
+    const override = envInt('PERSONAL_MIN_DISPATCH_INTERVAL_MS', 0);
+    if (override > 0) return override;
+    const tokens = this.personalTargetTokens120s(limit120s);
+    return Math.max(100, Math.ceil(120_000 / tokens));
+  },
+  get ingestionWorkerConcurrency(): number {
+    if (this.apiKeyType === 'personal') {
+      return envInt('PERSONAL_INGESTION_WORKER_CONCURRENCY', 1);
+    }
+    return envInt('INGESTION_WORKER_CONCURRENCY', 5);
+  },
   maxRetries: 3,
   get soakDurationMinutes(): number {
     return envInt('SOAK_DURATION_MINUTES', 10);

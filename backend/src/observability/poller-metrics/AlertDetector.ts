@@ -1,4 +1,5 @@
 import { getLatestResolvedSince } from '../../poll-orchestration/sinceContext.js';
+import { riotConfig } from '../../riot-gateway/config/riotConfig.js';
 import { PollerTuner } from '../../tuner/PollerTuner.js';
 import { pollerMetricsLogger } from './logger.js';
 import type { MetricsStore } from './MetricsStore.js';
@@ -107,12 +108,16 @@ export class AlertDetector {
   }
 
   private checkTokenUnderutilized(avgPct: number, sessionCount: number, emaReq: number): void {
-    if (avgPct < 30 && sessionCount > warmupSessions()) {
+    const personal = riotConfig.apiKeyType === 'personal';
+    const targetPct = personal ? riotConfig.personalTargetUtilizationPct * 100 : 30;
+    const warnBelow = personal ? targetPct - 7 : targetPct;
+    if (avgPct < warnBelow && sessionCount > warmupSessions()) {
       this.raise('token_underutilized', 'warn', 'tokens under-utilized — possible EMA miscalibration or pool exhausted', {
         avg_pct: avgPct,
+        target_pct: targetPct,
         ema_reqPerPlayer: emaReq,
       });
-    } else if (avgPct >= 30) {
+    } else if (avgPct >= warnBelow) {
       this.clear('token_underutilized');
     }
   }

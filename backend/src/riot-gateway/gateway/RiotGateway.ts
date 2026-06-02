@@ -343,6 +343,23 @@ export class RiotGateway {
         break;
       }
 
+      if (riotConfig.apiKeyType === 'personal') {
+        const bucket120 = check.appWindows.find((w) => w.windowMs === 120_000);
+        const limit120 = bucket120?.limit ?? 99;
+        if (bucket120 && bucket120.pctUsed >= riotConfig.personalTargetUtilizationPct * 100) {
+          this.scheduleFlushTimer(Math.max(50, bucket120.resetInMs));
+          break;
+        }
+        if (this.lastDispatchAt > 0) {
+          const spacing = riotConfig.personalDispatchSpacingMs(limit120);
+          const elapsed = Date.now() - this.lastDispatchAt;
+          if (elapsed < spacing) {
+            this.scheduleFlushTimer(spacing - elapsed);
+            break;
+          }
+        }
+      }
+
       const request = this.queue.dequeue();
       if (!request) break;
 
