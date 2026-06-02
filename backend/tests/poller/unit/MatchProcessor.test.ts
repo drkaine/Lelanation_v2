@@ -104,4 +104,44 @@ describe('MatchProcessor', () => {
     expect(ranks.filter((r) => r.fromCache).length).toBe(1);
     expect(ranks.filter((r) => !r.fromCache).length).toBe(9);
   });
+
+  test('PATH B disabled does not fetch participant ranks', async () => {
+    vi.mocked(fetchMatch).mockResolvedValue(buildMatch(Array.from({ length: 10 }, (_, i) => `p-${i}`)));
+    vi.mocked(fetchMatchTimeline).mockResolvedValue({ info: {} });
+    vi.mocked(fetchLeagueEntriesByPUUID).mockResolvedValue([{ tier: 'GOLD' }]);
+
+    const processor = new MatchProcessor(
+      player,
+      { ...config, resolveParticipantRanks: false },
+      new PollerEventBus(),
+      new ParticipantRankCache(),
+      's1',
+      () => undefined,
+      () => undefined,
+      () => undefined,
+    );
+
+    await processor.process('EUW1_200');
+    expect(fetchLeagueEntriesByPUUID).not.toHaveBeenCalled();
+  });
+
+  test('PATH B enabled fetches participant ranks', async () => {
+    vi.mocked(fetchMatch).mockResolvedValue(buildMatch(Array.from({ length: 10 }, (_, i) => `p-${i}`)));
+    vi.mocked(fetchMatchTimeline).mockResolvedValue({ info: {} });
+    vi.mocked(fetchLeagueEntriesByPUUID).mockResolvedValue([{ tier: 'GOLD' }]);
+
+    const processor = new MatchProcessor(
+      player,
+      { ...config, resolveParticipantRanks: true },
+      new PollerEventBus(),
+      new ParticipantRankCache(),
+      's1',
+      () => undefined,
+      () => undefined,
+      () => undefined,
+    );
+
+    await processor.process('EUW1_201');
+    expect(fetchLeagueEntriesByPUUID).toHaveBeenCalledTimes(10);
+  });
 });

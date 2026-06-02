@@ -970,10 +970,15 @@ const aggTableRoleColumnNameCache = new Map<string, 'role' | 'role_norm'>()
 async function resolveAggTableRoleColumn(
   tableName: 'agg_champion_summoner_spell_pair_stats' | 'agg_champion_item_starter_set_stats'
 ): Promise<'role' | 'role_norm'> {
+  // Tables partitionnées actuelles exposent `role` (pas `role_norm`).
+  if (tableName === 'agg_champion_summoner_spell_pair_stats') {
+    return 'role'
+  }
   const cached = aggTableRoleColumnNameCache.get(tableName)
   if (cached) return cached
+  const physical = tableName.replace(/^agg_/, '')
   const archiveTable = `archive_${tableName}`
-  for (const tn of [archiveTable, tableName]) {
+  for (const tn of [physical, archiveTable, tableName]) {
     const safeTable = tn.replace(/'/g, "''")
     const rows = await queryRawUnsafe<Array<{ col: string }>>(`
       SELECT column_name AS col
@@ -990,7 +995,7 @@ async function resolveAggTableRoleColumn(
       return col
     }
   }
-  return 'role_norm'
+  return 'role'
 }
 
 type SpellPairSqlRow = {
@@ -1015,7 +1020,9 @@ async function loadSummonerSpellPairsFromMatches(
   )
   const roleNorm = normalizeStatsRoleForChampion(role)
   const roleCol = await resolveAggTableRoleColumn('agg_champion_summoner_spell_pair_stats')
-  const roleSql = roleNorm ? ` AND ag.${roleCol} = '${statsRoleSqlLiteral(roleNorm)}'` : ''
+  const roleSql = roleNorm
+    ? ` AND upper(ag.${roleCol}::text) = '${statsRoleSqlLiteral(roleNorm)}'`
+    : ''
   const smiteSql = includeSmite ? '' : ` AND ag.spell_d <> 11 AND ag.spell_f <> 11`
   const agFrom = await matchVersionedAggFrom('agg_champion_summoner_spell_pair_stats', version, 'ag')
   const sql = `

@@ -13,6 +13,7 @@ import {
   RankFilter,
   SinceTimestampResolver,
   applySinceModeTransition,
+  assertPollConfigFiltersWired,
   loadPollOrchestrationEnv,
   setLatestResolvedSince,
 } from './poll-orchestration/index.js';
@@ -23,6 +24,7 @@ import { ingestionQueue, getQueueMetrics } from './queues/index.js';
 import { trimCompletedQueueJobs } from './queues/queue-cleanup.js';
 import { purgeStaleProcessedMatchesAndRankHistory } from './services/patch-retention-cleanup.js';
 import { initRiotGateway, logRiotRoutingVerified, shutdownRiotGateway } from './riot/client.js';
+import { riotConfig } from './riot-gateway/config/riotConfig.js';
 import { RiotGateway } from './riot-gateway/index.js';
 import { redis } from './redis/client.js';
 import { orchestrationLogger } from './poll-orchestration/logger.js';
@@ -246,13 +248,17 @@ async function discoveryLoop(): Promise<void> {
       const pollConfig: Partial<PollConfig> = {
         sinceTimestamp: resolved.sinceTimestamp,
         matchIdsPerPage: Number.parseInt(process.env.POLLER_MATCH_IDS_PER_PAGE ?? '100', 10),
-        resolveParticipantRanks: orchEnv.resolveParticipantRanks,
+        resolveParticipantRanks:
+          riotConfig.apiKeyType === 'personal'
+            ? false
+            : process.env.RESOLVE_PARTICIPANT_RANKS !== 'false',
         maxConcurrentPlayers: tuned.maxConcurrentPlayers,
         maxConcurrentMatchFetches: tuned.maxConcurrentMatchFetches,
         participantRankConcurrency: tuned.participantRankConcurrency,
         matchFilter: (matchIds) => matchFilter.filterNew(matchIds),
         rankFilter: (puuid, region) => rankFilter.isKnownToday(puuid, region),
       };
+      assertPollConfigFiltersWired(pollConfig, orchestrationLogger);
 
       const pollerPlayers: Player[] = players.map((p) => ({
         puuid: p.puuid,
@@ -323,6 +329,22 @@ async function bootstrap(): Promise<void> {
   logRiotRoutingVerified();
   initRiotGateway();
 
+  const resolveParticipantRanks =
+    riotConfig.apiKeyType === 'personal'
+      ? false
+      : process.env.RESOLVE_PARTICIPANT_RANKS !== 'false';
+  orchestrationLogger.info(
+    {
+      component: 'main',
+      apiKeyType: riotConfig.apiKeyType,
+      resolveParticipantRanks,
+      note: resolveParticipantRanks
+        ? 'player rank (path A) + participant ranks (path B) both active'
+        : 'player rank (path A) active - participant ranks (path B) disabled (personal key)',
+    },
+    'rank resolution config',
+  );
+
   await acquirePollerLeaderLock();
   console.log(`[poller-main] leader lock acquired pid=${process.pid}`);
 
@@ -333,7 +355,7 @@ async function bootstrap(): Promise<void> {
   dbConsumer = new PollerDbConsumer(participantDiscovery, playerDiscovery, {
     currentPatch: patchInfo.patch,
     rankTierForUnranked: 'UNRANKED',
-    resolveParticipantRanks: orchEnv.resolveParticipantRanks,
+    resolveParticipantRanks,
   }, engine.getEventBus());
   dbConsumer.subscribe();
 

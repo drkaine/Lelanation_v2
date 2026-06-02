@@ -1,20 +1,23 @@
 import { sql } from '../db/client.js';
 import { timedDbOp } from '../observability/poller-metrics/timedDbOp.js';
+import { PatchResolver } from './PatchResolver.js';
 import { orchestrationLogger } from './logger.js';
 
-const KNOWN_STATUSES = ['done', 'DONE', 'pending', 'PENDING'] as const;
+const KNOWN_STATUSES = ['done', 'DONE', 'pending', 'PENDING', 'error', 'ERROR'] as const;
 
 export class MatchFilter {
   async filterNew(matchIds: string[]): Promise<string[]> {
     if (matchIds.length === 0) return [];
 
     const unique = Array.from(new Set(matchIds.map((id) => id.trim()).filter(Boolean)));
+    const knownPatches = PatchResolver.getAllPatches().map((patchInfo) => patchInfo.patch);
     const knownRows = await timedDbOp('match_filter_query', () =>
       sql<{ riot_match_id: string }[]>`
         SELECT riot_match_id
         FROM processed_matches
         WHERE riot_match_id = ANY(${sql.array(unique, 25)})
           AND status = ANY(${sql.array([...KNOWN_STATUSES], 25)})
+          AND patch = ANY(${sql.array(knownPatches, 25)})
       `,
     );
 

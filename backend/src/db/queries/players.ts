@@ -1,6 +1,10 @@
 import { sql } from '../client.js'
 import type { PlayerJob } from '../../poller/jobTypes.js'
 
+function getPlayerKeyVersion(): string {
+  return process.env.PLAYER_KEY_VERSION || process.env.ENV || 'dev'
+}
+
 type PlayerRow = {
   puuid: string
   region: string
@@ -24,11 +28,12 @@ export async function fetchNextPlayerBatch(limit: number): Promise<PlayerJob[]> 
 
 export async function upsertPlayer(puuid: string, region: string): Promise<void> {
   await sql`
-    INSERT INTO players (puuid, region, last_seen, updated_at)
-    VALUES (${puuid}, ${region}, NOW(), NOW())
+    INSERT INTO players (puuid, region, puuid_key_version, last_seen, updated_at)
+    VALUES (${puuid}, ${region}, ${getPlayerKeyVersion()}, NOW(), NOW())
     ON CONFLICT (puuid)
     DO UPDATE SET
       region = EXCLUDED.region,
+      puuid_key_version = EXCLUDED.puuid_key_version,
       last_seen = NOW(),
       updated_at = NOW()
   `
@@ -39,8 +44,8 @@ export async function upsertPlayersIfMissing(puuids: string[], region: string): 
   if (deduped.length === 0) return
 
   await sql`
-    INSERT INTO players (puuid, region, last_seen, updated_at)
-    SELECT x.puuid, ${region}, NOW(), NOW()
+    INSERT INTO players (puuid, region, puuid_key_version, last_seen, updated_at)
+    SELECT x.puuid, ${region}, ${getPlayerKeyVersion()}, NOW(), NOW()
     FROM UNNEST(${sql.array(deduped, 25)}) AS x(puuid)
     ON CONFLICT (puuid) DO NOTHING
   `

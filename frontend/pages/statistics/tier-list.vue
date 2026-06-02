@@ -703,6 +703,7 @@ function fetchBotlanePayload(
   const params = new URLSearchParams()
   params.set('version', version)
   for (const t of statsDivisionFilter.value) params.append('rankTier', t)
+  params.set('otp', statsOtpFilter.value)
   const q = params.toString() ? `?${params.toString()}` : ''
   const fetchOpts = {
     timeout: BOTLANE_STATS_TIMEOUT_MS,
@@ -947,11 +948,20 @@ watch(
   }
 )
 
-watch([progressionFromVersion, statsVersionFilter, statsDivisionFilter], () => {
-  if (isBotlaneTierListView(tierListViewModel.value)) {
-    loadActiveBotlanePanel().catch(() => undefined)
+watch(
+  [
+    progressionFromVersion,
+    statsVersionFilter,
+    statsDivisionFilter,
+    statsRoleFilter,
+    statsOtpFilter,
+  ],
+  () => {
+    if (isBotlaneTierListView(tierListViewModel.value)) {
+      loadActiveBotlanePanel().catch(() => undefined)
+    }
   }
-})
+)
 
 watch(
   () => tierListViewModel.value,

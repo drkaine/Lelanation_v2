@@ -12,5 +12,6 @@ export { ParticipantDiscovery } from './ParticipantDiscovery.js';
 export type { ParticipantInfo } from './ParticipantDiscovery.js';
 export { BackpressureMonitor } from './BackpressureMonitor.js';
 export { PollerDbConsumer, attachPollerDbConsumer } from './PollerDbConsumer.js';
+export { assertPollConfigFiltersWired } from './startupPollConfigCheck.js';
 export { loadPollOrchestrationEnv } from './types.js';
 export type { DiscoveryPlayer, PollerDbConsumerConfig, PollOrchestrationEnv } from './types.js';

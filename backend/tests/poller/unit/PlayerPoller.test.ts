@@ -37,13 +37,21 @@ const baseConfig: PollConfig = {
   participantRankConcurrency: 5,
 };
 
-function createPoller(processed = new Set<string>()) {
+function createPoller(
+  processed = new Set<string>(),
+  options?: { resolveParticipantRanks?: boolean; rankKnownToday?: boolean },
+) {
   const bus = new PollerEventBus();
   const cache = new ParticipantRankCache();
   const sessionErrors: unknown[] = [];
+  const config: PollConfig = {
+    ...baseConfig,
+    resolveParticipantRanks: options?.resolveParticipantRanks ?? baseConfig.resolveParticipantRanks,
+    rankFilter: () => options?.rankKnownToday ?? false,
+  };
   const poller = new PlayerPoller(
     player,
-    baseConfig,
+    config,
     bus,
     cache,
     processed,
@@ -139,6 +147,20 @@ describe('PlayerPoller', () => {
     expect(mocks.processMock).toHaveBeenCalledOnce();
     expect(complete).toHaveLength(1);
     expect(stats.errors.some((e) => e.stage === 'player_rank')).toBe(true);
+  });
+
+  test('PATH A rank fetch remains active when resolveParticipantRanks=false', async () => {
+    mocks.fetchAllMock.mockResolvedValue([]);
+    const { poller } = createPoller(new Set<string>(), { resolveParticipantRanks: false, rankKnownToday: false });
+    await poller.run();
+    expect(fetchLeagueEntriesByPUUID).toHaveBeenCalledWith(player.puuid, player.platform, 'high');
+  });
+
+  test('PATH A rank fetch is skipped when rankFilter says known today', async () => {
+    mocks.fetchAllMock.mockResolvedValue([]);
+    const { poller } = createPoller(new Set<string>(), { resolveParticipantRanks: false, rankKnownToday: true });
+    await poller.run();
+    expect(fetchLeagueEntriesByPUUID).not.toHaveBeenCalledWith(player.puuid, player.platform, 'high');
   });
 
   test('zero match ids still emits player:complete', async () => {

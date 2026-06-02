@@ -253,6 +253,54 @@ function filterChampionGlobalRowsByOtp<
   return filtered.length > 0 ? filtered : otpGamesFiltered
 }
 
+/** Pickrate max (bleu/rouge) par champion pour filtrer duos bot / bans. */
+async function buildChampionPickratePercentMap(
+  version: string,
+  rankTier: string | string[] | null | undefined
+): Promise<Map<number, number>> {
+  const data = await getChampionGlobalTable([version], rankTier ?? null, null)
+  const map = new Map<number, number>()
+  for (const row of data?.rows ?? []) {
+    const pr = Math.max(
+      parsePickrateNumber(row.blue?.pickrate),
+      parsePickrateNumber(row.red?.pickrate)
+    )
+    map.set(row.championId, pr)
+  }
+  return map
+}
+
+/** Duos botlane : sans OTP = les deux champions au-dessus du seuil ; solo = au moins un niche. */
+function filterBotlaneDuoRowsByOtp<T extends { adcId: number; supportId: number }>(
+  rows: T[],
+  mode: OtpMode,
+  pickByChampion: Map<number, number>
+): T[] {
+  if (mode === 'oui' || rows.length === 0) return rows
+  const filtered = rows.filter((row) => {
+    const adcPick = pickByChampion.get(row.adcId) ?? 0
+    const supPick = pickByChampion.get(row.supportId) ?? 0
+    if (mode === 'non') {
+      return keepByOtpPickratePercent(adcPick, mode) && keepByOtpPickratePercent(supPick, mode)
+    }
+    return keepByOtpPickratePercent(adcPick, mode) || keepByOtpPickratePercent(supPick, mode)
+  })
+  return filtered.length > 0 ? filtered : rows
+}
+
+function filterBansTableRowsByOtp<T extends { championId: number }>(
+  rows: T[],
+  mode: OtpMode,
+  pickByChampion: Map<number, number>
+): T[] {
+  if (mode === 'oui' || rows.length === 0) return rows
+  const filtered = rows.filter((row) => {
+    const pr = pickByChampion.get(row.championId) ?? 0
+    return keepByOtpPickratePercent(pr, mode)
+  })
+  return filtered.length > 0 ? filtered : rows
+}
+
 /** GET /api/stats/versions-with-matches — patches ayant au moins un match (`match_outcome_stats`). */
 router.get('/versions-with-matches', async (req: Request, res: Response) => {
   res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
@@ -641,12 +689,13 @@ router.get('/champions/global-table', async (req: Request, res: Response) => {
   }
 })
 
-/** GET /api/stats/champions/bans-table — bans par champion (total, bleu/rouge, par rôle du banneur). Query: ?version=…&rankTier=…&role=TOP (pas de filtre OTP) */
+/** GET /api/stats/champions/bans-table — bans par champion (total, bleu/rouge, par rôle du banneur). Query: ?version=…&rankTier=…&role=TOP&otp=… */
 router.get('/champions/bans-table', async (req: Request, res: Response) => {
   res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
   const version = queryStringArray(req.query.version)
   const rankTier = queryStringArray(req.query.rankTier)
   const role = queryString(req.query.role)
+  const otpMode = otpModeFromQuery(req.query.otp)
   const sqlStart = Date.now()
   try {
     const data = await getChampionBansTable(
@@ -657,6 +706,11 @@ router.get('/champions/bans-table', async (req: Request, res: Response) => {
     ;(res as Response & { locals: { sqlMs?: number } }).locals.sqlMs = Date.now() - sqlStart
     if (!data) {
       return res.status(200).json({ matchCount: 0, rows: [], message: 'Database not configured.' })
+    }
+    if (otpMode !== 'oui' && version.length === 1 && data.rows?.length) {
+      const pickMap = await buildChampionPickratePercentMap(version[0]!, rankTier)
+      const rows = filterBansTableRowsByOtp(data.rows, otpMode, pickMap)
+      return res.json({ ...data, rows })
     }
     return res.json(data)
   } catch (err) {
@@ -1558,11 +1612,17 @@ router.get('/botlane-vs-botlane', async (req: Request, res: Response) => {
   res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
   const version = queryString(req.query.version)
   const rankTier = rankTierParam(req.query.rankTier)
+  const otpMode = otpModeFromQuery(req.query.otp)
   if (!version) {
     return res.status(400).json({ error: 'version query parameter is required' })
   }
   const data = await getBotlaneDuoVsDuoTierTable(version, rankTier)
-  return res.json(data ?? { version: null, rankTier: null, rows: [] })
+  const payload = data ?? { version: null, rankTier: null, rows: [] }
+  if (otpMode !== 'oui' && payload.rows.length > 0) {
+    const pickMap = await buildChampionPickratePercentMap(version, rankTier)
+    payload.rows = filterBotlaneDuoRowsByOtp(payload.rows, otpMode, pickMap)
+  }
+  return res.json(payload)
 })
 
 /** GET /api/stats/botlane-duo-tierlist — allied botlane duo ranking (aggregated over all matchups). */
@@ -1570,11 +1630,17 @@ router.get('/botlane-duo-tierlist', async (req: Request, res: Response) => {
   res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
   const version = queryString(req.query.version)
   const rankTier = rankTierParam(req.query.rankTier)
+  const otpMode = otpModeFromQuery(req.query.otp)
   if (!version) {
     return res.status(400).json({ error: 'version query parameter is required' })
   }
   const data = await getBotlaneDuoOverallTierTable(version, rankTier)
-  return res.json(data ?? { version: null, rankTier: null, rows: [] })
+  const payload = data ?? { version: null, rankTier: null, rows: [] }
+  if (otpMode !== 'oui' && payload.rows.length > 0) {
+    const pickMap = await buildChampionPickratePercentMap(version, rankTier)
+    payload.rows = filterBotlaneDuoRowsByOtp(payload.rows, otpMode, pickMap)
+  }
+  return res.json(payload)
 })
 
 router.get('/balance-framework', async (req: Request, res: Response) => {

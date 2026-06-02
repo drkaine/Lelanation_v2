@@ -3,6 +3,10 @@ import { parsePlatformFromMatchId } from '../poller/utils/parseMatchId.js';
 import type { MatchDto } from '../riot-gateway/routes/dto.js';
 import { orchestrationLogger } from './logger.js';
 
+function getPlayerKeyVersion(): string {
+  return process.env.PLAYER_KEY_VERSION || process.env.ENV || 'dev';
+}
+
 export interface ParticipantInfo {
   puuid: string;
   region: string;
@@ -55,8 +59,8 @@ export class ParticipantDiscovery {
     const regions = rows.map((r) => r.region);
 
     const inserted = await sql<{ puuid: string }[]>`
-      INSERT INTO players (puuid, region, last_seen, updated_at)
-      SELECT x.puuid, x.region, NOW(), NOW()
+      INSERT INTO players (puuid, region, puuid_key_version, last_seen, updated_at)
+      SELECT x.puuid, x.region, ${getPlayerKeyVersion()}, NOW(), NOW()
       FROM UNNEST(
         ${sql.array(puuids, 25)}::text[],
         ${sql.array(regions, 25)}::text[]

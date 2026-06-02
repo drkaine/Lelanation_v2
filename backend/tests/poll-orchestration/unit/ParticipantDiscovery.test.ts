@@ -9,6 +9,7 @@ import { ParticipantDiscovery } from '../../../src/poll-orchestration/Participan
 
 describe('ParticipantDiscovery', () => {
   beforeEach(() => {
+    process.env.PLAYER_KEY_VERSION = 'test-key-v';
     vi.mocked(sql).mockReset();
   });
 
@@ -48,5 +49,14 @@ describe('ParticipantDiscovery', () => {
     ]);
     expect(count).toBe(3);
     expect(sql).toHaveBeenCalledTimes(1);
+  });
+
+  test('upsertParticipants sets puuid_key_version for new players', async () => {
+    vi.mocked(sql).mockResolvedValueOnce([{ puuid: 'a' }]);
+    const discovery = new ParticipantDiscovery();
+    await discovery.upsertParticipants([{ puuid: 'a', region: 'euw1' }]);
+    const call = vi.mocked(sql).mock.calls[0] ?? [];
+    const sqlText = Array.isArray(call[0]) ? call[0].join(' ') : '';
+    expect(sqlText).toContain('puuid_key_version');
   });
 });

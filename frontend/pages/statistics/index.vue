@@ -674,6 +674,14 @@ import { useStatisticsCustomStore } from '~/stores/StatisticsCustomStore'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { useStatisticsMobileViewport } from '~/composables/useStatisticsMobileViewport'
 import { useStatisticsBansTab } from '~/composables/statistics/useStatisticsBansTab'
+import {
+  appendStatisticsCohortParams,
+  cohortFiltersForTab,
+  statisticsTabFilterFlags,
+  statisticsTabUsesOtp,
+  type StatisticsCohortFilterValues,
+  type StatisticsCohortTab,
+} from '~/composables/statistics/statisticsTabFilters'
 import { getChampionImageUrl, getItemImageUrl } from '~/utils/imageUrl'
 import { formatItemStatsForDisplay, formatItemEconomicForDisplay } from '~/utils/formatItemStats'
 import {
@@ -1292,6 +1300,15 @@ const statsVersionFilter = ref('')
 const statsDivisionFilter = ref<string[]>([])
 const statsRoleFilter = ref('')
 const statsOtpFilter = ref<'oui' | 'non' | 'solo'>('non')
+
+function statsCohortFilters(): StatisticsCohortFilterValues {
+  return {
+    division: statsDivisionFilter.value,
+    role: statsRoleFilter.value,
+    otp: statsOtpFilter.value,
+  }
+}
+
 const balanceGlobalFilter = ref<'ALL' | 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'>('ALL')
 const balanceNeedFilter = ref<'ALL' | 'NERF' | 'BUFF' | 'NORMAL'>('ALL')
 const balanceAverageFilter = ref<'ALL' | 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'>('ALL')
@@ -1340,18 +1357,16 @@ function syncStatisticsStateToQuery(): void {
   if (statsVersionFilter.value) nextQuery.version = statsVersionFilter.value
   else delete nextQuery.version
 
-  if (statsRoleFilter.value) nextQuery.role = statsRoleFilter.value
+  const cohortFlags = statisticsTabFilterFlags(activeTab.value)
+  if (cohortFlags.role && statsRoleFilter.value) nextQuery.role = statsRoleFilter.value
   else delete nextQuery.role
 
-  if (activeTab.value !== 'bans') {
-    if (statsOtpFilter.value !== 'non') nextQuery.otp = statsOtpFilter.value
-    else delete nextQuery.otp
-  } else {
-    delete nextQuery.otp
-  }
+  if (cohortFlags.otp && statsOtpFilter.value !== 'non') nextQuery.otp = statsOtpFilter.value
+  else delete nextQuery.otp
 
-  if (statsDivisionFilter.value.length > 0) nextQuery.rankTier = [...statsDivisionFilter.value]
-  else delete nextQuery.rankTier
+  if (cohortFlags.division && statsDivisionFilter.value.length > 0) {
+    nextQuery.rankTier = [...statsDivisionFilter.value]
+  } else delete nextQuery.rankTier
 
   isSyncingQueryState.value = true
   router.replace({ query: nextQuery }).finally(() => {
@@ -1362,12 +1377,13 @@ const showFiltersPanel = computed(() => activeTab.value !== 'infos')
 
 const activeStatsFiltersCount = computed(() => {
   let count = 0
+  const cohortFlags = statisticsTabFilterFlags(activeTab.value)
   if (statsVersionFilter.value) count++
-  if (statsDivisionFilter.value.length > 0) count++
-  if (statsRoleFilter.value) count++
-  if (statsOtpFilter.value !== 'non') count++
+  if (cohortFlags.division && statsDivisionFilter.value.length > 0) count++
+  if (cohortFlags.role && statsRoleFilter.value) count++
+  if (cohortFlags.otp && statsOtpFilter.value !== 'non') count++
   if (progressionFromVersionOverride.value) count++
-  if (championSearchQuery.value.trim()) count++
+  if (cohortFlags.championSearch && championSearchQuery.value.trim()) count++
   if (activeTab.value === 'balance') {
     if (balanceGlobalFilter.value !== 'ALL') count++
     if (balanceNeedFilter.value !== 'ALL') count++
@@ -1476,7 +1492,7 @@ function mergeKnownVersions(
 
 async function loadVersionsWithMatches(): Promise<void> {
   const params = new URLSearchParams()
-  for (const t of statsDivisionFilter.value) params.append('rankTier', t)
+  appendStatisticsCohortParams(params, activeTab.value, statsCohortFilters())
   const q = params.toString()
   try {
     const data = await statsFetch<{
@@ -1748,9 +1764,7 @@ async function loadBalanceFramework() {
     const fetchOnce = () => {
       const params = new URLSearchParams()
       if (statsVersionFilter.value) params.set('version', statsVersionFilter.value)
-      if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
-      if (statsOtpFilter.value && statsOtpFilter.value !== 'non')
-        params.set('otp', statsOtpFilter.value)
+      appendStatisticsCohortParams(params, activeTab.value, statsCohortFilters())
       const q = params.toString()
       return statsFetch<typeof balanceFrameworkData.value>(
         apiUrl('/api/stats/balance-framework' + (q ? `?${q}` : '')),
@@ -1872,13 +1886,16 @@ const overviewDetailData = ref<{
 const overviewDetailBaselineData = ref<typeof overviewDetailData.value>(null)
 const overviewDetailBaselinePending = ref(false)
 const overviewDetailPending = ref(false)
-function overviewQueryParams(opts?: { version?: string | null; includeSmite?: boolean }): string {
+function overviewQueryParams(opts?: {
+  version?: string | null
+  includeSmite?: boolean
+  tab?: StatisticsCohortTab
+}): string {
   const params = new URLSearchParams()
   const ver = opts?.version != null && opts.version !== '' ? opts.version : statsVersionFilter.value
   if (ver) params.set('version', ver)
-  for (const t of statsDivisionFilter.value) params.append('rankTier', t)
-  if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
-  params.set('otp', statsOtpFilter.value)
+  const tab = opts?.tab ?? activeTab.value
+  appendStatisticsCohortParams(params, tab, statsCohortFilters(), { alwaysSendOtp: true })
   if (opts?.includeSmite) params.set('includeSmite', '1')
   const q = params.toString()
   return q ? '?' + q : ''
@@ -1966,10 +1983,12 @@ function appendProgressionSinceVersion(params: URLSearchParams): void {
 }
 
 function progressionRequestKey(prefix: string, oldest: string): string {
-  const div = (overviewDivisionFilter.value ?? []).join(',')
-  const role = statsRoleFilter.value || ''
+  const effective = cohortFiltersForTab(activeTab.value, statsCohortFilters())
+  const div = effective.division.join(',')
+  const role = effective.role || ''
   const since = statsVersionFilter.value.trim()
-  return `${prefix}:${oldest}|${since}|${div}|${role}`
+  const otp = effective.otp
+  return `${prefix}:${oldest}|${since}|${div}|${role}|${otp}`
 }
 
 function runInBackground<T>(promise: Promise<T>): void {
@@ -2124,7 +2143,6 @@ function surrenderMatrixQueryParams(): string {
   ) {
     params.set('fromVersion', baseline)
   }
-  for (const t of statsDivisionFilter.value) params.append('rankTier', t)
   const s = params.toString()
   return s ? `?${s}` : ''
 }
@@ -2211,10 +2229,7 @@ async function loadOverviewProgression() {
     const params = new URLSearchParams()
     params.set('version', oldest)
     appendProgressionSinceVersion(params)
-    if (overviewDivisionFilter.value) {
-      for (const tier of overviewDivisionFilter.value) params.append('rankTier', tier)
-    }
-    if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
+    appendStatisticsCohortParams(params, activeTab.value, statsCohortFilters())
     const q = params.toString() ? '?' + params.toString() : ''
     try {
       overviewProgressionData.value = await statsFetch(
@@ -2362,10 +2377,7 @@ async function loadProgressionsFull() {
     const params = new URLSearchParams()
     params.set('version', oldest)
     appendProgressionSinceVersion(params)
-    if (overviewDivisionFilter.value) {
-      for (const tier of overviewDivisionFilter.value) params.append('rankTier', tier)
-    }
-    if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
+    appendStatisticsCohortParams(params, activeTab.value, statsCohortFilters())
     const q = params.toString() ? '?' + params.toString() : ''
     try {
       progressionFullData.value = await statsFetch(
@@ -3301,12 +3313,11 @@ function drakeTypePercentForCountSides(key: string, count: number, byBlue: boole
   const games = aggregateObjectiveHistogramDist(key, dist)[count] ?? 0
   return formatObjectiveObtentionPercent(games, data.matchCount)
 }
-function sidesQueryParams(opts?: { version?: string | null }): string {
+function sidesQueryParams(opts?: { version?: string | null; tab?: StatisticsCohortTab }): string {
   const params = new URLSearchParams()
   const ver = opts?.version != null && opts.version !== '' ? opts.version : statsVersionFilter.value
   if (ver) params.set('version', ver)
-  for (const t of statsDivisionFilter.value) params.append('rankTier', t)
-  if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
+  appendStatisticsCohortParams(params, opts?.tab ?? activeTab.value, statsCohortFilters())
   const s = params.toString()
   return s ? '?' + s : ''
 }
@@ -3314,8 +3325,7 @@ function sidesProgressionQueryParams(): string {
   const params = new URLSearchParams()
   if (progressionFromVersion.value) params.set('version', progressionFromVersion.value)
   if (statsVersionFilter.value) params.set('sinceVersion', statsVersionFilter.value)
-  for (const t of statsDivisionFilter.value) params.append('rankTier', t)
-  if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
+  appendStatisticsCohortParams(params, activeTab.value, statsCohortFilters())
   const s = params.toString()
   return s ? '?' + s : ''
 }
@@ -3472,6 +3482,7 @@ const FAST_STAT_ROW_COUNT = 5
 const STATS_OTP_PICKRATE_THRESHOLD_PCT = 1
 
 function overviewRowMatchesOtpFilter(row: { pickrate?: number }): boolean {
+  if (!statisticsTabUsesOtp(activeTab.value)) return true
   const pr = Number(row.pickrate ?? 0)
   if (statsOtpFilter.value === 'solo') return pr < STATS_OTP_PICKRATE_THRESHOLD_PCT
   if (statsOtpFilter.value === 'non') return pr >= STATS_OTP_PICKRATE_THRESHOLD_PCT
@@ -3487,7 +3498,9 @@ function takeOverviewChampionTopN<T extends { championId: number; pickrate?: num
   n: number = FAST_STAT_ROW_COUNT
 ): T[] {
   if (!rows.length || n <= 0) return []
-  if (statsOtpFilter.value === 'oui') return rows.slice(0, n)
+  if (!statisticsTabUsesOtp(activeTab.value) || statsOtpFilter.value === 'oui') {
+    return rows.slice(0, n)
+  }
 
   let pool = rows.filter(r => overviewRowMatchesOtpFilter(r))
   if (pool.length === 0) pool = [...rows]
@@ -4203,9 +4216,9 @@ watch(
 
 const queryString = computed(() => {
   const params = new URLSearchParams()
-  for (const t of statsDivisionFilter.value) params.append('rankTier', t)
-  if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
-  params.set('otp', statsOtpFilter.value)
+  appendStatisticsCohortParams(params, activeTab.value, statsCohortFilters(), {
+    alwaysSendOtp: true,
+  })
   return params.toString() ? `?${params.toString()}` : ''
 })
 async function loadChampions() {
@@ -4270,24 +4283,14 @@ const championGlobalPatchDeltaRefLabel = computed(() => {
 /** Patch de référence pour deltas runes / items / sorts (overview-detail baseline). */
 const overviewDetailComparisonVersion = computed(() => resolveStatsBaselineVersion())
 
-function championGlobalTableQueryForVersion(versionFull: string | null | undefined): string {
+function championGlobalTableQueryForVersion(
+  versionFull: string | null | undefined,
+  tab: StatisticsCohortTab = activeTab.value
+): string {
   const params = new URLSearchParams()
   const v = (versionFull ?? '').trim()
   if (v) params.set('version', v)
-  for (const t of statsDivisionFilter.value) params.append('rankTier', t)
-  if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
-  params.set('otp', statsOtpFilter.value)
-  const s = params.toString()
-  return s ? `?${s}` : ''
-}
-
-/** Requête bans : patch / ligue + rôle (quand choisi). */
-function bansTableQueryForVersion(versionFull: string | null | undefined): string {
-  const params = new URLSearchParams()
-  const v = (versionFull ?? '').trim()
-  if (v) params.set('version', v)
-  for (const t of statsDivisionFilter.value) params.append('rankTier', t)
-  if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
+  appendStatisticsCohortParams(params, tab, statsCohortFilters(), { alwaysSendOtp: true })
   const s = params.toString()
   return s ? `?${s}` : ''
 }
@@ -4317,7 +4320,8 @@ const bansTab = useStatisticsBansTab({
   statsFetch,
   apiUrl,
   patchFromVersion,
-  championGlobalTableQueryForVersion: bansTableQueryForVersion,
+  championGlobalTableQueryForVersion: (versionFull: string | null | undefined) =>
+    championGlobalTableQueryForVersion(versionFull, 'bans'),
   statsPerfStart,
   statsPerfEnd,
   championName,
@@ -4456,6 +4460,7 @@ function itemEconomicForItem(itemId: number): string[] {
 }
 
 watch(activeTab, async tab => {
+  syncStatisticsStateToQuery()
   if (tab === 'overview') {
     loadOverview()
     loadChampions()
@@ -4521,6 +4526,8 @@ watch([statsVersionFilter, statsDivisionFilter, statsRoleFilter, statsOtpFilter]
     loadObjectivesBaseline()
   }
   if (activeTab.value === 'surrender') loadSurrenderMatrix()
+  if (activeTab.value === 'duration') loadOverviewDurationWinrate()
+  if (activeTab.value === 'abandons') loadOverviewAbandons()
   if (activeTab.value === 'runes' || activeTab.value === 'items' || activeTab.value === 'spells') {
     loadOverviewDetail()
     loadOverviewDetailBaseline()
@@ -4548,6 +4555,8 @@ watch(progressionFromVersion, () => {
     loadObjectivesBaseline()
   }
   if (activeTab.value === 'surrender') loadSurrenderMatrix()
+  if (activeTab.value === 'duration') loadOverviewDurationWinrate()
+  if (activeTab.value === 'abandons') loadOverviewAbandons()
   if (activeTab.value === 'runes' || activeTab.value === 'items' || activeTab.value === 'spells') {
     loadOverviewDetail()
     loadOverviewDetailBaseline()
