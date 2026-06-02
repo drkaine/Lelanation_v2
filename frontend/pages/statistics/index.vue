@@ -483,19 +483,56 @@
                 activeTab !== 'bans' && activeTab !== 'objectives' && activeTab !== 'surrender'
               "
             >
-              <label for="otp-filter" class="mb-1 block text-sm font-medium text-text">
+              <div class="mb-1 text-sm font-medium text-text">
                 {{ t('statisticsPage.filterOtp') }}
-              </label>
-              <select
-                id="otp-filter"
-                v-model="statsOtpFilter"
-                class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-                @change="onStatsFilterChange"
-              >
-                <option value="non">{{ t('statisticsPage.filterOtpNo') }}</option>
-                <option value="oui">{{ t('statisticsPage.filterOtpYes') }}</option>
-                <option value="solo">{{ t('statisticsPage.filterOtpSolo') }}</option>
-              </select>
+              </div>
+              <div class="flex flex-wrap gap-1">
+                <button
+                  type="button"
+                  class="rounded border px-2 py-1 text-xs font-medium transition-colors"
+                  :class="
+                    statsOtpFilter === 'non'
+                      ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                  "
+                  @click="
+                    statsOtpFilter = 'non'
+                    onStatsFilterChange()
+                  "
+                >
+                  {{ t('statisticsPage.filterOtpNo') }}
+                </button>
+                <button
+                  type="button"
+                  class="rounded border px-2 py-1 text-xs font-medium transition-colors"
+                  :class="
+                    statsOtpFilter === 'oui'
+                      ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                  "
+                  @click="
+                    statsOtpFilter = 'oui'
+                    onStatsFilterChange()
+                  "
+                >
+                  {{ t('statisticsPage.filterOtpYes') }}
+                </button>
+                <button
+                  type="button"
+                  class="rounded border px-2 py-1 text-xs font-medium transition-colors"
+                  :class="
+                    statsOtpFilter === 'solo'
+                      ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                  "
+                  @click="
+                    statsOtpFilter = 'solo'
+                    onStatsFilterChange()
+                  "
+                >
+                  {{ t('statisticsPage.filterOtpSolo') }}
+                </button>
+              </div>
             </div>
             <div v-if="activeTab === 'spells'">
               <label for="spells-mode-filter" class="mb-1 block text-sm font-medium text-text">
@@ -529,6 +566,39 @@
                 >
                   {{ t('statisticsPage.spellsModePair') }}
                 </button>
+              </div>
+            </div>
+            <div v-if="activeTab === 'items'">
+              <label for="items-type-filter" class="mb-1 block text-sm font-medium text-text">
+                {{ t('statisticsPage.itemsColType') }}
+              </label>
+              <div class="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  class="rounded border px-2 py-1 text-xs font-medium transition-colors"
+                  :class="
+                    itemsLegendaryFilter === 'legendary'
+                      ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                  "
+                  @click="
+                    itemsLegendaryFilter =
+                      itemsLegendaryFilter === 'legendary' ? 'all' : 'legendary'
+                  "
+                >
+                  {{ t('statisticsPage.itemsTypeLegendary') }}
+                </button>
+                <select
+                  id="items-type-filter"
+                  v-model="itemsTypeFilter"
+                  class="rounded border border-primary/40 bg-background px-2 py-1 text-xs text-text"
+                >
+                  <option value="all">{{ t('statisticsPage.itemsTypeAll') }}</option>
+                  <option value="starter">{{ t('statisticsPage.itemKindStarter') }}</option>
+                  <option value="core">{{ t('statisticsPage.itemKindCore') }}</option>
+                  <option value="boots">{{ t('statisticsPage.itemKindBoots') }}</option>
+                  <option value="final">{{ t('statisticsPage.itemKindFinal') }}</option>
+                </select>
               </div>
             </div>
           </div>
@@ -1025,6 +1095,8 @@ function clearChampionSearch(): void {
   championSearchInputEl.value?.focus()
 }
 const spellsModeFilter = ref<'solo' | 'pair'>('solo')
+const itemsLegendaryFilter = ref<'all' | 'legendary'>('all')
+const itemsTypeFilter = ref<'all' | 'starter' | 'core' | 'boots' | 'final'>('all')
 const searchInputLabel = computed(() =>
   activeTab.value === 'items'
     ? t('statisticsPage.searchItem')
@@ -1392,6 +1464,8 @@ const activeStatsFiltersCount = computed(() => {
     if (balanceEliteFilter.value !== 'ALL') count++
   }
   if (activeTab.value === 'spells' && spellsModeFilter.value !== 'solo') count++
+  if (activeTab.value === 'items' && itemsLegendaryFilter.value !== 'all') count++
+  if (activeTab.value === 'items' && itemsTypeFilter.value !== 'all') count++
   return count
 })
 
@@ -1730,6 +1804,8 @@ function resetStatsFilters() {
   balanceEliteFilter.value = 'ALL'
   progressionFromVersionOverride.value = ''
   championSearchQuery.value = ''
+  itemsLegendaryFilter.value = 'all'
+  itemsTypeFilter.value = 'all'
   showBansOutcomeColumns.value = true
   showBansSideColumns.value = true
   showChampionSideColumns.value = true
@@ -4809,6 +4885,8 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   sidesRedTopWinrateSince,
   sidesSurrenderBySide,
   spellsModeFilter,
+  itemsLegendaryFilter,
+  itemsTypeFilter,
   teamPercent,
   tierListPatchDeltaClass,
   tierListPatchDeltaGamesClass,

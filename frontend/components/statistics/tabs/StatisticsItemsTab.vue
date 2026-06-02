@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, inject, ref, watch, unref } from 'vue'
+import type { Item } from '@lelanation/shared-types'
+import { useItemsStore } from '~/stores/ItemsStore'
 
 const p = inject('statisticsPageCtx') as any
+const itemsStore = useItemsStore()
 
 type ItemType = 'starter' | 'core' | 'boots' | 'final'
-type ItemTypeFilter = 'all' | ItemType | 'legendary'
 type SortKey = 'item' | 'type' | 'pickrate' | 'winrate' | 'deltaPick' | 'deltaWin'
 
 type RawItemRow = {
@@ -21,11 +23,15 @@ type TableRow = RawItemRow & {
   deltaWin: number | null
 }
 
-const itemTypeFilter = ref<ItemTypeFilter>('all')
 const sortBy = ref<SortKey | null>(null)
 const sortDir = ref<'asc' | 'desc'>('desc')
 const pageSize = ref<number>(20)
 const page = ref<number>(1)
+const itemTypeFilter = computed<'all' | ItemType>(() => {
+  const v = String(p.itemsTypeFilter ?? 'all')
+  return v === 'starter' || v === 'core' || v === 'boots' || v === 'final' ? v : 'all'
+})
+const legendaryOnly = computed(() => p.itemsLegendaryFilter === 'legendary')
 
 const PAGE_SIZE_OPTIONS = computed<number[]>(() =>
   Array.isArray(p.PAGE_SIZE_OPTIONS) && p.PAGE_SIZE_OPTIONS.length > 0
@@ -98,14 +104,41 @@ const itemSearchQuery = computed(() =>
     .toLowerCase()
 )
 
+const itemById = computed<Map<number, Item>>(
+  () => new Map(itemsStore.items.map(i => [Number(i.id), i] as const))
+)
+
+function isCompleteLegendary(item: Item | undefined): boolean {
+  if (!item) return false
+  if (item.isMasterwork) return true
+  if (item.id === '2526') return true
+  if (item.tags?.includes('Boots')) return false
+  if (item.tags?.includes('Consumable')) return false
+  const hasFrom = Array.isArray(item.from) && item.from.length > 0
+  const hasInto = Array.isArray(item.into) && item.into.length > 0
+  return hasFrom && !hasInto
+}
+
+function isBootsTier2Or3(item: Item | undefined): boolean {
+  if (!item) return false
+  if (!item.tags?.includes('Boots')) return false
+  if (item.id === '1001') return false
+  return item.depth >= 2
+}
+
 const filteredRows = computed<TableRow[]>(() => {
-  const byType = (() => {
-    if (itemTypeFilter.value === 'all') return tableRows.value
-    if (itemTypeFilter.value === 'legendary') {
-      return tableRows.value.filter(r => r.type === 'starter' || r.type === 'core')
-    }
-    return tableRows.value.filter(r => r.type === itemTypeFilter.value)
-  })()
+  const byLegendary = legendaryOnly.value
+    ? tableRows.value.filter(r => {
+        if (r.type === 'starter') return false
+        const item = itemById.value.get(r.itemId)
+        if (r.type === 'boots') return isBootsTier2Or3(item)
+        return isCompleteLegendary(item)
+      })
+    : tableRows.value
+  const byType =
+    itemTypeFilter.value === 'all'
+      ? byLegendary
+      : byLegendary.filter(r => r.type === itemTypeFilter.value)
   const q = itemSearchQuery.value
   if (!q) return byType
   return byType.filter(r => {
@@ -250,17 +283,6 @@ function deltaClass(value: number | null | undefined): string {
               >
                 {{ p.t('statisticsPage.itemsColType') }}{{ sortIcon('type') }}
               </button>
-              <select
-                v-model="itemTypeFilter"
-                class="mt-1 w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-normal text-text"
-              >
-                <option value="all">{{ p.t('statisticsPage.itemsTypeAll') }}</option>
-                <option value="legendary">{{ p.t('statisticsPage.itemsTypeLegendary') }}</option>
-                <option value="starter">{{ p.t('statisticsPage.itemKindStarter') }}</option>
-                <option value="core">{{ p.t('statisticsPage.itemKindCore') }}</option>
-                <option value="boots">{{ p.t('statisticsPage.itemKindBoots') }}</option>
-                <option value="final">{{ p.t('statisticsPage.itemKindFinal') }}</option>
-              </select>
             </div>
             <button
               type="button"

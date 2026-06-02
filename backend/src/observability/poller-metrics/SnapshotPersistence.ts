@@ -42,6 +42,9 @@ export class SnapshotPersistence {
           'loaded previous observability snapshot',
         );
       }
+      if (this.mirrorPath) {
+        await this.writeSnapshotTarget(this.mirrorPath, JSON.stringify(this.data, null, 2), 'startup-mirror-sync');
+      }
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
       if (code === 'ENOENT') {
@@ -60,26 +63,30 @@ export class SnapshotPersistence {
     const payload = JSON.stringify(this.data, null, 2);
     const targets = [this.filePath, ...(this.mirrorPath ? [this.mirrorPath] : [])];
     for (const target of targets) {
-      const tmp = `${target}.tmp`;
-      try {
-        await mkdir(dirname(target), { recursive: true });
-        await writeFile(tmp, payload, 'utf8');
-        await rename(tmp, target);
-      } catch (error) {
-        pollerMetricsLogger.warn(
-          {
-            component: 'SnapshotPersistence',
-            window,
-            target,
-            error: error instanceof Error ? error.message : String(error),
-          },
-          'failed to persist snapshot',
-        );
-      }
+      await this.writeSnapshotTarget(target, payload, window);
     }
   }
 
   getLatest(window: WindowLabel): FullSnapshot | null {
     return this.data[window] ?? null;
+  }
+
+  private async writeSnapshotTarget(target: string, payload: string, window: WindowLabel | 'startup-mirror-sync'): Promise<void> {
+    const tmp = `${target}.tmp`;
+    try {
+      await mkdir(dirname(target), { recursive: true });
+      await writeFile(tmp, payload, 'utf8');
+      await rename(tmp, target);
+    } catch (error) {
+      pollerMetricsLogger.warn(
+        {
+          component: 'SnapshotPersistence',
+          window,
+          target,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        'failed to persist snapshot',
+      );
+    }
   }
 }

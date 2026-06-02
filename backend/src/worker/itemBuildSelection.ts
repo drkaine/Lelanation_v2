@@ -1,5 +1,9 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import {
+  isStarterItemId,
+  STARTER_PURCHASE_WINDOW_MS,
+} from '../parsers/starterItemClassification.js'
 
 export type ItemMeta = {
   id: string
@@ -28,34 +32,11 @@ export type MatchPlayerItemRowInput = {
 }
 
 const BOOT_IDS = new Set(['1001', '3005', '3006', '3009', '3010', '3020', '3047', '3111', '3117', '3158'])
-const STARTER_IDS = new Set([
-  '1036', '1054', '1055', '1056', '1082', '1083', '3070',
-  '3865', '3866', '3867', '2003', '2009', '2010',
-  '2031', '2032', '2033', '1101', '1102', '1103',
-])
-const ATLAS_UPGRADE_IDS = new Set(['3869', '3870', '3871', '3876', '3877'])
-const STARTER_PATTERNS = [
-  'seau', 'anneau de doran', 'lame de doran', 'bouclier de doran',
-  'arc de doran', 'casque de doran',
-  "doran's ring", "doran's blade", "doran's shield", "doran's arc", "doran's helm",
-  'larme de la deesse', 'cull', 'abatteur', 'atlas', 'epee de voleur',
-  'epee longue', 'long sword', 'faucheuse', 'fragment',
-  'potion', 'ward', 'biscuit',
-]
 const FORCED_LEGENDARY_IDS = new Set(['2526'])
-const CONSUMABLE_IDS = new Set(['2003', '2009', '2010', '2031', '2032', '2033', '2055', '2060'])
 const TRINKET_IDS = new Set(['3340', '3363', '3364'])
-const STARTER_WINDOW_MS = 3 * 60 * 1000
 
 let itemMetaCache: Map<number, ItemMeta> | null = null
 let itemMetaLoadPromise: Promise<Map<number, ItemMeta>> | null = null
-
-function normalizeText(input: string | undefined): string {
-  return (input ?? '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-}
 
 export async function loadItemMeta(): Promise<Map<number, ItemMeta>> {
   if (itemMetaCache) return itemMetaCache
@@ -100,17 +81,6 @@ export async function loadItemMeta(): Promise<Map<number, ItemMeta>> {
     return itemMetaCache
   })()
   return itemMetaLoadPromise
-}
-
-function isStarter(item: ItemMeta | undefined, itemId: number): boolean {
-  const id = String(itemId)
-  if (ATLAS_UPGRADE_IDS.has(id)) return false
-  /** Balise de contrôle : consommable mais pas « starter » pour builds / stats. */
-  if (itemId === 2055) return false
-  if (STARTER_IDS.has(id) || CONSUMABLE_IDS.has(id)) return true
-  if (item?.tags?.includes('Consumable')) return true
-  const lower = normalizeText(item?.name)
-  return STARTER_PATTERNS.some((p) => lower.includes(p))
 }
 
 function isBoots(item: ItemMeta | undefined, itemId: number): boolean {
@@ -173,7 +143,7 @@ export async function selectMatchPlayerItems(params: {
   const starterCandidates = Array.from(firstTs.keys())
     .filter((itemId) => {
       const ts = firstTs.get(itemId) ?? Number.MAX_SAFE_INTEGER
-      return ts <= STARTER_WINDOW_MS && isStarter(itemMeta.get(itemId), itemId)
+      return ts <= STARTER_PURCHASE_WINDOW_MS && isStarterItemId(itemId, itemMeta.get(itemId))
     })
     .sort((a, b) => (firstTs.get(a) ?? 0) - (firstTs.get(b) ?? 0))
   const starters = uniqueStable(starterCandidates).slice(0, 2)
@@ -190,7 +160,10 @@ export async function selectMatchPlayerItems(params: {
   const boot = finalInventory.find((itemId) => !starters.includes(itemId) && isBoots(itemMeta.get(itemId), itemId)) ?? null
 
   const legendaryCandidates = finalInventory
-    .filter((itemId) => !starters.includes(itemId) && itemId !== boot && !isStarter(itemMeta.get(itemId), itemId))
+    .filter(
+      (itemId) =>
+        !starters.includes(itemId) && itemId !== boot && !isStarterItemId(itemId, itemMeta.get(itemId)),
+    )
     .filter((itemId) => isLegendary(itemMeta.get(itemId), itemId))
     .sort((a, b) => (firstTs.get(a) ?? Number.MAX_SAFE_INTEGER) - (firstTs.get(b) ?? Number.MAX_SAFE_INTEGER))
   const legendaries = legendaryCandidates.slice(0, 3)
@@ -202,7 +175,7 @@ export async function selectMatchPlayerItems(params: {
       !starters.includes(itemId) &&
       itemId !== boot &&
       !legendarySet.has(itemId) &&
-      !isStarter(itemMeta.get(itemId), itemId) &&
+      !isStarterItemId(itemId, itemMeta.get(itemId)) &&
       !isBoots(itemMeta.get(itemId), itemId)
   )
 

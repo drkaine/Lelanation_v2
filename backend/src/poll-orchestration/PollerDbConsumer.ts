@@ -184,10 +184,31 @@ export class PollerDbConsumer {
   private async processMatchData(event: MatchDataEvent): Promise<void> {
     const matchId = event.matchId;
     const patch = extractPatchFromMatch(event.match, this.config.currentPatch);
+    let queued = false;
 
     try {
       const { rank, source } = this.resolveMatchRank(event);
       orchestrationLogger.debug({ component: 'PollerDbConsumer', matchId, rank, source }, 'match rank resolved');
+
+      const payload = await buildIngestionPayloadFromMatchData({
+        match: event.match as unknown as MatchDto,
+        timeline: event.timeline as unknown as MatchTimelineDto,
+        queueRegion: event.player.platform,
+        rankByPuuid: this.rankEntriesCache,
+        resolveParticipantRanks: this.config.resolveParticipantRanks,
+      });
+
+      if (!payload) {
+        recordIngestionQueue({
+          matchId,
+          patch,
+          rank,
+          type: 'skipped',
+          skipReason: 'missing_rank',
+        });
+        orchestrationLogger.info({ component: 'PollerDbConsumer', matchId }, 'match skipped (rank gate not ready for ingestion)');
+        return;
+      }
 
       const inserted = await insertPendingProcessedMatch({
         matchId,
@@ -210,26 +231,6 @@ export class PollerDbConsumer {
 
       await updateProcessedMatchRank(patch, matchId, rank);
 
-      const payload = await buildIngestionPayloadFromMatchData({
-        match: event.match as unknown as MatchDto,
-        timeline: event.timeline as unknown as MatchTimelineDto,
-        queueRegion: event.player.platform,
-        rankByPuuid: this.rankEntriesCache,
-        resolveParticipantRanks: this.config.resolveParticipantRanks,
-      });
-
-      if (!payload) {
-        recordIngestionQueue({
-          matchId,
-          patch,
-          rank,
-          type: 'skipped',
-          skipReason: 'missing_rank',
-        });
-        orchestrationLogger.info({ component: 'PollerDbConsumer', matchId }, 'match skipped (rank gate not ready for ingestion)');
-        return;
-      }
-
       try {
       await ingestionQueue.add('ingest-match', payload, {
         jobId: matchId,
@@ -238,6 +239,7 @@ export class PollerDbConsumer {
         attempts: 3,
         backoff: { type: 'exponential', delay: 2000 },
       });
+      queued = true;
 
       recordIngestionQueue({ matchId, patch, rank, type: 'queued' });
       orchestrationLogger.info(
@@ -245,15 +247,23 @@ export class PollerDbConsumer {
         'match queued for ingestion',
       );
 
-      const participants = this.participantDiscovery.extractFromMatch(matchId, event.match);
-      const newCount = await this.participantDiscovery.upsertParticipants(participants);
-      if (newCount > 0) {
-        recordPlayer({ type: 'new_added', puuid: '(batch)', platform: event.player.platform });
+      try {
+        const participants = this.participantDiscovery.extractFromMatch(matchId, event.match);
+        const newCount = await this.participantDiscovery.upsertParticipants(participants);
+        if (newCount > 0) {
+          recordPlayer({ type: 'new_added', puuid: '(batch)', platform: event.player.platform });
+        }
+        orchestrationLogger.debug(
+          { component: 'PollerDbConsumer', matchId, newPlayers: newCount },
+          'participant discovery complete',
+        );
+      } catch (participantError) {
+        const participantMessage = participantError instanceof Error ? participantError.message : String(participantError);
+        orchestrationLogger.warn(
+          { component: 'PollerDbConsumer', matchId, error: participantMessage, queued: true },
+          'participant discovery failed after queueing ingestion',
+        );
       }
-      orchestrationLogger.debug(
-        { component: 'PollerDbConsumer', matchId, newPlayers: newCount },
-        'participant discovery complete',
-      );
       } catch (queueError) {
         recordIngestionQueue({
           matchId,
@@ -267,6 +277,13 @@ export class PollerDbConsumer {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       orchestrationLogger.error({ component: 'PollerDbConsumer', matchId, error: message, stage: 'onMatchData' }, 'onMatchData failed');
+      if (queued) {
+        orchestrationLogger.warn(
+          { component: 'PollerDbConsumer', matchId, patch, error: message },
+          'match already queued; skipping processed_matches error status update',
+        );
+        return;
+      }
       try {
         await markProcessedMatchError(patch, matchId);
       } catch (updateError) {

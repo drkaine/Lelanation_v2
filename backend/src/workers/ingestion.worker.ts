@@ -112,13 +112,25 @@ async function insertProcessedMatchSentinel(
   if (!rankTier) {
     throw new Error(`processed_match_requires_ranked_average:${payload.teamStats.matchId}`);
   }
-  const inserted = await tx<{ riot_match_id: string }[]>`
+  const updatedPending = await tx<{ riot_match_id: string }[]>`
+    UPDATE processed_matches
+    SET
+      status = 'DONE',
+      rank = ${rankTier}
+    WHERE patch = ${payload.teamStats.patch}
+      AND riot_match_id = ${payload.teamStats.matchId}
+      AND status IN ('pending', 'PENDING', 'error', 'ERROR')
+    RETURNING riot_match_id
+  `;
+  if (updatedPending.length > 0) return;
+
+  const insertedDone = await tx<{ riot_match_id: string }[]>`
     INSERT INTO processed_matches (patch, game_date, riot_match_id, status, rank)
     VALUES (${payload.teamStats.patch}, ${first.gameDate}, ${payload.teamStats.matchId}, 'DONE', ${rankTier})
     ON CONFLICT (patch, riot_match_id) DO NOTHING
     RETURNING riot_match_id
   `;
-  if (inserted.length === 0) {
+  if (insertedDone.length === 0) {
     throw new AlreadyProcessedMatchError(payload.teamStats.matchId);
   }
 }

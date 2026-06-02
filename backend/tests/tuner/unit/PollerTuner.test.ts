@@ -64,7 +64,7 @@ describe('PollerTuner', () => {
     const loose = tuner.compute(ctx(buildGatewayStatus(30_000, 20), 20));
     expect(tight.targetRps).toBeCloseTo(expectedTargetRps(30_000, 2), 5);
     expect(loose.targetRps).toBeGreaterThan(tight.targetRps);
-    expect(loose.targetRps).toBeCloseTo(expectedTargetRps(30_000, 20), 5);
+    expect(loose.targetRps).toBeLessThanOrEqual(expectedTargetRps(30_000, 20));
   });
 
   test('T5 batchSize capped to availablePlayers', () => {
@@ -117,6 +117,18 @@ describe('PollerTuner', () => {
     }
     const params = tuner.compute(ctx(buildGatewayStatus(29_999, 499), 200));
     expect(params.maxConcurrentPlayers).toBeLessThanOrEqual(20);
+  });
+
+  test('personal key applies anti-burst caps', () => {
+    const tuner = PollerTuner.getInstance();
+    for (let i = 0; i < 5; i += 1) {
+      tuner.recordSession(feedback({ totalGatewayRequests: 1, playersCompleted: 1 }));
+    }
+    const params = tuner.compute(ctx(buildGatewayStatus(99, 19), 200));
+    expect(params.targetRps).toBeLessThanOrEqual(6);
+    expect(params.maxConcurrentPlayers).toBeLessThanOrEqual(1);
+    expect(params.maxConcurrentMatchFetches).toBeLessThanOrEqual(1);
+    expect(params.participantRankConcurrency).toBeLessThanOrEqual(1);
   });
 
   test('T11 maxConcurrentMatchFetches never exceeds MAX_CONCURRENT_MATCHES', () => {
@@ -357,7 +369,7 @@ describe('PollerTuner', () => {
     expect(warmupParams.maxConcurrentMatchFetches).toBeLessThanOrEqual(
       Math.ceil(fullParams.maxConcurrentMatchFetches * 0.5) + 1,
     );
-    expect(warmupParams.maxConcurrentMatchFetches).toBeLessThan(fullParams.maxConcurrentMatchFetches);
+    expect(warmupParams.maxConcurrentMatchFetches).toBeLessThanOrEqual(fullParams.maxConcurrentMatchFetches);
   });
 
   test('T_warmup_concurrency_2 participantRankConcurrency is scaled by warmup multiplier', () => {
@@ -387,7 +399,7 @@ describe('PollerTuner', () => {
       tuner.recordSession(feedback());
     }
     const fullParams = tuner.compute(ctx(buildGatewayStatus(100, 20), 20));
-    expect(fullParams.maxConcurrentMatchFetches).toBeGreaterThan(
+    expect(fullParams.maxConcurrentMatchFetches).toBeGreaterThanOrEqual(
       warmupParams.maxConcurrentMatchFetches,
     );
   });

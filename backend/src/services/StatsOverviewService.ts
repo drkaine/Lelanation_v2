@@ -964,40 +964,6 @@ const OVERVIEW_STARTER_SLICE_EXCLUDED_IDS = new Set([
 
 const APEX_LADDER_TIERS = ['MASTER', 'GRANDMASTER', 'CHALLENGER'] as const
 
-/** Some DBs still use `role_norm` on agg tables; newer migrations use `role` on spell-pair only. */
-const aggTableRoleColumnNameCache = new Map<string, 'role' | 'role_norm'>()
-
-async function resolveAggTableRoleColumn(
-  tableName: 'agg_champion_summoner_spell_pair_stats' | 'agg_champion_item_starter_set_stats'
-): Promise<'role' | 'role_norm'> {
-  // Tables partitionnées actuelles exposent `role` (pas `role_norm`).
-  if (tableName === 'agg_champion_summoner_spell_pair_stats') {
-    return 'role'
-  }
-  const cached = aggTableRoleColumnNameCache.get(tableName)
-  if (cached) return cached
-  const physical = tableName.replace(/^agg_/, '')
-  const archiveTable = `archive_${tableName}`
-  for (const tn of [physical, archiveTable, tableName]) {
-    const safeTable = tn.replace(/'/g, "''")
-    const rows = await queryRawUnsafe<Array<{ col: string }>>(`
-      SELECT column_name AS col
-      FROM information_schema.columns
-      WHERE table_schema = 'public'
-        AND table_name = '${safeTable}'
-        AND column_name IN ('role', 'role_norm')
-      ORDER BY CASE WHEN column_name = 'role' THEN 0 ELSE 1 END
-      LIMIT 1
-    `)
-    if (rows[0]?.col) {
-      const col = rows[0].col === 'role' ? 'role' : 'role_norm'
-      aggTableRoleColumnNameCache.set(tableName, col)
-      return col
-    }
-  }
-  return 'role'
-}
-
 type SpellPairSqlRow = {
   spell_d: number
   spell_f: number
@@ -1010,7 +976,6 @@ type SpellPairSqlRow = {
 async function loadSummonerSpellPairsFromMatches(
   version: string | null,
   rankTier: string | string[] | null,
-  role: string | null,
   includeSmite: boolean,
   useApexRanksOnly: boolean
 ): Promise<SpellPairSqlRow[]> {
@@ -1018,11 +983,6 @@ async function loadSummonerSpellPairsFromMatches(
     /\bm\./g,
     'ag.'
   )
-  const roleNorm = normalizeStatsRoleForChampion(role)
-  const roleCol = await resolveAggTableRoleColumn('agg_champion_summoner_spell_pair_stats')
-  const roleSql = roleNorm
-    ? ` AND upper(ag.${roleCol}::text) = '${statsRoleSqlLiteral(roleNorm)}'`
-    : ''
   const smiteSql = includeSmite ? '' : ` AND ag.spell_d <> 11 AND ag.spell_f <> 11`
   const agFrom = await matchVersionedAggFrom('agg_champion_summoner_spell_pair_stats', version, 'ag')
   const sql = `
@@ -1034,7 +994,7 @@ async function loadSummonerSpellPairsFromMatches(
         COALESCE(SUM(ag.spell_d_casts), 0)::bigint AS spell1_casts,
         COALESCE(SUM(ag.spell_f_casts), 0)::bigint AS spell2_casts
       FROM ${agFrom}
-      WHERE ${matchCond}${roleSql}${smiteSql}
+      WHERE ${matchCond}${smiteSql}
       GROUP BY ag.spell_d, ag.spell_f
       HAVING SUM(ag.count_game) >= 40
       ORDER BY games DESC
@@ -1510,8 +1470,8 @@ export async function getOverviewDetailStats(
     }))
 
     const [pairRowsMain, pairRowsApex, itemStarterSetRows] = await Promise.all([
-      loadSummonerSpellPairsFromMatches(pVersion, rankTier ?? null, roleFilters.champion, includeSmite ?? false, false),
-      loadSummonerSpellPairsFromMatches(pVersion, rankTier ?? null, roleFilters.champion, includeSmite ?? false, true),
+      loadSummonerSpellPairsFromMatches(pVersion, rankTier ?? null, includeSmite ?? false, false),
+      loadSummonerSpellPairsFromMatches(pVersion, rankTier ?? null, includeSmite ?? false, true),
       loadItemStarterSetsFromMatches(pVersion, rankTier ?? null, roleFilters.champion),
     ])
     const apexPairMap = new Map<string, { games: number; wins: number }>()

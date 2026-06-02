@@ -170,12 +170,30 @@ describe('PollerDbConsumer', () => {
     expect(call?.rank).toBe('UNRANKED');
   });
 
+  test('does not insert pending processed_match when rank gate skips ingestion', async () => {
+    buildPayload.mockResolvedValueOnce(null);
+    const { bus } = await createConsumer(false);
+    bus.emit('match:data', buildMatchDataEvent('EUW1_SKIP', 'player-z', ['part-0']));
+    await Promise.resolve();
+    expect(insertPendingProcessedMatch).not.toHaveBeenCalled();
+    expect(ingestionAdd).not.toHaveBeenCalled();
+  });
+
   test('T9 ingestion failure marks error without throwing', async () => {
     ingestionAdd.mockRejectedValueOnce(new Error('queue down'));
     const { bus } = await createConsumer(false);
     bus.emit('player:rank', buildPlayerRankEvent('player-a'));
     bus.emit('match:data', buildMatchDataEvent('EUW1_4', 'player-a', ['part-0']));
     await vi.waitFor(() => expect(markProcessedMatchError).toHaveBeenCalled());
+  });
+
+  test('does not mark error when participant discovery fails after queueing', async () => {
+    upsertParticipants.mockRejectedValueOnce(new Error('deadlock detected'));
+    const { bus } = await createConsumer(false);
+    bus.emit('player:rank', buildPlayerRankEvent('player-a'));
+    bus.emit('match:data', buildMatchDataEvent('EUW1_Q_OK', 'player-a', ['part-0']));
+    await vi.waitFor(() => expect(ingestionAdd).toHaveBeenCalled());
+    expect(markProcessedMatchError).not.toHaveBeenCalled();
   });
 
   test('T10 onPlayerComplete updates last_seen', async () => {

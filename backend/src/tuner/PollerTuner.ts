@@ -24,6 +24,13 @@ const QUEUE_PRESSURE_FACTOR = 0.7;
 const REQ_PER_PLAYER_SEED = 25;
 const REQ_PER_MATCH_SEED = 3;
 const CACHE_HIT_RATE_SEED = 0.5;
+const PERSONAL_MAX_TARGET_RPS = Number.parseFloat(process.env.PERSONAL_MAX_TARGET_RPS ?? '6');
+const PERSONAL_MAX_CONCURRENT_PLAYERS = Number.parseInt(process.env.PERSONAL_MAX_CONCURRENT_PLAYERS ?? '1', 10);
+const PERSONAL_MAX_CONCURRENT_MATCH_FETCHES = Number.parseInt(process.env.PERSONAL_MAX_CONCURRENT_MATCH_FETCHES ?? '1', 10);
+const PERSONAL_MAX_PARTICIPANT_RANK_CONCURRENCY = Number.parseInt(
+  process.env.PERSONAL_MAX_PARTICIPANT_RANK_CONCURRENCY ?? '1',
+  10,
+);
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -142,6 +149,9 @@ export class PollerTuner {
     const rps120s = safeTokens120s / 120;
     const rps1s = safeTokens1s;
     let targetRps = Math.min(rps120s, rps1s);
+    if (riotConfig.apiKeyType === 'personal') {
+      targetRps = Math.min(targetRps, PERSONAL_MAX_TARGET_RPS);
+    }
 
     const threshold = backpressureThreshold();
     if (ctx.queueDepth > threshold * 0.5) {
@@ -209,25 +219,37 @@ export class PollerTuner {
       MIN_CONCURRENT,
       Math.min(MAX_CONCURRENT_PLAYERS, batchSize),
     );
+    const cappedConcurrentPlayers =
+      riotConfig.apiKeyType === 'personal'
+        ? Math.min(maxConcurrentPlayers, PERSONAL_MAX_CONCURRENT_PLAYERS)
+        : maxConcurrentPlayers;
 
-    const rpsPerPlayerBudget = targetRps / maxConcurrentPlayers;
+    const rpsPerPlayerBudget = targetRps / cappedConcurrentPlayers;
     const reqPerMatch = Math.max(1, this.reqPerMatchEma.value);
     const rpsPerMatch = reqPerMatch / TARGET_SESSION_DURATION;
 
-    const maxConcurrentMatchFetches = clamp(
+    const maxConcurrentMatchFetchesRaw = clamp(
       Math.floor(Math.ceil(rpsPerPlayerBudget / Math.max(0.01, rpsPerMatch)) * effectiveMultiplier),
       MIN_CONCURRENT,
       MAX_CONCURRENT_MATCHES,
     );
+    const maxConcurrentMatchFetches =
+      riotConfig.apiKeyType === 'personal'
+        ? Math.min(maxConcurrentMatchFetchesRaw, PERSONAL_MAX_CONCURRENT_MATCH_FETCHES)
+        : maxConcurrentMatchFetchesRaw;
 
     const cacheHitRate = clamp(this.cacheHitRateEma.value, 0, 1);
-    const participantRankConcurrency = clamp(
+    const participantRankConcurrencyRaw = clamp(
       Math.floor(
         Math.ceil(maxConcurrentMatchFetches * (1 - cacheHitRate) * 10) * effectiveMultiplier,
       ),
       MIN_CONCURRENT,
       MAX_CONCURRENT_RANKS,
     );
+    const participantRankConcurrency =
+      riotConfig.apiKeyType === 'personal'
+        ? Math.min(participantRankConcurrencyRaw, PERSONAL_MAX_PARTICIPANT_RANK_CONCURRENCY)
+        : participantRankConcurrencyRaw;
 
     const utilPct = maxAppUtilizationPct(ctx.gatewayStatus);
     let discoveryIntervalMs = 0;
@@ -242,7 +264,7 @@ export class PollerTuner {
     const params: TuningParams = {
       batchSize,
       discoveryIntervalMs,
-      maxConcurrentPlayers,
+      maxConcurrentPlayers: cappedConcurrentPlayers,
       maxConcurrentMatchFetches,
       participantRankConcurrency,
       targetRps,

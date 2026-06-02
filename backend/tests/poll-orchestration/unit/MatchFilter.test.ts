@@ -3,20 +3,13 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 vi.mock('../../../src/db/client.js', () => ({
   sql: Object.assign(vi.fn(), { array: (values: unknown[]) => values }),
 }));
-vi.mock('../../../src/poll-orchestration/PatchResolver.js', () => ({
-  PatchResolver: {
-    getAllPatches: vi.fn(() => [{ patch: '15.10' }, { patch: '15.9' }]),
-  },
-}));
 
 import { sql } from '../../../src/db/client.js';
 import { MatchFilter } from '../../../src/poll-orchestration/MatchFilter.js';
-import { PatchResolver } from '../../../src/poll-orchestration/PatchResolver.js';
 
 describe('MatchFilter', () => {
   beforeEach(() => {
     vi.mocked(sql).mockReset();
-    vi.mocked(PatchResolver.getAllPatches).mockReturnValue([{ patch: '15.10' }, { patch: '15.9' }] as never);
   });
 
   test('empty input returns empty', async () => {
@@ -55,8 +48,7 @@ describe('MatchFilter', () => {
     expect(sql).toHaveBeenCalledTimes(1);
   });
 
-  test('old partition matches are filtered when patch hint includes older patches', async () => {
-    vi.mocked(PatchResolver.getAllPatches).mockReturnValue([{ patch: '15.9' }, { patch: '15.10' }] as never);
+  test('known matches are filtered regardless of partition patch', async () => {
     vi.mocked(sql).mockResolvedValueOnce([{ riot_match_id: 'EUW1_OLDPATCH' }]);
     const filter = new MatchFilter();
     expect(await filter.filterNew(['EUW1_OLDPATCH'])).toEqual([]);
