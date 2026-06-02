@@ -102,10 +102,8 @@ function rankIcon(rank: string): string {
 </script>
 
 <template>
-  <div class="space-y-3">
-    <div
-      class="fast-stat-card fast-stat-card-objectives w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-3"
-    >
+  <div class="statistics-surrender-tab space-y-3">
+    <div class="statistics-surrender-panel w-full max-w-full">
       <div v-if="p.surrenderMatrixPending" class="text-sm text-text/70">
         {{ p.t('statisticsPage.loading') }}
       </div>
@@ -118,11 +116,11 @@ function rankIcon(rank: string): string {
           <article
             v-for="group in groupedRows"
             :key="`surrender-mobile-${group.rank}`"
-            class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-3"
+            class="statistics-surrender-mobile-card w-full max-w-full py-2"
           >
             <button
               type="button"
-              class="mb-2 flex w-full items-center gap-2 text-left"
+              class="statistics-surrender-mobile-card-header mb-2 flex w-full items-center gap-2.5 text-left"
               @click="toggleRank(group.rank)"
             >
               <span
@@ -134,10 +132,12 @@ function rankIcon(rank: string): string {
               <img
                 :src="rankIcon(group.rank)"
                 :alt="rankLabel(group.rank)"
-                class="h-5 w-5 shrink-0 object-contain"
+                class="statistics-surrender-mobile-rank-icon h-8 w-8 shrink-0 object-contain"
                 loading="lazy"
               />
-              <h3 class="min-w-0 flex-1 text-sm font-semibold leading-snug text-amber-300">
+              <h3
+                class="statistics-surrender-mobile-rank-title min-w-0 flex-1 text-base font-semibold leading-snug text-amber-300"
+              >
                 {{ rankLabel(group.rank) }}
               </h3>
               <span v-if="group.all?.matchCount" class="shrink-0 text-xs tabular-nums text-text/60">
@@ -148,7 +148,7 @@ function rankIcon(rank: string): string {
 
             <div
               v-if="group.all && Number(group.all.matchCount) > 0"
-              class="flex flex-col items-center gap-3 border-t border-primary/20 pt-3"
+              class="statistics-surrender-mobile-card-body flex flex-col items-center gap-3 pt-3"
             >
               <StatisticsMatchOutcomeDonut
                 :total="Number(group.all.matchCount)"
@@ -156,7 +156,7 @@ function rankIcon(rank: string): string {
                 :surrender-only="surrenderOnlyCount(group.all)"
                 :played="playedCount(group.all)"
               />
-              <div class="w-full min-w-0 space-y-1 text-xs">
+              <div class="statistics-surrender-mobile-details w-full min-w-0 space-y-1.5 text-sm">
                 <div class="font-medium text-text">
                   {{ p.t('statisticsPage.overviewMatchOutcomesTitle') }}
                 </div>
@@ -196,17 +196,17 @@ function rankIcon(rank: string): string {
                 </div>
               </div>
             </div>
-            <div v-else class="border-t border-primary/20 py-3 text-center text-xs text-text/60">
+            <div v-else class="py-3 text-center text-xs text-text/60">
               {{ p.t('statisticsPage.noData') }}
             </div>
 
             <div
               v-if="openRanks.has(group.rank) && (group.blue || group.red)"
-              class="mt-3 space-y-3 border-t border-primary/20 pt-3"
+              class="statistics-surrender-mobile-side-block mt-3 space-y-3 pt-3"
             >
               <div
                 v-if="group.blue && Number(group.blue.matchCount) > 0"
-                class="rounded-lg border border-sky-400/40 bg-sky-500/5 p-2"
+                class="statistics-surrender-mobile-side-card rounded-lg bg-sky-500/5 p-2"
               >
                 <div class="mb-2 text-xs font-semibold text-sky-300">{{ teamLabel(100) }}</div>
                 <div class="flex flex-col items-center gap-2 sm:flex-row sm:items-center">
@@ -243,7 +243,7 @@ function rankIcon(rank: string): string {
               </div>
               <div
                 v-if="group.red && Number(group.red.matchCount) > 0"
-                class="rounded-lg border border-rose-400/40 bg-rose-500/5 p-2"
+                class="statistics-surrender-mobile-side-card rounded-lg bg-rose-500/5 p-2"
               >
                 <div class="mb-2 text-xs font-semibold text-rose-300">{{ teamLabel(200) }}</div>
                 <div class="flex flex-col items-center gap-2 sm:flex-row sm:items-center">
@@ -398,5 +398,33 @@ function rankIcon(rank: string): string {
 .objectives-zebra-cols th:nth-child(even),
 .objectives-zebra-cols td:nth-child(even) {
   background-color: rgba(255, 255, 255, 0.04);
+}
+
+.statistics-surrender-panel,
+.statistics-surrender-mobile-list {
+  width: 100%;
+  max-width: 100%;
+}
+
+@media (max-width: 768px) {
+  .statistics-surrender-tab {
+    margin-inline: -1rem;
+    width: calc(100% + 2rem);
+    max-width: 100vw;
+  }
+
+  .statistics-surrender-mobile-card {
+    width: 100%;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .statistics-surrender-mobile-list {
+    gap: 1rem;
+  }
+
+  .statistics-surrender-mobile-side-block {
+    border-top: none;
+  }
 }
 </style>

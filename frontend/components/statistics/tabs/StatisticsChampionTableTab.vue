@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { inject, ref, unref, computed } from 'vue'
+import { useMobileViewport } from '~/composables/useMobileViewport'
 
 const p = inject('statisticsPageCtx') as any
+const { isMobileViewport } = useMobileViewport()
+const championCardPortraitSize = computed(() => (isMobileViewport.value ? 64 : 48))
 const showChampionDealtBreakdown = ref(false)
 const showChampionTakenBreakdown = ref(false)
 const expandedChampionIds = ref<Set<number>>(new Set())
@@ -35,6 +38,41 @@ function combinedPickrate(row: {
   const games = row.blue.games + row.red.games
   if (games <= 0) return null
   return (row.blue.pickrate * row.blue.games + row.red.pickrate * row.red.games) / games
+}
+
+type ChampionSideRow = {
+  championId: number
+  blue: { games: number; winrate: number; pickrate: number }
+  red: { games: number; winrate: number; pickrate: number }
+}
+
+function combinedStatDelta(row: ChampionSideRow, stat: 'winrate' | 'pickrate'): number | undefined {
+  if (!p.championGlobalPatchDeltaRefLabel) return undefined
+  const blueDelta = p.championGlobalSideStatDeltaPp(row.championId, 'blue', stat)
+  const redDelta = p.championGlobalSideStatDeltaPp(row.championId, 'red', stat)
+  let weighted = 0
+  let weight = 0
+  if (row.blue.games > 0 && blueDelta != null) {
+    weighted += blueDelta * row.blue.games
+    weight += row.blue.games
+  }
+  if (row.red.games > 0 && redDelta != null) {
+    weighted += redDelta * row.red.games
+    weight += row.red.games
+  }
+  if (weight <= 0) return undefined
+  return weighted / weight
+}
+
+function sideStatDelta(
+  row: ChampionSideRow,
+  side: 'blue' | 'red',
+  stat: 'winrate' | 'pickrate'
+): number | undefined {
+  if (!p.championGlobalPatchDeltaRefLabel) return undefined
+  const sideRow = side === 'blue' ? row.blue : row.red
+  if (sideRow.games <= 0) return undefined
+  return p.championGlobalSideStatDeltaPp(row.championId, side, stat)
 }
 
 const activeRoleLabel = computed(() => {
@@ -110,11 +148,11 @@ const championTableLayoutStyle = computed(() => {
         <article
           v-for="row in p.paginatedChampionGlobalRows"
           :key="'mobile-' + row.championId"
-          class="statistics-champion-mobile-card overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
+          class="statistics-champion-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
         >
           <button
             type="button"
-            class="flex w-full items-center gap-3 p-3 text-left"
+            class="statistics-champion-mobile-card-header flex w-full items-center gap-3 p-3.5 text-left"
             @click="toggleChampionCardExpanded(row.championId)"
           >
             <NuxtLink
@@ -132,25 +170,31 @@ const championTableLayoutStyle = computed(() => {
                 :alt="p.championName(row.championId) || ''"
                 :champion-id="row.championId"
                 :champion-name="p.championName(row.championId) || ''"
-                :size="48"
+                :size="championCardPortraitSize"
               />
             </NuxtLink>
             <div class="min-w-0 flex-1">
-              <div class="truncate font-semibold text-accent">
+              <div
+                class="statistics-champion-mobile-card-name truncate text-base font-semibold text-accent"
+              >
                 <StatisticsChampionNameHighlight
                   :name="String(p.championName(row.championId) || row.championId)"
                   :query="p.championSearchQuery"
                 />
               </div>
-              <div class="text-xs text-text/65">{{ activeRoleLabel }}</div>
+              <div class="statistics-champion-mobile-card-role text-sm text-text/65">
+                {{ activeRoleLabel }}
+              </div>
             </div>
             <div class="flex shrink-0 gap-4 text-center">
               <div>
-                <div class="text-[10px] uppercase tracking-wide text-text/55">
+                <div
+                  class="statistics-champion-mobile-card-stat-label text-xs uppercase tracking-wide text-text/55"
+                >
                   {{ p.t('statisticsPage.winrate') }}
                 </div>
                 <div
-                  class="text-2xl font-bold tabular-nums leading-none"
+                  class="statistics-champion-mobile-card-stat-value text-3xl font-bold tabular-nums leading-none"
                   :class="
                     combinedWinrate(row) != null
                       ? p.tierListWinrateClass(combinedWinrate(row)!)
@@ -159,13 +203,22 @@ const championTableLayoutStyle = computed(() => {
                 >
                   {{ combinedWinrate(row) != null ? combinedWinrate(row)!.toFixed(2) : '—' }}
                 </div>
+                <div
+                  v-if="combinedStatDelta(row, 'winrate') != null"
+                  class="mt-0.5 text-xs tabular-nums leading-none"
+                  :class="p.tierListPatchDeltaClass(combinedStatDelta(row, 'winrate')!)"
+                >
+                  {{ p.formatTierListPatchDeltaPp(combinedStatDelta(row, 'winrate')!) }}
+                </div>
               </div>
               <div>
-                <div class="text-[10px] uppercase tracking-wide text-text/55">
+                <div
+                  class="statistics-champion-mobile-card-stat-label text-xs uppercase tracking-wide text-text/55"
+                >
                   {{ p.t('statisticsPage.pickrate') }}
                 </div>
                 <div
-                  class="text-2xl font-bold tabular-nums leading-none"
+                  class="statistics-champion-mobile-card-stat-value text-3xl font-bold tabular-nums leading-none"
                   :class="
                     combinedPickrate(row) != null
                       ? p.championGlobalPickrateClass(combinedPickrate(row)!)
@@ -173,6 +226,13 @@ const championTableLayoutStyle = computed(() => {
                   "
                 >
                   {{ combinedPickrate(row) != null ? combinedPickrate(row)!.toFixed(2) : '—' }}
+                </div>
+                <div
+                  v-if="combinedStatDelta(row, 'pickrate') != null"
+                  class="mt-0.5 text-xs tabular-nums leading-none"
+                  :class="p.tierListPatchDeltaClass(combinedStatDelta(row, 'pickrate')!)"
+                >
+                  {{ p.formatTierListPatchDeltaPp(combinedStatDelta(row, 'pickrate')!) }}
                 </div>
               </div>
             </div>
@@ -182,37 +242,178 @@ const championTableLayoutStyle = computed(() => {
             class="border-t border-primary/20 bg-black/20 px-3 py-2 text-sm"
           >
             <div class="font-mono text-text/90">
-              K {{ p.formatChampionGlobalNum(row.avgKills) }} / D
-              {{ p.formatChampionGlobalNum(row.avgDeaths) }} / A
-              {{ p.formatChampionGlobalNum(row.avgAssists) }}
+              <div>
+                K {{ p.formatChampionGlobalNum(row.avgKills) }} / D
+                {{ p.formatChampionGlobalNum(row.avgDeaths) }} / A
+                {{ p.formatChampionGlobalNum(row.avgAssists) }}
+              </div>
+              <div
+                v-if="
+                  p.championGlobalPatchDeltaRefLabel &&
+                  (p.championGlobalNumericDelta(row.championId, 'avgKills') != null ||
+                    p.championGlobalNumericDelta(row.championId, 'avgDeaths') != null ||
+                    p.championGlobalNumericDelta(row.championId, 'avgAssists') != null)
+                "
+                class="mt-1 text-[11px] leading-none text-text/75"
+              >
+                <template v-if="p.championGlobalNumericDelta(row.championId, 'avgKills') != null">
+                  <span
+                    :class="
+                      p.championGlobalNumericDeltaClass(
+                        p.championGlobalNumericDelta(row.championId, 'avgKills')!
+                      )
+                    "
+                    >K
+                    {{
+                      p.formatChampionGlobalNumericDelta(
+                        p.championGlobalNumericDelta(row.championId, 'avgKills')!
+                      )
+                    }}</span
+                  >
+                </template>
+                <template
+                  v-if="
+                    p.championGlobalNumericDelta(row.championId, 'avgKills') != null &&
+                    p.championGlobalNumericDelta(row.championId, 'avgDeaths') != null
+                  "
+                >
+                  <span class="px-1 text-text/45">|</span>
+                </template>
+                <template v-if="p.championGlobalNumericDelta(row.championId, 'avgDeaths') != null">
+                  <span
+                    :class="
+                      p.championGlobalNumericDeltaClass(
+                        p.championGlobalNumericDelta(row.championId, 'avgDeaths')!,
+                        true
+                      )
+                    "
+                    >D
+                    {{
+                      p.formatChampionGlobalNumericDelta(
+                        p.championGlobalNumericDelta(row.championId, 'avgDeaths')!
+                      )
+                    }}</span
+                  >
+                </template>
+                <template
+                  v-if="
+                    (p.championGlobalNumericDelta(row.championId, 'avgKills') != null ||
+                      p.championGlobalNumericDelta(row.championId, 'avgDeaths') != null) &&
+                    p.championGlobalNumericDelta(row.championId, 'avgAssists') != null
+                  "
+                >
+                  <span class="px-1 text-text/45">|</span>
+                </template>
+                <template v-if="p.championGlobalNumericDelta(row.championId, 'avgAssists') != null">
+                  <span
+                    :class="
+                      p.championGlobalNumericDeltaClass(
+                        p.championGlobalNumericDelta(row.championId, 'avgAssists')!
+                      )
+                    "
+                    >A
+                    {{
+                      p.formatChampionGlobalNumericDelta(
+                        p.championGlobalNumericDelta(row.championId, 'avgAssists')!
+                      )
+                    }}</span
+                  >
+                </template>
+              </div>
             </div>
             <div v-if="p.showChampionSideColumns" class="mt-2 grid grid-cols-2 gap-2 text-xs">
               <div>
                 <span class="text-sky-300">{{
                   p.t('statisticsPage.championTableTooltipBlue')
                 }}</span>
-                WR {{ row.blue.games ? row.blue.winrate.toFixed(2) : '—' }} · PR
-                {{ row.blue.games ? row.blue.pickrate.toFixed(2) : '—' }}
+                <div class="tabular-nums">
+                  WR {{ row.blue.games ? row.blue.winrate.toFixed(2) : '—' }}
+                  <span
+                    v-if="sideStatDelta(row, 'blue', 'winrate') != null"
+                    class="ml-0.5"
+                    :class="p.tierListPatchDeltaClass(sideStatDelta(row, 'blue', 'winrate')!)"
+                  >
+                    {{ p.formatTierListPatchDeltaPp(sideStatDelta(row, 'blue', 'winrate')!) }}
+                  </span>
+                </div>
+                <div class="tabular-nums">
+                  PR {{ row.blue.games ? row.blue.pickrate.toFixed(2) : '—' }}
+                  <span
+                    v-if="sideStatDelta(row, 'blue', 'pickrate') != null"
+                    class="ml-0.5"
+                    :class="p.tierListPatchDeltaClass(sideStatDelta(row, 'blue', 'pickrate')!)"
+                  >
+                    {{ p.formatTierListPatchDeltaPp(sideStatDelta(row, 'blue', 'pickrate')!) }}
+                  </span>
+                </div>
               </div>
               <div>
                 <span class="text-red-300">{{
                   p.t('statisticsPage.championTableTooltipRed')
                 }}</span>
-                WR {{ row.red.games ? row.red.winrate.toFixed(2) : '—' }} · PR
-                {{ row.red.games ? row.red.pickrate.toFixed(2) : '—' }}
+                <div class="tabular-nums">
+                  WR {{ row.red.games ? row.red.winrate.toFixed(2) : '—' }}
+                  <span
+                    v-if="sideStatDelta(row, 'red', 'winrate') != null"
+                    class="ml-0.5"
+                    :class="p.tierListPatchDeltaClass(sideStatDelta(row, 'red', 'winrate')!)"
+                  >
+                    {{ p.formatTierListPatchDeltaPp(sideStatDelta(row, 'red', 'winrate')!) }}
+                  </span>
+                </div>
+                <div class="tabular-nums">
+                  PR {{ row.red.games ? row.red.pickrate.toFixed(2) : '—' }}
+                  <span
+                    v-if="sideStatDelta(row, 'red', 'pickrate') != null"
+                    class="ml-0.5"
+                    :class="p.tierListPatchDeltaClass(sideStatDelta(row, 'red', 'pickrate')!)"
+                  >
+                    {{ p.formatTierListPatchDeltaPp(sideStatDelta(row, 'red', 'pickrate')!) }}
+                  </span>
+                </div>
               </div>
             </div>
             <div
               v-if="p.showChampionDealtColumns || p.showChampionTakenColumns"
               class="mt-2 space-y-1 text-xs text-text/80"
             >
-              <div v-if="p.showChampionDealtColumns">
+              <div v-if="p.showChampionDealtColumns" class="tabular-nums">
                 {{ p.t('statisticsPage.championTableColTotalInflicted') }}:
                 {{ p.formatChampionGlobalNum(row.avgDamageToChamps) }}
+                <span
+                  v-if="p.championGlobalNumericDelta(row.championId, 'avgDamageToChamps') != null"
+                  class="ml-1"
+                  :class="
+                    p.championGlobalNumericDeltaClass(
+                      p.championGlobalNumericDelta(row.championId, 'avgDamageToChamps')!
+                    )
+                  "
+                >
+                  {{
+                    p.formatChampionGlobalNumericDelta(
+                      p.championGlobalNumericDelta(row.championId, 'avgDamageToChamps')!
+                    )
+                  }}
+                </span>
               </div>
-              <div v-if="p.showChampionTakenColumns">
+              <div v-if="p.showChampionTakenColumns" class="tabular-nums">
                 {{ p.t('statisticsPage.championTableColTotalTaken') }}:
                 {{ p.formatChampionGlobalNum(row.avgDamageTakenTotal) }}
+                <span
+                  v-if="p.championGlobalNumericDelta(row.championId, 'avgDamageTakenTotal') != null"
+                  class="ml-1"
+                  :class="
+                    p.championGlobalNumericDeltaClass(
+                      p.championGlobalNumericDelta(row.championId, 'avgDamageTakenTotal')!
+                    )
+                  "
+                >
+                  {{
+                    p.formatChampionGlobalNumericDelta(
+                      p.championGlobalNumericDelta(row.championId, 'avgDamageTakenTotal')!
+                    )
+                  }}
+                </span>
               </div>
             </div>
           </div>

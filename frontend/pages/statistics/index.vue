@@ -5250,23 +5250,126 @@ if (__statisticsVm?.proxy) {
   justify-self: center;
   overflow: visible;
 }
-@media (max-width: 640px) {
-  .statistics .team-side-fast-stat {
-    width: 100% !important;
+@media (max-width: 768px) {
+  .statistics .statistics-fast-stat-grid {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .statistics .statistics-fast-stat-grid > .fast-stat-card,
+  .statistics .statistics-fast-stat-grid > .team-side-fast-stat {
+    width: calc(100vw - 1.5rem) !important;
     min-width: 0 !important;
     max-width: 100% !important;
     min-height: 0;
     flex: 1 1 auto;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    align-self: stretch;
+    padding: 0.85rem 1rem !important;
   }
-}
-@media (max-width: 640px) {
+
+  .statistics .team-side-fast-stat,
   .statistics .fast-stat-card {
-    width: 100% !important;
+    width: calc(100vw - 1.5rem) !important;
     min-width: 0 !important;
     max-width: 100% !important;
     height: auto;
     min-height: 0;
     flex: 1 1 auto;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    align-self: stretch;
+  }
+
+  .statistics .fast-stat-title,
+  .statistics .fast-stat-card h3 {
+    font-size: 1rem !important;
+    line-height: 1.35;
+  }
+
+  .statistics .fast-stat-table {
+    font-size: 0.875rem;
+  }
+
+  .statistics .fast-stat-table img.h-5 {
+    height: 1.75rem;
+    width: 1.75rem;
+  }
+
+  .statistics .fast-stat-champion-cards {
+    gap: 0.65rem;
+  }
+
+  .statistics .fast-stat-champion-card-item {
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+  }
+
+  .statistics .fast-stat-champion-card-rank {
+    width: 1.25rem;
+    font-size: 0.875rem;
+  }
+
+  .statistics .fast-stat-champion-card-name {
+    font-size: 1rem;
+  }
+
+  .statistics .fast-stat-champion-card-label {
+    font-size: 0.8125rem;
+  }
+
+  .statistics .fast-stat-champion-card-value {
+    font-size: 1rem;
+  }
+
+  .statistics .fast-stat-champion-card-delta {
+    font-size: 0.8125rem;
+  }
+
+  .statistics .statistics-champion-mobile-list,
+  .statistics .statistics-bans-mobile-list,
+  .statistics .statistics-surrender-mobile-list {
+    width: 100%;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .statistics .statistics-champion-mobile-card,
+  .statistics .statistics-ban-mobile-card {
+    width: calc(100vw - 1.5rem);
+    max-width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .statistics .statistics-surrender-tab .statistics-surrender-mobile-card {
+    width: 100%;
+    max-width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .statistics .statistics-surrender-tab .statistics-surrender-mobile-side-card {
+    border: none !important;
+    width: 100%;
+  }
+
+  .statistics .statistics-fast-stat-grid .pie-chart-2 {
+    height: 11.5rem;
+    width: 11.5rem;
+  }
+
+  .statistics .statistics-surrender-mobile-list .pie-chart-2 {
+    height: 10.5rem;
+    width: 10.5rem;
   }
 }
 .statistics .fast-stat-card.fast-stat-card-objectives {
@@ -5305,6 +5408,19 @@ if (__statisticsVm?.proxy) {
   margin-left: auto;
   margin-right: auto;
   align-self: flex-start;
+}
+
+@media (max-width: 768px) {
+  .statistics .fast-stat-card.fast-stat-card-distribution,
+  .statistics .fast-stat-card.fast-stat-card-items {
+    width: calc(100vw - 1.5rem) !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: 1 1 auto !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    align-self: stretch;
+  }
 }
 .statistics .fast-stat-title {
   line-height: 1.4;

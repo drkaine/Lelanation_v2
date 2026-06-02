@@ -466,6 +466,7 @@
     "bansColBottom": "Bot",
     "bansColSupport": "Support",
     "bansColRate": "Ban rate",
+    "bansByRole": "Bans by role",
     "bansMatchCount": "{count} matches",
     "tabChampions": "Champions",
     "tabDuration": "Game duration",

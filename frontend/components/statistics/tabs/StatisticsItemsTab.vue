@@ -275,120 +275,178 @@ function deltaClass(value: number | null | undefined): string {
       {{ p.t('statisticsPage.overviewDetailTimeout') }}
     </div>
     <template v-else-if="tableRows.length > 0">
-      <div
-        class="statistics-overview-surface w-full overflow-x-auto rounded-lg border border-primary/30"
-      >
-        <div class="tier-list-lolalytics w-full min-w-[980px] text-[13px]">
-          <div
-            class="tier-list-lolalytics-head sticky top-0 z-10 flex h-auto min-h-8 w-full items-stretch justify-between border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
-          >
-            <button
-              type="button"
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[320px] shrink-0 items-center justify-start border-b border-black px-2 hover:bg-primary/25"
-              :title="p.t('statisticsPage.itemsTooltipItem')"
-              @click="toggleSort('item')"
-            >
-              {{ p.t('statisticsPage.overviewDetailItems') }}{{ sortIcon('item') }}
-            </button>
-            <div
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[160px] shrink-0 flex-col justify-center border-b border-black px-2 py-1"
-              :title="p.t('statisticsPage.itemsTooltipType')"
-            >
-              <button
-                type="button"
-                class="w-fit hover:bg-primary/25"
-                :title="p.t('statisticsPage.itemsTooltipType')"
-                @click="toggleSort('type')"
-              >
-                {{ p.t('statisticsPage.itemsColType') }}{{ sortIcon('type') }}
-              </button>
-            </div>
-            <button
-              type="button"
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[120px] shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
-              :title="p.t('statisticsPage.itemsTooltipPickrate')"
-              @click="toggleSort('pickrate')"
-            >
-              {{ p.t('statisticsPage.overviewDetailPickRate') }} %{{ sortIcon('pickrate') }}
-            </button>
-            <button
-              type="button"
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[120px] shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
-              :title="p.t('statisticsPage.itemsTooltipDeltaPick')"
-              @click="toggleSort('deltaPick')"
-            >
-              {{ p.t('statisticsPage.itemsColDeltaPick') }}{{ sortIcon('deltaPick') }}
-            </button>
-            <button
-              type="button"
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[120px] shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
-              :title="p.t('statisticsPage.itemsTooltipWinrate')"
-              @click="toggleSort('winrate')"
-            >
-              {{ p.t('statisticsPage.overviewDetailWinRate') }} %{{ sortIcon('winrate') }}
-            </button>
-            <button
-              type="button"
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[120px] shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
-              :title="p.t('statisticsPage.itemsTooltipDeltaWin')"
-              @click="toggleSort('deltaWin')"
-            >
-              {{ p.t('statisticsPage.itemsColDeltaWin') }}{{ sortIcon('deltaWin') }}
-            </button>
-          </div>
-
-          <div
+      <div class="statistics-items-tab space-y-3">
+        <div class="statistics-items-mobile-list space-y-2 md:hidden">
+          <article
             v-for="row in paginatedRows"
-            :key="`${row.type}-${row.itemId}`"
-            class="tier-list-lolalytics-row flex min-h-[52px] w-full items-center justify-between py-0.5 text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
+            :key="'item-mobile-' + row.type + '-' + row.itemId"
+            class="statistics-item-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
           >
-            <div class="tier-list-lolalytics-td flex w-[320px] shrink-0 items-center gap-2 px-2">
+            <div class="flex w-full items-center gap-3.5 p-3.5">
               <img
                 v-if="p.itemImageName(row.itemId)"
                 :src="p.getItemImageUrl(p.gameVersion, p.itemImageName(row.itemId)!)"
                 :alt="p.itemName(row.itemId) || ''"
-                class="h-[50px] w-[50px] shrink-0 rounded border border-black/30 object-cover"
-                width="50"
-                height="50"
+                class="h-16 w-16 shrink-0 rounded border border-black/30 object-cover"
+                width="64"
+                height="64"
               />
-              <span class="min-w-0 truncate text-left font-medium text-accent">{{
-                p.itemName(row.itemId) || row.itemId
-              }}</span>
+              <div class="min-w-0 flex-1">
+                <div class="truncate text-base font-semibold text-accent">
+                  {{ p.itemName(row.itemId) || row.itemId }}
+                </div>
+                <div class="text-sm text-text/65">{{ typeLabel(row.type) }}</div>
+                <div class="mt-0.5 text-xs text-text/55">
+                  {{ row.games.toLocaleString() }}
+                  {{ p.t('statisticsPage.overviewDurationWinrateTooltipMatches') }}
+                </div>
+              </div>
+              <div class="flex shrink-0 gap-3 text-center">
+                <div>
+                  <div class="text-[10px] uppercase tracking-wide text-text/55">
+                    {{ p.t('statisticsPage.overviewDetailPickRate') }}
+                  </div>
+                  <div class="text-lg font-bold tabular-nums leading-none text-text">
+                    {{ fmtPct(row.pickrate) }}
+                  </div>
+                  <div class="mt-0.5 text-xs tabular-nums" :class="deltaClass(row.deltaPick)">
+                    {{ fmtDelta(row.deltaPick) }}
+                  </div>
+                </div>
+                <div>
+                  <div class="text-[10px] uppercase tracking-wide text-text/55">
+                    {{ p.t('statisticsPage.overviewDetailWinRate') }}
+                  </div>
+                  <div
+                    class="text-lg font-bold tabular-nums leading-none"
+                    :class="winrateClass(row.winrate)"
+                  >
+                    {{ fmtPct(row.winrate) }}
+                  </div>
+                  <div class="mt-0.5 text-xs tabular-nums" :class="deltaClass(row.deltaWin)">
+                    {{ fmtDelta(row.deltaWin) }}
+                  </div>
+                </div>
+              </div>
             </div>
+          </article>
+        </div>
+
+        <div
+          class="statistics-overview-surface hidden w-full overflow-x-auto rounded-lg border border-primary/30 md:block"
+        >
+          <div class="tier-list-lolalytics w-full min-w-[980px] text-[13px]">
             <div
-              class="tier-list-lolalytics-td flex w-[160px] shrink-0 items-center px-2 text-text/90"
+              class="tier-list-lolalytics-head sticky top-0 z-10 flex h-auto min-h-8 w-full items-stretch justify-between border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
             >
-              {{ typeLabel(row.type) }}
+              <button
+                type="button"
+                class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[320px] shrink-0 items-center justify-start border-b border-black px-2 hover:bg-primary/25"
+                :title="p.t('statisticsPage.itemsTooltipItem')"
+                @click="toggleSort('item')"
+              >
+                {{ p.t('statisticsPage.overviewDetailItems') }}{{ sortIcon('item') }}
+              </button>
+              <div
+                class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[160px] shrink-0 flex-col justify-center border-b border-black px-2 py-1"
+                :title="p.t('statisticsPage.itemsTooltipType')"
+              >
+                <button
+                  type="button"
+                  class="w-fit hover:bg-primary/25"
+                  :title="p.t('statisticsPage.itemsTooltipType')"
+                  @click="toggleSort('type')"
+                >
+                  {{ p.t('statisticsPage.itemsColType') }}{{ sortIcon('type') }}
+                </button>
+              </div>
+              <button
+                type="button"
+                class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[120px] shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
+                :title="p.t('statisticsPage.itemsTooltipPickrate')"
+                @click="toggleSort('pickrate')"
+              >
+                {{ p.t('statisticsPage.overviewDetailPickRate') }} %{{ sortIcon('pickrate') }}
+              </button>
+              <button
+                type="button"
+                class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[120px] shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
+                :title="p.t('statisticsPage.itemsTooltipDeltaPick')"
+                @click="toggleSort('deltaPick')"
+              >
+                {{ p.t('statisticsPage.itemsColDeltaPick') }}{{ sortIcon('deltaPick') }}
+              </button>
+              <button
+                type="button"
+                class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[120px] shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
+                :title="p.t('statisticsPage.itemsTooltipWinrate')"
+                @click="toggleSort('winrate')"
+              >
+                {{ p.t('statisticsPage.overviewDetailWinRate') }} %{{ sortIcon('winrate') }}
+              </button>
+              <button
+                type="button"
+                class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[120px] shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
+                :title="p.t('statisticsPage.itemsTooltipDeltaWin')"
+                @click="toggleSort('deltaWin')"
+              >
+                {{ p.t('statisticsPage.itemsColDeltaWin') }}{{ sortIcon('deltaWin') }}
+              </button>
             </div>
+
             <div
-              class="tier-list-lolalytics-td flex w-[120px] shrink-0 items-center justify-center tabular-nums text-text/90"
+              v-for="row in paginatedRows"
+              :key="`${row.type}-${row.itemId}`"
+              class="tier-list-lolalytics-row flex min-h-[52px] w-full items-center justify-between py-0.5 text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
             >
-              {{ fmtPct(row.pickrate) }}
-            </div>
-            <div
-              class="tier-list-lolalytics-td flex w-[120px] shrink-0 items-center justify-center tabular-nums"
-              :class="deltaClass(row.deltaPick)"
-            >
-              {{ fmtDelta(row.deltaPick) }}
-            </div>
-            <div
-              class="tier-list-lolalytics-td flex w-[120px] shrink-0 items-center justify-center tabular-nums"
-              :class="winrateClass(row.winrate)"
-            >
-              {{ fmtPct(row.winrate) }}
-            </div>
-            <div
-              class="tier-list-lolalytics-td flex w-[120px] shrink-0 items-center justify-center tabular-nums"
-              :class="deltaClass(row.deltaWin)"
-            >
-              {{ fmtDelta(row.deltaWin) }}
+              <div class="tier-list-lolalytics-td flex w-[320px] shrink-0 items-center gap-2 px-2">
+                <img
+                  v-if="p.itemImageName(row.itemId)"
+                  :src="p.getItemImageUrl(p.gameVersion, p.itemImageName(row.itemId)!)"
+                  :alt="p.itemName(row.itemId) || ''"
+                  class="h-[50px] w-[50px] shrink-0 rounded border border-black/30 object-cover"
+                  width="50"
+                  height="50"
+                />
+                <span class="min-w-0 truncate text-left font-medium text-accent">{{
+                  p.itemName(row.itemId) || row.itemId
+                }}</span>
+              </div>
+              <div
+                class="tier-list-lolalytics-td flex w-[160px] shrink-0 items-center px-2 text-text/90"
+              >
+                {{ typeLabel(row.type) }}
+              </div>
+              <div
+                class="tier-list-lolalytics-td flex w-[120px] shrink-0 items-center justify-center tabular-nums text-text/90"
+              >
+                {{ fmtPct(row.pickrate) }}
+              </div>
+              <div
+                class="tier-list-lolalytics-td flex w-[120px] shrink-0 items-center justify-center tabular-nums"
+                :class="deltaClass(row.deltaPick)"
+              >
+                {{ fmtDelta(row.deltaPick) }}
+              </div>
+              <div
+                class="tier-list-lolalytics-td flex w-[120px] shrink-0 items-center justify-center tabular-nums"
+                :class="winrateClass(row.winrate)"
+              >
+                {{ fmtPct(row.winrate) }}
+              </div>
+              <div
+                class="tier-list-lolalytics-td flex w-[120px] shrink-0 items-center justify-center tabular-nums"
+                :class="deltaClass(row.deltaWin)"
+              >
+                {{ fmtDelta(row.deltaWin) }}
+              </div>
             </div>
           </div>
         </div>
 
         <div
           v-if="totalRowsCount > 0"
-          class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
+          class="statistics-items-pagination flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-surface/20 px-3 py-2 text-sm text-text/80 md:rounded-none md:border-t md:bg-transparent md:px-4"
         >
           <span>{{ totalRowsCount }} {{ p.t('statisticsPage.overviewDetailItems') }}</span>
           <div class="flex items-center gap-3">
@@ -430,3 +488,17 @@ function deltaClass(value: number | null | undefined): string {
     <div v-else class="text-text/70">{{ p.t('statisticsPage.overviewDetailNoData') }}</div>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  .statistics-items-tab {
+    margin-inline: -1rem;
+    width: calc(100% + 2rem);
+    max-width: 100vw;
+  }
+
+  .statistics-item-mobile-card {
+    width: 100%;
+  }
+}
+</style>

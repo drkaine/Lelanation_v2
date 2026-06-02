@@ -39,7 +39,7 @@
         />
 
         <div class="flex flex-col gap-6 lg:flex-row">
-          <div class="flex-shrink-0 lg:w-auto">
+          <div class="w-full flex-shrink-0 lg:w-auto">
             <div class="relative">
               <div ref="buildCardRef" :data-build-id="build.id">
                 <BuildCard
@@ -56,7 +56,7 @@
               </div>
             </div>
 
-            <div class="mt-4 w-full max-w-[380px]">
+            <div class="mt-4 w-full max-w-full md:max-w-[380px]">
               <div class="build-details-actions flex flex-wrap items-stretch gap-1.5">
                 <button
                   v-if="build && !isUserBuild"

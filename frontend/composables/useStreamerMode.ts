@@ -1,10 +1,12 @@
 import { onMounted, watch } from 'vue'
+import { MOBILE_VIEWPORT_MEDIA_QUERY, useMobileViewport } from '~/composables/useMobileViewport'
 
 const STREAMER_MODE_STORAGE_KEY = 'lelanation_streamer_mode'
 const STREAMER_MODE_COOKIE_KEY = 'lelanation_streamer_mode'
 
 export function useStreamerMode() {
   const route = useRoute()
+  const { isMobileViewport } = useMobileViewport()
   const modeCookie = useCookie<string | null>(STREAMER_MODE_COOKIE_KEY, {
     sameSite: 'lax',
     path: '/',
@@ -12,8 +14,16 @@ export function useStreamerMode() {
   })
   const isStreamerMode = useState<boolean>('streamer-mode', () => modeCookie.value === '1')
   const initialized = useState<boolean>('streamer-mode-initialized', () => false)
-  const isMobileViewport = () =>
-    import.meta.client && window.matchMedia('(max-width: 768px)').matches
+
+  const isMobilePresentationViewport = () =>
+    isMobileViewport.value ||
+    (import.meta.client && window.matchMedia(MOBILE_VIEWPORT_MEDIA_QUERY).matches)
+
+  const enableMobilePresentation = () => {
+    if (!isMobilePresentationViewport()) return
+    isStreamerMode.value = true
+    modeCookie.value = '1'
+  }
 
   // IMPORTANT: do not read localStorage before hydration, or SSR/CSR can diverge.
   if (import.meta.client) {
@@ -34,11 +44,8 @@ export function useStreamerMode() {
           return
         }
 
-        // Le mode présentation n'est pas supporté sur mobile.
-        if (isMobileViewport()) {
-          isStreamerMode.value = false
-          modeCookie.value = '0'
-          localStorage.setItem(STREAMER_MODE_STORAGE_KEY, '0')
+        if (isMobilePresentationViewport()) {
+          enableMobilePresentation()
           return
         }
 
@@ -57,6 +64,7 @@ export function useStreamerMode() {
     watch(
       isStreamerMode,
       value => {
+        if (isMobileViewport.value) return
         try {
           localStorage.setItem(STREAMER_MODE_STORAGE_KEY, value ? '1' : '0')
           modeCookie.value = value ? '1' : '0'
@@ -66,21 +74,22 @@ export function useStreamerMode() {
       },
       { flush: 'post' }
     )
+
+    watch(isMobileViewport, mobile => {
+      if (mobile) enableMobilePresentation()
+    })
   }
 
   const setStreamerMode = (enabled: boolean) => {
-    if (isMobileViewport()) {
-      isStreamerMode.value = false
+    if (isMobilePresentationViewport()) {
+      enableMobilePresentation()
       return
     }
     isStreamerMode.value = enabled
   }
 
   const toggleStreamerMode = () => {
-    if (isMobileViewport()) {
-      isStreamerMode.value = false
-      return
-    }
+    if (isMobilePresentationViewport()) return
     isStreamerMode.value = !isStreamerMode.value
   }
 

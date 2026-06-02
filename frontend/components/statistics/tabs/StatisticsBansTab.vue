@@ -15,11 +15,11 @@
         <article
           v-for="row in p.paginatedBans"
           :key="'ban-mobile-' + row.championId"
-          class="overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
+          class="statistics-ban-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
         >
           <button
             type="button"
-            class="flex w-full items-center gap-3 p-3 text-left"
+            class="statistics-ban-mobile-card-header flex w-full items-center gap-3.5 p-3.5 text-left"
             @click="toggleBanCardExpanded(row.championId)"
           >
             <img
@@ -28,12 +28,14 @@
                 p.getChampionImageUrl(p.gameVersion, p.championByKey(row.championId)!.image.full)
               "
               :alt="p.championName(row.championId) || ''"
-              class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover"
-              width="50"
-              height="50"
+              class="statistics-ban-mobile-card-portrait h-16 w-16 shrink-0 border-2 border-black object-cover"
+              width="64"
+              height="64"
             />
             <div class="min-w-0 flex-1">
-              <div class="truncate text-[12px] font-medium text-text/90">
+              <div
+                class="statistics-ban-mobile-card-name truncate text-base font-medium text-text/90"
+              >
                 <StatisticsChampionNameHighlight
                   :name="String(p.championName(row.championId) || row.championId)"
                   :query="p.championSearchQuery"
@@ -41,33 +43,132 @@
               </div>
             </div>
             <div class="shrink-0 text-center">
-              <div class="text-[10px] uppercase tracking-wide text-text/55">
+              <div
+                class="statistics-ban-mobile-card-stat-label text-xs uppercase tracking-wide text-text/55"
+              >
                 {{ p.t('statisticsPage.bansColRate') }}
               </div>
-              <div class="text-2xl font-bold tabular-nums leading-none text-amber-300">
+              <div
+                class="statistics-ban-mobile-card-stat-value text-3xl font-bold tabular-nums leading-none text-amber-300"
+              >
                 {{ p.banRateForBansRow(row, p.bansTableData?.matchCount ?? 0).toFixed(2) }}%
+              </div>
+              <div
+                v-if="p.bansDeltaPct(row, 'bansTotal', 2) != null"
+                class="mt-0.5 text-xs tabular-nums leading-none"
+                :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansTotal', 2)!)"
+              >
+                {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansTotal', 2)!) }}
               </div>
             </div>
           </button>
+
+          <div
+            v-if="visibleRoleHeaders.length > 0"
+            class="statistics-ban-mobile-card-roles border-t border-primary/15 px-3 py-2.5"
+          >
+            <div class="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-text/55">
+              {{ p.t('statisticsPage.bansByRole') }}
+            </div>
+            <div
+              class="grid gap-2"
+              :style="{
+                gridTemplateColumns: `repeat(${visibleRoleHeaders.length}, minmax(0, 1fr))`,
+              }"
+            >
+              <div
+                v-for="role in visibleRoleHeaders"
+                :key="'ban-mobile-role-' + row.championId + '-' + role.key"
+                class="flex min-w-0 flex-col items-center gap-0.5 text-center"
+              >
+                <img :src="role.icon" :alt="role.alt" class="h-5 w-5 object-contain" />
+                <span class="text-sm font-semibold tabular-nums text-text">
+                  {{
+                    p
+                      .banPctForCount(row[role.countKey], p.bansTableData?.matchCount ?? 0, 1)
+                      .toFixed(2)
+                  }}%
+                </span>
+                <span
+                  v-if="p.bansDeltaPct(row, role.countKey, 1) != null"
+                  class="text-[10px] tabular-nums leading-none"
+                  :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, role.countKey, 1)!)"
+                >
+                  {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, role.countKey, 1)!) }}
+                </span>
+              </div>
+            </div>
+          </div>
+
           <div
             v-if="expandedBanIds.has(row.championId)"
-            class="space-y-1 border-t border-primary/20 bg-black/20 px-3 py-2 text-xs text-text/85"
+            class="statistics-ban-mobile-card-details space-y-1.5 border-t border-primary/20 bg-black/20 px-3 py-2.5 text-sm text-text/85"
           >
-            <div v-if="p.showBansOutcomeColumns">
-              {{ p.t('statisticsPage.overviewTeamsByWin') }}:
-              {{ p.bansOutcomePct(row.championId, 'win').toFixed(2) }}%
+            <div
+              v-if="p.showBansOutcomeColumns"
+              class="flex flex-wrap items-baseline justify-between gap-x-2"
+            >
+              <span>{{ p.t('statisticsPage.overviewTeamsByWin') }}</span>
+              <span class="tabular-nums">
+                {{ p.bansOutcomePct(row.championId, 'win').toFixed(2) }}%
+                <span
+                  v-if="p.bansOutcomeDeltaPct(row.championId, 'win') != null"
+                  class="ml-1 text-xs"
+                  :class="p.tierListPatchDeltaClass(p.bansOutcomeDeltaPct(row.championId, 'win')!)"
+                >
+                  {{ formatBansPatchDeltaPct(p.bansOutcomeDeltaPct(row.championId, 'win')!) }}
+                </span>
+              </span>
             </div>
-            <div v-if="p.showBansOutcomeColumns">
-              {{ p.t('statisticsPage.overviewTeamsByLoss') }}:
-              {{ p.bansOutcomePct(row.championId, 'loss').toFixed(2) }}%
+            <div
+              v-if="p.showBansOutcomeColumns"
+              class="flex flex-wrap items-baseline justify-between gap-x-2"
+            >
+              <span>{{ p.t('statisticsPage.overviewTeamsByLoss') }}</span>
+              <span class="tabular-nums">
+                {{ p.bansOutcomePct(row.championId, 'loss').toFixed(2) }}%
+                <span
+                  v-if="p.bansOutcomeDeltaPct(row.championId, 'loss') != null"
+                  class="ml-1 text-xs"
+                  :class="p.tierListPatchDeltaClass(p.bansOutcomeDeltaPct(row.championId, 'loss')!)"
+                >
+                  {{ formatBansPatchDeltaPct(p.bansOutcomeDeltaPct(row.championId, 'loss')!) }}
+                </span>
+              </span>
             </div>
-            <div v-if="p.showBansSideColumns">
-              {{ p.t('statisticsPage.bansColBlueSide') }}:
-              {{ p.banPctForCount(row.bansBlue, p.bansTableData?.matchCount ?? 0, 1).toFixed(2) }}%
+            <div
+              v-if="p.showBansSideColumns"
+              class="flex flex-wrap items-baseline justify-between gap-x-2 text-blue-300/95"
+            >
+              <span>{{ p.t('statisticsPage.bansColBlueSide') }}</span>
+              <span class="tabular-nums">
+                {{
+                  p.banPctForCount(row.bansBlue, p.bansTableData?.matchCount ?? 0, 1).toFixed(2)
+                }}%
+                <span
+                  v-if="p.bansDeltaPct(row, 'bansBlue', 1) != null"
+                  class="ml-1 text-xs"
+                  :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansBlue', 1)!)"
+                >
+                  {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansBlue', 1)!) }}
+                </span>
+              </span>
             </div>
-            <div v-if="p.showBansSideColumns">
-              {{ p.t('statisticsPage.bansColRedSide') }}:
-              {{ p.banPctForCount(row.bansRed, p.bansTableData?.matchCount ?? 0, 1).toFixed(2) }}%
+            <div
+              v-if="p.showBansSideColumns"
+              class="flex flex-wrap items-baseline justify-between gap-x-2 text-red-300/95"
+            >
+              <span>{{ p.t('statisticsPage.bansColRedSide') }}</span>
+              <span class="tabular-nums">
+                {{ p.banPctForCount(row.bansRed, p.bansTableData?.matchCount ?? 0, 1).toFixed(2) }}%
+                <span
+                  v-if="p.bansDeltaPct(row, 'bansRed', 1) != null"
+                  class="ml-1 text-xs"
+                  :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansRed', 1)!)"
+                >
+                  {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansRed', 1)!) }}
+                </span>
+              </span>
             </div>
           </div>
         </article>
@@ -463,7 +564,7 @@
 </template>
 
 <script setup lang="ts">
-import { inject, ref, unref } from 'vue'
+import { computed, inject, ref, unref } from 'vue'
 import type { BansSortCol } from '~/composables/statistics/useStatisticsBansTab'
 
 const p = inject('statisticsPageCtx') as any
@@ -487,11 +588,53 @@ function formatBansPatchDeltaPct(pp: number): string {
   return `${sign}${pp.toFixed(2)}%`
 }
 
-const roleHeaders: Array<{ key: BansSortCol; deltaKey: BansSortCol; icon: string; alt: string }> = [
-  { key: 'top', deltaKey: 'topDelta', icon: '/icons/roles/top.png', alt: 'Top' },
-  { key: 'jungle', deltaKey: 'jungleDelta', icon: '/icons/roles/jungle.png', alt: 'Jungle' },
-  { key: 'middle', deltaKey: 'middleDelta', icon: '/icons/roles/mid.png', alt: 'Mid' },
-  { key: 'bottom', deltaKey: 'bottomDelta', icon: '/icons/roles/bot.png', alt: 'Bot' },
-  { key: 'support', deltaKey: 'supportDelta', icon: '/icons/roles/support.png', alt: 'Support' },
+type BanRoleMetricKey = 'bansTop' | 'bansJungle' | 'bansMiddle' | 'bansBottom' | 'bansSupport'
+
+const roleHeaders: Array<{
+  key: BansSortCol
+  deltaKey: BansSortCol
+  countKey: BanRoleMetricKey
+  icon: string
+  alt: string
+}> = [
+  {
+    key: 'top',
+    deltaKey: 'topDelta',
+    countKey: 'bansTop',
+    icon: '/icons/roles/top.png',
+    alt: 'Top',
+  },
+  {
+    key: 'jungle',
+    deltaKey: 'jungleDelta',
+    countKey: 'bansJungle',
+    icon: '/icons/roles/jungle.png',
+    alt: 'Jungle',
+  },
+  {
+    key: 'middle',
+    deltaKey: 'middleDelta',
+    countKey: 'bansMiddle',
+    icon: '/icons/roles/mid.png',
+    alt: 'Mid',
+  },
+  {
+    key: 'bottom',
+    deltaKey: 'bottomDelta',
+    countKey: 'bansBottom',
+    icon: '/icons/roles/bot.png',
+    alt: 'Bot',
+  },
+  {
+    key: 'support',
+    deltaKey: 'supportDelta',
+    countKey: 'bansSupport',
+    icon: '/icons/roles/support.png',
+    alt: 'Support',
+  },
 ]
+
+const visibleRoleHeaders = computed(() =>
+  roleHeaders.filter(role => p.showBansRoleColumn(role.key))
+)
 </script>

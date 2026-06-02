@@ -3655,6 +3655,21 @@ defineExpose({
   min-height: 585px;
 }
 
+@media (max-width: 768px) {
+  .build-card-wrapper--streamer-scaled {
+    width: calc(100vw - 1.5rem);
+    max-width: 100%;
+    --build-card-width: calc(100vw - 1.5rem);
+    min-height: auto;
+  }
+
+  .build-card-wrapper--streamer-scaled .flip-container {
+    width: 100%;
+    zoom: 1;
+    transform-origin: top center;
+  }
+}
+
 .card-top-actions {
   display: flex;
   align-items: center;

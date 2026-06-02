@@ -6,9 +6,9 @@
     >
       Skip to content
     </a>
-    <AppNavbar v-show="!isStreamerMode && !isBuildCardRenderRoute" />
+    <AppNavbar v-show="showStandardAppChrome && !isBuildCardRenderRoute" />
     <div
-      v-show="!isStreamerMode && !isBuildCardRenderRoute && !commandBarHiddenByScroll"
+      v-show="showStandardAppChrome && !isBuildCardRenderRoute && !commandBarHiddenByScroll"
       class="command-bar-fixed-wrapper"
     >
       <button
@@ -130,19 +130,19 @@
       </div>
     </div>
     <div
-      v-show="!isStreamerMode && !isBuildCardRenderRoute"
+      v-show="showStandardAppChrome && !isBuildCardRenderRoute"
       class="command-bar-spacer"
       aria-hidden="true"
     ></div>
     <div
-      v-show="isStreamerMode"
+      v-show="showStreamerPanels"
       class="streamer-panel streamer-panel-top"
       :class="{ 'is-open': streamerPanelsOpen }"
     >
       <AppNavbar />
     </div>
     <button
-      v-show="isStreamerMode"
+      v-show="showStreamerPanels"
       type="button"
       class="streamer-toggle streamer-toggle-top"
       :class="{ 'streamer-toggle-top-open': streamerPanelsOpen }"
@@ -154,9 +154,9 @@
     <main id="main" tabindex="-1" class="app-main flex-1">
       <NuxtPage />
     </main>
-    <AppFooter v-show="!isStreamerMode && !isAdminRoute && !isBuildCardRenderRoute" />
+    <AppFooter v-show="showStandardAppChrome && !isAdminRoute && !isBuildCardRenderRoute" />
     <div
-      v-show="isStreamerMode"
+      v-show="showStreamerPanels"
       class="streamer-panel streamer-panel-bottom"
       :class="{ 'is-open': streamerPanelsOpen }"
     >
@@ -167,7 +167,7 @@
 </template>
 
 <script setup lang="ts">
-import { watch, onMounted, onUnmounted } from 'vue'
+import { computed, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import CookieConsentBanner from '~/components/CookieConsentBanner.vue'
 import AppFooter from '~/components/AppFooter.vue'
@@ -176,6 +176,7 @@ import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 import { useChampionSplashPreference } from '~/composables/useChampionSplashPreference'
 import { usePresentationZoom } from '~/composables/usePresentationZoom'
 import { useLayoutScaled } from '~/composables/useLayoutScaled'
+import { useMobileViewport } from '~/composables/useMobileViewport'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -185,6 +186,9 @@ const localeHead = useLocaleHead({ addDirAttribute: true, addSeoAttributes: true
 const { isStreamerMode, toggleStreamerMode } = useStreamerMode()
 const { isPresentationZoom, togglePresentationZoom } = usePresentationZoom()
 const { isLayoutScaled } = useLayoutScaled()
+const { isMobileViewport } = useMobileViewport()
+const showStandardAppChrome = computed(() => !isStreamerMode.value || isMobileViewport.value)
+const showStreamerPanels = computed(() => isStreamerMode.value && !isMobileViewport.value)
 const { tooltipsDisabled, tooltipsEnabled, setTooltipsDisabled, toggleTooltipsDisabled } =
   useTooltipsPreference()
 const { championSplashEnabled, toggleChampionSplashEnabled } = useChampionSplashPreference()
@@ -512,6 +516,11 @@ if (import.meta.client) {
 @media (max-width: 768px) {
   .command-bar-fixed-wrapper,
   .command-bar-spacer {
+    display: none !important;
+  }
+
+  .streamer-toggle,
+  .streamer-panel {
     display: none !important;
   }
 }

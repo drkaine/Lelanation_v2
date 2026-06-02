@@ -86,6 +86,14 @@ const spellsMode = computed<'solo' | 'pair'>({
 })
 const pageSize = ref<number>(20)
 const page = ref<number>(1)
+const expandedSpellKeys = ref<Set<string>>(new Set())
+
+function toggleSpellCardExpanded(key: string): void {
+  const next = new Set(expandedSpellKeys.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  expandedSpellKeys.value = next
+}
 const PAGE_SIZE_OPTIONS = computed<number[]>(() =>
   Array.isArray(p.PAGE_SIZE_OPTIONS) && p.PAGE_SIZE_OPTIONS.length > 0
     ? p.PAGE_SIZE_OPTIONS
@@ -398,161 +406,273 @@ function deltaLabelClass(v: number | null | undefined): string {
     <div v-else-if="p.overviewDetailError" class="rounded border border-error/50 p-3 text-error">
       {{ p.t('statisticsPage.overviewDetailTimeout') }}
     </div>
-    <div
-      v-else-if="displayRows.length"
-      class="statistics-overview-surface w-full overflow-x-auto rounded-lg border border-primary/30"
-    >
-      <table class="w-full min-w-[1100px] text-left text-sm">
-        <thead class="border-b border-primary/30 bg-black/25">
-          <tr>
-            <th
-              class="px-3 py-2 font-semibold text-text"
-              :title="p.t('statisticsPage.spellsTooltipSummoner')"
-            >
-              <button type="button" class="hover:underline" @click="toggleSort('spell')">
-                {{ p.t('statisticsPage.overviewDetailSummonerSpells') }}{{ sortIcon('spell') }}
-              </button>
-            </th>
-            <th
-              class="px-3 py-2 font-semibold text-text"
-              :title="p.t('statisticsPage.spellsTooltipPickrate')"
-            >
-              <button type="button" class="hover:underline" @click="toggleSort('pickrate')">
-                {{ p.t('statisticsPage.overviewDetailPickRate') }}{{ sortIcon('pickrate') }}
-              </button>
-            </th>
-            <th
-              class="px-3 py-2 font-semibold text-text"
-              :title="p.t('statisticsPage.spellsTooltipDeltaPick')"
-            >
-              <button type="button" class="hover:underline" @click="toggleSort('deltaPick')">
-                {{ p.t('statisticsPage.championTableDeltaSymbol') }} pick{{ sortIcon('deltaPick') }}
-              </button>
-            </th>
-            <th
-              class="px-3 py-2 font-semibold text-text"
-              :title="p.t('statisticsPage.spellsTooltipCasts')"
-            >
-              <button type="button" class="hover:underline" @click="toggleSort('casts')">
-                {{ p.t('statisticsPage.spellsCasts') }}{{ sortIcon('casts') }}
-              </button>
-            </th>
-            <th
-              class="px-3 py-2 font-semibold text-text"
-              :title="p.t('statisticsPage.spellsTooltipDeltaCasts')"
-            >
-              <button type="button" class="hover:underline" @click="toggleSort('deltaCasts')">
-                {{ p.t('statisticsPage.championTableDeltaSymbol') }}
-                {{ p.t('statisticsPage.spellsCasts') }}{{ sortIcon('deltaCasts') }}
-              </button>
-            </th>
-            <th
-              class="px-3 py-2 font-semibold text-text"
-              :title="p.t('statisticsPage.spellsTooltipWinrate')"
-            >
-              <button type="button" class="hover:underline" @click="toggleSort('winrate')">
-                {{ p.t('statisticsPage.overviewDetailWinRate') }}{{ sortIcon('winrate') }}
-              </button>
-            </th>
-            <th
-              class="px-3 py-2 font-semibold text-text"
-              :title="p.t('statisticsPage.spellsTooltipDeltaWin')"
-            >
-              <button type="button" class="hover:underline" @click="toggleSort('deltaWin')">
-                {{ p.t('statisticsPage.championTableDeltaSymbol') }} WR{{ sortIcon('deltaWin') }}
-              </button>
-            </th>
-            <th
-              class="px-3 py-2 font-semibold text-text"
-              :title="p.t('statisticsPage.spellsTooltipPctD')"
-            >
-              <button type="button" class="hover:underline" @click="toggleSort('pctD')">
-                % D{{ sortIcon('pctD') }}
-              </button>
-            </th>
-            <th
-              class="px-3 py-2 font-semibold text-text"
-              :title="p.t('statisticsPage.spellsTooltipDeltaD')"
-            >
-              <button type="button" class="hover:underline" @click="toggleSort('deltaD')">
-                {{ p.t('statisticsPage.championTableDeltaSymbol') }} D{{ sortIcon('deltaD') }}
-              </button>
-            </th>
-            <th
-              class="px-3 py-2 font-semibold text-text"
-              :title="p.t('statisticsPage.spellsTooltipPctF')"
-            >
-              <button type="button" class="hover:underline" @click="toggleSort('pctF')">
-                % F{{ sortIcon('pctF') }}
-              </button>
-            </th>
-            <th
-              class="px-3 py-2 font-semibold text-text"
-              :title="p.t('statisticsPage.spellsTooltipDeltaF')"
-            >
-              <button type="button" class="hover:underline" @click="toggleSort('deltaF')">
-                {{ p.t('statisticsPage.championTableDeltaSymbol') }} F{{ sortIcon('deltaF') }}
-              </button>
-            </th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-primary/20">
-          <tr
-            v-for="row in paginatedDisplayRows"
-            :key="row.key"
-            class="odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
+    <div v-else-if="displayRows.length" class="statistics-spells-tab space-y-3">
+      <div class="statistics-spells-mobile-list space-y-2 md:hidden">
+        <article
+          v-for="row in paginatedDisplayRows"
+          :key="'spell-mobile-' + row.key"
+          class="statistics-spell-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
+        >
+          <button
+            type="button"
+            class="flex w-full items-center gap-3.5 p-3.5 text-left"
+            @click="toggleSpellCardExpanded(row.key)"
           >
-            <td class="px-3 py-2">
-              <div class="flex items-center gap-2">
-                <img
-                  v-if="row.imageSpellId != null && spellImage(row.imageSpellId) && p.gameVersion"
-                  :src="getSpellImageUrl(p.gameVersion, spellImage(row.imageSpellId)!)"
-                  :alt="row.label"
-                  class="h-[50px] w-[50px] rounded border border-black/30 object-cover"
-                  width="50"
-                  height="50"
-                />
-                <img
-                  v-if="row.imageSpellId2 != null && spellImage(row.imageSpellId2) && p.gameVersion"
-                  :src="getSpellImageUrl(p.gameVersion, spellImage(row.imageSpellId2)!)"
-                  :alt="row.label"
-                  class="h-[50px] w-[50px] rounded border border-black/30 object-cover"
-                  width="50"
-                  height="50"
-                />
-                <span v-if="!row.imageOnly" class="font-medium text-accent">{{ row.label }}</span>
+            <div class="flex shrink-0 items-center gap-1">
+              <img
+                v-if="row.imageSpellId != null && spellImage(row.imageSpellId) && p.gameVersion"
+                :src="getSpellImageUrl(p.gameVersion, spellImage(row.imageSpellId)!)"
+                :alt="row.label"
+                class="h-14 w-14 rounded border border-black/30 object-cover"
+                width="56"
+                height="56"
+              />
+              <img
+                v-if="row.imageSpellId2 != null && spellImage(row.imageSpellId2) && p.gameVersion"
+                :src="getSpellImageUrl(p.gameVersion, spellImage(row.imageSpellId2)!)"
+                :alt="row.label"
+                class="h-14 w-14 rounded border border-black/30 object-cover"
+                width="56"
+                height="56"
+              />
+            </div>
+            <div class="min-w-0 flex-1">
+              <div v-if="!row.imageOnly" class="truncate text-base font-semibold text-accent">
+                {{ row.label }}
               </div>
-            </td>
-            <td class="px-3 py-2 tabular-nums text-text/90">{{ fmtPct(row.pickrate) }}</td>
-            <td class="px-3 py-2 tabular-nums" :class="deltaClass(row.deltaPick)">
-              {{ fmtDelta(row.deltaPick) }}
-            </td>
-            <td class="px-3 py-2 tabular-nums text-text/90">{{ row.castsLabel }}</td>
-            <td class="px-3 py-2 tabular-nums" :class="deltaLabelClass(row.deltaCastsSort)">
-              {{ row.deltaCastsLabel }}
-            </td>
-            <td class="px-3 py-2 tabular-nums text-text/90">{{ fmtPct(row.winrate) }}</td>
-            <td class="px-3 py-2 tabular-nums" :class="deltaClass(row.deltaWin)">
-              {{ fmtDelta(row.deltaWin) }}
-            </td>
-            <td class="px-3 py-2 tabular-nums text-text/90">
-              {{ fmtPct(row.pctD) }}
-            </td>
-            <td class="px-3 py-2 tabular-nums" :class="deltaClass(row.deltaD)">
-              {{ fmtDelta(row.deltaD) }}
-            </td>
-            <td class="px-3 py-2 tabular-nums text-text/90">
-              {{ fmtPct(row.pctF) }}
-            </td>
-            <td class="px-3 py-2 tabular-nums" :class="deltaClass(row.deltaF)">
-              {{ fmtDelta(row.deltaF) }}
-            </td>
-          </tr>
-        </tbody>
-      </table>
+            </div>
+            <div class="flex shrink-0 gap-3 text-center">
+              <div>
+                <div class="text-[10px] uppercase tracking-wide text-text/55">
+                  {{ p.t('statisticsPage.overviewDetailPickRate') }}
+                </div>
+                <div class="text-lg font-bold tabular-nums leading-none text-text">
+                  {{ fmtPct(row.pickrate) }}
+                </div>
+                <div class="mt-0.5 text-xs tabular-nums" :class="deltaClass(row.deltaPick)">
+                  {{ fmtDelta(row.deltaPick) }}
+                </div>
+              </div>
+              <div>
+                <div class="text-[10px] uppercase tracking-wide text-text/55">
+                  {{ p.t('statisticsPage.overviewDetailWinRate') }}
+                </div>
+                <div class="text-lg font-bold tabular-nums leading-none text-text">
+                  {{ fmtPct(row.winrate) }}
+                </div>
+                <div class="mt-0.5 text-xs tabular-nums" :class="deltaClass(row.deltaWin)">
+                  {{ fmtDelta(row.deltaWin) }}
+                </div>
+              </div>
+            </div>
+          </button>
+          <div
+            v-if="expandedSpellKeys.has(row.key)"
+            class="space-y-1.5 border-t border-primary/20 bg-black/20 px-3 py-2.5 text-sm text-text/85"
+          >
+            <div class="flex flex-wrap items-baseline justify-between gap-x-2">
+              <span>{{ p.t('statisticsPage.spellsCasts') }}</span>
+              <span class="tabular-nums">
+                {{ row.castsLabel }}
+                <span class="ml-1 text-xs" :class="deltaLabelClass(row.deltaCastsSort)">
+                  {{ row.deltaCastsLabel }}
+                </span>
+              </span>
+            </div>
+            <div
+              v-if="spellsMode === 'solo'"
+              class="flex flex-wrap items-baseline justify-between gap-x-2"
+            >
+              <span>% D</span>
+              <span class="tabular-nums">
+                {{ fmtPct(row.pctD) }}
+                <span class="ml-1 text-xs" :class="deltaClass(row.deltaD)">{{
+                  fmtDelta(row.deltaD)
+                }}</span>
+              </span>
+            </div>
+            <div
+              v-if="spellsMode === 'solo'"
+              class="flex flex-wrap items-baseline justify-between gap-x-2"
+            >
+              <span>% F</span>
+              <span class="tabular-nums">
+                {{ fmtPct(row.pctF) }}
+                <span class="ml-1 text-xs" :class="deltaClass(row.deltaF)">{{
+                  fmtDelta(row.deltaF)
+                }}</span>
+              </span>
+            </div>
+            <div
+              v-if="spellsMode === 'pair'"
+              class="flex flex-wrap items-baseline justify-between gap-x-2"
+            >
+              <span>% D / % F</span>
+              <span class="tabular-nums"> {{ fmtPct(row.pctD) }} / {{ fmtPct(row.pctF) }} </span>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <div
+        class="statistics-overview-surface hidden w-full overflow-x-auto rounded-lg border border-primary/30 md:block"
+      >
+        <table class="w-full min-w-[1100px] text-left text-sm">
+          <thead class="border-b border-primary/30 bg-black/25">
+            <tr>
+              <th
+                class="px-3 py-2 font-semibold text-text"
+                :title="p.t('statisticsPage.spellsTooltipSummoner')"
+              >
+                <button type="button" class="hover:underline" @click="toggleSort('spell')">
+                  {{ p.t('statisticsPage.overviewDetailSummonerSpells') }}{{ sortIcon('spell') }}
+                </button>
+              </th>
+              <th
+                class="px-3 py-2 font-semibold text-text"
+                :title="p.t('statisticsPage.spellsTooltipPickrate')"
+              >
+                <button type="button" class="hover:underline" @click="toggleSort('pickrate')">
+                  {{ p.t('statisticsPage.overviewDetailPickRate') }}{{ sortIcon('pickrate') }}
+                </button>
+              </th>
+              <th
+                class="px-3 py-2 font-semibold text-text"
+                :title="p.t('statisticsPage.spellsTooltipDeltaPick')"
+              >
+                <button type="button" class="hover:underline" @click="toggleSort('deltaPick')">
+                  {{ p.t('statisticsPage.championTableDeltaSymbol') }} pick{{
+                    sortIcon('deltaPick')
+                  }}
+                </button>
+              </th>
+              <th
+                class="px-3 py-2 font-semibold text-text"
+                :title="p.t('statisticsPage.spellsTooltipCasts')"
+              >
+                <button type="button" class="hover:underline" @click="toggleSort('casts')">
+                  {{ p.t('statisticsPage.spellsCasts') }}{{ sortIcon('casts') }}
+                </button>
+              </th>
+              <th
+                class="px-3 py-2 font-semibold text-text"
+                :title="p.t('statisticsPage.spellsTooltipDeltaCasts')"
+              >
+                <button type="button" class="hover:underline" @click="toggleSort('deltaCasts')">
+                  {{ p.t('statisticsPage.championTableDeltaSymbol') }}
+                  {{ p.t('statisticsPage.spellsCasts') }}{{ sortIcon('deltaCasts') }}
+                </button>
+              </th>
+              <th
+                class="px-3 py-2 font-semibold text-text"
+                :title="p.t('statisticsPage.spellsTooltipWinrate')"
+              >
+                <button type="button" class="hover:underline" @click="toggleSort('winrate')">
+                  {{ p.t('statisticsPage.overviewDetailWinRate') }}{{ sortIcon('winrate') }}
+                </button>
+              </th>
+              <th
+                class="px-3 py-2 font-semibold text-text"
+                :title="p.t('statisticsPage.spellsTooltipDeltaWin')"
+              >
+                <button type="button" class="hover:underline" @click="toggleSort('deltaWin')">
+                  {{ p.t('statisticsPage.championTableDeltaSymbol') }} WR{{ sortIcon('deltaWin') }}
+                </button>
+              </th>
+              <th
+                class="px-3 py-2 font-semibold text-text"
+                :title="p.t('statisticsPage.spellsTooltipPctD')"
+              >
+                <button type="button" class="hover:underline" @click="toggleSort('pctD')">
+                  % D{{ sortIcon('pctD') }}
+                </button>
+              </th>
+              <th
+                class="px-3 py-2 font-semibold text-text"
+                :title="p.t('statisticsPage.spellsTooltipDeltaD')"
+              >
+                <button type="button" class="hover:underline" @click="toggleSort('deltaD')">
+                  {{ p.t('statisticsPage.championTableDeltaSymbol') }} D{{ sortIcon('deltaD') }}
+                </button>
+              </th>
+              <th
+                class="px-3 py-2 font-semibold text-text"
+                :title="p.t('statisticsPage.spellsTooltipPctF')"
+              >
+                <button type="button" class="hover:underline" @click="toggleSort('pctF')">
+                  % F{{ sortIcon('pctF') }}
+                </button>
+              </th>
+              <th
+                class="px-3 py-2 font-semibold text-text"
+                :title="p.t('statisticsPage.spellsTooltipDeltaF')"
+              >
+                <button type="button" class="hover:underline" @click="toggleSort('deltaF')">
+                  {{ p.t('statisticsPage.championTableDeltaSymbol') }} F{{ sortIcon('deltaF') }}
+                </button>
+              </th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-primary/20">
+            <tr
+              v-for="row in paginatedDisplayRows"
+              :key="row.key"
+              class="odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
+            >
+              <td class="px-3 py-2">
+                <div class="flex items-center gap-2">
+                  <img
+                    v-if="row.imageSpellId != null && spellImage(row.imageSpellId) && p.gameVersion"
+                    :src="getSpellImageUrl(p.gameVersion, spellImage(row.imageSpellId)!)"
+                    :alt="row.label"
+                    class="h-[50px] w-[50px] rounded border border-black/30 object-cover"
+                    width="50"
+                    height="50"
+                  />
+                  <img
+                    v-if="
+                      row.imageSpellId2 != null && spellImage(row.imageSpellId2) && p.gameVersion
+                    "
+                    :src="getSpellImageUrl(p.gameVersion, spellImage(row.imageSpellId2)!)"
+                    :alt="row.label"
+                    class="h-[50px] w-[50px] rounded border border-black/30 object-cover"
+                    width="50"
+                    height="50"
+                  />
+                  <span v-if="!row.imageOnly" class="font-medium text-accent">{{ row.label }}</span>
+                </div>
+              </td>
+              <td class="px-3 py-2 tabular-nums text-text/90">{{ fmtPct(row.pickrate) }}</td>
+              <td class="px-3 py-2 tabular-nums" :class="deltaClass(row.deltaPick)">
+                {{ fmtDelta(row.deltaPick) }}
+              </td>
+              <td class="px-3 py-2 tabular-nums text-text/90">{{ row.castsLabel }}</td>
+              <td class="px-3 py-2 tabular-nums" :class="deltaLabelClass(row.deltaCastsSort)">
+                {{ row.deltaCastsLabel }}
+              </td>
+              <td class="px-3 py-2 tabular-nums text-text/90">{{ fmtPct(row.winrate) }}</td>
+              <td class="px-3 py-2 tabular-nums" :class="deltaClass(row.deltaWin)">
+                {{ fmtDelta(row.deltaWin) }}
+              </td>
+              <td class="px-3 py-2 tabular-nums text-text/90">
+                {{ fmtPct(row.pctD) }}
+              </td>
+              <td class="px-3 py-2 tabular-nums" :class="deltaClass(row.deltaD)">
+                {{ fmtDelta(row.deltaD) }}
+              </td>
+              <td class="px-3 py-2 tabular-nums text-text/90">
+                {{ fmtPct(row.pctF) }}
+              </td>
+              <td class="px-3 py-2 tabular-nums" :class="deltaClass(row.deltaF)">
+                {{ fmtDelta(row.deltaF) }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <div
         v-if="totalRowsCount > 0"
-        class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
+        class="statistics-spells-pagination flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-surface/20 px-3 py-2 text-sm text-text/80 md:rounded-none md:border-t md:bg-transparent md:px-4"
       >
         <span>{{ totalRowsCount }} {{ p.t('statisticsPage.overviewDetailSummonerSpells') }}</span>
         <div class="flex items-center gap-3">
@@ -593,3 +713,17 @@ function deltaLabelClass(v: number | null | undefined): string {
     <div v-else class="text-text/70">{{ p.t('statisticsPage.overviewDetailNoData') }}</div>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  .statistics-spells-tab {
+    margin-inline: -1rem;
+    width: calc(100% + 2rem);
+    max-width: 100vw;
+  }
+
+  .statistics-spell-mobile-card {
+    width: 100%;
+  }
+}
+</style>

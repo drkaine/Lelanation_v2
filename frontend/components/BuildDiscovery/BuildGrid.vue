@@ -523,8 +523,8 @@ const displayedSubMap = ref<Record<string, number | null>>({})
 const { fetchWithAuth, checkLoggedIn } = useAdminAuth()
 const buildGridVars = computed(() => ({
   '--build-grid-card-width': isLayoutScaled.value
-    ? 'min(390px, calc(100vw - 30px))'
-    : 'min(300px, calc(100vw - 30px))',
+    ? 'min(390px, calc(100vw - 1.5rem))'
+    : 'min(300px, calc(100vw - 1.5rem))',
 }))
 
 function getDisplayedDescription(build: Build): string | undefined {

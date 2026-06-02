@@ -11,7 +11,9 @@ const p = inject('statisticsPageCtx') as any
         {{ p.t('statisticsPage.loading') }}
       </div>
       <div v-else-if="p.overviewSidesData" class="space-y-[10px]">
-        <div class="flex flex-wrap items-start justify-center gap-x-[5px] gap-y-[10px] pb-[10px]">
+        <div
+          class="statistics-fast-stat-grid flex flex-wrap items-start justify-center gap-x-[5px] gap-y-[10px] pb-[10px]"
+        >
           <div
             class="fast-stat-card flex w-full max-w-full flex-col items-center rounded-lg border border-primary/30 bg-surface/30 p-2"
           >

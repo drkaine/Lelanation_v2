@@ -175,7 +175,9 @@ function bansByOutcomeEntries(
       </div>
       <div v-else-if="p.overviewData" class="space-y-[10px]">
         <!-- Fast Stats : même gabarit que TeamSideFastStatTable -->
-        <div class="flex flex-wrap items-start justify-center gap-x-[5px] gap-y-[10px] pb-[10px]">
+        <div
+          class="statistics-fast-stat-grid flex flex-wrap items-start justify-center gap-x-[5px] gap-y-[10px] pb-[10px]"
+        >
           <!-- Champions les plus choisis -->
           <div class="team-side-fast-stat fast-stat-card rounded-lg border border-primary/30 p-2">
             <h3

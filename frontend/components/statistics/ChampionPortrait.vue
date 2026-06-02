@@ -61,7 +61,10 @@ function onError(): void {
     <span
       v-else
       class="flex h-full w-full items-center justify-center text-[10px] font-bold uppercase leading-none text-white"
-      :style="{ backgroundColor: fallbackBg, fontSize: size >= 40 ? '12px' : '10px' }"
+      :style="{
+        backgroundColor: fallbackBg,
+        fontSize: size >= 56 ? '14px' : size >= 40 ? '12px' : '10px',
+      }"
     >
       {{ initials }}
     </span>

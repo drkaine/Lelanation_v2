@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { computed, inject, ref, unref, watch } from 'vue'
+import { useMobileViewport } from '~/composables/useMobileViewport'
 
 const p = inject('statisticsPageCtx') as any
+const { isMobileViewport } = useMobileViewport()
+const balanceCardPortraitSize = computed(() => (isMobileViewport.value ? 64 : 48))
+const expandedBalanceKeys = ref<Set<string>>(new Set())
 
 type LevelRow = {
   status: 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'
@@ -24,6 +28,27 @@ type BalanceRow = {
 }
 
 type StatusFilter = 'ALL' | 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'
+
+const balanceLevelColumns: Array<{
+  key: 'average' | 'skilled' | 'elite'
+  label: string
+}> = [
+  { key: 'average', label: 'Average' },
+  { key: 'skilled', label: 'Skilled' },
+  { key: 'elite', label: 'Elite' },
+]
+
+function balanceRowKey(row: BalanceRow): string {
+  return `${row.championId}-${row.role}`
+}
+
+function toggleBalanceCardExpanded(row: BalanceRow): void {
+  const key = balanceRowKey(row)
+  const next = new Set(expandedBalanceKeys.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  expandedBalanceKeys.value = next
+}
 
 const rows = computed<BalanceRow[]>(() => p.balanceFrameworkData?.rows ?? [])
 const searchQuery = computed(() =>
@@ -256,128 +281,246 @@ function globalTooltip(row: BalanceRow): string {
       {{ p.t('statisticsPage.overviewDetailTimeout') }}
     </div>
     <template v-else>
-      <div
-        v-if="paginatedRows.length"
-        class="statistics-overview-surface w-full overflow-x-auto rounded-lg border border-primary/30"
-      >
-        <table class="w-full min-w-[900px] text-left text-sm">
-          <thead class="border-b border-primary/30 bg-black/25">
-            <tr>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.balanceTooltipChampion')"
-              >
-                {{ p.t('statisticsPage.tierListColChampion') }}
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.balanceTooltipRole')"
-              >
-                {{ p.t('statisticsPage.tierListRole') }}
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.balanceTooltipAverage')"
-              >
-                Average
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.balanceTooltipSkilled')"
-              >
-                Skilled
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.balanceTooltipElite')"
-              >
-                Elite
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.balanceTooltipGlobal')"
-              >
-                {{ p.t('statisticsPage.balanceGlobalStatus') }}
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.balanceTooltipNeed')"
-              >
-                {{ p.t('statisticsPage.balanceNeedColumn') }}
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.balanceTooltipGlobalDelta')"
-              >
-                {{ p.t('statisticsPage.balanceAbbrevDelta') }}
-              </th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-primary/20">
-            <tr
-              v-for="row in paginatedRows"
-              :key="`${row.championId}-${row.role}`"
-              class="odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
+      <div v-if="paginatedRows.length" class="statistics-balance-tab space-y-3">
+        <div class="statistics-balance-mobile-list space-y-2 md:hidden">
+          <article
+            v-for="row in paginatedRows"
+            :key="'balance-mobile-' + balanceRowKey(row)"
+            class="statistics-balance-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
+          >
+            <button
+              type="button"
+              class="statistics-balance-mobile-card-header flex w-full items-start gap-3.5 p-3.5 text-left"
+              @click="toggleBalanceCardExpanded(row)"
             >
-              <td class="px-3 py-2">
-                <div class="flex items-center gap-2">
-                  <img
-                    v-if="p.gameVersion && p.championByKey(row.championId)"
-                    :src="
-                      p.getChampionImageUrl(
-                        p.gameVersion,
-                        p.championByKey(row.championId)!.image.full
-                      )
-                    "
-                    :alt="p.championName(row.championId)"
-                    class="h-8 w-8 rounded border border-black/30 object-cover"
-                    width="32"
-                    height="32"
+              <NuxtLink
+                v-if="p.gameVersion && p.championByKey(row.championId)"
+                :to="
+                  p.localePath(`/statistics/champion/${encodeURIComponent(String(row.championId))}`)
+                "
+                class="shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                @click.stop
+              >
+                <StatisticsChampionPortrait
+                  :src="
+                    p.getChampionImageUrl(
+                      p.gameVersion,
+                      p.championByKey(row.championId)!.image.full
+                    )
+                  "
+                  :alt="p.championName(row.championId) || ''"
+                  :champion-id="row.championId"
+                  :champion-name="p.championName(row.championId) || ''"
+                  :size="balanceCardPortraitSize"
+                />
+              </NuxtLink>
+              <div class="min-w-0 flex-1">
+                <div class="truncate text-base font-semibold text-accent">
+                  <StatisticsChampionNameHighlight
+                    :name="String(p.championName(row.championId) || row.championId)"
+                    :query="p.championSearchQuery"
                   />
-                  <span class="font-medium text-accent">{{ p.championName(row.championId) }}</span>
                 </div>
-              </td>
-              <td class="px-3 py-2 text-text/90">{{ row.role }}</td>
-              <td
-                class="px-3 py-2 font-medium"
-                :class="statusClass(row.average.status)"
-                :title="levelTooltip(row, 'average')"
+                <div class="text-sm text-text/65">{{ row.role }}</div>
+                <div class="mt-1 text-xs text-text/55">
+                  {{ frameworkNeedLabel(row.globalStatus) }}
+                </div>
+              </div>
+              <div class="shrink-0 text-right">
+                <div class="text-[10px] uppercase tracking-wide text-text/55">
+                  {{ p.t('statisticsPage.balanceGlobalStatus') }}
+                </div>
+                <div class="text-lg font-bold leading-tight" :class="statusClass(row.globalStatus)">
+                  {{ statusLabel(row.globalStatus) }}
+                </div>
+                <div
+                  v-if="row.globalDelta"
+                  class="mt-0.5 max-w-[9rem] text-[10px] leading-snug text-text/70"
+                >
+                  {{ formatDeltaLabel(row.globalDelta) }}
+                </div>
+              </div>
+            </button>
+
+            <div class="statistics-balance-mobile-levels border-t border-primary/15 px-3 py-2.5">
+              <div class="grid grid-cols-3 gap-2">
+                <div
+                  v-for="level in balanceLevelColumns"
+                  :key="'balance-mobile-lvl-' + balanceRowKey(row) + '-' + level.key"
+                  class="flex min-w-0 flex-col items-center gap-0.5 text-center"
+                >
+                  <span class="text-[10px] font-semibold uppercase tracking-wide text-text/55">
+                    {{ level.label }}
+                  </span>
+                  <span
+                    class="text-xs font-semibold leading-tight"
+                    :class="statusClass(row[level.key].status)"
+                    :title="levelTooltip(row, level.key)"
+                  >
+                    {{ statusLabel(row[level.key].status) }}
+                  </span>
+                  <span
+                    v-if="row[level.key].delta"
+                    class="max-w-full truncate text-[10px] leading-snug text-text/60"
+                  >
+                    {{ formatDeltaLabel(row[level.key].delta) }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div
+              v-if="expandedBalanceKeys.has(balanceRowKey(row))"
+              class="statistics-balance-mobile-details space-y-2 border-t border-primary/20 bg-black/20 px-3 py-2.5 text-xs text-text/85"
+            >
+              <div
+                v-for="level in balanceLevelColumns"
+                :key="'balance-mobile-detail-' + balanceRowKey(row) + '-' + level.key"
+                class="rounded-md bg-black/15 px-2 py-1.5"
               >
-                {{ statusLabel(row.average.status) }}
-              </td>
-              <td
-                class="px-3 py-2 font-medium"
-                :class="statusClass(row.skilled.status)"
-                :title="levelTooltip(row, 'skilled')"
+                <div class="font-semibold text-text">{{ level.label }}</div>
+                <template v-if="row[level.key].games > 0">
+                  <div class="mt-1 tabular-nums">
+                    WR {{ fmt(row[level.key].winrate) }}% · BR {{ fmt3(row[level.key].banrate) }}% ·
+                    PR {{ fmt(row[level.key].presence) }}%
+                  </div>
+                  <div class="mt-0.5 text-text/70">{{ levelTooltip(row, level.key) }}</div>
+                </template>
+                <div v-else class="mt-1 text-text/55">
+                  {{ p.t('statisticsPage.balanceTooltipNoGames') }}
+                </div>
+              </div>
+              <div class="text-text/70" :title="globalTooltip(row)">
+                {{ globalTooltip(row) }}
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <div
+          class="statistics-overview-surface hidden w-full overflow-x-auto rounded-lg border border-primary/30 md:block"
+        >
+          <table class="w-full min-w-[900px] text-left text-sm">
+            <thead class="border-b border-primary/30 bg-black/25">
+              <tr>
+                <th
+                  class="px-3 py-2 font-semibold text-text"
+                  :title="p.t('statisticsPage.balanceTooltipChampion')"
+                >
+                  {{ p.t('statisticsPage.tierListColChampion') }}
+                </th>
+                <th
+                  class="px-3 py-2 font-semibold text-text"
+                  :title="p.t('statisticsPage.balanceTooltipRole')"
+                >
+                  {{ p.t('statisticsPage.tierListRole') }}
+                </th>
+                <th
+                  class="px-3 py-2 font-semibold text-text"
+                  :title="p.t('statisticsPage.balanceTooltipAverage')"
+                >
+                  Average
+                </th>
+                <th
+                  class="px-3 py-2 font-semibold text-text"
+                  :title="p.t('statisticsPage.balanceTooltipSkilled')"
+                >
+                  Skilled
+                </th>
+                <th
+                  class="px-3 py-2 font-semibold text-text"
+                  :title="p.t('statisticsPage.balanceTooltipElite')"
+                >
+                  Elite
+                </th>
+                <th
+                  class="px-3 py-2 font-semibold text-text"
+                  :title="p.t('statisticsPage.balanceTooltipGlobal')"
+                >
+                  {{ p.t('statisticsPage.balanceGlobalStatus') }}
+                </th>
+                <th
+                  class="px-3 py-2 font-semibold text-text"
+                  :title="p.t('statisticsPage.balanceTooltipNeed')"
+                >
+                  {{ p.t('statisticsPage.balanceNeedColumn') }}
+                </th>
+                <th
+                  class="px-3 py-2 font-semibold text-text"
+                  :title="p.t('statisticsPage.balanceTooltipGlobalDelta')"
+                >
+                  {{ p.t('statisticsPage.balanceAbbrevDelta') }}
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-primary/20">
+              <tr
+                v-for="row in paginatedRows"
+                :key="`${row.championId}-${row.role}`"
+                class="odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
               >
-                {{ statusLabel(row.skilled.status) }}
-              </td>
-              <td
-                class="px-3 py-2 font-medium"
-                :class="statusClass(row.elite.status)"
-                :title="levelTooltip(row, 'elite')"
-              >
-                {{ statusLabel(row.elite.status) }}
-              </td>
-              <td
-                class="px-3 py-2 font-semibold"
-                :class="statusClass(row.globalStatus)"
-                :title="globalTooltip(row)"
-              >
-                {{ statusLabel(row.globalStatus) }}
-              </td>
-              <td class="px-3 py-2 text-text/90">
-                {{ frameworkNeedLabel(row.globalStatus) }}
-              </td>
-              <td class="px-3 py-2 text-text/80">
-                {{ formatDeltaLabel(row.globalDelta) }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
+                <td class="px-3 py-2">
+                  <div class="flex items-center gap-2">
+                    <img
+                      v-if="p.gameVersion && p.championByKey(row.championId)"
+                      :src="
+                        p.getChampionImageUrl(
+                          p.gameVersion,
+                          p.championByKey(row.championId)!.image.full
+                        )
+                      "
+                      :alt="p.championName(row.championId)"
+                      class="h-8 w-8 rounded border border-black/30 object-cover"
+                      width="32"
+                      height="32"
+                    />
+                    <span class="font-medium text-accent">{{
+                      p.championName(row.championId)
+                    }}</span>
+                  </div>
+                </td>
+                <td class="px-3 py-2 text-text/90">{{ row.role }}</td>
+                <td
+                  class="px-3 py-2 font-medium"
+                  :class="statusClass(row.average.status)"
+                  :title="levelTooltip(row, 'average')"
+                >
+                  {{ statusLabel(row.average.status) }}
+                </td>
+                <td
+                  class="px-3 py-2 font-medium"
+                  :class="statusClass(row.skilled.status)"
+                  :title="levelTooltip(row, 'skilled')"
+                >
+                  {{ statusLabel(row.skilled.status) }}
+                </td>
+                <td
+                  class="px-3 py-2 font-medium"
+                  :class="statusClass(row.elite.status)"
+                  :title="levelTooltip(row, 'elite')"
+                >
+                  {{ statusLabel(row.elite.status) }}
+                </td>
+                <td
+                  class="px-3 py-2 font-semibold"
+                  :class="statusClass(row.globalStatus)"
+                  :title="globalTooltip(row)"
+                >
+                  {{ statusLabel(row.globalStatus) }}
+                </td>
+                <td class="px-3 py-2 text-text/90">
+                  {{ frameworkNeedLabel(row.globalStatus) }}
+                </td>
+                <td class="px-3 py-2 text-text/80">
+                  {{ formatDeltaLabel(row.globalDelta) }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <div
           v-if="totalRowsCount > 0"
-          class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
+          class="statistics-balance-pagination flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-surface/20 px-3 py-2 text-sm text-text/80 md:rounded-none md:border-t md:bg-transparent md:px-4"
         >
           <span>{{ p.t('statisticsPage.showing') }} {{ totalRowsCount }}</span>
           <div class="flex items-center gap-3">
@@ -429,3 +572,17 @@ function globalTooltip(row: BalanceRow): string {
     </template>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  .statistics-balance-tab {
+    margin-inline: -1rem;
+    width: calc(100% + 2rem);
+    max-width: 100vw;
+  }
+
+  .statistics-balance-mobile-card {
+    width: 100%;
+  }
+}
+</style>

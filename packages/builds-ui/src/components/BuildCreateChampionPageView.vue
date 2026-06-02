@@ -94,6 +94,10 @@ const emit = defineEmits<{
 }
 
 @media (max-width: 768px) {
+  .build-layout--streamer {
+    --build-card-width: calc(100vw - 1.5rem);
+  }
+
   .build-card-wrapper {
     width: 100%;
     max-width: 100%;

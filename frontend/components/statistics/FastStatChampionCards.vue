@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useMobileViewport } from '~/composables/useMobileViewport'
+
 /**
  * Liste Top 5 en cards (vue mobile « Cards (Top 5) »).
  */
@@ -17,6 +20,9 @@ defineProps<{
   getChampionImageUrl: (version: string, imageFull: string) => string
   searchQuery?: string
 }>()
+
+const { isMobileViewport } = useMobileViewport()
+const portraitSize = computed(() => (isMobileViewport.value ? 56 : 40))
 </script>
 
 <template>
@@ -24,32 +30,36 @@ defineProps<{
     <li
       v-for="(row, idx) in rows"
       :key="row.championId"
-      class="flex items-center gap-2 rounded-md border border-primary/20 bg-black/15 px-2 py-1.5"
+      class="fast-stat-champion-card-item flex items-center gap-2 rounded-md border border-primary/20 bg-black/15 px-2 py-1.5"
     >
-      <span class="w-4 shrink-0 text-xs text-text/60">{{ (rankOffset ?? 0) + idx + 1 }}.</span>
+      <span class="fast-stat-champion-card-rank w-4 shrink-0 text-xs text-text/60"
+        >{{ (rankOffset ?? 0) + idx + 1 }}.</span
+      >
       <StatisticsChampionPortrait
         v-if="gameVersion && championByKey(row.championId)"
         :src="getChampionImageUrl(gameVersion, championByKey(row.championId)!.image.full)"
         :alt="championName(row.championId) || ''"
         :champion-id="row.championId"
         :champion-name="championName(row.championId) || ''"
-        :size="40"
+        :size="portraitSize"
         rounded="sm"
       />
       <div class="min-w-0 flex-1">
-        <div class="truncate text-sm font-medium text-text">
+        <div class="fast-stat-champion-card-name truncate text-sm font-medium text-text">
           <StatisticsChampionNameHighlight
             :name="championName(row.championId) || String(row.championId)"
             :query="searchQuery"
           />
         </div>
-        <div class="text-[11px] text-text/55">{{ row.label }}</div>
+        <div class="fast-stat-champion-card-label text-[11px] text-text/55">{{ row.label }}</div>
       </div>
       <div class="shrink-0 text-right">
-        <div class="text-sm font-semibold tabular-nums text-text">{{ row.value }}</div>
+        <div class="fast-stat-champion-card-value text-sm font-semibold tabular-nums text-text">
+          {{ row.value }}
+        </div>
         <div
           v-if="row.delta != null && row.delta !== ''"
-          class="text-[10px] tabular-nums"
+          class="fast-stat-champion-card-delta text-[10px] tabular-nums"
           :class="row.deltaClass"
         >
           {{ row.delta }}
