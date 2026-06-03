@@ -18,6 +18,7 @@ function participant(puuid: string, overrides: Partial<ParsedParticipantDto> = {
     patch: "15.10",
     gameDate: "2025-05-19",
     gameEndTimestamp: 0,
+    gameDurationSec: 20 * 60,
     region: "euw1",
     rankTier: "GOLD",
     needsRankFetch: false,

@@ -22,6 +22,9 @@ export interface SummonerSpellDuoRow {
   games: number
   wins: number
   winrate: number
+  pickrate: number
+  spell1Casts: number
+  spell2Casts: number
 }
 
 function norm(value: string | string[] | null | undefined): string | null {
@@ -129,13 +132,22 @@ export async function getSummonerSpellsDuosByChampion(
       'sp',
     )
     const pairRows = await queryRawUnsafe<
-      Array<{ spellId1: number; spellId2: number; games: bigint; wins: bigint }>
+      Array<{
+        spellId1: number
+        spellId2: number
+        games: bigint
+        wins: bigint
+        spell1Casts: bigint
+        spell2Casts: bigint
+      }>
     >(`
       SELECT
         sp.spell_d AS "spellId1",
         sp.spell_f AS "spellId2",
         SUM(sp.count_game)::bigint AS games,
-        SUM(sp.count_win)::bigint AS wins
+        SUM(sp.count_win)::bigint AS wins,
+        SUM(sp.spell_d_casts)::bigint AS "spell1Casts",
+        SUM(sp.spell_f_casts)::bigint AS "spell2Casts"
       FROM ${pairFrom}
       WHERE ${whereSql}
       GROUP BY sp.spell_d, sp.spell_f
@@ -151,7 +163,10 @@ export async function getSummonerSpellsDuosByChampion(
         spellId2: Number(r.spellId2),
         games,
         wins,
+        pickrate: totalGames > 0 ? Math.round((games / totalGames) * 10000) / 100 : 0,
         winrate: games > 0 ? Math.round((wins / games) * 10000) / 100 : 0,
+        spell1Casts: Number(r.spell1Casts ?? 0),
+        spell2Casts: Number(r.spell2Casts ?? 0),
       }
     })
     return { totalGames, duos }

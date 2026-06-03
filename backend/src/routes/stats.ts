@@ -5,7 +5,11 @@
 import { Router, Request, Response } from 'express'
 import { RiotStatsAggregator } from '../services/RiotStatsAggregator.js'
 import { getBuildsByChampion } from '../services/StatsBuildsService.js'
-import { getRunesByChampion, getRuneStatsByChampion } from '../services/StatsRunesService.js'
+import {
+  getRunesByChampion,
+  getRuneStatsByChampion,
+  getShardStatsByChampion,
+} from '../services/StatsRunesService.js'
 import { getMatchupsByChampion } from '../services/StatsMatchupsService.js'
 import {
   getChampionMatchupsExtendedTable,
@@ -941,6 +945,30 @@ router.get('/champions/:championId/runes-per-rune', async (req: Request, res: Re
   return res.json(data)
 })
 
+/** GET /api/stats/champions/:championId/shards - per-shard stats for this champion. */
+router.get('/champions/:championId/shards', async (req: Request, res: Response) => {
+  const rawR = req.params.championId
+  const championId = parseInt(Array.isArray(rawR) ? rawR[0] : rawR, 10)
+  if (Number.isNaN(championId)) {
+    return res.status(400).json({ error: 'Invalid champion ID' })
+  }
+  const version = queryString(req.query.version) ?? queryString(req.query.patch)
+  const rankTier = rankTierParam(req.query.rankTier)
+  const role = queryString(req.query.role)
+  const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 10
+  const data = await getShardStatsByChampion({
+    championId,
+    version: version ?? null,
+    rankTier: rankTier ?? null,
+    role: role ?? null,
+    minGames,
+  })
+  if (!data) {
+    return res.status(200).json({ totalGames: 0, shards: [], message: 'No stats yet.' })
+  }
+  return res.json(data)
+})
+
 /** GET /api/stats/champions/:championId/matchups - winrate vs each opponent. Query: ?version=16.1 &rankTier=GOLD &minGames=10 */
 router.get('/champions/:championId/matchups', async (req: Request, res: Response) => {
   const rawR = req.params.championId
@@ -1249,9 +1277,11 @@ router.get('/champions/:championId/objectives', async (req: Request, res: Respon
       games: 0,
       wins: 0,
       winrate: 0,
+      durationRows: [],
       drakeTypeDistribution: [],
       soulDistribution: [],
       rows: [],
+      outcomeRows: [],
     })
   }
   return res.json(data)

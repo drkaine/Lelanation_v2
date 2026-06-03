@@ -377,6 +377,7 @@ export function parseMatch(
     Number(match.info.gameStartTimestamp ?? 0) + Number(match.info.gameDuration ?? 0) * 1000;
   const gameStartTimestamp =
     Number(match.info.gameStartTimestamp ?? 0) || Number(match.info.gameCreation ?? 0);
+  const gameDurationSec = Math.max(0, Math.trunc(Number(match.info.gameDuration ?? 0)));
   // Rank gate + agrégats : jour UTC de début de partie (pas gameEnd qui peut basculer J+1).
   const gameDate = new Date(
     gameStartTimestamp > 0 ? gameStartTimestamp : gameEndTimestamp,
@@ -463,6 +464,7 @@ export function parseMatch(
       patch: resolvedPatch,
       gameDate,
       gameEndTimestamp,
+      gameDurationSec,
       region,
       rankTier: String((participant as { tier?: string; rankTier?: string }).tier ?? (participant as { rankTier?: string }).rankTier ?? "UNRANKED"),
       needsRankFetch: false,

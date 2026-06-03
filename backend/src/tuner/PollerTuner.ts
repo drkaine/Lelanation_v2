@@ -38,6 +38,11 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+function mean(values: number[]): number {
+  if (values.length === 0) return 0;
+  return values.reduce((sum, v) => sum + v, 0) / values.length;
+}
+
 function backpressureThreshold(): number {
   return Number.parseInt(process.env.BACKPRESSURE_THRESHOLD ?? '500', 10);
 }
@@ -78,6 +83,13 @@ export class PollerTuner {
   private consecutiveMinParams = 0;
   private effectiveSafetyMargin = riotConfig.safetyMargin;
   private sessionsWithout429 = 0;
+  private utilizationCorrection = 1.0;
+  private sessionsSinceCorrection = 0;
+  private utilizationSamples: number[] = [];
+  private readonly correctionStep = 0.1;
+  private readonly correctionMax = 2.0;
+  private readonly correctionMin = 0.5;
+  private readonly correctionSessions = 3;
 
   private constructor() {
     this.reqPerPlayerEma = new ExponentialMovingAverage(EMA_ALPHA, REQ_PER_PLAYER_SEED);
@@ -184,10 +196,10 @@ export class PollerTuner {
       );
     }
 
-    const requestBudget = targetRps * TARGET_SESSION_DURATION;
     const reqPerPlayer = Math.max(1, this.reqPerPlayerEma.value);
 
-    let rawBatchSize = Math.floor(requestBudget / reqPerPlayer);
+    // Fill the 120s token window in one discovery batch; gateway spreads at targetRps.
+    let rawBatchSize = Math.ceil(safeTokens120s / reqPerPlayer);
     rawBatchSize = clamp(rawBatchSize, MIN_BATCH_SIZE, MAX_BATCH_SIZE);
 
     const availableCap = ctx.availablePlayers > 0 ? ctx.availablePlayers : MAX_BATCH_SIZE;
@@ -203,6 +215,8 @@ export class PollerTuner {
     }
     rawBatchSize = Math.min(rawBatchSize, availableCap);
 
+    const correctedBatchSize = Math.round(rawBatchSize * this.utilizationCorrection);
+
     const warmupActive = this.sessionCount < WARMUP_SESSIONS;
     if (warmupActive) {
       tunerLogger.debug(
@@ -217,11 +231,17 @@ export class PollerTuner {
     const warmupMultiplier =
       riotConfig.apiKeyType === 'personal' ? PERSONAL_WARMUP_MULTIPLIER : WARMUP_MULTIPLIER;
     const effectiveMultiplier = warmupActive ? warmupMultiplier : 1;
-    const batchSize = Math.max(MIN_BATCH_SIZE, Math.floor(rawBatchSize * effectiveMultiplier));
+    const batchSize = Math.max(
+      MIN_BATCH_SIZE,
+      Math.min(
+        Math.floor(correctedBatchSize * effectiveMultiplier),
+        availableCap,
+      ),
+    );
 
-    const rpsPerPlayer = reqPerPlayer / TARGET_SESSION_DURATION;
+    const rpsPerPlayer = Math.max(0.01, reqPerPlayer / TARGET_SESSION_DURATION);
     const maxConcurrentPlayers = clamp(
-      Math.floor(Math.ceil(targetRps / Math.max(0.01, rpsPerPlayer)) * effectiveMultiplier),
+      Math.ceil(targetRps / rpsPerPlayer) * effectiveMultiplier,
       MIN_CONCURRENT,
       Math.min(MAX_CONCURRENT_PLAYERS, batchSize),
     );
@@ -313,6 +333,8 @@ export class PollerTuner {
         event: 'params_computed',
         warmupActive,
         effectiveMultiplier,
+        rawBatchSize,
+        utilizationCorrection: this.utilizationCorrection,
         batchSize: params.batchSize,
         maxConcurrentPlayers: params.maxConcurrentPlayers,
         maxConcurrentMatchFetches: params.maxConcurrentMatchFetches,
@@ -351,6 +373,56 @@ export class PollerTuner {
       },
       'safety margin increased after 429',
     );
+  }
+
+  recordUtilization(avgTokenPct120s: number): void {
+    this.utilizationSamples.push(avgTokenPct120s);
+    this.sessionsSinceCorrection += 1;
+
+    if (this.sessionsSinceCorrection < this.correctionSessions) {
+      return;
+    }
+
+    const avgUtilization = mean(this.utilizationSamples);
+    const targetUtilization =
+      riotConfig.apiKeyType === 'personal'
+        ? riotConfig.personalTargetUtilizationPct * 100
+        : (1 - riotConfig.safetyMargin) * 100;
+
+    if (avgUtilization < targetUtilization * 0.8) {
+      this.utilizationCorrection = Math.min(
+        this.correctionMax,
+        this.utilizationCorrection + this.correctionStep,
+      );
+      tunerLogger.info(
+        {
+          component: 'poller-tuner',
+          event: 'utilization_correction_up',
+          avgUtilization,
+          targetUtilization,
+          utilizationCorrection: this.utilizationCorrection,
+        },
+        'utilization below target — scaling batch size up',
+      );
+    } else if (avgUtilization > targetUtilization * 1.02) {
+      this.utilizationCorrection = Math.max(
+        this.correctionMin,
+        this.utilizationCorrection - this.correctionStep,
+      );
+      tunerLogger.warn(
+        {
+          component: 'poller-tuner',
+          event: 'utilization_correction_down',
+          avgUtilization,
+          targetUtilization,
+          utilizationCorrection: this.utilizationCorrection,
+        },
+        'utilization above target — scaling batch size down',
+      );
+    }
+
+    this.utilizationSamples = [];
+    this.sessionsSinceCorrection = 0;
   }
 
   recordSession(feedback: SessionFeedback): void {

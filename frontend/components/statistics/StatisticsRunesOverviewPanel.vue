@@ -36,6 +36,8 @@ const props = defineProps<{
   baseline: DetailPayload | null
   baselinePending: boolean
   comparisonVersion: string | null
+  /** Fiche champion : une seule carte, runes + fragments puis séparateur + liste des sets. */
+  unifiedLayout?: boolean
 }>()
 
 const { t } = useI18n()
@@ -212,6 +214,13 @@ const runeSetsHighlights = computed(() => {
     bestWr: [...valid].sort((a, b) => b.winrate - a.winrate).slice(0, 5),
     worstWr: [...valid].sort((a, b) => a.winrate - b.winrate).slice(0, 5),
   }
+})
+
+const allRuneSetsListed = computed(() => {
+  const sets = props.data?.runeSets ?? []
+  const valid = runeSetsValidForHighlights(sets, props.data?.totalParticipants ?? 0)
+  const list = valid.length > 0 ? valid : sets.filter(s => Number(s.games ?? 0) > 0)
+  return [...list].sort((a, b) => b.games - a.games)
 })
 
 function getRuneById(runeId: number): { id: number; name: string; icon: string } | null {
@@ -466,14 +475,7 @@ function runeSetLayout(
 </script>
 
 <template>
-  <div class="stats-runes-panel flex w-full flex-col gap-8">
-    <div class="flex min-w-0 justify-end">
-      <StatisticsTableHelpTooltip
-        :aria-label="t('statisticsPage.tooltipTableRunesAria')"
-        :text="t('statisticsPage.tooltipTableRunes')"
-        :secondary-text="t('statisticsPage.tooltipTableRunesSecondary')"
-      />
-    </div>
+  <div class="stats-runes-panel flex w-full flex-col" :class="unifiedLayout ? 'gap-4' : 'gap-8'">
     <div v-if="!runeTreeReady" class="rounded-lg border border-primary/30 p-4 text-sm text-text/70">
       {{ t('statisticsPage.loading') }}
     </div>
@@ -635,11 +637,188 @@ function runeSetLayout(
             </div>
           </div>
         </div>
+
+        <template v-if="unifiedLayout">
+          <hr class="my-6 border-primary/25" aria-hidden="true" />
+          <h3 class="mb-3 text-sm font-semibold text-text">
+            {{ t('statisticsPage.runeSetsSectionTitle') }}
+          </h3>
+          <div class="rune-set-cards-grid grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div
+              v-for="(row, idx) in allRuneSetsListed.map(s => ({
+                set: s,
+                ly: runeSetLayout(s.runes, s.shards ?? null),
+              }))"
+              :key="'unified-set-' + idx"
+              class="rune-set-card relative mx-auto min-w-0 max-w-full rounded-lg border border-primary/30 bg-black/20 px-4 pb-3 pt-5"
+            >
+              <span
+                class="absolute left-0 top-0 z-10 flex h-5 min-w-5 items-center justify-center rounded-md bg-primary/30 px-1 text-[10px] font-bold tabular-nums text-text/90"
+                aria-hidden="true"
+              >
+                {{ idx + 1 }}
+              </span>
+              <div
+                class="rune-set-build-strip flex w-full min-w-0 flex-col items-center gap-2 sm:items-stretch"
+              >
+                <div
+                  v-if="row.ly.keystone && getRuneById(row.ly.keystone)"
+                  class="flex w-full shrink-0 justify-center"
+                >
+                  <img
+                    :src="getRuneImageUrl(gameVersion, getRuneById(row.ly.keystone)!.icon)"
+                    :alt="getRuneById(row.ly.keystone)!.name"
+                    class="rune-set-keystone-img shrink-0 rounded-full object-contain"
+                    width="64"
+                    height="64"
+                  />
+                </div>
+                <div
+                  v-if="
+                    row.ly.primaryRow.length || row.ly.secondaryPath || row.ly.secondaryRunes.length
+                  "
+                  class="rune-set-trees-grid grid w-full min-w-0 items-start justify-items-center gap-x-4 gap-y-1 sm:justify-items-stretch sm:gap-x-3"
+                  :class="
+                    row.ly.primaryRow.length &&
+                    (row.ly.secondaryPath || row.ly.secondaryRunes.length)
+                      ? 'grid-cols-2'
+                      : 'grid-cols-1'
+                  "
+                >
+                  <div
+                    v-if="row.ly.primaryRow.length"
+                    class="flex min-w-0 flex-col items-center gap-1.5 sm:items-start"
+                  >
+                    <template v-for="rid in row.ly.primaryRow" :key="'up-' + rid">
+                      <img
+                        v-if="getRuneById(rid)"
+                        :src="getRuneImageUrl(gameVersion, getRuneById(rid)!.icon)"
+                        :alt="getRuneById(rid)!.name"
+                        :title="getRuneById(rid)!.name"
+                        class="rune-set-small-rune rounded-full object-contain"
+                        width="28"
+                        height="28"
+                      />
+                    </template>
+                  </div>
+                  <div
+                    v-if="row.ly.secondaryPath || row.ly.secondaryRunes.length"
+                    class="rune-set-secondary-group flex min-w-0 flex-col items-center gap-1.5 sm:items-start"
+                  >
+                    <div
+                      v-if="row.ly.secondaryPath"
+                      class="rune-set-path-icon flex h-9 w-9 shrink-0 items-center justify-center rounded-full sm:h-7 sm:w-7"
+                    >
+                      <span
+                        class="rune-set-path-mask block h-9 w-9 rounded-full sm:h-7 sm:w-7"
+                        :style="{
+                          backgroundColor: getRunePathColor(
+                            row.ly.secondaryPath.icon,
+                            row.ly.secondaryPath.id,
+                            row.ly.secondaryPath.name
+                          ),
+                          WebkitMaskImage: `url(${getRunePathImageUrl(
+                            gameVersion,
+                            row.ly.secondaryPath.icon,
+                            row.ly.secondaryPath.id,
+                            row.ly.secondaryPath.name
+                          )})`,
+                          maskImage: `url(${getRunePathImageUrl(
+                            gameVersion,
+                            row.ly.secondaryPath.icon,
+                            row.ly.secondaryPath.id,
+                            row.ly.secondaryPath.name
+                          )})`,
+                          WebkitMaskSize: 'contain',
+                          maskSize: 'contain',
+                          WebkitMaskRepeat: 'no-repeat',
+                          maskRepeat: 'no-repeat',
+                          WebkitMaskPosition: 'center',
+                          maskPosition: 'center',
+                        }"
+                      />
+                    </div>
+                    <template v-for="rid in row.ly.secondaryRunes" :key="'us-' + rid">
+                      <img
+                        v-if="getRuneById(rid)"
+                        :src="getRuneImageUrl(gameVersion, getRuneById(rid)!.icon)"
+                        :alt="getRuneById(rid)!.name"
+                        :title="getRuneById(rid)!.name"
+                        class="rune-set-small-rune rounded-full object-contain"
+                        width="28"
+                        height="28"
+                      />
+                    </template>
+                  </div>
+                </div>
+                <div
+                  v-if="row.ly.shards.length"
+                  class="rune-set-shards-row -mx-4 mt-2 flex w-[calc(100%+2rem)] max-w-none items-center justify-center gap-4 self-stretch px-3 sm:justify-between sm:gap-2 sm:px-[3px]"
+                >
+                  <img
+                    v-for="sid in row.ly.shards"
+                    :key="'ush-' + sid"
+                    :src="getShardIcon(sid)"
+                    :alt="shardName(sid)"
+                    :title="shardName(sid)"
+                    class="rune-set-shard-img shrink-0 rounded-full bg-black/25 object-contain"
+                    width="32"
+                    height="32"
+                  />
+                </div>
+              </div>
+              <div
+                class="rune-set-stats mt-3 flex w-full flex-wrap items-baseline justify-center gap-x-5 gap-y-2 pt-1 text-center sm:justify-start sm:text-left"
+              >
+                <span
+                  class="rune-set-stat-item inline-flex flex-wrap items-baseline justify-center gap-x-1 sm:justify-start"
+                  ><span class="rune-set-stat-label text-text/55">WR:</span>
+                  <span
+                    class="rune-set-stat-value font-semibold tabular-nums"
+                    :class="wrClass(row.set.winrate)"
+                    >{{ Number(row.set.winrate).toFixed(2) }}%</span
+                  ></span
+                >
+                <span
+                  class="rune-set-stat-item inline-flex flex-wrap items-baseline justify-center gap-x-1 sm:justify-start"
+                  ><span class="rune-set-stat-label text-text/55">pR:</span>
+                  <span class="rune-set-stat-value font-semibold tabular-nums"
+                    >{{ Number(row.set.pickrate).toFixed(2) }}%</span
+                  ></span
+                >
+                <template v-if="comparisonVersion && !baselinePending">
+                  <span
+                    class="rune-set-stat-delta tabular-nums"
+                    :class="
+                      deltaClass(row.set.pickrate, baselineStatsForRuneSet(row.set)?.pickrate)
+                    "
+                  >
+                    ΔP
+                    {{ formatDelta(row.set.pickrate, baselineStatsForRuneSet(row.set)?.pickrate) }}
+                  </span>
+                  <span
+                    class="rune-set-stat-delta tabular-nums"
+                    :class="deltaClass(row.set.winrate, baselineStatsForRuneSet(row.set)?.winrate)"
+                  >
+                    ΔWR
+                    {{ formatDelta(row.set.winrate, baselineStatsForRuneSet(row.set)?.winrate) }}
+                  </span>
+                </template>
+              </div>
+            </div>
+            <p v-if="!allRuneSetsListed.length" class="text-xs text-text/50">
+              {{ t('statisticsPage.overviewNoData') }}
+            </p>
+          </div>
+        </template>
       </div>
     </div>
 
-    <!-- Sets : plus / moins pick, meilleur / pire WR -->
-    <div v-show="runeTreeReady" class="grid gap-4 lg:grid-cols-2 2xl:grid-cols-4 2xl:gap-3">
+    <!-- Sets : plus / moins pick, meilleur / pire WR (stats globales) -->
+    <div
+      v-show="runeTreeReady && !unifiedLayout"
+      class="grid gap-4 lg:grid-cols-2 2xl:grid-cols-4 2xl:gap-3"
+    >
       <div
         v-for="block in [
           {

@@ -101,18 +101,18 @@ describe('PollerTuner', () => {
     expect(params.batchSize).toBeLessThanOrEqual(200);
   });
 
-  test('T8 warmup halves batchSize vs post-warmup', () => {
-    const tuner = PollerTuner.getInstance();
-    const warmed = tuner.compute(ctx(buildGatewayStatus(29_999, 499), 200));
-    expect(warmed.warmupActive).toBe(true);
+  test('T8 warmup reduces batchSize vs post-warmup', () => {
+    withApiKeyType('production', () => {
+      PollerTuner.resetInstance();
+      const tuner = PollerTuner.getInstance();
+      const warmed = tuner.compute(ctx(buildGatewayStatus(100, 20), 200));
+      expect(warmed.warmupActive).toBe(true);
 
-    for (let i = 0; i < 5; i += 1) {
-      tuner.recordSession(feedback({ playersCompleted: 1, totalGatewayRequests: 20 }));
-    }
-
-    const afterWarmup = tuner.compute(ctx(buildGatewayStatus(29_999, 499), 200));
-    expect(afterWarmup.warmupActive).toBe(false);
-    expect(afterWarmup.batchSize).toBeGreaterThanOrEqual(warmed.batchSize * 2 - 1);
+      seedEmaReqPerPlayer(tuner, 2.55);
+      const afterWarmup = tuner.compute(ctx(buildGatewayStatus(100, 20), 200));
+      expect(afterWarmup.warmupActive).toBe(false);
+      expect(afterWarmup.batchSize).toBeGreaterThan(warmed.batchSize);
+    });
   });
 
   test('T10 maxConcurrentPlayers never exceeds MAX_CONCURRENT_PLAYERS', () => {
@@ -506,5 +506,108 @@ describe('PollerTuner', () => {
       const ratchetedRps = tuner.compute(ctx(buildGatewayStatus(100, 20), 20)).targetRps;
       expect(ratchetedRps).toBeLessThan(floorRps);
     });
+  });
+
+  function seedEmaReqPerPlayer(tuner: PollerTuner, value: number): void {
+    for (let i = 0; i < 12; i += 1) {
+      tuner.recordSession(
+        feedback({ totalGatewayRequests: value, playersCompleted: 1, matchesFetched: 1 }),
+      );
+    }
+  }
+
+  test('batchSize targets 120s window via ceil(safeTokens / ema)', () => {
+    withApiKeyType('production', () => {
+      PollerTuner.resetInstance();
+      const tuner = PollerTuner.getInstance();
+      seedEmaReqPerPlayer(tuner, 2.55);
+      const ema = tuner.getSnapshot().ema.reqPerPlayer;
+      const params = tuner.compute(ctx(buildGatewayStatus(100, 20), 200));
+      const expected = Math.ceil(Math.floor(100 * 0.95) / ema);
+      expect(params.batchSize).toBe(expected);
+    });
+  });
+
+  test('batchSize capped to MAX_BATCH_SIZE on production limits', () => {
+    withApiKeyType('production', () => {
+      const tuner = PollerTuner.getInstance();
+      seedEmaReqPerPlayer(tuner, 2.55);
+      const params = tuner.compute(ctx(buildGatewayStatus(29_999, 499), 50_000));
+      expect(params.batchSize).toBe(200);
+    });
+  });
+
+  test('batchSize capped to availablePlayers', () => {
+    const tuner = PollerTuner.getInstance();
+    seedEmaReqPerPlayer(tuner, 2.55);
+    const params = tuner.compute(ctx(buildGatewayStatus(100, 20), 15));
+    expect(params.batchSize).toBe(15);
+  });
+
+  test('utilization correction scales batch up after low utilization samples', () => {
+    withApiKeyType('production', () => {
+      PollerTuner.resetInstance();
+      const tuner = PollerTuner.getInstance();
+      seedEmaReqPerPlayer(tuner, 2.55);
+      const baseline = tuner.compute(ctx(buildGatewayStatus(100, 20), 200)).batchSize;
+      tuner.recordUtilization(10);
+      tuner.recordUtilization(10);
+      tuner.recordUtilization(10);
+      const corrected = tuner.compute(ctx(buildGatewayStatus(100, 20), 200)).batchSize;
+      expect(corrected).toBeGreaterThan(baseline);
+    });
+  });
+
+  test('utilization correction scales batch down after high utilization samples', () => {
+    withApiKeyType('production', () => {
+      PollerTuner.resetInstance();
+      const tuner = PollerTuner.getInstance();
+      seedEmaReqPerPlayer(tuner, 2.55);
+      const baseline = tuner.compute(ctx(buildGatewayStatus(100, 20), 200)).batchSize;
+      tuner.recordUtilization(99);
+      tuner.recordUtilization(99);
+      tuner.recordUtilization(99);
+      const corrected = tuner.compute(ctx(buildGatewayStatus(100, 20), 200)).batchSize;
+      expect(corrected).toBeLessThan(baseline);
+    });
+  });
+
+  test('utilization correction stays within [0.5, 2.0]', () => {
+    withApiKeyType('production', () => {
+      PollerTuner.resetInstance();
+      const tuner = PollerTuner.getInstance();
+      seedEmaReqPerPlayer(tuner, 2.55);
+      const baseline = tuner.compute(ctx(buildGatewayStatus(100, 20), 200)).batchSize;
+      for (let i = 0; i < 30; i += 1) {
+        tuner.recordUtilization(5);
+      }
+      const highBatch = tuner.compute(ctx(buildGatewayStatus(100, 20), 200)).batchSize;
+      expect(highBatch).toBeLessThanOrEqual(baseline * 2);
+      expect(highBatch).toBeGreaterThan(baseline);
+
+      PollerTuner.resetInstance();
+      const tunerLow = PollerTuner.getInstance();
+      seedEmaReqPerPlayer(tunerLow, 2.55);
+      const baselineLow = tunerLow.compute(ctx(buildGatewayStatus(100, 20), 200)).batchSize;
+      for (let i = 0; i < 30; i += 1) {
+        tunerLow.recordUtilization(99);
+      }
+      const lowBatch = tunerLow.compute(ctx(buildGatewayStatus(100, 20), 200)).batchSize;
+      expect(lowBatch).toBeGreaterThanOrEqual(Math.floor(baselineLow * 0.5));
+      expect(lowBatch).toBeLessThan(baselineLow);
+    });
+  });
+
+  test('warmup multiplier still applies to corrected batchSize', () => {
+    PollerTuner.resetInstance();
+    const cold = PollerTuner.getInstance();
+    const warmupBatch = cold.compute(ctx(buildGatewayStatus(100, 20), 200)).batchSize;
+    expect(cold.compute(ctx(buildGatewayStatus(100, 20), 200)).warmupActive).toBe(true);
+
+    PollerTuner.resetInstance();
+    const warm = PollerTuner.getInstance();
+    seedEmaReqPerPlayer(warm, 2.55);
+    const fullBatch = warm.compute(ctx(buildGatewayStatus(100, 20), 200)).batchSize;
+    expect(warmupBatch).toBeLessThan(fullBatch);
   });
 });

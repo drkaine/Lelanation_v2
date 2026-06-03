@@ -402,8 +402,14 @@ async function upsertChampionDuoRoleStats(tx: any, participants: ParsedParticipa
   }
 }
 
+const SPELL_ORDER_MIN_GAME_DURATION_SEC = 15 * 60;
+
 async function upsertSpellOrderStats(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
   for (const participant of participants) {
+    const gameDurationSec = Math.max(0, Math.trunc(Number(participant.gameDurationSec ?? 0)));
+    if (gameDurationSec < SPELL_ORDER_MIN_GAME_DURATION_SEC) continue;
+    const spellOrder = String(participant.spellOrder ?? "").trim();
+    if (!spellOrder) continue;
     const spellTs = Math.max(0, Math.trunc(Number(participant.spellLevelUpTimestampSumMs ?? 0)));
     await tx`
       INSERT INTO champion_spell_stats (
@@ -415,7 +421,7 @@ async function upsertSpellOrderStats(tx: any, participants: ParsedParticipantDto
       VALUES (
         ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
         ${participant.championId},
-        ${participant.spellOrder},
+        ${spellOrder},
         ${participant.spell1Casts}, ${participant.spell2Casts}, ${participant.spell3Casts}, ${participant.spell4Casts},
         1, ${participantWinCount(participant)}, ${spellTs}
       )

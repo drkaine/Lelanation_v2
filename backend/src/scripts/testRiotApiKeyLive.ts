@@ -42,9 +42,9 @@ function sleep(ms: number): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const testApiKey = (process.env['api-key-test'] ?? process.env.API_KEY_TEST ?? '').trim()
+  const testApiKey = (process.env.API_KEY_TEST ?? process.env['api-key-test'] ?? '').trim();
   if (!testApiKey) {
-    throw new Error('Missing env key "api-key-test" (or API_KEY_TEST fallback)')
+    throw new Error('Missing env key API_KEY_TEST');
   }
 
   const platform = (process.env.RIOT_TEST_PLATFORM ?? 'euw1').trim().toLowerCase()

@@ -50,6 +50,8 @@ export interface ParsedParticipantDto {
   patch: string;
   gameDate: string;
   gameEndTimestamp: number;
+  /** Durée de partie Riot (`gameDuration`, secondes). */
+  gameDurationSec: number;
   region: string;
   rankTier: string;
   /** true → rank worker doit appeler League v4 (pas de snapshot du jour en DB). */

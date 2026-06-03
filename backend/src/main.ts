@@ -286,6 +286,11 @@ async function discoveryLoop(): Promise<void> {
         participantRanksFromCache: stats.participantRanksFromCache,
       });
 
+      const app120Util = gateway
+        .getStatus()
+        .metrics.tokenUtilization.find((b) => b.bucketId.includes('120000'));
+      tuner.recordUtilization(app120Util?.pct ?? 0);
+
       orchestrationLogger.info(
         {
           sessionId,
