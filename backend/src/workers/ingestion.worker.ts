@@ -917,12 +917,29 @@ async function upsertTierDailySnapshots(tx: any, participants: ParsedParticipant
       VALUES (
         ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
         ${participant.championId}, ${participant.gameDate},
-        1, ${participantWinCount(participant)}, ${participant.bannedChampionId > 0 ? 1 : 0}
+        1, ${participantWinCount(participant)}, 0
       )
       ON CONFLICT (patch, role, rank_tier, region, champion_id, date_of_game)
       DO UPDATE SET
         games = champion_tier_daily_snapshots.games + EXCLUDED.games,
-        wins = champion_tier_daily_snapshots.wins + EXCLUDED.wins,
+        wins = champion_tier_daily_snapshots.wins + EXCLUDED.wins
+    `;
+  }
+  for (const participant of participants) {
+    const bannedId = Number(participant.bannedChampionId ?? 0)
+    if (!Number.isFinite(bannedId) || bannedId <= 0) continue
+    await tx`
+      INSERT INTO champion_tier_daily_snapshots (
+        patch, role, rank_tier, region, champion_id, date_of_game,
+        games, wins, count_ban
+      )
+      VALUES (
+        ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
+        ${bannedId}, ${participant.gameDate},
+        0, 0, 1
+      )
+      ON CONFLICT (patch, role, rank_tier, region, champion_id, date_of_game)
+      DO UPDATE SET
         count_ban = champion_tier_daily_snapshots.count_ban + EXCLUDED.count_ban
     `;
   }

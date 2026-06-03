@@ -1,29 +1,5 @@
 <template>
   <div class="champion-stats flex min-h-screen flex-col bg-background text-text">
-    <!-- Burger (mobile) -->
-    <button
-      type="button"
-      class="fixed left-4 top-4 z-40 flex h-10 w-10 items-center justify-center rounded-lg border border-primary/30 bg-surface/90 text-text shadow lg:hidden"
-      :aria-label="t('statisticsPage.openFilters')"
-      @click="championFiltersOpen = true"
-    >
-      <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M4 6h16M4 12h16M4 18h16"
-        />
-      </svg>
-    </button>
-
-    <div
-      v-show="championFiltersOpen"
-      class="fixed inset-0 z-30 bg-black/50 lg:hidden"
-      aria-hidden="true"
-      @click="closeChampionFilters"
-    />
-
     <div class="w-full flex-shrink-0 px-4 pb-2 pt-4">
       <div class="flex w-full items-end gap-3">
         <NuxtLink
@@ -52,295 +28,384 @@
             </button>
           </div>
         </nav>
+        <button
+          type="button"
+          class="filters-collapse-floating mt-0.5 inline-flex shrink-0 touch-manipulation lg:hidden"
+          :aria-label="
+            filtersOpen ? t('statisticsPage.closeFilters') : t('statisticsPage.openFilters')
+          "
+          :aria-expanded="filtersOpen"
+          @click="toggleFiltersOpen"
+        >
+          <svg
+            class="h-3 w-3 transition-transform duration-200"
+            :class="filtersOpen ? 'rotate-180' : ''"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M15 19l-7-7 7-7"
+            />
+          </svg>
+        </button>
       </div>
     </div>
 
     <div class="flex min-h-0 w-full min-w-0 flex-1">
       <button
         type="button"
-        class="filters-collapse-floating hidden shrink-0 lg:sticky lg:top-4 lg:z-20 lg:mr-2 lg:inline-flex lg:self-start"
+        class="statistics-filters-desktop-trigger hidden shrink-0 touch-manipulation lg:sticky lg:top-4 lg:z-20 lg:mr-2 lg:flex lg:flex-col lg:items-center lg:gap-1 lg:self-start"
         :aria-label="
-          championFiltersOpen ? t('statisticsPage.closeFilters') : t('statisticsPage.openFilters')
+          filtersOpen ? t('statisticsPage.closeFilters') : t('statisticsPage.openFilters')
         "
-        @click="toggleChampionFiltersOpen"
+        :aria-expanded="filtersOpen"
+        @click="toggleFiltersOpen"
       >
-        <svg
-          class="h-2 w-2 transition-transform duration-200"
-          :class="championFiltersOpen ? 'rotate-180' : ''"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-          aria-hidden="true"
+        <span class="filters-collapse-floating inline-flex" aria-hidden="true">
+          <svg
+            class="h-2 w-2 transition-transform duration-200"
+            :class="filtersOpen ? 'rotate-180' : ''"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M15 19l-7-7 7-7"
+            />
+          </svg>
+        </span>
+        <span
+          class="max-w-[4.5rem] text-center text-[10px] font-semibold leading-tight text-text/85"
         >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M15 19l-7-7 7-7"
-          />
-        </svg>
+          {{ t('statisticsPage.filtersTitle') }}
+        </span>
+        <span
+          v-if="activeChampionFiltersCount > 0"
+          class="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-bold text-background"
+          :aria-label="`${activeChampionFiltersCount} ${t('statisticsPage.filtersTitle')}`"
+        >
+          {{ activeChampionFiltersCount }}
+        </span>
       </button>
+
+      <div
+        v-if="filtersOpen && filtersSheetMode"
+        class="fixed inset-0 z-[10050] bg-black/50 lg:hidden"
+        aria-hidden="true"
+        role="presentation"
+        @click="closeFilters"
+      />
+
       <aside
+        v-if="!filtersSheetMode || filtersOpen"
         :class="[
-          'fixed left-0 top-0 z-40 flex h-full w-64 shrink-0 flex-col rounded-r-lg bg-surface/30 shadow-lg transition-transform duration-200',
-          'lg:static lg:sticky lg:top-4 lg:z-0 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-hidden lg:rounded-lg lg:shadow-none lg:transition-[width,opacity] lg:duration-200',
-          championFiltersOpen
-            ? 'translate-x-0 lg:w-64 lg:opacity-100'
-            : '-translate-x-full lg:w-0 lg:translate-x-0 lg:opacity-0',
+          'statistics-filters-panel flex shrink-0 flex-col overflow-hidden bg-surface',
+          filtersSheetMode
+            ? 'fixed inset-x-0 bottom-0 top-auto z-[10051] max-h-[85vh] w-full rounded-t-2xl shadow-lg lg:hidden'
+            : [
+                'hidden w-0 opacity-0 transition-[width,opacity] duration-200',
+                'lg:sticky lg:top-4 lg:z-0 lg:flex lg:h-auto lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:overflow-x-hidden lg:rounded-lg lg:shadow-none',
+                filtersOpen ? 'lg:w-64 lg:opacity-100' : 'lg:w-0 lg:opacity-0',
+              ],
         ]"
+        :role="filtersSheetMode ? 'dialog' : undefined"
+        :aria-modal="filtersSheetMode ? true : undefined"
+        :aria-label="t('statisticsPage.filtersTitle')"
+        @click.stop
       >
-        <div class="flex items-center justify-between p-2">
-          <h2 class="text-lg font-semibold text-text-accent">
+        <div
+          class="relative z-[1] flex shrink-0 items-center gap-2 border-b border-primary/25 p-2 lg:border-transparent lg:pb-2"
+        >
+          <button
+            type="button"
+            class="mx-auto mb-1 flex h-6 w-14 shrink-0 touch-manipulation items-center justify-center rounded-full lg:hidden"
+            :aria-label="t('statisticsPage.closeFilters')"
+            @click="closeFilters"
+          >
+            <span class="h-1 w-10 rounded-full bg-primary/40" aria-hidden="true" />
+          </button>
+          <h2 class="min-w-0 flex-1 truncate text-lg font-semibold text-text-accent">
             {{ t('statisticsPage.filtersTitle') }}
           </h2>
           <button
             type="button"
-            class="inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-semibold text-blue-300 transition-colors hover:bg-blue-500/15 hover:text-blue-200"
+            class="statistics-filters-reset inline-flex shrink-0 touch-manipulation items-center gap-1.5 rounded px-2 py-1.5 text-xs font-semibold text-blue-300 transition-colors hover:bg-blue-500/15 hover:text-blue-200"
             @click="resetChampionFilters"
           >
             <span class="iconify i-mdi:refresh" aria-hidden="true" />
             Reset
           </button>
-          <button
-            type="button"
-            class="rounded p-1 text-text/70 hover:bg-primary/20 hover:text-text lg:hidden"
-            :aria-label="t('statisticsPage.closeFilters')"
-            @click="closeChampionFilters"
-          >
-            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
         </div>
-        <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-2">
-          <div>
-            <label
-              for="champion-stats-filter-version"
-              class="mb-1 block text-sm font-medium text-text"
-            >
-              {{ t('statisticsPage.overviewFilterByVersion') }}
-            </label>
-            <select
-              id="champion-stats-filter-version"
-              v-model="filterVersion"
-              class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-            >
-              <option value="">{{ t('statisticsPage.overviewVersionAll') }}</option>
-              <option v-for="v in versionsFromOverview" :key="v.version" :value="v.version">
-                {{ v.version }}
-              </option>
-            </select>
-          </div>
-          <div v-if="championProgressionSelectableVersions.length">
-            <label
-              for="champion-stats-progression-version"
-              class="mb-1 block text-sm font-medium text-text"
-            >
-              {{ t('statisticsPage.progressionsReferenceVersion') }}
-            </label>
-            <select
-              id="champion-stats-progression-version"
-              v-model="championProgressionFromVersionModel"
-              class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-            >
-              <option
-                v-for="v in championProgressionSelectableVersions"
-                :key="'champion-delta-from-' + v.version"
-                :value="v.version"
+        <div class="flex min-h-0 flex-1 flex-col overflow-y-auto p-2 lg:flex-none">
+          <div class="statistics-filters-fields flex flex-col gap-3">
+            <div>
+              <label
+                for="champion-stats-filter-version"
+                class="mb-1 block text-sm font-medium text-text"
               >
-                {{ v.version }}
-              </option>
-            </select>
-          </div>
-          <div>
-            <div class="mb-1 text-sm font-medium text-text">
-              {{ t('statisticsPage.overviewMatchesByDivision') }}
+                {{ t('statisticsPage.overviewFilterByVersion') }}
+              </label>
+              <select
+                id="champion-stats-filter-version"
+                v-model="filterVersion"
+                class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+              >
+                <option value="">{{ t('statisticsPage.overviewVersionAll') }}</option>
+                <option v-for="v in versionsFromOverview" :key="v.version" :value="v.version">
+                  {{ v.version }}
+                </option>
+              </select>
             </div>
-            <div class="flex flex-wrap gap-1">
-              <button
-                type="button"
-                class="stats-division-btn rounded p-0.5 transition-colors"
-                :class="
-                  filterRank.length === 0
-                    ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
-                    : 'bg-black/20 hover:bg-white/10'
-                "
-                :title="t('statisticsPage.allRanks')"
-                @click="selectAllChampionDivisions()"
+            <div v-if="championProgressionSelectableVersions.length">
+              <label
+                for="champion-stats-progression-version"
+                class="mb-1 block text-sm font-medium text-text"
               >
-                <img
-                  src="/data/community-dragon/ranked-emblem/Unranked.png"
-                  :alt="t('statisticsPage.allRanks')"
-                  class="h-3 w-3 object-contain"
+                {{ t('statisticsPage.progressionsReferenceVersion') }}
+              </label>
+              <select
+                id="champion-stats-progression-version"
+                v-model="championProgressionFromVersionModel"
+                class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+              >
+                <option
+                  v-for="v in championProgressionSelectableVersions"
+                  :key="'champion-delta-from-' + v.version"
+                  :value="v.version"
+                >
+                  {{ v.version }}
+                </option>
+              </select>
+            </div>
+            <div>
+              <div class="mb-1 text-sm font-medium text-text">
+                {{ t('statisticsPage.overviewMatchesByDivision') }}
+              </div>
+              <div class="flex flex-wrap gap-1">
+                <button
+                  type="button"
+                  class="stats-division-btn rounded p-0.5 transition-colors"
                   :class="
                     filterRank.length === 0
-                      ? 'saturate-110 opacity-100'
-                      : 'brightness-125 grayscale'
+                      ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
+                      : 'bg-black/20 hover:bg-white/10'
                   "
-                  width="12"
-                  height="12"
-                />
-              </button>
-              <button
-                v-for="tier in rankTiers"
-                :key="tier"
-                type="button"
-                class="stats-division-btn rounded p-0.5 transition-colors"
-                :class="
-                  filterRank.includes(tier)
-                    ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
-                    : 'bg-black/20 hover:bg-white/10'
-                "
-                :title="formatDivisionLabel(tier)"
-                @click="toggleRankFilter(tier)"
-              >
-                <img
-                  v-if="getRankedEmblemUrl(tier)"
-                  :src="getRankedEmblemUrl(tier)!"
-                  :alt="tier"
-                  class="h-3 w-3 object-contain"
+                  :title="t('statisticsPage.allRanks')"
+                  :aria-pressed="filterRank.length === 0"
+                  @mousedown.prevent
+                  @click.stop="selectAllChampionDivisions()"
+                >
+                  <img
+                    src="/data/community-dragon/ranked-emblem/Unranked.png"
+                    :alt="t('statisticsPage.allRanks')"
+                    class="h-3 w-3 object-contain"
+                    :class="
+                      filterRank.length === 0
+                        ? 'saturate-110 opacity-100'
+                        : 'brightness-125 grayscale'
+                    "
+                    width="12"
+                    height="12"
+                  />
+                </button>
+                <button
+                  v-for="tier in rankTiers"
+                  :key="tier"
+                  type="button"
+                  class="stats-division-btn rounded p-0.5 transition-colors"
                   :class="
                     filterRank.includes(tier)
-                      ? 'saturate-110 opacity-100'
-                      : 'brightness-125 grayscale'
+                      ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
+                      : 'bg-black/20 hover:bg-white/10'
                   "
-                  width="12"
-                  height="12"
-                />
-              </button>
+                  :title="formatDivisionLabel(tier)"
+                  :aria-pressed="filterRank.includes(tier)"
+                  @mousedown.prevent
+                  @click.stop="toggleRankFilter(tier)"
+                >
+                  <img
+                    v-if="getRankedEmblemUrl(tier)"
+                    :src="getRankedEmblemUrl(tier)!"
+                    :alt="tier"
+                    class="h-3 w-3 object-contain"
+                    :class="
+                      filterRank.includes(tier)
+                        ? 'saturate-110 opacity-100'
+                        : 'brightness-125 grayscale'
+                    "
+                    width="12"
+                    height="12"
+                  />
+                </button>
+              </div>
             </div>
-          </div>
-          <div>
-            <div class="mb-1 text-sm font-medium text-text">
-              {{ t('statisticsPage.filterRole') }}
+            <div>
+              <div class="mb-1 text-sm font-medium text-text">
+                {{ t('statisticsPage.filterRole') }}
+              </div>
+              <div class="flex flex-wrap gap-1">
+                <button
+                  type="button"
+                  class="stats-role-btn rounded p-0.5 transition-colors"
+                  :class="!filterRole ? 'bg-blue-500/20' : 'bg-black/20 hover:bg-white/10'"
+                  :title="t('statisticsPage.allRoles')"
+                  @click="selectAllChampionRoles()"
+                >
+                  <img
+                    src="/icons/roles/all-role.png"
+                    :alt="t('statisticsPage.allRoles')"
+                    class="h-3 w-3 object-contain"
+                    :class="!filterRole ? 'saturate-110 opacity-100' : 'brightness-125 grayscale'"
+                    width="12"
+                    height="12"
+                  />
+                </button>
+                <button
+                  v-for="r in roles"
+                  :key="r.value"
+                  type="button"
+                  class="stats-role-btn rounded p-0.5 transition-colors"
+                  :class="[
+                    filterRole === r.value ? 'bg-blue-500/20' : 'bg-black/20 hover:bg-white/10',
+                    !rolesWithData.has(r.value) ? 'champion-role-disabled' : '',
+                  ]"
+                  :title="r.label"
+                  :disabled="!rolesWithData.has(r.value)"
+                  @click="toggleChampionRoleFilter(r)"
+                >
+                  <img
+                    :src="r.icon"
+                    :alt="r.label"
+                    class="h-3 w-3 object-contain"
+                    :class="
+                      filterRole === r.value
+                        ? 'saturate-110 opacity-100'
+                        : 'brightness-125 grayscale'
+                    "
+                    width="12"
+                    height="12"
+                  />
+                </button>
+              </div>
             </div>
-            <div class="flex flex-wrap gap-1">
-              <button
-                type="button"
-                class="stats-role-btn rounded p-0.5 transition-colors"
-                :class="!filterRole ? 'bg-blue-500/20' : 'bg-black/20 hover:bg-white/10'"
-                :title="t('statisticsPage.allRoles')"
-                @click="selectAllChampionRoles()"
+            <div>
+              <label
+                for="champion-stats-chart-from-date"
+                class="mb-1 block text-sm font-medium text-text"
               >
-                <img
-                  src="/icons/roles/all-role.png"
-                  :alt="t('statisticsPage.allRoles')"
-                  class="h-3 w-3 object-contain"
-                  :class="!filterRole ? 'saturate-110 opacity-100' : 'brightness-125 grayscale'"
-                  width="12"
-                  height="12"
-                />
-              </button>
-              <button
-                v-for="r in roles"
-                :key="r.value"
-                type="button"
-                class="stats-role-btn rounded p-0.5 transition-colors"
-                :class="[
-                  filterRole === r.value ? 'bg-blue-500/20' : 'bg-black/20 hover:bg-white/10',
-                  !rolesWithData.has(r.value) ? 'champion-role-disabled' : '',
-                ]"
-                :title="r.label"
-                :disabled="!rolesWithData.has(r.value)"
-                @click="toggleChampionRoleFilter(r)"
-              >
-                <img
-                  :src="r.icon"
-                  :alt="r.label"
-                  class="h-3 w-3 object-contain"
-                  :class="
-                    filterRole === r.value ? 'saturate-110 opacity-100' : 'brightness-125 grayscale'
-                  "
-                  width="12"
-                  height="12"
-                />
-              </button>
-            </div>
-          </div>
-          <div>
-            <label class="flex cursor-pointer items-center gap-2 text-sm font-medium text-text">
+                {{ t('statisticsPage.championStatsTrendFromDate') }}
+              </label>
               <input
-                v-model="filterPlayersMasterPlus"
-                type="checkbox"
-                class="rounded border-primary/50"
+                id="champion-stats-chart-from-date"
+                v-model="trendChartFromDate"
+                type="date"
+                class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
               />
-              {{ t('statisticsPage.championStatsPlayersMasterPlus') }}
-            </label>
+              <p class="mt-0.5 text-[10px] leading-snug text-text/55">
+                {{ t('statisticsPage.championStatsTrendFromDateHint') }}
+              </p>
+            </div>
+            <div>
+              <label class="flex cursor-pointer items-center gap-2 text-sm font-medium text-text">
+                <input
+                  v-model="filterPlayersMasterPlus"
+                  type="checkbox"
+                  class="rounded border-primary/50"
+                />
+                {{ t('statisticsPage.championStatsPlayersMasterPlus') }}
+              </label>
+            </div>
+            <div v-if="activeChampionTab === 'matchups'">
+              <label
+                for="champion-search-matchups"
+                class="mb-1 block text-sm font-medium text-text"
+                >{{ t('statisticsPage.championStatsMatchupSearchLabel') }}</label
+              >
+              <input
+                id="champion-search-matchups"
+                v-model.trim="championSearchQueryPlaceholder"
+                type="text"
+                :placeholder="t('statisticsPage.championStatsMatchupSearchPlaceholder')"
+                class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text placeholder:text-text/50"
+              />
+            </div>
+            <div v-if="activeChampionTab === 'matchups'">
+              <label
+                for="champion-matchup-profile-filter"
+                class="mb-1 block text-sm font-medium text-text"
+                >{{ t('statisticsPage.championMatchupFilterLaneProfile') }}</label
+              >
+              <select
+                id="champion-matchup-profile-filter"
+                v-model="matchupLaneProfileFilter"
+                class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+              >
+                <option value="ALL">{{ t('statisticsPage.overviewDivisionAll') }}</option>
+                <option value="balanced">
+                  {{ t('statisticsPage.championMatchupDominanceBalancedShort') }}
+                </option>
+                <option
+                  v-for="opt in matchupLaneProfileOptions"
+                  :key="opt.value"
+                  :value="opt.value"
+                >
+                  {{ opt.label }}
+                </option>
+              </select>
+            </div>
+            <div v-if="activeChampionTab === 'matchups'">
+              <label
+                for="champion-matchup-otp-filter"
+                class="mb-1 block text-sm font-medium text-text"
+                >{{ t('statisticsPage.championMatchupFilterOtpMode') }}</label
+              >
+              <select
+                id="champion-matchup-otp-filter"
+                v-model="matchupOtpMode"
+                class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+              >
+                <option value="non">{{ t('statisticsPage.championMatchupFilterOtpOff') }}</option>
+                <option value="oui">{{ t('statisticsPage.championMatchupFilterOtpOn') }}</option>
+                <option value="solo">{{ t('statisticsPage.championMatchupFilterOtpOnly') }}</option>
+              </select>
+            </div>
+            <div v-if="activeChampionTab === 'spells'">
+              <label
+                for="champion-summoner-mode-filter"
+                class="mb-1 block text-sm font-medium text-text"
+                >{{ t('statisticsPage.summonerSpells') }}</label
+              >
+              <select
+                id="champion-summoner-mode-filter"
+                v-model="championSpellsModeFilter"
+                class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+              >
+                <option value="solo">{{ t('statisticsPage.spellsModeSolo') }}</option>
+                <option value="pair">{{ t('statisticsPage.spellsModePair') }}</option>
+              </select>
+            </div>
           </div>
-          <div v-if="activeChampionTab === 'matchups'">
-            <label
-              for="champion-search-matchups"
-              class="mb-1 block text-sm font-medium text-text"
-              >{{ t('statisticsPage.championStatsMatchupSearchLabel') }}</label
-            >
-            <input
-              id="champion-search-matchups"
-              v-model.trim="championSearchQueryPlaceholder"
-              type="text"
-              :placeholder="t('statisticsPage.championStatsMatchupSearchPlaceholder')"
-              class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text placeholder:text-text/50"
-            />
-          </div>
-          <div v-if="activeChampionTab === 'matchups'">
-            <label
-              for="champion-matchup-profile-filter"
-              class="mb-1 block text-sm font-medium text-text"
-              >{{ t('statisticsPage.championMatchupFilterLaneProfile') }}</label
-            >
-            <select
-              id="champion-matchup-profile-filter"
-              v-model="matchupLaneProfileFilter"
-              class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-            >
-              <option value="ALL">{{ t('statisticsPage.overviewDivisionAll') }}</option>
-              <option value="balanced">
-                {{ t('statisticsPage.championMatchupDominanceBalancedShort') }}
-              </option>
-              <option v-for="opt in matchupLaneProfileOptions" :key="opt.value" :value="opt.value">
-                {{ opt.label }}
-              </option>
-            </select>
-          </div>
-          <div v-if="activeChampionTab === 'matchups'">
-            <label
-              for="champion-matchup-otp-filter"
-              class="mb-1 block text-sm font-medium text-text"
-              >{{ t('statisticsPage.championMatchupFilterOtpMode') }}</label
-            >
-            <select
-              id="champion-matchup-otp-filter"
-              v-model="matchupOtpMode"
-              class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-            >
-              <option value="non">{{ t('statisticsPage.championMatchupFilterOtpOff') }}</option>
-              <option value="oui">{{ t('statisticsPage.championMatchupFilterOtpOn') }}</option>
-              <option value="solo">{{ t('statisticsPage.championMatchupFilterOtpOnly') }}</option>
-            </select>
-          </div>
-          <div v-if="activeChampionTab === 'spells'">
-            <label
-              for="champion-summoner-mode-filter"
-              class="mb-1 block text-sm font-medium text-text"
-              >{{ t('statisticsPage.summonerSpells') }}</label
-            >
-            <select
-              id="champion-summoner-mode-filter"
-              v-model="championSpellsModeFilter"
-              class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-            >
-              <option value="solo">{{ t('statisticsPage.spellsModeSolo') }}</option>
-              <option value="pair">{{ t('statisticsPage.spellsModePair') }}</option>
-            </select>
-          </div>
+        </div>
+        <div class="shrink-0 border-t border-primary/25 p-3 lg:hidden">
+          <button
+            type="button"
+            class="w-full touch-manipulation rounded-lg border border-primary/40 bg-primary/10 px-4 py-3 text-sm font-semibold text-text hover:bg-primary/20"
+            @click="closeFilters"
+          >
+            {{ t('statisticsPage.closeFilters') }}
+          </button>
         </div>
       </aside>
 
-      <div class="min-w-0 flex-1 p-4 pt-14 lg:px-3 lg:pb-4 lg:pt-2">
+      <div class="min-w-0 flex-1 p-4 max-lg:pb-20 lg:px-3 lg:pb-4 lg:pt-0">
         <div class="w-full">
           <!-- Loading / error -->
           <div
@@ -387,7 +452,7 @@
                 </div>
               </div>
               <div
-                v-if="championDamageSplit"
+                v-if="championDamageSplit && championDamageSplit.total > 0"
                 class="mx-1 flex items-center gap-3 self-center rounded bg-surface/40 px-2 py-1.5"
               >
                 <div
@@ -519,7 +584,7 @@
                       ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
                       : 'bg-black/20 text-text/85 hover:bg-white/10'
                   "
-                  @click="trendDivisionPreset = 'selected'"
+                  @click="setTrendDivisionPreset('selected')"
                 >
                   {{ t('statisticsPage.championStatsTrendsPresetSelected') }}
                 </button>
@@ -531,7 +596,7 @@
                       ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
                       : 'bg-black/20 text-text/85 hover:bg-white/10'
                   "
-                  @click="trendDivisionPreset = 'average'"
+                  @click="setTrendDivisionPreset('average')"
                 >
                   Average
                 </button>
@@ -543,7 +608,7 @@
                       ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
                       : 'bg-black/20 text-text/85 hover:bg-white/10'
                   "
-                  @click="trendDivisionPreset = 'skilled'"
+                  @click="setTrendDivisionPreset('skilled')"
                 >
                   Skilled
                 </button>
@@ -555,7 +620,7 @@
                       ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
                       : 'bg-black/20 text-text/85 hover:bg-white/10'
                   "
-                  @click="trendDivisionPreset = 'elite'"
+                  @click="setTrendDivisionPreset('elite')"
                 >
                   Elite
                 </button>
@@ -1749,11 +1814,28 @@
         </div>
       </div>
     </div>
+
+    <button
+      v-if="!filtersOpen"
+      type="button"
+      class="statistics-filters-fab fixed bottom-4 left-1/2 z-[58] flex -translate-x-1/2 items-center gap-2 rounded-full border border-primary/40 bg-surface/95 px-4 py-2.5 text-sm font-semibold text-text shadow-lg backdrop-blur-sm lg:hidden"
+      :aria-label="t('statisticsPage.openFilters')"
+      @click="openFilters"
+    >
+      {{ t('statisticsPage.filtersTitle') }}
+      <span
+        v-if="activeChampionFiltersCount > 0"
+        class="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-bold text-background"
+      >
+        {{ activeChampionFiltersCount }}
+      </span>
+    </button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { apiUrl } from '~/utils/apiUrl'
@@ -1762,6 +1844,7 @@ import { useItemsStore } from '~/stores/ItemsStore'
 import { useRunesStore } from '~/stores/RunesStore'
 import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import { useVersionStore } from '~/stores/VersionStore'
+import { useStatisticsUiStore } from '~/stores/StatisticsUiStore'
 import StatisticsRunesOverviewPanel from '~/components/statistics/StatisticsRunesOverviewPanel.vue'
 import SummonerSpellTierTables from '~/components/statistics/SummonerSpellTierTables.vue'
 import {
@@ -1773,6 +1856,7 @@ import {
   getSpellImageUrl as _getSpellImageUrl,
 } from '~/utils/imageUrl'
 import { getRankedEmblemUrl } from '~/utils/rankedEmblem'
+import { rankTierSelectionsEqual } from '~/utils/statisticsRankTierQuery'
 
 definePageMeta({
   layout: 'default',
@@ -2122,8 +2206,16 @@ function _spellImageName(spellId: number) {
   return summonerSpellsStore.getSpellById(String(spellId))?.image?.full ?? null
 }
 
-const championFiltersOpen = ref(true)
+const statisticsUiStore = useStatisticsUiStore()
+const { filtersOpen } = storeToRefs(statisticsUiStore)
+const filtersSheetMode = ref(false)
+let filtersSheetMq: MediaQueryList | null = null
+const onFiltersSheetMqChange = () => {
+  filtersSheetMode.value = filtersSheetMq?.matches ?? false
+}
+
 const filterVersion = ref('')
+const trendChartFromDate = ref('')
 const filterRank = ref<string[]>([])
 const filterRole = ref('')
 const filterPlayersMasterPlus = ref(false)
@@ -2148,11 +2240,44 @@ function formatDivisionLabel(tier: string): string {
   return tier.charAt(0).toUpperCase() + tier.slice(1).toLowerCase()
 }
 
-function toggleChampionFiltersOpen() {
-  championFiltersOpen.value = !championFiltersOpen.value
+const activeChampionFiltersCount = computed(() => {
+  let count = 0
+  if (filterVersion.value) count++
+  if (filterRank.value.length > 0) count++
+  if (filterRole.value) count++
+  if (championProgressionFromVersionOverride.value) count++
+  if (trendChartFromDate.value.trim()) count++
+  if (filterPlayersMasterPlus.value) count++
+  return count
+})
+
+function closeFilters() {
+  statisticsUiStore.setFiltersOpen(false)
 }
-function closeChampionFilters() {
-  championFiltersOpen.value = false
+function openFilters() {
+  statisticsUiStore.setFiltersOpen(true)
+}
+function toggleFiltersOpen() {
+  if (filtersOpen.value) closeFilters()
+  else openFilters()
+}
+
+function onFiltersEscapeKey(event: KeyboardEvent) {
+  if (event.key !== 'Escape' || !filtersOpen.value) return
+  if (!import.meta.client || !filtersSheetMode.value) return
+  closeFilters()
+}
+
+watch([filtersOpen, filtersSheetMode], () => {
+  if (!import.meta.client) return
+  const lock = filtersSheetMode.value && filtersOpen.value
+  document.body.style.overflow = lock ? 'hidden' : ''
+})
+
+function normalizeTrendChartFromDate(raw: string): string | null {
+  const s = raw.trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null
+  return s
 }
 
 /** Référence patch pour fenêtre temporelle des graphes tendances (aligné page stats). */
@@ -2162,6 +2287,19 @@ function normalizeVersionToPrefix(v: string | null | undefined): string | null {
   const parts = v.trim().split('.')
   if (parts.length >= 2) return `${parts[0]}.${parts[1]}`
   return parts[0] || null
+}
+
+/** Même tri que /statistics et tier-list : patch le plus récent en premier. */
+function compareVersionsDesc(a: string, b: string): number {
+  const pa = a.split('.').map(x => Number(x))
+  const pb = b.split('.').map(x => Number(x))
+  const maxLen = Math.max(pa.length, pb.length)
+  for (let i = 0; i < maxLen; i++) {
+    const da = Number.isFinite(pa[i]) ? (pa[i] as number) : 0
+    const db = Number.isFinite(pb[i]) ? (pb[i] as number) : 0
+    if (da !== db) return db - da
+  }
+  return b.localeCompare(a)
 }
 function syncChampionProgressionDeltaToVersionBeforeFilter(): boolean {
   const filter = filterVersion.value.trim()
@@ -2701,6 +2839,13 @@ type TrendSnapshotPoint = {
 }
 type TrendGranularity = 'day' | 'week' | 'month' | 'patch'
 type TrendDivisionPreset = 'selected' | 'average' | 'skilled' | 'elite'
+
+const TREND_PRESET_TIERS: Record<Exclude<TrendDivisionPreset, 'selected'>, string[]> = {
+  average: ['IRON', 'BRONZE', 'SILVER', 'GOLD'],
+  skilled: ['PLATINUM', 'EMERALD', 'DIAMOND'],
+  elite: ['DIAMOND', 'MASTER', 'GRANDMASTER', 'CHALLENGER'],
+}
+
 const trendGranularity = ref<TrendGranularity>('day')
 const trendRangeMode = ref<'7d' | '14d' | 'months'>('7d')
 const trendMonthsWindow = ref(1)
@@ -2781,6 +2926,26 @@ function queryParams() {
   p.set('otp', 'oui')
   return p.toString() ? '?' + p.toString() : ''
 }
+function detectTrendDivisionPresetFromFilter(): TrendDivisionPreset {
+  const rank = filterRank.value
+  if (rank.length === 0) return 'selected'
+  for (const key of ['average', 'skilled', 'elite'] as const) {
+    if (rankTierSelectionsEqual(rank, TREND_PRESET_TIERS[key])) return key
+  }
+  return 'selected'
+}
+
+function syncTrendDivisionPresetFromFilter(): void {
+  const detected = detectTrendDivisionPresetFromFilter()
+  if (trendDivisionPreset.value !== detected) trendDivisionPreset.value = detected
+}
+
+function setTrendDivisionPreset(preset: TrendDivisionPreset): void {
+  trendDivisionPreset.value = preset
+  if (preset === 'selected') return
+  filterRank.value = [...TREND_PRESET_TIERS[preset]]
+}
+
 function toggleRankFilter(tier: string) {
   const arr = filterRank.value
   const idx = arr.indexOf(tier)
@@ -2789,18 +2954,22 @@ function toggleRankFilter(tier: string) {
   } else {
     filterRank.value = [...arr, tier]
   }
+  syncTrendDivisionPresetFromFilter()
 }
 
 function selectAllChampionDivisions() {
   filterRank.value = []
+  trendDivisionPreset.value = 'selected'
 }
 
 function resetChampionFilters() {
   filterVersion.value = ''
   filterRank.value = []
+  trendDivisionPreset.value = 'selected'
   filterRole.value = ''
   filterPlayersMasterPlus.value = false
   championProgressionFromVersionOverride.value = ''
+  trendChartFromDate.value = ''
   championSearchQueryPlaceholder.value = ''
   championSpellsModeFilter.value = 'solo'
 }
@@ -2912,6 +3081,11 @@ async function loadChampionDamageSplit() {
     const trueDamage = Number(data?.avgTrueDamageToChampions ?? 0)
     const totalFromParts = phys + magic + trueDamage
     const total = totalFromParts > 0 ? totalFromParts : Number(data?.avgTotalDamageToChampions ?? 0)
+    const games = Number((data as { games?: number })?.games ?? 0)
+    if (games <= 0 || total <= 0) {
+      championDamageSplit.value = null
+      return
+    }
     championDamageSplit.value = {
       phys: Number.isFinite(phys) ? phys : 0,
       magic: Number.isFinite(magic) ? magic : 0,
@@ -3115,10 +3289,22 @@ async function loadTrendSnapshots() {
   try {
     const params = new URLSearchParams()
     if (filterRole.value) params.set('role', filterRole.value)
-    const trendPatch = (championProgressionFromVersion.value ?? '').trim()
-    const patchWindow = trendPatch ? patchWindowFromFilterVersion(trendPatch) : null
-    if (patchWindow?.from) params.set('from', patchWindow.from)
-    if (patchWindow?.to) params.set('to', patchWindow.to)
+    for (const tier of filterRank.value) {
+      const normalized = String(tier || '')
+        .trim()
+        .toUpperCase()
+        .split('_')[0]
+      if (normalized) params.append('rankTier', normalized)
+    }
+    const userFrom = normalizeTrendChartFromDate(trendChartFromDate.value)
+    if (userFrom) {
+      params.set('from', userFrom)
+    } else {
+      const trendPatch = (championProgressionFromVersion.value ?? '').trim()
+      const patchWindow = trendPatch ? patchWindowFromFilterVersion(trendPatch) : null
+      if (patchWindow?.from) params.set('from', patchWindow.from)
+      if (patchWindow?.to) params.set('to', patchWindow.to)
+    }
     params.set('limit', '1200')
     const query = params.toString()
     const data = await statsFetch<{ points?: TrendSnapshotPoint[] }>(
@@ -3286,12 +3472,6 @@ function resolvePatchLabelForDate(dateIso: string): string {
   return match ?? catalog[0]?.patchLabel ?? dateIso.slice(0, 7)
 }
 
-const TREND_PRESET_TIERS: Record<Exclude<TrendDivisionPreset, 'selected'>, string[]> = {
-  average: ['IRON', 'BRONZE', 'SILVER', 'GOLD'],
-  skilled: ['PLATINUM', 'EMERALD', 'DIAMOND'],
-  elite: ['DIAMOND', 'MASTER', 'GRANDMASTER', 'CHALLENGER'],
-}
-
 const trendTiersFromFilterOrData = computed(() => {
   const selected = Array.from(new Set(filterRank.value.map(normalizeRankTier))).filter(Boolean)
   if (selected.length) return selected
@@ -3305,11 +3485,7 @@ const trendTiersFromFilterOrData = computed(() => {
   )
 })
 
-const trendSelectedTiers = computed(() => {
-  if (trendDivisionPreset.value === 'selected') return trendTiersFromFilterOrData.value
-  const preset = TREND_PRESET_TIERS[trendDivisionPreset.value]
-  return preset.filter(t => t !== 'UNRANKED')
-})
+const trendSelectedTiers = computed(() => trendTiersFromFilterOrData.value)
 
 /** Tiers affichés sur le graphe durée (fallback API si pas de snapshots tendance). */
 const durationDisplayTiers = computed(() => {
@@ -3553,8 +3729,13 @@ const trendChartCards = computed<TrendChartCard[]>(() => {
     let minVal = allValues.length ? Math.min(...allValues) : 0
     let maxVal = allValues.length ? Math.max(...allValues) : 1
     if (!Number.isFinite(minVal)) minVal = 0
-    if (!Number.isFinite(maxVal) || maxVal <= 0) maxVal = 1
-    if (metric.id === 'games') minVal = 0
+    if (!Number.isFinite(maxVal)) maxVal = 1
+    if (metric.id === 'games') {
+      minVal = 0
+      if (maxVal <= 0) maxVal = 1
+    } else if (maxVal <= minVal) {
+      maxVal = minVal + (metric.id === 'pickrate' || metric.id === 'banrate' ? 0.5 : 1)
+    }
     const spread = Math.max(1e-6, maxVal - minVal)
     const domainMin = metric.id === 'games' ? 0 : Math.max(0, minVal - spread * 0.12)
     const domainMax = maxVal + spread * 0.08
@@ -3902,6 +4083,7 @@ watch(
     filterRole,
     filterPlayersMasterPlus,
     championProgressionFromVersion,
+    trendChartFromDate,
   ],
   () => {
     if (!championPageBootstrapped.value) return
@@ -3960,6 +4142,7 @@ async function loadVersionsForFilter() {
             matchCount: Number(v.matchCount ?? 0),
           }))
           .filter(v => v.version)
+          .sort((a, b) => compareVersionsDesc(a.version, b.version))
       : []
   } catch {
     versionsFromOverview.value = []
@@ -3984,6 +4167,13 @@ async function loadVersionsForFilter() {
 }
 
 onMounted(async () => {
+  if (import.meta.client) {
+    statisticsUiStore.init()
+    document.addEventListener('keydown', onFiltersEscapeKey)
+    filtersSheetMq = window.matchMedia('(max-width: 1023px)')
+    onFiltersSheetMqChange()
+    filtersSheetMq.addEventListener('change', onFiltersSheetMqChange)
+  }
   const versionPromise = versionStore.currentVersion
     ? Promise.resolve()
     : versionStore.loadCurrentVersion()
@@ -3999,6 +4189,12 @@ onMounted(async () => {
   if (championId.value && !Number.isNaN(championId.value)) {
     await reloadChampionBaseAndActiveTabData()
   }
+})
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', onFiltersEscapeKey)
+  filtersSheetMq?.removeEventListener('change', onFiltersSheetMqChange)
+  if (import.meta.client) document.body.style.overflow = ''
 })
 
 useHead({
@@ -4233,5 +4429,10 @@ useHead({
   font-weight: 700;
   color: rgb(var(--rgb-text) / 0.95);
   background: rgb(var(--rgb-surface) / 0.65);
+}
+@media (max-width: 1023px) {
+  .statistics-filters-panel .flex.min-h-0.flex-1 {
+    overflow-y: auto;
+  }
 }
 </style>

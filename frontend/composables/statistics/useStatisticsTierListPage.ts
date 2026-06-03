@@ -4,6 +4,7 @@ import { useLocalePath } from '#i18n'
 import { apiUrl } from '~/utils/apiUrl'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { getChampionImageUrl } from '~/utils/imageUrl'
+import { TIER_CHART_COLORS, tierChartColor, tierChartColorMuted } from '~/utils/tierChartColors'
 
 type TierListSortColumn =
   | 'rank'
@@ -605,17 +606,6 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     Math.min(100, Math.max(0, tierListChartYTickBottomPct(0)))
   )
 
-  /** Couleurs barres / légende — style diverging tier (F rouge → S+ or). */
-  const TIER_CHART_COLORS: Record<'F' | 'D' | 'C' | 'B' | 'A' | 'S' | 'S+', string> = {
-    F: '#dc2626',
-    D: '#dc2626',
-    C: '#a78bfa',
-    B: '#7dd3fc',
-    A: '#3b82f6',
-    S: '#22c55e',
-    'S+': '#e5c558',
-  }
-
   const CHART_H = 260
   const CHART_PAD = { left: 44, right: 20, top: 20, bottom: 30 }
   const PLOT_H = CHART_H - CHART_PAD.top - CHART_PAD.bottom
@@ -633,8 +623,20 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     { key: 'S+', color: TIER_CHART_COLORS['S+'] },
   ]
 
-  function tierChartColor(tier: string): string {
-    return TIER_CHART_COLORS[tier as keyof typeof TIER_CHART_COLORS] ?? TIER_CHART_COLORS.D
+  /** Barre horizontale mobile : segment de 0 au score matchup (même échelle que le graphique desktop). */
+  function tierListChartHorizontalBarStyle(
+    pbi: number,
+    tier: string
+  ): { leftPct: number; widthPct: number; color: string } {
+    const zeroPct = tierListChartZeroBottomPct.value
+    const scorePct = tierListChartScoreBottomPct(pbi)
+    const leftPct = Math.min(zeroPct, scorePct)
+    const widthPct = Math.max(Math.abs(scorePct - zeroPct), 0.35)
+    return {
+      leftPct,
+      widthPct,
+      color: tierListChartBarColor(tier),
+    }
   }
 
   function toggleTierListChartTier(tier: 'S+' | 'S' | 'A' | 'B' | 'C' | 'D'): void {
@@ -913,6 +915,10 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     tierListRangeEnd,
     tierListDisplayRankByChampionId,
     TIER_DIVERGING_LEGEND,
+    TIER_CHART_COLORS,
+    tierChartColor,
+    tierChartColorMuted,
+    tierListChartHorizontalBarStyle,
     CHART_H,
     CHART_PAD,
     PLOT_H,

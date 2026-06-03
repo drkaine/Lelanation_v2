@@ -1,11 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useLocalePath } from '#i18n'
 import { useMobileViewport } from '~/composables/useMobileViewport'
 
 /**
  * Liste Top 5 en cards (vue mobile « Cards (Top 5) »).
  */
-defineProps<{
+const localePath = useLocalePath()
+const { isMobileViewport } = useMobileViewport()
+const portraitSize = computed(() => (isMobileViewport.value ? 56 : 40))
+
+const props = defineProps<{
   rows: Array<{
     championId: number
     label: string
@@ -21,8 +26,10 @@ defineProps<{
   searchQuery?: string
 }>()
 
-const { isMobileViewport } = useMobileViewport()
-const portraitSize = computed(() => (isMobileViewport.value ? 56 : 40))
+function championDetailTo(id: number): string | null {
+  if (!props.gameVersion || !props.championByKey(id)) return null
+  return localePath(`/statistics/champion/${encodeURIComponent(String(id))}`)
+}
 </script>
 
 <template>
@@ -35,24 +42,38 @@ const portraitSize = computed(() => (isMobileViewport.value ? 56 : 40))
       <span class="fast-stat-champion-card-rank w-4 shrink-0 text-xs text-text/60"
         >{{ (rankOffset ?? 0) + idx + 1 }}.</span
       >
-      <StatisticsChampionPortrait
-        v-if="gameVersion && championByKey(row.championId)"
-        :src="getChampionImageUrl(gameVersion, championByKey(row.championId)!.image.full)"
-        :alt="championName(row.championId) || ''"
-        :champion-id="row.championId"
-        :champion-name="championName(row.championId) || ''"
-        :size="portraitSize"
-        rounded="sm"
-      />
-      <div class="min-w-0 flex-1">
-        <div class="fast-stat-champion-card-name truncate text-sm font-medium text-text">
-          <StatisticsChampionNameHighlight
-            :name="championName(row.championId) || String(row.championId)"
-            :query="searchQuery"
-          />
+      <component
+        :is="championDetailTo(row.championId) ? 'NuxtLink' : 'div'"
+        :to="championDetailTo(row.championId) ?? undefined"
+        class="flex min-w-0 flex-1 items-center gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+        :class="championDetailTo(row.championId) ? 'hover:opacity-90 active:opacity-80' : ''"
+      >
+        <StatisticsChampionPortrait
+          v-if="gameVersion && championByKey(row.championId)"
+          :src="getChampionImageUrl(gameVersion, championByKey(row.championId)!.image.full)"
+          :alt="championName(row.championId) || ''"
+          :champion-id="row.championId"
+          :champion-name="championName(row.championId) || ''"
+          :size="portraitSize"
+          rounded="sm"
+        />
+        <div class="min-w-0 flex-1">
+          <div
+            class="fast-stat-champion-card-name truncate text-sm font-medium"
+            :class="
+              championDetailTo(row.championId)
+                ? 'text-accent underline decoration-accent/40 underline-offset-2'
+                : 'text-text'
+            "
+          >
+            <StatisticsChampionNameHighlight
+              :name="championName(row.championId) || String(row.championId)"
+              :query="searchQuery"
+            />
+          </div>
+          <div class="fast-stat-champion-card-label text-[11px] text-text/55">{{ row.label }}</div>
         </div>
-        <div class="fast-stat-champion-card-label text-[11px] text-text/55">{{ row.label }}</div>
-      </div>
+      </component>
       <div class="shrink-0 text-right">
         <div class="fast-stat-champion-card-value text-sm font-semibold tabular-nums text-text">
           {{ row.value }}

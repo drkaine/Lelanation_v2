@@ -1005,27 +1005,33 @@ router.get('/champions/:championId/matchups-extended', async (req: Request, res:
   const lane = queryString(req.query.lane) ?? queryString(req.query.role)
   const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 10
   const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 80
-  const data = await getChampionMatchupsExtendedTable({
-    championId,
-    version,
-    referenceVersion,
-    rankTier: rankTier ?? null,
-    role: lane ?? null,
-    minGames,
-    limit,
-  })
-  if (!data) {
-    return res.status(200).json({
+  try {
+    const data = await getChampionMatchupsExtendedTable({
       championId,
-      version: null,
-      referenceVersion: null,
-      rankTier: null,
-      roleFilter: null,
-      totalGames: 0,
-      rows: [],
+      version,
+      referenceVersion,
+      rankTier: rankTier ?? null,
+      role: lane ?? null,
+      minGames,
+      limit,
     })
+    if (!data) {
+      return res.status(200).json({
+        championId,
+        version: null,
+        referenceVersion: null,
+        rankTier: null,
+        roleFilter: null,
+        totalGames: 0,
+        rows: [],
+      })
+    }
+    return res.json(data)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('[stats] matchups-extended failed', { championId, version, referenceVersion, message })
+    return res.status(500).json({ error: 'Matchups extended failed', message })
   }
-  return res.json(data)
 })
 
 /** GET /api/stats/champions/:championId/matchups-export-rows — export rows with raw agg_champion_vs_stats metrics + computed deltas/scores. */
@@ -1139,14 +1145,14 @@ router.get('/champions/:championId/tier-trend-snapshots', async (req: Request, r
   if (!isDatabaseConfigured()) {
     return res.status(200).json({ championId, points: [], message: 'Database not configured.' })
   }
-  const rankTier = queryString(req.query.rankTier)
+  const rankTier = rankTierParam(req.query.rankTier)
   const role = queryString(req.query.role)
   const fromDate = queryString(req.query.from)
   const toDate = queryString(req.query.to)
   const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 365
   const points = await getChampionTierSnapshotsForCharts({
     championId,
-    rankTier: rankTier ?? null,
+    rankTier: rankTier?.length ? rankTier : null,
     role: role ?? null,
     fromDate: fromDate ?? null,
     toDate: toDate ?? null,

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { inject, ref } from 'vue'
+import StatisticsTierListMobileChart from '~/components/statistics/StatisticsTierListMobileChart.vue'
 
 const p = inject('statisticsPageCtx') as any
 
@@ -555,12 +556,22 @@ withDefaults(
           </div>
         </div>
       </div>
-      <!-- Vue graphique : barres divergentes (PBI), style analytics sombre -->
+      <!-- Vue graphique mobile : barres horizontales (pick rate), lecture portrait -->
       <div
         v-show="p.tierListViewModel === 'chart' && p.totalTierListCount > 0"
-        class="tier-list-mobile-rotate tier-list-diverging-wrap statistics-overview-surface overflow-x-auto rounded-xl border border-primary/30 py-4 pl-2 pr-4 shadow-inner"
+        class="statistics-overview-surface rounded-xl border border-primary/30 p-3 lg:hidden"
       >
-        <div class="flex min-w-[640px] flex-col gap-3 max-lg:min-w-[920px] lg:min-w-0">
+        <p class="mb-2 text-[11px] text-text/60">
+          {{ p.t('statisticsPage.tierListMobileChartHint') }}
+        </p>
+        <StatisticsTierListMobileChart />
+      </div>
+      <!-- Vue graphique desktop : barres divergentes (PBI) -->
+      <div
+        v-show="p.tierListViewModel === 'chart' && p.totalTierListCount > 0"
+        class="tier-list-diverging-wrap statistics-overview-surface hidden overflow-x-auto rounded-xl border border-primary/30 py-4 pl-2 pr-4 shadow-inner lg:block"
+      >
+        <div class="flex min-w-[640px] flex-col gap-3 lg:min-w-0">
           <div class="min-w-0 flex-1">
             <div class="flex gap-0.5">
               <div
@@ -766,23 +777,5 @@ withDefaults(
 .tier-list-chart-plot {
   height: min(75dvh, calc(100dvh - 14rem));
   min-height: 280px;
-}
-
-@media (max-width: 1023px) {
-  .tier-list-chart-plot {
-    height: min(50dvh, 320px);
-    min-height: 220px;
-  }
-
-  /* Force landscape rendering on phones held in portrait. */
-  @media (orientation: portrait) {
-    .tier-list-mobile-rotate {
-      width: 100dvh;
-      min-width: 100dvh;
-      height: 100dvw;
-      transform: rotate(90deg) translateY(-100%);
-      transform-origin: top left;
-    }
-  }
 }
 </style>

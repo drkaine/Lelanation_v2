@@ -69,12 +69,12 @@ type RawMyRow = {
   role: string
   games: bigint
   wins: bigint
-  sum_level: bigint
-  sum_kill_def: bigint
-  sum_cs: bigint
-  sum_vision: bigint
-  sum_laning: bigint
-  sum_early: bigint
+  sum_level: number
+  sum_kill_def: number
+  sum_cs: number
+  sum_vision: number
+  sum_laning: number
+  sum_early: number
 }
 
 type RawPeerRow = {
@@ -83,12 +83,12 @@ type RawPeerRow = {
   champion_id: number
   games: bigint
   wins: bigint
-  sum_level: bigint
-  sum_kill_def: bigint
-  sum_cs: bigint
-  sum_vision: bigint
-  sum_laning: bigint
-  sum_early: bigint
+  sum_level: number
+  sum_kill_def: number
+  sum_cs: number
+  sum_vision: number
+  sum_laning: number
+  sum_early: number
 }
 
 type RawOverallRow = {
@@ -117,26 +117,6 @@ async function getVsMetricColumns(): Promise<string[]> {
   return vsMetricColumnsCache
 }
 
-function buildCoreWhere(
-  championId: number,
-  version: string | null,
-  rankTier: string | string[] | null | undefined,
-  role: string | null,
-): string {
-  const parts: string[] = [`ac.champion_id = ${championId}`]
-  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
-  if (ranks.length === 1) parts.push(`ac.rank_tier = '${ranks[0]!.replace(/'/g, "''")}'`)
-  else if (ranks.length > 1) {
-    parts.push(`ac.rank_tier IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`)
-  }
-  if (version != null && version !== '') {
-    parts.push(`ac.game_version LIKE '${normalizePatchMajorMinor(version).replace(/'/g, "''")}%'`)
-  }
-  const roleDb = normalizeStatsRoleForChampion(role)
-  if (roleDb) parts.push(`ac.role = '${statsRoleSqlLiteral(roleDb)}'`)
-  return parts.join(' AND ')
-}
-
 function buildPeerCoreWhere(
   version: string | null,
   rankTier: string | string[] | null | undefined,
@@ -153,6 +133,46 @@ function buildPeerCoreWhere(
   }
   const roleDb = normalizeStatsRoleForChampion(role)
   if (roleDb) parts.push(`ac.role = '${statsRoleSqlLiteral(roleDb)}'`)
+  return parts.join(' AND ')
+}
+
+/** Filtres sur `champion_vs_stats` (pas de `champion_stat_id` — clé patch/rôle/ligue/région/champion). */
+function buildVsWhere(
+  championId: number,
+  version: string | null,
+  rankTier: string | string[] | null | undefined,
+  role: string | null,
+): string {
+  const parts: string[] = [`vs.champion_id = ${championId}`]
+  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
+  if (ranks.length === 1) parts.push(`vs.rank_tier = '${ranks[0]!.replace(/'/g, "''")}'`)
+  else if (ranks.length > 1) {
+    parts.push(`vs.rank_tier IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`)
+  }
+  if (version != null && version !== '') {
+    parts.push(`vs.game_version LIKE '${normalizePatchMajorMinor(version).replace(/'/g, "''")}%'`)
+  }
+  const roleDb = normalizeStatsRoleForChampion(role)
+  if (roleDb) parts.push(`vs.role = '${statsRoleSqlLiteral(roleDb)}'`)
+  return parts.join(' AND ')
+}
+
+function buildPeerVsWhere(
+  version: string | null,
+  rankTier: string | string[] | null | undefined,
+  role: string | null,
+): string {
+  const parts: string[] = ['1=1']
+  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
+  if (ranks.length === 1) parts.push(`vs.rank_tier = '${ranks[0]!.replace(/'/g, "''")}'`)
+  else if (ranks.length > 1) {
+    parts.push(`vs.rank_tier IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`)
+  }
+  if (version != null && version !== '') {
+    parts.push(`vs.game_version LIKE '${normalizePatchMajorMinor(version).replace(/'/g, "''")}%'`)
+  }
+  const roleDb = normalizeStatsRoleForChampion(role)
+  if (roleDb) parts.push(`vs.role = '${statsRoleSqlLiteral(roleDb)}'`)
   return parts.join(' AND ')
 }
 
@@ -229,23 +249,22 @@ export async function getChampionMatchupsExtendedTable(options: {
   const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', version, 'ac')
   const vsFrom = await matchVersionedAggFrom('agg_champion_vs_stats', version, 'vs')
 
-  const myWhere = buildCoreWhere(championId, version, options.rankTier, roleFilter)
+  const myWhere = buildVsWhere(championId, version, options.rankTier, roleFilter)
   const mySql = `
     SELECT
       vs.opponent_champion_id,
-      ac.role,
+      vs.role,
       SUM(vs.count_game)::bigint AS games,
       SUM(vs.count_win)::bigint AS wins,
-      SUM(vs.sum_max_level_lead_lane_opponent)::bigint AS sum_level,
-      SUM(vs.sum_max_kill_deficit)::bigint AS sum_kill_def,
-      SUM(vs.sum_max_cs_advantage_on_lane_opponent)::bigint AS sum_cs,
-      SUM(vs.sum_vision_score_advantage_lane_opponent)::bigint AS sum_vision,
-      SUM(vs.sum_laning_phase_gold_exp_advantage)::bigint AS sum_laning,
-      SUM(vs.sum_early_laning_phase_gold_exp_advantage)::bigint AS sum_early
-    FROM ${vsFrom}
-    INNER JOIN ${coreFrom} ON ac.id = vs.champion_stat_id
+      SUM(vs.sum_max_level_lead_lane_opponent)::double precision AS sum_level,
+      SUM(vs.sum_max_kill_deficit)::double precision AS sum_kill_def,
+      SUM(vs.sum_max_cs_advantage_on_lane_opponent)::double precision AS sum_cs,
+      SUM(vs.sum_vision_score_advantage_lane_opponent)::double precision AS sum_vision,
+      SUM(vs.sum_laning_phase_gold_exp_advantage)::double precision AS sum_laning,
+      SUM(vs.sum_early_laning_phase_gold_exp_advantage)::double precision AS sum_early
+    FROM ${vsFrom} vs
     WHERE ${myWhere}
-    GROUP BY vs.opponent_champion_id, ac.role
+    GROUP BY vs.opponent_champion_id, vs.role
     HAVING SUM(vs.count_game) >= ${minGames}
   `
 
@@ -269,25 +288,25 @@ export async function getChampionMatchupsExtendedTable(options: {
   const totalGames = myRows.reduce((s, r) => s + Number(r.games ?? 0), 0)
   const oppIds = [...new Set(myRows.map((r) => Number(r.opponent_champion_id)))]
 
-  const peerWhere = buildPeerCoreWhere(version, options.rankTier, roleFilter)
+  const peerVsWhere = buildPeerVsWhere(version, options.rankTier, roleFilter)
+  const peerCoreWhere = buildPeerCoreWhere(version, options.rankTier, roleFilter)
   const peerSql = `
     SELECT
       vs.opponent_champion_id,
-      ac.role,
-      ac.champion_id,
+      vs.role,
+      vs.champion_id,
       SUM(vs.count_game)::bigint AS games,
       SUM(vs.count_win)::bigint AS wins,
-      SUM(vs.sum_max_level_lead_lane_opponent)::bigint AS sum_level,
-      SUM(vs.sum_max_kill_deficit)::bigint AS sum_kill_def,
-      SUM(vs.sum_max_cs_advantage_on_lane_opponent)::bigint AS sum_cs,
-      SUM(vs.sum_vision_score_advantage_lane_opponent)::bigint AS sum_vision,
-      SUM(vs.sum_laning_phase_gold_exp_advantage)::bigint AS sum_laning,
-      SUM(vs.sum_early_laning_phase_gold_exp_advantage)::bigint AS sum_early
-    FROM ${vsFrom}
-    INNER JOIN ${coreFrom} ON ac.id = vs.champion_stat_id
-    WHERE ${peerWhere}
+      SUM(vs.sum_max_level_lead_lane_opponent)::double precision AS sum_level,
+      SUM(vs.sum_max_kill_deficit)::double precision AS sum_kill_def,
+      SUM(vs.sum_max_cs_advantage_on_lane_opponent)::double precision AS sum_cs,
+      SUM(vs.sum_vision_score_advantage_lane_opponent)::double precision AS sum_vision,
+      SUM(vs.sum_laning_phase_gold_exp_advantage)::double precision AS sum_laning,
+      SUM(vs.sum_early_laning_phase_gold_exp_advantage)::double precision AS sum_early
+    FROM ${vsFrom} vs
+    WHERE ${peerVsWhere}
       AND vs.opponent_champion_id IN (${oppIds.join(',')})
-    GROUP BY vs.opponent_champion_id, ac.role, ac.champion_id
+    GROUP BY vs.opponent_champion_id, vs.role, vs.champion_id
     HAVING SUM(vs.count_game) >= 3
   `
 
@@ -299,7 +318,7 @@ export async function getChampionMatchupsExtendedTable(options: {
       SUM(ac.count_game)::bigint AS games,
       SUM(ac.count_win)::bigint AS wins
     FROM ${coreFrom}
-    WHERE ${peerWhere}
+    WHERE ${peerCoreWhere}
       AND ac.champion_id IN (${[championId, ...oppIds].join(',')})
     GROUP BY ac.champion_id, ac.role
   `)
@@ -317,49 +336,46 @@ export async function getChampionMatchupsExtendedTable(options: {
   const referencePickrateByOppRole = new Map<string, number>()
   const referenceLaneScoreByOppRole = new Map<string, number>()
   if (referenceVersion && normalizePatchMajorMinor(referenceVersion) !== normalizePatchMajorMinor(version ?? '')) {
-    const refCoreFrom = await matchVersionedAggFrom('agg_champion_core_stats', referenceVersion, 'ac')
     const refVsFrom = await matchVersionedAggFrom('agg_champion_vs_stats', referenceVersion, 'vs')
-    const refMyWhere = buildCoreWhere(championId, referenceVersion, options.rankTier, roleFilter)
+    const refMyWhere = buildVsWhere(championId, referenceVersion, options.rankTier, roleFilter)
     const refMyRows = await queryRawUnsafe<RawMyRow[]>(`
       SELECT
         vs.opponent_champion_id,
-        ac.role,
+        vs.role,
         SUM(vs.count_game)::bigint AS games,
         SUM(vs.count_win)::bigint AS wins,
-        SUM(vs.sum_max_level_lead_lane_opponent)::bigint AS sum_level,
-        SUM(vs.sum_max_kill_deficit)::bigint AS sum_kill_def,
-        SUM(vs.sum_max_cs_advantage_on_lane_opponent)::bigint AS sum_cs,
-        SUM(vs.sum_vision_score_advantage_lane_opponent)::bigint AS sum_vision,
-        SUM(vs.sum_laning_phase_gold_exp_advantage)::bigint AS sum_laning,
-        SUM(vs.sum_early_laning_phase_gold_exp_advantage)::bigint AS sum_early
-      FROM ${refVsFrom}
-      INNER JOIN ${refCoreFrom} ON ac.id = vs.champion_stat_id
+        SUM(vs.sum_max_level_lead_lane_opponent)::double precision AS sum_level,
+        SUM(vs.sum_max_kill_deficit)::double precision AS sum_kill_def,
+        SUM(vs.sum_max_cs_advantage_on_lane_opponent)::double precision AS sum_cs,
+        SUM(vs.sum_vision_score_advantage_lane_opponent)::double precision AS sum_vision,
+        SUM(vs.sum_laning_phase_gold_exp_advantage)::double precision AS sum_laning,
+        SUM(vs.sum_early_laning_phase_gold_exp_advantage)::double precision AS sum_early
+      FROM ${refVsFrom} vs
       WHERE ${refMyWhere}
-      GROUP BY vs.opponent_champion_id, ac.role
+      GROUP BY vs.opponent_champion_id, vs.role
       HAVING SUM(vs.count_game) >= ${minGames}
     `)
     if (refMyRows.length > 0) {
       const refTotalGames = refMyRows.reduce((s, r) => s + Number(r.games ?? 0), 0)
       const refOppIds = [...new Set(refMyRows.map((r) => Number(r.opponent_champion_id)))]
-      const refPeerWhere = buildPeerCoreWhere(referenceVersion, options.rankTier, roleFilter)
+      const refPeerWhere = buildPeerVsWhere(referenceVersion, options.rankTier, roleFilter)
       const refPeerRows = await queryRawUnsafe<RawPeerRow[]>(`
         SELECT
           vs.opponent_champion_id,
-          ac.role,
-          ac.champion_id,
+          vs.role,
+          vs.champion_id,
           SUM(vs.count_game)::bigint AS games,
           SUM(vs.count_win)::bigint AS wins,
-          SUM(vs.sum_max_level_lead_lane_opponent)::bigint AS sum_level,
-          SUM(vs.sum_max_kill_deficit)::bigint AS sum_kill_def,
-          SUM(vs.sum_max_cs_advantage_on_lane_opponent)::bigint AS sum_cs,
-          SUM(vs.sum_vision_score_advantage_lane_opponent)::bigint AS sum_vision,
-          SUM(vs.sum_laning_phase_gold_exp_advantage)::bigint AS sum_laning,
-          SUM(vs.sum_early_laning_phase_gold_exp_advantage)::bigint AS sum_early
-        FROM ${refVsFrom}
-        INNER JOIN ${refCoreFrom} ON ac.id = vs.champion_stat_id
+          SUM(vs.sum_max_level_lead_lane_opponent)::double precision AS sum_level,
+          SUM(vs.sum_max_kill_deficit)::double precision AS sum_kill_def,
+          SUM(vs.sum_max_cs_advantage_on_lane_opponent)::double precision AS sum_cs,
+          SUM(vs.sum_vision_score_advantage_lane_opponent)::double precision AS sum_vision,
+          SUM(vs.sum_laning_phase_gold_exp_advantage)::double precision AS sum_laning,
+          SUM(vs.sum_early_laning_phase_gold_exp_advantage)::double precision AS sum_early
+        FROM ${refVsFrom} vs
         WHERE ${refPeerWhere}
           AND vs.opponent_champion_id IN (${refOppIds.join(',')})
-        GROUP BY vs.opponent_champion_id, ac.role, ac.champion_id
+        GROUP BY vs.opponent_champion_id, vs.role, vs.champion_id
         HAVING SUM(vs.count_game) >= 3
       `)
       const refByOppRole = new Map<string, RawPeerRow[]>()
@@ -396,7 +412,7 @@ export async function getChampionMatchupsExtendedTable(options: {
           gamesInMatchup: g,
           totalGamesChampion: Math.max(1, totalRoleGames),
         })
-        const perGame = (sum: bigint) => (g > 0 ? Number(sum) / g : 0)
+        const perGame = (sum: number | bigint) => (g > 0 ? Number(sum) / g : 0)
         const myLevel = perGame(mr.sum_level)
         const myKill = -perGame(mr.sum_kill_def)
         const myCs = perGame(mr.sum_cs)
@@ -408,7 +424,7 @@ export async function getChampionMatchupsExtendedTable(options: {
           const gg = Number(row.games ?? 0)
           if (gg <= 0) return 0
           const v = row[sumField]
-          return Number(v as bigint) / gg
+          return Number(v) / gg
         }
         const levels = cohort.map((p) => peerAvg(p, 'sum_level'))
         const kills = cohort.map((p) => -peerAvg(p, 'sum_kill_def'))
@@ -496,7 +512,7 @@ export async function getChampionMatchupsExtendedTable(options: {
       totalGamesChampion: Math.max(1, totalRoleGames),
     })
 
-    const perGame = (sum: bigint) => (g > 0 ? Number(sum) / g : 0)
+    const perGame = (sum: number | bigint) => (g > 0 ? Number(sum) / g : 0)
     const myLevel = perGame(mr.sum_level)
     const myKill = -perGame(mr.sum_kill_def)
     const myCs = perGame(mr.sum_cs)
@@ -509,7 +525,7 @@ export async function getChampionMatchupsExtendedTable(options: {
       const gg = Number(row.games ?? 0)
       if (gg <= 0) return 0
       const v = row[sumField]
-      return Number(v as bigint) / gg
+      return Number(v) / gg
     }
     const levels = cohort.map((p) => peerAvg(p, 'sum_level'))
     const kills = cohort.map((p) => -peerAvg(p, 'sum_kill_def'))
@@ -632,21 +648,19 @@ export async function getChampionMatchupsExportRows(options: {
   const roleFilter = options.role != null && options.role !== '' ? options.role.toUpperCase() : null
   const minGames = options.minGames != null ? Math.max(1, options.minGames) : 10
   const metricCols = await getVsMetricColumns()
-  const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', version, 'ac')
   const vsFrom = await matchVersionedAggFrom('agg_champion_vs_stats', version, 'vs')
-  const where = buildCoreWhere(championId, version, options.rankTier, roleFilter)
+  const where = buildVsWhere(championId, version, options.rankTier, roleFilter)
   const metricSelect = metricCols.map((c) => `COALESCE(SUM(vs.${c}), 0)::bigint AS ${c}`).join(',\n      ')
   const sql = `
     SELECT
       vs.opponent_champion_id,
-      ac.role,
+      vs.role,
       COALESCE(SUM(vs.count_game), 0)::bigint AS count_game,
       COALESCE(SUM(vs.count_win), 0)::bigint AS count_win
       ${metricSelect ? `,\n      ${metricSelect}` : ''}
-    FROM ${vsFrom}
-    INNER JOIN ${coreFrom} ON ac.id = vs.champion_stat_id
+    FROM ${vsFrom} vs
     WHERE ${where}
-    GROUP BY vs.opponent_champion_id, ac.role
+    GROUP BY vs.opponent_champion_id, vs.role
     HAVING SUM(vs.count_game) >= ${minGames}
     ORDER BY SUM(vs.count_game) DESC
   `

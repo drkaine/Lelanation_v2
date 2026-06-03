@@ -1,5 +1,9 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
 /** En-tête mobile unifié : nom + rôle (icône) au-dessus du portrait. */
+const { t } = useI18n()
+
 withDefaults(
   defineProps<{
     championId: number
@@ -26,12 +30,17 @@ withDefaults(
 </script>
 
 <template>
-  <div
-    class="statistics-champion-stats-mobile-identity flex w-[4.5rem] shrink-0 flex-col items-center gap-1.5"
+  <component
+    :is="detailTo ? 'NuxtLink' : 'div'"
+    :to="detailTo ?? undefined"
+    class="statistics-champion-stats-mobile-identity flex w-[4.5rem] shrink-0 flex-col items-center gap-1.5 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+    :class="detailTo ? 'hover:opacity-90 active:opacity-80' : ''"
+    :aria-label="detailTo ? t('statisticsPage.championStatsOpenDetail') : undefined"
   >
     <div class="flex w-full min-w-0 flex-col items-center gap-0.5 text-center">
       <div
         class="statistics-champion-stats-mobile-name w-full truncate text-sm font-semibold leading-tight text-accent"
+        :class="detailTo ? 'underline decoration-accent/40 underline-offset-2' : ''"
       >
         <StatisticsChampionNameHighlight
           :name="championName || String(championId)"
@@ -55,20 +64,13 @@ withDefaults(
         <span class="truncate">{{ roleLabel }}</span>
       </div>
     </div>
-    <component
-      :is="detailTo ? 'NuxtLink' : 'div'"
-      :to="detailTo ?? undefined"
-      class="shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
-      @click.stop
-    >
-      <StatisticsChampionPortrait
-        :src="portraitSrc"
-        :alt="portraitAlt || championName"
-        :champion-id="championId"
-        :champion-name="championName"
-        :size="portraitSize"
-        rounded="sm"
-      />
-    </component>
-  </div>
+    <StatisticsChampionPortrait
+      :src="portraitSrc"
+      :alt="portraitAlt || championName"
+      :champion-id="championId"
+      :champion-name="championName"
+      :size="portraitSize"
+      rounded="sm"
+    />
+  </component>
 </template>

@@ -271,10 +271,8 @@ function globalTooltip(row: BalanceRow): string {
             :key="'balance-mobile-' + balanceRowKey(row)"
             class="statistics-champion-stats-mobile-card statistics-balance-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
           >
-            <button
-              type="button"
-              class="statistics-champion-stats-mobile-card-header flex w-full items-center gap-3 p-3 text-left"
-              @click="toggleBalanceCardExpanded(row)"
+            <div
+              class="statistics-champion-stats-mobile-card-header flex w-full items-center gap-3 p-3"
             >
               <StatisticsChampionStatsMobileCardHeader
                 :champion-id="row.championId"
@@ -299,7 +297,11 @@ function globalTooltip(row: BalanceRow): string {
                     : null
                 "
               />
-              <div class="flex min-w-0 flex-1 flex-col items-end justify-center text-right">
+              <button
+                type="button"
+                class="flex min-w-0 flex-1 flex-col items-end justify-center text-right"
+                @click="toggleBalanceCardExpanded(row)"
+              >
                 <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
                   {{ p.t('statisticsPage.balanceGlobalStatus') }}
                 </div>
@@ -315,8 +317,8 @@ function globalTooltip(row: BalanceRow): string {
                 >
                   {{ formatDeltaLabel(row.globalDelta) }}
                 </div>
-              </div>
-            </button>
+              </button>
+            </div>
 
             <div class="statistics-balance-mobile-levels border-t border-primary/15 px-3 py-2.5">
               <div class="grid grid-cols-3 gap-2">

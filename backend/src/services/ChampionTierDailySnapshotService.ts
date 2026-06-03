@@ -3,6 +3,7 @@
  * Cron here only refreshes archive housekeeping (no ingest replay).
  */
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
+import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
 
 type Logger = ReturnType<typeof createRiotPollerLogger>
@@ -95,24 +96,77 @@ export interface ChampionTierSnapshotRow {
   pickRatePct: number
 }
 
+function buildSnapshotFilterSql(options: {
+  championId?: number | null
+  rankTiers?: string[] | null
+  role?: string | null
+  fromDate?: string | null
+  toDate?: string | null
+  alias?: string
+}): string {
+  const a = options.alias ?? 's'
+  const parts: string[] = ['1=1']
+  if (options.championId != null && Number.isFinite(options.championId)) {
+    parts.push(`${a}.champion_id = ${options.championId}`)
+  }
+  const tiers = (options.rankTiers ?? [])
+    .map((t) => t.trim().toUpperCase().split('_')[0]!)
+    .filter(Boolean)
+  if (tiers.length === 1) {
+    parts.push(
+      `split_part(upper(trim(${a}.rank_tier::text)), '_', 1) = '${tiers[0]!.replace(/'/g, "''")}'`,
+    )
+  } else if (tiers.length > 1) {
+    parts.push(
+      `split_part(upper(trim(${a}.rank_tier::text)), '_', 1) IN (${tiers.map((t) => `'${t.replace(/'/g, "''")}'`).join(', ')})`,
+    )
+  } else {
+    parts.push(`split_part(upper(trim(${a}.rank_tier::text)), '_', 1) <> 'UNRANKED'`)
+  }
+  if (options.role) {
+    parts.push(`${a}.role = '${options.role.toUpperCase().replace(/'/g, "''")}'`)
+  }
+  if (options.fromDate) parts.push(`${a}.date_of_game >= '${options.fromDate.replace(/'/g, "''")}'::date`)
+  if (options.toDate) parts.push(`${a}.date_of_game <= '${options.toDate.replace(/'/g, "''")}'::date`)
+  return parts.join(' AND ')
+}
+
 export async function getChampionTierSnapshotsForCharts(options: {
   championId: number
-  rankTier?: string | null
+  rankTier?: string | string[] | null
   role?: string | null
   fromDate?: string | null
   toDate?: string | null
   limit?: number
 }): Promise<ChampionTierSnapshotRow[]> {
   if (!isDatabaseConfigured()) return []
-  const { championId, rankTier, fromDate, toDate, limit = 365 } = options
+  const { championId, fromDate, toDate, limit = 365 } = options
+  const rankTiers = toQueryStringArrayParam(options.rankTier)
+    .map((t) => t.trim().toUpperCase().split('_')[0]!)
+    .filter(Boolean)
   let role = options.role
   if (role && role.toUpperCase() === 'UTILITY') role = 'SUPPORT'
+  if (role && role.toUpperCase() === 'MID') role = 'MIDDLE'
+  if (role && role.toUpperCase() === 'ADC') role = 'BOTTOM'
 
-  const conds: string[] = [`champion_id = ${championId}`]
-  if (rankTier) conds.push(`rank_tier = '${rankTier.toUpperCase().split('_')[0]!.replace(/'/g, "''")}'`)
-  if (role) conds.push(`role = '${role.toUpperCase().replace(/'/g, "''")}'`)
-  if (fromDate) conds.push(`date_of_game >= '${fromDate.replace(/'/g, "''")}'::date`)
-  if (toDate) conds.push(`date_of_game <= '${toDate.replace(/'/g, "''")}'::date`)
+  const normRole = role ? role.toUpperCase().replace(/'/g, "''") : null
+
+  const cohortWhere = buildSnapshotFilterSql({
+    championId: null,
+    rankTiers,
+    role: normRole,
+    fromDate,
+    toDate,
+    alias: 'cohort',
+  })
+  const champWhere = buildSnapshotFilterSql({
+    championId,
+    rankTiers,
+    role: normRole,
+    fromDate,
+    toDate,
+    alias: 'champ',
+  })
 
   const rows = await queryRawUnsafe<
     Array<{
@@ -123,26 +177,56 @@ export async function getChampionTierSnapshotsForCharts(options: {
       games: number
       wins: number
       count_ban: number
+      cohort_picks: number
     }>
   >(`
+    WITH cohort AS (
+      SELECT
+        date_of_game,
+        rank_tier,
+        role,
+        SUM(games)::int AS cohort_picks
+      FROM champion_tier_daily_snapshots cohort
+      WHERE ${cohortWhere}
+      GROUP BY date_of_game, rank_tier, role
+    ),
+    champ AS (
+      SELECT
+        date_of_game,
+        rank_tier,
+        role,
+        champion_id,
+        SUM(games)::int AS games,
+        SUM(wins)::int AS wins,
+        SUM(count_ban)::int AS count_ban
+      FROM champion_tier_daily_snapshots champ
+      WHERE ${champWhere}
+      GROUP BY date_of_game, rank_tier, role, champion_id
+    )
     SELECT
-      date_of_game,
-      rank_tier,
-      role,
-      champion_id,
-      SUM(games)::int AS games,
-      SUM(wins)::int AS wins,
-      SUM(count_ban)::int AS count_ban
-    FROM champion_tier_daily_snapshots
-    WHERE ${conds.join(' AND ')}
-    GROUP BY date_of_game, rank_tier, role, champion_id
-    ORDER BY date_of_game DESC
+      c.date_of_game,
+      c.rank_tier,
+      c.role,
+      c.champion_id,
+      c.games,
+      c.wins,
+      c.count_ban,
+      COALESCE(co.cohort_picks, 0)::int AS cohort_picks
+    FROM champ c
+    LEFT JOIN cohort co
+      ON co.date_of_game = c.date_of_game
+      AND co.rank_tier = c.rank_tier
+      AND co.role = c.role
+    ORDER BY c.date_of_game DESC
     LIMIT ${limit}
   `)
 
   return [...rows].reverse().map((r) => {
-    const games = r.games
-    const tierPickDenom = games
+    const games = Number(r.games ?? 0)
+    const cohortPicks = Number(r.cohort_picks ?? 0)
+    const countBan = Number(r.count_ban ?? 0)
+    const pickRatePct = cohortPicks > 0 ? (games / cohortPicks) * 100 : 0
+    const banRatePct = cohortPicks > 0 ? (countBan / cohortPicks) * 100 : 0
     return {
       dateOfGame: r.date_of_game.toISOString().slice(0, 10),
       rankTier: r.rank_tier,
@@ -150,8 +234,8 @@ export async function getChampionTierSnapshotsForCharts(options: {
       championId: r.champion_id,
       games,
       wins: r.wins,
-      banRatePct: games > 0 ? (r.count_ban / games) * 100 : 0,
-      pickRatePct: tierPickDenom > 0 ? (games / tierPickDenom) * 100 : 0,
+      banRatePct,
+      pickRatePct,
     }
   })
 }

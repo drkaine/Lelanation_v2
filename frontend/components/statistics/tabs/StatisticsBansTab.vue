@@ -24,10 +24,8 @@
           :key="'ban-mobile-' + row.championId"
           class="statistics-champion-stats-mobile-card statistics-ban-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
         >
-          <button
-            type="button"
-            class="statistics-champion-stats-mobile-card-header flex w-full items-center gap-3 p-3 text-left"
-            @click="toggleBanCardExpanded(row.championId)"
+          <div
+            class="statistics-champion-stats-mobile-card-header flex w-full items-center gap-3 p-3"
           >
             <StatisticsChampionStatsMobileCardHeader
               :champion-id="row.championId"
@@ -50,7 +48,11 @@
                   : null
               "
             />
-            <div class="flex min-w-0 flex-1 flex-col items-end justify-center text-right">
+            <button
+              type="button"
+              class="flex min-w-0 flex-1 flex-col items-end justify-center text-right"
+              @click="toggleBanCardExpanded(row.championId)"
+            >
               <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
                 {{ p.t('statisticsPage.bansColRate') }}
               </div>
@@ -64,8 +66,8 @@
               >
                 {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansTotal', 2)!) }}
               </div>
-            </div>
-          </button>
+            </button>
+          </div>
 
           <div
             v-if="visibleRoleHeaders.length > 0"

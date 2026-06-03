@@ -129,10 +129,8 @@ function rankDeltaClass(v: number): string {
   <article
     class="statistics-champion-stats-mobile-card statistics-tier-list-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
   >
-    <button
-      type="button"
-      class="statistics-champion-stats-mobile-card-header flex w-full min-w-0 items-center gap-3 p-3 text-left"
-      @click="emit('toggle')"
+    <div
+      class="statistics-champion-stats-mobile-card-header flex w-full min-w-0 items-center gap-3 p-3"
     >
       <StatisticsChampionStatsMobileCardHeader
         :champion-id="row.championId"
@@ -155,7 +153,11 @@ function rankDeltaClass(v: number): string {
         "
         :detail-to="detailTo"
       />
-      <div class="flex min-w-0 flex-1 justify-end gap-3 text-right">
+      <button
+        type="button"
+        class="flex min-w-0 flex-1 justify-end gap-3 text-right"
+        @click="emit('toggle')"
+      >
         <div class="min-w-0 shrink">
           <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
             {{ t('statisticsPage.winrate') }}
@@ -189,8 +191,8 @@ function rankDeltaClass(v: number): string {
             {{ formatPp(row.patchRefPickratePp) }}
           </div>
         </div>
-      </div>
-    </button>
+      </button>
+    </div>
     <div
       v-if="expanded"
       class="space-y-1.5 border-t border-primary/20 bg-black/20 px-3 py-2.5 text-sm text-text/85"

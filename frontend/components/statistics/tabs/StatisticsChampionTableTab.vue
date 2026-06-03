@@ -159,10 +159,8 @@ const championTableLayoutStyle = computed(() => {
           :key="'mobile-' + row.championId"
           class="statistics-champion-stats-mobile-card statistics-champion-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
         >
-          <button
-            type="button"
-            class="statistics-champion-stats-mobile-card-header flex w-full items-center gap-3 p-3 text-left"
-            @click="toggleChampionCardExpanded(row.championId)"
+          <div
+            class="statistics-champion-stats-mobile-card-header flex w-full items-center gap-3 p-3"
           >
             <StatisticsChampionStatsMobileCardHeader
               :champion-id="row.championId"
@@ -187,7 +185,11 @@ const championTableLayoutStyle = computed(() => {
                   : null
               "
             />
-            <div class="flex min-w-0 flex-1 justify-end gap-3 text-right">
+            <button
+              type="button"
+              class="flex min-w-0 flex-1 justify-end gap-3 text-right"
+              @click="toggleChampionCardExpanded(row.championId)"
+            >
               <div>
                 <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
                   {{ p.t('statisticsPage.winrate') }}
@@ -232,8 +234,8 @@ const championTableLayoutStyle = computed(() => {
                   {{ p.formatTierListPatchDeltaPp(combinedStatDelta(row, 'pickrate')!) }}
                 </div>
               </div>
-            </div>
-          </button>
+            </button>
+          </div>
           <div
             v-if="expandedChampionIds.has(row.championId)"
             class="border-t border-primary/20 bg-black/20 px-3 py-2 text-sm"
