@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useLocalePath } from '#i18n'
 import { useMobileViewport } from '~/composables/useMobileViewport'
+import { championStatsDetailPathIfValid } from '~/utils/championStatsRoutes'
 
 /**
  * Liste Top 5 en cards (vue mobile « Cards (Top 5) »).
@@ -10,7 +11,7 @@ const localePath = useLocalePath()
 const { isMobileViewport } = useMobileViewport()
 const portraitSize = computed(() => (isMobileViewport.value ? 56 : 40))
 
-const props = defineProps<{
+defineProps<{
   rows: Array<{
     championId: number
     label: string
@@ -27,8 +28,7 @@ const props = defineProps<{
 }>()
 
 function championDetailTo(id: number): string | null {
-  if (!props.gameVersion || !props.championByKey(id)) return null
-  return localePath(`/statistics/champion/${encodeURIComponent(String(id))}`)
+  return championStatsDetailPathIfValid(id, localePath)
 }
 </script>
 

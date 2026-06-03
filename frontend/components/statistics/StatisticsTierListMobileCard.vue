@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, inject } from 'vue'
+import { championStatsDetailPathIfValid } from '~/utils/championStatsRoutes'
 
 export type TierListMobileRow = {
   championId: number
@@ -80,9 +81,7 @@ const portraitSrc = computed(() => {
 
 const detailTo = computed(() => {
   const pathFn = p.localePath as ((path: string) => string) | undefined
-  const byKey = p.championByKey as ((id: number) => unknown) | undefined
-  if (!pathFn || !byKey?.(props.row.championId)) return null
-  return pathFn(`/statistics/champion/${encodeURIComponent(String(props.row.championId))}`)
+  return championStatsDetailPathIfValid(props.row.championId, pathFn)
 })
 
 const patchRefLabel = computed(() => (p.tierListPatchDeltaRefLabel as string | null) ?? null)

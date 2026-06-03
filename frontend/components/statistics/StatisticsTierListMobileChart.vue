@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject } from 'vue'
 import { tierChartColor } from '~/utils/tierChartColors'
+import { championStatsDetailPathIfValid } from '~/utils/championStatsRoutes'
 
 type ChartRow = {
   championId: number
@@ -55,9 +56,7 @@ function formatPbi(pbi: number): string {
 
 function championDetailTo(id: number): string | null {
   const pathFn = p.localePath as ((path: string) => string) | undefined
-  const byKey = p.championByKey as ((id: number) => unknown) | undefined
-  if (!pathFn || !byKey?.(id)) return null
-  return pathFn(`/statistics/champion/${encodeURIComponent(String(id))}`)
+  return championStatsDetailPathIfValid(id, pathFn)
 }
 
 function barColor(tier: string): string {

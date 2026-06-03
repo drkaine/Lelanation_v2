@@ -639,8 +639,8 @@ function runeSetLayout(
         </div>
 
         <template v-if="unifiedLayout">
-          <hr class="my-6 border-primary/25" aria-hidden="true" />
-          <h3 class="mb-3 text-sm font-semibold text-text">
+          <hr class="border-primary/25" aria-hidden="true" />
+          <h3 class="text-sm font-semibold text-text">
             {{ t('statisticsPage.runeSetsSectionTitle') }}
           </h3>
           <div class="rune-set-cards-grid grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -650,7 +650,7 @@ function runeSetLayout(
                 ly: runeSetLayout(s.runes, s.shards ?? null),
               }))"
               :key="'unified-set-' + idx"
-              class="rune-set-card relative mx-auto min-w-0 max-w-full rounded-lg border border-primary/30 bg-black/20 px-4 pb-3 pt-5"
+              class="rune-set-card relative h-full w-full min-w-0 rounded-lg border border-primary/30 bg-black/20 px-4 pb-3 pt-5"
             >
               <span
                 class="absolute left-0 top-0 z-10 flex h-5 min-w-5 items-center justify-center rounded-md bg-primary/30 px-1 text-[10px] font-bold tabular-nums text-text/90"
@@ -855,7 +855,7 @@ function runeSetLayout(
               ly: runeSetLayout(s.runes, s.shards ?? null),
             }))"
             :key="block.key + '-' + idx"
-            class="rune-set-card statistics-overview-surface relative mx-auto min-w-0 max-w-full rounded-lg border border-primary/30 px-4 pb-3 pt-5"
+            class="rune-set-card statistics-overview-surface relative h-full w-full min-w-0 rounded-lg border border-primary/30 px-4 pb-3 pt-5"
           >
             <span
               class="absolute left-0 top-0 z-10 flex h-5 min-w-5 items-center justify-center rounded-md bg-primary/30 px-1 text-[10px] font-bold tabular-nums text-text/90"
@@ -1026,6 +1026,17 @@ function runeSetLayout(
 .stats-runes-shard-icon {
   flex-shrink: 0;
 }
+.rune-set-cards-grid {
+  grid-auto-rows: 1fr;
+  align-items: stretch;
+}
+.rune-set-card {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-height: 20rem;
+  height: 100%;
+}
 .rune-set-keystone-img {
   width: 64px;
   height: 64px;
@@ -1045,11 +1056,6 @@ function runeSetLayout(
   min-width: 32px;
   min-height: 32px;
 }
-.rune-set-stats {
-  font-size: 0.875rem;
-  line-height: 1.35;
-  color: rgb(var(--rgb-text) / 0.88);
-}
 .rune-set-stat-label {
   font-size: 0.75rem;
   font-weight: 500;
@@ -1064,10 +1070,22 @@ function runeSetLayout(
   font-weight: 500;
 }
 .rune-set-build-strip {
-  min-height: 0;
+  flex: 1 1 auto;
+  min-height: 11.75rem;
+  justify-content: flex-start;
 }
 .rune-set-shards-row {
   box-sizing: border-box;
+  min-height: 2.25rem;
+}
+.rune-set-stats {
+  flex-shrink: 0;
+  margin-top: auto;
+  min-height: 4.75rem;
+  align-content: flex-end;
+  font-size: 0.875rem;
+  line-height: 1.35;
+  color: rgb(var(--rgb-text) / 0.88);
 }
 
 @media (max-width: 768px) {
@@ -1076,8 +1094,17 @@ function runeSetLayout(
   }
 
   .rune-set-card {
-    width: 100%;
-    max-width: 100%;
+    min-height: 21.5rem;
+  }
+
+  .rune-set-build-strip {
+    min-height: 12.5rem;
+  }
+
+  .rune-set-stats {
+    min-height: 5.25rem;
+    font-size: 0.9375rem;
+    gap: 0.625rem 1.25rem;
   }
 
   .rune-set-keystone-img {
@@ -1099,11 +1126,6 @@ function runeSetLayout(
     height: 2.75rem;
     min-width: 2.75rem;
     min-height: 2.75rem;
-  }
-
-  .rune-set-stats {
-    font-size: 0.9375rem;
-    gap: 0.625rem 1.25rem;
   }
 
   .rune-set-stat-label {

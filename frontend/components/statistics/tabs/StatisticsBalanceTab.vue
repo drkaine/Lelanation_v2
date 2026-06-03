@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { computed, inject, ref, unref, watch } from 'vue'
+import { championStatsDetailPathIfValid } from '~/utils/championStatsRoutes'
 const p = inject('statisticsPageCtx') as any
 const expandedBalanceKeys = ref<Set<string>>(new Set())
+
+function championDetailTo(championId: number): string | null {
+  return championStatsDetailPathIfValid(championId, p.localePath)
+}
 
 type LevelRow = {
   status: 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'
@@ -289,13 +294,7 @@ function globalTooltip(row: BalanceRow): string {
                     : null
                 "
                 :portrait-alt="p.championName(row.championId) || ''"
-                :detail-to="
-                  p.gameVersion && p.championByKey(row.championId)
-                    ? p.localePath(
-                        `/statistics/champion/${encodeURIComponent(String(row.championId))}`
-                      )
-                    : null
-                "
+                :detail-to="championDetailTo(row.championId)"
               />
               <button
                 type="button"
