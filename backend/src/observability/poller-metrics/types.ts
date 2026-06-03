@@ -91,6 +91,12 @@ export const INGESTION_SKIP_REASONS: IngestionSkipReason[] = [
   'queue_add_failed',
 ];
 
+export type IngestionRankSource =
+  | 'player_cache'
+  | 'participant_cache'
+  | 'db_fallback'
+  | 'unranked_fallback';
+
 export interface IngestionQueueEvent {
   ts: number;
   matchId: string;
@@ -98,6 +104,7 @@ export interface IngestionQueueEvent {
   rank: string;
   type: 'queued' | 'skipped';
   skipReason?: IngestionSkipReason;
+  rankSource?: IngestionRankSource;
 }
 
 export type IngestionCompletedReason = 'processed' | 'already_done';
@@ -202,6 +209,8 @@ export interface IngestionAggregate {
   slowest_db_ops: Array<{ operation: string; p95_ms: number }>;
   queue_depth_avg: number;
   queue_depth_peak: number;
+  rank_resolved_from_db: number;
+  rank_unranked_fallback: number;
 }
 
 export interface FullSnapshot {

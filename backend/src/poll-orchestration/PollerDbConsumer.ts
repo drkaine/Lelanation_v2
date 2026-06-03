@@ -1,3 +1,4 @@
+import { sql } from '../db/client.js';
 import { insertRankHistory } from '../db/queries/ranks.js';
 import { ingestionQueue } from '../queues/index.js';
 import { normalizePlatformRegion } from '../riot/platform-region.js';
@@ -18,6 +19,8 @@ import {
   updateProcessedMatchRank,
 } from './processedMatchWrite.js';
 import type { PollerDbConsumerConfig } from './types.js';
+import { timedDbOp } from '../observability/poller-metrics/timedDbOp.js';
+import type { IngestionRankSource } from '../observability/poller-metrics/types.js';
 import {
   recordIngestionQueue,
   recordPlayer,
@@ -159,26 +162,101 @@ export class PollerDbConsumer {
     await this.processMatchData(pending.event);
   }
 
-  private resolveMatchRank(event: MatchDataEvent): { rank: string; source: 'player' | 'participant' | 'fallback' } {
-    const playerRank = this.rankTierCache.get(event.player.puuid);
-    if (playerRank) {
-      return { rank: playerRank, source: 'player' };
+  /**
+   * Fetch rank_tier from player_rank_history for puuids not in rankTierCache.
+   * Single batch query; populates rankTierCache for session reuse.
+   */
+  private async fetchRankTiersFromDb(puuids: string[]): Promise<Set<string>> {
+    const filled = new Set<string>();
+    if (puuids.length === 0) return filled;
+
+    const rows = await timedDbOp('rank_history_fallback_query', () =>
+      sql<{ puuid: string; rank_tier: string }[]>`
+        SELECT DISTINCT ON (puuid)
+          puuid,
+          rank_tier
+        FROM player_rank_history
+        WHERE puuid = ANY(${sql.array(puuids, 25)})
+          AND date = CURRENT_DATE
+          AND rank_tier IS NOT NULL
+          AND rank_tier <> 'UNRANKED'
+        ORDER BY puuid, date DESC
+      `,
+    );
+
+    for (const row of rows) {
+      const puuid = String(row.puuid ?? '').trim();
+      const tier = String(row.rank_tier ?? '').trim().toUpperCase();
+      if (!puuid || !tier) continue;
+      if (!this.rankTierCache.has(puuid)) {
+        this.rankTierCache.set(puuid, tier);
+        filled.add(puuid);
+        orchestrationLogger.debug(
+          { component: 'PollerDbConsumer', event: 'rank_resolved_from_db', puuid, tier },
+          'rank resolved from player_rank_history',
+        );
+      }
     }
 
-    for (const participant of event.match.info?.participants ?? []) {
-      const puuid = String(participant.puuid ?? '').trim();
-      if (!puuid) continue;
-      const tier = this.rankTierCache.get(puuid);
-      if (tier) {
-        return { rank: tier, source: 'participant' };
+    return filled;
+  }
+
+  private async resolveMatchRank(
+    event: MatchDataEvent,
+  ): Promise<{ rank: string; rankSource: IngestionRankSource }> {
+    const playerPuuid = event.player.puuid;
+    const participantPuuids = extractParticipantPuuids(event.match);
+
+    const playerRank = this.rankTierCache.get(playerPuuid);
+    if (playerRank) {
+      return { rank: playerRank, rankSource: 'player_cache' };
+    }
+
+    for (const puuid of participantPuuids) {
+      const cached = this.rankTierCache.get(puuid);
+      if (cached) {
+        return { rank: cached, rankSource: 'participant_cache' };
+      }
+    }
+
+    const allPuuids = [playerPuuid, ...participantPuuids];
+    const unknownPuuids = Array.from(new Set(allPuuids.filter((p) => p && !this.rankTierCache.has(p))));
+    let dbFilled = new Set<string>();
+
+    if (unknownPuuids.length > 0) {
+      dbFilled = await this.fetchRankTiersFromDb(unknownPuuids);
+
+      const afterDbPlayer = this.rankTierCache.get(playerPuuid);
+      if (afterDbPlayer) {
+        return {
+          rank: afterDbPlayer,
+          rankSource: dbFilled.has(playerPuuid) ? 'db_fallback' : 'player_cache',
+        };
+      }
+
+      for (const puuid of participantPuuids) {
+        const cached = this.rankTierCache.get(puuid);
+        if (cached) {
+          return {
+            rank: cached,
+            rankSource: dbFilled.has(puuid) ? 'db_fallback' : 'participant_cache',
+          };
+        }
       }
     }
 
     orchestrationLogger.warn(
-      { component: 'PollerDbConsumer', matchId: event.matchId },
-      'match rank resolved to fallback',
+      {
+        component: 'PollerDbConsumer',
+        event: 'rank_fallback_unranked',
+        matchId: event.matchId,
+        playerPuuid,
+        participantPuuids: participantPuuids.slice(0, 3),
+        reason: 'no rank in cache or player_rank_history today',
+      },
+      'match rank resolved to UNRANKED fallback',
     );
-    return { rank: this.config.rankTierForUnranked, source: 'fallback' };
+    return { rank: this.config.rankTierForUnranked, rankSource: 'unranked_fallback' };
   }
 
   private async processMatchData(event: MatchDataEvent): Promise<void> {
@@ -187,8 +265,11 @@ export class PollerDbConsumer {
     let queued = false;
 
     try {
-      const { rank, source } = this.resolveMatchRank(event);
-      orchestrationLogger.debug({ component: 'PollerDbConsumer', matchId, rank, source }, 'match rank resolved');
+      const { rank, rankSource } = await this.resolveMatchRank(event);
+      orchestrationLogger.debug(
+        { component: 'PollerDbConsumer', matchId, rank, rankSource, event: 'match_rank_resolved' },
+        'match rank resolved',
+      );
 
       const payload = await buildIngestionPayloadFromMatchData({
         match: event.match as unknown as MatchDto,
@@ -205,6 +286,7 @@ export class PollerDbConsumer {
           rank,
           type: 'skipped',
           skipReason: 'missing_rank',
+          rankSource,
         });
         orchestrationLogger.info({ component: 'PollerDbConsumer', matchId }, 'match skipped (rank gate not ready for ingestion)');
         return;
@@ -224,6 +306,7 @@ export class PollerDbConsumer {
           rank,
           type: 'skipped',
           skipReason: 'conflict_already_done',
+          rankSource,
         });
         orchestrationLogger.debug({ component: 'PollerDbConsumer', matchId }, 'match already in processed_matches, skipping');
         return;
@@ -241,7 +324,7 @@ export class PollerDbConsumer {
       });
       queued = true;
 
-      recordIngestionQueue({ matchId, patch, rank, type: 'queued' });
+      recordIngestionQueue({ matchId, patch, rank, type: 'queued', rankSource });
       orchestrationLogger.info(
         { component: 'PollerDbConsumer', matchId, patch, rank, queueJobId: matchId },
         'match queued for ingestion',
@@ -271,6 +354,7 @@ export class PollerDbConsumer {
           rank,
           type: 'skipped',
           skipReason: 'queue_add_failed',
+          rankSource,
         });
         throw queueError;
       }

@@ -118,6 +118,8 @@ export class AggregateComputer {
 
     const matchesQueued = queued.filter((e) => e.type === 'queued').length;
     const matchesSkipped = queued.filter((e) => e.type === 'skipped').length;
+    const rank_resolved_from_db = queued.filter((e) => e.rankSource === 'db_fallback').length;
+    const rank_unranked_fallback = queued.filter((e) => e.rankSource === 'unranked_fallback').length;
 
     return {
       window,
@@ -141,6 +143,8 @@ export class AggregateComputer {
       slowest_db_ops,
       queue_depth_avg: mean(depths.map((d) => d.total)),
       queue_depth_peak: depths.length > 0 ? Math.max(...depths.map((d) => d.total)) : 0,
+      rank_resolved_from_db,
+      rank_unranked_fallback,
     };
   }
 

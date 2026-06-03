@@ -1,6 +1,11 @@
 import type { BucketState } from '../../riot-gateway/types.js';
 import { MetricsStore } from './MetricsStore.js';
-import type { IngestionCompletedReason, IngestionSkipReason, RankEvent } from './types.js';
+import type {
+  IngestionCompletedReason,
+  IngestionRankSource,
+  IngestionSkipReason,
+  RankEvent,
+} from './types.js';
 
 function appLimits(buckets: BucketState[]): {
   used120: number;
@@ -94,6 +99,7 @@ export function recordIngestionQueue(params: {
   rank: string;
   type: 'queued' | 'skipped';
   skipReason?: IngestionSkipReason;
+  rankSource?: IngestionRankSource;
 }): void {
   MetricsStore.getInstance().pushIngestionQueue({ ts: Date.now(), ...params });
 }

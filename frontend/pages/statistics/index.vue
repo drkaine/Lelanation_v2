@@ -66,27 +66,41 @@
       <button
         v-if="showFiltersPanel"
         type="button"
-        class="filters-collapse-floating hidden shrink-0 touch-manipulation lg:sticky lg:top-4 lg:z-20 lg:mr-2 lg:inline-flex lg:self-start"
+        class="statistics-filters-desktop-trigger hidden shrink-0 touch-manipulation lg:sticky lg:top-4 lg:z-20 lg:mr-2 lg:flex lg:flex-col lg:items-center lg:gap-1 lg:self-start"
         :aria-label="
           filtersOpen ? t('statisticsPage.closeFilters') : t('statisticsPage.openFilters')
         "
+        :aria-expanded="filtersOpen"
         @click="toggleFiltersOpen"
       >
-        <svg
-          class="h-2 w-2 transition-transform duration-200"
-          :class="filtersOpen ? 'rotate-180' : ''"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-          aria-hidden="true"
+        <span class="filters-collapse-floating inline-flex" aria-hidden="true">
+          <svg
+            class="h-2 w-2 transition-transform duration-200"
+            :class="filtersOpen ? 'rotate-180' : ''"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M15 19l-7-7 7-7"
+            />
+          </svg>
+        </span>
+        <span
+          class="max-w-[4.5rem] text-center text-[10px] font-semibold leading-tight text-text/85"
         >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M15 19l-7-7 7-7"
-          />
-        </svg>
+          {{ t('statisticsPage.filtersTitle') }}
+        </span>
+        <span
+          v-if="activeStatsFiltersCount > 0"
+          class="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-bold text-background"
+          :aria-label="`${activeStatsFiltersCount} ${t('statisticsPage.filtersTitle')}`"
+        >
+          {{ activeStatsFiltersCount }}
+        </span>
       </button>
       <!-- Overlay mobile : uniquement quand le sheet est ouvert -->
       <div
@@ -495,10 +509,7 @@
                       ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
                       : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
                   "
-                  @click="
-                    statsOtpFilter = 'non'
-                    onStatsFilterChange()
-                  "
+                  @click="setStatsOtpFilter('non')"
                 >
                   {{ t('statisticsPage.filterOtpNo') }}
                 </button>
@@ -510,10 +521,7 @@
                       ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
                       : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
                   "
-                  @click="
-                    statsOtpFilter = 'oui'
-                    onStatsFilterChange()
-                  "
+                  @click="setStatsOtpFilter('oui')"
                 >
                   {{ t('statisticsPage.filterOtpYes') }}
                 </button>
@@ -525,10 +533,7 @@
                       ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
                       : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
                   "
-                  @click="
-                    statsOtpFilter = 'solo'
-                    onStatsFilterChange()
-                  "
+                  @click="setStatsOtpFilter('solo')"
                 >
                   {{ t('statisticsPage.filterOtpSolo') }}
                 </button>
@@ -1692,6 +1697,10 @@ function toggleRoleFilter(r: (typeof roles)[number]) {
 }
 function selectAllRoles() {
   statsRoleFilter.value = ''
+  onStatsFilterChange()
+}
+function setStatsOtpFilter(value: 'oui' | 'non' | 'solo') {
+  statsOtpFilter.value = value
   onStatsFilterChange()
 }
 const showBansOutcomeColumns = ref(true)
@@ -5058,6 +5067,10 @@ if (__statisticsVm?.proxy) {
     border-color 0.2s ease;
 }
 .filters-collapse-floating:hover {
+  background: rgb(var(--rgb-background) / 0.3);
+  border-color: rgb(var(--rgb-accent) / 0.45);
+}
+.statistics-filters-desktop-trigger:hover .filters-collapse-floating {
   background: rgb(var(--rgb-background) / 0.3);
   border-color: rgb(var(--rgb-accent) / 0.45);
 }

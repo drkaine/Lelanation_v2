@@ -50,14 +50,8 @@ export class AggregateReporter {
   private async report(window: WindowLabel): Promise<void> {
     const { limit120s, limit1s } = this.getLimit();
     const activeAlerts = this.alertDetector.getActive();
-    const snapshot = this.computer.computeFull(window, limit120s, limit1s, activeAlerts);
-
-    if (window === '10m') {
-      this.alertDetector.check(snapshot);
-      snapshot.active_alerts = this.alertDetector.getActive();
-    }
-
     const resolved = getLatestResolvedSince();
+    const snapshot = this.computer.computeFull(window, limit120s, limit1s, activeAlerts);
     const enriched: FullSnapshot = resolved
       ? {
           ...snapshot,
@@ -68,6 +62,11 @@ export class AggregateReporter {
           },
         }
       : snapshot;
+
+    if (window === '10m') {
+      this.alertDetector.check(enriched);
+      enriched.active_alerts = this.alertDetector.getActive();
+    }
 
     pollerMetricsLogger.info({
       component: 'aggregate-reporter',

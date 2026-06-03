@@ -5,12 +5,33 @@ import {
   buildPlayerRankEvent,
 } from '../helpers/pipelineFixtures.js';
 
-vi.hoisted(() => {
+const { rankHistoryByPuuid, sqlMock } = vi.hoisted(() => {
   process.env.ENV = 'dev';
   process.env.REDIS_URL = 'redis://127.0.0.1:6379';
   process.env.DATABASE_URL = 'postgresql://lelanation:lelanation@localhost:5434/lelanation_statistiques';
   process.env.RIOT_API_KEY = 'RGAPI-test-key';
+
+  const rankHistoryByPuuid = new Map<string, string>();
+  const sqlMock = Object.assign(
+    vi.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      const q = String(strings.join('?')).toLowerCase();
+      if (q.includes('player_rank_history') && q.includes('distinct on')) {
+        for (const v of values) {
+          if (Array.isArray(v)) {
+            return (v as string[])
+              .filter((puuid) => rankHistoryByPuuid.has(puuid))
+              .map((puuid) => ({ puuid, rank_tier: rankHistoryByPuuid.get(puuid) }));
+          }
+        }
+      }
+      return [];
+    }),
+    { array: (arr: string[]) => arr },
+  );
+  return { rankHistoryByPuuid, sqlMock };
 });
+
+vi.mock('../../../src/db/client.js', () => ({ sql: sqlMock }));
 
 const insertRankHistory = vi.fn();
 const insertPendingProcessedMatch = vi.fn();
@@ -65,6 +86,8 @@ async function createConsumer(resolveRanks: boolean) {
 describe('PollerDbConsumer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    rankHistoryByPuuid.clear();
+    sqlMock.mockClear();
     insertRankHistory.mockResolvedValue(undefined);
     insertPendingProcessedMatch.mockResolvedValue(true);
     updateProcessedMatchRank.mockResolvedValue(undefined);
@@ -240,6 +263,84 @@ describe('PollerDbConsumer', () => {
     bus.emit('match:data', buildMatchDataEvent('EUW1_6', 'player-a', ['part-0']));
     await Promise.resolve();
     expect(ingestionAdd).not.toHaveBeenCalled();
+  });
+
+  test('DB fallback used when rank cache empty', async () => {
+    rankHistoryByPuuid.set('player-a', 'GOLD');
+    const { bus } = await createConsumer(false);
+    bus.emit('match:data', buildMatchDataEvent('EUW1_DB1', 'player-a', ['part-0']));
+    await vi.waitFor(() => expect(insertPendingProcessedMatch).toHaveBeenCalled());
+    expect(insertPendingProcessedMatch.mock.calls[0]?.[0]?.rank).toBe('GOLD');
+    expect(sqlMock).toHaveBeenCalled();
+  });
+
+  test('rank cache wins over DB fallback', async () => {
+    rankHistoryByPuuid.set('player-a', 'GOLD');
+    const { bus } = await createConsumer(false);
+    bus.emit('player:rank', buildPlayerRankEvent('player-a', 'PLATINUM'));
+    bus.emit('match:data', buildMatchDataEvent('EUW1_DB2', 'player-a', ['part-0']));
+    await vi.waitFor(() => expect(insertPendingProcessedMatch).toHaveBeenCalled());
+    expect(insertPendingProcessedMatch.mock.calls[0]?.[0]?.rank).toBe('PLATINUM');
+    expect(sqlMock).not.toHaveBeenCalled();
+  });
+
+  test('UNRANKED only when DB has no rank today', async () => {
+    const { orchestrationLogger } = await import('../../../src/poll-orchestration/logger.js');
+    const warnSpy = vi.spyOn(orchestrationLogger, 'warn');
+    const { bus } = await createConsumer(false);
+    bus.emit('match:data', buildMatchDataEvent('EUW1_DB3', 'player-x', ['part-0']));
+    await vi.waitFor(() => expect(insertPendingProcessedMatch).toHaveBeenCalled());
+    expect(insertPendingProcessedMatch.mock.calls[0]?.[0]?.rank).toBe('UNRANKED');
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'rank_fallback_unranked' }),
+      expect.any(String),
+    );
+    warnSpy.mockRestore();
+  });
+
+  test('single DB query for many unknown participants', async () => {
+    const participants = Array.from({ length: 10 }, (_, i) => `part-${i}`);
+    rankHistoryByPuuid.set('part-0', 'SILVER');
+    const { bus } = await createConsumer(false);
+    bus.emit('match:data', buildMatchDataEvent('EUW1_DB4', 'player-z', participants));
+    await vi.waitFor(() => expect(insertPendingProcessedMatch).toHaveBeenCalled());
+    const rankQueries = sqlMock.mock.calls.filter((call) =>
+      String(call[0]?.join?.('') ?? call[0]).toLowerCase().includes('player_rank_history'),
+    );
+    expect(rankQueries).toHaveLength(1);
+  });
+
+  test('DB fallback populates cache for next match', async () => {
+    rankHistoryByPuuid.set('player-b', 'SILVER');
+    const { bus } = await createConsumer(false);
+    bus.emit('match:data', buildMatchDataEvent('EUW1_DB5A', 'player-b', ['part-0']));
+    await vi.waitFor(() => expect(insertPendingProcessedMatch).toHaveBeenCalled());
+    const callsAfterFirst = sqlMock.mock.calls.length;
+
+    insertPendingProcessedMatch.mockClear();
+    bus.emit('match:data', buildMatchDataEvent('EUW1_DB5B', 'player-b', ['part-0']));
+    await vi.waitFor(() => expect(insertPendingProcessedMatch).toHaveBeenCalled());
+    expect(sqlMock.mock.calls.length).toBe(callsAfterFirst);
+  });
+
+  test('fetchRankTiersFromDb keeps one tier per puuid', async () => {
+    rankHistoryByPuuid.set('puuid_x', 'GOLD');
+    const { PollerDbConsumer } = await import('../../../src/poll-orchestration/PollerDbConsumer.js');
+    const { ParticipantDiscovery } = await import('../../../src/poll-orchestration/ParticipantDiscovery.js');
+    const { PlayerDiscovery } = await import('../../../src/poll-orchestration/PlayerDiscovery.js');
+    const bus = new PollerEventBus();
+    const consumer = new PollerDbConsumer(
+      new ParticipantDiscovery(),
+      new PlayerDiscovery(),
+      { currentPatch: '16.11', rankTierForUnranked: 'UNRANKED', resolveParticipantRanks: false },
+      bus,
+    );
+    await (consumer as unknown as { fetchRankTiersFromDb: (p: string[]) => Promise<Set<string>> }).fetchRankTiersFromDb(
+      ['puuid_x'],
+    );
+    const cache = (consumer as unknown as { rankTierCache: Map<string, string> }).rankTierCache;
+    expect(cache.get('puuid_x')).toBe('GOLD');
+    expect(cache.size).toBe(1);
   });
 
   test('T12 rank in cache before match uses player rank not fallback', async () => {

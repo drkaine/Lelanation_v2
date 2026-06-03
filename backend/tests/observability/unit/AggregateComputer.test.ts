@@ -28,6 +28,34 @@ describe('AggregateComputer', () => {
     expect(agg.total_requests).toBe(5);
   });
 
+  test('rank_resolved_from_db and rank_unranked_fallback from queue rankSource', () => {
+    const store = MetricsStore.getInstance();
+    const now = Date.now();
+    for (let i = 0; i < 5; i += 1) {
+      store.pushIngestionQueue({
+        ts: now,
+        matchId: `DB${i}`,
+        patch: '16.11',
+        rank: 'GOLD',
+        type: 'queued',
+        rankSource: 'db_fallback',
+      });
+    }
+    for (let i = 0; i < 2; i += 1) {
+      store.pushIngestionQueue({
+        ts: now,
+        matchId: `UN${i}`,
+        patch: '16.11',
+        rank: 'UNRANKED',
+        type: 'queued',
+        rankSource: 'unranked_fallback',
+      });
+    }
+    const ing = new AggregateComputer(store).computeIngestion('10m');
+    expect(ing.rank_resolved_from_db).toBe(5);
+    expect(ing.rank_unranked_fallback).toBe(2);
+  });
+
   test('T5 skip_breakdown from ingestion queue events', () => {
     const store = MetricsStore.getInstance();
     const now = Date.now();

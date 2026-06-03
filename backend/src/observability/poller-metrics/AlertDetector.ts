@@ -42,10 +42,9 @@ export class AlertDetector {
     const g = snapshot.gateway;
     const p = snapshot.poll;
     const ing = snapshot.ingestion;
-    const tuner = PollerTuner.getInstance().getSnapshot();
 
     this.checkTooMany429s(g.total_429s, g.total_wait_ms_from_429);
-    this.checkTokenUnderutilized(g.avg_token_pct_120s, tuner.sessionCount, tuner.ema.reqPerPlayer);
+    this.checkTokenUnderutilized(snapshot);
     this.checkTokenNearLimit(g.avg_token_pct_120s, g.peak_req_per_120s, g.times_limit_reached);
     this.checkIngestionLag(ing.queue_depth_peak, ing.queue_depth_avg, ing.matches_queued, ing.matches_ingested);
     this.checkIngestionFailureRate(
@@ -107,16 +106,39 @@ export class AlertDetector {
     }
   }
 
-  private checkTokenUnderutilized(avgPct: number, sessionCount: number, emaReq: number): void {
+  private checkTokenUnderutilized(snapshot: FullSnapshot): void {
+    const avgPct = snapshot.gateway.avg_token_pct_120s;
+    const tuner = PollerTuner.getInstance().getSnapshot();
+    const sessionCount = tuner.sessionCount;
+    const emaReq = tuner.ema.reqPerPlayer;
+    const sinceMode = snapshot.since?.mode ?? 'unknown';
+    const underutilizationActionable = sinceMode !== 'personal_24h';
+
     const personal = riotConfig.apiKeyType === 'personal';
     const targetPct = personal ? riotConfig.personalTargetUtilizationPct * 100 : 30;
     const warnBelow = personal ? targetPct - 7 : targetPct;
-    if (avgPct < warnBelow && sessionCount > warmupSessions()) {
+    const underThreshold = avgPct < warnBelow && sessionCount > warmupSessions();
+
+    if (underThreshold && underutilizationActionable) {
       this.raise('token_underutilized', 'warn', 'tokens under-utilized — possible EMA miscalibration or pool exhausted', {
         avg_pct: avgPct,
+        sinceMode,
         target_pct: targetPct,
         ema_reqPerPlayer: emaReq,
       });
+    } else if (underThreshold && !underutilizationActionable) {
+      if (this.active.has('token_underutilized')) {
+        this.clear('token_underutilized');
+        pollerMetricsLogger.info(
+          {
+            component: 'AlertDetector',
+            event: 'token_underutilized_suppressed',
+            sinceMode,
+            avg_pct: avgPct,
+          },
+          'token underutilized in personal_24h mode — expected, not alerting',
+        );
+      }
     } else if (avgPct >= warnBelow) {
       this.clear('token_underutilized');
     }

@@ -3,6 +3,26 @@ import { AlertDetector } from '../../../src/observability/poller-metrics/AlertDe
 import { AggregateComputer } from '../../../src/observability/poller-metrics/AggregateComputer.js';
 import { MetricsStore } from '../../../src/observability/poller-metrics/MetricsStore.js';
 import { PollerTuner } from '../../../src/tuner/PollerTuner.js';
+import type { SessionFeedback } from '../../../src/tuner/types.js';
+
+function sessionFeedback(): SessionFeedback {
+  return {
+    playersCompleted: 1,
+    totalGatewayRequests: 20,
+    sessionDurationMs: 30_000,
+    matchesFetched: 2,
+    matchesSkipped: 0,
+    participantRanksFetched: 5,
+    participantRanksFromCache: 5,
+  };
+}
+
+function warmupTuner(sessions = 6): void {
+  const tuner = PollerTuner.getInstance();
+  for (let i = 0; i < sessions; i += 1) {
+    tuner.recordSession(sessionFeedback());
+  }
+}
 
 describe('AlertDetector', () => {
   beforeEach(() => {
@@ -108,6 +128,56 @@ describe('AlertDetector', () => {
     detector.check(snap);
     const alert = detector.getActive().find((a) => a.type === 'ingestion_missing_data');
     expect(alert?.data.skip_breakdown).toMatchObject({ missing_rank: 1 });
+  });
+
+  test('token_underutilized does not fire in personal_24h with low avg pct', () => {
+    const store = MetricsStore.getInstance();
+    const detector = new AlertDetector(store);
+    warmupTuner();
+    const snap = new AggregateComputer(store).computeFull('10m', 99, 19, []);
+    snap.gateway.avg_token_pct_120s = 24;
+    snap.since = { mode: 'personal_24h', sinceTimestamp: 1, reason: 'test' };
+    detector.check(snap);
+    expect(detector.getActive().some((a) => a.type === 'token_underutilized')).toBe(false);
+  });
+
+  test('token_underutilized fires in prod_patch with low avg pct', () => {
+    const store = MetricsStore.getInstance();
+    const detector = new AlertDetector(store);
+    warmupTuner();
+    const snap = new AggregateComputer(store).computeFull('10m', 99, 19, []);
+    snap.gateway.avg_token_pct_120s = 24;
+    snap.since = { mode: 'prod_patch', sinceTimestamp: 1, reason: 'test' };
+    detector.check(snap);
+    expect(detector.getActive().some((a) => a.type === 'token_underutilized')).toBe(true);
+  });
+
+  test('token_underutilized clears when switching to personal_24h', () => {
+    const store = MetricsStore.getInstance();
+    const detector = new AlertDetector(store);
+    warmupTuner();
+    let snap = new AggregateComputer(store).computeFull('10m', 99, 19, []);
+    snap.gateway.avg_token_pct_120s = 24;
+    snap.since = { mode: 'prod_patch', sinceTimestamp: 1, reason: 'test' };
+    detector.check(snap);
+    expect(detector.getActive().some((a) => a.type === 'token_underutilized')).toBe(true);
+
+    snap = new AggregateComputer(store).computeFull('10m', 99, 19, []);
+    snap.gateway.avg_token_pct_120s = 24;
+    snap.since = { mode: 'personal_24h', sinceTimestamp: 1, reason: 'test' };
+    detector.check(snap);
+    expect(detector.getActive().some((a) => a.type === 'token_underutilized')).toBe(false);
+  });
+
+  test('token_underutilized fires when since mode is unknown', () => {
+    const store = MetricsStore.getInstance();
+    const detector = new AlertDetector(store);
+    warmupTuner();
+    const snap = new AggregateComputer(store).computeFull('10m', 99, 19, []);
+    snap.gateway.avg_token_pct_120s = 24;
+    snap.since = undefined;
+    detector.check(snap);
+    expect(detector.getActive().some((a) => a.type === 'token_underutilized')).toBe(true);
   });
 
   test('T2 alert fires once while condition holds', () => {
