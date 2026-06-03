@@ -5394,6 +5394,7 @@ if (__statisticsVm?.proxy) {
   .statistics .statistics-bans-mobile-list,
   .statistics .statistics-spells-mobile-list,
   .statistics .statistics-items-mobile-list,
+  .statistics .statistics-tier-list-mobile-list,
   .statistics .statistics-surrender-mobile-list {
     width: 100%;
     padding-left: 0;
@@ -5405,7 +5406,9 @@ if (__statisticsVm?.proxy) {
   .statistics .statistics-ban-mobile-card,
   .statistics .statistics-balance-mobile-card,
   .statistics .statistics-spell-mobile-card,
-  .statistics .statistics-item-mobile-card {
+  .statistics .statistics-item-mobile-card,
+  .statistics .statistics-tier-list-mobile-card,
+  .statistics .statistics-botlane-duo-mobile-card {
     width: calc(100vw - 1.5rem);
     max-width: 100%;
     margin-left: auto;
@@ -5531,11 +5534,20 @@ if (__statisticsVm?.proxy) {
   word-break: break-word;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
 }
+.statistics .fast-stat-tooltip-popover--end {
+  left: auto;
+  right: 0;
+  transform: none;
+}
 .statistics .fast-stat-tooltip-popover--objectives {
-  min-width: 24rem;
-  max-width: min(36rem, calc(100vw - 1.5rem));
+  min-width: min(16rem, calc(100vw - 1.5rem));
+  max-width: min(22rem, calc(100vw - 1.5rem));
 }
 @media (min-width: 1024px) {
+  .statistics .fast-stat-tooltip-popover--objectives {
+    min-width: 18rem;
+    max-width: min(28rem, calc(100vw - 1.5rem));
+  }
   .statistics .fast-stat-tooltip-popover--start {
     left: 0;
     transform: none;

@@ -407,6 +407,13 @@ function deltaLabelClass(v: number | null | undefined): string {
       {{ p.t('statisticsPage.overviewDetailTimeout') }}
     </div>
     <div v-else-if="displayRows.length" class="statistics-spells-tab space-y-3">
+      <div class="flex min-w-0 justify-end">
+        <StatisticsTableHelpTooltip
+          :aria-label="p.t('statisticsPage.tooltipTableSpellsAria')"
+          :text="p.t('statisticsPage.tooltipTableSpells')"
+          :secondary-text="p.t('statisticsPage.tooltipTableSpellsSecondary')"
+        />
+      </div>
       <div class="statistics-spells-mobile-list space-y-2 md:hidden">
         <article
           v-for="row in paginatedDisplayRows"
@@ -459,12 +466,6 @@ function deltaLabelClass(v: number | null | undefined): string {
                 </div>
               </div>
             </div>
-            <span
-              class="shrink-0 text-xs text-text/50 transition-transform duration-200"
-              :class="expandedSpellKeys.has(row.key) ? 'rotate-180' : ''"
-              aria-hidden="true"
-              >▼</span
-            >
           </button>
           <div
             v-if="expandedSpellKeys.has(row.key)"

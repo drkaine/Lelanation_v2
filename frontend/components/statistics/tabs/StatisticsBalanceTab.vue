@@ -316,12 +316,6 @@ function globalTooltip(row: BalanceRow): string {
                   {{ formatDeltaLabel(row.globalDelta) }}
                 </div>
               </div>
-              <span
-                class="shrink-0 text-xs text-text/50 transition-transform duration-200"
-                :class="expandedBalanceKeys.has(balanceRowKey(row)) ? 'rotate-180' : ''"
-                aria-hidden="true"
-                >▼</span
-              >
             </button>
 
             <div class="statistics-balance-mobile-levels border-t border-primary/15 px-3 py-2.5">

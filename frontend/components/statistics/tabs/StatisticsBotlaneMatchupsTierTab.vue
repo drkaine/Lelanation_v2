@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, ref, unref, watch } from 'vue'
 import { getChampionImageUrl } from '~/utils/imageUrl'
+import { botlaneRowKey } from '~/composables/statistics/botlanePatchDeltas'
 
 const p = inject('statisticsPageCtx') as any
 
@@ -44,6 +45,14 @@ const sortBy = ref<SortKey>('rank')
 const sortDir = ref<'asc' | 'desc'>('asc')
 const pageSize = ref(20)
 const page = ref(1)
+const expandedBotlaneKeys = ref<Set<string>>(new Set())
+
+function toggleBotlaneCard(key: string): void {
+  const next = new Set(expandedBotlaneKeys.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  expandedBotlaneKeys.value = next
+}
 
 const PAGE_SIZE_OPTIONS = computed<number[]>(() =>
   Array.isArray(p?.PAGE_SIZE_OPTIONS) && p.PAGE_SIZE_OPTIONS.length > 0
@@ -226,275 +235,292 @@ function tierLabel(tier: string): string {
     >
       {{ p.t('statisticsPage.vsBotlaneNoData') }}
     </div>
-    <div
-      v-else
-      class="tier-list-mobile-rotate statistics-overview-surface w-full overflow-x-auto rounded-lg border border-primary/30"
-    >
-      <div class="tier-list-lolalytics w-full min-w-0 text-[13px] max-lg:min-w-[924px]">
-        <div
-          class="tier-list-lolalytics-head sticky top-0 z-10 flex h-auto min-h-8 w-full items-stretch justify-between border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
-        >
-          <button
-            type="button"
-            class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-10 shrink-0 items-center justify-center border-b border-black px-0.5 hover:bg-primary/25"
-            @click="toggleSort('rank')"
-          >
-            {{ p.t('statisticsPage.tierListRank') }}{{ sortIcon('rank') }}
-          </button>
-          <div
-            class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[120px] shrink-0 items-center justify-center border-b border-black px-1 max-lg:w-[96px]"
-          >
-            {{ p.t('statisticsPage.vsBotlaneOurDuo') }}
-          </div>
-          <div
-            class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[120px] shrink-0 items-center justify-center border-b border-black px-1 max-lg:w-[96px]"
-          >
-            {{ p.t('statisticsPage.vsBotlaneEnemyDuo') }}
-          </div>
-          <button
-            type="button"
-            class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-10 shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
-            @click="toggleSort('tier')"
-          >
-            {{ p.t('statisticsPage.tierListTier') }}{{ sortIcon('tier') }}
-          </button>
-          <button
-            type="button"
-            class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-14 shrink-0 items-center justify-center border-b border-black px-0.5 hover:bg-primary/25"
-            :title="p.t('statisticsPage.tierListPbiTooltip')"
-            @click="toggleSort('score')"
-          >
-            {{ p.t('statisticsPage.tierListPbi') }}{{ sortIcon('score') }}
-          </button>
-          <button
-            type="button"
-            class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-12 shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
-            @click="toggleSort('winrate')"
-          >
-            {{ p.t('statisticsPage.winrate') }}{{ sortIcon('winrate') }}
-          </button>
-          <button
-            type="button"
-            class="tier-list-lolalytics-th tier-list-lolalytics-th-all hidden w-12 shrink-0 items-center justify-center border-b border-black hover:bg-primary/25 sm:flex"
-            :title="p.t('statisticsPage.vsBotlaneDeltaTooltip')"
-            @click="toggleSort('delta')"
-          >
-            {{ p.t('statisticsPage.vsBotlaneDeltaShort') }}{{ sortIcon('delta') }}
-          </button>
-          <button
-            type="button"
-            class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-12 shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
-            @click="toggleSort('pickrate')"
-          >
-            {{ p.t('statisticsPage.tierListPickrate') }}{{ sortIcon('pickrate') }}
-          </button>
-          <button
-            type="button"
-            class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-11 shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
-            @click="toggleSort('games')"
-          >
-            {{ p.t('statisticsPage.tierListGames') }}{{ sortIcon('games') }}
-          </button>
-        </div>
-
-        <div
+    <div v-else class="space-y-3">
+      <div class="statistics-tier-list-mobile-list space-y-2 md:hidden">
+        <StatisticsBotlaneDuoMobileCard
           v-for="row in paginatedRows"
-          :key="`${row.adcId}-${row.supportId}-${row.oppAdcId}-${row.oppSupportId}`"
-          class="tier-list-lolalytics-row flex min-h-[60px] w-full items-center justify-between py-0.5 text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25"
-        >
+          :key="'botlane-vs-mob-' + botlaneRowKey(row, 'vs')"
+          :row="row"
+          mode="matchups"
+          :patch-ref-label="patchRefLabel"
+          :expanded="expandedBotlaneKeys.has(botlaneRowKey(row, 'vs'))"
+          @toggle="toggleBotlaneCard(botlaneRowKey(row, 'vs'))"
+        />
+      </div>
+      <div
+        class="tier-list-mobile-rotate statistics-overview-surface hidden w-full overflow-x-auto rounded-lg border border-primary/30 md:block"
+      >
+        <div class="tier-list-lolalytics w-full min-w-0 text-[13px]">
           <div
-            class="tier-list-lolalytics-td flex w-10 shrink-0 flex-col items-center justify-center gap-0 tabular-nums leading-tight"
+            class="tier-list-lolalytics-head sticky top-0 z-10 flex h-auto min-h-8 w-full items-stretch justify-between border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
           >
-            <span>{{ row.rank }}</span>
-            <span
-              v-if="patchRefLabel && row.patchRefRankDelta != null"
-              class="text-[10px] leading-none"
-              :class="patchRankClass(row.patchRefRankDelta)"
-              :title="p.t('statisticsPage.tierListPatchDeltaRankTitle', { ref: patchRefLabel })"
-              >{{ fmtPatchRank(row.patchRefRankDelta) }}</span
+            <button
+              type="button"
+              class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-10 shrink-0 items-center justify-center border-b border-black px-0.5 hover:bg-primary/25"
+              @click="toggleSort('rank')"
             >
-          </div>
-          <div
-            class="tier-list-lolalytics-td flex w-[120px] shrink-0 items-center justify-center gap-1 px-1 max-lg:w-[96px]"
-          >
-            <template v-if="p.gameVersion">
-              <img
-                v-if="p.championByKey(row.adcId)"
-                :src="getChampionImageUrl(p.gameVersion, p.championByKey(row.adcId)!.image.full)"
-                :alt="p.championName(row.adcId) || ''"
-                class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover max-lg:h-10 max-lg:w-10"
-                width="50"
-                height="50"
-              />
-              <img
-                v-if="p.championByKey(row.supportId)"
-                :src="
-                  getChampionImageUrl(p.gameVersion, p.championByKey(row.supportId)!.image.full)
-                "
-                :alt="p.championName(row.supportId) || ''"
-                class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover max-lg:h-10 max-lg:w-10"
-                width="50"
-                height="50"
-              />
-            </template>
-          </div>
-          <div
-            class="tier-list-lolalytics-td flex w-[120px] shrink-0 items-center justify-center gap-1 px-1 max-lg:w-[96px]"
-          >
-            <template v-if="p.gameVersion">
-              <img
-                v-if="p.championByKey(row.oppAdcId)"
-                :src="getChampionImageUrl(p.gameVersion, p.championByKey(row.oppAdcId)!.image.full)"
-                :alt="p.championName(row.oppAdcId) || ''"
-                class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover max-lg:h-10 max-lg:w-10"
-                width="50"
-                height="50"
-              />
-              <img
-                v-if="p.championByKey(row.oppSupportId)"
-                :src="
-                  getChampionImageUrl(p.gameVersion, p.championByKey(row.oppSupportId)!.image.full)
-                "
-                :alt="p.championName(row.oppSupportId) || ''"
-                class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover max-lg:h-10 max-lg:w-10"
-                width="50"
-                height="50"
-              />
-            </template>
-          </div>
-          <div class="tier-list-lolalytics-td flex w-10 shrink-0 items-center justify-center">
-            <span
-              :class="[
-                'inline-flex min-h-[1.25rem] min-w-[1.25rem] items-center justify-center rounded px-0.5 text-[11px] font-bold leading-none text-background',
-                row.tier === 'S+' && 'bg-[#f5c542]',
-                row.tier === 'S' && 'bg-[#22c55e]',
-                row.tier === 'A' && 'bg-[#2563eb]',
-                row.tier === 'B' && 'bg-[#60a5fa]',
-                row.tier === 'C' && 'bg-[#a855f7]',
-                (row.tier === 'D' || row.tier === 'F') && 'bg-[#dc2626]',
-              ]"
+              {{ p.t('statisticsPage.tierListRank') }}{{ sortIcon('rank') }}
+            </button>
+            <div
+              class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[120px] shrink-0 items-center justify-center border-b border-black px-1 max-lg:w-[96px]"
             >
-              {{ tierLabel(row.tier) }}
-            </span>
-          </div>
-          <div
-            class="tier-list-lolalytics-td flex w-14 shrink-0 flex-col items-center justify-center gap-0 text-[11px] tabular-nums leading-tight text-text/90"
-          >
-            <span>{{ row.score.toFixed(2) }}</span>
-            <span
-              v-if="patchRefLabel && row.patchRefScorePp != null"
-              class="text-[10px] leading-none"
-              :class="patchPpClass(row.patchRefScorePp)"
-              :title="p.t('statisticsPage.tierListPatchDeltaTitle', { ref: patchRefLabel })"
-              >{{ fmtPatchPp(row.patchRefScorePp) }}</span
+              {{ p.t('statisticsPage.vsBotlaneOurDuo') }}
+            </div>
+            <div
+              class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[120px] shrink-0 items-center justify-center border-b border-black px-1 max-lg:w-[96px]"
             >
-          </div>
-          <div
-            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 tabular-nums leading-tight"
-            :class="p.tierListWinrateClass(row.winrate * 100)"
-          >
-            <span>{{ fmtPct01(row.winrate) }}</span>
-            <span
-              v-if="patchRefLabel && row.patchRefWinratePp != null"
-              class="text-[10px] leading-none"
-              :class="patchPpClass(row.patchRefWinratePp)"
-              :title="p.t('statisticsPage.tierListPatchDeltaTitle', { ref: patchRefLabel })"
-              >{{ fmtPatchPp(row.patchRefWinratePp) }}</span
+              {{ p.t('statisticsPage.vsBotlaneEnemyDuo') }}
+            </div>
+            <button
+              type="button"
+              class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-10 shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
+              @click="toggleSort('tier')"
             >
-          </div>
-          <div
-            class="tier-list-lolalytics-td hidden w-12 shrink-0 flex-col items-center justify-center gap-0 text-[11px] tabular-nums leading-tight sm:flex"
-          >
-            <span
-              :class="
-                row.deltaVsPeersPp == null
-                  ? 'text-text/55'
-                  : row.deltaVsPeersPp > 0
-                    ? 'text-green-400/90'
-                    : row.deltaVsPeersPp < 0
-                      ? 'text-red-400/90'
-                      : 'text-text/80'
-              "
-              >{{ fmtDeltaPp(row.deltaVsPeersPp) }}</span
+              {{ p.t('statisticsPage.tierListTier') }}{{ sortIcon('tier') }}
+            </button>
+            <button
+              type="button"
+              class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-14 shrink-0 items-center justify-center border-b border-black px-0.5 hover:bg-primary/25"
+              :title="p.t('statisticsPage.tierListPbiTooltip')"
+              @click="toggleSort('score')"
             >
-            <span
-              v-if="patchRefLabel && row.patchRefDeltaVsPeersPp != null"
-              class="text-[10px] leading-none"
-              :class="patchPpClass(row.patchRefDeltaVsPeersPp)"
-              :title="p.t('statisticsPage.tierListPatchDeltaTitle', { ref: patchRefLabel })"
-              >{{ fmtPatchPp(row.patchRefDeltaVsPeersPp) }}</span
+              {{ p.t('statisticsPage.tierListPbi') }}{{ sortIcon('score') }}
+            </button>
+            <button
+              type="button"
+              class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-12 shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
+              @click="toggleSort('winrate')"
             >
-          </div>
-          <div
-            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 tabular-nums leading-tight text-text/80"
-          >
-            <span>{{ fmtPct01(row.pickrate) }}</span>
-            <span
-              v-if="patchRefLabel && row.patchRefPickratePp != null"
-              class="text-[10px] leading-none"
-              :class="patchPpClass(row.patchRefPickratePp)"
-              :title="p.t('statisticsPage.tierListPatchDeltaTitle', { ref: patchRefLabel })"
-              >{{ fmtPatchPp(row.patchRefPickratePp) }}</span
+              {{ p.t('statisticsPage.winrate') }}{{ sortIcon('winrate') }}
+            </button>
+            <button
+              type="button"
+              class="tier-list-lolalytics-th tier-list-lolalytics-th-all hidden w-12 shrink-0 items-center justify-center border-b border-black hover:bg-primary/25 sm:flex"
+              :title="p.t('statisticsPage.vsBotlaneDeltaTooltip')"
+              @click="toggleSort('delta')"
             >
-          </div>
-          <div
-            class="tier-list-lolalytics-td flex w-11 shrink-0 flex-col items-center justify-center gap-0 tabular-nums leading-tight text-text/80"
-          >
-            <span>{{ row.games }}</span>
-            <span
-              v-if="patchRefLabel && row.patchRefGamesDelta != null"
-              class="text-[10px] leading-none"
-              :class="
-                typeof p?.tierListPatchDeltaGamesClass === 'function'
-                  ? p.tierListPatchDeltaGamesClass(row.patchRefGamesDelta)
-                  : patchPpClass(row.patchRefGamesDelta)
-              "
-              :title="p.t('statisticsPage.tierListPatchDeltaGamesTitle', { ref: patchRefLabel })"
-              >{{
-                typeof p?.formatTierListPatchDeltaGames === 'function'
-                  ? p.formatTierListPatchDeltaGames(row.patchRefGamesDelta)
-                  : `${row.patchRefGamesDelta > 0 ? '+' : ''}${row.patchRefGamesDelta}`
-              }}</span
+              {{ p.t('statisticsPage.vsBotlaneDeltaShort') }}{{ sortIcon('delta') }}
+            </button>
+            <button
+              type="button"
+              class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-12 shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
+              @click="toggleSort('pickrate')"
             >
+              {{ p.t('statisticsPage.tierListPickrate') }}{{ sortIcon('pickrate') }}
+            </button>
+            <button
+              type="button"
+              class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-11 shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
+              @click="toggleSort('games')"
+            >
+              {{ p.t('statisticsPage.tierListGames') }}{{ sortIcon('games') }}
+            </button>
           </div>
-        </div>
 
-        <div
-          v-if="totalRowsCount > 0"
-          class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
-        >
-          <span>{{ totalRowsCount }} {{ p.t('statisticsPage.vsBotlaneRowsLabel') }}</span>
-          <div class="flex items-center gap-3">
-            <label class="flex items-center gap-1.5">
-              <span class="text-text/70">{{ p.t('statisticsPage.perPage') }}</span>
-              <select
-                v-model.number="pageSize"
-                class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
+          <div
+            v-for="row in paginatedRows"
+            :key="`${row.adcId}-${row.supportId}-${row.oppAdcId}-${row.oppSupportId}`"
+            class="tier-list-lolalytics-row flex min-h-[60px] w-full items-center justify-between py-0.5 text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25"
+          >
+            <div
+              class="tier-list-lolalytics-td flex w-10 shrink-0 flex-col items-center justify-center gap-0 tabular-nums leading-tight"
+            >
+              <span>{{ row.rank }}</span>
+              <span
+                v-if="patchRefLabel && row.patchRefRankDelta != null"
+                class="text-[10px] leading-none"
+                :class="patchRankClass(row.patchRefRankDelta)"
+                :title="p.t('statisticsPage.tierListPatchDeltaRankTitle', { ref: patchRefLabel })"
+                >{{ fmtPatchRank(row.patchRefRankDelta) }}</span
               >
-                <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
-              </select>
-            </label>
-            <span class="text-text/70">
-              {{ (page - 1) * pageSize + 1 }}-{{ Math.min(page * pageSize, totalRowsCount) }} /
-              {{ totalRowsCount }}
-            </span>
-            <div class="flex gap-1">
-              <button
-                type="button"
-                class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
-                :disabled="page <= 1"
-                @click="page = Math.max(1, page - 1)"
+            </div>
+            <div
+              class="tier-list-lolalytics-td flex w-[120px] shrink-0 items-center justify-center gap-1 px-1 max-lg:w-[96px]"
+            >
+              <template v-if="p.gameVersion">
+                <img
+                  v-if="p.championByKey(row.adcId)"
+                  :src="getChampionImageUrl(p.gameVersion, p.championByKey(row.adcId)!.image.full)"
+                  :alt="p.championName(row.adcId) || ''"
+                  class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover max-lg:h-10 max-lg:w-10"
+                  width="50"
+                  height="50"
+                />
+                <img
+                  v-if="p.championByKey(row.supportId)"
+                  :src="
+                    getChampionImageUrl(p.gameVersion, p.championByKey(row.supportId)!.image.full)
+                  "
+                  :alt="p.championName(row.supportId) || ''"
+                  class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover max-lg:h-10 max-lg:w-10"
+                  width="50"
+                  height="50"
+                />
+              </template>
+            </div>
+            <div
+              class="tier-list-lolalytics-td flex w-[120px] shrink-0 items-center justify-center gap-1 px-1 max-lg:w-[96px]"
+            >
+              <template v-if="p.gameVersion">
+                <img
+                  v-if="p.championByKey(row.oppAdcId)"
+                  :src="
+                    getChampionImageUrl(p.gameVersion, p.championByKey(row.oppAdcId)!.image.full)
+                  "
+                  :alt="p.championName(row.oppAdcId) || ''"
+                  class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover max-lg:h-10 max-lg:w-10"
+                  width="50"
+                  height="50"
+                />
+                <img
+                  v-if="p.championByKey(row.oppSupportId)"
+                  :src="
+                    getChampionImageUrl(
+                      p.gameVersion,
+                      p.championByKey(row.oppSupportId)!.image.full
+                    )
+                  "
+                  :alt="p.championName(row.oppSupportId) || ''"
+                  class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover max-lg:h-10 max-lg:w-10"
+                  width="50"
+                  height="50"
+                />
+              </template>
+            </div>
+            <div class="tier-list-lolalytics-td flex w-10 shrink-0 items-center justify-center">
+              <span
+                :class="[
+                  'inline-flex min-h-[1.25rem] min-w-[1.25rem] items-center justify-center rounded px-0.5 text-[11px] font-bold leading-none text-background',
+                  row.tier === 'S+' && 'bg-[#f5c542]',
+                  row.tier === 'S' && 'bg-[#22c55e]',
+                  row.tier === 'A' && 'bg-[#2563eb]',
+                  row.tier === 'B' && 'bg-[#60a5fa]',
+                  row.tier === 'C' && 'bg-[#a855f7]',
+                  (row.tier === 'D' || row.tier === 'F') && 'bg-[#dc2626]',
+                ]"
               >
-                ‹
-              </button>
-              <button
-                type="button"
-                class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
-                :disabled="page >= totalPages"
-                @click="page = Math.min(totalPages, page + 1)"
+                {{ tierLabel(row.tier) }}
+              </span>
+            </div>
+            <div
+              class="tier-list-lolalytics-td flex w-14 shrink-0 flex-col items-center justify-center gap-0 text-[11px] tabular-nums leading-tight text-text/90"
+            >
+              <span>{{ row.score.toFixed(2) }}</span>
+              <span
+                v-if="patchRefLabel && row.patchRefScorePp != null"
+                class="text-[10px] leading-none"
+                :class="patchPpClass(row.patchRefScorePp)"
+                :title="p.t('statisticsPage.tierListPatchDeltaTitle', { ref: patchRefLabel })"
+                >{{ fmtPatchPp(row.patchRefScorePp) }}</span
               >
-                ›
-              </button>
+            </div>
+            <div
+              class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 tabular-nums leading-tight"
+              :class="p.tierListWinrateClass(row.winrate * 100)"
+            >
+              <span>{{ fmtPct01(row.winrate) }}</span>
+              <span
+                v-if="patchRefLabel && row.patchRefWinratePp != null"
+                class="text-[10px] leading-none"
+                :class="patchPpClass(row.patchRefWinratePp)"
+                :title="p.t('statisticsPage.tierListPatchDeltaTitle', { ref: patchRefLabel })"
+                >{{ fmtPatchPp(row.patchRefWinratePp) }}</span
+              >
+            </div>
+            <div
+              class="tier-list-lolalytics-td hidden w-12 shrink-0 flex-col items-center justify-center gap-0 text-[11px] tabular-nums leading-tight sm:flex"
+            >
+              <span
+                :class="
+                  row.deltaVsPeersPp == null
+                    ? 'text-text/55'
+                    : row.deltaVsPeersPp > 0
+                      ? 'text-green-400/90'
+                      : row.deltaVsPeersPp < 0
+                        ? 'text-red-400/90'
+                        : 'text-text/80'
+                "
+                >{{ fmtDeltaPp(row.deltaVsPeersPp) }}</span
+              >
+              <span
+                v-if="patchRefLabel && row.patchRefDeltaVsPeersPp != null"
+                class="text-[10px] leading-none"
+                :class="patchPpClass(row.patchRefDeltaVsPeersPp)"
+                :title="p.t('statisticsPage.tierListPatchDeltaTitle', { ref: patchRefLabel })"
+                >{{ fmtPatchPp(row.patchRefDeltaVsPeersPp) }}</span
+              >
+            </div>
+            <div
+              class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 tabular-nums leading-tight text-text/80"
+            >
+              <span>{{ fmtPct01(row.pickrate) }}</span>
+              <span
+                v-if="patchRefLabel && row.patchRefPickratePp != null"
+                class="text-[10px] leading-none"
+                :class="patchPpClass(row.patchRefPickratePp)"
+                :title="p.t('statisticsPage.tierListPatchDeltaTitle', { ref: patchRefLabel })"
+                >{{ fmtPatchPp(row.patchRefPickratePp) }}</span
+              >
+            </div>
+            <div
+              class="tier-list-lolalytics-td flex w-11 shrink-0 flex-col items-center justify-center gap-0 tabular-nums leading-tight text-text/80"
+            >
+              <span>{{ row.games }}</span>
+              <span
+                v-if="patchRefLabel && row.patchRefGamesDelta != null"
+                class="text-[10px] leading-none"
+                :class="
+                  typeof p?.tierListPatchDeltaGamesClass === 'function'
+                    ? p.tierListPatchDeltaGamesClass(row.patchRefGamesDelta)
+                    : patchPpClass(row.patchRefGamesDelta)
+                "
+                :title="p.t('statisticsPage.tierListPatchDeltaGamesTitle', { ref: patchRefLabel })"
+                >{{
+                  typeof p?.formatTierListPatchDeltaGames === 'function'
+                    ? p.formatTierListPatchDeltaGames(row.patchRefGamesDelta)
+                    : `${row.patchRefGamesDelta > 0 ? '+' : ''}${row.patchRefGamesDelta}`
+                }}</span
+              >
+            </div>
+          </div>
+
+          <div
+            v-if="totalRowsCount > 0"
+            class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
+          >
+            <span>{{ totalRowsCount }} {{ p.t('statisticsPage.vsBotlaneRowsLabel') }}</span>
+            <div class="flex items-center gap-3">
+              <label class="flex items-center gap-1.5">
+                <span class="text-text/70">{{ p.t('statisticsPage.perPage') }}</span>
+                <select
+                  v-model.number="pageSize"
+                  class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
+                >
+                  <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
+                </select>
+              </label>
+              <span class="text-text/70">
+                {{ (page - 1) * pageSize + 1 }}-{{ Math.min(page * pageSize, totalRowsCount) }} /
+                {{ totalRowsCount }}
+              </span>
+              <div class="flex gap-1">
+                <button
+                  type="button"
+                  class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                  :disabled="page <= 1"
+                  @click="page = Math.max(1, page - 1)"
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                  :disabled="page >= totalPages"
+                  @click="page = Math.min(totalPages, page + 1)"
+                >
+                  ›
+                </button>
+              </div>
             </div>
           </div>
         </div>

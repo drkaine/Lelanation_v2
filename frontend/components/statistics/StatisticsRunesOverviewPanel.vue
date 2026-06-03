@@ -467,6 +467,13 @@ function runeSetLayout(
 
 <template>
   <div class="stats-runes-panel flex w-full flex-col gap-8">
+    <div class="flex min-w-0 justify-end">
+      <StatisticsTableHelpTooltip
+        :aria-label="t('statisticsPage.tooltipTableRunesAria')"
+        :text="t('statisticsPage.tooltipTableRunes')"
+        :secondary-text="t('statisticsPage.tooltipTableRunesSecondary')"
+      />
+    </div>
     <div v-if="!runeTreeReady" class="rounded-lg border border-primary/30 p-4 text-sm text-text/70">
       {{ t('statisticsPage.loading') }}
     </div>

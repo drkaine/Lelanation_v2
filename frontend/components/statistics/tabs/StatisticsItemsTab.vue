@@ -288,6 +288,13 @@ function deltaClass(value: number | null | undefined): string {
     </div>
     <template v-else-if="tableRows.length > 0">
       <div class="statistics-items-tab space-y-3">
+        <div class="flex min-w-0 justify-end">
+          <StatisticsTableHelpTooltip
+            :aria-label="p.t('statisticsPage.tooltipTableItemsAria')"
+            :text="p.t('statisticsPage.tooltipTableItems')"
+            :secondary-text="p.t('statisticsPage.tooltipTableItemsSecondary')"
+          />
+        </div>
         <div class="statistics-items-mobile-list space-y-2 md:hidden">
           <article
             v-for="row in paginatedRows"
@@ -344,12 +351,6 @@ function deltaClass(value: number | null | undefined): string {
                   </div>
                 </div>
               </div>
-              <span
-                class="shrink-0 text-xs text-text/50 transition-transform duration-200"
-                :class="expandedItemKeys.has(itemRowKey(row)) ? 'rotate-180' : ''"
-                aria-hidden="true"
-                >▼</span
-              >
             </button>
             <div
               v-if="expandedItemKeys.has(itemRowKey(row))"

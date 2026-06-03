@@ -282,12 +282,12 @@ export default defineNuxtConfig({
             if (id.includes('/frontend/stores/') && id.includes('Statistics')) {
               return 'statistics-store'
             }
-            if (id.includes('/frontend/composables/statistics/')) {
-              return 'statistics-composables'
-            }
+            // Pages, composables et composants stats dans le même chunk pour éviter
+            // statistics-composables ↔ statistics (dépendances croisées via utils partagés).
             if (
               id.includes('frontend/pages/statistics') ||
-              id.includes('/components/statistics/')
+              id.includes('/components/statistics/') ||
+              id.includes('/frontend/composables/statistics/')
             ) {
               return 'statistics'
             }

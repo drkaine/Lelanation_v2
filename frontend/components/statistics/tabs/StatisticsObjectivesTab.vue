@@ -1475,7 +1475,7 @@ function onMobileObjectiveToggle(id: string) {
       v-else
       class="fast-stat-card fast-stat-card-objectives w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-3"
     >
-      <div class="mb-3 flex flex-wrap items-center gap-2">
+      <div class="mb-3 flex min-w-0 flex-wrap items-center gap-2">
         <button
           type="button"
           class="shrink-0 text-base leading-none transition-colors"
@@ -1565,7 +1565,7 @@ function onMobileObjectiveToggle(id: string) {
           ⓘ
           <span
             role="tooltip"
-            class="fast-stat-tooltip-popover fast-stat-tooltip-popover--objectives hidden group-hover/stat-tip:block"
+            class="fast-stat-tooltip-popover fast-stat-tooltip-popover--objectives fast-stat-tooltip-popover--end hidden group-hover/stat-tip:block"
           >
             {{ p.t('statisticsPage.tooltipOverviewObjectives') }}
             <span class="mt-1 block border-t border-primary/20 pt-1 text-text/80">

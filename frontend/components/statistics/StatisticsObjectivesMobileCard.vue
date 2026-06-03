@@ -41,13 +41,6 @@ function onHeaderClick() {
       @click="onHeaderClick"
     >
       <span
-        v-if="expandable"
-        class="inline-block shrink-0 text-xs text-text/60 transition-transform duration-200"
-        :class="expanded ? 'rotate-180' : ''"
-        aria-hidden
-        >▼</span
-      >
-      <span
         v-if="color"
         class="h-2.5 w-2.5 shrink-0 rounded-full"
         :style="{ backgroundColor: color }"

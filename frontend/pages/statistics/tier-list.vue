@@ -1,32 +1,16 @@
 <template>
-  <div class="statistics flex min-h-screen flex-col text-text">
-    <button
-      type="button"
-      class="filters-collapse-floating fixed left-3 top-2 z-[60] flex lg:hidden"
-      :aria-label="filtersOpen ? t('statisticsPage.closeFilters') : t('statisticsPage.openFilters')"
-      @click="toggleFiltersOpen"
+  <div class="statistics flex min-h-screen min-w-0 flex-col overflow-x-hidden text-text">
+    <div
+      class="statistics-tabs-bar flex w-full min-w-0 flex-shrink-0 items-start gap-2 overflow-x-hidden bg-surface/30 px-4 pb-2 pt-4"
     >
-      <svg
-        class="h-2 w-2 transition-transform duration-200"
-        :class="filtersOpen ? 'rotate-180' : ''"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-      >
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-      </svg>
-    </button>
-
-    <div class="mt-[15px] flex min-h-0 flex-1 flex-col">
-      <div
-        class="flex w-full flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-primary/30 bg-surface/30 px-4 pb-2 pt-4"
-      >
-        <div class="flex shrink-0 flex-nowrap gap-1 overflow-x-auto">
+      <div class="statistics-tabs-scroll-wrap relative min-w-0 flex-1 overflow-hidden">
+        <div
+          class="statistics-tabs-nav flex flex-nowrap gap-1 overflow-x-auto border-b border-primary/30 pb-2"
+        >
           <button
             type="button"
             :class="[
-              'rounded px-3 py-1.5 text-sm font-medium transition-colors',
+              'statistics-tab-btn shrink-0 snap-start whitespace-nowrap rounded px-3 py-1.5 text-sm font-medium transition-colors',
               tierListViewModel === 'table'
                 ? 'border border-accent/50 bg-accent/20 text-accent'
                 : 'border border-transparent text-text/80 hover:bg-primary/10 hover:text-text',
@@ -38,7 +22,7 @@
           <button
             type="button"
             :class="[
-              'rounded px-3 py-1.5 text-sm font-medium transition-colors',
+              'statistics-tab-btn shrink-0 snap-start whitespace-nowrap rounded px-3 py-1.5 text-sm font-medium transition-colors',
               tierListViewModel === 'chart'
                 ? 'border border-accent/50 bg-accent/20 text-accent'
                 : 'border border-transparent text-text/80 hover:bg-primary/10 hover:text-text',
@@ -50,7 +34,7 @@
           <button
             type="button"
             :class="[
-              'rounded px-3 py-1.5 text-sm font-medium transition-colors',
+              'statistics-tab-btn shrink-0 snap-start whitespace-nowrap rounded px-3 py-1.5 text-sm font-medium transition-colors',
               tierListViewModel === 'botlaneMatchups'
                 ? 'border border-accent/50 bg-accent/20 text-accent'
                 : 'border border-transparent text-text/80 hover:bg-primary/10 hover:text-text',
@@ -62,7 +46,7 @@
           <button
             type="button"
             :class="[
-              'rounded px-3 py-1.5 text-sm font-medium transition-colors',
+              'statistics-tab-btn shrink-0 snap-start whitespace-nowrap rounded px-3 py-1.5 text-sm font-medium transition-colors',
               tierListViewModel === 'botlaneDuoRank'
                 ? 'border border-accent/50 bg-accent/20 text-accent'
                 : 'border border-transparent text-text/80 hover:bg-primary/10 hover:text-text',
@@ -72,101 +56,130 @@
             {{ t('statisticsPage.tierListViewBotlaneDuoRank') }}
           </button>
         </div>
-        <h2
-          v-if="tierListViewModel === 'chart'"
-          class="min-w-0 max-w-full truncate text-right text-[11px] font-bold uppercase tracking-tight text-text-accent sm:max-w-[min(100%,36rem)] sm:text-xs md:text-sm"
-        >
-          {{ tierListChartHeading }}
-        </h2>
       </div>
+      <h2
+        v-if="tierListViewModel === 'chart'"
+        class="mt-0.5 min-w-0 max-w-[42%] shrink-0 truncate text-right text-[11px] font-bold uppercase tracking-tight text-text-accent sm:max-w-[min(100%,36rem)] sm:text-xs md:max-w-none md:text-sm"
+      >
+        {{ tierListChartHeading }}
+      </h2>
+      <button
+        type="button"
+        class="filters-collapse-floating mt-0.5 inline-flex shrink-0 touch-manipulation lg:hidden"
+        :aria-label="
+          filtersOpen ? t('statisticsPage.closeFilters') : t('statisticsPage.openFilters')
+        "
+        :aria-expanded="filtersOpen"
+        @click="toggleFiltersOpen"
+      >
+        <svg
+          class="h-3 w-3 transition-transform duration-200"
+          :class="filtersOpen ? 'rotate-180' : ''"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M15 19l-7-7 7-7"
+          />
+        </svg>
+      </button>
+    </div>
 
-      <div class="flex min-h-0 flex-1">
-        <button
-          type="button"
-          class="statistics-filters-desktop-trigger hidden lg:sticky lg:top-4 lg:z-20 lg:mr-2 lg:flex lg:shrink-0 lg:flex-col lg:items-center lg:gap-1 lg:self-start"
-          :aria-label="
-            filtersOpen ? t('statisticsPage.closeFilters') : t('statisticsPage.openFilters')
-          "
-          :aria-expanded="filtersOpen"
-          @click="toggleFiltersOpen"
-        >
-          <span class="filters-collapse-floating inline-flex" aria-hidden="true">
-            <svg
-              class="h-2 w-2 transition-transform duration-200"
-              :class="filtersOpen ? 'rotate-180' : ''"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M15 19l-7-7 7-7"
-              />
-            </svg>
-          </span>
-          <span
-            class="max-w-[4.5rem] text-center text-[10px] font-semibold leading-tight text-text/85"
+    <div class="flex min-h-0 min-w-0 flex-1">
+      <button
+        type="button"
+        class="statistics-filters-desktop-trigger hidden shrink-0 touch-manipulation lg:sticky lg:top-4 lg:z-20 lg:mr-2 lg:flex lg:flex-col lg:items-center lg:gap-1 lg:self-start"
+        :aria-label="
+          filtersOpen ? t('statisticsPage.closeFilters') : t('statisticsPage.openFilters')
+        "
+        :aria-expanded="filtersOpen"
+        @click="toggleFiltersOpen"
+      >
+        <span class="filters-collapse-floating inline-flex" aria-hidden="true">
+          <svg
+            class="h-2 w-2 transition-transform duration-200"
+            :class="filtersOpen ? 'rotate-180' : ''"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
           >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M15 19l-7-7 7-7"
+            />
+          </svg>
+        </span>
+        <span
+          class="max-w-[4.5rem] text-center text-[10px] font-semibold leading-tight text-text/85"
+        >
+          {{ t('statisticsPage.filtersTitle') }}
+        </span>
+        <span
+          v-if="activeStatsFiltersCount > 0"
+          class="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-bold text-background"
+          :aria-label="`${activeStatsFiltersCount} ${t('statisticsPage.filtersTitle')}`"
+        >
+          {{ activeStatsFiltersCount }}
+        </span>
+      </button>
+
+      <div
+        v-if="filtersOpen && filtersSheetMode"
+        class="fixed inset-0 z-[10050] bg-black/50 lg:hidden"
+        aria-hidden="true"
+        role="presentation"
+        @click="closeFilters"
+      />
+
+      <aside
+        v-if="!filtersSheetMode || filtersOpen"
+        :class="[
+          'statistics-filters-panel flex shrink-0 flex-col overflow-hidden bg-surface',
+          filtersSheetMode
+            ? 'fixed inset-x-0 bottom-0 top-auto z-[10051] max-h-[85vh] w-full rounded-t-2xl shadow-lg lg:hidden'
+            : [
+                'hidden w-0 opacity-0 transition-[width,opacity] duration-200',
+                'lg:sticky lg:top-4 lg:z-0 lg:flex lg:h-auto lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:overflow-x-hidden lg:rounded-lg lg:shadow-none',
+                filtersOpen ? 'lg:w-64 lg:opacity-100' : 'lg:w-0 lg:opacity-0',
+              ],
+        ]"
+        :role="filtersSheetMode ? 'dialog' : undefined"
+        :aria-modal="filtersSheetMode ? true : undefined"
+        :aria-label="t('statisticsPage.filtersTitle')"
+        @click.stop
+      >
+        <div
+          class="relative z-[1] flex shrink-0 items-center gap-2 border-b border-primary/25 p-2 lg:border-transparent lg:pb-2"
+        >
+          <button
+            type="button"
+            class="mx-auto mb-1 flex h-6 w-14 shrink-0 touch-manipulation items-center justify-center rounded-full lg:hidden"
+            :aria-label="t('statisticsPage.closeFilters')"
+            @click="closeFilters"
+          >
+            <span class="h-1 w-10 rounded-full bg-primary/40" aria-hidden="true" />
+          </button>
+          <h2 class="min-w-0 flex-1 truncate text-lg font-semibold text-text-accent">
             {{ t('statisticsPage.filtersTitle') }}
-          </span>
-          <span
-            v-if="activeStatsFiltersCount > 0"
-            class="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-bold text-background"
+          </h2>
+          <button
+            type="button"
+            class="statistics-filters-reset inline-flex shrink-0 touch-manipulation items-center gap-1.5 rounded px-2 py-1.5 text-xs font-semibold text-blue-300 transition-colors hover:bg-blue-500/15 hover:text-blue-200"
+            @click="resetStatsFilters"
           >
-            {{ activeStatsFiltersCount }}
-          </span>
-        </button>
-        <aside
-          :class="[
-            'fixed left-0 top-14 z-[50] flex h-[calc(100dvh-3.5rem)] w-72 max-w-[88vw] shrink-0 flex-col rounded-r-lg bg-surface/95 shadow-lg transition-transform duration-200',
-            'lg:static lg:sticky lg:top-4 lg:z-0 lg:h-auto lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto lg:overflow-x-hidden lg:rounded-lg lg:shadow-none lg:transition-[width,opacity] lg:duration-200',
-            filtersOpen
-              ? 'translate-x-0 lg:w-64 lg:opacity-100'
-              : '-translate-x-full lg:w-0 lg:translate-x-0 lg:opacity-0',
-          ]"
-          @click.stop
-        >
-          <div
-            class="flex shrink-0 items-center gap-2 border-b border-primary/25 p-2 lg:border-transparent lg:pb-2"
-          >
-            <h2 class="min-w-0 flex-1 truncate text-lg font-semibold text-text-accent">
-              {{ t('statisticsPage.filtersTitle') }}
-            </h2>
-            <button
-              type="button"
-              class="inline-flex shrink-0 touch-manipulation items-center gap-1.5 rounded px-2 py-1.5 text-xs font-semibold text-blue-300 transition-colors hover:bg-blue-500/15 hover:text-blue-200"
-              @click="resetStatsFilters"
-            >
-              <span class="iconify i-mdi:refresh" aria-hidden="true" />
-              Reset
-            </button>
-            <button
-              type="button"
-              class="flex h-11 min-w-11 shrink-0 touch-manipulation items-center justify-center rounded-lg text-text/90 hover:bg-primary/25 hover:text-text lg:hidden"
-              :aria-label="t('statisticsPage.closeFilters')"
-              @click="closeFilters"
-            >
-              <svg
-                class="h-6 w-6"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          </div>
-          <div
-            class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-2 pb-[10px] pt-2 lg:flex-none"
-          >
+            <span class="iconify i-mdi:refresh" aria-hidden="true" />
+            Reset
+          </button>
+        </div>
+        <div class="flex min-h-0 flex-1 flex-col overflow-y-auto p-2 lg:flex-none">
+          <div class="statistics-filters-fields flex flex-col gap-3">
             <div v-if="tierListViewModel === 'chart'">
               <div class="mb-1 text-sm font-medium text-text">
                 {{ t('statisticsPage.tierListLegend') }}
@@ -380,51 +393,58 @@
                 class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text placeholder:text-text/50"
               />
             </div>
-            <button
-              type="button"
-              class="mt-2 rounded border border-primary/40 bg-black/20 px-3 py-2 text-sm font-semibold text-text/90 hover:bg-primary/20 lg:hidden"
-              @click="closeFilters"
-            >
-              {{ t('statisticsPage.closeFilters') }}
-            </button>
           </div>
-        </aside>
+        </div>
+        <div class="shrink-0 border-t border-primary/25 p-3 lg:hidden">
+          <button
+            type="button"
+            class="w-full touch-manipulation rounded-lg border border-primary/40 bg-primary/10 px-4 py-3 text-sm font-semibold text-text hover:bg-primary/20"
+            @click="closeFilters"
+          >
+            {{ t('statisticsPage.closeFilters') }}
+          </button>
+        </div>
+      </aside>
 
-        <div
-          class="min-w-0 flex-1 p-4 pt-14 lg:px-3 lg:pb-4 lg:pt-0"
-          :class="filtersOpen ? 'max-lg:pointer-events-none' : ''"
-        >
-          <div class="w-full space-y-4">
-            <StatisticsTierListTab
-              v-show="
-                tierListViewModel !== 'botlaneMatchups' && tierListViewModel !== 'botlaneDuoRank'
-              "
-              :show-view-model-toggle="false"
-            />
-            <StatisticsBotlaneMatchupsTierTab
-              v-show="tierListViewModel === 'botlaneMatchups'"
-              :vs-data="botlaneVsData"
-              :vs-pending="botlaneVsPending"
-              :vs-error="botlaneVsError"
-            />
-            <StatisticsVsBotlaneTab
-              v-show="tierListViewModel === 'botlaneDuoRank'"
-              :ranking-data="botlaneRankingData"
-              :ranking-pending="botlaneRankingPending"
-              :ranking-error="botlaneRankingError"
-            />
-          </div>
+      <div class="min-w-0 flex-1 p-4 max-lg:pb-20 lg:px-3 lg:pb-4 lg:pt-0">
+        <div class="w-full space-y-4">
+          <StatisticsTierListTab
+            v-show="
+              tierListViewModel !== 'botlaneMatchups' && tierListViewModel !== 'botlaneDuoRank'
+            "
+            :show-view-model-toggle="false"
+          />
+          <StatisticsBotlaneMatchupsTierTab
+            v-show="tierListViewModel === 'botlaneMatchups'"
+            :vs-data="botlaneVsData"
+            :vs-pending="botlaneVsPending"
+            :vs-error="botlaneVsError"
+          />
+          <StatisticsVsBotlaneTab
+            v-show="tierListViewModel === 'botlaneDuoRank'"
+            :ranking-data="botlaneRankingData"
+            :ranking-pending="botlaneRankingPending"
+            :ranking-error="botlaneRankingError"
+          />
         </div>
       </div>
     </div>
 
-    <div
-      v-show="filtersOpen"
-      class="fixed inset-0 z-[45] bg-black/50 lg:hidden"
-      aria-hidden="true"
-      role="presentation"
-      @click="closeFilters"
-    />
+    <button
+      v-if="!filtersOpen"
+      type="button"
+      class="statistics-filters-fab fixed bottom-4 left-1/2 z-[58] flex -translate-x-1/2 items-center gap-2 rounded-full border border-primary/40 bg-surface/95 px-4 py-2.5 text-sm font-semibold text-text shadow-lg backdrop-blur-sm lg:hidden"
+      :aria-label="t('statisticsPage.openFilters')"
+      @click="openFilters"
+    >
+      {{ t('statisticsPage.filtersTitle') }}
+      <span
+        v-if="activeStatsFiltersCount > 0"
+        class="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-bold text-background"
+      >
+        {{ activeStatsFiltersCount }}
+      </span>
+    </button>
   </div>
 </template>
 
@@ -434,12 +454,14 @@ import {
   computed,
   watch,
   onMounted,
+  onUnmounted,
   getCurrentInstance,
   provide,
   unref,
   isRef,
   defineAsyncComponent,
 } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { RANK_TIERS } from '~/utils/rankTiers'
@@ -478,6 +500,12 @@ const router = useRouter()
 const championsStore = useChampionsStore()
 const versionStore = useVersionStore()
 const statisticsUiStore = useStatisticsUiStore()
+const { filtersOpen } = storeToRefs(statisticsUiStore)
+const filtersSheetMode = ref(false)
+let filtersSheetMq: MediaQueryList | null = null
+const onFiltersSheetMqChange = () => {
+  filtersSheetMode.value = filtersSheetMq?.matches ?? false
+}
 const { version: gameVersion } = useGameVersion()
 
 useHead({
@@ -867,17 +895,28 @@ function resetStatsFilters() {
   onStatsFilterChange()
 }
 
-const filtersOpen = computed({
-  get: () => statisticsUiStore.filtersOpen,
-  set: value => statisticsUiStore.setFiltersOpen(value),
-})
-
 function closeFilters() {
-  filtersOpen.value = false
+  statisticsUiStore.setFiltersOpen(false)
+}
+function openFilters() {
+  statisticsUiStore.setFiltersOpen(true)
 }
 function toggleFiltersOpen() {
-  filtersOpen.value = !filtersOpen.value
+  if (filtersOpen.value) closeFilters()
+  else openFilters()
 }
+
+function onFiltersEscapeKey(event: KeyboardEvent) {
+  if (event.key !== 'Escape' || !filtersOpen.value) return
+  if (!import.meta.client || !filtersSheetMode.value) return
+  closeFilters()
+}
+
+watch([filtersOpen, filtersSheetMode], () => {
+  if (!import.meta.client) return
+  const lock = filtersSheetMode.value && filtersOpen.value
+  document.body.style.overflow = lock ? 'hidden' : ''
+})
 
 function applyTierListStateFromQuery(): void {
   const versionRaw = queryFirst(route.query.version as string | string[] | null | undefined)
@@ -1018,6 +1057,10 @@ watch(
 onMounted(async () => {
   if (import.meta.client) {
     statisticsUiStore.init()
+    document.addEventListener('keydown', onFiltersEscapeKey)
+    filtersSheetMq = window.matchMedia('(max-width: 1023px)')
+    onFiltersSheetMqChange()
+    filtersSheetMq.addEventListener('change', onFiltersSheetMqChange)
   }
   applyTierListStateFromQuery()
   if (!versionStore.currentVersion) {
@@ -1032,6 +1075,12 @@ onMounted(async () => {
     await tierList.loadTierList()
   }
   championsStore.loadChampions(riotLocale.value)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', onFiltersEscapeKey)
+  filtersSheetMq?.removeEventListener('change', onFiltersSheetMqChange)
+  if (import.meta.client) document.body.style.overflow = ''
 })
 
 const __vm = getCurrentInstance()
@@ -1083,3 +1132,45 @@ if (__vm) {
   provide('statisticsPageCtx', __ctx)
 }
 </script>
+
+<style>
+/* Aligné sur /statistics : seule la barre d’onglets scroll horizontalement */
+.statistics-tabs-nav {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.statistics-tabs-nav::-webkit-scrollbar {
+  display: none;
+}
+.statistics-tabs-scroll-wrap::before,
+.statistics-tabs-scroll-wrap::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 8px;
+  width: 28px;
+  z-index: 2;
+  pointer-events: none;
+}
+.statistics-tabs-scroll-wrap::before {
+  left: 0;
+  background: linear-gradient(to right, rgb(8 16 31 / 0.95), transparent);
+}
+.statistics-tabs-scroll-wrap::after {
+  right: 0;
+  background: linear-gradient(to left, rgb(8 16 31 / 0.95), transparent);
+}
+@media (max-width: 767px) {
+  .statistics .statistics-tab-btn {
+    font-size: 13px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+}
+@media (max-width: 1023px) {
+  .statistics-filters-panel .flex.min-h-0.flex-1 {
+    overflow-y: auto;
+  }
+}
+</style>

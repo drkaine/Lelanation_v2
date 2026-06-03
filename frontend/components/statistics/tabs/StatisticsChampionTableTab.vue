@@ -145,6 +145,13 @@ const championTableLayoutStyle = computed(() => {
       {{ p.t('statisticsPage.championTableNoData') }}
     </div>
     <template v-else>
+      <div class="flex min-w-0 justify-end">
+        <StatisticsTableHelpTooltip
+          :aria-label="p.t('statisticsPage.tooltipTableChampionAria')"
+          :text="p.t('statisticsPage.tooltipTableChampion')"
+          :secondary-text="p.t('statisticsPage.championTableDeltaColumnsHint')"
+        />
+      </div>
       <!-- Mobile : cards -->
       <div class="statistics-champion-mobile-list space-y-2 md:hidden">
         <article
@@ -226,12 +233,6 @@ const championTableLayoutStyle = computed(() => {
                 </div>
               </div>
             </div>
-            <span
-              class="shrink-0 text-xs text-text/50 transition-transform duration-200"
-              :class="expandedChampionIds.has(row.championId) ? 'rotate-180' : ''"
-              aria-hidden="true"
-              >▼</span
-            >
           </button>
           <div
             v-if="expandedChampionIds.has(row.championId)"

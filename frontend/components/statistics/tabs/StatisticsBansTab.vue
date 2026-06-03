@@ -11,6 +11,13 @@
       {{ p.bansTableData.message }}
     </div>
     <div v-else class="space-y-3">
+      <div class="flex min-w-0 justify-end">
+        <StatisticsTableHelpTooltip
+          :aria-label="p.t('statisticsPage.tooltipTableBansAria')"
+          :text="p.t('statisticsPage.tooltipTableBans')"
+          :secondary-text="p.t('statisticsPage.tooltipTableBansSecondary')"
+        />
+      </div>
       <div class="statistics-bans-mobile-list space-y-2 md:hidden">
         <article
           v-for="row in p.paginatedBans"
@@ -58,12 +65,6 @@
                 {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansTotal', 2)!) }}
               </div>
             </div>
-            <span
-              class="shrink-0 text-xs text-text/50 transition-transform duration-200"
-              :class="expandedBanIds.has(row.championId) ? 'rotate-180' : ''"
-              aria-hidden="true"
-              >▼</span
-            >
           </button>
 
           <div
