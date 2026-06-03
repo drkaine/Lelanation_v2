@@ -57,7 +57,7 @@ export class AlertDetector {
     this.checkMatchSkipRateHigh(p.match_skip_rate_pct, p.match_ids_discovered, p.match_ids_new);
     this.checkPollStall();
     this.checkDbSlow(ing.slowest_db_ops);
-    this.checkIngestionMissingData(ing.skip_breakdown);
+    this.checkIngestionMissingData(ing.skip_breakdown, ing.matches_queued, ing.matches_skipped_total);
     this.checkFullHistoryModeReached();
 
     snapshot.active_alerts = this.getActive();
@@ -245,15 +245,24 @@ export class AlertDetector {
     }
   }
 
-  private checkIngestionMissingData(breakdown: Record<IngestionSkipReason, number>): void {
+  private checkIngestionMissingData(
+    breakdown: Record<IngestionSkipReason, number>,
+    matchesQueued: number,
+    matchesSkippedTotal: number,
+  ): void {
+    const skipRatePct = (matchesSkippedTotal / Math.max(1, matchesQueued)) * 100;
     const entries = INGESTION_SKIP_REASONS.map((reason) => ({ reason, count: breakdown[reason] ?? 0 }));
-    const total = entries.reduce((sum, e) => sum + e.count, 0);
-    if (total > 0) {
+    const totalSkipped = entries.reduce((sum, e) => sum + e.count, 0);
+
+    if (skipRatePct > 5 && totalSkipped > 0) {
       const top = [...entries].sort((a, b) => b.count - a.count)[0]!;
-      this.raise('ingestion_missing_data', 'warn', 'matches skipped from ingestion queue', {
+      this.raise('ingestion_missing_data', 'warn', 'ingestion queue skip rate above threshold', {
         skip_breakdown: breakdown,
         most_common_reason: top.reason,
         count: top.count,
+        skip_rate_pct: skipRatePct,
+        matches_queued: matchesQueued,
+        matches_skipped_total: matchesSkippedTotal,
       });
     } else {
       this.clear('ingestion_missing_data');

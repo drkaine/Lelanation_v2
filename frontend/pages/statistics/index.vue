@@ -111,7 +111,7 @@
         @click="closeFilters"
       />
       <aside
-        v-if="showFiltersPanel && (!filtersSheetMode || filtersOpen)"
+        v-show="showFiltersPanel && (filtersOpen || !filtersSheetMode)"
         :class="[
           'statistics-filters-panel flex shrink-0 flex-col overflow-hidden bg-surface',
           filtersSheetMode

@@ -899,7 +899,7 @@ router.get('/champions/:championId/runes', async (req: Request, res: Response) =
     return res.status(400).json({ error: 'Invalid champion ID' })
   }
   const rankTier = rankTierParam(req.query.rankTier)
-  const patch = (req.query.patch as string) || undefined
+  const patch = queryString(req.query.patch) ?? queryString(req.query.version)
   const role = queryString(req.query.role)
   const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 10
   const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 20

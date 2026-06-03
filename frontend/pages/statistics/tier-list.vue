@@ -139,7 +139,7 @@
       />
 
       <aside
-        v-if="!filtersSheetMode || filtersOpen"
+        v-show="filtersOpen || !filtersSheetMode"
         :class="[
           'statistics-filters-panel flex shrink-0 flex-col overflow-hidden bg-surface',
           filtersSheetMode

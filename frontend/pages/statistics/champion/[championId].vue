@@ -105,7 +105,7 @@
       />
 
       <aside
-        v-if="!filtersSheetMode || filtersOpen"
+        v-show="filtersOpen || !filtersSheetMode"
         :class="[
           'statistics-filters-panel flex shrink-0 flex-col overflow-hidden bg-surface',
           filtersSheetMode
@@ -312,16 +312,6 @@
               <p class="mt-0.5 text-[10px] leading-snug text-text/55">
                 {{ t('statisticsPage.championStatsTrendFromDateHint') }}
               </p>
-            </div>
-            <div>
-              <label class="flex cursor-pointer items-center gap-2 text-sm font-medium text-text">
-                <input
-                  v-model="filterPlayersMasterPlus"
-                  type="checkbox"
-                  class="rounded border-primary/50"
-                />
-                {{ t('statisticsPage.championStatsPlayersMasterPlus') }}
-              </label>
             </div>
             <div v-if="activeChampionTab === 'matchups'">
               <label
@@ -1028,6 +1018,39 @@
                     {{ t('statisticsPage.noData') }}
                   </div>
                   <div v-else class="space-y-3">
+                    <div
+                      class="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md border border-primary/20 bg-background/40 px-2.5 py-2 text-[10px] text-text/70"
+                      :title="t('statisticsPage.championMatchupTooltipLaneProfile')"
+                    >
+                      <span class="font-semibold text-text/80">{{
+                        t('statisticsPage.championMatchupLaneProfileLegendTitle')
+                      }}</span>
+                      <span class="inline-flex items-center gap-1 font-semibold text-emerald-400">
+                        <span class="h-1.5 w-1.5 rounded-full bg-emerald-400" aria-hidden="true" />
+                        {{ t('statisticsPage.championMatchupProfileChampion') }}
+                      </span>
+                      <span
+                        v-for="lvl in laneProfileStrengthLegendLevels"
+                        :key="'leg-s-' + lvl"
+                        :class="laneProfileSignalChipClass(lvl, 'strength')"
+                        class="pointer-events-none"
+                      >
+                        {{ t(`statisticsPage.championMatchupSignalLevelShort.${lvl}`) }}
+                      </span>
+                      <span class="mx-0.5 hidden h-3 w-px bg-primary/30 sm:inline-block" />
+                      <span class="inline-flex items-center gap-1 font-semibold text-rose-400">
+                        <span class="h-1.5 w-1.5 rounded-full bg-rose-400" aria-hidden="true" />
+                        {{ t('statisticsPage.championMatchupProfileOpponent') }}
+                      </span>
+                      <span
+                        v-for="lvl in laneProfileWeaknessLegendLevels"
+                        :key="'leg-w-' + lvl"
+                        :class="laneProfileSignalChipClass(lvl, 'weakness')"
+                        class="pointer-events-none"
+                      >
+                        {{ t(`statisticsPage.championMatchupSignalLevelShort.${lvl}`) }}
+                      </span>
+                    </div>
                     <div class="overflow-x-auto">
                       <table class="tier-list-lolalytics w-full min-w-[1120px] text-sm">
                         <thead>
@@ -1254,7 +1277,7 @@
                               </div>
                             </td>
                             <td
-                              class="max-w-xs px-2 py-2 text-xs leading-snug text-text/80"
+                              class="max-w-md px-2 py-2 align-top"
                               :title="
                                 dominanceTooltip(
                                   row.dominanceKeys,
@@ -1263,22 +1286,81 @@
                                 )
                               "
                             >
-                              <div>
-                                {{
-                                  dominanceStrengthLabel(row.dominanceKeys, row.laneProfileByKey)
-                                }}
+                              <div v-if="row.dominanceKeys?.length" class="mb-1.5">
+                                <div
+                                  class="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-400"
+                                >
+                                  <span
+                                    class="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400"
+                                    aria-hidden="true"
+                                  />
+                                  {{ t('statisticsPage.championMatchupProfileChampion') }}
+                                </div>
+                                <div class="flex flex-wrap gap-1">
+                                  <span
+                                    v-for="k in row.dominanceKeys"
+                                    :key="'dom-' + k"
+                                    :class="
+                                      laneProfileSignalChipClass(
+                                        row.laneProfileByKey?.[k] ?? 'smallAdvantage',
+                                        'strength'
+                                      )
+                                    "
+                                    :title="
+                                      laneProfileChipTitle(k, row.laneProfileByKey?.[k], 'strength')
+                                    "
+                                  >
+                                    <span class="font-semibold">{{
+                                      t(`statisticsPage.championMatchupDominanceShort.${k}`)
+                                    }}</span>
+                                    <span class="opacity-90">{{
+                                      t(
+                                        `statisticsPage.championMatchupSignalLevelShort.${row.laneProfileByKey?.[k] ?? 'smallAdvantage'}`
+                                      )
+                                    }}</span>
+                                  </span>
+                                </div>
+                              </div>
+                              <div v-if="row.weaknessKeys?.length">
+                                <div
+                                  class="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-rose-400"
+                                >
+                                  <span
+                                    class="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400"
+                                    aria-hidden="true"
+                                  />
+                                  {{ t('statisticsPage.championMatchupProfileOpponent') }}
+                                </div>
+                                <div class="flex flex-wrap gap-1">
+                                  <span
+                                    v-for="k in row.weaknessKeys"
+                                    :key="'weak-' + k"
+                                    :class="
+                                      laneProfileSignalChipClass(
+                                        row.laneProfileByKey?.[k] ?? 'smallDisadvantage',
+                                        'weakness'
+                                      )
+                                    "
+                                    :title="
+                                      laneProfileChipTitle(k, row.laneProfileByKey?.[k], 'weakness')
+                                    "
+                                  >
+                                    <span class="font-semibold">{{
+                                      t(`statisticsPage.championMatchupDominanceShort.${k}`)
+                                    }}</span>
+                                    <span class="opacity-90">{{
+                                      t(
+                                        `statisticsPage.championMatchupSignalLevelShort.${row.laneProfileByKey?.[k] ?? 'smallDisadvantage'}`
+                                      )
+                                    }}</span>
+                                  </span>
+                                </div>
                               </div>
                               <div
-                                v-if="row.weaknessKeys?.length"
-                                class="mt-0.5 text-[11px] text-rose-300"
+                                v-if="!row.dominanceKeys?.length && !row.weaknessKeys?.length"
+                                class="inline-flex items-center gap-1 rounded border border-primary/25 bg-white/[0.03] px-2 py-1 text-[11px] text-text/65"
                               >
-                                {{ dominanceWeaknessLabel(row.weaknessKeys, row.laneProfileByKey) }}
-                              </div>
-                              <div
-                                v-else-if="!row.dominanceKeys?.length"
-                                class="mt-0.5 text-[11px] text-text/65"
-                              >
-                                {{ t('statisticsPage.championMatchupSignalLevel.even') }}
+                                {{ t('statisticsPage.championMatchupDominanceBalancedShort') }}
                               </div>
                             </td>
                           </tr>
@@ -2130,32 +2212,61 @@ const paginatedMatchupsExt = computed(() => {
   return filteredMatchupsExt.value.slice(start, start + matchupPageSize.value)
 })
 
-function dominanceStrengthLabel(
-  keys: MatchupsExtDominanceKey[],
-  profileByKey?: Partial<Record<MatchupsExtDominanceKey, MatchupsExtSignalLevel>>
+const laneProfileStrengthLegendLevels: MatchupsExtSignalLevel[] = [
+  'bigAdvantage',
+  'mediumAdvantage',
+  'smallAdvantage',
+]
+const laneProfileWeaknessLegendLevels: MatchupsExtSignalLevel[] = [
+  'bigDisadvantage',
+  'mediumDisadvantage',
+  'smallDisadvantage',
+]
+
+const laneProfileChipBase =
+  'inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] leading-tight tabular-nums'
+
+function laneProfileSignalChipClass(
+  level: MatchupsExtSignalLevel,
+  side: 'strength' | 'weakness'
 ): string {
-  if (!keys?.length) return t('statisticsPage.championMatchupDominanceBalanced')
-  return `${t('statisticsPage.championMatchupProfileStrengths')}: ${keys
-    .map(k => {
-      const lvl = profileByKey?.[k] ?? 'smallAdvantage'
-      return `${t(`statisticsPage.championMatchupDominance.${k}`)} (${t(`statisticsPage.championMatchupSignalLevel.${lvl}`)})`
-    })
-    .filter(Boolean)
-    .join(' · ')}`
+  if (side === 'strength') {
+    if (level === 'bigAdvantage') {
+      return `${laneProfileChipBase} border-emerald-400/75 bg-emerald-500/35 font-semibold text-emerald-50 shadow-sm shadow-emerald-950/30`
+    }
+    if (level === 'mediumAdvantage') {
+      return `${laneProfileChipBase} border-emerald-500/55 bg-emerald-500/22 text-emerald-100`
+    }
+    if (level === 'smallAdvantage') {
+      return `${laneProfileChipBase} border-emerald-600/40 bg-emerald-600/12 text-emerald-200`
+    }
+    return `${laneProfileChipBase} border-primary/30 bg-white/[0.04] text-text/65`
+  }
+  if (level === 'bigDisadvantage') {
+    return `${laneProfileChipBase} border-rose-400/75 bg-rose-500/35 font-semibold text-rose-50 shadow-sm shadow-rose-950/30`
+  }
+  if (level === 'mediumDisadvantage') {
+    return `${laneProfileChipBase} border-rose-500/55 bg-rose-500/22 text-rose-100`
+  }
+  if (level === 'smallDisadvantage') {
+    return `${laneProfileChipBase} border-orange-500/45 bg-orange-600/14 text-orange-100`
+  }
+  return `${laneProfileChipBase} border-primary/30 bg-white/[0.04] text-text/65`
 }
 
-function dominanceWeaknessLabel(
-  keys: MatchupsExtDominanceKey[],
-  profileByKey?: Partial<Record<MatchupsExtDominanceKey, MatchupsExtSignalLevel>>
+function laneProfileChipTitle(
+  key: MatchupsExtDominanceKey,
+  level: MatchupsExtSignalLevel | undefined,
+  side: 'strength' | 'weakness'
 ): string {
-  if (!keys?.length) return ''
-  return `${t('statisticsPage.championMatchupProfileWarnings')}: ${keys
-    .map(k => {
-      const lvl = profileByKey?.[k] ?? 'smallDisadvantage'
-      return `${t(`statisticsPage.championMatchupDominance.${k}`)} (${t(`statisticsPage.championMatchupSignalLevel.${lvl}`)})`
-    })
-    .filter(Boolean)
-    .join(' · ')}`
+  const lvl =
+    level ??
+    (side === 'strength' ? ('smallAdvantage' as MatchupsExtSignalLevel) : 'smallDisadvantage')
+  const who =
+    side === 'strength'
+      ? t('statisticsPage.championMatchupProfileChampion')
+      : t('statisticsPage.championMatchupProfileOpponent')
+  return `${who} — ${t(`statisticsPage.championMatchupDominance.${key}`)} (${t(`statisticsPage.championMatchupSignalLevel.${lvl}`)}): ${t(`statisticsPage.championMatchupDominanceDetail.${key}`)}`
 }
 
 function dominanceTooltip(
@@ -2218,7 +2329,6 @@ const filterVersion = ref('')
 const trendChartFromDate = ref('')
 const filterRank = ref<string[]>([])
 const filterRole = ref('')
-const filterPlayersMasterPlus = ref(false)
 /** Versions chargées depuis l’overview pour le filtre (version + matchCount). */
 const versionsFromOverview = ref<Array<{ version: string; matchCount: number }>>([])
 const championSearchQueryPlaceholder = ref('')
@@ -2247,7 +2357,6 @@ const activeChampionFiltersCount = computed(() => {
   if (filterRole.value) count++
   if (championProgressionFromVersionOverride.value) count++
   if (trendChartFromDate.value.trim()) count++
-  if (filterPlayersMasterPlus.value) count++
   return count
 })
 
@@ -2804,17 +2913,6 @@ const durationByTierData = ref<{
   }>
 } | null>(null)
 
-const playersPending = ref(false)
-const playersData = ref<{
-  players: Array<{
-    puuid: string
-    summonerName: string | null
-    totalGames: number
-    winrate: number
-    rankTier: string | null
-  }>
-} | null>(null)
-
 const matchupsExtPending = ref(false)
 const matchupsExtError = ref<string | null>(null)
 const matchupsExtData = ref<{
@@ -2967,7 +3065,6 @@ function resetChampionFilters() {
   filterRank.value = []
   trendDivisionPreset.value = 'selected'
   filterRole.value = ''
-  filterPlayersMasterPlus.value = false
   championProgressionFromVersionOverride.value = ''
   trendChartFromDate.value = ''
   championSearchQueryPlaceholder.value = ''
@@ -3319,26 +3416,6 @@ async function loadTrendSnapshots() {
   } finally {
     trendPending.value = false
     statsPerfEnd('loadTrendSnapshots', t)
-  }
-}
-
-async function _loadPlayers() {
-  if (!championId.value) return
-  const t = statsPerfStart('loadPlayers')
-  playersPending.value = true
-  try {
-    const q = queryParams()
-    const highRank = filterPlayersMasterPlus.value ? '&highRankOnly=1' : ''
-    playersData.value = await statsFetch(
-      apiUrl(
-        `/api/stats/champions/${championId.value}/players${q ? q + '&' : '?'}minGames=20${highRank}`
-      )
-    )
-  } catch {
-    playersData.value = null
-  } finally {
-    playersPending.value = false
-    statsPerfEnd('loadPlayers', t)
   }
 }
 
@@ -4081,7 +4158,6 @@ watch(
     filterVersion,
     filterRank,
     filterRole,
-    filterPlayersMasterPlus,
     championProgressionFromVersion,
     trendChartFromDate,
   ],
@@ -4166,9 +4242,12 @@ async function loadVersionsForFilter() {
   }
 }
 
+if (import.meta.client) {
+  statisticsUiStore.init()
+}
+
 onMounted(async () => {
   if (import.meta.client) {
-    statisticsUiStore.init()
     document.addEventListener('keydown', onFiltersEscapeKey)
     filtersSheetMq = window.matchMedia('(max-width: 1023px)')
     onFiltersSheetMqChange()

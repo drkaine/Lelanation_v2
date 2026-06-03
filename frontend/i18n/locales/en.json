@@ -1004,7 +1004,6 @@
     "championStatsMatchupsSeeMore": "See more",
     "championStatsMatchupSearchLabel": "Matchup search",
     "championStatsMatchupSearchPlaceholder": "Filter opponents (name or id)",
-    "championStatsPlayersMasterPlus": "Top players: Master to Challenger only",
     "championStatsTabOverview": "Overview",
     "championStatsTabMatchups": "Matchups",
     "championStatsTabStats": "Stats",
@@ -1025,8 +1024,28 @@
     "championMatchupTooltipPickrate": "Share of this matchup among all champion matchups in the current filters.",
     "championMatchupTooltipLaneScore": "Average lane-signal score (CS, level, kill pressure, vision, lane economy, early lane), normalized vs peers then multiplied by 100.",
     "championMatchupTooltipLaneProfile": "Lane strengths and warning signals on this matchup compared to peer picks.",
+    "championMatchupLaneProfileLegendTitle": "Color key",
+    "championMatchupProfileChampion": "Champion",
+    "championMatchupProfileOpponent": "Opponent",
     "championMatchupProfileStrengths": "Strengths",
     "championMatchupProfileWarnings": "Watchouts",
+    "championMatchupSignalLevelShort": {
+      "bigAdvantage": "Big +",
+      "mediumAdvantage": "Med. +",
+      "smallAdvantage": "Small +",
+      "even": "Even",
+      "smallDisadvantage": "Small −",
+      "mediumDisadvantage": "Med. −",
+      "bigDisadvantage": "Big −"
+    },
+    "championMatchupDominanceShort": {
+      "early": "Early",
+      "laneEconomy": "Eco",
+      "kills": "Kills",
+      "level": "Lvl",
+      "cs": "CS",
+      "vision": "Vis."
+    },
     "championMatchupSignalLevel": {
       "bigAdvantage": "big advantage",
       "mediumAdvantage": "medium advantage",

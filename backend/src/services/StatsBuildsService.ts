@@ -3,8 +3,8 @@
  */
 import { queryRawUnsafe } from '../db/query.js'
 import { isDatabaseConfigured } from '../db/query.js'
-import { toQueryStringArrayParam } from '../utils/statsFilters.js'
-import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
+import { buildChampionScopedWhere, sumChampionCoreGames } from './ChampionGlobalTableService.js'
+import { matchVersionedAggFrom } from './statsAggArchive.js'
 
 export interface BuildRow {
   items: number[]
@@ -35,38 +35,6 @@ export interface BuildsByChampionOptions {
   limit?: number
 }
 
-async function getCoreStatIdsAndTotalGames(options: {
-  championId: number
-  patch?: string | null
-  rankTier?: string | string[] | null
-  role?: string | null
-  region?: string | null
-}): Promise<{ statIds: bigint[]; totalGames: number }> {
-  const { championId, patch, rankTier, role, region } = options
-  const filters: string[] = [`champion_id = ${championId}`]
-  if (patch) filters.push(`game_version LIKE '${normalizePatchMajorMinor(patch).replace(/'/g, "''")}%'`)
-  if (role) filters.push(`role = '${role.replace(/'/g, "''")}'`)
-  if (region) filters.push(`region = '${region.replace(/'/g, "''")}'`)
-  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
-  if (ranks.length === 1) filters.push(`rank_tier = '${ranks[0]!.replace(/'/g, "''")}'`)
-  else if (ranks.length > 1) {
-    filters.push(`rank_tier IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`)
-  } else {
-    filters.push(`rank_tier <> 'UNRANKED'`)
-  }
-  const whereSql = filters.join(' AND ')
-  const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', patch ?? null, 'cc')
-  const coreStats = await queryRawUnsafe<Array<{ id: bigint; countGame: number }>>(`
-    SELECT id, count_game AS "countGame"
-    FROM ${coreFrom}
-    WHERE ${whereSql}
-  `)
-  return {
-    statIds: coreStats.map((s) => s.id),
-    totalGames: coreStats.reduce((sum, r) => sum + Number(r.countGame ?? 0), 0),
-  }
-}
-
 export async function getBuildsByChampion(
   options: BuildsByChampionOptions
 ): Promise<{ totalGames: number; builds: BuildRow[]; soloItems?: ItemSoloRow[] } | null> {
@@ -77,31 +45,36 @@ export async function getBuildsByChampion(
     const pPatch = patch != null && patch !== '' ? patch : null
     const pRegion = region != null && region !== '' ? region : null
 
-    const { statIds, totalGames } = await getCoreStatIdsAndTotalGames({
+    const totalGames = await sumChampionCoreGames({
       championId,
-      patch: pPatch,
+      version: pPatch,
       rankTier,
       role: pRole,
       region: pRegion,
     })
-    if (statIds.length === 0) return { totalGames: 0, builds: [], soloItems: [] }
+    if (totalGames <= 0) return { totalGames: 0, builds: [], soloItems: [] }
 
     const itemsFrom = await matchVersionedAggFrom('agg_champion_item_stats', pPatch, 'it')
+    const whereSql = buildChampionScopedWhere('it', {
+      championId,
+      version: pPatch,
+      rankTier,
+      role: pRole,
+      region: pRegion,
+    })
 
-    // Item combinations
     const itemStatRows = await queryRawUnsafe<
       Array<{ itemList: string; countWin: number; countGame: number; sumTimestampMs: number }>
     >(`
       SELECT
-        item_list AS "itemList",
-        count_win AS "countWin",
-        count_game AS "countGame",
-        sum_timestamp_ms AS "sumTimestampMs"
+        it.item_list AS "itemList",
+        it.count_win AS "countWin",
+        it.count_game AS "countGame",
+        it.sum_timestamp_ms AS "sumTimestampMs"
       FROM ${itemsFrom}
-      WHERE champion_stat_id IN (${statIds.map((id) => id.toString()).join(',')})
+      WHERE ${whereSql}
     `)
 
-    // Aggregate by item_list
     const byList = new Map<string, { wins: number; games: number; sumMs: number }>()
     for (const row of itemStatRows) {
       const key = row.itemList
@@ -137,8 +110,14 @@ export async function getBuildsByChampion(
     builds.splice(limit)
 
     const soloFrom = await matchVersionedAggFrom('agg_champion_item_solo_stats', pPatch, 'iso')
+    const soloWhere = buildChampionScopedWhere('iso', {
+      championId,
+      version: pPatch,
+      rankTier,
+      role: pRole,
+      region: pRegion,
+    })
 
-    // Solo items
     const soloRows = await queryRawUnsafe<
       Array<{
         itemId: number
@@ -150,52 +129,38 @@ export async function getBuildsByChampion(
       }>
     >(`
       SELECT
-        item_id AS "itemId",
-        count_starter AS "countStarter",
-        count_core AS "countCore",
-        count_win AS "countWin",
-        count_game AS "countGame",
-        sum_timestamp_ms AS "sumTimestampMs"
+        iso.item_id AS "itemId",
+        SUM(iso.count_starter)::integer AS "countStarter",
+        SUM(iso.count_core)::integer AS "countCore",
+        SUM(iso.count_win)::integer AS "countWin",
+        SUM(iso.count_game)::integer AS "countGame",
+        SUM(iso.sum_timestamp_ms)::bigint AS "sumTimestampMs"
       FROM ${soloFrom}
-      WHERE champion_stat_id IN (${statIds.map((id) => id.toString()).join(',')})
+      WHERE ${soloWhere}
+      GROUP BY iso.item_id
     `)
 
-    const bySolo = new Map<
-      number,
-      { starter: number; core: number; wins: number; games: number; sumMs: number }
-    >()
-    for (const row of soloRows) {
-      const id = row.itemId
-      let entry = bySolo.get(id)
-      if (!entry) {
-        entry = { starter: 0, core: 0, wins: 0, games: 0, sumMs: 0 }
-        bySolo.set(id, entry)
-      }
-      entry.starter += row.countStarter
-      entry.core += row.countCore
-      entry.wins += row.countWin
-      entry.games += row.countGame
-      entry.sumMs += row.sumTimestampMs
-    }
-
     const soloItems: ItemSoloRow[] = []
-    for (const [itemId, entry] of bySolo.entries()) {
-      if (entry.games < minGames) continue
+    for (const row of soloRows) {
+      const games = Number(row.countGame ?? 0)
+      const wins = Number(row.countWin ?? 0)
+      if (games < minGames) continue
       soloItems.push({
-        itemId,
-        countStarter: entry.starter,
-        countCore: entry.core,
-        games: entry.games,
-        wins: entry.wins,
-        winrate: entry.games > 0 ? Math.round((entry.wins / entry.games) * 10000) / 100 : 0,
-        pickrate: totalGames > 0 ? Math.round((entry.games / totalGames) * 10000) / 100 : 0,
-        avgTimestampMs: entry.games > 0 ? Math.round(entry.sumMs / entry.games) : 0,
+        itemId: row.itemId,
+        countStarter: Number(row.countStarter ?? 0),
+        countCore: Number(row.countCore ?? 0),
+        games,
+        wins,
+        winrate: games > 0 ? Math.round((wins / games) * 10000) / 100 : 0,
+        pickrate: totalGames > 0 ? Math.round((games / totalGames) * 10000) / 100 : 0,
+        avgTimestampMs: games > 0 ? Math.round(Number(row.sumTimestampMs ?? 0) / games) : 0,
       })
     }
     soloItems.sort((a, b) => b.games - a.games)
 
     return { totalGames, builds, soloItems }
-  } catch {
+  } catch (err) {
+    console.warn('[getBuildsByChampion]', err)
     return null
   }
 }

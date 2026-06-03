@@ -51,7 +51,8 @@ function defaultFiltersOpen(): boolean {
 }
 
 function loadUiState(): StatisticsUiState {
-  if (import.meta.server) return { filtersOpen: true, activeTab: 'overview' }
+  // SSR : panneau fermé pour éviter un mismatch d’hydratation (le client réapplique init()).
+  if (import.meta.server) return { filtersOpen: false, activeTab: 'overview' }
   const filtersDefault = defaultFiltersOpen()
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -78,7 +79,7 @@ function saveUiState(state: StatisticsUiState): void {
 
 export const useStatisticsUiStore = defineStore('statisticsUi', {
   state: (): StatisticsUiState => ({
-    filtersOpen: true,
+    filtersOpen: false,
     activeTab: 'overview',
   }),
   actions: {

@@ -262,7 +262,7 @@ export async function getChampionMatchupsExtendedTable(options: {
       SUM(vs.sum_vision_score_advantage_lane_opponent)::double precision AS sum_vision,
       SUM(vs.sum_laning_phase_gold_exp_advantage)::double precision AS sum_laning,
       SUM(vs.sum_early_laning_phase_gold_exp_advantage)::double precision AS sum_early
-    FROM ${vsFrom} vs
+    FROM ${vsFrom}
     WHERE ${myWhere}
     GROUP BY vs.opponent_champion_id, vs.role
     HAVING SUM(vs.count_game) >= ${minGames}
@@ -303,7 +303,7 @@ export async function getChampionMatchupsExtendedTable(options: {
       SUM(vs.sum_vision_score_advantage_lane_opponent)::double precision AS sum_vision,
       SUM(vs.sum_laning_phase_gold_exp_advantage)::double precision AS sum_laning,
       SUM(vs.sum_early_laning_phase_gold_exp_advantage)::double precision AS sum_early
-    FROM ${vsFrom} vs
+    FROM ${vsFrom}
     WHERE ${peerVsWhere}
       AND vs.opponent_champion_id IN (${oppIds.join(',')})
     GROUP BY vs.opponent_champion_id, vs.role, vs.champion_id
@@ -350,7 +350,7 @@ export async function getChampionMatchupsExtendedTable(options: {
         SUM(vs.sum_vision_score_advantage_lane_opponent)::double precision AS sum_vision,
         SUM(vs.sum_laning_phase_gold_exp_advantage)::double precision AS sum_laning,
         SUM(vs.sum_early_laning_phase_gold_exp_advantage)::double precision AS sum_early
-      FROM ${refVsFrom} vs
+      FROM ${refVsFrom}
       WHERE ${refMyWhere}
       GROUP BY vs.opponent_champion_id, vs.role
       HAVING SUM(vs.count_game) >= ${minGames}
@@ -372,7 +372,7 @@ export async function getChampionMatchupsExtendedTable(options: {
           SUM(vs.sum_vision_score_advantage_lane_opponent)::double precision AS sum_vision,
           SUM(vs.sum_laning_phase_gold_exp_advantage)::double precision AS sum_laning,
           SUM(vs.sum_early_laning_phase_gold_exp_advantage)::double precision AS sum_early
-        FROM ${refVsFrom} vs
+        FROM ${refVsFrom}
         WHERE ${refPeerWhere}
           AND vs.opponent_champion_id IN (${refOppIds.join(',')})
         GROUP BY vs.opponent_champion_id, vs.role, vs.champion_id
@@ -658,7 +658,7 @@ export async function getChampionMatchupsExportRows(options: {
       COALESCE(SUM(vs.count_game), 0)::bigint AS count_game,
       COALESCE(SUM(vs.count_win), 0)::bigint AS count_win
       ${metricSelect ? `,\n      ${metricSelect}` : ''}
-    FROM ${vsFrom} vs
+    FROM ${vsFrom}
     WHERE ${where}
     GROUP BY vs.opponent_champion_id, vs.role
     HAVING SUM(vs.count_game) >= ${minGames}

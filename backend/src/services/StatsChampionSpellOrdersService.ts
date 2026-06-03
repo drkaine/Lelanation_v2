@@ -1,10 +1,6 @@
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
-import {
-  normalizeStatsRoleForChampion,
-  statsRoleSqlLiteral,
-  toQueryStringArrayParam,
-} from '../utils/statsFilters.js'
-import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
+import { buildChampionScopedWhere, sumChampionCoreGames } from './ChampionGlobalTableService.js'
+import { matchVersionedAggFrom } from './statsAggArchive.js'
 
 export type ChampionSpellOrderRow = {
   key: string
@@ -32,33 +28,24 @@ export async function getChampionSpellOrders(options: {
   if (!isDatabaseConfigured()) return null
   const championId = options.championId
   const pVersion = norm(options.version ?? null)
-  const role = norm(options.role ?? null)?.toUpperCase() ?? null
+  const role = norm(options.role ?? null)
   const minGames = Math.max(1, Math.trunc(Number(options.minGames ?? 10)))
   try {
-    const filters: string[] = [`cc.champion_id = ${championId}`]
-    if (pVersion) {
-      filters.push(`cc.game_version LIKE '${normalizePatchMajorMinor(pVersion).replace(/'/g, "''")}%'`)
-    }
-    const ranks = toQueryStringArrayParam(options.rankTier).map((r) => r.toUpperCase())
-    if (ranks.length === 1) filters.push(`cc.rank_tier = '${ranks[0]!.replace(/'/g, "''")}'`)
-    else if (ranks.length > 1) {
-      filters.push(`cc.rank_tier IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`)
-    } else {
-      filters.push(`cc.rank_tier <> 'UNRANKED'`)
-    }
-    const roleDb = normalizeStatsRoleForChampion(role)
-    if (roleDb) filters.push(`cc.role = '${statsRoleSqlLiteral(roleDb)}'`)
-    const whereSql = filters.join(' AND ')
-
-    const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', pVersion, 'cc')
-    const spellsFrom = await matchVersionedAggFrom('agg_champion_spells_stats', pVersion, 'cs')
-    const totalRows = await queryRawUnsafe<Array<{ totalGames: bigint }>>(`
-      SELECT COALESCE(SUM(cc.count_game), 0)::bigint AS "totalGames"
-      FROM ${coreFrom}
-      WHERE ${whereSql}
-    `)
-    const totalGames = Number(totalRows[0]?.totalGames ?? 0)
+    const totalGames = await sumChampionCoreGames({
+      championId,
+      version: pVersion,
+      rankTier: options.rankTier ?? null,
+      role,
+    })
     if (totalGames <= 0) return { totalGames: 0, rows: [] }
+
+    const spellsFrom = await matchVersionedAggFrom('agg_champion_spells_stats', pVersion, 'cs')
+    const whereSql = buildChampionScopedWhere('cs', {
+      championId,
+      version: pVersion,
+      rankTier: options.rankTier ?? null,
+      role,
+    })
 
     const rows = await queryRawUnsafe<
       Array<{
@@ -68,16 +55,15 @@ export async function getChampionSpellOrders(options: {
       }>
     >(`
       SELECT
-        e.key AS key,
-        COALESCE(SUM(NULLIF(e.value->>'number_of_games', '')::bigint), 0)::bigint AS games,
-        COALESCE(SUM(NULLIF(e.value->>'number_of_wins', '')::bigint), 0)::bigint AS wins
+        cs.spell_order AS key,
+        SUM(cs.count_game)::bigint AS games,
+        SUM(cs.count_win)::bigint AS wins
       FROM ${spellsFrom}
-      INNER JOIN ${coreFrom} ON cc.id = cs.champion_stat_id
-      CROSS JOIN LATERAL jsonb_each(COALESCE(cs.spell_order, '{}'::jsonb)) AS e(key, value)
       WHERE ${whereSql}
-      GROUP BY e.key
-      HAVING COALESCE(SUM(NULLIF(e.value->>'number_of_games', '')::bigint), 0)::bigint >= ${minGames}
+      GROUP BY cs.spell_order
+      HAVING SUM(cs.count_game) >= ${minGames}
       ORDER BY games DESC
+      LIMIT 200
     `)
 
     const out: ChampionSpellOrderRow[] = rows.map((r) => {

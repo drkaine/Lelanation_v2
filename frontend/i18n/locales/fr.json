@@ -1006,7 +1006,6 @@
     "championStatsMatchupsSeeMore": "Voir plus",
     "championStatsMatchupSearchLabel": "Recherche matchup",
     "championStatsMatchupSearchPlaceholder": "Filtrer les adversaires (nom ou id)",
-    "championStatsPlayersMasterPlus": "Meilleurs joueurs : Master → Challenger uniquement",
     "championStatsTabOverview": "Vue d'ensemble",
     "championStatsTabMatchups": "Matchups",
     "championStatsTabStats": "Stats",
@@ -1027,8 +1026,28 @@
     "championMatchupTooltipPickrate": "Part de ce matchup parmi tous les matchups du champion dans le filtre courant.",
     "championMatchupTooltipLaneScore": "Moyenne des signaux de lane (CS, niveau, pression kill, vision, économie, très tôt en lane), normalisée vs les autres picks puis multipliée par 100.",
     "championMatchupTooltipLaneProfile": "Forces et points de vigilance en lane sur ce matchup, comparés aux autres picks.",
+    "championMatchupLaneProfileLegendTitle": "Code couleur",
+    "championMatchupProfileChampion": "Champion",
+    "championMatchupProfileOpponent": "Adversaire",
     "championMatchupProfileStrengths": "Forces",
     "championMatchupProfileWarnings": "Points de vigilance",
+    "championMatchupSignalLevelShort": {
+      "bigAdvantage": "Gros +",
+      "mediumAdvantage": "Moy. +",
+      "smallAdvantage": "Petit +",
+      "even": "Égal",
+      "smallDisadvantage": "Petit −",
+      "mediumDisadvantage": "Moy. −",
+      "bigDisadvantage": "Gros −"
+    },
+    "championMatchupDominanceShort": {
+      "early": "Tôt",
+      "laneEconomy": "Éco",
+      "kills": "Kills",
+      "level": "Niv.",
+      "cs": "CS",
+      "vision": "Vis."
+    },
     "championMatchupSignalLevel": {
       "bigAdvantage": "gros avantage",
       "mediumAdvantage": "avantage moyen",

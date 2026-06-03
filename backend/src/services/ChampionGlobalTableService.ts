@@ -5,9 +5,57 @@
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
 import {
   buildRankTierSqlConditions,
+  normalizeStatsRoleForChampion,
+  normalizedRankTiers,
+  statsRoleSqlLiteral,
   toQueryStringArrayParam,
 } from '../utils/statsFilters.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor, sqlAggUnionAllLiveAndArchives } from './statsAggArchive.js'
+
+/** WHERE pour tables partitionnées champion_* (patch → game_version dans les fragments agg). */
+export function buildChampionScopedWhere(
+  alias: string,
+  opts: {
+    championId: number
+    version?: string | string[] | null
+    rankTier?: string | string[] | null
+    role?: string | null
+    region?: string | null
+  },
+): string {
+  const parts: string[] = [`${alias}.champion_id = ${Number(opts.championId)}`]
+  parts.push(buildRawMatchCond(opts.version ?? null, opts.rankTier).replace(/\bm\./g, `${alias}.`))
+  if (normalizedRankTiers(opts.rankTier).length === 0) {
+    parts.push(`${alias}.rank_tier <> 'UNRANKED'`)
+  }
+  const roleDb = normalizeStatsRoleForChampion(opts.role ?? null)
+  if (roleDb) parts.push(`${alias}.role = '${statsRoleSqlLiteral(roleDb)}'`)
+  const region = opts.region?.trim()
+  if (region) parts.push(`${alias}.region = '${region.replace(/'/g, "''")}'`)
+  return parts.join(' AND ')
+}
+
+export async function sumChampionCoreGames(options: {
+  championId: number
+  version?: string | null
+  rankTier?: string | string[] | null
+  role?: string | null
+  region?: string | null
+}): Promise<number> {
+  if (!isDatabaseConfigured()) return 0
+  const coreFrom = await matchVersionedAggFrom(
+    'agg_champion_core_stats',
+    options.version ?? null,
+    'cc',
+  )
+  const where = buildChampionScopedWhere('cc', options)
+  const rows = await queryRawUnsafe<Array<{ total: bigint }>>(`
+    SELECT COALESCE(SUM(cc.count_game), 0)::bigint AS total
+    FROM ${coreFrom}
+    WHERE ${where}
+  `)
+  return Number(rows[0]?.total ?? 0)
+}
 
 export function buildRawMatchCond(
   version?: string | string[] | null,

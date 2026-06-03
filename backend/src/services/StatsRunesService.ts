@@ -4,9 +4,9 @@
  */
 import { queryRawUnsafe } from '../db/query.js'
 import { isDatabaseConfigured } from '../db/query.js'
-import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { mergeLegacyStatShardAggregates } from '../utils/statShardLegacyMerge.js'
-import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
+import { buildChampionScopedWhere, sumChampionCoreGames } from './ChampionGlobalTableService.js'
+import { matchVersionedAggFrom } from './statsAggArchive.js'
 
 export interface RuneRow {
   runes: unknown
@@ -28,39 +28,6 @@ export interface RunesByChampionOptions {
   limit?: number
 }
 
-async function getCoreStatIdsAndTotalGames(options: {
-  championId: number
-  versionOrPatch?: string | null
-  rankTier?: string | string[] | null
-  role?: string | null
-  region?: string | null
-}): Promise<{ statIds: bigint[]; totalGames: number }> {
-  const { championId, versionOrPatch, rankTier, role, region } = options
-  const filters: string[] = [`champion_id = ${championId}`]
-  if (versionOrPatch)
-    filters.push(`game_version LIKE '${normalizePatchMajorMinor(String(versionOrPatch)).replace(/'/g, "''")}%'`)
-  if (role) filters.push(`role = '${String(role).replace(/'/g, "''")}'`)
-  if (region) filters.push(`region = '${String(region).replace(/'/g, "''")}'`)
-  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
-  if (ranks.length === 1) filters.push(`rank_tier = '${ranks[0]!.replace(/'/g, "''")}'`)
-  else if (ranks.length > 1) {
-    filters.push(`rank_tier IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`)
-  } else {
-    filters.push(`rank_tier <> 'UNRANKED'`)
-  }
-  const whereSql = filters.join(' AND ')
-  const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', versionOrPatch ?? null, 'cc')
-  const coreStats = await queryRawUnsafe<Array<{ id: bigint; countGame: number }>>(`
-    SELECT id, count_game AS "countGame"
-    FROM ${coreFrom}
-    WHERE ${whereSql}
-  `)
-  return {
-    statIds: coreStats.map((s) => s.id),
-    totalGames: coreStats.reduce((sum, r) => sum + Number(r.countGame ?? 0), 0),
-  }
-}
-
 export async function getRunesByChampion(
   options: RunesByChampionOptions
 ): Promise<{ totalGames: number; runes: RuneRow[] } | null> {
@@ -71,27 +38,34 @@ export async function getRunesByChampion(
     const pRole = role != null && role !== '' ? role : null
     const pRegion = region != null && region !== '' ? region : null
 
-    const { statIds, totalGames } = await getCoreStatIdsAndTotalGames({
+    const totalGames = await sumChampionCoreGames({
       championId,
-      versionOrPatch: pPatch,
+      version: pPatch,
       rankTier,
       role: pRole,
       region: pRegion,
     })
-    if (statIds.length === 0) return { totalGames: 0, runes: [] }
+    if (totalGames <= 0) return { totalGames: 0, runes: [] }
 
     const runesFrom = await matchVersionedAggFrom('agg_champion_runes_stats', pPatch, 'rs')
+    const whereSql = buildChampionScopedWhere('rs', {
+      championId,
+      version: pPatch,
+      rankTier,
+      role: pRole,
+      region: pRegion,
+    })
 
     const runeStatRows = await queryRawUnsafe<
       Array<{ runeList: string; shardList: string; countWin: number; countGame: number }>
     >(`
       SELECT
-        rune_list AS "runeList",
-        shard_list AS "shardList",
-        count_win AS "countWin",
-        count_game AS "countGame"
+        rs.rune_list AS "runeList",
+        rs.shard_list AS "shardList",
+        rs.count_win AS "countWin",
+        rs.count_game AS "countGame"
       FROM ${runesFrom}
-      WHERE champion_stat_id IN (${statIds.map((id) => id.toString()).join(',')})
+      WHERE ${whereSql}
     `)
 
     const aggKeySep = '\u001e'
@@ -140,7 +114,8 @@ export async function getRunesByChampion(
     runes.splice(limit)
 
     return { totalGames, runes }
-  } catch {
+  } catch (err) {
+    console.warn('[getRunesByChampion]', err)
     return null
   }
 }
@@ -173,56 +148,54 @@ export async function getRuneStatsByChampion(
     const pRole = role != null && role !== '' ? role : null
     const pRegion = region != null && region !== '' ? region : null
 
-    const { statIds, totalGames } = await getCoreStatIdsAndTotalGames({
+    const totalGames = await sumChampionCoreGames({
       championId,
-      versionOrPatch: pVersion,
+      version: pVersion,
       rankTier,
       role: pRole,
       region: pRegion,
     })
-    if (statIds.length === 0) return { totalGames: 0, runes: [] }
+    if (totalGames <= 0) return { totalGames: 0, runes: [] }
 
     const soloFrom = await matchVersionedAggFrom('agg_champion_runes_solo_stats', pVersion, 'rs')
+    const whereSql = buildChampionScopedWhere('rs', {
+      championId,
+      version: pVersion,
+      rankTier,
+      role: pRole,
+      region: pRegion,
+    })
 
     const soloRows = await queryRawUnsafe<
       Array<{ perkId: number; countWin: number; countGame: number }>
     >(`
       SELECT
-        perk_id AS "perkId",
-        count_win AS "countWin",
-        count_game AS "countGame"
+        rs.perk_id AS "perkId",
+        SUM(rs.count_win)::integer AS "countWin",
+        SUM(rs.count_game)::integer AS "countGame"
       FROM ${soloFrom}
-      WHERE champion_stat_id IN (${statIds.map((id) => id.toString()).join(',')})
+      WHERE ${whereSql}
+      GROUP BY rs.perk_id
     `)
 
-    // Aggregate by runeId
-    const byRune = new Map<number, { wins: number; games: number }>()
-    for (const row of soloRows) {
-      const rid = row.perkId
-      let entry = byRune.get(rid)
-      if (!entry) {
-        entry = { wins: 0, games: 0 }
-        byRune.set(rid, entry)
-      }
-      entry.wins += row.countWin
-      entry.games += row.countGame
-    }
-
     const runes: RuneStatRow[] = []
-    for (const [runeId, entry] of byRune.entries()) {
-      if (entry.games < minGames) continue
+    for (const row of soloRows) {
+      const games = Number(row.countGame ?? 0)
+      const wins = Number(row.countWin ?? 0)
+      if (games < minGames) continue
       runes.push({
-        runeId,
-        games: entry.games,
-        wins: entry.wins,
-        pickrate: totalGames > 0 ? Math.round((entry.games / totalGames) * 10000) / 100 : 0,
-        winrate: entry.games > 0 ? Math.round((entry.wins / entry.games) * 10000) / 100 : 0,
+        runeId: row.perkId,
+        games,
+        wins,
+        pickrate: totalGames > 0 ? Math.round((games / totalGames) * 10000) / 100 : 0,
+        winrate: games > 0 ? Math.round((wins / games) * 10000) / 100 : 0,
       })
     }
     runes.sort((a, b) => b.games - a.games)
 
     return { totalGames, runes }
-  } catch {
+  } catch (err) {
+    console.warn('[getRuneStatsByChampion]', err)
     return null
   }
 }
@@ -252,60 +225,54 @@ export async function getShardStatsByChampion(options: {
     const pRole = role != null && role !== '' ? role : null
     const pRegion = region != null && region !== '' ? region : null
 
-    const { statIds, totalGames } = await getCoreStatIdsAndTotalGames({
+    const totalGames = await sumChampionCoreGames({
       championId,
-      versionOrPatch: pVersion,
+      version: pVersion,
       rankTier,
       role: pRole,
       region: pRegion,
     })
-    if (statIds.length === 0) return { totalGames: 0, shards: [] }
+    if (totalGames <= 0) return { totalGames: 0, shards: [] }
 
     const shardFrom = await matchVersionedAggFrom('agg_champion_shard_solo_stats', pVersion, 'sh')
+    const whereSql = buildChampionScopedWhere('sh', {
+      championId,
+      version: pVersion,
+      rankTier,
+      role: pRole,
+      region: pRegion,
+    })
 
     const shardRows = await queryRawUnsafe<
       Array<{ shardId: number; slot: number; countWin: number; countGame: number }>
     >(`
       SELECT
-        shard_id AS "shardId",
-        slot,
-        count_win AS "countWin",
-        count_game AS "countGame"
+        sh.shard_id AS "shardId",
+        sh.slot,
+        SUM(sh.count_win)::integer AS "countWin",
+        SUM(sh.count_game)::integer AS "countGame"
       FROM ${shardFrom}
-      WHERE champion_stat_id IN (${statIds.map((id) => id.toString()).join(',')})
+      WHERE ${whereSql}
+      GROUP BY sh.shard_id, sh.slot
     `)
 
-    const byShardSlot = new Map<string, { shardId: number; slot: number; wins: number; games: number }>()
+    const mergeMap = new Map<string, { wins: number; games: number }>()
     for (const row of shardRows) {
       const key = `${row.shardId}:${row.slot}`
-      let entry = byShardSlot.get(key)
-      if (!entry) {
-        entry = { shardId: row.shardId, slot: row.slot, wins: 0, games: 0 }
-        byShardSlot.set(key, entry)
-      }
-      entry.wins += row.countWin
-      entry.games += row.countGame
-    }
-
-    const mergeMap = new Map<string, { wins: number; games: number }>()
-    for (const [key, entry] of byShardSlot.entries()) {
-      mergeMap.set(key, { wins: entry.wins, games: entry.games })
+      const prev = mergeMap.get(key) ?? { wins: 0, games: 0 }
+      prev.wins += Number(row.countWin ?? 0)
+      prev.games += Number(row.countGame ?? 0)
+      mergeMap.set(key, prev)
     }
     mergeLegacyStatShardAggregates(mergeMap)
-    byShardSlot.clear()
-    for (const [key, e] of mergeMap.entries()) {
-      const [shardIdStr, slotStr] = key.split(':')
-      const shardId = Number(shardIdStr)
-      const slot = Number(slotStr)
-      byShardSlot.set(key, { shardId, slot, wins: e.wins, games: e.games })
-    }
 
     const shards: ShardStatRow[] = []
-    for (const entry of byShardSlot.values()) {
+    for (const [key, entry] of mergeMap.entries()) {
       if (entry.games < minGames) continue
+      const [shardIdStr, slotStr] = key.split(':')
       shards.push({
-        shardId: entry.shardId,
-        slot: entry.slot,
+        shardId: Number(shardIdStr),
+        slot: Number(slotStr),
         games: entry.games,
         wins: entry.wins,
         pickrate: totalGames > 0 ? Math.round((entry.games / totalGames) * 10000) / 100 : 0,
@@ -315,7 +282,8 @@ export async function getShardStatsByChampion(options: {
     shards.sort((a, b) => b.games - a.games)
 
     return { totalGames, shards }
-  } catch {
+  } catch (err) {
+    console.warn('[getShardStatsByChampion]', err)
     return null
   }
 }

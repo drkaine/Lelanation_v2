@@ -111,23 +111,64 @@ describe('AlertDetector', () => {
     expect(detector2.getActive().find((a) => a.type === 'db_slow')?.severity).toBe('error');
   });
 
-  test('T8 ingestion_missing_data includes skip breakdown', () => {
+  test('T8 ingestion_missing_data does not fire below 5% skip rate', () => {
     const store = MetricsStore.getInstance();
     const detector = new AlertDetector(store);
     const computer = new AggregateComputer(store);
     const now = Date.now();
-    store.pushIngestionQueue({
-      ts: now,
-      matchId: 'M1',
-      patch: '16.11',
-      rank: 'GOLD',
-      type: 'skipped',
-      skipReason: 'missing_rank',
-    });
+    for (let i = 0; i < 98; i += 1) {
+      store.pushIngestionQueue({
+        ts: now,
+        matchId: `Q${i}`,
+        patch: '16.11',
+        rank: 'GOLD',
+        type: 'queued',
+      });
+    }
+    for (let i = 0; i < 2; i += 1) {
+      store.pushIngestionQueue({
+        ts: now,
+        matchId: `S${i}`,
+        patch: '16.11',
+        rank: 'GOLD',
+        type: 'skipped',
+        skipReason: 'missing_rank',
+      });
+    }
+    const snap = computer.computeFull('10m', 99, 19, []);
+    detector.check(snap);
+    expect(detector.getActive().some((a) => a.type === 'ingestion_missing_data')).toBe(false);
+  });
+
+  test('ingestion_missing_data fires when skip rate exceeds 5%', () => {
+    const store = MetricsStore.getInstance();
+    const detector = new AlertDetector(store);
+    const computer = new AggregateComputer(store);
+    const now = Date.now();
+    for (let i = 0; i < 90; i += 1) {
+      store.pushIngestionQueue({
+        ts: now,
+        matchId: `Q${i}`,
+        patch: '16.11',
+        rank: 'GOLD',
+        type: 'queued',
+      });
+    }
+    for (let i = 0; i < 10; i += 1) {
+      store.pushIngestionQueue({
+        ts: now,
+        matchId: `S${i}`,
+        patch: '16.11',
+        rank: 'GOLD',
+        type: 'skipped',
+        skipReason: 'missing_rank',
+      });
+    }
     const snap = computer.computeFull('10m', 99, 19, []);
     detector.check(snap);
     const alert = detector.getActive().find((a) => a.type === 'ingestion_missing_data');
-    expect(alert?.data.skip_breakdown).toMatchObject({ missing_rank: 1 });
+    expect(alert?.data.skip_breakdown).toMatchObject({ missing_rank: 10 });
+    expect(alert?.data.skip_rate_pct).toBeGreaterThan(5);
   });
 
   test('token_underutilized does not fire in personal_24h with low avg pct', () => {
