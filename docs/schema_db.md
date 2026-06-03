@@ -4,7 +4,7 @@ Ce document décrit le schéma **réel** de la base PostgreSQL utilisée par le 
 
 Sources de vérité :
 - `backend/drizzle/migrations/0001_statistiques_partition_by_patch.sql`
-- migrations incrémentales `0002` à `0016`
+- migrations incrémentales `0002` à `0018`
 
 ---
 
@@ -172,6 +172,16 @@ erDiagram
     int wins
     jsonb order
     bigint sum_achat_tmps
+    int top_game
+    int top_win
+    int jungle_game
+    int jungle_win
+    int mid_game
+    int mid_win
+    int adc_game
+    int adc_win
+    int support_game
+    int support_win
   }
 
   champion_bans_by_banner {
@@ -303,7 +313,7 @@ Indexes notables :
 
 ## Tables bans & snapshots
 
-- `item_tier_daily_snapshots` *(migration `0016`, partitionnée par `patch`)*
+- `item_tier_daily_snapshots` *(migrations `0016`–`0018`, partitionnée par `patch` ; compteurs par rôle `top_*`, `jungle_*`, `mid_*`, `adc_*`, `support_*`)*
   - PK: `(patch, rank_tier, region, item_id, date_of_game)`
   - Rôle: tendances item par patch / tier / région / jour (patch notes tracker).
   - Colonnes: `games`, `wins`, `"order"` (JSONB — clé = ordre d'achat sérialisé, valeur = nombre de wins), `sum_achat_tmps` (somme des timestamps ms d'achat pour timing moyen).

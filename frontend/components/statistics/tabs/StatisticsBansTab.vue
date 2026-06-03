@@ -15,42 +15,39 @@
         <article
           v-for="row in p.paginatedBans"
           :key="'ban-mobile-' + row.championId"
-          class="statistics-ban-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
+          class="statistics-champion-stats-mobile-card statistics-ban-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
         >
           <button
             type="button"
-            class="statistics-ban-mobile-card-header flex w-full items-center gap-3.5 p-3.5 text-left"
+            class="statistics-champion-stats-mobile-card-header flex w-full items-center gap-3 p-3 text-left"
             @click="toggleBanCardExpanded(row.championId)"
           >
-            <img
-              v-if="p.gameVersion && p.championByKey(row.championId)"
-              :src="
-                p.getChampionImageUrl(p.gameVersion, p.championByKey(row.championId)!.image.full)
+            <StatisticsChampionStatsMobileCardHeader
+              :champion-id="row.championId"
+              :champion-name="String(p.championName(row.championId) || row.championId)"
+              :search-query="p.championSearchQuery"
+              :portrait-src="
+                p.gameVersion && p.championByKey(row.championId)
+                  ? p.getChampionImageUrl(
+                      p.gameVersion,
+                      p.championByKey(row.championId)!.image.full
+                    )
+                  : null
               "
-              :alt="p.championName(row.championId) || ''"
-              class="statistics-ban-mobile-card-portrait h-16 w-16 shrink-0 border-2 border-black object-cover"
-              width="64"
-              height="64"
+              :portrait-alt="p.championName(row.championId) || ''"
+              :detail-to="
+                p.gameVersion && p.championByKey(row.championId)
+                  ? p.localePath(
+                      `/statistics/champion/${encodeURIComponent(String(row.championId))}`
+                    )
+                  : null
+              "
             />
-            <div class="min-w-0 flex-1">
-              <div
-                class="statistics-ban-mobile-card-name truncate text-base font-medium text-text/90"
-              >
-                <StatisticsChampionNameHighlight
-                  :name="String(p.championName(row.championId) || row.championId)"
-                  :query="p.championSearchQuery"
-                />
-              </div>
-            </div>
-            <div class="shrink-0 text-center">
-              <div
-                class="statistics-ban-mobile-card-stat-label text-xs uppercase tracking-wide text-text/55"
-              >
+            <div class="flex min-w-0 flex-1 flex-col items-end justify-center text-right">
+              <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
                 {{ p.t('statisticsPage.bansColRate') }}
               </div>
-              <div
-                class="statistics-ban-mobile-card-stat-value text-3xl font-bold tabular-nums leading-none text-amber-300"
-              >
+              <div class="text-2xl font-bold tabular-nums leading-none text-amber-300 sm:text-3xl">
                 {{ p.banRateForBansRow(row, p.bansTableData?.matchCount ?? 0).toFixed(2) }}%
               </div>
               <div
@@ -61,6 +58,12 @@
                 {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansTotal', 2)!) }}
               </div>
             </div>
+            <span
+              class="shrink-0 text-xs text-text/50 transition-transform duration-200"
+              :class="expandedBanIds.has(row.championId) ? 'rotate-180' : ''"
+              aria-hidden="true"
+              >▼</span
+            >
           </button>
 
           <div

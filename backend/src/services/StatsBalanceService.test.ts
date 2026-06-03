@@ -52,6 +52,38 @@ test('collapse to main role per champion', () => {
   assert.equal(ahri?.role, 'JUNGLE')
 })
 
+test('normalizeRoleFilter maps UI roles to champion and banner SQL', () => {
+  assert.deepEqual(__testOnly.normalizeRoleFilter('MIDDLE'), {
+    client: 'MIDDLE',
+    championSql: 'MID',
+    bannerSql: 'MIDDLE',
+  })
+  assert.deepEqual(__testOnly.normalizeRoleFilter('BOTTOM'), {
+    client: 'BOTTOM',
+    championSql: 'ADC',
+    bannerSql: 'BOTTOM',
+  })
+  assert.deepEqual(__testOnly.normalizeRoleFilter('MID'), {
+    client: 'MIDDLE',
+    championSql: 'MID',
+    bannerSql: 'MIDDLE',
+  })
+  assert.deepEqual(__testOnly.normalizeRoleFilter('ADC'), {
+    client: 'BOTTOM',
+    championSql: 'ADC',
+    bannerSql: 'BOTTOM',
+  })
+  assert.equal(__testOnly.normalizeRoleFilter('TOP')?.championSql, 'TOP')
+  assert.equal(__testOnly.normalizeRoleFilter(''), null)
+})
+
+test('balance role keys unify MID/ADC rows with MIDDLE/BOTTOM bans', () => {
+  assert.equal(__testOnly.balanceRoleKeyFromChampionColumn('MID'), 'MIDDLE')
+  assert.equal(__testOnly.balanceRoleKeyFromChampionColumn('ADC'), 'BOTTOM')
+  assert.equal(__testOnly.balanceRoleKeyFromBannerColumn('MIDDLE'), 'MIDDLE')
+  assert.equal(__testOnly.balanceRoleKeyFromBannerColumn('BOTTOM'), 'BOTTOM')
+})
+
 test('global status aggregation', () => {
   assert.equal(
     __testOnly.computeGlobalStatus({

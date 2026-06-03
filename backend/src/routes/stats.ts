@@ -209,23 +209,31 @@ function filterChampionRowsByOtp<T extends { pickrate?: number }>(rows: T[], mod
   return filtered.length > 0 ? filtered : rows
 }
 
-/** Balance : pickrate pilotée par la plus haute exposition parmi average/skilled/elite (en %). */
+/** Balance : pickrate par niveau (rôle filtré) ou pickrate globale champion (vue réduite au rôle principal). */
 function filterBalanceRowsByOtp<
   T extends {
+    championId: number
     average?: { pickrate?: number }
     skilled?: { pickrate?: number }
     elite?: { pickrate?: number }
   },
->(rows: T[], mode: OtpMode, hasRoleFilter: boolean): T[] {
-  if (mode === 'non' || rows.length === 0) return rows
+>(
+  rows: T[],
+  mode: OtpMode,
+  options: { roleScoped: boolean; pickByChampion?: Map<number, number> }
+): T[] {
+  if (mode === 'oui' || rows.length === 0) return rows
   const filtered = rows.filter((row) => {
-    const a = parsePickrateNumber(row.average?.pickrate)
-    const s = parsePickrateNumber(row.skilled?.pickrate)
-    const e = parsePickrateNumber(row.elite?.pickrate)
-    // When role filter is not set, pickrate is diluted by all 5 roles.
-    // Re-scale for OTP filtering to keep behavior consistent with role-scoped view.
-    const basePick = Math.max(a, s, e)
-    const p = hasRoleFilter ? basePick : Math.min(100, basePick * 5)
+    let p: number
+    if (!options.roleScoped && options.pickByChampion) {
+      p = options.pickByChampion.get(row.championId) ?? 0
+    } else {
+      const a = parsePickrateNumber(row.average?.pickrate)
+      const s = parsePickrateNumber(row.skilled?.pickrate)
+      const e = parsePickrateNumber(row.elite?.pickrate)
+      const basePick = Math.max(a, s, e)
+      p = options.roleScoped ? basePick : Math.min(100, basePick * 5)
+    }
     return keepByOtpPickratePercent(p, mode)
   })
   return filtered.length > 0 ? filtered : rows
@@ -1665,8 +1673,19 @@ router.get('/balance-framework', async (req: Request, res: Response) => {
   if (!roleScoped) {
     balanceRows = collapseBalanceRowsToMainRole(balanceRows)
   }
-  // Après réduction au rôle principal, pickrate = exposition réelle (pas ×5).
-  response.rows = filterBalanceRowsByOtp(balanceRows, otpMode, true)
+  if (otpMode !== 'oui' && balanceRows.length > 0) {
+    const patchForPick =
+      patchFromGameVersion(version) ?? patchFromGameVersion(response.currentPatch) ?? ''
+    const pickMap =
+      patchForPick.length > 0
+        ? await buildChampionPickratePercentMap(patchForPick, rankTierParam(req.query.rankTier))
+        : new Map<number, number>()
+    balanceRows = filterBalanceRowsByOtp(balanceRows, otpMode, {
+      roleScoped,
+      pickByChampion: roleScoped ? undefined : pickMap,
+    })
+  }
+  response.rows = balanceRows
   return res.json(response)
 })
 

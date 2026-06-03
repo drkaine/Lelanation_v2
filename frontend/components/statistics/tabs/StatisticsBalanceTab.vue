@@ -1,10 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, ref, unref, watch } from 'vue'
-import { useMobileViewport } from '~/composables/useMobileViewport'
-
 const p = inject('statisticsPageCtx') as any
-const { isMobileViewport } = useMobileViewport()
-const balanceCardPortraitSize = computed(() => (isMobileViewport.value ? 64 : 48))
 const expandedBalanceKeys = ref<Set<string>>(new Set())
 
 type LevelRow = {
@@ -165,15 +161,6 @@ function frameworkNeedCode(
   return 'NORMAL'
 }
 
-function isOtpRoleRow(row: BalanceRow): boolean {
-  const pickMax = Math.max(
-    Number(row.average?.pickrate ?? 0),
-    Number(row.skilled?.pickrate ?? 0),
-    Number(row.elite?.pickrate ?? 0)
-  )
-  return pickMax < 1
-}
-
 function rowGamesScore(row: BalanceRow): number {
   return Math.max(
     Number(row.average?.games ?? 0),
@@ -213,10 +200,6 @@ const filteredRows = computed<BalanceRow[]>(() => {
     if (!statusMatches(row.average.status, af)) return false
     if (!statusMatches(row.skilled.status, sf)) return false
     if (!statusMatches(row.elite.status, ef)) return false
-    const otpFilter = String(p.statsOtpFilter ?? 'non')
-    const isOtpRole = isOtpRoleRow(row)
-    if (otpFilter === 'non' && isOtpRole) return false
-    if (otpFilter === 'solo' && !isOtpRole) return false
     return true
   })
 
@@ -286,52 +269,45 @@ function globalTooltip(row: BalanceRow): string {
           <article
             v-for="row in paginatedRows"
             :key="'balance-mobile-' + balanceRowKey(row)"
-            class="statistics-balance-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
+            class="statistics-champion-stats-mobile-card statistics-balance-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
           >
             <button
               type="button"
-              class="statistics-balance-mobile-card-header flex w-full items-start gap-3.5 p-3.5 text-left"
+              class="statistics-champion-stats-mobile-card-header flex w-full items-center gap-3 p-3 text-left"
               @click="toggleBalanceCardExpanded(row)"
             >
-              <NuxtLink
-                v-if="p.gameVersion && p.championByKey(row.championId)"
-                :to="
-                  p.localePath(`/statistics/champion/${encodeURIComponent(String(row.championId))}`)
+              <StatisticsChampionStatsMobileCardHeader
+                :champion-id="row.championId"
+                :champion-name="String(p.championName(row.championId) || row.championId)"
+                :search-query="p.championSearchQuery"
+                :role-label="p.mainRoleLabel(row.role)"
+                :role-icon-src="p.mainRoleIconSrc(row.role)"
+                :portrait-src="
+                  p.gameVersion && p.championByKey(row.championId)
+                    ? p.getChampionImageUrl(
+                        p.gameVersion,
+                        p.championByKey(row.championId)!.image.full
+                      )
+                    : null
                 "
-                class="shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
-                @click.stop
-              >
-                <StatisticsChampionPortrait
-                  :src="
-                    p.getChampionImageUrl(
-                      p.gameVersion,
-                      p.championByKey(row.championId)!.image.full
-                    )
-                  "
-                  :alt="p.championName(row.championId) || ''"
-                  :champion-id="row.championId"
-                  :champion-name="p.championName(row.championId) || ''"
-                  :size="balanceCardPortraitSize"
-                />
-              </NuxtLink>
-              <div class="min-w-0 flex-1">
-                <div class="truncate text-base font-semibold text-accent">
-                  <StatisticsChampionNameHighlight
-                    :name="String(p.championName(row.championId) || row.championId)"
-                    :query="p.championSearchQuery"
-                  />
-                </div>
-                <div class="text-sm text-text/65">{{ row.role }}</div>
-                <div class="mt-1 text-xs text-text/55">
-                  {{ frameworkNeedLabel(row.globalStatus) }}
-                </div>
-              </div>
-              <div class="shrink-0 text-right">
-                <div class="text-[10px] uppercase tracking-wide text-text/55">
+                :portrait-alt="p.championName(row.championId) || ''"
+                :detail-to="
+                  p.gameVersion && p.championByKey(row.championId)
+                    ? p.localePath(
+                        `/statistics/champion/${encodeURIComponent(String(row.championId))}`
+                      )
+                    : null
+                "
+              />
+              <div class="flex min-w-0 flex-1 flex-col items-end justify-center text-right">
+                <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
                   {{ p.t('statisticsPage.balanceGlobalStatus') }}
                 </div>
                 <div class="text-lg font-bold leading-tight" :class="statusClass(row.globalStatus)">
                   {{ statusLabel(row.globalStatus) }}
+                </div>
+                <div class="mt-0.5 text-xs text-text/55">
+                  {{ frameworkNeedLabel(row.globalStatus) }}
                 </div>
                 <div
                   v-if="row.globalDelta"
@@ -340,6 +316,12 @@ function globalTooltip(row: BalanceRow): string {
                   {{ formatDeltaLabel(row.globalDelta) }}
                 </div>
               </div>
+              <span
+                class="shrink-0 text-xs text-text/50 transition-transform duration-200"
+                :class="expandedBalanceKeys.has(balanceRowKey(row)) ? 'rotate-180' : ''"
+                aria-hidden="true"
+                >▼</span
+              >
             </button>
 
             <div class="statistics-balance-mobile-levels border-t border-primary/15 px-3 py-2.5">

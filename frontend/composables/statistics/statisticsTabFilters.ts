@@ -45,7 +45,8 @@ export function statisticsTabFilterFlags(tab: StatisticsCohortTab): StatisticsTa
     division: t !== 'balance' && t !== 'surrender' && t !== 'infos',
     role: t !== 'objectives' && t !== 'surrender' && t !== 'infos',
     otp: t !== 'bans' && t !== 'objectives' && t !== 'surrender' && t !== 'infos',
-    championSearch: t !== 'objectives' && t !== 'surrender' && t !== 'infos',
+    championSearch:
+      t !== 'overview' && t !== 'team' && t !== 'objectives' && t !== 'surrender' && t !== 'infos',
   }
 }
 

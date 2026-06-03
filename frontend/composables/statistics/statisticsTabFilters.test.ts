@@ -28,6 +28,12 @@ describe('statisticsTabFilterFlags', () => {
     expect(statisticsTabFilterFlags('bans').otp).toBe(false)
     expect(statisticsTabFilterFlags('bans').role).toBe(true)
   })
+
+  it('overview and team: no champion search', () => {
+    expect(statisticsTabFilterFlags('overview').championSearch).toBe(false)
+    expect(statisticsTabFilterFlags('team').championSearch).toBe(false)
+    expect(statisticsTabFilterFlags('championTable').championSearch).toBe(true)
+  })
 })
 
 describe('appendStatisticsCohortParams', () => {

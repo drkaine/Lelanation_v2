@@ -1,10 +1,6 @@
 <script setup lang="ts">
 import { inject, ref, unref, computed } from 'vue'
-import { useMobileViewport } from '~/composables/useMobileViewport'
-
 const p = inject('statisticsPageCtx') as any
-const { isMobileViewport } = useMobileViewport()
-const championCardPortraitSize = computed(() => (isMobileViewport.value ? 64 : 48))
 const showChampionDealtBreakdown = ref(false)
 const showChampionTakenBreakdown = ref(false)
 const expandedChampionIds = ref<Set<number>>(new Set())
@@ -82,6 +78,12 @@ const activeRoleLabel = computed(() => {
   return roles.find(r => r.value === role)?.label ?? role
 })
 
+const activeRoleIconSrc = computed(() => {
+  const role = p.statsRoleFilter as string
+  if (!role) return '/icons/roles/all-role.png'
+  return p.mainRoleIconSrc(role) ?? '/icons/roles/all-role.png'
+})
+
 const STAT_COL_MIN_PX = 48
 const CHAMPION_COL_MIN_PX = 220
 const KDA_COL_MIN_PX = 160
@@ -148,53 +150,43 @@ const championTableLayoutStyle = computed(() => {
         <article
           v-for="row in p.paginatedChampionGlobalRows"
           :key="'mobile-' + row.championId"
-          class="statistics-champion-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
+          class="statistics-champion-stats-mobile-card statistics-champion-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
         >
           <button
             type="button"
-            class="statistics-champion-mobile-card-header flex w-full items-center gap-3 p-3.5 text-left"
+            class="statistics-champion-stats-mobile-card-header flex w-full items-center gap-3 p-3 text-left"
             @click="toggleChampionCardExpanded(row.championId)"
           >
-            <NuxtLink
-              v-if="p.gameVersion && p.championByKey(row.championId)"
-              :to="
-                p.localePath(`/statistics/champion/${encodeURIComponent(String(row.championId))}`)
+            <StatisticsChampionStatsMobileCardHeader
+              :champion-id="row.championId"
+              :champion-name="String(p.championName(row.championId) || row.championId)"
+              :search-query="p.championSearchQuery"
+              :role-label="activeRoleLabel"
+              :role-icon-src="activeRoleIconSrc"
+              :portrait-src="
+                p.gameVersion && p.championByKey(row.championId)
+                  ? p.getChampionImageUrl(
+                      p.gameVersion,
+                      p.championByKey(row.championId)!.image.full
+                    )
+                  : null
               "
-              class="shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
-              @click.stop
-            >
-              <StatisticsChampionPortrait
-                :src="
-                  p.getChampionImageUrl(p.gameVersion, p.championByKey(row.championId)!.image.full)
-                "
-                :alt="p.championName(row.championId) || ''"
-                :champion-id="row.championId"
-                :champion-name="p.championName(row.championId) || ''"
-                :size="championCardPortraitSize"
-              />
-            </NuxtLink>
-            <div class="min-w-0 flex-1">
-              <div
-                class="statistics-champion-mobile-card-name truncate text-base font-semibold text-accent"
-              >
-                <StatisticsChampionNameHighlight
-                  :name="String(p.championName(row.championId) || row.championId)"
-                  :query="p.championSearchQuery"
-                />
-              </div>
-              <div class="statistics-champion-mobile-card-role text-sm text-text/65">
-                {{ activeRoleLabel }}
-              </div>
-            </div>
-            <div class="flex shrink-0 gap-4 text-center">
+              :portrait-alt="p.championName(row.championId) || ''"
+              :detail-to="
+                p.gameVersion && p.championByKey(row.championId)
+                  ? p.localePath(
+                      `/statistics/champion/${encodeURIComponent(String(row.championId))}`
+                    )
+                  : null
+              "
+            />
+            <div class="flex min-w-0 flex-1 justify-end gap-3 text-right">
               <div>
-                <div
-                  class="statistics-champion-mobile-card-stat-label text-xs uppercase tracking-wide text-text/55"
-                >
+                <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
                   {{ p.t('statisticsPage.winrate') }}
                 </div>
                 <div
-                  class="statistics-champion-mobile-card-stat-value text-3xl font-bold tabular-nums leading-none"
+                  class="text-2xl font-bold tabular-nums leading-none sm:text-3xl"
                   :class="
                     combinedWinrate(row) != null
                       ? p.tierListWinrateClass(combinedWinrate(row)!)
@@ -212,13 +204,11 @@ const championTableLayoutStyle = computed(() => {
                 </div>
               </div>
               <div>
-                <div
-                  class="statistics-champion-mobile-card-stat-label text-xs uppercase tracking-wide text-text/55"
-                >
+                <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
                   {{ p.t('statisticsPage.pickrate') }}
                 </div>
                 <div
-                  class="statistics-champion-mobile-card-stat-value text-3xl font-bold tabular-nums leading-none"
+                  class="text-2xl font-bold tabular-nums leading-none sm:text-3xl"
                   :class="
                     combinedPickrate(row) != null
                       ? p.championGlobalPickrateClass(combinedPickrate(row)!)
@@ -236,6 +226,12 @@ const championTableLayoutStyle = computed(() => {
                 </div>
               </div>
             </div>
+            <span
+              class="shrink-0 text-xs text-text/50 transition-transform duration-200"
+              :class="expandedChampionIds.has(row.championId) ? 'rotate-180' : ''"
+              aria-hidden="true"
+              >▼</span
+            >
           </button>
           <div
             v-if="expandedChampionIds.has(row.championId)"

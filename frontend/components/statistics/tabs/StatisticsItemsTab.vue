@@ -27,6 +27,18 @@ const sortBy = ref<SortKey | null>(null)
 const sortDir = ref<'asc' | 'desc'>('desc')
 const pageSize = ref<number>(20)
 const page = ref<number>(1)
+const expandedItemKeys = ref<Set<string>>(new Set())
+
+function itemRowKey(row: TableRow): string {
+  return `${row.type}:${row.itemId}`
+}
+
+function toggleItemCardExpanded(key: string): void {
+  const next = new Set(expandedItemKeys.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  expandedItemKeys.value = next
+}
 const itemTypeFilter = computed<'all' | ItemType>(() => {
   const v = String(p.itemsTypeFilter ?? 'all')
   return v === 'starter' || v === 'core' || v === 'boots' || v === 'final' ? v : 'all'
@@ -280,53 +292,76 @@ function deltaClass(value: number | null | undefined): string {
           <article
             v-for="row in paginatedRows"
             :key="'item-mobile-' + row.type + '-' + row.itemId"
-            class="statistics-item-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
+            class="statistics-champion-stats-mobile-card statistics-item-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
           >
-            <div class="flex w-full items-center gap-3.5 p-3.5">
-              <img
-                v-if="p.itemImageName(row.itemId)"
-                :src="p.getItemImageUrl(p.gameVersion, p.itemImageName(row.itemId)!)"
-                :alt="p.itemName(row.itemId) || ''"
-                class="h-16 w-16 shrink-0 rounded border border-black/30 object-cover"
-                width="64"
-                height="64"
+            <button
+              type="button"
+              class="statistics-champion-stats-mobile-card-header flex w-full min-w-0 items-center gap-3 p-3 text-left"
+              @click="toggleItemCardExpanded(itemRowKey(row))"
+            >
+              <StatisticsItemStatsMobileCardHeader
+                :item-name="String(p.itemName(row.itemId) || row.itemId)"
+                :type-label="typeLabel(row.type)"
+                :image-src="
+                  p.itemImageName(row.itemId) && p.gameVersion
+                    ? p.getItemImageUrl(p.gameVersion, p.itemImageName(row.itemId)!)
+                    : null
+                "
+                :image-alt="p.itemName(row.itemId) || ''"
               />
-              <div class="min-w-0 flex-1">
-                <div class="truncate text-base font-semibold text-accent">
-                  {{ p.itemName(row.itemId) || row.itemId }}
-                </div>
-                <div class="text-sm text-text/65">{{ typeLabel(row.type) }}</div>
-                <div class="mt-0.5 text-xs text-text/55">
-                  {{ row.games.toLocaleString() }}
-                  {{ p.t('statisticsPage.overviewDurationWinrateTooltipMatches') }}
-                </div>
-              </div>
-              <div class="flex shrink-0 gap-3 text-center">
-                <div>
-                  <div class="text-[10px] uppercase tracking-wide text-text/55">
+              <div
+                class="statistics-item-mobile-stats flex min-w-0 flex-1 justify-end gap-2 text-right sm:gap-3"
+              >
+                <div class="min-w-0 shrink">
+                  <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
                     {{ p.t('statisticsPage.overviewDetailPickRate') }}
                   </div>
-                  <div class="text-lg font-bold tabular-nums leading-none text-text">
+                  <div class="text-xl font-bold tabular-nums leading-none text-text sm:text-2xl">
                     {{ fmtPct(row.pickrate) }}
                   </div>
-                  <div class="mt-0.5 text-xs tabular-nums" :class="deltaClass(row.deltaPick)">
+                  <div
+                    class="mt-0.5 text-xs tabular-nums leading-none"
+                    :class="deltaClass(row.deltaPick)"
+                  >
                     {{ fmtDelta(row.deltaPick) }}
                   </div>
                 </div>
-                <div>
-                  <div class="text-[10px] uppercase tracking-wide text-text/55">
+                <div class="min-w-0 shrink">
+                  <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
                     {{ p.t('statisticsPage.overviewDetailWinRate') }}
                   </div>
                   <div
-                    class="text-lg font-bold tabular-nums leading-none"
+                    class="text-xl font-bold tabular-nums leading-none sm:text-2xl"
                     :class="winrateClass(row.winrate)"
                   >
                     {{ fmtPct(row.winrate) }}
                   </div>
-                  <div class="mt-0.5 text-xs tabular-nums" :class="deltaClass(row.deltaWin)">
+                  <div
+                    class="mt-0.5 text-xs tabular-nums leading-none"
+                    :class="deltaClass(row.deltaWin)"
+                  >
                     {{ fmtDelta(row.deltaWin) }}
                   </div>
                 </div>
+              </div>
+              <span
+                class="shrink-0 text-xs text-text/50 transition-transform duration-200"
+                :class="expandedItemKeys.has(itemRowKey(row)) ? 'rotate-180' : ''"
+                aria-hidden="true"
+                >▼</span
+              >
+            </button>
+            <div
+              v-if="expandedItemKeys.has(itemRowKey(row))"
+              class="space-y-1.5 border-t border-primary/20 bg-black/20 px-3 py-2.5 text-sm text-text/85"
+            >
+              <div class="flex flex-wrap items-baseline justify-between gap-x-2">
+                <span>{{ p.t('statisticsPage.itemsColType') }}</span>
+                <span>{{ typeLabel(row.type) }}</span>
+              </div>
+              <div class="flex flex-wrap items-baseline justify-between gap-x-2">
+                <span>{{ p.t('statisticsPage.overviewDurationWinrateTooltipMatches') }}</span>
+                <span class="tabular-nums">{{ row.games.toLocaleString() }}</span>
               </div>
             </div>
           </article>
@@ -488,17 +523,3 @@ function deltaClass(value: number | null | undefined): string {
     <div v-else class="text-text/70">{{ p.t('statisticsPage.overviewDetailNoData') }}</div>
   </div>
 </template>
-
-<style scoped>
-@media (max-width: 768px) {
-  .statistics-items-tab {
-    margin-inline: -1rem;
-    width: calc(100% + 2rem);
-    max-width: 100vw;
-  }
-
-  .statistics-item-mobile-card {
-    width: 100%;
-  }
-}
-</style>

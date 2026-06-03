@@ -19,6 +19,7 @@ import {
   normalizeParticipantRankTier,
 } from "./match-rank-readiness.js";
 import { buildStarterLegendaryOrderByItemId } from "../parsers/itemOrderSnapshot.js";
+import { itemTierRoleGameWinCounts } from "../parsers/itemTierDailySnapshotRole.js";
 import { rehydrateParticipantRanksForIngestion } from "../services/matchIngestionPayload.js";
 import { riotConfig } from "../riot-gateway/config/riotConfig.js";
 
@@ -946,6 +947,7 @@ async function upsertItemTierDailySnapshots(tx: any, participants: ParsedPartici
     }
 
     const winCount = participantWinCount(participant);
+    const roleCounts = itemTierRoleGameWinCounts(participant.role, winCount);
     for (const [itemId, orderPos] of orderByItemId) {
       const orderKey = String(orderPos);
       const orderJson = JSON.stringify({ [orderKey]: { games: 1, wins: winCount } });
@@ -953,11 +955,18 @@ async function upsertItemTierDailySnapshots(tx: any, participants: ParsedPartici
       await tx`
         INSERT INTO item_tier_daily_snapshots (
           patch, rank_tier, region, item_id, date_of_game,
-          games, wins, "order", sum_achat_tmps
+          games, wins, "order", sum_achat_tmps,
+          top_game, top_win, jungle_game, jungle_win, mid_game, mid_win,
+          adc_game, adc_win, support_game, support_win
         )
         VALUES (
           ${participant.patch}, ${participant.rankTier}, ${participant.region}, ${itemId}, ${dateOfGame}::date,
-          1, ${winCount}, ${orderJson}::jsonb, ${ts}
+          1, ${winCount}, ${orderJson}::jsonb, ${ts},
+          ${roleCounts.top_game}, ${roleCounts.top_win},
+          ${roleCounts.jungle_game}, ${roleCounts.jungle_win},
+          ${roleCounts.mid_game}, ${roleCounts.mid_win},
+          ${roleCounts.adc_game}, ${roleCounts.adc_win},
+          ${roleCounts.support_game}, ${roleCounts.support_win}
         )
         ON CONFLICT (patch, rank_tier, region, item_id, date_of_game)
         DO UPDATE SET
@@ -986,7 +995,17 @@ async function upsertItemTierDailySnapshots(tx: any, participants: ParsedPartici
             ),
             true
           ),
-          sum_achat_tmps = item_tier_daily_snapshots.sum_achat_tmps + EXCLUDED.sum_achat_tmps
+          sum_achat_tmps = item_tier_daily_snapshots.sum_achat_tmps + EXCLUDED.sum_achat_tmps,
+          top_game = item_tier_daily_snapshots.top_game + EXCLUDED.top_game,
+          top_win = item_tier_daily_snapshots.top_win + EXCLUDED.top_win,
+          jungle_game = item_tier_daily_snapshots.jungle_game + EXCLUDED.jungle_game,
+          jungle_win = item_tier_daily_snapshots.jungle_win + EXCLUDED.jungle_win,
+          mid_game = item_tier_daily_snapshots.mid_game + EXCLUDED.mid_game,
+          mid_win = item_tier_daily_snapshots.mid_win + EXCLUDED.mid_win,
+          adc_game = item_tier_daily_snapshots.adc_game + EXCLUDED.adc_game,
+          adc_win = item_tier_daily_snapshots.adc_win + EXCLUDED.adc_win,
+          support_game = item_tier_daily_snapshots.support_game + EXCLUDED.support_game,
+          support_win = item_tier_daily_snapshots.support_win + EXCLUDED.support_win
       `;
     }
   }

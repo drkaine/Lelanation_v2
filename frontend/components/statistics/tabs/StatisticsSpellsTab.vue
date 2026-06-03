@@ -341,7 +341,7 @@ const displayRows = computed<DisplayRow[]>(() => {
     label: `${spellName(r.spellIdD)} + ${spellName(r.spellIdF)}`,
     imageSpellId: r.spellIdD,
     imageSpellId2: r.spellIdF,
-    imageOnly: true,
+    imageOnly: false,
     pickrate: r.pickrate,
     deltaPick: r.deltaPick,
     castsLabel: `${(Number(r.spell1Casts ?? 0) / Math.max(1, Number(r.games ?? 0))).toFixed(2)}/${(Number(r.spell2Casts ?? 0) / Math.max(1, Number(r.games ?? 0))).toFixed(2)}`,
@@ -411,72 +411,88 @@ function deltaLabelClass(v: number | null | undefined): string {
         <article
           v-for="row in paginatedDisplayRows"
           :key="'spell-mobile-' + row.key"
-          class="statistics-spell-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
+          class="statistics-champion-stats-mobile-card statistics-spell-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
         >
           <button
             type="button"
-            class="flex w-full items-center gap-3.5 p-3.5 text-left"
+            class="statistics-champion-stats-mobile-card-header flex w-full min-w-0 items-center gap-3 p-3 text-left"
             @click="toggleSpellCardExpanded(row.key)"
           >
-            <div class="flex shrink-0 items-center gap-1">
-              <img
-                v-if="row.imageSpellId != null && spellImage(row.imageSpellId) && p.gameVersion"
-                :src="getSpellImageUrl(p.gameVersion, spellImage(row.imageSpellId)!)"
-                :alt="row.label"
-                class="h-14 w-14 rounded border border-black/30 object-cover"
-                width="56"
-                height="56"
-              />
-              <img
-                v-if="row.imageSpellId2 != null && spellImage(row.imageSpellId2) && p.gameVersion"
-                :src="getSpellImageUrl(p.gameVersion, spellImage(row.imageSpellId2)!)"
-                :alt="row.label"
-                class="h-14 w-14 rounded border border-black/30 object-cover"
-                width="56"
-                height="56"
-              />
-            </div>
-            <div class="min-w-0 flex-1">
-              <div v-if="!row.imageOnly" class="truncate text-base font-semibold text-accent">
-                {{ row.label }}
-              </div>
-            </div>
-            <div class="flex shrink-0 gap-3 text-center">
-              <div>
-                <div class="text-[10px] uppercase tracking-wide text-text/55">
+            <StatisticsSpellStatsMobileCardHeader
+              :label="row.label"
+              :game-version="p.gameVersion"
+              :image-spell-id="row.imageSpellId"
+              :image-file1="row.imageSpellId != null ? spellImage(row.imageSpellId) : null"
+              :image-spell-id2="row.imageSpellId2 ?? null"
+              :image-file2="row.imageSpellId2 != null ? spellImage(row.imageSpellId2) : null"
+              :is-pair="spellsMode === 'pair'"
+            />
+            <div
+              class="statistics-spell-mobile-stats flex min-w-0 flex-1 justify-end gap-2 text-right sm:gap-3"
+            >
+              <div class="min-w-0 shrink">
+                <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
                   {{ p.t('statisticsPage.overviewDetailPickRate') }}
                 </div>
-                <div class="text-lg font-bold tabular-nums leading-none text-text">
+                <div class="text-xl font-bold tabular-nums leading-none text-text sm:text-2xl">
                   {{ fmtPct(row.pickrate) }}
                 </div>
-                <div class="mt-0.5 text-xs tabular-nums" :class="deltaClass(row.deltaPick)">
+                <div
+                  class="mt-0.5 text-xs tabular-nums leading-none"
+                  :class="deltaClass(row.deltaPick)"
+                >
                   {{ fmtDelta(row.deltaPick) }}
                 </div>
               </div>
-              <div>
-                <div class="text-[10px] uppercase tracking-wide text-text/55">
+              <div class="min-w-0 shrink">
+                <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
                   {{ p.t('statisticsPage.overviewDetailWinRate') }}
                 </div>
-                <div class="text-lg font-bold tabular-nums leading-none text-text">
+                <div class="text-xl font-bold tabular-nums leading-none text-text sm:text-2xl">
                   {{ fmtPct(row.winrate) }}
                 </div>
-                <div class="mt-0.5 text-xs tabular-nums" :class="deltaClass(row.deltaWin)">
+                <div
+                  class="mt-0.5 text-xs tabular-nums leading-none"
+                  :class="deltaClass(row.deltaWin)"
+                >
                   {{ fmtDelta(row.deltaWin) }}
                 </div>
               </div>
             </div>
+            <span
+              class="shrink-0 text-xs text-text/50 transition-transform duration-200"
+              :class="expandedSpellKeys.has(row.key) ? 'rotate-180' : ''"
+              aria-hidden="true"
+              >▼</span
+            >
           </button>
           <div
             v-if="expandedSpellKeys.has(row.key)"
             class="space-y-1.5 border-t border-primary/20 bg-black/20 px-3 py-2.5 text-sm text-text/85"
           >
-            <div class="flex flex-wrap items-baseline justify-between gap-x-2">
-              <span>{{ p.t('statisticsPage.spellsCasts') }}</span>
-              <span class="tabular-nums">
-                {{ row.castsLabel }}
-                <span class="ml-1 text-xs" :class="deltaLabelClass(row.deltaCastsSort)">
-                  {{ row.deltaCastsLabel }}
-                </span>
+            <div
+              class="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1"
+              :class="
+                spellsMode === 'pair' ? 'flex-col items-stretch sm:flex-row sm:items-baseline' : ''
+              "
+            >
+              <span class="shrink-0">{{ p.t('statisticsPage.spellsCasts') }}</span>
+              <span
+                class="min-w-0 tabular-nums"
+                :class="spellsMode === 'pair' ? 'break-words text-right' : ''"
+              >
+                <template v-if="spellsMode === 'pair'">
+                  <span class="block">{{ row.castsLabel }}</span>
+                  <span class="block text-xs" :class="deltaLabelClass(row.deltaCastsSort)">
+                    {{ row.deltaCastsLabel }}
+                  </span>
+                </template>
+                <template v-else>
+                  {{ row.castsLabel }}
+                  <span class="ml-1 text-xs" :class="deltaLabelClass(row.deltaCastsSort)">
+                    {{ row.deltaCastsLabel }}
+                  </span>
+                </template>
               </span>
             </div>
             <div
@@ -713,17 +729,3 @@ function deltaLabelClass(v: number | null | undefined): string {
     <div v-else class="text-text/70">{{ p.t('statisticsPage.overviewDetailNoData') }}</div>
   </div>
 </template>
-
-<style scoped>
-@media (max-width: 768px) {
-  .statistics-spells-tab {
-    margin-inline: -1rem;
-    width: calc(100% + 2rem);
-    max-width: 100vw;
-  }
-
-  .statistics-spell-mobile-card {
-    width: 100%;
-  }
-}
-</style>

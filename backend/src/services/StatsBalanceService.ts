@@ -1,9 +1,21 @@
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
 import { readBalanceRules, type BalanceLevelKey, type BalanceRulesConfig } from './BalanceRulesService.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor, sqlAggUnionAllLiveAndArchives } from './statsAggArchive.js'
+import {
+  normalizeStatsRoleForBanner,
+  normalizeStatsRoleForChampion,
+  statsRoleSqlLiteral,
+} from '../utils/statsFilters.js'
 
 type BalanceStatus = 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'
-const BALANCE_ALLOWED_ROLES = new Set(['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT'])
+/** Rôles exposés à l’API / UI (MIDDLE, BOTTOM, …). */
+const BALANCE_CLIENT_ROLES = new Set(['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT'])
+
+type BalanceRoleFilter = {
+  client: string
+  championSql: string
+  bannerSql: string
+}
 
 type ChampionAgg = {
   games: number
@@ -120,20 +132,36 @@ async function listAvailablePatches(): Promise<string[]> {
   ]
 }
 
-function normalizeRoleFilter(role: string | null | undefined): string | null {
-  const v = String(role ?? '').trim().toUpperCase()
-  if (!v) return null
-  if (v === 'MID') return 'MIDDLE'
-  if (v === 'ADC') return 'BOTTOM'
-  if (!BALANCE_ALLOWED_ROLES.has(v)) return null
-  return v
-}
-
 function roleForClient(role: string): string {
   const v = String(role ?? '').toUpperCase()
   if (v === 'MID') return 'MIDDLE'
   if (v === 'ADC') return 'BOTTOM'
   return v
+}
+
+function balanceRoleKeyFromChampionColumn(role: string): string | null {
+  const champ = normalizeStatsRoleForChampion(role)
+  if (!champ) return null
+  const client = roleForClient(champ)
+  return BALANCE_CLIENT_ROLES.has(client) ? client : null
+}
+
+function balanceRoleKeyFromBannerColumn(role: string): string | null {
+  const banner = normalizeStatsRoleForBanner(role)
+  if (!banner) return null
+  return BALANCE_CLIENT_ROLES.has(banner) ? banner : null
+}
+
+/** Filtre rôle : SQL champion (MID/ADC) + bans (MIDDLE/BOTTOM), clé client unifiée. */
+function normalizeRoleFilter(role: string | null | undefined): BalanceRoleFilter | null {
+  const raw = String(role ?? '').trim().toUpperCase()
+  if (!raw) return null
+  const championSql = normalizeStatsRoleForChampion(raw)
+  const bannerSql = normalizeStatsRoleForBanner(raw)
+  if (!championSql || !bannerSql) return null
+  const client = roleForClient(championSql)
+  if (!BALANCE_CLIENT_ROLES.has(client)) return null
+  return { client, championSql, bannerSql }
 }
 
 function makeChampionRoleKey(championId: number, role: string): string {
@@ -192,7 +220,7 @@ function deltaLabel(current: BalanceStatus, previous: BalanceStatus | null): str
 
 async function buildPatchSnapshot(
   patch: string,
-  role: string | null,
+  roleFilter: BalanceRoleFilter | null,
   rules: BalanceRulesConfig
 ): Promise<PatchSnapshot> {
   type CoreRow = {
@@ -216,7 +244,9 @@ async function buildPatchSnapshot(
 
   const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', patch, 'cc')
   const tiersSql = tiers.map((t) => `'${String(t).replace(/'/g, "''")}'`).join(', ')
-  const roleSql = role ? `AND role = '${String(role).replace(/'/g, "''")}'` : ''
+  const roleSql = roleFilter
+    ? `AND role = '${statsRoleSqlLiteral(roleFilter.championSql)}'`
+    : ''
   const patchLike = `${normalizePatchMajorMinor(patch).replace(/'/g, "''")}%`
   const coreRowsEffective = await queryRawUnsafe<CoreRow[]>(`
       SELECT champion_id, rank_tier, role, count_game, count_win
@@ -226,7 +256,9 @@ async function buildPatchSnapshot(
         ${roleSql}
     `)
   const bansFrom = await matchVersionedAggFrom('agg_champion_bans_by_banner', patch, 'bb')
-  const banRoleSql = role ? `AND banner_role_norm = '${String(role).replace(/'/g, "''")}'` : ''
+  const banRoleSql = roleFilter
+    ? `AND banner_role_norm = '${statsRoleSqlLiteral(roleFilter.bannerSql)}'`
+    : ''
   const banRowsEffective = await queryRawUnsafe<BanRow[]>(`
       SELECT banned_champion_id, rank_tier, banner_role_norm, ban_count
       FROM ${bansFrom}
@@ -252,18 +284,18 @@ async function buildPatchSnapshot(
   }
   for (const r of coreRowsEffective) {
     const rankTier = String(r.rank_tier).toUpperCase()
-    const roleNorm = String(r.role ?? '').toUpperCase()
-    if (!BALANCE_ALLOWED_ROLES.has(roleNorm)) continue
+    const roleKey = balanceRoleKeyFromChampionColumn(String(r.role ?? ''))
+    if (!roleKey) continue
     const cid = r.champion_id
-    const key = makeChampionRoleKey(cid, roleNorm || 'UNKNOWN')
+    const key = makeChampionRoleKey(cid, roleKey)
     const games = r.count_game
     const wins = r.count_win
     ;(['average', 'skilled', 'elite'] as const).forEach((lvl) => {
       if (!rules.levels[lvl].tiers.includes(rankTier)) return
       participantsByLevel[lvl] += games
       participantsByLevelByRole[lvl].set(
-        roleNorm,
-        (participantsByLevelByRole[lvl].get(roleNorm) ?? 0) + games
+        roleKey,
+        (participantsByLevelByRole[lvl].get(roleKey) ?? 0) + games
       )
       const agg = initChampionAggMap(key, byLevel[lvl])
       agg.games += games
@@ -273,10 +305,10 @@ async function buildPatchSnapshot(
 
   for (const r of banRowsEffective) {
     const rankTier = String(r.rank_tier).toUpperCase()
-    const roleNorm = String(r.banner_role_norm ?? '').toUpperCase()
-    if (!BALANCE_ALLOWED_ROLES.has(roleNorm)) continue
+    const roleKey = balanceRoleKeyFromBannerColumn(String(r.banner_role_norm ?? ''))
+    if (!roleKey) continue
     const cid = r.banned_champion_id
-    const key = makeChampionRoleKey(cid, roleNorm || 'UNKNOWN')
+    const key = makeChampionRoleKey(cid, roleKey)
     const bans = r.ban_count
     ;(['average', 'skilled', 'elite'] as const).forEach((lvl) => {
       if (!rules.levels[lvl].tiers.includes(rankTier)) return
@@ -287,13 +319,13 @@ async function buildPatchSnapshot(
 
   const levels = (['average', 'skilled', 'elite'] as const).reduce((acc, lvl) => {
     const participantTotal = participantsByLevel[lvl]
-    const perMatchFactor = role ? 2 : 10
+    const perMatchFactor = roleFilter ? 2 : 10
     const matchTotal = participantTotal > 0 ? participantTotal / perMatchFactor : 0
 
     const byChampionRole = new Map<string, LevelSnapshotChampion>()
     for (const [key, a] of byLevel[lvl].entries()) {
       const { championId, role: championRole } = parseChampionRoleKey(key)
-      const roleParticipantTotal = role
+      const roleParticipantTotal = roleFilter
         ? participantTotal
         : Number(participantsByLevelByRole[lvl].get((championRole || '').toUpperCase()) ?? 0)
       const pickrate = roleParticipantTotal > 0 ? (a.games / roleParticipantTotal) * 100 : 0
@@ -304,7 +336,7 @@ async function buildPatchSnapshot(
       byChampionRole.set(key, {
         key,
         championId,
-        role: championRole || role || 'UNKNOWN',
+        role: championRole || roleFilter?.client || 'UNKNOWN',
         games: a.games,
         wins: a.wins,
         pickrate: round2(pickrate),
@@ -385,17 +417,17 @@ export async function getBalanceFramework(
     }
   }
 
-  const role = normalizeRoleFilter(options.role)
+  const roleFilter = normalizeRoleFilter(options.role)
 
   const snapshotHasRows = (snap: PatchSnapshot): boolean =>
     (['average', 'skilled', 'elite'] as const).some((lvl) => snap.levels[lvl].byChampionRole.size > 0)
 
-  let currentSnapshot = await buildPatchSnapshot(currentPatch, role, rules)
+  let currentSnapshot = await buildPatchSnapshot(currentPatch, roleFilter, rules)
   if (!snapshotHasRows(currentSnapshot) && sorted.length > 0) {
     const fallbackPatch = sorted[0]!
     if (fallbackPatch !== currentPatch) {
       currentPatch = fallbackPatch
-      currentSnapshot = await buildPatchSnapshot(currentPatch, role, rules)
+      currentSnapshot = await buildPatchSnapshot(currentPatch, roleFilter, rules)
     }
   }
 
@@ -403,10 +435,10 @@ export async function getBalanceFramework(
   const beforePreviousPatch = previousPatch ? findPreviousPatch(previousPatch, sorted) : null
 
   const previousSnapshot = previousPatch
-    ? await buildPatchSnapshot(previousPatch, role, rules)
+    ? await buildPatchSnapshot(previousPatch, roleFilter, rules)
     : null
   const beforePreviousSnapshot = beforePreviousPatch
-    ? await buildPatchSnapshot(beforePreviousPatch, role, rules)
+    ? await buildPatchSnapshot(beforePreviousPatch, roleFilter, rules)
     : null
 
   const championRoleKeys = new Set<string>()
@@ -491,7 +523,7 @@ export async function getBalanceFramework(
 
       return {
         championId,
-        role: roleForClient(roleFromKey || role || 'UNKNOWN'),
+        role: roleForClient(roleFromKey || roleFilter?.client || 'UNKNOWN'),
         average,
         skilled,
         elite,
@@ -528,4 +560,7 @@ export const __testOnly = {
   computeGlobalStatus,
   balanceRowGamesScore,
   collapseBalanceRowsToMainRole,
+  normalizeRoleFilter,
+  balanceRoleKeyFromChampionColumn,
+  balanceRoleKeyFromBannerColumn,
 }

@@ -847,9 +847,23 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
       tierListPending.value = false
     }
   }
-  watch([statsDivisionFilter, statsRoleFilter, statsOtpFilter], () => {
+  const TIER_LIST_DIVISION_DEBOUNCE_MS = 280
+  let tierListDivisionReloadTimer: ReturnType<typeof setTimeout> | null = null
+  watch([statsRoleFilter, statsOtpFilter], () => {
     if (!tierListViewIsBotlanePanel(tierListViewModel.value)) loadTierList().catch(() => undefined)
   })
+  watch(
+    statsDivisionFilter,
+    () => {
+      if (tierListViewIsBotlanePanel(tierListViewModel.value)) return
+      if (tierListDivisionReloadTimer) clearTimeout(tierListDivisionReloadTimer)
+      tierListDivisionReloadTimer = setTimeout(() => {
+        tierListDivisionReloadTimer = null
+        loadTierList().catch(() => undefined)
+      }, TIER_LIST_DIVISION_DEBOUNCE_MS)
+    },
+    { deep: true }
+  )
   watch(effectiveTierListPatch, (patch, oldPatch) => {
     if (tierListViewIsBotlanePanel(tierListViewModel.value)) return
     if (patch || oldPatch) loadTierList().catch(() => undefined)

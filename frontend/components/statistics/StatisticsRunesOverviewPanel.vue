@@ -662,14 +662,14 @@ function runeSetLayout(
         <h4 class="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-accent/90">
           {{ block.title }}
         </h4>
-        <div class="grid grid-cols-1 gap-2 min-[480px]:grid-cols-2">
+        <div class="rune-set-cards-grid grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div
             v-for="(row, idx) in block.list.map(s => ({
               set: s,
               ly: runeSetLayout(s.runes, s.shards ?? null),
             }))"
             :key="block.key + '-' + idx"
-            class="rune-set-card statistics-overview-surface relative min-w-0 rounded-lg border border-primary/30 px-4 pb-3 pt-5"
+            class="rune-set-card statistics-overview-surface relative mx-auto min-w-0 max-w-full rounded-lg border border-primary/30 px-4 pb-3 pt-5"
           >
             <span
               class="absolute left-0 top-0 z-10 flex h-5 min-w-5 items-center justify-center rounded-md bg-primary/30 px-1 text-[10px] font-bold tabular-nums text-text/90"
@@ -677,13 +677,18 @@ function runeSetLayout(
             >
               {{ idx + 1 }}
             </span>
-            <div class="rune-set-build-strip flex min-w-0 flex-col gap-2">
+            <div
+              class="rune-set-build-strip flex w-full min-w-0 flex-col items-center gap-2 sm:items-stretch"
+            >
               <!-- Clé de voûte seule (hors ligne d’alignement avec le secondaire) -->
-              <div v-if="row.ly.keystone && getRuneById(row.ly.keystone)" class="flex shrink-0">
+              <div
+                v-if="row.ly.keystone && getRuneById(row.ly.keystone)"
+                class="flex w-full shrink-0 justify-center"
+              >
                 <img
                   :src="getRuneImageUrl(gameVersion, getRuneById(row.ly.keystone)!.icon)"
                   :alt="getRuneById(row.ly.keystone)!.name"
-                  class="rune-set-keystone-img shrink-0 rounded-full object-cover"
+                  class="rune-set-keystone-img shrink-0 rounded-full object-contain"
                   width="64"
                   height="64"
                 />
@@ -693,7 +698,7 @@ function runeSetLayout(
                 v-if="
                   row.ly.primaryRow.length || row.ly.secondaryPath || row.ly.secondaryRunes.length
                 "
-                class="grid min-w-0 items-start gap-x-3 gap-y-1"
+                class="rune-set-trees-grid grid w-full min-w-0 items-start justify-items-center gap-x-4 gap-y-1 sm:justify-items-stretch sm:gap-x-3"
                 :class="
                   row.ly.primaryRow.length && (row.ly.secondaryPath || row.ly.secondaryRunes.length)
                     ? 'grid-cols-2'
@@ -702,7 +707,7 @@ function runeSetLayout(
               >
                 <div
                   v-if="row.ly.primaryRow.length"
-                  class="flex min-w-0 flex-col items-start gap-1"
+                  class="flex min-w-0 flex-col items-center gap-1.5 sm:items-start"
                 >
                   <template v-for="rid in row.ly.primaryRow" :key="'p-' + rid">
                     <img
@@ -710,7 +715,7 @@ function runeSetLayout(
                       :src="getRuneImageUrl(gameVersion, getRuneById(rid)!.icon)"
                       :alt="getRuneById(rid)!.name"
                       :title="getRuneById(rid)!.name"
-                      class="rune-set-small-rune rounded-full object-cover"
+                      class="rune-set-small-rune rounded-full object-contain"
                       width="28"
                       height="28"
                     />
@@ -718,14 +723,14 @@ function runeSetLayout(
                 </div>
                 <div
                   v-if="row.ly.secondaryPath || row.ly.secondaryRunes.length"
-                  class="rune-set-secondary-group flex min-w-0 flex-col items-start gap-1"
+                  class="rune-set-secondary-group flex min-w-0 flex-col items-center gap-1.5 sm:items-start"
                 >
                   <div
                     v-if="row.ly.secondaryPath"
-                    class="rune-set-path-icon flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full"
+                    class="rune-set-path-icon flex h-9 w-9 shrink-0 items-center justify-center rounded-full sm:h-7 sm:w-7"
                   >
                     <span
-                      class="block h-[28px] w-[28px] rounded-full"
+                      class="rune-set-path-mask block h-9 w-9 rounded-full sm:h-7 sm:w-7"
                       :style="{
                         backgroundColor: getRunePathColor(
                           row.ly.secondaryPath.icon,
@@ -759,7 +764,7 @@ function runeSetLayout(
                       :src="getRuneImageUrl(gameVersion, getRuneById(rid)!.icon)"
                       :alt="getRuneById(rid)!.name"
                       :title="getRuneById(rid)!.name"
-                      class="rune-set-small-rune rounded-full object-cover"
+                      class="rune-set-small-rune rounded-full object-contain"
                       width="28"
                       height="28"
                     />
@@ -768,7 +773,7 @@ function runeSetLayout(
               </div>
               <div
                 v-if="row.ly.shards.length"
-                class="rune-set-shards-row -mx-4 mt-2 flex w-[calc(100%+2rem)] max-w-none items-center justify-between self-stretch px-[3px]"
+                class="rune-set-shards-row -mx-4 mt-2 flex w-[calc(100%+2rem)] max-w-none items-center justify-center gap-4 self-stretch px-3 sm:justify-between sm:gap-2 sm:px-[3px]"
               >
                 <img
                   v-for="sid in row.ly.shards"
@@ -777,40 +782,40 @@ function runeSetLayout(
                   :alt="shardName(sid)"
                   :title="shardName(sid)"
                   class="rune-set-shard-img shrink-0 rounded-full bg-black/25 object-contain"
-                  width="22"
-                  height="22"
+                  width="32"
+                  height="32"
                 />
               </div>
             </div>
             <div
-              class="mt-3 flex flex-wrap gap-x-4 gap-y-1 pt-1 text-xs leading-tight text-text/85"
+              class="rune-set-stats mt-3 flex w-full flex-wrap items-baseline justify-center gap-x-5 gap-y-2 pt-1 text-center sm:justify-start sm:text-left"
             >
               <span
-                ><span class="text-text/55">WR:</span>
-                {{ ' ' }}
-                <span class="font-semibold tabular-nums" :class="wrClass(row.set.winrate)">{{
-                  Number(row.set.winrate).toFixed(2)
-                }}</span
-                >%</span
+                class="rune-set-stat-item inline-flex flex-wrap items-baseline justify-center gap-x-1 sm:justify-start"
+                ><span class="rune-set-stat-label text-text/55">WR:</span>
+                <span
+                  class="rune-set-stat-value font-semibold tabular-nums"
+                  :class="wrClass(row.set.winrate)"
+                  >{{ Number(row.set.winrate).toFixed(2) }}%</span
+                ></span
               >
               <span
-                ><span class="text-text/55">pR:</span>
-                {{ ' ' }}
-                <span class="font-semibold tabular-nums">{{
-                  Number(row.set.pickrate).toFixed(2)
-                }}</span
-                >%</span
+                class="rune-set-stat-item inline-flex flex-wrap items-baseline justify-center gap-x-1 sm:justify-start"
+                ><span class="rune-set-stat-label text-text/55">pR:</span>
+                <span class="rune-set-stat-value font-semibold tabular-nums"
+                  >{{ Number(row.set.pickrate).toFixed(2) }}%</span
+                ></span
               >
               <template v-if="comparisonVersion && !baselinePending">
                 <span
-                  class="text-[10px] tabular-nums"
+                  class="rune-set-stat-delta tabular-nums"
                   :class="deltaClass(row.set.pickrate, baselineStatsForRuneSet(row.set)?.pickrate)"
                 >
                   ΔP
                   {{ formatDelta(row.set.pickrate, baselineStatsForRuneSet(row.set)?.pickrate) }}
                 </span>
                 <span
-                  class="text-[10px] tabular-nums"
+                  class="rune-set-stat-delta tabular-nums"
                   :class="deltaClass(row.set.winrate, baselineStatsForRuneSet(row.set)?.winrate)"
                 >
                   ΔWR
@@ -849,15 +854,95 @@ function runeSetLayout(
   flex-shrink: 0;
 }
 .rune-set-shard-img {
-  width: 22px;
-  height: 22px;
-  min-width: 22px;
-  min-height: 22px;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+}
+.rune-set-stats {
+  font-size: 0.875rem;
+  line-height: 1.35;
+  color: rgb(var(--rgb-text) / 0.88);
+}
+.rune-set-stat-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.rune-set-stat-value {
+  font-size: 1rem;
+}
+.rune-set-stat-delta {
+  font-size: 0.8125rem;
+  font-weight: 500;
 }
 .rune-set-build-strip {
   min-height: 0;
 }
 .rune-set-shards-row {
   box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .rune-set-cards-grid {
+    width: 100%;
+  }
+
+  .rune-set-card {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .rune-set-keystone-img {
+    width: 4.5rem;
+    height: 4.5rem;
+    min-width: 4.5rem;
+    min-height: 4.5rem;
+  }
+
+  .rune-set-small-rune {
+    width: 2.25rem;
+    height: 2.25rem;
+    min-width: 2.25rem;
+    min-height: 2.25rem;
+  }
+
+  .rune-set-shard-img {
+    width: 2.75rem;
+    height: 2.75rem;
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+
+  .rune-set-stats {
+    font-size: 0.9375rem;
+    gap: 0.625rem 1.25rem;
+  }
+
+  .rune-set-stat-label {
+    font-size: 0.6875rem;
+  }
+
+  .rune-set-stat-value {
+    font-size: 1.125rem;
+  }
+
+  .rune-set-stat-delta {
+    font-size: 0.875rem;
+  }
+
+  .rune-set-path-icon,
+  .rune-set-path-mask {
+    width: 2.5rem !important;
+    height: 2.5rem !important;
+    min-width: 2.5rem;
+    min-height: 2.5rem;
+  }
+
+  .rune-set-trees-grid {
+    max-width: 16rem;
+    margin-inline: auto;
+  }
 }
 </style>

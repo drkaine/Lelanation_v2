@@ -125,6 +125,7 @@
         :role="filtersSheetMode ? 'dialog' : undefined"
         :aria-modal="filtersSheetMode ? true : undefined"
         :aria-label="t('statisticsPage.filtersTitle')"
+        @click.stop
       >
         <div
           class="relative z-[1] flex shrink-0 items-center gap-2 border-b border-primary/25 p-2 lg:border-transparent lg:pb-2"
@@ -151,7 +152,7 @@
         </div>
         <div class="flex min-h-0 flex-1 flex-col overflow-y-auto p-2 lg:flex-none">
           <div
-            v-if="activeTab !== 'objectives' && activeTab !== 'surrender'"
+            v-if="statisticsTabFilterFlags(activeTab).championSearch"
             :class="[
               championSearchFocused
                 ? 'statistics-search-sticky mb-2 max-lg:sticky max-lg:top-0 max-lg:z-20 max-lg:-mx-2 max-lg:border-b max-lg:border-primary/25 max-lg:bg-surface/95 max-lg:px-2 max-lg:pb-2 max-lg:pt-1 max-lg:backdrop-blur-sm'
@@ -239,7 +240,9 @@
                       : 'bg-black/20 hover:bg-white/10'
                   "
                   :title="t('statisticsPage.allRanks')"
-                  @click="selectAllDivisions()"
+                  :aria-pressed="statsDivisionFilter.length === 0"
+                  @mousedown.prevent
+                  @click.stop="selectAllDivisions()"
                 >
                   <img
                     src="/data/community-dragon/ranked-emblem/Unranked.png"
@@ -265,7 +268,9 @@
                       : 'bg-black/20 hover:bg-white/10'
                   "
                   :title="formatDivisionLabel(tier)"
-                  @click="toggleDivisionFilter(tier)"
+                  :aria-pressed="statsDivisionFilter.includes(tier)"
+                  @mousedown.prevent
+                  @click.stop="toggleDivisionFilter(tier)"
                 >
                   <img
                     v-if="getRankedEmblemUrl(tier)"
@@ -757,6 +762,7 @@ import {
   type StatisticsCohortFilterValues,
   type StatisticsCohortTab,
 } from '~/composables/statistics/statisticsTabFilters'
+import { parseRankTierQuery, rankTierSelectionsEqual } from '~/utils/statisticsRankTierQuery'
 import { getChampionImageUrl, getItemImageUrl } from '~/utils/imageUrl'
 import { formatItemStatsForDisplay, formatItemEconomicForDisplay } from '~/utils/formatItemStats'
 import {
@@ -1405,9 +1411,9 @@ function applyStatisticsStateFromQuery(): void {
   const versionRaw = queryFirst(route.query.version as string | string[] | null | undefined)
   const roleRaw = queryFirst(route.query.role as string | string[] | null | undefined).toUpperCase()
   const otpRaw = queryFirst(route.query.otp as string | string[] | null | undefined)
-  const divisionsRaw = queryAll(route.query.rankTier as string | string[] | null | undefined)
-    .map(v => v.toUpperCase())
-    .filter(Boolean)
+  const divisionsRaw = parseRankTierQuery(
+    route.query.rankTier as string | string[] | null | undefined
+  )
 
   isApplyingQueryState.value = true
   const section = sectionFromQuery()
@@ -1415,7 +1421,9 @@ function applyStatisticsStateFromQuery(): void {
   activeTab.value = normalizeTabForSection(section, tabCandidate)
   statsVersionFilter.value = versionRaw
   statsRoleFilter.value = roleRaw
-  statsDivisionFilter.value = divisionsRaw
+  if (!rankTierSelectionsEqual(statsDivisionFilter.value, divisionsRaw)) {
+    statsDivisionFilter.value = divisionsRaw
+  }
   statsOtpFilter.value = otpRaw === 'oui' || otpRaw === 'solo' || otpRaw === 'non' ? otpRaw : 'non'
   isApplyingQueryState.value = false
   if (import.meta.client) {
@@ -1742,6 +1750,21 @@ function toggleChampionColumnGroup(group: 'side' | 'dealt' | 'taken') {
   if (showChampionTakenColumns.value && activeCount <= 1) return
   showChampionTakenColumns.value = !showChampionTakenColumns.value
 }
+const COHORT_DIVISION_DEBOUNCE_MS = 280
+let cohortDivisionEffectTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleDivisionCohortEffects() {
+  if (!import.meta.client) return
+  if (cohortDivisionEffectTimer) clearTimeout(cohortDivisionEffectTimer)
+  cohortDivisionEffectTimer = setTimeout(() => {
+    cohortDivisionEffectTimer = null
+    onStatsFilterChange()
+    if (!isApplyingQueryState.value && !isSyncingQueryState.value) {
+      syncStatisticsStateToQuery()
+    }
+  }, COHORT_DIVISION_DEBOUNCE_MS)
+}
+
 function toggleDivisionFilter(tier: string) {
   const arr = statsDivisionFilter.value
   const idx = arr.indexOf(tier)
@@ -1750,11 +1773,10 @@ function toggleDivisionFilter(tier: string) {
   } else {
     statsDivisionFilter.value = [...arr, tier]
   }
-  onStatsFilterChange()
 }
 function selectAllDivisions() {
+  if (statsDivisionFilter.value.length === 0) return
   statsDivisionFilter.value = []
-  onStatsFilterChange()
 }
 function onStatsFilterChange() {
   overviewDetailData.value = null
@@ -1802,6 +1824,10 @@ function onStatsFilterChange() {
 }
 
 function resetStatsFilters() {
+  if (cohortDivisionEffectTimer) {
+    clearTimeout(cohortDivisionEffectTimer)
+    cohortDivisionEffectTimer = null
+  }
   statsVersionFilter.value = ''
   statsDivisionFilter.value = []
   statsRoleFilter.value = ''
@@ -3931,17 +3957,24 @@ const roles = [
 ]
 const ROLE_OPTIONS = roles
 
-function mainRoleIconSrc(mainRole: string | null | undefined): string | null {
+function normalizeStatsRoleKey(mainRole: string | null | undefined): string {
   const raw = (mainRole ?? '').trim().toUpperCase()
-  if (!raw) return null
-  const key = raw === 'UTILITY' ? 'SUPPORT' : raw
+  if (!raw) return ''
+  if (raw === 'UTILITY' || raw === 'SUPPORT') return 'SUPPORT'
+  if (raw === 'MID' || raw === 'MIDDLE') return 'MIDDLE'
+  if (raw === 'ADC' || raw === 'BOTTOM' || raw === 'BOT') return 'BOTTOM'
+  return raw
+}
+
+function mainRoleIconSrc(mainRole: string | null | undefined): string | null {
+  const key = normalizeStatsRoleKey(mainRole)
+  if (!key) return null
   return ROLE_OPTIONS.find(r => r.value === key)?.icon ?? null
 }
 
 function mainRoleLabel(mainRole: string | null | undefined): string {
-  const raw = (mainRole ?? '').trim().toUpperCase()
-  if (!raw) return String(mainRole ?? '—')
-  const key = raw === 'UTILITY' ? 'SUPPORT' : raw
+  const key = normalizeStatsRoleKey(mainRole)
+  if (!key) return String(mainRole ?? '—')
   return ROLE_OPTIONS.find(r => r.value === key)?.label ?? String(mainRole)
 }
 
@@ -4507,12 +4540,21 @@ function formatChampionGlobalNumericDelta(d: number): string {
   return `${sign}${Number(d).toFixed(1)}`
 }
 
-watch([statsDivisionFilter, statsRoleFilter, statsOtpFilter], () => {
+watch([statsRoleFilter, statsOtpFilter], () => {
   loadVersionsWithMatches()
   const tab = activeTab.value
   if (tab === 'overview') loadChampions()
   if (tab === 'championTable') loadChampionGlobalTable()
 })
+
+watch(
+  statsDivisionFilter,
+  () => {
+    if (isApplyingQueryState.value) return
+    scheduleDivisionCohortEffects()
+  },
+  { deep: true }
+)
 
 /** Resolve champion by numeric id (API uses Riot champion key). */
 function championByKey(championId: number): (typeof championsStore.champions)[0] | null {
@@ -4546,6 +4588,10 @@ function itemEconomicForItem(itemId: number): string[] {
 
 watch(activeTab, async tab => {
   syncStatisticsStateToQuery()
+  if (!statisticsTabFilterFlags(tab).championSearch) {
+    championSearchQuery.value = ''
+    championSearchFocused.value = false
+  }
   if (tab === 'overview') {
     loadOverview()
     loadChampions()
@@ -4582,7 +4628,7 @@ watch(activeTab, async tab => {
   if (tab === 'abandons') loadOverviewAbandons()
   if (tab === 'surrender') loadSurrenderMatrix()
 })
-watch([statsVersionFilter, statsDivisionFilter, statsRoleFilter, statsOtpFilter], () => {
+watch([statsVersionFilter, statsRoleFilter, statsOtpFilter], () => {
   if (activeTab.value === 'overview') {
     loadVersionsWithMatches()
     loadOverview()
@@ -4619,7 +4665,7 @@ watch([statsVersionFilter, statsDivisionFilter, statsRoleFilter, statsOtpFilter]
   }
 })
 
-watch([activeTab, statsVersionFilter, statsDivisionFilter, statsRoleFilter, statsOtpFilter], () => {
+watch([activeTab, statsVersionFilter, statsRoleFilter, statsOtpFilter], () => {
   syncStatisticsStateToQuery()
 })
 watch(progressionFromVersion, () => {
@@ -5346,18 +5392,28 @@ if (__statisticsVm?.proxy) {
 
   .statistics .statistics-champion-mobile-list,
   .statistics .statistics-bans-mobile-list,
+  .statistics .statistics-spells-mobile-list,
+  .statistics .statistics-items-mobile-list,
   .statistics .statistics-surrender-mobile-list {
     width: 100%;
     padding-left: 0;
     padding-right: 0;
   }
 
+  .statistics .statistics-champion-stats-mobile-card,
   .statistics .statistics-champion-mobile-card,
-  .statistics .statistics-ban-mobile-card {
+  .statistics .statistics-ban-mobile-card,
+  .statistics .statistics-balance-mobile-card,
+  .statistics .statistics-spell-mobile-card,
+  .statistics .statistics-item-mobile-card {
     width: calc(100vw - 1.5rem);
     max-width: 100%;
     margin-left: auto;
     margin-right: auto;
+  }
+
+  .statistics .statistics-champion-stats-mobile-card-header {
+    align-items: center;
   }
 
   .statistics .statistics-surrender-tab .statistics-surrender-mobile-card {

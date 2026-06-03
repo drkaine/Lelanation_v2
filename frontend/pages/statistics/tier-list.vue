@@ -252,7 +252,9 @@
                       : 'bg-black/20 hover:bg-white/10'
                   "
                   :title="t('statisticsPage.allRanks')"
-                  @click="selectAllDivisions()"
+                  :aria-pressed="statsDivisionFilter.length === 0"
+                  @mousedown.prevent
+                  @click.stop="selectAllDivisions()"
                 >
                   <img
                     src="/data/community-dragon/ranked-emblem/Unranked.png"
@@ -278,7 +280,9 @@
                       : 'bg-black/20 hover:bg-white/10'
                   "
                   :title="formatDivisionLabel(tier)"
-                  @click="toggleDivisionFilter(tier)"
+                  :aria-pressed="statsDivisionFilter.includes(tier)"
+                  @mousedown.prevent
+                  @click.stop="toggleDivisionFilter(tier)"
                 >
                   <img
                     v-if="getRankedEmblemUrl(tier)"
@@ -450,6 +454,7 @@ import {
   enrichBotlaneRowsWithPatchDeltas,
   type BotlaneTierRowWithPatchDelta,
 } from '~/composables/statistics/botlanePatchDeltas'
+import { parseRankTierQuery, rankTierSelectionsEqual } from '~/utils/statisticsRankTierQuery'
 
 definePageMeta({
   layout: 'default',
@@ -486,11 +491,6 @@ const riotLocale = computed(() => getRiotLanguage(locale.value))
 function queryFirst(value: string | string[] | null | undefined): string {
   if (Array.isArray(value)) return value[0] ?? ''
   return value ?? ''
-}
-
-function queryAll(value: string | string[] | null | undefined): string[] {
-  if (Array.isArray(value)) return value.filter(Boolean)
-  return value ? [value] : []
 }
 
 function compareVersionsDesc(a: string, b: string): number {
@@ -670,6 +670,21 @@ function selectAllRoles() {
   onStatsFilterChange()
 }
 
+const COHORT_DIVISION_DEBOUNCE_MS = 280
+let cohortDivisionEffectTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleDivisionCohortEffects() {
+  if (!import.meta.client) return
+  if (cohortDivisionEffectTimer) clearTimeout(cohortDivisionEffectTimer)
+  cohortDivisionEffectTimer = setTimeout(() => {
+    cohortDivisionEffectTimer = null
+    onStatsFilterChange()
+    if (!isApplyingQueryState.value && !isSyncingQueryState.value) {
+      syncTierListStateToQuery()
+    }
+  }, COHORT_DIVISION_DEBOUNCE_MS)
+}
+
 function toggleDivisionFilter(tier: string) {
   const arr = statsDivisionFilter.value
   const idx = arr.indexOf(tier)
@@ -678,12 +693,11 @@ function toggleDivisionFilter(tier: string) {
   } else {
     statsDivisionFilter.value = [...arr, tier]
   }
-  onStatsFilterChange()
 }
 
 function selectAllDivisions() {
+  if (statsDivisionFilter.value.length === 0) return
   statsDivisionFilter.value = []
-  onStatsFilterChange()
 }
 
 const tierList = useStatisticsTierListPage({
@@ -840,6 +854,10 @@ function onStatsFilterChange() {
 }
 
 function resetStatsFilters() {
+  if (cohortDivisionEffectTimer) {
+    clearTimeout(cohortDivisionEffectTimer)
+    cohortDivisionEffectTimer = null
+  }
   statsVersionFilter.value = ''
   statsDivisionFilter.value = []
   statsRoleFilter.value = ''
@@ -865,16 +883,18 @@ function applyTierListStateFromQuery(): void {
   const versionRaw = queryFirst(route.query.version as string | string[] | null | undefined)
   const roleRaw = queryFirst(route.query.role as string | string[] | null | undefined).toUpperCase()
   const otpRaw = queryFirst(route.query.otp as string | string[] | null | undefined)
-  const divisionsRaw = queryAll(route.query.rankTier as string | string[] | null | undefined)
-    .map(v => v.toUpperCase())
-    .filter(v => Boolean(v) && v !== 'ALL')
+  const divisionsRaw = parseRankTierQuery(
+    route.query.rankTier as string | string[] | null | undefined
+  )
   const sortRaw = queryFirst(route.query.sort as string | string[] | null | undefined)
   const viewRaw = queryFirst(route.query.view as string | string[] | null | undefined).toLowerCase()
 
   isApplyingQueryState.value = true
   statsVersionFilter.value = versionRaw
   statsRoleFilter.value = roleRaw
-  statsDivisionFilter.value = divisionsRaw
+  if (!rankTierSelectionsEqual(statsDivisionFilter.value, divisionsRaw)) {
+    statsDivisionFilter.value = divisionsRaw
+  }
   statsOtpFilter.value = otpRaw === 'oui' || otpRaw === 'solo' || otpRaw === 'non' ? otpRaw : 'non'
   if (sortRaw === 'winrate' || sortRaw === 'pickrate') {
     tierList.tierListSortColumn.value = sortRaw
@@ -959,7 +979,6 @@ if (import.meta.client) {
 watch(
   [
     statsVersionFilter,
-    statsDivisionFilter,
     statsRoleFilter,
     statsOtpFilter,
     progressionFromVersion,
@@ -973,19 +992,19 @@ watch(
 )
 
 watch(
-  [
-    progressionFromVersion,
-    statsVersionFilter,
-    statsDivisionFilter,
-    statsRoleFilter,
-    statsOtpFilter,
-  ],
+  statsDivisionFilter,
   () => {
-    if (isBotlaneTierListView(tierListViewModel.value)) {
-      loadActiveBotlanePanel().catch(() => undefined)
-    }
-  }
+    if (isApplyingQueryState.value) return
+    scheduleDivisionCohortEffects()
+  },
+  { deep: true }
 )
+
+watch([progressionFromVersion, statsVersionFilter, statsRoleFilter, statsOtpFilter], () => {
+  if (isBotlaneTierListView(tierListViewModel.value)) {
+    loadActiveBotlanePanel().catch(() => undefined)
+  }
+})
 
 watch(
   () => tierListViewModel.value,
