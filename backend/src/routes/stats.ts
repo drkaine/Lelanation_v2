@@ -24,6 +24,7 @@ import { getTierList } from '../services/TierListService.js'
 import { getChampionGlobalTable } from '../services/ChampionGlobalTableService.js'
 import { getChampionBansTable } from '../services/ChampionBansTableService.js'
 import { getChampionDamageSplit } from '../services/ChampionDamageSplitService.js'
+import { getChampionMiscSummary } from '../services/ChampionMiscStatsService.js'
 import {
   getTopPlayers,
   getTopPlayersForChampion,
@@ -819,6 +820,9 @@ router.get('/champions/:championId/damage-split', async (req: Request, res: Resp
         avgMagicDamageToChampions: 0,
         avgTrueDamageToChampions: 0,
         avgTotalDamageToChampions: 0,
+        avgDamageToChampions: 0,
+        avgDamageToObjectives: 0,
+        avgDamageToBuildings: 0,
       })
     }
     return res.json(data)
@@ -832,6 +836,9 @@ router.get('/champions/:championId/damage-split', async (req: Request, res: Resp
       avgMagicDamageToChampions: 0,
       avgTrueDamageToChampions: 0,
       avgTotalDamageToChampions: 0,
+      avgDamageToChampions: 0,
+      avgDamageToObjectives: 0,
+      avgDamageToBuildings: 0,
       error: 'Champion damage split failed',
       message,
     })
@@ -1287,11 +1294,47 @@ router.get('/champions/:championId/objectives', async (req: Request, res: Respon
       outcomeRows: [],
       participationCard: {
         stealPct: 0,
+        stealWithSmitePct: 0,
         stealWithoutSmitePct: 0,
         soloBaronPct: 0,
+        soloTowerPct: 0,
+        soloDragonPct: 0,
+        soloRiftHeraldPct: 0,
+        soloHordePct: 0,
+        soloInhibitorPct: 0,
+        soloKillPct: 0,
         soloEpicObjectivePct: 0,
       },
+      structureCard: {
+        damageToTurretsPerGame: 0,
+        damageToObjectivesPerGame: 0,
+        damageToBuildingsPerGame: 0,
+        turretsDestroyedPerGame: 0,
+        turretsTakenWithHeraldPerGame: 0,
+      },
     })
+  }
+  return res.json(data)
+})
+
+/** GET /api/stats/champions/:championId/misc — soins, dégâts totaux, multikills (moyennes / partie). */
+router.get('/champions/:championId/misc', async (req: Request, res: Response) => {
+  const raw = req.params.championId
+  const championId = parseInt(Array.isArray(raw) ? raw[0] : raw, 10)
+  if (Number.isNaN(championId)) {
+    return res.status(400).json({ error: 'Invalid champion ID' })
+  }
+  const version = queryString(req.query.version)
+  const rankTier = rankTierParam(req.query.rankTier)
+  const role = queryString(req.query.role)
+  const data = await getChampionMiscSummary({
+    championId,
+    version: version ?? null,
+    rankTier: rankTier ?? null,
+    role: role ?? null,
+  })
+  if (!data) {
+    return res.status(200).json({ championId, games: 0, groups: [] })
   }
   return res.json(data)
 })

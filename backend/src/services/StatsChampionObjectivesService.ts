@@ -37,17 +37,39 @@ export type ChampionObjectiveSummary = {
   rows: Array<{
     key: string
     label: string
+    /** % parties avec l'objectif quand l'équipe gagne (col. « First en victoire »). */
+    firstByWin: number
+    /** % parties avec l'objectif quand l'équipe perd (col. « First en défaite »). */
+    firstByLoss: number
+    /** % parties côté bleu avec l'objectif. */
+    blue: number
+    /** % parties côté rouge avec l'objectif. */
+    red: number
     objectiveWinrate: number
-    killRate: number
-    assistRate: number
-    soloRate: number
+    winrateBlue: number
+    winrateRed: number
   }>
-  /** Vol d'objectif, solo baron, etc. (challenges Riot agrégés). */
+  /** Vol d'objectif, solo, etc. (challenges Riot agrégés). */
   participationCard: {
     stealPct: number
+    stealWithSmitePct: number
     stealWithoutSmitePct: number
     soloBaronPct: number
+    soloTowerPct: number
+    soloDragonPct: number
+    soloRiftHeraldPct: number
+    soloHordePct: number
+    soloInhibitorPct: number
+    soloKillPct: number
     soloEpicObjectivePct: number
+  }
+  /** Dégâts structures / tours (moyennes par partie). */
+  structureCard: {
+    damageToTurretsPerGame: number
+    damageToObjectivesPerGame: number
+    damageToBuildingsPerGame: number
+    turretsDestroyedPerGame: number
+    turretsTakenWithHeraldPerGame: number
   }
   outcomeRows: Array<{
     key: string
@@ -162,6 +184,13 @@ type RawObjectiveAgg = {
   horde_kill_ge5p: bigint
   rift_herald_kill_ge1: bigint
   rift_herald_kill_ge2p: bigint
+  sum_damage_dealt_to_turrets: bigint
+  sum_damage_dealt_to_objectives: bigint
+  sum_damage_dealt_to_buildings: bigint
+  sum_turret_takedowns: bigint
+  sum_turrets_taken_with_rift_herald: bigint
+  sum_solo_baron_kills: bigint
+  sum_quick_solo_kills: bigint
 }
 
 function involvedWinExpr(killCol: string, assistCol: string): string {
@@ -265,6 +294,18 @@ function touchGamesExpr(col: string): string {
   return `COALESCE(SUM(CASE WHEN ${col} > 0 THEN cs.count_game ELSE 0 END), 0)`
 }
 
+function touchSumGamesExpr(sumCol: string): string {
+  return `COALESCE(SUM(CASE WHEN ${sumCol} > 0 THEN cs.count_game ELSE 0 END), 0)`
+}
+
+function involvedGamesFromSumKillAssistExpr(sumKillCol: string, assistCol: string): string {
+  return `COALESCE(SUM(CASE WHEN (${sumKillCol} + ${assistCol}) > 0 THEN cs.count_game ELSE 0 END), 0)`
+}
+
+function soloTouchFromSumKillAssistExpr(sumKillCol: string, assistCol: string): string {
+  return `COALESCE(SUM(CASE WHEN ${sumKillCol} > 0 AND ${assistCol} = 0 THEN cs.count_game ELSE 0 END), 0)`
+}
+
 /** Parties où le joueur a le crédit kill sans assist sur cet objectif. */
 function soloTouchGamesExpr(killCol: string, assistCol: string): string {
   return `COALESCE(SUM(CASE WHEN ${killCol} > 0 AND ${assistCol} = 0 THEN cs.count_game ELSE 0 END), 0)`
@@ -318,11 +359,11 @@ export async function getChampionObjectivesSummary(options: {
         ${touchGamesExpr('cs.count_first_blood_assist_true')}::bigint AS first_blood_assist_game,
         ${soloTouchGamesExpr('cs.count_first_blood_kill_true', 'cs.count_first_blood_assist_true')}::bigint AS first_blood_solo_game,
         COALESCE(SUM(cs.count_elder_kill + cs.count_elder_assist), 0)::bigint AS elder_drake_total,
-        ${involvedGamesExpr('cs.count_baron_kill', 'cs.count_baron_assist')}::bigint AS baron_involved_game,
+        ${involvedGamesFromSumKillAssistExpr('cs.sum_baron_kills', 'cs.count_baron_assist')}::bigint AS baron_involved_game,
         COALESCE(SUM(cs.count_baron_involved_win), 0)::bigint AS baron_involved_win,
-        ${touchGamesExpr('cs.count_baron_kill')}::bigint AS baron_kill_game,
+        ${touchSumGamesExpr('cs.sum_baron_kills')}::bigint AS baron_kill_game,
         ${touchGamesExpr('cs.count_baron_assist')}::bigint AS baron_assist_game,
-        ${soloTouchGamesExpr('cs.count_baron_kill', 'cs.count_baron_assist')}::bigint AS baron_solo_game,
+        ${soloTouchFromSumKillAssistExpr('cs.sum_baron_kills', 'cs.count_baron_assist')}::bigint AS baron_solo_game,
         ${involvedGamesExpr('cs.count_dragon_kill', 'cs.count_dragon_assist')}::bigint AS dragon_involved_game,
         COALESCE(SUM(cs.count_dragon_involved_win), 0)::bigint AS dragon_involved_win,
         ${touchGamesExpr('cs.count_dragon_kill')}::bigint AS dragon_kill_game,
@@ -354,7 +395,7 @@ export async function getChampionObjectivesSummary(options: {
         ${touchGamesExpr('cs.count_inhibitor_assist')}::bigint AS inhibitor_assist_game,
         ${soloTouchGamesExpr('cs.count_inhibitor_kill', 'cs.count_inhibitor_assist')}::bigint AS inhibitor_solo_game,
         COALESCE(SUM(CASE WHEN
-          (cs.count_baron_kill > 0 AND cs.count_baron_assist = 0)
+          (cs.sum_baron_kills > 0 AND cs.count_baron_assist = 0)
           OR (cs.count_dragon_kill > 0 AND cs.count_dragon_assist = 0)
           OR (cs.count_rift_herald_kill > 0 AND cs.count_rift_herald_assist = 0)
           OR (cs.count_horde_kill > 0 AND cs.count_horde_assist = 0)
@@ -417,7 +458,14 @@ export async function getChampionObjectivesSummary(options: {
         COALESCE(SUM(cs.count_horde_kill_ge4_game), 0)::bigint AS horde_kill_ge4,
         COALESCE(SUM(cs.count_horde_kill_ge5p_game), 0)::bigint AS horde_kill_ge5p,
         COALESCE(SUM(cs.count_rift_herald_kill_ge1_game), 0)::bigint AS rift_herald_kill_ge1,
-        COALESCE(SUM(cs.count_rift_herald_kill_ge2p_game), 0)::bigint AS rift_herald_kill_ge2p
+        COALESCE(SUM(cs.count_rift_herald_kill_ge2p_game), 0)::bigint AS rift_herald_kill_ge2p,
+        COALESCE(SUM(cs.sum_damage_dealt_to_turrets), 0)::bigint AS sum_damage_dealt_to_turrets,
+        COALESCE(SUM(cs.sum_damage_dealt_to_objectives), 0)::bigint AS sum_damage_dealt_to_objectives,
+        COALESCE(SUM(cs.sum_damage_dealt_to_buildings), 0)::bigint AS sum_damage_dealt_to_buildings,
+        COALESCE(SUM(cs.sum_turret_takedowns), 0)::bigint AS sum_turret_takedowns,
+        COALESCE(SUM(cs.sum_turrets_taken_with_rift_herald), 0)::bigint AS sum_turrets_taken_with_rift_herald,
+        COALESCE(SUM(cs.sum_solo_baron_kills), 0)::bigint AS sum_solo_baron_kills,
+        COALESCE(SUM(cs.sum_quick_solo_kills), 0)::bigint AS sum_quick_solo_kills
       FROM ${csFrom}
       WHERE ${where}
     `)
@@ -441,9 +489,23 @@ export async function getChampionObjectivesSummary(options: {
         outcomeRows: [],
         participationCard: {
           stealPct: 0,
+          stealWithSmitePct: 0,
           stealWithoutSmitePct: 0,
           soloBaronPct: 0,
+          soloTowerPct: 0,
+          soloDragonPct: 0,
+          soloRiftHeraldPct: 0,
+          soloHordePct: 0,
+          soloInhibitorPct: 0,
+          soloKillPct: 0,
           soloEpicObjectivePct: 0,
+        },
+        structureCard: {
+          damageToTurretsPerGame: 0,
+          damageToObjectivesPerGame: 0,
+          damageToBuildingsPerGame: 0,
+          turretsDestroyedPerGame: 0,
+          turretsTakenWithHeraldPerGame: 0,
         },
       }
     }
@@ -517,14 +579,100 @@ export async function getChampionObjectivesSummary(options: {
       },
     ]
 
-    const rowsOut = objectiveBaseRows.map((r) => ({
-      key: r.key,
-      label: r.label,
-      objectiveWinrate: toPct(r.involvedWin, r.involvedGame),
-      killRate: toPct(r.killGame, games),
-      assistRate: toPct(r.assistGame, games),
-      soloRate: toPct(r.soloGame, games),
-    }))
+    type SideObjectiveAgg = {
+      team: number
+      games: bigint
+      first_blood_involved: bigint
+      baron_involved: bigint
+      dragon_involved: bigint
+      rift_herald_involved: bigint
+      horde_involved: bigint
+      tower_involved: bigint
+      inhibitor_involved: bigint
+      first_blood_involved_win: bigint
+      baron_involved_win: bigint
+      dragon_involved_win: bigint
+      rift_herald_involved_win: bigint
+      horde_involved_win: bigint
+      tower_involved_win: bigint
+      inhibitor_involved_win: bigint
+    }
+
+    let sideByTeam: Map<number, SideObjectiveAgg> = new Map()
+    try {
+      const sideObjRows = await queryRawUnsafe<SideObjectiveAgg[]>(`
+        SELECT
+          cs.team,
+          COALESCE(SUM(cs.count_game), 0)::bigint AS games,
+          ${involvedGamesExpr('cs.count_first_blood_kill_true', 'cs.count_first_blood_assist_true')}::bigint AS first_blood_involved,
+          ${involvedGamesFromSumKillAssistExpr('cs.sum_baron_kills', 'cs.count_baron_assist')}::bigint AS baron_involved,
+          ${involvedGamesExpr('cs.count_dragon_kill', 'cs.count_dragon_assist')}::bigint AS dragon_involved,
+          ${involvedGamesExpr('cs.count_rift_herald_kill', 'cs.count_rift_herald_assist')}::bigint AS rift_herald_involved,
+          ${involvedGamesExpr('cs.count_horde_kill', 'cs.count_horde_assist')}::bigint AS horde_involved,
+          ${involvedGamesExpr('cs.count_tower_kill', 'cs.count_tower_assist')}::bigint AS tower_involved,
+          ${involvedGamesExpr('cs.count_inhibitor_kill', 'cs.count_inhibitor_assist')}::bigint AS inhibitor_involved,
+          ${involvedWinExpr('cs.count_first_blood_kill_true', 'cs.count_first_blood_assist_true')}::bigint AS first_blood_involved_win,
+          ${involvedWinExpr('cs.sum_baron_kills', 'cs.count_baron_assist')}::bigint AS baron_involved_win,
+          ${involvedWinExpr('cs.count_dragon_kill', 'cs.count_dragon_assist')}::bigint AS dragon_involved_win,
+          ${involvedWinExpr('cs.count_rift_herald_kill', 'cs.count_rift_herald_assist')}::bigint AS rift_herald_involved_win,
+          ${involvedWinExpr('cs.count_horde_kill', 'cs.count_horde_assist')}::bigint AS horde_involved_win,
+          ${involvedWinExpr('cs.count_tower_kill', 'cs.count_tower_assist')}::bigint AS tower_involved_win,
+          ${involvedWinExpr('cs.count_inhibitor_kill', 'cs.count_inhibitor_assist')}::bigint AS inhibitor_involved_win
+        FROM ${csFrom}
+        WHERE ${where}
+        GROUP BY cs.team
+      `)
+      sideByTeam = new Map(sideObjRows.map((r) => [Number(r.team), r]))
+    } catch {
+      sideByTeam = new Map()
+    }
+
+    const blueSide = sideByTeam.get(100)
+    const redSide = sideByTeam.get(200)
+    const blueGames = Number(blueSide?.games ?? 0)
+    const redGames = Number(redSide?.games ?? 0)
+
+    const sideInvolved = (side: SideObjectiveAgg | undefined, key: string): number => {
+      if (!side) return 0
+      const map: Record<string, bigint | undefined> = {
+        firstBlood: side.first_blood_involved,
+        baron: side.baron_involved,
+        dragon: side.dragon_involved,
+        riftHerald: side.rift_herald_involved,
+        horde: side.horde_involved,
+        tower: side.tower_involved,
+        inhibitor: side.inhibitor_involved,
+      }
+      return Number(map[key] ?? 0)
+    }
+    const sideInvolvedWin = (side: SideObjectiveAgg | undefined, key: string): number => {
+      if (!side) return 0
+      const map: Record<string, bigint | undefined> = {
+        firstBlood: side.first_blood_involved_win,
+        baron: side.baron_involved_win,
+        dragon: side.dragon_involved_win,
+        riftHerald: side.rift_herald_involved_win,
+        horde: side.horde_involved_win,
+        tower: side.tower_involved_win,
+        inhibitor: side.inhibitor_involved_win,
+      }
+      return Number(map[key] ?? 0)
+    }
+
+    const rowsOut = objectiveBaseRows.map((r) => {
+      const involvedLoss = Math.max(0, r.involvedGame - r.involvedWin)
+      return {
+        key: r.key,
+        label: r.label,
+        firstByWin: toPct(r.involvedWin, games),
+        firstByLoss: toPct(involvedLoss, games),
+        blue: toPct(sideInvolved(blueSide, r.key), blueGames),
+        red: toPct(sideInvolved(redSide, r.key), redGames),
+        objectiveWinrate: toPct(r.involvedWin, r.involvedGame),
+        winrateBlue: toPct(sideInvolvedWin(blueSide, r.key), sideInvolved(blueSide, r.key)),
+        winrateRed: toPct(sideInvolvedWin(redSide, r.key), sideInvolved(redSide, r.key)),
+      }
+    })
 
     const objectiveSourceByKey = new Map(
       objectiveBaseRows.map((r) => [r.key, { involvedGame: r.involvedGame, involvedWin: r.involvedWin }])
@@ -549,19 +697,19 @@ export async function getChampionObjectivesSummary(options: {
     try {
       const sideFrom = await matchVersionedAggFrom('agg_champion_side_stats', version, 'cs')
       const sideWhere = buildChampionScopedWhere('cs', scope)
-      const sideRows = await queryRawUnsafe<Array<{ team_num: number; games: bigint; wins: bigint }>>(
+      const sideRows = await queryRawUnsafe<Array<{ team: number; games: bigint; wins: bigint }>>(
         `
           SELECT
-            cs.team_num,
+            cs.team,
             COALESCE(SUM(cs.count_game), 0)::bigint AS games,
             COALESCE(SUM(cs.count_win), 0)::bigint AS wins
           FROM ${sideFrom}
           WHERE ${sideWhere}
-          GROUP BY cs.team_num
+          GROUP BY cs.team
         `
       )
-      const blue = sideRows.find((r) => Number(r.team_num) === 100)
-      const red = sideRows.find((r) => Number(r.team_num) === 200)
+      const blue = sideRows.find((r) => Number(r.team) === 100)
+      const red = sideRows.find((r) => Number(r.team) === 200)
       const sideOutcomeRows: ChampionObjectiveSummary['outcomeRows'] = []
       const blueGames = Number(blue?.games ?? 0)
       const blueWins = Number(blue?.wins ?? 0)
@@ -654,14 +802,33 @@ export async function getChampionObjectivesSummary(options: {
     const epicSteals = Number(row?.sum_epic_monster_steals ?? 0)
     const objectivesStolen = Number(row?.sum_objectives_stolen ?? 0)
     const stealEvents = epicSteals > 0 ? epicSteals : objectivesStolen
+    const stealNoSmite = Number(row?.sum_epic_monster_stolen_without_smite ?? 0)
+    const stealWithSmite = Math.max(0, stealEvents - stealNoSmite)
     const participationCard = {
       stealPct: pctGamesWithEvents(stealEvents, games),
-      stealWithoutSmitePct: pctGamesWithEvents(
-        Number(row?.sum_epic_monster_stolen_without_smite ?? 0),
+      stealWithSmitePct: pctGamesWithEvents(stealWithSmite, games),
+      stealWithoutSmitePct: pctGamesWithEvents(stealNoSmite, games),
+      soloBaronPct: toPct(
+        Math.max(Number(row?.baron_solo_game ?? 0), Number(row?.sum_solo_baron_kills ?? 0)),
         games
       ),
-      soloBaronPct: toPct(Number(row?.baron_solo_game ?? 0), games),
+      soloTowerPct: toPct(Number(row?.tower_solo_game ?? 0), games),
+      soloDragonPct: toPct(Number(row?.dragon_solo_game ?? 0), games),
+      soloRiftHeraldPct: toPct(Number(row?.rift_herald_solo_game ?? 0), games),
+      soloHordePct: toPct(Number(row?.horde_solo_game ?? 0), games),
+      soloInhibitorPct: toPct(Number(row?.inhibitor_solo_game ?? 0), games),
+      soloKillPct: pctGamesWithEvents(Number(row?.sum_quick_solo_kills ?? 0), games),
       soloEpicObjectivePct: toPct(Number(row?.any_epic_solo_game ?? 0), games),
+    }
+
+    const perGameAvg = (sum: number): number =>
+      games > 0 ? Number((sum / games).toFixed(2)) : 0
+    const structureCard = {
+      damageToTurretsPerGame: perGameAvg(Number(row?.sum_damage_dealt_to_turrets ?? 0)),
+      damageToObjectivesPerGame: perGameAvg(Number(row?.sum_damage_dealt_to_objectives ?? 0)),
+      damageToBuildingsPerGame: perGameAvg(Number(row?.sum_damage_dealt_to_buildings ?? 0)),
+      turretsDestroyedPerGame: perGameAvg(Number(row?.sum_turret_takedowns ?? 0)),
+      turretsTakenWithHeraldPerGame: perGameAvg(Number(row?.sum_turrets_taken_with_rift_herald ?? 0)),
     }
 
     const cbFrom = await matchVersionedAggFrom('agg_champion_bucket', version, 'cb')
@@ -729,6 +896,7 @@ export async function getChampionObjectivesSummary(options: {
       rows: rowsOut,
       outcomeRows,
       participationCard,
+      structureCard,
     }
   } catch (err) {
     console.warn('[getChampionObjectivesSummary]', err)

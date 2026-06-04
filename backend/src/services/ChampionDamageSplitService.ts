@@ -1,5 +1,6 @@
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
-import { toQueryStringArrayParam } from '../utils/statsFilters.js'
+import { buildChampionScopedWhere } from './ChampionGlobalTableService.js'
+import { toQueryStringArrayParam, normalizeStatsRoleForChampion } from '../utils/statsFilters.js'
 import { matchVersionedAggFrom } from './statsAggArchive.js'
 
 function esc(v: string): string {
@@ -18,6 +19,9 @@ export async function getChampionDamageSplit(
   avgMagicDamageToChampions: number
   avgTrueDamageToChampions: number
   avgTotalDamageToChampions: number
+  avgDamageToChampions: number
+  avgDamageToObjectives: number
+  avgDamageToBuildings: number
 } | null> {
   if (!isDatabaseConfigured() || championId <= 0) return null
 
@@ -71,6 +75,46 @@ export async function getChampionDamageSplit(
   const div = games > 0 ? games : 1
   const round1 = (n: number) => Math.round(n * 10) / 10
 
+  const versionsArr = versions
+  const tiersArr = tiers
+  const csFrom = await matchVersionedAggFrom(
+    'agg_champion_team_objective_stats',
+    versionsArr.length ? versionsArr : null,
+    'cs'
+  )
+  const csWhere = buildChampionScopedWhere('cs', {
+    championId,
+    version: versionsArr.length ? versionsArr : null,
+    rankTier: tiersArr.length ? tiersArr : null,
+    role: normalizeStatsRoleForChampion(role ?? null),
+  })
+  const targetRows = await queryRawUnsafe<
+    Array<{
+      games: number
+      sum_champs: bigint
+      sum_objectives: bigint
+      sum_buildings: bigint
+    }>
+  >(`
+    SELECT
+      COALESCE(SUM(cs.count_game), 0)::int AS games,
+      COALESCE(SUM(
+        cs.sum_physical_damage_done_to_champions
+        + cs.sum_magic_damage_done_to_champions
+        + cs.sum_true_damage_done_to_champions
+      ), 0)::bigint AS sum_champs,
+      COALESCE(SUM(cs.sum_damage_dealt_to_objectives), 0)::bigint AS sum_objectives,
+      COALESCE(SUM(cs.sum_damage_dealt_to_buildings), 0)::bigint AS sum_buildings
+    FROM ${csFrom}
+    WHERE ${csWhere}
+  `)
+  const tRow = targetRows[0]
+  const tGames = Number(tRow?.games ?? 0) || games
+  const tDiv = tGames > 0 ? tGames : 1
+  const sumChamps = Number(tRow?.sum_champs ?? 0)
+  const sumObj = Number(tRow?.sum_objectives ?? 0)
+  const sumBld = Number(tRow?.sum_buildings ?? 0)
+
   return {
     championId,
     games,
@@ -78,6 +122,9 @@ export async function getChampionDamageSplit(
     avgMagicDamageToChampions: round1(sumMagic / div),
     avgTrueDamageToChampions: round1(sumTrue / div),
     avgTotalDamageToChampions: round1(sumTotal / div),
+    avgDamageToChampions: round1(sumChamps / tDiv),
+    avgDamageToObjectives: round1(sumObj / tDiv),
+    avgDamageToBuildings: round1(sumBld / tDiv),
   }
 }
 

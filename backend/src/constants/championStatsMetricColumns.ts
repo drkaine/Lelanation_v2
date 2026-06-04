@@ -49,7 +49,6 @@ export const CHAMPION_STATS_METRIC_COLUMNS = [
   "count_first_blood_assist_true",
   "count_first_tower_kill_true",
   "count_first_tower_assist_true",
-  "count_baron_kill",
   "count_baron_kill_ge1_game",
   "count_baron_kill_ge2_game",
   "count_baron_kill_ge3p_game",

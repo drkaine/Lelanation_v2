@@ -518,28 +518,57 @@
                 </div>
                 <div
                   v-if="championDamageSplit && championDamageSplit.total > 0"
-                  class="mx-1 flex items-center gap-3 self-center rounded bg-surface/40 px-2 py-1.5"
+                  class="mx-1 flex flex-wrap items-center gap-2 self-center"
                 >
-                  <div
-                    class="h-12 w-12 shrink-0 rounded-full"
-                    :style="championDamageDonutStyle"
-                    :title="t('statisticsPage.championStatsDamageSplitTitle')"
-                    aria-hidden="true"
-                  />
-                  <div class="space-y-0.5 text-[10px] leading-tight text-text/85">
-                    <div class="text-[11px] font-semibold text-text">
-                      {{ t('statisticsPage.championStatsDamageSplitTitle') }}
-                    </div>
+                  <div class="flex items-center gap-3 rounded bg-surface/40 px-2 py-1.5">
                     <div
-                      v-for="entry in championDamageShareLegend"
-                      :key="entry.key"
-                      class="flex items-center gap-1"
-                    >
-                      <span
-                        class="inline-block h-2.5 w-2.5 rounded-sm"
-                        :style="{ backgroundColor: entry.color }"
-                      />
-                      <span>{{ entry.label }}: {{ entry.pct.toFixed(1) }}%</span>
+                      class="h-12 w-12 shrink-0 rounded-full"
+                      :style="championDamageDonutStyle"
+                      :title="t('statisticsPage.championStatsDamageSplitTitle')"
+                      aria-hidden="true"
+                    />
+                    <div class="space-y-0.5 text-[10px] leading-tight text-text/85">
+                      <div class="text-[11px] font-semibold text-text">
+                        {{ t('statisticsPage.championStatsDamageSplitTitle') }}
+                      </div>
+                      <div
+                        v-for="entry in championDamageShareLegend"
+                        :key="entry.key"
+                        class="flex items-center gap-1"
+                      >
+                        <span
+                          class="inline-block h-2.5 w-2.5 rounded-sm"
+                          :style="{ backgroundColor: entry.color }"
+                        />
+                        <span>{{ entry.label }}: {{ entry.pct.toFixed(1) }}%</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    v-if="championDamageTargetTotal > 0"
+                    class="flex items-center gap-3 rounded bg-surface/40 px-2 py-1.5"
+                  >
+                    <div
+                      class="h-12 w-12 shrink-0 rounded-full"
+                      :style="championDamageTargetDonutStyle"
+                      :title="t('statisticsPage.championStatsDamageTargetSplitTitle')"
+                      aria-hidden="true"
+                    />
+                    <div class="space-y-0.5 text-[10px] leading-tight text-text/85">
+                      <div class="text-[11px] font-semibold text-text">
+                        {{ t('statisticsPage.championStatsDamageTargetSplitTitle') }}
+                      </div>
+                      <div
+                        v-for="entry in championDamageTargetLegend"
+                        :key="entry.key"
+                        class="flex items-center gap-1"
+                      >
+                        <span
+                          class="inline-block h-2.5 w-2.5 rounded-sm"
+                          :style="{ backgroundColor: entry.color }"
+                        />
+                        <span>{{ entry.label }}: {{ entry.pct.toFixed(1) }}%</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1505,6 +1534,14 @@
                   :pending="championObjectivesPending"
                 />
               </div>
+              <div
+                v-if="activeChampionTab === 'misc'"
+                id="champion-tab-panel-misc"
+                role="tabpanel"
+                class="p-4"
+              >
+                <ChampionMiscTab :data="championMiscData" :pending="championMiscPending" />
+              </div>
             </div>
           </template>
         </div>
@@ -1547,6 +1584,9 @@ import StatisticsSpellsTab from '~/components/statistics/tabs/StatisticsSpellsTa
 import ChampionObjectivesTab, {
   type ChampionObjectivesSummary,
 } from '~/components/statistics/ChampionObjectivesTab.vue'
+import ChampionMiscTab, {
+  type ChampionMiscSummary,
+} from '~/components/statistics/ChampionMiscTab.vue'
 import ChampionSpellOrderCard from '~/components/statistics/ChampionSpellOrderCard.vue'
 import { mergeChampionSpellOrderRows } from '~/utils/championSpellOrderMerge'
 import {
@@ -2094,7 +2134,12 @@ const championDamageSplit = ref<{
   magic: number
   trueDamage: number
   total: number
+  champions: number
+  objectives: number
+  buildings: number
 } | null>(null)
+const championMiscData = ref<ChampionMiscSummary | null>(null)
+const championMiscPending = ref(false)
 
 const CHAMPION_ROLE_ORDER = ['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT'] as const
 
@@ -2192,13 +2237,48 @@ const championDamageShareLegend = computed(() => {
   ]
 })
 
-const championDamageDonutStyle = computed(() => {
-  const entries = championDamageShareLegend.value
+const championDamageTargetTotal = computed(() => {
+  const d = championDamageSplit.value
+  if (!d) return 0
+  return d.champions + d.objectives + d.buildings
+})
+
+const championDamageTargetLegend = computed(() => {
+  const d = championDamageSplit.value
+  const total = championDamageTargetTotal.value
+  if (!d || total <= 0)
+    return [] as Array<{ key: string; label: string; pct: number; color: string }>
+  const toPct = (v: number) => (v / total) * 100
+  return [
+    {
+      key: 'champions',
+      label: t('statisticsPage.championDamageTargetChampions'),
+      pct: toPct(d.champions),
+      color: '#ef4444',
+    },
+    {
+      key: 'objectives',
+      label: t('statisticsPage.championDamageTargetObjectives'),
+      pct: toPct(d.objectives),
+      color: '#8b5cf6',
+    },
+    {
+      key: 'buildings',
+      label: t('statisticsPage.championDamageTargetBuildings'),
+      pct: toPct(d.buildings),
+      color: '#f59e0b',
+    },
+  ].filter(e => e.pct > 0)
+})
+
+function conicDonutStyleFromLegend(
+  entries: Array<{ pct: number; color: string }>
+): Record<string, string> {
   if (!entries.length) {
     return {
       background:
         'radial-gradient(circle at center, rgb(var(--rgb-surface)) 58%, transparent 59%), rgb(var(--rgb-primary) / 0.25)',
-    } as Record<string, string>
+    }
   }
   const parts: string[] = []
   let cursor = 0
@@ -2210,8 +2290,16 @@ const championDamageDonutStyle = computed(() => {
   }
   return {
     background: `radial-gradient(circle at center, rgb(var(--rgb-surface)) 58%, transparent 59%), conic-gradient(${parts.join(',')})`,
-  } as Record<string, string>
-})
+  }
+}
+
+const championDamageDonutStyle = computed(() =>
+  conicDonutStyleFromLegend(championDamageShareLegend.value)
+)
+
+const championDamageTargetDonutStyle = computed(() =>
+  conicDonutStyleFromLegend(championDamageTargetLegend.value)
+)
 
 const buildsPending = ref(false)
 const buildsData = ref<{
@@ -2486,9 +2574,9 @@ const trendPoints = ref<TrendSnapshotPoint[]>([])
 const trendVersionsCatalog = ref<Array<{ patchLabel: string; releaseDate: string }>>([])
 
 const activeChampionTab = ref<
-  'overview' | 'matchups' | 'runes' | 'spells' | 'skills' | 'objectives'
+  'overview' | 'matchups' | 'runes' | 'spells' | 'skills' | 'objectives' | 'misc'
 >('overview')
-type ChampionTabId = 'overview' | 'matchups' | 'runes' | 'spells' | 'skills' | 'objectives'
+type ChampionTabId = 'overview' | 'matchups' | 'runes' | 'spells' | 'skills' | 'objectives' | 'misc'
 const championPageBootstrapped = ref(false)
 const championTabLoaded = ref<Record<ChampionTabId, boolean>>({
   overview: false,
@@ -2497,6 +2585,7 @@ const championTabLoaded = ref<Record<ChampionTabId, boolean>>({
   spells: false,
   skills: false,
   objectives: false,
+  misc: false,
 })
 const championTabs = [
   { id: 'overview' as const, label: 'statisticsPage.championStatsTabOverview' },
@@ -2505,6 +2594,7 @@ const championTabs = [
   { id: 'spells' as const, label: 'statisticsPage.championStatsTabSpells' },
   { id: 'skills' as const, label: 'statisticsPage.championStatsTabSkills' },
   { id: 'objectives' as const, label: 'statisticsPage.objectivesTabMain' },
+  { id: 'misc' as const, label: 'statisticsPage.championStatsTabMisc' },
 ]
 const championTabsNavEl = ref<HTMLElement | null>(null)
 
@@ -2568,6 +2658,7 @@ function resetChampionTabLoadState(): void {
     spells: false,
     skills: false,
     objectives: false,
+    misc: false,
   }
 }
 
@@ -2877,18 +2968,25 @@ async function loadChampionDamageSplit() {
   try {
     const q = queryParams()
     const data = await statsFetch<{
+      games?: number
       avgPhysicalDamageToChampions?: number
       avgMagicDamageToChampions?: number
       avgTrueDamageToChampions?: number
       avgTotalDamageToChampions?: number
+      avgDamageToChampions?: number
+      avgDamageToObjectives?: number
+      avgDamageToBuildings?: number
     }>(apiUrl(`/api/stats/champions/${championId.value}/damage-split${q}`))
     const phys = Number(data?.avgPhysicalDamageToChampions ?? 0)
     const magic = Number(data?.avgMagicDamageToChampions ?? 0)
     const trueDamage = Number(data?.avgTrueDamageToChampions ?? 0)
     const totalFromParts = phys + magic + trueDamage
     const total = totalFromParts > 0 ? totalFromParts : Number(data?.avgTotalDamageToChampions ?? 0)
-    const games = Number((data as { games?: number })?.games ?? 0)
-    if (games <= 0 || total <= 0) {
+    const champions = Number(data?.avgDamageToChampions ?? 0)
+    const objectives = Number(data?.avgDamageToObjectives ?? 0)
+    const buildings = Number(data?.avgDamageToBuildings ?? 0)
+    const games = Number(data?.games ?? 0)
+    if (games <= 0 || (total <= 0 && champions + objectives + buildings <= 0)) {
       championDamageSplit.value = null
       return
     }
@@ -2897,6 +2995,9 @@ async function loadChampionDamageSplit() {
       magic: Number.isFinite(magic) ? magic : 0,
       trueDamage: Number.isFinite(trueDamage) ? trueDamage : 0,
       total: Number.isFinite(total) ? total : 0,
+      champions: Number.isFinite(champions) ? champions : 0,
+      objectives: Number.isFinite(objectives) ? objectives : 0,
+      buildings: Number.isFinite(buildings) ? buildings : 0,
     }
   } catch {
     championDamageSplit.value = null
@@ -3123,6 +3224,20 @@ async function loadChampionObjectives() {
   }
 }
 
+async function loadChampionMisc() {
+  if (!championId.value) return
+  championMiscPending.value = true
+  try {
+    championMiscData.value = await statsFetch<ChampionMiscSummary>(
+      apiUrl(`/api/stats/champions/${championId.value}/misc${overviewQueryParams()}`)
+    )
+  } catch {
+    championMiscData.value = null
+  } finally {
+    championMiscPending.value = false
+  }
+}
+
 /** Query durée par tier : version + rôle seulement (rankTier non envoyé ; ligues = presets des graphes). */
 function durationByTierQueryParams() {
   const p = new URLSearchParams()
@@ -3213,8 +3328,13 @@ async function loadChampionDataForTab(tab: ChampionTabId, force = false): Promis
     markChampionTabLoaded(tab)
     return
   }
-  await loadChampionObjectives()
-  markChampionTabLoaded('objectives')
+  if (tab === 'objectives') {
+    await loadChampionObjectives()
+    markChampionTabLoaded('objectives')
+    return
+  }
+  await loadChampionMisc()
+  markChampionTabLoaded('misc')
 }
 
 async function reloadChampionBaseAndActiveTabData(): Promise<void> {

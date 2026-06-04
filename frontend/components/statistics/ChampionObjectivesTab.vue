@@ -101,21 +101,21 @@
                     {{ t('statisticsPage.overviewTeamsObjective') }}
                   </th>
                   <th class="px-1 py-1.5 text-center font-medium">
-                    {{ t('statisticsPage.objectiveKillRate') }}
+                    {{ t('statisticsPage.overviewTeamsFirstByWin') }}
                   </th>
                   <th class="px-1 py-1.5 text-center font-medium">
-                    {{ t('statisticsPage.objectiveAssistRate') }}
+                    {{ t('statisticsPage.overviewTeamsFirstByLoss') }}
                   </th>
-                  <th class="px-1 py-1.5 text-center font-medium">
-                    {{ t('statisticsPage.objectiveSoloRate') }}
+                  <th class="px-1 py-1.5 text-center font-medium text-blue-600 dark:text-blue-400">
+                    {{ t('statisticsPage.sidesBlue') }}
                   </th>
-                  <th class="py-1.5 pl-1 text-center font-medium">
-                    {{ t('statisticsPage.objectiveWinrateWhenTaken') }}
+                  <th class="py-1.5 pl-1 text-center font-medium text-red-600 dark:text-red-400">
+                    {{ t('statisticsPage.sidesRed') }}
                   </th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-primary/20 text-text/80">
-                <template v-for="row in objectiveRows" :key="row.key">
+                <template v-for="row in mainTableRows" :key="'obt-' + row.key">
                   <tr>
                     <td class="py-1.5 pr-2">
                       <button
@@ -133,38 +133,38 @@
                         <img
                           v-if="objectiveIconSrc(row.key)"
                           :src="objectiveIconSrc(row.key)"
-                          :alt="objectiveLabel(row.key, row.label)"
+                          :alt="rowTitle(row)"
                           class="h-4 w-4 object-contain"
                           loading="lazy"
                           decoding="async"
                           @error="onObjectiveIconError($event, row.key)"
                         />
-                        {{ objectiveLabel(row.key, row.label) }}
+                        {{ rowTitle(row) }}
                       </button>
                       <div v-else class="flex items-center gap-1 font-medium text-text/90">
                         <img
                           v-if="objectiveIconSrc(row.key)"
                           :src="objectiveIconSrc(row.key)"
-                          :alt="objectiveLabel(row.key, row.label)"
+                          :alt="rowTitle(row)"
                           class="h-4 w-4 object-contain"
                           loading="lazy"
                           decoding="async"
                           @error="onObjectiveIconError($event, row.key)"
                         />
-                        {{ objectiveLabel(row.key, row.label) }}
+                        {{ rowTitle(row) }}
                       </div>
                     </td>
                     <td class="px-1 py-1.5 text-center tabular-nums">
-                      {{ formatPct(row.killRate) }}
+                      {{ formatPct(row.firstByWin) }}
                     </td>
                     <td class="px-1 py-1.5 text-center tabular-nums">
-                      {{ formatPct(row.assistRate) }}
+                      {{ formatPct(row.firstByLoss) }}
                     </td>
                     <td class="px-1 py-1.5 text-center tabular-nums">
-                      {{ formatPct(row.soloRate) }}
+                      {{ formatPct(row.blue) }}
                     </td>
-                    <td class="py-1.5 pl-1 text-center font-semibold tabular-nums text-accent">
-                      {{ formatPct(row.objectiveWinrate) }}
+                    <td class="py-1.5 pl-1 text-center tabular-nums">
+                      {{ formatPct(row.red) }}
                     </td>
                   </tr>
                   <template
@@ -187,68 +187,27 @@
           </div>
           <ul class="statistics-objectives-mobile-list space-y-3 md:hidden">
             <li
-              v-for="row in objectiveRows"
+              v-for="row in mainTableRows"
               :key="'mob-obt-' + row.key"
               class="rounded border border-primary/20 bg-black/10 px-2 py-2 text-sm text-text/80"
             >
-              <div class="mb-1 flex items-center gap-1 font-medium text-text/90">
-                <button
-                  v-if="objectiveHasKillDropdown(row.key)"
-                  type="button"
-                  class="flex items-center gap-1"
-                  @click="toggleObjective(row.key)"
-                >
-                  <span
-                    class="inline-block text-xs transition-transform duration-200"
-                    :class="openObjectiveKeys.has(row.key) ? 'rotate-180' : ''"
-                    aria-hidden
-                    >▼</span
-                  >
-                </button>
-                <img
-                  v-if="objectiveIconSrc(row.key)"
-                  :src="objectiveIconSrc(row.key)"
-                  :alt="objectiveLabel(row.key, row.label)"
-                  class="h-4 w-4 object-contain"
-                  loading="lazy"
-                  decoding="async"
-                  @error="onObjectiveIconError($event, row.key)"
-                />
-                {{ objectiveLabel(row.key, row.label) }}
-              </div>
-              <ul
-                v-if="objectiveHasKillDropdown(row.key) && openObjectiveKeys.has(row.key)"
-                class="mb-2 space-y-0.5 border-b border-primary/10 pb-2 text-xs text-text/70"
-              >
-                <li
-                  v-for="count in objectiveKillCounts(row.key)"
-                  :key="'mob-k-' + row.key + count"
-                  class="flex justify-between tabular-nums"
-                >
-                  <span>{{ count }}</span>
-                  <span>{{ percentForKillCount(row.key, count) }}</span>
-                </li>
-              </ul>
+              <div class="mb-1 font-medium text-text/90">{{ rowTitle(row) }}</div>
               <div class="grid grid-cols-2 gap-1 text-center text-xs">
                 <div>
-                  <div class="text-text/50">{{ t('statisticsPage.objectiveKillRate') }}</div>
-                  <div class="font-semibold tabular-nums">{{ formatPct(row.killRate) }}</div>
+                  <div class="text-text/50">{{ t('statisticsPage.overviewTeamsFirstByWin') }}</div>
+                  <div class="font-semibold tabular-nums">{{ formatPct(row.firstByWin) }}</div>
                 </div>
                 <div>
-                  <div class="text-text/50">{{ t('statisticsPage.objectiveAssistRate') }}</div>
-                  <div class="font-semibold tabular-nums">{{ formatPct(row.assistRate) }}</div>
+                  <div class="text-text/50">{{ t('statisticsPage.overviewTeamsFirstByLoss') }}</div>
+                  <div class="font-semibold tabular-nums">{{ formatPct(row.firstByLoss) }}</div>
                 </div>
                 <div>
-                  <div class="text-text/50">{{ t('statisticsPage.objectiveSoloRate') }}</div>
-                  <div class="font-semibold tabular-nums">{{ formatPct(row.soloRate) }}</div>
+                  <div class="text-text/50">{{ t('statisticsPage.sidesBlue') }}</div>
+                  <div class="font-semibold tabular-nums">{{ formatPct(row.blue) }}</div>
                 </div>
                 <div>
-                  <div class="text-text/50">
-                    {{ t('statisticsPage.objectiveWinrateWhenTaken') }}
-                  </div>
-                  <div class="font-semibold tabular-nums text-accent">
-                    {{ formatPct(row.objectiveWinrate) }}
-                  </div>
+                  <div class="text-text/50">{{ t('statisticsPage.sidesRed') }}</div>
+                  <div class="font-semibold tabular-nums">{{ formatPct(row.red) }}</div>
                 </div>
               </div>
             </li>
@@ -267,58 +226,91 @@
                     {{ t('statisticsPage.overviewTeamsObjective') }}
                   </th>
                   <th class="px-1 py-1.5 text-center font-medium">
-                    {{ t('statisticsPage.objectivesTabFirstWinrate') }}
+                    {{ t('statisticsPage.objectivesFirstWinrateColGlobal') }}
                   </th>
-                  <th class="px-1 py-1.5 text-center font-medium">
-                    {{ t('statisticsPage.objectiveKillRate') }}
+                  <th class="px-1 py-1.5 text-center font-medium text-blue-600 dark:text-blue-400">
+                    {{ t('statisticsPage.sidesBlue') }}
                   </th>
-                  <th class="px-1 py-1.5 text-center font-medium">
-                    {{ t('statisticsPage.objectiveAssistRate') }}
-                  </th>
-                  <th class="py-1.5 pl-1 text-center font-medium">
-                    {{ t('statisticsPage.objectiveSoloRate') }}
+                  <th class="py-1.5 pl-1 text-center font-medium text-red-600 dark:text-red-400">
+                    {{ t('statisticsPage.sidesRed') }}
                   </th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-primary/20 text-text/80">
-                <tr v-for="row in objectiveRows" :key="'wr-' + row.key">
-                  <td class="py-1.5 pr-2">
-                    <div class="flex items-center gap-1 font-medium text-text/90">
-                      <img
-                        v-if="objectiveIconSrc(row.key)"
-                        :src="objectiveIconSrc(row.key)"
-                        :alt="objectiveLabel(row.key, row.label)"
-                        class="h-4 w-4 object-contain"
-                        loading="lazy"
-                        decoding="async"
-                        @error="onObjectiveIconError($event, row.key)"
-                      />
-                      {{ objectiveLabel(row.key, row.label) }}
-                    </div>
-                  </td>
-                  <td class="px-1 py-1.5 text-center font-semibold tabular-nums text-accent">
-                    {{ formatPct(row.objectiveWinrate) }}
-                  </td>
-                  <td class="px-1 py-1.5 text-center tabular-nums text-text/80">
-                    {{ formatPct(row.killRate) }}
-                  </td>
-                  <td class="px-1 py-1.5 text-center tabular-nums text-text/80">
-                    {{ formatPct(row.assistRate) }}
-                  </td>
-                  <td class="py-1.5 pl-1 text-center tabular-nums text-text/80">
-                    {{ formatPct(row.soloRate) }}
-                  </td>
-                </tr>
+                <template v-for="row in mainTableRows" :key="'wr-' + row.key">
+                  <tr>
+                    <td class="py-1.5 pr-2">
+                      <button
+                        v-if="objectiveHasKillDropdown(row.key)"
+                        type="button"
+                        class="flex items-center gap-1 font-medium text-text/90 hover:text-text"
+                        @click="toggleObjective(row.key)"
+                      >
+                        <span
+                          class="inline-block transition-transform duration-200"
+                          :class="openObjectiveKeys.has(row.key) ? 'rotate-180' : ''"
+                          aria-hidden
+                          >▼</span
+                        >
+                        <img
+                          v-if="objectiveIconSrc(row.key)"
+                          :src="objectiveIconSrc(row.key)"
+                          :alt="rowTitle(row)"
+                          class="h-4 w-4 object-contain"
+                          loading="lazy"
+                          decoding="async"
+                          @error="onObjectiveIconError($event, row.key)"
+                        />
+                        {{ rowTitle(row) }}
+                      </button>
+                      <div v-else class="flex items-center gap-1 font-medium text-text/90">
+                        <img
+                          v-if="objectiveIconSrc(row.key)"
+                          :src="objectiveIconSrc(row.key)"
+                          :alt="rowTitle(row)"
+                          class="h-4 w-4 object-contain"
+                          loading="lazy"
+                          decoding="async"
+                          @error="onObjectiveIconError($event, row.key)"
+                        />
+                        {{ rowTitle(row) }}
+                      </div>
+                    </td>
+                    <td class="px-1 py-1.5 text-center font-semibold tabular-nums text-accent">
+                      {{ formatPct(row.objectiveWinrate) }}
+                    </td>
+                    <td class="px-1 py-1.5 text-center tabular-nums text-text/80">
+                      {{ formatPct(row.winrateBlue) }}
+                    </td>
+                    <td class="py-1.5 pl-1 text-center tabular-nums text-text/80">
+                      {{ formatPct(row.winrateRed) }}
+                    </td>
+                  </tr>
+                  <template
+                    v-if="objectiveHasKillDropdown(row.key) && openObjectiveKeys.has(row.key)"
+                  >
+                    <tr
+                      v-for="count in objectiveKillCounts(row.key)"
+                      :key="'wr-k-' + row.key + count"
+                      class="bg-surface/30"
+                    >
+                      <td class="py-1 pl-6 pr-2 text-text/70">{{ count }}</td>
+                      <td colspan="3" class="px-1 py-1 text-center tabular-nums text-text/80">
+                        {{ percentForKillCount(row.key, count) }}
+                      </td>
+                    </tr>
+                  </template>
+                </template>
               </tbody>
             </table>
           </div>
           <ul class="statistics-objectives-mobile-list space-y-3 md:hidden">
             <li
-              v-for="row in objectiveRows"
+              v-for="row in mainTableRows"
               :key="'mob-wr-' + row.key"
               class="flex items-center justify-between rounded border border-primary/20 bg-black/10 px-2 py-2 text-sm text-text/80"
             >
-              <span class="font-medium text-text/90">{{ objectiveLabel(row.key, row.label) }}</span>
+              <span class="font-medium text-text/90">{{ rowTitle(row) }}</span>
               <span class="font-semibold tabular-nums text-accent">{{
                 formatPct(row.objectiveWinrate)
               }}</span>
@@ -463,24 +455,48 @@
             </li>
           </ul>
         </div>
+      </div>
 
-        <div v-if="panelTab === 'objectives'" class="mt-4 border-t border-primary/20 pt-4">
-          <h4 class="mb-3 text-sm font-semibold text-text/90">
-            {{ t('statisticsPage.championObjectivesParticipationTitle') }}
-          </h4>
-          <ul class="grid gap-2.5 text-xs text-text/85 sm:grid-cols-2 lg:grid-cols-4">
-            <li
-              v-for="metric in participationMetrics"
-              :key="metric.key"
-              class="flex items-start justify-between gap-3 rounded border border-primary/15 bg-black/10 px-2 py-1.5"
-            >
-              <span class="min-w-0 leading-snug text-text/70">{{ metric.label }}</span>
-              <span class="shrink-0 font-semibold tabular-nums text-accent">
-                {{ formatPct(metric.value) }}
-              </span>
-            </li>
-          </ul>
-        </div>
+      <div
+        v-if="panelTab === 'objectives' && participationMetrics.length > 0"
+        class="fast-stat-card w-full rounded-lg border border-primary/30 bg-surface/30 p-3"
+      >
+        <h4 class="mb-3 text-sm font-semibold text-text/90">
+          {{ t('statisticsPage.championObjectivesParticipationTitle') }}
+        </h4>
+        <ul class="grid gap-2.5 text-xs text-text/85 sm:grid-cols-2 lg:grid-cols-3">
+          <li
+            v-for="metric in participationMetrics"
+            :key="metric.key"
+            class="flex items-start justify-between gap-3 rounded border border-primary/15 bg-black/10 px-2 py-1.5"
+          >
+            <span class="min-w-0 leading-snug text-text/70">{{ metric.label }}</span>
+            <span class="shrink-0 font-semibold tabular-nums text-accent">
+              {{ formatPct(metric.value) }}
+            </span>
+          </li>
+        </ul>
+      </div>
+
+      <div
+        v-if="panelTab === 'objectives' && structureMetrics.length > 0"
+        class="fast-stat-card w-full rounded-lg border border-primary/30 bg-surface/30 p-3"
+      >
+        <h4 class="mb-3 text-sm font-semibold text-text/90">
+          {{ t('statisticsPage.championObjectivesStructureTitle') }}
+        </h4>
+        <ul class="grid gap-2.5 text-xs text-text/85 sm:grid-cols-2 lg:grid-cols-3">
+          <li
+            v-for="metric in structureMetrics"
+            :key="metric.key"
+            class="flex items-start justify-between gap-3 rounded border border-primary/15 bg-black/10 px-2 py-1.5"
+          >
+            <span class="min-w-0 leading-snug text-text/70">{{ metric.label }}</span>
+            <span class="shrink-0 font-semibold tabular-nums text-accent">
+              {{ formatNumber(metric.value) }}
+            </span>
+          </li>
+        </ul>
       </div>
 
       <div v-if="showDistributionCards" class="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -526,18 +542,36 @@ import {
 
 export type ChampionObjectivesParticipationCard = {
   stealPct: number
+  stealWithSmitePct: number
   stealWithoutSmitePct: number
   soloBaronPct: number
+  soloTowerPct: number
+  soloDragonPct: number
+  soloRiftHeraldPct: number
+  soloHordePct: number
+  soloInhibitorPct: number
+  soloKillPct: number
   soloEpicObjectivePct: number
+}
+
+export type ChampionObjectivesStructureCard = {
+  damageToTurretsPerGame: number
+  damageToObjectivesPerGame: number
+  damageToBuildingsPerGame: number
+  turretsDestroyedPerGame: number
+  turretsTakenWithHeraldPerGame: number
 }
 
 export type ChampionObjectivesRow = {
   key: string
   label: string
+  firstByWin: number
+  firstByLoss: number
+  blue: number
+  red: number
   objectiveWinrate: number
-  killRate: number
-  assistRate: number
-  soloRate: number
+  winrateBlue: number
+  winrateRed: number
 }
 
 export type ChampionObjectivesDistributionEntry = {
@@ -559,6 +593,7 @@ export type ChampionObjectivesSummary = {
   winrate?: number
   rows?: ChampionObjectivesRow[]
   participationCard?: ChampionObjectivesParticipationCard
+  structureCard?: ChampionObjectivesStructureCard
   drakeTypeDistribution?: ChampionObjectivesDistributionEntry[]
   soulDistribution?: ChampionObjectivesDistributionEntry[]
   drakeTypeRows?: ChampionObjectivesTypedRow[]
@@ -577,6 +612,15 @@ const panelTab = ref<'objectives' | 'drakeTypes' | 'drakeSouls'>('objectives')
 const displayMode = ref<'obtention' | 'winrate'>('obtention')
 const openObjectiveKeys = ref<Set<string>>(new Set())
 
+const objectiveKeysOrdered = [
+  'baron',
+  'dragon',
+  'tower',
+  'inhibitor',
+  'riftHerald',
+  'horde',
+] as const
+
 const OBJECTIVE_KEYS_WITH_KILL_DROPDOWN = new Set([
   'baron',
   'dragon',
@@ -584,6 +628,9 @@ const OBJECTIVE_KEYS_WITH_KILL_DROPDOWN = new Set([
   'inhibitor',
   'horde',
 ])
+
+const HORDE_DISPLAY_MAX = 3
+const RIFT_HERALD_DISPLAY_MAX = 1
 
 const DONUT_COLORS: Record<string, string> = {
   elder: '#7c3aed',
@@ -597,14 +644,27 @@ const DONUT_COLORS: Record<string, string> = {
 
 type DistRow = { key: string; label: string; value: number; color: string }
 
-const EPIC_OBJECTIVE_KEYS = ['baron', 'dragon', 'riftHerald', 'horde', 'elder'] as const
-
 const games = computed(() => Number(props.data?.games ?? 0))
-const hasData = computed(() => games.value > 0 && objectiveRows.value.length > 0)
+const hasData = computed(() => games.value > 0 && (props.data?.rows?.length ?? 0) > 0)
 
 const objectiveRows = computed(() =>
   (props.data?.rows ?? []).filter(r => r && typeof r.key === 'string' && r.key !== 'elder')
 )
+
+const rowByKey = (key: string): ChampionObjectivesRow | undefined =>
+  objectiveRows.value.find(r => r.key === key)
+
+/** Ordre aligné stats globales : first blood puis baron → dragon → tour → inhib → héraut → grubs. */
+const mainTableRows = computed(() => {
+  const out: ChampionObjectivesRow[] = []
+  const fb = rowByKey('firstBlood')
+  if (fb) out.push(fb)
+  for (const key of objectiveKeysOrdered) {
+    const row = rowByKey(key)
+    if (row) out.push(row)
+  }
+  return out
+})
 
 const drakeTypeRows = computed(() => {
   const fromApi = props.data?.drakeTypeRows ?? []
@@ -636,13 +696,22 @@ function objectiveHasKillDropdown(key: string): boolean {
 function objectiveKillCounts(key: string): string[] {
   const hist = props.data?.killHistograms?.[key]
   if (!hist) return []
-  return Object.keys(hist)
-    .filter(label => Number(hist[label] ?? 0) > 0)
-    .sort((a, b) => {
-      const na = a === '3+' || a.endsWith('+') ? 99 : Number.parseInt(a, 10) || 0
-      const nb = b === '3+' || b.endsWith('+') ? 99 : Number.parseInt(b, 10) || 0
-      return na - nb
-    })
+  const capHorde = key === 'horde'
+  const capHerald = key === 'riftHerald'
+  const labels = new Set<string>()
+  for (const [label, n] of Object.entries(hist)) {
+    if (Number(n ?? 0) <= 0) continue
+    let display = label
+    const num = label === '3+' || label.endsWith('+') ? 99 : Number.parseInt(label, 10) || 0
+    if (capHorde && num > HORDE_DISPLAY_MAX) display = String(HORDE_DISPLAY_MAX)
+    if (capHerald && num > RIFT_HERALD_DISPLAY_MAX) display = String(RIFT_HERALD_DISPLAY_MAX)
+    labels.add(display)
+  }
+  return [...labels].sort((a, b) => {
+    const na = a === '3+' || a.endsWith('+') ? 99 : Number.parseInt(a, 10) || 0
+    const nb = b === '3+' || b.endsWith('+') ? 99 : Number.parseInt(b, 10) || 0
+    return na - nb
+  })
 }
 
 function percentForKillCount(key: string, label: string): string {
@@ -653,35 +722,19 @@ function percentForKillCount(key: string, label: string): string {
   return `${((100 * n) / total).toFixed(2)}%`
 }
 
-function rowSoloRate(key: string): number {
-  const v = objectiveRows.value.find(r => r.key === key)?.soloRate
-  return Number.isFinite(Number(v)) ? Number(v) : 0
-}
-
-/** Repli si `participationCard` absent ou backend pas à jour (solo aligné sur le tableau). */
-const participationCard = computed(() => {
-  const api = props.data?.participationCard
-  const soloBaronFromRows = rowSoloRate('baron')
-  const soloEpicFromRows = Math.max(0, ...EPIC_OBJECTIVE_KEYS.map(rowSoloRate))
-  const base = {
-    stealPct: Number(api?.stealPct ?? 0),
-    stealWithoutSmitePct: Number(api?.stealWithoutSmitePct ?? 0),
-    soloBaronPct: Number(api?.soloBaronPct ?? 0),
-    soloEpicObjectivePct: Number(api?.soloEpicObjectivePct ?? 0),
-  }
-  return {
-    stealPct: base.stealPct,
-    stealWithoutSmitePct: base.stealWithoutSmitePct,
-    soloBaronPct: base.soloBaronPct > 0 ? base.soloBaronPct : soloBaronFromRows,
-    soloEpicObjectivePct:
-      base.soloEpicObjectivePct > 0 ? base.soloEpicObjectivePct : soloEpicFromRows,
-  }
-})
+const participationCard = computed(() => props.data?.participationCard)
+const structureCard = computed(() => props.data?.structureCard)
 
 const participationMetrics = computed(() => {
   const c = participationCard.value
+  if (!c) return []
   return [
     { key: 'steal', label: t('statisticsPage.championObjectivesStealPct'), value: c.stealPct },
+    {
+      key: 'stealSmite',
+      label: t('statisticsPage.championObjectivesStealWithSmitePct'),
+      value: c.stealWithSmitePct,
+    },
     {
       key: 'stealNoSmite',
       label: t('statisticsPage.championObjectivesStealNoSmitePct'),
@@ -693,9 +746,71 @@ const participationMetrics = computed(() => {
       value: c.soloBaronPct,
     },
     {
+      key: 'soloTower',
+      label: t('statisticsPage.championObjectivesSoloTowerPct'),
+      value: c.soloTowerPct,
+    },
+    {
+      key: 'soloDragon',
+      label: t('statisticsPage.championObjectivesSoloDragonPct'),
+      value: c.soloDragonPct,
+    },
+    {
+      key: 'soloHerald',
+      label: t('statisticsPage.championObjectivesSoloHeraldPct'),
+      value: c.soloRiftHeraldPct,
+    },
+    {
+      key: 'soloHorde',
+      label: t('statisticsPage.championObjectivesSoloHordePct'),
+      value: c.soloHordePct,
+    },
+    {
+      key: 'soloInhib',
+      label: t('statisticsPage.championObjectivesSoloInhibitorPct'),
+      value: c.soloInhibitorPct,
+    },
+    {
+      key: 'soloKill',
+      label: t('statisticsPage.championObjectivesSoloKillPct'),
+      value: c.soloKillPct,
+    },
+    {
       key: 'soloEpic',
       label: t('statisticsPage.championObjectivesSoloEpicPct'),
       value: c.soloEpicObjectivePct,
+    },
+  ]
+})
+
+const structureMetrics = computed(() => {
+  const s = structureCard.value
+  if (!s) return []
+  return [
+    {
+      key: 'dmgTurret',
+      label: t('statisticsPage.championObjectivesDamageTurrets'),
+      value: s.damageToTurretsPerGame,
+    },
+    {
+      key: 'dmgObj',
+      label: t('statisticsPage.championObjectivesDamageObjectives'),
+      value: s.damageToObjectivesPerGame,
+    },
+    {
+      key: 'dmgBuild',
+      label: t('statisticsPage.championObjectivesDamageBuildings'),
+      value: s.damageToBuildingsPerGame,
+    },
+    {
+      key: 'turrets',
+      label: t('statisticsPage.championObjectivesTurretsPerGame'),
+      value: s.turretsDestroyedPerGame,
+    },
+    {
+      key: 'heraldTurrets',
+      label: t('statisticsPage.championObjectivesTurretsWithHerald'),
+      value: s.turretsTakenWithHeraldPerGame,
     },
   ]
 })
@@ -734,9 +849,22 @@ function formatPct(n: number): string {
   return `${v.toFixed(2)}%`
 }
 
+function formatNumber(n: number): string {
+  const v = Number(n)
+  if (!Number.isFinite(v)) return '—'
+  return v.toLocaleString(undefined, { maximumFractionDigits: 1 })
+}
+
 function objectiveLabel(key: string, fallback: string): string {
+  const globalKey = `statisticsPage.overviewTeamsObjective_${key}`
+  if (te(globalKey)) return t(globalKey)
   const i18nKey = `statisticsPage.championObjective_${key}`
   return te(i18nKey) ? t(i18nKey) : fallback
+}
+
+function rowTitle(row: ChampionObjectivesRow): string {
+  if (row.key === 'firstBlood') return t('statisticsPage.overviewTeamsFirstBlood')
+  return objectiveLabel(row.key, row.label)
 }
 
 function drakeTypeLabel(key: string, fallback: string): string {

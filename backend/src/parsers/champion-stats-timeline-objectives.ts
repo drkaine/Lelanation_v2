@@ -49,7 +49,8 @@ export function timelineChampionObjectiveMetrics(
     const touch = (id: number, isKill: boolean) => {
       if (id !== pid) return;
       if (flags.baron) {
-        inc(out, isKill ? "count_baron_kill" : "count_baron_assist");
+        if (isKill) inc(out, "sum_baron_kills");
+        else inc(out, "count_baron_assist");
         winBump("count_baron_involved_win");
       }
       if (flags.dragon) {
@@ -161,7 +162,7 @@ export function timelineChampionObjectiveMetrics(
     }
   }
 
-  addPerGameKillBuckets(out, "count_baron_kill", "count_baron_kill");
+  addPerGameKillBuckets(out, "sum_baron_kills", "count_baron_kill");
   addPerGameKillBuckets(out, "count_dragon_kill", "count_dragon_kill");
   addPerGameKillBuckets(out, "count_tower_kill", "count_tower_kill");
   addPerGameKillBuckets(out, "count_inhibitor_kill", "count_inhibitor_kill");
