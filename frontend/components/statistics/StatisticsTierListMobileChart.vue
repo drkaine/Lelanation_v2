@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, inject } from 'vue'
 import { tierChartColor } from '~/utils/tierChartColors'
-import { championStatsDetailPathIfValid } from '~/utils/championStatsRoutes'
 
 type ChartRow = {
   championId: number
@@ -54,11 +53,6 @@ function formatPbi(pbi: number): string {
   return fn?.(pbi, 2) ?? pbi.toFixed(2)
 }
 
-function championDetailTo(id: number): string | null {
-  const pathFn = p.localePath as ((path: string) => string) | undefined
-  return championStatsDetailPathIfValid(id, pathFn)
-}
-
 function barColor(tier: string): string {
   const fn = p.tierListChartBarColor as ((tier: string) => string) | undefined
   return fn?.(tier) ?? tierChartColor(tier)
@@ -78,16 +72,9 @@ function barColor(tier: string): string {
       class="statistics-tier-list-mobile-chart-row overflow-hidden rounded-lg border border-primary/25 bg-black/25"
     >
       <div class="flex min-w-0 items-start gap-2.5 px-2.5 py-2">
-        <component
-          :is="championDetailTo(row.championId) ? 'NuxtLink' : 'div'"
-          :to="championDetailTo(row.championId) ?? undefined"
-          class="flex min-w-0 max-w-[42%] shrink-0 items-center gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
-          :class="championDetailTo(row.championId) ? 'hover:opacity-90 active:opacity-80' : ''"
-          :aria-label="
-            championDetailTo(row.championId)
-              ? t('statisticsPage.championStatsOpenDetail')
-              : undefined
-          "
+        <StatisticsChampionDetailLink
+          :champion-id="row.championId"
+          class="flex min-w-0 max-w-[42%] shrink-0 items-center gap-2 rounded-sm"
         >
           <img
             v-if="portraitSrc(row.championId)"
@@ -106,16 +93,11 @@ function barColor(tier: string): string {
             {{ championName(row.championId).slice(0, 2) }}
           </span>
           <span
-            class="min-w-0 truncate text-sm font-semibold"
-            :class="
-              championDetailTo(row.championId)
-                ? 'text-accent underline decoration-accent/40 underline-offset-2'
-                : 'text-text'
-            "
+            class="min-w-0 truncate text-sm font-semibold text-accent underline decoration-accent/40 underline-offset-2"
           >
             {{ championName(row.championId) }}
           </span>
-        </component>
+        </StatisticsChampionDetailLink>
         <div class="min-w-0 flex-1">
           <div class="flex min-w-0 items-center justify-end gap-2">
             <span

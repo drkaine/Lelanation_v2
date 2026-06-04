@@ -823,6 +823,8 @@ router.get('/champions/:championId/damage-split', async (req: Request, res: Resp
         avgDamageToChampions: 0,
         avgDamageToObjectives: 0,
         avgDamageToBuildings: 0,
+        avgDamageToNeutralMonsters: 0,
+        avgDamageToMinions: 0,
       })
     }
     return res.json(data)
@@ -839,6 +841,8 @@ router.get('/champions/:championId/damage-split', async (req: Request, res: Resp
       avgDamageToChampions: 0,
       avgDamageToObjectives: 0,
       avgDamageToBuildings: 0,
+      avgDamageToNeutralMonsters: 0,
+      avgDamageToMinions: 0,
       error: 'Champion damage split failed',
       message,
     })

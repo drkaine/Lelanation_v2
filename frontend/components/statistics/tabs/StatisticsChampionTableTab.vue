@@ -1,14 +1,9 @@
 <script setup lang="ts">
 import { inject, ref, unref, computed } from 'vue'
-import { championStatsDetailPathIfValid } from '~/utils/championStatsRoutes'
 const p = inject('statisticsPageCtx') as any
 const showChampionDealtBreakdown = ref(false)
 const showChampionTakenBreakdown = ref(false)
 const expandedChampionIds = ref<Set<number>>(new Set())
-
-function championDetailTo(championId: number): string | null {
-  return championStatsDetailPathIfValid(championId, p.localePath)
-}
 
 function onChampionPageSizeChange(event: Event): void {
   const target = event.target as HTMLSelectElement | null
@@ -182,7 +177,6 @@ const championTableLayoutStyle = computed(() => {
                   : null
               "
               :portrait-alt="p.championName(row.championId) || ''"
-              :detail-to="championDetailTo(row.championId)"
             />
             <button
               type="button"

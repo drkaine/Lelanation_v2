@@ -193,29 +193,39 @@ function progressionBeforeAfterLine(row: Record<string, unknown>): string {
           <td class="py-0.5 align-middle">
             <div class="flex w-full min-w-0 items-center gap-0.5">
               <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
-              <img
-                v-if="gameVersion && championByKey(Number(row.championId))"
-                :src="
-                  getChampionImageUrl(
-                    gameVersion,
-                    championByKey(Number(row.championId))!.image.full
-                  )
-                "
-                :alt="championName(Number(row.championId)) || ''"
-                class="h-5 w-5 shrink-0 rounded-full object-cover"
-              />
-              <span v-else class="h-5 w-5 shrink-0" aria-hidden="true" />
-              <div v-if="isProgression" class="min-w-0 max-w-[6.5rem] shrink-0">
-                <div class="truncate font-medium leading-tight text-text">
+              <StatisticsChampionDetailLink
+                :champion-id="Number(row.championId)"
+                class="flex min-w-0 flex-1 items-center gap-0.5"
+              >
+                <img
+                  v-if="gameVersion && championByKey(Number(row.championId))"
+                  :src="
+                    getChampionImageUrl(
+                      gameVersion,
+                      championByKey(Number(row.championId))!.image.full
+                    )
+                  "
+                  :alt="championName(Number(row.championId)) || ''"
+                  class="h-5 w-5 shrink-0 rounded-full object-cover"
+                />
+                <span v-else class="h-5 w-5 shrink-0" aria-hidden="true" />
+                <div v-if="isProgression" class="min-w-0 max-w-[6.5rem] shrink-0">
+                  <div
+                    class="truncate font-medium leading-tight text-accent underline decoration-accent/40 underline-offset-2"
+                  >
+                    {{ championName(Number(row.championId)) || row.championId }}
+                  </div>
+                  <div class="whitespace-nowrap text-[9px] tabular-nums leading-tight text-text/70">
+                    {{ progressionBeforeAfterLine(row) }}
+                  </div>
+                </div>
+                <span
+                  v-else
+                  class="min-w-[5.5rem] shrink-0 truncate font-medium text-accent underline decoration-accent/40 underline-offset-2"
+                >
                   {{ championName(Number(row.championId)) || row.championId }}
-                </div>
-                <div class="whitespace-nowrap text-[9px] tabular-nums leading-tight text-text/70">
-                  {{ progressionBeforeAfterLine(row) }}
-                </div>
-              </div>
-              <span v-else class="min-w-[5.5rem] shrink-0 truncate font-medium text-text">
-                {{ championName(Number(row.championId)) || row.championId }}
-              </span>
+                </span>
+              </StatisticsChampionDetailLink>
               <span :class="valueCellClass">{{ displayValue(row) }}</span>
             </div>
           </td>

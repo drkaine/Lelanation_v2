@@ -1,9 +1,5 @@
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n'
-
 /** En-tête mobile unifié : nom + rôle (icône) au-dessus du portrait. */
-const { t } = useI18n()
-
 withDefaults(
   defineProps<{
     championId: number
@@ -13,8 +9,6 @@ withDefaults(
     roleIconSrc?: string | null
     portraitSrc?: string | null
     portraitAlt?: string
-    /** Lien fiche champion ; si absent, portrait non cliquable. */
-    detailTo?: string | null
     portraitSize?: number
   }>(),
   {
@@ -23,24 +17,19 @@ withDefaults(
     roleIconSrc: null,
     portraitSrc: null,
     portraitAlt: '',
-    detailTo: null,
     portraitSize: 64,
   }
 )
 </script>
 
 <template>
-  <component
-    :is="detailTo ? 'NuxtLink' : 'div'"
-    :to="detailTo ?? undefined"
+  <StatisticsChampionDetailLink
+    :champion-id="championId"
     class="statistics-champion-stats-mobile-identity flex w-[4.5rem] shrink-0 flex-col items-center gap-1.5 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
-    :class="detailTo ? 'hover:opacity-90 active:opacity-80' : ''"
-    :aria-label="detailTo ? t('statisticsPage.championStatsOpenDetail') : undefined"
   >
     <div class="flex w-full min-w-0 flex-col items-center gap-0.5 text-center">
       <div
-        class="statistics-champion-stats-mobile-name w-full truncate text-sm font-semibold leading-tight text-accent"
-        :class="detailTo ? 'underline decoration-accent/40 underline-offset-2' : ''"
+        class="statistics-champion-stats-mobile-name w-full truncate text-sm font-semibold leading-tight text-accent underline decoration-accent/40 underline-offset-2"
       >
         <StatisticsChampionNameHighlight
           :name="championName || String(championId)"
@@ -72,5 +61,5 @@ withDefaults(
       :size="portraitSize"
       rounded="sm"
     />
-  </component>
+  </StatisticsChampionDetailLink>
 </template>

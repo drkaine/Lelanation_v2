@@ -49,9 +49,9 @@ const p = inject('statisticsPageCtx') as any
                   class="border-b border-primary/20"
                 >
                   <td class="py-1.5 pr-2">
-                    <NuxtLink
-                      :to="p.localePath('/statistics/champion/' + row.championId)"
-                      class="flex items-center gap-2 hover:text-accent"
+                    <StatisticsChampionDetailLink
+                      :champion-id="row.championId"
+                      class="flex items-center gap-2"
                     >
                       <img
                         v-if="p.gameVersion && p.championByKey(row.championId)"
@@ -66,8 +66,10 @@ const p = inject('statisticsPageCtx') as any
                         width="24"
                         height="24"
                       />
-                      <span>{{ p.championName(row.championId) || row.championId }}</span>
-                    </NuxtLink>
+                      <span class="text-accent underline decoration-accent/40 underline-offset-2">{{
+                        p.championName(row.championId) || row.championId
+                      }}</span>
+                    </StatisticsChampionDetailLink>
                   </td>
                   <td class="py-1.5 text-right">{{ Number(row.wrSince).toFixed(2) }}%</td>
                   <td
@@ -106,9 +108,9 @@ const p = inject('statisticsPageCtx') as any
                   class="border-b border-primary/20"
                 >
                   <td class="py-1.5 pr-2">
-                    <NuxtLink
-                      :to="p.localePath('/statistics/champion/' + row.championId)"
-                      class="flex items-center gap-2 hover:text-accent"
+                    <StatisticsChampionDetailLink
+                      :champion-id="row.championId"
+                      class="flex items-center gap-2"
                     >
                       <img
                         v-if="p.gameVersion && p.championByKey(row.championId)"
@@ -123,8 +125,10 @@ const p = inject('statisticsPageCtx') as any
                         width="24"
                         height="24"
                       />
-                      <span>{{ p.championName(row.championId) || row.championId }}</span>
-                    </NuxtLink>
+                      <span class="text-accent underline decoration-accent/40 underline-offset-2">{{
+                        p.championName(row.championId) || row.championId
+                      }}</span>
+                    </StatisticsChampionDetailLink>
                   </td>
                   <td class="py-1.5 text-right">{{ Number(row.pickrateSince).toFixed(2) }}%</td>
                   <td

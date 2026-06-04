@@ -5494,6 +5494,27 @@ if (__statisticsVm?.proxy) {
     align-self: stretch;
   }
 }
+.statistics .statistics-champion-detail-link {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgb(var(--rgb-accent) / 0.2);
+  cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+  position: relative;
+  z-index: 2;
+}
+.statistics .statistics-champion-detail-link:active {
+  opacity: 0.85;
+}
+.statistics .statistics-champion-detail-link :is(img, .champion-portrait, .champion-portrait *) {
+  pointer-events: none;
+}
+.statistics .statistics-champion-stats-mobile-identity.statistics-champion-detail-link,
+.statistics a.statistics-champion-stats-mobile-identity.statistics-champion-detail-link {
+  min-height: 2.75rem;
+  min-width: 2.75rem;
+}
+
 .statistics .fast-stat-title {
   line-height: 1.4;
   color: rgb(252 211 77) !important;

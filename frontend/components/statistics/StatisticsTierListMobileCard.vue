@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, inject } from 'vue'
-import { championStatsDetailPathIfValid } from '~/utils/championStatsRoutes'
 
 export type TierListMobileRow = {
   championId: number
@@ -79,11 +78,6 @@ const portraitSrc = computed(() => {
   return urlFn(gv, champ.image.full)
 })
 
-const detailTo = computed(() => {
-  const pathFn = p.localePath as ((path: string) => string) | undefined
-  return championStatsDetailPathIfValid(props.row.championId, pathFn)
-})
-
 const patchRefLabel = computed(() => (p.tierListPatchDeltaRefLabel as string | null) ?? null)
 
 function winrateClass(v: number): string {
@@ -150,7 +144,6 @@ function rankDeltaClass(v: number): string {
             (p.championName as ((id: number) => string | null) | undefined)?.(row.championId) || ''
           )
         "
-        :detail-to="detailTo"
       />
       <button
         type="button"

@@ -1,12 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, ref, unref, watch } from 'vue'
-import { championStatsDetailPathIfValid } from '~/utils/championStatsRoutes'
 const p = inject('statisticsPageCtx') as any
 const expandedBalanceKeys = ref<Set<string>>(new Set())
-
-function championDetailTo(championId: number): string | null {
-  return championStatsDetailPathIfValid(championId, p.localePath)
-}
 
 type LevelRow = {
   status: 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'
@@ -294,7 +289,6 @@ function globalTooltip(row: BalanceRow): string {
                     : null
                 "
                 :portrait-alt="p.championName(row.championId) || ''"
-                :detail-to="championDetailTo(row.championId)"
               />
               <button
                 type="button"
@@ -437,7 +431,10 @@ function globalTooltip(row: BalanceRow): string {
                 class="odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
               >
                 <td class="px-3 py-2">
-                  <div class="flex items-center gap-2">
+                  <StatisticsChampionDetailLink
+                    :champion-id="row.championId"
+                    class="flex items-center gap-2"
+                  >
                     <img
                       v-if="p.gameVersion && p.championByKey(row.championId)"
                       :src="
@@ -451,10 +448,11 @@ function globalTooltip(row: BalanceRow): string {
                       width="32"
                       height="32"
                     />
-                    <span class="font-medium text-accent">{{
-                      p.championName(row.championId)
-                    }}</span>
-                  </div>
+                    <span
+                      class="font-medium text-accent underline decoration-accent/40 underline-offset-2"
+                      >{{ p.championName(row.championId) }}</span
+                    >
+                  </StatisticsChampionDetailLink>
                 </td>
                 <td class="px-3 py-2 text-text/90">{{ row.role }}</td>
                 <td

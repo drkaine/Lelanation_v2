@@ -1,13 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useLocalePath } from '#i18n'
 import { useMobileViewport } from '~/composables/useMobileViewport'
-import { championStatsDetailPathIfValid } from '~/utils/championStatsRoutes'
 
 /**
  * Liste Top 5 en cards (vue mobile « Cards (Top 5) »).
  */
-const localePath = useLocalePath()
 const { isMobileViewport } = useMobileViewport()
 const portraitSize = computed(() => (isMobileViewport.value ? 56 : 40))
 
@@ -26,10 +23,6 @@ defineProps<{
   getChampionImageUrl: (version: string, imageFull: string) => string
   searchQuery?: string
 }>()
-
-function championDetailTo(id: number): string | null {
-  return championStatsDetailPathIfValid(id, localePath)
-}
 </script>
 
 <template>
@@ -42,11 +35,9 @@ function championDetailTo(id: number): string | null {
       <span class="fast-stat-champion-card-rank w-4 shrink-0 text-xs text-text/60"
         >{{ (rankOffset ?? 0) + idx + 1 }}.</span
       >
-      <component
-        :is="championDetailTo(row.championId) ? 'NuxtLink' : 'div'"
-        :to="championDetailTo(row.championId) ?? undefined"
-        class="flex min-w-0 flex-1 items-center gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
-        :class="championDetailTo(row.championId) ? 'hover:opacity-90 active:opacity-80' : ''"
+      <StatisticsChampionDetailLink
+        :champion-id="row.championId"
+        class="flex min-w-0 flex-1 items-center gap-2 rounded-sm"
       >
         <StatisticsChampionPortrait
           v-if="gameVersion && championByKey(row.championId)"
@@ -59,12 +50,7 @@ function championDetailTo(id: number): string | null {
         />
         <div class="min-w-0 flex-1">
           <div
-            class="fast-stat-champion-card-name truncate text-sm font-medium"
-            :class="
-              championDetailTo(row.championId)
-                ? 'text-accent underline decoration-accent/40 underline-offset-2'
-                : 'text-text'
-            "
+            class="fast-stat-champion-card-name truncate text-sm font-medium text-accent underline decoration-accent/40 underline-offset-2"
           >
             <StatisticsChampionNameHighlight
               :name="championName(row.championId) || String(row.championId)"
@@ -73,7 +59,7 @@ function championDetailTo(id: number): string | null {
           </div>
           <div class="fast-stat-champion-card-label text-[11px] text-text/55">{{ row.label }}</div>
         </div>
-      </component>
+      </StatisticsChampionDetailLink>
       <div class="shrink-0 text-right">
         <div class="fast-stat-champion-card-value text-sm font-semibold tabular-nums text-text">
           {{ row.value }}

@@ -40,7 +40,6 @@
                   : null
               "
               :portrait-alt="p.championName(row.championId) || ''"
-              :detail-to="championDetailTo(row.championId)"
             />
             <button
               type="button"
@@ -316,7 +315,10 @@
                 @click="navigateTo(p.localePath('/statistics/champion/' + row.championId))"
               >
                 <td class="min-w-[220px] py-0.5 pl-2 pr-0">
-                  <div class="flex min-h-[60px] items-center gap-2">
+                  <StatisticsChampionDetailLink
+                    :champion-id="row.championId"
+                    class="flex min-h-[60px] items-center gap-2"
+                  >
                     <img
                       v-if="p.gameVersion && p.championByKey(row.championId)"
                       :src="
@@ -332,13 +334,15 @@
                       loading="lazy"
                       decoding="async"
                     />
-                    <span class="min-w-0 truncate text-[12px] text-text/90">
+                    <span
+                      class="min-w-0 truncate text-[12px] text-accent underline decoration-accent/40 underline-offset-2"
+                    >
                       <StatisticsChampionNameHighlight
                         :name="String(p.championName(row.championId) || row.championId)"
                         :query="p.championSearchQuery"
                       />
                     </span>
-                  </div>
+                  </StatisticsChampionDetailLink>
                 </td>
                 <td class="px-1 py-0.5 align-middle">
                   <div
@@ -566,14 +570,8 @@
 <script setup lang="ts">
 import { computed, inject, ref, unref } from 'vue'
 import type { BansSortCol } from '~/composables/statistics/useStatisticsBansTab'
-import { championStatsDetailPathIfValid } from '~/utils/championStatsRoutes'
-
 const p = inject('statisticsPageCtx') as any
 const expandedBanIds = ref<Set<number>>(new Set())
-
-function championDetailTo(championId: number): string | null {
-  return championStatsDetailPathIfValid(championId, p.localePath)
-}
 
 function toggleBanCardExpanded(championId: number): void {
   const next = new Set(expandedBanIds.value)

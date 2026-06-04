@@ -338,53 +338,75 @@ function tierLabel(tier: string): string {
               class="tier-list-lolalytics-td flex w-[120px] shrink-0 items-center justify-center gap-1 px-1 max-lg:w-[96px]"
             >
               <template v-if="p.gameVersion">
-                <img
+                <StatisticsChampionDetailLink
                   v-if="p.championByKey(row.adcId)"
-                  :src="getChampionImageUrl(p.gameVersion, p.championByKey(row.adcId)!.image.full)"
-                  :alt="p.championName(row.adcId) || ''"
-                  class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover max-lg:h-10 max-lg:w-10"
-                  width="50"
-                  height="50"
-                />
-                <img
+                  :champion-id="row.adcId"
+                  class="shrink-0"
+                >
+                  <img
+                    :src="
+                      getChampionImageUrl(p.gameVersion, p.championByKey(row.adcId)!.image.full)
+                    "
+                    :alt="p.championName(row.adcId) || ''"
+                    class="h-[50px] w-[50px] border-2 border-black object-cover max-lg:h-10 max-lg:w-10"
+                    width="50"
+                    height="50"
+                  />
+                </StatisticsChampionDetailLink>
+                <StatisticsChampionDetailLink
                   v-if="p.championByKey(row.supportId)"
-                  :src="
-                    getChampionImageUrl(p.gameVersion, p.championByKey(row.supportId)!.image.full)
-                  "
-                  :alt="p.championName(row.supportId) || ''"
-                  class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover max-lg:h-10 max-lg:w-10"
-                  width="50"
-                  height="50"
-                />
+                  :champion-id="row.supportId"
+                  class="shrink-0"
+                >
+                  <img
+                    :src="
+                      getChampionImageUrl(p.gameVersion, p.championByKey(row.supportId)!.image.full)
+                    "
+                    :alt="p.championName(row.supportId) || ''"
+                    class="h-[50px] w-[50px] border-2 border-black object-cover max-lg:h-10 max-lg:w-10"
+                    width="50"
+                    height="50"
+                  />
+                </StatisticsChampionDetailLink>
               </template>
             </div>
             <div
               class="tier-list-lolalytics-td flex w-[120px] shrink-0 items-center justify-center gap-1 px-1 max-lg:w-[96px]"
             >
               <template v-if="p.gameVersion">
-                <img
+                <StatisticsChampionDetailLink
                   v-if="p.championByKey(row.oppAdcId)"
-                  :src="
-                    getChampionImageUrl(p.gameVersion, p.championByKey(row.oppAdcId)!.image.full)
-                  "
-                  :alt="p.championName(row.oppAdcId) || ''"
-                  class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover max-lg:h-10 max-lg:w-10"
-                  width="50"
-                  height="50"
-                />
-                <img
+                  :champion-id="row.oppAdcId"
+                  class="shrink-0"
+                >
+                  <img
+                    :src="
+                      getChampionImageUrl(p.gameVersion, p.championByKey(row.oppAdcId)!.image.full)
+                    "
+                    :alt="p.championName(row.oppAdcId) || ''"
+                    class="h-[50px] w-[50px] border-2 border-black object-cover max-lg:h-10 max-lg:w-10"
+                    width="50"
+                    height="50"
+                  />
+                </StatisticsChampionDetailLink>
+                <StatisticsChampionDetailLink
                   v-if="p.championByKey(row.oppSupportId)"
-                  :src="
-                    getChampionImageUrl(
-                      p.gameVersion,
-                      p.championByKey(row.oppSupportId)!.image.full
-                    )
-                  "
-                  :alt="p.championName(row.oppSupportId) || ''"
-                  class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover max-lg:h-10 max-lg:w-10"
-                  width="50"
-                  height="50"
-                />
+                  :champion-id="row.oppSupportId"
+                  class="shrink-0"
+                >
+                  <img
+                    :src="
+                      getChampionImageUrl(
+                        p.gameVersion,
+                        p.championByKey(row.oppSupportId)!.image.full
+                      )
+                    "
+                    :alt="p.championName(row.oppSupportId) || ''"
+                    class="h-[50px] w-[50px] border-2 border-black object-cover max-lg:h-10 max-lg:w-10"
+                    width="50"
+                    height="50"
+                  />
+                </StatisticsChampionDetailLink>
               </template>
             </div>
             <div class="tier-list-lolalytics-td flex w-10 shrink-0 items-center justify-center">

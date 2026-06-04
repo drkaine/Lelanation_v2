@@ -22,6 +22,8 @@ export async function getChampionDamageSplit(
   avgDamageToChampions: number
   avgDamageToObjectives: number
   avgDamageToBuildings: number
+  avgDamageToNeutralMonsters: number
+  avgDamageToMinions: number
 } | null> {
   if (!isDatabaseConfigured() || championId <= 0) return null
 
@@ -94,6 +96,8 @@ export async function getChampionDamageSplit(
       sum_champs: bigint
       sum_objectives: bigint
       sum_buildings: bigint
+      sum_epic: bigint
+      sum_total_done: bigint
     }>
   >(`
     SELECT
@@ -104,7 +108,13 @@ export async function getChampionDamageSplit(
         + cs.sum_true_damage_done_to_champions
       ), 0)::bigint AS sum_champs,
       COALESCE(SUM(cs.sum_damage_dealt_to_objectives), 0)::bigint AS sum_objectives,
-      COALESCE(SUM(cs.sum_damage_dealt_to_buildings), 0)::bigint AS sum_buildings
+      COALESCE(SUM(cs.sum_damage_dealt_to_buildings), 0)::bigint AS sum_buildings,
+      COALESCE(SUM(cs.sum_damage_dealt_to_epic_monsters), 0)::bigint AS sum_epic,
+      COALESCE(SUM(
+        cs.sum_physical_damage_done
+        + cs.sum_magic_damage_done
+        + cs.sum_true_damage_done
+      ), 0)::bigint AS sum_total_done
     FROM ${csFrom}
     WHERE ${csWhere}
   `)
@@ -114,6 +124,10 @@ export async function getChampionDamageSplit(
   const sumChamps = Number(tRow?.sum_champs ?? 0)
   const sumObj = Number(tRow?.sum_objectives ?? 0)
   const sumBld = Number(tRow?.sum_buildings ?? 0)
+  const sumEpic = Number(tRow?.sum_epic ?? 0)
+  const sumTotalDone = Number(tRow?.sum_total_done ?? 0)
+  const sumObjNet = Math.max(0, sumObj - sumEpic)
+  const sumMinions = Math.max(0, sumTotalDone - sumChamps - sumBld - sumObj)
 
   return {
     championId,
@@ -123,8 +137,10 @@ export async function getChampionDamageSplit(
     avgTrueDamageToChampions: round1(sumTrue / div),
     avgTotalDamageToChampions: round1(sumTotal / div),
     avgDamageToChampions: round1(sumChamps / tDiv),
-    avgDamageToObjectives: round1(sumObj / tDiv),
+    avgDamageToObjectives: round1(sumObjNet / tDiv),
     avgDamageToBuildings: round1(sumBld / tDiv),
+    avgDamageToNeutralMonsters: round1(sumEpic / tDiv),
+    avgDamageToMinions: round1(sumMinions / tDiv),
   }
 }
 

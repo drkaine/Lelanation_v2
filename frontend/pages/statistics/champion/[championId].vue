@@ -2137,6 +2137,8 @@ const championDamageSplit = ref<{
   champions: number
   objectives: number
   buildings: number
+  neutralMonsters: number
+  minions: number
 } | null>(null)
 const championMiscData = ref<ChampionMiscSummary | null>(null)
 const championMiscPending = ref(false)
@@ -2240,7 +2242,7 @@ const championDamageShareLegend = computed(() => {
 const championDamageTargetTotal = computed(() => {
   const d = championDamageSplit.value
   if (!d) return 0
-  return d.champions + d.objectives + d.buildings
+  return d.champions + d.objectives + d.buildings + d.neutralMonsters + d.minions
 })
 
 const championDamageTargetLegend = computed(() => {
@@ -2267,6 +2269,18 @@ const championDamageTargetLegend = computed(() => {
       label: t('statisticsPage.championDamageTargetBuildings'),
       pct: toPct(d.buildings),
       color: '#f59e0b',
+    },
+    {
+      key: 'neutralMonsters',
+      label: t('statisticsPage.championDamageTargetNeutralMonsters'),
+      pct: toPct(d.neutralMonsters),
+      color: '#10b981',
+    },
+    {
+      key: 'minions',
+      label: t('statisticsPage.championDamageTargetMinions'),
+      pct: toPct(d.minions),
+      color: '#64748b',
     },
   ].filter(e => e.pct > 0)
 })
@@ -2976,6 +2990,8 @@ async function loadChampionDamageSplit() {
       avgDamageToChampions?: number
       avgDamageToObjectives?: number
       avgDamageToBuildings?: number
+      avgDamageToNeutralMonsters?: number
+      avgDamageToMinions?: number
     }>(apiUrl(`/api/stats/champions/${championId.value}/damage-split${q}`))
     const phys = Number(data?.avgPhysicalDamageToChampions ?? 0)
     const magic = Number(data?.avgMagicDamageToChampions ?? 0)
@@ -2985,8 +3001,13 @@ async function loadChampionDamageSplit() {
     const champions = Number(data?.avgDamageToChampions ?? 0)
     const objectives = Number(data?.avgDamageToObjectives ?? 0)
     const buildings = Number(data?.avgDamageToBuildings ?? 0)
+    const neutralMonsters = Number(data?.avgDamageToNeutralMonsters ?? 0)
+    const minions = Number(data?.avgDamageToMinions ?? 0)
     const games = Number(data?.games ?? 0)
-    if (games <= 0 || (total <= 0 && champions + objectives + buildings <= 0)) {
+    if (
+      games <= 0 ||
+      (total <= 0 && champions + objectives + buildings + neutralMonsters + minions <= 0)
+    ) {
       championDamageSplit.value = null
       return
     }
@@ -2998,6 +3019,8 @@ async function loadChampionDamageSplit() {
       champions: Number.isFinite(champions) ? champions : 0,
       objectives: Number.isFinite(objectives) ? objectives : 0,
       buildings: Number.isFinite(buildings) ? buildings : 0,
+      neutralMonsters: Number.isFinite(neutralMonsters) ? neutralMonsters : 0,
+      minions: Number.isFinite(minions) ? minions : 0,
     }
   } catch {
     championDamageSplit.value = null
@@ -4288,6 +4311,21 @@ useHead({
   }
 }
 
+.champion-stats .statistics-champion-detail-link {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgb(var(--rgb-accent) / 0.2);
+  cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+  position: relative;
+  z-index: 2;
+}
+.champion-stats
+  .statistics-champion-detail-link
+  :is(img, .champion-portrait, .champion-portrait *) {
+  pointer-events: none;
+}
+
 .champion-stats .statistics-overview-surface {
   background-color: #08101f !important;
 }
@@ -4307,6 +4345,18 @@ useHead({
   background: #08101f !important;
 }
 
+.champion-stats .fast-stat-card.fast-stat-card-misc,
+.champion-stats .champion-misc-tab .fast-stat-card-misc {
+  width: min(100%, 313px) !important;
+  min-width: 0 !important;
+  max-width: 313px !important;
+  height: auto !important;
+  min-height: 0 !important;
+  flex: 0 1 313px;
+  overflow: visible;
+  background: #08101f !important;
+}
+
 .champion-stats .fast-stat-card.fast-stat-card-distribution {
   width: min(100%, 420px) !important;
   min-width: 0 !important;
@@ -4319,6 +4369,16 @@ useHead({
 }
 
 @media (max-width: 768px) {
+  .champion-stats .fast-stat-card.fast-stat-card-misc,
+  .champion-stats .champion-misc-tab .fast-stat-card-misc {
+    width: calc(100vw - 1.5rem) !important;
+    max-width: 100% !important;
+    flex: 1 1 auto !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    align-self: stretch;
+  }
+
   .champion-stats .fast-stat-card.fast-stat-card-distribution {
     width: calc(100vw - 1.5rem) !important;
     min-width: 0 !important;

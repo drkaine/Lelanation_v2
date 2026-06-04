@@ -128,17 +128,13 @@ function formatGamesDelta(v: number): string {
   <article
     class="statistics-champion-stats-mobile-card statistics-botlane-duo-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
   >
-    <button
-      type="button"
-      class="statistics-champion-stats-mobile-card-header flex w-full min-w-0 items-center gap-3 p-3 text-left"
-      @click="emit('toggle')"
+    <div
+      class="statistics-champion-stats-mobile-card-header flex w-full min-w-0 items-center gap-3 p-3"
     >
-      <div
-        class="statistics-champion-stats-mobile-identity flex w-[4.5rem] shrink-0 flex-col items-center gap-1.5"
-      >
+      <div class="flex w-[4.5rem] shrink-0 flex-col items-center gap-1.5">
         <div class="flex w-full min-w-0 flex-col items-center gap-0.5 text-center">
           <div
-            class="statistics-champion-stats-mobile-name w-full truncate text-sm font-semibold leading-tight text-accent"
+            class="statistics-champion-stats-mobile-name w-full truncate text-sm font-semibold leading-tight text-text"
             :title="title"
           >
             {{ title }}
@@ -151,67 +147,97 @@ function formatGamesDelta(v: number): string {
           class="flex items-center justify-center gap-1"
           :class="mode === 'matchups' ? 'grid w-full max-w-[4.5rem] grid-cols-2 gap-0.5' : ''"
         >
-          <img
+          <StatisticsChampionDetailLink
             v-if="portraitSrc(row.adcId)"
-            :src="portraitSrc(row.adcId)!"
-            :alt="championName(row.adcId)"
-            class="mx-auto shrink-0 rounded-sm border border-black/40 object-cover"
-            :class="mode === 'matchups' ? 'h-10 w-10' : 'h-12 w-12'"
-            :width="mode === 'matchups' ? 40 : 48"
-            :height="mode === 'matchups' ? 40 : 48"
-            loading="lazy"
-          />
-          <img
-            v-if="portraitSrc(row.supportId)"
-            :src="portraitSrc(row.supportId)!"
-            :alt="championName(row.supportId)"
-            class="mx-auto shrink-0 rounded-sm border border-black/40 object-cover"
-            :class="mode === 'matchups' ? 'h-10 w-10' : 'h-12 w-12'"
-            :width="mode === 'matchups' ? 40 : 48"
-            :height="mode === 'matchups' ? 40 : 48"
-            loading="lazy"
-          />
-          <template v-if="mode === 'matchups'">
+            :champion-id="row.adcId"
+            class="mx-auto shrink-0 rounded-sm"
+          >
             <img
+              :src="portraitSrc(row.adcId)!"
+              :alt="championName(row.adcId)"
+              class="rounded-sm border border-black/40 object-cover"
+              :class="mode === 'matchups' ? 'h-10 w-10' : 'h-12 w-12'"
+              :width="mode === 'matchups' ? 40 : 48"
+              :height="mode === 'matchups' ? 40 : 48"
+              loading="lazy"
+            />
+          </StatisticsChampionDetailLink>
+          <StatisticsChampionDetailLink
+            v-if="portraitSrc(row.supportId)"
+            :champion-id="row.supportId"
+            class="mx-auto shrink-0 rounded-sm"
+          >
+            <img
+              :src="portraitSrc(row.supportId)!"
+              :alt="championName(row.supportId)"
+              class="rounded-sm border border-black/40 object-cover"
+              :class="mode === 'matchups' ? 'h-10 w-10' : 'h-12 w-12'"
+              :width="mode === 'matchups' ? 40 : 48"
+              :height="mode === 'matchups' ? 40 : 48"
+              loading="lazy"
+            />
+          </StatisticsChampionDetailLink>
+          <template v-if="mode === 'matchups'">
+            <StatisticsChampionDetailLink
               v-if="
                 portraitSrc((row as BotlaneTierRowWithPatchDelta & { oppAdcId: number }).oppAdcId)
               "
-              :src="
-                portraitSrc((row as BotlaneTierRowWithPatchDelta & { oppAdcId: number }).oppAdcId)!
-              "
-              :alt="
-                championName((row as BotlaneTierRowWithPatchDelta & { oppAdcId: number }).oppAdcId)
-              "
-              class="mx-auto h-10 w-10 shrink-0 rounded-sm border border-red-500/40 object-cover"
-              width="40"
-              height="40"
-              loading="lazy"
-            />
-            <img
+              :champion-id="(row as BotlaneTierRowWithPatchDelta & { oppAdcId: number }).oppAdcId"
+              class="mx-auto shrink-0 rounded-sm"
+            >
+              <img
+                :src="
+                  portraitSrc(
+                    (row as BotlaneTierRowWithPatchDelta & { oppAdcId: number }).oppAdcId
+                  )!
+                "
+                :alt="
+                  championName(
+                    (row as BotlaneTierRowWithPatchDelta & { oppAdcId: number }).oppAdcId
+                  )
+                "
+                class="h-10 w-10 rounded-sm border border-red-500/40 object-cover"
+                width="40"
+                height="40"
+                loading="lazy"
+              />
+            </StatisticsChampionDetailLink>
+            <StatisticsChampionDetailLink
               v-if="
                 portraitSrc(
                   (row as BotlaneTierRowWithPatchDelta & { oppSupportId: number }).oppSupportId
                 )
               "
-              :src="
-                portraitSrc(
-                  (row as BotlaneTierRowWithPatchDelta & { oppSupportId: number }).oppSupportId
-                )!
+              :champion-id="
+                (row as BotlaneTierRowWithPatchDelta & { oppSupportId: number }).oppSupportId
               "
-              :alt="
-                championName(
-                  (row as BotlaneTierRowWithPatchDelta & { oppSupportId: number }).oppSupportId
-                )
-              "
-              class="mx-auto h-10 w-10 shrink-0 rounded-sm border border-red-500/40 object-cover"
-              width="40"
-              height="40"
-              loading="lazy"
-            />
+              class="mx-auto shrink-0 rounded-sm"
+            >
+              <img
+                :src="
+                  portraitSrc(
+                    (row as BotlaneTierRowWithPatchDelta & { oppSupportId: number }).oppSupportId
+                  )!
+                "
+                :alt="
+                  championName(
+                    (row as BotlaneTierRowWithPatchDelta & { oppSupportId: number }).oppSupportId
+                  )
+                "
+                class="h-10 w-10 rounded-sm border border-red-500/40 object-cover"
+                width="40"
+                height="40"
+                loading="lazy"
+              />
+            </StatisticsChampionDetailLink>
           </template>
         </div>
       </div>
-      <div class="flex min-w-0 flex-1 justify-end gap-3 text-right">
+      <button
+        type="button"
+        class="flex min-w-0 flex-1 touch-manipulation justify-end gap-3 text-right"
+        @click="emit('toggle')"
+      >
         <div class="min-w-0 shrink">
           <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
             {{ t('statisticsPage.winrate') }}
@@ -245,8 +271,8 @@ function formatGamesDelta(v: number): string {
             {{ fmtPatchPp(row.patchRefPickratePp) }}
           </div>
         </div>
-      </div>
-    </button>
+      </button>
+    </div>
     <div
       v-if="expanded"
       class="space-y-1.5 border-t border-primary/20 bg-black/20 px-3 py-2.5 text-sm text-text/85"
