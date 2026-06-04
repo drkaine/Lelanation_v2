@@ -1,5 +1,5 @@
 import { riotConfig } from '../riot-gateway/config/riotConfig.js';
-import type { GatewayStatus } from '../riot-gateway/types.js';
+import type { ApiKeyType, GatewayStatus } from '../riot-gateway/types.js';
 import { ExponentialMovingAverage } from './ExponentialMovingAverage.js';
 import { LimitChangeDetector } from './LimitChangeDetector.js';
 import { tunerLogger } from './TuningLogger.js';
@@ -38,10 +38,10 @@ const PERSONAL_MAX_PARTICIPANT_RANK_CONCURRENCY = Number.parseInt(
   process.env.PERSONAL_MAX_PARTICIPANT_RANK_CONCURRENCY ?? '2',
   10,
 );
-const PERSONAL_MIN_CONCURRENT_SESSIONS = Number.parseInt(
-  process.env.PERSONAL_MIN_CONCURRENT_SESSIONS ?? '3',
-  10,
-);
+const MAX_SESSIONS_BY_KEY: Record<ApiKeyType, number> = {
+  personal: Number.parseInt(process.env.PERSONAL_MAX_CONCURRENT_SESSIONS ?? '2', 10),
+  production: Number.parseInt(process.env.PRODUCTION_MAX_CONCURRENT_SESSIONS ?? '20', 10),
+};
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -228,8 +228,21 @@ export class PollerTuner {
       this.lastSessionWallClockS = sessionWallClockS;
     }
 
-    if (riotConfig.apiKeyType === 'personal') {
-      maxConcurrentSessions = Math.max(PERSONAL_MIN_CONCURRENT_SESSIONS, maxConcurrentSessions);
+    const rawMaxConcurrentSessions = maxConcurrentSessions;
+    const maxConcurrentSessionsCap = MAX_SESSIONS_BY_KEY[riotConfig.apiKeyType];
+    maxConcurrentSessions = Math.min(rawMaxConcurrentSessions, maxConcurrentSessionsCap);
+
+    if (rawMaxConcurrentSessions > maxConcurrentSessions) {
+      tunerLogger.debug(
+        {
+          component: 'PollerTuner',
+          event: 'sessions_capped_by_key_type',
+          raw: rawMaxConcurrentSessions,
+          capped: maxConcurrentSessions,
+          apiKeyType: riotConfig.apiKeyType,
+        },
+        'max concurrent sessions capped for api key type',
+      );
       const tokenBudgetPerSession = safeTokens120s / Math.max(1, maxConcurrentSessions);
       rawBatchSize = Math.ceil(tokenBudgetPerSession / reqPerPlayer);
       rawBatchSize = clamp(rawBatchSize, MIN_BATCH_SIZE, maxBatchCap);
@@ -322,6 +335,8 @@ export class PollerTuner {
       maxConcurrentMatchFetches,
       participantRankConcurrency,
       maxConcurrentSessions,
+      rawMaxConcurrentSessions,
+      maxConcurrentSessionsCap,
       sessionDispatchS: this.lastSessionDispatchS,
       sessionWallClockS: this.lastSessionWallClockS,
       targetRps,
@@ -476,8 +491,22 @@ export class PollerTuner {
       this.reqPerMatchEma.update(reqPerMatch);
     }
 
-    if (feedback.matchesFetched > 0 && feedback.avgMatchLatencyMs > 0) {
+    if (
+      feedback.matchesFetched > 0 &&
+      feedback.avgMatchLatencyMs > 0 &&
+      !feedback.wasGatewayQueueCongested
+    ) {
       this.matchLatencyEma.update(feedback.avgMatchLatencyMs);
+    } else if (feedback.wasGatewayQueueCongested) {
+      tunerLogger.debug(
+        {
+          component: 'PollerTuner',
+          event: 'latency_ema_skipped_congestion',
+          observedMs: feedback.avgMatchLatencyMs,
+          currentEma: this.matchLatencyEma.value,
+        },
+        'match latency EMA not updated — gateway queue was congested',
+      );
     }
 
     const totalParticipantEvents =

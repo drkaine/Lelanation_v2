@@ -21,7 +21,7 @@ export class PollSession {
   readonly startedAt: number;
 
   private readonly rankCache = new ParticipantRankCache();
-  private readonly processedMatchIds = new Set<string>();
+  private readonly processedMatchIds: Set<string>;
   private stats: SessionStats;
   private status: SessionStatus = 'pending';
   private readonly abortController = new AbortController();
@@ -34,6 +34,7 @@ export class PollSession {
     this.sessionId = crypto.randomUUID();
     this.players = players;
     this.config = mergePollConfig(config);
+    this.processedMatchIds = this.config.sharedProcessedMatchIds ?? new Set<string>();
     this.startedAt = Date.now();
     this.stats = createEmptySessionStats(players.length, this.startedAt);
   }

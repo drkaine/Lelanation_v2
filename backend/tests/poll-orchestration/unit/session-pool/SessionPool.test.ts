@@ -83,6 +83,8 @@ describe('SessionPool', () => {
         maxConcurrentMatchFetches: 1,
         participantRankConcurrency: 1,
         maxConcurrentSessions: opts.maxSessions ?? 2,
+        rawMaxConcurrentSessions: opts.maxSessions ?? 2,
+        maxConcurrentSessionsCap: opts.maxSessions ?? 2,
         sessionDispatchS: 1,
         sessionWallClockS: 2,
         targetRps: 1,

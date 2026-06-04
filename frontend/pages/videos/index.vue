@@ -40,8 +40,22 @@
                 {{ c.channelName || c.channelId }}
               </option>
             </select>
-            <div class="text-sm text-sky-200">
-              {{ filteredVideos.length }} vidéo{{ filteredVideos.length > 1 ? 's' : '' }}
+            <div class="flex flex-wrap items-center gap-2">
+              <div class="text-sm text-sky-200">
+                {{ filteredVideos.length }} vidéo{{ filteredVideos.length > 1 ? 's' : '' }}
+              </div>
+              <label for="videos-per-page" class="sr-only">Résultats par page</label>
+              <select
+                id="videos-per-page"
+                :value="String(perPage)"
+                class="rounded-lg border border-accent/70 bg-black px-2 py-1.5 text-xs text-sky-200 focus:border-accent focus:outline-none"
+                aria-label="Résultats par page"
+                @change="onPerPageChange"
+              >
+                <option v-for="o in perPageOptions" :key="o.value" :value="o.value">
+                  {{ o.label }}
+                </option>
+              </select>
             </div>
           </div>
         </div>
@@ -86,23 +100,6 @@
               >
                 {{ opt.label }}
               </button>
-            </div>
-
-            <div class="h-5 w-px shrink-0 bg-accent/30" aria-hidden="true"></div>
-
-            <div class="flex flex-wrap items-center gap-2">
-              <label for="videos-per-page" class="sr-only">Résultats par page</label>
-              <select
-                id="videos-per-page"
-                :value="String(perPage)"
-                class="rounded-lg border border-accent/70 bg-black px-2 py-1.5 text-xs text-sky-200 focus:border-accent focus:outline-none"
-                aria-label="Résultats par page"
-                @change="onPerPageChange"
-              >
-                <option v-for="o in perPageOptions" :key="o.value" :value="o.value">
-                  {{ o.label }}
-                </option>
-              </select>
             </div>
           </div>
         </div>

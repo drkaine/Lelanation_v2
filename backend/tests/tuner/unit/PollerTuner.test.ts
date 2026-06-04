@@ -21,6 +21,7 @@ function feedback(overrides: Partial<SessionFeedback> = {}): SessionFeedback {
     participantRanksFetched: 5,
     participantRanksFromCache: 5,
     avgMatchLatencyMs: 2600,
+    wasGatewayQueueCongested: false,
     ...overrides,
   };
 }
@@ -138,7 +139,8 @@ describe('PollerTuner', () => {
     expect(params.maxConcurrentPlayers).toBeLessThanOrEqual(2);
     expect(params.maxConcurrentMatchFetches).toBeLessThanOrEqual(4);
     expect(params.participantRankConcurrency).toBeLessThanOrEqual(2);
-    expect(params.maxConcurrentSessions).toBeGreaterThanOrEqual(3);
+    expect(params.maxConcurrentSessions).toBe(2);
+    expect(params.rawMaxConcurrentSessions).toBeGreaterThanOrEqual(2);
   });
 
   test('T11 maxConcurrentMatchFetches never exceeds MAX_CONCURRENT_MATCHES', () => {
@@ -616,14 +618,68 @@ describe('PollerTuner', () => {
     expect(warmupBatch).toBeLessThan(fullBatch);
   });
 
-  test('T12 maxConcurrentSessions>=3 for personal key (pipeline overlap)', () => {
+  test('T12 maxConcurrentSessions capped at 2 for personal key', () => {
     withApiKeyType('personal', () => {
       PollerTuner.resetInstance();
       const tuner = PollerTuner.getInstance();
       seedEmaReqPerPlayer(tuner, 2.55);
+      for (let i = 0; i < 5; i += 1) {
+        tuner.recordSession(feedback({ avgMatchLatencyMs: 45_000, wasGatewayQueueCongested: false }));
+      }
       const params = tuner.compute(ctx(buildGatewayStatus(99, 19), 200));
-      expect(params.maxConcurrentSessions).toBeGreaterThanOrEqual(3);
+      expect(params.maxConcurrentSessions).toBe(2);
+      expect(params.maxConcurrentSessionsCap).toBe(2);
+      expect(params.maxConcurrentSessions).toBe(
+        Math.min(params.rawMaxConcurrentSessions, params.maxConcurrentSessionsCap),
+      );
     });
+  });
+
+  test('T4 maxConcurrentSessions never exceeds personal cap', () => {
+    withApiKeyType('personal', () => {
+      PollerTuner.resetInstance();
+      const tuner = PollerTuner.getInstance();
+      seedEmaReqPerPlayer(tuner, 2.55);
+      for (let i = 0; i < 5; i += 1) {
+        tuner.recordSession(feedback({ avgMatchLatencyMs: 45_000, wasGatewayQueueCongested: false }));
+      }
+      const params = tuner.compute(ctx(buildGatewayStatus(99, 19), 200));
+      expect(params.maxConcurrentSessionsCap).toBe(2);
+      expect(params.maxConcurrentSessions).toBeLessThanOrEqual(2);
+    });
+  });
+
+  test('T5 maxConcurrentSessions NOT capped for production key', () => {
+    withApiKeyType('production', () => {
+      PollerTuner.resetInstance();
+      const tuner = PollerTuner.getInstance();
+      seedEmaReqPerPlayer(tuner, 2.55);
+      const params = tuner.compute(ctx(buildGatewayStatus(29_999, 499), 200));
+      expect(params.maxConcurrentSessions).toBe(3);
+      expect(params.maxConcurrentSessions).toBe(params.rawMaxConcurrentSessions);
+    });
+  });
+
+  test('T6 matchLatencyEma NOT updated when wasGatewayQueueCongested=true', () => {
+    const tuner = PollerTuner.getInstance();
+    for (let i = 0; i < 5; i += 1) {
+      tuner.recordSession(feedback());
+    }
+    const before = tuner.getSnapshot().ema.matchLatencyMs;
+    tuner.recordSession(
+      feedback({ avgMatchLatencyMs: 20_000, wasGatewayQueueCongested: true }),
+    );
+    expect(tuner.getSnapshot().ema.matchLatencyMs).toBeCloseTo(before, 0);
+  });
+
+  test('T7 matchLatencyEma updated when not congested', () => {
+    const tuner = PollerTuner.getInstance();
+    for (let i = 0; i < 5; i += 1) {
+      tuner.recordSession(feedback());
+    }
+    const before = tuner.getSnapshot().ema.matchLatencyMs;
+    tuner.recordSession(feedback({ avgMatchLatencyMs: 3000, wasGatewayQueueCongested: false }));
+    expect(tuner.getSnapshot().ema.matchLatencyMs).toBeGreaterThan(before);
   });
 
   test('T13 maxConcurrentSessions=3 for production key (latency bound)', () => {

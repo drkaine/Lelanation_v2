@@ -105,11 +105,19 @@ export function recordIngestionQueue(params: {
 }
 
 export function recordSessionPool(params: {
-  type: 'session_started' | 'session_completed' | 'pool_exhausted' | 'pool_recovered';
+  type:
+    | 'session_started'
+    | 'session_completed'
+    | 'pool_exhausted'
+    | 'pool_recovered'
+    | 'gateway_queue_wait';
   activeSessions: number;
   maxSessions: number;
   queueSize: number;
   sessionId?: string;
+  sharedMatchIdsSize?: number;
+  waitMs?: number;
+  gatewayQueueSize?: number;
 }): void {
   MetricsStore.getInstance().pushSessionPool({ ts: Date.now(), ...params });
 }

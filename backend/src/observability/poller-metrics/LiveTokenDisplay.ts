@@ -83,6 +83,8 @@ export class LiveTokenDisplay {
       active_sessions: pool
         ? `${pool.activeSessions} / max: ${pool.maxConcurrentSessions} | queue: ${pool.queueSize} players`
         : null,
+      gateway_queue: status.queue?.size ?? 0,
+      shared_dedup: pool?.sharedMatchIdsSize ?? null,
       rps_current: status.metrics.rps.current.toFixed(2),
       rps_avg_60s: status.metrics.rps.avg60s.toFixed(2),
       latency_p50: status.metrics.latency.p50,

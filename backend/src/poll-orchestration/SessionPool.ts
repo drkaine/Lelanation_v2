@@ -23,6 +23,14 @@ import {
 import { setSessionPoolStatusGetter } from './sessionPoolStatus.js';
 
 const SLOT_WAIT_MS = 200;
+const GATEWAY_QUEUE_POLL_MS = 200;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const SESSION_QUEUE_SAMPLE_MS = 1000;
+
+export function maxGatewayQueueBeforeSession(): number {
+  const parsed = Number.parseInt(process.env.MAX_GATEWAY_QUEUE ?? '10', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 10;
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -42,6 +50,8 @@ export interface SessionPoolStatus {
   activeSessions: number;
   maxConcurrentSessions: number;
   queueSize: number;
+  gatewayQueueSize: number;
+  sharedMatchIdsSize: number;
   isExhausted: boolean;
   isShuttingDown: boolean;
   totalSessionsLaunched: number;
@@ -59,6 +69,8 @@ export class SessionPool {
   private totalSessionsLaunched = 0;
   private totalSessionsCompleted = 0;
   private heartbeatTimer: NodeJS.Timeout | null = null;
+  private sharedProcessedMatchIds = new Set<string>();
+  private sharedMatchIdsLastReset = Date.now();
 
   constructor(
     private readonly playerQueue: PlayerQueue,
@@ -80,6 +92,8 @@ export class SessionPool {
       activeSessions: this.activeSessions.size,
       maxConcurrentSessions: this.config.maxConcurrentSessions,
       queueSize: this.playerQueue.size,
+      gatewayQueueSize: this.gateway.getStatus().queue.size,
+      sharedMatchIdsSize: this.sharedProcessedMatchIds.size,
       isExhausted: this.playerQueue.isExhausted(),
       isShuttingDown: this.isShuttingDown,
       totalSessionsLaunched: this.totalSessionsLaunched,
@@ -129,6 +143,50 @@ export class SessionPool {
         );
       }),
     ]);
+  }
+
+  private resetSharedMatchIdsIfNeeded(): void {
+    const now = Date.now();
+    if (now - this.sharedMatchIdsLastReset <= MS_PER_DAY) {
+      return;
+    }
+    const previousSize = this.sharedProcessedMatchIds.size;
+    this.sharedProcessedMatchIds = new Set<string>();
+    this.sharedMatchIdsLastReset = now;
+    orchestrationLogger.info(
+      {
+        component: 'SessionPool',
+        event: 'shared_match_ids_reset',
+        previousSize,
+        reason: '24h TTL expired',
+      },
+      'shared processed match ids reset',
+    );
+  }
+
+  private async waitForGatewayQueue(threshold: number): Promise<void> {
+    const waitStartedAt = Date.now();
+    let enteredWait = false;
+
+    while (!this.isShuttingDown) {
+      const size = this.gateway.getStatus().queue.size;
+      if (size <= threshold) {
+        const waitMs = Date.now() - waitStartedAt;
+        if (enteredWait && waitMs > 0) {
+          recordSessionPool({
+            type: 'gateway_queue_wait',
+            activeSessions: this.activeSessions.size,
+            maxSessions: this.config.maxConcurrentSessions,
+            queueSize: this.playerQueue.size,
+            waitMs,
+            gatewayQueueSize: size,
+          });
+        }
+        return;
+      }
+      enteredWait = true;
+      await sleep(GATEWAY_QUEUE_POLL_MS);
+    }
   }
 
   private async loopIteration(): Promise<void> {
@@ -181,17 +239,36 @@ export class SessionPool {
       }
     }
 
+    const gatewayQueueThreshold = maxGatewayQueueBeforeSession();
+    const gatewayQueueSize = this.gateway.getStatus().queue.size;
+    if (gatewayQueueSize > gatewayQueueThreshold) {
+      orchestrationLogger.debug(
+        {
+          component: 'SessionPool',
+          event: 'gateway_queue_wait',
+          queueSize: gatewayQueueSize,
+          threshold: gatewayQueueThreshold,
+          activeSessions: this.activeSessions.size,
+        },
+        'waiting for gateway queue to drain before new session',
+      );
+      await this.waitForGatewayQueue(gatewayQueueThreshold);
+    }
+
     const resolved = await this.sinceResolver.resolve();
     setLatestResolvedSince(resolved);
     this.currentSinceMode = applySinceModeTransition(this.currentSinceMode, resolved);
 
     const patchInfo = await PatchResolver.resolveCurrentPatchInfo();
+    this.resetSharedMatchIdsIfNeeded();
+
     const pollConfig: Partial<PollConfig> = {
       ...this.config.pollConfig,
       sinceTimestamp: resolved.sinceTimestamp,
       maxConcurrentPlayers: params.maxConcurrentPlayers,
       maxConcurrentMatchFetches: params.maxConcurrentMatchFetches,
       participantRankConcurrency: params.participantRankConcurrency,
+      sharedProcessedMatchIds: this.sharedProcessedMatchIds,
     };
     assertPollConfigFiltersWired(pollConfig, orchestrationLogger);
 
@@ -208,12 +285,19 @@ export class SessionPool {
     const sessionStartedAt = Date.now();
     this.totalSessionsLaunched += 1;
 
+    const gatewayQueueThresholdForSession = maxGatewayQueueBeforeSession();
+    let peakGatewayQueue = this.gateway.getStatus().queue.size;
+    const queueSampler = setInterval(() => {
+      peakGatewayQueue = Math.max(peakGatewayQueue, this.gateway.getStatus().queue.size);
+    }, SESSION_QUEUE_SAMPLE_MS);
+
     recordSessionPool({
       type: 'session_started',
       activeSessions: this.activeSessions.size + 1,
       maxSessions: this.config.maxConcurrentSessions,
       queueSize: this.playerQueue.size,
       sessionId,
+      sharedMatchIdsSize: this.sharedProcessedMatchIds.size,
     });
 
     orchestrationLogger.debug(
@@ -225,6 +309,7 @@ export class SessionPool {
         maxAllowed: this.config.maxConcurrentSessions,
         patch: patchInfo.patch,
         sinceMode: resolved.mode,
+        sharedMatchIdsSize: this.sharedProcessedMatchIds.size,
       },
       'session started',
     );
@@ -240,8 +325,14 @@ export class SessionPool {
           sessionStartedAt,
           endedAt,
         );
+        const wasGatewayQueueCongested = peakGatewayQueue > gatewayQueueThresholdForSession;
         this.tuner.recordSession(
-          buildSessionFeedback(result.stats, requestsUsed, avgMatchLatencyMs),
+          buildSessionFeedback(
+            result.stats,
+            requestsUsed,
+            avgMatchLatencyMs,
+            wasGatewayQueueCongested,
+          ),
         );
         this.tuner.recordUtilization(getTokenPct120s(this.gateway));
         this.totalSessionsCompleted += 1;
@@ -259,6 +350,8 @@ export class SessionPool {
             players: result.stats.playersTotal,
             matchesFetched: result.stats.matchesFetched,
             elapsedMs: result.stats.elapsedMs,
+            peakGatewayQueue,
+            wasGatewayQueueCongested,
           },
           'session complete',
         );
@@ -273,6 +366,7 @@ export class SessionPool {
         throw error;
       })
       .finally(() => {
+        clearInterval(queueSampler);
         this.activeSessions.delete(sessionId);
       });
 
@@ -295,6 +389,8 @@ export class SessionPool {
         active: this.activeSessions.size,
         max: this.config.maxConcurrentSessions,
         queue: this.playerQueue.size,
+        gateway_queue: status.queue.size,
+        shared_dedup: this.sharedProcessedMatchIds.size,
         launched: this.totalSessionsLaunched,
         completed: this.totalSessionsCompleted,
         gateway_rps: status.metrics.rps.current,

@@ -167,11 +167,19 @@ export interface GatewayAggregate {
 
 export interface SessionPoolEvent {
   ts: number;
-  type: 'session_started' | 'session_completed' | 'pool_exhausted' | 'pool_recovered';
+  type:
+    | 'session_started'
+    | 'session_completed'
+    | 'pool_exhausted'
+    | 'pool_recovered'
+    | 'gateway_queue_wait';
   activeSessions: number;
   maxSessions: number;
   queueSize: number;
   sessionId?: string;
+  sharedMatchIdsSize?: number;
+  waitMs?: number;
+  gatewayQueueSize?: number;
 }
 
 export interface PollAggregate {
@@ -195,6 +203,9 @@ export interface PollAggregate {
   matches_fetched_failed: number;
   match_fetch_latency_p50_ms: number;
   match_fetch_latency_p95_ms: number;
+  shared_match_ids_size: number;
+  gateway_queue_waits: number;
+  gateway_queue_wait_ms: number;
 }
 
 export interface IngestionAggregate {

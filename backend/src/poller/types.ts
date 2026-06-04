@@ -40,6 +40,11 @@ export interface PollConfig {
   matchFilter?: (matchIds: string[]) => Promise<string[]>;
   /** DB pre-filter: true if rank already exists for (puuid, today). */
   rankFilter?: (puuid: string, region: string) => Promise<boolean>;
+  /**
+   * Shared across concurrent SessionPool sessions — dedupes matchIds in place.
+   * When omitted, PollSession uses a session-local Set.
+   */
+  sharedProcessedMatchIds?: Set<string>;
 }
 
 export const DEFAULT_POLL_CONFIG: PollConfig = {

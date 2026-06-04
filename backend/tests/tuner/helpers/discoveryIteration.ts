@@ -73,6 +73,8 @@ export async function runDiscoveryIteration(deps: {
     matchesSkipped: stats.matchIdsSkipped,
     participantRanksFetched: stats.participantRanksFetched,
     participantRanksFromCache: stats.participantRanksFromCache,
+    avgMatchLatencyMs: 0,
+    wasGatewayQueueCongested: false,
   };
   tuner.recordSession(sessionFeedback);
 

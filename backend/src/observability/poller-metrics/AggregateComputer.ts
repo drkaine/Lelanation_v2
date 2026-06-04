@@ -58,6 +58,10 @@ export class AggregateComputer {
     const started = poolEvents.filter((e) => e.type === 'session_started');
     const activeSamples = started.map((e) => e.activeSessions);
     const poolExhausted = poolEvents.filter((e) => e.type === 'pool_exhausted').length;
+    const queueWaits = poolEvents.filter((e) => e.type === 'gateway_queue_wait');
+    const sharedSizes = poolEvents
+      .filter((e) => e.type === 'session_started' && e.sharedMatchIdsSize != null)
+      .map((e) => e.sharedMatchIdsSize as number);
 
     return {
       window,
@@ -80,6 +84,9 @@ export class AggregateComputer {
       matches_fetched_failed: fetches.filter((e) => !e.success).length,
       match_fetch_latency_p50_ms: percentileOf(successLatencies, 0.5),
       match_fetch_latency_p95_ms: percentileOf(successLatencies, 0.95),
+      shared_match_ids_size: sharedSizes.length > 0 ? Math.max(...sharedSizes) : 0,
+      gateway_queue_waits: queueWaits.length,
+      gateway_queue_wait_ms: queueWaits.reduce((sum, e) => sum + (e.waitMs ?? 0), 0),
     };
   }
 

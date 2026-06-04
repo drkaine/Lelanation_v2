@@ -21,6 +21,7 @@ export function buildSessionFeedback(
   stats: SessionStats,
   requestsUsed: number,
   avgMatchLatencyMs: number,
+  wasGatewayQueueCongested: boolean,
 ): SessionFeedback {
   return {
     playersCompleted: stats.playersCompleted,
@@ -31,6 +32,7 @@ export function buildSessionFeedback(
     participantRanksFetched: stats.participantRanksFetched,
     participantRanksFromCache: stats.participantRanksFromCache,
     avgMatchLatencyMs,
+    wasGatewayQueueCongested,
   };
 }
 

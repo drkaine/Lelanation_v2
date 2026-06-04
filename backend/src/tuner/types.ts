@@ -8,6 +8,8 @@ export interface TuningParams {
   maxConcurrentMatchFetches: number;
   participantRankConcurrency: number;
   maxConcurrentSessions: number;
+  rawMaxConcurrentSessions: number;
+  maxConcurrentSessionsCap: number;
   sessionDispatchS: number;
   sessionWallClockS: number;
   targetRps: number;
@@ -33,6 +35,7 @@ export interface SessionFeedback {
   participantRanksFetched: number;
   participantRanksFromCache: number;
   avgMatchLatencyMs: number;
+  wasGatewayQueueCongested: boolean;
 }
 
 export interface LimitChangeEvent {

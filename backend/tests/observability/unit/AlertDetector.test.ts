@@ -15,6 +15,7 @@ function sessionFeedback(): SessionFeedback {
     participantRanksFetched: 5,
     participantRanksFromCache: 5,
     avgMatchLatencyMs: 2600,
+    wasGatewayQueueCongested: false,
   };
 }
 
