@@ -54,9 +54,16 @@ export class AggregateComputer {
 
     const successFetches = fetches.filter((e) => e.success);
     const successLatencies = successFetches.map((e) => e.latencyMs);
+    const poolEvents = this.store.sessionPool.inWindow(windowMs);
+    const started = poolEvents.filter((e) => e.type === 'session_started');
+    const activeSamples = started.map((e) => e.activeSessions);
+    const poolExhausted = poolEvents.filter((e) => e.type === 'pool_exhausted').length;
 
     return {
       window,
+      concurrent_sessions_avg: mean(activeSamples),
+      concurrent_sessions_peak: activeSamples.length > 0 ? Math.max(...activeSamples) : 0,
+      pool_exhausted_count: poolExhausted,
       players_polled: players.filter((e) => e.type === 'polled').length,
       players_new_added: players.filter((e) => e.type === 'new_added').length,
       ranks_fetched: ranks.filter((e) => e.type === 'fetched').length,

@@ -2,10 +2,14 @@ import type { GatewayStatus } from '../riot-gateway/types.js';
 
 export interface TuningParams {
   batchSize: number;
+  /** @deprecated SessionPool ignores fixed sleeps; kept for snapshots */
   discoveryIntervalMs: number;
   maxConcurrentPlayers: number;
   maxConcurrentMatchFetches: number;
   participantRankConcurrency: number;
+  maxConcurrentSessions: number;
+  sessionDispatchS: number;
+  sessionWallClockS: number;
   targetRps: number;
   detectedLimit120s: number;
   detectedLimit1s: number;
@@ -28,6 +32,7 @@ export interface SessionFeedback {
   matchesSkipped: number;
   participantRanksFetched: number;
   participantRanksFromCache: number;
+  avgMatchLatencyMs: number;
 }
 
 export interface LimitChangeEvent {
@@ -52,7 +57,14 @@ export interface TunerSnapshot {
     reqPerPlayer: number;
     reqPerMatch: number;
     cacheHitRate: number;
+    matchLatencyMs: number;
   };
+  concurrent: {
+    maxConcurrentSessions: number;
+    matchLatencyEma: number;
+    sessionDispatchS: number;
+    sessionWallClockS: number;
+  } | null;
   limitHistory: LimitChangeEvent[];
   sessionCount: number;
   ratchet: TunerRatchetSnapshot;

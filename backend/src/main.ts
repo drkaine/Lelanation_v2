@@ -9,17 +9,17 @@ import {
   ParticipantDiscovery,
   PatchResolver,
   PlayerDiscovery,
+  PlayerQueue,
   PollerDbConsumer,
   RankFilter,
+  SessionPool,
   SinceTimestampResolver,
-  applySinceModeTransition,
   assertPollConfigFiltersWired,
+  clearSessionPoolStatusGetter,
   loadPollOrchestrationEnv,
-  setLatestResolvedSince,
 } from './poll-orchestration/index.js';
-import type { SinceMode } from './poll-orchestration/SinceTimestampResolver.js';
 import { PollerEngine } from './poller/PollerEngine.js';
-import type { Platform, Player, PollConfig } from './poller/types.js';
+import type { PollConfig } from './poller/types.js';
 import { ingestionQueue, getQueueMetrics } from './queues/index.js';
 import { trimCompletedQueueJobs } from './queues/queue-cleanup.js';
 import { purgeStaleProcessedMatchesAndRankHistory } from './services/patch-retention-cleanup.js';
@@ -44,6 +44,7 @@ let patchRetentionInterval: NodeJS.Timeout | null = null;
 let leaderLockRenewInterval: NodeJS.Timeout | null = null;
 let dbConsumer: PollerDbConsumer | null = null;
 let observability: ObservabilityOrchestrator | null = null;
+let sessionPool: SessionPool | null = null;
 let shuttingDown = false;
 
 const playerDiscovery = new PlayerDiscovery();
@@ -51,14 +52,6 @@ const sinceResolver = new SinceTimestampResolver(playerDiscovery);
 const matchFilter = new MatchFilter();
 const rankFilter = new RankFilter();
 const participantDiscovery = new ParticipantDiscovery();
-
-function toPlatform(region: string): Platform {
-  return region.trim().toLowerCase() as Platform;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 async function acquirePollerLeaderLock(): Promise<void> {
   const acquired = await redis.set(
@@ -188,8 +181,7 @@ async function startMonitoring(): Promise<void> {
   summary1hInterval = setInterval(() => void emitDbWindowSummary('1h'), 60 * 60_000);
 }
 
-async function discoveryLoop(): Promise<void> {
-  orchestrationLogger.info('discovery loop started');
+async function startSessionPool(): Promise<void> {
   const backpressure = new BackpressureMonitor(
     ingestionQueue,
     orchEnv.backpressureThreshold,
@@ -197,130 +189,66 @@ async function discoveryLoop(): Promise<void> {
   );
   const tuner = PollerTuner.getInstance();
   const gateway = RiotGateway.getInstance();
-  let requestsAtSessionStart = 0;
-  let previousSinceMode: SinceMode | null = null;
+  const engine = PollerEngine.getInstance();
 
-  while (!shuttingDown) {
-    try {
-      await backpressure.waitForHeadroom();
-      const { total: queueDepth } = await backpressure.getDepth();
+  const initialParams = tuner.compute({
+    gatewayStatus: gateway.getStatus(),
+    queueDepth: 0,
+    availablePlayers: 1000,
+  });
 
-      const discovered = await playerDiscovery.fetchNextBatch(TUNER_MAX_DISCOVERY_FETCH);
-      if (discovered.length === 0) {
-        orchestrationLogger.warn({ sleepMs: orchEnv.discoveryIdleSleepMs }, 'no players in discovery batch, sleeping');
-        await sleep(orchEnv.discoveryIdleSleepMs);
-        continue;
-      }
+  const playerQueue = new PlayerQueue(playerDiscovery, {
+    highWaterMark: initialParams.batchSize * initialParams.maxConcurrentSessions * 4,
+    lowWaterMark: initialParams.batchSize * initialParams.maxConcurrentSessions,
+    fetchBatchSize: initialParams.batchSize * initialParams.maxConcurrentSessions * 2,
+  });
+  await playerQueue.prime();
 
-      const tuned = tuner.compute({
-        gatewayStatus: gateway.getStatus(),
-        queueDepth,
-        availablePlayers: discovered.length,
-      });
+  const resolveParticipantRanks =
+    riotConfig.apiKeyType === 'personal'
+      ? false
+      : process.env.RESOLVE_PARTICIPANT_RANKS !== 'false';
 
-      const players = discovered.slice(0, tuned.batchSize);
+  const basePollConfig: Partial<PollConfig> = {
+    matchIdsPerPage: Number.parseInt(process.env.POLLER_MATCH_IDS_PER_PAGE ?? '100', 10),
+    resolveParticipantRanks,
+    matchFilter: (matchIds) => matchFilter.filterNew(matchIds),
+    rankFilter: (puuid, region) => rankFilter.isKnownToday(puuid, region),
+  };
+  assertPollConfigFiltersWired(basePollConfig, orchestrationLogger);
 
-      orchestrationLogger.info(
-        {
-          count: players.length,
-          discovered: discovered.length,
-          firstPlayer: players[0]?.puuid,
-          lastPlayer: players[players.length - 1]?.puuid,
-        },
-        'discovery batch ready',
-      );
-
-      const patchInfo = await PatchResolver.resolveCurrentPatchInfo();
-      const resolved = await sinceResolver.resolve();
-      setLatestResolvedSince(resolved);
-      previousSinceMode = applySinceModeTransition(previousSinceMode, resolved);
-
-      orchestrationLogger.info(
-        {
-          patch: patchInfo.patch,
-          since: new Date(resolved.sinceTimestamp * 1000).toISOString(),
-          sinceMode: resolved.mode,
-          sinceReason: resolved.reason,
-        },
-        'polling patch',
-      );
-
-      const pollConfig: Partial<PollConfig> = {
-        sinceTimestamp: resolved.sinceTimestamp,
-        matchIdsPerPage: Number.parseInt(process.env.POLLER_MATCH_IDS_PER_PAGE ?? '100', 10),
-        resolveParticipantRanks:
-          riotConfig.apiKeyType === 'personal'
-            ? false
-            : process.env.RESOLVE_PARTICIPANT_RANKS !== 'false',
-        maxConcurrentPlayers: tuned.maxConcurrentPlayers,
-        maxConcurrentMatchFetches: tuned.maxConcurrentMatchFetches,
-        participantRankConcurrency: tuned.participantRankConcurrency,
-        matchFilter: (matchIds) => matchFilter.filterNew(matchIds),
-        rankFilter: (puuid, region) => rankFilter.isKnownToday(puuid, region),
-      };
-      assertPollConfigFiltersWired(pollConfig, orchestrationLogger);
-
-      const pollerPlayers: Player[] = players.map((p) => ({
-        puuid: p.puuid,
-        platform: toPlatform(p.region),
-      }));
-
-      const engine = PollerEngine.getInstance();
-      dbConsumer?.resetSessionState();
-      rankFilter.clearCache();
-
-      requestsAtSessionStart = gateway.getStatus().metrics.totals.requests;
-
-      const { sessionId, stats } = await engine.poll(pollerPlayers, pollConfig);
-
-      const requestsUsed =
-        gateway.getStatus().metrics.totals.requests - requestsAtSessionStart;
-
-      tuner.recordSession({
-        playersCompleted: stats.playersCompleted,
-        totalGatewayRequests: requestsUsed,
-        sessionDurationMs: stats.elapsedMs ?? 0,
-        matchesFetched: stats.matchesFetched,
-        matchesSkipped: stats.matchIdsSkipped,
-        participantRanksFetched: stats.participantRanksFetched,
-        participantRanksFromCache: stats.participantRanksFromCache,
-      });
-
-      const app120Util = gateway
-        .getStatus()
-        .metrics.tokenUtilization.find((b) => b.bucketId.includes('120000'));
-      tuner.recordUtilization(app120Util?.pct ?? 0);
-
-      orchestrationLogger.info(
-        {
-          sessionId,
-          players: stats.playersTotal,
-          matchesFetched: stats.matchesFetched,
-          errors: stats.errors.length,
-          elapsedMs: stats.elapsedMs,
-          tunerSnapshot: tuner.getSnapshot(),
-        },
-        'poll session complete',
-      );
-
-      let sleepMs = 0;
-      if (stats.matchesFetched === 0) {
-        sleepMs = orchEnv.discoveryIdleSleepMs;
-      } else if (tuned.discoveryIntervalMs > 0) {
-        sleepMs = tuned.discoveryIntervalMs;
-      }
-      if (sleepMs > 0) {
-        orchestrationLogger.debug({ sleepMs }, 'sleeping before next discovery');
-        await sleep(sleepMs);
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      orchestrationLogger.error({ error: message }, 'discovery loop iteration failed');
-      await sleep(10_000);
-    }
+  if (!observability) {
+    throw new Error('observability_not_started');
   }
 
-  orchestrationLogger.info('discovery loop exited (shutdown signal)');
+  sessionPool = new SessionPool(
+    playerQueue,
+    engine,
+    tuner,
+    backpressure,
+    sinceResolver,
+    gateway,
+    observability,
+    dbConsumer,
+    rankFilter,
+    {
+      maxConcurrentSessions: initialParams.maxConcurrentSessions,
+      batchSize: initialParams.batchSize,
+      pollConfig: basePollConfig,
+    },
+  );
+
+  orchestrationLogger.info(
+    {
+      component: 'main',
+      maxConcurrentSessions: initialParams.maxConcurrentSessions,
+      batchSize: initialParams.batchSize,
+      queueHighWater: initialParams.batchSize * initialParams.maxConcurrentSessions * 4,
+    },
+    'session pool starting',
+  );
+
+  await sessionPool.start();
 }
 
 async function bootstrap(): Promise<void> {
@@ -393,7 +321,7 @@ async function bootstrap(): Promise<void> {
   await runPatchRetentionPurge();
   patchRetentionInterval = setInterval(() => void runPatchRetentionPurge(), 6 * 60 * 60_000);
 
-  void discoveryLoop();
+  void startSessionPool();
 
   await startMonitoring();
   process.send?.('ready');
@@ -410,6 +338,9 @@ async function gracefulShutdown(signal: string): Promise<void> {
   if (patchRetentionInterval) clearInterval(patchRetentionInterval);
 
   try {
+    await sessionPool?.shutdown(60_000);
+    sessionPool = null;
+    clearSessionPoolStatusGetter();
     dbConsumer?.unsubscribe();
     dbConsumer = null;
     observability?.stop();

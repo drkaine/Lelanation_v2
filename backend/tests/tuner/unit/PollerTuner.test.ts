@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { riotConfig } from '../../../src/riot-gateway/config/riotConfig.js';
 import { PollerTuner } from '../../../src/tuner/PollerTuner.js';
 import type { SessionFeedback } from '../../../src/tuner/types.js';
 import { withApiKeyType } from '../helpers/apiKeyType.js';
@@ -19,6 +20,7 @@ function feedback(overrides: Partial<SessionFeedback> = {}): SessionFeedback {
     matchesSkipped: 0,
     participantRanksFetched: 5,
     participantRanksFromCache: 5,
+    avgMatchLatencyMs: 2600,
     ...overrides,
   };
 }
@@ -93,12 +95,14 @@ describe('PollerTuner', () => {
   });
 
   test('T7 batchSize never exceeds MAX_BATCH_SIZE (200)', () => {
-    const tuner = PollerTuner.getInstance();
-    for (let i = 0; i < 5; i += 1) {
-      tuner.recordSession(feedback({ totalGatewayRequests: 1, playersCompleted: 1 }));
-    }
-    const params = tuner.compute(ctx(buildGatewayStatus(29_999, 499), 500));
-    expect(params.batchSize).toBeLessThanOrEqual(200);
+    withApiKeyType('production', () => {
+      const tuner = PollerTuner.getInstance();
+      for (let i = 0; i < 5; i += 1) {
+        tuner.recordSession(feedback({ totalGatewayRequests: 1, playersCompleted: 1 }));
+      }
+      const params = tuner.compute(ctx(buildGatewayStatus(29_999, 499), 500));
+      expect(params.batchSize).toBeLessThanOrEqual(200);
+    });
   });
 
   test('T8 warmup reduces batchSize vs post-warmup', () => {
@@ -185,15 +189,15 @@ describe('PollerTuner', () => {
     expect(params.maxConcurrentPlayers).toBeLessThanOrEqual(params.batchSize);
   });
 
-  test('T14 utilization 75% sets 1000ms interval', () => {
+  test('T14 discovery interval unused with SessionPool', () => {
     withApiKeyType('production', () => {
       const tuner = PollerTuner.getInstance();
       const params = tuner.compute(ctx(buildGatewayStatus(99, 19, 75), 10));
-      expect(params.discoveryIntervalMs).toBe(1000);
+      expect(params.discoveryIntervalMs).toBe(0);
     });
   });
 
-  test('T13 high utilization sets 3000ms interval', () => {
+  test('T13 discovery interval unused with SessionPool (high util)', () => {
     withApiKeyType('production', () => {
       const tuner = PollerTuner.getInstance();
       const params = tuner.compute({
@@ -201,15 +205,8 @@ describe('PollerTuner', () => {
         queueDepth: 0,
         availablePlayers: 10,
       });
-      expect(params.discoveryIntervalMs).toBe(3000);
+      expect(params.discoveryIntervalMs).toBe(0);
     });
-  });
-
-  test('personal high utilization throttles discovery only above 96%', () => {
-    const tuner = PollerTuner.getInstance();
-    expect(tuner.compute(ctx(buildGatewayStatus(99, 19, 75), 10)).discoveryIntervalMs).toBe(0);
-    expect(tuner.compute(ctx(buildGatewayStatus(99, 19, 97), 10)).discoveryIntervalMs).toBe(1000);
-    expect(tuner.compute(ctx(buildGatewayStatus(99, 19, 99), 10)).discoveryIntervalMs).toBe(3000);
   });
 
   test('T15 low utilization and queue gives 0 interval', () => {
@@ -222,14 +219,14 @@ describe('PollerTuner', () => {
     expect(params.discoveryIntervalMs).toBe(0);
   });
 
-  test('T16 deep queue sets 2000ms interval', () => {
+  test('T16 deep queue does not set discovery interval (SessionPool)', () => {
     const tuner = PollerTuner.getInstance();
     const params = tuner.compute({
       gatewayStatus: buildGatewayStatus(99, 19, 50),
       queueDepth: 450,
       availablePlayers: 10,
     });
-    expect(params.discoveryIntervalMs).toBe(2000);
+    expect(params.discoveryIntervalMs).toBe(0);
   });
 
   test('T18 queueDepth zero leaves targetRps unchanged', () => {
@@ -516,15 +513,17 @@ describe('PollerTuner', () => {
     }
   }
 
-  test('batchSize targets 120s window via ceil(safeTokens / ema)', () => {
+  test('batchSize targets 120s window split across concurrent sessions', () => {
     withApiKeyType('production', () => {
       PollerTuner.resetInstance();
       const tuner = PollerTuner.getInstance();
       seedEmaReqPerPlayer(tuner, 2.55);
       const ema = tuner.getSnapshot().ema.reqPerPlayer;
       const params = tuner.compute(ctx(buildGatewayStatus(100, 20), 200));
-      const expected = Math.ceil(Math.floor(100 * 0.95) / ema);
+      const safeTokens = Math.floor(100 * (1 - 0.05));
+      const expected = Math.ceil(safeTokens / params.maxConcurrentSessions / ema);
       expect(params.batchSize).toBe(expected);
+      expect(params.maxConcurrentSessions).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -609,5 +608,52 @@ describe('PollerTuner', () => {
     seedEmaReqPerPlayer(warm, 2.55);
     const fullBatch = warm.compute(ctx(buildGatewayStatus(100, 20), 200)).batchSize;
     expect(warmupBatch).toBeLessThan(fullBatch);
+  });
+
+  test('T12 maxConcurrentSessions=2 for personal key (gateway bound)', () => {
+    withApiKeyType('personal', () => {
+      PollerTuner.resetInstance();
+      const tuner = PollerTuner.getInstance();
+      seedEmaReqPerPlayer(tuner, 2.55);
+      const params = tuner.compute(ctx(buildGatewayStatus(99, 19), 200));
+      expect(params.maxConcurrentSessions).toBe(2);
+    });
+  });
+
+  test('T13 maxConcurrentSessions=3 for production key (latency bound)', () => {
+    withApiKeyType('production', () => {
+      PollerTuner.resetInstance();
+      const tuner = PollerTuner.getInstance();
+      seedEmaReqPerPlayer(tuner, 2.55);
+      const params = tuner.compute(ctx(buildGatewayStatus(29_999, 499), 200));
+      expect(params.maxConcurrentSessions).toBe(3);
+    });
+  });
+
+  test('T14 batchSize uses 120s window per session for personal', () => {
+    withApiKeyType('personal', () => {
+      PollerTuner.resetInstance();
+      const tuner = PollerTuner.getInstance();
+      seedEmaReqPerPlayer(tuner, 2.55);
+      const params = tuner.compute(ctx(buildGatewayStatus(99, 19), 200));
+      const targetTokens = riotConfig.personalTargetTokens120s(99);
+      const rawExpected = Math.ceil(targetTokens / params.maxConcurrentSessions / 2.55);
+      expect(params.batchSize).toBeGreaterThanOrEqual(Math.floor(rawExpected * 0.85));
+      expect(params.batchSize).toBeLessThanOrEqual(rawExpected);
+    });
+  });
+
+  test('T15 matchLatencyEma updated from recordSession feedback', () => {
+    const tuner = PollerTuner.getInstance();
+    const before = tuner.getSnapshot().ema.matchLatencyMs;
+    tuner.recordSession(feedback({ matchesFetched: 3, avgMatchLatencyMs: 3100 }));
+    expect(tuner.getSnapshot().ema.matchLatencyMs).toBeGreaterThan(before);
+    expect(tuner.getSnapshot().ema.matchLatencyMs).toBeGreaterThan(2650);
+  });
+
+  test('T16 maxConcurrentSessions never below 1', () => {
+    const tuner = PollerTuner.getInstance();
+    const params = tuner.compute(ctx(buildGatewayStatus(1, 1, 99), 1));
+    expect(params.maxConcurrentSessions).toBeGreaterThanOrEqual(1);
   });
 });

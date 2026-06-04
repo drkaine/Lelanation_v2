@@ -34,7 +34,14 @@ export class SnapshotPersistence {
   async load(): Promise<void> {
     try {
       const { readFile } = await import('node:fs/promises');
-      const raw = await readFile(this.filePath, 'utf8');
+      const raw = (await readFile(this.filePath, 'utf8')).trim();
+      if (!raw) {
+        pollerMetricsLogger.info(
+          { component: 'SnapshotPersistence', path: this.filePath },
+          'empty snapshot file — starting fresh',
+        );
+        return;
+      }
       this.data = JSON.parse(raw) as Partial<Record<WindowLabel, FullSnapshot>>;
       for (const [window, snapshot] of Object.entries(this.data)) {
         pollerMetricsLogger.info(

@@ -104,6 +104,16 @@ export function recordIngestionQueue(params: {
   MetricsStore.getInstance().pushIngestionQueue({ ts: Date.now(), ...params });
 }
 
+export function recordSessionPool(params: {
+  type: 'session_started' | 'session_completed' | 'pool_exhausted' | 'pool_recovered';
+  activeSessions: number;
+  maxSessions: number;
+  queueSize: number;
+  sessionId?: string;
+}): void {
+  MetricsStore.getInstance().pushSessionPool({ ts: Date.now(), ...params });
+}
+
 export function recordIngestionWorker(params: {
   matchId: string;
   patch: string;

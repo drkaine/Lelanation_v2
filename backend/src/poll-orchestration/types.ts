@@ -18,7 +18,9 @@ export interface PollOrchestrationEnv {
   /** @deprecated batch size is computed by PollerTuner */
   discoveryBatchSize: number;
   /** @deprecated sleep between cycles is computed by PollerTuner */
+  /** @deprecated SessionPool replaces fixed discovery sleeps */
   discoveryIntervalMs: number;
+  /** @deprecated SessionPool uses PlayerQueue.waitForPlayers */
   discoveryIdleSleepMs: number;
   /** @deprecated use PollerTuner */
   pollMaxConcurrentPlayers: number;

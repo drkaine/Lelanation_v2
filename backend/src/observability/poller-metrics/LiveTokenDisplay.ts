@@ -3,6 +3,7 @@ import type { RiotGateway } from '../../riot-gateway/gateway/RiotGateway.js';
 import type { MetricsStore } from './MetricsStore.js';
 import { pollerMetricsLogger } from './logger.js';
 import { getLatestResolvedSince } from '../../poll-orchestration/sinceContext.js';
+import { getSessionPoolStatus } from '../../poll-orchestration/sessionPoolStatus.js';
 import type { ResolvedSince, TokenSnapshotEvent } from './types.js';
 
 export function tokenBar(pct: number): string {
@@ -69,6 +70,8 @@ export class LiveTokenDisplay {
     };
     this.store.pushTokenSnapshot(snapshot);
 
+    const pool = getSessionPoolStatus();
+
     pollerMetricsLogger.info({
       component: 'live-tokens',
       since_mode: sinceMode,
@@ -77,6 +80,9 @@ export class LiveTokenDisplay {
       tokens_1s: `${used_1s}/${limit_1s} ${tokenBar(pct_1s)} ${pct_1s.toFixed(1)}%`,
       in_flight: status.inFlight.global,
       queue_depth: waiting + active,
+      active_sessions: pool
+        ? `${pool.activeSessions} / max: ${pool.maxConcurrentSessions} | queue: ${pool.queueSize} players`
+        : null,
       rps_current: status.metrics.rps.current.toFixed(2),
       rps_avg_60s: status.metrics.rps.avg60s.toFixed(2),
       latency_p50: status.metrics.latency.p50,

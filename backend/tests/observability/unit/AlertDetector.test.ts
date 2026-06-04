@@ -14,6 +14,7 @@ function sessionFeedback(): SessionFeedback {
     matchesSkipped: 0,
     participantRanksFetched: 5,
     participantRanksFromCache: 5,
+    avgMatchLatencyMs: 2600,
   };
 }
 

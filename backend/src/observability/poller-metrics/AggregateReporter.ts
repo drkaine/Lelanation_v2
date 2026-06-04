@@ -31,6 +31,8 @@ export class AggregateReporter {
       const timer = setInterval(() => void this.report(label), intervalMs);
       this.timers.set(label, timer);
     }
+    // First aggregates soon after restart (intervals alone wait up to 10m).
+    void this.report('10m');
   }
 
   stop(): void {

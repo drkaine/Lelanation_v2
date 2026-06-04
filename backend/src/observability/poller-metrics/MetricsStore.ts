@@ -11,6 +11,7 @@ import type {
   QueueDepthEvent,
   RankEvent,
   RateLimitSaturationEvent,
+  SessionPoolEvent,
   TokenSnapshotEvent,
 } from './types.js';
 
@@ -29,6 +30,7 @@ export class MetricsStore {
   readonly ingestionWorker = new CircularBuffer<IngestionWorkerEvent>(50_000);
   readonly dbOperations = new CircularBuffer<DbOperationEvent>(50_000);
   readonly queueDepth = new CircularBuffer<QueueDepthEvent>(8_640);
+  readonly sessionPool = new CircularBuffer<SessionPoolEvent>(500);
 
   private readonly startedAt = Date.now();
 
@@ -93,5 +95,9 @@ export class MetricsStore {
 
   pushQueueDepth(e: QueueDepthEvent): void {
     this.queueDepth.push(e);
+  }
+
+  pushSessionPool(e: SessionPoolEvent): void {
+    this.sessionPool.push(e);
   }
 }

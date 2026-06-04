@@ -165,8 +165,20 @@ export interface GatewayAggregate {
   avg_token_pct_1s: number;
 }
 
+export interface SessionPoolEvent {
+  ts: number;
+  type: 'session_started' | 'session_completed' | 'pool_exhausted' | 'pool_recovered';
+  activeSessions: number;
+  maxSessions: number;
+  queueSize: number;
+  sessionId?: string;
+}
+
 export interface PollAggregate {
   window: WindowLabel;
+  concurrent_sessions_avg: number;
+  concurrent_sessions_peak: number;
+  pool_exhausted_count: number;
   players_polled: number;
   players_new_added: number;
   ranks_fetched: number;

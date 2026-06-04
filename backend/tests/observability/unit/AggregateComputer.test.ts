@@ -175,6 +175,7 @@ describe('AggregateComputer', () => {
     const snap = new AggregateComputer(store).computeFull('10m', 99, 19, []);
     expect(snap.gateway.total_requests).toBe(0);
     expect(snap.poll.players_polled).toBe(0);
+    expect(snap.poll.concurrent_sessions_avg).toBe(0);
     expect(snap.ingestion.matches_ingested).toBe(0);
     expect(snap.ingestion.ingested_processed).toBe(0);
     expect(snap.ingestion.ingested_already_done).toBe(0);

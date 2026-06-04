@@ -74,6 +74,7 @@ describe('tunerIntegration e2e', () => {
         matchesSkipped: 0,
         participantRanksFetched: 0,
         participantRanksFromCache: 0,
+        avgMatchLatencyMs: 2600,
       });
     }
     const fullBatch = afterWarmupEstimator.compute({
@@ -101,6 +102,7 @@ describe('tunerIntegration e2e', () => {
         matchesSkipped: 0,
         participantRanksFetched: 0,
         participantRanksFromCache: 10,
+        avgMatchLatencyMs: 2600,
       });
     }
     const params = tuner.compute({
@@ -141,6 +143,7 @@ describe('tunerIntegration e2e', () => {
         matchesSkipped: 0,
         participantRanksFetched: 0,
         participantRanksFromCache: 0,
+        avgMatchLatencyMs: 2600,
       });
     }
     const baseline = tuner.compute({
@@ -159,6 +162,7 @@ describe('tunerIntegration e2e', () => {
         matchesSkipped: 0,
         participantRanksFetched: 0,
         participantRanksFromCache: 0,
+        avgMatchLatencyMs: 2600,
       });
     }
     const pressured = pressuredTuner.compute({
@@ -168,7 +172,7 @@ describe('tunerIntegration e2e', () => {
     });
     expect(pressured.targetRps).toBeLessThan(baseline.targetRps);
     expect(pressured.batchSize).toBeLessThanOrEqual(baseline.batchSize);
-    expect(pressured.discoveryIntervalMs).toBeGreaterThan(0);
+    expect(pressured.discoveryIntervalMs).toBe(0);
   });
 
   test('T5 one poll iteration with tuner feedback', async () => {
