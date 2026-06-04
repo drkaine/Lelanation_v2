@@ -26,7 +26,15 @@ export type ChampionObjectiveSummary = {
     objectiveWinrate: number
     killRate: number
     assistRate: number
+    soloRate: number
   }>
+  /** Vol d'objectif, solo baron, etc. (challenges Riot agrégés). */
+  participationCard: {
+    stealPct: number
+    stealWithoutSmitePct: number
+    soloBaronPct: number
+    soloEpicObjectivePct: number
+  }
   outcomeRows: Array<{
     key: string
     label: string
@@ -44,30 +52,41 @@ type RawObjectiveAgg = {
   baron_involved_win: bigint
   baron_kill_game: bigint
   baron_assist_game: bigint
+  baron_solo_game: bigint
   dragon_involved_game: bigint
   dragon_involved_win: bigint
   dragon_kill_game: bigint
   dragon_assist_game: bigint
+  dragon_solo_game: bigint
   rift_herald_involved_game: bigint
   rift_herald_involved_win: bigint
   rift_herald_kill_game: bigint
   rift_herald_assist_game: bigint
+  rift_herald_solo_game: bigint
   horde_involved_game: bigint
   horde_involved_win: bigint
   horde_kill_game: bigint
   horde_assist_game: bigint
+  horde_solo_game: bigint
   elder_involved_game: bigint
   elder_involved_win: bigint
   elder_kill_game: bigint
   elder_assist_game: bigint
+  elder_solo_game: bigint
   tower_involved_game: bigint
   tower_involved_win: bigint
   tower_kill_game: bigint
   tower_assist_game: bigint
+  tower_solo_game: bigint
   inhibitor_involved_game: bigint
   inhibitor_involved_win: bigint
   inhibitor_kill_game: bigint
   inhibitor_assist_game: bigint
+  inhibitor_solo_game: bigint
+  any_epic_solo_game: bigint
+  sum_epic_monster_steals: bigint
+  sum_epic_monster_stolen_without_smite: bigint
+  sum_objectives_stolen: bigint
   earth_drake_total: bigint
   water_drake_total: bigint
   wind_drake_total: bigint
@@ -103,6 +122,17 @@ function involvedGamesExpr(killCol: string, assistCol: string): string {
 
 function touchGamesExpr(col: string): string {
   return `COALESCE(SUM(CASE WHEN ${col} > 0 THEN cs.count_game ELSE 0 END), 0)`
+}
+
+/** Parties où le joueur a le crédit kill sans assist sur cet objectif. */
+function soloTouchGamesExpr(killCol: string, assistCol: string): string {
+  return `COALESCE(SUM(CASE WHEN ${killCol} > 0 AND ${assistCol} = 0 THEN cs.count_game ELSE 0 END), 0)`
+}
+
+/** % parties avec au moins un événement (proxy quand seuls des sum_* existent, max ~1 par match). */
+function pctGamesWithEvents(totalEvents: number, games: number): number {
+  if (games <= 0 || totalEvents <= 0) return 0
+  return Number(((100 * Math.min(games, totalEvents)) / games).toFixed(2))
 }
 
 function parseDurationBucketMin(bucket: string): number {
@@ -145,30 +175,47 @@ export async function getChampionObjectivesSummary(options: {
         COALESCE(SUM(cs.count_baron_involved_win), 0)::bigint AS baron_involved_win,
         ${touchGamesExpr('cs.count_baron_kill')}::bigint AS baron_kill_game,
         ${touchGamesExpr('cs.count_baron_assist')}::bigint AS baron_assist_game,
+        ${soloTouchGamesExpr('cs.count_baron_kill', 'cs.count_baron_assist')}::bigint AS baron_solo_game,
         ${involvedGamesExpr('cs.count_dragon_kill', 'cs.count_dragon_assist')}::bigint AS dragon_involved_game,
         COALESCE(SUM(cs.count_dragon_involved_win), 0)::bigint AS dragon_involved_win,
         ${touchGamesExpr('cs.count_dragon_kill')}::bigint AS dragon_kill_game,
         ${touchGamesExpr('cs.count_dragon_assist')}::bigint AS dragon_assist_game,
+        ${soloTouchGamesExpr('cs.count_dragon_kill', 'cs.count_dragon_assist')}::bigint AS dragon_solo_game,
         ${involvedGamesExpr('cs.count_rift_herald_kill', 'cs.count_rift_herald_assist')}::bigint AS rift_herald_involved_game,
         COALESCE(SUM(cs.count_rift_herald_involved_win), 0)::bigint AS rift_herald_involved_win,
         ${touchGamesExpr('cs.count_rift_herald_kill')}::bigint AS rift_herald_kill_game,
         ${touchGamesExpr('cs.count_rift_herald_assist')}::bigint AS rift_herald_assist_game,
+        ${soloTouchGamesExpr('cs.count_rift_herald_kill', 'cs.count_rift_herald_assist')}::bigint AS rift_herald_solo_game,
         ${involvedGamesExpr('cs.count_horde_kill', 'cs.count_horde_assist')}::bigint AS horde_involved_game,
         COALESCE(SUM(cs.count_horde_involved_win), 0)::bigint AS horde_involved_win,
         ${touchGamesExpr('cs.count_horde_kill')}::bigint AS horde_kill_game,
         ${touchGamesExpr('cs.count_horde_assist')}::bigint AS horde_assist_game,
+        ${soloTouchGamesExpr('cs.count_horde_kill', 'cs.count_horde_assist')}::bigint AS horde_solo_game,
         ${involvedGamesExpr('cs.count_elder_kill', 'cs.count_elder_assist')}::bigint AS elder_involved_game,
         COALESCE(SUM(cs.count_elder_involved_win), 0)::bigint AS elder_involved_win,
         ${touchGamesExpr('cs.count_elder_kill')}::bigint AS elder_kill_game,
         ${touchGamesExpr('cs.count_elder_assist')}::bigint AS elder_assist_game,
+        ${soloTouchGamesExpr('cs.count_elder_kill', 'cs.count_elder_assist')}::bigint AS elder_solo_game,
         ${involvedGamesExpr('cs.count_tower_kill', 'cs.count_tower_assist')}::bigint AS tower_involved_game,
         COALESCE(SUM(cs.count_tower_involved_win), 0)::bigint AS tower_involved_win,
         ${touchGamesExpr('cs.count_tower_kill')}::bigint AS tower_kill_game,
         ${touchGamesExpr('cs.count_tower_assist')}::bigint AS tower_assist_game,
+        ${soloTouchGamesExpr('cs.count_tower_kill', 'cs.count_tower_assist')}::bigint AS tower_solo_game,
         ${involvedGamesExpr('cs.count_inhibitor_kill', 'cs.count_inhibitor_assist')}::bigint AS inhibitor_involved_game,
         COALESCE(SUM(cs.count_inhibitor_involved_win), 0)::bigint AS inhibitor_involved_win,
         ${touchGamesExpr('cs.count_inhibitor_kill')}::bigint AS inhibitor_kill_game,
         ${touchGamesExpr('cs.count_inhibitor_assist')}::bigint AS inhibitor_assist_game,
+        ${soloTouchGamesExpr('cs.count_inhibitor_kill', 'cs.count_inhibitor_assist')}::bigint AS inhibitor_solo_game,
+        COALESCE(SUM(CASE WHEN
+          (cs.count_baron_kill > 0 AND cs.count_baron_assist = 0)
+          OR (cs.count_dragon_kill > 0 AND cs.count_dragon_assist = 0)
+          OR (cs.count_rift_herald_kill > 0 AND cs.count_rift_herald_assist = 0)
+          OR (cs.count_horde_kill > 0 AND cs.count_horde_assist = 0)
+          OR (cs.count_elder_kill > 0 AND cs.count_elder_assist = 0)
+          THEN cs.count_game ELSE 0 END), 0)::bigint AS any_epic_solo_game,
+        COALESCE(SUM(cs.sum_epic_monster_steals), 0)::bigint AS sum_epic_monster_steals,
+        COALESCE(SUM(cs.sum_epic_monster_stolen_without_smite), 0)::bigint AS sum_epic_monster_stolen_without_smite,
+        COALESCE(SUM(cs.sum_objectives_stolen), 0)::bigint AS sum_objectives_stolen,
         COALESCE(SUM(cs.count_earth_drake_kill + cs.count_earth_drake_assist), 0)::bigint AS earth_drake_total,
         COALESCE(SUM(cs.count_water_drake_kill + cs.count_water_drake_assist), 0)::bigint AS water_drake_total,
         COALESCE(SUM(cs.count_wind_drake_kill + cs.count_wind_drake_assist), 0)::bigint AS wind_drake_total,
@@ -199,6 +246,12 @@ export async function getChampionObjectivesSummary(options: {
         soulDistribution: [],
         rows: [],
         outcomeRows: [],
+        participationCard: {
+          stealPct: 0,
+          stealWithoutSmitePct: 0,
+          soloBaronPct: 0,
+          soloEpicObjectivePct: 0,
+        },
       }
     }
 
@@ -213,6 +266,7 @@ export async function getChampionObjectivesSummary(options: {
         involvedWin: Number(row?.baron_involved_win ?? 0),
         killGame: Number(row?.baron_kill_game ?? 0),
         assistGame: Number(row?.baron_assist_game ?? 0),
+        soloGame: Number(row?.baron_solo_game ?? 0),
       },
       {
         key: 'dragon',
@@ -221,6 +275,7 @@ export async function getChampionObjectivesSummary(options: {
         involvedWin: Number(row?.dragon_involved_win ?? 0),
         killGame: Number(row?.dragon_kill_game ?? 0),
         assistGame: Number(row?.dragon_assist_game ?? 0),
+        soloGame: Number(row?.dragon_solo_game ?? 0),
       },
       {
         key: 'riftHerald',
@@ -229,6 +284,7 @@ export async function getChampionObjectivesSummary(options: {
         involvedWin: Number(row?.rift_herald_involved_win ?? 0),
         killGame: Number(row?.rift_herald_kill_game ?? 0),
         assistGame: Number(row?.rift_herald_assist_game ?? 0),
+        soloGame: Number(row?.rift_herald_solo_game ?? 0),
       },
       {
         key: 'horde',
@@ -237,6 +293,7 @@ export async function getChampionObjectivesSummary(options: {
         involvedWin: Number(row?.horde_involved_win ?? 0),
         killGame: Number(row?.horde_kill_game ?? 0),
         assistGame: Number(row?.horde_assist_game ?? 0),
+        soloGame: Number(row?.horde_solo_game ?? 0),
       },
       {
         key: 'elder',
@@ -245,6 +302,7 @@ export async function getChampionObjectivesSummary(options: {
         involvedWin: Number(row?.elder_involved_win ?? 0),
         killGame: Number(row?.elder_kill_game ?? 0),
         assistGame: Number(row?.elder_assist_game ?? 0),
+        soloGame: Number(row?.elder_solo_game ?? 0),
       },
       {
         key: 'tower',
@@ -253,6 +311,7 @@ export async function getChampionObjectivesSummary(options: {
         involvedWin: Number(row?.tower_involved_win ?? 0),
         killGame: Number(row?.tower_kill_game ?? 0),
         assistGame: Number(row?.tower_assist_game ?? 0),
+        soloGame: Number(row?.tower_solo_game ?? 0),
       },
       {
         key: 'inhibitor',
@@ -261,6 +320,7 @@ export async function getChampionObjectivesSummary(options: {
         involvedWin: Number(row?.inhibitor_involved_win ?? 0),
         killGame: Number(row?.inhibitor_kill_game ?? 0),
         assistGame: Number(row?.inhibitor_assist_game ?? 0),
+        soloGame: Number(row?.inhibitor_solo_game ?? 0),
       },
     ]
 
@@ -270,6 +330,7 @@ export async function getChampionObjectivesSummary(options: {
       objectiveWinrate: toPct(r.involvedWin, r.involvedGame),
       killRate: toPct(r.killGame, games),
       assistRate: toPct(r.assistGame, games),
+      soloRate: toPct(r.soloGame, games),
     }))
 
     const objectiveSourceByKey = new Map(
@@ -416,6 +477,21 @@ export async function getChampionObjectivesSummary(options: {
       .filter((r) => r.games > 0)
       .sort((a, b) => a.durationMin - b.durationMin)
 
+    const epicSteals = Number(row?.sum_epic_monster_steals ?? 0)
+    const objectivesStolen = Number(row?.sum_objectives_stolen ?? 0)
+    const stealEvents = epicSteals > 0 ? epicSteals : objectivesStolen
+    const anyEpicSolo = Number(row?.any_epic_solo_game ?? 0)
+    const baronSoloGames = Number(row?.baron_solo_game ?? 0)
+    const participationCard = {
+      stealPct: pctGamesWithEvents(stealEvents, games),
+      stealWithoutSmitePct: pctGamesWithEvents(
+        Number(row?.sum_epic_monster_stolen_without_smite ?? 0),
+        games
+      ),
+      soloBaronPct: toPct(baronSoloGames, games),
+      soloEpicObjectivePct: toPct(anyEpicSolo, games),
+    }
+
     return {
       championId,
       games,
@@ -426,6 +502,7 @@ export async function getChampionObjectivesSummary(options: {
       soulDistribution,
       rows: rowsOut,
       outcomeRows,
+      participationCard,
     }
   } catch (err) {
     console.warn('[getChampionObjectivesSummary]', err)

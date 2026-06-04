@@ -1471,101 +1471,28 @@
                 >
                   {{ t('statisticsPage.noData') }}
                 </div>
-                <div v-else class="grid grid-cols-1 gap-3">
-                  <div
+                <div v-else class="space-y-5">
+                  <section
                     v-for="section in championSpellOrderSectionsVisible"
                     :key="section.key"
-                    class="rounded border bg-black/20 p-3"
+                    class="rounded-lg border bg-black/20 p-4"
                     :class="section.borderClass"
                   >
-                    <div class="mb-2 text-xs font-semibold" :class="section.titleClass">
+                    <h3 class="mb-3 text-xs font-semibold" :class="section.titleClass">
                       {{ section.title }}
-                    </div>
-                    <div class="space-y-3">
-                      <div
+                    </h3>
+                    <div class="grid grid-cols-1 gap-2 lg:grid-cols-2 2xl:grid-cols-3">
+                      <ChampionSpellOrderCard
                         v-for="row in section.rows"
                         :key="section.key + '-' + row.key"
-                        class="overflow-x-auto"
-                      >
-                        <table class="champion-skills-orders-table min-w-[940px]">
-                          <thead>
-                            <tr>
-                              <th class="w-14"></th>
-                              <th
-                                v-for="level in championSkillLevelsForRow(row)"
-                                :key="section.key + '-' + row.key + '-h-' + level"
-                                class="w-9"
-                              >
-                                {{ level }}
-                              </th>
-                              <th class="min-w-[90px] text-center">
-                                {{ t('statisticsPage.pickrate') }}
-                              </th>
-                              <th class="min-w-[90px] text-center">
-                                {{ t('statisticsPage.winrate') }}
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <tr
-                              v-for="skillKey in championSkillKeys"
-                              :key="section.key + '-' + row.key + '-' + skillKey"
-                              :class="
-                                'champion-skill-row champion-skill-row--' + skillKey.toLowerCase()
-                              "
-                            >
-                              <td
-                                class="champion-skill-icon-cell"
-                                :class="'champion-skill-icon-cell--' + skillKey.toLowerCase()"
-                              >
-                                <img
-                                  v-if="championSkillIconUrl(skillKey)"
-                                  :src="championSkillIconUrl(skillKey)!"
-                                  :alt="championSkillName(skillKey)"
-                                  :title="championSkillName(skillKey)"
-                                  class="h-8 w-8 rounded border border-white/15"
-                                />
-                                <span v-else class="text-xs font-semibold text-text/80">{{
-                                  championSkillDisplayKey(skillKey)
-                                }}</span>
-                              </td>
-                              <td
-                                v-for="level in championSkillLevelsForRow(row)"
-                                :key="section.key + '-' + row.key + '-' + skillKey + '-' + level"
-                                class="champion-skill-cell"
-                                :class="
-                                  championSkillAtLevel(row.order, level) === skillKey
-                                    ? 'champion-skill-cell-active champion-skill-cell-active--' +
-                                      skillKey.toLowerCase()
-                                    : 'champion-skill-cell-empty'
-                                "
-                              >
-                                <span
-                                  v-if="championSkillAtLevel(row.order, level) === skillKey"
-                                  class="champion-skill-cell-label"
-                                  >{{ championSkillDisplayKey(skillKey) }}</span
-                                >
-                              </td>
-                              <td
-                                v-if="skillKey === 'Q'"
-                                rowspan="4"
-                                class="champion-skill-metric-cell"
-                              >
-                                {{ row.pickrate.toFixed(1) }}%
-                              </td>
-                              <td
-                                v-if="skillKey === 'Q'"
-                                rowspan="4"
-                                class="champion-skill-metric-cell"
-                              >
-                                {{ row.winrate.toFixed(1) }}%
-                              </td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
+                        :row="row"
+                        :champion-id="championId"
+                        :game-version="(filterVersion || gameVersion || '').trim()"
+                        :spells="championSkillChampion?.spells"
+                        :accent="championSpellOrderSectionAccent(section.key)"
+                      />
                     </div>
-                  </div>
+                  </section>
                 </div>
               </div>
               <div
@@ -1573,7 +1500,10 @@
                 id="champion-tab-panel-objectives"
                 role="tabpanel"
               >
-                <StatisticsObjectivesTab />
+                <ChampionObjectivesTab
+                  :data="championObjectivesData"
+                  :pending="championObjectivesPending"
+                />
               </div>
             </div>
           </template>
@@ -1614,10 +1544,13 @@ import { useStatisticsUiStore } from '~/stores/StatisticsUiStore'
 import { useStatisticsCustomStore } from '~/stores/StatisticsCustomStore'
 import StatisticsRunesTab from '~/components/statistics/tabs/StatisticsRunesTab.vue'
 import StatisticsSpellsTab from '~/components/statistics/tabs/StatisticsSpellsTab.vue'
-import StatisticsObjectivesTab from '~/components/statistics/tabs/StatisticsObjectivesTab.vue'
+import ChampionObjectivesTab, {
+  type ChampionObjectivesSummary,
+} from '~/components/statistics/ChampionObjectivesTab.vue'
+import ChampionSpellOrderCard from '~/components/statistics/ChampionSpellOrderCard.vue'
+import { mergeChampionSpellOrderRows } from '~/utils/championSpellOrderMerge'
 import {
   getChampionImageUrl,
-  getChampionSpellImageUrl,
   getItemImageUrl as _getItemImageUrl,
   getRunePathColor,
   getRuneImageUrl as _getRuneImageUrl,
@@ -1626,8 +1559,6 @@ import {
 import { getRankedEmblemUrl } from '~/utils/rankedEmblem'
 import { rankTierSelectionsEqual } from '~/utils/statisticsRankTierQuery'
 import { useGameVersion } from '~/composables/useGameVersion'
-import { useStatisticsObjectivesPanel } from '~/composables/useStatisticsObjectivesPanel'
-
 definePageMeta({
   layout: 'default',
 })
@@ -2379,6 +2310,8 @@ const championSpellOrdersData = ref<{
     winrate: number
   }>
 } | null>(null)
+const championObjectivesData = ref<ChampionObjectivesSummary | null>(null)
+const championObjectivesPending = ref(false)
 const championSpellsModeFilter = ref<'solo' | 'pair'>('solo')
 const championRunesPanelData = computed(() =>
   assembleChampionRunesPanel(runesPerRuneData.value, runesData.value, runesShardsData.value)
@@ -2434,16 +2367,19 @@ const championSpellsComparisonVersion = computed(() => {
   return refV
 })
 
-const championSpellOrdersRows = computed(() =>
-  (championSpellOrdersData.value?.rows ?? []).filter(
+const championSpellOrdersRows = computed(() => {
+  const raw = (championSpellOrdersData.value?.rows ?? []).filter(
     row => Array.isArray(row.order) && row.order.length > 0
   )
-)
-const championSkillKeys = ['Q', 'W', 'E', 'R'] as const
-type ChampionSkillKey = (typeof championSkillKeys)[number]
-function championSkillLevelsForRow(row: { order: number[] }): number[] {
-  const n = Math.min(18, Math.max(0, row.order?.length ?? 0))
-  return Array.from({ length: n }, (_, i) => i + 1)
+  const totalGames = Number(championSpellOrdersData.value?.totalGames ?? 0)
+  return mergeChampionSpellOrderRows(raw, totalGames)
+})
+
+function championSpellOrderSectionAccent(sectionKey: string): 'emerald' | 'rose' | 'sky' | 'amber' {
+  if (sectionKey === 'top-wr') return 'emerald'
+  if (sectionKey === 'low-wr') return 'rose'
+  if (sectionKey === 'top-pr') return 'sky'
+  return 'amber'
 }
 const championSpellOrderSections = computed(() => [
   {
@@ -2479,39 +2415,6 @@ const championSpellOrderSectionsVisible = computed(() =>
   championSpellOrderSections.value.filter(section => section.rows.length > 0)
 )
 const championSkillChampion = computed(() => championByKey(championId.value))
-function championSkillIndex(key: ChampionSkillKey): number {
-  if (key === 'Q') return 0
-  if (key === 'W') return 1
-  if (key === 'E') return 2
-  return 3
-}
-function championSkillLabelFromOrderValue(v: number): ChampionSkillKey | null {
-  if (v === 1) return 'Q'
-  if (v === 2) return 'W'
-  if (v === 3) return 'E'
-  if (v === 4) return 'R'
-  return null
-}
-function championSkillAtLevel(order: number[], level: number): ChampionSkillKey | null {
-  const raw = Number(Array.isArray(order) ? order[level - 1] : Number.NaN)
-  if (!Number.isFinite(raw)) return null
-  return championSkillLabelFromOrderValue(raw)
-}
-function championSkillName(key: ChampionSkillKey): string {
-  const spell = championSkillChampion.value?.spells?.[championSkillIndex(key)]
-  return spell?.name ?? key
-}
-/** Touche affichée (QWERTY en EN, AZERTY en FR via `skills.key.*`). */
-function championSkillDisplayKey(key: ChampionSkillKey): string {
-  return t(`skills.key.${key}`)
-}
-function championSkillIconUrl(key: ChampionSkillKey): string | null {
-  const spell = championSkillChampion.value?.spells?.[championSkillIndex(key)]
-  const file = spell?.image?.full
-  const version = gameVersion.value ?? versionStore.currentVersion
-  if (!file || championId.value <= 0 || !version) return null
-  return getChampionSpellImageUrl(version, String(championId.value), file)
-}
 const championSpellOrdersTopWinrate = computed(() =>
   [...championSpellOrdersRows.value]
     .sort((a, b) => b.winrate - a.winrate || b.games - a.games)
@@ -2882,23 +2785,9 @@ function statsFetch<T = unknown>(url: string, options?: Parameters<typeof $fetch
   }) as Promise<T>
 }
 
-const objectivesPanel = useStatisticsObjectivesPanel({
-  t,
-  statsFetch,
-  buildQuery: overviewQueryParams,
-  resolveBaselineVersion: () => championSpellsComparisonVersion.value,
-})
-
 const championStatisticsPageCtx = new Proxy({} as Record<string, unknown>, {
   get(_target, key: string | symbol) {
     if (key === 't') return t
-    if (typeof key === 'string') {
-      const objectivesCtx = objectivesPanel.pageCtx as Record<string, unknown>
-      if (Object.prototype.hasOwnProperty.call(objectivesCtx, key)) {
-        const value = objectivesCtx[key]
-        return typeof value === 'function' ? value.bind(objectivesCtx) : value
-      }
-    }
     switch (key) {
       case 'gameVersion':
         return gameVersion.value || versionStore.currentVersion || ''
@@ -3219,7 +3108,19 @@ async function _loadChampionSpells() {
 }
 
 async function loadChampionObjectives() {
-  await objectivesPanel.loadObjectivesPanel()
+  if (!championId.value) return
+  const t0 = statsPerfStart('loadChampionObjectives')
+  championObjectivesPending.value = true
+  try {
+    championObjectivesData.value = await statsFetch<ChampionObjectivesSummary>(
+      apiUrl(`/api/stats/champions/${championId.value}/objectives${overviewQueryParams()}`)
+    )
+  } catch {
+    championObjectivesData.value = null
+  } finally {
+    championObjectivesPending.value = false
+    statsPerfEnd('loadChampionObjectives', t0)
+  }
 }
 
 /** Query durée par tier : version + rôle seulement (rankTier non envoyé ; ligues = presets des graphes). */

@@ -1282,6 +1282,12 @@ router.get('/champions/:championId/objectives', async (req: Request, res: Respon
       soulDistribution: [],
       rows: [],
       outcomeRows: [],
+      participationCard: {
+        stealPct: 0,
+        stealWithoutSmitePct: 0,
+        soloBaronPct: 0,
+        soloEpicObjectivePct: 0,
+      },
     })
   }
   return res.json(data)
