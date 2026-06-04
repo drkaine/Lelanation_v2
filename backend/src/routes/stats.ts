@@ -1280,6 +1280,9 @@ router.get('/champions/:championId/objectives', async (req: Request, res: Respon
       durationRows: [],
       drakeTypeDistribution: [],
       soulDistribution: [],
+      drakeTypeRows: [],
+      soulRows: [],
+      killHistograms: {},
       rows: [],
       outcomeRows: [],
       participationCard: {

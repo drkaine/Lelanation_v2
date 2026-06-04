@@ -1,0 +1,20 @@
+-- Jeux avec N kills objectif (timeline) pour histogrammes champion.
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_baron_kill_ge1_game BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_baron_kill_ge2_game BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_baron_kill_ge3p_game BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_dragon_kill_ge1_game BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_dragon_kill_ge2_game BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_dragon_kill_ge3p_game BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_tower_kill_ge1_game BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_tower_kill_ge2_game BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_tower_kill_ge3p_game BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_inhibitor_kill_ge1_game BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_inhibitor_kill_ge2_game BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_inhibitor_kill_ge3p_game BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_horde_kill_ge1_game BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_horde_kill_ge2_game BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_horde_kill_ge3p_game BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_horde_kill_ge4_game BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_horde_kill_ge5p_game BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_rift_herald_kill_ge1_game BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_rift_herald_kill_ge2p_game BIGINT NOT NULL DEFAULT 0;

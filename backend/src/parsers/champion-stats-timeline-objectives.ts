@@ -161,5 +161,38 @@ export function timelineChampionObjectiveMetrics(
     }
   }
 
+  addPerGameKillBuckets(out, "count_baron_kill", "count_baron_kill");
+  addPerGameKillBuckets(out, "count_dragon_kill", "count_dragon_kill");
+  addPerGameKillBuckets(out, "count_tower_kill", "count_tower_kill");
+  addPerGameKillBuckets(out, "count_inhibitor_kill", "count_inhibitor_kill");
+  addHordeKillBuckets(out);
+  addRiftHeraldKillBuckets(out);
+
   return out;
+}
+
+function addPerGameKillBuckets(
+  out: Record<string, number>,
+  killCol: string,
+  prefix: string,
+): void {
+  const k = out[killCol] ?? 0;
+  if (k >= 1) inc(out, `${prefix}_ge1_game`);
+  if (k >= 2) inc(out, `${prefix}_ge2_game`);
+  if (k >= 3) inc(out, `${prefix}_ge3p_game`);
+}
+
+function addHordeKillBuckets(out: Record<string, number>): void {
+  const k = out.count_horde_kill ?? 0;
+  if (k >= 1) inc(out, "count_horde_kill_ge1_game");
+  if (k >= 2) inc(out, "count_horde_kill_ge2_game");
+  if (k >= 3) inc(out, "count_horde_kill_ge3p_game");
+  if (k >= 4) inc(out, "count_horde_kill_ge4_game");
+  if (k >= 5) inc(out, "count_horde_kill_ge5p_game");
+}
+
+function addRiftHeraldKillBuckets(out: Record<string, number>): void {
+  const k = out.count_rift_herald_kill ?? 0;
+  if (k >= 1) inc(out, "count_rift_herald_kill_ge1_game");
+  if (k >= 2) inc(out, "count_rift_herald_kill_ge2p_game");
 }

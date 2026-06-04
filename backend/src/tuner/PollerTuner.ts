@@ -27,12 +27,19 @@ const QUEUE_PRESSURE_FACTOR = 0.7;
 const REQ_PER_PLAYER_SEED = 25;
 const REQ_PER_MATCH_SEED = 3;
 const CACHE_HIT_RATE_SEED = 0.5;
-const PERSONAL_MAX_TARGET_RPS = Number.parseFloat(process.env.PERSONAL_MAX_TARGET_RPS ?? '1');
 const PERSONAL_WARMUP_MULTIPLIER = Number.parseFloat(process.env.PERSONAL_WARMUP_MULTIPLIER ?? '0.9');
-const PERSONAL_MAX_CONCURRENT_PLAYERS = Number.parseInt(process.env.PERSONAL_MAX_CONCURRENT_PLAYERS ?? '1', 10);
-const PERSONAL_MAX_CONCURRENT_MATCH_FETCHES = Number.parseInt(process.env.PERSONAL_MAX_CONCURRENT_MATCH_FETCHES ?? '1', 10);
+/** Keep the gateway queue fed between match/DB gaps (gateway still throttles to ~95 tokens/120s). */
+const PERSONAL_MAX_CONCURRENT_PLAYERS = Number.parseInt(process.env.PERSONAL_MAX_CONCURRENT_PLAYERS ?? '2', 10);
+const PERSONAL_MAX_CONCURRENT_MATCH_FETCHES = Number.parseInt(
+  process.env.PERSONAL_MAX_CONCURRENT_MATCH_FETCHES ?? '4',
+  10,
+);
 const PERSONAL_MAX_PARTICIPANT_RANK_CONCURRENCY = Number.parseInt(
-  process.env.PERSONAL_MAX_PARTICIPANT_RANK_CONCURRENCY ?? '1',
+  process.env.PERSONAL_MAX_PARTICIPANT_RANK_CONCURRENCY ?? '2',
+  10,
+);
+const PERSONAL_MIN_CONCURRENT_SESSIONS = Number.parseInt(
+  process.env.PERSONAL_MIN_CONCURRENT_SESSIONS ?? '3',
   10,
 );
 
@@ -165,8 +172,7 @@ export class PollerTuner {
     let targetRps = Math.min(rps120s, rps1s);
     if (riotConfig.apiKeyType === 'personal') {
       const targetTokens = riotConfig.personalTargetTokens120s(limit120s);
-      const personalTargetRps = targetTokens / 120;
-      targetRps = Math.min(personalTargetRps, PERSONAL_MAX_TARGET_RPS);
+      targetRps = targetTokens / 120;
     }
 
     const threshold = backpressureThreshold();
@@ -218,6 +224,18 @@ export class PollerTuner {
         1,
         Math.ceil(sessionWallClockS / Math.max(0.001, sessionDispatchS)) + 1,
       );
+      this.lastSessionDispatchS = sessionDispatchS;
+      this.lastSessionWallClockS = sessionWallClockS;
+    }
+
+    if (riotConfig.apiKeyType === 'personal') {
+      maxConcurrentSessions = Math.max(PERSONAL_MIN_CONCURRENT_SESSIONS, maxConcurrentSessions);
+      const tokenBudgetPerSession = safeTokens120s / Math.max(1, maxConcurrentSessions);
+      rawBatchSize = Math.ceil(tokenBudgetPerSession / reqPerPlayer);
+      rawBatchSize = clamp(rawBatchSize, MIN_BATCH_SIZE, maxBatchCap);
+      const reqPerSession = rawBatchSize * reqPerPlayer;
+      const sessionDispatchS = reqPerSession / Math.max(0.001, targetRps);
+      const sessionWallClockS = Math.max(sessionDispatchS, avgMatchLatencyS);
       this.lastSessionDispatchS = sessionDispatchS;
       this.lastSessionWallClockS = sessionWallClockS;
     }

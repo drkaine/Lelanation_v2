@@ -20,6 +20,20 @@ export type ChampionObjectiveSummary = {
   }>
   drakeTypeDistribution: Array<{ key: string; label: string; total: number; pct: number }>
   soulDistribution: Array<{ key: string; label: string; total: number; pct: number }>
+  drakeTypeRows: Array<{
+    key: string
+    label: string
+    gamePct: number
+    objectiveWinrate: number
+  }>
+  soulRows: Array<{
+    key: string
+    label: string
+    gamePct: number
+    objectiveWinrate: number
+  }>
+  /** Jeux avec N kills crédités (1, 2, 3+…) par type d'objectif. */
+  killHistograms: Record<string, Record<string, number>>
   rows: Array<{
     key: string
     label: string
@@ -48,6 +62,12 @@ export type ChampionObjectiveSummary = {
 type RawObjectiveAgg = {
   games: bigint
   wins: bigint
+  first_blood_involved_game: bigint
+  first_blood_involved_win: bigint
+  first_blood_kill_game: bigint
+  first_blood_assist_game: bigint
+  first_blood_solo_game: bigint
+  elder_drake_total: bigint
   baron_involved_game: bigint
   baron_involved_win: bigint
   baron_kill_game: bigint
@@ -99,6 +119,127 @@ type RawObjectiveAgg = {
   fire_soul_total: bigint
   hextec_soul_total: bigint
   chem_soul_total: bigint
+  earth_drake_involved_win: bigint
+  water_drake_involved_win: bigint
+  wind_drake_involved_win: bigint
+  fire_drake_involved_win: bigint
+  hextec_drake_involved_win: bigint
+  chem_drake_involved_win: bigint
+  earth_drake_involved_game: bigint
+  water_drake_involved_game: bigint
+  wind_drake_involved_game: bigint
+  fire_drake_involved_game: bigint
+  hextec_drake_involved_game: bigint
+  chem_drake_involved_game: bigint
+  earth_soul_game: bigint
+  water_soul_game: bigint
+  wind_soul_game: bigint
+  fire_soul_game: bigint
+  hextec_soul_game: bigint
+  chem_soul_game: bigint
+  earth_soul_win: bigint
+  water_soul_win: bigint
+  wind_soul_win: bigint
+  fire_soul_win: bigint
+  hextec_soul_win: bigint
+  chem_soul_win: bigint
+  baron_kill_ge1: bigint
+  baron_kill_ge2: bigint
+  baron_kill_ge3p: bigint
+  dragon_kill_ge1: bigint
+  dragon_kill_ge2: bigint
+  dragon_kill_ge3p: bigint
+  tower_kill_ge1: bigint
+  tower_kill_ge2: bigint
+  tower_kill_ge3p: bigint
+  inhibitor_kill_ge1: bigint
+  inhibitor_kill_ge2: bigint
+  inhibitor_kill_ge3p: bigint
+  horde_kill_ge1: bigint
+  horde_kill_ge2: bigint
+  horde_kill_ge3p: bigint
+  horde_kill_ge4: bigint
+  horde_kill_ge5p: bigint
+  rift_herald_kill_ge1: bigint
+  rift_herald_kill_ge2p: bigint
+}
+
+function involvedWinExpr(killCol: string, assistCol: string): string {
+  return `COALESCE(SUM(CASE WHEN (${killCol} + ${assistCol}) > 0 THEN cs.count_win ELSE 0 END), 0)`
+}
+
+function soulTouchGamesExpr(soulCol: string): string {
+  return `COALESCE(SUM(CASE WHEN ${soulCol} > 0 THEN cs.count_game ELSE 0 END), 0)`
+}
+
+function soulWinExpr(soulCol: string): string {
+  return `COALESCE(SUM(CASE WHEN ${soulCol} > 0 THEN cs.count_win ELSE 0 END), 0)`
+}
+
+const KILL_HISTOGRAM_KEYS: Array<{
+  key: string
+  buckets: Array<{ label: string; col: keyof RawObjectiveAgg }>
+}> = [
+  {
+    key: 'baron',
+    buckets: [
+      { label: '1', col: 'baron_kill_ge1' },
+      { label: '2', col: 'baron_kill_ge2' },
+      { label: '3+', col: 'baron_kill_ge3p' },
+    ],
+  },
+  {
+    key: 'dragon',
+    buckets: [
+      { label: '1', col: 'dragon_kill_ge1' },
+      { label: '2', col: 'dragon_kill_ge2' },
+      { label: '3+', col: 'dragon_kill_ge3p' },
+    ],
+  },
+  {
+    key: 'tower',
+    buckets: [
+      { label: '1', col: 'tower_kill_ge1' },
+      { label: '2', col: 'tower_kill_ge2' },
+      { label: '3+', col: 'tower_kill_ge3p' },
+    ],
+  },
+  {
+    key: 'inhibitor',
+    buckets: [
+      { label: '1', col: 'inhibitor_kill_ge1' },
+      { label: '2', col: 'inhibitor_kill_ge2' },
+      { label: '3+', col: 'inhibitor_kill_ge3p' },
+    ],
+  },
+  {
+    key: 'horde',
+    buckets: [
+      { label: '1', col: 'horde_kill_ge1' },
+      { label: '2', col: 'horde_kill_ge2' },
+      { label: '3', col: 'horde_kill_ge3p' },
+      { label: '4', col: 'horde_kill_ge4' },
+      { label: '5+', col: 'horde_kill_ge5p' },
+    ],
+  },
+]
+
+function buildKillHistograms(row: RawObjectiveAgg | undefined): Record<string, Record<string, number>> {
+  const out: Record<string, Record<string, number>> = {}
+  for (const cfg of KILL_HISTOGRAM_KEYS) {
+    const dist: Record<string, number> = {}
+    for (const b of cfg.buckets) {
+      dist[b.label] = Number(row?.[b.col] ?? 0)
+    }
+    out[cfg.key] = dist
+  }
+  const herald: Record<string, number> = {}
+  const h1 = Number(row?.rift_herald_kill_ge1 ?? 0)
+  const h2p = Number(row?.rift_herald_kill_ge2p ?? 0)
+  if (h1 > 0) herald['1'] = h1
+  if (h2p > 0) herald['2+'] = h2p
+  if (Object.keys(herald).length > 0) out.riftHerald = herald
+  return out
 }
 
 type RawDurationAgg = {
@@ -171,6 +312,12 @@ export async function getChampionObjectivesSummary(options: {
       SELECT
         COALESCE(SUM(cs.count_game), 0)::bigint AS games,
         COALESCE(SUM(cs.count_win), 0)::bigint AS wins,
+        ${involvedGamesExpr('cs.count_first_blood_kill_true', 'cs.count_first_blood_assist_true')}::bigint AS first_blood_involved_game,
+        ${involvedWinExpr('cs.count_first_blood_kill_true', 'cs.count_first_blood_assist_true')}::bigint AS first_blood_involved_win,
+        ${touchGamesExpr('cs.count_first_blood_kill_true')}::bigint AS first_blood_kill_game,
+        ${touchGamesExpr('cs.count_first_blood_assist_true')}::bigint AS first_blood_assist_game,
+        ${soloTouchGamesExpr('cs.count_first_blood_kill_true', 'cs.count_first_blood_assist_true')}::bigint AS first_blood_solo_game,
+        COALESCE(SUM(cs.count_elder_kill + cs.count_elder_assist), 0)::bigint AS elder_drake_total,
         ${involvedGamesExpr('cs.count_baron_kill', 'cs.count_baron_assist')}::bigint AS baron_involved_game,
         COALESCE(SUM(cs.count_baron_involved_win), 0)::bigint AS baron_involved_win,
         ${touchGamesExpr('cs.count_baron_kill')}::bigint AS baron_kill_game,
@@ -192,7 +339,7 @@ export async function getChampionObjectivesSummary(options: {
         ${touchGamesExpr('cs.count_horde_assist')}::bigint AS horde_assist_game,
         ${soloTouchGamesExpr('cs.count_horde_kill', 'cs.count_horde_assist')}::bigint AS horde_solo_game,
         ${involvedGamesExpr('cs.count_elder_kill', 'cs.count_elder_assist')}::bigint AS elder_involved_game,
-        COALESCE(SUM(cs.count_elder_involved_win), 0)::bigint AS elder_involved_win,
+        ${involvedWinExpr('cs.count_elder_kill', 'cs.count_elder_assist')}::bigint AS elder_involved_win,
         ${touchGamesExpr('cs.count_elder_kill')}::bigint AS elder_kill_game,
         ${touchGamesExpr('cs.count_elder_assist')}::bigint AS elder_assist_game,
         ${soloTouchGamesExpr('cs.count_elder_kill', 'cs.count_elder_assist')}::bigint AS elder_solo_game,
@@ -227,7 +374,50 @@ export async function getChampionObjectivesSummary(options: {
         COALESCE(SUM(cs.count_wind_soul), 0)::bigint AS wind_soul_total,
         COALESCE(SUM(cs.count_fire_soul), 0)::bigint AS fire_soul_total,
         COALESCE(SUM(cs.count_hextec_soul), 0)::bigint AS hextec_soul_total,
-        COALESCE(SUM(cs.count_chem_soul), 0)::bigint AS chem_soul_total
+        COALESCE(SUM(cs.count_chem_soul), 0)::bigint AS chem_soul_total,
+        ${involvedGamesExpr('cs.count_earth_drake_kill', 'cs.count_earth_drake_assist')}::bigint AS earth_drake_involved_game,
+        ${involvedWinExpr('cs.count_earth_drake_kill', 'cs.count_earth_drake_assist')}::bigint AS earth_drake_involved_win,
+        ${involvedGamesExpr('cs.count_water_drake_kill', 'cs.count_water_drake_assist')}::bigint AS water_drake_involved_game,
+        ${involvedWinExpr('cs.count_water_drake_kill', 'cs.count_water_drake_assist')}::bigint AS water_drake_involved_win,
+        ${involvedGamesExpr('cs.count_wind_drake_kill', 'cs.count_wind_drake_assist')}::bigint AS wind_drake_involved_game,
+        ${involvedWinExpr('cs.count_wind_drake_kill', 'cs.count_wind_drake_assist')}::bigint AS wind_drake_involved_win,
+        ${involvedGamesExpr('cs.count_fire_drake_kill', 'cs.count_fire_drake_assist')}::bigint AS fire_drake_involved_game,
+        ${involvedWinExpr('cs.count_fire_drake_kill', 'cs.count_fire_drake_assist')}::bigint AS fire_drake_involved_win,
+        ${involvedGamesExpr('cs.count_hextec_drake_kill', 'cs.count_hextec_drake_assist')}::bigint AS hextec_drake_involved_game,
+        ${involvedWinExpr('cs.count_hextec_drake_kill', 'cs.count_hextec_drake_assist')}::bigint AS hextec_drake_involved_win,
+        ${involvedGamesExpr('cs.count_chem_drake_kill', 'cs.count_chem_drake_assist')}::bigint AS chem_drake_involved_game,
+        ${involvedWinExpr('cs.count_chem_drake_kill', 'cs.count_chem_drake_assist')}::bigint AS chem_drake_involved_win,
+        ${soulTouchGamesExpr('cs.count_earth_soul')}::bigint AS earth_soul_game,
+        ${soulWinExpr('cs.count_earth_soul')}::bigint AS earth_soul_win,
+        ${soulTouchGamesExpr('cs.count_water_soul')}::bigint AS water_soul_game,
+        ${soulWinExpr('cs.count_water_soul')}::bigint AS water_soul_win,
+        ${soulTouchGamesExpr('cs.count_wind_soul')}::bigint AS wind_soul_game,
+        ${soulWinExpr('cs.count_wind_soul')}::bigint AS wind_soul_win,
+        ${soulTouchGamesExpr('cs.count_fire_soul')}::bigint AS fire_soul_game,
+        ${soulWinExpr('cs.count_fire_soul')}::bigint AS fire_soul_win,
+        ${soulTouchGamesExpr('cs.count_hextec_soul')}::bigint AS hextec_soul_game,
+        ${soulWinExpr('cs.count_hextec_soul')}::bigint AS hextec_soul_win,
+        ${soulTouchGamesExpr('cs.count_chem_soul')}::bigint AS chem_soul_game,
+        ${soulWinExpr('cs.count_chem_soul')}::bigint AS chem_soul_win,
+        COALESCE(SUM(cs.count_baron_kill_ge1_game), 0)::bigint AS baron_kill_ge1,
+        COALESCE(SUM(cs.count_baron_kill_ge2_game), 0)::bigint AS baron_kill_ge2,
+        COALESCE(SUM(cs.count_baron_kill_ge3p_game), 0)::bigint AS baron_kill_ge3p,
+        COALESCE(SUM(cs.count_dragon_kill_ge1_game), 0)::bigint AS dragon_kill_ge1,
+        COALESCE(SUM(cs.count_dragon_kill_ge2_game), 0)::bigint AS dragon_kill_ge2,
+        COALESCE(SUM(cs.count_dragon_kill_ge3p_game), 0)::bigint AS dragon_kill_ge3p,
+        COALESCE(SUM(cs.count_tower_kill_ge1_game), 0)::bigint AS tower_kill_ge1,
+        COALESCE(SUM(cs.count_tower_kill_ge2_game), 0)::bigint AS tower_kill_ge2,
+        COALESCE(SUM(cs.count_tower_kill_ge3p_game), 0)::bigint AS tower_kill_ge3p,
+        COALESCE(SUM(cs.count_inhibitor_kill_ge1_game), 0)::bigint AS inhibitor_kill_ge1,
+        COALESCE(SUM(cs.count_inhibitor_kill_ge2_game), 0)::bigint AS inhibitor_kill_ge2,
+        COALESCE(SUM(cs.count_inhibitor_kill_ge3p_game), 0)::bigint AS inhibitor_kill_ge3p,
+        COALESCE(SUM(cs.count_horde_kill_ge1_game), 0)::bigint AS horde_kill_ge1,
+        COALESCE(SUM(cs.count_horde_kill_ge2_game), 0)::bigint AS horde_kill_ge2,
+        COALESCE(SUM(cs.count_horde_kill_ge3p_game), 0)::bigint AS horde_kill_ge3p,
+        COALESCE(SUM(cs.count_horde_kill_ge4_game), 0)::bigint AS horde_kill_ge4,
+        COALESCE(SUM(cs.count_horde_kill_ge5p_game), 0)::bigint AS horde_kill_ge5p,
+        COALESCE(SUM(cs.count_rift_herald_kill_ge1_game), 0)::bigint AS rift_herald_kill_ge1,
+        COALESCE(SUM(cs.count_rift_herald_kill_ge2p_game), 0)::bigint AS rift_herald_kill_ge2p
       FROM ${csFrom}
       WHERE ${where}
     `)
@@ -244,6 +434,9 @@ export async function getChampionObjectivesSummary(options: {
         durationRows: [],
         drakeTypeDistribution: [],
         soulDistribution: [],
+        drakeTypeRows: [],
+        soulRows: [],
+        killHistograms: {},
         rows: [],
         outcomeRows: [],
         participationCard: {
@@ -259,6 +452,15 @@ export async function getChampionObjectivesSummary(options: {
       den > 0 ? Number(((100 * num) / den).toFixed(2)) : 0
 
     const objectiveBaseRows = [
+      {
+        key: 'firstBlood',
+        label: 'First Blood',
+        involvedGame: Number(row?.first_blood_involved_game ?? 0),
+        involvedWin: Number(row?.first_blood_involved_win ?? 0),
+        killGame: Number(row?.first_blood_kill_game ?? 0),
+        assistGame: Number(row?.first_blood_assist_game ?? 0),
+        soloGame: Number(row?.first_blood_solo_game ?? 0),
+      },
       {
         key: 'baron',
         label: 'Baron',
@@ -294,15 +496,6 @@ export async function getChampionObjectivesSummary(options: {
         killGame: Number(row?.horde_kill_game ?? 0),
         assistGame: Number(row?.horde_assist_game ?? 0),
         soloGame: Number(row?.horde_solo_game ?? 0),
-      },
-      {
-        key: 'elder',
-        label: 'Elder Dragon',
-        involvedGame: Number(row?.elder_involved_game ?? 0),
-        involvedWin: Number(row?.elder_involved_win ?? 0),
-        killGame: Number(row?.elder_kill_game ?? 0),
-        assistGame: Number(row?.elder_assist_game ?? 0),
-        soloGame: Number(row?.elder_solo_game ?? 0),
       },
       {
         key: 'tower',
@@ -399,6 +592,7 @@ export async function getChampionObjectivesSummary(options: {
     }
 
     const drakeTypeDistributionBase = [
+      { key: 'elder', label: 'Elder Dragon', total: Number(row?.elder_drake_total ?? 0) },
       { key: 'earth', label: 'Earth', total: Number(row?.earth_drake_total ?? 0) },
       { key: 'water', label: 'Water', total: Number(row?.water_drake_total ?? 0) },
       { key: 'wind', label: 'Wind', total: Number(row?.wind_drake_total ?? 0) },
@@ -425,6 +619,50 @@ export async function getChampionObjectivesSummary(options: {
       ...e,
       pct: soulTotal > 0 ? Number(((100 * e.total) / soulTotal).toFixed(2)) : 0,
     }))
+
+    const drakeTypeRows = [
+      { key: 'elder', label: 'Elder Dragon', involvedGame: Number(row?.elder_involved_game ?? 0), involvedWin: Number(row?.elder_involved_win ?? 0) },
+      { key: 'earth', label: 'Earth', involvedGame: Number(row?.earth_drake_involved_game ?? 0), involvedWin: Number(row?.earth_drake_involved_win ?? 0) },
+      { key: 'water', label: 'Water', involvedGame: Number(row?.water_drake_involved_game ?? 0), involvedWin: Number(row?.water_drake_involved_win ?? 0) },
+      { key: 'wind', label: 'Wind', involvedGame: Number(row?.wind_drake_involved_game ?? 0), involvedWin: Number(row?.wind_drake_involved_win ?? 0) },
+      { key: 'fire', label: 'Fire', involvedGame: Number(row?.fire_drake_involved_game ?? 0), involvedWin: Number(row?.fire_drake_involved_win ?? 0) },
+      { key: 'hextec', label: 'Hextec', involvedGame: Number(row?.hextec_drake_involved_game ?? 0), involvedWin: Number(row?.hextec_drake_involved_win ?? 0) },
+      { key: 'chem', label: 'Chem', involvedGame: Number(row?.chem_drake_involved_game ?? 0), involvedWin: Number(row?.chem_drake_involved_win ?? 0) },
+    ].map((e) => ({
+      key: e.key,
+      label: e.label,
+      gamePct: toPct(e.involvedGame, games),
+      objectiveWinrate: toPct(e.involvedWin, e.involvedGame),
+    }))
+
+    const soulRows = soulDistributionBase.map((e) => {
+      const key = e.key as keyof RawObjectiveAgg
+      const gameCol = `${key}_soul_game` as keyof RawObjectiveAgg
+      const winCol = `${key}_soul_win` as keyof RawObjectiveAgg
+      const involvedGame = Number(row?.[gameCol] ?? 0)
+      const involvedWin = Number(row?.[winCol] ?? 0)
+      return {
+        key: e.key,
+        label: e.label,
+        gamePct: toPct(involvedGame, games),
+        objectiveWinrate: toPct(involvedWin, involvedGame),
+      }
+    })
+
+    const killHistograms = buildKillHistograms(row)
+
+    const epicSteals = Number(row?.sum_epic_monster_steals ?? 0)
+    const objectivesStolen = Number(row?.sum_objectives_stolen ?? 0)
+    const stealEvents = epicSteals > 0 ? epicSteals : objectivesStolen
+    const participationCard = {
+      stealPct: pctGamesWithEvents(stealEvents, games),
+      stealWithoutSmitePct: pctGamesWithEvents(
+        Number(row?.sum_epic_monster_stolen_without_smite ?? 0),
+        games
+      ),
+      soloBaronPct: toPct(Number(row?.baron_solo_game ?? 0), games),
+      soloEpicObjectivePct: toPct(Number(row?.any_epic_solo_game ?? 0), games),
+    }
 
     const cbFrom = await matchVersionedAggFrom('agg_champion_bucket', version, 'cb')
     const cbWhere = buildChampionScopedWhere('cb', scope)
@@ -477,21 +715,6 @@ export async function getChampionObjectivesSummary(options: {
       .filter((r) => r.games > 0)
       .sort((a, b) => a.durationMin - b.durationMin)
 
-    const epicSteals = Number(row?.sum_epic_monster_steals ?? 0)
-    const objectivesStolen = Number(row?.sum_objectives_stolen ?? 0)
-    const stealEvents = epicSteals > 0 ? epicSteals : objectivesStolen
-    const anyEpicSolo = Number(row?.any_epic_solo_game ?? 0)
-    const baronSoloGames = Number(row?.baron_solo_game ?? 0)
-    const participationCard = {
-      stealPct: pctGamesWithEvents(stealEvents, games),
-      stealWithoutSmitePct: pctGamesWithEvents(
-        Number(row?.sum_epic_monster_stolen_without_smite ?? 0),
-        games
-      ),
-      soloBaronPct: toPct(baronSoloGames, games),
-      soloEpicObjectivePct: toPct(anyEpicSolo, games),
-    }
-
     return {
       championId,
       games,
@@ -500,6 +723,9 @@ export async function getChampionObjectivesSummary(options: {
       durationRows,
       drakeTypeDistribution,
       soulDistribution,
+      drakeTypeRows,
+      soulRows,
+      killHistograms,
       rows: rowsOut,
       outcomeRows,
       participationCard,

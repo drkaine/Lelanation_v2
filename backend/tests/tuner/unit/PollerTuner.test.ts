@@ -128,17 +128,17 @@ describe('PollerTuner', () => {
     expect(params.maxConcurrentPlayers).toBeLessThanOrEqual(20);
   });
 
-  test('personal key applies anti-burst caps', () => {
+  test('personal key applies pipeline caps (gateway still throttles)', () => {
     const tuner = PollerTuner.getInstance();
     for (let i = 0; i < 5; i += 1) {
       tuner.recordSession(feedback({ totalGatewayRequests: 1, playersCompleted: 1 }));
     }
     const params = tuner.compute(ctx(buildGatewayStatus(99, 19), 200));
     expect(params.targetRps).toBeCloseTo(Math.floor(99 * 0.95) / 120, 5);
-    expect(params.targetRps).toBeLessThanOrEqual(1);
-    expect(params.maxConcurrentPlayers).toBeLessThanOrEqual(1);
-    expect(params.maxConcurrentMatchFetches).toBeLessThanOrEqual(1);
-    expect(params.participantRankConcurrency).toBeLessThanOrEqual(1);
+    expect(params.maxConcurrentPlayers).toBeLessThanOrEqual(2);
+    expect(params.maxConcurrentMatchFetches).toBeLessThanOrEqual(4);
+    expect(params.participantRankConcurrency).toBeLessThanOrEqual(2);
+    expect(params.maxConcurrentSessions).toBeGreaterThanOrEqual(3);
   });
 
   test('T11 maxConcurrentMatchFetches never exceeds MAX_CONCURRENT_MATCHES', () => {
@@ -379,18 +379,21 @@ describe('PollerTuner', () => {
   });
 
   test('T_warmup_concurrency_1 maxConcurrentMatchFetches is scaled by warmup multiplier', () => {
-    const tuner = PollerTuner.getInstance();
-    const warmupParams = tuner.compute(ctx(buildGatewayStatus(100, 20), 20));
-    expect(warmupParams.warmupActive).toBe(true);
+    withApiKeyType('production', () => {
+      PollerTuner.resetInstance();
+      const tuner = PollerTuner.getInstance();
+      const warmupParams = tuner.compute(ctx(buildGatewayStatus(100, 20), 20));
+      expect(warmupParams.warmupActive).toBe(true);
 
-    for (let i = 0; i < 5; i += 1) {
-      tuner.recordSession(feedback());
-    }
-    const fullParams = tuner.compute(ctx(buildGatewayStatus(100, 20), 20));
-    expect(warmupParams.maxConcurrentMatchFetches).toBeLessThanOrEqual(
-      Math.ceil(fullParams.maxConcurrentMatchFetches * 0.5) + 1,
-    );
-    expect(warmupParams.maxConcurrentMatchFetches).toBeLessThanOrEqual(fullParams.maxConcurrentMatchFetches);
+      for (let i = 0; i < 5; i += 1) {
+        tuner.recordSession(feedback());
+      }
+      const fullParams = tuner.compute(ctx(buildGatewayStatus(100, 20), 20));
+      expect(warmupParams.maxConcurrentMatchFetches).toBeLessThanOrEqual(
+        Math.ceil(fullParams.maxConcurrentMatchFetches * 0.5) + 1,
+      );
+      expect(warmupParams.maxConcurrentMatchFetches).toBeLessThanOrEqual(fullParams.maxConcurrentMatchFetches);
+    });
   });
 
   test('T_warmup_concurrency_2 participantRankConcurrency is scaled by warmup multiplier', () => {
@@ -537,10 +540,13 @@ describe('PollerTuner', () => {
   });
 
   test('batchSize capped to availablePlayers', () => {
-    const tuner = PollerTuner.getInstance();
-    seedEmaReqPerPlayer(tuner, 2.55);
-    const params = tuner.compute(ctx(buildGatewayStatus(100, 20), 15));
-    expect(params.batchSize).toBe(15);
+    withApiKeyType('production', () => {
+      PollerTuner.resetInstance();
+      const tuner = PollerTuner.getInstance();
+      seedEmaReqPerPlayer(tuner, 2.55);
+      const params = tuner.compute(ctx(buildGatewayStatus(100, 20), 15));
+      expect(params.batchSize).toBe(15);
+    });
   });
 
   test('utilization correction scales batch up after low utilization samples', () => {
@@ -610,13 +616,13 @@ describe('PollerTuner', () => {
     expect(warmupBatch).toBeLessThan(fullBatch);
   });
 
-  test('T12 maxConcurrentSessions=2 for personal key (gateway bound)', () => {
+  test('T12 maxConcurrentSessions>=3 for personal key (pipeline overlap)', () => {
     withApiKeyType('personal', () => {
       PollerTuner.resetInstance();
       const tuner = PollerTuner.getInstance();
       seedEmaReqPerPlayer(tuner, 2.55);
       const params = tuner.compute(ctx(buildGatewayStatus(99, 19), 200));
-      expect(params.maxConcurrentSessions).toBe(2);
+      expect(params.maxConcurrentSessions).toBeGreaterThanOrEqual(3);
     });
   });
 

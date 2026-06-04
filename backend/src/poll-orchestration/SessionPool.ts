@@ -284,6 +284,10 @@ export class SessionPool {
     const bucket120 = status.buckets.find((b) => b.windowMs === 120_000);
     const pct = bucket120 && bucket120.limit > 0 ? (bucket120.used / bucket120.limit) * 100 : 0;
 
+    if (this.activeSessions.size > 0) {
+      this.tuner.recordUtilization(getTokenPct120s(this.gateway));
+    }
+
     orchestrationLogger.info(
       {
         component: 'SessionPool',
