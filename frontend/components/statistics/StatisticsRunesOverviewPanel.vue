@@ -7,6 +7,7 @@ import { useI18n } from 'vue-i18n'
 import type { RunePath } from '@lelanation/shared-types'
 import { useRunesStore } from '~/stores/RunesStore'
 import { getRuneImageUrl, getRunePathColor, getRunePathImageUrl } from '~/utils/imageUrl'
+import { parseShardList } from '~/utils/parseShardList'
 
 type RuneStat = { pickrate: number; winrate: number; games: number }
 type DetailPayload = {
@@ -15,6 +16,8 @@ type DetailPayload = {
   runeSets: Array<{
     runes: unknown
     shards?: number[]
+    /** Raw DB value when `shards` was not parsed server-side. */
+    shardList?: string
     games: number
     wins: number
     pickrate: number
@@ -405,9 +408,17 @@ function baselineStatsForRuneSet(
   return fb ? { pickrate: fb.pickrate, winrate: fb.winrate } : undefined
 }
 
+function resolveSetShardIds(set: Pick<RuneSetRow, 'shards' | 'shardList' | 'runes'>): number[] {
+  const fromApi = parseShardList(set.shards)
+  if (fromApi.length > 0) return fromApi
+  const fromList = parseShardList(set.shardList)
+  if (fromList.length > 0) return fromList
+  return parseRuneSetParts(set.runes).shards
+}
+
 function runeSetLayout(
   run: unknown,
-  shardIdsFromApi?: number[] | null
+  shardSource?: Pick<RuneSetRow, 'shards' | 'shardList' | 'runes'> | number[] | null
 ): {
   keystone: number | null
   primaryRow: number[]
@@ -416,8 +427,13 @@ function runeSetLayout(
   shards: number[]
 } {
   const { style0, style1, shards: rawFromRunes } = parseRuneSetParts(run)
-  const api = shardIdsFromApi?.filter(n => Number.isFinite(n) && n > 0) ?? []
-  const rawShards = api.length > 0 ? api : rawFromRunes
+  let resolved: number[] = []
+  if (Array.isArray(shardSource)) {
+    resolved = parseShardList(shardSource)
+  } else if (shardSource && typeof shardSource === 'object' && 'runes' in shardSource) {
+    resolved = resolveSetShardIds(shardSource as Pick<RuneSetRow, 'shards' | 'shardList' | 'runes'>)
+  }
+  const rawShards = resolved.length > 0 ? resolved : rawFromRunes
   const shards = sortShardIdsForSet(rawShards)
 
   /** Toutes les perks non-shard (JSON `[…]` met souvent les 6 runes en « style 0 » seulement). */
@@ -485,10 +501,7 @@ function runeSetLayout(
       class="statistics-overview-surface rounded-lg border border-primary/30 p-4 sm:p-3"
     >
       <div class="flex flex-col gap-7">
-        <div
-          class="stats-runes-paths-grid grid min-w-0 gap-x-4 gap-y-8 overflow-x-auto pb-2 lg:gap-x-6"
-          style="grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr))"
-        >
+        <div class="stats-runes-paths-grid min-w-0 pb-2">
           <div
             v-for="{ path, cells } in pathsWithCells"
             v-show="cells.length > 0"
@@ -568,7 +581,9 @@ function runeSetLayout(
 
         <!-- Fragments -->
         <div>
-          <div class="flex flex-row flex-wrap items-end justify-center gap-8 sm:gap-12 md:gap-16">
+          <div
+            class="stats-runes-shards-grid flex flex-col items-center gap-6 sm:flex-row sm:flex-wrap sm:items-end sm:justify-center sm:gap-12 md:gap-16"
+          >
             <div
               v-for="row in SHARD_ROWS"
               :key="'shard-trio-' + row.slot"
@@ -647,7 +662,7 @@ function runeSetLayout(
             <div
               v-for="(row, idx) in allRuneSetsListed.map(s => ({
                 set: s,
-                ly: runeSetLayout(s.runes, s.shards ?? null),
+                ly: runeSetLayout(s.runes, s),
               }))"
               :key="'unified-set-' + idx"
               class="rune-set-card relative h-full w-full min-w-0 rounded-lg border border-primary/30 bg-black/20 px-4 pb-3 pt-5"
@@ -677,13 +692,7 @@ function runeSetLayout(
                   v-if="
                     row.ly.primaryRow.length || row.ly.secondaryPath || row.ly.secondaryRunes.length
                   "
-                  class="rune-set-trees-grid grid w-full min-w-0 items-start justify-items-center gap-x-4 gap-y-1 sm:justify-items-stretch sm:gap-x-3"
-                  :class="
-                    row.ly.primaryRow.length &&
-                    (row.ly.secondaryPath || row.ly.secondaryRunes.length)
-                      ? 'grid-cols-2'
-                      : 'grid-cols-1'
-                  "
+                  class="rune-set-trees-grid w-full min-w-0"
                 >
                   <div
                     v-if="row.ly.primaryRow.length"
@@ -753,7 +762,7 @@ function runeSetLayout(
                 </div>
                 <div
                   v-if="row.ly.shards.length"
-                  class="rune-set-shards-row -mx-4 mt-2 flex w-[calc(100%+2rem)] max-w-none items-center justify-center gap-4 self-stretch px-3 sm:justify-between sm:gap-2 sm:px-[3px]"
+                  class="rune-set-shards-row mt-2 flex w-full min-w-0 items-center justify-center gap-3 border-t border-primary/20 pt-2 sm:justify-between sm:gap-4"
                 >
                   <img
                     v-for="sid in row.ly.shards"
@@ -852,7 +861,7 @@ function runeSetLayout(
           <div
             v-for="(row, idx) in block.list.map(s => ({
               set: s,
-              ly: runeSetLayout(s.runes, s.shards ?? null),
+              ly: runeSetLayout(s.runes, s),
             }))"
             :key="block.key + '-' + idx"
             class="rune-set-card statistics-overview-surface relative h-full w-full min-w-0 rounded-lg border border-primary/30 px-4 pb-3 pt-5"
@@ -884,12 +893,7 @@ function runeSetLayout(
                 v-if="
                   row.ly.primaryRow.length || row.ly.secondaryPath || row.ly.secondaryRunes.length
                 "
-                class="rune-set-trees-grid grid w-full min-w-0 items-start justify-items-center gap-x-4 gap-y-1 sm:justify-items-stretch sm:gap-x-3"
-                :class="
-                  row.ly.primaryRow.length && (row.ly.secondaryPath || row.ly.secondaryRunes.length)
-                    ? 'grid-cols-2'
-                    : 'grid-cols-1'
-                "
+                class="rune-set-trees-grid w-full min-w-0"
               >
                 <div
                   v-if="row.ly.primaryRow.length"
@@ -959,7 +963,7 @@ function runeSetLayout(
               </div>
               <div
                 v-if="row.ly.shards.length"
-                class="rune-set-shards-row -mx-4 mt-2 flex w-[calc(100%+2rem)] max-w-none items-center justify-center gap-4 self-stretch px-3 sm:justify-between sm:gap-2 sm:px-[3px]"
+                class="rune-set-shards-row mt-2 flex w-full min-w-0 items-center justify-center gap-3 border-t border-primary/20 pt-2 sm:justify-between sm:gap-4"
               >
                 <img
                   v-for="sid in row.ly.shards"
@@ -1020,8 +1024,30 @@ function runeSetLayout(
 </template>
 
 <style scoped>
+/* Arbres de runes (Précision, Domination, …) : une branche sous l’autre, comme l’onglet stats global */
 .stats-runes-paths-grid {
-  scrollbar-gutter: stable;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  align-items: stretch;
+}
+
+.stats-runes-shards-grid {
+  width: 100%;
+}
+
+/* Primaire + secondaire dans chaque set : empilés, pas côte à côte */
+.rune-set-trees-grid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .rune-set-trees-grid {
+    align-items: flex-start;
+  }
 }
 .stats-runes-shard-icon {
   flex-shrink: 0;
@@ -1146,11 +1172,6 @@ function runeSetLayout(
     height: 2.5rem !important;
     min-width: 2.5rem;
     min-height: 2.5rem;
-  }
-
-  .rune-set-trees-grid {
-    max-width: 16rem;
-    margin-inline: auto;
   }
 }
 </style>

@@ -17,6 +17,7 @@ import {
 } from '../utils/statsFilters.js'
 import { buildRawMatchCond } from './ChampionGlobalTableService.js'
 import { mergeLegacyStatShardAggregates } from '../utils/statShardLegacyMerge.js'
+import { parseShardList } from '../utils/parseShardList.js'
 import { isBootsTier2Or3ItemId } from '../parsers/bootItemClassification.js'
 import { loadItemMeta } from '../worker/itemBuildSelection.js'
 import {
@@ -1602,14 +1603,6 @@ export async function getOverviewDetailStats(
       LIMIT 2000
     `)
     const runeSetAggKeySep = '\u001e'
-    const parseShardListCsv = (csv: string | null | undefined): number[] => {
-      if (csv == null || csv === '') return []
-      const sep = String(csv).includes('_') ? '_' : ','
-      return String(csv)
-        .split(sep)
-        .map((x) => Number(String(x).trim()))
-        .filter((n) => Number.isFinite(n) && n > 0)
-    }
     const runeSetMap = new Map<string, { wins: number; games: number; shardList: string }>()
     for (const r of runeSetRows) {
       const shard = r.shardList ?? ''
@@ -1635,7 +1628,7 @@ export async function getOverviewDetailStats(
         }
         return {
           runes: parsedRunes,
-          shards: parseShardListCsv(e.shardList),
+          shards: parseShardList(e.shardList),
           games: e.games,
           wins: e.wins,
           pickrate: totalParticipants > 0 ? Math.round((e.games / totalParticipants) * 10000) / 100 : 0,

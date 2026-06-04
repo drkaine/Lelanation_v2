@@ -2,6 +2,7 @@
 import { computed, inject, ref, unref, watch } from 'vue'
 import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import { getSpellImageUrl } from '~/utils/imageUrl'
+import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
 
 const p = inject('statisticsPageCtx') as any
 const summonerSpellsStore = useSummonerSpellsStore()
@@ -372,6 +373,38 @@ watch([spellsMode, sortBy, sortDir, spellSearchQuery, pageSize], () => {
   page.value = 1
 })
 
+const spellsMobileSortColumn = computed({
+  get: () => String(sortBy.value ?? 'pickrate'),
+  set: (v: string) => {
+    sortBy.value = v as SortKey
+  },
+})
+
+const spellsMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
+  const t = p.t
+  const delta = t('statisticsPage.championTableDeltaSymbol')
+  const opts: StatisticsMobileSortOption[] = [
+    { value: 'spell', label: t('statisticsPage.overviewDetailSummonerSpells') },
+    { value: 'pickrate', label: t('statisticsPage.overviewDetailPickRate') },
+    { value: 'casts', label: t('statisticsPage.spellsCasts') },
+    { value: 'winrate', label: t('statisticsPage.overviewDetailWinRate') },
+  ]
+  if (spellsMode.value === 'solo') {
+    opts.push({ value: 'pctD', label: '% D' }, { value: 'pctF', label: '% F' })
+  }
+  if (hasComparison.value) {
+    opts.push(
+      { value: 'deltaPick', label: `${delta} pick` },
+      { value: 'deltaCasts', label: `${delta} ${t('statisticsPage.spellsCasts')}` },
+      { value: 'deltaWin', label: `${delta} WR` }
+    )
+    if (spellsMode.value === 'solo') {
+      opts.push({ value: 'deltaD', label: `${delta} D` }, { value: 'deltaF', label: `${delta} F` })
+    }
+  }
+  return opts
+})
+
 function fmtPct(v: number | null | undefined): string {
   if (v == null) return '—'
   return `${Number(v).toFixed(2)}%`
@@ -414,6 +447,13 @@ function deltaLabelClass(v: number | null | undefined): string {
           :secondary-text="p.t('statisticsPage.tooltipTableSpellsSecondary')"
         />
       </div>
+      <StatisticsMobileSortBar
+        id="spells-mobile-sort"
+        v-model:column="spellsMobileSortColumn"
+        v-model:direction="sortDir"
+        :options="spellsMobileSortOptions"
+        :asc-default-columns="['spell']"
+      />
       <div class="statistics-spells-mobile-list space-y-2 md:hidden">
         <article
           v-for="row in paginatedDisplayRows"

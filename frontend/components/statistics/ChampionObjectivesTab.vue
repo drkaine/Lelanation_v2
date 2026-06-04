@@ -1,5 +1,5 @@
 <template>
-  <div class="champion-objectives-tab space-y-4">
+  <div class="champion-objectives-tab w-full min-w-0 max-w-full space-y-4">
     <div v-if="pending" class="text-text/70">
       {{ t('statisticsPage.loading') }}
     </div>
@@ -499,9 +499,12 @@
         </ul>
       </div>
 
-      <div v-if="showDistributionCards" class="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div
+        v-if="showDistributionCards"
+        class="grid w-full min-w-0 max-w-full grid-cols-1 gap-4 md:grid-cols-2"
+      >
         <div
-          class="fast-stat-card fast-stat-card-distribution mx-auto w-full max-w-[420px] rounded-lg border border-primary/30 bg-surface/30 p-3"
+          class="fast-stat-card fast-stat-card-distribution mx-auto w-full min-w-0 max-w-[420px] rounded-lg border border-primary/30 bg-surface/30 p-3 max-lg:max-w-full"
         >
           <h4 class="mb-2 text-sm font-semibold text-text/90">
             {{ t('statisticsPage.objectivesDrakeDistributionCardTitle') }}
@@ -513,7 +516,7 @@
           />
         </div>
         <div
-          class="fast-stat-card fast-stat-card-distribution mx-auto w-full max-w-[420px] rounded-lg border border-primary/30 bg-surface/30 p-3"
+          class="fast-stat-card fast-stat-card-distribution mx-auto w-full min-w-0 max-w-[420px] rounded-lg border border-primary/30 bg-surface/30 p-3 max-lg:max-w-full"
         >
           <h4 class="mb-2 text-sm font-semibold text-text/90">
             {{ t('statisticsPage.objectivesSoulDistributionCardTitle') }}

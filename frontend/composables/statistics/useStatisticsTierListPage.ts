@@ -674,6 +674,13 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
       tierListSortDir.value = 'desc'
     }
   }
+
+  /** Mobile sort bar: always keeps an active column (no third-click reset). */
+  function setTierListSort(col: TierListSortColumn) {
+    if (tierListSortColumn.value === col) return
+    tierListSortColumn.value = col
+    tierListSortDir.value = col === 'champion' ? 'asc' : 'desc'
+  }
   function tierListSortIcon(col: TierListSortColumn): string {
     if (tierListSortColumn.value !== col) return '—'
     return tierListSortDir.value === 'desc' ? '↓' : '↑'
@@ -900,6 +907,7 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     formatTierListPatchDeltaRank,
     tierListPatchDeltaRankClass,
     cycleTierListSort,
+    setTierListSort,
     tierListSortIcon,
     tierListPending,
     tierListError,

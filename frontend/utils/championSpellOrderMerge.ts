@@ -1,6 +1,8 @@
 /** Valeurs API / DB : 1=Q, 2=W, 3=E, 4=R */
 export type SpellOrderSkill = 1 | 2 | 3 | 4
 
+export type SpellOrderSkillKey = 'Q' | 'W' | 'E' | 'R'
+
 export type ChampionSpellOrderRowInput = {
   key: string
   order: number[]
@@ -173,4 +175,89 @@ export function mergeChampionSpellOrderRows(
       sourceMaxLevels: agg.sourceMaxLevels,
     }))
     .sort((a, b) => b.games - a.games)
+}
+
+export function skillKeyFromValue(v: number): SpellOrderSkillKey | null {
+  if (v === 1) return 'Q'
+  if (v === 2) return 'W'
+  if (v === 3) return 'E'
+  if (v === 4) return 'R'
+  return null
+}
+
+/** Niveaux 1–3 (premiers ups). */
+export function firstThreeLevelsKey(displayOrder: number[]): string {
+  return displayOrder
+    .slice(0, 3)
+    .map(v => skillKeyFromValue(v) ?? '?')
+    .join('-')
+}
+
+/** Ordre de max des sorts de base (Q/W/E) : séquence d’atteinte de 5 points. */
+export function maxOrderKey(displayOrder: number[]): string {
+  const counts: Record<1 | 2 | 3, number> = { 1: 0, 2: 0, 3: 0 }
+  const order: Array<1 | 2 | 3> = []
+  for (const raw of displayOrder) {
+    if (raw !== 1 && raw !== 2 && raw !== 3) continue
+    counts[raw]++
+    if (counts[raw] === 5 && !order.includes(raw)) order.push(raw)
+  }
+  return order
+    .map(s => skillKeyFromValue(s) ?? '')
+    .filter(Boolean)
+    .join(' > ')
+}
+
+export type SpellOrderRecapEntry = {
+  key: string
+  label: string
+  skills: SpellOrderSkillKey[]
+  games: number
+  pickrate: number
+}
+
+export function buildSpellOrderRecap(
+  rows: ChampionSpellOrderRowMerged[],
+  totalGames: number
+): { topFirstThree: SpellOrderRecapEntry[]; topMaxOrder: SpellOrderRecapEntry[] } {
+  const firstMap = new Map<string, { games: number; skills: SpellOrderSkillKey[] }>()
+  const maxMap = new Map<string, { games: number; skills: SpellOrderSkillKey[] }>()
+
+  for (const row of rows) {
+    const fKey = firstThreeLevelsKey(row.displayOrder)
+    const fSkills = row.displayOrder
+      .slice(0, 3)
+      .map(v => skillKeyFromValue(v))
+      .filter((k): k is SpellOrderSkillKey => k != null)
+    if (fSkills.length === 3) {
+      const prevF = firstMap.get(fKey)
+      if (prevF) prevF.games += row.games
+      else firstMap.set(fKey, { games: row.games, skills: fSkills })
+    }
+
+    const mKey = maxOrderKey(row.displayOrder)
+    if (mKey) {
+      const mSkills = mKey.split(' > ').filter(Boolean) as SpellOrderSkillKey[]
+      const prevM = maxMap.get(mKey)
+      if (prevM) prevM.games += row.games
+      else maxMap.set(mKey, { games: row.games, skills: mSkills })
+    }
+  }
+
+  const toEntries = (map: Map<string, { games: number; skills: SpellOrderSkillKey[] }>) =>
+    [...map.entries()]
+      .map(([key, agg]) => ({
+        key,
+        label: agg.skills.join(' · '),
+        skills: agg.skills,
+        games: agg.games,
+        pickrate: totalGames > 0 ? Math.round((agg.games / totalGames) * 10000) / 100 : 0,
+      }))
+      .sort((a, b) => b.games - a.games)
+      .slice(0, 3)
+
+  return {
+    topFirstThree: toEntries(firstMap),
+    topMaxOrder: toEntries(maxMap),
+  }
 }

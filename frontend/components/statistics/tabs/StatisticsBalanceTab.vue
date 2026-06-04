@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { computed, inject, ref, unref, watch } from 'vue'
+import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
+
 const p = inject('statisticsPageCtx') as any
+
+type BalanceSortKey = 'champion' | 'globalStatus' | 'games'
+
+const balanceSortBy = ref<BalanceSortKey>('champion')
+const balanceSortDir = ref<'asc' | 'desc'>('asc')
 const expandedBalanceKeys = ref<Set<string>>(new Set())
 
 type LevelRow = {
@@ -203,14 +210,34 @@ const filteredRows = computed<BalanceRow[]>(() => {
     return true
   })
 
+  const dir = balanceSortDir.value === 'asc' ? 1 : -1
+  const key = balanceSortBy.value
   out.sort((a, b) => {
-    const an = String(p.championName(a.championId) || a.championId).toLowerCase()
-    const bn = String(p.championName(b.championId) || b.championId).toLowerCase()
-    if (an === bn) return 0
-    return an < bn ? -1 : 1
+    if (key === 'champion') {
+      const an = String(p.championName(a.championId) || a.championId).toLowerCase()
+      const bn = String(p.championName(b.championId) || b.championId).toLowerCase()
+      if (an === bn) return 0
+      return dir * (an < bn ? -1 : 1)
+    }
+    if (key === 'globalStatus') {
+      const order = { OVERPOWERED: 0, BALANCED: 1, UNDERPOWERED: 2 }
+      const av = order[a.globalStatus] ?? 1
+      const bv = order[b.globalStatus] ?? 1
+      if (av !== bv) return dir * (av - bv)
+      const an = String(p.championName(a.championId) || a.championId).toLowerCase()
+      const bn = String(p.championName(b.championId) || b.championId).toLowerCase()
+      return an < bn ? -1 : an > bn ? 1 : 0
+    }
+    return dir * (rowGamesScore(a) - rowGamesScore(b))
   })
   return out
 })
+
+const balanceMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => [
+  { value: 'champion', label: p.t('statisticsPage.mobileSortBalanceChampion') },
+  { value: 'globalStatus', label: p.t('statisticsPage.mobileSortBalanceGlobal') },
+  { value: 'games', label: p.t('statisticsPage.mobileSortBalanceGames') },
+])
 
 const balancePage = ref(1)
 const pageSize = computed(() => Number(unref(p.championsPageSize) ?? 20))
@@ -222,7 +249,7 @@ const paginatedRows = computed(() => {
   return filteredRows.value.slice(start, start + pageSize.value)
 })
 
-watch([filteredRows, pageSize], () => {
+watch([filteredRows, pageSize, balanceSortBy, balanceSortDir], () => {
   balancePage.value = 1
 })
 
@@ -265,6 +292,13 @@ function globalTooltip(row: BalanceRow): string {
     </div>
     <template v-else>
       <div v-if="paginatedRows.length" class="statistics-balance-tab space-y-3">
+        <StatisticsMobileSortBar
+          id="balance-mobile-sort"
+          v-model:column="balanceSortBy"
+          v-model:direction="balanceSortDir"
+          :options="balanceMobileSortOptions"
+          :asc-default-columns="['champion']"
+        />
         <div class="statistics-balance-mobile-list space-y-2 md:hidden">
           <article
             v-for="row in paginatedRows"

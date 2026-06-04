@@ -18,6 +18,12 @@
           :secondary-text="p.t('statisticsPage.tooltipTableBansSecondary')"
         />
       </div>
+      <StatisticsMobileSortBar
+        id="bans-mobile-sort"
+        v-model:column="bansMobileSortColumn"
+        v-model:direction="bansMobileSortDir"
+        :options="bansMobileSortOptions"
+      />
       <div class="statistics-bans-mobile-list space-y-2 md:hidden">
         <article
           v-for="row in p.paginatedBans"
@@ -570,6 +576,8 @@
 <script setup lang="ts">
 import { computed, inject, ref, unref } from 'vue'
 import type { BansSortCol } from '~/composables/statistics/useStatisticsBansTab'
+import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
+
 const p = inject('statisticsPageCtx') as any
 const expandedBanIds = ref<Set<number>>(new Set())
 
@@ -590,6 +598,52 @@ function formatBansPatchDeltaPct(pp: number): string {
   const sign = pp > 0 ? '+' : ''
   return `${sign}${pp.toFixed(2)}%`
 }
+
+const bansMobileSortColumn = computed({
+  get: () => String(p.bansSortColumn ?? 'rate'),
+  set: (v: string) => {
+    p.setBansSort(v)
+  },
+})
+
+const bansMobileSortDir = computed({
+  get: () => (p.bansSortDir === 'asc' ? 'asc' : 'desc') as 'asc' | 'desc',
+  set: (v: 'asc' | 'desc') => {
+    p.bansSortDir = v
+  },
+})
+
+const bansMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
+  const t = p.t
+  const opts: StatisticsMobileSortOption[] = [
+    { value: 'rate', label: t('statisticsPage.bansColRate') },
+    { value: 'win', label: t('statisticsPage.overviewTeamsByWin') },
+    { value: 'loss', label: t('statisticsPage.overviewTeamsByLoss') },
+    { value: 'blue', label: t('statisticsPage.bansColBlueSide') },
+    { value: 'red', label: t('statisticsPage.bansColRedSide') },
+    { value: 'top', label: t('statisticsPage.bansColTop') },
+    { value: 'jungle', label: t('statisticsPage.bansColJungle') },
+    { value: 'middle', label: t('statisticsPage.bansColMiddle') },
+    { value: 'bottom', label: t('statisticsPage.bansColBottom') },
+    { value: 'support', label: t('statisticsPage.bansColSupport') },
+  ]
+  if (p.bansPatchDeltaRefLabel) {
+    const deltaOpts: StatisticsMobileSortOption[] = [
+      { value: 'rateDelta', label: `Δ ${t('statisticsPage.bansColRate')}` },
+      { value: 'winDelta', label: `Δ ${t('statisticsPage.overviewTeamsByWin')}` },
+      { value: 'lossDelta', label: `Δ ${t('statisticsPage.overviewTeamsByLoss')}` },
+      { value: 'blueDelta', label: `Δ ${t('statisticsPage.bansColBlue')}` },
+      { value: 'redDelta', label: `Δ ${t('statisticsPage.bansColRed')}` },
+      { value: 'topDelta', label: `Δ ${t('statisticsPage.bansColTop')}` },
+      { value: 'jungleDelta', label: `Δ ${t('statisticsPage.bansColJungle')}` },
+      { value: 'middleDelta', label: `Δ ${t('statisticsPage.bansColMiddle')}` },
+      { value: 'bottomDelta', label: `Δ ${t('statisticsPage.bansColBottom')}` },
+      { value: 'supportDelta', label: `Δ ${t('statisticsPage.bansColSupport')}` },
+    ]
+    return [...opts, ...deltaOpts]
+  }
+  return opts
+})
 
 type BanRoleMetricKey = 'bansTop' | 'bansJungle' | 'bansMiddle' | 'bansBottom' | 'bansSupport'
 

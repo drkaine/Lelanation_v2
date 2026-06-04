@@ -2,6 +2,7 @@
 import { computed, inject, ref, unref, watch } from 'vue'
 import { getChampionImageUrl } from '~/utils/imageUrl'
 import { botlaneRowKey } from '~/composables/statistics/botlanePatchDeltas'
+import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
 
 const p = inject('statisticsPageCtx') as any
 
@@ -219,6 +220,19 @@ function tierLabel(tier: string): string {
       return p.t('statisticsPage.tierF')
   }
 }
+
+const botlaneMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
+  const t = p.t
+  return [
+    { value: 'rank', label: t('statisticsPage.tierListRank') },
+    { value: 'tier', label: t('statisticsPage.tierListTier') },
+    { value: 'score', label: t('statisticsPage.tierListPbi') },
+    { value: 'winrate', label: t('statisticsPage.winrate') },
+    { value: 'delta', label: t('statisticsPage.vsBotlaneDeltaShort') },
+    { value: 'pickrate', label: t('statisticsPage.tierListPickrate') },
+    { value: 'games', label: t('statisticsPage.games') },
+  ]
+})
 </script>
 
 <template>
@@ -236,6 +250,13 @@ function tierLabel(tier: string): string {
       {{ p.t('statisticsPage.vsBotlaneNoData') }}
     </div>
     <div v-else class="space-y-3">
+      <StatisticsMobileSortBar
+        id="botlane-matchups-mobile-sort"
+        v-model:column="sortBy"
+        v-model:direction="sortDir"
+        :options="botlaneMobileSortOptions"
+        :asc-default-columns="['rank']"
+      />
       <div class="statistics-tier-list-mobile-list space-y-2 md:hidden">
         <StatisticsBotlaneDuoMobileCard
           v-for="row in paginatedRows"

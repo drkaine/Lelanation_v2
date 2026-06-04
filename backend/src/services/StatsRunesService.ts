@@ -5,6 +5,7 @@
 import { queryRawUnsafe } from '../db/query.js'
 import { isDatabaseConfigured } from '../db/query.js'
 import { mergeLegacyStatShardAggregates } from '../utils/statShardLegacyMerge.js'
+import { parseShardList } from '../utils/parseShardList.js'
 import { buildChampionScopedWhere, sumChampionCoreGames } from './ChampionGlobalTableService.js'
 import { matchVersionedAggFrom } from './statsAggArchive.js'
 
@@ -69,13 +70,6 @@ export async function getRunesByChampion(
     `)
 
     const aggKeySep = '\u001e'
-    const parseShardListCsv = (csv: string | null | undefined): number[] => {
-      if (csv == null || csv === '') return []
-      return csv
-        .split(',')
-        .map((x) => Number(String(x).trim()))
-        .filter((n) => Number.isFinite(n) && n > 0)
-    }
 
     const byList = new Map<string, { wins: number; games: number; shardList: string }>()
     for (const row of runeStatRows) {
@@ -103,7 +97,7 @@ export async function getRunesByChampion(
       }
       runes.push({
         runes: parsedRunes,
-        shards: parseShardListCsv(entry.shardList),
+        shards: parseShardList(entry.shardList),
         games: entry.games,
         wins: entry.wins,
         winrate: entry.games > 0 ? Math.round((entry.wins / entry.games) * 10000) / 100 : 0,

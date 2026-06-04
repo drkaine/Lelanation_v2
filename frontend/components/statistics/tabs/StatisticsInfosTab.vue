@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import { computed, inject, ref, watch } from 'vue'
+import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
 
 const p = inject('statisticsPageCtx') as any
 const pageSize = ref<number>(20)
 const page = ref<number>(1)
+type InfosSortKey = 'version' | 'total'
+
+const infosSortBy = ref<InfosSortKey>('version')
+const infosSortDir = ref<'asc' | 'desc'>('desc')
 const PAGE_SIZE_OPTIONS = computed<number[]>(() =>
   Array.isArray(p.PAGE_SIZE_OPTIONS) && p.PAGE_SIZE_OPTIONS.length > 0
     ? p.PAGE_SIZE_OPTIONS
@@ -13,12 +18,33 @@ const totalRowsCount = computed<number>(() => (p.infosMatrixRows ?? []).length)
 const totalPages = computed<number>(() =>
   Math.max(1, Math.ceil(totalRowsCount.value / pageSize.value))
 )
+const sortedInfosRows = computed(() => {
+  const rows = [...(p.infosMatrixRows ?? [])]
+  const dir = infosSortDir.value === 'asc' ? 1 : -1
+  rows.sort((a, b) => {
+    if (infosSortBy.value === 'total') {
+      const av = cellValue(a, 'ALL')
+      const bv = cellValue(b, 'ALL')
+      if (av !== bv) return dir * (av - bv)
+    }
+    const av = String(a.version ?? '')
+    const bv = String(b.version ?? '')
+    return dir * av.localeCompare(bv)
+  })
+  return rows
+})
+
 const paginatedRows = computed(() => {
-  const rows = p.infosMatrixRows ?? []
+  const rows = sortedInfosRows.value
   const pnum = Math.min(page.value, totalPages.value)
   const start = (pnum - 1) * pageSize.value
   return rows.slice(start, start + pageSize.value)
 })
+
+const infosMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => [
+  { value: 'version', label: p.t('statisticsPage.mobileSortInfosVersion') },
+  { value: 'total', label: p.t('statisticsPage.mobileSortInfosTotal') },
+])
 
 const infosMatrixColumns = computed(() => p.infosMatrixColumns ?? [])
 
@@ -39,7 +65,7 @@ function cellValue(
 }
 
 watch(
-  () => [p.infosMatrixRows, pageSize.value],
+  () => [p.infosMatrixRows, pageSize.value, infosSortBy.value, infosSortDir.value],
   () => {
     page.value = 1
   }
@@ -62,6 +88,12 @@ watch(
     </div>
     <div v-else class="statistics-infos-tab space-y-3">
       <div v-if="paginatedRows.length" class="space-y-3">
+        <StatisticsMobileSortBar
+          id="infos-mobile-sort"
+          v-model:column="infosSortBy"
+          v-model:direction="infosSortDir"
+          :options="infosMobileSortOptions"
+        />
         <div class="statistics-infos-mobile-list space-y-2 md:hidden">
           <article
             v-for="row in paginatedRows"

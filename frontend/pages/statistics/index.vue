@@ -33,32 +33,6 @@
           </button>
         </div>
       </div>
-      <button
-        v-if="showFiltersPanel"
-        type="button"
-        class="filters-collapse-floating mt-0.5 inline-flex shrink-0 touch-manipulation lg:hidden"
-        :aria-label="
-          filtersOpen ? t('statisticsPage.closeFilters') : t('statisticsPage.openFilters')
-        "
-        :aria-expanded="filtersOpen"
-        @click="toggleFiltersOpen"
-      >
-        <svg
-          class="h-3 w-3 transition-transform duration-200"
-          :class="filtersOpen ? 'rotate-180' : ''"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M15 19l-7-7 7-7"
-          />
-        </svg>
-      </button>
     </div>
 
     <!-- Filtres + contenu -->

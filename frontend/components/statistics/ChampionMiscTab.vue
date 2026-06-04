@@ -14,7 +14,7 @@
         {{ t('statisticsPage.championMiscGamesHint', { count: gamesCount.toLocaleString() }) }}
       </p>
       <div
-        class="champion-misc-grid flex flex-wrap items-start justify-center gap-x-[5px] gap-y-[10px] pb-[10px]"
+        class="champion-misc-grid flex w-full min-w-0 max-w-full flex-wrap items-stretch justify-center gap-x-[5px] gap-y-[10px] pb-[10px] max-lg:px-0"
       >
         <div
           v-for="group in visibleGroups"
@@ -212,6 +212,12 @@ function formatMetric(metric: ChampionMiscMetric): string {
   border-bottom: none;
 }
 
+.champion-misc-tab {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
 .champion-misc-tab .fast-stat-card-misc {
   margin-bottom: 0;
   width: 313px;
@@ -224,15 +230,16 @@ function formatMetric(metric: ChampionMiscMetric): string {
   margin-right: auto;
   background: #08101f !important;
   justify-self: center;
-  overflow: visible;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1023px) {
   .champion-misc-tab .champion-misc-grid > .fast-stat-card-misc {
     width: 100% !important;
     min-width: 0 !important;
     max-width: 100% !important;
-    flex: 1 1 auto;
+    flex: 1 1 100% !important;
     margin-left: 0 !important;
     margin-right: 0 !important;
     align-self: stretch;

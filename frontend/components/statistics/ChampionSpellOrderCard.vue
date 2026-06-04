@@ -2,15 +2,32 @@
   <article
     class="champion-spell-order-card flex flex-col rounded-lg border border-primary/25 bg-background/35 p-2.5"
   >
-    <div class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
-      <span class="text-text/55">{{ t('statisticsPage.winrate') }}</span>
-      <span class="font-semibold tabular-nums text-accent">{{ row.winrate.toFixed(1) }}%</span>
-      <span class="text-text/35">·</span>
-      <span class="text-text/55">{{ t('statisticsPage.pickrate') }}</span>
-      <span class="font-semibold tabular-nums text-primary">{{ row.pickrate.toFixed(1) }}%</span>
-      <span class="ml-auto tabular-nums text-text/45">
-        {{ t('statisticsPage.championSpellOrderGames', { count: row.games }) }}
-      </span>
+    <div class="mb-2.5 grid grid-cols-2 gap-2">
+      <div class="rounded-md bg-black/25 px-2 py-1.5">
+        <div class="text-[9px] font-semibold uppercase tracking-wide text-text/50">
+          {{ t('statisticsPage.winrate') }}
+        </div>
+        <div class="text-lg font-bold tabular-nums leading-tight text-accent">
+          {{ row.winrate.toFixed(1) }}%
+        </div>
+      </div>
+      <div class="rounded-md bg-sky-500/15 px-2 py-1.5 ring-1 ring-sky-400/35">
+        <div class="text-[9px] font-semibold uppercase tracking-wide text-sky-200/70">
+          {{ t('statisticsPage.pickrate') }}
+        </div>
+        <div class="text-lg font-bold tabular-nums leading-tight text-sky-200">
+          {{ row.pickrate.toFixed(1) }}%
+        </div>
+        <div class="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-black/35" role="presentation">
+          <div
+            class="h-full rounded-full bg-sky-400/90"
+            :style="{ width: `${Math.min(100, Math.max(0, row.pickrate))}%` }"
+          />
+        </div>
+      </div>
+    </div>
+    <div class="mb-2 text-right text-[10px] tabular-nums text-text/45">
+      {{ t('statisticsPage.championSpellOrderGames', { count: row.games }) }}
     </div>
 
     <div

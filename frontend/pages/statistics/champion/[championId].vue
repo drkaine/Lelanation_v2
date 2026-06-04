@@ -1,6 +1,6 @@
 <template>
   <div class="champion-stats flex min-h-screen flex-col bg-background text-text">
-    <div class="w-full flex-shrink-0 px-4 pb-2 pt-4">
+    <div class="w-full flex-shrink-0 px-4 pb-2 pt-4 max-lg:px-3">
       <div
         class="statistics-tabs-bar champion-tabs-bar flex w-full items-start gap-2 bg-surface/30"
       >
@@ -33,31 +33,6 @@
             </button>
           </nav>
         </div>
-        <button
-          type="button"
-          class="filters-collapse-floating mt-0.5 inline-flex shrink-0 touch-manipulation lg:hidden"
-          :aria-label="
-            filtersOpen ? t('statisticsPage.closeFilters') : t('statisticsPage.openFilters')
-          "
-          :aria-expanded="filtersOpen"
-          @click="toggleFiltersOpen"
-        >
-          <svg
-            class="h-3 w-3 transition-transform duration-200"
-            :class="filtersOpen ? 'rotate-180' : ''"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M15 19l-7-7 7-7"
-            />
-          </svg>
-        </button>
       </div>
     </div>
 
@@ -345,7 +320,7 @@
               >
                 <option value="ALL">{{ t('statisticsPage.overviewDivisionAll') }}</option>
                 <option value="balanced">
-                  {{ t('statisticsPage.championMatchupDominanceBalancedShort') }}
+                  {{ t('statisticsPage.championMatchupDominanceBalanced') }}
                 </option>
                 <option
                   v-for="opt in matchupLaneProfileOptions"
@@ -359,6 +334,9 @@
                 class="mt-2 space-y-2 rounded-md border border-primary/20 bg-background/40 p-2 text-[10px] text-text/70"
                 :title="t('statisticsPage.championMatchupTooltipLaneProfile')"
               >
+                <p class="leading-snug text-text/60">
+                  {{ t('statisticsPage.championMatchupLaneProfileLegendHint') }}
+                </p>
                 <div class="font-semibold text-text/80">
                   {{ t('statisticsPage.championMatchupLaneProfileLegendTitle') }}
                 </div>
@@ -399,6 +377,24 @@
                       {{ t(`statisticsPage.championMatchupSignalLevelShort.${lvl}`) }}
                     </span>
                   </div>
+                </div>
+                <div class="space-y-1 border-t border-primary/15 pt-2">
+                  <div class="font-semibold text-text/80">
+                    {{ t('statisticsPage.championMatchupLaneProfileDimensionsTitle') }}
+                  </div>
+                  <ul class="space-y-1 leading-snug">
+                    <li
+                      v-for="key in MATCHUP_LANE_PROFILE_DIMENSION_KEYS"
+                      :key="'dim-leg-' + key"
+                      class="text-text/65"
+                    >
+                      <span class="font-semibold text-text/85">{{
+                        t(`statisticsPage.championMatchupDominanceShort.${key}`)
+                      }}</span>
+                      <span class="text-text/55"> — </span>
+                      <span>{{ t(`statisticsPage.championMatchupDominance.${key}`) }}</span>
+                    </li>
+                  </ul>
                 </div>
               </div>
             </div>
@@ -467,7 +463,9 @@
         </div>
       </aside>
 
-      <div class="min-w-0 flex-1 p-4 max-lg:pb-20 lg:px-3 lg:pb-4 lg:pt-0">
+      <div
+        class="champion-page-main min-w-0 flex-1 p-4 max-lg:px-0 max-lg:py-2 max-lg:pb-20 lg:px-3 lg:pb-4 lg:pt-0"
+      >
         <div class="w-full">
           <!-- Loading / error -->
           <div
@@ -481,119 +479,170 @@
           </div>
           <template v-else-if="championStats">
             <div
-              class="champion-content-stack overflow-hidden rounded-lg border border-primary/30 bg-surface/30"
+              class="champion-content-stack w-full min-w-0 overflow-hidden rounded-lg border border-primary/30 bg-surface/30 max-lg:rounded-none max-lg:border-x-0"
             >
-              <!-- Header: image + nom + KPI principaux -->
-              <div
-                class="champion-header-band flex flex-wrap items-center gap-3 border-b border-primary/25 px-3 py-2.5"
-              >
-                <img
-                  v-if="gameVersion && championByKey(championId)"
-                  :src="getChampionImageUrl(gameVersion, championByKey(championId)!.image.full)"
-                  :alt="championName(championId) ?? ''"
-                  class="h-10 w-10 shrink-0 rounded-full object-cover"
-                  width="40"
-                  height="40"
-                />
-                <div class="min-w-[140px] flex-1">
-                  <h1 class="truncate text-base font-semibold text-accent">
-                    {{ championName(championId) || championId }}
-                  </h1>
-                  <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-text/80">
-                    <span
-                      v-for="role in roleDistribution"
-                      :key="role.role"
-                      class="inline-flex items-center gap-1 rounded border border-primary/30 bg-surface/40 px-1.5 py-0.5"
-                    >
-                      <img
-                        :src="roleIconPath(role.role)"
-                        :alt="roleLabel(role.role)"
-                        class="h-3 w-3 object-contain"
-                        width="12"
-                        height="12"
-                      />
-                      <span>{{ formatDonutPercent(role.pickrate) }}%</span>
-                    </span>
-                  </div>
-                </div>
-                <div
-                  v-if="championDamageSplit && championDamageSplit.total > 0"
-                  class="mx-1 flex flex-wrap items-center gap-2 self-center"
+              <!-- Header: image + nom + KPI principaux (repliable sur mobile) -->
+              <div class="champion-header-mobile-wrap max-lg:border-b max-lg:border-primary/25">
+                <button
+                  type="button"
+                  class="champion-header-band-toggle flex w-full touch-manipulation items-center gap-2.5 px-3 py-2.5 text-left lg:hidden"
+                  :aria-expanded="championHeaderBandOpen"
+                  :aria-controls="'champion-header-band'"
+                  @click="championHeaderBandOpen = !championHeaderBandOpen"
                 >
-                  <div class="flex items-center gap-3 rounded bg-surface/40 px-2 py-1.5">
-                    <div
-                      class="h-12 w-12 shrink-0 rounded-full"
-                      :style="championDamageDonutStyle"
-                      :title="t('statisticsPage.championStatsDamageSplitTitle')"
-                      aria-hidden="true"
+                  <img
+                    v-if="gameVersion && championByKey(championId)"
+                    :src="getChampionImageUrl(gameVersion, championByKey(championId)!.image.full)"
+                    :alt="championName(championId) ?? ''"
+                    class="h-9 w-9 shrink-0 rounded-full object-cover"
+                    width="36"
+                    height="36"
+                  />
+                  <span class="min-w-0 flex-1">
+                    <span class="block truncate text-sm font-semibold text-accent">
+                      {{ championName(championId) || championId }}
+                    </span>
+                    <span
+                      v-if="!championHeaderBandOpen"
+                      class="mt-0.5 block truncate text-[11px] tabular-nums text-text/70"
+                    >
+                      {{ championHeaderCollapsedSummary }}
+                    </span>
+                    <span v-else class="mt-0.5 block text-[11px] text-text/55">
+                      {{ t('statisticsPage.championStatsHeaderHide') }}
+                    </span>
+                  </span>
+                  <svg
+                    class="h-4 w-4 shrink-0 text-text/60 transition-transform duration-200"
+                    :class="championHeaderBandOpen ? 'rotate-180' : ''"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M19 9l-7 7-7-7"
                     />
-                    <div class="space-y-0.5 text-[10px] leading-tight text-text/85">
-                      <div class="text-[11px] font-semibold text-text">
-                        {{ t('statisticsPage.championStatsDamageSplitTitle') }}
-                      </div>
-                      <div
-                        v-for="entry in championDamageShareLegend"
-                        :key="entry.key"
-                        class="flex items-center gap-1"
+                  </svg>
+                </button>
+                <div
+                  id="champion-header-band"
+                  class="champion-header-band flex flex-wrap items-center gap-3 border-b border-primary/25 px-3 py-2.5 max-lg:flex-col max-lg:items-stretch max-lg:border-b-0"
+                  :class="championHeaderBandOpen ? 'flex' : 'hidden lg:flex'"
+                >
+                  <img
+                    v-if="gameVersion && championByKey(championId)"
+                    :src="getChampionImageUrl(gameVersion, championByKey(championId)!.image.full)"
+                    :alt="championName(championId) ?? ''"
+                    class="h-10 w-10 shrink-0 rounded-full object-cover"
+                    width="40"
+                    height="40"
+                  />
+                  <div class="min-w-[140px] flex-1">
+                    <h1 class="truncate text-base font-semibold text-accent">
+                      {{ championName(championId) || championId }}
+                    </h1>
+                    <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-text/80">
+                      <span
+                        v-for="role in roleDistribution"
+                        :key="role.role"
+                        class="inline-flex items-center gap-1 rounded border border-primary/30 bg-surface/40 px-1.5 py-0.5"
                       >
-                        <span
-                          class="inline-block h-2.5 w-2.5 rounded-sm"
-                          :style="{ backgroundColor: entry.color }"
+                        <img
+                          :src="roleIconPath(role.role)"
+                          :alt="roleLabel(role.role)"
+                          class="h-3 w-3 object-contain"
+                          width="12"
+                          height="12"
                         />
-                        <span>{{ entry.label }}: {{ entry.pct.toFixed(1) }}%</span>
+                        <span>{{ formatDonutPercent(role.pickrate) }}%</span>
+                      </span>
+                    </div>
+                  </div>
+                  <div
+                    v-if="championDamageSplit && championDamageSplit.total > 0"
+                    class="mx-1 flex w-full min-w-0 flex-wrap items-center gap-2 self-center max-lg:mx-0 max-lg:flex-col max-lg:items-stretch"
+                  >
+                    <div
+                      class="flex min-w-0 items-center gap-3 rounded bg-surface/40 px-2 py-1.5 max-lg:w-full"
+                    >
+                      <div
+                        class="h-12 w-12 shrink-0 rounded-full"
+                        :style="championDamageDonutStyle"
+                        :title="t('statisticsPage.championStatsDamageSplitTitle')"
+                        aria-hidden="true"
+                      />
+                      <div class="space-y-0.5 text-[10px] leading-tight text-text/85">
+                        <div class="text-[11px] font-semibold text-text">
+                          {{ t('statisticsPage.championStatsDamageSplitTitle') }}
+                        </div>
+                        <div
+                          v-for="entry in championDamageShareLegend"
+                          :key="entry.key"
+                          class="flex items-center gap-1"
+                        >
+                          <span
+                            class="inline-block h-2.5 w-2.5 rounded-sm"
+                            :style="{ backgroundColor: entry.color }"
+                          />
+                          <span>{{ entry.label }}: {{ entry.pct.toFixed(1) }}%</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div
+                      v-if="championDamageTargetTotal > 0"
+                      class="flex min-w-0 items-center gap-3 rounded bg-surface/40 px-2 py-1.5 max-lg:w-full"
+                    >
+                      <div
+                        class="h-12 w-12 shrink-0 rounded-full"
+                        :style="championDamageTargetDonutStyle"
+                        :title="t('statisticsPage.championStatsDamageTargetSplitTitle')"
+                        aria-hidden="true"
+                      />
+                      <div class="space-y-0.5 text-[10px] leading-tight text-text/85">
+                        <div class="text-[11px] font-semibold text-text">
+                          {{ t('statisticsPage.championStatsDamageTargetSplitTitle') }}
+                        </div>
+                        <div
+                          v-for="entry in championDamageTargetLegend"
+                          :key="entry.key"
+                          class="flex items-center gap-1"
+                        >
+                          <span
+                            class="inline-block h-2.5 w-2.5 rounded-sm"
+                            :style="{ backgroundColor: entry.color }"
+                          />
+                          <span>{{ entry.label }}: {{ entry.pct.toFixed(1) }}%</span>
+                        </div>
                       </div>
                     </div>
                   </div>
                   <div
-                    v-if="championDamageTargetTotal > 0"
-                    class="flex items-center gap-3 rounded bg-surface/40 px-2 py-1.5"
+                    class="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text/85"
                   >
-                    <div
-                      class="h-12 w-12 shrink-0 rounded-full"
-                      :style="championDamageTargetDonutStyle"
-                      :title="t('statisticsPage.championStatsDamageTargetSplitTitle')"
-                      aria-hidden="true"
-                    />
-                    <div class="space-y-0.5 text-[10px] leading-tight text-text/85">
-                      <div class="text-[11px] font-semibold text-text">
-                        {{ t('statisticsPage.championStatsDamageTargetSplitTitle') }}
-                      </div>
-                      <div
-                        v-for="entry in championDamageTargetLegend"
-                        :key="entry.key"
-                        class="flex items-center gap-1"
-                      >
-                        <span
-                          class="inline-block h-2.5 w-2.5 rounded-sm"
-                          :style="{ backgroundColor: entry.color }"
-                        />
-                        <span>{{ entry.label }}: {{ entry.pct.toFixed(1) }}%</span>
-                      </div>
-                    </div>
+                    <span
+                      >{{ t('statisticsPage.pickrate') }}:
+                      <strong>{{ formatDonutPercent(championStats.pickrate ?? 0) }}%</strong></span
+                    >
+                    <span
+                      >{{ t('statisticsPage.winrate') }}:
+                      <strong>{{ formatDonutPercent(championStats.winrate ?? 0) }}%</strong></span
+                    >
+                    <span
+                      >{{ t('statisticsPage.championStatsBanrateTitle') }}:
+                      <strong>{{ formatDonutPercent(championStats.banrate ?? 0) }}%</strong></span
+                    >
                   </div>
-                </div>
-                <div
-                  class="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text/85"
-                >
-                  <span
-                    >{{ t('statisticsPage.pickrate') }}:
-                    <strong>{{ formatDonutPercent(championStats.pickrate ?? 0) }}%</strong></span
-                  >
-                  <span
-                    >{{ t('statisticsPage.winrate') }}:
-                    <strong>{{ formatDonutPercent(championStats.winrate ?? 0) }}%</strong></span
-                  >
-                  <span
-                    >{{ t('statisticsPage.championStatsBanrateTitle') }}:
-                    <strong>{{ formatDonutPercent(championStats.banrate ?? 0) }}%</strong></span
-                  >
                 </div>
               </div>
               <section
                 v-if="activeChampionTab === 'overview'"
                 id="champion-tab-panel-overview"
                 role="tabpanel"
-                class="p-4"
+                class="champion-tab-panel p-4 max-lg:px-3 max-lg:py-3"
               >
                 <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <h2 class="text-base font-semibold text-text">
@@ -742,20 +791,18 @@
                       durationByTierPending ||
                       durationTrendExtraCards.length
                     "
-                    class="grid gap-4 lg:grid-cols-2"
+                    class="champion-trend-charts-grid grid w-full min-w-0 grid-cols-1 gap-4 lg:grid-cols-2"
                   >
                     <article
                       v-for="card in trendChartCards"
                       :key="card.metricId"
-                      class="rounded border border-primary/20 bg-background/30 p-3"
+                      class="champion-trend-chart-card w-full min-w-0 max-w-full rounded border border-primary/20 bg-background/30 p-3"
                     >
                       <h3 class="mb-2 text-sm font-medium text-text">{{ card.title }}</h3>
-                      <div class="overflow-x-auto">
+                      <div class="champion-trend-chart-wrap max-w-full overflow-hidden">
                         <svg
                           :viewBox="`0 0 ${TREND_CHART_W} ${TREND_CHART_H}`"
-                          :width="TREND_CHART_W"
-                          :height="TREND_CHART_H"
-                          class="h-auto w-full min-w-[480px]"
+                          class="champion-trend-chart-svg block h-auto w-full max-w-full"
                           preserveAspectRatio="xMidYMid meet"
                           aria-hidden="true"
                         >
@@ -902,7 +949,7 @@
 
                     <article
                       v-if="durationByTierPending"
-                      class="rounded border border-primary/20 bg-background/30 p-3"
+                      class="champion-trend-chart-card w-full min-w-0 max-w-full rounded border border-primary/20 bg-background/30 p-3"
                     >
                       <h3 class="mb-2 text-sm font-medium text-text">
                         {{ t('statisticsPage.championStatsDurationChartsLoading') }}
@@ -915,15 +962,13 @@
                       <article
                         v-for="card in durationTrendExtraCards"
                         :key="`duration-extra-${card.metricId}`"
-                        class="rounded border border-primary/20 bg-background/30 p-3"
+                        class="champion-trend-chart-card w-full min-w-0 max-w-full rounded border border-primary/20 bg-background/30 p-3"
                       >
                         <h3 class="mb-2 text-sm font-medium text-text">{{ card.title }}</h3>
-                        <div class="overflow-x-auto">
+                        <div class="champion-trend-chart-wrap max-w-full overflow-hidden">
                           <svg
                             :viewBox="`0 0 ${TREND_CHART_W} ${TREND_CHART_H}`"
-                            :width="TREND_CHART_W"
-                            :height="TREND_CHART_H"
-                            class="h-auto w-full min-w-[480px]"
+                            class="champion-trend-chart-svg block h-auto w-full max-w-full"
                             preserveAspectRatio="xMidYMid meet"
                             aria-hidden="true"
                           >
@@ -1111,12 +1156,12 @@
                 </template>
               </section>
             </div>
-            <div class="champion-tab-panels mb-6 space-y-6">
+            <div class="champion-tab-panels mb-6 w-full min-w-0 space-y-6 max-lg:mb-4">
               <div
                 v-if="activeChampionTab === 'matchups'"
                 id="champion-tab-panel-matchups"
                 role="tabpanel"
-                class="p-4"
+                class="champion-tab-panel p-4 max-lg:px-3 max-lg:py-3"
               >
                 <div v-if="matchupsExtPending" class="py-6 text-text/70">
                   {{ t('statisticsPage.loading') }}
@@ -1128,7 +1173,41 @@
                   {{ t('statisticsPage.noData') }}
                 </div>
                 <div v-else class="space-y-3">
-                  <div class="overflow-x-auto">
+                  <StatisticsMobileSortBar
+                    id="champion-matchups-mobile-sort"
+                    v-model:column="matchupMobileSortColumn"
+                    v-model:direction="matchupSortDir"
+                    :options="matchupMobileSortOptions"
+                    :asc-default-columns="['champion', 'role']"
+                  />
+                  <div
+                    class="statistics-champion-matchup-mobile-list statistics-tier-list-mobile-list w-full space-y-2 md:hidden"
+                  >
+                    <ChampionMatchupMobileCard
+                      v-for="(row, idx) in paginatedMatchupsExt"
+                      :key="matchupCardKey(row)"
+                      :row="row"
+                      :display-rank="(matchupPage - 1) * matchupPageSize + idx + 1"
+                      :expanded="expandedMatchupKeys.has(matchupCardKey(row))"
+                      :show-role="!filterRole"
+                      :portrait-src="
+                        gameVersion && championByKey(row.opponentChampionId)?.image?.full
+                          ? getChampionImageUrl(
+                              gameVersion,
+                              championByKey(row.opponentChampionId)!.image!.full
+                            )
+                          : null
+                      "
+                      :champion-name="
+                        championName(row.opponentChampionId) ?? String(row.opponentChampionId)
+                      "
+                      :role-label="roleLabel(row.role)"
+                      :role-icon-src="roleIconPath(row.role)"
+                      :reference-version="matchupsExtData?.referenceVersion ?? null"
+                      @toggle="toggleMatchupCard(row)"
+                    />
+                  </div>
+                  <div class="hidden overflow-x-auto md:block">
                     <table class="tier-list-lolalytics w-full min-w-[1120px] text-sm">
                       <thead>
                         <tr class="border-b border-primary/30 text-left">
@@ -1386,6 +1465,7 @@
                                   <span class="font-semibold">{{
                                     t(`statisticsPage.championMatchupDominanceShort.${k}`)
                                   }}</span>
+                                  <span class="opacity-70" aria-hidden="true">·</span>
                                   <span class="opacity-90">{{
                                     t(
                                       `statisticsPage.championMatchupSignalLevelShort.${row.laneProfileByKey?.[k] ?? 'smallAdvantage'}`
@@ -1421,6 +1501,7 @@
                                   <span class="font-semibold">{{
                                     t(`statisticsPage.championMatchupDominanceShort.${k}`)
                                   }}</span>
+                                  <span class="opacity-70" aria-hidden="true">·</span>
                                   <span class="opacity-90">{{
                                     t(
                                       `statisticsPage.championMatchupSignalLevelShort.${row.laneProfileByKey?.[k] ?? 'smallDisadvantage'}`
@@ -1439,44 +1520,44 @@
                         </tr>
                       </tbody>
                     </table>
-                    <div
-                      class="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-text/80"
-                    >
-                      <div class="inline-flex items-center gap-2">
-                        <span>{{ t('statisticsPage.perPage') }}</span>
-                        <select
-                          v-model.number="matchupPageSize"
-                          class="rounded border border-primary/40 bg-background px-1.5 py-0.5 text-xs text-text"
-                        >
-                          <option v-for="s in matchupPageSizeOptions" :key="s" :value="s">
-                            {{ s }}
-                          </option>
-                        </select>
-                      </div>
-                      <div class="inline-flex items-center gap-2">
-                        <button
-                          type="button"
-                          class="rounded border border-primary/30 px-2 py-0.5 disabled:opacity-40"
-                          :disabled="matchupPage <= 1"
-                          @click="matchupPage = Math.max(1, matchupPage - 1)"
-                        >
-                          {{ t('admin.pagination.prev') }}
-                        </button>
-                        <span>{{
-                          t('statisticsPage.pageXOfY', {
-                            current: matchupPage,
-                            total: totalMatchupPages,
-                          })
-                        }}</span>
-                        <button
-                          type="button"
-                          class="rounded border border-primary/30 px-2 py-0.5 disabled:opacity-40"
-                          :disabled="matchupPage >= totalMatchupPages"
-                          @click="matchupPage = Math.min(totalMatchupPages, matchupPage + 1)"
-                        >
-                          {{ t('admin.pagination.next') }}
-                        </button>
-                      </div>
+                  </div>
+                  <div
+                    class="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-text/80"
+                  >
+                    <div class="inline-flex items-center gap-2">
+                      <span>{{ t('statisticsPage.perPage') }}</span>
+                      <select
+                        v-model.number="matchupPageSize"
+                        class="rounded border border-primary/40 bg-background px-1.5 py-0.5 text-xs text-text"
+                      >
+                        <option v-for="s in matchupPageSizeOptions" :key="s" :value="s">
+                          {{ s }}
+                        </option>
+                      </select>
+                    </div>
+                    <div class="inline-flex items-center gap-2">
+                      <button
+                        type="button"
+                        class="rounded border border-primary/30 px-2 py-0.5 disabled:opacity-40"
+                        :disabled="matchupPage <= 1"
+                        @click="matchupPage = Math.max(1, matchupPage - 1)"
+                      >
+                        {{ t('admin.pagination.prev') }}
+                      </button>
+                      <span>{{
+                        t('statisticsPage.pageXOfY', {
+                          current: matchupPage,
+                          total: totalMatchupPages,
+                        })
+                      }}</span>
+                      <button
+                        type="button"
+                        class="rounded border border-primary/30 px-2 py-0.5 disabled:opacity-40"
+                        :disabled="matchupPage >= totalMatchupPages"
+                        @click="matchupPage = Math.min(totalMatchupPages, matchupPage + 1)"
+                      >
+                        {{ t('admin.pagination.next') }}
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1501,6 +1582,16 @@
                   {{ t('statisticsPage.noData') }}
                 </div>
                 <div v-else class="space-y-5">
+                  <ChampionSpellOrderRecap
+                    v-if="
+                      championSpellOrderRecap.topFirstThree.length ||
+                      championSpellOrderRecap.topMaxOrder.length
+                    "
+                    :recap="championSpellOrderRecap"
+                    :champion-id="championId"
+                    :game-version="(filterVersion || gameVersion || '').trim()"
+                    :spells="championSkillChampion?.spells"
+                  />
                   <section
                     v-for="section in championSpellOrderSectionsVisible"
                     :key="section.key"
@@ -1528,6 +1619,7 @@
                 v-if="activeChampionTab === 'objectives'"
                 id="champion-tab-panel-objectives"
                 role="tabpanel"
+                class="champion-tab-panel p-4 max-lg:px-3 max-lg:py-3"
               >
                 <ChampionObjectivesTab
                   :data="championObjectivesData"
@@ -1538,7 +1630,7 @@
                 v-if="activeChampionTab === 'misc'"
                 id="champion-tab-panel-misc"
                 role="tabpanel"
-                class="p-4"
+                class="champion-tab-panel p-4 max-lg:px-3 max-lg:py-3"
               >
                 <ChampionMiscTab :data="championMiscData" :pending="championMiscPending" />
               </div>
@@ -1581,6 +1673,11 @@ import { useStatisticsUiStore } from '~/stores/StatisticsUiStore'
 import { useStatisticsCustomStore } from '~/stores/StatisticsCustomStore'
 import StatisticsRunesTab from '~/components/statistics/tabs/StatisticsRunesTab.vue'
 import StatisticsSpellsTab from '~/components/statistics/tabs/StatisticsSpellsTab.vue'
+import ChampionMatchupMobileCard, {
+  type MatchupsExtDominanceKey,
+  type MatchupsExtRow,
+  type MatchupsExtSignalLevel,
+} from '~/components/statistics/ChampionMatchupMobileCard.vue'
 import ChampionObjectivesTab, {
   type ChampionObjectivesSummary,
 } from '~/components/statistics/ChampionObjectivesTab.vue'
@@ -1588,7 +1685,8 @@ import ChampionMiscTab, {
   type ChampionMiscSummary,
 } from '~/components/statistics/ChampionMiscTab.vue'
 import ChampionSpellOrderCard from '~/components/statistics/ChampionSpellOrderCard.vue'
-import { mergeChampionSpellOrderRows } from '~/utils/championSpellOrderMerge'
+import ChampionSpellOrderRecap from '~/components/statistics/ChampionSpellOrderRecap.vue'
+import { buildSpellOrderRecap, mergeChampionSpellOrderRows } from '~/utils/championSpellOrderMerge'
 import {
   getChampionImageUrl,
   getItemImageUrl as _getItemImageUrl,
@@ -1726,50 +1824,25 @@ function _runePathPanelStyle(icon: string): Record<string, string> {
   }
 }
 
-type MatchupsExtDominanceKey = 'early' | 'laneEconomy' | 'kills' | 'level' | 'cs' | 'vision'
-
-type MatchupsExtSignalLevel =
-  | 'bigAdvantage'
-  | 'mediumAdvantage'
-  | 'smallAdvantage'
-  | 'even'
-  | 'smallDisadvantage'
-  | 'mediumDisadvantage'
-  | 'bigDisadvantage'
-
-type MatchupsExtRow = {
-  rank: number
-  opponentChampionId: number
-  role: string
-  games: number
-  wins: number
-  winrate: number
-  winrateDeltaVsReference?: number | null
-  matchupScore: number
-  matchupScoreDeltaVsReference?: number | null
-  pickrate: number
-  pickrateDeltaVsReference?: number | null
-  delta1?: number
-  delta2?: number
-  laneScore: number
-  laneScoreDeltaVsReference?: number | null
-  dominanceKeys: MatchupsExtDominanceKey[]
-  weaknessKeys?: MatchupsExtDominanceKey[]
-  laneProfileByKey?: Partial<Record<MatchupsExtDominanceKey, MatchupsExtSignalLevel>>
-}
-
 const normalizedChampionSearchQuery = computed(() =>
   championSearchQueryPlaceholder.value.trim().toLowerCase()
 )
 const matchupOtpMode = ref<'oui' | 'non' | 'solo'>('non')
+const MATCHUP_LANE_PROFILE_DIMENSION_KEYS = [
+  'early',
+  'laneEconomy',
+  'kills',
+  'level',
+  'cs',
+  'vision',
+] as const satisfies readonly MatchupsExtDominanceKey[]
+
 const matchupLaneProfileFilter = ref<'ALL' | 'balanced' | MatchupsExtDominanceKey>('ALL')
 const matchupLaneProfileOptions = computed(() =>
-  (['cs', 'level', 'laneEconomy', 'early', 'kills', 'vision'] as MatchupsExtDominanceKey[]).map(
-    key => ({
-      value: key,
-      label: t(`statisticsPage.championMatchupDominance.${key}`),
-    })
-  )
+  MATCHUP_LANE_PROFILE_DIMENSION_KEYS.map(key => ({
+    value: key,
+    label: t(`statisticsPage.championMatchupDominance.${key}`),
+  }))
 )
 type MatchupSortKey =
   | 'rank'
@@ -1785,6 +1858,19 @@ type MatchupSortKey =
   | 'dominance'
 const matchupSortKey = ref<MatchupSortKey>('score')
 const matchupSortDir = ref<'asc' | 'desc'>('desc')
+const expandedMatchupKeys = ref<Set<string>>(new Set())
+
+function matchupCardKey(row: MatchupsExtRow): string {
+  return `${row.opponentChampionId}-${row.role}`
+}
+
+function toggleMatchupCard(row: MatchupsExtRow): void {
+  const key = matchupCardKey(row)
+  const next = new Set(expandedMatchupKeys.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  expandedMatchupKeys.value = next
+}
 
 function setMatchupSort(key: MatchupSortKey): void {
   if (matchupSortKey.value === key) {
@@ -1799,6 +1885,38 @@ function matchupSortIcon(key: MatchupSortKey): string {
   if (matchupSortKey.value !== key) return ''
   return matchupSortDir.value === 'asc' ? ' ↑' : ' ↓'
 }
+
+const matchupMobileSortColumn = computed({
+  get: () => matchupSortKey.value,
+  set: (v: string) => {
+    const key = v as MatchupSortKey
+    if (matchupSortKey.value === key) return
+    matchupSortKey.value = key
+    matchupSortDir.value = key === 'champion' || key === 'role' ? 'asc' : 'desc'
+  },
+})
+
+const matchupMobileSortOptions = computed(() => {
+  const opts = [
+    { value: 'rank', label: t('statisticsPage.tierListRank') },
+    { value: 'champion', label: t('statisticsPage.champion') },
+    { value: 'score', label: t('statisticsPage.championMatchupColScore') },
+    {
+      value: 'scoreDelta',
+      label: `${t('statisticsPage.championTableDeltaSymbol')} ${t('statisticsPage.championMatchupColScore')}`,
+    },
+    { value: 'winrate', label: t('statisticsPage.winrate') },
+    { value: 'pickrate', label: t('statisticsPage.championMatchupColPickrate') },
+    { value: 'delta1', label: t('statisticsPage.championMatchupColDelta1') },
+    { value: 'delta2', label: t('statisticsPage.championMatchupColDelta2') },
+    { value: 'laneScore', label: t('statisticsPage.championMatchupColLaneScore') },
+    { value: 'dominance', label: t('statisticsPage.championMatchupColDominance') },
+  ]
+  if (!filterRole.value) {
+    opts.splice(4, 0, { value: 'role', label: t('statisticsPage.filterRole') })
+  }
+  return opts
+})
 
 function matchupMatchesSearch(opponentChampionId: number): boolean {
   const q = normalizedChampionSearchQuery.value
@@ -1977,6 +2095,32 @@ function _spellImageName(spellId: number) {
 const statisticsUiStore = useStatisticsUiStore()
 const statisticsCustomStore = useStatisticsCustomStore()
 const { filtersOpen } = storeToRefs(statisticsUiStore)
+
+const CHAMPION_HEADER_BAND_STORAGE_KEY = 'champion-header-band-open'
+const championHeaderBandOpen = ref(true)
+
+const championHeaderCollapsedSummary = computed(() => {
+  if (!championStats.value) return ''
+  const pr = formatDonutPercent(championStats.value.pickrate ?? 0)
+  const wr = formatDonutPercent(championStats.value.winrate ?? 0)
+  const ban = formatDonutPercent(championStats.value.banrate ?? 0)
+  return `${t('statisticsPage.pickrate')} ${pr}% · ${t('statisticsPage.winrate')} ${wr}% · ${t('statisticsPage.championStatsBanrateTitle')} ${ban}%`
+})
+
+function initChampionHeaderBandOpen(): void {
+  if (!import.meta.client) return
+  const stored = sessionStorage.getItem(CHAMPION_HEADER_BAND_STORAGE_KEY)
+  if (stored === '0' || stored === '1') {
+    championHeaderBandOpen.value = stored === '1'
+    return
+  }
+  championHeaderBandOpen.value = window.matchMedia('(min-width: 1024px)').matches
+}
+
+watch(championHeaderBandOpen, open => {
+  if (!import.meta.client) return
+  sessionStorage.setItem(CHAMPION_HEADER_BAND_STORAGE_KEY, open ? '1' : '0')
+})
 
 function cardIsFavorite(cardId: string): boolean {
   return statisticsCustomStore.isFavorite(cardId)
@@ -2469,13 +2613,20 @@ const championSpellsComparisonVersion = computed(() => {
   return refV
 })
 
+const championSpellOrdersTotalGames = computed(() =>
+  Number(championSpellOrdersData.value?.totalGames ?? 0)
+)
+
 const championSpellOrdersRows = computed(() => {
   const raw = (championSpellOrdersData.value?.rows ?? []).filter(
     row => Array.isArray(row.order) && row.order.length > 0
   )
-  const totalGames = Number(championSpellOrdersData.value?.totalGames ?? 0)
-  return mergeChampionSpellOrderRows(raw, totalGames)
+  return mergeChampionSpellOrderRows(raw, championSpellOrdersTotalGames.value)
 })
+
+const championSpellOrderRecap = computed(() =>
+  buildSpellOrderRecap(championSpellOrdersRows.value, championSpellOrdersTotalGames.value)
+)
 
 function championSpellOrderSectionAccent(sectionKey: string): 'emerald' | 'rose' | 'sky' | 'amber' {
   if (sectionKey === 'top-wr') return 'emerald'
@@ -4163,6 +4314,7 @@ if (import.meta.client) {
 
 onMounted(async () => {
   if (import.meta.client) {
+    initChampionHeaderBandOpen()
     document.addEventListener('keydown', onFiltersEscapeKey)
     filtersSheetMq = window.matchMedia('(max-width: 1023px)')
     onFiltersSheetMqChange()
@@ -4353,7 +4505,7 @@ useHead({
   height: auto !important;
   min-height: 0 !important;
   flex: 0 1 313px;
-  overflow: visible;
+  overflow: hidden;
   background: #08101f !important;
 }
 
@@ -4364,29 +4516,83 @@ useHead({
   height: auto !important;
   min-height: 0 !important;
   flex: 0 1 auto;
-  overflow: visible;
+  overflow: hidden;
   background: #08101f !important;
 }
 
-@media (max-width: 768px) {
-  .champion-stats .fast-stat-card.fast-stat-card-misc,
-  .champion-stats .champion-misc-tab .fast-stat-card-misc {
-    width: calc(100vw - 1.5rem) !important;
+@media (max-width: 1023px) {
+  .champion-stats .champion-page-main {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .champion-stats .champion-content-stack {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .champion-stats .champion-tab-panel {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .champion-stats .champion-trend-charts-grid {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .champion-stats .champion-trend-chart-card {
+    width: 100% !important;
     max-width: 100% !important;
-    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+
+  .champion-stats .champion-trend-chart-wrap {
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .champion-stats .champion-trend-chart-svg {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    height: auto !important;
+    aspect-ratio: 620 / 220;
+  }
+
+  .champion-stats .champion-misc-tab,
+  .champion-stats .champion-misc-tab .champion-misc-grid,
+  .champion-stats .statistics-champion-matchup-mobile-list {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .champion-stats .statistics-champion-matchup-mobile-card {
+    width: 100%;
+    max-width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .champion-stats .fast-stat-card.fast-stat-card-misc,
+  .champion-stats .champion-misc-tab .fast-stat-card-misc,
+  .champion-stats .fast-stat-card.fast-stat-card-distribution,
+  .champion-stats .fast-stat-card.fast-stat-card-objectives {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: 1 1 100% !important;
     margin-left: 0 !important;
     margin-right: 0 !important;
     align-self: stretch;
   }
 
   .champion-stats .fast-stat-card.fast-stat-card-distribution {
-    width: calc(100vw - 1.5rem) !important;
-    min-width: 0 !important;
     max-width: 100% !important;
-    flex: 1 1 auto !important;
-    margin-left: 0 !important;
-    margin-right: 0 !important;
-    align-self: stretch;
   }
 }
 

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { inject, ref, unref, computed } from 'vue'
+import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
+
 const p = inject('statisticsPageCtx') as any
 const showChampionDealtBreakdown = ref(false)
 const showChampionTakenBreakdown = ref(false)
@@ -125,6 +127,77 @@ const championTableLayoutStyle = computed(() => {
     '--cg-kda-flex': String(kdaFlex),
   } as Record<string, string>
 })
+
+const championMobileSortColumn = computed({
+  get: () => String(p.championGlobalSortColumn ?? 'totalGames'),
+  set: (v: string) => {
+    p.championGlobalSortColumn = v
+  },
+})
+
+const championMobileSortDir = computed({
+  get: () => (p.championGlobalSortDir === 'asc' ? 'asc' : 'desc') as 'asc' | 'desc',
+  set: (v: 'asc' | 'desc') => {
+    p.championGlobalSortDir = v
+  },
+})
+
+const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
+  const t = p.t
+  const opts: StatisticsMobileSortOption[] = [
+    { value: 'champion', label: t('statisticsPage.champion') },
+    { value: 'totalGames', label: t('statisticsPage.games') },
+    {
+      value: 'blueWinrate',
+      label: `${t('statisticsPage.championTableGroupBlue')} · ${t('statisticsPage.winrate')}`,
+    },
+    {
+      value: 'bluePickrate',
+      label: `${t('statisticsPage.championTableGroupBlue')} · ${t('statisticsPage.pickrate')}`,
+    },
+    {
+      value: 'redWinrate',
+      label: `${t('statisticsPage.championTableGroupRed')} · ${t('statisticsPage.winrate')}`,
+    },
+    {
+      value: 'redPickrate',
+      label: `${t('statisticsPage.championTableGroupRed')} · ${t('statisticsPage.pickrate')}`,
+    },
+    { value: 'dmgTotal', label: t('statisticsPage.championTableColTotalInflicted') },
+    { value: 'takenTotal', label: t('statisticsPage.championTableColTotalTaken') },
+    { value: 'kills', label: t('statisticsPage.championTableColKill') },
+    { value: 'deaths', label: t('statisticsPage.championTableColDeath') },
+    { value: 'assists', label: t('statisticsPage.championTableColAssist') },
+  ]
+  if (p.championGlobalPatchDeltaRefLabel) {
+    opts.splice(
+      2,
+      0,
+      {
+        value: 'blueWinrateDelta',
+        label: `${t('statisticsPage.championTableGroupBlue')} · Δ ${t('statisticsPage.winrate')}`,
+      },
+      {
+        value: 'bluePickrateDelta',
+        label: `${t('statisticsPage.championTableGroupBlue')} · Δ ${t('statisticsPage.pickrate')}`,
+      },
+      {
+        value: 'redWinrateDelta',
+        label: `${t('statisticsPage.championTableGroupRed')} · Δ ${t('statisticsPage.winrate')}`,
+      },
+      {
+        value: 'redPickrateDelta',
+        label: `${t('statisticsPage.championTableGroupRed')} · Δ ${t('statisticsPage.pickrate')}`,
+      },
+      { value: 'dmgTotalDelta', label: `Δ ${t('statisticsPage.championTableColTotalInflicted')}` },
+      { value: 'takenTotalDelta', label: `Δ ${t('statisticsPage.championTableColTotalTaken')}` },
+      { value: 'killsDelta', label: `Δ ${t('statisticsPage.championTableColKill')}` },
+      { value: 'deathsDelta', label: `Δ ${t('statisticsPage.championTableColDeath')}` },
+      { value: 'assistsDelta', label: `Δ ${t('statisticsPage.championTableColAssist')}` }
+    )
+  }
+  return opts
+})
 </script>
 
 <template>
@@ -152,6 +225,13 @@ const championTableLayoutStyle = computed(() => {
           :secondary-text="p.t('statisticsPage.championTableDeltaColumnsHint')"
         />
       </div>
+      <StatisticsMobileSortBar
+        id="champion-global-mobile-sort"
+        v-model:column="championMobileSortColumn"
+        v-model:direction="championMobileSortDir"
+        :options="championMobileSortOptions"
+        :asc-default-columns="['champion']"
+      />
       <!-- Mobile : cards -->
       <div class="statistics-champion-mobile-list space-y-2 md:hidden">
         <article

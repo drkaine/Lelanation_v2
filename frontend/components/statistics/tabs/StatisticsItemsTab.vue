@@ -2,6 +2,7 @@
 import { computed, inject, ref, watch, unref } from 'vue'
 import type { Item } from '@lelanation/shared-types'
 import { useItemsStore } from '~/stores/ItemsStore'
+import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
 
 const p = inject('statisticsPageCtx') as any
 const itemsStore = useItemsStore()
@@ -246,6 +247,30 @@ function toggleSort(key: SortKey) {
   sortDir.value = 'desc'
 }
 
+const itemsMobileSortColumn = computed({
+  get: () => String(sortBy.value ?? 'pickrate'),
+  set: (v: string) => {
+    sortBy.value = v as SortKey
+  },
+})
+
+const itemsMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
+  const t = p.t
+  const opts: StatisticsMobileSortOption[] = [
+    { value: 'item', label: t('statisticsPage.itemsColumn') },
+    { value: 'type', label: t('statisticsPage.itemsColType') },
+    { value: 'pickrate', label: t('statisticsPage.pickrate') },
+    { value: 'winrate', label: t('statisticsPage.winrate') },
+  ]
+  if (hasComparison.value) {
+    opts.push(
+      { value: 'deltaPick', label: `Δ ${t('statisticsPage.pickrate')}` },
+      { value: 'deltaWin', label: `Δ ${t('statisticsPage.winrate')}` }
+    )
+  }
+  return opts
+})
+
 function fmtPct(value: number | null | undefined): string {
   if (value == null) return '—'
   return `${Number(value).toFixed(2)}%`
@@ -295,6 +320,13 @@ function deltaClass(value: number | null | undefined): string {
             :secondary-text="p.t('statisticsPage.tooltipTableItemsSecondary')"
           />
         </div>
+        <StatisticsMobileSortBar
+          id="items-mobile-sort"
+          v-model:column="itemsMobileSortColumn"
+          v-model:direction="sortDir"
+          :options="itemsMobileSortOptions"
+          :asc-default-columns="['item', 'type']"
+        />
         <div class="statistics-items-mobile-list space-y-2 md:hidden">
           <article
             v-for="row in paginatedRows"

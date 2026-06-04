@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { inject, ref } from 'vue'
+import { computed, inject, ref } from 'vue'
 import StatisticsTierListMobileChart from '~/components/statistics/StatisticsTierListMobileChart.vue'
+import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
 
 const p = inject('statisticsPageCtx') as any
 
@@ -20,6 +21,64 @@ withDefaults(
   }>(),
   { showViewModelToggle: true }
 )
+
+const tierListMobileSortColumn = computed({
+  get: () => String(p.tierListSortColumn ?? 'rank'),
+  set: (v: string) => {
+    if (typeof p.setTierListSort === 'function') {
+      p.setTierListSort(v)
+    } else {
+      p.tierListSortColumn = v
+      p.tierListSortDir = v === 'champion' ? 'asc' : 'desc'
+    }
+  },
+})
+
+const tierListMobileSortDir = computed({
+  get: () => (p.tierListSortDir === 'asc' ? 'asc' : 'desc') as 'asc' | 'desc',
+  set: (v: 'asc' | 'desc') => {
+    p.tierListSortDir = v
+  },
+})
+
+const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
+  const t = p.t
+  const opts: StatisticsMobileSortOption[] = [
+    { value: 'rank', label: t('statisticsPage.tierListRank') },
+    { value: 'champion', label: t('statisticsPage.champion') },
+    { value: 'tier', label: t('statisticsPage.tierListTier') },
+    { value: 'winrate', label: t('statisticsPage.winrate') },
+    { value: 'pickrate', label: t('statisticsPage.pickrate') },
+    { value: 'games', label: t('statisticsPage.games') },
+    { value: 'pbi', label: t('statisticsPage.tierListPbi') },
+    { value: 'mainRolePct', label: t('statisticsPage.tierListMainRole') },
+    { value: 'delta', label: t('statisticsPage.tierListDelta') },
+  ]
+  if (p.hasTierListHighElo) {
+    opts.push(
+      { value: 'highEloRank', label: t('statisticsPage.tierListHighEloRank') },
+      { value: 'highEloWinrate', label: t('statisticsPage.tierListHighEloWin') },
+      { value: 'highEloGames', label: t('statisticsPage.tierListHighEloGames') }
+    )
+  }
+  if (p.tierListPatchDeltaRefLabel) {
+    opts.push(
+      { value: 'patchWinratePp', label: `Δ ${t('statisticsPage.winrate')}` },
+      { value: 'patchPickratePp', label: `Δ ${t('statisticsPage.pickrate')}` },
+      { value: 'patchPbiPp', label: `Δ ${t('statisticsPage.tierListPbi')}` },
+      { value: 'patchGamesDelta', label: `Δ ${t('statisticsPage.games')}` },
+      { value: 'patchMainRolePctPp', label: `Δ ${t('statisticsPage.tierListMainRole')}` }
+    )
+    if (p.hasTierListHighElo) {
+      opts.push(
+        { value: 'patchHighEloWinratePp', label: `Δ ${t('statisticsPage.tierListHighEloWin')}` },
+        { value: 'patchHighEloGamesDelta', label: `Δ ${t('statisticsPage.tierListHighEloGames')}` },
+        { value: 'patchHighEloRankDelta', label: `Δ ${t('statisticsPage.tierListHighEloRank')}` }
+      )
+    }
+  }
+  return opts
+})
 </script>
 
 <template>
@@ -67,6 +126,13 @@ withDefaults(
       </div>
       <!-- Vue tableau (grille type LoLalytics, couleurs Lelanation) -->
       <div v-show="p.tierListViewModel === 'table' && p.totalTierListCount > 0" class="space-y-3">
+        <StatisticsMobileSortBar
+          id="tier-list-mobile-sort"
+          v-model:column="tierListMobileSortColumn"
+          v-model:direction="tierListMobileSortDir"
+          :options="tierListMobileSortOptions"
+          :asc-default-columns="['champion']"
+        />
         <div class="statistics-tier-list-mobile-list space-y-2 md:hidden">
           <StatisticsTierListMobileCard
             v-for="row in p.paginatedTierList"

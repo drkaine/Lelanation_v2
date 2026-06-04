@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildSpellOrderRecap,
   extrapolateSpellOrder,
+  firstThreeLevelsKey,
+  maxOrderKey,
   mergeChampionSpellOrderRows,
   resolveCanonicalSpellOrder,
   resolveCanonicalSpellOrderKey,
@@ -62,5 +65,23 @@ describe('championSpellOrderMerge', () => {
     const prefix = FULL.slice(0, 8)
     const full = [...FULL]
     expect(resolveCanonicalSpellOrderKey(prefix, [prefix, full])).toBe(full.join('-'))
+  })
+
+  it('firstThreeLevelsKey and maxOrderKey', () => {
+    expect(firstThreeLevelsKey(FULL)).toBe('Q-W-Q')
+    expect(maxOrderKey(FULL)).toContain('Q')
+  })
+
+  it('buildSpellOrderRecap aggregates top patterns', () => {
+    const rows = mergeChampionSpellOrderRows(
+      [
+        { key: 'a', order: FULL, games: 70, wins: 40, pickrate: 0, winrate: 0 },
+        { key: 'b', order: [2, 1, 3, 2, 1, 4], games: 30, wins: 15, pickrate: 0, winrate: 0 },
+      ],
+      100
+    )
+    const recap = buildSpellOrderRecap(rows, 100)
+    expect(recap.topFirstThree.length).toBeGreaterThan(0)
+    expect(recap.topFirstThree[0]!.pickrate).toBe(70)
   })
 })
