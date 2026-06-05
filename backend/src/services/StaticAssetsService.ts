@@ -6,6 +6,7 @@ import { Result } from '../utils/Result.js'
 import { AppError } from '../utils/errors.js'
 import { FileManager } from '../utils/fileManager.js'
 import { isAlwaysExcludedGameItemId } from '../config/excludedGameItemIds.js'
+import { movePatchVersionToFrontend, rebuildPatchNotesIndex } from './PatchNotesPublishService.js'
 
 const execAsync = promisify(exec)
 
@@ -26,6 +27,7 @@ export class StaticAssetsService {
   private readonly backendImagesDir: string
   private readonly backendYouTubeDir: string
   private readonly backendCommunityDragonDir: string
+  private readonly backendTheorycraftCacheDir: string
   private readonly frontendPublicDir: string
 
   constructor(
@@ -33,12 +35,14 @@ export class StaticAssetsService {
     backendImagesDir: string = join(process.cwd(), 'data', 'images'),
     backendYouTubeDir: string = join(process.cwd(), 'data', 'youtube'),
     backendCommunityDragonDir: string = join(process.cwd(), 'data', 'community-dragon'),
+    backendTheorycraftCacheDir: string = join(process.cwd(), 'data', 'theorycraft-cache'),
     frontendPublicDir: string = join(process.cwd(), '..', 'frontend', 'public')
   ) {
     this.backendDataDir = backendDataDir
     this.backendImagesDir = backendImagesDir
     this.backendYouTubeDir = backendYouTubeDir
     this.backendCommunityDragonDir = backendCommunityDragonDir
+    this.backendTheorycraftCacheDir = backendTheorycraftCacheDir
     this.frontendPublicDir = frontendPublicDir
   }
 
@@ -603,8 +607,20 @@ export class StaticAssetsService {
     version: string,
     languages: string[] = ['fr_FR', 'en_US'],
     restartFrontend: boolean = false,
-    buildFrontend: boolean = false
-  ): Promise<Result<{ dataCopied: number; imagesCopied: number; imagesSkipped: number }, AppError>> {
+    buildFrontend: boolean = false,
+    patchVersion?: string
+  ): Promise<
+    Result<
+      {
+        dataCopied: number
+        imagesCopied: number
+        imagesSkipped: number
+        patchNotesMoved: number
+        theorycraftCacheDeleted: boolean
+      },
+      AppError
+    >
+  > {
     // Delete old version data and images from frontend before copying new ones
     const deleteOldDataResult = await this.deleteOldVersionDataFromFrontend(version)
     if (deleteOldDataResult.isOk()) {
@@ -672,6 +688,21 @@ export class StaticAssetsService {
       // Continue anyway - not critical
     }
 
+    const patch = patchVersion ?? version.split('.').slice(0, 2).join('.')
+    let patchNotesMoved = 0
+    if (patch) {
+      const patchMoveResult = await this.movePatchNotesToFrontend(patch)
+      if (patchMoveResult.isOk()) {
+        patchNotesMoved = patchMoveResult.unwrap().moved
+      } else {
+        console.warn(
+          `[StaticAssets] Failed to move patch notes to frontend: ${patchMoveResult.unwrapErr()}`
+        )
+      }
+    }
+
+    const theorycraftCacheDeleted = (await this.deleteTheorycraftCache()).isOk()
+
     // Restart frontend if requested (typically in production with PM2)
     if (restartFrontend) {
       const restartResult = await this.restartFrontendPM2(buildFrontend)
@@ -686,8 +717,56 @@ export class StaticAssetsService {
     return Result.ok({
       dataCopied: dataStats.copied,
       imagesCopied: imageStats.copied,
-      imagesSkipped: imageStats.skipped
+      imagesSkipped: imageStats.skipped,
+      patchNotesMoved,
+      theorycraftCacheDeleted,
     })
+  }
+
+  /**
+   * Move patch notes from backend to frontend (copy + delete backend), then rebuild index.json.
+   */
+  async movePatchNotesToFrontend(
+    patchVersion: string
+  ): Promise<Result<{ moved: number; deleted: number }, AppError>> {
+    try {
+      const { moved, deleted, frontendDir } = await movePatchVersionToFrontend(
+        patchVersion,
+        'staticAssets'
+      )
+      await rebuildPatchNotesIndex(frontendDir)
+      return Result.ok({ moved, deleted })
+    } catch (error) {
+      return Result.err(
+        new AppError(
+          `Failed to move patch notes to frontend: ${error}`,
+          'FILE_ERROR',
+          error
+        )
+      )
+    }
+  }
+
+  /**
+   * Delete theorycraft build cache from backend after datasets are on frontend.
+   */
+  async deleteTheorycraftCache(): Promise<Result<void, AppError>> {
+    try {
+      const exists = await FileManager.exists(this.backendTheorycraftCacheDir)
+      if (!exists) {
+        return Result.ok(undefined)
+      }
+      await fs.rm(this.backendTheorycraftCacheDir, { recursive: true, force: true })
+      return Result.ok(undefined)
+    } catch (error) {
+      return Result.err(
+        new AppError(
+          `Failed to delete theorycraft cache: ${error}`,
+          'FILE_ERROR',
+          error
+        )
+      )
+    }
   }
 
   /**

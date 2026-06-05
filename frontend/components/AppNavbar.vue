@@ -121,7 +121,17 @@
         >
           {{ t('nav.tierList') }}
         </NuxtLink>
+        <a
+          :href="patchNotesUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="version"
+          @click="toggleMenu"
+        >
+          {{ gameVersion }}
+        </a>
         <NuxtLink
+          v-if="isAdminLoggedIn"
           :to="localePath('/patch-notes')"
           :title="t('nav.patchNotes')"
           class="version"
@@ -256,6 +266,7 @@
           {{ t('nav.download') }}
         </NuxtLink>
         <NuxtLink
+          v-if="isAdminLoggedIn"
           :to="localePath('/patch-notes')"
           :title="t('nav.patchNotes')"
           class="version"
@@ -263,6 +274,15 @@
         >
           {{ t('nav.patchNotes') }}
         </NuxtLink>
+        <a
+          :href="patchNotesUrl"
+          title="Patch Notes"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="link"
+        >
+          {{ gameVersion }}
+        </a>
       </div>
     </nav>
   </header>
@@ -272,16 +292,20 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import LanguageSwitcher from '~/components/LanguageSwitcher.vue'
+import { getFallbackGameVersion } from '~/config/version'
 import { useAdminAuth } from '~/composables/useAdminAuth'
 import { useFavoritesStore } from '~/stores/FavoritesStore'
+import { useVersionStore } from '~/stores/VersionStore'
 
 const isMenuOpen = ref(false)
 const isBuildsMenuOpen = ref(false)
 const isMobileBuildsMenuOpen = ref(false)
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const { isLoggedIn: isAdminLoggedIn, checkLoggedIn } = useAdminAuth()
 const localePath = useLocalePath()
 const route = useRoute()
+const versionStore = useVersionStore()
+const gameVersion = computed(() => versionStore.currentVersion || getFallbackGameVersion())
 const discoverBuildsLink = computed(() => ({
   path: localePath('/builds'),
   query: { tab: 'discover' },
@@ -336,8 +360,35 @@ const statisticsTierListLink = computed(() =>
   })
 )
 
+const getRiotLocale = (currentLocale: string): string => {
+  const localeMap: Record<string, string> = {
+    fr: 'fr-fr',
+    en: 'en-us',
+  }
+  return localeMap[currentLocale] || 'en-us'
+}
+
+const patchNotesUrl = computed(() => {
+  const riotLocale = getRiotLocale(locale.value)
+  const v = String(gameVersion.value || '').trim()
+  const parts = v.match(/\d+/g) ?? []
+  const gameMajor = Number(parts[0] ?? NaN)
+  const gameMinor = Number(parts[1] ?? NaN)
+
+  if (Number.isFinite(gameMajor) && Number.isFinite(gameMinor)) {
+    const patchMajor = gameMajor + 10
+    return `https://www.leagueoflegends.com/${riotLocale}/news/game-updates/league-of-legends-patch-${patchMajor}-${gameMinor}-notes/`
+  }
+
+  const slug = v.replace(/\./g, '-')
+  return `https://www.leagueoflegends.com/${riotLocale}/news/game-updates/league-of-legends-patch-${slug}-notes/`
+})
+
 onMounted(() => {
   checkLoggedIn()
+  if (!versionStore.currentVersion) {
+    versionStore.loadCurrentVersion().catch(() => undefined)
+  }
   favoritesStore.init()
 })
 

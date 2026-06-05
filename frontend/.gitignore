@@ -27,3 +27,7 @@ public/images/lelariva.webp
 .env
 .env.*
 !.env.example
+
+# Patch notes scrapés (copiés depuis backend/data/patches)
+public/data/patch-notes/*
+!public/data/patch-notes/schema.example.json

@@ -41,6 +41,10 @@ frontend/public/data/community-dragon/
 # Frontend static YouTube data (copied from backend during sync)
 frontend/public/data/youtube/
 
+# Frontend patch notes (scraped + copied from backend/data/patches)
+frontend/public/data/patch-notes/*
+!frontend/public/data/patch-notes/schema.example.json
+
 # Logs
 logs/
 *.log

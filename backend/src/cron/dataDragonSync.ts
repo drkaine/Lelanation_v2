@@ -11,6 +11,7 @@ import { createCronLogger } from '../utils/cronLogger.js'
 import { ensureActivePatchVersion, syncActivePatchesFromConfigAndCounts } from '../services/ActivePatchService.js'
 import { FileManager } from '../utils/fileManager.js'
 import { TheorycraftDataBuilderService } from '../services/TheorycraftDataBuilderService.js'
+import { scrapePatchNotesIfNeeded } from '../services/PatchNotesScraperService.js'
 
 /**
  * Run Data Dragon sync once (used by cron schedule and manual trigger).
@@ -139,8 +140,19 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
 
     await log.info('Data Dragon sync completed. Version:', syncData.version, 'Synced at:', syncData.syncedAt.toISOString())
 
-    // Step 3: Build theorycraft-ready static datasets
-    await log.step('Step 3/5: Building theorycraft datasets', { version: syncData.version })
+    // Step 3: Scrape patch notes for new version (non-blocking, keeps previous patches)
+    await log.step('Step 3/6: Scraping patch notes', { version: syncData.version })
+    const patchScrapeResult = await scrapePatchNotesIfNeeded(syncData.version, 'dataDragonSync')
+    if (!patchScrapeResult.ok) {
+      await log.warn('Patch notes scrape failed (non-blocking):', patchScrapeResult.error)
+    } else if (patchScrapeResult.scraped) {
+      await log.info('Patch notes scraped', { patchVersion: patchScrapeResult.patchVersion })
+    } else {
+      await log.info('Patch notes scrape skipped', { reason: patchScrapeResult.reason })
+    }
+
+    // Step 4: Build theorycraft-ready static datasets
+    await log.step('Step 4/6: Building theorycraft datasets', { version: syncData.version })
     const theorycraftBuild = await theorycraftBuilder.build(syncData.version)
     if (theorycraftBuild.isErr()) {
       await log.warn('Theorycraft dataset generation failed:', theorycraftBuild.unwrapErr())
@@ -149,20 +161,33 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
       await log.info('Theorycraft datasets built', { champions: tc.champions })
     }
 
-    // Step 4: Copy static assets to frontend
-    await log.step('Step 4/5: Copying static assets to frontend', { version: syncData.version })
+    // Step 5: Copy static assets to frontend
+    await log.step('Step 5/6: Copying static assets to frontend', { version: syncData.version })
 
     const copyResult = await staticAssets.copyAllAssetsToFrontend(
       syncData.version,
       ['fr_FR', 'en_US'],
       true,
-      true
+      true,
+      patch
     )
 
     let assetsStats = null
     if (copyResult.isOk()) {
       assetsStats = copyResult.unwrap()
-      await log.info('Static assets copied:', assetsStats.dataCopied, 'data files,', assetsStats.imagesCopied, 'images,', assetsStats.imagesSkipped, 'skipped')
+      await log.info(
+        'Static assets copied:',
+        assetsStats.dataCopied,
+        'data files,',
+        assetsStats.imagesCopied,
+        'images,',
+        assetsStats.imagesSkipped,
+        'skipped,',
+        assetsStats.patchNotesMoved,
+        'patch files moved,',
+        'theorycraft-cache deleted:',
+        assetsStats.theorycraftCacheDeleted
+      )
     } else {
       const copyError = copyResult.unwrapErr()
       await log.warn('Failed to copy static assets to frontend:', copyError)
@@ -181,7 +206,7 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
     await cronStatus.markSuccess('dataDragonSync')
 
     const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
-    await log.step('Step 5/5: Done', {
+    await log.step('Step 6/6: Done', {
       version: syncData.version,
       duration: `${duration}s`,
       ...(assetsStats && { dataFiles: assetsStats.dataCopied, imagesCopied: assetsStats.imagesCopied, imagesSkipped: assetsStats.imagesSkipped })

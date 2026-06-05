@@ -43,7 +43,10 @@
     "test:poller:all": "npm run test:poller:unit && npm run test:poller:e2e && npm run test:orchestration:unit && npm run test:orchestration:e2e && npm run test:tuner",
     "test:all": "npm run test:gateway && npm run test:poller:all && npm run test:tuner:e2e && npm run test:observability && npm run test:orchestration:integration",
     "test:poller": "npm run test:poller:all",
-    "seed:eu": "tsx scripts/seed-eu-players.ts"
+    "seed:eu": "tsx scripts/seed-eu-players.ts",
+    "scrape:patch": "tsx src/scripts/scrapePatch.ts",
+    "publish:patches": "tsx src/scripts/publishPatchNotes.ts",
+    "test:scraper": "vitest run --config vitest.scraper.config.ts"
   },
   "devDependencies": {
     "@types/compression": "^1.8.1",
@@ -60,6 +63,7 @@
   "dependencies": {
     "bottleneck": "^2.19.5",
     "bullmq": "^5.76.8",
+    "cheerio": "^1.2.0",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
