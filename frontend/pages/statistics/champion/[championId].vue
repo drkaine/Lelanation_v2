@@ -38,6 +38,7 @@
 
     <div class="flex min-h-0 w-full min-w-0 flex-1">
       <button
+        v-if="showDesktopFiltersTrigger"
         type="button"
         class="statistics-filters-desktop-trigger hidden shrink-0 touch-manipulation lg:sticky lg:top-4 lg:z-20 lg:mr-2 lg:flex lg:flex-col lg:items-center lg:gap-1 lg:self-start"
         :aria-label="
@@ -77,27 +78,27 @@
       </button>
 
       <div
-        v-if="filtersOpen && filtersSheetMode"
-        class="fixed inset-0 z-[10050] bg-black/50 lg:hidden"
+        v-if="filtersOpen && effectiveFiltersSheetMode"
+        class="fixed inset-0 z-[10050] bg-black/50"
         aria-hidden="true"
         role="presentation"
         @click="closeFilters"
       />
 
       <aside
-        v-show="filtersOpen || !filtersSheetMode"
+        v-show="filtersOpen || !effectiveFiltersSheetMode"
         :class="[
           'statistics-filters-panel flex shrink-0 flex-col overflow-hidden bg-surface',
-          filtersSheetMode
-            ? 'fixed inset-x-0 bottom-0 top-auto z-[10051] max-h-[85vh] w-full rounded-t-2xl shadow-lg lg:hidden'
+          effectiveFiltersSheetMode
+            ? 'fixed inset-x-0 bottom-0 top-auto z-[10051] max-h-[85vh] w-full rounded-t-2xl shadow-lg'
             : [
                 'hidden w-0 opacity-0 transition-[width,opacity] duration-200',
                 'lg:sticky lg:top-4 lg:z-0 lg:flex lg:h-auto lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:overflow-x-hidden lg:rounded-lg lg:shadow-none',
                 filtersOpen ? 'lg:w-64 lg:opacity-100' : 'lg:w-0 lg:opacity-0',
               ],
         ]"
-        :role="filtersSheetMode ? 'dialog' : undefined"
-        :aria-modal="filtersSheetMode ? true : undefined"
+        :role="effectiveFiltersSheetMode ? 'dialog' : undefined"
+        :aria-modal="effectiveFiltersSheetMode ? true : undefined"
         :aria-label="t('statisticsPage.filtersTitle')"
         @click.stop
       >
@@ -106,7 +107,10 @@
         >
           <button
             type="button"
-            class="mx-auto mb-1 flex h-6 w-14 shrink-0 touch-manipulation items-center justify-center rounded-full lg:hidden"
+            :class="[
+              'mx-auto mb-1 flex h-6 w-14 shrink-0 touch-manipulation items-center justify-center rounded-full',
+              effectiveFiltersSheetMode ? '' : 'lg:hidden',
+            ]"
             :aria-label="t('statisticsPage.closeFilters')"
             @click="closeFilters"
           >
@@ -319,7 +323,11 @@
               <label
                 for="champion-matchup-profile-filter"
                 class="mb-1 block text-sm font-medium text-text"
-                >{{ t('statisticsPage.championMatchupFilterLaneProfile') }}</label
+                >{{
+                  activeChampionTab === 'synergy'
+                    ? t('statisticsPage.championSynergyFilterLaneProfile')
+                    : t('statisticsPage.championMatchupFilterLaneProfile')
+                }}</label
               >
               <select
                 id="champion-matchup-profile-filter"
@@ -340,10 +348,17 @@
               </select>
               <div
                 class="mt-2 space-y-2 rounded-md border border-primary/20 bg-background/40 p-2 text-[10px] text-text/70"
-                :title="t('statisticsPage.championMatchupTooltipLaneProfile')"
+                :title="
+                  activeChampionTab === 'synergy'
+                    ? t('statisticsPage.championSynergyTooltipLaneProfile')
+                    : t('statisticsPage.championMatchupTooltipLaneProfile')
+                "
               >
                 <p class="leading-snug text-text/60">
                   {{ t('statisticsPage.championMatchupLaneProfileLegendHint') }}
+                </p>
+                <p v-if="activeChampionTab === 'synergy'" class="leading-snug text-text/55">
+                  {{ t('statisticsPage.championSynergyProfileWarningsHint') }}
                 </p>
                 <div class="font-semibold text-text/80">
                   {{ t('statisticsPage.championMatchupLaneProfileLegendTitle') }}
@@ -354,7 +369,11 @@
                       class="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400"
                       aria-hidden="true"
                     />
-                    {{ t('statisticsPage.championMatchupProfileChampion') }}
+                    {{
+                      activeChampionTab === 'synergy'
+                        ? t('statisticsPage.championSynergyProfileStrengths')
+                        : t('statisticsPage.championMatchupProfileChampion')
+                    }}
                   </div>
                   <div class="flex flex-wrap gap-1">
                     <span
@@ -373,7 +392,11 @@
                       class="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400"
                       aria-hidden="true"
                     />
-                    {{ t('statisticsPage.championMatchupProfileOpponent') }}
+                    {{
+                      activeChampionTab === 'synergy'
+                        ? t('statisticsPage.championSynergyProfileWarnings')
+                        : t('statisticsPage.championMatchupProfileOpponent')
+                    }}
                   </div>
                   <div class="flex flex-wrap gap-1">
                     <span
@@ -410,16 +433,38 @@
               <label
                 for="champion-matchup-otp-filter"
                 class="mb-1 block text-sm font-medium text-text"
-                >{{ t('statisticsPage.championMatchupFilterOtpMode') }}</label
+                >{{
+                  activeChampionTab === 'synergy'
+                    ? t('statisticsPage.championSynergyFilterOtpMode')
+                    : t('statisticsPage.championMatchupFilterOtpMode')
+                }}</label
               >
               <select
                 id="champion-matchup-otp-filter"
                 v-model="matchupOtpMode"
                 class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
               >
-                <option value="non">{{ t('statisticsPage.championMatchupFilterOtpOff') }}</option>
-                <option value="oui">{{ t('statisticsPage.championMatchupFilterOtpOn') }}</option>
-                <option value="solo">{{ t('statisticsPage.championMatchupFilterOtpOnly') }}</option>
+                <option value="non">
+                  {{
+                    activeChampionTab === 'synergy'
+                      ? t('statisticsPage.championSynergyFilterOtpOff')
+                      : t('statisticsPage.championMatchupFilterOtpOff')
+                  }}
+                </option>
+                <option value="oui">
+                  {{
+                    activeChampionTab === 'synergy'
+                      ? t('statisticsPage.championSynergyFilterOtpOn')
+                      : t('statisticsPage.championMatchupFilterOtpOn')
+                  }}
+                </option>
+                <option value="solo">
+                  {{
+                    activeChampionTab === 'synergy'
+                      ? t('statisticsPage.championSynergyFilterOtpOnly')
+                      : t('statisticsPage.championMatchupFilterOtpOnly')
+                  }}
+                </option>
               </select>
             </div>
             <div v-if="activeChampionTab === 'spells'">
@@ -1201,7 +1246,7 @@
                 v-if="activeChampionTab === 'matchups'"
                 id="champion-tab-panel-matchups"
                 role="tabpanel"
-                class="champion-tab-panel champion-tab-panel-matchups p-2 max-lg:px-3 max-lg:py-3"
+                class="champion-tab-panel champion-tab-panel-matchups champion-tab-panel-flush"
               >
                 <div v-if="matchupsExtPending" class="py-6 text-text/70">
                   {{ t('statisticsPage.loading') }}
@@ -1219,6 +1264,13 @@
                     v-model:direction="matchupSortDir"
                     :options="matchupMobileSortOptions"
                     :asc-default-columns="['champion', 'role']"
+                  />
+                  <StatisticsTabPagination
+                    v-model:page="matchupPage"
+                    v-model:page-size="matchupPageSize"
+                    :total-pages="totalMatchupPages"
+                    :total-count="filteredMatchupsExt.length"
+                    :page-size-options="matchupPageSizeOptions"
                   />
                   <div
                     class="statistics-champion-matchup-mobile-list statistics-tier-list-mobile-list w-full space-y-1 md:hidden"
@@ -1248,7 +1300,7 @@
                     />
                   </div>
                   <div
-                    class="champion-matchups-table-wrap hidden overflow-x-auto rounded-lg border border-primary/30 bg-surface/30 md:block"
+                    class="champion-matchups-table-wrap champion-tab-data-surface hidden overflow-x-auto md:block"
                   >
                     <table class="tier-list-lolalytics w-full min-w-[1120px] text-sm">
                       <thead>
@@ -1295,7 +1347,7 @@
                               "
                               @click="setMatchupSort('scoreDelta')"
                             >
-                              {{ t('statisticsPage.championTableDeltaSymbol')
+                              {{ t('statisticsPage.championMatchupColScoreDelta')
                               }}{{ matchupSortIcon('scoreDelta') }}
                             </button>
                           </th>
@@ -1563,52 +1615,20 @@
                       </tbody>
                     </table>
                   </div>
-                  <div
-                    class="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-xs text-text/80"
-                  >
-                    <div class="inline-flex items-center gap-2">
-                      <span>{{ t('statisticsPage.perPage') }}</span>
-                      <select
-                        v-model.number="matchupPageSize"
-                        class="rounded border border-primary/40 bg-background px-1.5 py-0.5 text-xs text-text"
-                      >
-                        <option v-for="s in matchupPageSizeOptions" :key="s" :value="s">
-                          {{ s }}
-                        </option>
-                      </select>
-                    </div>
-                    <div class="inline-flex items-center gap-2">
-                      <button
-                        type="button"
-                        class="rounded border border-primary/30 px-2 py-0.5 disabled:opacity-40"
-                        :disabled="matchupPage <= 1"
-                        @click="matchupPage = Math.max(1, matchupPage - 1)"
-                      >
-                        {{ t('admin.pagination.prev') }}
-                      </button>
-                      <span>{{
-                        t('statisticsPage.pageXOfY', {
-                          current: matchupPage,
-                          total: totalMatchupPages,
-                        })
-                      }}</span>
-                      <button
-                        type="button"
-                        class="rounded border border-primary/30 px-2 py-0.5 disabled:opacity-40"
-                        :disabled="matchupPage >= totalMatchupPages"
-                        @click="matchupPage = Math.min(totalMatchupPages, matchupPage + 1)"
-                      >
-                        {{ t('admin.pagination.next') }}
-                      </button>
-                    </div>
-                  </div>
+                  <StatisticsTabPagination
+                    v-model:page="matchupPage"
+                    v-model:page-size="matchupPageSize"
+                    :total-pages="totalMatchupPages"
+                    :total-count="filteredMatchupsExt.length"
+                    :page-size-options="matchupPageSizeOptions"
+                  />
                 </div>
               </div>
               <div
                 v-if="activeChampionTab === 'synergy'"
                 id="champion-tab-panel-synergy"
                 role="tabpanel"
-                class="champion-tab-panel champion-tab-panel-synergy p-2 max-lg:px-3 max-lg:py-3"
+                class="champion-tab-panel champion-tab-panel-synergy champion-tab-panel-flush"
               >
                 <ChampionSynergyTab
                   :pending="synergyExtPending"
@@ -1672,6 +1692,7 @@
                         :key="section.key + '-' + row.key"
                         :row="row"
                         :champion-id="championId"
+                        :champion-slug="championSkillChampion?.id ?? ''"
                         :game-version="(filterVersion || gameVersion || '').trim()"
                         :spells="championSkillChampion?.spells"
                         :accent="championSpellOrderSectionAccent(section.key)"
@@ -1684,7 +1705,7 @@
                 v-if="activeChampionTab === 'objectives'"
                 id="champion-tab-panel-objectives"
                 role="tabpanel"
-                class="champion-tab-panel p-4 max-lg:px-3 max-lg:py-3"
+                class="champion-tab-panel champion-tab-panel-objectives champion-tab-panel-flush"
               >
                 <ChampionObjectivesTab
                   :data="championObjectivesData"
@@ -1708,7 +1729,10 @@
     <button
       v-if="!filtersOpen"
       type="button"
-      class="statistics-filters-fab fixed bottom-4 left-1/2 z-[58] flex -translate-x-1/2 items-center gap-2 rounded-full border border-primary/40 bg-surface/95 px-4 py-2.5 text-sm font-semibold text-text shadow-lg backdrop-blur-sm lg:hidden"
+      :class="[
+        'statistics-filters-fab fixed bottom-4 left-1/2 z-[58] -translate-x-1/2 items-center gap-2 rounded-full border border-primary/40 bg-surface/95 px-4 py-2.5 text-sm font-semibold text-text shadow-lg backdrop-blur-sm',
+        filtersFabClass,
+      ]"
       :aria-label="t('statisticsPage.openFilters')"
       @click="openFilters"
     >
@@ -1764,6 +1788,7 @@ import {
 import { getRankedEmblemUrl } from '~/utils/rankedEmblem'
 import { rankTierSelectionsEqual } from '~/utils/statisticsRankTierQuery'
 import { useGameVersion } from '~/composables/useGameVersion'
+import { statsRoleIconPath, statsRoleLabel } from '~/utils/statsRoleDisplay'
 definePageMeta({
   layout: 'default',
 })
@@ -1970,7 +1995,7 @@ const matchupMobileSortOptions = computed(() => {
     { value: 'score', label: t('statisticsPage.championMatchupColScore') },
     {
       value: 'scoreDelta',
-      label: `${t('statisticsPage.championTableDeltaSymbol')} ${t('statisticsPage.championMatchupColScore')}`,
+      label: t('statisticsPage.championMatchupColScoreDelta'),
     },
     { value: 'winrate', label: t('statisticsPage.winrate') },
     { value: 'pickrate', label: t('statisticsPage.championMatchupColPickrate') },
@@ -2196,11 +2221,8 @@ function cardIsFavorite(cardId: string): boolean {
 function toggleFavoriteCard(cardId: string, title: string): void {
   statisticsCustomStore.toggleFavorite(cardId, title)
 }
-const filtersSheetMode = ref(false)
-let filtersSheetMq: MediaQueryList | null = null
-const onFiltersSheetMqChange = () => {
-  filtersSheetMode.value = filtersSheetMq?.matches ?? false
-}
+const { effectiveFiltersSheetMode, showDesktopFiltersTrigger, filtersFabClass } =
+  useStatisticsFiltersSheetMode()
 
 const filterVersion = ref('')
 const trendChartFromDate = ref('')
@@ -2251,13 +2273,13 @@ function toggleFiltersOpen() {
 
 function onFiltersEscapeKey(event: KeyboardEvent) {
   if (event.key !== 'Escape' || !filtersOpen.value) return
-  if (!import.meta.client || !filtersSheetMode.value) return
+  if (!import.meta.client || !effectiveFiltersSheetMode.value) return
   closeFilters()
 }
 
-watch([filtersOpen, filtersSheetMode], () => {
+watch([filtersOpen, effectiveFiltersSheetMode], () => {
   if (!import.meta.client) return
-  const lock = filtersSheetMode.value && filtersOpen.value
+  const lock = effectiveFiltersSheetMode.value && filtersOpen.value
   document.body.style.overflow = lock ? 'hidden' : ''
 })
 
@@ -2383,20 +2405,6 @@ const rolesWithData = computed(
 
 const roleDistribution = computed(() => [...byRoleList.value].sort((a, b) => b.games - a.games))
 
-const ROLE_LABELS: Record<string, string> = {
-  TOP: 'Top',
-  JUNGLE: 'Jungle',
-  MIDDLE: 'Mid',
-  BOTTOM: 'ADC',
-  SUPPORT: 'Support',
-}
-const ROLE_ICON_MAP: Record<string, string> = {
-  TOP: '/icons/roles/top.png',
-  JUNGLE: '/icons/roles/jungle.png',
-  MIDDLE: '/icons/roles/mid.png',
-  BOTTOM: '/icons/roles/bot.png',
-  SUPPORT: '/icons/roles/support.png',
-}
 const roleOptions = [
   { value: 'TOP', label: 'Top', icon: '/icons/roles/top.png' },
   { value: 'JUNGLE', label: 'Jungle', icon: '/icons/roles/jungle.png' },
@@ -2415,10 +2423,10 @@ function toggleChampionRoleFilter(r: (typeof roleOptions)[number]) {
 }
 
 function roleLabel(role: string) {
-  return ROLE_LABELS[role] ?? role
+  return statsRoleLabel(role)
 }
 function roleIconPath(role: string) {
-  return ROLE_ICON_MAP[role] ?? '/icons/roles/mid.png'
+  return statsRoleIconPath(role)
 }
 function formatDonutPercent(value: number) {
   return Number.isFinite(value) ? Number(value).toFixed(2) : '0'
@@ -3415,6 +3423,10 @@ async function _loadDetail() {
 async function _loadChampionSpells() {
   if (!championId.value) return
   const t = statsPerfStart('loadChampionSpells')
+  const skillChampion = championByKey(championId.value)
+  if (skillChampion?.id) {
+    await championsStore.loadChampionDetails(skillChampion.id, riotLocale.value).catch(() => null)
+  }
   championSpellsPending.value = true
   championSpellsData.value = null
   championSpellsDuosData.value = null
@@ -4433,9 +4445,6 @@ onMounted(async () => {
   if (import.meta.client) {
     initChampionHeaderBandOpen()
     document.addEventListener('keydown', onFiltersEscapeKey)
-    filtersSheetMq = window.matchMedia('(max-width: 1023px)')
-    onFiltersSheetMqChange()
-    filtersSheetMq.addEventListener('change', onFiltersSheetMqChange)
   }
   const versionPromise = versionStore.currentVersion
     ? Promise.resolve()
@@ -4457,7 +4466,6 @@ onMounted(async () => {
 
 onUnmounted(() => {
   document.removeEventListener('keydown', onFiltersEscapeKey)
-  filtersSheetMq?.removeEventListener('change', onFiltersSheetMqChange)
   if (import.meta.client) document.body.style.overflow = ''
 })
 
@@ -4603,8 +4611,78 @@ useHead({
   row-gap: 0.5rem;
 }
 
-.champion-stats .champion-content-stack + .champion-tab-panels {
+.champion-stats .champion-tab-panels {
   margin-top: 0;
+}
+
+.champion-stats .champion-tab-panel-flush {
+  width: 100%;
+  max-width: 100%;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.champion-stats .champion-tab-panel-flush .champion-tab-data-surface,
+.champion-stats .champion-tab-panel-flush .champion-matchups-table-wrap,
+.champion-stats .champion-tab-panel-flush .champion-synergy-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  margin-left: 0;
+  margin-right: 0;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  background-color: rgb(8 16 31 / 0.45);
+  border-top: 1px solid rgb(var(--rgb-primary) / 0.3);
+  border-bottom: 1px solid rgb(var(--rgb-primary) / 0.3);
+}
+
+.champion-stats .champion-tab-panel-flush .statistics-champion-matchup-mobile-list,
+.champion-stats .champion-tab-panel-flush .statistics-champion-synergy-mobile-list {
+  width: 100%;
+  max-width: 100%;
+}
+
+.champion-stats .champion-tab-panel-flush .statistics-tab-pagination {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.champion-stats .champion-tab-panel-flush .statistics-champion-matchup-mobile-card,
+.champion-stats .champion-tab-panel-flush .statistics-champion-stats-mobile-card {
+  width: 100%;
+  max-width: 100%;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+}
+
+.champion-stats
+  .champion-tab-panel-flush
+  .statistics-champion-matchup-mobile-card
+  + .statistics-champion-matchup-mobile-card,
+.champion-stats
+  .champion-tab-panel-flush
+  .statistics-champion-stats-mobile-card
+  + .statistics-champion-stats-mobile-card {
+  border-top-width: 0;
+}
+
+.champion-stats .champion-tab-panel-objectives .champion-objectives-tab {
+  width: 100%;
+  max-width: 100%;
+}
+
+.champion-stats .champion-tab-panel-objectives .fast-stat-card-objectives {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-top: 1px solid rgb(var(--rgb-primary) / 0.3);
+  border-bottom: 1px solid rgb(var(--rgb-primary) / 0.3);
 }
 
 .champion-stats .champion-tab-panel-runes,
@@ -4626,13 +4704,9 @@ useHead({
   margin-top: 0.5rem !important;
 }
 
-.champion-stats .champion-tab-panel-matchups,
-.champion-stats .champion-tab-panel-synergy {
-  padding-top: 0.5rem;
-}
-
-.champion-stats .champion-matchups-table-wrap {
-  overflow: hidden;
+.champion-stats .champion-matchups-table-wrap,
+.champion-stats .champion-synergy-table-wrap {
+  overflow-x: auto;
 }
 
 .champion-stats .champion-header-roles {
@@ -4770,7 +4844,8 @@ useHead({
 
   .champion-stats .champion-misc-tab,
   .champion-stats .champion-misc-tab .champion-misc-grid,
-  .champion-stats .statistics-champion-matchup-mobile-list {
+  .champion-stats .statistics-champion-matchup-mobile-list,
+  .champion-stats .statistics-champion-synergy-mobile-list {
     width: 100%;
     max-width: 100%;
   }

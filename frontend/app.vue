@@ -31,36 +31,6 @@
           :class="{ 'command-bar-collapsed': !isHomeRoute && commandsCollapsed }"
         >
           <div v-show="!commandsCollapsed" class="command-bar-content">
-            <div
-              v-if="commandHelpOpen"
-              class="command-help-panel"
-              role="dialog"
-              aria-label="Raccourcis clavier"
-            >
-              <p class="command-help" aria-live="polite">
-                {{ t('commandBar.builderLabel') }}: <span class="command-shortcut">Ctrl + ←</span>
-                {{ t('commandBar.previousStep') }}, <span class="command-shortcut">Ctrl + →</span>
-                {{ t('commandBar.nextStep') }}
-                <span class="command-help-separator">|</span>
-                <span class="command-shortcut">Ctrl + ↓</span> {{ t('commandBar.showBar') }},
-                <span class="command-shortcut">Ctrl + ↑</span> {{ t('commandBar.hideBar') }}
-              </p>
-              <ul class="command-shortcuts-list">
-                <li>
-                  <span class="command-shortcut">Alt + T</span> {{ t('nav.disableTooltips') }}
-                </li>
-                <li>
-                  <span class="command-shortcut">Alt + P</span> {{ t('footer.presentationMode') }}
-                </li>
-                <li>
-                  <span class="command-shortcut">Alt + Z</span>
-                  {{ t('commandBar.presentationZoom') }}
-                </li>
-                <li>
-                  <span class="command-shortcut">Alt + S</span> {{ t('commandBar.championSplash') }}
-                </li>
-              </ul>
-            </div>
             <label class="command-toggle">
               <input
                 type="checkbox"
@@ -108,10 +78,22 @@
             </button>
             <button
               type="button"
+              class="command-toggle command-toggle-button"
+              :aria-pressed="simplifiedStatsEnabled"
+              @click="toggleSimplifiedStatsEnabled()"
+            >
+              <span class="command-toggle-track" :class="{ active: simplifiedStatsEnabled }">
+                <span class="command-toggle-thumb" />
+              </span>
+              <span>{{ t('commandBar.simplifiedStats') }}</span>
+            </button>
+            <button
+              type="button"
               class="command-help-button"
-              title="Raccourcis clavier"
-              :aria-expanded="commandHelpOpen"
-              @click="commandHelpOpen = !commandHelpOpen"
+              :title="t('commandBar.shortcutsModalTitle')"
+              :aria-label="t('commandBar.openShortcutsModal')"
+              :aria-expanded="commandsModalOpen"
+              @click="openCommandsModal"
             >
               ?
             </button>
@@ -163,6 +145,20 @@
       <AppFooter />
     </div>
     <CookieConsentBanner v-show="!isBuildCardRenderRoute" />
+    <CommandShortcutsModal
+      :open="commandsModalOpen"
+      :tooltips-disabled="tooltipsDisabled"
+      :streamer-mode="isStreamerMode"
+      :presentation-zoom="isPresentationZoom"
+      :champion-splash="championSplashEnabled"
+      :simplified-stats="simplifiedStatsEnabled"
+      @close="closeCommandsModal"
+      @toggle-tooltips="toggleTooltipsDisabled()"
+      @toggle-streamer="toggleStreamerMode()"
+      @toggle-presentation-zoom="togglePresentationZoom()"
+      @toggle-champion-splash="toggleChampionSplashEnabled()"
+      @toggle-simplified-stats="toggleSimplifiedStatsEnabled()"
+    />
   </div>
 </template>
 
@@ -171,6 +167,7 @@ import { computed, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import CookieConsentBanner from '~/components/CookieConsentBanner.vue'
 import AppFooter from '~/components/AppFooter.vue'
+import CommandShortcutsModal from '~/components/CommandShortcutsModal.vue'
 import { useStreamerMode } from '~/composables/useStreamerMode'
 import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 import { useChampionSplashPreference } from '~/composables/useChampionSplashPreference'
@@ -192,12 +189,25 @@ const showStreamerPanels = computed(() => isStreamerMode.value && !isMobileViewp
 const { tooltipsDisabled, tooltipsEnabled, setTooltipsDisabled, toggleTooltipsDisabled } =
   useTooltipsPreference()
 const { championSplashEnabled, toggleChampionSplashEnabled } = useChampionSplashPreference()
+const { simplifiedStatsEnabled, toggleSimplifiedStatsEnabled } = useSimplifiedStatsPreference()
 const streamerNavOpen = useState<boolean>('streamer-nav-open', () => false)
 const streamerFooterOpen = useState<boolean>('streamer-footer-open', () => false)
 const streamerPanelsOpen = computed(() => streamerNavOpen.value && streamerFooterOpen.value)
 const commandsCollapsed = useState<boolean>('commands-collapsed', () => true)
-const commandHelpOpen = ref(false)
+const commandsModalOpen = ref(false)
 const commandBarRef = ref<HTMLElement | null>(null)
+
+function openCommandsModal() {
+  commandsModalOpen.value = true
+}
+
+function closeCommandsModal() {
+  commandsModalOpen.value = false
+}
+
+function toggleCommandsModal() {
+  commandsModalOpen.value = !commandsModalOpen.value
+}
 const commandBarHiddenByScroll = ref(false)
 const COMMAND_BAR_SCROLL_THRESHOLD = 80
 
@@ -278,6 +288,12 @@ const onKeyDown = (event: KeyboardEvent) => {
     return
   }
 
+  if (event.altKey && key === 'h') {
+    event.preventDefault()
+    toggleCommandsModal()
+    return
+  }
+
   if (event.altKey && key === 'p') {
     event.preventDefault()
     toggleStreamerMode()
@@ -299,6 +315,12 @@ const onKeyDown = (event: KeyboardEvent) => {
   if (event.altKey && key === 'z') {
     event.preventDefault()
     togglePresentationZoom()
+    return
+  }
+
+  if (event.altKey && key === 'c') {
+    event.preventDefault()
+    toggleSimplifiedStatsEnabled()
     return
   }
 
@@ -362,12 +384,11 @@ const onKeyDown = (event: KeyboardEvent) => {
 
 const onDocumentPointerDown = (event: MouseEvent) => {
   if (isHomeRoute.value) return
-  if (commandsCollapsed.value && !commandHelpOpen.value) return
+  if (commandsCollapsed.value) return
   const target = event.target as Node | null
   if (!target) return
   if (commandBarRef.value?.contains(target)) return
   commandsCollapsed.value = true
-  commandHelpOpen.value = false
 }
 
 function onWindowScroll() {
@@ -586,46 +607,6 @@ if (import.meta.client) {
   flex: 1;
 }
 
-.command-help-panel {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 60;
-  min-width: min(320px, calc(100vw - 24px));
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid rgb(var(--rgb-accent) / 0.35);
-  background: #08101f;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
-}
-
-.command-help {
-  margin: 0 0 8px;
-  font-size: 10px;
-  color: rgb(var(--rgb-text) / 0.75);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.command-shortcuts-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 11px;
-  color: rgb(var(--rgb-text) / 0.85);
-}
-
-.command-shortcuts-list li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .command-help-button {
   flex-shrink: 0;
   width: 24px;
@@ -649,10 +630,6 @@ if (import.meta.client) {
 .command-help-button[aria-expanded='true'] {
   background: rgb(var(--rgb-background) / 0.3);
   border-color: rgb(var(--rgb-accent) / 0.45);
-}
-
-.command-help-separator {
-  opacity: 0.55;
 }
 
 .command-collapse-button {
@@ -789,5 +766,137 @@ if (import.meta.client) {
 
 .app-main > .min-h-screen {
   min-height: 100% !important;
+}
+
+/* Stats simplifiées (Alt+C) : cartes type mobile sur desktop */
+html[data-stats-cards='1'] .statistics-mobile-sort-bar,
+html[data-stats-cards='1'] .statistics-tab-pagination {
+  display: flex !important;
+  width: 100%;
+  flex-basis: 100%;
+  box-sizing: border-box;
+}
+
+html[data-stats-cards='1'] .statistics-tier-list-mobile-list,
+html[data-stats-cards='1'] .statistics-champion-matchup-mobile-list,
+html[data-stats-cards='1'] .statistics-champion-synergy-mobile-list,
+html[data-stats-cards='1'] .statistics-objectives-mobile-list,
+html[data-stats-cards='1'] .statistics-bans-mobile-list,
+html[data-stats-cards='1'] .statistics-champion-mobile-list,
+html[data-stats-cards='1'] .statistics-spells-mobile-list,
+html[data-stats-cards='1'] .statistics-items-mobile-list,
+html[data-stats-cards='1'] .statistics-balance-mobile-list,
+html[data-stats-cards='1'] .statistics-infos-mobile-list,
+html[data-stats-cards='1'] .statistics-surrender-mobile-list {
+  display: block !important;
+}
+
+html[data-stats-cards='1'] .tier-list-mobile-rotate,
+html[data-stats-cards='1'] .champion-matchups-table-wrap,
+html[data-stats-cards='1'] .champion-synergy-table-wrap,
+html[data-stats-cards='1'] .statistics .hidden.md\:block,
+html[data-stats-cards='1'] .champion-stats .hidden.md\:block {
+  display: none !important;
+}
+
+/* Desktop + stats simplifiées : cartes taille standard en grille flex */
+@media (min-width: 768px) {
+  html[data-stats-cards='1'] {
+    --stats-simplified-card-width: 18.5rem;
+  }
+
+  html[data-stats-cards='1']
+    :is(
+      .statistics-tier-list-mobile-list,
+      .statistics-champion-matchup-mobile-list,
+      .statistics-champion-synergy-mobile-list,
+      .statistics-champion-mobile-list,
+      .statistics-bans-mobile-list,
+      .statistics-spells-mobile-list,
+      .statistics-items-mobile-list,
+      .statistics-balance-mobile-list,
+      .statistics-infos-mobile-list,
+      .statistics-objectives-mobile-list
+    ) {
+    display: flex !important;
+    flex-flow: row wrap;
+    align-items: stretch;
+    align-content: flex-start;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  html[data-stats-cards='1']
+    :is(
+      .statistics-tier-list-mobile-list,
+      .statistics-champion-matchup-mobile-list,
+      .statistics-champion-synergy-mobile-list,
+      .statistics-champion-mobile-list,
+      .statistics-bans-mobile-list,
+      .statistics-spells-mobile-list,
+      .statistics-items-mobile-list,
+      .statistics-balance-mobile-list,
+      .statistics-infos-mobile-list,
+      .statistics-objectives-mobile-list
+    )
+    > * {
+    margin-top: 0 !important;
+  }
+
+  html[data-stats-cards='1']
+    :is(
+      .statistics-champion-stats-mobile-card,
+      .statistics-infos-mobile-card,
+      .statistics-tier-list-mobile-card,
+      .statistics-objectives-mobile-card,
+      .statistics-surrender-mobile-side-card
+    ) {
+    width: var(--stats-simplified-card-width) !important;
+    max-width: var(--stats-simplified-card-width) !important;
+    min-width: 0;
+    flex: 0 1 var(--stats-simplified-card-width);
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    border-radius: 0.5rem !important;
+    border: 1px solid rgb(var(--rgb-primary) / 0.3) !important;
+    box-sizing: border-box;
+  }
+
+  html[data-stats-cards='1'] .statistics-objectives-mobile-list > li {
+    width: var(--stats-simplified-card-width);
+    max-width: var(--stats-simplified-card-width);
+    flex: 0 1 var(--stats-simplified-card-width);
+    margin: 0;
+    border-radius: 0.5rem;
+    box-sizing: border-box;
+  }
+
+  html[data-stats-cards='1']
+    .champion-stats
+    .champion-tab-panel-flush
+    .statistics-champion-matchup-mobile-card,
+  html[data-stats-cards='1']
+    .champion-stats
+    .champion-tab-panel-flush
+    .statistics-champion-stats-mobile-card {
+    border-left: 1px solid rgb(var(--rgb-primary) / 0.3) !important;
+    border-right: 1px solid rgb(var(--rgb-primary) / 0.3) !important;
+  }
+
+  html[data-stats-cards='1']
+    .champion-stats
+    .champion-tab-panel-flush
+    .statistics-champion-matchup-mobile-card
+    + .statistics-champion-matchup-mobile-card,
+  html[data-stats-cards='1']
+    .champion-stats
+    .champion-tab-panel-flush
+    .statistics-champion-stats-mobile-card
+    + .statistics-champion-stats-mobile-card {
+    border-top-width: 1px !important;
+  }
 }
 </style>

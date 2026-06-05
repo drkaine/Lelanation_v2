@@ -3,12 +3,14 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { getChampionImageUrl } from '~/utils/imageUrl'
+import { statsRoleIconPath, statsRoleLabel } from '~/utils/statsRoleDisplay'
 import ChampionMatchupMobileCard, {
   type MatchupsExtDominanceKey,
   type MatchupsExtRow,
   type MatchupsExtSignalLevel,
 } from '~/components/statistics/ChampionMatchupMobileCard.vue'
 import StatisticsMobileSortBar from '~/components/statistics/StatisticsMobileSortBar.vue'
+import StatisticsTabPagination from '~/components/statistics/StatisticsTabPagination.vue'
 
 export type SynergyExtRow = {
   rank: number
@@ -63,24 +65,10 @@ type SynergySortKey =
 
 const sortKey = ref<SynergySortKey>('score')
 const sortDir = ref<'asc' | 'desc'>('desc')
+const pageSizeOptions = [10, 20, 50, 100]
 const pageSize = ref(20)
 const page = ref(1)
 const expandedKeys = ref<Set<string>>(new Set())
-
-const ROLE_LABELS: Record<string, string> = {
-  TOP: 'Top',
-  JUNGLE: 'Jungle',
-  MIDDLE: 'Mid',
-  BOTTOM: 'ADC',
-  SUPPORT: 'Support',
-}
-const ROLE_ICON_MAP: Record<string, string> = {
-  TOP: '/icons/roles/top.png',
-  JUNGLE: '/icons/roles/jungle.png',
-  MIDDLE: '/icons/roles/mid.png',
-  BOTTOM: '/icons/roles/bot.png',
-  SUPPORT: '/icons/roles/support.png',
-}
 
 function championByKey(id: number) {
   return championsStore.champions.find(c => c.key === String(id)) ?? null
@@ -89,10 +77,25 @@ function championName(id: number) {
   return championByKey(id)?.name ?? null
 }
 function roleLabel(role: string) {
-  return ROLE_LABELS[role?.toUpperCase()] ?? role
+  return statsRoleLabel(role)
 }
 function roleIconPath(role: string) {
-  return ROLE_ICON_MAP[role?.toUpperCase()] ?? ''
+  return statsRoleIconPath(role)
+}
+
+function laneProfileChipTitle(
+  key: MatchupsExtDominanceKey,
+  level: MatchupsExtSignalLevel | undefined,
+  side: 'strength' | 'weakness'
+): string {
+  const lvl =
+    level ??
+    (side === 'strength' ? ('smallAdvantage' as MatchupsExtSignalLevel) : 'smallDisadvantage')
+  const who =
+    side === 'strength'
+      ? t('statisticsPage.championSynergyProfileStrengths')
+      : t('statisticsPage.championSynergyProfileWarnings')
+  return `${who} — ${t(`statisticsPage.championMatchupDominance.${key}`)} (${t(`statisticsPage.championMatchupSignalLevel.${lvl}`)}): ${t(`statisticsPage.championMatchupDominanceDetail.${key}`)}`
 }
 
 function cardKey(row: SynergyExtRow): string {
@@ -211,7 +214,7 @@ const mobileSortOptions = computed(() => {
     { value: 'score', label: t('statisticsPage.championSynergyColScore') },
     {
       value: 'scoreDelta',
-      label: `${t('statisticsPage.championTableDeltaSymbol')} ${t('statisticsPage.championSynergyColScore')}`,
+      label: t('statisticsPage.championSynergyColScoreDelta'),
     },
     { value: 'winrate', label: t('statisticsPage.winrate') },
     { value: 'pickrate', label: t('statisticsPage.championSynergyColPickrate') },
@@ -315,8 +318,15 @@ function toggleCard(row: SynergyExtRow) {
         :options="mobileSortOptions"
         :asc-default-columns="['champion', 'role', 'allyRole']"
       />
+      <StatisticsTabPagination
+        v-model:page="page"
+        v-model:page-size="pageSize"
+        :total-pages="totalPages"
+        :total-count="filteredRows.length"
+        :page-size-options="pageSizeOptions"
+      />
       <div
-        class="statistics-champion-synergy-mobile-list statistics-tier-list-mobile-list w-full space-y-1 md:hidden"
+        class="statistics-champion-matchup-mobile-list statistics-champion-synergy-mobile-list statistics-tier-list-mobile-list w-full space-y-1 md:hidden"
       >
         <ChampionMatchupMobileCard
           v-for="(row, idx) in paginatedRows"
@@ -325,6 +335,11 @@ function toggleCard(row: SynergyExtRow) {
           :display-rank="(page - 1) * pageSize + idx + 1"
           :expanded="expandedKeys.has(cardKey(row))"
           :show-role="true"
+          profile-context="synergy"
+          score-column-label-key="statisticsPage.championSynergyColScore"
+          profile-section-label-key="statisticsPage.championSynergyColProfile"
+          strength-side-label-key="statisticsPage.championSynergyProfileStrengths"
+          weakness-side-label-key="statisticsPage.championSynergyProfileWarnings"
           :portrait-src="
             gameVersion && championByKey(row.allyChampionId)?.image?.full
               ? getChampionImageUrl(gameVersion, championByKey(row.allyChampionId)!.image!.full)
@@ -338,7 +353,7 @@ function toggleCard(row: SynergyExtRow) {
         />
       </div>
       <div
-        class="champion-synergy-table-wrap hidden overflow-x-auto rounded-lg border border-primary/30 bg-surface/30 md:block"
+        class="champion-synergy-table-wrap champion-tab-data-surface hidden overflow-x-auto md:block"
       >
         <table class="tier-list-lolalytics w-full min-w-[1120px] text-sm">
           <thead>
@@ -376,7 +391,7 @@ function toggleCard(row: SynergyExtRow) {
                   class="inline-flex items-center gap-1 hover:text-accent"
                   @click="setSort('scoreDelta')"
                 >
-                  {{ t('statisticsPage.championTableDeltaSymbol') }}{{ sortIcon('scoreDelta') }}
+                  {{ t('statisticsPage.championSynergyColScoreDelta') }}{{ sortIcon('scoreDelta') }}
                 </button>
               </th>
               <th v-if="!filterRole" class="px-2 py-2 text-left font-medium text-text">
@@ -546,8 +561,12 @@ function toggleCard(row: SynergyExtRow) {
               >
                 <div v-if="row.dominanceKeys?.length" class="mb-1.5">
                   <div
-                    class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-400"
+                    class="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-400"
                   >
+                    <span
+                      class="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400"
+                      aria-hidden="true"
+                    />
                     {{ t('statisticsPage.championSynergyProfileStrengths') }}
                   </div>
                   <div class="flex flex-wrap gap-1">
@@ -560,15 +579,33 @@ function toggleCard(row: SynergyExtRow) {
                           'strength'
                         )
                       "
+                      :title="laneProfileChipTitle(k, row.laneProfileByKey?.[k], 'strength')"
                     >
-                      {{ t(`statisticsPage.championMatchupDominanceShort.${k}`) }}
+                      <span class="font-semibold">{{
+                        t(`statisticsPage.championMatchupDominanceShort.${k}`)
+                      }}</span>
+                      <span class="opacity-70" aria-hidden="true">·</span>
+                      <span class="opacity-90">{{
+                        t(
+                          `statisticsPage.championMatchupSignalLevelShort.${row.laneProfileByKey?.[k] ?? 'smallAdvantage'}`
+                        )
+                      }}</span>
                     </span>
                   </div>
                 </div>
                 <div v-if="row.weaknessKeys?.length">
-                  <div class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-rose-400">
+                  <div
+                    class="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-rose-400"
+                  >
+                    <span
+                      class="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400"
+                      aria-hidden="true"
+                    />
                     {{ t('statisticsPage.championSynergyProfileWarnings') }}
                   </div>
+                  <p class="mb-1 text-[10px] leading-snug text-text/55">
+                    {{ t('statisticsPage.championSynergyProfileWarningsHint') }}
+                  </p>
                   <div class="flex flex-wrap gap-1">
                     <span
                       v-for="k in row.weaknessKeys"
@@ -579,8 +616,17 @@ function toggleCard(row: SynergyExtRow) {
                           'weakness'
                         )
                       "
+                      :title="laneProfileChipTitle(k, row.laneProfileByKey?.[k], 'weakness')"
                     >
-                      {{ t(`statisticsPage.championMatchupDominanceShort.${k}`) }}
+                      <span class="font-semibold">{{
+                        t(`statisticsPage.championMatchupDominanceShort.${k}`)
+                      }}</span>
+                      <span class="opacity-70" aria-hidden="true">·</span>
+                      <span class="opacity-90">{{
+                        t(
+                          `statisticsPage.championMatchupSignalLevelShort.${row.laneProfileByKey?.[k] ?? 'smallDisadvantage'}`
+                        )
+                      }}</span>
                     </span>
                   </div>
                 </div>
@@ -595,39 +641,13 @@ function toggleCard(row: SynergyExtRow) {
           </tbody>
         </table>
       </div>
-      <div class="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-xs text-text/80">
-        <div class="inline-flex items-center gap-2">
-          <span>{{ t('statisticsPage.perPage') }}</span>
-          <select
-            v-model.number="pageSize"
-            class="rounded border border-primary/40 bg-background px-1.5 py-0.5 text-xs text-text"
-          >
-            <option :value="10">10</option>
-            <option :value="20">20</option>
-            <option :value="50">50</option>
-            <option :value="100">100</option>
-          </select>
-        </div>
-        <div class="inline-flex items-center gap-2">
-          <button
-            type="button"
-            class="rounded border border-primary/30 px-2 py-0.5 disabled:opacity-40"
-            :disabled="page <= 1"
-            @click="page = Math.max(1, page - 1)"
-          >
-            {{ t('admin.pagination.prev') }}
-          </button>
-          <span>{{ t('statisticsPage.pageXOfY', { current: page, total: totalPages }) }}</span>
-          <button
-            type="button"
-            class="rounded border border-primary/30 px-2 py-0.5 disabled:opacity-40"
-            :disabled="page >= totalPages"
-            @click="page = Math.min(totalPages, page + 1)"
-          >
-            {{ t('admin.pagination.next') }}
-          </button>
-        </div>
-      </div>
+      <StatisticsTabPagination
+        v-model:page="page"
+        v-model:page-size="pageSize"
+        :total-pages="totalPages"
+        :total-count="filteredRows.length"
+        :page-size-options="pageSizeOptions"
+      />
     </div>
   </div>
 </template>

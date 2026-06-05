@@ -19,13 +19,19 @@ const props = withDefaults(
     ascDefaultColumns?: string[]
   }>(),
   {
+    id: undefined,
     ascDefaultColumns: () => [],
   }
 )
 
 const { t } = useI18n()
+const { simplifiedStatsEnabled } = useSimplifiedStatsPreference()
 
 const selectId = computed(() => props.id ?? 'statistics-mobile-sort')
+
+const barVisibilityClass = computed(() =>
+  simplifiedStatsEnabled.value ? 'flex' : 'flex md:hidden'
+)
 
 function toggleDirection(): void {
   direction.value = direction.value === 'desc' ? 'asc' : 'desc'
@@ -39,7 +45,10 @@ watch(column, (col, prev) => {
 
 <template>
   <div
-    class="statistics-mobile-sort-bar flex flex-wrap items-end gap-2 rounded-lg border border-primary/25 bg-surface/50 p-2.5 md:hidden"
+    :class="[
+      'statistics-mobile-sort-bar flex-wrap items-end gap-2 rounded-lg border border-primary/25 bg-surface/50 p-2.5',
+      barVisibilityClass,
+    ]"
   >
     <div class="min-w-0 flex-1">
       <label

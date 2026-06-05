@@ -67,6 +67,7 @@
 
     <div class="flex min-h-0 min-w-0 flex-1">
       <button
+        v-if="showDesktopFiltersTrigger"
         type="button"
         class="statistics-filters-desktop-trigger hidden shrink-0 touch-manipulation lg:sticky lg:top-4 lg:z-20 lg:mr-2 lg:flex lg:flex-col lg:items-center lg:gap-1 lg:self-start"
         :aria-label="
@@ -106,27 +107,27 @@
       </button>
 
       <div
-        v-if="filtersOpen && filtersSheetMode"
-        class="fixed inset-0 z-[10050] bg-black/50 lg:hidden"
+        v-if="filtersOpen && effectiveFiltersSheetMode"
+        class="fixed inset-0 z-[10050] bg-black/50"
         aria-hidden="true"
         role="presentation"
         @click="closeFilters"
       />
 
       <aside
-        v-show="filtersOpen || !filtersSheetMode"
+        v-show="filtersOpen || !effectiveFiltersSheetMode"
         :class="[
           'statistics-filters-panel flex shrink-0 flex-col overflow-hidden bg-surface',
-          filtersSheetMode
-            ? 'fixed inset-x-0 bottom-0 top-auto z-[10051] max-h-[85vh] w-full rounded-t-2xl shadow-lg lg:hidden'
+          effectiveFiltersSheetMode
+            ? 'fixed inset-x-0 bottom-0 top-auto z-[10051] max-h-[85vh] w-full rounded-t-2xl shadow-lg'
             : [
                 'hidden w-0 opacity-0 transition-[width,opacity] duration-200',
                 'lg:sticky lg:top-4 lg:z-0 lg:flex lg:h-auto lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:overflow-x-hidden lg:rounded-lg lg:shadow-none',
                 filtersOpen ? 'lg:w-64 lg:opacity-100' : 'lg:w-0 lg:opacity-0',
               ],
         ]"
-        :role="filtersSheetMode ? 'dialog' : undefined"
-        :aria-modal="filtersSheetMode ? true : undefined"
+        :role="effectiveFiltersSheetMode ? 'dialog' : undefined"
+        :aria-modal="effectiveFiltersSheetMode ? true : undefined"
         :aria-label="t('statisticsPage.filtersTitle')"
         @click.stop
       >
@@ -135,7 +136,10 @@
         >
           <button
             type="button"
-            class="mx-auto mb-1 flex h-6 w-14 shrink-0 touch-manipulation items-center justify-center rounded-full lg:hidden"
+            :class="[
+              'mx-auto mb-1 flex h-6 w-14 shrink-0 touch-manipulation items-center justify-center rounded-full',
+              effectiveFiltersSheetMode ? '' : 'lg:hidden',
+            ]"
             :aria-label="t('statisticsPage.closeFilters')"
             @click="closeFilters"
           >
@@ -408,7 +412,10 @@
     <button
       v-if="!filtersOpen"
       type="button"
-      class="statistics-filters-fab fixed bottom-4 left-1/2 z-[58] flex -translate-x-1/2 items-center gap-2 rounded-full border border-primary/40 bg-surface/95 px-4 py-2.5 text-sm font-semibold text-text shadow-lg backdrop-blur-sm lg:hidden"
+      :class="[
+        'statistics-filters-fab fixed bottom-4 left-1/2 z-[58] -translate-x-1/2 items-center gap-2 rounded-full border border-primary/40 bg-surface/95 px-4 py-2.5 text-sm font-semibold text-text shadow-lg backdrop-blur-sm',
+        filtersFabClass,
+      ]"
       :aria-label="t('statisticsPage.openFilters')"
       @click="openFilters"
     >
@@ -476,11 +483,8 @@ const championsStore = useChampionsStore()
 const versionStore = useVersionStore()
 const statisticsUiStore = useStatisticsUiStore()
 const { filtersOpen } = storeToRefs(statisticsUiStore)
-const filtersSheetMode = ref(false)
-let filtersSheetMq: MediaQueryList | null = null
-const onFiltersSheetMqChange = () => {
-  filtersSheetMode.value = filtersSheetMq?.matches ?? false
-}
+const { effectiveFiltersSheetMode, showDesktopFiltersTrigger, filtersFabClass } =
+  useStatisticsFiltersSheetMode()
 const { version: gameVersion } = useGameVersion()
 
 useHead({
@@ -883,13 +887,13 @@ function toggleFiltersOpen() {
 
 function onFiltersEscapeKey(event: KeyboardEvent) {
   if (event.key !== 'Escape' || !filtersOpen.value) return
-  if (!import.meta.client || !filtersSheetMode.value) return
+  if (!import.meta.client || !effectiveFiltersSheetMode.value) return
   closeFilters()
 }
 
-watch([filtersOpen, filtersSheetMode], () => {
+watch([filtersOpen, effectiveFiltersSheetMode], () => {
   if (!import.meta.client) return
-  const lock = filtersSheetMode.value && filtersOpen.value
+  const lock = effectiveFiltersSheetMode.value && filtersOpen.value
   document.body.style.overflow = lock ? 'hidden' : ''
 })
 
@@ -1033,9 +1037,6 @@ onMounted(async () => {
   if (import.meta.client) {
     statisticsUiStore.init()
     document.addEventListener('keydown', onFiltersEscapeKey)
-    filtersSheetMq = window.matchMedia('(max-width: 1023px)')
-    onFiltersSheetMqChange()
-    filtersSheetMq.addEventListener('change', onFiltersSheetMqChange)
   }
   applyTierListStateFromQuery()
   if (!versionStore.currentVersion) {
@@ -1054,7 +1055,6 @@ onMounted(async () => {
 
 onUnmounted(() => {
   document.removeEventListener('keydown', onFiltersEscapeKey)
-  filtersSheetMq?.removeEventListener('change', onFiltersSheetMqChange)
   if (import.meta.client) document.body.style.overflow = ''
 })
 

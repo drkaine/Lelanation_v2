@@ -239,17 +239,50 @@ export function maxOrderKey(displayOrder: number[]): string {
   return maxOrderSkills(displayOrder).join(' > ')
 }
 
+/** Ordre de max approximatif quand l’ordre observé est trop court pour atteindre 5 points. */
+function inferPartialMaxOrder(displayOrder: number[]): SpellOrderSkillKey[] {
+  const counts: Record<SpellOrderSkill, number> = { 1: 0, 2: 0, 3: 0, 4: 0 }
+  const firstSeenAt: Partial<Record<SpellOrderSkill, number>> = {}
+  for (let i = 0; i < displayOrder.length; i++) {
+    const raw = displayOrder[i]
+    if (raw !== 1 && raw !== 2 && raw !== 3 && raw !== 4) continue
+    if (firstSeenAt[raw] == null) firstSeenAt[raw] = i
+    counts[raw]++
+  }
+  const ranked = ([1, 2, 3, 4] as const)
+    .filter(s => counts[s] > 0)
+    .sort((a, b) => counts[b] - counts[a] || (firstSeenAt[a] ?? 0) - (firstSeenAt[b] ?? 0))
+  const basics = ranked.filter(s => s !== 4)
+  const hasR = ranked.includes(4)
+  if (!basics.length) return hasR ? ['R'] : []
+  if (hasR && counts[4] >= counts[basics[0]]) {
+    return ['R', ...basics.slice(0, 2).map(s => skillKeyFromValue(s)!)].filter(Boolean)
+  }
+  const out = basics.slice(0, 2).map(s => skillKeyFromValue(s)!)
+  if (hasR) out.push('R')
+  else if (basics[2]) out.push(skillKeyFromValue(basics[2])!)
+  return out.filter((k): k is SpellOrderSkillKey => k != null)
+}
+
 /** Récap d’une ligne (carte) : 3 premiers niveaux + ordre de max. */
 export function spellOrderRowRecap(displayOrder: number[]): {
   firstThree: SpellOrderSkillKey[]
   maxOrder: SpellOrderSkillKey[]
 } {
+  const orderForMax =
+    displayOrder.length >= EXTRAPOLATE_FROM_LEVEL && displayOrder.length < MAX_LEVEL
+      ? extrapolateSpellOrder(displayOrder)
+      : displayOrder
+  let maxOrder = maxOrderSkills(orderForMax)
+  if (!maxOrder.length && displayOrder.length >= 3) {
+    maxOrder = inferPartialMaxOrder(displayOrder)
+  }
   return {
     firstThree: displayOrder
       .slice(0, 3)
       .map(v => skillKeyFromValue(v))
       .filter((k): k is SpellOrderSkillKey => k != null),
-    maxOrder: maxOrderSkills(displayOrder),
+    maxOrder,
   }
 }
 

@@ -33,6 +33,7 @@
       :first-three="rowRecap.firstThree"
       :max-order="rowRecap.maxOrder"
       :champion-id="championId"
+      :champion-slug="championSlug"
       :game-version="gameVersion"
       :spells="spells"
     />
@@ -41,8 +42,23 @@
       {{ t('statisticsPage.championSpellOrderGames', { count: row.games }) }}
     </div>
 
+    <button
+      v-if="displayLevels.length"
+      type="button"
+      class="mb-2 w-full touch-manipulation rounded border border-primary/25 bg-black/20 px-2 py-1.5 text-left text-[11px] font-medium text-accent/90 transition-colors hover:bg-primary/10"
+      :aria-expanded="levelsExpanded"
+      @click="levelsExpanded = !levelsExpanded"
+    >
+      {{
+        levelsExpanded
+          ? t('statisticsPage.championSpellOrderHideLevelDetail')
+          : t('statisticsPage.championSpellOrderShowLevelDetail')
+      }}
+    </button>
+
     <div
-      class="champion-spell-order-levels grid w-full gap-px"
+      v-show="levelsExpanded"
+      class="champion-spell-order-levels mb-2 grid w-full gap-px"
       :style="{ gridTemplateColumns: `repeat(${displayLevels.length}, minmax(0, 1fr))` }"
     >
       <div
@@ -52,7 +68,7 @@
       >
         <span class="text-[8px] font-medium leading-none text-text/40">{{ level }}</span>
         <div
-          class="champion-spell-order-cell flex aspect-square w-full items-center justify-center rounded-sm border text-[9px] font-bold leading-none"
+          class="champion-spell-order-cell relative flex aspect-square w-full items-center justify-center overflow-visible rounded-sm border text-[8px] font-bold leading-none"
           :class="cellClass(skillAt(level))"
           :title="skillTitle(skillAt(level))"
         >
@@ -63,6 +79,9 @@
             class="h-full w-full rounded-sm object-cover"
           />
           <span v-else-if="skillAt(level)" class="select-none">{{
+            skillDisplayKey(skillAt(level)!)
+          }}</span>
+          <span v-if="skillAt(level)" class="champion-spell-order-cell-key" aria-hidden="true">{{
             skillDisplayKey(skillAt(level)!)
           }}</span>
         </div>
@@ -76,7 +95,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getChampionSpellImageUrl } from '~/utils/imageUrl'
 import ChampionSpellOrderInlineRecap from '~/components/statistics/ChampionSpellOrderInlineRecap.vue'
@@ -90,6 +109,7 @@ type SkillKey = 'Q' | 'W' | 'E' | 'R'
 const props = defineProps<{
   row: ChampionSpellOrderRowMerged
   championId: number
+  championSlug?: string
   gameVersion: string
   spells?: Array<{ name?: string; image?: { full?: string } }>
   /** Conservé pour compat parent ; style carte unifié (DA site). */
@@ -97,6 +117,8 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
+
+const levelsExpanded = ref(false)
 
 const rowRecap = computed(() => spellOrderRowRecap(props.row.displayOrder))
 
@@ -148,10 +170,12 @@ function skillTitle(key: SkillKey | null): string {
 }
 
 function skillIconUrl(key: SkillKey | null): string | null {
-  if (!key || props.championId <= 0) return null
+  if (!key || props.championId <= 0 || !props.gameVersion) return null
   const file = props.spells?.[skillIndex(key)]?.image?.full
-  if (!file || !props.gameVersion) return null
-  return getChampionSpellImageUrl(props.gameVersion, String(props.championId), file)
+  if (file) return getChampionSpellImageUrl(props.gameVersion, String(props.championId), file)
+  const slug = (props.championSlug ?? '').trim()
+  if (!slug) return null
+  return getChampionSpellImageUrl(props.gameVersion, slug, `${slug}${key}.png`)
 }
 
 function cellClass(key: SkillKey | null): string {
@@ -189,5 +213,24 @@ function cellClass(key: SkillKey | null): string {
   border-color: rgb(var(--rgb-accent) / 0.55);
   background: rgb(var(--rgb-accent) / 0.2);
   color: rgb(var(--rgb-accent) / 1);
+}
+
+.champion-spell-order-cell-key {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 11px;
+  height: 11px;
+  padding: 0 1px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.9);
+  color: var(--color-gold-300, #fcd34d);
+  font-size: 7px;
+  font-weight: 700;
+  line-height: 1;
 }
 </style>

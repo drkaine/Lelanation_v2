@@ -45,8 +45,27 @@ const props = withDefaults(
     roleLabel: string
     roleIconSrc: string | null
     referenceVersion?: string | null
+    /** Libellé colonne score (matchup ou synergie). */
+    scoreColumnLabelKey?: string
+    /** Titre section profil de lane / duo. */
+    profileSectionLabelKey?: string
+    /** Sous-titre forces (champion ou duo). */
+    strengthSideLabelKey?: string
+    /** Sous-titre vigilance (adversaire ou duo). */
+    weaknessSideLabelKey?: string
+    /** Contexte des tooltips profil : matchup ou synergie. */
+    profileContext?: 'matchup' | 'synergy'
   }>(),
-  { referenceVersion: null, roleIconSrc: null, portraitSrc: null }
+  {
+    referenceVersion: null,
+    roleIconSrc: null,
+    portraitSrc: null,
+    scoreColumnLabelKey: 'statisticsPage.championMatchupColScore',
+    profileSectionLabelKey: 'statisticsPage.championMatchupColDominance',
+    strengthSideLabelKey: 'statisticsPage.championMatchupProfileChampion',
+    weaknessSideLabelKey: 'statisticsPage.championMatchupProfileOpponent',
+    profileContext: 'matchup',
+  }
 )
 
 const emit = defineEmits<{ toggle: [] }>()
@@ -123,10 +142,7 @@ function laneProfileChipTitle(
   const lvl =
     level ??
     (side === 'strength' ? ('smallAdvantage' as MatchupsExtSignalLevel) : 'smallDisadvantage')
-  const who =
-    side === 'strength'
-      ? t('statisticsPage.championMatchupProfileChampion')
-      : t('statisticsPage.championMatchupProfileOpponent')
+  const who = side === 'strength' ? t(props.strengthSideLabelKey) : t(props.weaknessSideLabelKey)
   return `${who} — ${t(`statisticsPage.championMatchupDominance.${key}`)} (${t(`statisticsPage.championMatchupSignalLevel.${lvl}`)}): ${t(`statisticsPage.championMatchupDominanceDetail.${key}`)}`
 }
 </script>
@@ -148,43 +164,42 @@ function laneProfileChipTitle(
       />
       <button
         type="button"
-        class="flex min-w-0 flex-1 touch-manipulation justify-end gap-3 text-right"
+        class="matchup-card-metrics flex min-w-0 flex-1 touch-manipulation justify-end text-right"
         @click="emit('toggle')"
       >
-        <div class="min-w-0 shrink">
-          <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
-            {{ t('statisticsPage.winrate') }}
+        <div class="matchup-card-metrics-grid min-w-0">
+          <div class="matchup-card-metric min-w-0">
+            <div class="matchup-card-metric-label">
+              {{ t('statisticsPage.winrate') }}
+            </div>
+            <div class="matchup-card-metric-value tabular-nums" :class="winrateClass(row.winrate)">
+              {{ row.winrate.toFixed(2) }}%
+            </div>
+            <div
+              v-if="patchRefLabel && row.winrateDeltaVsReference != null"
+              class="matchup-card-metric-delta tabular-nums"
+              :class="deltaClass(row.winrateDeltaVsReference)"
+            >
+              {{ formatSignedDelta(row.winrateDeltaVsReference) }}
+            </div>
           </div>
-          <div
-            class="text-2xl font-bold tabular-nums leading-none sm:text-3xl"
-            :class="winrateClass(row.winrate)"
-          >
-            {{ row.winrate.toFixed(2) }}%
-          </div>
-          <div
-            v-if="patchRefLabel && row.winrateDeltaVsReference != null"
-            class="mt-0.5 text-xs tabular-nums leading-none"
-            :class="deltaClass(row.winrateDeltaVsReference)"
-          >
-            {{ formatSignedDelta(row.winrateDeltaVsReference) }}
-          </div>
-        </div>
-        <div class="min-w-0 shrink">
-          <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
-            {{ t('statisticsPage.championMatchupColScore') }}
-          </div>
-          <div
-            class="text-2xl font-bold tabular-nums leading-none sm:text-3xl"
-            :class="scoreClass(row.matchupScore)"
-          >
-            {{ row.matchupScore.toFixed(2) }}
-          </div>
-          <div
-            v-if="patchRefLabel && row.matchupScoreDeltaVsReference != null"
-            class="mt-0.5 text-xs tabular-nums leading-none"
-            :class="deltaClass(row.matchupScoreDeltaVsReference)"
-          >
-            {{ formatSignedDelta(row.matchupScoreDeltaVsReference) }}
+          <div class="matchup-card-metric min-w-0">
+            <div class="matchup-card-metric-label truncate" :title="t(scoreColumnLabelKey)">
+              {{ t(scoreColumnLabelKey) }}
+            </div>
+            <div
+              class="matchup-card-metric-value tabular-nums"
+              :class="scoreClass(row.matchupScore)"
+            >
+              {{ row.matchupScore.toFixed(2) }}
+            </div>
+            <div
+              v-if="patchRefLabel && row.matchupScoreDeltaVsReference != null"
+              class="matchup-card-metric-delta tabular-nums"
+              :class="deltaClass(row.matchupScoreDeltaVsReference)"
+            >
+              {{ formatSignedDelta(row.matchupScoreDeltaVsReference) }}
+            </div>
           </div>
         </div>
       </button>
@@ -255,14 +270,14 @@ function laneProfileChipTitle(
       </div>
       <div class="border-t border-primary/15 pt-2">
         <div class="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-text/55">
-          {{ t('statisticsPage.championMatchupColDominance') }}
+          {{ t(profileSectionLabelKey) }}
         </div>
         <div v-if="row.dominanceKeys?.length" class="mb-2">
           <div
             class="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-400"
           >
             <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" aria-hidden="true" />
-            {{ t('statisticsPage.championMatchupProfileChampion') }}
+            {{ t(strengthSideLabelKey) }}
           </div>
           <div class="flex flex-wrap gap-1">
             <span
@@ -293,8 +308,14 @@ function laneProfileChipTitle(
             class="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-rose-400"
           >
             <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400" aria-hidden="true" />
-            {{ t('statisticsPage.championMatchupProfileOpponent') }}
+            {{ t(weaknessSideLabelKey) }}
           </div>
+          <p
+            v-if="profileContext === 'synergy'"
+            class="mb-1.5 text-[10px] leading-snug text-text/55"
+          >
+            {{ t('statisticsPage.championSynergyProfileWarningsHint') }}
+          </p>
           <div class="flex flex-wrap gap-1">
             <span
               v-for="k in row.weaknessKeys"
@@ -329,3 +350,34 @@ function laneProfileChipTitle(
     </div>
   </article>
 </template>
+
+<style scoped>
+.matchup-card-metrics-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.35rem 0.5rem;
+  width: 100%;
+  max-width: 9.5rem;
+}
+
+.matchup-card-metric-label {
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgb(var(--rgb-text) / 0.55);
+}
+
+.matchup-card-metric-value {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.matchup-card-metric-delta {
+  margin-top: 1px;
+  font-size: 10px;
+  line-height: 1.1;
+}
+</style>
