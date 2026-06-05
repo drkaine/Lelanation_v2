@@ -22,7 +22,13 @@ function pct(value: number | null | undefined): string {
 function delta(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return ''
   const sign = value > 0 ? '+' : ''
-  return `(${sign}${Number(value).toFixed(2)} %)`
+  return `${sign}${Number(value).toFixed(2)}%`
+}
+
+function formatStatCount(value: number): string {
+  return Math.round(Number(value))
+    .toLocaleString('fr-FR')
+    .replace(/\u202F/g, '')
 }
 
 function deltaClass(value: number | null | undefined): string {
@@ -61,6 +67,14 @@ function playedCount(row: Row | null | undefined): number {
   return Math.max(0, Number(row.matchCount ?? 0) - Number(row.surrenderCount ?? 0))
 }
 
+function rowHasData(row: Row | null | undefined): boolean {
+  return !!row && Number(row.matchCount) > 0
+}
+
+function groupHasData(group: { all: Row | null; blue: Row | null; red: Row | null }): boolean {
+  return rowHasData(group.all) || rowHasData(group.blue) || rowHasData(group.red)
+}
+
 function outcomePct(part: number, total: number): string {
   if (!total || total <= 0) return '0.00'
   return ((part / total) * 100).toFixed(2)
@@ -92,7 +106,7 @@ const groupedRows = computed(() => {
   ]
   return order
     .map(rank => ({ rank, ...(byRank.get(rank) ?? { all: null, blue: null, red: null }) }))
-    .filter(g => g.all || g.blue || g.red)
+    .filter(groupHasData)
 })
 
 function rankIcon(rank: string): string {
@@ -140,9 +154,14 @@ function rankIcon(rank: string): string {
               >
                 {{ rankLabel(group.rank) }}
               </h3>
-              <span v-if="group.all?.matchCount" class="shrink-0 text-xs tabular-nums text-text/60">
+              <span
+                v-if="group.all?.matchCount"
+                class="statistics-surrender-mobile-match-count shrink-0 text-[10px] tabular-nums leading-tight text-text/60"
+              >
                 {{ Number(group.all.matchCount).toLocaleString() }}
-                {{ p.t('statisticsPage.overviewDurationWinrateTooltipMatches') }}
+                <span class="statistics-surrender-mobile-match-count-label">
+                  {{ p.t('statisticsPage.overviewDurationWinrateTooltipMatches') }}
+                </span>
               </span>
             </button>
 
@@ -156,43 +175,68 @@ function rankIcon(rank: string): string {
                 :surrender-only="surrenderOnlyCount(group.all)"
                 :played="playedCount(group.all)"
               />
-              <div class="statistics-surrender-mobile-details w-full min-w-0 space-y-1.5 text-sm">
-                <div class="font-medium text-text">
+              <div class="statistics-surrender-mobile-details w-full min-w-0 space-y-1.5">
+                <div class="statistics-surrender-details-title font-medium text-text/90">
                   {{ p.t('statisticsPage.overviewMatchOutcomesTitle') }}
                 </div>
-                <div class="flex items-center gap-2 text-text/85">
-                  <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-300" />
-                  &lt;15 min surrender:
-                  {{ Number(group.all.earlySurrenderCount).toLocaleString() }} ({{
-                    outcomePct(Number(group.all.earlySurrenderCount), Number(group.all.matchCount))
-                  }}%)
-                  <span
-                    v-if="delta(group.all.earlySurrenderDelta)"
-                    :class="deltaClass(group.all.earlySurrenderDelta)"
-                    class="tabular-nums"
-                  >
-                    {{ delta(group.all.earlySurrenderDelta) }}
+                <div class="statistics-surrender-stat-block">
+                  <span class="statistics-surrender-stat-label">
+                    <span class="statistics-surrender-stat-dot bg-amber-300" />
+                    <span>{{ p.t('statisticsPage.surrenderStatEarlyShort') }}</span>
+                  </span>
+                  <span class="statistics-surrender-stat-value">
+                    {{ formatStatCount(Number(group.all.earlySurrenderCount)) }}
+                    <span class="text-text/55"
+                      >({{
+                        outcomePct(
+                          Number(group.all.earlySurrenderCount),
+                          Number(group.all.matchCount)
+                        )
+                      }}%)</span
+                    >
+                    <span
+                      v-if="delta(group.all.earlySurrenderDelta)"
+                      class="statistics-surrender-stat-delta"
+                      :class="deltaClass(group.all.earlySurrenderDelta)"
+                    >
+                      {{ delta(group.all.earlySurrenderDelta) }}
+                    </span>
                   </span>
                 </div>
-                <div class="flex items-center gap-2 text-text/85">
-                  <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-100" />
-                  {{ p.t('statisticsPage.abandonsSurrenderRate') }}:
-                  {{ surrenderOnlyCount(group.all).toLocaleString() }} ({{
-                    outcomePct(surrenderOnlyCount(group.all), Number(group.all.matchCount))
-                  }}%)
-                  <span
-                    v-if="delta(group.all.surrenderDelta)"
-                    :class="deltaClass(group.all.surrenderDelta)"
-                    class="tabular-nums"
-                  >
-                    {{ delta(group.all.surrenderDelta) }}
+                <div class="statistics-surrender-stat-block">
+                  <span class="statistics-surrender-stat-label">
+                    <span class="statistics-surrender-stat-dot bg-amber-100" />
+                    <span>{{ p.t('statisticsPage.surrenderStatSurrenderShort') }}</span>
+                  </span>
+                  <span class="statistics-surrender-stat-value">
+                    {{ formatStatCount(surrenderOnlyCount(group.all)) }}
+                    <span class="text-text/55"
+                      >({{
+                        outcomePct(surrenderOnlyCount(group.all), Number(group.all.matchCount))
+                      }}%)</span
+                    >
+                    <span
+                      v-if="delta(group.all.surrenderDelta)"
+                      class="statistics-surrender-stat-delta"
+                      :class="deltaClass(group.all.surrenderDelta)"
+                    >
+                      {{ delta(group.all.surrenderDelta) }}
+                    </span>
                   </span>
                 </div>
-                <div class="flex items-center gap-2 text-text/85">
-                  <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-blue-400" />
-                  Jouées: {{ playedCount(group.all).toLocaleString() }} ({{
-                    outcomePct(playedCount(group.all), Number(group.all.matchCount))
-                  }}%)
+                <div class="statistics-surrender-stat-block">
+                  <span class="statistics-surrender-stat-label">
+                    <span class="statistics-surrender-stat-dot bg-blue-400" />
+                    <span>{{ p.t('statisticsPage.surrenderPlayedMatches') }}</span>
+                  </span>
+                  <span class="statistics-surrender-stat-value">
+                    {{ formatStatCount(playedCount(group.all)) }}
+                    <span class="text-text/55"
+                      >({{
+                        outcomePct(playedCount(group.all), Number(group.all.matchCount))
+                      }}%)</span
+                    >
+                  </span>
                 </div>
               </div>
             </div>
@@ -217,25 +261,35 @@ function rankIcon(rank: string): string {
                     :surrender-only="surrenderOnlyCount(group.blue)"
                     :played="playedCount(group.blue)"
                   />
-                  <div class="w-full min-w-0 space-y-1 text-[11px] text-text/85">
-                    <div>
-                      {{ p.t('statisticsPage.abandonsSurrenderRate') }}:
-                      {{ pct(group.blue.surrenderRate) }}
-                      <span
-                        v-if="delta(group.blue.surrenderDelta)"
-                        :class="deltaClass(group.blue.surrenderDelta)"
-                      >
-                        {{ delta(group.blue.surrenderDelta) }}
+                  <div class="w-full min-w-0 space-y-1.5">
+                    <div class="statistics-surrender-stat-block">
+                      <span class="statistics-surrender-stat-label">
+                        {{ p.t('statisticsPage.surrenderStatSurrenderShort') }}
+                      </span>
+                      <span class="statistics-surrender-stat-value">
+                        {{ pct(group.blue.surrenderRate) }}
+                        <span
+                          v-if="delta(group.blue.surrenderDelta)"
+                          class="statistics-surrender-stat-delta"
+                          :class="deltaClass(group.blue.surrenderDelta)"
+                        >
+                          {{ delta(group.blue.surrenderDelta) }}
+                        </span>
                       </span>
                     </div>
-                    <div>
-                      {{ p.t('statisticsPage.abandonsEarlySurrenderRate') }}:
-                      {{ pct(group.blue.earlySurrenderRate) }}
-                      <span
-                        v-if="delta(group.blue.earlySurrenderDelta)"
-                        :class="deltaClass(group.blue.earlySurrenderDelta)"
-                      >
-                        {{ delta(group.blue.earlySurrenderDelta) }}
+                    <div class="statistics-surrender-stat-block">
+                      <span class="statistics-surrender-stat-label">
+                        {{ p.t('statisticsPage.surrenderStatEarlyShort') }}
+                      </span>
+                      <span class="statistics-surrender-stat-value">
+                        {{ pct(group.blue.earlySurrenderRate) }}
+                        <span
+                          v-if="delta(group.blue.earlySurrenderDelta)"
+                          class="statistics-surrender-stat-delta"
+                          :class="deltaClass(group.blue.earlySurrenderDelta)"
+                        >
+                          {{ delta(group.blue.earlySurrenderDelta) }}
+                        </span>
                       </span>
                     </div>
                   </div>
@@ -254,25 +308,35 @@ function rankIcon(rank: string): string {
                     :surrender-only="surrenderOnlyCount(group.red)"
                     :played="playedCount(group.red)"
                   />
-                  <div class="w-full min-w-0 space-y-1 text-[11px] text-text/85">
-                    <div>
-                      {{ p.t('statisticsPage.abandonsSurrenderRate') }}:
-                      {{ pct(group.red.surrenderRate) }}
-                      <span
-                        v-if="delta(group.red.surrenderDelta)"
-                        :class="deltaClass(group.red.surrenderDelta)"
-                      >
-                        {{ delta(group.red.surrenderDelta) }}
+                  <div class="w-full min-w-0 space-y-1.5">
+                    <div class="statistics-surrender-stat-block">
+                      <span class="statistics-surrender-stat-label">
+                        {{ p.t('statisticsPage.surrenderStatSurrenderShort') }}
+                      </span>
+                      <span class="statistics-surrender-stat-value">
+                        {{ pct(group.red.surrenderRate) }}
+                        <span
+                          v-if="delta(group.red.surrenderDelta)"
+                          class="statistics-surrender-stat-delta"
+                          :class="deltaClass(group.red.surrenderDelta)"
+                        >
+                          {{ delta(group.red.surrenderDelta) }}
+                        </span>
                       </span>
                     </div>
-                    <div>
-                      {{ p.t('statisticsPage.abandonsEarlySurrenderRate') }}:
-                      {{ pct(group.red.earlySurrenderRate) }}
-                      <span
-                        v-if="delta(group.red.earlySurrenderDelta)"
-                        :class="deltaClass(group.red.earlySurrenderDelta)"
-                      >
-                        {{ delta(group.red.earlySurrenderDelta) }}
+                    <div class="statistics-surrender-stat-block">
+                      <span class="statistics-surrender-stat-label">
+                        {{ p.t('statisticsPage.surrenderStatEarlyShort') }}
+                      </span>
+                      <span class="statistics-surrender-stat-value">
+                        {{ pct(group.red.earlySurrenderRate) }}
+                        <span
+                          v-if="delta(group.red.earlySurrenderDelta)"
+                          class="statistics-surrender-stat-delta"
+                          :class="deltaClass(group.red.earlySurrenderDelta)"
+                        >
+                          {{ delta(group.red.earlySurrenderDelta) }}
+                        </span>
                       </span>
                     </div>
                   </div>
@@ -404,6 +468,55 @@ function rankIcon(rank: string): string {
 .statistics-surrender-mobile-list {
   width: 100%;
   max-width: 100%;
+}
+
+.statistics-surrender-mobile-details {
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.statistics-surrender-details-title {
+  font-size: 10px;
+}
+
+.statistics-surrender-stat-block {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.statistics-surrender-stat-label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: rgb(var(--rgb-text) / 0.72);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.statistics-surrender-stat-dot {
+  display: inline-block;
+  height: 0.4rem;
+  width: 0.4rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+}
+
+.statistics-surrender-stat-value {
+  display: block;
+  padding-left: 0.7rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: rgb(var(--rgb-text) / 0.92);
+}
+
+.statistics-surrender-stat-delta {
+  margin-left: 0.2rem;
+  font-size: 9px;
 }
 
 @media (max-width: 768px) {

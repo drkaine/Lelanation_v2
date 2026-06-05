@@ -1,0 +1,90 @@
+{
+  "version": "26.12",
+  "date": "2026-06-04",
+  "summary": {
+    "fr": "Résumé du patch en français.",
+    "en": "Patch summary in English."
+  },
+  "highlights": [
+    {
+      "title_fr": "Titre highlight FR",
+      "title_en": "Highlight title EN",
+      "image_url": "https://ddragon.leagueoflegends.com/cdn/img/champion/splash/Ahri_0.jpg"
+    }
+  ],
+  "champions": [
+    {
+      "slug": "ahri",
+      "name_fr": "Ahri",
+      "name_en": "Ahri",
+      "image_url": "https://ddragon.leagueoflegends.com/cdn/16.11.1/img/champion/Ahri.png",
+      "ddragon_id": "Ahri",
+      "global_type": "buff",
+      "changes": [
+        {
+          "stat": "Dégâts de base",
+          "old_value": "55",
+          "new_value": "58",
+          "type": "buff",
+          "description_fr": "Orbe du trompeur : dégâts de base augmentés.",
+          "description_en": "Orb of Deception: base damage increased."
+        }
+      ]
+    }
+  ],
+  "items": [
+    {
+      "slug": "trinity-force",
+      "name_fr": "Force de la Trinité",
+      "name_en": "Trinity Force",
+      "image_url": "https://ddragon.leagueoflegends.com/cdn/16.11.1/img/item/3078.png",
+      "ddragon_id": "3078",
+      "global_type": "nerf",
+      "changes": [
+        {
+          "stat": "Dégâts bonus",
+          "old_value": "4%",
+          "new_value": "3%",
+          "type": "nerf",
+          "description_fr": "Dégâts bonus réduits.",
+          "description_en": "Bonus damage reduced."
+        }
+      ]
+    }
+  ],
+  "runes": [
+    {
+      "slug": "conqueror",
+      "name_fr": "Conquérant",
+      "name_en": "Conqueror",
+      "ddragon_id": "8010",
+      "global_type": "adjust",
+      "changes": [
+        {
+          "stat": "Stacks max",
+          "old_value": "12",
+          "new_value": "10",
+          "type": "adjust",
+          "description_fr": "Stacks maximum réduits.",
+          "description_en": "Maximum stacks reduced."
+        }
+      ]
+    }
+  ],
+  "systems": [
+    {
+      "title_fr": "Arène",
+      "title_en": "Arena",
+      "content_fr": "Ajustements mineurs du mode Arène.",
+      "content_en": "Minor Arena mode adjustments."
+    }
+  ],
+  "skins": [
+    {
+      "name_fr": "Sion Hextech",
+      "name_en": "Hextech Sion",
+      "champion": "Sion",
+      "image_url": "https://ddragon.leagueoflegends.com/cdn/img/champion/splash/Sion_0.jpg"
+    }
+  ]
+}

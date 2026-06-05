@@ -1760,8 +1760,6 @@ import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import { useVersionStore } from '~/stores/VersionStore'
 import { useStatisticsUiStore } from '~/stores/StatisticsUiStore'
 import { useStatisticsCustomStore } from '~/stores/StatisticsCustomStore'
-import StatisticsRunesTab from '~/components/statistics/tabs/StatisticsRunesTab.vue'
-import StatisticsSpellsTab from '~/components/statistics/tabs/StatisticsSpellsTab.vue'
 import ChampionMatchupMobileCard, {
   type MatchupsExtDominanceKey,
   type MatchupsExtRow,
@@ -1789,6 +1787,12 @@ import { getRankedEmblemUrl } from '~/utils/rankedEmblem'
 import { rankTierSelectionsEqual } from '~/utils/statisticsRankTierQuery'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { statsRoleIconPath, statsRoleLabel } from '~/utils/statsRoleDisplay'
+const StatisticsRunesTab = defineAsyncComponent(
+  () => import('~/components/statistics/tabs/StatisticsRunesTab.vue')
+)
+const StatisticsSpellsTab = defineAsyncComponent(
+  () => import('~/components/statistics/tabs/StatisticsSpellsTab.vue')
+)
 definePageMeta({
   layout: 'default',
 })

@@ -1,0 +1,76 @@
+{
+  "version": "26.12",
+  "date": "2026-06-04",
+  "summary": {
+    "fr": "Patch 26.12 — nerfs ciblés sur les ADC et ajustements runes.",
+    "en": "Patch 26.12 — targeted ADC nerfs and rune adjustments."
+  },
+  "highlights": [
+    {
+      "title_fr": "Équilibrage ADC",
+      "title_en": "ADC balance",
+      "image_url": "https://ddragon.leagueoflegends.com/cdn/img/champion/splash/Jinx_0.jpg"
+    }
+  ],
+  "champions": [
+    {
+      "slug": "jinx",
+      "name_fr": "Jinx",
+      "name_en": "Jinx",
+      "image_url": "https://ddragon.leagueoflegends.com/cdn/16.11.1/img/champion/Jinx.png",
+      "ddragon_id": "Jinx",
+      "global_type": "nerf",
+      "changes": [
+        {
+          "stat": "Portée (W)",
+          "old_value": "1450",
+          "new_value": "1400",
+          "type": "nerf",
+          "description_fr": "Zap ! : portée réduite.",
+          "description_en": "Zap!: range reduced."
+        }
+      ]
+    }
+  ],
+  "items": [
+    {
+      "slug": "lord-dominiks-regards",
+      "name_fr": "Regard dominant de Lord",
+      "name_en": "Lord Dominik's Regards",
+      "image_url": "https://ddragon.leagueoflegends.com/cdn/16.11.1/img/item/3036.png",
+      "ddragon_id": "3036",
+      "global_type": "nerf",
+      "changes": [
+        {
+          "stat": "Pénétration d'armure",
+          "old_value": "30%",
+          "new_value": "25%",
+          "type": "nerf",
+          "description_fr": "Pénétration d'armure réduite.",
+          "description_en": "Armor penetration reduced."
+        }
+      ]
+    }
+  ],
+  "runes": [
+    {
+      "slug": "lethal-tempo",
+      "name_fr": "Tempo mortel",
+      "name_en": "Lethal Tempo",
+      "ddragon_id": "8008",
+      "global_type": "nerf",
+      "changes": [
+        {
+          "stat": "Vitesse d'attaque",
+          "old_value": "60%",
+          "new_value": "50%",
+          "type": "nerf",
+          "description_fr": "Bonus de vitesse d'attaque réduit.",
+          "description_en": "Attack speed bonus reduced."
+        }
+      ]
+    }
+  ],
+  "systems": [],
+  "skins": []
+}

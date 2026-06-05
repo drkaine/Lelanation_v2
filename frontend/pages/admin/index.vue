@@ -10,6 +10,12 @@
           </p>
         </div>
         <div class="flex items-center gap-2">
+          <NuxtLink
+            :to="localePath('/admin/patch-notes')"
+            class="rounded-lg border border-primary bg-surface px-4 py-2 text-sm text-text transition-colors hover:bg-primary hover:text-white"
+          >
+            {{ t('admin.patchNotes.title') }}
+          </NuxtLink>
           <button
             type="button"
             class="rounded-lg border border-primary bg-surface px-4 py-2 text-sm text-text transition-colors hover:bg-primary hover:text-white"

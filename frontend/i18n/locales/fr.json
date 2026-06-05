@@ -9,6 +9,7 @@
     "map": "Map",
     "statistics": "Statistiques",
     "tierList": "Tier list",
+    "patchNotes": "Notes de patch",
     "admin": "Admin",
     "theorycraft": "Theorycraft",
     "appAdmin": "Lelanation App",
@@ -658,6 +659,9 @@
     "abandonsRemakeRate": "Taux remake",
     "abandonsSurrenderRate": "Taux surrender",
     "abandonsEarlySurrenderRate": "Taux surrender avant 15 minutes",
+    "surrenderPlayedMatches": "Jouées",
+    "surrenderStatEarlyShort": "<15 min",
+    "surrenderStatSurrenderShort": "Surrender",
     "progressionsTitle": "Progressions depuis le dernier patch",
     "progressionsDescription": "Comparaison depuis la version {version} : évolution du winrate et de la popularité (pickrate) sur l'ensemble des versions depuis.",
     "progressionsReferenceVersion": "Version de référence (delta depuis)",
@@ -1582,6 +1586,28 @@
       }
     }
   },
+  "patchNotesPage": {
+    "metaTitle": "Notes de patch {version} | Lelanation",
+    "metaTitleFallback": "Notes de patch | Lelanation",
+    "metaDescription": "Résumé des changements du dernier patch League of Legends : champions, objets, runes et systèmes.",
+    "loading": "Chargement des notes de patch…",
+    "loadError": "Impossible de charger les notes de patch.",
+    "notFound": "Aucune note de patch disponible.",
+    "eyebrow": "League of Legends",
+    "title": "Notes de patch {version}",
+    "selectPatch": "Choisir un patch",
+    "latest": "dernier",
+    "officialLink": "Voir sur leagueoflegends.com",
+    "highlights": "Temps forts",
+    "moreChanges": "autres changements",
+    "sections": {
+      "champions": "Champions",
+      "items": "Objets",
+      "runes": "Runes",
+      "systems": "Systèmes",
+      "skins": "Skins"
+    }
+  },
   "videosPage": {
     "metaTitle": "Vidéos League of Legends - Builds et guides | Lelanation",
     "metaDescription": "Vidéos et guides League of Legends : builds, tier lists, meta. Contenu Lelariva et communauté. Découvrez les builds populaires en vidéo.",
@@ -1627,6 +1653,34 @@
       "videos": "Vidéos",
       "data": "Data",
       "logs": "Logs"
+    },
+    "patchNotes": {
+      "title": "Admin · Patch notes",
+      "subtitle": "Visualisation JSON des patch notes (admin uniquement).",
+      "backToAdmin": "Retour admin",
+      "selectPatch": "Patch",
+      "patchList": "Patches disponibles",
+      "latest": "Dernier",
+      "reload": "Recharger",
+      "summary": "Résumé",
+      "highlights": "Temps forts",
+      "emptySection": "Aucune entrée pour cette section.",
+      "buildChecker": "Build checker (démo)",
+      "buildCheckerHint": "Teste le score d'un build fictif contre les patches JSON chargés.",
+      "runDemoCheck": "Lancer check démo (Darius + TF + Lethal Tempo)",
+      "noAffected": "Aucune entité affectée depuis la création du build.",
+      "tabs": {
+        "champions": "Champions",
+        "items": "Objets",
+        "runes": "Runes",
+        "systems": "Systèmes",
+        "skins": "Skins"
+      },
+      "status": {
+        "current": "À jour",
+        "affected": "Affecté",
+        "outdated": "Dépassé"
+      }
     },
     "logs": {
       "title": "Logs unifiés",

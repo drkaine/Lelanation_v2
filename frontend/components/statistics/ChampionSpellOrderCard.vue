@@ -1,6 +1,23 @@
 <template>
   <article
-    class="champion-spell-order-card flex flex-col rounded-lg border border-primary/25 bg-background/35 p-2.5"
+    class="champion-spell-order-card flex flex-col rounded-lg border border-primary/25 bg-background/35 p-2.5 transition-colors"
+    :class="[
+      canExpandLevels ? 'cursor-pointer touch-manipulation hover:border-primary/40' : '',
+      levelsExpanded ? 'border-accent/35 bg-background/45' : '',
+    ]"
+    :role="canExpandLevels ? 'button' : undefined"
+    :tabindex="canExpandLevels ? 0 : undefined"
+    :aria-expanded="canExpandLevels ? levelsExpanded : undefined"
+    :aria-label="
+      canExpandLevels
+        ? levelsExpanded
+          ? t('statisticsPage.championSpellOrderHideLevelDetail')
+          : t('statisticsPage.championSpellOrderShowLevelDetail')
+        : undefined
+    "
+    @click="toggleLevels"
+    @keydown.enter.prevent="toggleLevels"
+    @keydown.space.prevent="toggleLevels"
   >
     <div class="mb-2.5 grid grid-cols-2 gap-2">
       <div class="rounded-md bg-black/25 px-2 py-1.5">
@@ -42,24 +59,11 @@
       {{ t('statisticsPage.championSpellOrderGames', { count: row.games }) }}
     </div>
 
-    <button
-      v-if="displayLevels.length"
-      type="button"
-      class="mb-2 w-full touch-manipulation rounded border border-primary/25 bg-black/20 px-2 py-1.5 text-left text-[11px] font-medium text-accent/90 transition-colors hover:bg-primary/10"
-      :aria-expanded="levelsExpanded"
-      @click="levelsExpanded = !levelsExpanded"
-    >
-      {{
-        levelsExpanded
-          ? t('statisticsPage.championSpellOrderHideLevelDetail')
-          : t('statisticsPage.championSpellOrderShowLevelDetail')
-      }}
-    </button>
-
     <div
       v-show="levelsExpanded"
       class="champion-spell-order-levels mb-2 grid w-full gap-px"
       :style="{ gridTemplateColumns: `repeat(${displayLevels.length}, minmax(0, 1fr))` }"
+      @click.stop
     >
       <div
         v-for="level in displayLevels"
@@ -126,6 +130,13 @@ const displayLevels = computed(() => {
   const n = Math.min(18, props.row.displayOrder.length)
   return Array.from({ length: n }, (_, i) => i + 1)
 })
+
+const canExpandLevels = computed(() => displayLevels.value.length > 0)
+
+function toggleLevels() {
+  if (!canExpandLevels.value) return
+  levelsExpanded.value = !levelsExpanded.value
+}
 
 const extrapolatedHint = computed(() => {
   if (props.row.mergedFromPartial > 0 && props.row.mergedFromPartial < props.row.games) {

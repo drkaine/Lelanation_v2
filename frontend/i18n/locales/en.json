@@ -9,6 +9,7 @@
     "map": "Map",
     "statistics": "Statistics",
     "tierList": "Tier list",
+    "patchNotes": "Patch notes",
     "admin": "Admin",
     "theorycraft": "Theorycraft",
     "appAdmin": "Lelanation App",
@@ -657,6 +658,9 @@
     "abandonsRemakeRate": "Remake rate",
     "abandonsSurrenderRate": "Surrender rate",
     "abandonsEarlySurrenderRate": "Surrender rate before 15 minutes",
+    "surrenderPlayedMatches": "Played",
+    "surrenderStatEarlyShort": "<15 min",
+    "surrenderStatSurrenderShort": "Surrender",
     "progressionsTitle": "Progressions since last patch",
     "progressionsDescription": "Comparison since version {version}: winrate and popularity (pickrate) evolution across all versions since.",
     "progressionsReferenceVersion": "Reference version (delta since)",
@@ -1576,6 +1580,28 @@
       }
     }
   },
+  "patchNotesPage": {
+    "metaTitle": "Patch {version} Notes | Lelanation",
+    "metaTitleFallback": "Patch Notes | Lelanation",
+    "metaDescription": "Summary of the latest League of Legends patch: champions, items, runes and systems.",
+    "loading": "Loading patch notes…",
+    "loadError": "Could not load patch notes.",
+    "notFound": "No patch notes available.",
+    "eyebrow": "League of Legends",
+    "title": "Patch {version} Notes",
+    "selectPatch": "Select patch",
+    "latest": "latest",
+    "officialLink": "View on leagueoflegends.com",
+    "highlights": "Highlights",
+    "moreChanges": "more changes",
+    "sections": {
+      "champions": "Champions",
+      "items": "Items",
+      "runes": "Runes",
+      "systems": "Systems",
+      "skins": "Skins"
+    }
+  },
   "videosPage": {
     "metaTitle": "League of Legends videos - Builds and guides | Lelanation",
     "metaDescription": "League of Legends videos and guides: builds, tier lists, meta. Lelariva and community content. Discover popular builds on video.",
@@ -1621,6 +1647,34 @@
       "videos": "Videos",
       "data": "Data",
       "logs": "Logs"
+    },
+    "patchNotes": {
+      "title": "Admin · Patch notes",
+      "subtitle": "JSON patch notes viewer (admin only).",
+      "backToAdmin": "Back to admin",
+      "selectPatch": "Patch",
+      "patchList": "Available patches",
+      "latest": "Latest",
+      "reload": "Reload",
+      "summary": "Summary",
+      "highlights": "Highlights",
+      "emptySection": "No entries in this section.",
+      "buildChecker": "Build checker (demo)",
+      "buildCheckerHint": "Tests a sample build score against loaded patch JSON files.",
+      "runDemoCheck": "Run demo check (Darius + TF + Lethal Tempo)",
+      "noAffected": "No entities affected since build creation.",
+      "tabs": {
+        "champions": "Champions",
+        "items": "Items",
+        "runes": "Runes",
+        "systems": "Systems",
+        "skins": "Skins"
+      },
+      "status": {
+        "current": "Up to date",
+        "affected": "Affected",
+        "outdated": "Outdated"
+      }
     },
     "logs": {
       "title": "Unified logs",

@@ -816,7 +816,8 @@ html[data-stats-cards='1'] .champion-stats .hidden.md\:block {
       .statistics-items-mobile-list,
       .statistics-balance-mobile-list,
       .statistics-infos-mobile-list,
-      .statistics-objectives-mobile-list
+      .statistics-objectives-mobile-list,
+      .statistics-surrender-mobile-list
     ) {
     display: flex !important;
     flex-flow: row wrap;
@@ -840,7 +841,8 @@ html[data-stats-cards='1'] .champion-stats .hidden.md\:block {
       .statistics-items-mobile-list,
       .statistics-balance-mobile-list,
       .statistics-infos-mobile-list,
-      .statistics-objectives-mobile-list
+      .statistics-objectives-mobile-list,
+      .statistics-surrender-mobile-list
     )
     > * {
     margin-top: 0 !important;
@@ -852,6 +854,7 @@ html[data-stats-cards='1'] .champion-stats .hidden.md\:block {
       .statistics-infos-mobile-card,
       .statistics-tier-list-mobile-card,
       .statistics-objectives-mobile-card,
+      .statistics-surrender-mobile-card,
       .statistics-surrender-mobile-side-card
     ) {
     width: var(--stats-simplified-card-width) !important;
@@ -863,6 +866,34 @@ html[data-stats-cards='1'] .champion-stats .hidden.md\:block {
     border-radius: 0.5rem !important;
     border: 1px solid rgb(var(--rgb-primary) / 0.3) !important;
     box-sizing: border-box;
+  }
+
+  html[data-stats-cards='1'] .statistics-surrender-mobile-card {
+    padding: 0.75rem !important;
+    background: rgb(8 16 31 / 0.45) !important;
+    box-shadow: none !important;
+  }
+
+  html[data-stats-cards='1'] .statistics-surrender-mobile-rank-title {
+    font-size: 0.875rem !important;
+  }
+
+  html[data-stats-cards='1'] .statistics-surrender-mobile-match-count-label {
+    display: none;
+  }
+
+  html[data-stats-cards='1'] .statistics-surrender-details-title {
+    display: none;
+  }
+
+  html[data-stats-cards='1'] .statistics-surrender-mobile-card .pie-chart-2 {
+    height: 5.5rem !important;
+    width: 5.5rem !important;
+  }
+
+  html[data-stats-cards='1'] .statistics-surrender-mobile-card-body {
+    gap: 0.5rem !important;
+    padding-top: 0.5rem !important;
   }
 
   html[data-stats-cards='1'] .statistics-objectives-mobile-list > li {
