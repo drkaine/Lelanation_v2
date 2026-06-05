@@ -293,21 +293,29 @@
                 {{ t('statisticsPage.championStatsTrendFromDateHint') }}
               </p>
             </div>
-            <div v-if="activeChampionTab === 'matchups'">
+            <div v-if="activeChampionTab === 'matchups' || activeChampionTab === 'synergy'">
               <label
                 for="champion-search-matchups"
                 class="mb-1 block text-sm font-medium text-text"
-                >{{ t('statisticsPage.championStatsMatchupSearchLabel') }}</label
+                >{{
+                  activeChampionTab === 'synergy'
+                    ? t('statisticsPage.championStatsSynergySearchLabel')
+                    : t('statisticsPage.championStatsMatchupSearchLabel')
+                }}</label
               >
               <input
                 id="champion-search-matchups"
                 v-model.trim="championSearchQueryPlaceholder"
                 type="text"
-                :placeholder="t('statisticsPage.championStatsMatchupSearchPlaceholder')"
+                :placeholder="
+                  activeChampionTab === 'synergy'
+                    ? t('statisticsPage.championStatsSynergySearchPlaceholder')
+                    : t('statisticsPage.championStatsMatchupSearchPlaceholder')
+                "
                 class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text placeholder:text-text/50"
               />
             </div>
-            <div v-if="activeChampionTab === 'matchups'">
+            <div v-if="activeChampionTab === 'matchups' || activeChampionTab === 'synergy'">
               <label
                 for="champion-matchup-profile-filter"
                 class="mb-1 block text-sm font-medium text-text"
@@ -398,7 +406,7 @@
                 </div>
               </div>
             </div>
-            <div v-if="activeChampionTab === 'matchups'">
+            <div v-if="activeChampionTab === 'matchups' || activeChampionTab === 'synergy'">
               <label
                 for="champion-matchup-otp-filter"
                 class="mb-1 block text-sm font-medium text-text"
@@ -482,13 +490,16 @@
               class="champion-content-stack w-full min-w-0 overflow-hidden rounded-lg border border-primary/30 bg-surface/30 max-lg:rounded-none max-lg:border-x-0"
             >
               <!-- Header: image + nom + KPI principaux (repliable sur mobile) -->
-              <div class="champion-header-mobile-wrap max-lg:border-b max-lg:border-primary/25">
+              <div
+                class="champion-header-wrap border-b border-primary/25 max-lg:border-b max-lg:border-primary/25"
+              >
                 <button
+                  v-if="!championHeaderBandOpen"
                   type="button"
                   class="champion-header-band-toggle flex w-full touch-manipulation items-center gap-2.5 px-3 py-2.5 text-left lg:hidden"
-                  :aria-expanded="championHeaderBandOpen"
+                  :aria-expanded="false"
                   :aria-controls="'champion-header-band'"
-                  @click="championHeaderBandOpen = !championHeaderBandOpen"
+                  @click="championHeaderBandOpen = true"
                 >
                   <img
                     v-if="gameVersion && championByKey(championId)"
@@ -502,19 +513,12 @@
                     <span class="block truncate text-sm font-semibold text-accent">
                       {{ championName(championId) || championId }}
                     </span>
-                    <span
-                      v-if="!championHeaderBandOpen"
-                      class="mt-0.5 block truncate text-[11px] tabular-nums text-text/70"
-                    >
+                    <span class="mt-0.5 block truncate text-[11px] tabular-nums text-text/70">
                       {{ championHeaderCollapsedSummary }}
-                    </span>
-                    <span v-else class="mt-0.5 block text-[11px] text-text/55">
-                      {{ t('statisticsPage.championStatsHeaderHide') }}
                     </span>
                   </span>
                   <svg
-                    class="h-4 w-4 shrink-0 text-text/60 transition-transform duration-200"
-                    :class="championHeaderBandOpen ? 'rotate-180' : ''"
+                    class="h-4 w-4 shrink-0 text-text/60"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -530,14 +534,14 @@
                 </button>
                 <div
                   id="champion-header-band"
-                  class="champion-header-band flex flex-wrap items-center gap-3 border-b border-primary/25 px-3 py-2.5 max-lg:flex-col max-lg:items-stretch max-lg:border-b-0 lg:flex-nowrap lg:items-center"
+                  class="champion-header-band flex flex-wrap items-center gap-2 px-3 py-2 max-lg:flex-col max-lg:items-stretch lg:flex-nowrap lg:items-center lg:gap-3 lg:py-2.5"
                   :class="championHeaderBandOpen ? 'flex' : 'hidden lg:flex'"
                 >
                   <div
-                    class="champion-header-identity flex shrink-0 flex-col items-center gap-1 text-center max-lg:w-full max-lg:min-w-0 max-lg:flex-row max-lg:items-center max-lg:gap-3 max-lg:text-left"
+                    class="champion-header-identity flex shrink-0 items-center gap-2 max-lg:w-full lg:flex-col lg:gap-0.5 lg:text-center"
                   >
                     <h1
-                      class="order-1 w-full truncate text-base font-semibold text-accent max-lg:hidden"
+                      class="order-2 min-w-0 truncate text-sm font-semibold leading-tight text-accent max-lg:flex-1 lg:order-1 lg:max-w-[5.5rem]"
                     >
                       {{ championName(championId) || championId }}
                     </h1>
@@ -545,28 +549,29 @@
                       v-if="gameVersion && championByKey(championId)"
                       :src="getChampionImageUrl(gameVersion, championByKey(championId)!.image.full)"
                       :alt="championName(championId) ?? ''"
-                      class="order-2 h-10 w-10 shrink-0 rounded-full object-cover max-lg:hidden"
+                      class="order-1 h-9 w-9 shrink-0 rounded-full object-cover lg:order-2 lg:h-10 lg:w-10"
                       width="40"
                       height="40"
                     />
-                    <div
-                      class="order-3 flex flex-wrap items-center justify-center gap-2 text-[11px] text-text/80 max-lg:flex-1 max-lg:justify-start"
+                  </div>
+                  <div class="champion-header-roles text-[11px] text-text/80">
+                    <span
+                      v-for="role in roleDistribution"
+                      :key="role.role"
+                      class="champion-header-role-badge inline-flex items-center justify-between gap-1.5 rounded border border-primary/30 bg-surface/40 px-1.5 py-0.5"
+                      :title="roleLabel(role.role)"
                     >
-                      <span
-                        v-for="role in roleDistribution"
-                        :key="role.role"
-                        class="inline-flex items-center gap-1 rounded border border-primary/30 bg-surface/40 px-1.5 py-0.5"
-                      >
-                        <img
-                          :src="roleIconPath(role.role)"
-                          :alt="roleLabel(role.role)"
-                          class="h-3 w-3 object-contain"
-                          width="12"
-                          height="12"
-                        />
-                        <span>{{ formatDonutPercent(role.pickrate) }}%</span>
+                      <img
+                        :src="roleIconPath(role.role)"
+                        :alt="roleLabel(role.role)"
+                        class="h-3 w-3 shrink-0 object-contain"
+                        width="12"
+                        height="12"
+                      />
+                      <span class="shrink-0 font-medium tabular-nums">
+                        {{ formatDonutPercent(role.pickrate) }}%
                       </span>
-                    </div>
+                    </span>
                   </div>
                   <div
                     v-if="championDamageSplit && championDamageSplit.total > 0"
@@ -627,20 +632,49 @@
                     </div>
                   </div>
                   <div
-                    class="champion-header-kpis ml-auto flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text/85 max-lg:ml-0 max-lg:w-full"
+                    class="champion-header-kpis-wrap ml-auto flex shrink-0 items-center gap-2 max-lg:ml-0 max-lg:w-full max-lg:justify-between"
                   >
-                    <span
-                      >{{ t('statisticsPage.pickrate') }}:
-                      <strong>{{ formatDonutPercent(championStats.pickrate ?? 0) }}%</strong></span
+                    <div
+                      class="champion-header-kpis flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text/85"
                     >
-                    <span
-                      >{{ t('statisticsPage.winrate') }}:
-                      <strong>{{ formatDonutPercent(championStats.winrate ?? 0) }}%</strong></span
+                      <span
+                        >{{ t('statisticsPage.pickrate') }}:
+                        <strong
+                          >{{ formatDonutPercent(championStats.pickrate ?? 0) }}%</strong
+                        ></span
+                      >
+                      <span
+                        >{{ t('statisticsPage.winrate') }}:
+                        <strong>{{ formatDonutPercent(championStats.winrate ?? 0) }}%</strong></span
+                      >
+                      <span
+                        >{{ t('statisticsPage.championStatsBanrateTitle') }}:
+                        <strong>{{ formatDonutPercent(championStats.banrate ?? 0) }}%</strong></span
+                      >
+                    </div>
+                    <button
+                      type="button"
+                      class="champion-header-band-collapse shrink-0 rounded p-1 text-text/60 transition-colors hover:bg-white/5 hover:text-text lg:hidden"
+                      :aria-expanded="true"
+                      :aria-controls="'champion-header-band'"
+                      :title="t('statisticsPage.championStatsHeaderHide')"
+                      @click="championHeaderBandOpen = false"
                     >
-                    <span
-                      >{{ t('statisticsPage.championStatsBanrateTitle') }}:
-                      <strong>{{ formatDonutPercent(championStats.banrate ?? 0) }}%</strong></span
-                    >
+                      <svg
+                        class="h-4 w-4 rotate-180"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M19 9l-7 7-7-7"
+                        />
+                      </svg>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -648,143 +682,143 @@
                 v-if="activeChampionTab === 'overview'"
                 id="champion-tab-panel-overview"
                 role="tabpanel"
-                class="champion-tab-panel p-4 max-lg:px-3 max-lg:py-3"
+                class="champion-tab-panel p-1 max-lg:px-3 max-lg:py-3"
               >
-                <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <h2 class="text-base font-semibold text-text">
+                <div
+                  class="champion-overview-filters mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs"
+                >
+                  <h2 class="shrink-0 text-base font-semibold text-text">
                     {{ t('statisticsPage.championStatsTrendsTitle') }}
                   </h2>
+                  <label class="inline-flex shrink-0 items-center gap-2 text-text/80">
+                    <span>{{ t('statisticsPage.championStatsTrendsGranularity') }}</span>
+                    <select
+                      v-model="trendGranularity"
+                      class="rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+                    >
+                      <option value="day">
+                        {{ t('statisticsPage.championStatsTrendsDay') }}
+                      </option>
+                      <option value="week">
+                        {{ t('statisticsPage.championStatsTrendsWeek') }}
+                      </option>
+                      <option value="month">
+                        {{ t('statisticsPage.championStatsTrendsMonth') }}
+                      </option>
+                      <option value="patch">
+                        {{ t('statisticsPage.championStatsTrendsPatch') }}
+                      </option>
+                    </select>
+                  </label>
                   <div class="flex flex-wrap items-center gap-2">
-                    <label class="inline-flex items-center gap-2 text-xs text-text/80">
-                      <span>{{ t('statisticsPage.championStatsTrendsGranularity') }}</span>
-                      <select
-                        v-model="trendGranularity"
-                        class="rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-                      >
-                        <option value="day">
-                          {{ t('statisticsPage.championStatsTrendsDay') }}
-                        </option>
-                        <option value="week">
-                          {{ t('statisticsPage.championStatsTrendsWeek') }}
-                        </option>
-                        <option value="month">
-                          {{ t('statisticsPage.championStatsTrendsMonth') }}
-                        </option>
-                        <option value="patch">
-                          {{ t('statisticsPage.championStatsTrendsPatch') }}
-                        </option>
-                      </select>
+                    <button
+                      type="button"
+                      class="rounded px-2 py-1 font-medium transition-colors"
+                      :class="
+                        trendRangeMode === '7d'
+                          ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+                          : 'bg-black/20 text-text/85 hover:bg-white/10'
+                      "
+                      @click="trendRangeMode = '7d'"
+                    >
+                      {{ t('statisticsPage.championStatsTrendsRange7d') }}
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded px-2 py-1 font-medium transition-colors"
+                      :class="
+                        trendRangeMode === '14d'
+                          ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+                          : 'bg-black/20 text-text/85 hover:bg-white/10'
+                      "
+                      @click="trendRangeMode = '14d'"
+                    >
+                      {{ t('statisticsPage.championStatsTrendsRange14d') }}
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded px-2 py-1 font-medium transition-colors"
+                      :class="
+                        trendRangeMode === 'months'
+                          ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+                          : 'bg-black/20 text-text/85 hover:bg-white/10'
+                      "
+                      @click="trendRangeMode = 'months'"
+                    >
+                      {{ t('statisticsPage.championStatsTrendsRangeMonths') }}
+                    </button>
+                    <label
+                      v-if="trendRangeMode === 'months'"
+                      class="inline-flex items-center gap-1 text-text/80"
+                    >
+                      <span>{{ t('statisticsPage.championStatsTrendsMonthsLabel') }}</span>
+                      <input
+                        v-model.number="trendMonthsWindow"
+                        type="number"
+                        min="1"
+                        max="24"
+                        class="w-16 rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+                      />
                     </label>
                   </div>
-                </div>
-                <div class="mb-3 flex flex-wrap items-center gap-2 text-xs">
-                  <button
-                    type="button"
-                    class="rounded px-2 py-1 font-medium transition-colors"
-                    :class="
-                      trendRangeMode === '7d'
-                        ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
-                        : 'bg-black/20 text-text/85 hover:bg-white/10'
-                    "
-                    @click="trendRangeMode = '7d'"
-                  >
-                    {{ t('statisticsPage.championStatsTrendsRange7d') }}
-                  </button>
-                  <button
-                    type="button"
-                    class="rounded px-2 py-1 font-medium transition-colors"
-                    :class="
-                      trendRangeMode === '14d'
-                        ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
-                        : 'bg-black/20 text-text/85 hover:bg-white/10'
-                    "
-                    @click="trendRangeMode = '14d'"
-                  >
-                    {{ t('statisticsPage.championStatsTrendsRange14d') }}
-                  </button>
-                  <button
-                    type="button"
-                    class="rounded px-2 py-1 font-medium transition-colors"
-                    :class="
-                      trendRangeMode === 'months'
-                        ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
-                        : 'bg-black/20 text-text/85 hover:bg-white/10'
-                    "
-                    @click="trendRangeMode = 'months'"
-                  >
-                    {{ t('statisticsPage.championStatsTrendsRangeMonths') }}
-                  </button>
-                  <label
-                    v-if="trendRangeMode === 'months'"
-                    class="inline-flex items-center gap-1 text-text/80"
-                  >
-                    <span>{{ t('statisticsPage.championStatsTrendsMonthsLabel') }}</span>
-                    <input
-                      v-model.number="trendMonthsWindow"
-                      type="number"
-                      min="1"
-                      max="24"
-                      class="w-16 rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-                    />
-                  </label>
-                </div>
-                <div class="mb-3 flex flex-wrap items-center gap-2 text-xs">
-                  <button
-                    type="button"
-                    class="rounded px-2 py-1 font-medium transition-colors"
-                    :class="
-                      trendDivisionPreset === 'selected'
-                        ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
-                        : 'bg-black/20 text-text/85 hover:bg-white/10'
-                    "
-                    @click="setTrendDivisionPreset('selected')"
-                  >
-                    {{ t('statisticsPage.championStatsTrendsPresetSelected') }}
-                  </button>
-                  <button
-                    type="button"
-                    class="rounded px-2 py-1 font-medium transition-colors"
-                    :class="
-                      trendDivisionPreset === 'average'
-                        ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
-                        : 'bg-black/20 text-text/85 hover:bg-white/10'
-                    "
-                    @click="setTrendDivisionPreset('average')"
-                  >
-                    Average
-                  </button>
-                  <button
-                    type="button"
-                    class="rounded px-2 py-1 font-medium transition-colors"
-                    :class="
-                      trendDivisionPreset === 'skilled'
-                        ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
-                        : 'bg-black/20 text-text/85 hover:bg-white/10'
-                    "
-                    @click="setTrendDivisionPreset('skilled')"
-                  >
-                    Skilled
-                  </button>
-                  <button
-                    type="button"
-                    class="rounded px-2 py-1 font-medium transition-colors"
-                    :class="
-                      trendDivisionPreset === 'elite'
-                        ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
-                        : 'bg-black/20 text-text/85 hover:bg-white/10'
-                    "
-                    @click="setTrendDivisionPreset('elite')"
-                  >
-                    Elite
-                  </button>
-                  <label class="ml-2 inline-flex items-center gap-1 text-text/80">
-                    <input
-                      v-model="trendShowGlobalLine"
-                      type="checkbox"
-                      class="rounded border-primary/50"
-                    />
-                    <span>{{ t('statisticsPage.championStatsTrendsGlobalLine') }}</span>
-                  </label>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      class="rounded px-2 py-1 font-medium transition-colors"
+                      :class="
+                        trendDivisionPreset === 'selected'
+                          ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+                          : 'bg-black/20 text-text/85 hover:bg-white/10'
+                      "
+                      @click="setTrendDivisionPreset('selected')"
+                    >
+                      {{ t('statisticsPage.championStatsTrendsPresetSelected') }}
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded px-2 py-1 font-medium transition-colors"
+                      :class="
+                        trendDivisionPreset === 'average'
+                          ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+                          : 'bg-black/20 text-text/85 hover:bg-white/10'
+                      "
+                      @click="setTrendDivisionPreset('average')"
+                    >
+                      Average
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded px-2 py-1 font-medium transition-colors"
+                      :class="
+                        trendDivisionPreset === 'skilled'
+                          ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+                          : 'bg-black/20 text-text/85 hover:bg-white/10'
+                      "
+                      @click="setTrendDivisionPreset('skilled')"
+                    >
+                      Skilled
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded px-2 py-1 font-medium transition-colors"
+                      :class="
+                        trendDivisionPreset === 'elite'
+                          ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+                          : 'bg-black/20 text-text/85 hover:bg-white/10'
+                      "
+                      @click="setTrendDivisionPreset('elite')"
+                    >
+                      Elite
+                    </button>
+                    <label class="inline-flex items-center gap-1 text-text/80">
+                      <input
+                        v-model="trendShowGlobalLine"
+                        type="checkbox"
+                        class="rounded border-primary/50"
+                      />
+                      <span>{{ t('statisticsPage.championStatsTrendsGlobalLine') }}</span>
+                    </label>
+                  </div>
                 </div>
                 <div v-if="trendPending" class="py-4 text-text/70">
                   {{ t('statisticsPage.loading') }}
@@ -1162,12 +1196,12 @@
                 </template>
               </section>
             </div>
-            <div class="champion-tab-panels mb-6 w-full min-w-0 space-y-6 max-lg:mb-4">
+            <div class="champion-tab-panels mb-6 w-full min-w-0 space-y-3 max-lg:mb-4">
               <div
                 v-if="activeChampionTab === 'matchups'"
                 id="champion-tab-panel-matchups"
                 role="tabpanel"
-                class="champion-tab-panel p-4 max-lg:px-3 max-lg:py-3"
+                class="champion-tab-panel champion-tab-panel-matchups p-2 max-lg:px-3 max-lg:py-3"
               >
                 <div v-if="matchupsExtPending" class="py-6 text-text/70">
                   {{ t('statisticsPage.loading') }}
@@ -1178,7 +1212,7 @@
                 <div v-else-if="!filteredMatchupsExt.length" class="py-4 text-text/70">
                   {{ t('statisticsPage.noData') }}
                 </div>
-                <div v-else class="space-y-3">
+                <div v-else class="space-y-1.5">
                   <StatisticsMobileSortBar
                     id="champion-matchups-mobile-sort"
                     v-model:column="matchupMobileSortColumn"
@@ -1187,7 +1221,7 @@
                     :asc-default-columns="['champion', 'role']"
                   />
                   <div
-                    class="statistics-champion-matchup-mobile-list statistics-tier-list-mobile-list w-full space-y-2 md:hidden"
+                    class="statistics-champion-matchup-mobile-list statistics-tier-list-mobile-list w-full space-y-1 md:hidden"
                   >
                     <ChampionMatchupMobileCard
                       v-for="(row, idx) in paginatedMatchupsExt"
@@ -1213,7 +1247,9 @@
                       @toggle="toggleMatchupCard(row)"
                     />
                   </div>
-                  <div class="hidden overflow-x-auto md:block">
+                  <div
+                    class="champion-matchups-table-wrap hidden overflow-x-auto rounded-lg border border-primary/30 bg-surface/30 md:block"
+                  >
                     <table class="tier-list-lolalytics w-full min-w-[1120px] text-sm">
                       <thead>
                         <tr class="border-b border-primary/30 text-left">
@@ -1528,7 +1564,7 @@
                     </table>
                   </div>
                   <div
-                    class="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-text/80"
+                    class="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-xs text-text/80"
                   >
                     <div class="inline-flex items-center gap-2">
                       <span>{{ t('statisticsPage.perPage') }}</span>
@@ -1568,13 +1604,46 @@
                   </div>
                 </div>
               </div>
-              <div v-if="isChampionTab('runes')" id="champion-tab-panel-runes" role="tabpanel">
+              <div
+                v-if="activeChampionTab === 'synergy'"
+                id="champion-tab-panel-synergy"
+                role="tabpanel"
+                class="champion-tab-panel champion-tab-panel-synergy p-2 max-lg:px-3 max-lg:py-3"
+              >
+                <ChampionSynergyTab
+                  :pending="synergyExtPending"
+                  :error="synergyExtError"
+                  :rows="synergyExtData?.rows ?? []"
+                  :reference-version="synergyExtData?.referenceVersion ?? null"
+                  :game-version="gameVersion || ''"
+                  :filter-role="filterRole"
+                  :search-query="championSearchQueryPlaceholder"
+                  :lane-profile-filter="matchupLaneProfileFilter"
+                  :otp-mode="matchupOtpMode"
+                />
+              </div>
+              <div
+                v-if="isChampionTab('runes')"
+                id="champion-tab-panel-runes"
+                role="tabpanel"
+                class="champion-tab-panel-runes"
+              >
                 <StatisticsRunesTab />
               </div>
-              <div v-if="isChampionTab('spells')" id="champion-tab-panel-spells" role="tabpanel">
+              <div
+                v-if="isChampionTab('spells')"
+                id="champion-tab-panel-spells"
+                role="tabpanel"
+                class="champion-tab-panel-spells"
+              >
                 <StatisticsSpellsTab />
               </div>
-              <div v-if="isChampionTab('skills')" id="champion-tab-panel-skills" role="tabpanel">
+              <div
+                v-if="isChampionTab('skills')"
+                id="champion-tab-panel-skills"
+                role="tabpanel"
+                class="champion-tab-panel-skills"
+              >
                 <div
                   v-if="championSpellsPending && !championSpellOrdersRows.length"
                   class="py-6 text-text/70"
@@ -1587,17 +1656,7 @@
                 >
                   {{ t('statisticsPage.noData') }}
                 </div>
-                <div v-else class="space-y-5">
-                  <ChampionSpellOrderRecap
-                    v-if="
-                      championSpellOrderRecap.topFirstThree.length ||
-                      championSpellOrderRecap.topMaxOrder.length
-                    "
-                    :recap="championSpellOrderRecap"
-                    :champion-id="championId"
-                    :game-version="(filterVersion || gameVersion || '').trim()"
-                    :spells="championSkillChampion?.spells"
-                  />
+                <div v-else class="champion-skills-sections space-y-[5px]">
                   <section
                     v-for="section in championSpellOrderSectionsVisible"
                     :key="section.key"
@@ -1684,6 +1743,9 @@ import ChampionMatchupMobileCard, {
   type MatchupsExtRow,
   type MatchupsExtSignalLevel,
 } from '~/components/statistics/ChampionMatchupMobileCard.vue'
+import ChampionSynergyTab, {
+  type SynergyExtRow,
+} from '~/components/statistics/ChampionSynergyTab.vue'
 import ChampionObjectivesTab, {
   type ChampionObjectivesSummary,
 } from '~/components/statistics/ChampionObjectivesTab.vue'
@@ -1691,8 +1753,7 @@ import ChampionMiscTab, {
   type ChampionMiscSummary,
 } from '~/components/statistics/ChampionMiscTab.vue'
 import ChampionSpellOrderCard from '~/components/statistics/ChampionSpellOrderCard.vue'
-import ChampionSpellOrderRecap from '~/components/statistics/ChampionSpellOrderRecap.vue'
-import { buildSpellOrderRecap, mergeChampionSpellOrderRows } from '~/utils/championSpellOrderMerge'
+import { mergeChampionSpellOrderRows } from '~/utils/championSpellOrderMerge'
 import {
   getChampionImageUrl,
   getItemImageUrl as _getItemImageUrl,
@@ -2630,10 +2691,6 @@ const championSpellOrdersRows = computed(() => {
   return mergeChampionSpellOrderRows(raw, championSpellOrdersTotalGames.value)
 })
 
-const championSpellOrderRecap = computed(() =>
-  buildSpellOrderRecap(championSpellOrdersRows.value, championSpellOrdersTotalGames.value)
-)
-
 function championSpellOrderSectionAccent(sectionKey: string): 'emerald' | 'rose' | 'sky' | 'amber' {
   if (sectionKey === 'top-wr') return 'emerald'
   if (sectionKey === 'low-wr') return 'rose'
@@ -2711,6 +2768,15 @@ const matchupsExtData = ref<{
   referenceVersion?: string | null
   rows: MatchupsExtRow[]
 } | null>(null)
+
+const synergyExtPending = ref(false)
+const synergyExtError = ref<string | null>(null)
+const synergyExtData = ref<{
+  championId: number
+  totalGames: number
+  referenceVersion?: string | null
+  rows: SynergyExtRow[]
+} | null>(null)
 watch([filteredMatchupsExt, matchupPageSize], () => {
   matchupPage.value = 1
 })
@@ -2745,13 +2811,22 @@ const trendPoints = ref<TrendSnapshotPoint[]>([])
 const trendVersionsCatalog = ref<Array<{ patchLabel: string; releaseDate: string }>>([])
 
 const activeChampionTab = ref<
-  'overview' | 'matchups' | 'runes' | 'spells' | 'skills' | 'objectives' | 'misc'
+  'overview' | 'matchups' | 'synergy' | 'runes' | 'spells' | 'skills' | 'objectives' | 'misc'
 >('overview')
-type ChampionTabId = 'overview' | 'matchups' | 'runes' | 'spells' | 'skills' | 'objectives' | 'misc'
+type ChampionTabId =
+  | 'overview'
+  | 'matchups'
+  | 'synergy'
+  | 'runes'
+  | 'spells'
+  | 'skills'
+  | 'objectives'
+  | 'misc'
 const championPageBootstrapped = ref(false)
 const championTabLoaded = ref<Record<ChampionTabId, boolean>>({
   overview: false,
   matchups: false,
+  synergy: false,
   runes: false,
   spells: false,
   skills: false,
@@ -2761,6 +2836,7 @@ const championTabLoaded = ref<Record<ChampionTabId, boolean>>({
 const championTabs = [
   { id: 'overview' as const, label: 'statisticsPage.championStatsTabOverview' },
   { id: 'matchups' as const, label: 'statisticsPage.championStatsTabMatchups' },
+  { id: 'synergy' as const, label: 'statisticsPage.championStatsTabSynergy' },
   { id: 'runes' as const, label: 'statisticsPage.championStatsTabRunes' },
   { id: 'spells' as const, label: 'statisticsPage.championStatsTabSpells' },
   { id: 'skills' as const, label: 'statisticsPage.championStatsTabSkills' },
@@ -2825,6 +2901,7 @@ function resetChampionTabLoadState(): void {
   championTabLoaded.value = {
     overview: false,
     matchups: false,
+    synergy: false,
     runes: false,
     spells: false,
     skills: false,
@@ -3292,6 +3369,35 @@ async function loadMatchupsExtended() {
   }
 }
 
+async function loadSynergyExtended() {
+  if (!championId.value) return
+  const t0 = statsPerfStart('loadSynergyExtended')
+  synergyExtPending.value = true
+  synergyExtError.value = null
+  try {
+    const params = new URLSearchParams()
+    const effectiveVersion = filterVersion.value || gameVersion.value || ''
+    if (effectiveVersion) params.set('version', effectiveVersion)
+    const referenceVersion = championProgressionFromVersion.value
+    if (referenceVersion && referenceVersion !== effectiveVersion) {
+      params.set('fromVersion', referenceVersion)
+    }
+    for (const tier of filterRank.value) params.append('rankTier', tier)
+    if (filterRole.value) params.set('role', filterRole.value)
+    params.set('minGames', '10')
+    params.set('limit', '100')
+    synergyExtData.value = await statsFetch(
+      apiUrl(`/api/stats/champions/${championId.value}/synergy-extended?${params.toString()}`)
+    )
+  } catch (e) {
+    synergyExtData.value = null
+    synergyExtError.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    synergyExtPending.value = false
+    statsPerfEnd('loadSynergyExtended', t0)
+  }
+}
+
 async function _loadDetail() {
   const t = statsPerfStart('loadDetail')
   detailPending.value = true
@@ -3496,6 +3602,11 @@ async function loadChampionDataForTab(tab: ChampionTabId, force = false): Promis
   if (tab === 'matchups') {
     await loadMatchupsExtended()
     markChampionTabLoaded('matchups')
+    return
+  }
+  if (tab === 'synergy') {
+    await loadSynergyExtended()
+    markChampionTabLoaded('synergy')
     return
   }
   if (tab === 'runes') {
@@ -4488,17 +4599,88 @@ useHead({
   background-color: #08101f !important;
 }
 
+.champion-stats .champion-overview-filters {
+  row-gap: 0.5rem;
+}
+
+.champion-stats .champion-content-stack + .champion-tab-panels {
+  margin-top: 0;
+}
+
+.champion-stats .champion-tab-panel-runes,
+.champion-stats .champion-tab-panel-skills {
+  margin-top: 5px;
+  padding-top: 0;
+}
+
+.champion-stats .champion-tab-panel-spells {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.champion-stats .champion-tab-panel-runes > div > * + * {
+  margin-top: 0 !important;
+}
+
+.champion-stats .champion-tab-panel-spells > div > * + * {
+  margin-top: 0.5rem !important;
+}
+
+.champion-stats .champion-tab-panel-matchups,
+.champion-stats .champion-tab-panel-synergy {
+  padding-top: 0.5rem;
+}
+
+.champion-stats .champion-matchups-table-wrap {
+  overflow: hidden;
+}
+
+.champion-stats .champion-header-roles {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(auto-fit, minmax(4.75rem, 1fr));
+  gap: 0.25rem;
+  align-items: stretch;
+}
+
+.champion-stats .champion-header-role-badge {
+  width: 100%;
+  min-height: 1.375rem;
+  box-sizing: border-box;
+}
+
 @media (min-width: 1024px) {
   .champion-stats .champion-header-band {
     gap: 0.75rem;
   }
 
   .champion-stats .champion-header-identity {
-    min-width: 5.5rem;
-    max-width: 8rem;
+    flex: 0 0 auto;
+  }
+
+  .champion-stats .champion-header-roles {
+    display: flex;
+    flex: 0 0 auto;
+    flex-flow: row nowrap;
+    align-items: center;
+    width: auto;
+    gap: 0.25rem;
+  }
+
+  .champion-stats .champion-header-role-badge {
+    width: auto;
+    min-width: 3.5rem;
+  }
+
+  .champion-stats .champion-header-damage-split {
+    flex: 0 1 auto;
   }
 
   .champion-stats .champion-header-damage-split > div {
+    flex: 0 0 auto;
+  }
+
+  .champion-stats .champion-header-kpis {
     flex: 0 0 auto;
   }
 }
@@ -4550,6 +4732,7 @@ useHead({
   .champion-stats .champion-content-stack {
     width: 100%;
     max-width: 100%;
+    padding-bottom: 5px;
   }
 
   .champion-stats .champion-tab-panel {

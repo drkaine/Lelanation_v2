@@ -491,7 +491,7 @@ function runeSetLayout(
 </script>
 
 <template>
-  <div class="stats-runes-panel flex w-full flex-col" :class="unifiedLayout ? 'gap-4' : 'gap-8'">
+  <div class="stats-runes-panel flex w-full flex-col" :class="unifiedLayout ? 'gap-2' : 'gap-4'">
     <div v-if="!runeTreeReady" class="rounded-lg border border-primary/30 p-4 text-sm text-text/70">
       {{ t('statisticsPage.loading') }}
     </div>

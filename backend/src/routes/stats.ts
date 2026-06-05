@@ -15,6 +15,7 @@ import {
   getChampionMatchupsExtendedTable,
   getChampionMatchupsExportRows,
 } from '../services/StatsChampionMatchupsExtendedService.js'
+import { getChampionSynergyExtendedTable } from '../services/StatsChampionSynergyExtendedService.js'
 import {
   getTierListByLane,
   getMatchupDetailsByChampion,
@@ -1070,6 +1071,49 @@ router.get('/champions/:championId/matchups-extended', async (req: Request, res:
     const message = err instanceof Error ? err.message : String(err)
     console.error('[stats] matchups-extended failed', { championId, version, referenceVersion, message })
     return res.status(500).json({ error: 'Matchups extended failed', message })
+  }
+})
+
+/** GET /api/stats/champions/:championId/synergy-extended — synergy table (ally pairings from champion_duo_role_stats). */
+router.get('/champions/:championId/synergy-extended', async (req: Request, res: Response) => {
+  const raw = req.params.championId
+  const championId = parseInt(Array.isArray(raw) ? raw[0] : raw, 10)
+  if (Number.isNaN(championId) || championId <= 0) {
+    return res.status(400).json({ error: 'Invalid champion ID' })
+  }
+  const version = queryString(req.query.version) ?? queryString(req.query.patch) ?? null
+  const referenceVersion =
+    queryString(req.query.fromVersion) ?? queryString(req.query.baselineVersion) ?? null
+  const rankTier = rankTierParam(req.query.rankTier)
+  const lane = queryString(req.query.lane) ?? queryString(req.query.role)
+  const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 10
+  const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 80
+  try {
+    const data = await getChampionSynergyExtendedTable({
+      championId,
+      version,
+      referenceVersion,
+      rankTier: rankTier ?? null,
+      role: lane ?? null,
+      minGames,
+      limit,
+    })
+    if (!data) {
+      return res.status(200).json({
+        championId,
+        version: null,
+        referenceVersion: null,
+        rankTier: null,
+        roleFilter: null,
+        totalGames: 0,
+        rows: [],
+      })
+    }
+    return res.json(data)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('[stats] synergy-extended failed', { championId, version, referenceVersion, message })
+    return res.status(500).json({ error: 'Synergy extended failed', message })
   }
 })
 

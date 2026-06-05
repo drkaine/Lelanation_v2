@@ -10,9 +10,6 @@
       {{ t('statisticsPage.championMiscEmpty') }}
     </div>
     <template v-else>
-      <p v-if="gamesCount > 0" class="mb-3 text-center text-xs text-text/55">
-        {{ t('statisticsPage.championMiscGamesHint', { count: gamesCount.toLocaleString() }) }}
-      </p>
       <div
         class="champion-misc-grid flex w-full min-w-0 max-w-full flex-wrap items-stretch justify-center gap-x-[5px] gap-y-[10px] pb-[10px] max-lg:px-0"
       >
@@ -57,15 +54,19 @@
                       {{ formatMetric(metric) }}
                     </span>
                   </div>
-                  <div
-                    v-if="showBar(group.key, metric)"
-                    class="mt-1 h-1 overflow-hidden rounded-full bg-black/25"
-                  >
-                    <div
-                      class="h-full rounded-full transition-[width] duration-300"
-                      :class="metricBarClass(group.key, metric.key)"
-                      :style="{ width: `${metricBarPct(group, group.metrics)}%` }"
-                    />
+                  <div v-if="showBar(group.key, metric)" class="mt-1.5 flex items-center gap-2">
+                    <div class="champion-misc-bar-track h-1.5 flex-1 overflow-hidden rounded-full">
+                      <div
+                        class="h-full rounded-full transition-[width] duration-300"
+                        :class="metricBarClass(group.key, metric.key)"
+                        :style="{ width: `${metricBarPct(metric, group.metrics)}%` }"
+                      />
+                    </div>
+                    <span
+                      class="champion-misc-bar-pct shrink-0 text-[10px] tabular-nums text-text/55"
+                    >
+                      {{ metricBarPctLabel(metric, group.metrics) }}
+                    </span>
                   </div>
                 </td>
               </tr>
@@ -171,7 +172,7 @@ function metricBarClass(groupKey: string, metricKey: string): string {
 }
 
 function showBar(groupKey: string, metric: ChampionMiscMetric): boolean {
-  return Number(metric.avgPerGame) > 0 && groupKey !== 'multikills'
+  return Number(metric.avgPerGame) > 0
 }
 
 function metricBarPct(metric: ChampionMiscMetric, metrics: ChampionMiscMetric[]): number {
@@ -179,6 +180,10 @@ function metricBarPct(metric: ChampionMiscMetric, metrics: ChampionMiscMetric[])
   if (!Number.isFinite(v) || v <= 0) return 0
   const max = Math.max(...metrics.map(m => Number(m.avgPerGame) || 0), 1)
   return Math.min(100, (v / max) * 100)
+}
+
+function metricBarPctLabel(metric: ChampionMiscMetric, metrics: ChampionMiscMetric[]): string {
+  return `${Math.round(metricBarPct(metric, metrics))}%`
 }
 
 function formatMetric(metric: ChampionMiscMetric): string {
@@ -210,6 +215,11 @@ function formatMetric(metric: ChampionMiscMetric): string {
 
 .champion-misc-tab .fast-stat-row:last-child {
   border-bottom: none;
+}
+
+.champion-misc-bar-track {
+  background: rgb(15 23 42 / 0.75);
+  border: 1px solid rgb(var(--rgb-primary) / 0.18);
 }
 
 .champion-misc-tab {

@@ -83,6 +83,11 @@ export const STATS_ENDPOINT_SOURCE_POLICY: StatsEndpointSourceRule[] = [
     allowedSources: ['champion_stats', 'champion_vs_stats'],
   },
   {
+    path: '/champions/:championId/synergy-extended',
+    policy: 'mv_only',
+    allowedSources: ['champion_stats', 'champion_duo_role_stats'],
+  },
+  {
     path: '/champions/bans-table',
     policy: 'mv_only',
     allowedSources: ['champion_bans_by_banner', 'match_outcome_stats'],
