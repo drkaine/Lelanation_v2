@@ -162,6 +162,7 @@ export function timelineChampionObjectiveMetrics(
     }
   }
 
+  // Prefix yields count_baron_kill_ge{1,2,3p}_game only — not the dropped count_baron_kill column.
   addPerGameKillBuckets(out, "sum_baron_kills", "count_baron_kill");
   addPerGameKillBuckets(out, "count_dragon_kill", "count_dragon_kill");
   addPerGameKillBuckets(out, "count_tower_kill", "count_tower_kill");

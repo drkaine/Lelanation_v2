@@ -193,19 +193,64 @@ export function firstThreeLevelsKey(displayOrder: number[]): string {
     .join('-')
 }
 
-/** Ordre de max des sorts de base (Q/W/E) : séquence d’atteinte de 5 points. */
-export function maxOrderKey(displayOrder: number[]): string {
-  const counts: Record<1 | 2 | 3, number> = { 1: 0, 2: 0, 3: 0 }
-  const order: Array<1 | 2 | 3> = []
-  for (const raw of displayOrder) {
-    if (raw !== 1 && raw !== 2 && raw !== 3) continue
+/**
+ * Ordre de max : les 2 premiers sorts (Q/W/E/R) qui atteignent 5 points, puis le 3ᵉ
+ * (sort amélioré ensuite dans la suite — ex. Udyr avec R à 5, ou le dernier Q/W/E restant).
+ */
+export function maxOrderSkills(displayOrder: number[]): SpellOrderSkillKey[] {
+  const counts: Record<SpellOrderSkill, number> = { 1: 0, 2: 0, 3: 0, 4: 0 }
+  const maxed: SpellOrderSkill[] = []
+  let resumeAt = 0
+
+  for (let i = 0; i < displayOrder.length; i++) {
+    const raw = displayOrder[i]
+    if (raw !== 1 && raw !== 2 && raw !== 3 && raw !== 4) continue
     counts[raw]++
-    if (counts[raw] === 5 && !order.includes(raw)) order.push(raw)
+    if (counts[raw] === 5 && !maxed.includes(raw)) {
+      maxed.push(raw)
+      if (maxed.length === 2) {
+        resumeAt = i + 1
+        break
+      }
+    }
   }
-  return order
-    .map(s => skillKeyFromValue(s) ?? '')
-    .filter(Boolean)
-    .join(' > ')
+
+  if (maxed.length === 2) {
+    for (let i = resumeAt; i < displayOrder.length; i++) {
+      const raw = displayOrder[i]
+      if (raw !== 1 && raw !== 2 && raw !== 3 && raw !== 4) continue
+      if (!maxed.includes(raw)) {
+        maxed.push(raw)
+        break
+      }
+    }
+  }
+
+  if (maxed.length === 2) {
+    const remaining = ([1, 2, 3] as const).filter(s => !maxed.includes(s))
+    if (remaining.length === 1) maxed.push(remaining[0])
+  }
+
+  return maxed.map(s => skillKeyFromValue(s)).filter((k): k is SpellOrderSkillKey => k != null)
+}
+
+/** Ordre de max (clé d’agrégation). */
+export function maxOrderKey(displayOrder: number[]): string {
+  return maxOrderSkills(displayOrder).join(' > ')
+}
+
+/** Récap d’une ligne (carte) : 3 premiers niveaux + ordre de max. */
+export function spellOrderRowRecap(displayOrder: number[]): {
+  firstThree: SpellOrderSkillKey[]
+  maxOrder: SpellOrderSkillKey[]
+} {
+  return {
+    firstThree: displayOrder
+      .slice(0, 3)
+      .map(v => skillKeyFromValue(v))
+      .filter((k): k is SpellOrderSkillKey => k != null),
+    maxOrder: maxOrderSkills(displayOrder),
+  }
 }
 
 export type SpellOrderRecapEntry = {
@@ -235,9 +280,9 @@ export function buildSpellOrderRecap(
       else firstMap.set(fKey, { games: row.games, skills: fSkills })
     }
 
-    const mKey = maxOrderKey(row.displayOrder)
+    const mSkills = maxOrderSkills(row.displayOrder)
+    const mKey = mSkills.join(' > ')
     if (mKey) {
-      const mSkills = mKey.split(' > ').filter(Boolean) as SpellOrderSkillKey[]
       const prevM = maxMap.get(mKey)
       if (prevM) prevM.games += row.games
       else maxMap.set(mKey, { games: row.games, skills: mSkills })

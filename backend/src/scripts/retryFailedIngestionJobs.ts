@@ -7,15 +7,17 @@ async function main(): Promise<void> {
   const connection = new IORedis(redisUrl, { maxRetriesPerRequest: null });
   const queue = new Queue('ingestion', { connection });
 
-  const counts = await queue.getJobCounts('failed', 'waiting', 'active', 'completed');
-  const failed = await queue.getJobs(['failed'], 0, 10_000);
-  let retried = 0;
-  for (const job of failed) {
-    await job.retry();
-    retried += 1;
+  const countsBefore = await queue.getJobCounts('failed', 'waiting', 'active', 'completed');
+  const failedBefore = countsBefore.failed ?? 0;
+
+  if (failedBefore > 0) {
+    await queue.retryJobs({ state: 'failed' });
   }
-  console.log('[retry-failed-ingestion] queue counts before retry:', counts);
-  console.log(`[retry-failed-ingestion] retried ${retried} job(s)`);
+
+  const countsAfter = await queue.getJobCounts('failed', 'waiting', 'active', 'completed');
+  console.log('[retry-failed-ingestion] counts before:', countsBefore);
+  console.log('[retry-failed-ingestion] counts after:', countsAfter);
+  console.log(`[retry-failed-ingestion] retried ${failedBefore} job(s)`);
   await queue.close();
   await connection.quit();
   process.exit(0);

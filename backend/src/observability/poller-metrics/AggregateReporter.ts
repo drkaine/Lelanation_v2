@@ -5,6 +5,8 @@ import type { AggregateComputer } from './AggregateComputer.js';
 import { pollerMetricsLogger } from './logger.js';
 import type { SnapshotPersistence } from './SnapshotPersistence.js';
 import { getLatestResolvedSince } from '../../poll-orchestration/sinceContext.js';
+import { ExtendedSnapshotBuilder } from './ExtendedSnapshotBuilder.js';
+import type { MetricsStore } from './MetricsStore.js';
 import type { FullSnapshot, WindowLabel } from './types.js';
 
 const REPORT_INTERVALS: Record<WindowLabel, number> = {
@@ -18,13 +20,17 @@ const REPORT_INTERVALS: Record<WindowLabel, number> = {
 
 export class AggregateReporter {
   private readonly timers = new Map<WindowLabel, NodeJS.Timeout>();
+  private readonly extendedBuilder: ExtendedSnapshotBuilder;
 
   constructor(
     private readonly computer: AggregateComputer,
     private readonly persistence: SnapshotPersistence,
     private readonly gateway: RiotGateway,
     private readonly alertDetector: AlertDetector,
-  ) {}
+    store: MetricsStore,
+  ) {
+    this.extendedBuilder = new ExtendedSnapshotBuilder(store, alertDetector);
+  }
 
   start(): void {
     for (const [label, intervalMs] of Object.entries(REPORT_INTERVALS) as Array<[WindowLabel, number]>) {
@@ -54,7 +60,7 @@ export class AggregateReporter {
     const activeAlerts = this.alertDetector.getActive();
     const resolved = getLatestResolvedSince();
     const snapshot = this.computer.computeFull(window, limit120s, limit1s, activeAlerts);
-    const enriched: FullSnapshot = resolved
+    let enriched: FullSnapshot = resolved
       ? {
           ...snapshot,
           since: {
@@ -70,6 +76,8 @@ export class AggregateReporter {
       enriched.active_alerts = this.alertDetector.getActive();
     }
 
+    enriched = await this.extendedBuilder.enrich(enriched);
+
     pollerMetricsLogger.info({
       component: 'aggregate-reporter',
       window,
@@ -79,6 +87,13 @@ export class AggregateReporter {
       ingestion: enriched.ingestion,
       ratios: enriched.ratios,
       active_alerts: enriched.active_alerts,
+      tuner: enriched.tuner,
+      sessionPool: enriched.sessionPool,
+      playerPool: enriched.playerPool,
+      dataQuality: enriched.dataQuality,
+      ingestionThroughput: enriched.ingestionThroughput,
+      byPatch: enriched.byPatch ? Object.keys(enriched.byPatch).length : 0,
+      alertHistory: enriched.alertHistory,
     });
 
     if (window === '10m' || window === '30m' || window === '1h') {

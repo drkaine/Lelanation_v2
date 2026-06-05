@@ -4,6 +4,8 @@ import {
   extrapolateSpellOrder,
   firstThreeLevelsKey,
   maxOrderKey,
+  maxOrderSkills,
+  spellOrderRowRecap,
   mergeChampionSpellOrderRows,
   resolveCanonicalSpellOrder,
   resolveCanonicalSpellOrderKey,
@@ -70,6 +72,24 @@ describe('championSpellOrderMerge', () => {
   it('firstThreeLevelsKey and maxOrderKey', () => {
     expect(firstThreeLevelsKey(FULL)).toBe('Q-W-Q')
     expect(maxOrderKey(FULL)).toContain('Q')
+  })
+
+  it('maxOrderSkills: Q puis W puis E (classique)', () => {
+    const classic = [1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4]
+    expect(maxOrderSkills(classic)).toEqual(['Q', 'W', 'E'])
+    expect(maxOrderKey(classic)).toBe('Q > W > E')
+  })
+
+  it('maxOrderSkills: Udyr — R et Q à 5, puis prochain up W', () => {
+    const udyrLike = [4, 4, 4, 4, 4, 1, 1, 1, 1, 1, 2, 3, 3, 2, 2, 2, 2, 2]
+    expect(maxOrderSkills(udyrLike)).toEqual(['R', 'Q', 'W'])
+  })
+
+  it('spellOrderRowRecap exposes first three and max order', () => {
+    const classic = [1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2]
+    const recap = spellOrderRowRecap(classic)
+    expect(recap.firstThree).toEqual(['Q', 'W', 'Q'])
+    expect(recap.maxOrder.length).toBeGreaterThan(0)
   })
 
   it('buildSpellOrderRecap aggregates top patterns', () => {

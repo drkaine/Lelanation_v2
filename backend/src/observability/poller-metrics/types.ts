@@ -172,7 +172,8 @@ export interface SessionPoolEvent {
     | 'session_completed'
     | 'pool_exhausted'
     | 'pool_recovered'
-    | 'gateway_queue_wait';
+    | 'gateway_queue_wait'
+    | 'player_queue_refill';
   activeSessions: number;
   maxSessions: number;
   queueSize: number;
@@ -180,6 +181,11 @@ export interface SessionPoolEvent {
   sharedMatchIdsSize?: number;
   waitMs?: number;
   gatewayQueueSize?: number;
+  durationMs?: number;
+  gatewayRequests?: number;
+  playersCompleted?: number;
+  gatewayQueuePeak?: number;
+  refillBatchSize?: number;
 }
 
 export interface PollAggregate {
@@ -236,28 +242,6 @@ export interface IngestionAggregate {
   rank_unranked_fallback: number;
 }
 
-export interface FullSnapshot {
-  ts: number;
-  uptime_ms: number;
-  window: WindowLabel;
-  /** Dernier mode `since` connu au moment du rapport (discovery). */
-  since?: {
-    mode: SinceMode | 'unknown';
-    sinceTimestamp: number;
-    reason: string;
-  };
-  gateway: GatewayAggregate;
-  poll: PollAggregate;
-  ingestion: IngestionAggregate;
-  ratios: {
-    matches_ingested_vs_fetched_pct: number;
-    matches_skipped_vs_discovered_pct: number;
-    ranks_coverage_pct: number;
-    token_efficiency_pct: number;
-  };
-  active_alerts: Alert[];
-}
-
 export type AlertSeverity = 'warn' | 'error' | 'fatal';
 
 export type AlertType =
@@ -280,6 +264,116 @@ export interface Alert {
   message: string;
   since: number;
   data: Record<string, unknown>;
+}
+
+export interface AlertLifecycleEvent {
+  ts: number;
+  type: AlertType;
+  event: 'raised' | 'cleared';
+}
+
+export interface TunerObservability {
+  batchSize: number;
+  maxConcurrentSessions: number;
+  maxConcurrentMatchFetches: number;
+  ema_reqPerPlayer: number;
+  ema_matchLatencyMs: number;
+  utilizationCorrection: number;
+  ratchetActive: boolean;
+  effectiveSafetyMargin: number;
+  sessionCount: number;
+  warmupActive: boolean;
+}
+
+export interface SessionPoolObservability {
+  sessionAvgDurationMs: number;
+  sessionAvgRequests: number;
+  sessionThroughputPlayersPerMin: number;
+  playerQueueRefills: number;
+  playerQueueHighWaterMark: number;
+  gatewayQueuePeakDuringSession: number;
+  activeSessions: number;
+  playerQueueSize: number;
+}
+
+export interface PlayerPoolObservability {
+  totalPlayersInDb: number;
+  playersPolledLast24h: number;
+  poolCoverage24hPct: number;
+  cycleTimeEstimatedHours: number;
+  newPlayersDiscoveryRatePct: number;
+  avgLastSeenAgeHours: number;
+  oldestLastSeenAgeHours: number;
+  neverSeenCount: number;
+}
+
+export interface DataQualityObservability {
+  matchReuseRatePct: number;
+  matchFetchSuccessRatePct: number;
+  unrankedMatchRatePct: number;
+  rankDbFallbackRatePct: number;
+  ingestionRetryRateAvg: number;
+  topErrorsLast24h: Array<{ message: string; count: number }>;
+  matchNaturalLatencyEstimateMs: number;
+  matchQueueWaitEstimateMs: number;
+}
+
+export interface IngestionThroughputObservability {
+  matchesProcessedPerHour: number;
+  champStatsRowsWrittenPerHour: number;
+  ingestionWorkerAvgMs: number;
+  ingestionQueueSaturationPct: number;
+  failedJobsAccumulated: number;
+  failedJobsOldestAgeSec: number | null;
+}
+
+export interface PatchObservability {
+  matchesProcessed: number;
+  matchesFailed: number;
+  matchesPending: number;
+  playersWithRankToday: number;
+  firstSeenAt: string | null;
+}
+
+export interface AlertHistoryEntry {
+  type: AlertType;
+  count: number;
+  totalDurationMs: number;
+  firstSeen: string;
+}
+
+export interface AlertHistoryObservability {
+  last24h: AlertHistoryEntry[];
+  mostFrequent: AlertType | null;
+}
+
+export interface FullSnapshot {
+  ts: number;
+  uptime_ms: number;
+  window: WindowLabel;
+  /** Dernier mode `since` connu au moment du rapport (discovery). */
+  since?: {
+    mode: SinceMode | 'unknown';
+    sinceTimestamp: number;
+    reason: string;
+  };
+  gateway: GatewayAggregate;
+  poll: PollAggregate;
+  ingestion: IngestionAggregate;
+  ratios: {
+    matches_ingested_vs_fetched_pct: number;
+    matches_skipped_vs_discovered_pct: number;
+    ranks_coverage_pct: number;
+    token_efficiency_pct: number;
+  };
+  active_alerts: Alert[];
+  tuner?: TunerObservability;
+  sessionPool?: SessionPoolObservability;
+  playerPool?: PlayerPoolObservability;
+  dataQuality?: DataQualityObservability;
+  ingestionThroughput?: IngestionThroughputObservability;
+  byPatch?: Record<string, PatchObservability>;
+  alertHistory?: AlertHistoryObservability;
 }
 
 export type { TunerSnapshot };

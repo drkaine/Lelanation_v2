@@ -110,7 +110,8 @@ export function recordSessionPool(params: {
     | 'session_completed'
     | 'pool_exhausted'
     | 'pool_recovered'
-    | 'gateway_queue_wait';
+    | 'gateway_queue_wait'
+    | 'player_queue_refill';
   activeSessions: number;
   maxSessions: number;
   queueSize: number;
@@ -118,6 +119,11 @@ export function recordSessionPool(params: {
   sharedMatchIdsSize?: number;
   waitMs?: number;
   gatewayQueueSize?: number;
+  durationMs?: number;
+  gatewayRequests?: number;
+  playersCompleted?: number;
+  gatewayQueuePeak?: number;
+  refillBatchSize?: number;
 }): void {
   MetricsStore.getInstance().pushSessionPool({ ts: Date.now(), ...params });
 }

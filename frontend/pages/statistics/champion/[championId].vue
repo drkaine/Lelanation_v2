@@ -530,22 +530,28 @@
                 </button>
                 <div
                   id="champion-header-band"
-                  class="champion-header-band flex flex-wrap items-center gap-3 border-b border-primary/25 px-3 py-2.5 max-lg:flex-col max-lg:items-stretch max-lg:border-b-0"
+                  class="champion-header-band flex flex-wrap items-center gap-3 border-b border-primary/25 px-3 py-2.5 max-lg:flex-col max-lg:items-stretch max-lg:border-b-0 lg:flex-nowrap lg:items-center"
                   :class="championHeaderBandOpen ? 'flex' : 'hidden lg:flex'"
                 >
-                  <img
-                    v-if="gameVersion && championByKey(championId)"
-                    :src="getChampionImageUrl(gameVersion, championByKey(championId)!.image.full)"
-                    :alt="championName(championId) ?? ''"
-                    class="h-10 w-10 shrink-0 rounded-full object-cover"
-                    width="40"
-                    height="40"
-                  />
-                  <div class="min-w-[140px] flex-1">
-                    <h1 class="truncate text-base font-semibold text-accent">
+                  <div
+                    class="champion-header-identity flex shrink-0 flex-col items-center gap-1 text-center max-lg:w-full max-lg:min-w-0 max-lg:flex-row max-lg:items-center max-lg:gap-3 max-lg:text-left"
+                  >
+                    <h1
+                      class="order-1 w-full truncate text-base font-semibold text-accent max-lg:hidden"
+                    >
                       {{ championName(championId) || championId }}
                     </h1>
-                    <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-text/80">
+                    <img
+                      v-if="gameVersion && championByKey(championId)"
+                      :src="getChampionImageUrl(gameVersion, championByKey(championId)!.image.full)"
+                      :alt="championName(championId) ?? ''"
+                      class="order-2 h-10 w-10 shrink-0 rounded-full object-cover max-lg:hidden"
+                      width="40"
+                      height="40"
+                    />
+                    <div
+                      class="order-3 flex flex-wrap items-center justify-center gap-2 text-[11px] text-text/80 max-lg:flex-1 max-lg:justify-start"
+                    >
                       <span
                         v-for="role in roleDistribution"
                         :key="role.role"
@@ -564,7 +570,7 @@
                   </div>
                   <div
                     v-if="championDamageSplit && championDamageSplit.total > 0"
-                    class="mx-1 flex w-full min-w-0 flex-wrap items-center gap-2 self-center max-lg:mx-0 max-lg:flex-col max-lg:items-stretch"
+                    class="champion-header-damage-split flex min-w-0 shrink-0 flex-nowrap items-center gap-2 max-lg:w-full max-lg:flex-col max-lg:items-stretch"
                   >
                     <div
                       class="flex min-w-0 items-center gap-3 rounded bg-surface/40 px-2 py-1.5 max-lg:w-full"
@@ -621,7 +627,7 @@
                     </div>
                   </div>
                   <div
-                    class="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text/85"
+                    class="champion-header-kpis ml-auto flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text/85 max-lg:ml-0 max-lg:w-full"
                   >
                     <span
                       >{{ t('statisticsPage.pickrate') }}:
@@ -4480,6 +4486,21 @@ useHead({
 
 .champion-stats .statistics-overview-surface {
   background-color: #08101f !important;
+}
+
+@media (min-width: 1024px) {
+  .champion-stats .champion-header-band {
+    gap: 0.75rem;
+  }
+
+  .champion-stats .champion-header-identity {
+    min-width: 5.5rem;
+    max-width: 8rem;
+  }
+
+  .champion-stats .champion-header-damage-split > div {
+    flex: 0 0 auto;
+  }
 }
 
 .champion-stats .fast-stat-card.fast-stat-card-objectives {

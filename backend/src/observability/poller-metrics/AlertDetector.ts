@@ -3,7 +3,14 @@ import { riotConfig } from '../../riot-gateway/config/riotConfig.js';
 import { PollerTuner } from '../../tuner/PollerTuner.js';
 import { pollerMetricsLogger } from './logger.js';
 import type { MetricsStore } from './MetricsStore.js';
-import type { Alert, AlertSeverity, AlertType, FullSnapshot, IngestionSkipReason } from './types.js';
+import type {
+  Alert,
+  AlertHistoryObservability,
+  AlertSeverity,
+  AlertType,
+  FullSnapshot,
+  IngestionSkipReason,
+} from './types.js';
 import { INGESTION_SKIP_REASONS } from './types.js';
 
 function backpressureThreshold(): number {
@@ -36,6 +43,44 @@ export class AlertDetector {
 
   getActive(): Alert[] {
     return [...this.active.values()];
+  }
+
+  getAlertHistory(windowMs: number): AlertHistoryObservability {
+    const events = this.store.alertLifecycle.inWindow(windowMs);
+    const raisedAt = new Map<AlertType, number>();
+    const firstSeenAt = new Map<AlertType, number>();
+    const counts = new Map<AlertType, number>();
+    const durations = new Map<AlertType, number>();
+
+    for (const event of events) {
+      if (event.event === 'raised') {
+        if (!firstSeenAt.has(event.type)) {
+          firstSeenAt.set(event.type, event.ts);
+        }
+        raisedAt.set(event.type, event.ts);
+        counts.set(event.type, (counts.get(event.type) ?? 0) + 1);
+      } else if (event.event === 'cleared') {
+        const start = raisedAt.get(event.type);
+        if (start != null) {
+          durations.set(event.type, (durations.get(event.type) ?? 0) + (event.ts - start));
+          raisedAt.delete(event.type);
+        }
+      }
+    }
+
+    const last24h = [...counts.entries()]
+      .map(([type, count]) => ({
+        type,
+        count,
+        totalDurationMs: durations.get(type) ?? 0,
+        firstSeen: new Date(firstSeenAt.get(type) ?? Date.now()).toISOString(),
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    return {
+      last24h,
+      mostFrequent: last24h[0]?.type ?? null,
+    };
   }
 
   private evaluate(snapshot: FullSnapshot): void {
@@ -79,8 +124,10 @@ export class AlertDetector {
 
   private raise(type: AlertType, severity: AlertSeverity, message: string, data: Record<string, unknown>): void {
     if (this.active.has(type)) return;
-    const alert: Alert = { type, severity, message, since: Date.now(), data };
+    const now = Date.now();
+    const alert: Alert = { type, severity, message, since: now, data };
     this.active.set(type, alert);
+    this.store.pushAlertLifecycle({ ts: now, type, event: 'raised' });
     pollerMetricsLogger[severity === 'error' ? 'error' : 'warn'](
       { component: 'AlertDetector', alert: type, ...data },
       message,
@@ -89,6 +136,7 @@ export class AlertDetector {
 
   private clear(type: AlertType): void {
     if (this.active.delete(type)) {
+      this.store.pushAlertLifecycle({ ts: Date.now(), type, event: 'cleared' });
       pollerMetricsLogger.info({ component: 'AlertDetector', alert: type }, 'alert cleared');
     }
   }

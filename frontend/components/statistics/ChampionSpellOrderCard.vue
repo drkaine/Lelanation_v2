@@ -26,6 +26,17 @@
         </div>
       </div>
     </div>
+
+    <ChampionSpellOrderInlineRecap
+      v-if="rowRecap.firstThree.length === 3 || rowRecap.maxOrder.length"
+      class="mb-2"
+      :first-three="rowRecap.firstThree"
+      :max-order="rowRecap.maxOrder"
+      :champion-id="championId"
+      :game-version="gameVersion"
+      :spells="spells"
+    />
+
     <div class="mb-2 text-right text-[10px] tabular-nums text-text/45">
       {{ t('statisticsPage.championSpellOrderGames', { count: row.games }) }}
     </div>
@@ -68,7 +79,11 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getChampionSpellImageUrl } from '~/utils/imageUrl'
-import type { ChampionSpellOrderRowMerged } from '~/utils/championSpellOrderMerge'
+import ChampionSpellOrderInlineRecap from '~/components/statistics/ChampionSpellOrderInlineRecap.vue'
+import {
+  spellOrderRowRecap,
+  type ChampionSpellOrderRowMerged,
+} from '~/utils/championSpellOrderMerge'
 
 type SkillKey = 'Q' | 'W' | 'E' | 'R'
 
@@ -82,6 +97,8 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
+
+const rowRecap = computed(() => spellOrderRowRecap(props.row.displayOrder))
 
 const displayLevels = computed(() => {
   const n = Math.min(18, props.row.displayOrder.length)

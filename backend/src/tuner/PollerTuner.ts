@@ -42,6 +42,8 @@ const MAX_SESSIONS_BY_KEY: Record<ApiKeyType, number> = {
   personal: Number.parseInt(process.env.PERSONAL_MAX_CONCURRENT_SESSIONS ?? '2', 10),
   production: Number.parseInt(process.env.PRODUCTION_MAX_CONCURRENT_SESSIONS ?? '20', 10),
 };
+/** Max gateway queue wait before match-fetch concurrency is throttled (seconds). */
+const ACCEPTABLE_QUEUE_WAIT_S = Number.parseFloat(process.env.TUNER_ACCEPTABLE_QUEUE_WAIT_S ?? '3');
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -310,10 +312,20 @@ export class PollerTuner {
       MIN_CONCURRENT,
       MAX_CONCURRENT_MATCHES,
     );
+
+    // Cap match-fetch concurrency to avoid gateway queue congestion.
+    // Acceptable in-flight ≈ targetRps × wait budget; each match ≈ 2 gateway requests.
+    const acceptableQueueRequests = Math.floor(targetRps * ACCEPTABLE_QUEUE_WAIT_S);
+    const maxConcurrentMatchFetchesGlobal = Math.max(1, Math.floor(acceptableQueueRequests / 2));
+    const queueCongestionCap = Math.max(
+      1,
+      Math.floor(maxConcurrentMatchFetchesGlobal / Math.max(1, maxConcurrentSessions)),
+    );
+    const maxConcurrentMatchFetchesBounded = Math.min(maxConcurrentMatchFetchesRaw, queueCongestionCap);
     const maxConcurrentMatchFetches =
       riotConfig.apiKeyType === 'personal'
-        ? Math.min(maxConcurrentMatchFetchesRaw, PERSONAL_MAX_CONCURRENT_MATCH_FETCHES)
-        : maxConcurrentMatchFetchesRaw;
+        ? Math.min(maxConcurrentMatchFetchesBounded, PERSONAL_MAX_CONCURRENT_MATCH_FETCHES)
+        : maxConcurrentMatchFetchesBounded;
 
     const cacheHitRate = clamp(this.cacheHitRateEma.value, 0, 1);
     const participantRankConcurrencyRaw = clamp(
@@ -376,6 +388,8 @@ export class PollerTuner {
         batchSize: params.batchSize,
         maxConcurrentPlayers: params.maxConcurrentPlayers,
         maxConcurrentMatchFetches: params.maxConcurrentMatchFetches,
+        queueCongestionCap,
+        acceptableQueueRequests,
         participantRankConcurrency: params.participantRankConcurrency,
         targetRps: params.targetRps,
         detectedLimit120s: limit120s,
@@ -589,6 +603,7 @@ export class PollerTuner {
         : null,
       limitHistory: this.limitDetector.getHistory(),
       sessionCount: this.sessionCount,
+      utilizationCorrection: this.utilizationCorrection,
       ratchet: {
         effectiveSafetyMargin: this.effectiveSafetyMargin,
         configuredFloor: floor,

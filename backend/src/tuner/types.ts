@@ -70,5 +70,6 @@ export interface TunerSnapshot {
   } | null;
   limitHistory: LimitChangeEvent[];
   sessionCount: number;
+  utilizationCorrection: number;
   ratchet: TunerRatchetSnapshot;
 }

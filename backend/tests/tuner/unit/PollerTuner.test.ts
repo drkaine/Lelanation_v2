@@ -143,6 +143,17 @@ describe('PollerTuner', () => {
     expect(params.rawMaxConcurrentSessions).toBeGreaterThanOrEqual(2);
   });
 
+  test('personal key caps maxConcurrentMatchFetches via gateway queue budget', () => {
+    const tuner = PollerTuner.getInstance();
+    for (let i = 0; i < 5; i += 1) {
+      tuner.recordSession(feedback({ totalGatewayRequests: 2.55, playersCompleted: 1, matchesFetched: 1 }));
+    }
+    const params = tuner.compute(ctx(buildGatewayStatus(100, 20), 200));
+    // floor(0.79×3)=2 → global floor(2/2)=1 → per-session floor(1/2)=1
+    expect(params.maxConcurrentSessions).toBe(2);
+    expect(params.maxConcurrentMatchFetches).toBe(1);
+  });
+
   test('T11 maxConcurrentMatchFetches never exceeds MAX_CONCURRENT_MATCHES', () => {
     const tuner = PollerTuner.getInstance();
     for (let i = 0; i < 5; i += 1) {

@@ -1447,6 +1447,10 @@ function onMobileObjectiveToggle(id: string) {
   if (id === 'firstBlood' || !p.objectiveHasKillDropdown(id)) return
   syncToggleObjective(id)
 }
+
+function drakeDropdownCountLabel(count: number): string {
+  return String(p.t('statisticsPage.objectivesDrakeCountLabel', { count }))
+}
 </script>
 
 <template>
@@ -1714,7 +1718,9 @@ function onMobileObjectiveToggle(id: string) {
                     :key="key + '-' + count"
                     class="bg-surface/30"
                   >
-                    <td class="py-1 pl-6 pr-2 text-text/70">{{ count }}</td>
+                    <td class="py-1 pl-6 pr-2 text-text/70">
+                      {{ drakeDropdownCountLabel(count) }}
+                    </td>
                     <td class="px-1 py-1 text-center text-text/80">
                       <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
                         {{ p.percentForCount(key, count, true) }}
@@ -1867,7 +1873,9 @@ function onMobileObjectiveToggle(id: string) {
                     :key="'drake-type-dist-' + row.key + '-' + count"
                     class="bg-surface/30"
                   >
-                    <td class="py-1 pl-6 pr-2 text-text/70">{{ count }}</td>
+                    <td class="py-1 pl-6 pr-2 text-text/70">
+                      {{ drakeDropdownCountLabel(count) }}
+                    </td>
                     <td class="px-1 py-1 text-center text-text/80">
                       {{
                         p.overviewTeamsData && p.overviewTeamsData.matchCount > 0
@@ -2543,7 +2551,7 @@ function onMobileObjectiveToggle(id: string) {
 
     <div v-if="showDistributionCards" class="grid grid-cols-1 gap-4 md:grid-cols-2">
       <div
-        class="fast-stat-card fast-stat-card-distribution mx-auto w-full max-w-[420px] rounded-lg border border-primary/30 bg-surface/30 p-3"
+        class="fast-stat-card fast-stat-card-distribution mx-auto w-full max-w-[420px] rounded-lg border border-primary/30 bg-surface/30 p-3 md:mx-0"
       >
         <h4 class="mb-2 text-sm font-semibold text-text/90">
           {{ p.t('statisticsPage.objectivesDrakeDistributionCardTitle') }}
@@ -2599,7 +2607,7 @@ function onMobileObjectiveToggle(id: string) {
       </div>
 
       <div
-        class="fast-stat-card fast-stat-card-distribution mx-auto w-full max-w-[420px] rounded-lg border border-primary/30 bg-surface/30 p-3"
+        class="fast-stat-card fast-stat-card-distribution mx-auto w-full max-w-[420px] rounded-lg border border-primary/30 bg-surface/30 p-3 md:mx-0"
       >
         <h4 class="mb-2 text-sm font-semibold text-text/90">
           {{ p.t('statisticsPage.objectivesSoulDistributionCardTitle') }}

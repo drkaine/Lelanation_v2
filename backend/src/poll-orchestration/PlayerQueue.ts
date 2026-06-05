@@ -18,6 +18,8 @@ export class PlayerQueue {
   private queue: DiscoveryPlayer[] = [];
   private refilling = false;
   private exhausted = false;
+  private refillCount = 0;
+  private peakQueueSize = 0;
 
   constructor(
     private readonly discovery: PlayerDiscovery,
@@ -39,6 +41,10 @@ export class PlayerQueue {
 
   get size(): number {
     return this.queue.length;
+  }
+
+  getStats(): { refillCount: number; highWaterMark: number } {
+    return { refillCount: this.refillCount, highWaterMark: this.peakQueueSize };
   }
 
   /**
@@ -84,6 +90,8 @@ export class PlayerQueue {
       const fetched = await this.discovery.fetchNextBatch(fetchSize);
       if (fetched.length > 0) {
         this.queue.push(...fetched);
+        this.refillCount += 1;
+        this.peakQueueSize = Math.max(this.peakQueueSize, this.queue.length);
         if (wasExhausted) {
           orchestrationLogger.info(
             {

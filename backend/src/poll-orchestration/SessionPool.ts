@@ -56,6 +56,8 @@ export interface SessionPoolStatus {
   isShuttingDown: boolean;
   totalSessionsLaunched: number;
   totalSessionsCompleted: number;
+  playerQueueRefills: number;
+  playerQueueHighWaterMark: number;
 }
 
 export class SessionPool {
@@ -88,6 +90,7 @@ export class SessionPool {
   }
 
   getStatus(): SessionPoolStatus {
+    const pq = this.playerQueue.getStats();
     return {
       activeSessions: this.activeSessions.size,
       maxConcurrentSessions: this.config.maxConcurrentSessions,
@@ -98,6 +101,8 @@ export class SessionPool {
       isShuttingDown: this.isShuttingDown,
       totalSessionsLaunched: this.totalSessionsLaunched,
       totalSessionsCompleted: this.totalSessionsCompleted,
+      playerQueueRefills: pq.refillCount,
+      playerQueueHighWaterMark: pq.highWaterMark,
     };
   }
 
@@ -342,6 +347,10 @@ export class SessionPool {
           maxSessions: this.config.maxConcurrentSessions,
           queueSize: this.playerQueue.size,
           sessionId: result.sessionId,
+          durationMs: endedAt - sessionStartedAt,
+          gatewayRequests: requestsUsed,
+          playersCompleted: result.stats.playersCompleted,
+          gatewayQueuePeak: peakGatewayQueue,
         });
         orchestrationLogger.info(
           {

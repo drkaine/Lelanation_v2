@@ -501,7 +501,9 @@ function runeSetLayout(
       class="statistics-overview-surface rounded-lg border border-primary/30 p-4 sm:p-3"
     >
       <div class="flex flex-col gap-7">
-        <div class="stats-runes-paths-grid min-w-0 pb-2">
+        <div
+          class="stats-runes-paths-grid grid min-w-0 gap-x-4 gap-y-8 overflow-x-auto pb-2 lg:gap-x-6"
+        >
           <div
             v-for="{ path, cells } in pathsWithCells"
             v-show="cells.length > 0"
@@ -692,7 +694,13 @@ function runeSetLayout(
                   v-if="
                     row.ly.primaryRow.length || row.ly.secondaryPath || row.ly.secondaryRunes.length
                   "
-                  class="rune-set-trees-grid w-full min-w-0"
+                  class="rune-set-trees-grid grid w-full min-w-0 items-start justify-items-center gap-x-4 gap-y-1 sm:justify-items-stretch sm:gap-x-3"
+                  :class="
+                    row.ly.primaryRow.length &&
+                    (row.ly.secondaryPath || row.ly.secondaryRunes.length)
+                      ? 'grid-cols-2'
+                      : 'grid-cols-1'
+                  "
                 >
                   <div
                     v-if="row.ly.primaryRow.length"
@@ -762,7 +770,7 @@ function runeSetLayout(
                 </div>
                 <div
                   v-if="row.ly.shards.length"
-                  class="rune-set-shards-row mt-2 flex w-full min-w-0 items-center justify-center gap-3 border-t border-primary/20 pt-2 sm:justify-between sm:gap-4"
+                  class="rune-set-shards-row -mx-4 mt-2 flex w-[calc(100%+2rem)] max-w-none items-center justify-center gap-4 self-stretch px-3 sm:justify-between sm:gap-2 sm:px-[3px]"
                 >
                   <img
                     v-for="sid in row.ly.shards"
@@ -893,7 +901,12 @@ function runeSetLayout(
                 v-if="
                   row.ly.primaryRow.length || row.ly.secondaryPath || row.ly.secondaryRunes.length
                 "
-                class="rune-set-trees-grid w-full min-w-0"
+                class="rune-set-trees-grid grid w-full min-w-0 items-start justify-items-center gap-x-4 gap-y-1 sm:justify-items-stretch sm:gap-x-3"
+                :class="
+                  row.ly.primaryRow.length && (row.ly.secondaryPath || row.ly.secondaryRunes.length)
+                    ? 'grid-cols-2'
+                    : 'grid-cols-1'
+                "
               >
                 <div
                   v-if="row.ly.primaryRow.length"
@@ -963,7 +976,7 @@ function runeSetLayout(
               </div>
               <div
                 v-if="row.ly.shards.length"
-                class="rune-set-shards-row mt-2 flex w-full min-w-0 items-center justify-center gap-3 border-t border-primary/20 pt-2 sm:justify-between sm:gap-4"
+                class="rune-set-shards-row -mx-4 mt-2 flex w-[calc(100%+2rem)] max-w-none items-center justify-center gap-4 self-stretch px-3 sm:justify-between sm:gap-2 sm:px-[3px]"
               >
                 <img
                   v-for="sid in row.ly.shards"
@@ -1024,31 +1037,22 @@ function runeSetLayout(
 </template>
 
 <style scoped>
-/* Arbres de runes (Précision, Domination, …) : une branche sous l’autre, comme l’onglet stats global */
 .stats-runes-paths-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
-  align-items: stretch;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  scrollbar-gutter: stable;
 }
 
-.stats-runes-shards-grid {
-  width: 100%;
-}
-
-/* Primaire + secondaire dans chaque set : empilés, pas côte à côte */
-.rune-set-trees-grid {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-@media (min-width: 640px) {
-  .rune-set-trees-grid {
-    align-items: flex-start;
+/* Mobile : arbres de runes (Précision, Domination, …) empilés verticalement */
+@media (max-width: 639px) {
+  .stats-runes-paths-grid {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2rem;
+    overflow-x: visible;
   }
 }
+
 .stats-runes-shard-icon {
   flex-shrink: 0;
 }
@@ -1172,6 +1176,11 @@ function runeSetLayout(
     height: 2.5rem !important;
     min-width: 2.5rem;
     min-height: 2.5rem;
+  }
+
+  .rune-set-trees-grid {
+    max-width: 16rem;
+    margin-inline: auto;
   }
 }
 </style>

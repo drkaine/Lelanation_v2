@@ -24,7 +24,13 @@ export class ObservabilityOrchestrator {
     queue: Queue,
   ) {
     this.liveDisplay = new LiveTokenDisplay(gateway, queue, this.store);
-    this.reporter = new AggregateReporter(this.computer, this.persistence, gateway, this.alertDetector);
+    this.reporter = new AggregateReporter(
+      this.computer,
+      this.persistence,
+      gateway,
+      this.alertDetector,
+      this.store,
+    );
   }
 
   static getInstance(gateway: RiotGateway, queue: Queue): ObservabilityOrchestrator {
