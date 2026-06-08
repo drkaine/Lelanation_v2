@@ -17,10 +17,16 @@ const props = withDefaults(
     id?: string
     /** Column values that default to ascending when chosen from the dropdown. */
     ascDefaultColumns?: string[]
+    helpAriaLabel?: string
+    helpText?: string
+    helpSecondaryText?: string
   }>(),
   {
     id: undefined,
     ascDefaultColumns: () => [],
+    helpAriaLabel: undefined,
+    helpText: undefined,
+    helpSecondaryText: undefined,
   }
 )
 
@@ -51,12 +57,22 @@ watch(column, (col, prev) => {
     ]"
   >
     <div class="min-w-0 flex-1">
-      <label
-        :for="selectId"
-        class="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-text/55"
-      >
-        {{ t('statisticsPage.mobileSortLabel') }}
-      </label>
+      <div class="mb-1 flex min-w-0 items-center gap-2">
+        <label
+          :for="selectId"
+          class="min-w-0 flex-1 text-[10px] font-semibold uppercase tracking-wide text-text/55"
+        >
+          {{ t('statisticsPage.mobileSortLabel') }}
+        </label>
+        <StatisticsTableHelpTooltip
+          v-if="helpText"
+          :aria-label="helpAriaLabel || helpText"
+          :text="helpText"
+          :secondary-text="helpSecondaryText"
+          align="end"
+        />
+        <slot name="help" />
+      </div>
       <select
         :id="selectId"
         v-model="column"

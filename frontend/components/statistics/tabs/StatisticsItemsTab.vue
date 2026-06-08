@@ -313,19 +313,15 @@ function deltaClass(value: number | null | undefined): string {
     </div>
     <template v-else-if="tableRows.length > 0">
       <div class="statistics-items-tab space-y-3">
-        <div class="flex min-w-0 justify-end">
-          <StatisticsTableHelpTooltip
-            :aria-label="p.t('statisticsPage.tooltipTableItemsAria')"
-            :text="p.t('statisticsPage.tooltipTableItems')"
-            :secondary-text="p.t('statisticsPage.tooltipTableItemsSecondary')"
-          />
-        </div>
         <StatisticsMobileSortBar
           id="items-mobile-sort"
           v-model:column="itemsMobileSortColumn"
           v-model:direction="sortDir"
           :options="itemsMobileSortOptions"
           :asc-default-columns="['item', 'type']"
+          :help-aria-label="p.t('statisticsPage.tooltipTableItemsAria')"
+          :help-text="p.t('statisticsPage.tooltipTableItems')"
+          :help-secondary-text="p.t('statisticsPage.tooltipTableItemsSecondary')"
         />
         <div class="statistics-items-mobile-list space-y-2 md:hidden">
           <article

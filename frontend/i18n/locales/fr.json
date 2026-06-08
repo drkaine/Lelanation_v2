@@ -1587,25 +1587,47 @@
     }
   },
   "patchNotesPage": {
-    "metaTitle": "Notes de patch {version} | Lelanation",
+    "metaTitle": "Notes du patch {version} | Lelanation",
     "metaTitleFallback": "Notes de patch | Lelanation",
-    "metaDescription": "Résumé des changements du dernier patch League of Legends : champions, objets, runes et systèmes.",
-    "loading": "Chargement des notes de patch…",
+    "metaDescription": "Notes de patch {version} de League of Legends - changements des champions, objets, runes et systèmes.",
+    "loading": "Chargement des notes de patch...",
     "loadError": "Impossible de charger les notes de patch.",
     "notFound": "Aucune note de patch disponible.",
     "eyebrow": "League of Legends",
-    "title": "Notes de patch {version}",
+    "title": "Patch {version}",
     "selectPatch": "Choisir un patch",
     "latest": "dernier",
     "officialLink": "Voir sur leagueoflegends.com",
     "highlights": "Temps forts",
     "moreChanges": "autres changements",
+    "summaryImageAlt": "Image récapitulative du patch {version}",
+    "publishedAt": "Publié le {date}",
+    "viewOfficial": "Voir les notes de patch officielles",
+    "error": "Échec du chargement des notes de patch",
+    "retry": "Réessayer",
+    "noChanges": "Aucun changement dans cette catégorie",
+"noSummaryImage": "Aucune image récapitulative disponible",
     "sections": {
       "champions": "Champions",
       "items": "Objets",
       "runes": "Runes",
       "systems": "Systèmes",
       "skins": "Skins"
+    },
+    "categories": {
+      "summary": "Résumé",
+      "champions": "Champions",
+      "items": "Objets",
+      "runes": "Runes",
+      "systems": "Systèmes"
+    },
+    "changeTypes": {
+      "buff": "Buff",
+      "nerf": "Nerf",
+      "adjustment": "Ajustement",
+      "new": "Nouveau",
+      "removed": "Supprimé",
+      "text": "Texte"
     }
   },
   "videosPage": {

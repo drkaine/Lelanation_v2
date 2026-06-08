@@ -218,19 +218,15 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
       {{ p.t('statisticsPage.championTableNoData') }}
     </div>
     <template v-else>
-      <div class="flex min-w-0 justify-end">
-        <StatisticsTableHelpTooltip
-          :aria-label="p.t('statisticsPage.tooltipTableChampionAria')"
-          :text="p.t('statisticsPage.tooltipTableChampion')"
-          :secondary-text="p.t('statisticsPage.championTableDeltaColumnsHint')"
-        />
-      </div>
       <StatisticsMobileSortBar
         id="champion-global-mobile-sort"
         v-model:column="championMobileSortColumn"
         v-model:direction="championMobileSortDir"
         :options="championMobileSortOptions"
         :asc-default-columns="['champion']"
+        :help-aria-label="p.t('statisticsPage.tooltipTableChampionAria')"
+        :help-text="p.t('statisticsPage.tooltipTableChampion')"
+        :help-secondary-text="p.t('statisticsPage.championTableDeltaColumnsHint')"
       />
       <!-- Mobile : cards -->
       <div class="statistics-champion-mobile-list space-y-2 md:hidden">
@@ -889,11 +885,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
           <div
             v-for="row in p.paginatedChampionGlobalRows"
             :key="row.championId"
-            class="tier-list-lolalytics-row flex min-h-[60px] w-full cursor-pointer flex-nowrap items-center justify-start py-0.5 text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
-            role="button"
-            tabindex="0"
-            @click="navigateTo(p.localePath('/statistics/champion/' + row.championId))"
-            @keydown.enter="navigateTo(p.localePath('/statistics/champion/' + row.championId))"
+            class="tier-list-lolalytics-row flex min-h-[60px] w-full flex-nowrap items-center justify-start py-0.5 text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
           >
             <StatisticsTierListChampionCell
               :champion-id="row.championId"

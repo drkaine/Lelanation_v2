@@ -851,11 +851,19 @@ html[data-stats-cards='1'] .champion-stats .hidden.md\:block {
   html[data-stats-cards='1']
     :is(
       .statistics-champion-stats-mobile-card,
+      .statistics-champion-matchup-mobile-card,
+      .statistics-champion-mobile-card,
+      .statistics-ban-mobile-card,
+      .statistics-spell-mobile-card,
+      .statistics-item-mobile-card,
+      .statistics-balance-mobile-card,
+      .statistics-botlane-duo-mobile-card,
       .statistics-infos-mobile-card,
       .statistics-tier-list-mobile-card,
       .statistics-objectives-mobile-card,
       .statistics-surrender-mobile-card,
-      .statistics-surrender-mobile-side-card
+      .statistics-surrender-mobile-side-card,
+      .champion-spell-order-card
     ) {
     width: var(--stats-simplified-card-width) !important;
     max-width: var(--stats-simplified-card-width) !important;
@@ -864,7 +872,7 @@ html[data-stats-cards='1'] .champion-stats .hidden.md\:block {
     margin-left: 0 !important;
     margin-right: 0 !important;
     border-radius: 0.5rem !important;
-    border: 1px solid rgb(var(--rgb-primary) / 0.3) !important;
+    border: 1px solid rgb(var(--rgb-accent) / 0.55) !important;
     box-sizing: border-box;
   }
 
@@ -875,7 +883,7 @@ html[data-stats-cards='1'] .champion-stats .hidden.md\:block {
   }
 
   html[data-stats-cards='1'] .statistics-surrender-mobile-rank-title {
-    font-size: 0.875rem !important;
+    font-size: 1rem !important;
   }
 
   html[data-stats-cards='1'] .statistics-surrender-mobile-match-count-label {
@@ -908,13 +916,9 @@ html[data-stats-cards='1'] .champion-stats .hidden.md\:block {
   html[data-stats-cards='1']
     .champion-stats
     .champion-tab-panel-flush
-    .statistics-champion-matchup-mobile-card,
-  html[data-stats-cards='1']
-    .champion-stats
-    .champion-tab-panel-flush
-    .statistics-champion-stats-mobile-card {
-    border-left: 1px solid rgb(var(--rgb-primary) / 0.3) !important;
-    border-right: 1px solid rgb(var(--rgb-primary) / 0.3) !important;
+    :is(.statistics-champion-matchup-mobile-card, .statistics-champion-stats-mobile-card) {
+    border: 1px solid rgb(var(--rgb-accent) / 0.55) !important;
+    border-radius: 0.5rem !important;
   }
 
   html[data-stats-cards='1']

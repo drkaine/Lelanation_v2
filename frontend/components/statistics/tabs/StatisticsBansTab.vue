@@ -11,18 +11,14 @@
       {{ p.bansTableData.message }}
     </div>
     <div v-else class="space-y-3">
-      <div class="flex min-w-0 justify-end">
-        <StatisticsTableHelpTooltip
-          :aria-label="p.t('statisticsPage.tooltipTableBansAria')"
-          :text="p.t('statisticsPage.tooltipTableBans')"
-          :secondary-text="p.t('statisticsPage.tooltipTableBansSecondary')"
-        />
-      </div>
       <StatisticsMobileSortBar
         id="bans-mobile-sort"
         v-model:column="bansMobileSortColumn"
         v-model:direction="bansMobileSortDir"
         :options="bansMobileSortOptions"
+        :help-aria-label="p.t('statisticsPage.tooltipTableBansAria')"
+        :help-text="p.t('statisticsPage.tooltipTableBans')"
+        :help-secondary-text="p.t('statisticsPage.tooltipTableBansSecondary')"
       />
       <div class="statistics-bans-mobile-list space-y-2 md:hidden">
         <article
@@ -317,13 +313,12 @@
               <tr
                 v-for="row in p.paginatedBans"
                 :key="'ban-' + row.championId"
-                class="cursor-pointer text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
-                @click="navigateTo(p.localePath('/statistics/champion/' + row.championId))"
+                class="text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
               >
                 <td class="min-w-[220px] py-0.5 pl-2 pr-0">
                   <StatisticsChampionDetailLink
                     :champion-id="row.championId"
-                    class="flex min-h-[60px] items-center gap-2"
+                    class="flex items-center gap-2"
                   >
                     <img
                       v-if="p.gameVersion && p.championByKey(row.championId)"

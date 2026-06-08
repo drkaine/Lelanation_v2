@@ -440,19 +440,15 @@ function deltaLabelClass(v: number | null | undefined): string {
       {{ p.t('statisticsPage.overviewDetailTimeout') }}
     </div>
     <div v-else-if="displayRows.length" class="statistics-spells-tab space-y-3">
-      <div class="flex min-w-0 justify-end">
-        <StatisticsTableHelpTooltip
-          :aria-label="p.t('statisticsPage.tooltipTableSpellsAria')"
-          :text="p.t('statisticsPage.tooltipTableSpells')"
-          :secondary-text="p.t('statisticsPage.tooltipTableSpellsSecondary')"
-        />
-      </div>
       <StatisticsMobileSortBar
         id="spells-mobile-sort"
         v-model:column="spellsMobileSortColumn"
         v-model:direction="sortDir"
         :options="spellsMobileSortOptions"
         :asc-default-columns="['spell']"
+        :help-aria-label="p.t('statisticsPage.tooltipTableSpellsAria')"
+        :help-text="p.t('statisticsPage.tooltipTableSpells')"
+        :help-secondary-text="p.t('statisticsPage.tooltipTableSpellsSecondary')"
       />
       <div class="statistics-spells-mobile-list space-y-2 md:hidden">
         <article

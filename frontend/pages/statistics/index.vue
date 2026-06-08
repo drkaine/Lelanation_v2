@@ -5397,13 +5397,9 @@ if (__statisticsVm?.proxy) {
     max-width: 100%;
     margin-left: 0;
     margin-right: 0;
-    border: none !important;
-    background: transparent !important;
-    box-shadow: none !important;
   }
 
   .statistics .statistics-surrender-tab .statistics-surrender-mobile-side-card {
-    border: none !important;
     width: 100%;
   }
 
@@ -5482,8 +5478,7 @@ if (__statisticsVm?.proxy) {
 .statistics .statistics-champion-detail-link :is(img, .champion-portrait, .champion-portrait *) {
   pointer-events: none;
 }
-.statistics .statistics-champion-stats-mobile-identity.statistics-champion-detail-link,
-.statistics a.statistics-champion-stats-mobile-identity.statistics-champion-detail-link {
+.statistics .statistics-champion-stats-mobile-identity .statistics-champion-detail-link {
   min-height: 2.75rem;
   min-width: 2.75rem;
 }

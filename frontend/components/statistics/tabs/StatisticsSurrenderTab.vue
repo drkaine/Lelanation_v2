@@ -130,7 +130,7 @@ function rankIcon(rank: string): string {
           <article
             v-for="group in groupedRows"
             :key="`surrender-mobile-${group.rank}`"
-            class="statistics-surrender-mobile-card w-full max-w-full py-2"
+            class="statistics-surrender-mobile-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/40 py-2"
           >
             <button
               type="button"
@@ -156,7 +156,7 @@ function rankIcon(rank: string): string {
               </h3>
               <span
                 v-if="group.all?.matchCount"
-                class="statistics-surrender-mobile-match-count shrink-0 text-[10px] tabular-nums leading-tight text-text/60"
+                class="statistics-surrender-mobile-match-count shrink-0 text-xs tabular-nums leading-tight text-text/60"
               >
                 {{ Number(group.all.matchCount).toLocaleString() }}
                 <span class="statistics-surrender-mobile-match-count-label">
@@ -250,9 +250,9 @@ function rankIcon(rank: string): string {
             >
               <div
                 v-if="group.blue && Number(group.blue.matchCount) > 0"
-                class="statistics-surrender-mobile-side-card rounded-lg bg-sky-500/5 p-2"
+                class="statistics-surrender-mobile-side-card rounded-lg border border-primary/30 bg-sky-500/5 p-2"
               >
-                <div class="mb-2 text-xs font-semibold text-sky-300">{{ teamLabel(100) }}</div>
+                <div class="mb-2 text-sm font-semibold text-sky-300">{{ teamLabel(100) }}</div>
                 <div class="flex flex-col items-center gap-2 sm:flex-row sm:items-center">
                   <StatisticsMatchOutcomeDonut
                     side-accent="blue"
@@ -297,9 +297,9 @@ function rankIcon(rank: string): string {
               </div>
               <div
                 v-if="group.red && Number(group.red.matchCount) > 0"
-                class="statistics-surrender-mobile-side-card rounded-lg bg-rose-500/5 p-2"
+                class="statistics-surrender-mobile-side-card rounded-lg border border-primary/30 bg-rose-500/5 p-2"
               >
-                <div class="mb-2 text-xs font-semibold text-rose-300">{{ teamLabel(200) }}</div>
+                <div class="mb-2 text-sm font-semibold text-rose-300">{{ teamLabel(200) }}</div>
                 <div class="flex flex-col items-center gap-2 sm:flex-row sm:items-center">
                   <StatisticsMatchOutcomeDonut
                     side-accent="red"
@@ -348,7 +348,7 @@ function rankIcon(rank: string): string {
 
         <!-- Desktop : tableau -->
         <div class="hidden w-full min-w-0 overflow-x-auto md:block">
-          <table class="objectives-zebra-cols w-full min-w-[640px] text-left text-sm">
+          <table class="objectives-zebra-cols w-full min-w-[640px] text-left text-base">
             <thead>
               <tr class="border-b border-primary/30 text-text/70">
                 <th class="py-1.5 pr-2 font-medium">
@@ -471,52 +471,52 @@ function rankIcon(rank: string): string {
 }
 
 .statistics-surrender-mobile-details {
-  font-size: 10px;
-  line-height: 1.3;
+  font-size: 0.875rem;
+  line-height: 1.4;
 }
 
 .statistics-surrender-details-title {
-  font-size: 10px;
+  font-size: 0.875rem;
 }
 
 .statistics-surrender-stat-block {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 0.125rem;
 }
 
 .statistics-surrender-stat-label {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.375rem;
   color: rgb(var(--rgb-text) / 0.72);
-  font-size: 9px;
+  font-size: 0.75rem;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.3;
 }
 
 .statistics-surrender-stat-dot {
   display: inline-block;
-  height: 0.4rem;
-  width: 0.4rem;
+  height: 0.5rem;
+  width: 0.5rem;
   flex-shrink: 0;
   border-radius: 9999px;
 }
 
 .statistics-surrender-stat-value {
   display: block;
-  padding-left: 0.7rem;
+  padding-left: 0.875rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 10px;
+  font-size: 0.875rem;
   font-variant-numeric: tabular-nums;
   color: rgb(var(--rgb-text) / 0.92);
 }
 
 .statistics-surrender-stat-delta {
-  margin-left: 0.2rem;
-  font-size: 9px;
+  margin-left: 0.25rem;
+  font-size: 0.75rem;
 }
 
 @media (max-width: 768px) {

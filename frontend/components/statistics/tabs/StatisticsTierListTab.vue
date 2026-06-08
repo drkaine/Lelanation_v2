@@ -358,14 +358,7 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             <div
               v-for="row in p.paginatedTierList"
               :key="row.championId"
-              :class="[
-                'tier-list-lolalytics-row flex min-h-[60px] w-full items-center justify-between py-0.5 text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25',
-                'cursor-pointer hover:brightness-110',
-              ]"
-              role="button"
-              tabindex="0"
-              @click="navigateTo(p.localePath('/statistics/champion/' + row.championId))"
-              @keydown.enter="navigateTo(p.localePath('/statistics/champion/' + row.championId))"
+              class="tier-list-lolalytics-row flex min-h-[60px] w-full items-center justify-between py-0.5 text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
             >
               <div
                 class="tier-list-lolalytics-td hidden w-10 shrink-0 flex-col items-center justify-center gap-0 leading-tight md:flex"

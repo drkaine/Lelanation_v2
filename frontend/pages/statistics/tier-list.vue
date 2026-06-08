@@ -1158,8 +1158,7 @@ if (__vm) {
   position: relative;
   z-index: 2;
 }
-.statistics .statistics-champion-stats-mobile-identity.statistics-champion-detail-link,
-.statistics a.statistics-champion-stats-mobile-identity.statistics-champion-detail-link {
+.statistics .statistics-champion-stats-mobile-identity .statistics-champion-detail-link {
   min-height: 2.75rem;
   min-width: 2.75rem;
 }
