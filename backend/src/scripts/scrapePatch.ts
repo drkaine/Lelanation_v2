@@ -7,7 +7,7 @@
 
 import { scrapePatch } from '../scraper/patchScraper.js';
 import { publishPatchNotesToFrontend } from '../services/PatchNotesPublishService.js';
-import { extractPatchVersion } from '../utils/helpers.js';
+import { extractPatchVersion, notesUrlVersionToPatchLabel } from '../utils/helpers.js';
 import { logger } from '../utils/logger.js';
 
 const DEFAULT_OUTPUT_DIR = './data/patches';
@@ -32,9 +32,9 @@ async function main(): Promise<void> {
   logger.info({ url: enUrl, outputDir }, 'Starting patch scrape from CLI');
 
   try {
-    await scrapePatch(enUrl, outputDir);
+    await scrapePatch(enUrl, outputDir, undefined, { triggeredBy: 'scrapePatchCli' });
 
-    const patchVersion = extractPatchVersion(enUrl);
+    const patchVersion = notesUrlVersionToPatchLabel(extractPatchVersion(enUrl));
     const publishResult = await publishPatchNotesToFrontend(patchVersion, 'scrapePatchCli');
     logger.info('Patch notes moved to frontend', { moved: publishResult.moved, deleted: publishResult.deleted });
 

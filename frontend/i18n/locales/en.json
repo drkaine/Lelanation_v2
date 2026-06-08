@@ -1590,6 +1590,8 @@
     "eyebrow": "League of Legends",
     "title": "Patch {version}",
     "selectPatch": "Select patch",
+    "searchPlaceholder": "Search champion, item…",
+    "noSearchResults": "No results for \"{query}\"",
     "latest": "latest",
     "officialLink": "View on leagueoflegends.com",
     "highlights": "Highlights",
@@ -1601,6 +1603,7 @@
     "retry": "Retry",
     "noChanges": "No changes in this category",
 "noSummaryImage": "No summary image available",
+"clickToZoom": "Click to enlarge — scroll to zoom, drag to pan",
     "sections": {
       "champions": "Champions",
       "items": "Items",
@@ -1613,7 +1616,11 @@
       "champions": "Champions",
       "items": "Items",
       "runes": "Runes",
-      "systems": "Systems"
+      "systems": "Systems",
+      "aram": "ARAM",
+      "aramChaos": "ARAM Chaos",
+      "arena": "Arena",
+      "bugfix": "Bug Fixes"
     },
     "changeTypes": {
       "buff": "Buff",

@@ -20,9 +20,11 @@ describe('PatchNotesScraperService', () => {
   });
 
   it('should skip when both locale files already exist', async () => {
-    await mkdir(tempDir, { recursive: true });
-    await writeFile(join(tempDir, 'patch-26.11-en-GB.json'), '{}');
-    await writeFile(join(tempDir, 'patch-26.11-fr-FR.json'), '{}');
+    const patchVersion = '26.11';
+    const versionDir = join(tempDir, patchVersion);
+    await mkdir(versionDir, { recursive: true });
+    await writeFile(join(versionDir, `patch-${patchVersion}-en-GB.json`), '{}');
+    await writeFile(join(versionDir, `patch-${patchVersion}-fr-FR.json`), '{}');
 
     const result = await scrapePatchNotesIfNeeded('26.11.1', 'test');
 

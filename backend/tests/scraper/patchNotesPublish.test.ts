@@ -31,30 +31,33 @@ describe('PatchNotesPublishService', () => {
     await rm(frontendDir, { recursive: true, force: true });
   });
 
-  it('should move patch files to frontend and delete from backend', async () => {
-    await writeFile(join(backendDir, 'patch-26.10-en-GB.json'), '{"scrapedAt":"2026-05-01T00:00:00.000Z"}');
-    await writeFile(join(backendDir, 'patch-26.11-fr-FR.json'), '{"scrapedAt":"2026-06-05T00:00:00.000Z"}');
-    await writeFile(join(frontendDir, 'patch-26.10-fr-FR.json'), '{"old":true}');
+  it('should move patch files to frontend version subfolder and delete from backend', async () => {
+    const backendVersionDir = join(backendDir, '26.11');
+    await mkdir(backendVersionDir, { recursive: true });
+    await writeFile(join(backendVersionDir, 'patch-26.11-fr-FR.json'), '{"scrapedAt":"2026-06-05T00:00:00.000Z"}');
+    await mkdir(join(frontendDir, '26.10'), { recursive: true });
+    await writeFile(join(frontendDir, '26.10', 'patch-26.10-fr-FR.json'), '{"old":true}');
 
     const result = await movePatchVersionToFrontend('26.11');
     expect(result.moved).toBe(1);
     expect(result.deleted).toBe(1);
 
-    const frontendFiles = await readFile(join(frontendDir, 'patch-26.11-fr-FR.json'), 'utf-8');
+    const frontendFiles = await readFile(join(frontendDir, '26.11', 'patch-26.11-fr-FR.json'), 'utf-8');
     expect(frontendFiles).toContain('scrapedAt');
 
-    await expect(access(join(backendDir, 'patch-26.11-fr-FR.json'))).rejects.toThrow();
+    await expect(access(join(backendVersionDir, 'patch-26.11-fr-FR.json'))).rejects.toThrow();
 
-    const oldStillThere = await readFile(join(frontendDir, 'patch-26.10-fr-FR.json'), 'utf-8');
+    const oldStillThere = await readFile(join(frontendDir, '26.10', 'patch-26.10-fr-FR.json'), 'utf-8');
     expect(oldStillThere).toContain('old');
   });
 
   it('should rebuild index.json with latest patch first', async () => {
-    await mkdir(frontendDir, { recursive: true });
-    await writeFile(join(frontendDir, 'patch-26.10-en-GB.json'), '{"scrapedAt":"2026-05-01T00:00:00.000Z"}');
-    await writeFile(join(frontendDir, 'patch-26.11-en-GB.json'), '{"scrapedAt":"2026-06-05T00:00:00.000Z"}');
-    await writeFile(join(frontendDir, 'patch-26.11-fr-FR.json'), '{"scrapedAt":"2026-06-05T00:00:00.000Z"}');
-    await writeFile(join(frontendDir, 'patch-26.11-fr-FR-summary.png'), 'png');
+    await mkdir(join(frontendDir, '26.10'), { recursive: true });
+    await mkdir(join(frontendDir, '26.11'), { recursive: true });
+    await writeFile(join(frontendDir, '26.10', 'patch-26.10-en-GB.json'), '{"scrapedAt":"2026-05-01T00:00:00.000Z"}');
+    await writeFile(join(frontendDir, '26.11', 'patch-26.11-en-GB.json'), '{"scrapedAt":"2026-06-05T00:00:00.000Z"}');
+    await writeFile(join(frontendDir, '26.11', 'patch-26.11-fr-FR.json'), '{"scrapedAt":"2026-06-05T00:00:00.000Z"}');
+    await writeFile(join(frontendDir, '26.11', 'patch-26.11-fr-FR-summary.png'), 'png');
 
     const index = await rebuildPatchNotesIndex(frontendDir);
     expect(index.latest).toBe('26.11');
@@ -64,8 +67,10 @@ describe('PatchNotesPublishService', () => {
   });
 
   it('should publish patch and write index.json', async () => {
-    await writeFile(join(backendDir, 'patch-26.11-en-GB.json'), '{"scrapedAt":"2026-06-05T00:00:00.000Z"}');
-    await writeFile(join(backendDir, 'patch-26.11-fr-FR.json'), '{"scrapedAt":"2026-06-05T00:00:00.000Z"}');
+    const backendVersionDir = join(backendDir, '26.11');
+    await mkdir(backendVersionDir, { recursive: true });
+    await writeFile(join(backendVersionDir, 'patch-26.11-en-GB.json'), '{"scrapedAt":"2026-06-05T00:00:00.000Z"}');
+    await writeFile(join(backendVersionDir, 'patch-26.11-fr-FR.json'), '{"scrapedAt":"2026-06-05T00:00:00.000Z"}');
 
     const result = await publishPatchNotesToFrontend('26.11');
     expect(result.moved).toBe(2);

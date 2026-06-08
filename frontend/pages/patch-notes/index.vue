@@ -1,55 +1,82 @@
 <template>
   <div class="min-h-screen bg-background text-text">
     <!-- Header -->
-    <div class="border-b border-primary/20 bg-surface/30 px-4 py-4">
-      <div class="mx-auto max-w-7xl">
-        <div class="flex flex-col items-start gap-2">
-          <h1 class="text-2xl font-bold md:text-3xl lg:text-4xl">
+    <div class="border-b border-primary/20 bg-surface/30 px-4 py-3">
+      <div class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-3 gap-y-2">
+        <div class="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h1 class="text-base font-bold text-accent md:text-lg">
             {{ t('patchNotesPage.title', { version: currentPatchVersion }) }}
           </h1>
-          <p v-if="currentPatchDate" class="text-sm text-text/70">
+          <p v-if="currentPatchDate" class="text-xs text-text/60">
             {{ t('patchNotesPage.publishedAt', { date: formatDate(currentPatchDate) }) }}
           </p>
         </div>
-      </div>
-    </div>
 
-    <!-- Category Tabs -->
-    <div class="sticky top-0 z-30 border-b border-primary/20 bg-background/95 backdrop-blur">
-      <div class="mx-auto max-w-7xl px-4">
-        <div class="scrollbar-hide flex gap-1 overflow-x-auto py-2">
-          <button
-            v-for="tab in tabs"
-            :key="tab.id"
-            type="button"
-            :class="[
-              'flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors',
-              activeTab === tab.id
-                ? 'bg-accent text-background'
-                : 'text-text/70 hover:bg-primary/10 hover:text-text',
-            ]"
-            @click="activeTab = tab.id"
+        <div class="min-w-[10rem] flex-1 sm:max-w-xs">
+          <label class="sr-only" for="patch-entity-search">{{
+            t('patchNotesPage.searchPlaceholder')
+          }}</label>
+          <input
+            id="patch-entity-search"
+            v-model="searchQuery"
+            type="search"
+            :placeholder="t('patchNotesPage.searchPlaceholder')"
+            class="w-full rounded-lg border border-primary/30 bg-background px-3 py-1.5 text-sm text-text placeholder:text-text/40 focus:border-accent focus:outline-none"
+          />
+        </div>
+
+        <div v-if="availablePatches.length > 0" class="shrink-0">
+          <label class="sr-only" for="patch-version-select">{{
+            t('patchNotesPage.selectPatch')
+          }}</label>
+          <select
+            id="patch-version-select"
+            :value="selectedVersion ?? currentPatchVersion"
+            class="rounded-lg border border-primary/30 bg-background px-3 py-1.5 text-sm text-text focus:border-accent focus:outline-none"
+            @change="onPatchChange"
           >
-            <span v-if="tab.icon" class="text-lg">{{ tab.icon }}</span>
-            {{ tab.label }}
-            <span
-              v-if="tab.count > 0"
-              :class="[
-                'ml-1 rounded-full px-2 py-0.5 text-xs',
-                activeTab === tab.id
-                  ? 'bg-background/20 text-background'
-                  : 'bg-primary/20 text-text',
-              ]"
-            >
-              {{ tab.count }}
-            </span>
-          </button>
+            <option v-for="patch in availablePatches" :key="patch.version" :value="patch.version">
+              {{ formatPatchOption(patch.version) }}
+            </option>
+          </select>
         </div>
       </div>
     </div>
 
-    <!-- Content -->
-    <div class="mx-auto max-w-7xl px-4 py-6">
+    <!-- Category Tabs - full width, no icons -->
+    <div class="sticky top-0 z-30 border-b border-primary/20 bg-background/95 backdrop-blur">
+      <div class="flex w-full">
+        <button
+          v-for="tab in visibleTabs"
+          :key="tab.id"
+          type="button"
+          :class="[
+            'flex flex-1 items-center justify-center gap-2 border-b-2 px-2 py-3 text-xs font-medium transition-colors sm:text-sm',
+            activeTab === tab.id
+              ? 'border-accent text-accent'
+              : 'border-transparent text-text/60 hover:bg-primary/10 hover:text-text',
+          ]"
+          @click="activeTab = tab.id"
+        >
+          <span class="truncate">{{ tab.label }}</span>
+          <span
+            v-if="tab.count > 0"
+            :class="[
+              'ml-1 rounded-full px-1.5 py-0.5 text-[10px] sm:px-2 sm:text-xs',
+              activeTab === tab.id ? 'bg-accent/20 text-accent' : 'bg-primary/20 text-text/60',
+            ]"
+          >
+            {{ tab.count }}
+          </span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Content - reduced padding for more cards per row -->
+    <div
+      class="mx-auto max-w-full px-2 md:px-4 lg:px-6"
+      :class="activeTab === 'summary' && !isSearchActive ? 'py-1' : 'py-4'"
+    >
       <!-- Loading State -->
       <div
         v-if="status === 'loading'"
@@ -76,33 +103,58 @@
         </button>
       </div>
 
-      <!-- Summary Tab Content -->
-      <div v-else-if="activeTab === 'summary'" class="flex flex-col items-center">
-        <div v-if="summaryImageUrl" class="w-full">
+      <!-- Summary Tab Content - fit viewport without scroll -->
+      <div
+        v-else-if="activeTab === 'summary' && !isSearchActive"
+        class="flex flex-col items-center"
+      >
+        <div
+          v-if="summaryImageUrl"
+          class="flex w-full cursor-pointer flex-col items-center justify-center"
+          style="height: calc(100dvh - 14rem)"
+          @click="isLightboxOpen = true"
+        >
           <img
             :src="summaryImageUrl"
             :alt="t('patchNotesPage.summaryImageAlt', { version: currentPatchVersion })"
-            class="w-full rounded-lg"
+            class="max-h-full max-w-full rounded-lg object-contain transition-opacity hover:opacity-90"
           />
+          <p class="mt-1 shrink-0 text-center text-xs text-text/50">
+            {{ t('patchNotesPage.clickToZoom') }}
+          </p>
         </div>
         <div v-else class="py-12 text-text/70">
           {{ t('patchNotesPage.noSummaryImage') }}
         </div>
       </div>
 
-      <!-- Entity Cards Grid -->
-      <div v-else-if="filteredEntities.length > 0" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <!-- Entity Cards Grid - tighter spacing, more cards per row -->
+      <div
+        v-else-if="filteredEntities.length > 0"
+        class="grid gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+      >
         <PatchEntityCard
           v-for="(entity, idx) in filteredEntities"
-          :key="entity.patchSlug || entity.name || idx"
+          :key="`${entity.patchSlug || entity.name}-${entity.subCategory || ''}-${idx}`"
           :entity="entity"
         />
       </div>
 
       <!-- Empty State -->
       <div v-else class="flex flex-col items-center justify-center gap-4 py-12 text-text/70">
-        <p>{{ t('patchNotesPage.noChanges', { category: activeTabLabel }) }}</p>
+        <p v-if="isSearchActive">
+          {{ t('patchNotesPage.noSearchResults', { query: searchQuery.trim() }) }}
+        </p>
+        <p v-else>{{ t('patchNotesPage.noChanges', { category: activeTabLabel }) }}</p>
       </div>
+
+      <!-- Image Lightbox (teleports to body, can be placed anywhere) -->
+      <PatchImageLightbox
+        :is-open="isLightboxOpen"
+        :src="summaryImageUrl || ''"
+        :alt="t('patchNotesPage.summaryImageAlt', { version: currentPatchVersion })"
+        @close="isLightboxOpen = false"
+      />
     </div>
   </div>
 </template>
@@ -112,27 +164,50 @@ import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { usePatchNotesStore, type PatchEntity } from '~/stores/PatchNotesStore'
 import PatchEntityCard from '~/components/PatchEntityCard.vue'
+import PatchImageLightbox from '~/components/PatchImageLightbox.vue'
 
 const { t, locale } = useI18n()
 const patchNotesStore = usePatchNotesStore()
 
 // Use storeToRefs for reactive state extraction
-const { status, error, currentPatch, champions, items, runes, systems } =
-  storeToRefs(patchNotesStore)
+const {
+  status,
+  error,
+  currentPatch,
+  selectedVersion,
+  latestVersion,
+  availablePatches,
+  getSummaryImagePath,
+  champions,
+  items,
+  runes,
+  systems,
+  aram,
+  aramChaos,
+  arena,
+  bugfix,
+} = storeToRefs(patchNotesStore)
 
-const activeTab = ref<'summary' | 'champions' | 'items' | 'runes' | 'systems'>('summary')
+const activeTab = ref<
+  | 'summary'
+  | 'champions'
+  | 'items'
+  | 'runes'
+  | 'systems'
+  | 'aram'
+  | 'aram-chaos'
+  | 'arena'
+  | 'bugfix'
+>('summary')
+const isLightboxOpen = ref(false)
+const searchQuery = ref('')
+
+const isSearchActive = computed(() => searchQuery.value.trim().length > 0)
 
 const currentPatchVersion = computed(() => currentPatch.value?.patchVersion ?? '')
 const currentPatchDate = computed(() => currentPatch.value?.scrapedAt)
 
-const summaryImageUrl = computed(() => {
-  if (!currentPatch.value?.summaryImage) return null
-  const localPath = currentPatch.value.summaryImage.localPath
-  if (localPath) {
-    return localPath.replace(/^data\/patches\//, '/data/patch-notes/')
-  }
-  return currentPatch.value.summaryImage.url
-})
+const summaryImageUrl = computed(() => getSummaryImagePath.value)
 
 const tabs = computed(() => [
   {
@@ -165,13 +240,52 @@ const tabs = computed(() => [
     icon: '⚙️',
     count: systems.value.length,
   },
+  {
+    id: 'aram' as const,
+    label: t('patchNotesPage.categories.aram'),
+    icon: '🎲',
+    count: aram.value.length,
+  },
+  {
+    id: 'aram-chaos' as const,
+    label: t('patchNotesPage.categories.aramChaos'),
+    icon: '🌀',
+    count: aramChaos.value.length,
+  },
+  {
+    id: 'arena' as const,
+    label: t('patchNotesPage.categories.arena'),
+    icon: '🏟️',
+    count: arena.value.length,
+  },
+  {
+    id: 'bugfix' as const,
+    label: t('patchNotesPage.categories.bugfix'),
+    icon: '🐛',
+    count: bugfix.value.length,
+  },
 ])
 
+const visibleTabs = computed(() =>
+  tabs.value.filter(tab => {
+    if (tab.id === 'summary') return Boolean(summaryImageUrl.value)
+    return tab.count > 0
+  })
+)
+
 const activeTabLabel = computed(() => {
-  return tabs.value.find(t => t.id === activeTab.value)?.label ?? ''
+  return visibleTabs.value.find(t => t.id === activeTab.value)?.label ?? ''
 })
 
-const filteredEntities = computed<PatchEntity[]>(() => {
+function normalizeSearch(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036F]/g, '')
+    .trim()
+}
+
+const tabEntities = computed<PatchEntity[]>(() => {
   switch (activeTab.value) {
     case 'champions':
       return champions.value
@@ -181,10 +295,31 @@ const filteredEntities = computed<PatchEntity[]>(() => {
       return runes.value
     case 'systems':
       return systems.value
+    case 'aram':
+      return aram.value
+    case 'aram-chaos':
+      return aramChaos.value
+    case 'arena':
+      return arena.value
+    case 'bugfix':
+      return bugfix.value
     case 'summary':
     default:
       return []
   }
+})
+
+const filteredEntities = computed<PatchEntity[]>(() => {
+  const query = normalizeSearch(searchQuery.value)
+  if (!query) return tabEntities.value
+
+  const entities = currentPatch.value?.entities ?? []
+  return entities.filter(entity => {
+    const name = entity.name?.trim()
+    if (!name) return false
+    const haystack = [name, entity.subCategory ?? ''].map(normalizeSearch).join(' ')
+    return haystack.includes(query)
+  })
 })
 
 function formatDate(dateStr: string): string {
@@ -196,8 +331,26 @@ function formatDate(dateStr: string): string {
   })
 }
 
+function formatPatchOption(version: string): string {
+  if (version === latestVersion.value) {
+    return `${version} (${t('patchNotesPage.latest')})`
+  }
+  return version
+}
+
 function retryLoad() {
-  patchNotesStore.loadLatestPatch(locale.value)
+  const version = selectedVersion.value ?? latestVersion.value
+  if (version) {
+    patchNotesStore.loadPatch(version, locale.value)
+  } else {
+    patchNotesStore.loadLatestPatch(locale.value)
+  }
+}
+
+function onPatchChange(event: Event) {
+  const version = (event.target as HTMLSelectElement).value
+  searchQuery.value = ''
+  patchNotesStore.selectPatch(version, locale.value)
 }
 
 // Load patch on mount
@@ -207,7 +360,15 @@ onMounted(() => {
 
 // Watch locale changes
 watch(locale, () => {
+  searchQuery.value = ''
   patchNotesStore.loadLatestPatch(locale.value)
+})
+
+watch(visibleTabs, tabs => {
+  if (tabs.length === 0) return
+  if (!tabs.some(tab => tab.id === activeTab.value)) {
+    activeTab.value = tabs[0].id
+  }
 })
 
 useHead(() => ({

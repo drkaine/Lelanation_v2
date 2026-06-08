@@ -63,7 +63,7 @@ export async function scrapePatchNotesIfNeeded(
   });
 
   try {
-    await scrapePatch(url, outputDir);
+    await scrapePatch(url, outputDir, patchVersion, { triggeredBy: cronName });
 
     await log.info('Patch notes scraped successfully (backend)', { patchVersion, url, outputDir });
     await appendUnifiedLog({

@@ -52,7 +52,6 @@ describe('entityIds', () => {
       'rune'
     );
     expect(result.id).toBe('SummonAery');
-    expect(result.imageUrl).toContain('cmsassets.rgpub.io');
   });
 
   it('should map champion slugs with overrides', () => {

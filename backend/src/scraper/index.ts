@@ -20,6 +20,12 @@ export {
   patchSlugToRuneKey,
 } from './entityIds.js';
 export { loadGameDataIndexes } from './gameDataLoader.js';
+export {
+  runPatchPreflight,
+  assertPatchReadyToScrape,
+  PatchPreflightError,
+} from './patchPreflight.js';
+export { notifyPatchScrapeFailure } from './patchScrapeAlerts.js';
 export type {
   ChangeType,
   Locale,

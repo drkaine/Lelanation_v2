@@ -45,6 +45,7 @@
     "test:poller": "npm run test:poller:all",
     "seed:eu": "tsx scripts/seed-eu-players.ts",
     "scrape:patch": "tsx src/scripts/scrapePatch.ts",
+    "scrape:patches": "tsx src/scripts/scrapeAllPatches.ts",
     "publish:patches": "tsx src/scripts/publishPatchNotes.ts",
     "test:scraper": "vitest run --config vitest.scraper.config.ts"
   },

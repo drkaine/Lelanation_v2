@@ -40,15 +40,50 @@ export function extractPatchVersion(url: string): string {
 }
 
 /**
+ * Game patch label (16.x) → Riot patch notes URL version (26.x on the website in 2026).
+ */
+export function patchLabelToNotesUrlVersion(patchLabel: string): string {
+  const [major, minor] = patchLabel.split('.').map(Number);
+  if (major === 16 && Number.isFinite(minor)) {
+    return `26.${minor}`;
+  }
+  return patchLabel;
+}
+
+/** Riot website version in patch notes URLs (26.x) → game patch label (16.x). */
+export function notesUrlVersionToPatchLabel(notesVersion: string): string {
+  const [major, minor] = notesVersion.split('.').map(Number);
+  if (major === 26 && Number.isFinite(minor)) {
+    return `16.${minor}`;
+  }
+  return notesVersion;
+}
+
+/**
+ * Riot uses two URL slug formats on the website:
+ * - patch-26-1-notes … patch-26-3-notes (short)
+ * - league-of-legends-patch-26-4-notes … (long)
+ */
+export function getPatchNotesUrlSlug(notesVersion: string): string {
+  const [major, minor] = notesVersion.split('.').map(Number);
+  if (!Number.isFinite(major) || !Number.isFinite(minor)) {
+    throw new Error(`Invalid notes version for URL slug: ${notesVersion}`);
+  }
+  if (major === 26 && minor <= 3) {
+    return `patch-${major}-${minor}-notes`;
+  }
+  return `league-of-legends-patch-${major}-${minor}-notes`;
+}
+
+/**
  * Build Riot patch notes URL from game version (e.g. "16.4.1" or "26.11" → patch 16.4 / 26.11)
  */
 export function buildPatchNotesUrl(patchVersion: string, locale: 'en-gb' | 'en-us' = 'en-gb'): string {
-  const normalized = patchVersion.trim().replace(/^v/i, '');
-  const [major, minor] = normalized.split('.');
-  if (!major || !minor) {
-    throw new Error(`Invalid patch version for URL: ${patchVersion}`);
-  }
-  return `https://www.leagueoflegends.com/${locale}/news/game-updates/league-of-legends-patch-${major}-${minor}-notes/`;
+  const normalized = patchLabelToNotesUrlVersion(
+    patchVersion.trim().replace(/^v/i, '').split('.').slice(0, 2).join('.')
+  );
+  const slug = getPatchNotesUrlSlug(normalized);
+  return `https://www.leagueoflegends.com/${locale}/news/game-updates/${slug}/`;
 }
 
 /**

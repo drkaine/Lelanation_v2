@@ -131,7 +131,6 @@
           {{ gameVersion }}
         </a>
         <NuxtLink
-          v-if="isAdminLoggedIn"
           :to="localePath('/patch-notes')"
           :title="t('nav.patchNotes')"
           class="version"
@@ -266,7 +265,6 @@
           {{ t('nav.download') }}
         </NuxtLink>
         <NuxtLink
-          v-if="isAdminLoggedIn"
           :to="localePath('/patch-notes')"
           :title="t('nav.patchNotes')"
           class="version"

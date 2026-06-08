@@ -2,8 +2,9 @@
  * Cleaner module - normalizes and deduplicates patch changes
  */
 
+import { inferNumericChangeType } from './changeType.js';
 import { logger } from '../utils/logger.js';
-import type { EntityChanges, StatChange, ChangeType, EntityCategory } from './types.js';
+import type { EntityChanges, StatChange, EntityCategory } from './types.js';
 
 /**
  * Clean and normalize extracted changes
@@ -49,22 +50,34 @@ export function cleanChanges(raw: EntityChanges[]): EntityChanges[] {
         type: change.type,
       };
 
-      // Skip empty changes
-      if (!cleanChange.stat || (!cleanChange.before && !cleanChange.after)) {
+      // Skip empty changes (allow text-only bugfix lines with empty stat)
+      if (!cleanChange.after && !cleanChange.before) {
+        continue;
+      }
+      if (!cleanChange.stat && !cleanChange.before && !cleanChange.after) {
         continue;
       }
 
-      // Skip duplicate stats (keep first occurrence)
-      const statKey = `${cleanChange.stat.toLowerCase()}`;
+      // Skip exact duplicate lines (same stat + before + after)
+      const statKey = cleanChange.stat
+        ? `${cleanChange.stat.toLowerCase()}::${cleanChange.before.toLowerCase()}::${cleanChange.after.toLowerCase()}`
+        : `__text__:${cleanChange.before.toLowerCase()}::${cleanChange.after.toLowerCase()}`;
       if (seenStats.has(statKey)) {
         logger.debug({ entity: cleanEntity.name, stat: cleanChange.stat }, 'Skipping duplicate stat');
         continue;
       }
       seenStats.add(statKey);
 
-      // Recalculate type if needed
-      if (cleanChange.type === 'adjustment') {
-        cleanChange.type = recalculateChangeType(cleanChange.before, cleanChange.after);
+      if (
+        cleanChange.type === 'adjustment' ||
+        cleanChange.type === 'buff' ||
+        cleanChange.type === 'nerf'
+      ) {
+        cleanChange.type = inferNumericChangeType(
+          cleanChange.before,
+          cleanChange.after,
+          cleanChange.stat
+        );
       }
 
       cleanEntity.changes.push(cleanChange);
@@ -108,56 +121,18 @@ function normalizeCategory(category: EntityCategory | string): EntityCategory {
   if (normalized.includes('champion')) return 'champion';
   if (normalized.includes('item')) return 'item';
   if (normalized.includes('rune')) return 'rune';
+  
+  // ARAM modes
+  if (normalized.includes('aram-chaos') || normalized.includes('chaos')) return 'aram-chaos';
+  if (normalized.includes('aram')) return 'aram';
+  
+  // Arena
+  if (normalized.includes('arena')) return 'arena';
+  
+  // Bug fixes
+  if (normalized.includes('bugfix') || normalized.includes('bug')) return 'bugfix';
 
   return 'system';
-}
-
-/**
- * Recalculate change type based on before/after values
- */
-function recalculateChangeType(before: string, after: string): ChangeType {
-  const beforeNum = extractFirstNumber(before);
-  const afterNum = extractFirstNumber(after);
-
-  if (beforeNum === null || afterNum === null) {
-    return 'adjustment';
-  }
-
-  // Check for nerfs on beneficial stats or buffs on negative stats
-  const lowerText = (before + ' ' + after).toLowerCase();
-  const isNegativeStat =
-    lowerText.includes('cooldown') ||
-    lowerText.includes('cost') ||
-    lowerText.includes('reduction') && !lowerText.includes('damage reduction');
-
-  if (isNegativeStat) {
-    // For negative stats (cooldown, cost), lower is better
-    if (afterNum < beforeNum) return 'buff';
-    if (afterNum > beforeNum) return 'nerf';
-  } else {
-    // For positive stats (damage, healing), higher is better
-    if (afterNum > beforeNum) return 'buff';
-    if (afterNum < beforeNum) return 'nerf';
-  }
-
-  return 'adjustment';
-}
-
-/**
- * Extract first number from string
- */
-function extractFirstNumber(text: string): number | null {
-  // Handle both dot and comma as decimal separator
-  const normalized = text
-    .replace(/\s/g, '')
-    .replace(/,/g, '.');
-
-  const match = normalized.match(/(\d+(?:\.\d+)?)/);
-  if (match) {
-    const num = parseFloat(match[1]);
-    return isNaN(num) ? null : num;
-  }
-  return null;
 }
 
 /**
@@ -167,7 +142,9 @@ export function deduplicateEntities(entities: EntityChanges[]): EntityChanges[] 
   const byName = new Map<string, EntityChanges[]>();
 
   for (const entity of entities) {
-    const key = entity.name.toLowerCase().trim();
+    const key = entity.name
+      ? `${entity.name.toLowerCase().trim()}::${entity.subCategory?.toLowerCase().trim() ?? ''}`
+      : `__unnamed__:${entity.category}:${entity.changes[0]?.after?.slice(0, 80) ?? ''}`;
     if (!byName.has(key)) {
       byName.set(key, []);
     }
@@ -204,11 +181,17 @@ export function sortEntities(entities: EntityChanges[]): EntityChanges[] {
     item: 2,
     rune: 3,
     system: 4,
+    aram: 5,
+    'aram-chaos': 6,
+    arena: 7,
+    bugfix: 8,
   };
 
   return [...entities].sort((a, b) => {
     const catDiff = categoryOrder[a.category] - categoryOrder[b.category];
     if (catDiff !== 0) return catDiff;
-    return a.name.localeCompare(b.name);
+    const nameDiff = a.name.localeCompare(b.name);
+    if (nameDiff !== 0) return nameDiff;
+    return (a.subCategory ?? '').localeCompare(b.subCategory ?? '');
   });
 }

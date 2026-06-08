@@ -1,5 +1,5 @@
 /**
- * Publish scraped patch notes to frontend/public/data/patch-notes.
+ * Publish scraped patch notes to frontend/public/data/patch-notes/{version}/.
  * Moves files from backend → frontend (copy + delete backend), like Community Dragon.
  * Frontend keeps all published patch versions; backend only holds data until transfer.
  */
@@ -7,6 +7,7 @@
 import { promises as fs } from 'fs';
 import { join, basename } from 'path';
 import { createCronLogger } from '../utils/cronLogger.js';
+import { getPatchVersionDir } from '../utils/fileWriter.js';
 
 export type PatchNotesIndexEntry = {
   version: string;
@@ -42,7 +43,7 @@ function getFrontendPatchNotesDir(): string {
   return join(process.cwd(), '..', 'frontend', 'public', 'data', 'patch-notes');
 }
 
-function comparePatchVersions(a: string, b: string): number {
+export function comparePatchVersions(a: string, b: string): number {
   const [aMajor, aMinor] = a.split('.').map(Number);
   const [bMajor, bMinor] = b.split('.').map(Number);
   if (aMajor !== bMajor) return bMajor - aMajor;
@@ -65,7 +66,7 @@ function parsePatchFilename(filename: string): {
   };
 }
 
-async function listPatchFiles(dir: string): Promise<string[]> {
+async function listPatchFilesInDir(dir: string): Promise<string[]> {
   try {
     const entries = await fs.readdir(dir, { withFileTypes: true });
     return entries.filter((e) => e.isFile()).map((e) => e.name);
@@ -75,23 +76,60 @@ async function listPatchFiles(dir: string): Promise<string[]> {
   }
 }
 
-function buildIndexFromFiles(files: string[], scrapedAtByVersion: Map<string, string>): PatchNotesIndex {
+/** List all patch asset files across version subfolders (and legacy flat layout). */
+async function listAllPatchAssetFiles(rootDir: string): Promise<Array<{ version: string; filename: string }>> {
+  const results: Array<{ version: string; filename: string }> = [];
+
+  try {
+    const entries = await fs.readdir(rootDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isFile() && entry.name !== 'index.json' && entry.name !== 'schema.example.json') {
+        const parsed = parsePatchFilename(entry.name);
+        if (parsed) {
+          results.push({ version: parsed.version, filename: entry.name });
+        }
+        continue;
+      }
+
+      if (entry.isDirectory()) {
+        const version = entry.name;
+        const files = await listPatchFilesInDir(join(rootDir, version));
+        for (const filename of files) {
+          const parsed = parsePatchFilename(filename);
+          if (parsed && parsed.version === version) {
+            results.push({ version, filename });
+          }
+        }
+      }
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
+
+  return results;
+}
+
+function buildIndexFromFiles(
+  files: Array<{ version: string; filename: string }>,
+  scrapedAtByVersion: Map<string, string>
+): PatchNotesIndex {
   const byVersion = new Map<string, PatchNotesIndexEntry>();
 
-  for (const filename of files) {
+  for (const { version, filename } of files) {
     const parsed = parsePatchFilename(filename);
     if (!parsed) continue;
 
-    if (!byVersion.has(parsed.version)) {
-      byVersion.set(parsed.version, {
-        version: parsed.version,
-        scrapedAt: scrapedAtByVersion.get(parsed.version) ?? new Date().toISOString(),
+    if (!byVersion.has(version)) {
+      byVersion.set(version, {
+        version,
+        scrapedAt: scrapedAtByVersion.get(version) ?? new Date().toISOString(),
         locales: [],
         files: { summary: {} },
       });
     }
 
-    const entry = byVersion.get(parsed.version)!;
+    const entry = byVersion.get(version)!;
 
     if (parsed.kind === 'json') {
       entry.files[parsed.locale] = filename;
@@ -134,27 +172,31 @@ export async function movePatchVersionToFrontend(
   const log = createCronLogger(cronName);
   const backendDir = getBackendPatchesDir();
   const frontendDir = getFrontendPatchNotesDir();
-  const prefix = `patch-${patchVersion}-`;
+  const backendVersionDir = getPatchVersionDir(backendDir, patchVersion);
+  const frontendVersionDir = getPatchVersionDir(frontendDir, patchVersion);
 
-  await fs.mkdir(frontendDir, { recursive: true });
+  await fs.mkdir(frontendVersionDir, { recursive: true });
 
-  const backendFiles = await listPatchFiles(backendDir);
-  const toMove = backendFiles.filter((f) => f.startsWith(prefix));
-
+  const backendFiles = await listPatchFilesInDir(backendVersionDir);
   let moved = 0;
   let deleted = 0;
 
-  for (const filename of toMove) {
-    const source = join(backendDir, filename);
-    const target = join(frontendDir, filename);
+  for (const filename of backendFiles) {
+    const source = join(backendVersionDir, filename);
+    const target = join(frontendVersionDir, filename);
     await fs.copyFile(source, target);
     moved++;
     await fs.unlink(source);
     deleted++;
   }
 
-  await log.info('Patch notes moved to frontend', { patchVersion, moved, deleted, frontendDir });
-  return { moved, deleted, frontendDir };
+  await log.info('Patch notes moved to frontend', {
+    patchVersion,
+    moved,
+    deleted,
+    frontendDir: frontendVersionDir,
+  });
+  return { moved, deleted, frontendDir: frontendVersionDir };
 }
 
 /** @deprecated Use movePatchVersionToFrontend */
@@ -170,13 +212,12 @@ export async function copyPatchVersionToFrontend(
  * Delete all backend patch files for a version (after successful move).
  */
 export async function deleteBackendPatchVersion(patchVersion: string): Promise<number> {
-  const backendDir = getBackendPatchesDir();
-  const prefix = `patch-${patchVersion}-`;
-  const backendFiles = await listPatchFiles(backendDir);
+  const backendVersionDir = getPatchVersionDir(getBackendPatchesDir(), patchVersion);
+  const backendFiles = await listPatchFilesInDir(backendVersionDir);
   let deleted = 0;
 
-  for (const filename of backendFiles.filter((f) => f.startsWith(prefix))) {
-    await fs.unlink(join(backendDir, filename));
+  for (const filename of backendFiles) {
+    await fs.unlink(join(backendVersionDir, filename));
     deleted++;
   }
 
@@ -191,16 +232,16 @@ export async function rebuildPatchNotesIndex(
 ): Promise<PatchNotesIndex> {
   await fs.mkdir(frontendDir, { recursive: true });
 
-  const files = await listPatchFiles(frontendDir);
+  const files = await listAllPatchAssetFiles(frontendDir);
   const scrapedAtByVersion = new Map<string, string>();
 
-  for (const filename of files) {
+  for (const { version, filename } of files) {
     const parsed = parsePatchFilename(filename);
     if (!parsed || parsed.kind !== 'json') continue;
 
-    const scrapedAt = await readScrapedAtFromJson(join(frontendDir, filename));
+    const scrapedAt = await readScrapedAtFromJson(join(frontendDir, version, filename));
     if (scrapedAt) {
-      scrapedAtByVersion.set(parsed.version, scrapedAt);
+      scrapedAtByVersion.set(version, scrapedAt);
     }
   }
 
@@ -216,8 +257,8 @@ export async function publishPatchNotesToFrontend(
   patchVersion: string,
   cronName: string = 'patchNotesPublish'
 ): Promise<{ moved: number; deleted: number; index: PatchNotesIndex }> {
-  const { moved, deleted, frontendDir } = await movePatchVersionToFrontend(patchVersion, cronName);
-  const index = await rebuildPatchNotesIndex(frontendDir);
+  const { moved, deleted } = await movePatchVersionToFrontend(patchVersion, cronName);
+  const index = await rebuildPatchNotesIndex();
   return { moved, deleted, index };
 }
 
@@ -233,16 +274,19 @@ export async function publishAllPatchNotesToFrontend(
 
   await fs.mkdir(frontendDir, { recursive: true });
 
-  const backendFiles = await listPatchFiles(backendDir);
   let moved = 0;
   let deleted = 0;
 
-  for (const filename of backendFiles) {
-    if (!parsePatchFilename(filename)) continue;
-    await fs.copyFile(join(backendDir, filename), join(frontendDir, filename));
-    moved++;
-    await fs.unlink(join(backendDir, filename));
-    deleted++;
+  try {
+    const entries = await fs.readdir(backendDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const result = await movePatchVersionToFrontend(entry.name, cronName);
+      moved += result.moved;
+      deleted += result.deleted;
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
 
   const index = await rebuildPatchNotesIndex(frontendDir);

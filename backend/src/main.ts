@@ -53,30 +53,74 @@ const matchFilter = new MatchFilter();
 const rankFilter = new RankFilter();
 const participantDiscovery = new ParticipantDiscovery();
 
-async function acquirePollerLeaderLock(): Promise<void> {
-  const acquired = await redis.set(
-    POLLER_LEADER_LOCK_KEY,
-    String(process.pid),
-    'EX',
-    POLLER_LEADER_LOCK_TTL_SEC,
-    'NX',
-  );
-  if (acquired !== 'OK') {
-    const owner = await redis.get(POLLER_LEADER_LOCK_KEY);
-    console.warn(
-      `[poller-main] leader lock held by pid=${owner ?? 'unknown'} (this pid=${process.pid}) — exiting`,
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function acquirePollerLeaderLock(maxWaitMs = 60_000): Promise<void> {
+  const start = Date.now();
+  let attempt = 0;
+
+  while (Date.now() - start < maxWaitMs) {
+    // Try to acquire lock
+    const acquired = await redis.set(
+      POLLER_LEADER_LOCK_KEY,
+      String(process.pid),
+      'EX',
+      POLLER_LEADER_LOCK_TTL_SEC,
+      'NX',
     );
-    await redis.quit().catch(() => undefined);
-    process.exit(0);
+
+    if (acquired === 'OK') {
+      console.log(`[poller-main] leader lock acquired pid=${process.pid}`);
+      leaderLockRenewInterval = setInterval(() => {
+        void redis
+          .set(POLLER_LEADER_LOCK_KEY, String(process.pid), 'EX', POLLER_LEADER_LOCK_TTL_SEC)
+          .catch((error) => {
+            console.error('[poller-main] leader lock renew failed', error);
+          });
+      }, 30_000);
+      return;
+    }
+
+    // Lock held - check TTL
+    const ttl = await redis.ttl(POLLER_LEADER_LOCK_KEY);
+    const owner = await redis.get(POLLER_LEADER_LOCK_KEY);
+
+    // If lock has no TTL or is stale (> 2x TTL old), steal it
+    if (ttl < 0 || ttl > POLLER_LEADER_LOCK_TTL_SEC * 2) {
+      console.warn(
+        `[poller-main] stealing stale leader lock (ttl=${ttl}, owner=${owner ?? 'unknown'})`,
+      );
+      await redis.del(POLLER_LEADER_LOCK_KEY);
+      continue; // Retry immediately
+    }
+
+    // If TTL is short (< 5s), wait for it to expire
+    if (ttl < 5) {
+      console.warn(
+        `[poller-main] leader lock expires in ${ttl}s, waiting... (owner=${owner ?? 'unknown'})`,
+      );
+      await sleep((ttl + 1) * 1000);
+      continue;
+    }
+
+    // Exponential backoff with jitter
+    attempt++;
+    const delay = Math.min(1000 * 2 ** attempt + Math.random() * 1000, 10_000);
+    console.warn(
+      `[poller-main] leader lock held by pid=${owner ?? 'unknown'}, waiting ${Math.round(delay)}ms (attempt ${attempt})`,
+    );
+    await sleep(delay);
   }
 
-  leaderLockRenewInterval = setInterval(() => {
-    void redis
-      .set(POLLER_LEADER_LOCK_KEY, String(process.pid), 'EX', POLLER_LEADER_LOCK_TTL_SEC)
-      .catch((error) => {
-        console.error('[poller-main] leader lock renew failed', error);
-      });
-  }, 30_000);
+  // Max wait exceeded - exit
+  const owner = await redis.get(POLLER_LEADER_LOCK_KEY);
+  console.error(
+    `[poller-main] failed to acquire leader lock after ${maxWaitMs}ms (owner=${owner ?? 'unknown'}) — exiting`,
+  );
+  await redis.quit().catch(() => undefined);
+  process.exit(0);
 }
 
 async function releasePollerLeaderLock(): Promise<void> {
@@ -279,7 +323,6 @@ async function bootstrap(): Promise<void> {
   );
 
   await acquirePollerLeaderLock();
-  console.log(`[poller-main] leader lock acquired pid=${process.pid}`);
 
   ingestionWorker = await startIngestionWorker();
   console.log('[poller-main] ingestion worker started');

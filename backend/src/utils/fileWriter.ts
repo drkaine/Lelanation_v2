@@ -7,6 +7,15 @@ import path from 'path';
 import { logger } from './logger.js';
 import type { PatchJson } from '../scraper/types.js';
 
+export function getPatchVersionDir(baseDir: string, patchVersion: string): string {
+  return path.join(baseDir, patchVersion);
+}
+
+/** Web path for a patch asset under /data/patch-notes/{version}/ */
+export function buildPatchNotesPublicPath(patchVersion: string, filename: string): string {
+  return `data/patch-notes/${patchVersion}/${filename}`;
+}
+
 /**
  * Write patch data to JSON file
  */
@@ -93,7 +102,7 @@ export async function patchFileExists(
   locale: string
 ): Promise<boolean> {
   const filename = `patch-${patchVersion}-${locale}.json`;
-  const filePath = path.join(dir, filename);
+  const filePath = path.join(getPatchVersionDir(dir, patchVersion), filename);
 
   try {
     await fs.access(filePath);

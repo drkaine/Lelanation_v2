@@ -3,7 +3,15 @@ import { defineStore } from 'pinia'
 import type { Locale } from '~/types/locale'
 
 export type ChangeType = 'buff' | 'nerf' | 'adjustment' | 'new' | 'removed' | 'text'
-export type EntityCategory = 'champion' | 'item' | 'rune' | 'system'
+export type EntityCategory =
+  | 'champion'
+  | 'item'
+  | 'rune'
+  | 'system'
+  | 'aram'
+  | 'aram-chaos'
+  | 'arena'
+  | 'bugfix'
 
 export interface StatChange {
   stat: string
@@ -63,19 +71,65 @@ function localeToPatchLocale(locale: string): string {
   return 'en-GB'
 }
 
+export function resolvePatchNotesAssetPath(
+  localPath: string | undefined,
+  patchVersion: string
+): string | null {
+  if (!localPath) return null
+  if (localPath.startsWith('http://') || localPath.startsWith('https://')) return localPath
+  if (localPath.startsWith('/data/patch-notes/')) return localPath
+  if (localPath.startsWith('data/patch-notes/')) {
+    return `/${localPath}`
+  }
+  if (localPath.startsWith('data/patches/')) {
+    const filename = localPath.split('/').pop() ?? localPath
+    // Legacy paths may reference 26.x filenames while files are stored as 16.x
+    const normalizedFilename = filename.replace(/^patch-26\.(\d+)-/, `patch-16.$1-`)
+    return `${getPatchNotesBaseUrl()}/${patchVersion}/${normalizedFilename}`
+  }
+  if (!localPath.includes('/')) {
+    return `${getPatchNotesBaseUrl()}/${patchVersion}/${localPath}`
+  }
+  return `${getPatchNotesBaseUrl()}/${localPath.replace(/^data\/patch-notes\//, '')}`
+}
+
+export function resolveSummaryImageUrl(
+  patchVersion: string,
+  patchLocale: string,
+  index: PatchIndex | null,
+  summaryImage?: PatchSummaryImage
+): string | null {
+  const entry = index?.patches.find(p => p.version === patchVersion)
+  const summaryFilename = entry?.files?.summary?.[patchLocale] ?? entry?.files?.summary?.['en-GB']
+
+  if (summaryFilename) {
+    return `${getPatchNotesBaseUrl()}/${patchVersion}/${summaryFilename}`
+  }
+
+  if (summaryImage?.localPath) {
+    const resolved = resolvePatchNotesAssetPath(summaryImage.localPath, patchVersion)
+    if (resolved) return resolved
+  }
+
+  return summaryImage?.url ?? null
+}
+
+function getPatchJsonUrl(version: string, patchLocale: string): string {
+  return `${getPatchNotesBaseUrl()}/${version}/patch-${version}-${patchLocale}.json`
+}
+
 /** Single-flight: parallel loads share one fetch. */
 let loadIndexInflight: Promise<void> | null = null
 let loadPatchInflight: Promise<PatchData | null> | null = null
 let loadPatchInflightKey: string | null = null
 
 export const usePatchNotesStore = defineStore('patchNotes', () => {
-  // State
   const index = ref<PatchIndex | null>(null)
   const currentPatch = ref<PatchData | null>(null)
+  const selectedVersion = ref<string | null>(null)
   const status = ref<'idle' | 'loading' | 'success' | 'error'>('idle')
   const error = ref<string | null>(null)
 
-  // Getters (computed)
   const latestVersion = computed(() => index.value?.latest ?? null)
   const availablePatches = computed(() => index.value?.patches ?? [])
 
@@ -91,19 +145,32 @@ export const usePatchNotesStore = defineStore('patchNotes', () => {
   const systems = computed(
     () => currentPatch.value?.entities?.filter(e => e.category === 'system') ?? []
   )
+  const aram = computed(
+    () => currentPatch.value?.entities?.filter(e => e.category === 'aram') ?? []
+  )
+  const aramChaos = computed(
+    () => currentPatch.value?.entities?.filter(e => e.category === 'aram-chaos') ?? []
+  )
+  const arena = computed(
+    () => currentPatch.value?.entities?.filter(e => e.category === 'arena') ?? []
+  )
+  const bugfix = computed(
+    () => currentPatch.value?.entities?.filter(e => e.category === 'bugfix') ?? []
+  )
 
   const getSummaryImagePath = computed(() => {
-    if (!currentPatch.value?.summaryImage) return null
-    const localPath = currentPatch.value.summaryImage.localPath
-    if (localPath) {
-      return localPath.replace(/^data\/patches\//, '/data/patch-notes/')
-    }
-    return currentPatch.value.summaryImage.url
+    if (!currentPatch.value?.patchVersion) return null
+    const patchLocale = currentPatch.value.locale
+    return resolveSummaryImageUrl(
+      currentPatch.value.patchVersion,
+      patchLocale,
+      index.value,
+      currentPatch.value.summaryImage
+    )
   })
 
-  // Actions
-  async function loadIndex(): Promise<void> {
-    if (index.value) return
+  async function loadIndex(force = false): Promise<void> {
+    if (index.value && !force) return
     if (loadIndexInflight) {
       await loadIndexInflight
       return
@@ -143,6 +210,7 @@ export const usePatchNotesStore = defineStore('patchNotes', () => {
       currentPatch.value?.patchVersion === version &&
       currentPatch.value?.locale === patchLocale
     ) {
+      selectedVersion.value = version
       return currentPatch.value
     }
 
@@ -156,20 +224,16 @@ export const usePatchNotesStore = defineStore('patchNotes', () => {
         status.value = 'loading'
         error.value = null
 
-        const response = await fetch(
-          `${getPatchNotesBaseUrl()}/patch-${version}-${patchLocale}.json`,
-          { cache: 'no-cache' }
-        )
+        const response = await fetch(getPatchJsonUrl(version, patchLocale), { cache: 'no-cache' })
 
         if (!response.ok) {
-          // Try fallback to en-GB if locale not available
           if (patchLocale !== 'en-GB') {
-            const fallbackResponse = await fetch(
-              `${getPatchNotesBaseUrl()}/patch-${version}-en-GB.json`,
-              { cache: 'no-cache' }
-            )
+            const fallbackResponse = await fetch(getPatchJsonUrl(version, 'en-GB'), {
+              cache: 'no-cache',
+            })
             if (fallbackResponse.ok) {
               currentPatch.value = await fallbackResponse.json()
+              selectedVersion.value = version
               status.value = 'success'
               return currentPatch.value
             }
@@ -178,6 +242,7 @@ export const usePatchNotesStore = defineStore('patchNotes', () => {
         }
 
         currentPatch.value = await response.json()
+        selectedVersion.value = version
         status.value = 'success'
         return currentPatch.value
       } catch (err) {
@@ -199,9 +264,15 @@ export const usePatchNotesStore = defineStore('patchNotes', () => {
     return loadPatch(latestVersion.value, locale)
   }
 
+  async function selectPatch(version: string, locale: string): Promise<PatchData | null> {
+    await loadIndex()
+    return loadPatch(version, locale)
+  }
+
   return {
     index,
     currentPatch,
+    selectedVersion,
     status,
     error,
     latestVersion,
@@ -210,9 +281,14 @@ export const usePatchNotesStore = defineStore('patchNotes', () => {
     items,
     runes,
     systems,
+    aram,
+    aramChaos,
+    arena,
+    bugfix,
     getSummaryImagePath,
     loadIndex,
     loadPatch,
     loadLatestPatch,
+    selectPatch,
   }
 })

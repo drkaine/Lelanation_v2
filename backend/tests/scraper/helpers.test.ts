@@ -42,9 +42,18 @@ describe('helpers', () => {
       );
     });
 
-    it('should build URL from full game version', () => {
+    it('should build short URL slug for early 2026 patches (26.1–26.3)', () => {
+      expect(buildPatchNotesUrl('16.1')).toBe(
+        'https://www.leagueoflegends.com/en-gb/news/game-updates/patch-26-1-notes/'
+      );
+      expect(buildPatchNotesUrl('16.3')).toBe(
+        'https://www.leagueoflegends.com/en-gb/news/game-updates/patch-26-3-notes/'
+      );
+    });
+
+    it('should build URL from full game version (16.x → 26.x on website)', () => {
       expect(buildPatchNotesUrl('16.4.1')).toBe(
-        'https://www.leagueoflegends.com/en-gb/news/game-updates/league-of-legends-patch-16-4-notes/'
+        'https://www.leagueoflegends.com/en-gb/news/game-updates/league-of-legends-patch-26-4-notes/'
       );
     });
   });

@@ -52,14 +52,14 @@ describe('cleaner', () => {
       expect(cleaned[0].changes[0].before).toBe('100');
     });
 
-    it('should deduplicate stat changes', () => {
+    it('should deduplicate exact duplicate stat changes', () => {
       const raw: EntityChanges[] = [
         {
           name: 'Nami',
           category: 'champion',
           changes: [
             { stat: 'Damage', before: '100', after: '120', type: 'buff' as ChangeType },
-            { stat: 'damage', before: '110', after: '130', type: 'buff' as ChangeType }, // duplicate (case insensitive)
+            { stat: 'damage', before: '100', after: '120', type: 'buff' as ChangeType },
             { stat: 'Healing', before: '50', after: '60', type: 'buff' as ChangeType },
           ],
         },
@@ -69,6 +69,59 @@ describe('cleaner', () => {
       expect(cleaned[0].changes).toHaveLength(2);
       expect(cleaned[0].changes[0].stat).toBe('Damage');
       expect(cleaned[0].changes[1].stat).toBe('Healing');
+    });
+
+    it('should keep duplicate stat names on one entity when before/after differ', () => {
+      const raw: EntityChanges[] = [
+        {
+          name: 'Quinn',
+          category: 'champion',
+          changes: [
+            {
+              stat: 'Dégâts aux monstres',
+              before: '50',
+              after: '75',
+              type: 'buff' as ChangeType,
+            },
+            {
+              stat: 'Dégâts aux monstres',
+              before: '150%',
+              after: '200%',
+              type: 'buff' as ChangeType,
+            },
+          ],
+        },
+      ];
+
+      const cleaned = cleanChanges(raw);
+      expect(cleaned[0].changes).toHaveLength(2);
+    });
+
+    it('should keep multiple changes with the same stat name when values differ', () => {
+      const raw: EntityChanges[] = [
+        {
+          name: 'Rêve éveillé',
+          category: 'item',
+          changes: [
+            {
+              stat: 'Réduction des dégâts de la bulle bleue',
+              before: '75 - 255 (niveaux 1 à 18)',
+              after: '50 - 194 (niveaux 1 à 18)',
+              type: 'nerf' as ChangeType,
+            },
+            {
+              stat: 'Réduction des dégâts de la bulle bleue',
+              before: "la réduction des dégâts s'applique à la prochaine instance de dégâts non nulle, quelle qu'elle soit",
+              after: "la réduction des dégâts s'applique à la prochaine source de dégâts non nulle (transfert temporel)",
+              type: 'adjustment' as ChangeType,
+            },
+          ],
+        },
+      ];
+
+      const cleaned = cleanChanges(raw);
+      expect(cleaned[0].changes).toHaveLength(2);
+      expect(cleaned[0].changes.every(c => c.stat === 'Réduction des dégâts de la bulle bleue')).toBe(true);
     });
 
     it('should normalize categories', () => {
@@ -112,6 +165,26 @@ describe('cleaner', () => {
       const entities: EntityChanges[] = [
         { name: 'Nami', category: 'champion', changes: [{ stat: 'A', before: '1', after: '2', type: 'buff' as ChangeType }] },
         { name: 'Lux', category: 'champion', changes: [{ stat: 'A', before: '1', after: '2', type: 'buff' as ChangeType }] },
+      ];
+
+      const deduped = deduplicateEntities(entities);
+      expect(deduped).toHaveLength(2);
+    });
+
+    it('should keep separate ability blocks for the same champion', () => {
+      const entities: EntityChanges[] = [
+        {
+          name: 'Heimerdinger',
+          category: 'champion',
+          subCategory: 'A - Tourelle H-28G Évolution',
+          changes: [{ stat: 'Portée', before: '530', after: '550', type: 'buff' as ChangeType }],
+        },
+        {
+          name: 'Heimerdinger',
+          category: 'champion',
+          subCategory: 'E - Grenade électro-tempête CH-2',
+          changes: [{ stat: 'Vision', before: '1 sec', after: '1,25 sec', type: 'buff' as ChangeType }],
+        },
       ];
 
       const deduped = deduplicateEntities(entities);

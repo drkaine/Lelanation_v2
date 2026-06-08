@@ -13,8 +13,15 @@ import {
 import { cleanChanges, deduplicateEntities, sortEntities } from './cleaner.js';
 import { enrichEntityIds } from './entityIds.js';
 import { loadGameDataIndexes } from './gameDataLoader.js';
-import { writePatchJson, writePatchImage } from '../utils/fileWriter.js';
-import { extractPatchVersion, getFrUrl, isValidPatchUrl } from '../utils/helpers.js';
+import {
+  writePatchJson,
+  writePatchImage,
+  getPatchVersionDir,
+  buildPatchNotesPublicPath,
+} from '../utils/fileWriter.js';
+import { extractPatchVersion, getFrUrl, isValidPatchUrl, notesUrlVersionToPatchLabel } from '../utils/helpers.js';
+import { assertPatchReadyToScrape } from './patchPreflight.js';
+import { notifyPatchScrapeFailure } from './patchScrapeAlerts.js';
 import type { PatchJson, Locale, PatchSummaryImage, EntityChanges } from './types.js';
 
 // Delay between EN and FR requests (ms)
@@ -24,29 +31,43 @@ const REQUEST_DELAY_MS = 2000;
  * Scrape patch notes from both EN and FR URLs
  * Main entry point called by cron
  */
-export async function scrapePatch(enUrl: string, outputDir: string): Promise<void> {
-  logger.info({ enUrl, outputDir }, 'Starting patch scrape');
+export async function scrapePatch(
+  enUrl: string,
+  outputDir: string,
+  storageVersion?: string,
+  options?: { skipPreflight?: boolean; triggeredBy?: string }
+): Promise<void> {
+  logger.info({ enUrl, outputDir, storageVersion }, 'Starting patch scrape');
 
-  // Validate URL
-  if (!isValidPatchUrl(enUrl)) {
-    throw new Error(`Invalid patch URL: ${enUrl}`);
+  const patchVersion = storageVersion ?? notesUrlVersionToPatchLabel(extractPatchVersion(enUrl));
+  const alertContext = {
+    patchVersion,
+    url: enUrl,
+    triggeredBy: options?.triggeredBy,
+  };
+
+  try {
+    if (!isValidPatchUrl(enUrl)) {
+      throw new Error(`Invalid patch URL: ${enUrl}`);
+    }
+
+    if (!options?.skipPreflight) {
+      const entityCount = await assertPatchReadyToScrape(enUrl);
+      logger.info({ enUrl, entityCount }, 'Patch preflight check passed');
+    }
+
+    const frUrl = getFrUrl(enUrl);
+    logger.info({ patchVersion, frUrl }, 'Resolved URLs');
+
+    await scrapeLocale(enUrl, 'en-GB', patchVersion, outputDir);
+    await delayBetweenRequests(REQUEST_DELAY_MS);
+    await scrapeLocale(frUrl, 'fr-FR', patchVersion, outputDir);
+
+    logger.info({ patchVersion }, 'Patch scrape complete');
+  } catch (error) {
+    await notifyPatchScrapeFailure(error, alertContext);
+    throw error;
   }
-
-  const patchVersion = extractPatchVersion(enUrl);
-  const frUrl = getFrUrl(enUrl);
-
-  logger.info({ patchVersion, frUrl }, 'Resolved URLs');
-
-  // Scrape EN version
-  await scrapeLocale(enUrl, 'en-GB', patchVersion, outputDir);
-
-  // Small delay to be respectful to the server
-  await delayBetweenRequests(REQUEST_DELAY_MS);
-
-  // Scrape FR version
-  await scrapeLocale(frUrl, 'fr-FR', patchVersion, outputDir);
-
-  logger.info({ patchVersion }, 'Patch scrape complete');
 }
 
 /**
@@ -61,22 +82,20 @@ async function scrapeLocale(
   logger.info({ url, locale }, 'Scraping locale');
 
   try {
-    // Fetch HTML
     const html = await fetchPage(url);
-
-    // Parse changes
     const rawEntities = parsePatchHtml(html, locale);
 
-    // Clean, enrich ids, normalize
     let cleanedEntities = cleanChanges(rawEntities);
     cleanedEntities = await enrichEntitiesWithGameData(cleanedEntities);
     cleanedEntities = deduplicateEntities(cleanedEntities);
     cleanedEntities = sortEntities(cleanedEntities);
 
-    // Download summary infographic (patch-highlights section)
+    if (cleanedEntities.length === 0) {
+      throw new Error(`Aucune entité extraite après nettoyage (${locale})`);
+    }
+
     const summaryImage = await downloadSummaryImage(html, patchVersion, locale, outputDir);
 
-    // Build output structure
     const patchJson: PatchJson = {
       patchVersion,
       locale,
@@ -86,15 +105,18 @@ async function scrapeLocale(
       entities: cleanedEntities,
     };
 
-    // Write to file
+    const versionDir = getPatchVersionDir(outputDir, patchVersion);
     const filename = `patch-${patchVersion}-${locale}.json`;
-    await writePatchJson(outputDir, filename, patchJson);
+    await writePatchJson(versionDir, filename, patchJson);
 
     logger.info(
-      { locale, entities: cleanedEntities.length, changes: cleanedEntities.reduce((s, e) => s + e.changes.length, 0) },
+      {
+        locale,
+        entities: cleanedEntities.length,
+        changes: cleanedEntities.reduce((s, e) => s + e.changes.length, 0),
+      },
       'Locale scrape complete'
     );
-
   } catch (error) {
     logger.error({ url, locale, error }, 'Failed to scrape locale');
     throw error;
@@ -126,8 +148,9 @@ export async function scrapePatchWithResult(
   // EN
   try {
     results.en = await scrapeLocaleWithResult(enUrl, 'en-GB', patchVersion, outputDir);
+    const versionDir = getPatchVersionDir(outputDir, patchVersion);
     const filename = `patch-${patchVersion}-en-GB.json`;
-    await writePatchJson(outputDir, filename, results.en);
+    await writePatchJson(versionDir, filename, results.en);
   } catch (error) {
     logger.error({ url: enUrl, error }, 'Failed to scrape EN');
   }
@@ -137,8 +160,9 @@ export async function scrapePatchWithResult(
   // FR
   try {
     results.fr = await scrapeLocaleWithResult(frUrl, 'fr-FR', patchVersion, outputDir);
+    const versionDir = getPatchVersionDir(outputDir, patchVersion);
     const filename = `patch-${patchVersion}-fr-FR.json`;
-    await writePatchJson(outputDir, filename, results.fr);
+    await writePatchJson(versionDir, filename, results.fr);
   } catch (error) {
     logger.error({ url: frUrl, error }, 'Failed to scrape FR');
   }
@@ -197,9 +221,11 @@ async function downloadSummaryImage(
   }
 
   try {
+    const versionDir = getPatchVersionDir(outputDir, patchVersion);
     const imageBuffer = await fetchBinary(extracted.url);
     const filename = buildSummaryImageFilename(patchVersion, locale, extracted.url);
-    const localPath = await writePatchImage(outputDir, filename, imageBuffer);
+    await writePatchImage(versionDir, filename, imageBuffer);
+    const localPath = buildPatchNotesPublicPath(patchVersion, filename);
 
     logger.info({ patchVersion, locale, url: extracted.url, localPath }, 'Summary image downloaded');
 

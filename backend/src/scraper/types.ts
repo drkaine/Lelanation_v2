@@ -4,7 +4,7 @@
 
 export type ChangeType = 'buff' | 'nerf' | 'adjustment' | 'new' | 'removed' | 'text';
 export type Locale = 'en-GB' | 'fr-FR';
-export type EntityCategory = 'champion' | 'item' | 'rune' | 'system';
+export type EntityCategory = 'champion' | 'item' | 'rune' | 'system' | 'aram' | 'aram-chaos' | 'arena' | 'bugfix';
 
 export interface StatChange {
   stat: string;

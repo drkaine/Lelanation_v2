@@ -17,56 +17,65 @@ export function getImageUrl(
 }
 
 /**
- * Get champion image URL
+ * Get champion image URL (local)
  */
-export function getChampionImageUrl(version: string, imageName: string): string {
+export function getChampionImageUrl(_version: string, imageName: string): string {
   if (!imageName) return ''
-  return `https://ddragon.leagueoflegends.com/cdn/${version}/img/champion/${imageName}`
+  // Use local images instead of Data Dragon
+  return `/images/game/latest/champion/${imageName}`
 }
 
 /**
  * Get champion splash image URL (base skin 0).
  * Stored as: /images/game/{version}/champion/splash_{ChampionId}.jpg
  */
-export function getChampionSplashImageUrl(version: string, championId: string): string {
+export function getChampionSplashImageUrl(_version: string, championId: string): string {
   if (!championId) return ''
-  return `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${championId}_0.jpg`
+  // Use local images instead of Data Dragon
+  return `/images/game/latest/champion/splash_${championId}_0.jpg`
 }
 
 /**
- * Get item image URL
+ * Get item image URL (local)
  */
-export function getItemImageUrl(version: string, imageName: string): string {
+export function getItemImageUrl(_version: string, imageName: string): string {
   if (!imageName) return ''
-  return `https://ddragon.leagueoflegends.com/cdn/${version}/img/item/${imageName}`
+  // Use local images instead of Data Dragon
+  return `/images/game/latest/item/${imageName}`
 }
 
 /**
- * Get summoner spell image URL
+ * Get summoner spell image URL (local)
  */
-export function getSpellImageUrl(version: string, imageName: string): string {
+export function getSpellImageUrl(_version: string, imageName: string): string {
   if (!imageName) return ''
-  return `https://ddragon.leagueoflegends.com/cdn/${version}/img/spell/${imageName}`
+  // Use local images instead of Data Dragon
+  return `/images/game/latest/spell/${imageName}`
 }
 
 /**
- * Get champion spell image URL
+ * Get champion spell image URL (local)
+ * Stored as: /images/game/latest/champion-spell/{ChampionId}/{SpellImage}.png
  */
 export function getChampionSpellImageUrl(
-  version: string,
-  _championId: string,
+  _version: string,
+  championId: string,
   imageName: string
 ): string {
-  if (!imageName) return ''
-  return `https://ddragon.leagueoflegends.com/cdn/${version}/img/spell/${imageName}`
+  if (!imageName || !championId) return ''
+  if (imageName.includes('/')) {
+    return `/images/game/latest/champion-spell/${imageName}`
+  }
+  return getImageUrl('champion-spell', 'latest', imageName, championId)
 }
 
 /**
- * Get champion passive image URL
+ * Get champion passive image URL (local)
+ * Stored as: /images/game/latest/champion-spell/passive/{PassiveImage}.png
  */
-export function getChampionPassiveImageUrl(version: string, imageName: string): string {
+export function getChampionPassiveImageUrl(_version: string, imageName: string): string {
   if (!imageName) return ''
-  return `https://ddragon.leagueoflegends.com/cdn/${version}/img/passive/${imageName}`
+  return getImageUrl('champion-spell', 'latest', imageName, 'passive')
 }
 
 /**

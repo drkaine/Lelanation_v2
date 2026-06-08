@@ -35,6 +35,18 @@ const CHAMPION_SLUG_OVERRIDES: Record<string, string> = {
   yuumi: 'Yuumi',
 };
 
+/** Items whose patch slug does not directly map to game data name (apostrophe issues). */
+const ITEM_SLUG_OVERRIDES: Record<string, string> = {
+  'zekes-convergence': '3050',
+  'knights-vow': '3109',
+  'moonstone-renewer': '6617',
+  'dream-maker': '3870',
+  'locket-of-the-iron-solari': '3190',
+  'echoes-of-helia': '6620',
+  'hexplaque-experimentale': '3073',
+  'experimental-hexplate': '3073',
+};
+
 export interface EntityIdExtraction {
   id?: string;
   imageUrl?: string;
@@ -55,12 +67,16 @@ function extractDdragonFromHref(href: string): EntityIdExtraction | null {
 
   const itemMatch = decoded.match(D_DRAGON_ITEM_RE);
   if (itemMatch) {
-    return { id: itemMatch[1], imageUrl: decoded };
+    // Only return the ID, not the full Data Dragon URL
+    // Frontend will use local images
+    return { id: itemMatch[1] };
   }
 
   const championMatch = decoded.match(D_DRAGON_CHAMPION_RE);
   if (championMatch) {
-    return { id: championMatch[1], imageUrl: decoded };
+    // Only return the ID, not the full Data Dragon URL
+    // Frontend will use local images
+    return { id: championMatch[1] };
   }
 
   return null;
@@ -98,8 +114,19 @@ function normalizeImageUrl(href: string): string | undefined {
   if (!trimmed || trimmed.includes('how-to-play') || CHAMPION_PAGE_RE.test(trimmed)) {
     return undefined;
   }
-  if (!trimmed.includes('cmsassets.rgpub.io') && !trimmed.includes('ddragon') && !trimmed.includes('akamaihd.net')) {
+  // Don't store Data Dragon or external URLs - frontend uses local images
+  if (trimmed.includes('ddragon.leagueoflegends.com')) {
     return undefined;
+  }
+  // Only keep cmsassets.rgpub.io images (Riot's CDN for non-game assets like runes)
+  if (!trimmed.includes('cmsassets.rgpub.io') && !trimmed.includes('akamaihd.net')) {
+    return undefined;
+  }
+  const imageMatch = trimmed.match(
+    /(https:\/\/cmsassets\.rgpub\.io[^\s"'<>]+?\.(?:png|jpe?g|webp|svg))/i
+  );
+  if (imageMatch) {
+    return imageMatch[1];
   }
   return trimmed.split('?')[0];
 }
@@ -137,7 +164,8 @@ export function extractEntityIdFromHtml(
 
   if (category === 'rune') {
     const runeKey = patchSlugToRuneKey(patchSlug);
-    return runeKey ? { id: runeKey, imageUrl } : { imageUrl };
+    // Numeric id resolved later from game data; frontend uses local rune images
+    return runeKey ? { id: runeKey } : {};
   }
 
   if (category === 'item') {
@@ -250,9 +278,26 @@ export function enrichEntityIds(
       return entity;
     }
 
+    if (entity.category === 'aram' || entity.category === 'aram-chaos' || entity.category === 'arena') {
+      if (entity.id && indexes.championIds.has(entity.id)) {
+        return entity;
+      }
+
+      const fromName = indexes.championSlugToId.get(normalizeLookupKey(entity.name));
+      if (fromName) {
+        return { ...entity, id: fromName };
+      }
+      return entity;
+    }
+
     if (entity.category === 'item') {
       if (entity.id) {
         return entity;
+      }
+
+      // Check direct slug overrides first (for apostrophe issues like Zeke's, Knight's)
+      if (patchSlug && ITEM_SLUG_OVERRIDES[patchSlug.toLowerCase()]) {
+        return { ...entity, id: ITEM_SLUG_OVERRIDES[patchSlug.toLowerCase()] };
       }
 
       if (patchSlug) {

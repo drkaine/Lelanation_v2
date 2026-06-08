@@ -146,6 +146,15 @@ describe('parser', () => {
       expect(dreamMaker?.category).toBe('item'); // detected from ddragon item href
       expect(dreamMaker?.id).toBe('3870');
 
+      const moonstone = entities.find((e: EntityChanges) => e.name === 'Régénérateur de pierre de lune');
+      expect(moonstone).toBeDefined();
+      expect(moonstone!.category).toBe('item');
+      expect(moonstone!.patchSlug).toBe('Moonstone-Renewer');
+      expect(moonstone!.changes).toHaveLength(2);
+      expect(moonstone!.changes[0].type).toBe('text');
+      expect(moonstone!.changes[0].after).toContain('Hémorragie');
+      expect(moonstone!.changes[1].after).toContain('moins de PV');
+
       const mandate = entities.find((e: EntityChanges) => e.name === 'Mandat impérial');
       expect(mandate?.id).toBe('4005');
       expect(mandate?.patchSlug).toBe('Imperial-Mandate');
@@ -161,6 +170,73 @@ describe('parser', () => {
       expect(newChanges[0].stat).toBe('Unique – Contrôle');
       expect(newChanges[0].after).toContain('15 accélération');
       expect(newChanges[1].stat).toBe('Unique – Ordre');
+    });
+
+    it('should parse champions section with blockquote before stats', () => {
+      const html = loadFixture('champions-section.html');
+      const entities = parsePatchHtml(html, 'fr-FR');
+
+      const brand = entities.find(e => e.name === 'Brand');
+      expect(brand).toBeDefined();
+      expect(brand!.category).toBe('champion');
+      expect(brand!.subCategory).toBe('Stats de base');
+      expect(brand!.changes).toHaveLength(1);
+    });
+
+    it('should split champion changes into ability cards', () => {
+      const html = loadFixture('champion-abilities.html');
+      const entities = parsePatchHtml(html, 'fr-FR').filter(e => e.name === 'Heimerdinger');
+
+      expect(entities).toHaveLength(2);
+
+      const turret = entities.find(e => e.subCategory?.includes('Tourelle'));
+      expect(turret).toBeDefined();
+      expect(turret!.changes).toHaveLength(2);
+      expect(turret!.changes[0].stat).toBe("Portée d'attaque de la tourelle");
+
+      const grenade = entities.find(e => e.subCategory?.includes('Grenade'));
+      expect(grenade).toBeDefined();
+      expect(grenade!.changes).toHaveLength(1);
+      expect(grenade!.changes[0].stat).toBe("Vision de l'emplacement de la cible");
+
+      const quinn = parsePatchHtml(html, 'fr-FR').filter(e => e.name === 'Quinn');
+      expect(quinn).toHaveLength(2);
+      expect(quinn.find(e => e.subCategory?.includes('Busard'))?.changes[0].after).toBe('75');
+      expect(quinn.find(e => e.subCategory?.includes('Assaut'))?.changes[0].after).toBe('200%');
+    });
+
+    it('should parse structured mode sections (larves, ARAM chaos, bugfixes)', () => {
+      const structuredHtml = loadFixture('structured-modes.html');
+      const entities = parsePatchHtml(structuredHtml, 'fr-FR');
+
+      const midRoleQuest = entities.find(e => e.name === 'Quête de rôle de la voie du milieu');
+      expect(midRoleQuest).toBeDefined();
+      expect(midRoleQuest!.category).toBe('system');
+      expect(midRoleQuest!.changes[0].type).toBe('text');
+      expect(midRoleQuest!.changes[0].after).toContain('26.9');
+      expect(midRoleQuest!.changes[1].stat).toBe("Dégâts d'attaque et puissance bonus");
+      expect(midRoleQuest!.changes[1].before).toBe('6%');
+      expect(midRoleQuest!.changes[1].after).toBe('8%');
+
+      const larves = entities.find(e => e.name === 'Larves du Néant');
+      expect(larves).toBeDefined();
+      expect(larves!.category).toBe('system');
+      expect(larves!.changes.length).toBeGreaterThanOrEqual(2);
+
+      const gwen = entities.find(e => e.name === 'Gwen' && e.category === 'aram-chaos');
+      expect(gwen).toBeDefined();
+      expect(gwen!.changes[0].stat).toBe('Dégâts infligés');
+
+      const chaosBugfixes = entities.filter(
+        e => e.category === 'aram-chaos' && e.subCategory === 'Corrections de bugs'
+      );
+      expect(chaosBugfixes).toHaveLength(1);
+      expect(chaosBugfixes[0].name).toBe('');
+      expect(chaosBugfixes[0].changes[0].after).toContain('Graves');
+
+      const srBugfixes = entities.filter(e => e.category === 'bugfix');
+      expect(srBugfixes).toHaveLength(2);
+      expect(srBugfixes.every(e => e.name === '')).toBe(true);
     });
   });
 

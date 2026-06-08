@@ -4,8 +4,10 @@
  */
 
 import * as cheerio from 'cheerio';
+import type { Element } from 'domhandler';
 import { logger } from '../utils/logger.js';
 import { extractEntityIdFromHtml, patchHeaderIdToSlug } from './entityIds.js';
+import { inferNumericChangeType } from './changeType.js';
 import type { EntityChanges, StatChange, EntityCategory, Locale } from './types.js';
 
 const CMS_IMAGE_HOST = 'cmsassets.rgpub.io';
@@ -106,11 +108,44 @@ function parseTextOnlyChange(text: string, locale: Locale): StatChange | null {
   return null;
 }
 
+function looksLikePatchNoteLine(text: string): boolean {
+  const lower = text.toLowerCase();
+  return (
+    /^(correction|fix|fixed|bug|note)\b/i.test(text) ||
+    /\b(désormais|dorénavant|ne plus|no longer|renommé|renamed|privilégie|privilege)\b/i.test(
+      lower
+    ) ||
+    /\b(notamment|afin de|pour corriger|to fix|bugfix)\b/i.test(lower)
+  );
+}
+
+/**
+ * Plain list item without arrow separator (bugfix-style notes on items/champions).
+ */
+function parsePlainListItemChange(text: string): StatChange | null {
+  const normalized = text
+    .replace(/\u00A0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!normalized || !looksLikePatchNoteLine(normalized)) return null;
+
+  const { stat, detail } = splitStatAndDetail(normalized);
+  const hasNamedStat = stat !== detail && stat.length > 0 && stat.length <= 120;
+
+  return {
+    stat: hasNamedStat ? stat : '',
+    before: '',
+    after: hasNamedStat ? detail : normalized,
+    type: 'text',
+  };
+}
+
 /**
  * Extract stat name and value from a line
  * Format: "Stat Name: value ⇒ newValue"
  */
-function parseStatChange(text: string, locale: Locale): StatChange | null {
+function parseStatChange(text: string, _locale: Locale): StatChange | null {
   const split = splitBySeparator(text);
   if (!split) return null;
 
@@ -144,70 +179,8 @@ function parseStatChange(text: string, locale: Locale): StatChange | null {
     stat: statName,
     before: beforeValue || '(empty)',
     after: afterValue || '(empty)',
-    type: inferChangeType(beforeValue, afterValue, locale),
+    type: inferNumericChangeType(beforeValue, afterValue, statName),
   };
-}
-
-/**
- * Infer change type by comparing numeric values
- */
-function inferChangeType(before: string, after: string, locale: Locale): import('./types.js').ChangeType {
-  // Extract first number from each string
-  const beforeNum = extractFirstNumber(before, locale);
-  const afterNum = extractFirstNumber(after, locale);
-
-  if (beforeNum === null || afterNum === null) {
-    return 'adjustment';
-  }
-
-  if (afterNum > beforeNum) {
-    // Check context for damage/healing reductions (higher number = nerf)
-    const lowerContext = before.toLowerCase() + ' ' + after.toLowerCase();
-    if (lowerContext.includes('reduction') || lowerContext.includes('cooldown') || lowerContext.includes('cost')) {
-      return 'nerf'; // Higher reduction/cooldown/cost = nerf
-    }
-    return 'buff';
-  }
-
-  if (afterNum < beforeNum) {
-    const lowerContext = before.toLowerCase() + ' ' + after.toLowerCase();
-    if (lowerContext.includes('reduction') || lowerContext.includes('cooldown') || lowerContext.includes('cost')) {
-      return 'buff'; // Lower reduction/cooldown/cost = buff
-    }
-    return 'nerf';
-  }
-
-  return 'adjustment';
-}
-
-/**
- * Extract first number from a string (handles various formats)
- */
-function extractFirstNumber(text: string, _locale: Locale): number | null {
-  // Handle percentage and various number formats
-  // en-GB: 1,234.56 or 1234.56
-  // fr-FR: 1 234,56 or 1234,56
-
-  const normalized = text
-    .replace(/\s/g, '') // Remove spaces (used as thousand separators in FR)
-    .replace(/,/g, '.'); // Convert comma to dot (FR decimal separator)
-
-  // Match various number patterns
-  const patterns = [
-    /(\d+(?:\.\d+)?)%?/, // Basic number with optional decimal
-    /(\d+)\s*-\s*(\d+)/, // Range like "50 - 170"
-    /(\d+)\.\d+/, // Decimal
-  ];
-
-  for (const pattern of patterns) {
-    const match = normalized.match(pattern);
-    if (match) {
-      const num = parseFloat(match[1]);
-      if (!isNaN(num)) return num;
-    }
-  }
-
-  return null;
 }
 
 /** h2 section ids with no stat changes to extract */
@@ -216,7 +189,6 @@ const SKIPPED_SECTION_IDS = [
   'patch-pride',
   'patch-ranked',
   'patch-upcoming-skins',
-  'patch-bugfixes',
   'title',
 ];
 
@@ -253,9 +225,20 @@ function detectCategoryFromId(sectionId: string, headingText: string): EntityCat
   }
 
   if (id.includes('support-adjust')) return 'item';
+  if (id.includes('role-quest')) return 'system';
   if (id.includes('champion')) return 'champion';
   if (id.includes('item') || id.includes('objet')) return 'item';
   if (id.includes('rune')) return 'rune';
+  
+  // ARAM modes (check chaos first, then regular ARAM)
+  if (id.includes('aram') && (id.includes('chaos') || id.includes('mayhem'))) return 'aram-chaos';
+  if (id.includes('aram')) return 'aram';
+  
+  // Arena mode
+  if (id.includes('arena')) return 'arena';
+  
+  // Bug fixes (check heading text too for "correction" in FR)
+  if (id.includes('bug') || id.includes('correct') || headingText.toLowerCase().includes('correction')) return 'bugfix';
 
   return detectCategory(headingText);
 }
@@ -292,6 +275,49 @@ function flushEntity(
   return null;
 }
 
+function isAbilityOrBaseStatsHeading($elem: cheerio.Cheerio<any>, text: string): boolean {
+  if ($elem.hasClass('ability-title')) return true;
+  if (/^stats de base$/i.test(text) || /^base stats$/i.test(text)) return true;
+  if (/^compétence passive\s*[-–—]/i.test(text) || /^passive ability\s*[-–—]/i.test(text)) {
+    return true;
+  }
+  return /^([QWERAZ]|Passive)\s*[-–—]/i.test(text);
+}
+
+function shouldSplitEntityBySubSection(
+  sectionCategory: EntityCategory,
+  $elem: cheerio.Cheerio<any>,
+  text: string
+): boolean {
+  return (
+    sectionCategory === 'champion' &&
+    isAbilityOrBaseStatsHeading($elem, text)
+  );
+}
+
+function cloneEntityForSubSection(entity: EntityChanges, subCategory: string): EntityChanges {
+  return {
+    name: entity.name,
+    category: entity.category,
+    subCategory,
+    changes: [],
+    ...(entity.id ? { id: entity.id } : {}),
+    ...(entity.imageUrl ? { imageUrl: entity.imageUrl } : {}),
+    ...(entity.patchSlug ? { patchSlug: entity.patchSlug } : {}),
+  };
+}
+
+function splitCurrentEntityBySubSection(
+  entities: EntityChanges[],
+  currentEntity: EntityChanges | null,
+  subCategory: string
+): EntityChanges | null {
+  if (!currentEntity) return null;
+  const base = currentEntity;
+  flushEntity(entities, base);
+  return cloneEntityForSubSection(base, subCategory);
+}
+
 function findContentRoot($: cheerio.CheerioAPI): cheerio.Cheerio<any> {
   const riotSelectors = [
     '#patch-notes-container',
@@ -313,8 +339,490 @@ function findContentRoot($: cheerio.CheerioAPI): cheerio.Cheerio<any> {
 
 function isEntityHeader(tagName: string, $elem: cheerio.Cheerio<any>): boolean {
   if (tagName === 'h3') return true;
-  if (tagName === 'h4' && !$elem.hasClass('change-title')) return true;
+  if (
+    tagName === 'h4' &&
+    !$elem.hasClass('change-detail-title') &&
+    !$elem.hasClass('change-title')
+  ) {
+    return true;
+  }
   return false;
+}
+
+function isBugfixHeading(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return normalized.includes('bug') || normalized.includes('correction');
+}
+
+function isEmptyHeading(text: string): boolean {
+  return !text.replace(/\u00a0/g, ' ').trim();
+}
+
+function isStructuredSectionCategory(category: EntityCategory): boolean {
+  return (
+    category === 'aram' ||
+    category === 'aram-chaos' ||
+    category === 'arena' ||
+    category === 'bugfix'
+  );
+}
+
+function inferContextEntityName(context: string): string {
+  if (/larves?\s+du\s+n[eé]ant/i.test(context)) return 'Larves du Néant';
+  const trimmed = context.replace(/\s+/g, ' ').trim();
+  return trimmed.length > 80 ? `${trimmed.slice(0, 77)}...` : trimmed;
+}
+
+function getSectionBodyElements($: cheerio.CheerioAPI, $header: cheerio.Cheerio<any>): Element[] {
+  const flattened: Element[] = [];
+  let $sibling = $header.next();
+
+  while ($sibling.length) {
+    if ($sibling.is('header')) break;
+
+    if ($sibling.is('div.content-border')) {
+      $sibling.children('div').each((_, block) => {
+        $(block)
+          .children('div')
+          .first()
+          .children()
+          .each((_, child) => {
+            flattened.push(child);
+          });
+      });
+    } else {
+      const sibling = $sibling[0];
+      if (sibling) {
+        const tag = sibling.tagName?.toLowerCase();
+        if (['h3', 'h4', 'h5', 'h6', 'ul', 'p', 'blockquote', 'hr'].includes(tag ?? '')) {
+          flattened.push(sibling);
+        } else {
+          $sibling
+            .find('h3, h4, h5, h6, ul, p, blockquote, hr')
+            .each((_, child) => {
+              flattened.push(child);
+            });
+        }
+      }
+    }
+
+    $sibling = $sibling.next();
+  }
+
+  if (flattened.length > 0) return flattened;
+
+  const $contentBorder = $header.next('div.content-border');
+  if ($contentBorder.length) {
+    $contentBorder.children('div').each((_, block) => {
+      $(block)
+        .children('div')
+        .first()
+        .children()
+        .each((_, child) => {
+          flattened.push(child);
+        });
+    });
+    if (flattened.length > 0) return flattened;
+  }
+
+  const elements: Element[] = [];
+  $sibling = $header.next();
+  while ($sibling.length) {
+    if ($sibling.is('header')) break;
+    const sibling = $sibling[0];
+    if (sibling) elements.push(sibling);
+    $sibling = $sibling.next();
+  }
+
+  const legacyFlat: Element[] = [];
+  for (const sibling of elements) {
+    const tag = sibling.tagName?.toLowerCase();
+    if (['h3', 'h4', 'h5', 'h6', 'ul', 'p', 'blockquote', 'hr'].includes(tag ?? '')) {
+      legacyFlat.push(sibling);
+      continue;
+    }
+    $(sibling)
+      .find('h3, h4, h5, h6, ul, p, blockquote, hr')
+      .each((_, child) => {
+        legacyFlat.push(child);
+      });
+  }
+  return legacyFlat;
+}
+
+function parseInlineEntityName(_$: cheerio.CheerioAPI, $p: cheerio.Cheerio<any>): string | null {
+  const $strong = $p.children('strong, b');
+  if ($strong.length !== 1) return null;
+
+  const strongText = $strong.text().replace(/\s+/g, ' ').trim().replace(/:$/, '');
+  if (!strongText || strongText.length > 80) return null;
+
+  const pText = $p
+    .text()
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/:$/, '');
+
+  if (pText === strongText || pText.startsWith(strongText)) {
+    return strongText;
+  }
+
+  return null;
+}
+
+function parseListItems(
+  $: cheerio.CheerioAPI,
+  $ul: cheerio.Cheerio<any>,
+  locale: Locale
+): StatChange[] {
+  const changes: StatChange[] = [];
+
+  $ul.children('li').each((_, li) => {
+    const itemText = $(li).text().replace(/\s+/g, ' ').trim();
+    if (!itemText) return;
+
+    const statChange =
+      (containsChangeSeparator(itemText)
+        ? parseStatChange(itemText, locale)
+        : parseTextOnlyChange(itemText, locale)) ?? parsePlainListItemChange(itemText);
+
+    if (statChange) {
+      changes.push(statChange);
+    }
+  });
+
+  return changes;
+}
+
+function createBugfixEntity(
+  text: string,
+  scope: EntityCategory
+): EntityChanges {
+  return {
+    name: '',
+    category: scope === 'bugfix' ? 'bugfix' : scope,
+    ...(scope !== 'bugfix' ? { subCategory: 'Corrections de bugs' } : {}),
+    changes: [
+      {
+        stat: '',
+        before: '',
+        after: text,
+        type: 'text',
+      },
+    ],
+  };
+}
+
+function createEntityFromH3(
+  _$: cheerio.CheerioAPI,
+  $elem: cheerio.Cheerio<any>,
+  sectionCategory: EntityCategory
+): EntityChanges {
+  const text = $elem.text().replace(/\s+/g, ' ').trim();
+  const headerId = $elem.attr('id') ?? '';
+  const href = $elem.find('a').attr('href') ?? '';
+  const entityCategory = detectEntityCategoryFromHref(href, sectionCategory);
+  const { id, imageUrl } = extractEntityIdFromHtml(href, headerId, entityCategory);
+  const patchSlug = patchHeaderIdToSlug(headerId);
+
+  return {
+    name: text,
+    category: entityCategory,
+    ...(id ? { id } : {}),
+    ...(imageUrl ? { imageUrl } : {}),
+    ...(patchSlug ? { patchSlug } : {}),
+    changes: [],
+  };
+}
+
+function createModeEntity(
+  name: string,
+  sectionCategory: EntityCategory,
+  subCategory: string | null,
+  changes: StatChange[]
+): EntityChanges {
+  return {
+    name,
+    category: sectionCategory,
+    ...(subCategory ? { subCategory } : {}),
+    changes,
+  };
+}
+
+function createContextSystemEntity(
+  context: string,
+  changes: StatChange[]
+): EntityChanges {
+  const entityChanges: StatChange[] = [
+    {
+      stat: '',
+      before: '',
+      after: context,
+      type: 'text',
+    },
+    ...changes,
+  ];
+
+  return {
+    name: inferContextEntityName(context),
+    category: 'system',
+    changes: entityChanges,
+  };
+}
+
+interface SectionParseState {
+  currentEntity: EntityChanges | null;
+  currentSubSection: string | null;
+  inBugfixSubsection: boolean;
+  pendingContext: string | null;
+  pendingName: string | null;
+}
+
+function parseSectionContent(
+  $: cheerio.CheerioAPI,
+  elements: Element[],
+  sectionCategory: EntityCategory,
+  locale: Locale,
+  entities: EntityChanges[]
+): void {
+  const state: SectionParseState = {
+    currentEntity: null,
+    currentSubSection: null,
+    inBugfixSubsection: sectionCategory === 'bugfix',
+    pendingContext: null,
+    pendingName: null,
+  };
+
+  const flushCurrentEntity = () => {
+    state.currentEntity = flushEntity(entities, state.currentEntity);
+  };
+
+  const clearPending = () => {
+    state.pendingContext = null;
+    state.pendingName = null;
+  };
+
+  const pushBugfix = (text: string) => {
+    entities.push(createBugfixEntity(text, sectionCategory));
+  };
+
+  const pushListAsBugfixes = ($ul: cheerio.Cheerio<any>) => {
+    $ul.children('li').each((_, li) => {
+      const itemText = $(li).text().replace(/\s+/g, ' ').trim();
+      if (itemText) pushBugfix(itemText);
+    });
+  };
+
+  const pushListToEntity = ($ul: cheerio.Cheerio<any>, entity: EntityChanges) => {
+    const changes = parseListItems($, $ul, locale);
+    for (const change of changes) {
+      entity.changes.push(change);
+      logger.debug(
+        { entity: entity.name, stat: change.stat, type: change.type },
+        'Found change'
+      );
+    }
+  };
+
+  const consumePendingList = ($ul: cheerio.Cheerio<any>) => {
+    if (state.inBugfixSubsection || sectionCategory === 'bugfix') {
+      pushListAsBugfixes($ul);
+      clearPending();
+      return;
+    }
+
+    if (state.pendingName) {
+      flushCurrentEntity();
+      const changes = parseListItems($, $ul, locale);
+      if (state.pendingContext) {
+        changes.unshift({
+          stat: '',
+          before: '',
+          after: state.pendingContext,
+          type: 'text',
+        });
+      }
+      const entity = createModeEntity(
+        state.pendingName,
+        sectionCategory,
+        state.currentSubSection,
+        changes
+      );
+      if (entity.changes.length > 0) {
+        entities.push(entity);
+      }
+      clearPending();
+      return;
+    }
+
+    if (state.pendingContext) {
+      const changes = parseListItems($, $ul, locale);
+      if (changes.length > 0) {
+        entities.push(createContextSystemEntity(state.pendingContext, changes));
+      }
+      clearPending();
+      return;
+    }
+
+    if (state.currentEntity) {
+      pushListToEntity($ul, state.currentEntity);
+      return;
+    }
+
+    if (isStructuredSectionCategory(sectionCategory)) {
+      const changes = parseListItems($, $ul, locale);
+      if (changes.length > 0) {
+        entities.push(
+          createModeEntity('', sectionCategory, state.currentSubSection, changes)
+        );
+      }
+    }
+  };
+
+  for (const elem of elements) {
+    const $elem = $(elem);
+    const tagName = elem.tagName?.toLowerCase() ?? '';
+    const text = $elem.text().replace(/\s+/g, ' ').trim();
+
+    if (tagName === 'hr') {
+      if (!state.pendingName) {
+        clearPending();
+      }
+      continue;
+    }
+
+    if (tagName === 'h3') {
+      flushCurrentEntity();
+      clearPending();
+      state.inBugfixSubsection = sectionCategory === 'bugfix';
+      state.currentEntity = createEntityFromH3($, $elem, sectionCategory);
+      continue;
+    }
+
+    if (tagName === 'h4') {
+      if ($elem.hasClass('change-detail-title')) {
+        if (isEmptyHeading(text)) continue;
+
+        const isBugfix = isBugfixHeading(text);
+        state.inBugfixSubsection = isBugfix;
+
+        if (isBugfix) {
+          flushCurrentEntity();
+          clearPending();
+          state.currentSubSection = text;
+        } else if (!state.currentEntity && sectionCategory === 'system') {
+          state.pendingName = text;
+        } else if (shouldSplitEntityBySubSection(sectionCategory, $elem, text)) {
+          state.currentEntity = splitCurrentEntityBySubSection(
+            entities,
+            state.currentEntity,
+            text
+          );
+          state.currentSubSection = text;
+          state.inBugfixSubsection = false;
+        } else {
+          state.currentSubSection = text;
+        }
+        continue;
+      }
+
+      if (state.currentEntity) {
+        if (shouldSplitEntityBySubSection(sectionCategory, $elem, text)) {
+          state.currentEntity = splitCurrentEntityBySubSection(
+            entities,
+            state.currentEntity,
+            text
+          );
+          state.currentSubSection = text;
+          state.inBugfixSubsection = false;
+        } else {
+          state.currentEntity.subCategory = text;
+        }
+        continue;
+      }
+
+      flushCurrentEntity();
+      clearPending();
+      state.currentSubSection = text;
+      state.inBugfixSubsection = isBugfixHeading(text);
+      continue;
+    }
+
+    if (tagName === 'h5' || tagName === 'h6') {
+      if (state.currentEntity) {
+        state.currentEntity.subCategory = text;
+      }
+      continue;
+    }
+
+    if (tagName === 'blockquote') {
+      if (state.currentEntity) continue;
+      const context = $elem.find('p').text().replace(/\s+/g, ' ').trim() || text;
+      if (context.length > 10) {
+        state.pendingContext = context;
+      }
+      continue;
+    }
+
+    if (tagName === 'p') {
+      if ($elem.find('ul').length > 0) continue;
+      if ($elem.find('img').length > 0 && !$elem.find('strong, b').length) continue;
+
+      const inlineName = parseInlineEntityName($, $elem);
+      if (inlineName) {
+        flushCurrentEntity();
+        state.pendingName = inlineName;
+        continue;
+      }
+
+      if (state.currentEntity) {
+        const $strong = $elem.find('strong, b');
+        if (
+          $strong.length === 1 &&
+          $strong.text().trim().length > 0 &&
+          $strong.text().trim().length < 80 &&
+          !containsChangeSeparator(text)
+        ) {
+          state.currentEntity.subCategory = $strong.text().trim();
+          continue;
+        }
+
+        if (containsChangeSeparator(text)) {
+          const statChange = parseStatChange(text, locale);
+          if (statChange) state.currentEntity.changes.push(statChange);
+        }
+      }
+      continue;
+    }
+
+    if (tagName === 'ul') {
+      consumePendingList($elem);
+    }
+  }
+
+  flushCurrentEntity();
+}
+
+function parseSection(
+  $: cheerio.CheerioAPI,
+  $header: cheerio.Cheerio<any>,
+  sectionCategory: EntityCategory,
+  locale: Locale,
+  entities: EntityChanges[]
+): void {
+  const elements = getSectionBodyElements($, $header);
+  if (elements.length === 0) return;
+
+  logger.debug(
+    {
+      category: sectionCategory,
+      sectionId: $header.find('h2').attr('id'),
+      elementCount: elements.length,
+    },
+    'Parsing section'
+  );
+
+  parseSectionContent($, elements, sectionCategory, locale, entities);
 }
 
 /**
@@ -323,132 +831,98 @@ function isEntityHeader(tagName: string, $elem: cheerio.Cheerio<any>): boolean {
 export function parsePatchHtml(html: string, locale: Locale): EntityChanges[] {
   const $ = cheerio.load(html);
   const entities: EntityChanges[] = [];
-
-  let currentCategory: EntityCategory | null = null;
-  let currentEntity: EntityChanges | null = null;
-  let skipSection = false;
-
   const $content = findContentRoot($);
 
   logger.debug({ locale, root: $content.attr('id') ?? $content.get(0)?.tagName }, 'Starting parse');
 
-  const elements = $content.find('h1, h2, h3, h4, h5, h6, ul, p');
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  elements.each((_: number, elem: any) => {
-    const $elem = $(elem);
-    const tagName = elem.tagName.toLowerCase();
-    const text = $elem.text().trim();
-
-    if (!text) return;
-
-    // Section headers (h1, h2)
-    if (tagName === 'h1' || tagName === 'h2') {
-      currentEntity = flushEntity(entities, currentEntity);
-
-      const sectionId = $elem.attr('id') ?? '';
+  const $headers = $content.find('header.header-primary');
+  if ($headers.length > 0) {
+    $headers.each((_, headerEl) => {
+      const $header = $(headerEl);
+      const $h2 = $header.find('h2').first();
+      const sectionId = $h2.attr('id') ?? '';
+      const headingText = $h2.text().trim();
       const categoryResult = sectionId
-        ? detectCategoryFromId(sectionId, text)
-        : detectCategory(text);
+        ? detectCategoryFromId(sectionId, headingText)
+        : detectCategory(headingText);
 
       if (categoryResult === 'skip') {
-        skipSection = true;
-        currentCategory = null;
-        logger.debug({ sectionId, text: text.substring(0, 50) }, 'Skipping section');
+        logger.debug({ sectionId, text: headingText.substring(0, 50) }, 'Skipping section');
         return;
       }
 
-      skipSection = false;
-      if (categoryResult) {
-        currentCategory = categoryResult;
-        logger.debug({ category: categoryResult, sectionId, text: text.substring(0, 50) }, 'Detected category');
-      } else if (sectionId.startsWith('patch-')) {
-        currentCategory = 'system';
-      }
-      return;
-    }
+      const sectionCategory =
+        categoryResult ?? (sectionId.startsWith('patch-') ? 'system' : null);
+      if (!sectionCategory) return;
 
-    if (skipSection || !currentCategory) return;
+      parseSection($, $header, sectionCategory, locale, entities);
+    });
+  } else {
+    // Fallback for minimal fixtures without header wrappers
+    let currentCategory: EntityCategory | null = null;
+    let currentEntity: EntityChanges | null = null;
+    let skipSection = false;
 
-    // Entity headers — Riot uses h3.change-title, fixtures use plain h3/h4
-    if (isEntityHeader(tagName, $elem)) {
-      if (detectCategory(text)) return;
+    $content.find('h1, h2, h3, h4, h5, h6, ul, p, blockquote, hr').each((_, elem) => {
+      const $elem = $(elem);
+      const tagName = elem.tagName?.toLowerCase() ?? '';
+      const text = $elem.text().replace(/\s+/g, ' ').trim();
+      if (!text && tagName !== 'hr') return;
 
-      if (tagName === 'h4' && currentEntity) {
-        currentEntity.subCategory = text.replace(/\s+/g, ' ').trim();
-        return;
-      }
+      if (tagName === 'h1' || tagName === 'h2') {
+        currentEntity = flushEntity(entities, currentEntity);
+        const sectionId = $elem.attr('id') ?? '';
+        const categoryResult = sectionId
+          ? detectCategoryFromId(sectionId, text)
+          : detectCategory(text);
 
-      currentEntity = flushEntity(entities, currentEntity);
-
-      const headerId = $elem.attr('id') ?? '';
-      const href = $elem.find('a').attr('href') ?? '';
-      const entityCategory = detectEntityCategoryFromHref(href, currentCategory);
-      const { id, imageUrl } = extractEntityIdFromHtml(href, headerId, entityCategory);
-      const patchSlug = patchHeaderIdToSlug(headerId);
-
-      currentEntity = {
-        name: text.replace(/\s+/g, ' ').trim(),
-        category: entityCategory,
-        ...(id ? { id } : {}),
-        ...(imageUrl ? { imageUrl } : {}),
-        ...(patchSlug ? { patchSlug } : {}),
-        changes: [],
-      };
-      return;
-    }
-
-    // Sub-category (ability name, passive, etc.)
-    if ((tagName === 'h5' || tagName === 'h6') && currentEntity) {
-      currentEntity.subCategory = text.replace(/\s+/g, ' ').trim();
-      return;
-    }
-
-    // Bold text sub-category (non-stat lines)
-    if ((tagName === 'p' || tagName === 'div') && currentEntity) {
-      const $strong = $elem.find('strong, b');
-      if ($strong.length === 1 && $strong.text().trim().length > 0 && $strong.text().trim().length < 80) {
-        if (!containsChangeSeparator($elem.text())) {
-          currentEntity.subCategory = $strong.text().trim();
+        if (categoryResult === 'skip') {
+          skipSection = true;
+          currentCategory = null;
           return;
         }
+
+        skipSection = false;
+        currentCategory =
+          categoryResult ?? (sectionId.startsWith('patch-') ? 'system' : null);
+        return;
       }
-    }
 
-    // Stat changes in lists (primary) or standalone paragraphs
-    if ((tagName === 'ul' || tagName === 'p') && currentEntity) {
-      // Skip paragraphs that wrap lists — ul handles those
-      if (tagName === 'p' && $elem.find('ul').length > 0) return;
+      if (skipSection || !currentCategory) return;
 
-      const items = tagName === 'ul'
-        ? $elem.children('li').map((_, li) => $(li).text().trim()).get()
-        : [text];
-
-      for (const itemText of items) {
-        if (!itemText) continue;
-
-        const statChange = containsChangeSeparator(itemText)
-          ? parseStatChange(itemText, locale)
-          : parseTextOnlyChange(itemText, locale);
-
-        if (statChange) {
-          currentEntity.changes.push(statChange);
-          logger.debug(
-            { entity: currentEntity.name, stat: statChange.stat, type: statChange.type },
-            'Found change'
-          );
+      if (isEntityHeader(tagName, $elem)) {
+        if (detectCategory(text)) return;
+        if (tagName === 'h4' && currentEntity) {
+          currentEntity.subCategory = text;
+          return;
         }
+        currentEntity = flushEntity(entities, currentEntity);
+        currentEntity = createEntityFromH3($, $elem, currentCategory);
+        return;
       }
-    }
-  });
 
-  flushEntity(entities, currentEntity);
+      if ((tagName === 'h5' || tagName === 'h6') && currentEntity) {
+        currentEntity.subCategory = text;
+        return;
+      }
 
-  logger.info({
-    locale,
-    entityCount: entities.length,
-    totalChanges: entities.reduce((sum, e) => sum + e.changes.length, 0),
-  }, 'Parse complete');
+      if (tagName === 'ul' && currentEntity) {
+        const changes = parseListItems($, $elem, locale);
+        currentEntity.changes.push(...changes);
+      }
+    });
+
+    flushEntity(entities, currentEntity);
+  }
+
+  logger.info(
+    {
+      locale,
+      entityCount: entities.length,
+      totalChanges: entities.reduce((sum, e) => sum + e.changes.length, 0),
+    },
+    'Parse complete'
+  );
 
   return entities;
 }
