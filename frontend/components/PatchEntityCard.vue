@@ -2,107 +2,120 @@
   <div
     class="overflow-hidden rounded-xl border border-primary/20 bg-surface shadow-sm transition-shadow hover:shadow-md"
   >
-    <!-- Entity Header -->
     <div
-      v-if="entity.name"
+      v-if="showCardHeader"
       class="flex items-center gap-2 border-b border-primary/10 bg-primary/5 p-[5px]"
     >
-      <!-- Champion/Item Icon -->
       <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-background text-lg">
         <img
-          v-if="championImageUrl"
-          :src="championImageUrl"
-          :alt="entity.name"
+          v-if="entityImageUrl"
+          :src="entityImageUrl"
+          :alt="cardTitle"
           class="h-full w-full rounded object-cover"
-          @error="onChampionImageError"
-        />
-        <img
-          v-else-if="itemImageUrl"
-          :src="itemImageUrl"
-          :alt="entity.name"
-          class="h-full w-full rounded object-cover"
-          @error="onItemImageError"
-        />
-        <img
-          v-else-if="runeImageUrl"
-          :src="runeImageUrl"
-          :alt="entity.name"
-          class="h-full w-full rounded object-cover"
-          @error="onRuneImageError"
+          @error="onImageError"
         />
         <span v-else>{{ categoryIcon }}</span>
       </div>
 
-      <!-- Spell Icon (for champions) -->
-      <div
-        v-if="showSpellIcon && spellImageUrl"
-        class="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-background/50"
-      >
-        <img
-          :src="spellImageUrl"
-          :alt="entity.subCategory || 'spell'"
-          class="h-full w-full rounded object-cover"
-          @error="onSpellImageError"
-        />
-      </div>
-
-      <!-- Title: ability / stats block when present, else entity name -->
       <div class="min-w-0 flex-1">
         <h3 class="truncate text-sm font-semibold text-accent">
           {{ cardTitle }}
         </h3>
-        <p v-if="cardSubtitle" class="truncate text-xs text-text/60">
+        <p v-if="cardSubtitle" class="truncate text-xs text-primary-light">
           {{ cardSubtitle }}
         </p>
       </div>
+
+      <span
+        v-if="summaryTag"
+        :class="[
+          'shrink-0 rounded px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide',
+          typeClasses[summaryTag],
+        ]"
+      >
+        {{ typeLabels[summaryTag] }}
+      </span>
     </div>
 
-    <!-- Changes List -->
     <div class="p-[5px]">
-      <ul class="space-y-2">
-        <li
-          v-for="(change, index) in entity.changes"
-          :key="index"
-          class="flex items-start gap-2 text-sm"
+      <div
+        v-for="section in changeSections"
+        :key="section.key"
+        :class="section.title ? 'border-b border-primary/10 last:border-b-0' : ''"
+      >
+        <button
+          v-if="section.title"
+          type="button"
+          class="flex w-full items-center gap-2 rounded px-1 py-1.5 text-left transition-colors hover:bg-primary/5"
+          :aria-expanded="!isSectionCollapsed(section.key)"
+          @click="toggleSection(section.key)"
         >
-          <!-- Change Type Indicator -->
-          <span
-            v-if="change.stat || change.type !== 'text'"
-            :class="[
-              'shrink-0 rounded px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide',
-              typeClasses[change.type],
-            ]"
-          >
-            {{ typeLabels[change.type] }}
+          <ChampionSpellIconBadge
+            v-if="section.spellImageUrl && section.spellSkillKey"
+            :skill-key="section.spellSkillKey"
+            :image-url="section.spellImageUrl"
+            :label="section.title"
+            size="sm"
+          />
+          <span class="min-w-0 flex-1 truncate text-xs font-semibold text-primary-light">
+            {{ section.title }}
           </span>
+          <span class="shrink-0 text-[10px] text-text/40">
+            {{ isSectionCollapsed(section.key) ? '▸' : '▾' }}
+          </span>
+        </button>
 
-          <!-- Change Content -->
-          <div class="flex-1">
-            <span v-if="change.stat" class="font-medium text-primary-light">{{ change.stat }}</span>
-            <div
+        <ul
+          v-show="!section.title || !isSectionCollapsed(section.key)"
+          class="space-y-2"
+          :class="section.title ? 'px-1 pb-2 pt-0.5' : ''"
+        >
+          <li
+            v-for="(change, index) in section.changes"
+            :key="`${section.key}-${index}`"
+            class="flex items-start gap-2 text-sm"
+          >
+            <span
+              v-if="change.stat || change.type !== 'text'"
               :class="[
-                'flex flex-wrap items-center gap-1 text-xs text-text/70',
-                change.stat ? 'mt-0.5' : '',
+                'shrink-0 rounded px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide',
+                typeClasses[change.type],
               ]"
             >
-              <span v-if="shouldShowBefore(change)" class="line-through decoration-red-500/50">{{
-                change.before
+              {{ typeLabels[change.type] }}
+            </span>
+
+            <div class="flex-1">
+              <span v-if="change.stat" class="font-medium text-primary-light">{{
+                change.stat
               }}</span>
-              <span v-if="shouldShowBefore(change) && shouldShowAfter(change)" class="text-text/40"
-                >→</span
+              <div
+                :class="[
+                  'flex flex-wrap items-center gap-1 text-xs text-text/70',
+                  change.stat ? 'mt-0.5' : '',
+                ]"
               >
-              <span
-                v-if="shouldShowAfter(change)"
-                :class="{
-                  'font-medium text-green-400': change.type === 'buff',
-                  'font-medium text-red-400': change.type === 'nerf',
-                }"
-                >{{ change.after }}</span
-              >
+                <span v-if="shouldShowBefore(change)" class="line-through decoration-red-500/50">{{
+                  change.before
+                }}</span>
+                <span
+                  v-if="shouldShowBefore(change) && shouldShowAfter(change)"
+                  class="text-text/40"
+                  >→</span
+                >
+                <span
+                  v-if="shouldShowAfter(change)"
+                  :class="{
+                    'font-medium text-green-400': change.type === 'buff',
+                    'font-medium text-red-400': change.type === 'nerf',
+                  }"
+                  >{{ change.after }}</span
+                >
+              </div>
             </div>
-          </div>
-        </li>
-      </ul>
+          </li>
+        </ul>
+      </div>
     </div>
   </div>
 </template>
@@ -111,36 +124,58 @@
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import type { Champion } from '@lelanation/shared-types'
-import type { PatchEntity, ChangeType } from '~/stores/PatchNotesStore'
+import type { PatchEntity, StatChange, ChangeType } from '~/stores/PatchNotesStore'
 import { useVersionStore } from '~/stores/VersionStore'
 import { useChampionsStore } from '~/stores/ChampionsStore'
-import {
-  getChampionImageUrl,
-  getItemImageUrl,
-  getChampionSpellImageUrl,
-  getChampionPassiveImageUrl,
-  getRuneImageUrl,
-} from '~/utils/imageUrl'
-import { useGameDataLookup } from '~/composables/useGameDataLookup'
+import { getChampionSpellImageUrl, getChampionPassiveImageUrl } from '~/utils/imageUrl'
+import { usePatchEntityImage } from '~/composables/usePatchEntityImage'
+import ChampionSpellIconBadge, {
+  type ChampionSpellBadgeKey,
+} from '~/components/statistics/ChampionSpellIconBadge.vue'
+import { resolvePatchEntitySummaryType } from '~/utils/patchEntitySummary'
 
 const props = defineProps<{
   entity: PatchEntity
 }>()
 
 const { t, locale } = useI18n()
-const { getRuneIcon } = useGameDataLookup()
 const championsStore = useChampionsStore()
 const championDetail = ref<Champion | null>(null)
-const championImageError = ref(false)
-const spellImageError = ref(false)
-const itemImageError = ref(false)
-const runeImageError = ref(false)
+const collapsedSections = ref<Set<string>>(new Set())
 
-// Get current game version for image URLs
 const versionStore = useVersionStore()
 const { currentVersion: gameVersion } = storeToRefs(versionStore)
 
-// Load version if not already loaded
+const { entityImageUrl, resolvedEntityId, onImageError } = usePatchEntityImage(() => props.entity)
+
+const isArenaCard = computed(() => props.entity.category === 'arena')
+
+const showCardHeader = computed(() => {
+  if (isArenaCard.value) {
+    return Boolean(props.entity.subCategory?.trim() || props.entity.name?.trim())
+  }
+  return Boolean(props.entity.name)
+})
+
+const cardTitle = computed(() => {
+  if (isArenaCard.value) {
+    return props.entity.subCategory?.trim() || props.entity.name || ''
+  }
+  return props.entity.name
+})
+
+const cardSubtitle = computed(() => {
+  if (isArenaCard.value && props.entity.subCategory?.trim() && props.entity.name?.trim()) {
+    return props.entity.name
+  }
+  if (!isArenaCard.value && props.entity.subCategory?.trim() && !hasGroupedSections.value) {
+    return props.entity.subCategory
+  }
+  return ''
+})
+
+const summaryTag = computed(() => resolvePatchEntitySummaryType(props.entity.changes))
+
 onMounted(() => {
   if (!gameVersion.value) {
     versionStore.loadCurrentVersion()
@@ -149,9 +184,8 @@ onMounted(() => {
 })
 
 watch(
-  () => [props.entity.id, props.entity.subCategory, locale.value] as const,
+  () => [resolvedEntityId.value, props.entity.category, locale.value] as const,
   () => {
-    spellImageError.value = false
     loadChampionDetail()
   }
 )
@@ -159,24 +193,16 @@ watch(
 const riotLocale = computed(() => (locale.value === 'fr' ? 'fr_FR' : 'en_US'))
 
 async function loadChampionDetail() {
-  if (props.entity.category !== 'champion' || !props.entity.id || !props.entity.subCategory) {
+  if (props.entity.category !== 'champion' || !resolvedEntityId.value) {
     championDetail.value = null
     return
   }
-  if (/passive/i.test(props.entity.subCategory)) {
-    const detail = await championsStore.loadChampionDetails(props.entity.id, riotLocale.value)
-    championDetail.value = detail
-    return
-  }
-  if (!/^([A-Z]|Passive)\s*-/i.test(props.entity.subCategory)) {
-    championDetail.value = null
-    return
-  }
-  const detail = await championsStore.loadChampionDetails(props.entity.id, riotLocale.value)
-  championDetail.value = detail
+  championDetail.value = await championsStore.loadChampionDetails(
+    resolvedEntityId.value,
+    riotLocale.value
+  )
 }
 
-/** French client keys: A=Q, Z=W, E=E, R=R */
 const FR_KEY_TO_SLOT: Record<string, 'Q' | 'W' | 'E' | 'R'> = {
   A: 'Q',
   Z: 'W',
@@ -206,17 +232,79 @@ function resolveSpellImageFile(champion: Champion, subCategory: string): string 
   return bySlot?.image?.full ?? null
 }
 
-const cardTitle = computed(() => props.entity.subCategory?.trim() || props.entity.name)
+function resolveSectionSpellKey(title: string): ChampionSpellBadgeKey | null {
+  if (!title || /^stats de base$/i.test(title) || /^base stats$/i.test(title)) return null
+  if (/passive/i.test(title)) return 'P'
 
-const cardSubtitle = computed(() => (props.entity.subCategory?.trim() ? props.entity.name : ''))
+  const match = title.match(/^([A-Z]|Passive)\s*-\s*(.+)$/i)
+  if (!match) return null
 
-const showSpellIcon = computed(() => {
-  if (props.entity.category !== 'champion' || !props.entity.subCategory) return false
-  if (/^stats de base$/i.test(props.entity.subCategory)) return false
-  if (/^base stats$/i.test(props.entity.subCategory)) return false
-  if (/passive/i.test(props.entity.subCategory)) return true
-  return /^([A-Z]|Passive)\s*-/i.test(props.entity.subCategory)
+  return FR_KEY_TO_SLOT[match[1].toUpperCase()] ?? null
+}
+
+function resolveSectionSpellUrl(title: string): string | null {
+  if (!gameVersion.value || !championDetail.value || !resolvedEntityId.value || !title) return null
+  if (!resolveSectionSpellKey(title)) return null
+
+  const imageFile = resolveSpellImageFile(championDetail.value, title)
+  if (!imageFile) return null
+
+  if (/passive/i.test(title)) {
+    return getChampionPassiveImageUrl(gameVersion.value, imageFile)
+  }
+
+  return getChampionSpellImageUrl(gameVersion.value, resolvedEntityId.value, imageFile)
+}
+
+interface ChangeSection {
+  key: string
+  title: string
+  changes: StatChange[]
+  spellImageUrl: string | null
+  spellSkillKey: ChampionSpellBadgeKey | null
+}
+
+const changeSections = computed<ChangeSection[]>(() => {
+  const groups: { title: string; changes: StatChange[] }[] = []
+  const indexByTitle = new Map<string, number>()
+
+  for (const change of props.entity.changes) {
+    const title = change.subCategory?.trim() || props.entity.subCategory?.trim() || ''
+    let idx = indexByTitle.get(title)
+    if (idx === undefined) {
+      idx = groups.length
+      indexByTitle.set(title, idx)
+      groups.push({ title, changes: [] })
+    }
+    groups[idx].changes.push(change)
+  }
+
+  return groups.map((group, index) => ({
+    key: group.title || `__section__${index}`,
+    title: isArenaCard.value ? '' : group.title,
+    changes: group.changes,
+    spellImageUrl: resolveSectionSpellUrl(group.title),
+    spellSkillKey: resolveSectionSpellKey(group.title),
+  }))
 })
+
+const hasGroupedSections = computed(
+  () => !isArenaCard.value && changeSections.value.some(section => section.title)
+)
+
+function isSectionCollapsed(key: string): boolean {
+  return collapsedSections.value.has(key)
+}
+
+function toggleSection(key: string) {
+  const next = new Set(collapsedSections.value)
+  if (next.has(key)) {
+    next.delete(key)
+  } else {
+    next.add(key)
+  }
+  collapsedSections.value = next
+}
 
 const typeClasses: Record<ChangeType, string> = {
   buff: 'bg-green-500/20 text-green-400',
@@ -259,86 +347,13 @@ const categoryIcon = computed(() => {
   }
 })
 
-// Champion portrait image URL
-const championImageUrl = computed(() => {
-  if (championImageError.value) return null
-  if (!gameVersion.value) return null
-
-  const isChampionCategory =
-    props.entity.category === 'champion' ||
-    props.entity.category === 'aram' ||
-    props.entity.category === 'aram-chaos' ||
-    props.entity.category === 'arena'
-
-  if (!isChampionCategory || !props.entity.id) return null
-
-  return getChampionImageUrl(gameVersion.value, `${props.entity.id}.png`)
-})
-
-// Spell/Passive image URL for champions (from game data + French patch keys)
-const spellImageUrl = computed(() => {
-  if (spellImageError.value) return null
-  if (!gameVersion.value || !championDetail.value || !props.entity.subCategory) return null
-
-  const imageFile = resolveSpellImageFile(championDetail.value, props.entity.subCategory)
-  if (!imageFile) return null
-
-  if (/passive/i.test(props.entity.subCategory)) {
-    return getChampionPassiveImageUrl(gameVersion.value, imageFile)
-  }
-
-  return getChampionSpellImageUrl(gameVersion.value, props.entity.id!, imageFile)
-})
-
-// Item image URL
-const itemImageUrl = computed(() => {
-  if (itemImageError.value) return null
-  if (!gameVersion.value) return null
-  if (props.entity.category !== 'item' || !props.entity.id) return null
-
-  return getItemImageUrl(gameVersion.value, `${props.entity.id}.png`)
-})
-
-// Rune image URL (local, via numeric id → runesReforged icon)
-const runeImageUrl = computed(() => {
-  if (runeImageError.value) return null
-  if (props.entity.category !== 'rune' || !gameVersion.value) return null
-
-  const numericId = props.entity.id ? Number(props.entity.id) : NaN
-  if (!Number.isFinite(numericId) || numericId <= 0) return null
-
-  const icon = getRuneIcon(numericId)
-  if (!icon) return null
-
-  return getRuneImageUrl(gameVersion.value, icon)
-})
-
-function onChampionImageError() {
-  championImageError.value = true
-}
-
-function onSpellImageError() {
-  spellImageError.value = true
-}
-
-function onItemImageError() {
-  itemImageError.value = true
-}
-
-function onRuneImageError() {
-  runeImageError.value = true
-}
-
 function shouldShowBefore(change: { before: string; type: ChangeType }): boolean {
-  // Don't show before for new additions
   if (change.type === 'new') return false
-  // Don't show if before is a placeholder
   if (change.before.startsWith('(') && change.before.endsWith(')')) return false
   return Boolean(change.before)
 }
 
 function shouldShowAfter(change: { after: string; type: ChangeType }): boolean {
-  // Don't show after for removed items
   if (change.type === 'removed') return false
   return Boolean(change.after)
 }

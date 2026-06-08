@@ -3,9 +3,11 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { SpellOrderSkillKey } from '~/utils/championSpellOrderMerge'
 
+export type ChampionSpellBadgeKey = SpellOrderSkillKey | 'P'
+
 const props = withDefaults(
   defineProps<{
-    skillKey: SpellOrderSkillKey
+    skillKey: ChampionSpellBadgeKey
     imageUrl: string | null
     label: string
     size?: 'sm' | 'md'

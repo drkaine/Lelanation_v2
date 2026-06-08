@@ -194,6 +194,52 @@ function normalizeLookupKey(value: string): string {
     .trim();
 }
 
+function parseHonoredGuestChampionName(name: string): string {
+  const colonIdx = name.indexOf(':');
+  return colonIdx >= 0 ? name.slice(0, colonIdx).trim() : name;
+}
+
+function isArenaItemSubCategory(subCategory?: string): boolean {
+  const normalized = normalizeLookupKey(subCategory ?? '');
+  return normalized.includes('objet') || normalized.includes('item');
+}
+
+function isArenaChampionSubCategory(subCategory?: string): boolean {
+  const normalized = normalizeLookupKey(subCategory ?? '');
+  return (
+    normalized.includes('champion') ||
+    normalized.includes('invite') ||
+    normalized.includes('honneur') ||
+    normalized.includes('honor')
+  );
+}
+
+function resolveArenaEntityId(entity: EntityChanges, indexes: GameDataIndexes): string | undefined {
+  if (entity.id) {
+    if (indexes.championIds.has(entity.id) || /^\d+$/.test(entity.id)) {
+      return entity.id;
+    }
+  }
+
+  const name = entity.name?.trim();
+  if (!name) return undefined;
+
+  if (isArenaItemSubCategory(entity.subCategory)) {
+    return indexes.itemNameToId.get(normalizeLookupKey(name));
+  }
+
+  if (isArenaChampionSubCategory(entity.subCategory)) {
+    const championName = parseHonoredGuestChampionName(name);
+    return indexes.championSlugToId.get(normalizeLookupKey(championName));
+  }
+
+  if (normalizeLookupKey(entity.subCategory ?? '') === 'champions') {
+    return indexes.championSlugToId.get(normalizeLookupKey(name));
+  }
+
+  return undefined;
+}
+
 export function buildGameDataIndexes(
   champions: Array<{ id: string; name?: string }>,
   items: Record<string, { name?: string }>,
@@ -278,7 +324,7 @@ export function enrichEntityIds(
       return entity;
     }
 
-    if (entity.category === 'aram' || entity.category === 'aram-chaos' || entity.category === 'arena') {
+    if (entity.category === 'aram' || entity.category === 'aram-chaos') {
       if (entity.id && indexes.championIds.has(entity.id)) {
         return entity;
       }
@@ -286,6 +332,14 @@ export function enrichEntityIds(
       const fromName = indexes.championSlugToId.get(normalizeLookupKey(entity.name));
       if (fromName) {
         return { ...entity, id: fromName };
+      }
+      return entity;
+    }
+
+    if (entity.category === 'arena') {
+      const resolved = resolveArenaEntityId(entity, indexes);
+      if (resolved) {
+        return { ...entity, id: resolved };
       }
       return entity;
     }

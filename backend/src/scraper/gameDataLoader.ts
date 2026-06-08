@@ -8,7 +8,10 @@ import { existsSync } from 'fs';
 import { logger } from '../utils/logger.js';
 import { buildGameDataIndexes, type GameDataIndexes } from './entityIds.js';
 
-const LANG = 'en_US';
+export type { GameDataIndexes };
+
+const PRIMARY_LANG = 'en_US';
+const SECONDARY_LANGS = ['fr_FR'] as const;
 
 async function readJson<T>(path: string): Promise<T | null> {
   try {
@@ -42,9 +45,49 @@ async function resolveGameVersion(): Promise<string | null> {
   return null;
 }
 
-function resolveLangDir(root: string, version: string): string | null {
-  const langDir = join(root, version, LANG);
+function resolveLangDir(root: string, version: string, lang: string = PRIMARY_LANG): string | null {
+  const langDir = join(root, version, lang);
   return existsSync(langDir) ? langDir : null;
+}
+
+async function buildIndexesFromRoot(langDir: string): Promise<GameDataIndexes | null> {
+  const championsIndexPath = join(langDir, 'champions', 'index.json');
+  const itemPath = join(langDir, 'item.json');
+  const runesPath = join(langDir, 'runesReforged.json');
+
+  type RunesReforgedData = Array<{
+    slots: Array<{ runes: Array<{ id: number; key: string; name?: string }> }>;
+  }>;
+
+  const [championsData, itemData, runesData] = await Promise.all([
+    readJson<{ champions?: Array<{ id: string; name?: string }> }>(championsIndexPath),
+    readJson<{ data?: Record<string, { name?: string }> }>(itemPath),
+    readJson<RunesReforgedData>(runesPath),
+  ]);
+
+  if (!championsData?.champions || !itemData?.data || !runesData) {
+    return null;
+  }
+
+  return buildGameDataIndexes(championsData.champions, itemData.data, runesData);
+}
+
+function mergeGameDataIndexes(target: GameDataIndexes, source: GameDataIndexes): void {
+  for (const id of source.championIds) {
+    target.championIds.add(id);
+  }
+  for (const [key, value] of source.championSlugToId) {
+    target.championSlugToId.set(key, value);
+  }
+  for (const [key, value] of source.itemNameToId) {
+    target.itemNameToId.set(key, value);
+  }
+  for (const [key, value] of source.itemPatchSlugToId) {
+    target.itemPatchSlugToId.set(key, value);
+  }
+  for (const [key, value] of source.runeKeyToId) {
+    target.runeKeyToId.set(key, value);
+  }
 }
 
 /**
@@ -61,25 +104,17 @@ export async function loadGameDataIndexes(gameVersion?: string): Promise<GameDat
     const langDir = resolveLangDir(root, version);
     if (!langDir) continue;
 
-    const championsIndexPath = join(langDir, 'champions', 'index.json');
-    const itemPath = join(langDir, 'item.json');
-    const runesPath = join(langDir, 'runesReforged.json');
+    const indexes = await buildIndexesFromRoot(langDir);
+    if (!indexes) continue;
 
-    const [championsData, itemData, runesData] = await Promise.all([
-      readJson<{ champions?: Array<{ id: string; name?: string }> }>(championsIndexPath),
-      readJson<{ data?: Record<string, { name?: string }> }>(itemPath),
-      readJson<Array<{ slots: Array<{ runes: Array<{ id: number; key: string; name?: string }> }> }>>(runesPath),
-    ]);
-
-    if (!championsData?.champions || !itemData?.data || !runesData) {
-      continue;
+    for (const secondaryLang of SECONDARY_LANGS) {
+      const secondaryDir = join(root, version, secondaryLang);
+      if (!existsSync(secondaryDir)) continue;
+      const secondaryIndexes = await buildIndexesFromRoot(secondaryDir);
+      if (secondaryIndexes) {
+        mergeGameDataIndexes(indexes, secondaryIndexes);
+      }
     }
-
-    const indexes = buildGameDataIndexes(
-      championsData.champions,
-      itemData.data,
-      runesData
-    );
 
     logger.debug({ version, root }, 'Loaded game data indexes for entity id enrichment');
     return indexes;

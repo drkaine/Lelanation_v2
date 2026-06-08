@@ -129,8 +129,8 @@ describe('parser', () => {
       expect(brand!.category).toBe('champion');
       expect(brand!.id).toBe('Brand');
       expect(brand!.patchSlug).toBe('brand');
-      expect(brand!.subCategory).toBe('Stats de base');
       expect(brand!.changes).toHaveLength(2);
+      expect(brand!.changes.every(c => c.subCategory === 'Stats de base')).toBe(true);
 
       const heartsteel = entities.find((e: EntityChanges) => e.name === 'Cœuracier');
       expect(heartsteel?.category).toBe('item');
@@ -179,30 +179,27 @@ describe('parser', () => {
       const brand = entities.find(e => e.name === 'Brand');
       expect(brand).toBeDefined();
       expect(brand!.category).toBe('champion');
-      expect(brand!.subCategory).toBe('Stats de base');
       expect(brand!.changes).toHaveLength(1);
+      expect(brand!.changes[0].subCategory).toBe('Stats de base');
     });
 
-    it('should split champion changes into ability cards', () => {
+    it('should group champion changes by ability within one entity', () => {
       const html = loadFixture('champion-abilities.html');
-      const entities = parsePatchHtml(html, 'fr-FR').filter(e => e.name === 'Heimerdinger');
+      const entities = parsePatchHtml(html, 'fr-FR');
 
-      expect(entities).toHaveLength(2);
+      const heimer = entities.find(e => e.name === 'Heimerdinger');
+      expect(heimer).toBeDefined();
+      expect(heimer!.changes).toHaveLength(3);
+      expect(heimer!.changes.filter(c => c.subCategory?.includes('Tourelle'))).toHaveLength(2);
+      expect(heimer!.changes.find(c => c.subCategory?.includes('Grenade'))?.stat).toBe(
+        "Vision de l'emplacement de la cible"
+      );
 
-      const turret = entities.find(e => e.subCategory?.includes('Tourelle'));
-      expect(turret).toBeDefined();
-      expect(turret!.changes).toHaveLength(2);
-      expect(turret!.changes[0].stat).toBe("Portée d'attaque de la tourelle");
-
-      const grenade = entities.find(e => e.subCategory?.includes('Grenade'));
-      expect(grenade).toBeDefined();
-      expect(grenade!.changes).toHaveLength(1);
-      expect(grenade!.changes[0].stat).toBe("Vision de l'emplacement de la cible");
-
-      const quinn = parsePatchHtml(html, 'fr-FR').filter(e => e.name === 'Quinn');
-      expect(quinn).toHaveLength(2);
-      expect(quinn.find(e => e.subCategory?.includes('Busard'))?.changes[0].after).toBe('75');
-      expect(quinn.find(e => e.subCategory?.includes('Assaut'))?.changes[0].after).toBe('200%');
+      const quinn = entities.find(e => e.name === 'Quinn');
+      expect(quinn).toBeDefined();
+      expect(quinn!.changes).toHaveLength(2);
+      expect(quinn!.changes.find(c => c.subCategory?.includes('Busard'))?.after).toBe('75');
+      expect(quinn!.changes.find(c => c.subCategory?.includes('Assaut'))?.after).toBe('200%');
     });
 
     it('should parse structured mode sections (larves, ARAM chaos, bugfixes)', () => {

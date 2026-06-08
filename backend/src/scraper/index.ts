@@ -11,7 +11,7 @@ export {
   normalizeCmsImageUrl,
   buildSummaryImageFilename,
 } from './parser.js';
-export { cleanChanges, deduplicateEntities, sortEntities } from './cleaner.js';
+export { cleanChanges, deduplicateEntities, mergeEntityVariants, sortEntities } from './cleaner.js';
 export {
   extractEntityIdFromHtml,
   enrichEntityIds,

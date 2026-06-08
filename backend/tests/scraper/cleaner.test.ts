@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   cleanChanges,
   deduplicateEntities,
+  mergeEntityVariants,
   sortEntities,
 } from '../../src/scraper/cleaner.js';
 import type { EntityChanges, ChangeType } from '../../src/scraper/types.js';
@@ -171,7 +172,7 @@ describe('cleaner', () => {
       expect(deduped).toHaveLength(2);
     });
 
-    it('should keep separate ability blocks for the same champion', () => {
+    it('should merge ability blocks into one champion entity', () => {
       const entities: EntityChanges[] = [
         {
           name: 'Heimerdinger',
@@ -187,8 +188,11 @@ describe('cleaner', () => {
         },
       ];
 
-      const deduped = deduplicateEntities(entities);
-      expect(deduped).toHaveLength(2);
+      const merged = mergeEntityVariants(entities);
+      expect(merged).toHaveLength(1);
+      expect(merged[0].changes).toHaveLength(2);
+      expect(merged[0].changes[0].subCategory).toBe('A - Tourelle H-28G Évolution');
+      expect(merged[0].changes[1].subCategory).toBe('E - Grenade électro-tempête CH-2');
     });
   });
 

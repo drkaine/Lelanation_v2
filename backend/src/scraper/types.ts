@@ -11,6 +11,8 @@ export interface StatChange {
   before: string;
   after: string;
   type: ChangeType;
+  /** Ability block or "Stats de base" within a champion card. */
+  subCategory?: string;
 }
 
 export interface EntityChanges {

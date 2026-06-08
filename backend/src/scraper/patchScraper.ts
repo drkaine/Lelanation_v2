@@ -10,7 +10,7 @@ import {
   extractSummaryImageUrl,
   buildSummaryImageFilename,
 } from './parser.js';
-import { cleanChanges, deduplicateEntities, sortEntities } from './cleaner.js';
+import { cleanChanges, deduplicateEntities, mergeEntityVariants, sortEntities } from './cleaner.js';
 import { enrichEntityIds } from './entityIds.js';
 import { loadGameDataIndexes } from './gameDataLoader.js';
 import {
@@ -86,6 +86,7 @@ async function scrapeLocale(
     const rawEntities = parsePatchHtml(html, locale);
 
     let cleanedEntities = cleanChanges(rawEntities);
+    cleanedEntities = mergeEntityVariants(cleanedEntities);
     cleanedEntities = await enrichEntitiesWithGameData(cleanedEntities);
     cleanedEntities = deduplicateEntities(cleanedEntities);
     cleanedEntities = sortEntities(cleanedEntities);
@@ -182,6 +183,7 @@ async function scrapeLocaleWithResult(
   const html = await fetchPage(url);
   const rawEntities = parsePatchHtml(html, locale);
   let cleanedEntities = cleanChanges(rawEntities);
+  cleanedEntities = mergeEntityVariants(cleanedEntities);
   cleanedEntities = await enrichEntitiesWithGameData(cleanedEntities);
   cleanedEntities = deduplicateEntities(cleanedEntities);
   cleanedEntities = sortEntities(cleanedEntities);

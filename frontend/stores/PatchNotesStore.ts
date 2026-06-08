@@ -18,6 +18,7 @@ export interface StatChange {
   before: string
   after: string
   type: ChangeType
+  subCategory?: string
 }
 
 export interface PatchEntity {

@@ -48,6 +48,7 @@ export function cleanChanges(raw: EntityChanges[]): EntityChanges[] {
         before: cleanString(change.before),
         after: cleanString(change.after),
         type: change.type,
+        ...(change.subCategory ? { subCategory: cleanString(change.subCategory) } : {}),
       };
 
       // Skip empty changes (allow text-only bugfix lines with empty stat)
@@ -60,8 +61,8 @@ export function cleanChanges(raw: EntityChanges[]): EntityChanges[] {
 
       // Skip exact duplicate lines (same stat + before + after)
       const statKey = cleanChange.stat
-        ? `${cleanChange.stat.toLowerCase()}::${cleanChange.before.toLowerCase()}::${cleanChange.after.toLowerCase()}`
-        : `__text__:${cleanChange.before.toLowerCase()}::${cleanChange.after.toLowerCase()}`;
+        ? `${cleanChange.subCategory?.toLowerCase() ?? ''}::${cleanChange.stat.toLowerCase()}::${cleanChange.before.toLowerCase()}::${cleanChange.after.toLowerCase()}`
+        : `__text__:${cleanChange.subCategory?.toLowerCase() ?? ''}::${cleanChange.before.toLowerCase()}::${cleanChange.after.toLowerCase()}`;
       if (seenStats.has(statKey)) {
         logger.debug({ entity: cleanEntity.name, stat: cleanChange.stat }, 'Skipping duplicate stat');
         continue;
@@ -136,6 +137,46 @@ function normalizeCategory(category: EntityCategory | string): EntityCategory {
 }
 
 /**
+ * Merge multiple rows for the same entity (e.g. champion split per ability).
+ */
+export function mergeEntityVariants(entities: EntityChanges[]): EntityChanges[] {
+  const merged = new Map<string, EntityChanges>();
+
+  for (const entity of entities) {
+    const key = entity.name
+      ? `${entity.category}::${entity.name.toLowerCase().trim()}`
+      : `__unnamed__:${entity.category}:${entity.changes[0]?.after?.slice(0, 80) ?? ''}`;
+
+    const existing = merged.get(key);
+    if (!existing) {
+      merged.set(key, {
+        ...entity,
+        changes: entity.changes.map((change) =>
+          change.subCategory || !entity.subCategory
+            ? change
+            : { ...change, subCategory: entity.subCategory }
+        ),
+      });
+      continue;
+    }
+
+    for (const change of entity.changes) {
+      const normalized =
+        change.subCategory || !entity.subCategory
+          ? change
+          : { ...change, subCategory: entity.subCategory };
+      existing.changes.push(normalized);
+    }
+
+    if (!existing.id && entity.id) existing.id = entity.id;
+    if (!existing.patchSlug && entity.patchSlug) existing.patchSlug = entity.patchSlug;
+    if (!existing.imageUrl && entity.imageUrl) existing.imageUrl = entity.imageUrl;
+  }
+
+  return Array.from(merged.values());
+}
+
+/**
  * Remove duplicate entities (by name, keeping the one with most changes)
  */
 export function deduplicateEntities(entities: EntityChanges[]): EntityChanges[] {
@@ -143,7 +184,7 @@ export function deduplicateEntities(entities: EntityChanges[]): EntityChanges[] 
 
   for (const entity of entities) {
     const key = entity.name
-      ? `${entity.name.toLowerCase().trim()}::${entity.subCategory?.toLowerCase().trim() ?? ''}`
+      ? `${entity.name.toLowerCase().trim()}`
       : `__unnamed__:${entity.category}:${entity.changes[0]?.after?.slice(0, 80) ?? ''}`;
     if (!byName.has(key)) {
       byName.set(key, []);

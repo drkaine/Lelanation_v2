@@ -106,4 +106,43 @@ describe('entityIds', () => {
     expect(enriched[0].id).toBe('4005');
     expect(enriched[1].id).toBe('8214');
   });
+
+  it('should enrich arena items, champions and honored guests from localized names', () => {
+    const indexes = buildGameDataIndexes(
+      [
+        { id: 'MasterYi', name: 'Maître Yi' },
+        { id: 'Kayle', name: 'Kayle' },
+      ],
+      {
+        '3031': { name: "Lame d'infini" },
+      },
+      [{ slots: [{ runes: [] }] }]
+    );
+
+    const entities: EntityChanges[] = [
+      {
+        name: "Lame d'infini",
+        category: 'arena',
+        subCategory: 'Objets',
+        changes: [{ stat: 'AD', before: '70', after: '65', type: 'nerf' }],
+      },
+      {
+        name: 'Maître Yi',
+        category: 'arena',
+        subCategory: 'Champions',
+        changes: [{ stat: 'R - Durée', before: '7', after: '5', type: 'nerf' }],
+      },
+      {
+        name: 'Kayle : Ascension divine',
+        category: 'arena',
+        subCategory: "Invités d'honneur",
+        changes: [{ stat: 'PO gagnées', before: '1000', after: '1500', type: 'buff' }],
+      },
+    ];
+
+    const enriched = enrichEntityIds(entities, indexes);
+    expect(enriched[0].id).toBe('3031');
+    expect(enriched[1].id).toBe('MasterYi');
+    expect(enriched[2].id).toBe('Kayle');
+  });
 });

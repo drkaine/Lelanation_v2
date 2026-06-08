@@ -135,7 +135,7 @@
       >
         <PatchEntityCard
           v-for="(entity, idx) in filteredEntities"
-          :key="`${entity.patchSlug || entity.name}-${entity.subCategory || ''}-${idx}`"
+          :key="entity.patchSlug || entity.name || idx"
           :entity="entity"
         />
       </div>
@@ -317,7 +317,8 @@ const filteredEntities = computed<PatchEntity[]>(() => {
   return entities.filter(entity => {
     const name = entity.name?.trim()
     if (!name) return false
-    const haystack = [name, entity.subCategory ?? ''].map(normalizeSearch).join(' ')
+    const changeLabels = entity.changes.map(c => c.subCategory ?? '').join(' ')
+    const haystack = [name, entity.subCategory ?? '', changeLabels].map(normalizeSearch).join(' ')
     return haystack.includes(query)
   })
 })

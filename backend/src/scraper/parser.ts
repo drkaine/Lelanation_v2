@@ -284,38 +284,20 @@ function isAbilityOrBaseStatsHeading($elem: cheerio.Cheerio<any>, text: string):
   return /^([QWERAZ]|Passive)\s*[-–—]/i.test(text);
 }
 
-function shouldSplitEntityBySubSection(
+function isChampionChangeSubSection(
   sectionCategory: EntityCategory,
   $elem: cheerio.Cheerio<any>,
   text: string
 ): boolean {
-  return (
-    sectionCategory === 'champion' &&
-    isAbilityOrBaseStatsHeading($elem, text)
-  );
+  return sectionCategory === 'champion' && isAbilityOrBaseStatsHeading($elem, text);
 }
 
-function cloneEntityForSubSection(entity: EntityChanges, subCategory: string): EntityChanges {
-  return {
-    name: entity.name,
-    category: entity.category,
-    subCategory,
-    changes: [],
-    ...(entity.id ? { id: entity.id } : {}),
-    ...(entity.imageUrl ? { imageUrl: entity.imageUrl } : {}),
-    ...(entity.patchSlug ? { patchSlug: entity.patchSlug } : {}),
-  };
-}
-
-function splitCurrentEntityBySubSection(
-  entities: EntityChanges[],
-  currentEntity: EntityChanges | null,
-  subCategory: string
-): EntityChanges | null {
-  if (!currentEntity) return null;
-  const base = currentEntity;
-  flushEntity(entities, base);
-  return cloneEntityForSubSection(base, subCategory);
+function tagChangeWithSubSection(
+  change: StatChange,
+  subSection: string | null
+): StatChange {
+  if (!subSection) return change;
+  return { ...change, subCategory: subSection };
 }
 
 function findContentRoot($: cheerio.CheerioAPI): cheerio.Cheerio<any> {
@@ -616,9 +598,10 @@ function parseSectionContent(
   const pushListToEntity = ($ul: cheerio.Cheerio<any>, entity: EntityChanges) => {
     const changes = parseListItems($, $ul, locale);
     for (const change of changes) {
-      entity.changes.push(change);
+      const tagged = tagChangeWithSubSection(change, state.currentSubSection);
+      entity.changes.push(tagged);
       logger.debug(
-        { entity: entity.name, stat: change.stat, type: change.type },
+        { entity: entity.name, stat: change.stat, type: change.type, subCategory: tagged.subCategory },
         'Found change'
       );
     }
@@ -694,6 +677,7 @@ function parseSectionContent(
     if (tagName === 'h3') {
       flushCurrentEntity();
       clearPending();
+      state.currentSubSection = null;
       state.inBugfixSubsection = sectionCategory === 'bugfix';
       state.currentEntity = createEntityFromH3($, $elem, sectionCategory);
       continue;
@@ -712,31 +696,24 @@ function parseSectionContent(
           state.currentSubSection = text;
         } else if (!state.currentEntity && sectionCategory === 'system') {
           state.pendingName = text;
-        } else if (shouldSplitEntityBySubSection(sectionCategory, $elem, text)) {
-          state.currentEntity = splitCurrentEntityBySubSection(
-            entities,
-            state.currentEntity,
-            text
-          );
+        } else if (isChampionChangeSubSection(sectionCategory, $elem, text)) {
           state.currentSubSection = text;
-          state.inBugfixSubsection = false;
         } else {
           state.currentSubSection = text;
+          if (state.currentEntity && sectionCategory !== 'champion') {
+            state.currentEntity.subCategory = text;
+          }
         }
         continue;
       }
 
       if (state.currentEntity) {
-        if (shouldSplitEntityBySubSection(sectionCategory, $elem, text)) {
-          state.currentEntity = splitCurrentEntityBySubSection(
-            entities,
-            state.currentEntity,
-            text
-          );
+        if (isChampionChangeSubSection(sectionCategory, $elem, text)) {
           state.currentSubSection = text;
-          state.inBugfixSubsection = false;
-        } else {
+        } else if (sectionCategory !== 'champion') {
           state.currentEntity.subCategory = text;
+        } else {
+          state.currentSubSection = text;
         }
         continue;
       }
@@ -750,7 +727,11 @@ function parseSectionContent(
 
     if (tagName === 'h5' || tagName === 'h6') {
       if (state.currentEntity) {
-        state.currentEntity.subCategory = text;
+        if (state.currentEntity.category === 'champion') {
+          state.currentSubSection = text;
+        } else {
+          state.currentEntity.subCategory = text;
+        }
       }
       continue;
     }
@@ -783,13 +764,21 @@ function parseSectionContent(
           $strong.text().trim().length < 80 &&
           !containsChangeSeparator(text)
         ) {
-          state.currentEntity.subCategory = $strong.text().trim();
+          if (state.currentEntity.category === 'champion') {
+            state.currentSubSection = $strong.text().trim();
+          } else {
+            state.currentEntity.subCategory = $strong.text().trim();
+          }
           continue;
         }
 
         if (containsChangeSeparator(text)) {
           const statChange = parseStatChange(text, locale);
-          if (statChange) state.currentEntity.changes.push(statChange);
+          if (statChange) {
+            state.currentEntity.changes.push(
+              tagChangeWithSubSection(statChange, state.currentSubSection)
+            );
+          }
         }
       }
       continue;

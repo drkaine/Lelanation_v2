@@ -1299,7 +1299,8 @@
       "Q": "A",
       "W": "Z",
       "E": "E",
-      "R": "R"
+      "R": "R",
+      "P": "P"
     },
     "selectSkill": "Sélectionner une compétence",
     "clickToDeselect": "Cliquer pour désélectionner",
