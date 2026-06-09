@@ -12,14 +12,18 @@ import {
 describe('PatchNotesPublishService', () => {
   let backendDir: string;
   let frontendDir: string;
+  let buildsDir: string;
   const originalBackend = process.env.PATCH_OUTPUT_DIR;
   const originalFrontend = process.env.PATCH_FRONTEND_DIR;
+  const originalBuildsDir = process.env.BUILDS_DATA_DIR;
 
   beforeEach(async () => {
     backendDir = await mkdtemp(join(tmpdir(), 'patch-backend-'));
     frontendDir = await mkdtemp(join(tmpdir(), 'patch-frontend-'));
+    buildsDir = await mkdtemp(join(tmpdir(), 'patch-builds-'));
     process.env.PATCH_OUTPUT_DIR = backendDir;
     process.env.PATCH_FRONTEND_DIR = frontendDir;
+    process.env.BUILDS_DATA_DIR = buildsDir;
   });
 
   afterEach(async () => {
@@ -27,8 +31,11 @@ describe('PatchNotesPublishService', () => {
     else delete process.env.PATCH_OUTPUT_DIR;
     if (originalFrontend) process.env.PATCH_FRONTEND_DIR = originalFrontend;
     else delete process.env.PATCH_FRONTEND_DIR;
+    if (originalBuildsDir) process.env.BUILDS_DATA_DIR = originalBuildsDir;
+    else delete process.env.BUILDS_DATA_DIR;
     await rm(backendDir, { recursive: true, force: true });
     await rm(frontendDir, { recursive: true, force: true });
+    await rm(buildsDir, { recursive: true, force: true });
   });
 
   it('should move patch files to frontend version subfolder and delete from backend', async () => {

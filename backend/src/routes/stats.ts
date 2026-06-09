@@ -71,6 +71,8 @@ import {
   getWatchlistDelta,
 } from '../services/StatsWatchlistService.js'
 import { isDatabaseConfigured } from '../db/query.js'
+import { getPatchNotesAggregateStats, getPatchNotesVersionList } from '../services/StatsPatchNotesAggregateService.js'
+import type { PatchNotesTargetType } from '../services/patchNotesStatsBuilder.js'
 
 const router = Router()
 const aggregator = new RiotStatsAggregator()
@@ -1879,6 +1881,42 @@ router.get('/infos/patch-division-matrix', async (_req: Request, res: Response) 
       rows: [],
     }
   )
+})
+
+/** GET /api/stats/patch-notes/versions - patches disponibles (patch notes, indépendant du poller). */
+router.get('/patch-notes/versions', async (_req: Request, res: Response) => {
+  try {
+    const versions = await getPatchNotesVersionList()
+    res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
+    return res.json({ versions })
+  } catch (err) {
+    return res.status(500).json({
+      error: err instanceof Error ? err.message : 'Patch notes versions failed',
+    })
+  }
+})
+
+/** GET /api/stats/patch-notes - agrégats patch notes par entité. Query: ?version=16.9&sinceVersion=16.11&targetType=champion&targetType=items */
+router.get('/patch-notes', async (req: Request, res: Response) => {
+  try {
+    const fromVersion = queryString(req.query.version)
+    const toVersion = queryString(req.query.sinceVersion)
+    const rawTypes = queryStringArray(req.query.targetType)
+    const targetTypes = rawTypes.filter((t): t is PatchNotesTargetType =>
+      t === 'champion' || t === 'items' || t === 'runes'
+    )
+    const data = await getPatchNotesAggregateStats(
+      fromVersion,
+      toVersion,
+      targetTypes.length > 0 ? targetTypes : null,
+    )
+    res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
+    return res.json(data)
+  } catch (err) {
+    return res.status(500).json({
+      error: err instanceof Error ? err.message : 'Patch notes stats failed',
+    })
+  }
 })
 
 /** POST /api/stats/aggregate - recalculer les agrégats (admin / cron) */

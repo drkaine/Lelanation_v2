@@ -42,9 +42,14 @@ export interface StatisticsTabFilterFlags {
 export function statisticsTabFilterFlags(tab: StatisticsCohortTab): StatisticsTabFilterFlags {
   const t = tab
   return {
-    division: t !== 'balance' && t !== 'surrender' && t !== 'infos',
-    role: t !== 'objectives' && t !== 'surrender' && t !== 'infos',
-    otp: t !== 'bans' && t !== 'objectives' && t !== 'surrender' && t !== 'infos',
+    division: t !== 'balance' && t !== 'surrender' && t !== 'infos' && t !== 'patchNotes',
+    role: t !== 'objectives' && t !== 'surrender' && t !== 'infos' && t !== 'patchNotes',
+    otp:
+      t !== 'bans' &&
+      t !== 'objectives' &&
+      t !== 'surrender' &&
+      t !== 'infos' &&
+      t !== 'patchNotes',
     championSearch:
       t !== 'overview' && t !== 'team' && t !== 'objectives' && t !== 'surrender' && t !== 'infos',
   }

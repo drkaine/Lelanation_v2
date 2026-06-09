@@ -12,6 +12,7 @@ import {
 } from './PatchNotesPublishService.js';
 import { enrichEntityIds } from '../scraper/entityIds.js';
 import { loadGameDataIndexes } from '../scraper/gameDataLoader.js';
+import { notesUrlVersionToPatchLabel } from '../utils/helpers.js';
 import { normalizeGamePatchKey } from './VersionService.js';
 
 const PATCH_AFFECTED_CATEGORIES = new Set<EntityCategory>(['champion', 'item', 'rune']);
@@ -156,6 +157,29 @@ export function shouldConsiderPatchForBuild(build: StoredBuild, patchVersion: st
  * Latest-patch mode: add stale flags for newly impacted builds only.
  * Never clears or overwrites builds already marked patchStale.
  */
+/** Riot URL version (26.x) → storage label (16.x). */
+export function normalizeStoragePatchVersion(version: string): string {
+  const key = normalizeGamePatchKey(version);
+  return key ? notesUrlVersionToPatchLabel(key) : '';
+}
+
+export function resolveNextPatchStaleFlag(
+  mode: BuildPatchStaleMode,
+  build: StoredBuild,
+  previous: PatchStaleInfo | null,
+  affectedByVersion: PatchAffectedByVersion,
+  versionsDesc: string[],
+  latestOnlyVersion: string | null,
+  latestBuckets: PatchEntityBuckets | null
+): PatchStaleInfo | null {
+  if (mode === 'all') {
+    return resolveLatestMatchingPatchVersion(build, affectedByVersion, versionsDesc);
+  }
+  if (!latestOnlyVersion) return previous;
+  if (!latestBuckets) return previous;
+  return resolveLatestPatchStaleFlag(build, previous, latestBuckets, latestOnlyVersion);
+}
+
 export function resolveLatestPatchStaleFlag(
   build: StoredBuild,
   previous: PatchStaleInfo | null,
@@ -263,15 +287,19 @@ export async function flagBuildsPatchStale(
   options: FlagBuildsPatchStaleOptions
 ): Promise<FlagBuildsPatchStaleResult> {
   const log = createCronLogger(options.cronName ?? 'buildPatchStale');
-  const buildsDir = options.buildsDir ?? join(process.cwd(), 'data', 'builds');
+  const buildsDir =
+    options.buildsDir ??
+    process.env.BUILDS_DATA_DIR?.trim() ??
+    join(process.cwd(), 'data', 'builds');
   const patchNotesDir = options.patchNotesDir ?? getFrontendPatchNotesDir();
   const index = await rebuildPatchNotesIndex(patchNotesDir);
 
   const allVersions = index.patches.map((entry) => entry.version);
+  const latestTarget = options.patchVersion ?? index.latest ?? '';
   const targetVersions =
     options.mode === 'all'
       ? allVersions
-      : [options.patchVersion ?? index.latest].filter((version): version is string => Boolean(version));
+      : [normalizeStoragePatchVersion(latestTarget)].filter((version): version is string => Boolean(version));
 
   if (targetVersions.length === 0) {
     await log.warn('No patch versions available for build patch stale flagging');
@@ -303,13 +331,15 @@ export async function flagBuildsPatchStale(
     const build = readResult.unwrap();
     const previous = build.patchStale ?? null;
 
-    let next: PatchStaleInfo | null = null;
-
-    if (options.mode === 'all') {
-      next = resolveLatestMatchingPatchVersion(build, affectedByVersion, versionsDesc);
-    } else if (latestBuckets && latestOnlyVersion) {
-      next = resolveLatestPatchStaleFlag(build, previous, latestBuckets, latestOnlyVersion);
-    }
+    const next = resolveNextPatchStaleFlag(
+      options.mode,
+      build,
+      previous,
+      affectedByVersion,
+      versionsDesc,
+      latestOnlyVersion,
+      latestBuckets
+    );
 
     if (isSamePatchStale(previous, next)) {
       unchanged++;

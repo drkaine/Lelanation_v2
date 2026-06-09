@@ -166,44 +166,138 @@
             v-show="!championSearchFocused || !isMobileViewport"
             class="statistics-filters-fields flex flex-col gap-3"
           >
-            <div>
-              <label for="stats-filter-version" class="mb-1 block text-sm font-medium text-text">
-                {{ t('statisticsPage.overviewFilterByVersion') }}
-              </label>
-              <select
-                id="stats-filter-version"
-                v-model="statsVersionFilter"
-                class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-                @change="onStatsFilterChange"
-              >
-                <option value="">{{ t('statisticsPage.overviewVersionAll') }}</option>
-                <option v-for="v in statsVersionOptions" :key="v.version" :value="v.version">
-                  {{ v.version }}
-                </option>
-              </select>
-            </div>
-            <div>
-              <label
-                for="stats-filter-progression-version"
-                class="mb-1 block text-sm font-medium text-text"
-              >
-                {{ t('statisticsPage.progressionsReferenceVersion') }}
-              </label>
-              <select
-                id="stats-filter-progression-version"
-                v-model="progressionFromVersionModel"
-                class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-              >
-                <option
-                  v-for="v in progressionSelectableVersions"
-                  :key="'delta-from-' + v.version"
-                  :value="v.version"
+            <template v-if="activeTab === 'patchNotes'">
+              <div>
+                <label for="patch-notes-filter-to" class="mb-1 block text-sm font-medium text-text">
+                  {{ t('statisticsPage.patchNotesFilterTo') }}
+                </label>
+                <select
+                  id="patch-notes-filter-to"
+                  v-model="patchNotesToVersion"
+                  class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
                 >
-                  {{ v.version }}
-                </option>
-              </select>
+                  <option value="">{{ t('statisticsPage.overviewVersionAll') }}</option>
+                  <option v-for="v in patchNotesVersionOptions" :key="'pn-to-' + v" :value="v">
+                    {{ v }}
+                  </option>
+                </select>
+              </div>
+              <div>
+                <label
+                  for="patch-notes-filter-from"
+                  class="mb-1 block text-sm font-medium text-text"
+                >
+                  {{ t('statisticsPage.patchNotesFilterFrom') }}
+                </label>
+                <select
+                  id="patch-notes-filter-from"
+                  v-model="patchNotesFromVersion"
+                  class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+                >
+                  <option value="">{{ t('statisticsPage.overviewVersionAll') }}</option>
+                  <option v-for="v in patchNotesVersionOptions" :key="'pn-from-' + v" :value="v">
+                    {{ v }}
+                  </option>
+                </select>
+              </div>
+            </template>
+            <template v-else>
+              <div>
+                <label for="stats-filter-version" class="mb-1 block text-sm font-medium text-text">
+                  {{ t('statisticsPage.overviewFilterByVersion') }}
+                </label>
+                <select
+                  id="stats-filter-version"
+                  v-model="statsVersionFilter"
+                  class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+                  @change="onStatsFilterChange"
+                >
+                  <option value="">{{ t('statisticsPage.overviewVersionAll') }}</option>
+                  <option v-for="v in statsVersionOptions" :key="v.version" :value="v.version">
+                    {{ v.version }}
+                  </option>
+                </select>
+              </div>
+              <div>
+                <label
+                  for="stats-filter-progression-version"
+                  class="mb-1 block text-sm font-medium text-text"
+                >
+                  {{ t('statisticsPage.progressionsReferenceVersion') }}
+                </label>
+                <select
+                  id="stats-filter-progression-version"
+                  v-model="progressionFromVersionModel"
+                  class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+                >
+                  <option
+                    v-for="v in progressionSelectableVersions"
+                    :key="'delta-from-' + v.version"
+                    :value="v.version"
+                  >
+                    {{ v.version }}
+                  </option>
+                </select>
+              </div>
+            </template>
+            <div v-if="activeTab === 'patchNotes'">
+              <div class="mb-1 text-sm font-medium text-text">
+                {{ t('statisticsPage.patchNotesTargetFilterTitle') }}
+              </div>
+              <div class="flex flex-wrap gap-1">
+                <button
+                  type="button"
+                  class="rounded border px-2 py-1 text-xs font-medium transition-colors"
+                  :class="
+                    patchNotesTab.patchNotesTargetActive('champion')
+                      ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                  "
+                  @click="patchNotesTab.togglePatchNotesTarget('champion')"
+                >
+                  {{ t('statisticsPage.patchNotesTargetChampion') }}
+                </button>
+                <button
+                  type="button"
+                  class="rounded border px-2 py-1 text-xs font-medium transition-colors"
+                  :class="
+                    patchNotesTab.patchNotesTargetActive('items')
+                      ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                  "
+                  @click="patchNotesTab.togglePatchNotesTarget('items')"
+                >
+                  {{ t('statisticsPage.patchNotesTargetItems') }}
+                </button>
+                <button
+                  type="button"
+                  class="rounded border px-2 py-1 text-xs font-medium transition-colors"
+                  :class="
+                    patchNotesTab.patchNotesTargetActive('runes')
+                      ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                  "
+                  @click="patchNotesTab.togglePatchNotesTarget('runes')"
+                >
+                  {{ t('statisticsPage.patchNotesTargetRunes') }}
+                </button>
+              </div>
+              <p
+                v-if="
+                  patchNotesTab.patchNotesTargetActive('champion') &&
+                  patchNotesTab.patchNotesTargetActive('items') &&
+                  patchNotesTab.patchNotesTargetActive('runes')
+                "
+                class="mt-1 text-[10px] text-text/50"
+              >
+                {{ t('statisticsPage.patchNotesTargetAllHint') }}
+              </p>
             </div>
-            <div v-if="activeTab !== 'balance' && activeTab !== 'surrender'">
+            <div
+              v-if="
+                activeTab !== 'balance' && activeTab !== 'surrender' && activeTab !== 'patchNotes'
+              "
+            >
               <div class="mb-1 text-sm font-medium text-text">
                 {{ t('statisticsPage.overviewMatchesByDivision') }}
               </div>
@@ -355,7 +449,13 @@
                 </select>
               </div>
             </div>
-            <div v-if="activeTab !== 'objectives' && activeTab !== 'surrender'">
+            <div
+              v-if="
+                activeTab !== 'objectives' &&
+                activeTab !== 'surrender' &&
+                activeTab !== 'patchNotes'
+              "
+            >
               <div class="mb-1 text-sm font-medium text-text">
                 {{ t('statisticsPage.filterRole') }}
               </div>
@@ -476,7 +576,10 @@
             </div>
             <div
               v-show="
-                activeTab !== 'bans' && activeTab !== 'objectives' && activeTab !== 'surrender'
+                activeTab !== 'bans' &&
+                activeTab !== 'objectives' &&
+                activeTab !== 'surrender' &&
+                activeTab !== 'patchNotes'
               "
             >
               <div class="mb-1 text-sm font-medium text-text">
@@ -652,6 +755,9 @@
               <div v-else-if="activeTab === 'abandons'" class="space-y-4">
                 <StatisticsAbandonsTab />
               </div>
+              <div v-else-if="activeTab === 'patchNotes'" class="space-y-4">
+                <StatisticsPatchNotesTab />
+              </div>
             </div>
           </Transition>
         </div>
@@ -735,6 +841,10 @@ import { useGameVersion } from '~/composables/useGameVersion'
 import { useStatisticsMobileViewport } from '~/composables/useStatisticsMobileViewport'
 import { useStatisticsBansTab } from '~/composables/statistics/useStatisticsBansTab'
 import {
+  useStatisticsPatchNotesTab,
+  type PatchNotesTargetType,
+} from '~/composables/statistics/useStatisticsPatchNotesTab'
+import {
   appendStatisticsCohortParams,
   cohortFiltersForTab,
   statisticsTabFilterFlags,
@@ -796,6 +906,9 @@ const StatisticsSpellsTab = defineAsyncComponent(
 )
 const StatisticsAbandonsTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsAbandonsTab.vue')
+)
+const StatisticsPatchNotesTab = defineAsyncComponent(
+  () => import('~/components/statistics/tabs/StatisticsPatchNotesTab.vue')
 )
 
 definePageMeta({
@@ -891,7 +1004,8 @@ function normalizeLegacyTab(tab: string): StatisticsMainTab {
     tab === 'runes' ||
     tab === 'items' ||
     tab === 'spells' ||
-    tab === 'infos'
+    tab === 'infos' ||
+    tab === 'patchNotes'
   ) {
     return tab
   }
@@ -927,6 +1041,7 @@ const activeTab = ref<
   | 'duration'
   | 'abandons'
   | 'bans'
+  | 'patchNotes'
 >(initialActiveTabFromRoute())
 
 /** Ordre unique barre d’onglets + navigation clavier (←/→/↑/↓, Home, End). */
@@ -942,6 +1057,7 @@ const STATISTICS_TAB_NAV_ORDER: readonly StatisticsMainTab[] = [
   'spells',
   'items',
   'infos',
+  'patchNotes',
 ]
 
 const allTabs = computed(() => [
@@ -965,6 +1081,7 @@ const allTabs = computed(() => [
   { id: 'spells' as const, label: t('statisticsPage.tabSummonerSpells'), widgetId: 'spells' },
   { id: 'items' as const, label: t('statisticsPage.tabItems'), widgetId: 'items' },
   { id: 'infos' as const, label: t('statisticsPage.tabInfos'), widgetId: 'infos' },
+  { id: 'patchNotes' as const, label: t('statisticsPage.tabPatchNotes'), widgetId: 'patchNotes' },
 ])
 const activeSection = computed<StatisticsTabSection | null>(() => sectionFromQuery())
 const tabs = computed(() => {
@@ -1085,19 +1202,31 @@ function clearChampionSearch(): void {
 const spellsModeFilter = ref<'solo' | 'pair'>('solo')
 const itemsLegendaryFilter = ref<'all' | 'legendary'>('all')
 const itemsTypeFilter = ref<'all' | 'starter' | 'core' | 'boots' | 'final'>('all')
+const patchNotesTargetFilters = ref<Set<PatchNotesTargetType>>(
+  new Set(['champion', 'items', 'runes'])
+)
+/** Filtres version patch notes (indépendants du poller stats). Vide = tous les patches. */
+const patchNotesFromVersion = ref('')
+const patchNotesToVersion = ref('')
+const patchNotesVersionOptions = ref<string[]>([])
+const patchNotesVersionsPending = ref(false)
 const searchInputLabel = computed(() =>
   activeTab.value === 'items'
     ? t('statisticsPage.searchItem')
     : activeTab.value === 'spells'
       ? t('statisticsPage.searchSummoner')
-      : t('statisticsPage.searchChampion')
+      : activeTab.value === 'patchNotes'
+        ? t('statisticsPage.searchPatchNotes')
+        : t('statisticsPage.searchChampion')
 )
 const searchInputPlaceholder = computed(() =>
   activeTab.value === 'items'
     ? t('statisticsPage.searchItemPlaceholder')
     : activeTab.value === 'spells'
       ? t('statisticsPage.searchSummonerPlaceholder')
-      : t('statisticsPage.searchChampionPlaceholder')
+      : activeTab.value === 'patchNotes'
+        ? t('statisticsPage.searchPatchNotesPlaceholder')
+        : t('statisticsPage.searchChampionPlaceholder')
 )
 /** Pagination: page size and current page (1-based). Shared for Champions and Tier list. */
 const championsPageSize = ref(20)
@@ -1440,11 +1569,16 @@ const showFiltersPanel = computed(() => activeTab.value !== 'infos')
 const activeStatsFiltersCount = computed(() => {
   let count = 0
   const cohortFlags = statisticsTabFilterFlags(activeTab.value)
-  if (statsVersionFilter.value) count++
+  if (activeTab.value === 'patchNotes') {
+    if (patchNotesFromVersion.value.trim()) count++
+    if (patchNotesToVersion.value.trim()) count++
+  } else {
+    if (statsVersionFilter.value) count++
+    if (progressionFromVersionOverride.value) count++
+  }
   if (cohortFlags.division && statsDivisionFilter.value.length > 0) count++
   if (cohortFlags.role && statsRoleFilter.value) count++
   if (cohortFlags.otp && statsOtpFilter.value !== 'non') count++
-  if (progressionFromVersionOverride.value) count++
   if (cohortFlags.championSearch && championSearchQuery.value.trim()) count++
   if (activeTab.value === 'balance') {
     if (balanceGlobalFilter.value !== 'ALL') count++
@@ -1456,6 +1590,7 @@ const activeStatsFiltersCount = computed(() => {
   if (activeTab.value === 'spells' && spellsModeFilter.value !== 'solo') count++
   if (activeTab.value === 'items' && itemsLegendaryFilter.value !== 'all') count++
   if (activeTab.value === 'items' && itemsTypeFilter.value !== 'all') count++
+  if (activeTab.value === 'patchNotes' && patchNotesTargetFilters.value.size < 3) count++
   return count
 })
 
@@ -4403,8 +4538,6 @@ function showBansRoleColumn(key: string): boolean {
   return key === activeBansRoleColumn.value
 }
 
-// Keep the composable return as one object — bundlers drop destructured bindings that are only used via
-// provide/inject in child SFCs, which breaks SSR (e.g. bansSortHint).
 const bansTab = useStatisticsBansTab({
   championSearchQuery,
   championsPageSize,
@@ -4423,6 +4556,47 @@ const bansTab = useStatisticsBansTab({
   overviewTeamsData,
   overviewTeamsBaselineData,
 })
+
+const patchNotesTab = useStatisticsPatchNotesTab({
+  patchNotesFromVersion,
+  patchNotesToVersion,
+  patchNotesTargetFilters,
+  championSearchQuery,
+  statsFetch,
+  apiUrl,
+})
+
+async function loadPatchNotesVersionOptions(): Promise<void> {
+  patchNotesVersionsPending.value = true
+  try {
+    try {
+      const data = await statsFetch<{ versions?: string[] }>(
+        apiUrl('/api/stats/patch-notes/versions')
+      )
+      const fromApi = (data?.versions ?? []).filter(Boolean)
+      if (fromApi.length > 0) {
+        patchNotesVersionOptions.value = [...fromApi].sort(compareVersionsDesc)
+        return
+      }
+    } catch {
+      /* fallback index.json */
+    }
+    const res = await fetch('/data/patch-notes/index.json')
+    if (res.ok) {
+      const idx = (await res.json()) as { patches?: Array<{ version?: string }> }
+      patchNotesVersionOptions.value = [...(idx.patches ?? [])]
+        .map(p => String(p.version ?? '').trim())
+        .filter(Boolean)
+        .sort(compareVersionsDesc)
+    } else {
+      patchNotesVersionOptions.value = []
+    }
+  } catch {
+    patchNotesVersionOptions.value = []
+  } finally {
+    patchNotesVersionsPending.value = false
+  }
+}
 
 async function loadChampionGlobalTable() {
   championGlobalTablePending.value = true
@@ -4604,6 +4778,10 @@ watch(activeTab, async tab => {
   }
   if (tab === 'abandons') loadOverviewAbandons()
   if (tab === 'surrender') loadSurrenderMatrix()
+  if (tab === 'patchNotes') {
+    runInBackground(loadPatchNotesVersionOptions())
+    patchNotesTab.loadPatchNotesStats()
+  }
 })
 watch([statsVersionFilter, statsRoleFilter, statsOtpFilter], () => {
   if (activeTab.value === 'overview') {
@@ -4640,6 +4818,18 @@ watch([statsVersionFilter, statsRoleFilter, statsOtpFilter], () => {
     loadOverviewDetail()
     loadOverviewDetailBaseline()
   }
+})
+
+watch(
+  patchNotesTargetFilters,
+  () => {
+    if (activeTab.value === 'patchNotes') patchNotesTab.loadPatchNotesStats()
+  },
+  { deep: true }
+)
+
+watch([patchNotesFromVersion, patchNotesToVersion], () => {
+  if (activeTab.value === 'patchNotes') patchNotesTab.loadPatchNotesStats()
 })
 
 watch([activeTab, statsVersionFilter, statsRoleFilter, statsOtpFilter], () => {
@@ -4959,6 +5149,14 @@ if (__statisticsVm?.proxy) {
             championsPageSizeModel.value = v
           }
         }
+        if (key === 'onPatchNotesPageUpdated') {
+          return (v: number) => {
+            patchNotesTab.patchNotesPage.value = v
+          }
+        }
+        if (Object.prototype.hasOwnProperty.call(patchNotesTab, key)) {
+          return unref((patchNotesTab as any)[key])
+        }
         if (Object.prototype.hasOwnProperty.call(bansTab, key)) {
           return unref((bansTab as any)[key])
         }
@@ -4976,6 +5174,20 @@ if (__statisticsVm?.proxy) {
       },
       set(_target, key: string | symbol, value: unknown) {
         if (typeof key === 'string') {
+          if (Object.prototype.hasOwnProperty.call(patchNotesTab, key)) {
+            const binding = (patchNotesTab as Record<string, unknown>)[key]
+            if (isRef(binding)) {
+              ;(binding as { value: unknown }).value = value
+              return true
+            }
+          }
+          if (Object.prototype.hasOwnProperty.call(bansTab, key)) {
+            const binding = (bansTab as Record<string, unknown>)[key]
+            if (isRef(binding)) {
+              ;(binding as { value: unknown }).value = value
+              return true
+            }
+          }
           const inst = __statisticsVm as { setupState?: Record<string, unknown> }
           const binding = inst.setupState?.[key]
           if (isRef(binding)) {

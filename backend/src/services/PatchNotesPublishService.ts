@@ -8,7 +8,10 @@ import { promises as fs } from 'fs';
 import { join, basename } from 'path';
 import { createCronLogger } from '../utils/cronLogger.js';
 import { getPatchVersionDir } from '../utils/fileWriter.js';
-import { flagBuildsPatchStale } from './BuildPatchStaleService.js';
+import {
+  flagBuildsPatchStale,
+  normalizeStoragePatchVersion,
+} from './BuildPatchStaleService.js';
 
 export type PatchNotesIndexEntry = {
   version: string;
@@ -269,14 +272,15 @@ async function flagBuildsAfterPatchPublish(
   cronName: string
 ): Promise<void> {
   const log = createCronLogger(cronName);
+  const storagePatchVersion = normalizeStoragePatchVersion(patchVersion);
   try {
     const result = await flagBuildsPatchStale({
       mode: 'latest',
-      patchVersion,
+      patchVersion: storagePatchVersion,
       cronName,
     });
     await log.info('Builds flagged after patch publish', {
-      patchVersion,
+      patchVersion: storagePatchVersion,
       flagged: result.flagged,
       cleared: result.cleared,
       scanned: result.scanned,
@@ -284,7 +288,7 @@ async function flagBuildsAfterPatchPublish(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await log.warn('Build patch stale flagging failed after patch publish', {
-      patchVersion,
+      patchVersion: storagePatchVersion,
       error: message,
     });
   }

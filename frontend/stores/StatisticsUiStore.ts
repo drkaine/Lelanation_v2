@@ -15,6 +15,7 @@ export type StatisticsMainTab =
   | 'spells'
   | 'infos'
   | 'bans'
+  | 'patchNotes'
 
 interface StatisticsUiState {
   filtersOpen: boolean
@@ -34,6 +35,7 @@ const VALID_TABS: StatisticsMainTab[] = [
   'spells',
   'items',
   'infos',
+  'patchNotes',
   'trends',
 ]
 

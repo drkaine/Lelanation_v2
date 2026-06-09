@@ -6,6 +6,7 @@ import {
   extractPatchEntityBuckets,
   resolveLatestMatchingPatchVersion,
   resolveLatestPatchStaleFlag,
+  resolveNextPatchStaleFlag,
   shouldConsiderPatchForBuild,
 } from '../../src/services/BuildPatchStaleService.js';
 
@@ -139,6 +140,26 @@ describe('BuildPatchStaleService', () => {
 
     expect(result?.patchVersion).toBe('16.11');
     expect(result?.categories).toEqual(['champion']);
+  });
+
+  it('should keep existing patchStale when latest patch JSON is missing', () => {
+    const previous = {
+      patchVersion: '16.11',
+      flaggedAt: '2026-01-01T00:00:00.000Z',
+      categories: ['champion'] as const,
+    };
+
+    const next = resolveNextPatchStaleFlag(
+      'latest',
+      buildFixture({ patchStale: previous }),
+      previous,
+      new Map(),
+      [],
+      '16.11',
+      null
+    );
+
+    expect(next).toEqual(previous);
   });
 
   it('should not clear existing patchStale flag in latest mode', () => {
