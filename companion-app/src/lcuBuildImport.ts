@@ -1,43 +1,135 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Build, Item, RuneSelection, ShardSelection, SummonerSpell } from "@lelanation/shared-types";
+import type {
+  Build,
+  Item,
+  RuneSelection,
+  ShardSelection,
+  SummonerSpell,
+} from "@lelanation/shared-types";
 import { getSettings } from "./settings";
-
-function lcu(method: string, path: string, body: string | null): Promise<string> {
-  return invoke<string>("lcu_request", { method, path, body });
-}
+import type { ApplyResult, BuildPayload } from "./composables/useLcuExport";
 
 export function runePagePayload(
   runes: RuneSelection,
   shards: ShardSelection
-): { primaryStyleId: number; subStyleId: number; selectedPerkIds: number[] } {
+): NonNullable<BuildPayload["runes"]> {
   const { primary, secondary } = runes;
   const toRuneId = (value: unknown): number => Number(value);
-  const selectedPerkIds = [
+  const primaryPerks = [
     toRuneId(primary.keystone),
     toRuneId(primary.slot1),
     toRuneId(primary.slot2),
     toRuneId(primary.slot3),
-    toRuneId(secondary.slot1),
-    toRuneId(secondary.slot2),
-    toRuneId(shards.slot1),
-    toRuneId(shards.slot2),
-    toRuneId(shards.slot3),
+  ] as [number, number, number, number];
+  const secondaryPerks = [toRuneId(secondary.slot1), toRuneId(secondary.slot2)] as [
+    number,
+    number,
+  ];
+  const shardIds = [toRuneId(shards.slot1), toRuneId(shards.slot2), toRuneId(shards.slot3)] as [
+    number,
+    number,
+    number,
   ];
   return {
-    primaryStyleId: toRuneId(primary.pathId),
-    subStyleId: toRuneId(secondary.pathId),
-    selectedPerkIds,
+    primaryPath: toRuneId(primary.pathId),
+    secondaryPath: toRuneId(secondary.pathId),
+    perks: {
+      primaryPerks,
+      secondaryPerks,
+      shards: shardIds,
+    },
   };
 }
 
-/** Riot item set file format (shop Recommended dropdown). */
+function itemNumericId(item: Item): number | null {
+  let id = String(item.id ?? "").trim();
+  if (item.isMasterwork && item.baseItemId) id = String(item.baseItemId).trim();
+  const n = Number.parseInt(id, 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Map flat build items into LCU item-set blocks (all items → core unless categorized later). */
+export function itemsPayload(items: Item[]): NonNullable<BuildPayload["items"]> {
+  const ids = items
+    .map(itemNumericId)
+    .filter((id): id is number => id != null);
+  return {
+    starter: [],
+    core: ids,
+    boots: [],
+    optional: [],
+  };
+}
+
+function summonerSpellNumericId(spell: SummonerSpell | null): number | null {
+  if (!spell) return null;
+  const candidates = [
+    String((spell as unknown as { key?: string | number }).key ?? "").trim(),
+    String(spell.id ?? "").trim(),
+  ];
+  for (const raw of candidates) {
+    const n = Number.parseInt(raw, 10);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
+}
+
+function championNumericId(build: Build): number {
+  const key = build.champion?.key ?? build.champion?.id ?? "";
+  const n = Number.parseInt(String(key).trim(), 10);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+export function buildToPayload(
+  build: Build,
+  opts?: {
+    importRunes?: boolean;
+    importItems?: boolean;
+    importSummonerSpells?: boolean;
+  }
+): BuildPayload {
+  const s = getSettings();
+  const importRunes = opts?.importRunes ?? s.importRunes;
+  const importItems = opts?.importItems ?? s.importItems;
+  const importSummonerSpells = opts?.importSummonerSpells ?? s.importSummonerSpells;
+
+  const payload: BuildPayload = {
+    name: (build.name?.trim() || build.id).slice(0, 80),
+    championId: championNumericId(build),
+    importRunes,
+    importItems,
+    importSummonerSpells,
+  };
+
+  if (importRunes && build.runes && build.shards) {
+    payload.runes = runePagePayload(build.runes, build.shards);
+  }
+
+  if (importItems && build.items?.length) {
+    const mapped = itemsPayload(build.items);
+    if (mapped.core.length > 0) {
+      payload.items = mapped;
+    }
+  }
+
+  if (importSummonerSpells) {
+    const a = summonerSpellNumericId(build.summonerSpells?.[0] ?? null);
+    const b = summonerSpellNumericId(build.summonerSpells?.[1] ?? null);
+    if (a != null && b != null) {
+      payload.summonerSpells = [a, b];
+    }
+  }
+
+  return payload;
+}
+
+/** Riot item set file format (shop Recommended dropdown) — filesystem fallback. */
 export function buildItemSetJson(title: string, items: Item[]): string {
   const rows = items
     .map((i) => {
-      let id = String(i.id ?? "").trim();
-      if (i.isMasterwork && i.baseItemId) id = String(i.baseItemId).trim();
-      if (!/^\d+$/.test(id)) return null;
-      return { id, count: 1 };
+      const id = itemNumericId(i);
+      if (id == null) return null;
+      return { id: String(id), count: 1 };
     })
     .filter((x): x is { id: string; count: number } => x != null);
 
@@ -63,114 +155,21 @@ export function buildItemSetJson(title: string, items: Item[]): string {
   return JSON.stringify(body, null, 2);
 }
 
-async function applyRunesLcu(pageName: string, runes: RuneSelection, shards: ShardSelection): Promise<void> {
-  const payload = runePagePayload(runes, shards);
-  for (const id of payload.selectedPerkIds) {
-    if (!Number.isFinite(id) || id <= 0) {
-      throw new Error("Invalid rune or shard id in build.");
-    }
-  }
-
-  let currentRaw: string;
-  try {
-    currentRaw = await lcu("GET", "/lol-perks/v1/currentpage", null);
-  } catch (e) {
-    throw new Error(e instanceof Error ? e.message : String(e));
-  }
-
-  let current: Record<string, unknown> | null = null;
-  try {
-    const parsed = JSON.parse(currentRaw) as Record<string, unknown> | null;
-    if (parsed && typeof parsed.id === "number") current = parsed;
-  } catch {
-    current = null;
-  }
-
-  const name = pageName.trim().slice(0, 48) || "Lelanation";
-  const mergedBase = {
-    name,
-    primaryStyleId: payload.primaryStyleId,
-    subStyleId: payload.subStyleId,
-    selectedPerkIds: payload.selectedPerkIds,
-    current: true,
-  };
-
-  if (current) {
-    const merged = { ...current, ...mergedBase };
-    try {
-      await lcu("PUT", `/lol-perks/v1/pages/${current.id as number}`, JSON.stringify(merged));
-      return;
-    } catch {
-      try {
-        await lcu("DELETE", `/lol-perks/v1/pages/${current.id as number}`, null);
-      } catch {
-        /* continue to POST */
-      }
-    }
-  }
-
-  await lcu("POST", "/lol-perks/v1/pages", JSON.stringify(mergedBase));
-}
-
-async function tryApplyItemSetLcu(title: string, items: Item[]): Promise<void> {
-  const currentSummonerRaw = await lcu("GET", "/lol-summoner/v1/current-summoner", null);
-  const currentSummoner = JSON.parse(currentSummonerRaw) as {
-    summonerId?: number;
-    id?: number;
-  };
-  const summonerId = Number(currentSummoner.summonerId ?? currentSummoner.id ?? 0);
-  if (!Number.isFinite(summonerId) || summonerId <= 0) {
-    throw new Error("Cannot resolve current summoner id");
-  }
-
-  const itemSetPayload = JSON.parse(buildItemSetJson(title, items)) as Record<string, unknown>;
-  await lcu(
-    "POST",
-    `/lol-item-sets/v1/item-sets/${summonerId}/sets`,
-    JSON.stringify(itemSetPayload)
-  );
-}
-
-function summonerSpellNumericId(spell: SummonerSpell | null): number | null {
-  if (!spell) return null;
-  const candidates = [
-    String((spell as unknown as { key?: string | number }).key ?? "").trim(),
-    String(spell.id ?? "").trim(),
-  ];
-  for (const raw of candidates) {
-    const n = Number.parseInt(raw, 10);
-    if (Number.isFinite(n) && n > 0) return n;
-  }
-  return null;
-}
-
-async function tryApplySummonerSpells(
-  spells: [SummonerSpell | null, SummonerSpell | null]
-): Promise<void> {
-  const s = getSettings();
-  if (!s.importSummonerSpells) return;
-  const a = summonerSpellNumericId(spells[0]);
-  const b = summonerSpellNumericId(spells[1]);
-  if (a == null || b == null) return;
-
-  const body = JSON.stringify({ spell1Id: a, spell2Id: b });
-  try {
-    await lcu("PATCH", "/lol-champ-select/v1/session/my-selection", body);
-  } catch {
-    try {
-      await lcu("PATCH", "/lol-champ-select-legacy/v1/session/my-selection", body);
-    } catch {
-      /* not in champion select — expected */
-    }
-  }
+function formatApplyResult(result: ApplyResult): string {
+  const parts: string[] = [];
+  if (result.runes) parts.push("runes");
+  if (result.items) parts.push("items");
+  if (result.summoners) parts.push("summoners");
+  if (result.summonersPending) parts.push("summoners pending");
+  if (result.errors.length) parts.push(...result.errors);
+  return parts.join("; ");
 }
 
 /**
- * Imports runes + shards via LCU, writes champion item set JSON under League Config,
- * best-effort summoner spells in champion select.
+ * Imports runes, items and summoner spells via Rust `apply_build` command.
+ * Falls back to filesystem item set if LCU items fail but runes succeeded.
  */
-export async function importBuildToLcu(build: Build): Promise<void> {
-  const s = getSettings();
+export async function importBuildToLcu(build: Build): Promise<ApplyResult> {
   const conn = await invoke<{ ok: boolean }>("get_lcu_connection");
   if (!conn.ok) {
     throw new Error("LCU_OFFLINE");
@@ -181,44 +180,57 @@ export async function importBuildToLcu(build: Build): Promise<void> {
     throw new Error("NO_CHAMPION");
   }
 
-  let didSomething = false;
-
-  if (s.importRunes && build.runes && build.shards) {
-    try {
-      const pageTitle = build.name?.trim() || build.id;
-      await applyRunesLcu(pageTitle, build.runes, build.shards);
-      didSomething = true;
-    } catch (e) {
-      throw new Error(`RUNES:${e instanceof Error ? e.message : String(e)}`);
-    }
-  }
-
-  if (s.importItems && build.items?.length) {
-    const json = buildItemSetJson(build.name || build.id, build.items);
-    const parsed = JSON.parse(json) as { blocks?: Array<{ items?: unknown[] }> };
-    const count = parsed.blocks?.[0]?.items?.length ?? 0;
-    if (count > 0) {
-      try {
-        try {
-          await tryApplyItemSetLcu(build.name || build.id, build.items);
-        } catch {
-          // Fallback: write to League Config file when LCU endpoint is unavailable.
-          await invoke<string>("companion_write_champion_item_set", {
-            championKey,
-            titleStem: `${build.id}_${(build.name || "build").slice(0, 24)}`,
-            jsonContent: json,
-          });
-        }
-        didSomething = true;
-      } catch (e) {
-        throw new Error(`ITEMS:${e instanceof Error ? e.message : String(e)}`);
-      }
-    }
-  }
-
-  if (!didSomething) {
+  const payload = buildToPayload(build);
+  const hasContent =
+    payload.runes != null || payload.items != null || payload.summonerSpells != null;
+  if (!hasContent) {
     throw new Error("NOTHING_TO_IMPORT");
   }
 
-  await tryApplySummonerSpells(build.summonerSpells);
+  try {
+    const result = await invoke<ApplyResult>("apply_build", { build: payload });
+
+    if (!result.items && payload.items && payload.importItems && build.items?.length) {
+      try {
+        const json = buildItemSetJson(build.name || build.id, build.items);
+        await invoke<string>("companion_write_champion_item_set", {
+          championKey,
+          titleStem: `${build.id}_${(build.name || "build").slice(0, 24)}`,
+          jsonContent: json,
+        });
+        result.items = true;
+      } catch (e) {
+        result.errors.push(
+          `Items fallback: ${e instanceof Error ? e.message : String(e)}`
+        );
+      }
+    }
+
+    if (!result.runes && !result.items && !result.summoners && !result.summonersPending) {
+      throw new Error(result.errors.join("; ") || "NOTHING_TO_IMPORT");
+    }
+
+    return result;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("Nothing to import")) throw new Error("NOTHING_TO_IMPORT");
+    throw new Error(msg.startsWith("Runes:") || msg.startsWith("Items:") ? msg : msg);
+  }
+}
+
+export function describeApplyResult(result: ApplyResult, lang: "fr" | "en"): string {
+  if (lang === "en") {
+    const lines: string[] = [];
+    if (result.runes) lines.push("Rune page applied");
+    if (result.items) lines.push("Item set applied");
+    if (result.summoners) lines.push("Summoner spells set");
+    if (result.summonersPending) lines.push("Summoner spells queued for champion select");
+    return lines.join(" · ") || formatApplyResult(result);
+  }
+  const lines: string[] = [];
+  if (result.runes) lines.push("Runes appliquées");
+  if (result.items) lines.push("Items appliqués");
+  if (result.summoners) lines.push("Sorts définis");
+  if (result.summonersPending) lines.push("Sorts en attente (champ select)");
+  return lines.join(" · ") || formatApplyResult(result);
 }

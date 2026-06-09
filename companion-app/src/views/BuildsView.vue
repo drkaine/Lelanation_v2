@@ -11,10 +11,12 @@ import { apiBase } from "../config";
 import { getSettings, setSettings } from "../settings";
 import { translate } from "../i18n";
 import type { CompanionConfig } from "../companionConfig";
-import { importBuildToLcu } from "../lcuBuildImport";
+import { importBuildToLcu, describeApplyResult } from "../lcuBuildImport";
+import { useLcuExport } from "../composables/useLcuExport";
 
 const settings = ref(getSettings());
-const lcuOk = ref<boolean | null>(null);
+const { lcuStatus, refreshStatus } = useLcuExport();
+const lcuOk = computed(() => lcuStatus.value.connected);
 const iframeError = ref(false);
 const importInProgress = ref(false);
 const importFeedback = ref("");
@@ -45,7 +47,6 @@ const UPDATER_INVALID_RELEASE_JSON = "Could not fetch a valid release JSON from 
 
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 let updateCheckTimer: ReturnType<typeof setInterval> | null = null;
-let lcuPollTimer: ReturnType<typeof setInterval> | null = null;
 let importNotificationTimer: ReturnType<typeof setTimeout> | null = null;
 
 type AppPage = "builds" | "videos" | "statistics" | "tier-list" | "settings";
@@ -107,15 +108,6 @@ function showImportNotification(message: string, ok: boolean) {
   importNotificationTimer = setTimeout(() => {
     importNotificationVisible.value = false;
   }, 7000);
-}
-
-async function pollLcu() {
-  try {
-    const res = await invoke<{ ok: boolean }>("get_lcu_connection");
-    lcuOk.value = res.ok === true;
-  } catch {
-    lcuOk.value = false;
-  }
 }
 
 async function checkForUpdates() {
@@ -298,9 +290,13 @@ async function runImportFromIframe(build: Build) {
   pushImportLog("Import requested from iframe.", { buildId: build.id, buildName: build.name });
   importInProgress.value = true;
   try {
-    await importBuildToLcu(build);
-    pushImportLog("Import success.");
-    showImportNotification(t("importSuccess"), true);
+    const result = await importBuildToLcu(build);
+    pushImportLog("Import success.", result);
+    showImportNotification(
+      describeApplyResult(result, settings.value.language) || t("importSuccess"),
+      true
+    );
+    await refreshStatus();
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     pushImportLog("Import failed.", { error: msg });
@@ -355,8 +351,7 @@ onMounted(async () => {
   } catch {
     currentAppVersion.value = "dev";
   }
-  void pollLcu();
-  lcuPollTimer = setInterval(pollLcu, 15_000);
+  void refreshStatus();
 
   void checkForUpdates();
   updateCheckTimer = setInterval(checkForUpdates, UPDATE_CHECK_INTERVAL_MS);
@@ -374,7 +369,6 @@ onMounted(async () => {
 });
 onUnmounted(() => {
   if (updateCheckTimer) clearInterval(updateCheckTimer);
-  if (lcuPollTimer) clearInterval(lcuPollTimer);
   if (importNotificationTimer) clearTimeout(importNotificationTimer);
   window.removeEventListener("message", onIframeMessage);
 });
@@ -399,14 +393,13 @@ onUnmounted(() => {
         </button>
       </nav>
       <div class="top-actions">
-        <span class="lcu-pill" :data-ok="lcuOk === true ? '1' : '0'">
+        <span class="lcu-pill" :data-ok="lcuOk ? '1' : '0'" :title="lcuStatus.phase">
           {{
-            lcuOk === null
-              ? t("status.untested")
-              : lcuOk
-                ? t("status.connected")
-                : t("status.disconnected")
+            lcuOk
+              ? t("status.connected")
+              : t("status.disconnected")
           }}
+          <span v-if="lcuOk" class="lcu-phase"> · {{ lcuStatus.phase }}</span>
         </span>
         <button type="button" class="icon-btn" :title="t('settings.more')" @click="currentPage = 'settings'">
           ⚙
@@ -679,6 +672,10 @@ onUnmounted(() => {
 .lcu-pill[data-ok="1"] {
   border-color: rgba(80, 200, 120, 0.6);
   color: #b8f0c8;
+}
+.lcu-phase {
+  opacity: 0.85;
+  font-size: 0.72rem;
 }
 .icon-btn {
   width: 36px;

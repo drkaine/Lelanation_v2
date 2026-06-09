@@ -1,13 +1,17 @@
 //! Lelanation Companion: LCU integration and Tauri commands.
 
 mod app_config;
+mod commands;
 mod image_cache;
 mod lcu;
+mod state;
 
 use app_config::{load_companion_config, save_companion_config, CompanionConfig};
-
+use commands::{apply_build, get_lcu_status, get_pending_build};
 use image_cache::ImageCacheState;
+use lcu::watcher;
 use serde::Serialize;
+use state::AppState;
 use std::path::PathBuf;
 use std::sync::Arc;
 #[cfg(target_os = "windows")]
@@ -278,9 +282,16 @@ fn clear_image_cache(state: tauri::State<Arc<ImageCacheState>>) -> Result<(), St
 pub fn run() {
     let image_cache = Arc::new(ImageCacheState::new());
     let protocol_cache = Arc::clone(&image_cache);
+    let app_state = Arc::new(AppState::new());
+    let watcher_state = Arc::clone(&app_state);
 
     tauri::Builder::default()
         .manage(image_cache)
+        .manage(app_state)
+        .setup(move |app| {
+            watcher::start(app.handle().clone(), watcher_state);
+            Ok(())
+        })
         .register_uri_scheme_protocol("cachedimg", move |_ctx, request| {
             let path = request.uri().path().trim_start_matches('/');
 
@@ -305,6 +316,9 @@ pub fn run() {
             companion_save_config,
             companion_write_champion_item_set,
             get_lcu_connection,
+            get_lcu_status,
+            get_pending_build,
+            apply_build,
             lcu_request,
             lcu_debug,
             create_desktop_shortcut,
