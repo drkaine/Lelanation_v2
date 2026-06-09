@@ -4346,6 +4346,7 @@ defineExpose({
 }
 
 .build-card {
+  --build-card-edge-inset: 10px;
   position: relative;
   width: 300px;
   height: 450px;
@@ -4973,13 +4974,13 @@ defineExpose({
   opacity: 0.3;
   flex: 0 0 35px;
 }
-/* Items Section - alignée avec les cases skills (top: 300px, lignes 38px + gap 6px) */
+/* Items Section - alignée avec les cases skills (lignes 38px + gap 6px) */
 .items-section {
   position: absolute;
   top: 300px;
-  left: 10px;
+  left: var(--build-card-edge-inset);
   margin: 0;
-  padding-left: 0;
+  padding: 0;
   z-index: 5;
 }
 
@@ -4989,10 +4990,8 @@ defineExpose({
   gap: 6px;
   justify-content: flex-start;
   min-height: 38px;
-  margin-bottom: 6px;
-  padding-left: 0;
-  /* Centrer par rapport à un path de 3 items (32px * 3 + 14px * 2 flèches = 124px) */
-  margin-left: 27px;
+  margin: 0 0 6px;
+  padding: 0;
 }
 
 .boots-slot {
@@ -5390,8 +5389,8 @@ defineExpose({
 /* First Three Ups Section */
 .first-three-ups-section {
   position: absolute;
-  left: 200px; /* Positionné pour avoir le même espace entre items (~120px) et skill order (~280px) */
-  top: 303px; /* Descendu pour s'aligner avec les items */
+  left: 200px;
+  top: 300px;
   z-index: 40;
 }
 
@@ -5488,8 +5487,8 @@ defineExpose({
 /* Skill Order Section */
 .skill-order-section {
   position: absolute;
-  right: 20px; /* Décalé de 20px du bord droit */
-  top: 303px; /* Descendu pour s'aligner avec les items */
+  right: var(--build-card-edge-inset);
+  top: 300px;
   z-index: 50;
 }
 

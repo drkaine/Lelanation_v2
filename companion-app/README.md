@@ -93,7 +93,9 @@ Pour que la workflow génère **`latest.json`** et que l’auto-update in-app fo
 3. Nom : `TAURI_SIGNING_PRIVATE_KEY`. Valeur : le **contenu complet** du fichier de clé privée (les deux lignes).
 4. Si la clé a un mot de passe, ajoute aussi le secret `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` ; sinon laisser vide.
 
-Sans ce secret, la CI affiche « Skipping latest.json – no updater signature found » et l’app ne pourra pas proposer de mise à jour.
+Sans ce secret, la CI ne peut pas générer `latest.json` et l’auto-update in-app ne fonctionnera pas.
+
+Avec `createUpdaterArtifacts: true` (Tauri v2), les artefacts updater sont `*-setup.exe` + `*-setup.exe.sig` (pas `.nsis.zip`). La CI régénère la signature minisign après la signature Authenticode Windows.
 
 Pour la **signature de code Windows** (éditeur « Darkaine »), voir [CODE_SIGNING_WINDOWS.md](./CODE_SIGNING_WINDOWS.md) ; en CI il faut aussi les secrets `WINDOWS_CODESIGN_PFX_B64` et `WINDOWS_CODESIGN_PASSWORD`.
 
