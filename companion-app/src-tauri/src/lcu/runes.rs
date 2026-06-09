@@ -24,8 +24,6 @@ pub struct RunePageData {
 struct PerksInventory {
     #[serde(default)]
     page_max: u32,
-    #[serde(default)]
-    page_max_reached: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]

@@ -91,7 +91,7 @@ pub fn apply_build(build: BuildPayload, state: State<'_, Arc<AppState>>) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lcu::{ItemSetData, RunePageData, RunePerksData};
+    use crate::lcu::ItemSetData;
 
     #[test]
     fn build_payload_deserializes() {
@@ -129,16 +129,6 @@ mod tests {
             import_summoner_spells: true,
         };
         assert!(payload.runes.is_none());
-        let _perks = RunePerksData {
-            primary_perks: [1, 2, 3, 4],
-            secondary_perks: [5, 6],
-            shards: [7, 8, 9],
-        };
-        let _ = RunePageData {
-            primary_path: 8000,
-            secondary_path: 8200,
-            perks: _perks,
-        };
-        let _ = ItemSetData::default();
+        assert!(ItemSetData::default().core.is_empty());
     }
 }

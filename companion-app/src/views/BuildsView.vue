@@ -49,7 +49,7 @@ const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 let updateCheckTimer: ReturnType<typeof setInterval> | null = null;
 let importNotificationTimer: ReturnType<typeof setTimeout> | null = null;
 
-type AppPage = "builds" | "videos" | "statistics" | "tier-list" | "settings";
+type AppPage = "builds" | "videos" | "statistics" | "tier-list" | "patch-notes" | "settings";
 const currentPage = ref<AppPage>("builds");
 
 const navEntries = computed(() =>
@@ -59,12 +59,14 @@ const navEntries = computed(() =>
         { id: "videos" as const, label: "Videos" },
         { id: "statistics" as const, label: "Statistics" },
         { id: "tier-list" as const, label: "Tier List" },
+        { id: "patch-notes" as const, label: "Patch Notes" },
       ]
     : [
         { id: "builds" as const, label: "Les Builds" },
         { id: "videos" as const, label: "Videos" },
         { id: "statistics" as const, label: "Statistiques" },
         { id: "tier-list" as const, label: "Tier list" },
+        { id: "patch-notes" as const, label: "Notes de patch" },
       ]
 );
 
@@ -78,6 +80,7 @@ const embeddedPageUrl = computed(() => {
     videos: `${locale}/videos`,
     statistics: `${locale}/statistics`,
     "tier-list": `${locale}/statistics/tier-list`,
+    "patch-notes": `${locale}/patch-notes`,
   };
   const url = new URL(pathMap[currentPage.value], apiBase);
   url.searchParams.set("app", "on");

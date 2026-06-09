@@ -12,7 +12,7 @@ use std::path::PathBuf;
 
 pub use auto_apply::try_auto_apply;
 pub use items::{apply_item_set, ItemSetData};
-pub use runes::{apply_rune_page, RunePageData, RunePerksData};
+pub use runes::{apply_rune_page, RunePageData};
 pub use summoners::apply_summoner_spells;
 
 /// Parsed lockfile contents: process name, PID, port, password, protocol.
@@ -47,10 +47,6 @@ impl LcuClient {
         Self::from_lockfile(find_lockfile()?)
     }
 
-    pub fn port(&self) -> u16 {
-        self.port
-    }
-
     pub fn is_connected(&self) -> bool {
         self.get("/lol-service-status/v1/lcu-info").is_ok()
     }
@@ -69,10 +65,6 @@ impl LcuClient {
 
     pub fn patch(&self, path: &str, body: &str) -> Result<String, String> {
         self.request("PATCH", path, Some(body))
-    }
-
-    pub fn delete(&self, path: &str) -> Result<String, String> {
-        self.request("DELETE", path, None)
     }
 
     pub fn request(&self, method: &str, path: &str, body: Option<&str>) -> Result<String, String> {
