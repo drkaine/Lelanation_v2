@@ -72,11 +72,15 @@ function toRuneId(value: unknown): number {
 }
 
 /** Rows from `/lol-perks/v1/styles` (last 3 `kStatMod` slots). */
-const LCU_SHARD_ROWS = {
+const LCU_SHARD_ROWS: Record<"offense" | "flex" | "defense", readonly number[]> = {
   offense: [5008, 5005, 5007],
   flex: [5008, 5010, 5001],
   defense: [5011, 5013, 5001],
-} as const;
+};
+
+function shardIdsInclude(allowed: readonly number[], id: number): boolean {
+  return allowed.some((value) => value === id);
+}
 
 /** Site legacy ids (ex. 5002 = PV croissance affiché) → ids acceptés par le client LoL actuel. */
 function legacyShardAlias(slot: 1 | 2 | 3, id: number): number {
@@ -89,15 +93,15 @@ function legacyShardAlias(slot: 1 | 2 | 3, id: number): number {
 }
 
 function pickShardFallback(allowed: readonly number[], preferred: number): number {
-  return allowed.includes(preferred) ? preferred : (allowed[0] ?? 5008);
+  return shardIdsInclude(allowed, preferred) ? preferred : (allowed[0] ?? 5008);
 }
 
 function remapShardForLcu(slot: 1 | 2 | 3, id: number): number {
   const allowed =
     slot === 1 ? LCU_SHARD_ROWS.offense : slot === 2 ? LCU_SHARD_ROWS.flex : LCU_SHARD_ROWS.defense;
   const aliased = legacyShardAlias(slot, id);
-  if (allowed.includes(aliased)) return aliased;
-  if (allowed.includes(id)) return id;
+  if (shardIdsInclude(allowed, aliased)) return aliased;
+  if (shardIdsInclude(allowed, id)) return id;
   if (slot === 3 && id === 5002) return pickShardFallback(allowed, 5001);
   if (slot === 3 && id === 5003) return pickShardFallback(allowed, 5013);
   if (slot === 2 && (id === 5002 || id === 5003)) return pickShardFallback(allowed, 5001);
