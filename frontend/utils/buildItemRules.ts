@@ -237,8 +237,8 @@ export function ensureJunglePetInItems(
       newStarters = [greenPet]
     }
   } else {
+    // Conserver le familier déjà choisi (1101/1102/1103), ne pas forcer le vert.
     newStarters = [...starterItems]
-    newStarters[petIndex] = greenPet
   }
 
   return [...newStarters.slice(0, 2), ...bootsItems, ...cleanedCore]

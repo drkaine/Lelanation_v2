@@ -115,6 +115,26 @@ describe('buildItemRules', () => {
     expect(result.map(i => i.id)).toEqual(['1103', '2003', '3089'])
   })
 
+  it('keeps the selected jungle pet instead of forcing the default green one', () => {
+    const lookup = (id: string) => item(id, ['starter'])
+    const result = ensureJunglePetInItems(
+      [item('1101', ['starter']), item('2003', ['starter']), item('3089')],
+      ['jungle'],
+      lookup
+    )
+    expect(result.map(i => i.id)).toEqual(['1101', '2003', '3089'])
+  })
+
+  it('preserves blue jungle pet when jungle role normalization runs again', () => {
+    const lookup = (id: string) => item(id, ['starter'])
+    const result = normalizeBuildItemsAfterChange(
+      [item('1102', ['starter']), item('2003', ['starter']), item('3089')],
+      ['jungle'],
+      lookup
+    )
+    expect(result.map(i => i.id)).toEqual(['1102', '2003', '3089'])
+  })
+
   it('uses real Data Dragon tags when replacing starters for jungle role', () => {
     const lookup = (id: string) =>
       ({

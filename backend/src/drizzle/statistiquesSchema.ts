@@ -88,3 +88,18 @@ export const botlaneDuoVsDuoStats = pgTable(
 
 export type BotlaneDuoVsDuoStatRow = typeof botlaneDuoVsDuoStats.$inferSelect
 export type BotlaneDuoVsDuoStatInsert = typeof botlaneDuoVsDuoStats.$inferInsert
+
+/** Compteurs nerf / buff / ajust par entité et patch (JSON patch notes). */
+export const patchNotesStats = pgTable(
+  'patch_notes_stats',
+  {
+    typeCible: text('type_cible').notNull(),
+    idCible: text('id_cible').notNull(),
+    gameVersion: text('game_version').notNull(),
+    countNerf: integer('count_nerf').notNull().default(0),
+    countUp: integer('count_up').notNull().default(0),
+    countAjust: integer('count_ajust').notNull().default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.typeCible, t.idCible, t.gameVersion] })],
+)

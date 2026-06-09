@@ -113,6 +113,48 @@
       "when": 1748611200000,
       "tag": "0016_processed_matches_participants_item_tier_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1748697600000,
+      "tag": "0015_observability",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1748784000000,
+      "tag": "0017_item_tier_order_jsonb_object",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1748870400000,
+      "tag": "0018_item_tier_daily_snapshots_role_cols",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1748956800000,
+      "tag": "0019_champion_objective_kill_ge_buckets",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1749043200000,
+      "tag": "0020_drop_count_baron_kill",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1749129600000,
+      "tag": "0021_patch_notes_stats",
+      "breakpoints": true
     }
   ]
 }

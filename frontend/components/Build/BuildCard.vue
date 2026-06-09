@@ -4990,8 +4990,10 @@ defineExpose({
   gap: 6px;
   justify-content: flex-start;
   min-height: 38px;
-  margin: 0 0 6px;
-  padding: 0;
+  margin-bottom: 6px;
+  padding-left: 0;
+  /* Centrer par rapport à un path de 3 items (32px * 3 + 14px * 2 flèches = 124px) */
+  margin-left: 27px;
 }
 
 .boots-slot {

@@ -22,6 +22,7 @@ import {
 import { extractPatchVersion, getFrUrl, isValidPatchUrl, notesUrlVersionToPatchLabel } from '../utils/helpers.js';
 import { assertPatchReadyToScrape } from './patchPreflight.js';
 import { notifyPatchScrapeFailure } from './patchScrapeAlerts.js';
+import { persistPatchNotesStats } from '../services/PatchNotesStatsService.js';
 import type { PatchJson, Locale, PatchSummaryImage, EntityChanges } from './types.js';
 
 // Delay between EN and FR requests (ms)
@@ -109,6 +110,17 @@ async function scrapeLocale(
     const versionDir = getPatchVersionDir(outputDir, patchVersion);
     const filename = `patch-${patchVersion}-${locale}.json`;
     await writePatchJson(versionDir, filename, patchJson);
+
+    if (locale === 'en-GB') {
+      try {
+        await persistPatchNotesStats(patchJson);
+      } catch (statsError) {
+        logger.warn(
+          { patchVersion, locale, error: statsError },
+          'patch_notes_stats persistence failed (scrape continues)'
+        );
+      }
+    }
 
     logger.info(
       {
