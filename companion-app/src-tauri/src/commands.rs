@@ -1,11 +1,40 @@
 //! Tauri commands for LCU build export.
 
+use crate::app_config::load_companion_config;
 use crate::lcu::{
-    apply_item_set, apply_rune_page, apply_summoner_spells, fetch_gameflow_phase, LcuClient,
+    apply_item_set, apply_rune_page, apply_summoner_spells, fetch_gameflow_phase,
+    resolve_champion_numeric_id, write_recommended_item_set, LcuClient,
 };
 use crate::state::{AppState, ApplyResult, BuildPayload, LcuStatus};
 use std::sync::Arc;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
+
+/// Called from lelanation.fr iframe (injected bridge or remote ACL invoke).
+#[tauri::command]
+pub fn companion_import_build(build: serde_json::Value, app: AppHandle) -> Result<(), String> {
+    app.emit(
+        "companion-import-build",
+        serde_json::json!({ "build": build, "via": "tauri-invoke" }),
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn resolve_champion_id(champion_folder: String) -> Result<u32, String> {
+    let client = LcuClient::connect()?;
+    if !client.is_connected() {
+        return Err("League Client is not reachable".into());
+    }
+    let id = resolve_champion_numeric_id(&client, 0, Some(champion_folder.trim()));
+    if id == 0 {
+        return Err(format!(
+            "Cannot resolve champion id for '{}'",
+            champion_folder.trim()
+        ));
+    }
+    Ok(id)
+}
 
 #[tauri::command]
 pub fn get_lcu_status(state: State<'_, Arc<AppState>>) -> LcuStatus {
@@ -44,6 +73,11 @@ pub fn apply_build(build: BuildPayload, state: State<'_, Arc<AppState>>) -> Resu
         errors: Vec::new(),
     };
 
+    let champion_id = resolve_champion_numeric_id(
+        &client,
+        build.champion_id,
+        build.champion_folder.as_deref(),
+    );
     if build.import_runes {
         if let Some(ref runes) = build.runes {
             match apply_rune_page(&client, &build.name, runes) {
@@ -55,9 +89,36 @@ pub fn apply_build(build: BuildPayload, state: State<'_, Arc<AppState>>) -> Resu
 
     if build.import_items {
         if let Some(ref items) = build.items {
-            match apply_item_set(&client, &build.name, build.champion_id, items) {
+            match apply_item_set(&client, &build.name, champion_id, items) {
                 Ok(()) => result.items = true,
                 Err(e) => result.errors.push(format!("Items: {e}")),
+            }
+
+            let cfg = load_companion_config();
+            if let Some(league_root) = cfg
+                .league_install_path
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
+                let champion_folder = build.champion_folder.as_deref().unwrap_or("");
+                let build_id = build.build_id.as_deref().unwrap_or("");
+                match write_recommended_item_set(
+                    league_root,
+                    champion_folder,
+                    champion_id,
+                    build_id,
+                    &build.name,
+                    items,
+                ) {
+                    Ok(_) => {
+                        result.items = true;
+                    }
+                    Err(e) => result.errors.push(format!("Items file: {e}")),
+                }
+            } else if !result.items {
+                result.errors
+                    .push("Items file: League install folder not configured.".into());
             }
         }
     }
@@ -121,6 +182,8 @@ mod tests {
         let payload = BuildPayload {
             name: "X".into(),
             champion_id: 1,
+            champion_folder: None,
+            build_id: None,
             runes: None,
             items: None,
             summoner_spells: None,

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getVersion } from "@tauri-apps/api/app";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -8,22 +9,24 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { Build } from "@lelanation/shared-types";
 import { apiBase } from "../config";
+import { IMPORT_BRIDGE_ORIGIN, wrapWithEmbedProxy } from "../embedProxy";
 import { getSettings, setSettings } from "../settings";
-import { translate } from "../i18n";
+import { translate, translateLcuPhase } from "../i18n";
 import type { CompanionConfig } from "../companionConfig";
 import { importBuildToLcu, describeApplyResult } from "../lcuBuildImport";
 import { useLcuExport } from "../composables/useLcuExport";
+import KeyboardShortcutsView from "./KeyboardShortcutsView.vue";
 
 const settings = ref(getSettings());
 const { lcuStatus, refreshStatus } = useLcuExport();
 const lcuOk = computed(() => lcuStatus.value.connected);
 const iframeError = ref(false);
+const iframeLoadedOrigin = ref<string | null>(null);
 const importInProgress = ref(false);
 const importFeedback = ref("");
 const importOk = ref(true);
 const iframeRef = ref<HTMLIFrameElement | null>(null);
 const importNotificationVisible = ref(false);
-const importLogs = ref<string[]>([]);
 const configLeaguePath = ref("");
 const configShareRanked = ref(false);
 const configLanguage = ref<"fr" | "en">(settings.value.language);
@@ -48,8 +51,21 @@ const UPDATER_INVALID_RELEASE_JSON = "Could not fetch a valid release JSON from 
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 let updateCheckTimer: ReturnType<typeof setInterval> | null = null;
 let importNotificationTimer: ReturnType<typeof setTimeout> | null = null;
+let bridgeUnlisten: UnlistenFn | null = null;
 
-type AppPage = "builds" | "videos" | "statistics" | "tier-list" | "patch-notes" | "settings";
+type QueuedImportMessage = {
+  origin?: string;
+  data?: { type?: string; payload?: { build?: Build } };
+};
+
+type AppPage =
+  | "builds"
+  | "videos"
+  | "statistics"
+  | "tier-list"
+  | "patch-notes"
+  | "shortcuts"
+  | "settings";
 const currentPage = ref<AppPage>("builds");
 
 const navEntries = computed(() =>
@@ -60,6 +76,7 @@ const navEntries = computed(() =>
         { id: "statistics" as const, label: "Statistics" },
         { id: "tier-list" as const, label: "Tier List" },
         { id: "patch-notes" as const, label: "Patch Notes" },
+        { id: "shortcuts" as const, label: t("nav.shortcuts") },
       ]
     : [
         { id: "builds" as const, label: "Les Builds" },
@@ -67,15 +84,16 @@ const navEntries = computed(() =>
         { id: "statistics" as const, label: "Statistiques" },
         { id: "tier-list" as const, label: "Tier list" },
         { id: "patch-notes" as const, label: "Notes de patch" },
+        { id: "shortcuts" as const, label: t("nav.shortcuts") },
       ]
 );
 
 const embeddedPageUrl = computed(() => {
-  if (currentPage.value === "settings") {
+  if (currentPage.value === "settings" || currentPage.value === "shortcuts") {
     return "";
   }
   const locale = settings.value.language === "en" ? "/en" : "";
-  const pathMap: Record<Exclude<AppPage, "settings">, string> = {
+  const pathMap: Record<Exclude<AppPage, "settings" | "shortcuts">, string> = {
     builds: `${locale}/builds?tab=discover`,
     videos: `${locale}/videos`,
     statistics: `${locale}/statistics`,
@@ -84,9 +102,16 @@ const embeddedPageUrl = computed(() => {
   };
   const url = new URL(pathMap[currentPage.value], apiBase);
   url.searchParams.set("app", "on");
-  return url.toString();
+  const target = url.toString();
+  const wrapped = wrapWithEmbedProxy(target);
+  if (wrapped !== target) {
+    return wrapped;
+  }
+  return target;
 });
-const isEmbeddedPage = computed(() => currentPage.value !== "settings");
+const isEmbeddedPage = computed(
+  () => currentPage.value !== "settings" && currentPage.value !== "shortcuts"
+);
 
 watch(currentPage, () => {
   iframeError.value = false;
@@ -96,13 +121,6 @@ function t(key: string, params?: Record<string, string | number>): string {
   return translate(settings.value.language, key, params);
 }
 
-function pushImportLog(message: string, details?: unknown) {
-  const line = `[${new Date().toLocaleTimeString()}] ${message}`;
-  importLogs.value = [line, ...importLogs.value].slice(0, 30);
-  if (details !== undefined) console.info("[companion-import]", line, details);
-  else console.info("[companion-import]", line);
-}
-
 function showImportNotification(message: string, ok: boolean) {
   importFeedback.value = message;
   importOk.value = ok;
@@ -110,7 +128,7 @@ function showImportNotification(message: string, ok: boolean) {
   if (importNotificationTimer) clearTimeout(importNotificationTimer);
   importNotificationTimer = setTimeout(() => {
     importNotificationVisible.value = false;
-  }, 7000);
+  }, 12000);
 }
 
 async function checkForUpdates() {
@@ -265,11 +283,15 @@ function allowedIframeOrigins(): string[] {
     origins.add(baseOrigin);
     try {
       const parsed = new URL(baseOrigin);
-      const { protocol, hostname } = parsed;
+      const { protocol, hostname, port } = parsed;
       if (hostname.startsWith("www.")) {
-        origins.add(`${protocol}//${hostname.slice(4)}`);
+        origins.add(`${protocol}//${hostname.slice(4)}${port ? `:${port}` : ""}`);
       } else {
-        origins.add(`${protocol}//www.${hostname}`);
+        origins.add(`${protocol}//www.${hostname}${port ? `:${port}` : ""}`);
+      }
+      if (hostname === "localhost" || hostname === "127.0.0.1") {
+        origins.add(`${protocol}//localhost${port ? `:${port}` : ""}`);
+        origins.add(`${protocol}//127.0.0.1${port ? `:${port}` : ""}`);
       }
     } catch {
       // ignore malformed origin
@@ -282,27 +304,52 @@ function allowedIframeOrigins(): string[] {
       // ignore malformed URL
     }
   }
+  if (iframeLoadedOrigin.value) {
+    origins.add(iframeLoadedOrigin.value);
+  }
+  origins.add(IMPORT_BRIDGE_ORIGIN);
   return [...origins];
+}
+
+function onIframeLoad() {
+  const src = iframeRef.value?.src;
+  if (!src) return;
+  try {
+    iframeLoadedOrigin.value = new URL(src).origin;
+  } catch {
+    iframeLoadedOrigin.value = null;
+  }
+}
+
+function importErrorMessage(error: unknown): string {
+  if (typeof error === "string") return error;
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error) {
+    const msg = (error as { message?: unknown }).message;
+    if (typeof msg === "string") return msg;
+  }
+  return String(error);
 }
 
 async function runImportFromIframe(build: Build) {
   if (importInProgress.value) {
-    pushImportLog("Import ignored: another import is already running.");
+    showImportNotification(
+      settings.value.language === "en"
+        ? "An import is already running."
+        : "Un import est déjà en cours.",
+      false
+    );
     return;
   }
-  pushImportLog("Import requested from iframe.", { buildId: build.id, buildName: build.name });
   importInProgress.value = true;
+  showImportNotification(t("importInProgress"), true);
   try {
     const result = await importBuildToLcu(build);
-    pushImportLog("Import success.", result);
-    showImportNotification(
-      describeApplyResult(result, settings.value.language) || t("importSuccess"),
-      true
-    );
+    const summary = describeApplyResult(result, settings.value.language) || t("importSuccess");
+    showImportNotification(summary, true);
     await refreshStatus();
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    pushImportLog("Import failed.", { error: msg });
+    const msg = importErrorMessage(e);
     if (msg === "LCU_OFFLINE") showImportNotification(t("importNeedClient"), false);
     else if (msg === "NO_CHAMPION") showImportNotification(t("importNeedChampion"), false);
     else if (msg === "NOTHING_TO_IMPORT") showImportNotification(t("importNothingToImport"), false);
@@ -314,26 +361,50 @@ async function runImportFromIframe(build: Build) {
   }
 }
 
-function onIframeMessage(event: MessageEvent) {
-  const iframeWindow = iframeRef.value?.contentWindow;
-  if (!iframeWindow || event.source !== iframeWindow) {
-    pushImportLog("Message ignored: source window mismatch.");
-    return;
-  }
-  if (!allowedIframeOrigins().includes(event.origin)) {
-    pushImportLog("Message ignored: origin not allowed.", { origin: event.origin });
-    return;
-  }
+const recentImportKeys = new Set<string>();
 
+function handleCompanionImportBuild(build: Build) {
+  const dedupeKey = `${build.id}:${build.name ?? ""}`;
+  if (recentImportKeys.has(dedupeKey)) {
+    return;
+  }
+  recentImportKeys.add(dedupeKey);
+  setTimeout(() => recentImportKeys.delete(dedupeKey), 3000);
+
+  void runImportFromIframe(build);
+}
+
+function drainQueuedImportMessages() {
+  const win = window as Window & { __LELANATION_IMPORT_QUEUE__?: QueuedImportMessage[] };
+  const queue = win.__LELANATION_IMPORT_QUEUE__;
+  if (!queue?.length) return;
+  for (const item of queue.splice(0, queue.length)) {
+    const build = item.data?.payload?.build;
+    if (build) {
+      handleCompanionImportBuild(build);
+    }
+  }
+}
+
+function onIframeMessage(event: MessageEvent) {
   const data = event.data as
     | { type?: string; payload?: { build?: Build } }
     | undefined;
+
   if (data?.type !== "lelanation:companion-import-build") {
-    pushImportLog("Message ignored: unexpected message type.", { type: data?.type });
+    return;
+  }
+
+  if (!allowedIframeOrigins().includes(event.origin)) {
+    showImportNotification(
+      settings.value.language === "en"
+        ? `Import blocked (origin: ${event.origin}). Check VITE_API_BASE / site URL.`
+        : `Import bloqué (origine : ${event.origin}). Vérifie VITE_API_BASE / l'URL du site.`,
+      false
+    );
     return;
   }
   if (!data.payload?.build) {
-    pushImportLog("Message ignored: missing build payload.");
     showImportNotification(
       settings.value.language === "en"
         ? "Import failed: missing build payload."
@@ -343,12 +414,11 @@ function onIframeMessage(event: MessageEvent) {
     return;
   }
 
-  pushImportLog("Valid import message received.", { origin: event.origin, buildId: data.payload.build.id });
-  void runImportFromIframe(data.payload.build);
+  handleCompanionImportBuild(data.payload.build);
 }
 
 onMounted(async () => {
-  pushImportLog("Companion import bridge ready.");
+  importInProgress.value = false;
   try {
     currentAppVersion.value = await getVersion();
   } catch {
@@ -368,12 +438,26 @@ onMounted(async () => {
     configShareRanked.value = false;
   }
 
-  window.addEventListener("message", onIframeMessage);
+  drainQueuedImportMessages();
+
+  bridgeUnlisten = await listen<{ build?: Build; via?: string }>(
+    "companion-import-build",
+    (event) => {
+      if (event.payload?.build) {
+        handleCompanionImportBuild(event.payload.build);
+      }
+    }
+  );
+
+  window.addEventListener("message", onIframeMessage, true);
+  document.addEventListener("message", onIframeMessage as EventListener, true);
 });
 onUnmounted(() => {
   if (updateCheckTimer) clearInterval(updateCheckTimer);
   if (importNotificationTimer) clearTimeout(importNotificationTimer);
-  window.removeEventListener("message", onIframeMessage);
+  if (bridgeUnlisten) void bridgeUnlisten();
+  window.removeEventListener("message", onIframeMessage, true);
+  document.removeEventListener("message", onIframeMessage as EventListener, true);
 });
 </script>
 
@@ -402,13 +486,22 @@ onUnmounted(() => {
               ? t("status.connected")
               : t("status.disconnected")
           }}
-          <span v-if="lcuOk" class="lcu-phase"> · {{ lcuStatus.phase }}</span>
+          <span v-if="lcuOk" class="lcu-phase"> · {{ translateLcuPhase(settings.language, lcuStatus.phase) }}</span>
         </span>
         <button type="button" class="icon-btn" :title="t('settings.more')" @click="currentPage = 'settings'">
           ⚙
         </button>
       </div>
     </header>
+
+    <div
+      v-if="importNotificationVisible && importFeedback"
+      class="import-banner"
+      :class="{ err: !importOk }"
+      role="status"
+    >
+      {{ importFeedback }}
+    </div>
 
     <div v-if="updateAvailable && settings.autoUpdate" class="update-banner">
       <span v-if="updateRestarting">{{ t("update.restarting") }}</span>
@@ -417,7 +510,12 @@ onUnmounted(() => {
       <p v-if="updateError" class="update-err">{{ t("update.error") }}: {{ updateError }}</p>
     </div>
 
-    <section v-if="isEmbeddedPage" class="presentation-shell">
+    <KeyboardShortcutsView
+      v-if="currentPage === 'shortcuts'"
+      :language="settings.language"
+    />
+
+    <section v-else-if="isEmbeddedPage" class="presentation-shell">
       <iframe
         ref="iframeRef"
         :key="embeddedPageUrl"
@@ -426,6 +524,7 @@ onUnmounted(() => {
         :src="embeddedPageUrl"
         title="Lelanation builds presentation"
         loading="eager"
+        @load="onIframeLoad"
         @error="iframeError = true"
       />
       <div v-if="iframeError" class="iframe-fallback">
@@ -433,7 +532,7 @@ onUnmounted(() => {
         <button type="button" class="btn-sm" @click="openUrl(embeddedPageUrl)">Ouvrir dans le navigateur</button>
       </div>
     </section>
-    <section v-else class="settings-page">
+    <section v-else-if="currentPage === 'settings'" class="settings-page">
       <div class="settings-card">
         <h2 class="settings-title">{{ t("settings.more") }}</h2>
         <p class="settings-subtitle">
@@ -555,28 +654,8 @@ onUnmounted(() => {
           {{ settings.language === "en" ? "Settings saved." : "Parametres enregistres." }}
         </p>
         <p v-if="configError" class="settings-error">{{ configError }}</p>
-
-        <h3 class="settings-subsection">
-          {{ settings.language === "en" ? "Import debug logs" : "Logs debug import" }}
-        </h3>
-        <p class="settings-meta">
-          {{
-            settings.language === "en"
-              ? "Recent events for iframe bridge and LoL import."
-              : "Evenements recents du bridge iframe et de l'import LoL."
-          }}
-        </p>
-        <div class="import-log-list">
-          <p v-for="(line, idx) in importLogs" :key="`${idx}-${line}`" class="import-log-line">{{ line }}</p>
-          <p v-if="importLogs.length === 0" class="import-log-line muted">
-            {{ settings.language === "en" ? "No logs yet." : "Aucun log pour le moment." }}
-          </p>
-        </div>
       </div>
     </section>
-    <p v-if="importNotificationVisible && importFeedback" class="import-feedback" :class="{ err: !importOk }">
-      {{ importFeedback }}
-    </p>
     <div v-if="updateNoticeOpen" class="overlay" @click.self="updateNoticeOpen = false">
       <div class="update-modal">
         <h3>{{ settings.language === "en" ? "Update available" : "Mise a jour disponible" }}</h3>
@@ -605,21 +684,25 @@ onUnmounted(() => {
 <style scoped>
 .app-frame {
   width: 100%;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
   margin: 0;
-  padding: 0.75rem 0 0;
+  padding: 0.5rem 0 0;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   background:
     radial-gradient(circle at 20% 0%, rgba(3, 151, 171, 0.18), transparent 38%),
     radial-gradient(circle at 80% 0%, rgba(200, 155, 60, 0.1), transparent 40%);
 }
 .top-bar {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: flex-start;
   gap: 1rem;
-  margin: 0 1rem 0.65rem;
+  margin: 0 1rem 0.5rem;
   padding: 0.5rem 0.65rem;
   border: 1px solid rgba(200, 155, 60, 0.35);
   border-radius: 12px;
@@ -691,7 +774,9 @@ onUnmounted(() => {
 }
 .settings-page {
   flex: 1;
-  margin: 0 1rem;
+  min-height: 0;
+  margin: 0 1rem 0.5rem;
+  overflow: auto;
   display: flex;
   justify-content: center;
   align-items: flex-start;
@@ -765,7 +850,8 @@ onUnmounted(() => {
   font-size: 0.84rem;
 }
 .update-banner {
-  margin: 0 1rem 0.75rem;
+  flex-shrink: 0;
+  margin: 0 1rem 0.5rem;
   padding: 0.65rem 0.85rem;
   border-radius: 8px;
   border: 1px solid rgba(3, 151, 171, 0.5);
@@ -796,17 +882,20 @@ onUnmounted(() => {
 }
 .presentation-shell {
   flex: 1;
-  margin: 0 1rem;
+  min-height: 0;
+  margin: 0 1rem 0.5rem;
   border: 1px solid rgba(200, 155, 60, 0.35);
   border-radius: 12px;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
   background: rgba(10, 20, 40, 0.72);
   box-shadow: 0 14px 35px rgba(0, 0, 0, 0.25);
 }
 .presentation-iframe {
+  flex: 1;
   width: 100%;
-  height: 100%;
-  min-height: calc(100vh - 165px);
+  min-height: 0;
   border: none;
   display: block;
 }
@@ -814,45 +903,20 @@ onUnmounted(() => {
   padding: 1.25rem;
   text-align: center;
 }
-.import-feedback {
-  position: fixed;
-  right: 1rem;
-  bottom: 1rem;
-  z-index: 1100;
-  margin: 0;
-  max-width: min(620px, calc(100vw - 2rem));
-  padding: 0.55rem 0.75rem;
+.import-banner {
+  flex-shrink: 0;
+  margin: 0 1rem 0.5rem;
+  padding: 0.6rem 0.85rem;
   border-radius: 8px;
   border: 1px solid rgba(80, 200, 120, 0.45);
   background: rgba(80, 200, 120, 0.12);
   color: #b8f0c8;
-  font-size: 0.86rem;
+  font-size: 0.88rem;
 }
-.import-feedback.err {
+.import-banner.err {
   border-color: rgba(255, 138, 138, 0.45);
   background: rgba(255, 138, 138, 0.12);
   color: #ffb4b4;
-}
-.import-log-list {
-  margin-top: 0.4rem;
-  max-height: 220px;
-  overflow: auto;
-  border: 1px solid rgba(200, 155, 60, 0.25);
-  border-radius: 8px;
-  padding: 0.5rem;
-  background: rgba(4, 10, 22, 0.72);
-}
-.import-log-line {
-  margin: 0;
-  font-size: 0.78rem;
-  line-height: 1.35;
-  color: #d8ccb4;
-}
-.import-log-line + .import-log-line {
-  margin-top: 0.25rem;
-}
-.import-log-line.muted {
-  opacity: 0.72;
 }
 .overlay {
   position: fixed;

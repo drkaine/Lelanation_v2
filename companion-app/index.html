@@ -9,6 +9,23 @@
 
   <body>
     <div id="app"></div>
+    <script>
+      // Queue postMessage events that arrive before Vue mounts (Tauri + iframe).
+      window.__LELANATION_IMPORT_QUEUE__ = [];
+      window.addEventListener(
+        "message",
+        function (event) {
+          var data = event.data;
+          if (data && data.type === "lelanation:companion-import-build") {
+            window.__LELANATION_IMPORT_QUEUE__.push({
+              origin: event.origin,
+              data: data,
+            });
+          }
+        },
+        true
+      );
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

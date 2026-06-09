@@ -12,6 +12,8 @@
   "app": {
     "windows": [
       {
+        "create": false,
+        "label": "main",
         "title": "Lelanation Companion",
         "width": 1100,
         "height": 780

@@ -9,6 +9,12 @@ use std::sync::Mutex;
 pub struct BuildPayload {
     pub name: String,
     pub champion_id: u32,
+    /// Riot folder under `Config/Champions/` (e.g. `Nidalee`).
+    #[serde(default)]
+    pub champion_folder: Option<String>,
+    /// Stable build id for item-set filenames.
+    #[serde(default)]
+    pub build_id: Option<String>,
     #[serde(default)]
     pub runes: Option<RunePageData>,
     #[serde(default)]

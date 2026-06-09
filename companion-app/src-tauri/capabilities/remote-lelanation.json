@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/remote-schema.json",
+  "identifier": "remote-lelanation-import",
+  "description": "lelanation.fr iframe may call companion_import_build only.",
+  "windows": ["main"],
+  "remote": {
+    "urls": [
+      "https://www.lelanation.fr/**",
+      "https://lelanation.fr/**"
+    ]
+  },
+  "permissions": ["allow-companion-import-build"]
+}

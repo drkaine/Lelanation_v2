@@ -3,17 +3,21 @@
 mod app_config;
 mod commands;
 mod image_cache;
+mod import_bridge;
 mod lcu;
 mod state;
 
 use app_config::{load_companion_config, save_companion_config, CompanionConfig};
-use commands::{apply_build, get_lcu_status, get_pending_build};
+use commands::{
+    apply_build, companion_import_build, get_lcu_status, get_pending_build, resolve_champion_id,
+};
 use image_cache::ImageCacheState;
 use lcu::watcher;
 use serde::Serialize;
 use state::AppState;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tauri::WebviewWindowBuilder;
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 #[cfg(target_os = "windows")]
@@ -289,7 +293,26 @@ pub fn run() {
         .manage(image_cache)
         .manage(app_state)
         .setup(move |app| {
+            import_bridge::start(app.handle().clone());
             watcher::start(app.handle().clone(), watcher_state);
+
+            let window_config = app
+                .config()
+                .app
+                .windows
+                .iter()
+                .find(|w| w.label == "main")
+                .or_else(|| app.config().app.windows.first())
+                .ok_or("main window config missing")?;
+
+            WebviewWindowBuilder::from_config(app.handle(), window_config)
+                .map_err(|e| format!("invalid window config: {e}"))?
+                .initialization_script_for_all_frames(include_str!(
+                    "../scripts/companion-frame-bridge.js"
+                ))
+                .build()
+                .map_err(|e| format!("failed to create main window: {e}"))?;
+
             Ok(())
         })
         .register_uri_scheme_protocol("cachedimg", move |_ctx, request| {
@@ -315,6 +338,8 @@ pub fn run() {
             companion_get_config,
             companion_save_config,
             companion_write_champion_item_set,
+            companion_import_build,
+            resolve_champion_id,
             get_lcu_connection,
             get_lcu_status,
             get_pending_build,

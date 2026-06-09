@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-companion-import-build"
+description = "Allow iframe on lelanation.fr to trigger LCU build import."
+commands.allow = ["companion_import_build"]

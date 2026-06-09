@@ -1,0 +1,21 @@
+[[permission]]
+identifier = "allow-companion-local"
+description = "Companion local window: config, LCU export, images, updater helpers."
+commands.allow = [
+  "companion_get_config",
+  "companion_save_config",
+  "companion_write_champion_item_set",
+  "companion_import_build",
+  "resolve_champion_id",
+  "get_lcu_connection",
+  "get_lcu_status",
+  "get_pending_build",
+  "apply_build",
+  "lcu_request",
+  "lcu_debug",
+  "create_desktop_shortcut",
+  "uninstall_app",
+  "set_image_api_base",
+  "prefetch_images",
+  "clear_image_cache",
+]

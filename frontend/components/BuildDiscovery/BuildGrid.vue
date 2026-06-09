@@ -19,7 +19,12 @@
     </div>
 
     <div v-else class="build-grid-list">
-      <div v-for="build in builds" :key="build.id" class="build-grid-item">
+      <div
+        v-for="build in builds"
+        :key="build.id"
+        class="build-grid-item"
+        :data-active-sub-index="displayedSubMap[build.id] ?? ''"
+      >
         <div class="mb-[3px] flex w-full items-center gap-2">
           <div class="build-grid-top-icon-slot">
             <button
@@ -717,10 +722,14 @@ const navigateToBuild = (buildId: string) => {
   router.push(localePath(`/builds/${buildId}`))
 }
 
-function sendBuildToCompanion(build: Build) {
+const COMPANION_IMPORT_BRIDGE = 'http://127.0.0.1:17321/import'
+
+async function sendBuildToCompanion(build: Build) {
   if (typeof window === 'undefined') return
   const parentWindow = window.parent
   if (!parentWindow || parentWindow === window) return
+
+  if (!isCompanionAppEmbed.value) return
 
   const subIdx = displayedSubMap.value[build.id]
   const selectedSub =
@@ -741,15 +750,34 @@ function sendBuildToCompanion(build: Build) {
       }
     : build
 
-  parentWindow.postMessage(
-    {
-      type: 'lelanation:companion-import-build',
-      payload: {
-        build: buildForImport,
+  const serialized = JSON.parse(JSON.stringify(buildForImport)) as Build
+
+  // 1) HTTP bridge — works from cross-origin iframe in Tauri WebView2 (postMessage often does not).
+  try {
+    const res = await fetch(COMPANION_IMPORT_BRIDGE, {
+      method: 'POST',
+      mode: 'cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ build: serialized }),
+    })
+    if (res.ok) return
+    console.warn('[companion-import] bridge HTTP', res.status, await res.text())
+  } catch (error) {
+    console.warn('[companion-import] bridge unreachable', error)
+  }
+
+  // 2) postMessage fallback (browser / same-origin embeds)
+  try {
+    parentWindow.postMessage(
+      {
+        type: 'lelanation:companion-import-build',
+        payload: { build: serialized },
       },
-    },
-    '*'
-  )
+      '*'
+    )
+  } catch (error) {
+    console.error('[companion-import] postMessage failed', error)
+  }
 }
 
 const getUpvoteCount = (buildId: string): number => {

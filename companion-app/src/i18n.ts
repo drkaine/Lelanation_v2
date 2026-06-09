@@ -8,6 +8,7 @@ const messages: Record<string, Record<string, string>> = {
     "tabs.settings": "Paramètres",
     "status.connected": "Client LoL connecté",
     "status.disconnected": "Client LoL non détecté",
+    "status.phase.None": "connecté",
     "status.untested": "Non vérifié",
     "loading": "Chargement des builds...",
     "noBuilds": "Aucun build disponible.",
@@ -127,6 +128,22 @@ const messages: Record<string, Record<string, string>> = {
     "mainBuild": "Build principal",
     "variant": "Variante",
     "detailDescriptionTab": "Description",
+    "nav.shortcuts": "Raccourcis",
+    "shortcuts.title": "Commandes et raccourcis",
+    "shortcuts.hint": "Ces raccourcis fonctionnent dans les pages du site affichées dans l'application.",
+    "shortcuts.togglesSection": "Options",
+    "shortcuts.shortcutsSection": "Raccourcis clavier",
+    "shortcuts.openModal": "Ouvrir cette fenêtre",
+    "shortcuts.disableTooltips": "Désactiver les tooltips",
+    "shortcuts.presentationMode": "Mode présentation",
+    "shortcuts.presentationZoom": "Zoom présentation",
+    "shortcuts.championSplash": "Splash champion",
+    "shortcuts.simplifiedStats": "Stats simplifiées",
+    "shortcuts.builderLabel": "Builder et statistiques",
+    "shortcuts.previousStep": "étape précédente",
+    "shortcuts.nextStep": "étape suivante",
+    "shortcuts.showBar": "afficher la barre",
+    "shortcuts.hideBar": "masquer la barre",
   },
   en: {
     "onboarding.title": "Lelanation Companion",
@@ -137,6 +154,7 @@ const messages: Record<string, Record<string, string>> = {
     "tabs.settings": "Settings",
     "status.connected": "LoL Client connected",
     "status.disconnected": "LoL Client not detected",
+    "status.phase.None": "connected",
     "status.untested": "Not tested",
     "loading": "Loading builds...",
     "noBuilds": "No builds available.",
@@ -256,6 +274,22 @@ const messages: Record<string, Record<string, string>> = {
     "mainBuild": "Main build",
     "variant": "Variant",
     "detailDescriptionTab": "Description",
+    "nav.shortcuts": "Shortcuts",
+    "shortcuts.title": "Commands and shortcuts",
+    "shortcuts.hint": "These shortcuts work in the site pages displayed inside the app.",
+    "shortcuts.togglesSection": "Options",
+    "shortcuts.shortcutsSection": "Keyboard shortcuts",
+    "shortcuts.openModal": "Open this panel",
+    "shortcuts.disableTooltips": "Disable tooltips",
+    "shortcuts.presentationMode": "Presentation mode",
+    "shortcuts.presentationZoom": "Presentation zoom",
+    "shortcuts.championSplash": "Champion splash",
+    "shortcuts.simplifiedStats": "Simplified stats",
+    "shortcuts.builderLabel": "Builder and statistics",
+    "shortcuts.previousStep": "previous step",
+    "shortcuts.nextStep": "next step",
+    "shortcuts.showBar": "show bar",
+    "shortcuts.hideBar": "hide bar",
   },
 };
 
@@ -263,6 +297,13 @@ const messages: Record<string, Record<string, string>> = {
  * Translate a key. Pass `lang` explicitly so Vue can track the reactive dependency.
  * If called without `lang`, defaults to "fr".
  */
+/** Human-readable LCU gameflow phase (raw API values like `None`, `Lobby`, …). */
+export function translateLcuPhase(lang: string, phase: string): string {
+  const key = `status.phase.${phase}`;
+  const l = lang || "fr";
+  return messages[l]?.[key] ?? messages.fr[key] ?? phase;
+}
+
 export function translate(lang: string, key: string, params?: Record<string, string | number>): string {
   const l = lang || "fr";
   let text = messages[l]?.[key] ?? messages.fr[key] ?? key;

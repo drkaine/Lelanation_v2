@@ -1,6 +1,6 @@
 [package]
 name = "lelanation-companion"
-version = "1.0.0"
+version = "0.28.0"
 description = "Lelanation Companion for Windows"
 authors = ["Darkaine"]
 edition = "2021"

@@ -11,7 +11,7 @@ use serde::Deserialize;
 use std::path::PathBuf;
 
 pub use auto_apply::try_auto_apply;
-pub use items::{apply_item_set, ItemSetData};
+pub use items::{apply_item_set, write_recommended_item_set, ItemSetData};
 pub use runes::{apply_rune_page, RunePageData};
 pub use summoners::apply_summoner_spells;
 
@@ -48,7 +48,9 @@ impl LcuClient {
     }
 
     pub fn is_connected(&self) -> bool {
-        self.get("/lol-service-status/v1/lcu-info").is_ok()
+        // `/lol-service-status/v1/lcu-info` returns 404 on recent League clients.
+        self.get("/lol-gameflow/v1/gameflow-phase").is_ok()
+            || self.get("/lol-summoner/v1/current-summoner").is_ok()
     }
 
     pub fn get(&self, path: &str) -> Result<String, String> {
@@ -65,6 +67,10 @@ impl LcuClient {
 
     pub fn patch(&self, path: &str, body: &str) -> Result<String, String> {
         self.request("PATCH", path, Some(body))
+    }
+
+    pub fn delete(&self, path: &str) -> Result<String, String> {
+        self.request("DELETE", path, None)
     }
 
     pub fn request(&self, method: &str, path: &str, body: Option<&str>) -> Result<String, String> {
@@ -417,6 +423,102 @@ pub fn lcu_request(
 pub fn fetch_gameflow_phase(client: &LcuClient) -> Result<String, String> {
     let raw = client.get("/lol-gameflow/v1/gameflow-phase")?;
     serde_json::from_str(&raw).map_err(|e| format!("Invalid gameflow phase JSON: {e}"))
+}
+
+fn json_champion_numeric_id(value: &serde_json::Value) -> Option<u32> {
+    for key in ["id", "key", "championId"] {
+        if let Some(id) = value.get(key).and_then(|x| x.as_u64()) {
+            if id > 0 {
+                return Some(id as u32);
+            }
+        }
+        if let Some(raw) = value.get(key).and_then(|x| x.as_str()) {
+            if let Ok(id) = raw.parse::<u32>() {
+                if id > 0 {
+                    return Some(id);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn champion_matches_folder(champ: &serde_json::Value, folder_lower: &str) -> bool {
+    for key in ["alias", "id", "name"] {
+        if let Some(raw) = champ.get(key).and_then(|x| x.as_str()) {
+            if raw.to_ascii_lowercase() == folder_lower {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn resolve_from_champions_data(data: &serde_json::Map<String, serde_json::Value>, folder: &str) -> Option<u32> {
+    let folder_lower = folder.to_ascii_lowercase();
+    if let Some(champ) = data.get(folder).or_else(|| data.get(&folder_lower)) {
+        if let Some(id) = json_champion_numeric_id(champ) {
+            return Some(id);
+        }
+    }
+    for (_, champ) in data {
+        if champion_matches_folder(champ, &folder_lower) {
+            if let Some(id) = json_champion_numeric_id(champ) {
+                return Some(id);
+            }
+        }
+    }
+    None
+}
+
+fn resolve_from_champion_summary(client: &LcuClient, folder: &str) -> Option<u32> {
+    let raw = client
+        .get("/lol-game-data/assets/v1/champion-summary.json")
+        .ok()?;
+    let list: Vec<serde_json::Value> = serde_json::from_str(&raw).ok()?;
+    let folder_lower = folder.to_ascii_lowercase();
+    for champ in &list {
+        if champion_matches_folder(champ, &folder_lower) {
+            return json_champion_numeric_id(champ);
+        }
+    }
+    None
+}
+
+/// Resolve Riot numeric champion id from folder alias (`Nidalee`) or numeric string.
+pub fn resolve_champion_numeric_id(
+    client: &LcuClient,
+    champion_id: u32,
+    champion_folder: Option<&str>,
+) -> u32 {
+    if champion_id > 0 {
+        return champion_id;
+    }
+    let folder = champion_folder.unwrap_or("").trim();
+    if folder.is_empty() {
+        return 0;
+    }
+    if let Ok(n) = folder.parse::<u32>() {
+        if n > 0 {
+            return n;
+        }
+    }
+
+    if let Ok(raw) = client.get("/lol-game-data/assets/v1/champions.json") {
+        if let Ok(root) = serde_json::from_str::<serde_json::Value>(&raw) {
+            if let Some(data) = root.get("data").and_then(|d| d.as_object()) {
+                if let Some(id) = resolve_from_champions_data(data, folder) {
+                    return id;
+                }
+            }
+        }
+    }
+
+    if let Some(id) = resolve_from_champion_summary(client, folder) {
+        return id;
+    }
+
+    0
 }
 
 /// Local player's champion id during champ select, if detectable.

@@ -19,6 +19,8 @@ export interface ApplyResult {
 export interface BuildPayload {
   name: string;
   championId: number;
+  championFolder?: string;
+  buildId?: string;
   runes?: {
     primaryPath: number;
     secondaryPath: number;

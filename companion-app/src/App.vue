@@ -34,7 +34,7 @@ function onOnboardingDone() {
 </script>
 
 <template>
-  <div v-if="booted">
+  <div v-if="booted" class="app-root">
     <OnboardingView v-if="needsOnboarding" @done="onOnboardingDone" />
     <BuildsView v-else />
   </div>
@@ -61,8 +61,17 @@ body {
   color: #f0e6d2;
   background: transparent;
 }
+html,
+body,
 #app {
+  height: 100%;
+  overflow: hidden;
+}
+#app,
+.app-root {
+  height: 100%;
   min-height: 100vh;
+  min-height: 100dvh;
 }
 .boot {
   padding: 2rem;
