@@ -149,7 +149,6 @@
           {{ t('nav.admin') }}
         </NuxtLink>
         <NuxtLink
-          v-if="isAdminLoggedIn"
           :to="localePath('/app')"
           :title="t('nav.download')"
           class="version"
@@ -256,12 +255,7 @@
         >
           {{ t('nav.admin') }}
         </NuxtLink>
-        <NuxtLink
-          v-if="isAdminLoggedIn"
-          :to="localePath('/app')"
-          :title="t('nav.download')"
-          class="version"
-        >
+        <NuxtLink :to="localePath('/app')" :title="t('nav.download')" class="version">
           {{ t('nav.download') }}
         </NuxtLink>
         <NuxtLink

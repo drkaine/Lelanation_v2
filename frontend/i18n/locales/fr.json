@@ -2023,7 +2023,7 @@
     }
   },
   "adminApp": {
-    "title": "Lelanation App (Admin)",
+    "title": "Lelanation App",
     "backToAdmin": "Retour admin",
     "downloadTitle": "Téléchargement",
     "description": "Cette application compagnon Windows connecte le client LoL au projet Lelanation. Elle permet d'importer vos builds (runes, items, sorts selon vos réglages), de conserver les favoris en local et de remonter le matchId + région après la partie.",

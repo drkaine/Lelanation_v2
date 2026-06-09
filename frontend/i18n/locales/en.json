@@ -2017,7 +2017,7 @@
     }
   },
   "adminApp": {
-    "title": "Lelanation App (Admin)",
+    "title": "Lelanation App",
     "backToAdmin": "Back to admin",
     "downloadTitle": "Download",
     "description": "This Windows companion app connects the LoL client with the Lelanation project. It imports builds (runes, items, summoner spells based on your settings), keeps favorites locally, and sends matchId + region after each game.",
