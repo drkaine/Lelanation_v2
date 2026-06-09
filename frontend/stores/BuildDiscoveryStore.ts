@@ -5,6 +5,7 @@ import { useVoteStore } from './VoteStore'
 import { useVersionStore } from './VersionStore'
 import { apiUrl } from '~/utils/apiUrl'
 import { hydrateBuild, isStoredBuild } from '~/utils/buildSerialize'
+import { extractPatchStaleMap, mergePatchStaleIntoBuilds } from '~/utils/mergePatchStale'
 import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 
 export type SortOption = 'recent' | 'popular' | 'name'
@@ -65,6 +66,7 @@ interface BuildDiscoveryState {
   selectedRole: FilterRole
   selectedTag: FilterBuildTag
   selectedVersion: string | null
+  onlyUpToDate: boolean
   sortBy: SortOption
   pageSize: PageSizeOption
   currentPage: number
@@ -80,6 +82,7 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
     selectedRole: null,
     selectedTag: null,
     selectedVersion: null,
+    onlyUpToDate: false,
     sortBy: 'recent',
     pageSize: 20,
     currentPage: 1,
@@ -131,6 +134,10 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
       // Filter by version
       if (this.selectedVersion) {
         results = results.filter(build => build.gameVersion === this.selectedVersion)
+      }
+
+      if (this.onlyUpToDate) {
+        results = results.filter(build => !build.patchStale)
       }
 
       // Sort
@@ -187,7 +194,8 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
         this.selectedChampion !== null ||
         this.selectedRole !== null ||
         this.selectedTag !== null ||
-        this.selectedVersion !== null
+        this.selectedVersion !== null ||
+        this.onlyUpToDate
       )
     },
   },
@@ -195,6 +203,8 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
   actions: {
     async loadBuilds() {
       const buildStore = useBuildStore()
+
+      await buildStore.syncPatchStaleFromServer().catch(() => undefined)
 
       // Synchroniser les builds locaux avec le serveur (en arrière-plan)
       // Cela resauvegarde automatiquement les builds qui n'existent pas sur le serveur
@@ -213,11 +223,24 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
         const response = await fetch(apiUrl('/api/builds'))
         if (response.ok) {
           const allBuilds = (await response.json()) as (Build | StoredBuild)[]
+          const patchStaleById = extractPatchStaleMap(allBuilds)
           const localBuildIds = new Set(localBuilds.map(b => b.id))
           const filtered = allBuilds.filter(
             b => !localBuildIds.has(b.id) && b.visibility !== 'private'
           )
           publicBuilds = filtered.map(b => (isStoredBuild(b) ? hydrateBuild(b) : (b as Build)))
+          const localPublicBuilds = mergePatchStaleIntoBuilds(
+            localBuilds.filter(b => b.visibility !== 'private'),
+            patchStaleById
+          )
+          this.builds = [...localPublicBuilds, ...publicBuilds]
+
+          const versionStore = useVersionStore()
+          if (!versionStore.currentVersion) {
+            await versionStore.loadCurrentVersion()
+          }
+          this.applyFilters()
+          return
         }
       } catch {
         // Failed to load public builds
@@ -260,6 +283,11 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
       this.applyFilters()
     },
 
+    setOnlyUpToDate(value: boolean) {
+      this.onlyUpToDate = value
+      this.applyFilters()
+    },
+
     setSortBy(sort: SortOption) {
       this.sortBy = sort
       this.applyFilters()
@@ -271,6 +299,7 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
       this.selectedRole = null
       this.selectedTag = null
       this.selectedVersion = null
+      this.onlyUpToDate = false
       this.applyFilters()
     },
 

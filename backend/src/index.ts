@@ -1,4 +1,5 @@
 import 'dotenv/config'
+import './redis/ensure-ready.js'
 import express from 'express'
 import cors from 'cors'
 import compression from 'compression'

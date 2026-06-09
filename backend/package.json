@@ -46,7 +46,10 @@
     "seed:eu": "tsx scripts/seed-eu-players.ts",
     "scrape:patch": "tsx src/scripts/scrapePatch.ts",
     "scrape:patches": "tsx src/scripts/scrapeAllPatches.ts",
+    "scrape:patches:rescrape-below": "tsx src/scripts/scrapeAllPatches.ts 16.1 --force --below 16.11",
     "publish:patches": "tsx src/scripts/publishPatchNotes.ts",
+    "flag:builds-patch-stale": "tsx src/scripts/flagBuildsPatchStale.ts",
+    "flag:builds-patch-stale:all": "tsx src/scripts/flagBuildsPatchStale.ts --all",
     "test:scraper": "vitest run --config vitest.scraper.config.ts"
   },
   "devDependencies": {

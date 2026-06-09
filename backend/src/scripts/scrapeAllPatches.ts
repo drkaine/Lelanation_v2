@@ -2,7 +2,10 @@
 /**
  * Scrape all League of Legends patch notes from a minimum version (default 16.1).
  * Uses patch labels from data/game/versions.json (stored as 16.x, fetched from Riot as 26.x).
- * Usage: tsx src/scripts/scrapeAllPatches.ts [fromVersion]
+ *
+ * Usage:
+ *   tsx src/scripts/scrapeAllPatches.ts [fromVersion]
+ *   tsx src/scripts/scrapeAllPatches.ts 16.1 --force --below 16.11
  */
 
 import { readFile } from 'fs/promises';
@@ -68,25 +71,62 @@ async function delay(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function main(): Promise<void> {
-  const fromVersion = process.argv[2]?.trim() || DEFAULT_FROM;
-  const outputDir = getPatchOutputDir();
-  const allPatches = await loadPatchLabelsFromVersionsJson(fromVersion);
+function parseCliArgs(argv: string[]): {
+  fromVersion: string;
+  force: boolean;
+  below: string | null;
+} {
+  let fromVersion = DEFAULT_FROM;
+  let force = false;
+  let below: string | null = null;
 
-  logger.info({ fromVersion, count: allPatches.length, outputDir }, 'Starting bulk patch scrape');
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === '--force') {
+      force = true;
+      continue;
+    }
+    if (arg === '--below') {
+      below = argv[i + 1]?.trim() || null;
+      i += 1;
+      continue;
+    }
+    if (!arg.startsWith('--') && fromVersion === DEFAULT_FROM) {
+      fromVersion = arg.trim() || DEFAULT_FROM;
+    }
+  }
+
+  return { fromVersion, force, below };
+}
+
+async function main(): Promise<void> {
+  const { fromVersion, force, below } = parseCliArgs(process.argv.slice(2));
+  const outputDir = getPatchOutputDir();
+  let allPatches = await loadPatchLabelsFromVersionsJson(fromVersion);
+
+  if (below) {
+    allPatches = allPatches.filter(
+      (patchVersion) => comparePatchVersions(patchVersion, below) > 0
+    );
+  }
+
+  logger.info(
+    { fromVersion, below, force, count: allPatches.length, outputDir },
+    'Starting bulk patch scrape'
+  );
 
   let scraped = 0;
   let skipped = 0;
   let failed = 0;
 
   for (const patchVersion of allPatches) {
-    if (await isPatchPublished(patchVersion)) {
+    if (!force && (await isPatchPublished(patchVersion))) {
       logger.info({ patchVersion }, 'Already published, skipping');
       skipped++;
       continue;
     }
 
-    if (await isPatchInBackend(patchVersion)) {
+    if (!force && (await isPatchInBackend(patchVersion))) {
       logger.info({ patchVersion }, 'Already in backend, publishing only');
       await publishPatchNotesToFrontend(patchVersion, 'scrapeAllPatches');
       skipped++;

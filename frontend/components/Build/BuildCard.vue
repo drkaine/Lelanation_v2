@@ -333,8 +333,16 @@
             </div>
           </div>
 
-          <div v-if="!readonly || selectedBuildTags.length > 0" class="build-tags-section">
+          <div
+            v-if="!readonly || selectedBuildTags.length > 0 || displayBuild?.patchStale"
+            class="build-tags-section"
+          >
             <div class="build-tags-container">
+              <PatchStaleBuildBadge
+                v-if="displayBuild?.patchStale"
+                :patch-stale="displayBuild.patchStale"
+                class="build-patch-stale-chip"
+              />
               <button
                 v-for="tag in visibleBuildTags"
                 :key="tag.id"
@@ -1758,6 +1766,7 @@ import { resolveSummonerSpellFromRef } from '~/utils/summonerSpellResolver'
 import { fixedTooltipStyleFromPointer, type TooltipPointer } from '~/utils/tooltipPosition'
 import { formatRuneTooltipHtml } from '~/utils/formatTooltipMarkupHtml'
 import DescriptionEditor from '~/components/Build/DescriptionEditor.vue'
+import PatchStaleBuildBadge from '~/components/Build/PatchStaleBuildBadge.vue'
 import TheorycraftCardStatsBack from '~/components/Build/TheorycraftCardStatsBack.vue'
 import TheorycraftItemManagerSlot from '~/components/Build/TheorycraftItemManagerSlot.vue'
 import { isTheorycraftActivatableItemPassive } from '~/utils/theorycraftItemPassives'
@@ -2707,9 +2716,12 @@ const showVariantTriggerButton = computed(
     ((props.readonly && buildSubBuilds.value.length > 0) || (!props.readonly && hasChampion.value))
 )
 
+const hasPatchStaleBadge = computed(() => Boolean(displayBuild.value?.patchStale))
+
 const showFrontVariantsTagsStack = computed(() => {
   const variantShown = showVariantTriggerButton.value
-  const tagsShown = !props.readonly || selectedBuildTags.value.length > 0
+  const tagsShown =
+    !props.readonly || selectedBuildTags.value.length > 0 || hasPatchStaleBadge.value
   return variantShown || tagsShown
 })
 
@@ -2718,7 +2730,7 @@ const showVariantsTagColumnSpacer = computed(
   () =>
     showFrontVariantsTagsStack.value &&
     !showVariantTriggerButton.value &&
-    (!props.readonly || selectedBuildTags.value.length > 0)
+    (!props.readonly || selectedBuildTags.value.length > 0 || hasPatchStaleBadge.value)
 )
 
 const getRoleName = (role: Role): string => {
@@ -4465,6 +4477,12 @@ defineExpose({
   gap: 4px;
   align-items: stretch;
   width: 100%;
+}
+
+.build-patch-stale-chip {
+  width: 100%;
+  justify-content: center;
+  margin-top: 5px;
 }
 
 .build-tag-chip {

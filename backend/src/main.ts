@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import './redis/ensure-ready.js';
 import type { Worker } from 'bullmq';
 import { config } from './config/index.js';
 import { healthCheck, sql } from './db/client.js';

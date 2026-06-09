@@ -65,6 +65,46 @@ describe('entityIds', () => {
     expect(patchSlugToRuneKey('Conqueror')).toBe('Conqueror');
   });
 
+  it('should map stormraider surge patch slug to PhaseRush game key', () => {
+    const result = extractEntityIdFromHtml(
+      'https://cmsassets.rgpub.io/sanity/images/foo-64x64.png',
+      'patch-stormraider-surge',
+      'rune'
+    );
+    expect(result.id).toBe('PhaseRush');
+  });
+
+  it('should enrich StormraiderSurge alias to numeric rune id', () => {
+    const indexes = buildGameDataIndexes(
+      [{ id: 'Brand', name: 'Brand' }],
+      {},
+      [
+        {
+          slots: [
+            {
+              runes: [{ id: 8230, key: 'PhaseRush', name: 'Assaut du maraudeur' }],
+            },
+          ],
+        },
+      ]
+    );
+
+    const enriched = enrichEntityIds(
+      [
+        {
+          name: 'Assaut du maraudeur',
+          category: 'rune',
+          id: 'StormraiderSurge',
+          patchSlug: 'stormraider-surge',
+          changes: [{ stat: 'MS', before: '40%', after: '48%', type: 'buff' }],
+        },
+      ],
+      indexes
+    );
+
+    expect(enriched[0].id).toBe('8230');
+  });
+
   it('should enrich item and rune ids from game data indexes', () => {
     const indexes = buildGameDataIndexes(
       [{ id: 'Brand', name: 'Brand' }],

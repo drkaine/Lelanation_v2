@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-background text-text">
+  <div class="min-h-screen overflow-x-hidden bg-background text-text">
     <!-- Header -->
     <div class="border-b border-primary/20 bg-surface/30 px-4 py-3">
       <div class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-3 gap-y-2">
@@ -43,32 +43,46 @@
       </div>
     </div>
 
-    <!-- Category Tabs - full width, no icons -->
-    <div class="sticky top-0 z-30 border-b border-primary/20 bg-background/95 backdrop-blur">
-      <div class="flex w-full">
-        <button
-          v-for="tab in visibleTabs"
-          :key="tab.id"
-          type="button"
-          :class="[
-            'flex flex-1 items-center justify-center gap-2 border-b-2 px-2 py-3 text-xs font-medium transition-colors sm:text-sm',
-            activeTab === tab.id
-              ? 'border-accent text-accent'
-              : 'border-transparent text-text/60 hover:bg-primary/10 hover:text-text',
-          ]"
-          @click="activeTab = tab.id"
+    <!-- Category Tabs — horizontal scroll (comme stats) -->
+    <div
+      class="patch-notes-tabs-bar sticky top-0 z-30 flex w-full min-w-0 flex-shrink-0 items-start gap-2 overflow-x-hidden border-b border-primary/20 bg-background/95 px-4 pb-2 pt-2 backdrop-blur"
+    >
+      <div class="patch-notes-tabs-scroll-wrap relative min-w-0 flex-1 overflow-hidden">
+        <div
+          ref="tabsNavEl"
+          role="tablist"
+          :aria-label="t('patchNotesPage.title', { version: currentPatchVersion })"
+          class="patch-notes-tabs-nav flex flex-nowrap gap-1 overflow-x-auto border-b border-primary/30 pb-2"
         >
-          <span class="truncate">{{ tab.label }}</span>
-          <span
-            v-if="tab.count > 0"
+          <button
+            v-for="tab in visibleTabs"
+            :id="`patch-notes-tab-${tab.id}`"
+            :key="tab.id"
+            type="button"
+            role="tab"
+            :data-tab-id="tab.id"
+            :aria-selected="activeTab === tab.id"
+            :tabindex="activeTab === tab.id ? 0 : -1"
             :class="[
-              'ml-1 rounded-full px-1.5 py-0.5 text-[10px] sm:px-2 sm:text-xs',
-              activeTab === tab.id ? 'bg-accent/20 text-accent' : 'bg-primary/20 text-text/60',
+              'patch-notes-tab-btn flex shrink-0 snap-start items-center gap-1.5 whitespace-nowrap rounded px-3 py-1.5 text-sm font-medium transition-colors',
+              activeTab === tab.id
+                ? 'border border-accent/50 bg-accent/20 text-accent'
+                : 'border border-transparent text-text/80 hover:bg-primary/10 hover:text-text',
             ]"
+            @click="selectTab(tab.id)"
           >
-            {{ tab.count }}
-          </span>
-        </button>
+            <span>{{ tab.label }}</span>
+            <span
+              v-if="tab.count > 0"
+              :class="[
+                'rounded-full px-1.5 py-0.5 text-[10px]',
+                activeTab === tab.id ? 'bg-accent/30 text-accent' : 'bg-primary/20 text-text/60',
+              ]"
+            >
+              {{ tab.count }}
+            </span>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -188,7 +202,7 @@ const {
   bugfix,
 } = storeToRefs(patchNotesStore)
 
-const activeTab = ref<
+type PatchNotesTabId =
   | 'summary'
   | 'champions'
   | 'items'
@@ -198,9 +212,11 @@ const activeTab = ref<
   | 'aram-chaos'
   | 'arena'
   | 'bugfix'
->('summary')
+
+const activeTab = ref<PatchNotesTabId>('summary')
 const isLightboxOpen = ref(false)
 const searchQuery = ref('')
+const tabsNavEl = ref<HTMLElement | null>(null)
 
 const isSearchActive = computed(() => searchQuery.value.trim().length > 0)
 
@@ -354,6 +370,20 @@ function onPatchChange(event: Event) {
   patchNotesStore.selectPatch(version, locale.value)
 }
 
+function scrollActiveTabIntoView(behavior: ScrollBehavior = 'smooth'): void {
+  if (!import.meta.client || !tabsNavEl.value) return
+  const el = tabsNavEl.value.querySelector<HTMLButtonElement>(
+    `button[data-tab-id="${activeTab.value}"]`
+  )
+  el?.scrollIntoView({ inline: 'start', block: 'nearest', behavior })
+}
+
+function selectTab(tabId: PatchNotesTabId): void {
+  activeTab.value = tabId
+  if (!import.meta.client) return
+  requestAnimationFrame(() => scrollActiveTabIntoView())
+}
+
 // Load patch on mount
 onMounted(() => {
   patchNotesStore.loadLatestPatch(locale.value)
@@ -372,6 +402,11 @@ watch(visibleTabs, tabs => {
   }
 })
 
+watch(activeTab, () => {
+  if (!import.meta.client) return
+  requestAnimationFrame(() => scrollActiveTabIntoView('auto'))
+})
+
 useHead(() => ({
   title: t('patchNotesPage.metaTitle', { version: currentPatchVersion.value }),
   meta: [
@@ -382,3 +417,39 @@ useHead(() => ({
   ],
 }))
 </script>
+
+<style>
+.patch-notes-tabs-nav {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.patch-notes-tabs-nav::-webkit-scrollbar {
+  display: none;
+}
+.patch-notes-tabs-scroll-wrap::before,
+.patch-notes-tabs-scroll-wrap::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 8px;
+  width: 28px;
+  z-index: 2;
+  pointer-events: none;
+}
+.patch-notes-tabs-scroll-wrap::before {
+  left: 0;
+  background: linear-gradient(to right, rgb(8 16 31 / 0.95), transparent);
+}
+.patch-notes-tabs-scroll-wrap::after {
+  right: 0;
+  background: linear-gradient(to left, rgb(8 16 31 / 0.95), transparent);
+}
+@media (max-width: 767px) {
+  .patch-notes-tab-btn {
+    font-size: 13px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+}
+</style>

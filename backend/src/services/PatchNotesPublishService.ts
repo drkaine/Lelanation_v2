@@ -8,6 +8,7 @@ import { promises as fs } from 'fs';
 import { join, basename } from 'path';
 import { createCronLogger } from '../utils/cronLogger.js';
 import { getPatchVersionDir } from '../utils/fileWriter.js';
+import { flagBuildsPatchStale } from './BuildPatchStaleService.js';
 
 export type PatchNotesIndexEntry = {
   version: string;
@@ -259,7 +260,34 @@ export async function publishPatchNotesToFrontend(
 ): Promise<{ moved: number; deleted: number; index: PatchNotesIndex }> {
   const { moved, deleted } = await movePatchVersionToFrontend(patchVersion, cronName);
   const index = await rebuildPatchNotesIndex();
+  await flagBuildsAfterPatchPublish(patchVersion, cronName);
   return { moved, deleted, index };
+}
+
+async function flagBuildsAfterPatchPublish(
+  patchVersion: string,
+  cronName: string
+): Promise<void> {
+  const log = createCronLogger(cronName);
+  try {
+    const result = await flagBuildsPatchStale({
+      mode: 'latest',
+      patchVersion,
+      cronName,
+    });
+    await log.info('Builds flagged after patch publish', {
+      patchVersion,
+      flagged: result.flagged,
+      cleared: result.cleared,
+      scanned: result.scanned,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await log.warn('Build patch stale flagging failed after patch publish', {
+      patchVersion,
+      error: message,
+    });
+  }
 }
 
 /**

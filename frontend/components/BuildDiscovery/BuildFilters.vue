@@ -84,6 +84,11 @@
           <option value="all">{{ t('buildDiscovery.all') }}</option>
         </select>
       </div>
+
+      <label class="filter-uptodate shrink-0">
+        <input :checked="onlyUpToDate" type="checkbox" @change="handleOnlyUpToDateChange" />
+        <span>{{ t('buildDiscovery.upToDate') }}</span>
+      </label>
     </div>
 
     <button v-if="hasActiveFilters" class="filter-clear shrink-0" @click="clearFilters">
@@ -118,6 +123,7 @@ const selectedChampion = ref<string | null>(discoveryStore.selectedChampion)
 const selectedRole = ref<FilterRole>(discoveryStore.selectedRole)
 const selectedTag = ref<FilterBuildTag>(discoveryStore.selectedTag)
 const sortBy = ref<SortOption>(discoveryStore.sortBy)
+const onlyUpToDate = ref(discoveryStore.onlyUpToDate)
 const pageSize = computed({
   get: () => discoveryStore.pageSize,
   set: (v: PageSizeOption) => discoveryStore.setPageSize(v),
@@ -248,6 +254,12 @@ const handleSortChange = () => {
   discoveryStore.setSortBy(sortBy.value)
 }
 
+const handleOnlyUpToDateChange = (event: Event) => {
+  const checked = (event.target as HTMLInputElement).checked
+  onlyUpToDate.value = checked
+  discoveryStore.setOnlyUpToDate(checked)
+}
+
 const clearFilters = () => {
   discoveryStore.clearAllFilters()
   selectedVersion.value = ''
@@ -255,6 +267,7 @@ const clearFilters = () => {
   championSearchQuery.value = ''
   selectedRole.value = null
   selectedTag.value = null
+  onlyUpToDate.value = false
   sortBy.value = 'recent'
 }
 
@@ -352,5 +365,15 @@ watch(locale, () => {
 .filter-inline-label-text {
   font-size: 0.875rem;
   color: rgb(var(--rgb-text) / 0.8);
+}
+
+.filter-uptodate {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.875rem;
+  color: rgb(var(--rgb-text) / 0.9);
+  cursor: pointer;
+  white-space: nowrap;
 }
 </style>

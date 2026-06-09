@@ -57,16 +57,35 @@ export async function fetchBuildCardSharePngEphemeral(
   }
 }
 
-/** GET capture d’abord ; si échec (build privé local, pas sur le serveur, etc.), upload éphémère puis capture. */
+export type BuildCardShareImageOptions = {
+  sub?: number | null
+  meta?: boolean
+  splash?: boolean
+  /** Élément DOM du build affiché — repli client si Playwright indisponible. */
+  cardHost?: HTMLElement | null
+}
+
+/** GET capture d’abord ; si échec, upload éphémère ; sinon capture DOM locale. */
 export async function fetchBuildCardSharePngResilient(
   build: Build,
   localeCode: string,
-  options?: { sub?: number | null; meta?: boolean; splash?: boolean }
+  options?: BuildCardShareImageOptions
 ): Promise<Blob | null> {
   const urlPath = buildCardShareImageUrl(build.id, localeCode, options)
   const direct = await fetchBuildCardSharePng(urlPath)
   if (direct) return direct
-  return fetchBuildCardSharePngEphemeral(build, localeCode, options)
+
+  const ephemeral = await fetchBuildCardSharePngEphemeral(build, localeCode, options)
+  if (ephemeral) return ephemeral
+
+  if (!options?.cardHost) return null
+
+  return captureBuildCardHostToPngBlob(options.cardHost, {
+    withMeta: options.meta,
+    build,
+    locale: localeCode === 'en' ? 'en' : 'fr',
+    subIndex: options.sub ?? null,
+  })
 }
 
 export type CaptureBuildCardDomOptions = {

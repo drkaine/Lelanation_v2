@@ -31,8 +31,8 @@ export function getChampionImageUrl(_version: string, imageName: string): string
  */
 export function getChampionSplashImageUrl(_version: string, championId: string): string {
   if (!championId) return ''
-  // Use local images instead of Data Dragon
-  return `/images/game/latest/champion/splash_${championId}_0.jpg`
+  // Use local images instead of Data Dragon (skin 0 stored as splash_{ChampionId}.jpg)
+  return `/images/game/latest/champion/splash_${championId}.jpg`
 }
 
 /**

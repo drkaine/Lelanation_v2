@@ -63,9 +63,14 @@ router.post('/', async (req, res) => {
       })
     }
 
+    // Saving a build clears patch stale flag (author reviewed / updated the build).
+    const { patchStale: _patchStale, ...buildWithoutPatchStale } = build as BuildPayload & {
+      patchStale?: unknown
+    }
+
     // Add metadata (ensure id and basic info are present)
     const buildWithMetadata = {
-      ...build,
+      ...buildWithoutPatchStale,
       id: buildId,
       fileName,
       savedAt: new Date().toISOString(),

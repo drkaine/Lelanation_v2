@@ -1348,7 +1348,19 @@
     "shareCodeClose": "Close",
     "importWithCode": "Import",
     "importCodeTitle": "Import builds",
-    "importCodeBlurb": "Paste the code from another device or the Lelanation companion app."
+    "importCodeBlurb": "Paste the code from another device or the Lelanation companion app.",
+    "patchStale": {
+      "badge": "Out of date",
+      "badgeTitle": "Champion, items or runes changed in patch {version}",
+      "bannerTitle": "Build out of date",
+      "bannerDescription": "This build uses a champion, items or runes affected by patch {version}.",
+      "dismiss": "Dismiss",
+      "categories": {
+        "champion": "champion",
+        "item": "items",
+        "rune": "runes"
+      }
+    }
   },
   "buildDiscovery": {
     "searchPlaceholder": "Search builds by champion or author...",

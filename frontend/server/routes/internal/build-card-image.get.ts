@@ -73,7 +73,7 @@ async function fetchBuildForCacheRevision(
   if (sawUpstreamFailure) {
     throw createError({
       statusCode: 503,
-      statusMessage: 'Build API unavailable',
+      message: 'Build API unavailable',
     })
   }
   return null
@@ -101,7 +101,7 @@ export default defineEventHandler(async event => {
   const q = getQuery(event)
   const id = typeof q.id === 'string' ? q.id.trim() : ''
   if (!id || !UUID_RE.test(id)) {
-    throw createError({ statusCode: 400, statusMessage: 'Invalid build id' })
+    throw createError({ statusCode: 400, message: 'Invalid build id' })
   }
 
   const locale = q.locale === 'en' ? 'en' : 'fr'
@@ -112,17 +112,17 @@ export default defineEventHandler(async event => {
   if (q.sub !== undefined && q.sub !== null && String(q.sub).trim() !== '') {
     const n = Number.parseInt(String(q.sub), 10)
     if (!Number.isFinite(n) || n < 0) {
-      throw createError({ statusCode: 400, statusMessage: 'Invalid sub index' })
+      throw createError({ statusCode: 400, message: 'Invalid sub index' })
     }
     sub = n
   }
 
   const metaBuild = await fetchBuildForCacheRevision(event, id)
   if (!metaBuild) {
-    throw createError({ statusCode: 404, statusMessage: 'Build not found' })
+    throw createError({ statusCode: 404, message: 'Build not found' })
   }
   if (sub !== null && sub >= metaBuild.subBuildsLen) {
-    throw createError({ statusCode: 400, statusMessage: 'Invalid sub index' })
+    throw createError({ statusCode: 400, message: 'Invalid sub index' })
   }
 
   const cacheDir = join(tmpdir(), 'lelanation-card-screenshots')
@@ -156,7 +156,7 @@ export default defineEventHandler(async event => {
     const msg = err instanceof Error ? err.message : String(err)
     throw createError({
       statusCode: 503,
-      statusMessage: `Screenshot failed: ${msg}`,
+      message: `Screenshot failed: ${msg}`,
     })
   }
 

@@ -630,6 +630,10 @@ const filteredCustomBuilds = computed(() => {
     results = results.filter(build => build.gameVersion === discoveryStore.selectedVersion)
   }
 
+  if (discoveryStore.onlyUpToDate) {
+    results = results.filter(build => !build.patchStale)
+  }
+
   // Sort
   switch (discoveryStore.sortBy) {
     case 'recent':
@@ -891,6 +895,7 @@ function shareImageOptionsForBuild(buildId: string, meta: boolean) {
     sub: typeof sub === 'number' ? sub : null,
     meta,
     splash: championSplashEnabled.value,
+    cardHost: buildCardRefs.value[buildId] ?? null,
   }
 }
 

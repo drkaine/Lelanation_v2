@@ -1350,7 +1350,19 @@
     "shareCodeClose": "Fermer",
     "importWithCode": "Importer",
     "importCodeTitle": "Importer des builds",
-    "importCodeBlurb": "Colle le code reçu depuis un autre appareil ou l’app compagnon Lelanation."
+    "importCodeBlurb": "Colle le code reçu depuis un autre appareil ou l’app compagnon Lelanation.",
+    "patchStale": {
+      "badge": "Plus à jour",
+      "badgeTitle": "Champion, objets ou runes modifiés dans le patch {version}",
+      "bannerTitle": "Build plus à jour",
+      "bannerDescription": "Ce build utilise un champion, des objets ou des runes touchés par le patch {version}.",
+      "dismiss": "Masquer",
+      "categories": {
+        "champion": "champion",
+        "item": "objets",
+        "rune": "runes"
+      }
+    }
   },
   "buildDiscovery": {
     "searchPlaceholder": "Rechercher un build par champion ou auteur...",

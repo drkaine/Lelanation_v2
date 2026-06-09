@@ -1,7 +1,20 @@
-# PostgreSQL 16 — base unique `lelanation_statistiques` (Drizzle, port hôte 5434).
+# PostgreSQL 16 + Redis — dépendances locales (ports hôte 5434 / 6379).
 # Usage : docker compose up -d   ou   make docker-db-up
 # Migrations : make migrate-db (Drizzle)
+# Si redis-server systemd occupe déjà 6379 : systemctl stop redis-server avant docker-db-up
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: lelanation-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   postgres-statistiques:
     image: postgres:16-alpine
     container_name: lelanation-postgres-statistiques

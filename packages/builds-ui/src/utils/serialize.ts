@@ -66,6 +66,7 @@ export function serializeBuild(build: Build): StoredBuild {
     updatedAt: build.updatedAt,
     subBuilds: build.subBuilds ? build.subBuilds.map(serializeSubBuild) : undefined,
     descriptionMode: build.descriptionMode,
+    patchStale: build.patchStale ?? null,
   }
 }
 
@@ -200,6 +201,7 @@ export function hydrateBuild(stored: StoredBuild, catalogs: HydrationCatalogs): 
     gameVersion: stored.gameVersion, createdAt: stored.createdAt, updatedAt: stored.updatedAt,
     subBuilds: stored.subBuilds ? stored.subBuilds.map(s => hydrateSubBuild(s, catalogs)) : undefined,
     descriptionMode: stored.descriptionMode,
+    patchStale: stored.patchStale ?? null,
   }
 }
 

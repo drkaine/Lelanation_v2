@@ -2,7 +2,7 @@
 	pm2-status pm2-start pm2-restart pm2-restart-no-poller pm2-stop pm2-delete pm2-logs pm2-logs-backend pm2-logs-poller pm2-restart-poller pm2-logs-frontend \
 	deploy sync-data typecheck typecheck-frontend typecheck-companion lint lint-frontend format format-frontend \
 	test test-packages clean \
-	docker-db-up docker-db-down docker-db-restart docker-db-wait-healthy docker-db-verify \
+	docker-db-up docker-db-down docker-db-restart docker-db-wait-healthy docker-db-verify wait-redis \
 	migrate-drizzle-statistiques migrate-db merge-objective-histogram-global
 
 ROOT_DIR := $(CURDIR)
@@ -48,8 +48,9 @@ help:
 	@echo "  make migrate-db         Migrations Drizzle (DATABASE_URL → lelanation_statistiques)"
 	@echo "  make merge-objective-histogram-global  Fusionne region GLOBAL → euw1 sur objective_outcome_histogram (DATABASE_URL)"
 	@echo ""
-	@echo "Docker PostgreSQL (local)"
-	@echo "  make docker-db-up       docker compose up -d + attente healthcheck"
+	@echo "Docker PostgreSQL + Redis (local)"
+	@echo "  make docker-db-up       docker compose up -d + attente healthcheck (postgres + redis)"
+	@echo "  make wait-redis         Attendre redis-cli PONG sur 127.0.0.1:6379"
 	@echo "  make docker-db-down     docker compose down"
 	@echo "  make docker-db-restart  docker compose restart + attente healthcheck"
 	@echo "  make docker-db-verify   down → up → restart, contrôle healthy (cycle type redémarrage)"
@@ -110,14 +111,25 @@ migrate-drizzle-statistiques:
 migrate-db: migrate-drizzle-statistiques
 
 # ─── Docker (PostgreSQL local) ─────────────────────────────────────────────────
+wait-redis:
+	@elapsed=0; max=60; \
+	while [ $$elapsed -lt $$max ]; do \
+	  if redis-cli -h 127.0.0.1 -p 6379 ping 2>/dev/null | grep -q PONG; then \
+	    echo "redis: ready"; exit 0; \
+	  fi; \
+	  sleep 2; elapsed=$$((elapsed+2)); \
+	done; \
+	echo "redis: timeout — lancer Redis (make docker-db-up ou systemctl start redis-server)"; exit 1
+
 docker-db-wait-healthy:
 	@elapsed=0; max=60; \
 	while [ $$elapsed -lt $$max ]; do \
-	  s=$$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' lelanation-postgres-statistiques 2>/dev/null || echo missing); \
-	  if [ "$$s" = "healthy" ]; then echo "docker-db: healthy (lelanation_statistiques=$$s)"; exit 0; fi; \
+	  pg=$$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' lelanation-postgres-statistiques 2>/dev/null || echo missing); \
+	  rd=$$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' lelanation-redis 2>/dev/null || echo missing); \
+	  if [ "$$pg" = "healthy" ] && [ "$$rd" = "healthy" ]; then echo "docker-db: healthy (postgres=$$pg redis=$$rd)"; exit 0; fi; \
 	  sleep 2; elapsed=$$((elapsed+2)); \
 	done; \
-	echo "docker-db: timeout (lelanation-postgres-statistiques=$$s)"; exit 1
+	echo "docker-db: timeout (postgres=$$pg redis=$$rd)"; exit 1
 
 docker-db-up:
 	$(COMPOSE) up -d
@@ -163,11 +175,11 @@ exe-windows:
 pm2-status:
 	$(PM2) status
 
-pm2-start:
+pm2-start: wait-redis
 	mkdir -p "$(LOGS_DIR)"
 	$(PM2) start "$(ECOSYSTEM_FILE)" --update-env
 
-pm2-restart:
+pm2-restart: wait-redis
 	$(PM2) restart "$(ECOSYSTEM_FILE)" --update-env
 
 pm2-restart-no-poller:
@@ -194,7 +206,7 @@ pm2-restart-poller:
 pm2-logs-frontend:
 	$(PM2) logs lelanation-frontend
 
-deploy: build
+deploy: build wait-redis
 	mkdir -p "$(LOGS_DIR)"
 	$(PM2) startOrRestart "$(ECOSYSTEM_FILE)" --update-env
 

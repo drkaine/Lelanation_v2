@@ -56,9 +56,8 @@ export function useBuildsFilter(
       results = results.filter(b => b.roles?.includes(role))
     }
 
-    if (onlyUpToDate.value && options?.currentVersion?.value) {
-      const ver = options.currentVersion.value
-      results = results.filter(b => b.gameVersion === ver)
+    if (onlyUpToDate.value) {
+      results = results.filter(b => !b.patchStale)
     }
 
     const sorted = [...results]

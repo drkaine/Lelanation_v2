@@ -89,13 +89,20 @@ describe('useBuildsFilter', () => {
     expect(filteredBuilds.value[0].id).toBe('2')
   })
 
-  it('filters by up-to-date version', () => {
-    const builds = ref([b1, b2, b3])
-    const currentVersion = ref<string | null>('16.3.1')
-    const { filteredBuilds, onlyUpToDate } = useBuildsFilter(builds, { currentVersion })
+  it('filters out patch-stale builds when only up to date', () => {
+    const stale = makeBuild({
+      id: '4',
+      patchStale: {
+        patchVersion: '16.9',
+        flaggedAt: '2026-01-01T00:00:00Z',
+        categories: ['champion'],
+      },
+    })
+    const builds = ref([b1, b2, stale, b3])
+    const { filteredBuilds, onlyUpToDate } = useBuildsFilter(builds)
     onlyUpToDate.value = true
-    expect(filteredBuilds.value).toHaveLength(2)
-    expect(filteredBuilds.value.map(b => b.id).sort()).toEqual(['1', '3'])
+    expect(filteredBuilds.value).toHaveLength(3)
+    expect(filteredBuilds.value.map(b => b.id).sort()).toEqual(['1', '2', '3'])
   })
 
   it('sorts by most recent', () => {

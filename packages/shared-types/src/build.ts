@@ -272,6 +272,13 @@ export interface SkillOrder {
 export type Role = 'top' | 'jungle' | 'mid' | 'adc' | 'support'
 export type BuildTag = 'pro' | 'otp' | 'exotique' | 'troll'
 
+/** Build flagged because champion/items/runes appear in patch notes. */
+export interface PatchStaleInfo {
+  patchVersion: string
+  flaggedAt: string
+  categories: Array<'champion' | 'item' | 'rune'>
+}
+
 /** A build variant (sub-build). Same content as Build but champion is always inherited from the parent build. */
 export interface SubBuild {
   title: string
@@ -323,6 +330,7 @@ export interface Build {
   updatedAt: string
   subBuilds?: SubBuild[]
   descriptionMode?: 'single' | 'multiple'
+  patchStale?: PatchStaleInfo | null
 }
 
 export interface ChampionRef {
@@ -363,6 +371,7 @@ export interface StoredBuild {
   updatedAt: string
   subBuilds?: StoredSubBuild[]
   descriptionMode?: 'single' | 'multiple'
+  patchStale?: PatchStaleInfo | null
 }
 
 export interface CalculatedStats {

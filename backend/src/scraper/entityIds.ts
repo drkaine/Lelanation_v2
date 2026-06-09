@@ -105,6 +105,21 @@ export function patchSlugToRuneKey(patchSlug: string): string {
     .join('');
 }
 
+/** Patch note slugs / keys that differ from game data `rune.key` (Riot renames). */
+export const RUNE_KEY_ALIASES: Record<string, string> = {
+  StormraiderSurge: 'PhaseRush',
+};
+
+const RUNE_SLUG_TO_GAME_KEY: Record<string, string> = {
+  'stormraider-surge': 'PhaseRush',
+};
+
+export function resolveRuneGameKey(keyOrAlias: string): string {
+  const trimmed = keyOrAlias.trim();
+  if (!trimmed) return trimmed;
+  return RUNE_KEY_ALIASES[trimmed] ?? trimmed;
+}
+
 export function patchSlugToEnglishName(patchSlug: string): string {
   return patchSlug.replace(/-/g, ' ');
 }
@@ -163,9 +178,13 @@ export function extractEntityIdFromHtml(
   }
 
   if (category === 'rune') {
+    const slugKey = patchSlug?.toLowerCase();
+    if (slugKey && RUNE_SLUG_TO_GAME_KEY[slugKey]) {
+      return { id: RUNE_SLUG_TO_GAME_KEY[slugKey] };
+    }
     const runeKey = patchSlugToRuneKey(patchSlug);
     // Numeric id resolved later from game data; frontend uses local rune images
-    return runeKey ? { id: runeKey } : {};
+    return runeKey ? { id: resolveRuneGameKey(runeKey) } : {};
   }
 
   if (category === 'item') {
@@ -281,6 +300,13 @@ export function buildGameDataIndexes(
     }
   }
 
+  for (const [alias, gameKey] of Object.entries(RUNE_KEY_ALIASES)) {
+    const numericId = runeKeyToId.get(gameKey);
+    if (numericId) {
+      runeKeyToId.set(alias, numericId);
+    }
+  }
+
   return {
     championIds,
     championSlugToId,
@@ -366,15 +392,19 @@ export function enrichEntityIds(
     }
 
     if (entity.category === 'rune') {
-      const runeKey =
+      const rawKey =
         entity.id && !/^\d+$/.test(entity.id)
           ? entity.id
           : patchSlug
             ? patchSlugToRuneKey(patchSlug)
             : undefined;
 
-      if (runeKey) {
-        const numericId = indexes.runeKeyToId.get(runeKey);
+      if (rawKey) {
+        const runeKey = resolveRuneGameKey(rawKey);
+        const numericId =
+          indexes.runeKeyToId.get(runeKey) ??
+          indexes.runeKeyToId.get(rawKey) ??
+          (entity.name ? indexes.runeKeyToId.get(normalizeLookupKey(entity.name)) : undefined);
         if (numericId) {
           return { ...entity, id: numericId };
         }

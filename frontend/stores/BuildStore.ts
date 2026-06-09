@@ -10,11 +10,18 @@ import type {
   SkillOrder,
   CalculatedStats,
   Role,
+  PatchStaleInfo,
+  StoredBuild,
 } from '@lelanation/shared-types'
 import { isStarterItem } from '@lelanation/builds-ui'
 import { getFallbackGameVersion } from '~/config/version'
 import { apiUrl } from '~/utils/apiUrl'
 import { serializeBuild, hydrateBuild, isStoredBuild } from '~/utils/buildSerialize'
+import {
+  applyPatchStaleToBuild,
+  extractPatchStaleMap,
+  mergePatchStaleIntoBuilds,
+} from '~/utils/mergePatchStale'
 import { useVersionStore } from '~/stores/VersionStore'
 import { useVoteStore } from '~/stores/VoteStore'
 import {
@@ -1844,6 +1851,50 @@ export const useBuildStore = defineStore('build', {
         return parsed.map(b => (isStoredBuild(b) ? hydrateBuild(b) : (b as Build)))
       } catch {
         return []
+      }
+    },
+
+    async fetchServerPatchStaleMap(): Promise<Map<string, PatchStaleInfo | null>> {
+      try {
+        const response = await fetch(apiUrl('/api/builds'))
+        if (!response.ok) return new Map()
+        const serverBuilds = (await response.json()) as Array<
+          Pick<StoredBuild, 'id'> & { patchStale?: PatchStaleInfo | null }
+        >
+        return extractPatchStaleMap(serverBuilds)
+      } catch {
+        return new Map()
+      }
+    },
+
+    async syncPatchStaleFromServer(): Promise<void> {
+      if (import.meta.server) return
+
+      const savedBuilds = this.getSavedBuilds()
+      if (savedBuilds.length === 0) return
+
+      const patchStaleById = await this.fetchServerPatchStaleMap()
+      if (patchStaleById.size === 0) return
+
+      const merged = mergePatchStaleIntoBuilds(savedBuilds, patchStaleById)
+      const changed = merged.some((build, index) => build !== savedBuilds[index])
+      if (!changed) return
+
+      const toStore = merged.map(build => serializeBuild(build))
+      localStorage.setItem('lelanation_builds', JSON.stringify(toStore))
+      this.savedBuildsVersion++
+    },
+
+    async applyServerPatchStale(build: Build): Promise<Build> {
+      try {
+        const response = await fetch(apiUrl(`/api/builds/${encodeURIComponent(build.id)}`))
+        if (!response.ok) return build
+        const serverBuild = (await response.json()) as {
+          patchStale?: PatchStaleInfo | null
+        }
+        return applyPatchStaleToBuild(build, serverBuild.patchStale ?? null)
+      } catch {
+        return build
       }
     },
 

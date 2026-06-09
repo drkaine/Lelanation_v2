@@ -38,6 +38,12 @@
           :on-update="updateToCurrentVersion"
         />
 
+        <PatchStaleBuildBanner
+          v-if="build.patchStale"
+          :patch-stale="build.patchStale"
+          :storage-key="`build:${build.id}:patch:${build.patchStale.patchVersion}`"
+        />
+
         <div class="flex flex-col gap-6 lg:flex-row">
           <div class="w-full flex-shrink-0 lg:w-auto">
             <div class="relative">
@@ -345,6 +351,7 @@ import BuildCard from '~/components/Build/BuildCard.vue'
 import DescriptionVideoPreviews from '~/components/Build/DescriptionVideoPreviews.vue'
 import NotificationToast from '~/components/NotificationToast.vue'
 import OutdatedBuildBanner from '~/components/Build/OutdatedBuildBanner.vue'
+import PatchStaleBuildBanner from '~/components/Build/PatchStaleBuildBanner.vue'
 import StatsTable from '~/components/Build/StatsTable.vue'
 import { apiUrl } from '~/utils/apiUrl'
 import {
@@ -645,6 +652,7 @@ function detailShareImageOptions(meta: boolean) {
     sub: typeof sub === 'number' ? sub : null,
     meta,
     splash: championSplashEnabled.value,
+    cardHost: buildCardRef.value,
   }
 }
 
@@ -786,7 +794,8 @@ watch(
         const savedBuilds = buildStore.getSavedBuilds()
         const localBuild = savedBuilds.find(b => b.id === id) || null
         if (localBuild) {
-          const { migrated } = await migrateBuildToCurrent(localBuild)
+          const withPatchStale = await buildStore.applyServerPatchStale(localBuild)
+          const { migrated } = await migrateBuildToCurrent(withPatchStale)
           detailRootBuild.value = migrated
           loading.value = false
           return

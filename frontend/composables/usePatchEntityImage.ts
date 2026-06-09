@@ -24,6 +24,15 @@ function parseHonoredGuestChampionName(name: string): string {
   return colonIdx >= 0 ? name.slice(0, colonIdx).trim() : name
 }
 
+/** Patch note keys that differ from game data `rune.key` (Riot renames). */
+const RUNE_KEY_ALIASES: Record<string, string> = {
+  StormraiderSurge: 'PhaseRush',
+}
+
+function resolveRuneGameKey(keyOrAlias: string): string {
+  return RUNE_KEY_ALIASES[keyOrAlias] ?? keyOrAlias
+}
+
 export type PatchEntityImageKind = 'champion' | 'item' | 'rune' | null
 
 export function resolveArenaImageKind(subCategory?: string): PatchEntityImageKind {
@@ -115,14 +124,36 @@ export function usePatchEntityImage(entity: () => PatchEntity) {
     return null
   }
 
+  function findRuneIdByKey(keyOrAlias: string): string | null {
+    const gameKey = resolveRuneGameKey(keyOrAlias)
+    for (const path of runesStore.runePaths) {
+      for (const slot of path.slots) {
+        for (const rune of slot.runes) {
+          if (rune.key === gameKey) {
+            return String(rune.id)
+          }
+        }
+      }
+    }
+    return null
+  }
+
   const resolvedEntityId = computed(() => {
     const current = entity()
-    if (current.id) return current.id
+    const kind = resolvePatchEntityImageKind(current)
+
+    if (current.id) {
+      if (kind === 'rune' && !/^\d+$/.test(current.id)) {
+        return (
+          findRuneIdByKey(current.id) ?? findRuneIdByName(current.name?.trim() ?? '') ?? current.id
+        )
+      }
+      return current.id
+    }
 
     const name = current.name?.trim()
     if (!name) return null
 
-    const kind = resolvePatchEntityImageKind(current)
     if (kind === 'item') return findItemIdByName(name)
     if (kind === 'champion') {
       const championName =
