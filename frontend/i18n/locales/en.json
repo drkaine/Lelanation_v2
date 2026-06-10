@@ -481,7 +481,6 @@
       "push": "Push",
       "retreat": "Retreat"
     },
-    "pingsDeprecatedNote": "Basic and Danger use Riot’s current counters (command / get back). Vision cleared is no longer reported by the API.",
     "pingsShowMoreMetrics": "Show all pings",
     "pingsShowLessMetrics": "Show less",
     "patchNotesTargetFilterTitle": "Targets",
@@ -1007,6 +1006,7 @@
     "showing": "shown",
     "resultsTotal": "results",
     "perPage": "Per page",
+    "pageXOfY": "Page {current} of {total}",
     "paginationPrev": "Previous",
     "paginationNext": "Next",
     "searchPlayer": "Search player",

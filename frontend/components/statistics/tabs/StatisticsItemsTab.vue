@@ -362,12 +362,11 @@ function deltaClass(value: number | null | undefined): string {
             :key="'item-mobile-' + row.type + '-' + row.itemId"
             class="statistics-champion-stats-mobile-card statistics-item-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
           >
-            <button
-              type="button"
-              class="statistics-champion-stats-mobile-card-header flex w-full min-w-0 items-center gap-3 p-3 text-left"
-              @click="toggleItemCardExpanded(itemRowKey(row))"
+            <div
+              class="statistics-champion-stats-mobile-card-header flex w-full min-w-0 items-center gap-3 p-3"
             >
               <StatisticsItemStatsMobileCardHeader
+                :item-id="row.itemId"
                 :item-name="String(p.itemName(row.itemId) || row.itemId)"
                 :type-label="typeLabel(row.type)"
                 :image-src="
@@ -377,8 +376,10 @@ function deltaClass(value: number | null | undefined): string {
                 "
                 :image-alt="p.itemName(row.itemId) || ''"
               />
-              <div
+              <button
+                type="button"
                 class="statistics-item-mobile-stats flex min-w-0 flex-1 justify-end gap-2 text-right sm:gap-3"
+                @click="toggleItemCardExpanded(itemRowKey(row))"
               >
                 <div class="min-w-0 shrink">
                   <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
@@ -411,20 +412,53 @@ function deltaClass(value: number | null | undefined): string {
                     {{ fmtDelta(row.deltaWin) }}
                   </div>
                 </div>
-              </div>
-            </button>
+              </button>
+            </div>
             <div
               v-if="expandedItemKeys.has(itemRowKey(row))"
-              class="space-y-1.5 border-t border-primary/20 bg-black/20 px-3 py-2.5 text-sm text-text/85"
+              class="space-y-2 border-t border-primary/20 bg-black/20 px-3 py-2.5 text-sm text-text/85"
             >
-              <div class="flex flex-wrap items-baseline justify-between gap-x-2">
-                <span>{{ p.t('statisticsPage.itemsColType') }}</span>
-                <span>{{ typeLabel(row.type) }}</span>
+              <div class="grid grid-cols-2 gap-2 text-xs">
+                <div class="rounded bg-primary/10 px-2 py-1.5">
+                  <div class="text-[10px] uppercase text-text/55">
+                    {{ p.t('statisticsPage.itemsColGoldValue') }}
+                  </div>
+                  <div class="font-bold tabular-nums text-text">
+                    {{ fmtGoldValue(row.goldValue) }}
+                  </div>
+                </div>
+                <div class="rounded bg-primary/10 px-2 py-1.5">
+                  <div class="text-[10px] uppercase text-text/55">
+                    {{ p.t('statisticsPage.itemsColGoldEfficiency') }}
+                  </div>
+                  <div class="font-bold tabular-nums text-text">
+                    {{ fmtGoldEfficiency(row) }}
+                  </div>
+                </div>
+                <div class="rounded bg-primary/10 px-2 py-1.5">
+                  <div class="text-[10px] uppercase text-text/55">
+                    {{ p.t('statisticsPage.games') }}
+                  </div>
+                  <div class="font-bold tabular-nums text-text">
+                    {{ row.games.toLocaleString() }}
+                  </div>
+                </div>
+                <div class="rounded bg-primary/10 px-2 py-1.5">
+                  <div class="text-[10px] uppercase text-text/55">
+                    {{ p.t('statisticsPage.wins') }}
+                  </div>
+                  <div class="font-bold tabular-nums text-text">
+                    {{ row.wins.toLocaleString() }}
+                  </div>
+                </div>
               </div>
-              <div class="flex flex-wrap items-baseline justify-between gap-x-2">
-                <span>{{ p.t('statisticsPage.overviewDurationWinrateTooltipMatches') }}</span>
-                <span class="tabular-nums">{{ row.games.toLocaleString() }}</span>
-              </div>
+              <StatisticsItemDetailLink
+                :item-id="row.itemId"
+                class="block text-center text-xs font-medium text-accent underline decoration-accent/40 underline-offset-2"
+                :stop-propagation="false"
+              >
+                {{ p.t('statisticsPage.itemStatsOpenDetail') }}
+              </StatisticsItemDetailLink>
             </div>
           </article>
         </div>

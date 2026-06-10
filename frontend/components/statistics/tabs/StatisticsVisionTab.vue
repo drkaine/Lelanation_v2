@@ -68,6 +68,13 @@ function visionMessage(message: string | undefined): string {
 function deltaSortKey(key: VisionMetricKey): VisionSortCol {
   return `${key}Delta`
 }
+
+const visionPageSize = computed({
+  get: () => Number(p.championsPageSize) || 20,
+  set: (value: number) => {
+    p.onVisionPageSizeUpdated?.(value)
+  },
+})
 </script>
 
 <template>
@@ -151,107 +158,142 @@ function deltaSortKey(key: VisionMetricKey): VisionSortCol {
         </article>
       </div>
 
-      <div class="hidden overflow-x-auto md:block">
-        <table class="statistics-table w-full min-w-[52rem] border-collapse text-sm">
-          <thead>
-            <tr
-              class="border-b border-primary/30 text-left text-xs uppercase tracking-wide text-text/60"
+      <div
+        class="tier-list-mobile-rotate statistics-overview-surface hidden w-full overflow-x-auto rounded-lg border border-primary/30 md:block"
+      >
+        <div class="tier-list-lolalytics w-full min-w-0 text-[13px] max-lg:min-w-[720px]">
+          <table class="w-full min-w-[520px] text-left text-[13px]">
+            <thead
+              class="sticky top-0 z-10 border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
             >
-              <th class="sticky left-0 z-[1] bg-surface px-2 py-2">
+              <tr>
+                <th class="min-w-[220px] px-2 py-1.5 text-left font-semibold text-text">
+                  {{ p.t('statisticsPage.tierListColChampion') }}
+                </th>
+                <th
+                  v-for="key in VISION_METRIC_KEYS"
+                  :key="'vision-th-' + key"
+                  class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text"
+                >
+                  <div class="flex items-center justify-center gap-1">
+                    <button type="button" @click="p.setVisionSort(key)">
+                      {{ p.t('statisticsPage.visionMetric.' + key) }}{{ sortIndicator(key) }}
+                    </button>
+                    <button
+                      v-if="p.visionTableRefData"
+                      type="button"
+                      class="text-[10px] text-text/70 hover:text-text"
+                      :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
+                      @click="p.setVisionSort(deltaSortKey(key))"
+                    >
+                      Δ{{ sortIndicator(deltaSortKey(key)) }}
+                    </button>
+                  </div>
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-primary/20">
+              <tr
+                v-for="row in p.paginatedVisionRows"
+                :key="'vision-' + row.championId"
+                class="text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
+              >
+                <td class="min-w-[220px] py-0.5 pl-2 pr-0">
+                  <StatisticsChampionDetailLink
+                    :champion-id="row.championId"
+                    class="flex items-center gap-2"
+                  >
+                    <img
+                      v-if="championPortraitSrc(row.championId)"
+                      :src="championPortraitSrc(row.championId)!"
+                      :alt="p.championName(row.championId) || ''"
+                      class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover"
+                      width="50"
+                      height="50"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                    <span
+                      class="min-w-0 truncate text-[12px] text-accent underline decoration-accent/40 underline-offset-2"
+                    >
+                      <StatisticsChampionNameHighlight
+                        :name="String(p.championName(row.championId) || row.championId)"
+                        :query="p.championSearchQuery"
+                      />
+                    </span>
+                  </StatisticsChampionDetailLink>
+                </td>
+                <td
+                  v-for="key in VISION_METRIC_KEYS"
+                  :key="'vision-td-' + row.championId + '-' + key"
+                  class="px-1 py-0.5 align-middle"
+                >
+                  <div
+                    class="flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight"
+                    :class="key === 'visionScore' ? 'font-semibold' : ''"
+                  >
+                    <span>{{ formatVisionValue(key, visionValue(row, key)) }}</span>
+                    <span
+                      v-if="visionDelta(row, key) != null"
+                      class="text-[10px] leading-none"
+                      :class="p.championGlobalNumericDeltaClass(visionDelta(row, key)!)"
+                    >
+                      {{ formatVisionDelta(key, visionDelta(row, key)!) }}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div
+            v-if="p.totalVisionCount > 0"
+            class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
+          >
+            <span v-if="p.championSearchQuery"
+              >{{ p.t('statisticsPage.showing') }} {{ p.totalVisionCount }}</span
+            >
+            <div class="flex items-center gap-3">
+              <label class="flex items-center gap-1.5">
+                <span class="text-text/70">{{ p.t('statisticsPage.perPage') }}</span>
+                <select
+                  v-model.number="visionPageSize"
+                  class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
+                >
+                  <option v-for="n in p.PAGE_SIZE_OPTIONS" :key="'vision-ps-' + n" :value="n">
+                    {{ n }}
+                  </option>
+                </select>
+              </label>
+              <span class="text-text/70">
+                {{
+                  p.t('statisticsPage.pageXOfY', {
+                    current: p.visionPage,
+                    total: p.totalVisionPages,
+                  })
+                }}
+              </span>
+              <div class="flex gap-1">
                 <button
                   type="button"
-                  class="font-semibold hover:text-text"
-                  @click="p.setVisionSort('champion')"
+                  class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                  :disabled="p.visionPage <= 1"
+                  @click="p.onVisionPageUpdated(Math.max(1, p.visionPage - 1))"
                 >
-                  {{ p.t('statisticsPage.visionColChampion') }}{{ sortIndicator('champion') }}
+                  ‹
                 </button>
-              </th>
-              <th
-                v-for="key in VISION_METRIC_KEYS"
-                :key="'vision-th-' + key"
-                class="px-2 py-2 text-right"
-              >
-                <div class="flex items-center justify-end gap-1">
-                  <button
-                    type="button"
-                    class="font-semibold hover:text-text"
-                    @click="p.setVisionSort(key)"
-                  >
-                    {{ p.t('statisticsPage.visionMetric.' + key) }}{{ sortIndicator(key) }}
-                  </button>
-                  <button
-                    v-if="p.visionTableRefData"
-                    type="button"
-                    class="text-[10px] text-text/70 hover:text-text"
-                    :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
-                    @click="p.setVisionSort(deltaSortKey(key))"
-                  >
-                    Δ{{ sortIndicator(deltaSortKey(key)) }}
-                  </button>
-                </div>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="row in p.paginatedVisionRows"
-              :key="'vision-' + row.championId"
-              class="border-b border-primary/15 hover:bg-primary/5"
-            >
-              <td class="sticky left-0 z-[1] min-w-[220px] bg-surface px-2 py-2">
-                <StatisticsChampionDetailLink
-                  :champion-id="row.championId"
-                  class="flex min-w-0 items-center gap-2"
+                <button
+                  type="button"
+                  class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                  :disabled="p.visionPage >= p.totalVisionPages"
+                  @click="p.onVisionPageUpdated(Math.min(p.totalVisionPages, p.visionPage + 1))"
                 >
-                  <img
-                    v-if="championPortraitSrc(row.championId)"
-                    :src="championPortraitSrc(row.championId)!"
-                    :alt="p.championName(row.championId) || ''"
-                    class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover"
-                    width="50"
-                    height="50"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                  <span
-                    class="min-w-0 truncate text-[12px] text-accent underline decoration-accent/40 underline-offset-2"
-                  >
-                    <StatisticsChampionNameHighlight
-                      :name="String(p.championName(row.championId) || row.championId)"
-                      :query="p.championSearchQuery"
-                    />
-                  </span>
-                </StatisticsChampionDetailLink>
-              </td>
-              <td
-                v-for="key in VISION_METRIC_KEYS"
-                :key="'vision-td-' + row.championId + '-' + key"
-                class="px-2 py-2 text-right tabular-nums"
-                :class="key === 'visionScore' ? 'font-semibold' : ''"
-              >
-                <div class="flex flex-col items-end gap-0 leading-tight">
-                  <span>{{ formatVisionValue(key, visionValue(row, key)) }}</span>
-                  <span
-                    v-if="visionDelta(row, key) != null"
-                    class="text-[10px] leading-none"
-                    :class="p.championGlobalNumericDeltaClass(visionDelta(row, key)!)"
-                  >
-                    {{ formatVisionDelta(key, visionDelta(row, key)!) }}
-                  </span>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+                  ›
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-
-      <StatisticsTabPagination
-        v-if="p.totalVisionPages > 1"
-        :page="p.visionPage"
-        :total-pages="p.totalVisionPages"
-        @prev="p.onVisionPageUpdated(Math.max(1, p.visionPage - 1))"
-        @next="p.onVisionPageUpdated(Math.min(p.totalVisionPages, p.visionPage + 1))"
-      />
     </template>
   </div>
 </template>

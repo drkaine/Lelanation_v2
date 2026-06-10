@@ -1,4 +1,4 @@
-import { computed, ref, type Ref } from 'vue'
+import { computed, ref, watch, type Ref } from 'vue'
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
 
 /**
@@ -59,6 +59,7 @@ export function useStatisticsPingsTab(params: {
   championGlobalTableQueryForVersion: (versionFull: string | null | undefined) => string
   gameVersion: Ref<string>
   championName: (championId: number) => string | null
+  championsPageSize: Ref<number>
   resolveBaselineVersion: () => string | null
   patchFromVersion: (v: string | null | undefined) => string | null
 }) {
@@ -69,7 +70,6 @@ export function useStatisticsPingsTab(params: {
   const pingsSortColumn = ref<PingsSortCol>('totalPerGame')
   const pingsSortDir = ref<'asc' | 'desc'>('desc')
   const pingsPage = ref(1)
-  const pingsPageSize = ref(50)
 
   const pingsRefByChampion = computed(() => {
     const m = new Map<number, PingsTableRow>()
@@ -162,14 +162,25 @@ export function useStatisticsPingsTab(params: {
 
   const sortedPingsRows = computed(() => [...filteredPingsRows.value].sort(comparePingsRows))
 
+  const totalPingsCount = computed(() => sortedPingsRows.value.length)
+
   const totalPingsPages = computed(() =>
-    Math.max(1, Math.ceil(sortedPingsRows.value.length / pingsPageSize.value))
+    Math.max(1, Math.ceil(totalPingsCount.value / params.championsPageSize.value))
   )
 
   const paginatedPingsRows = computed(() => {
-    const start = (pingsPage.value - 1) * pingsPageSize.value
-    return sortedPingsRows.value.slice(start, start + pingsPageSize.value)
+    const size = params.championsPageSize.value
+    const page = Math.min(pingsPage.value, totalPingsPages.value)
+    const start = (page - 1) * size
+    return sortedPingsRows.value.slice(start, start + size)
   })
+
+  watch(
+    [params.championSearchQuery, pingsSortColumn, pingsSortDir, params.championsPageSize],
+    () => {
+      pingsPage.value = 1
+    }
+  )
 
   function setPingsSort(col: PingsSortCol): void {
     if (pingsSortColumn.value === col) {
@@ -190,8 +201,8 @@ export function useStatisticsPingsTab(params: {
     pingsSortColumn,
     pingsSortDir,
     pingsPage,
-    pingsPageSize,
     sortedPingsRows,
+    totalPingsCount,
     paginatedPingsRows,
     totalPingsPages,
     pingsDelta,

@@ -1,4 +1,4 @@
-import { computed, ref, type Ref } from 'vue'
+import { computed, ref, watch, type Ref } from 'vue'
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
 
 export const VISION_METRIC_KEYS = [
@@ -38,6 +38,7 @@ export function useStatisticsVisionTab(params: {
   championGlobalTableQueryForVersion: (versionFull: string | null | undefined) => string
   gameVersion: Ref<string>
   championName: (championId: number) => string | null
+  championsPageSize: Ref<number>
   resolveBaselineVersion: () => string | null
   patchFromVersion: (v: string | null | undefined) => string | null
 }) {
@@ -48,7 +49,6 @@ export function useStatisticsVisionTab(params: {
   const visionSortColumn = ref<VisionSortCol>('visionScore')
   const visionSortDir = ref<'asc' | 'desc'>('desc')
   const visionPage = ref(1)
-  const visionPageSize = ref(50)
 
   const visionRefByChampion = computed(() => {
     const m = new Map<number, VisionTableRow>()
@@ -142,14 +142,25 @@ export function useStatisticsVisionTab(params: {
 
   const sortedVisionRows = computed(() => [...filteredVisionRows.value].sort(compareVisionRows))
 
+  const totalVisionCount = computed(() => sortedVisionRows.value.length)
+
   const totalVisionPages = computed(() =>
-    Math.max(1, Math.ceil(sortedVisionRows.value.length / visionPageSize.value))
+    Math.max(1, Math.ceil(totalVisionCount.value / params.championsPageSize.value))
   )
 
   const paginatedVisionRows = computed(() => {
-    const start = (visionPage.value - 1) * visionPageSize.value
-    return sortedVisionRows.value.slice(start, start + visionPageSize.value)
+    const size = params.championsPageSize.value
+    const page = Math.min(visionPage.value, totalVisionPages.value)
+    const start = (page - 1) * size
+    return sortedVisionRows.value.slice(start, start + size)
   })
+
+  watch(
+    [params.championSearchQuery, visionSortColumn, visionSortDir, params.championsPageSize],
+    () => {
+      visionPage.value = 1
+    }
+  )
 
   function setVisionSort(col: VisionSortCol): void {
     if (visionSortColumn.value === col) {
@@ -170,8 +181,8 @@ export function useStatisticsVisionTab(params: {
     visionSortColumn,
     visionSortDir,
     visionPage,
-    visionPageSize,
     sortedVisionRows,
+    totalVisionCount,
     paginatedVisionRows,
     totalVisionPages,
     visionDelta,

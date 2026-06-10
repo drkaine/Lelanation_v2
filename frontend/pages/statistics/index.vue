@@ -4695,6 +4695,7 @@ const pingsTab = useStatisticsPingsTab({
     championGlobalTableQueryForVersion(versionFull, 'pings'),
   gameVersion,
   championName,
+  championsPageSize,
   resolveBaselineVersion: resolveStatsBaselineVersion,
   patchFromVersion,
 })
@@ -4708,6 +4709,7 @@ const visionTab = useStatisticsVisionTab({
     championGlobalTableQueryForVersion(versionFull, 'vision'),
   gameVersion,
   championName,
+  championsPageSize,
   resolveBaselineVersion: resolveStatsBaselineVersion,
   patchFromVersion,
 })
@@ -5340,9 +5342,25 @@ if (__statisticsVm?.proxy) {
             pingsTab.pingsPage.value = v
           }
         }
+        if (key === 'onPingsPageSizeUpdated') {
+          return (v: number) => {
+            const n = Number(v)
+            const next = Number.isFinite(n) && n > 0 ? Math.floor(n) : 20
+            championsPageSize.value = PAGE_SIZE_OPTIONS.includes(next) ? next : 20
+            pingsTab.pingsPage.value = 1
+          }
+        }
         if (key === 'onVisionPageUpdated') {
           return (v: number) => {
             visionTab.visionPage.value = v
+          }
+        }
+        if (key === 'onVisionPageSizeUpdated') {
+          return (v: number) => {
+            const n = Number(v)
+            const next = Number.isFinite(n) && n > 0 ? Math.floor(n) : 20
+            championsPageSize.value = PAGE_SIZE_OPTIONS.includes(next) ? next : 20
+            visionTab.visionPage.value = 1
           }
         }
         if (Object.prototype.hasOwnProperty.call(pingsTab, key)) {
@@ -5886,7 +5904,8 @@ if (__statisticsVm?.proxy) {
     align-self: stretch;
   }
 }
-.statistics .statistics-champion-detail-link {
+.statistics .statistics-champion-detail-link,
+.statistics .statistics-item-detail-link {
   touch-action: manipulation;
   -webkit-tap-highlight-color: rgb(var(--rgb-accent) / 0.2);
   cursor: pointer;
@@ -5895,13 +5914,20 @@ if (__statisticsVm?.proxy) {
   position: relative;
   z-index: 2;
 }
-.statistics .statistics-champion-detail-link:active {
+.statistics .statistics-champion-detail-link:active,
+.statistics .statistics-item-detail-link:active {
   opacity: 0.85;
 }
 .statistics .statistics-champion-detail-link :is(img, .champion-portrait, .champion-portrait *) {
   pointer-events: none;
 }
-.statistics .statistics-champion-stats-mobile-identity .statistics-champion-detail-link {
+.statistics
+  .statistics-item-detail-link
+  :is(img, .statistics-item-stats-mobile-portrait, .statistics-item-stats-mobile-portrait *) {
+  pointer-events: none;
+}
+.statistics .statistics-champion-stats-mobile-identity .statistics-champion-detail-link,
+.statistics .statistics-item-stats-mobile-identity .statistics-item-detail-link {
   min-height: 2.75rem;
   min-width: 2.75rem;
 }

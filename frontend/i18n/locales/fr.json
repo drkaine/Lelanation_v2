@@ -481,7 +481,6 @@
       "push": "Push",
       "retreat": "Recule"
     },
-    "pingsDeprecatedNote": "Basique et Danger utilisent les compteurs Riot actuels (command / get back). Vision nettoyée n’est plus renseignée par l’API.",
     "pingsShowMoreMetrics": "Voir tous les pings",
     "pingsShowLessMetrics": "Réduire",
     "patchNotesTargetFilterTitle": "Cibles",
@@ -1009,6 +1008,7 @@
     "showing": "affichés",
     "resultsTotal": "résultats",
     "perPage": "Par page",
+    "pageXOfY": "Page {current} sur {total}",
     "paginationPrev": "Précédent",
     "paginationNext": "Suivant",
     "searchPlayer": "Rechercher un joueur",
