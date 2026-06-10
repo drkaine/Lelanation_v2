@@ -95,6 +95,28 @@ describe('DataDragonService item stats enrichment', () => {
     assert.equal(cleaned['3860'].stats.FlatHPPoolMod, 30)
   })
 
+  it('fills missing World Atlas description and regen stats from fallback', () => {
+    const service = new DataDragonService()
+    const items = {
+      '3865': {
+        name: 'Atlas',
+        description: '',
+        plaintext: '',
+        stats: { FlatHPPoolMod: 30 },
+        tags: ['GoldPer'],
+        effect: { Effect1Amount: '3' },
+        maps: { '11': true },
+      },
+    } as any
+
+    const cleanedFr = (service as any).cleanItemsData(items, 'fr_FR') as Record<string, any>
+    assert.match(cleanedFr['3865'].description, /Richesses partagées/)
+    assert.equal(cleanedFr['3865'].plaintext, 'Objet de départ du support.')
+    assert.equal(cleanedFr['3865'].stats.PercentHPRegenMod, 25)
+    assert.equal(cleanedFr['3865'].stats.PercentMPRegenMod, 25)
+    assert.equal(cleanedFr['3865'].stats.GoldPer10, 3)
+  })
+
   it('does not overwrite existing stat keys', () => {
     const service = new DataDragonService()
     const items = {

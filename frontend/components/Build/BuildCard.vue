@@ -1112,9 +1112,9 @@
                   </div>
                   <!-- eslint-disable vue/no-v-html -->
                   <div
-                    v-if="sheetElementTooltipResolved.item.description"
-                    class="item-tooltip-description"
-                    v-html="sheetElementTooltipResolved.item.description"
+                    v-if="sheetElementTooltipResolved.item.descriptionHtml"
+                    class="item-tooltip-description tooltip-game-description"
+                    v-html="sheetElementTooltipResolved.item.descriptionHtml"
                   />
                   <!-- eslint-enable vue/no-v-html -->
                 </div>
@@ -1792,7 +1792,8 @@ import {
 } from '~/utils/gameTooltipFormatter'
 import { resolveSummonerSpellFromRef } from '~/utils/summonerSpellResolver'
 import { fixedTooltipStyleFromPointer, type TooltipPointer } from '~/utils/tooltipPosition'
-import { formatRuneTooltipHtml } from '~/utils/formatTooltipMarkupHtml'
+import { formatRuneTooltipHtml, formatTooltipMarkupHtml } from '~/utils/formatTooltipMarkupHtml'
+import { resolveItemDescription, resolveItemPlaintext } from '~/utils/itemDescriptionFallbacks'
 import DescriptionEditor from '~/components/Build/DescriptionEditor.vue'
 import PatchStaleBuildBadge from '~/components/Build/PatchStaleBuildBadge.vue'
 import TheorycraftCardStatsBack from '~/components/Build/TheorycraftCardStatsBack.vue'
@@ -2354,7 +2355,19 @@ const sheetElementTooltipResolved = computed(() => {
     case 'item': {
       const p = tt.payload as { id: string; name?: string }
       const item = itemsStore.items.find(i => i.id === p?.id)
-      return item ? { type: 'item' as const, item } : null
+      if (!item) return null
+      const descriptionHtml = formatTooltipMarkupHtml(
+        resolveItemDescription(item, riotLocale.value)
+      )
+      const plaintext = resolveItemPlaintext(item, riotLocale.value)
+      return {
+        type: 'item' as const,
+        item: {
+          ...item,
+          plaintext: plaintext || item.plaintext,
+          descriptionHtml,
+        },
+      }
     }
     case 'rune': {
       const id = tt.payload as number
@@ -5616,7 +5629,7 @@ defineExpose({
 .skill-order-section {
   position: absolute;
   right: var(--build-card-edge-inset);
-  top: 300px;
+  top: 303px;
   z-index: 50;
 }
 

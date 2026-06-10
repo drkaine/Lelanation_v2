@@ -6,6 +6,7 @@ import { ImageService } from './ImageService.js'
 import { CommunityDragonOrnnService } from './CommunityDragonOrnnService.js'
 import { fetchJson, HttpRequestError } from '../utils/httpFetch.js'
 import { enrichSummonerSpellRecord } from '../utils/summonerSpellTooltip.js'
+import { resolveItemDescriptionFields } from '../utils/itemDescriptionFallbacks.js'
 import { isAlwaysExcludedGameItemId } from '../config/excludedGameItemIds.js'
 
 interface ChampionData {
@@ -167,11 +168,14 @@ export class DataDragonService {
   /**
    * Remove maps field from item payload after filtering.
    */
-  private cleanItemsData(items: ItemData): ItemData {
+  private cleanItemsData(items: ItemData, language: string = 'en_US'): ItemData {
     const cleaned: ItemData = {}
     for (const [itemId, item] of Object.entries(items)) {
       const clone = { ...(item as Record<string, unknown>) }
       delete (clone as { maps?: unknown }).maps
+      const resolved = resolveItemDescriptionFields(itemId, clone, language)
+      clone.description = resolved.description
+      if (resolved.plaintext) clone.plaintext = resolved.plaintext
       this.enrichItemStatsFromDescription(clone)
       this.enrichGoldPer10FromEffect(clone)
       cleaned[itemId] = clone as ItemData[string]
@@ -486,7 +490,7 @@ export class DataDragonService {
         }
       }
 
-      return Result.ok(this.cleanItemsData(filteredItems))
+      return Result.ok(this.cleanItemsData(filteredItems, language))
     } catch (error) {
       if (error instanceof HttpRequestError) {
         if (error.statusCode === 429) {

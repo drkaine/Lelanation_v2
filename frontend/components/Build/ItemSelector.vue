@@ -167,8 +167,8 @@
               </div>
             </div>
           </div>
-          <div v-if="hoveredItem.plaintext" class="item-tooltip-plaintext">
-            {{ hoveredItem.plaintext }}
+          <div v-if="resolvedHoveredItemPlaintext" class="item-tooltip-plaintext">
+            {{ resolvedHoveredItemPlaintext }}
           </div>
           <!-- Validation error message -->
           <div
@@ -179,7 +179,7 @@
           </div>
           <!-- eslint-disable vue/no-v-html -->
           <div
-            v-if="hoveredItem.description"
+            v-if="formattedHoveredItemDescription"
             class="item-tooltip-description tooltip-game-description"
             v-html="formattedHoveredItemDescription"
           />
@@ -205,6 +205,7 @@ import { getItemImageUrl } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 import { formatTooltipMarkupHtml } from '~/utils/formatTooltipMarkupHtml'
+import { resolveItemDescription, resolveItemPlaintext } from '~/utils/itemDescriptionFallbacks'
 import {
   atlasUpgradeMissing,
   isJunglePetItem,
@@ -898,8 +899,12 @@ const tooltipStyle = computed(() => {
   }
 })
 
+const resolvedHoveredItemPlaintext = computed(() =>
+  resolveItemPlaintext(hoveredItem.value, riotLocale.value)
+)
+
 const formattedHoveredItemDescription = computed(() =>
-  formatTooltipMarkupHtml(hoveredItem.value?.description ?? '')
+  formatTooltipMarkupHtml(resolveItemDescription(hoveredItem.value, riotLocale.value))
 )
 
 // Handle mouse move to update tooltip position
