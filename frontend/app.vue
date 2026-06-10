@@ -366,6 +366,7 @@ const onKeyDown = (event: KeyboardEvent) => {
       'spells',
       'items',
       'pings',
+      'vision',
       'patchNotes',
       'infos',
     ] as const

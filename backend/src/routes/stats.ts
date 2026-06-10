@@ -25,6 +25,7 @@ import { getTierList } from '../services/TierListService.js'
 import { getChampionGlobalTable } from '../services/ChampionGlobalTableService.js'
 import { getChampionBansTable } from '../services/ChampionBansTableService.js'
 import { getChampionPingsTable } from '../services/ChampionPingsTableService.js'
+import { getChampionVisionTable } from '../services/ChampionVisionTableService.js'
 import { getChampionDamageSplit } from '../services/ChampionDamageSplitService.js'
 import { getChampionMiscSummary } from '../services/ChampionMiscStatsService.js'
 import {
@@ -731,6 +732,33 @@ router.get('/champions/pings-table', async (req: Request, res: Response) => {
     return res.status(200).json({
       rows: [],
       error: 'Champion pings table failed',
+      message,
+    })
+  }
+})
+
+/** GET /api/stats/champions/vision-table — stats vision moyennes par champion. Query: ?version=…&rankTier=…&role=… */
+router.get('/champions/vision-table', async (req: Request, res: Response) => {
+  res.set('Cache-Control', 'no-store')
+  const version = queryStringArray(req.query.version)
+  const rankTier = queryStringArray(req.query.rankTier)
+  const role = queryString(req.query.role)
+  try {
+    const data = await getChampionVisionTable(
+      version.length ? version : null,
+      rankTier.length ? rankTier : null,
+      role
+    )
+    if (!data) {
+      return res.status(200).json({ rows: [], message: 'Database not configured.' })
+    }
+    return res.json(data)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('[champions/vision-table]', message, err)
+    return res.status(200).json({
+      rows: [],
+      error: 'Champion vision table failed',
       message,
     })
   }

@@ -40,6 +40,8 @@ function onChange(event: Event): void {
       class="w-full max-w-full truncate rounded border border-primary/35 bg-black/30 px-1.5 py-0.5 text-[10px] font-medium text-text/85 hover:border-primary/55 max-lg:text-xs"
       :value="modelValue === 'all' ? 'all' : String(modelValue)"
       @click.stop
+      @mousedown.stop
+      @pointerdown.stop
       @change="onChange"
     >
       <option value="all">{{ p.t('statisticsPage.championTransformAll') }}</option>

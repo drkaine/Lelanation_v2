@@ -1,6 +1,7 @@
 import { computed, ref, type Ref } from 'vue'
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
 
+/** Aligné sur `champion_stats` / match-v5 (`championPingMetrics.ts`). */
 export const PING_METRIC_KEYS = [
   'allIn',
   'assistMe',
@@ -26,7 +27,7 @@ export type PingsTableRow = {
   totalPerGame: number
 } & Record<PingMetricKey, number>
 
-export type PingsSortCol = 'champion' | 'games' | 'totalPerGame' | PingMetricKey
+export type PingsSortCol = 'champion' | 'totalPerGame' | PingMetricKey
 
 type PingsApiPayload = {
   rows: PingsTableRow[]
@@ -87,8 +88,8 @@ export function useStatisticsPingsTab(params: {
       const bn = (params.championName(b.championId) ?? String(b.championId)).toLowerCase()
       return dir * an.localeCompare(bn, undefined, { sensitivity: 'base' })
     }
-    const av = col === 'games' || col === 'totalPerGame' ? a[col] : a[col as PingMetricKey]
-    const bv = col === 'games' || col === 'totalPerGame' ? b[col] : b[col as PingMetricKey]
+    const av = col === 'totalPerGame' ? a[col] : a[col as PingMetricKey]
+    const bv = col === 'totalPerGame' ? b[col] : b[col as PingMetricKey]
     return dir * (Number(av) - Number(bv))
   }
 
@@ -132,7 +133,6 @@ export function useStatisticsPingsTab(params: {
 export function pingsMobileSortOptions(t: (key: string) => string): StatisticsMobileSortOption[] {
   return [
     { value: 'totalPerGame', label: t('statisticsPage.pingsColTotal') },
-    { value: 'games', label: t('statisticsPage.pingsColGames') },
     { value: 'champion', label: t('statisticsPage.pingsColChampion') },
     ...PING_METRIC_KEYS.map(key => ({
       value: key,

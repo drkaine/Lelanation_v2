@@ -16,6 +16,7 @@ export type StatisticsCohortTab =
   | 'spells'
   | 'infos'
   | 'pings'
+  | 'vision'
   | 'patchNotes'
   | 'duration'
   | 'abandons'

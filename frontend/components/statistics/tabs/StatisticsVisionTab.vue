@@ -5,68 +5,70 @@ import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useVersionStore } from '~/stores/VersionStore'
 import { getChampionImageUrl } from '~/utils/imageUrl'
 import {
-  PING_METRIC_KEYS,
-  pingsMobileSortOptions,
-  type PingMetricKey,
-  type PingsSortCol,
-  type PingsTableRow,
-} from '~/composables/statistics/useStatisticsPingsTab'
+  VISION_METRIC_KEYS,
+  visionMobileSortOptions,
+  type VisionMetricKey,
+  type VisionSortCol,
+  type VisionTableRow,
+} from '~/composables/statistics/useStatisticsVisionTab'
 
 const p = inject('statisticsPageCtx') as Record<string, unknown>
 
 const championsStore = useChampionsStore()
 const { currentVersion: gameVersionFromStore } = storeToRefs(useVersionStore())
 
-const pingsMobileSortColumn = computed({
-  get: () => String(p.pingsSortColumn ?? 'totalPerGame'),
+const visionMobileSortColumn = computed({
+  get: () => String(p.visionSortColumn ?? 'visionScore'),
   set: (v: string) => {
-    ;(p.setPingsSort as (c: PingsSortCol) => void)?.(v as PingsSortCol)
+    ;(p.setVisionSort as (c: VisionSortCol) => void)?.(v as VisionSortCol)
   },
 })
 
-const pingsMobileSortDir = computed({
-  get: () => (p.pingsSortDir === 'asc' ? 'asc' : 'desc') as 'asc' | 'desc',
+const visionMobileSortDir = computed({
+  get: () => (p.visionSortDir === 'asc' ? 'asc' : 'desc') as 'asc' | 'desc',
   set: (v: 'asc' | 'desc') => {
-    p.pingsSortDir = v
+    p.visionSortDir = v
   },
 })
 
-const pingsMobileSortOptionsComputed = computed(() =>
-  pingsMobileSortOptions((key: string) => String(p.t?.(key) ?? key))
+const visionMobileSortOptionsComputed = computed(() =>
+  visionMobileSortOptions((key: string) => String(p.t?.(key) ?? key))
 )
 
 function championById(championId: number) {
   return championsStore.champions.find(c => Number(c.key) === championId) ?? null
 }
 
-function championLabel(row: PingsTableRow): string {
+function championLabel(row: VisionTableRow): string {
   return championById(row.championId)?.name ?? String(row.championId)
 }
 
-function championImageUrl(row: PingsTableRow): string | null {
+function championImageUrl(row: VisionTableRow): string | null {
   const version = String(p.gameVersion ?? gameVersionFromStore.value ?? '').trim()
   const champion = championById(row.championId)
   if (!version || !champion?.image?.full) return null
   return getChampionImageUrl(version, champion.image.full)
 }
 
-function formatPing(value: number): string {
-  return Number(value).toFixed(2)
+function formatVisionValue(key: VisionMetricKey, value: number): string {
+  const n = Number(value)
+  if (key === 'visionScore') return n.toFixed(1)
+  return n.toFixed(2)
 }
 
-function pingValue(row: PingsTableRow, key: PingMetricKey): number {
+function visionValue(row: VisionTableRow, key: VisionMetricKey): number {
   return Number(row[key] ?? 0)
 }
 
-function sortIndicator(col: PingsSortCol): string {
-  if (p.pingsSortColumn !== col) return ''
-  return p.pingsSortDir === 'asc' ? ' ▲' : ' ▼'
+function sortIndicator(col: VisionSortCol): string {
+  if (p.visionSortColumn !== col) return ''
+  return p.visionSortDir === 'asc' ? ' ▲' : ' ▼'
 }
 
-function pingsMessage(message: string | undefined): string {
+function visionMessage(message: string | undefined): string {
   if (!message) return ''
   if (message === 'Database not configured.' || message === 'Database not configured') {
-    return String(p.t?.('statisticsPage.pingsDbNotConfigured') ?? message)
+    return String(p.t?.('statisticsPage.visionDbNotConfigured') ?? message)
   }
   return message
 }
@@ -74,32 +76,32 @@ function pingsMessage(message: string | undefined): string {
 
 <template>
   <div class="space-y-3">
-    <div v-if="p.pingsPending" class="text-text/70">{{ p.t('statisticsPage.loading') }}</div>
-    <div v-else-if="p.pingsError" class="rounded border border-error bg-surface p-3 text-error">
-      {{ p.pingsError }}
+    <div v-if="p.visionPending" class="text-text/70">{{ p.t('statisticsPage.loading') }}</div>
+    <div v-else-if="p.visionError" class="rounded border border-error bg-surface p-3 text-error">
+      {{ p.visionError }}
     </div>
     <div
-      v-else-if="p.pingsTableData?.message && !p.pingsTableData?.rows?.length"
+      v-else-if="p.visionTableData?.message && !p.visionTableData?.rows?.length"
       class="text-text/70"
     >
-      {{ pingsMessage(p.pingsTableData.message) }}
+      {{ visionMessage(p.visionTableData.message) }}
     </div>
-    <div v-else-if="!p.paginatedPingsRows?.length" class="text-text/70">
+    <div v-else-if="!p.paginatedVisionRows?.length" class="text-text/70">
       {{ p.t('statisticsPage.noData') }}
     </div>
     <template v-else>
       <StatisticsMobileSortBar
-        id="pings-mobile-sort"
-        v-model:column="pingsMobileSortColumn"
-        v-model:direction="pingsMobileSortDir"
-        :options="pingsMobileSortOptionsComputed"
+        id="vision-mobile-sort"
+        v-model:column="visionMobileSortColumn"
+        v-model:direction="visionMobileSortDir"
+        :options="visionMobileSortOptionsComputed"
       />
 
-      <div class="statistics-pings-mobile-list space-y-2 md:hidden">
+      <div class="statistics-vision-mobile-list space-y-2 md:hidden">
         <article
-          v-for="row in p.paginatedPingsRows"
-          :key="'ping-mobile-' + row.championId"
-          class="statistics-pings-mobile-card rounded-lg border border-primary/30 bg-surface/40 p-3"
+          v-for="row in p.paginatedVisionRows"
+          :key="'vision-mobile-' + row.championId"
+          class="statistics-vision-mobile-card rounded-lg border border-primary/30 bg-surface/40 p-3"
         >
           <div class="flex items-center gap-3">
             <img
@@ -121,24 +123,24 @@ function pingsMessage(message: string | undefined): string {
             </div>
             <div class="text-right">
               <div class="text-[10px] uppercase text-text/50">
-                {{ p.t('statisticsPage.pingsColTotal') }}
+                {{ p.t('statisticsPage.visionMetric.visionScore') }}
               </div>
               <div class="text-xl font-bold tabular-nums text-text">
-                {{ formatPing(row.totalPerGame) }}
+                {{ formatVisionValue('visionScore', row.visionScore) }}
               </div>
             </div>
           </div>
           <div class="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
             <div
-              v-for="key in PING_METRIC_KEYS"
-              :key="'ping-mobile-metric-' + row.championId + '-' + key"
+              v-for="key in VISION_METRIC_KEYS"
+              :key="'vision-mobile-metric-' + row.championId + '-' + key"
               class="rounded bg-primary/10 px-2 py-1.5"
             >
               <div class="text-[10px] uppercase text-text/55">
-                {{ p.t('statisticsPage.pingsMetric.' + key) }}
+                {{ p.t('statisticsPage.visionMetric.' + key) }}
               </div>
               <div class="font-bold tabular-nums text-text">
-                {{ formatPing(pingValue(row, key)) }}
+                {{ formatVisionValue(key, visionValue(row, key)) }}
               </div>
             </div>
           </div>
@@ -146,7 +148,7 @@ function pingsMessage(message: string | undefined): string {
       </div>
 
       <div class="hidden overflow-x-auto md:block">
-        <table class="statistics-table w-full min-w-[72rem] border-collapse text-sm">
+        <table class="statistics-table w-full min-w-[52rem] border-collapse text-sm">
           <thead>
             <tr
               class="border-b border-primary/30 text-left text-xs uppercase tracking-wide text-text/60"
@@ -155,39 +157,30 @@ function pingsMessage(message: string | undefined): string {
                 <button
                   type="button"
                   class="font-semibold hover:text-text"
-                  @click="p.setPingsSort('champion')"
+                  @click="p.setVisionSort('champion')"
                 >
-                  {{ p.t('statisticsPage.pingsColChampion') }}{{ sortIndicator('champion') }}
-                </button>
-              </th>
-              <th class="px-2 py-2 text-right">
-                <button
-                  type="button"
-                  class="font-semibold hover:text-text"
-                  @click="p.setPingsSort('totalPerGame')"
-                >
-                  {{ p.t('statisticsPage.pingsColTotal') }}{{ sortIndicator('totalPerGame') }}
+                  {{ p.t('statisticsPage.visionColChampion') }}{{ sortIndicator('champion') }}
                 </button>
               </th>
               <th
-                v-for="key in PING_METRIC_KEYS"
-                :key="'ping-th-' + key"
+                v-for="key in VISION_METRIC_KEYS"
+                :key="'vision-th-' + key"
                 class="px-2 py-2 text-right"
               >
                 <button
                   type="button"
                   class="font-semibold hover:text-text"
-                  @click="p.setPingsSort(key)"
+                  @click="p.setVisionSort(key)"
                 >
-                  {{ p.t('statisticsPage.pingsMetric.' + key) }}{{ sortIndicator(key) }}
+                  {{ p.t('statisticsPage.visionMetric.' + key) }}{{ sortIndicator(key) }}
                 </button>
               </th>
             </tr>
           </thead>
           <tbody>
             <tr
-              v-for="row in p.paginatedPingsRows"
-              :key="'ping-' + row.championId"
+              v-for="row in p.paginatedVisionRows"
+              :key="'vision-' + row.championId"
               class="border-b border-primary/15 hover:bg-primary/5"
             >
               <td class="sticky left-0 z-[1] bg-surface px-2 py-2">
@@ -203,15 +196,13 @@ function pingsMessage(message: string | undefined): string {
                   <div class="min-w-0 truncate font-medium text-text">{{ championLabel(row) }}</div>
                 </div>
               </td>
-              <td class="px-2 py-2 text-right font-semibold tabular-nums">
-                {{ formatPing(row.totalPerGame) }}
-              </td>
               <td
-                v-for="key in PING_METRIC_KEYS"
-                :key="'ping-td-' + row.championId + '-' + key"
+                v-for="key in VISION_METRIC_KEYS"
+                :key="'vision-td-' + row.championId + '-' + key"
                 class="px-2 py-2 text-right tabular-nums"
+                :class="key === 'visionScore' ? 'font-semibold' : ''"
               >
-                {{ formatPing(pingValue(row, key)) }}
+                {{ formatVisionValue(key, visionValue(row, key)) }}
               </td>
             </tr>
           </tbody>
@@ -219,11 +210,11 @@ function pingsMessage(message: string | undefined): string {
       </div>
 
       <StatisticsTabPagination
-        v-if="p.totalPingsPages > 1"
-        :page="p.pingsPage"
-        :total-pages="p.totalPingsPages"
-        @prev="p.onPingsPageUpdated(Math.max(1, p.pingsPage - 1))"
-        @next="p.onPingsPageUpdated(Math.min(p.totalPingsPages, p.pingsPage + 1))"
+        v-if="p.totalVisionPages > 1"
+        :page="p.visionPage"
+        :total-pages="p.totalVisionPages"
+        @prev="p.onVisionPageUpdated(Math.max(1, p.visionPage - 1))"
+        @next="p.onVisionPageUpdated(Math.min(p.totalVisionPages, p.visionPage + 1))"
       />
     </template>
   </div>

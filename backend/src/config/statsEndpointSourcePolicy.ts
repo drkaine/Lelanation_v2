@@ -98,6 +98,11 @@ export const STATS_ENDPOINT_SOURCE_POLICY: StatsEndpointSourceRule[] = [
     allowedSources: ['champion_stats'],
   },
   {
+    path: '/champions/vision-table',
+    policy: 'mv_only',
+    allowedSources: ['champion_stats'],
+  },
+  {
     path: '/tier-list',
     policy: 'mv_only',
     allowedSources: ['champion_stats', 'champion_vs_stats', 'match_outcome_stats'],

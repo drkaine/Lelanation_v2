@@ -48,19 +48,21 @@ const displayName = computed(() => {
   >
     <StatisticsChampionDetailLink
       :champion-id="championId"
-      class="flex min-w-0 items-center gap-2 max-lg:justify-center max-lg:gap-0"
+      class="shrink-0 max-lg:flex max-lg:justify-center"
     >
       <img
         v-if="portraitSrc"
         :src="portraitSrc"
         :alt="p.championName(championId) || ''"
-        class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover max-lg:h-10 max-lg:w-10"
+        class="h-[50px] w-[50px] border-2 border-black object-cover max-lg:h-10 max-lg:w-10"
         width="50"
         height="50"
         loading="lazy"
         decoding="async"
       />
-      <div class="min-w-0 max-lg:hidden">
+    </StatisticsChampionDetailLink>
+    <div class="flex min-w-0 flex-col gap-1 max-lg:hidden">
+      <StatisticsChampionDetailLink :champion-id="championId" class="min-w-0">
         <span
           class="block min-w-0 truncate text-[12px] text-accent text-text/90 underline decoration-accent/40 underline-offset-2"
         >
@@ -71,15 +73,14 @@ const displayName = computed(() => {
           />
           <template v-else>{{ displayName }}</template>
         </span>
-        <StatisticsChampionTransformSelect
-          v-if="showTransformDropdown && transformRows?.length"
-          class="mt-1"
-          :champion-id="championId"
-          :transform-rows="transformRows"
-          :model-value="transformView ?? 'all'"
-          @update:model-value="emit('update:transformView', $event)"
-        />
-      </div>
-    </StatisticsChampionDetailLink>
+      </StatisticsChampionDetailLink>
+      <StatisticsChampionTransformSelect
+        v-if="showTransformDropdown && transformRows?.length"
+        :champion-id="championId"
+        :transform-rows="transformRows"
+        :model-value="transformView ?? 'all'"
+        @update:model-value="emit('update:transformView', $event)"
+      />
+    </div>
   </div>
 </template>

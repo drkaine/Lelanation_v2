@@ -775,6 +775,9 @@
               <div v-else-if="activeTab === 'pings'" class="space-y-4">
                 <StatisticsPingsTab />
               </div>
+              <div v-else-if="activeTab === 'vision'" class="space-y-4">
+                <StatisticsVisionTab />
+              </div>
               <div v-else-if="activeTab === 'patchNotes'" class="space-y-4">
                 <StatisticsPatchNotesTab />
               </div>
@@ -865,6 +868,7 @@ import {
   type PatchNotesTargetType,
 } from '~/composables/statistics/useStatisticsPatchNotesTab'
 import { useStatisticsPingsTab } from '~/composables/statistics/useStatisticsPingsTab'
+import { useStatisticsVisionTab } from '~/composables/statistics/useStatisticsVisionTab'
 import {
   appendStatisticsCohortParams,
   cohortFiltersForTab,
@@ -938,6 +942,9 @@ const StatisticsAbandonsTab = defineAsyncComponent(
 )
 const StatisticsPingsTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsPingsTab.vue')
+)
+const StatisticsVisionTab = defineAsyncComponent(
+  () => import('~/components/statistics/tabs/StatisticsVisionTab.vue')
 )
 const StatisticsPatchNotesTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsPatchNotesTab.vue')
@@ -1038,6 +1045,7 @@ function normalizeLegacyTab(tab: string): StatisticsMainTab {
     tab === 'spells' ||
     tab === 'infos' ||
     tab === 'pings' ||
+    tab === 'vision' ||
     tab === 'patchNotes'
   ) {
     return tab
@@ -1075,6 +1083,7 @@ const activeTab = ref<
   | 'abandons'
   | 'bans'
   | 'pings'
+  | 'vision'
   | 'patchNotes'
 >(initialActiveTabFromRoute())
 
@@ -1091,6 +1100,7 @@ const STATISTICS_TAB_NAV_ORDER: readonly StatisticsMainTab[] = [
   'spells',
   'items',
   'pings',
+  'vision',
   'patchNotes',
   'infos',
 ]
@@ -1116,6 +1126,7 @@ const allTabs = computed(() => [
   { id: 'spells' as const, label: t('statisticsPage.tabSummonerSpells'), widgetId: 'spells' },
   { id: 'items' as const, label: t('statisticsPage.tabItems'), widgetId: 'items' },
   { id: 'pings' as const, label: t('statisticsPage.tabPings'), widgetId: 'pings' },
+  { id: 'vision' as const, label: t('statisticsPage.tabVision'), widgetId: 'vision' },
   { id: 'patchNotes' as const, label: t('statisticsPage.tabPatchNotes'), widgetId: 'patchNotes' },
   { id: 'infos' as const, label: t('statisticsPage.tabInfos'), widgetId: 'infos' },
 ])
@@ -4686,6 +4697,17 @@ const pingsTab = useStatisticsPingsTab({
   championName,
 })
 
+const visionTab = useStatisticsVisionTab({
+  championSearchQuery,
+  statsVersionFilter,
+  statsFetch,
+  apiUrl,
+  championGlobalTableQueryForVersion: (versionFull: string | null | undefined) =>
+    championGlobalTableQueryForVersion(versionFull, 'vision'),
+  gameVersion,
+  championName,
+})
+
 const patchNotesTab = useStatisticsPatchNotesTab({
   patchNotesFromVersion,
   patchNotesToVersion,
@@ -4923,6 +4945,7 @@ watch(activeTab, async tab => {
   if (tab === 'abandons') loadOverviewAbandons()
   if (tab === 'surrender') loadSurrenderMatrix()
   if (tab === 'pings') pingsTab.loadPingsTable()
+  if (tab === 'vision') visionTab.loadVisionTable()
   if (tab === 'patchNotes') {
     runInBackground(loadPatchNotesVersionOptions())
     patchNotesTab.loadPatchNotesStats()
@@ -4957,6 +4980,7 @@ watch([statsVersionFilter, statsRoleFilter, statsOtpFilter], () => {
     loadObjectivesBaseline()
   }
   if (activeTab.value === 'pings') pingsTab.loadPingsTable()
+  if (activeTab.value === 'vision') visionTab.loadVisionTable()
   if (activeTab.value === 'surrender') loadSurrenderMatrix()
   if (activeTab.value === 'duration') loadOverviewDurationWinrate()
   if (activeTab.value === 'abandons') loadOverviewAbandons()
@@ -4999,6 +5023,7 @@ watch(progressionFromVersion, () => {
     loadObjectivesBaseline()
   }
   if (activeTab.value === 'pings') pingsTab.loadPingsTable()
+  if (activeTab.value === 'vision') visionTab.loadVisionTable()
   if (activeTab.value === 'surrender') loadSurrenderMatrix()
   if (activeTab.value === 'duration') loadOverviewDurationWinrate()
   if (activeTab.value === 'abandons') loadOverviewAbandons()
@@ -5311,8 +5336,16 @@ if (__statisticsVm?.proxy) {
             pingsTab.pingsPage.value = v
           }
         }
+        if (key === 'onVisionPageUpdated') {
+          return (v: number) => {
+            visionTab.visionPage.value = v
+          }
+        }
         if (Object.prototype.hasOwnProperty.call(pingsTab, key)) {
           return unref((pingsTab as any)[key])
+        }
+        if (Object.prototype.hasOwnProperty.call(visionTab, key)) {
+          return unref((visionTab as any)[key])
         }
         if (Object.prototype.hasOwnProperty.call(patchNotesTab, key)) {
           return unref((patchNotesTab as any)[key])
@@ -5336,6 +5369,13 @@ if (__statisticsVm?.proxy) {
         if (typeof key === 'string') {
           if (Object.prototype.hasOwnProperty.call(pingsTab, key)) {
             const binding = (pingsTab as Record<string, unknown>)[key]
+            if (isRef(binding)) {
+              ;(binding as { value: unknown }).value = value
+              return true
+            }
+          }
+          if (Object.prototype.hasOwnProperty.call(visionTab, key)) {
+            const binding = (visionTab as Record<string, unknown>)[key]
             if (isRef(binding)) {
               ;(binding as { value: unknown }).value = value
               return true

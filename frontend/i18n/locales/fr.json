@@ -451,11 +451,22 @@
     "objectivesCombinedEmpty": "Aucune donnée objectifs pour cette cohorte.",
     "tabInfos": "Infos",
     "tabPings": "Pings",
+    "tabVision": "Vision",
     "tabPatchNotes": "Notes de patch",
     "pingsColChampion": "Champion",
     "pingsColGames": "Parties",
     "pingsColTotal": "Total / partie",
     "pingsDbNotConfigured": "Base de données non configurée.",
+    "visionColChampion": "Champion",
+    "visionDbNotConfigured": "Base de données non configurée.",
+    "visionMetric": {
+      "visionScore": "Score de vision",
+      "visionScorePerMinute": "Score / min",
+      "wardsPlaced": "Balises posées",
+      "wardsKilled": "Balises détruites",
+      "controlWardsPlaced": "Balises de contrôle",
+      "stealthWardsPlaced": "Balises invisibles"
+    },
     "pingsMetric": {
       "allIn": "All-in",
       "assistMe": "Aide-moi",

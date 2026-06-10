@@ -1,12 +1,7 @@
 /**
- * Pings moyens par champion (match-v5 participant ping counters agrégés dans champion_stats).
+ * Stats vision moyennes par champion (score, balises posées / détruites, etc.).
  */
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
-import {
-  CHAMPION_PING_METRIC_KEYS,
-  CHAMPION_PING_SQL_COLUMN,
-  type ChampionPingMetricKey,
-} from '../constants/championPingMetrics.js'
 import { buildRawMatchCond } from './ChampionGlobalTableService.js'
 import { matchVersionedAggFrom } from './statsAggArchive.js'
 import {
@@ -15,13 +10,29 @@ import {
   statsRoleSqlLiteral,
 } from '../utils/statsFilters.js'
 
-export { CHAMPION_PING_METRIC_KEYS, type ChampionPingMetricKey }
+export const CHAMPION_VISION_METRIC_KEYS = [
+  'visionScore',
+  'visionScorePerMinute',
+  'wardsPlaced',
+  'wardsKilled',
+  'controlWardsPlaced',
+  'stealthWardsPlaced',
+] as const
 
-export type ChampionPingsTableRow = {
+export type ChampionVisionMetricKey = (typeof CHAMPION_VISION_METRIC_KEYS)[number]
+
+const VISION_SQL_COLUMN: Record<ChampionVisionMetricKey, string> = {
+  visionScore: 'sum_vision_score',
+  visionScorePerMinute: 'sum_vision_score_per_minute',
+  wardsPlaced: 'sum_wards_placed',
+  wardsKilled: 'sum_wards_killed',
+  controlWardsPlaced: 'sum_control_wards_placed',
+  stealthWardsPlaced: 'sum_stealth_wards_placed',
+}
+
+export type ChampionVisionTableRow = {
   championId: number
-  games: number
-  totalPerGame: number
-} & Record<ChampionPingMetricKey, number>
+} & Record<ChampionVisionMetricKey, number>
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100
@@ -31,11 +42,11 @@ function avgPerGame(sum: number, games: number): number {
   return games > 0 ? round2(sum / games) : 0
 }
 
-export async function getChampionPingsTable(
+export async function getChampionVisionTable(
   version?: string | string[] | null,
   rankTier?: string | string[] | null,
   role?: string | null
-): Promise<{ rows: ChampionPingsTableRow[] } | null> {
+): Promise<{ rows: ChampionVisionTableRow[] } | null> {
   if (!isDatabaseConfigured()) return null
 
   const csFrom = await matchVersionedAggFrom('agg_champion_team_objective_stats', version, 'cs')
@@ -47,14 +58,14 @@ export async function getChampionPingsTable(
   if (roleDb) whereParts.push(`cs.role = '${statsRoleSqlLiteral(roleDb)}'`)
   const where = whereParts.join(' AND ')
 
-  const sumSelect = CHAMPION_PING_METRIC_KEYS.map(
-    key => `COALESCE(SUM(cs.${CHAMPION_PING_SQL_COLUMN[key]}), 0)::bigint AS sum_${key}`
+  const sumSelect = CHAMPION_VISION_METRIC_KEYS.map(
+    key => `COALESCE(SUM(cs.${VISION_SQL_COLUMN[key]}), 0)::double precision AS sum_${key}`
   ).join(',\n      ')
 
   type SqlRow = {
     champion_id: number
     games: bigint
-  } & Record<`sum_${ChampionPingMetricKey}`, bigint>
+  } & Record<`sum_${ChampionVisionMetricKey}`, number>
 
   const raw = await queryRawUnsafe<SqlRow[]>(`
     SELECT
@@ -68,23 +79,18 @@ export async function getChampionPingsTable(
     ORDER BY champion_id ASC
   `)
 
-  const rows: ChampionPingsTableRow[] = raw.map(row => {
+  const rows: ChampionVisionTableRow[] = raw.map(row => {
     const games = Number(row.games ?? 0)
-    const pings = {} as Record<ChampionPingMetricKey, number>
-    let totalSum = 0
-    for (const key of CHAMPION_PING_METRIC_KEYS) {
-      const sum = Number(row[`sum_${key}`] ?? 0)
-      totalSum += sum
-      pings[key] = avgPerGame(sum, games)
+    const metrics = {} as Record<ChampionVisionMetricKey, number>
+    for (const key of CHAMPION_VISION_METRIC_KEYS) {
+      metrics[key] = avgPerGame(Number(row[`sum_${key}`] ?? 0), games)
     }
     return {
       championId: Number(row.champion_id),
-      games,
-      totalPerGame: avgPerGame(totalSum, games),
-      ...pings,
+      ...metrics,
     }
   })
 
-  rows.sort((a, b) => b.totalPerGame - a.totalPerGame || a.championId - b.championId)
+  rows.sort((a, b) => b.visionScore - a.visionScore || a.championId - b.championId)
   return { rows }
 }
