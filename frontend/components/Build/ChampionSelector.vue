@@ -1,32 +1,33 @@
 <template>
   <div class="champion-selector" style="background: transparent !important">
-    <!-- Search Bar -->
-    <div class="mb-2">
+    <!-- Search + role filters -->
+    <div class="champion-toolbar mb-3">
+      <label for="champion-search" class="sr-only">
+        {{ t('common.search') }}
+      </label>
       <input
+        id="champion-search"
         v-model="searchQuery"
         type="text"
         :placeholder="t('common.search')"
-        class="w-full rounded border border-primary/50 bg-transparent px-2 py-1 text-sm text-text placeholder:text-text/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50"
+        class="champion-search-input rounded border border-primary/50 bg-transparent px-2 py-1 text-sm text-text placeholder:text-text/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50"
         @input="handleSearch"
       />
-    </div>
-
-    <!-- Role Filters -->
-    <div class="mb-3 flex flex-wrap gap-0">
-      <button
-        v-for="role in availableRoles"
-        :key="role"
-        :class="[
-          'rounded-lg border px-3 py-1.5 text-sm font-semibold transition-all',
-          selectedRoles.includes(role)
-            ? 'border-surface bg-accent text-background'
-            : 'border-accent bg-surface text-text',
-        ]"
-        style="margin-right: -1px"
-        @click="toggleRole(role)"
-      >
-        {{ translateRole(role) }}
-      </button>
+      <div class="champion-filter-bar flex flex-wrap">
+        <button
+          v-for="role in availableRoles"
+          :key="role"
+          :class="[
+            'champion-filter-btn rounded-lg border text-sm font-semibold transition-all',
+            selectedRoles.includes(role)
+              ? 'border-surface bg-accent text-background'
+              : 'border-accent bg-surface text-text',
+          ]"
+          @click="toggleRole(role)"
+        >
+          {{ translateRole(role) }}
+        </button>
+      </div>
     </div>
 
     <div v-if="championsStore.status === 'loading'" class="py-8 text-center">
@@ -187,6 +188,29 @@ watch(locale, () => {
 <style scoped>
 .champion-selector {
   background: transparent !important;
+}
+
+.champion-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+.champion-search-input {
+  width: 6.5rem;
+  min-width: 5rem;
+  flex: 0 0 auto;
+}
+
+.champion-filter-bar {
+  flex: 1 1 auto;
+  gap: 5px;
+}
+
+.champion-filter-btn {
+  padding: 5px;
+  margin: 0;
 }
 
 .champions-list {

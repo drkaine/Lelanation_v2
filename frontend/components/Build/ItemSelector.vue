@@ -1,7 +1,7 @@
 <template>
   <div class="item-selector" style="background: transparent !important">
-    <!-- Search Bar -->
-    <div class="mb-2">
+    <!-- Search + filters -->
+    <div class="item-toolbar mb-3">
       <label for="item-search" class="sr-only">
         {{ t('common.search') }}
       </label>
@@ -10,50 +10,48 @@
         v-model="searchQuery"
         type="text"
         :placeholder="t('common.search')"
-        class="w-full rounded border border-primary/50 bg-transparent px-2 py-1 text-sm text-text placeholder:text-text/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50"
+        class="item-search-input rounded border border-primary/50 bg-transparent px-2 py-1 text-sm text-text placeholder:text-text/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50"
         @input="handleSearch"
       />
-    </div>
-
-    <!-- Tag Filters -->
-    <div class="item-filter-bar mb-3 flex flex-wrap">
-      <button
-        v-for="tag in availableTags"
-        :key="tag"
-        :class="[
-          'item-filter-btn rounded-lg border text-sm font-semibold transition-all',
-          selectedTags.includes(tag)
-            ? 'border-surface bg-accent text-background'
-            : 'border-accent bg-surface text-text',
-        ]"
-        @click="toggleTag(tag)"
-      >
-        {{ translateTag(tag) }}
-      </button>
-      <button
-        type="button"
-        :class="[
-          'item-filter-btn rounded-lg border text-sm font-semibold transition-all',
-          showGoldValue
-            ? 'border-surface bg-primary text-primary-light'
-            : 'border-primary bg-surface text-text',
-        ]"
-        @click="showGoldValue = !showGoldValue"
-      >
-        {{ t('item.selector.showGoldValue') }}
-      </button>
-      <button
-        type="button"
-        :class="[
-          'item-filter-btn rounded-lg border text-sm font-semibold transition-all',
-          showGoldEfficiency
-            ? 'border-surface bg-primary text-primary-light'
-            : 'border-primary bg-surface text-text',
-        ]"
-        @click="showGoldEfficiency = !showGoldEfficiency"
-      >
-        {{ t('item.selector.showGoldEfficiency') }}
-      </button>
+      <div class="item-filter-bar flex flex-wrap">
+        <button
+          v-for="tag in availableTags"
+          :key="tag"
+          :class="[
+            'item-filter-btn rounded-lg border text-sm font-semibold transition-all',
+            selectedTags.includes(tag)
+              ? 'border-surface bg-accent text-background'
+              : 'border-accent bg-surface text-text',
+          ]"
+          @click="toggleTag(tag)"
+        >
+          {{ translateTag(tag) }}
+        </button>
+        <button
+          type="button"
+          :class="[
+            'item-filter-btn rounded-lg border text-sm font-semibold transition-all',
+            showGoldValue
+              ? 'border-surface bg-primary text-primary-light'
+              : 'border-primary bg-surface text-text',
+          ]"
+          @click="showGoldValue = !showGoldValue"
+        >
+          {{ t('item.selector.showGoldValue') }}
+        </button>
+        <button
+          type="button"
+          :class="[
+            'item-filter-btn rounded-lg border text-sm font-semibold transition-all',
+            showGoldEfficiency
+              ? 'border-surface bg-primary text-primary-light'
+              : 'border-primary bg-surface text-text',
+          ]"
+          @click="showGoldEfficiency = !showGoldEfficiency"
+        >
+          {{ t('item.selector.showGoldEfficiency') }}
+        </button>
+      </div>
     </div>
 
     <p v-if="supportAtlasUpgradeMissing" class="item-selector-warning mb-3">
@@ -984,7 +982,21 @@ watch(locale, () => {
   background: transparent !important;
 }
 
+.item-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+.item-search-input {
+  width: 6.5rem;
+  min-width: 5rem;
+  flex: 0 0 auto;
+}
+
 .item-filter-bar {
+  flex: 1 1 auto;
   gap: 5px;
 }
 

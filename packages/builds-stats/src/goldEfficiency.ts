@@ -1,7 +1,6 @@
-/**
- * Gold efficiency calculation for builds.
- * Reference prices from https://wiki.leagueoflegends.com/en-us/Gold_efficiency
- */
+import { resolveItemStatsForGoldValue, type ItemForGoldValueStats } from "./itemStatsEnrichment.js";
+
+export type { ItemForGoldValueStats };
 
 /** Basic reference items (cheapest item providing only that stat). */
 const GOLD_PER_STAT = {
@@ -181,15 +180,19 @@ export function calculateGoldEfficiency(
   return (goldValue / itemPrice) * 100;
 }
 
-type ItemGoldInput = {
-  stats?: ItemStatsRecord;
+type ItemGoldInput = ItemForGoldValueStats & {
   gold?: { total: number; base: number; sell: number; purchasable: boolean };
 };
 
+export function calculateItemGoldValueFromItem(
+  item: ItemForGoldValueStats | null | undefined
+): number {
+  return calculateItemGoldValue(resolveItemStatsForGoldValue(item));
+}
+
 export function calculateItemGoldEfficiency(item: ItemGoldInput): number | null {
   if (!item.gold?.total || item.gold.total === 0) return null;
-  if (!item.stats) return 0;
-  const goldValue = calculateItemGoldValue(item.stats);
+  const goldValue = calculateItemGoldValueFromItem(item);
   return calculateGoldEfficiency(goldValue, item.gold.total);
 }
 
@@ -204,9 +207,7 @@ export function calculateBuildGoldEfficiency(items: ItemGoldInput[]): {
   for (const item of items) {
     if (!item.gold?.total) continue;
     totalGoldCost += item.gold.total;
-    if (item.stats) {
-      totalGoldValue += calculateItemGoldValue(item.stats);
-    }
+    totalGoldValue += calculateItemGoldValueFromItem(item);
   }
 
   const goldEfficiency =

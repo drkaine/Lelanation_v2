@@ -10,8 +10,14 @@ export {
   calculateGoldValue,
   calculateGoldEfficiency,
   calculateItemGoldValue,
+  calculateItemGoldValueFromItem,
   calculateItemGoldEfficiency,
   calculateBuildGoldEfficiency,
   itemStatsToGoldValueStats,
   type GoldValueStats,
+  type ItemForGoldValueStats,
 } from "./goldEfficiency";
+export {
+  parseStatsFromItemDescription,
+  resolveItemStatsForGoldValue,
+} from "./itemStatsEnrichment";

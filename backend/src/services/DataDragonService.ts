@@ -291,6 +291,12 @@ export class DataDragonService {
     if (label.includes('mana') && (label.includes('regen') || label.includes('regeneration'))) {
       return hasPercent ? 'PercentMPRegenMod' : 'FlatMPRegenMod'
     }
+    if (
+      (label.includes('health') || label.includes('pv') || label.includes('sante')) &&
+      (label.includes('regen') || label.includes('regeneration'))
+    ) {
+      return hasPercent ? 'PercentHPRegenMod' : 'FlatHPRegenMod'
+    }
     if (label.includes('regeneration') && (label.includes('pv') || label.includes('sante'))) {
       return hasPercent ? 'PercentHPRegenMod' : 'FlatHPRegenMod'
     }

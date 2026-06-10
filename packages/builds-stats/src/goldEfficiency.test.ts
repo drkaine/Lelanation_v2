@@ -4,6 +4,7 @@ import {
   calculateGoldValue,
   calculateItemGoldEfficiency,
   calculateItemGoldValue,
+  calculateItemGoldValueFromItem,
   itemStatsToGoldValueStats,
 } from "./goldEfficiency.js";
 
@@ -74,5 +75,29 @@ describe("goldEfficiency wiki reference prices", () => {
     const mp = calculateItemGoldValue({ PercentMPRegenMod: 50 });
     assert.equal(hp, 300);
     assert.equal(mp, 200);
+  });
+
+  it("World Atlas: enriches missing regen stats (wiki 255g, 63.75%)", () => {
+    const atlas = {
+      id: "3865",
+      stats: { FlatHPPoolMod: 30 },
+      tags: ["GoldPer"],
+      effect: { Effect1Amount: "3" },
+      gold: { total: 400, base: 400, sell: 160, purchasable: true },
+    };
+    const value = calculateItemGoldValueFromItem(atlas);
+    assert.equal(value, 255);
+    const eff = calculateItemGoldEfficiency(atlas);
+    assert.ok(eff != null && Math.abs(eff - 63.75) < 0.01);
+  });
+
+  it("parses EN Base Health Regen from description", () => {
+    const value = calculateItemGoldValueFromItem({
+      id: "9999",
+      description:
+        "<mainText><stats><attention>25%</attention> Base Health Regen</stats></mainText>",
+      stats: {},
+    });
+    assert.equal(value, 75);
   });
 });

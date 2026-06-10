@@ -6,7 +6,7 @@
 import type { Item, ItemStats } from '@lelanation/shared-types'
 import {
   calculateItemGoldEfficiency,
-  calculateItemGoldValue,
+  calculateItemGoldValueFromItem,
   getGoldPer10FromItem,
 } from '@lelanation/builds-stats'
 
@@ -131,20 +131,28 @@ export function formatItemStatsForDisplay(
 
 /** Item with optional gold and stats (Data Dragon / ItemsStore shape). */
 type ItemWithGold = {
+  id?: string
+  description?: string
+  tags?: string[]
+  effect?: Record<string, string | undefined>
   gold?: { total: number; base?: number; sell: number; purchasable?: boolean }
   stats?: Record<string, number | undefined>
 }
 
 /** Gold value of item stats (wiki reference prices via @lelanation/builds-stats). */
 export function getItemGoldValue(item: ItemWithGold | undefined): number {
-  return calculateItemGoldValue(item?.stats)
+  return calculateItemGoldValueFromItem(item)
 }
 
 /** Gold efficiency of item stats vs price (%), or null when not computable. */
 export function getItemGoldEfficiency(item: ItemWithGold | undefined): number | null {
   if (!item?.gold?.total) return null
   return calculateItemGoldEfficiency({
+    id: item.id,
     stats: item.stats,
+    description: item.description,
+    tags: item.tags,
+    effect: item.effect,
     gold: {
       total: item.gold.total,
       sell: item.gold.sell,
@@ -171,7 +179,11 @@ export function formatItemEconomicForDisplay(item: ItemWithGold | undefined): st
   rows.push(`Prix: ${item.gold.total}`)
   if (item.gold.sell != null) rows.push(`Revente: ${item.gold.sell}`)
   const eff = calculateItemGoldEfficiency({
-    ...item,
+    id: item.id,
+    stats: item.stats,
+    description: item.description,
+    tags: item.tags,
+    effect: item.effect,
     gold: {
       total: item.gold.total,
       sell: item.gold.sell,
