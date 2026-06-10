@@ -2,36 +2,40 @@
 
 ## Community Dragon
 
-**Community Dragon** fournit les définitions de sorts des champions (theorycraft), avec les **bonnes valeurs** (coefficients, effectAmounts, cooldown/cost/range par rang) selon la locale.
+Community Dragon sert à deux usages distincts dans le projet.
 
-**Source** : API v1 Riot game data, par **locale** (default = en_US sur CD, on utilise `fr_fr` pour le français) :  
-`https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/{locale}/v1/champions/{id}.json`  
-Ex. `global/fr_fr/v1/champions/1.json` = Annie en français, `global/default/v1/champions/1.json` = Annie en anglais.  
-Locales disponibles : `default`, `fr_fr`, `de_de`, `es_es`, `it_it`, `pt_br`, `ja_jp`, `ko_kr`, `zh_cn`, etc.
+### Theorycraft (données champions)
 
-**Locale** : par défaut le sync utilise `fr_fr`. Pour une autre langue, définir la variable d’environnement `COMMUNITY_DRAGON_LOCALE` (ex. `COMMUNITY_DRAGON_LOCALE=en_gb`).
+**Community Dragon** fournit les définitions de sorts (coefficients, effectAmounts, cooldown/cost/range par rang) selon la locale.
 
-Le flux :
+**Source** : API v1 Riot game data :  
+`https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/{locale}/v1/champions/{id}.json`
 
-1. **Sync côté backend** : le cron `communityDragonSync` et le script `syncData` appellent `CommunityDragonService.syncAllChampions()`, qui télécharge les JSON v1 par **clé numérique** (depuis championFull.json) pour la locale configurée, et les enregistre dans `backend/data/community-dragon/` (ex. `266.json`).
-2. **Fusion** : `ChampionMergeService.mergeChampionFull()` fusionne DDragon (stats, images, structure) et CD (valeurs de sorts) dans un seul `championFull.json` (par langue).
-3. **Copie puis suppression** : `StaticAssetsService.copyCommunityDragonDataToFrontend()` copie les JSON CD vers `frontend/public/data/community-dragon/`, puis supprime les fichiers du backend. Les championFull fusionnés sont déjà dans le répertoire game (DDragon) et sont copiés avec le reste des assets.
-4. **Utilisation** : le frontend charge la liste champions via championFull fusionné ; les sorts détaillés (theorycraft) via `/data/community-dragon/{championKey}.json`. Le parser lit le format Community nettoyé (`spells` à la racine) et en déduit coefficients, dégâts de base par rang, cooldown, coût et portée.
+Le flux theorycraft :
 
-Le backend ne conserve pas de copie après la copie vers le frontend.
+1. **Data Dragon sync** : `DataDragonService` télécharge `championFull.json` (stats, images, structure).
+2. **Build theorycraft** : `TheorycraftDataBuilderService.build()` fusionne DDragon + CD (API + bins) et écrit `frontend/public/data/game/{version}/{lang}/champions/{id}.json` (ex. `kalista.json`).
+3. **Utilisation frontend** : le theorycraft charge ces fichiers par champion ; pas de JSON CD à la racine de `community-dragon/`.
 
-### Fusion CD + Data Dragon (une seule source)
+Le cache CD intermédiaire est dans `backend/data/theorycraft-cache/` (pas versionné).
 
-Après le sync CD, une fusion (ChampionMergeService) combine DDragon (stats de base, images, structure) et CD (sorts avec coefficients/coûts/cooldowns/range) dans un seul championFull.json (ex. fr_FR). Une seule source côté affichage ; champion.json n'est plus produit. L'API sert championFull même si on demande champions sans full=true (fallback).
+### Assets statiques (images)
 
-### Nettoyage des payloads synchronisés
+Le cron `communityDragonSync` et le script `syncData` appellent `CommunityDragonService` pour synchroniser uniquement :
 
-Pendant le sync:
+- `frontend/public/data/community-dragon/ranked-emblem/` — emblèmes de rang
+- `frontend/public/data/community-dragon/scoreboard-objectives/` — icônes objectifs
+- `frontend/public/data/community-dragon/map-planner/` — assets carte tactique
+
+`StaticAssetsService.copyCommunityDragonDataToFrontend()` copie ces sous-dossiers depuis le backend si besoin, et supprime les éventuels JSON champions legacy à la racine.
+
+### Nettoyage des payloads Data Dragon
+
+Pendant le sync DDragon :
 - `championFull.json` est réduit aux champs utiles (`id/key/name/title/image/tags/partype/stats/spells/passive`).
 - `runesReforged.json` supprime `shortDesc` sur chaque rune.
 - `summoner.json` supprime `description` sur chaque sort.
 - `item.json` supprime `maps` après filtrage backend.
-- Les fichiers Community champion (`frontend/public/data/community-dragon/{key}.json`) sont nettoyés au format compact centré sur `spells` (pas de dump brut complet du champion).
 
 ---
 

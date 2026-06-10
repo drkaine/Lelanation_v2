@@ -84,41 +84,8 @@ async function main(): Promise<void> {
     return
   }
 
-  // --- Community Dragon ---
+  // --- Community Dragon (static assets only; theorycraft CD data via TheorycraftDataBuilder) ---
   const communityDragonService = new CommunityDragonService()
-
-  const cdSync = await communityDragonService.syncAllChampions()
-  if (cdSync.isErr()) {
-    const err = cdSync.unwrapErr()
-    console.error('[sync:data] Community Dragon sync failed:', err)
-    const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
-    await discordService.sendAlert(
-      '❌ Manual Data Sync - Community Dragon Failed',
-      'Failed to synchronize Community Dragon data',
-      err,
-      {
-        duration: `${duration}s`,
-        timestamp: new Date().toISOString(),
-      }
-    )
-    process.exitCode = 1
-    return
-  }
-
-  const cdSyncData = cdSync.unwrap()
-  if (cdSyncData.errors.length > 0) {
-    console.warn(
-      `[sync:data] Community Dragon sync completed with ${cdSyncData.errors.length} errors:`
-    )
-    cdSyncData.errors.slice(0, 10).forEach((err) => {
-      console.warn(`[sync:data]   - ${err.champion}: ${err.error}`)
-    })
-    if (cdSyncData.errors.length > 10) {
-      console.warn(
-        `[sync:data]   ... and ${cdSyncData.errors.length - 10} more errors`
-      )
-    }
-  }
 
   const emblemSync = await communityDragonService.syncRankedEmblems()
   if (emblemSync.isErr()) {
@@ -248,9 +215,7 @@ async function main(): Promise<void> {
   const successContext: Record<string, unknown> = {
     version: ddSyncData.version,
     dataDragonSyncedAt: ddSyncData.syncedAt.toISOString(),
-    communityDragonSynced: cdSyncData.synced,
-    communityDragonFailed: cdSyncData.failed,
-    communityDragonSkipped: cdSyncData.skipped,
+    communityDragonEmblemsSynced: emblemSync.isOk() ? emblemSync.unwrap().synced : 0,
     communityDragonObjectiveIconsSynced: objectiveIconsSync.isOk()
       ? objectiveIconsSync.unwrap().synced
       : 0,
@@ -262,10 +227,6 @@ async function main(): Promise<void> {
     assetsImagesSkipped: copyStats.imagesSkipped,
     duration: `${duration}s`,
     timestamp: new Date().toISOString(),
-  }
-
-  if (cdSyncData.errors.length > 0) {
-    successContext.communityDragonErrors = cdSyncData.errors.length
   }
 
   if (youtubeResult.isOk()) {

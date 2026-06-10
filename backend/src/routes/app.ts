@@ -2,7 +2,7 @@
  * Routes for the companion app: track download, download stats, optional ranked match hints from the desktop app.
  */
 import { Router, type Request, type Response } from 'express'
-import { join } from 'path'
+import { isAbsolute, join } from 'path'
 import { promises as fs } from 'fs'
 import { tryReserveTrackedMatch } from '../worker/processedMatchReserve.js'
 
@@ -75,6 +75,30 @@ router.get('/download-stats', async (_req: Request, res: Response) => {
   } catch {
     return res.status(500).json({ error: 'Failed to read download stats' })
   }
+})
+
+/**
+ * GET /api/app/download — public companion installer (same sources as admin route).
+ */
+router.get('/download', async (_req: Request, res: Response) => {
+  const externalDownloadUrl = process.env.COMPANION_APP_DOWNLOAD_URL?.trim()
+  if (externalDownloadUrl) {
+    return res.json({ redirect: externalDownloadUrl })
+  }
+  const defaultPath = join(process.cwd(), 'data', 'releases', 'lelanation-companion-setup.exe')
+  const raw = process.env.COMPANION_APP_INSTALLER_PATH
+  const absolutePath = raw ? (isAbsolute(raw) ? raw : join(process.cwd(), raw)) : defaultPath
+  try {
+    await fs.access(absolutePath)
+  } catch {
+    return res.status(404).json({
+      error: 'Installer not available',
+      hint: 'Set COMPANION_APP_INSTALLER_PATH or place the installer in data/releases/',
+    })
+  }
+  const filename = absolutePath.split(/[/\\]/).pop() ?? 'lelanation-companion-setup.exe'
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+  return res.sendFile(absolutePath)
 })
 
 /**

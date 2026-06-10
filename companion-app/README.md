@@ -32,23 +32,40 @@ npm run tauri build  # Build (Windows : .msi/.exe dans src-tauri/target/release/
 
 ## Version (une seule source de vérité)
 
-La version est pilotée par **`package.json`** uniquement. Un hook `postversion` synchronise automatiquement vers `tauri.conf.json` et `Cargo.toml`.
+La version est pilotée par **`companion-app/package.json`**. Le script `scripts/sync-version.mjs` propage vers `tauri.conf.json` et `Cargo.toml`.
 
-Pour monter en version (une seule commande) :
+### Release + tag CI (`companion-v*`)
+
+**Recommandé** — une commande aligne les 3 fichiers, commit le bump, crée le tag annoté (déclenche la CI Windows) :
 
 ```bash
-# Version exacte
-npm version 0.12.0
-
-# Ou sémantiquement
-npm version patch   # 0.11.0 → 0.11.1
-npm version minor   # 0.11.0 → 0.12.0
-npm version major   # 0.11.0 → 1.0.0
-xvfb-run -a npm run tauri dev
+# Depuis la racine du monorepo
+make companion-tag VERSION=1.0.0 MSG="Companion installer 1.0.0"
+git push origin HEAD
+git push origin companion-v1.0.0
 ```
 
-Cela met à jour `package.json`, puis le script `scripts/sync-version.mjs` met à jour `tauri.conf.json` et `Cargo.toml`.  
-Sans commit/tag automatique : `npm version 0.12.0 --no-git-tag-version`.
+Équivalent npm :
+
+```bash
+cd companion-app
+npm run release:tag -- 1.0.0 -m "Companion installer 1.0.0"
+```
+
+Aperçu sans git : `npm run release:tag -- 1.0.0 --dry-run`
+
+### Bump local sans tag (dev)
+
+```bash
+cd companion-app
+npm version 0.12.0          # postversion → sync-version.mjs
+# ou
+npm run version:sync -- 1.0.0
+```
+
+Sans commit/tag npm : `npm version 0.12.0 --no-git-tag-version`
+
+> Évite `git tag companion-v…` à la main sans passer par `release:tag` / `make companion-tag` : les fichiers locaux resteraient désynchronisés (ex. `package.json` 0.28 vs `tauri.conf.json` 1.0). La CI réinjecte la version au build, mais le dépôt doit rester cohérent.
 
 ## « Éditeur inconnu » sous Windows
 
@@ -68,19 +85,11 @@ La workflow GitHub installer Windows se déclenche sur :
 - tags `v*` (ex: `v1.3.0`)
 - tags `companion-v*` (ex: `companion-v1.3.0`)
 
-Exemple pour taguer le commit courant et déclencher la CI :
+Exemple (préféré) :
 
 ```bash
-git add .
-git commit -m "release: companion 1.3.0"
-git tag -a companion-v1.3.0 -m "Companion installer 1.3.0"
-git push origin main --tags
-```
-
-Si tu veux taguer un commit précis (pas forcément le HEAD) :
-
-```bash
-git tag -a companion-v1.3.0 <sha_du_commit> -m "Companion installer 1.3.0"
+make companion-tag VERSION=1.3.0 MSG="Companion installer 1.3.0"
+git push origin HEAD
 git push origin companion-v1.3.0
 ```
 

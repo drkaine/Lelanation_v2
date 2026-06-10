@@ -8,6 +8,8 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "version:sync": "node scripts/sync-version.mjs",
+    "release:tag": "node scripts/companion-tag.mjs",
     "postversion": "node scripts/sync-version.mjs"
   },
   "dependencies": {

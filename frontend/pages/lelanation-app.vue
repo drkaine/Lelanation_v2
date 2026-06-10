@@ -42,7 +42,7 @@
       <ul class="mt-4 space-y-2 text-text/85">
         <li>• {{ t('lelanationApp.features.importBuilds') }}</li>
         <li>• {{ t('lelanationApp.features.localFavorites') }}</li>
-        <li>• {{ t('lelanationApp.features.matchSync') }}</li>
+        <!-- <li>• {{ t('lelanationApp.features.matchSync') }}</li> -->
         <li>• {{ t('lelanationApp.features.settings') }}</li>
       </ul>
     </section>
@@ -52,7 +52,7 @@
       <p class="mt-3 text-text/85">{{ t('lelanationApp.gdprIntro') }}</p>
       <ul class="mt-4 space-y-2 text-text/85">
         <li>• {{ t('lelanationApp.gdpr.items.consent') }}</li>
-        <li>• {{ t('lelanationApp.gdpr.items.minData') }}</li>
+        <!-- <li>• {{ t('lelanationApp.gdpr.items.minData') }}</li> -->
         <li>• {{ t('lelanationApp.gdpr.items.localOnly') }}</li>
         <li>• {{ t('lelanationApp.gdpr.items.rights') }}</li>
       </ul>
@@ -69,7 +69,7 @@ const config = useRuntimeConfig()
 
 const downloadUrl = computed(() => {
   const configured = config.public.companionAppDownloadUrl as string | undefined
-  return configured && configured.trim() ? configured : apiUrl('/api/admin/app-download')
+  return configured && configured.trim() ? configured : apiUrl('/api/app/download')
 })
 
 async function trackDownload() {

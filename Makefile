@@ -1,4 +1,4 @@
-.PHONY: help setup dev dev-backend dev-frontend build build-all build-backend build-frontend build-companion build-companion-exe exe-windows \
+.PHONY: help setup dev dev-backend dev-frontend build build-all build-backend build-frontend build-companion build-companion-exe companion-tag exe-windows \
 	pm2-status pm2-start pm2-restart pm2-restart-no-poller pm2-stop pm2-delete pm2-logs pm2-logs-backend pm2-logs-poller pm2-restart-poller pm2-logs-frontend \
 	deploy sync-data typecheck typecheck-frontend typecheck-companion lint lint-frontend format format-frontend \
 	test test-packages clean \
@@ -42,6 +42,7 @@ help:
 	@echo "  make build-frontend     Build frontend only"
 	@echo "  make build-companion    Build companion Vite app only"
 	@echo "  make build-companion-exe  Build companion Windows .exe at project root"
+	@echo "  make companion-tag      Sync version files + commit + tag companion-v* (VERSION=1.0.0 MSG=...)"
 	@echo "  make exe-windows        Build Tauri app and copy it to ./Lelanation.exe"
 	@echo ""
 	@echo "Bases de données (migrations)"
@@ -167,6 +168,14 @@ build-companion-exe:
 	fi; \
 	cp "$$EXE_PATH" "$(ROOT_DIR)/$(COMPANION_EXE_NAME)"; \
 	echo "Copied companion installer to $(ROOT_DIR)/$(COMPANION_EXE_NAME)"
+
+# Sync companion-app version files, commit bump, create annotated tag companion-v*.
+# Example: make companion-tag VERSION=1.0.0 MSG="Companion installer 1.0.0"
+companion-tag:
+	@test -n "$(VERSION)" || (echo "Usage: make companion-tag VERSION=1.0.0 [MSG='Companion installer 1.0.0']" && exit 1)
+	@ARGS="$(VERSION)"; \
+	if [ -n "$(MSG)" ]; then ARGS="$$ARGS -m $(MSG)"; fi; \
+	node "$(COMPANION_APP_DIR)/scripts/companion-tag.mjs" $$ARGS
 
 exe-windows:
 	powershell -NoProfile -ExecutionPolicy Bypass -File "$(ROOT_DIR)/scripts/exe-windows.ps1"

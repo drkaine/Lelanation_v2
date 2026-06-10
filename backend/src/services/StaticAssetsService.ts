@@ -910,31 +910,35 @@ export class StaticAssetsService {
   }
 
   /**
-   * Copy Community Dragon data to frontend public directory, then delete from backend.
-   * Frontend serves Community Dragon data directly; backend does not keep a copy.
+   * Copy Community Dragon static assets to frontend, then delete backend copy.
+   * Only asset subdirs (emblems, scoreboard icons, map planner) — not champion JSON.
    */
   async copyCommunityDragonDataToFrontend(): Promise<
     Result<{ copied: number; deleted: number }, AppError>
   > {
+    const assetSubdirs = ['ranked-emblem', 'scoreboard-objectives', 'map-planner']
     let copied = 0
     let deleted = 0
 
     try {
       const targetCommunityDragonDir = join(this.frontendPublicDir, 'data', 'community-dragon')
-
-      // Ensure target directory exists
       const dirResult = await FileManager.ensureDir(targetCommunityDragonDir)
       if (dirResult.isErr()) {
         return Result.err(dirResult.unwrapErr())
       }
 
-      // Check if backend Community Dragon directory exists
+      // Remove legacy per-champion JSON files if any remain at the root.
+      const targetEntries = await fs.readdir(targetCommunityDragonDir, { withFileTypes: true })
+      for (const entry of targetEntries) {
+        if (entry.isFile() && entry.name.endsWith('.json')) {
+          await fs.unlink(join(targetCommunityDragonDir, entry.name)).catch(() => {})
+          deleted++
+        }
+      }
+
       const backendExists = await FileManager.exists(this.backendCommunityDragonDir)
       if (!backendExists) {
-        console.warn(
-          `[StaticAssets] Backend Community Dragon directory not found: ${this.backendCommunityDragonDir}`
-        )
-        return Result.ok({ copied: 0, deleted: 0 })
+        return Result.ok({ copied, deleted })
       }
 
       const copyRecursive = async (sourceDir: string, targetDir: string): Promise<void> => {
@@ -943,14 +947,14 @@ export class StaticAssetsService {
           const sourcePath = join(sourceDir, entry.name)
           const targetPath = join(targetDir, entry.name)
           if (entry.isDirectory()) {
-            const dirResult = await FileManager.ensureDir(targetPath)
-            if (dirResult.isErr()) {
+            const subDirResult = await FileManager.ensureDir(targetPath)
+            if (subDirResult.isErr()) {
               continue
             }
             await copyRecursive(sourcePath, targetPath)
             continue
           }
-          if (!entry.isFile()) {
+          if (!entry.isFile() || entry.name.endsWith('.json')) {
             continue
           }
           const content = await fs.readFile(sourcePath)
@@ -961,7 +965,15 @@ export class StaticAssetsService {
         }
       }
 
-      await copyRecursive(this.backendCommunityDragonDir, targetCommunityDragonDir)
+      for (const subdir of assetSubdirs) {
+        const sourceSubdir = join(this.backendCommunityDragonDir, subdir)
+        if (!(await FileManager.exists(sourceSubdir))) {
+          continue
+        }
+        const targetSubdir = join(targetCommunityDragonDir, subdir)
+        await FileManager.ensureDir(targetSubdir)
+        await copyRecursive(sourceSubdir, targetSubdir)
+      }
 
       if (deleted > 0) {
         try {
@@ -975,7 +987,7 @@ export class StaticAssetsService {
     } catch (error) {
       return Result.err(
         new AppError(
-          `Failed to copy Community Dragon data to frontend: ${error}`,
+          `Failed to copy Community Dragon assets to frontend: ${error}`,
           'FILE_ERROR',
           error
         )

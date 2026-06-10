@@ -1,132 +1,136 @@
 <template>
-  <div class="min-h-screen bg-background text-text">
-    <div class="mx-auto max-w-4xl px-4 py-8">
-      <div class="mb-6 flex items-center justify-between">
-        <h1 class="text-2xl font-bold text-text-accent">{{ t('adminApp.title') }}</h1>
-        <NuxtLink
-          :to="localePath('/admin')"
-          class="rounded border border-primary/40 px-3 py-1.5 text-sm hover:bg-primary/15"
-        >
-          {{ t('adminApp.backToAdmin') }}
-        </NuxtLink>
+  <div class="mx-auto max-w-4xl px-4 py-10">
+    <section class="rounded-xl border border-primary/30 bg-surface/40 p-6 md:p-8">
+      <h1 class="text-3xl font-bold text-text-accent">{{ t('lelanationApp.title') }}</h1>
+      <p class="mt-3 text-text/80">
+        {{ t('lelanationApp.subtitle') }}
+      </p>
+
+      <div
+        v-if="downloadStats"
+        class="mt-4 rounded-lg border border-primary/20 bg-surface/30 px-4 py-3 text-sm text-text/85"
+      >
+        {{ t('lelanationApp.downloadCount', { count: downloadStats.total }) }}
       </div>
 
-      <section class="rounded-lg border border-primary/30 bg-surface/30 p-5">
-        <h2 class="text-lg font-semibold">{{ t('adminApp.downloadTitle') }}</h2>
-        <p class="mt-2 text-sm text-text/80">{{ t('adminApp.description') }}</p>
-
-        <div v-if="downloadStats" class="mt-4 rounded border border-primary/20 bg-surface/20 p-3">
-          <p class="text-sm font-semibold text-text-accent">
-            {{ t('adminApp.downloadCount', { count: downloadStats.total }) }}
-          </p>
-        </div>
-        <p v-else-if="statsError" class="mt-3 text-sm text-error">
-          {{ t('adminApp.downloadCountError') }}
-        </p>
-
-        <p v-if="message" :class="isError ? 'text-error' : 'text-green-600'" class="mt-3 text-sm">
-          {{ message }}
-        </p>
+      <div class="mt-6 flex flex-wrap gap-3">
         <button
           type="button"
-          class="mt-4 rounded bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
+          class="inline-flex items-center rounded bg-accent px-5 py-2.5 font-semibold text-background transition hover:bg-accent-dark disabled:opacity-50"
           :disabled="downloading"
           @click="downloadCompanionApp"
         >
-          {{ downloading ? '…' : t('adminApp.downloadButton') }}
+          {{ downloading ? '…' : t('lelanationApp.downloadButton') }}
         </button>
-      </section>
+        <NuxtLink
+          :to="localePath('/privacy')"
+          class="inline-flex items-center rounded border border-primary/50 bg-background px-5 py-2.5 font-semibold text-text transition hover:bg-primary/15"
+        >
+          {{ t('lelanationApp.privacyButton') }}
+        </NuxtLink>
+      </div>
 
-      <section class="mt-6 rounded-lg border border-primary/30 bg-surface/30 p-5">
-        <h2 class="text-lg font-semibold">{{ t('adminApp.featuresTitle') }}</h2>
-        <ul class="mt-3 list-disc space-y-2 pl-5 text-sm text-text/85">
-          <li>{{ t('adminApp.features.importBuilds') }}</li>
-          <li>{{ t('adminApp.features.localFavorites') }}</li>
-          <li>{{ t('adminApp.features.matchSync') }}</li>
-          <li>{{ t('adminApp.features.settings') }}</li>
-        </ul>
-      </section>
+      <p v-if="message" :class="isError ? 'text-error' : 'text-green-600'" class="mt-3 text-sm">
+        {{ message }}
+      </p>
 
-      <section class="mt-6 rounded-lg border border-primary/30 bg-surface/30 p-5">
-        <h2 class="text-lg font-semibold">{{ t('adminApp.gdprTitle') }}</h2>
-        <p class="mt-2 text-sm text-text/80">{{ t('adminApp.gdprIntro') }}</p>
-        <ul class="mt-3 list-disc space-y-2 pl-5 text-sm text-text/85">
-          <li>{{ t('adminApp.gdpr.consent') }}</li>
-          <li>{{ t('adminApp.gdpr.minData') }}</li>
-          <li>{{ t('adminApp.gdpr.localOnly') }}</li>
-          <li>{{ t('adminApp.gdpr.privacyPolicy') }}</li>
-        </ul>
-      </section>
-    </div>
+      <p class="mt-3 text-xs text-text/60">
+        {{ t('lelanationApp.downloadHint') }}
+      </p>
+
+      <div class="mt-5 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
+        <h3 class="text-sm font-semibold text-amber-400">
+          ⚠ {{ t('lelanationApp.smartScreenTitle') }}
+        </h3>
+        <p class="mt-2 text-sm text-text/80">{{ t('lelanationApp.smartScreenText') }}</p>
+        <p class="mt-2 text-sm font-medium text-text/90">
+          {{ t('lelanationApp.smartScreenSteps') }}
+        </p>
+      </div>
+    </section>
+
+    <section class="mt-8 rounded-xl border border-primary/30 bg-surface/40 p-6 md:p-8">
+      <h2 class="text-xl font-semibold text-text">{{ t('lelanationApp.featuresTitle') }}</h2>
+      <ul class="mt-4 space-y-2 text-text/85">
+        <li>• {{ t('lelanationApp.features.importBuilds') }}</li>
+        <li>• {{ t('lelanationApp.features.localFavorites') }}</li>
+        <li>• {{ t('lelanationApp.features.settings') }}</li>
+      </ul>
+    </section>
+
+    <section class="mt-8 rounded-xl border border-primary/30 bg-surface/40 p-6 md:p-8">
+      <h2 class="text-xl font-semibold text-text">{{ t('lelanationApp.gdprTitle') }}</h2>
+      <p class="mt-3 text-text/85">{{ t('lelanationApp.gdprIntro') }}</p>
+      <ul class="mt-4 space-y-2 text-text/85">
+        <li>• {{ t('lelanationApp.gdpr.items.consent') }}</li>
+        <li>• {{ t('lelanationApp.gdpr.items.localOnly') }}</li>
+        <li>• {{ t('lelanationApp.gdpr.items.rights') }}</li>
+      </ul>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
 import { apiUrl } from '~/utils/apiUrl'
-import { useAdminAuth } from '~/composables/useAdminAuth'
-
-definePageMeta({
-  layout: false,
-})
 
 const { t } = useI18n()
 const localePath = useLocalePath()
-const { fetchWithAuth, clearAuth, checkLoggedIn } = useAdminAuth()
 const config = useRuntimeConfig()
 
 const downloading = ref(false)
 const message = ref('')
 const isError = ref(false)
-
 const downloadStats = ref<{ total: number; daily: Record<string, number> } | null>(null)
-const statsError = ref(false)
 
-async function downloadCompanionApp() {
+const downloadUrl = computed(() => {
+  const configured = config.public.companionAppDownloadUrl as string | undefined
+  return configured && configured.trim() ? configured : apiUrl('/api/app/download')
+})
+
+async function bumpDownloadStats(): Promise<void> {
+  try {
+    await $fetch(apiUrl('/api/app/track-download'), { method: 'POST' })
+    if (downloadStats.value) {
+      const today = new Date().toISOString().slice(0, 10)
+      downloadStats.value = {
+        total: downloadStats.value.total + 1,
+        daily: {
+          ...downloadStats.value.daily,
+          [today]: (downloadStats.value.daily[today] || 0) + 1,
+        },
+      }
+    }
+  } catch {
+    // Non-blocking
+  }
+}
+
+async function downloadCompanionApp(): Promise<void> {
   message.value = ''
   isError.value = false
   downloading.value = true
   try {
-    // Track download on click (+1 in file)
-    try {
-      await $fetch(apiUrl('/api/app/track-download'), { method: 'POST' })
-      // Update stats reactively
-      if (downloadStats.value) {
-        const today = new Date().toISOString().slice(0, 10)
-        downloadStats.value = {
-          total: downloadStats.value.total + 1,
-          daily: {
-            ...downloadStats.value.daily,
-            [today]: (downloadStats.value.daily[today] || 0) + 1,
-          },
-        }
-      } else {
-        await loadDownloadStats()
-      }
-    } catch {
-      // Non-blocking: continue with download even if track fails
-    }
+    await bumpDownloadStats()
+
     const configuredUrl = String(config.public.companionAppDownloadUrl || '').trim()
     if (configuredUrl) {
       window.location.href = configuredUrl
       return
     }
-    const res = await fetchWithAuth(apiUrl('/api/admin/app-download'))
-    if (res.status === 401) {
-      clearAuth()
-      await navigateTo(localePath('/admin/login'))
-      return
-    }
+
+    const res = await fetch(downloadUrl.value)
     if (res.status === 404) {
       isError.value = true
-      message.value = t('adminApp.unavailable')
+      message.value = t('lelanationApp.downloadUnavailable')
       return
     }
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
       isError.value = true
-      message.value = data?.error ?? t('adminApp.error')
+      message.value = (data as { error?: string })?.error ?? t('lelanationApp.downloadError')
       return
     }
+
     const contentType = res.headers.get('Content-Type') || ''
     if (contentType.includes('application/json')) {
       const data = (await res.json()) as { redirect?: string }
@@ -135,6 +139,7 @@ async function downloadCompanionApp() {
         return
       }
     }
+
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -148,30 +153,34 @@ async function downloadCompanionApp() {
     URL.revokeObjectURL(url)
   } catch {
     isError.value = true
-    message.value = t('adminApp.error')
+    message.value = t('lelanationApp.downloadError')
   } finally {
     downloading.value = false
   }
 }
 
-async function loadDownloadStats() {
+async function loadDownloadStats(): Promise<void> {
   try {
-    const res = await fetchWithAuth(apiUrl('/api/app/download-stats'))
-    if (res.ok) {
-      downloadStats.value = (await res.json()) as { total: number; daily: Record<string, number> }
-    } else {
-      statsError.value = true
-    }
+    downloadStats.value = await $fetch<{ total: number; daily: Record<string, number> }>(
+      apiUrl('/api/app/download-stats')
+    )
   } catch {
-    statsError.value = true
+    downloadStats.value = null
   }
 }
 
-onMounted(async () => {
-  if (!checkLoggedIn()) {
-    await navigateTo(localePath('/admin/login'))
-    return
-  }
+useHead({
+  title: () => t('lelanationApp.metaTitle'),
+  meta: [{ name: 'description', content: () => t('lelanationApp.metaDescription') }],
+})
+
+useSeoMeta({
+  ogTitle: () => t('lelanationApp.metaTitle'),
+  ogDescription: () => t('lelanationApp.metaDescription'),
+  ogType: 'website',
+})
+
+onMounted(() => {
   loadDownloadStats()
 })
 </script>
