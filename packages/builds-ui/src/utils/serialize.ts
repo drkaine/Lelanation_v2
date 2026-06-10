@@ -34,6 +34,7 @@ function serializeSubBuild(sub: SubBuild): StoredSubBuild {
     roles: sub.roles ?? [],
     tags: sub.tags ?? [],
     gameVersion: sub.gameVersion,
+    kaynForm: sub.kaynForm,
   }
 }
 
@@ -67,6 +68,7 @@ export function serializeBuild(build: Build): StoredBuild {
     subBuilds: build.subBuilds ? build.subBuilds.map(serializeSubBuild) : undefined,
     descriptionMode: build.descriptionMode,
     patchStale: build.patchStale ?? null,
+    kaynForm: build.kaynForm,
   }
 }
 
@@ -184,6 +186,7 @@ function hydrateSubBuild(stored: StoredSubBuild, catalogs: HydrationCatalogs): S
     roles: stored.roles ?? [],
     tags: stored.tags ?? [],
     gameVersion: stored.gameVersion,
+    kaynForm: stored.kaynForm,
   }
 }
 
@@ -202,6 +205,7 @@ export function hydrateBuild(stored: StoredBuild, catalogs: HydrationCatalogs): 
     subBuilds: stored.subBuilds ? stored.subBuilds.map(s => hydrateSubBuild(s, catalogs)) : undefined,
     descriptionMode: stored.descriptionMode,
     patchStale: stored.patchStale ?? null,
+    kaynForm: stored.kaynForm,
   }
 }
 

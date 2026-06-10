@@ -22,6 +22,7 @@ import { buildStarterLegendaryOrderByItemId } from "../parsers/itemOrderSnapshot
 import { itemTierRoleGameWinCounts } from "../parsers/itemTierDailySnapshotRole.js";
 import { rehydrateParticipantRanksForIngestion } from "../services/matchIngestionPayload.js";
 import { riotConfig } from "../riot-gateway/config/riotConfig.js";
+import { normalizeChampionTransform } from "../parsers/championTransform.js";
 
 export class AlreadyProcessedMatchError extends Error {
   constructor(matchId: string) {
@@ -32,6 +33,16 @@ export class AlreadyProcessedMatchError extends Error {
 
 function participantWinCount(participant: ParsedParticipantDto): number {
   return participant.win ? 1 : 0;
+}
+
+function championTransformFields(participant: ParsedParticipantDto): {
+  championTransform: number;
+  transformTimestampMs: number;
+} {
+  return {
+    championTransform: normalizeChampionTransform(participant.championTransform),
+    transformTimestampMs: Math.max(0, Math.trunc(Number(participant.transformTimestampMs ?? 0))),
+  };
 }
 
 function numericMetric(participant: ParsedParticipantDto, key: string): number {
@@ -260,7 +271,17 @@ async function upsertPlayerRankHistoryFromParticipants(
 }
 
 async function upsertChampionStats(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
-  const baseCols = ["patch", "role", "rank_tier", "region", "champion_id", "team", "count_game", "count_win"];
+  const baseCols = [
+    "patch",
+    "role",
+    "rank_tier",
+    "region",
+    "champion_id",
+    "champion_transform",
+    "team",
+    "count_game",
+    "count_win",
+  ];
   const metricCols = CHAMPION_STATS_METRIC_COLUMNS;
   const allCols = [...baseCols, ...metricCols];
   const updateParts = [
@@ -270,15 +291,17 @@ async function upsertChampionStats(tx: any, participants: ParsedParticipantDto[]
     "updated_at = NOW()",
   ];
   const insertHeader = `INSERT INTO champion_stats (${allCols.join(", ")})`;
-  const conflict = `ON CONFLICT (patch, role, rank_tier, region, champion_id, team) DO UPDATE SET ${updateParts.join(", ")}`;
+  const conflict = `ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, team) DO UPDATE SET ${updateParts.join(", ")}`;
 
   for (const participant of participants) {
+    const { championTransform } = championTransformFields(participant);
     const values: unknown[] = [
       participant.patch,
       participant.role,
       participant.rankTier,
       participant.region,
       participant.championId,
+      championTransform,
       participant.teamId,
       1,
       participantWinCount(participant),
@@ -292,11 +315,12 @@ async function upsertChampionStats(tx: any, participants: ParsedParticipantDto[]
 
 async function upsertChampionVsStats(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
   for (const participant of participants.filter((p) => p.opponentChampionId > 0)) {
+    const { championTransform } = championTransformFields(participant);
     const m = championDuoRoleEconomyFromParticipant(participant);
     const u = u15IngestSums(participant.u15);
     await tx`
       INSERT INTO champion_vs_stats (
-        patch, role, rank_tier, region, champion_id, opponent_champion_id,
+        patch, role, rank_tier, region, champion_id, champion_transform, opponent_champion_id,
         count_win, count_game,
         sum_gold_earned, sum_gold_spent,
         sum_max_level_lead_lane_opponent, sum_max_kill_deficit, sum_more_enemy_jungle_than_opponent,
@@ -307,7 +331,7 @@ async function upsertChampionVsStats(tx: any, participants: ParsedParticipantDto
       )
       VALUES (
         ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
-        ${participant.championId}, ${participant.opponentChampionId},
+        ${participant.championId}, ${championTransform}, ${participant.opponentChampionId},
         ${participantWinCount(participant)}, 1,
         ${m.goldEarned}, ${m.goldSpent},
         ${m.maxLevelLeadLaneOpponent}, ${m.maxKillDeficit}, ${m.moreEnemyJungleThanOpponent},
@@ -316,7 +340,7 @@ async function upsertChampionVsStats(tx: any, participants: ParsedParticipantDto
         ${u.phys}, ${u.magic}, ${u.trueDmg},
         ${u.kill}, ${u.assist}, ${u.death}, ${u.vision}, ${u.shield}, ${u.cs}
       )
-      ON CONFLICT (patch, role, rank_tier, region, champion_id, opponent_champion_id)
+      ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, opponent_champion_id)
       DO UPDATE SET
         count_game = champion_vs_stats.count_game + 1,
         count_win = champion_vs_stats.count_win + EXCLUDED.count_win,
@@ -359,9 +383,10 @@ async function upsertChampionDuoRoleStats(tx: any, participants: ParsedParticipa
     );
     const m = championDuoRoleEconomyFromParticipant(participant);
     for (const ally of allies) {
+      const { championTransform } = championTransformFields(participant);
       await tx`
         INSERT INTO champion_duo_role_stats (
-          patch, rank_tier, region, champion_id, role, ally_champion_id, ally_role,
+          patch, rank_tier, region, champion_id, champion_transform, role, ally_champion_id, ally_role,
           count_game, count_win,
           sum_gold_earned, sum_gold_spent,
           sum_max_level_lead_lane_opponent, sum_max_kill_deficit, sum_more_enemy_jungle_than_opponent,
@@ -370,14 +395,14 @@ async function upsertChampionDuoRoleStats(tx: any, participants: ParsedParticipa
         )
         VALUES (
           ${participant.patch}, ${participant.rankTier}, ${participant.region},
-          ${participant.championId}, ${participant.role}, ${ally.championId}, ${ally.role},
+          ${participant.championId}, ${championTransform}, ${participant.role}, ${ally.championId}, ${ally.role},
           1, ${participantWinCount(participant)},
           ${m.goldEarned}, ${m.goldSpent},
           ${m.maxLevelLeadLaneOpponent}, ${m.maxKillDeficit}, ${m.moreEnemyJungleThanOpponent},
           ${m.maxCsAdvantageOnLaneOpponent}, ${m.visionScoreAdvantageLaneOpponent},
           ${m.laningPhaseGoldExpAdvantage}, ${m.earlyLaningPhaseGoldExpAdvantage}
         )
-        ON CONFLICT (patch, rank_tier, region, champion_id, role, ally_champion_id, ally_role)
+        ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, ally_champion_id, ally_role)
         DO UPDATE SET
           count_game = champion_duo_role_stats.count_game + 1,
           count_win = champion_duo_role_stats.count_win + EXCLUDED.count_win,
@@ -411,21 +436,22 @@ async function upsertSpellOrderStats(tx: any, participants: ParsedParticipantDto
     const spellOrder = String(participant.spellOrder ?? "").trim();
     if (!spellOrder) continue;
     const spellTs = Math.max(0, Math.trunc(Number(participant.spellLevelUpTimestampSumMs ?? 0)));
+    const { championTransform } = championTransformFields(participant);
     await tx`
       INSERT INTO champion_spell_stats (
-        patch, role, rank_tier, region, champion_id,
+        patch, role, rank_tier, region, champion_id, champion_transform,
         spell_order,
         spell1_casts, spell2_casts, spell3_casts, spell4_casts,
         count_game, count_win, sum_timestamp_ms
       )
       VALUES (
         ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
-        ${participant.championId},
+        ${participant.championId}, ${championTransform},
         ${spellOrder},
         ${participant.spell1Casts}, ${participant.spell2Casts}, ${participant.spell3Casts}, ${participant.spell4Casts},
         1, ${participantWinCount(participant)}, ${spellTs}
       )
-      ON CONFLICT (patch, role, rank_tier, region, champion_id, spell_order_hash)
+      ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, spell_order_hash)
       DO UPDATE SET
         count_game = champion_spell_stats.count_game + 1,
         count_win = champion_spell_stats.count_win + EXCLUDED.count_win,
@@ -441,6 +467,7 @@ async function upsertSpellOrderStats(tx: any, participants: ParsedParticipantDto
 
 async function upsertItemSetStats(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
   for (const participant of participants) {
+    const { championTransform } = championTransformFields(participant);
     const rows: Array<{ type: string; key: string }> = [
       { type: "starter", key: participant.starterKey },
       { type: "core", key: participant.coreKey },
@@ -449,15 +476,15 @@ async function upsertItemSetStats(tx: any, participants: ParsedParticipantDto[])
     for (const row of rows) {
       await tx`
         INSERT INTO champion_item_set_stats (
-          patch, role, rank_tier, region, champion_id, phase, item_set_key,
+          patch, role, rank_tier, region, champion_id, champion_transform, phase, item_set_key,
           count_game, count_win
         )
         VALUES (
           ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
-          ${participant.championId}, ${row.type}, ${row.key},
+          ${participant.championId}, ${championTransform}, ${row.type}, ${row.key},
           1, ${participantWinCount(participant)}
         )
-        ON CONFLICT (patch, role, rank_tier, region, champion_id, phase, item_set_key)
+        ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, phase, item_set_key)
         DO UPDATE SET
           count_game = champion_item_set_stats.count_game + 1,
           count_win = champion_item_set_stats.count_win + EXCLUDED.count_win
@@ -468,6 +495,7 @@ async function upsertItemSetStats(tx: any, participants: ParsedParticipantDto[])
 
 async function upsertItemSoloStats(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
   for (const participant of participants) {
+    const { championTransform } = championTransformFields(participant);
     const distinctItems = Array.from(new Set(participant.items.map((item) => item.itemId).filter((itemId) => itemId > 0)));
     for (const itemId of distinctItems) {
       const starterCount = participant.items.filter((item) => item.itemId === itemId && item.phase === "starter").length;
@@ -482,17 +510,17 @@ async function upsertItemSoloStats(tx: any, participants: ParsedParticipantDto[]
 
       await tx`
         INSERT INTO champion_item_solo_stats (
-          patch, role, rank_tier, region, champion_id, item_id,
+          patch, role, rank_tier, region, champion_id, champion_transform, item_id,
           count_starter, count_win_starter, count_core, count_win_core, count_final, count_win_final,
           count_game, count_win, sum_timestamp_ms
         )
         VALUES (
           ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
-          ${participant.championId}, ${itemId},
+          ${participant.championId}, ${championTransform}, ${itemId},
           ${starterCount}, ${countWinStarter}, ${coreCount}, ${countWinCore}, ${finalCount}, ${countWinFinal},
           1, ${participantWinCount(participant)}, ${avgTimestamp}
         )
-        ON CONFLICT (patch, role, rank_tier, region, champion_id, item_id)
+        ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, item_id)
         DO UPDATE SET
           count_starter = champion_item_solo_stats.count_starter + EXCLUDED.count_starter,
           count_win_starter = champion_item_solo_stats.count_win_starter + EXCLUDED.count_win_starter,
@@ -510,17 +538,18 @@ async function upsertItemSoloStats(tx: any, participants: ParsedParticipantDto[]
 
 async function upsertRuneStats(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
   for (const participant of participants) {
+    const { championTransform } = championTransformFields(participant);
     await tx`
       INSERT INTO champion_runes_stats (
-        patch, role, rank_tier, region, champion_id, rune_list, shard_list,
+        patch, role, rank_tier, region, champion_id, champion_transform, rune_list, shard_list,
         count_game, count_win
       )
       VALUES (
         ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
-        ${participant.championId}, ${participant.runeList}, ${participant.shardList},
+        ${participant.championId}, ${championTransform}, ${participant.runeList}, ${participant.shardList},
         1, ${participantWinCount(participant)}
       )
-      ON CONFLICT (patch, role, rank_tier, region, champion_id, rune_list, shard_list)
+      ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, rune_list, shard_list)
       DO UPDATE SET
         count_game = champion_runes_stats.count_game + 1,
         count_win = champion_runes_stats.count_win + EXCLUDED.count_win
@@ -529,15 +558,15 @@ async function upsertRuneStats(tx: any, participants: ParsedParticipantDto[]): P
     for (const runeId of participant.perks) {
       await tx`
         INSERT INTO champion_runes_solo_stats (
-          patch, role, rank_tier, region, champion_id, perk_id,
+          patch, role, rank_tier, region, champion_id, champion_transform, perk_id,
           count_game, count_win
         )
         VALUES (
           ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
-          ${participant.championId}, ${runeId},
+          ${participant.championId}, ${championTransform}, ${runeId},
           1, ${participantWinCount(participant)}
         )
-        ON CONFLICT (patch, role, rank_tier, region, champion_id, perk_id)
+        ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, perk_id)
         DO UPDATE SET
           count_game = champion_runes_solo_stats.count_game + 1,
           count_win = champion_runes_solo_stats.count_win + EXCLUDED.count_win
@@ -551,15 +580,15 @@ async function upsertRuneStats(tx: any, participants: ParsedParticipantDto[]): P
       .entries()) {
       await tx`
         INSERT INTO champion_shard_solo_stats (
-          patch, role, rank_tier, region, champion_id, shard_id, slot,
+          patch, role, rank_tier, region, champion_id, champion_transform, shard_id, slot,
           count_game, count_win
         )
         VALUES (
           ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
-          ${participant.championId}, ${shardId}, ${slot},
+          ${participant.championId}, ${championTransform}, ${shardId}, ${slot},
           1, ${participantWinCount(participant)}
         )
-        ON CONFLICT (patch, role, rank_tier, region, champion_id, shard_id, slot)
+        ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, shard_id, slot)
         DO UPDATE SET
           count_game = champion_shard_solo_stats.count_game + 1,
           count_win = champion_shard_solo_stats.count_win + EXCLUDED.count_win
@@ -570,19 +599,20 @@ async function upsertRuneStats(tx: any, participants: ParsedParticipantDto[]): P
 
 async function upsertSummonerSpellStats(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
   for (const participant of participants) {
+    const { championTransform } = championTransformFields(participant);
     const [spellD, spellF] = [participant.spellD, participant.spellF].sort((a, b) => a - b);
     const spellDCasts = spellD === participant.spellD ? participant.spellDCasts : participant.spellFCasts;
     const spellFCasts = spellF === participant.spellF ? participant.spellFCasts : participant.spellDCasts;
     await tx`
       INSERT INTO champion_summoner_spell_pair_stats (
-        patch, role, rank_tier, region, champion_id, spell_d, spell_f, spell_d_casts, spell_f_casts, count_game, count_win
+        patch, role, rank_tier, region, champion_id, champion_transform, spell_d, spell_f, spell_d_casts, spell_f_casts, count_game, count_win
       )
       VALUES (
         ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
-        ${participant.championId}, ${spellD}, ${spellF}, ${spellDCasts}, ${spellFCasts},
+        ${participant.championId}, ${championTransform}, ${spellD}, ${spellF}, ${spellDCasts}, ${spellFCasts},
         1, ${participantWinCount(participant)}
       )
-      ON CONFLICT (patch, role, rank_tier, region, champion_id, spell_d, spell_f)
+      ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, spell_d, spell_f)
       DO UPDATE SET
         count_game = champion_summoner_spell_pair_stats.count_game + 1,
         count_win = champion_summoner_spell_pair_stats.count_win + EXCLUDED.count_win,
@@ -602,15 +632,15 @@ async function upsertSummonerSpellStats(tx: any, participants: ParsedParticipant
       const countSlotF = slot === "f" ? 1 : 0;
       await tx`
         INSERT INTO champion_summoner_spells (
-          patch, role, rank_tier, region, champion_id, spell_id,
+          patch, role, rank_tier, region, champion_id, champion_transform, spell_id,
           count_win_d, count_win_f, count_game_d, count_game_f, count_slotd, count_slotf
         )
         VALUES (
           ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
-          ${participant.championId}, ${spellId},
+          ${participant.championId}, ${championTransform}, ${spellId},
           ${countWinD}, ${countWinF}, ${countGameD}, ${countGameF}, ${countSlotD}, ${countSlotF}
         )
-        ON CONFLICT (patch, role, rank_tier, region, champion_id, spell_id)
+        ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, spell_id)
         DO UPDATE SET
           count_win_d = champion_summoner_spells.count_win_d + EXCLUDED.count_win_d,
           count_win_f = champion_summoner_spells.count_win_f + EXCLUDED.count_win_f,
@@ -676,16 +706,17 @@ async function upsertBansByBanner(tx: any, participants: ParsedParticipantDto[])
 
 async function upsertChampionPickOrder(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
   for (const participant of participants) {
+    const { championTransform } = championTransformFields(participant);
     await tx`
       INSERT INTO champion_pick_order (
-        patch, role, rank_tier, region, champion_id, team, pick_order, count_win, count_game
+        patch, role, rank_tier, region, champion_id, champion_transform, team, pick_order, count_win, count_game
       )
       VALUES (
         ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
-        ${participant.championId}, ${participant.teamId}, ${participant.pickOrder},
+        ${participant.championId}, ${championTransform}, ${participant.teamId}, ${participant.pickOrder},
         ${participantWinCount(participant)}, 1
       )
-      ON CONFLICT (patch, role, rank_tier, region, champion_id, team, pick_order)
+      ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, team, pick_order)
       DO UPDATE SET
         count_game = champion_pick_order.count_game + 1,
         count_win = champion_pick_order.count_win + EXCLUDED.count_win
@@ -695,6 +726,7 @@ async function upsertChampionPickOrder(tx: any, participants: ParsedParticipantD
 
 async function upsertChampionBucket(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
   for (const participant of participants) {
+    const { championTransform, transformTimestampMs } = championTransformFields(participant);
     const durationSeconds =
       Math.max(0, Math.trunc(numericMetric(participant, "sum_game_length"))) ||
       Math.max(0, Math.trunc((participant.gameEndTimestamp > 0 ? participant.gameEndTimestamp : 0) / 1000));
@@ -728,7 +760,7 @@ async function upsertChampionBucket(tx: any, participants: ParsedParticipantDto[
 
     await tx`
       INSERT INTO champion_bucket (
-        patch, role, rank_tier, region, champion_id, duration_bucket,
+        patch, role, rank_tier, region, champion_id, champion_transform, transform_timestamp_ms, duration_bucket,
         count_win, count_game,
         sum_current_gold, sum_magic_damage_done, sum_magic_damage_done_to_champion, sum_magic_damage_taken,
         sum_physical_damage_done, sum_physical_damage_done_to_champion, sum_physical_damage_taken,
@@ -739,7 +771,8 @@ async function upsertChampionBucket(tx: any, participants: ParsedParticipantDto[
         count_kd_diff_20_positive_game, count_kd_diff_20_positive_win, count_game_end, count_time_enemy_spent_controlled
       )
       VALUES (
-        ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region}, ${participant.championId}, ${durationBucket},
+        ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
+        ${participant.championId}, ${championTransform}, ${transformTimestampMs}, ${durationBucket},
         ${participantWinCount(participant)}, 1,
         ${sumCurrentGold}, ${sumMagicDamageDone}, ${sumMagicDamageDoneToChampion}, ${sumMagicDamageTaken},
         ${sumPhysicalDamageDone}, ${sumPhysicalDamageDoneToChampion}, ${sumPhysicalDamageTaken},
@@ -749,7 +782,7 @@ async function upsertChampionBucket(tx: any, participants: ParsedParticipantDto[
         ${countKdDiff10PositiveGame}, ${countKdDiff10PositiveWin},
         ${countKdDiff20PositiveGame}, ${countKdDiff20PositiveWin}, 1, ${countTimeEnemySpentControlled}
       )
-      ON CONFLICT (patch, role, rank_tier, region, champion_id, duration_bucket)
+      ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, transform_timestamp_ms, duration_bucket)
       DO UPDATE SET
         count_win = champion_bucket.count_win + EXCLUDED.count_win,
         count_game = champion_bucket.count_game + EXCLUDED.count_game,
@@ -915,17 +948,18 @@ async function upsertBotlaneDuoVsDuoStats(tx: any, payload: IngestionJobData): P
 
 async function upsertTierDailySnapshots(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
   for (const participant of participants) {
+    const { championTransform } = championTransformFields(participant);
     await tx`
       INSERT INTO champion_tier_daily_snapshots (
-        patch, role, rank_tier, region, champion_id, date_of_game,
+        patch, role, rank_tier, region, champion_id, champion_transform, date_of_game,
         games, wins, count_ban
       )
       VALUES (
         ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
-        ${participant.championId}, ${participant.gameDate},
+        ${participant.championId}, ${championTransform}, ${participant.gameDate},
         1, ${participantWinCount(participant)}, 0
       )
-      ON CONFLICT (patch, role, rank_tier, region, champion_id, date_of_game)
+      ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, date_of_game)
       DO UPDATE SET
         games = champion_tier_daily_snapshots.games + EXCLUDED.games,
         wins = champion_tier_daily_snapshots.wins + EXCLUDED.wins
@@ -936,15 +970,15 @@ async function upsertTierDailySnapshots(tx: any, participants: ParsedParticipant
     if (!Number.isFinite(bannedId) || bannedId <= 0) continue
     await tx`
       INSERT INTO champion_tier_daily_snapshots (
-        patch, role, rank_tier, region, champion_id, date_of_game,
+        patch, role, rank_tier, region, champion_id, champion_transform, date_of_game,
         games, wins, count_ban
       )
       VALUES (
         ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
-        ${bannedId}, ${participant.gameDate},
+        ${bannedId}, 0, ${participant.gameDate},
         0, 0, 1
       )
-      ON CONFLICT (patch, role, rank_tier, region, champion_id, date_of_game)
+      ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, date_of_game)
       DO UPDATE SET
         count_ban = champion_tier_daily_snapshots.count_ban + EXCLUDED.count_ban
     `;

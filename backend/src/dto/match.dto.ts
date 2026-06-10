@@ -58,6 +58,10 @@ export interface ParsedParticipantDto {
   needsRankFetch: boolean;
   role: string;
   championId: number;
+  /** 0 = aucune, 1 = Slayer (Kayn), 2 = Assassin (Kayn). */
+  championTransform: number;
+  /** Timestamp ms de CHAMPION_TRANSFORM (0 si jamais transformé). */
+  transformTimestampMs: number;
   teamId: 100 | 200;
   win: boolean;
 

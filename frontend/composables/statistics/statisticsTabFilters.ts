@@ -15,6 +15,8 @@ export type StatisticsCohortTab =
   | 'items'
   | 'spells'
   | 'infos'
+  | 'pings'
+  | 'patchNotes'
   | 'duration'
   | 'abandons'
   | 'champions'
@@ -51,7 +53,12 @@ export function statisticsTabFilterFlags(tab: StatisticsCohortTab): StatisticsTa
       t !== 'infos' &&
       t !== 'patchNotes',
     championSearch:
-      t !== 'overview' && t !== 'team' && t !== 'objectives' && t !== 'surrender' && t !== 'infos',
+      t !== 'overview' &&
+      t !== 'team' &&
+      t !== 'objectives' &&
+      t !== 'surrender' &&
+      t !== 'infos' &&
+      t !== 'patchNotes',
   }
 }
 

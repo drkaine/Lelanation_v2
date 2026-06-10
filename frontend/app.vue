@@ -89,6 +89,17 @@
             </button>
             <button
               type="button"
+              class="command-toggle command-toggle-button"
+              :aria-pressed="statsSplitTransformEnabled"
+              @click="toggleStatsSplitTransformEnabled()"
+            >
+              <span class="command-toggle-track" :class="{ active: statsSplitTransformEnabled }">
+                <span class="command-toggle-thumb" />
+              </span>
+              <span>{{ t('commandBar.splitTransformStats') }}</span>
+            </button>
+            <button
+              type="button"
               class="command-help-button"
               :title="t('commandBar.shortcutsModalTitle')"
               :aria-label="t('commandBar.openShortcutsModal')"
@@ -152,12 +163,14 @@
       :presentation-zoom="isPresentationZoom"
       :champion-splash="championSplashEnabled"
       :simplified-stats="simplifiedStatsEnabled"
+      :split-transform-stats="statsSplitTransformEnabled"
       @close="closeCommandsModal"
       @toggle-tooltips="toggleTooltipsDisabled()"
       @toggle-streamer="toggleStreamerMode()"
       @toggle-presentation-zoom="togglePresentationZoom()"
       @toggle-champion-splash="toggleChampionSplashEnabled()"
       @toggle-simplified-stats="toggleSimplifiedStatsEnabled()"
+      @toggle-split-transform-stats="toggleStatsSplitTransformEnabled()"
     />
   </div>
 </template>
@@ -190,6 +203,8 @@ const { tooltipsDisabled, tooltipsEnabled, setTooltipsDisabled, toggleTooltipsDi
   useTooltipsPreference()
 const { championSplashEnabled, toggleChampionSplashEnabled } = useChampionSplashPreference()
 const { simplifiedStatsEnabled, toggleSimplifiedStatsEnabled } = useSimplifiedStatsPreference()
+const { statsSplitTransformEnabled, toggleStatsSplitTransformEnabled } =
+  useStatisticsSplitTransformPreference()
 const streamerNavOpen = useState<boolean>('streamer-nav-open', () => false)
 const streamerFooterOpen = useState<boolean>('streamer-footer-open', () => false)
 const streamerPanelsOpen = computed(() => streamerNavOpen.value && streamerFooterOpen.value)
@@ -324,6 +339,14 @@ const onKeyDown = (event: KeyboardEvent) => {
     return
   }
 
+  if (event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey && key === 't') {
+    if (!isEditableTarget) {
+      event.preventDefault()
+      toggleStatsSplitTransformEnabled()
+    }
+    return
+  }
+
   if (!event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return
   if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
 
@@ -342,6 +365,8 @@ const onKeyDown = (event: KeyboardEvent) => {
       'runes',
       'spells',
       'items',
+      'pings',
+      'patchNotes',
       'infos',
     ] as const
     const currentTabRaw = route.query.tab
@@ -787,7 +812,9 @@ html[data-stats-cards='1'] .statistics-spells-mobile-list,
 html[data-stats-cards='1'] .statistics-items-mobile-list,
 html[data-stats-cards='1'] .statistics-balance-mobile-list,
 html[data-stats-cards='1'] .statistics-infos-mobile-list,
-html[data-stats-cards='1'] .statistics-surrender-mobile-list {
+html[data-stats-cards='1'] .statistics-surrender-mobile-list,
+html[data-stats-cards='1'] .statistics-pings-mobile-list,
+html[data-stats-cards='1'] .statistics-patch-notes-mobile-list {
   display: block !important;
 }
 
@@ -817,7 +844,9 @@ html[data-stats-cards='1'] .champion-stats .hidden.md\:block {
       .statistics-balance-mobile-list,
       .statistics-infos-mobile-list,
       .statistics-objectives-mobile-list,
-      .statistics-surrender-mobile-list
+      .statistics-surrender-mobile-list,
+      .statistics-pings-mobile-list,
+      .statistics-patch-notes-mobile-list
     ) {
     display: flex !important;
     flex-flow: row wrap;
@@ -842,7 +871,9 @@ html[data-stats-cards='1'] .champion-stats .hidden.md\:block {
       .statistics-balance-mobile-list,
       .statistics-infos-mobile-list,
       .statistics-objectives-mobile-list,
-      .statistics-surrender-mobile-list
+      .statistics-surrender-mobile-list,
+      .statistics-pings-mobile-list,
+      .statistics-patch-notes-mobile-list
     )
     > * {
     margin-top: 0 !important;
@@ -863,6 +894,8 @@ html[data-stats-cards='1'] .champion-stats .hidden.md\:block {
       .statistics-objectives-mobile-card,
       .statistics-surrender-mobile-card,
       .statistics-surrender-mobile-side-card,
+      .statistics-pings-mobile-card,
+      .statistics-patch-notes-mobile-card,
       .champion-spell-order-card
     ) {
     width: var(--stats-simplified-card-width) !important;

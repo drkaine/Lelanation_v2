@@ -1,5 +1,10 @@
 import { formatTooltipMarkupHtml } from './formatTooltipMarkupHtml'
-import { normalizeKaynFormMarkup } from './kaynFormTooltipMarkup'
+import {
+  filterKaynDetailedTexts,
+  filterKaynTooltipHtml,
+  normalizeKaynFormMarkup,
+  type KaynFormFilter,
+} from './kaynFormTooltipMarkup'
 import { resolveSummonerSpellTooltipText } from './resolveSummonerSpellTooltip'
 
 export type SpellHeaderStat = {
@@ -35,6 +40,8 @@ export type FormatSpellTooltipOptions = {
   showDetailedTexts?: boolean
   /** Summoner spell: no cost in meta, use DDragon description instead of tooltip templates */
   summoner?: boolean
+  /** Builder Kayn : n'afficher que les blocs Darkin (1) ou Assassin (2). */
+  kaynForm?: KaynFormFilter
 }
 
 function escapeTooltipText(text: string): string {
@@ -172,18 +179,47 @@ export function formatSpellDetailedTextsHtml(
   options?: FormatSpellTooltipOptions
 ): string {
   if (options?.showDetailedTexts === false) return ''
-  const sections = Array.isArray(spell.detailedTexts)
+  const rawSections = Array.isArray(spell.detailedTexts)
     ? spell.detailedTexts
         .map(section => String(section ?? '').trim())
         .filter(section => section.length > 0)
-        .map(section => formatPreParsedTooltipSection(section))
     : []
+  const filteredSections = options?.kaynForm
+    ? filterKaynDetailedTexts(rawSections, options.kaynForm)
+    : rawSections
+  const sections = filteredSections.map(section => formatPreParsedTooltipSection(section))
   if (sections.length === 0) return ''
   return sections.map(section => `<div class="tooltip-spell-detail">${section}</div>`).join('')
 }
 
 const PRE_PARSED_TOOLTIP_MARKUP_RE =
   /class=["'][^"']*(?:dmg-(?:physical|magic|true)|tooltip-icon|tooltip-tag|status-cc|scale-(?:ad|ap|mana|hp|level|mr)|keyword|healing|shield|speed)/i
+
+function hasKaynFormMarkup(html: string): boolean {
+  return /kayn-form-(?:darkin|shadow)|#fe5c50|#8484fb/i.test(html)
+}
+
+function resolveNonSummonerSpellBodyHtml(spell: SpellLike): string {
+  const preParsed = String(spell.descriptionHtml ?? spell.descriptionParsed ?? '').trim()
+  const fallback = String(
+    spell.description ?? spell.descriptionText ?? spell.parsedText ?? spell.tooltip ?? ''
+  ).trim()
+  const raw = preParsed || fallback
+  if (!raw) return ''
+
+  const usePreParsedAsHtml =
+    Boolean(preParsed) &&
+    (PRE_PARSED_TOOLTIP_MARKUP_RE.test(preParsed) || hasKaynFormMarkup(preParsed))
+
+  if (usePreParsedAsHtml) return preParsed
+
+  const tooltipRaw = String(spell.tooltip ?? '').trim()
+  if (hasKaynFormMarkup(tooltipRaw)) {
+    return formatTooltipMarkupHtml(tooltipRaw).replace(/\n/g, '<br>')
+  }
+
+  return formatTooltipMarkupHtml(raw).replace(/\n/g, '<br>')
+}
 
 /** Rich HTML from theorycraft JSON (descriptionHtml / descriptionParsed). */
 export function resolveSpellTooltipBodyHtml(
@@ -196,20 +232,14 @@ export function resolveSpellTooltipBodyHtml(
     return raw ? formatTooltipMarkupHtml(raw).replace(/\n/g, '<br>') : ''
   }
 
-  const preParsed = String(spell.descriptionHtml ?? spell.descriptionParsed ?? '').trim()
-  if (preParsed && PRE_PARSED_TOOLTIP_MARKUP_RE.test(preParsed)) {
-    return normalizeKaynFormMarkup(preParsed)
+  let html = normalizeKaynFormMarkup(resolveNonSummonerSpellBodyHtml(spell))
+  if (!html) return ''
+
+  if (options?.kaynForm) {
+    html = filterKaynTooltipHtml(html, options.kaynForm)
   }
 
-  const fallback = String(
-    spell.description ??
-      spell.descriptionText ??
-      spell.parsedText ??
-      spell.tooltip ??
-      preParsed ??
-      ''
-  ).trim()
-  return fallback ? formatTooltipMarkupHtml(fallback).replace(/\n/g, '<br>') : ''
+  return html
 }
 
 function formatPreParsedTooltipSection(section: string): string {

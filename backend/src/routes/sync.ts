@@ -104,18 +104,27 @@ router.post('/trigger', async (_req, res) => {
 router.post('/community-dragon', async (_req, res) => {
 
   try {
-    const [emblemsResult, objectiveIconsResult, mapPlannerResult] = await Promise.all([
-      communityDragonService.syncRankedEmblems(),
-      communityDragonService.syncScoreboardObjectiveIcons(),
-      communityDragonService.syncMapPlannerAssets(),
-    ])
+    const [emblemsResult, objectiveIconsResult, mapPlannerResult, kaynHudResult] =
+      await Promise.all([
+        communityDragonService.syncRankedEmblems(),
+        communityDragonService.syncScoreboardObjectiveIcons(),
+        communityDragonService.syncMapPlannerAssets(),
+        communityDragonService.syncKaynHudImages(),
+      ])
 
-    if (emblemsResult.isErr() || objectiveIconsResult.isErr() || mapPlannerResult.isErr()) {
+    if (
+      emblemsResult.isErr() ||
+      objectiveIconsResult.isErr() ||
+      mapPlannerResult.isErr() ||
+      kaynHudResult.isErr()
+    ) {
       const error = emblemsResult.isErr()
         ? emblemsResult.unwrapErr()
         : objectiveIconsResult.isErr()
           ? objectiveIconsResult.unwrapErr()
-          : mapPlannerResult.unwrapErr()
+          : mapPlannerResult.isErr()
+            ? mapPlannerResult.unwrapErr()
+            : kaynHudResult.unwrapErr()
       console.error('[Manual Sync] Community Dragon assets sync failed:', error)
       return res.status(500).json({
         error: 'Community Dragon assets sync failed',
@@ -126,9 +135,15 @@ router.post('/community-dragon', async (_req, res) => {
     const emblems = emblemsResult.unwrap()
     const objectiveIcons = objectiveIconsResult.unwrap()
     const mapPlanner = mapPlannerResult.unwrap()
-    const synced = emblems.synced + objectiveIcons.synced + mapPlanner.synced
-    const failed = emblems.failed + objectiveIcons.failed + mapPlanner.failed
-    const errors = [...emblems.errors, ...objectiveIcons.errors, ...mapPlanner.errors]
+    const kaynHud = kaynHudResult.unwrap()
+    const synced = emblems.synced + objectiveIcons.synced + mapPlanner.synced + kaynHud.synced
+    const failed = emblems.failed + objectiveIcons.failed + mapPlanner.failed + kaynHud.failed
+    const errors = [
+      ...emblems.errors,
+      ...objectiveIcons.errors,
+      ...mapPlanner.errors,
+      ...kaynHud.errors,
+    ]
     
     return res.json({
       success: true,

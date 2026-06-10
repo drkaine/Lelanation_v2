@@ -93,6 +93,18 @@
                 <span class="min-w-0 flex-1">{{ t('commandBar.simplifiedStats') }}</span>
                 <span class="command-shortcut shrink-0">Alt + C</span>
               </button>
+              <button
+                type="button"
+                class="command-toggle command-toggle-button command-toggle-modal"
+                :aria-pressed="splitTransformStats"
+                @click="emit('toggle-split-transform-stats')"
+              >
+                <span class="command-toggle-track" :class="{ active: splitTransformStats }">
+                  <span class="command-toggle-thumb" />
+                </span>
+                <span class="min-w-0 flex-1">{{ t('commandBar.splitTransformStats') }}</span>
+                <span class="command-shortcut shrink-0">Shift + T</span>
+              </button>
             </div>
           </section>
 
@@ -120,6 +132,10 @@
               </li>
               <li>
                 <span class="command-shortcut">Alt + C</span> {{ t('commandBar.simplifiedStats') }}
+              </li>
+              <li>
+                <span class="command-shortcut">Shift + T</span>
+                {{ t('commandBar.splitTransformStats') }}
               </li>
             </ul>
             <p class="command-help mt-6">
@@ -151,6 +167,7 @@ const props = defineProps<{
   presentationZoom: boolean
   championSplash: boolean
   simplifiedStats: boolean
+  splitTransformStats: boolean
 }>()
 
 const emit = defineEmits<{
@@ -160,6 +177,7 @@ const emit = defineEmits<{
   'toggle-presentation-zoom': []
   'toggle-champion-splash': []
   'toggle-simplified-stats': []
+  'toggle-split-transform-stats': []
 }>()
 
 const { t } = useI18n()

@@ -51,16 +51,18 @@ function buildTeamStats(
 
 async function upsertChampionStats(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
   for (const participant of participants) {
+    const championTransform = Math.max(0, Math.min(2, Math.trunc(Number(participant.championTransform ?? 0))));
     await tx`
       INSERT INTO champion_stats (
-        patch, role, rank_tier, region, champion_id, team,
+        patch, role, rank_tier, region, champion_id, champion_transform, team,
         count_game, count_win, sum_gold_earned, sum_gold_spent, sum_kills, sum_assists
       )
       VALUES (
-        ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region}, ${participant.championId}, ${participant.teamId},
+        ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
+        ${participant.championId}, ${championTransform}, ${participant.teamId},
         1, ${participant.win ? 1 : 0}, ${participant.goldEarned}, ${participant.goldSpent}, ${participant.kills}, ${participant.assists}
       )
-      ON CONFLICT (patch, role, rank_tier, region, champion_id, team)
+      ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, team)
       DO UPDATE SET
         count_game = champion_stats.count_game + EXCLUDED.count_game,
         count_win = champion_stats.count_win + EXCLUDED.count_win,

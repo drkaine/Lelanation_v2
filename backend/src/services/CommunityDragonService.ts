@@ -45,6 +45,10 @@ const MINIMAP_OBJECTIVE_ICONS: Array<{ source: string; target: string }> = [
   { source: 'kindred_minimap_icon_enemy.png', target: 'kindred_minimap_icon_enemy.png' },
   { source: 'grub.png', target: 'grub.png' },
 ]
+const CD_KAYN_HUD_BASE =
+  'https://raw.communitydragon.org/latest/game/assets/characters/kayn/hud'
+const KAYN_HUD_FILES = ['kayn_slay_square.png', 'kayn_ass_square.png'] as const
+
 const MAP_PLANNER_FILES: Array<{ source: string; target: string }> = [
   { source: 'map11.png', target: 'map11.png' },
   { source: 'inhibitor-200.png', target: 'inhibitor-200.png' },
@@ -225,6 +229,56 @@ export class CommunityDragonService {
         const errorMessage = error instanceof Error ? error.message : String(error)
         errors.push({ file: asset.source, error: errorMessage })
         console.error(`[CommunityDragon] Failed to sync map planner asset ${asset.source}: ${errorMessage}`)
+      }
+    }
+
+    return Result.ok({ synced, failed, errors })
+  }
+
+  /**
+   * Sync Kayn transformation HUD squares (Darkin / Assassin) from Community Dragon.
+   * Saves to backend staging and frontend `/images/game/latest/champion/`.
+   */
+  async syncKaynHudImages(): Promise<
+    Result<
+      { synced: number; failed: number; errors: Array<{ file: string; error: string }> },
+      AppError
+    >
+  > {
+    const targetDirs = [
+      join(process.cwd(), 'data', 'images', 'latest', 'champion'),
+      join(process.cwd(), '..', 'frontend', 'public', 'images', 'game', 'latest', 'champion'),
+    ]
+
+    let synced = 0
+    let failed = 0
+    const errors: Array<{ file: string; error: string }> = []
+
+    for (const dir of targetDirs) {
+      const dirResult = await FileManager.ensureDir(dir)
+      if (dirResult.isErr()) {
+        return Result.err(dirResult.unwrapErr())
+      }
+    }
+
+    for (const file of KAYN_HUD_FILES) {
+      try {
+        const data = await this.fetchBinary(CD_KAYN_HUD_BASE, `/${file}`)
+        if (data == null || data.byteLength === 0) {
+          failed++
+          errors.push({ file, error: 'No data returned' })
+          continue
+        }
+        const buffer = Buffer.from(data)
+        for (const dir of targetDirs) {
+          await fs.writeFile(join(dir, file), buffer)
+        }
+        synced++
+      } catch (error) {
+        failed++
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        errors.push({ file, error: errorMessage })
+        console.error(`[CommunityDragon] Failed to sync Kayn HUD image ${file}: ${errorMessage}`)
       }
     }
 

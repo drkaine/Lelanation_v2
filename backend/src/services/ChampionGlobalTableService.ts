@@ -102,8 +102,12 @@ export type ChampionGlobalTableSide = {
   banrate: number
 }
 
+/** 0 = base, 1 = Darkin, 2 = Assassin (Kayn). */
+export type ChampionTransform = 0 | 1 | 2
+
 export type ChampionGlobalTableRow = {
   championId: number
+  championTransform?: ChampionTransform
   blue: ChampionGlobalTableSide
   red: ChampionGlobalTableSide
   totalGames: number
@@ -152,11 +156,41 @@ function emptySide(): SideAgg {
   }
 }
 
+function normalizeChampionTransform(value: unknown): ChampionTransform {
+  const n = Number(value)
+  if (n === 1 || n === 2) return n
+  return 0
+}
+
+function mergeSideAgg(target: SideAgg, source: SideAgg): void {
+  target.games += source.games
+  target.wins += source.wins
+  target.sum_phys_d += source.sum_phys_d
+  target.sum_magic_d += source.sum_magic_d
+  target.sum_true_d += source.sum_true_d
+  target.sum_phys_t += source.sum_phys_t
+  target.sum_magic_t += source.sum_magic_t
+  target.sum_true_t += source.sum_true_t
+  target.sum_total_t += source.sum_total_t
+  target.sum_k += source.sum_k
+  target.sum_de += source.sum_de
+  target.sum_a += source.sum_a
+}
+
+function rowKey(championId: number, transform: ChampionTransform): string {
+  return `${championId}:${transform}`
+}
+
 export async function getChampionGlobalTable(
   version?: string | string[] | null,
   rankTier?: string | string[] | null,
-  role?: string | null
-): Promise<{ matchCount: number; rows: ChampionGlobalTableRow[] } | null> {
+  role?: string | null,
+  splitTransform = false
+): Promise<{
+  matchCount: number
+  rows: ChampionGlobalTableRow[]
+  transformBreakdown?: ChampionGlobalTableRow[]
+} | null> {
   if (!isDatabaseConfigured()) return null
   const roleFilterRaw = String(role ?? '').trim().toUpperCase()
   const roleFilter =
@@ -194,6 +228,7 @@ export async function getChampionGlobalTable(
   type AggRow = {
     team_id: number
     champion_id: number
+    champion_transform: number
     games: number
     wins: number
     sum_phys_d: bigint
@@ -229,6 +264,7 @@ export async function getChampionGlobalTable(
     SELECT
       mv.team_num AS team_id,
       mv.champion_id AS champion_id,
+      COALESCE(mv.champion_transform, 0)::int AS champion_transform,
       SUM(mv.count_game)::int AS games,
       SUM(mv.count_win)::int AS wins,
       COALESCE(SUM(mv.sum_physical_damage_to_champions), 0)::bigint AS sum_phys_d,
@@ -245,7 +281,7 @@ export async function getChampionGlobalTable(
     WHERE ${matchCondSide} AND mv.team_num IN (100, 200)
     ${sideRoleSql}
     ${rolePlayedCond}
-    GROUP BY mv.team_num, mv.champion_id
+    GROUP BY mv.team_num, mv.champion_id, mv.champion_transform
   `
   const aggRows = await queryRawUnsafe<AggRow[]>(aggSql)
 
@@ -255,21 +291,29 @@ export async function getChampionGlobalTable(
   const coreRoleSql = roleFilterSqlValueList ? ` AND cs.role IN (${roleFilterSqlValueList})` : ''
 
   const kdaRows = await queryRawUnsafe<
-    Array<{ champion_id: number; sum_k: bigint; sum_de: bigint; sum_a: bigint }>
+    Array<{
+      champion_id: number
+      champion_transform: number
+      sum_k: bigint
+      sum_de: bigint
+      sum_a: bigint
+    }>
   >(`
     SELECT
       cs.champion_id,
+      COALESCE(cs.champion_transform, 0)::int AS champion_transform,
       COALESCE(SUM(cs.sum_kills), 0)::bigint AS sum_k,
       COALESCE(SUM(cs.sum_deaths), 0)::bigint AS sum_de,
       COALESCE(SUM(cs.sum_assists), 0)::bigint AS sum_a
     FROM ${coreFrom}
     WHERE ${coreWhere}
     ${coreRoleSql}
-    GROUP BY cs.champion_id
+    GROUP BY cs.champion_id, cs.champion_transform
   `)
-  const kdaByChampion = new Map<number, { k: number; d: number; a: number }>()
+  const kdaByKey = new Map<string, { k: number; d: number; a: number }>()
   for (const r of kdaRows) {
-    kdaByChampion.set(Number(r.champion_id), {
+    const transform = normalizeChampionTransform(r.champion_transform)
+    kdaByKey.set(rowKey(Number(r.champion_id), transform), {
       k: Number(r.sum_k ?? 0),
       d: Number(r.sum_de ?? 0),
       a: Number(r.sum_a ?? 0),
@@ -279,10 +323,18 @@ export async function getChampionGlobalTable(
   const bucketWhere = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'cb.')
   const bucketRoleSql = roleFilterSqlValueList ? ` AND cb.role IN (${roleFilterSqlValueList})` : ''
   const takenRows = await queryRawUnsafe<
-    Array<{ champion_id: number; phys_t: bigint; magic_t: bigint; true_t: bigint; total_t: bigint }>
+    Array<{
+      champion_id: number
+      champion_transform: number
+      phys_t: bigint
+      magic_t: bigint
+      true_t: bigint
+      total_t: bigint
+    }>
   >(`
     SELECT
       cb.champion_id,
+      COALESCE(cb.champion_transform, 0)::int AS champion_transform,
       COALESCE(SUM(cb.sum_physical_damage_taken), 0)::bigint AS phys_t,
       COALESCE(SUM(cb.sum_magic_damage_taken), 0)::bigint AS magic_t,
       COALESCE(SUM(cb.sum_true_damage_taken), 0)::bigint AS true_t,
@@ -293,11 +345,12 @@ export async function getChampionGlobalTable(
     FROM ${bucketFrom}
     WHERE ${bucketWhere}
     ${bucketRoleSql}
-    GROUP BY cb.champion_id
+    GROUP BY cb.champion_id, cb.champion_transform
   `)
-  const takenByChampion = new Map<number, { phys: number; magic: number; true: number; total: number }>()
+  const takenByKey = new Map<string, { phys: number; magic: number; true: number; total: number }>()
   for (const r of takenRows) {
-    takenByChampion.set(Number(r.champion_id), {
+    const transform = normalizeChampionTransform(r.champion_transform)
+    takenByKey.set(rowKey(Number(r.champion_id), transform), {
       phys: Number(r.phys_t ?? 0),
       magic: Number(r.magic_t ?? 0),
       true: Number(r.true_t ?? 0),
@@ -334,13 +387,15 @@ export async function getChampionGlobalTable(
     banMap.set(`${Number(b.team_id)}:${Number(b.champion_id)}`, Number(b.cnt))
   }
 
-  const byChamp = new Map<number, { blue: SideAgg; red: SideAgg }>()
+  const byKey = new Map<string, { championId: number; transform: ChampionTransform; blue: SideAgg; red: SideAgg }>()
   for (const r of aggRows) {
     const cid = Number(r.champion_id)
-    let e = byChamp.get(cid)
+    const transform = normalizeChampionTransform(r.champion_transform)
+    const key = rowKey(cid, transform)
+    let e = byKey.get(key)
     if (!e) {
-      e = { blue: emptySide(), red: emptySide() }
-      byChamp.set(cid, e)
+      e = { championId: cid, transform, blue: emptySide(), red: emptySide() }
+      byKey.set(key, e)
     }
     const side = Number(r.team_id) === 100 ? e.blue : e.red
     side.games = Number(r.games)
@@ -368,28 +423,69 @@ export async function getChampionGlobalTable(
     return { games: g, wins: side.wins, winrate: wr, pickrate: pr, banrate: br }
   }
 
-  const rows: ChampionGlobalTableRow[] = []
-  for (const [championId, sides] of byChamp) {
+  const sumKdaForChampion = (championId: number): { k: number; d: number; a: number } | undefined => {
+    let k = 0
+    let d = 0
+    let a = 0
+    let found = false
+    for (const [key, val] of kdaByKey) {
+      if (!key.startsWith(`${championId}:`)) continue
+      k += val.k
+      d += val.d
+      a += val.a
+      found = true
+    }
+    return found ? { k, d, a } : undefined
+  }
+
+  const sumTakenForChampion = (
+    championId: number
+  ): { phys: number; magic: number; true: number; total: number } | undefined => {
+    let phys = 0
+    let magic = 0
+    let trueD = 0
+    let total = 0
+    let found = false
+    for (const [key, val] of takenByKey) {
+      if (!key.startsWith(`${championId}:`)) continue
+      phys += val.phys
+      magic += val.magic
+      trueD += val.true
+      total += val.total
+      found = true
+    }
+    return found ? { phys, magic, true: trueD, total } : undefined
+  }
+
+  const buildRow = (
+    championId: number,
+    transform: ChampionTransform | null,
+    sides: { blue: SideAgg; red: SideAgg }
+  ): ChampionGlobalTableRow | null => {
     const tg = sides.blue.games + sides.red.games
-    if (tg === 0) continue
+    if (tg === 0) return null
 
     const totalPhysD = sides.blue.sum_phys_d + sides.red.sum_phys_d
     const totalMagicD = sides.blue.sum_magic_d + sides.red.sum_magic_d
     const totalTrueD = sides.blue.sum_true_d + sides.red.sum_true_d
     const totalDmgToChamps = totalPhysD + totalMagicD + totalTrueD
 
-    const taken = takenByChampion.get(championId)
+    const taken =
+      transform == null
+        ? sumTakenForChampion(championId)
+        : takenByKey.get(rowKey(championId, transform))
     const totalPhysT = taken?.phys ?? sides.blue.sum_phys_t + sides.red.sum_phys_t
     const totalMagicT = taken?.magic ?? sides.blue.sum_magic_t + sides.red.sum_magic_t
     const totalTrueT = taken?.true ?? sides.blue.sum_true_t + sides.red.sum_true_t
     const totalTakenT = taken?.total ?? sides.blue.sum_total_t + sides.red.sum_total_t
 
-    const kda = kdaByChampion.get(championId)
+    const kda =
+      transform == null ? sumKdaForChampion(championId) : kdaByKey.get(rowKey(championId, transform))
     const totalK = kda?.k ?? sides.blue.sum_k + sides.red.sum_k
     const totalDe = kda?.d ?? sides.blue.sum_de + sides.red.sum_de
     const totalA = kda?.a ?? sides.blue.sum_a + sides.red.sum_a
 
-    rows.push({
+    const row: ChampionGlobalTableRow = {
       championId,
       blue: mkSide(championId, sides.blue, 100),
       red: mkSide(championId, sides.red, 200),
@@ -405,9 +501,60 @@ export async function getChampionGlobalTable(
       avgKills: round1(totalK / tg),
       avgDeaths: round1(totalDe / tg),
       avgAssists: round1(totalA / tg),
-    })
+    }
+    if (transform != null) row.championTransform = transform
+    return row
   }
 
+  const splitRows: ChampionGlobalTableRow[] = []
+  for (const entry of byKey.values()) {
+    const row = buildRow(entry.championId, entry.transform, entry)
+    if (row) splitRows.push(row)
+  }
+  splitRows.sort((a, b) => b.totalGames - a.totalGames)
+
+  if (splitTransform) {
+    return { matchCount, rows: splitRows }
+  }
+
+  const aggregatedByChampion = new Map<number, { blue: SideAgg; red: SideAgg }>()
+  for (const entry of byKey.values()) {
+    let sides = aggregatedByChampion.get(entry.championId)
+    if (!sides) {
+      sides = { blue: emptySide(), red: emptySide() }
+      aggregatedByChampion.set(entry.championId, sides)
+    }
+    mergeSideAgg(sides.blue, entry.blue)
+    mergeSideAgg(sides.red, entry.red)
+  }
+
+  const rows: ChampionGlobalTableRow[] = []
+  for (const [championId, sides] of aggregatedByChampion) {
+    const row = buildRow(championId, null, sides)
+    if (row) rows.push(row)
+  }
   rows.sort((a, b) => b.totalGames - a.totalGames)
-  return { matchCount, rows }
+
+  const breakdownByChampion = new Map<number, ChampionGlobalTableRow[]>()
+  for (const r of splitRows) {
+    const list = breakdownByChampion.get(r.championId) ?? []
+    list.push(r)
+    breakdownByChampion.set(r.championId, list)
+  }
+  const transformBreakdownFiltered: ChampionGlobalTableRow[] = []
+  for (const list of breakdownByChampion.values()) {
+    if (list.length === 0) continue
+    const hasMultipleForms = list.length > 1
+    const hasAlternateForm = list.some((r) => (r.championTransform ?? 0) > 0)
+    if (!hasMultipleForms && !hasAlternateForm) continue
+    list.sort((a, b) => (a.championTransform ?? 0) - (b.championTransform ?? 0))
+    transformBreakdownFiltered.push(...list)
+  }
+
+  return {
+    matchCount,
+    rows,
+    transformBreakdown:
+      transformBreakdownFiltered.length > 0 ? transformBreakdownFiltered : undefined,
+  }
 }

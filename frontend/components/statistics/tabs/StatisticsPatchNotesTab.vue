@@ -129,23 +129,21 @@ function sortIndicator(col: PatchNotesSortCol): string {
   if (p.patchNotesSortColumn !== col) return ''
   return p.patchNotesSortDir === 'asc' ? ' ▲' : ' ▼'
 }
+
+function patchNotesMessage(message: string | undefined): string {
+  if (!message) return ''
+  if (message === 'No patch notes data in selected version range') {
+    return String(p.t?.('statisticsPage.patchNotesNoDataInRange') ?? message)
+  }
+  if (message === 'Database not configured') {
+    return String(p.t?.('statisticsPage.patchNotesDbNotConfigured') ?? message)
+  }
+  return message
+}
 </script>
 
 <template>
   <div class="space-y-3">
-    <p
-      v-if="p.patchNotesData?.fromVersion || p.patchNotesData?.toVersion"
-      class="text-xs text-text/60"
-    >
-      {{
-        p.t('statisticsPage.patchNotesRangeHint', {
-          from: p.patchNotesData?.fromVersion ?? '—',
-          to: p.patchNotesData?.toVersion ?? '—',
-          total: p.patchNotesData?.totalPatches ?? 0,
-        })
-      }}
-    </p>
-
     <div v-if="p.patchNotesPending" class="text-text/70">{{ p.t('statisticsPage.loading') }}</div>
     <div
       v-else-if="p.patchNotesError"
@@ -157,7 +155,7 @@ function sortIndicator(col: PatchNotesSortCol): string {
       v-else-if="p.patchNotesData?.message && !p.patchNotesData?.rows?.length"
       class="text-text/70"
     >
-      {{ p.patchNotesData.message }}
+      {{ patchNotesMessage(p.patchNotesData.message) }}
     </div>
     <div v-else-if="!p.paginatedPatchNotesRows?.length" class="text-text/70">
       {{ p.t('statisticsPage.noData') }}
@@ -170,11 +168,11 @@ function sortIndicator(col: PatchNotesSortCol): string {
         :options="patchNotesMobileSortOptionsComputed"
       />
 
-      <div class="space-y-2 md:hidden">
+      <div class="statistics-patch-notes-mobile-list space-y-2 md:hidden">
         <article
           v-for="row in p.paginatedPatchNotesRows"
           :key="'pn-mobile-' + row.targetType + '-' + row.targetId"
-          class="rounded-lg border border-primary/30 bg-surface/40 p-3"
+          class="statistics-patch-notes-mobile-card rounded-lg border border-primary/30 bg-surface/40 p-3"
         >
           <div class="flex items-center gap-3">
             <img

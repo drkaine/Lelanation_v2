@@ -25,6 +25,11 @@ export function getChampionImageUrl(_version: string, imageName: string): string
   return `/images/game/latest/champion/${imageName}`
 }
 
+/** Kayn transformation HUD squares (Community Dragon cron). */
+export function getKaynHudImageUrl(form: 'slay' | 'ass'): string {
+  return `/images/game/latest/champion/kayn_${form}_square.png`
+}
+
 /**
  * Get champion splash image URL (base skin 0).
  * Stored as: /images/game/{version}/champion/splash_{ChampionId}.jpg

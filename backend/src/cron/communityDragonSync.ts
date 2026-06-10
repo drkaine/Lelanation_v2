@@ -35,12 +35,23 @@ export async function runCommunityDragonSyncOnce(): Promise<
 
   await log.step('Syncing map planner assets')
   const mapPlannerResult = await communityDragonService.syncMapPlannerAssets()
-  if (emblemResult.isErr() || objectiveIconsResult.isErr() || mapPlannerResult.isErr()) {
+
+  await log.step('Syncing Kayn HUD transform images')
+  const kaynHudResult = await communityDragonService.syncKaynHudImages()
+
+  if (
+    emblemResult.isErr() ||
+    objectiveIconsResult.isErr() ||
+    mapPlannerResult.isErr() ||
+    kaynHudResult.isErr()
+  ) {
     const firstError = emblemResult.isErr()
       ? emblemResult.unwrapErr()
       : objectiveIconsResult.isErr()
         ? objectiveIconsResult.unwrapErr()
-        : mapPlannerResult.unwrapErr()
+        : mapPlannerResult.isErr()
+          ? mapPlannerResult.unwrapErr()
+          : kaynHudResult.unwrapErr()
     await log.error('Community Dragon assets sync failed:', firstError)
     await cronStatus.markFailure('communityDragonSync', firstError)
     return { ok: false, error: firstError instanceof Error ? firstError.message : String(firstError) }
@@ -49,8 +60,11 @@ export async function runCommunityDragonSyncOnce(): Promise<
   const emblemData = emblemResult.unwrap()
   const objectiveIconsData = objectiveIconsResult.unwrap()
   const mapPlannerData = mapPlannerResult.unwrap()
-  const synced = emblemData.synced + objectiveIconsData.synced + mapPlannerData.synced
-  const failed = emblemData.failed + objectiveIconsData.failed + mapPlannerData.failed
+  const kaynHudData = kaynHudResult.unwrap()
+  const synced =
+    emblemData.synced + objectiveIconsData.synced + mapPlannerData.synced + kaynHudData.synced
+  const failed =
+    emblemData.failed + objectiveIconsData.failed + mapPlannerData.failed + kaynHudData.failed
 
   await log.info('Ranked emblems:', emblemData.synced, 'synced,', emblemData.failed, 'failed')
   await log.info(
@@ -67,6 +81,7 @@ export async function runCommunityDragonSyncOnce(): Promise<
     mapPlannerData.failed,
     'failed'
   )
+  await log.info('Kayn HUD images:', kaynHudData.synced, 'synced,', kaynHudData.failed, 'failed')
 
   await cronStatus.markSuccess('communityDragonSync')
 
@@ -83,6 +98,7 @@ export async function runCommunityDragonSyncOnce(): Promise<
       ...emblemData.errors,
       ...objectiveIconsData.errors,
       ...mapPlannerData.errors,
+      ...kaynHudData.errors,
     ]
     const successContext: Record<string, unknown> = {
       synced,

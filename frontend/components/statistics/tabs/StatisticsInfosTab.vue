@@ -18,6 +18,24 @@ const totalRowsCount = computed<number>(() => (p.infosMatrixRows ?? []).length)
 const totalPages = computed<number>(() =>
   Math.max(1, Math.ceil(totalRowsCount.value / pageSize.value))
 )
+function compareVersions(a: string, b: string): number {
+  const cmp = p.compareVersionsDesc?.(a, b)
+  if (typeof cmp === 'number') return cmp
+  const pa = String(a)
+    .split('.')
+    .map(x => Number(x))
+  const pb = String(b)
+    .split('.')
+    .map(x => Number(x))
+  const maxLen = Math.max(pa.length, pb.length)
+  for (let i = 0; i < maxLen; i++) {
+    const da = Number.isFinite(pa[i]) ? (pa[i] as number) : 0
+    const db = Number.isFinite(pb[i]) ? (pb[i] as number) : 0
+    if (da !== db) return db - da
+  }
+  return String(b).localeCompare(String(a))
+}
+
 const sortedInfosRows = computed(() => {
   const rows = [...(p.infosMatrixRows ?? [])]
   const dir = infosSortDir.value === 'asc' ? 1 : -1
@@ -26,10 +44,10 @@ const sortedInfosRows = computed(() => {
       const av = cellValue(a, 'ALL')
       const bv = cellValue(b, 'ALL')
       if (av !== bv) return dir * (av - bv)
+      return compareVersions(String(a.version ?? ''), String(b.version ?? ''))
     }
-    const av = String(a.version ?? '')
-    const bv = String(b.version ?? '')
-    return dir * av.localeCompare(bv)
+    const versionCmp = compareVersions(String(a.version ?? ''), String(b.version ?? ''))
+    return infosSortDir.value === 'desc' ? versionCmp : -versionCmp
   })
   return rows
 })

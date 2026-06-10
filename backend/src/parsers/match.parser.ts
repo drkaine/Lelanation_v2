@@ -1,5 +1,6 @@
 import { CHAMPION_STATS_METRIC_COLUMN_SET } from "../constants/championStatsMetricColumns.js";
 import type { ParsedItemDto, ParsedParticipantDto } from "../dto/match.dto.js";
+import { extractChampionTransformInfo } from "./championTransform.js";
 import { mapChampionStatsRiotMetrics } from "./champion-stats-riot-metrics.js";
 import { timelineChampionObjectiveMetrics } from "./champion-stats-timeline-objectives.js";
 import type {
@@ -458,6 +459,12 @@ export function parseMatch(
     const shardList = shardIds.join("_");
     const perks = [...perkStyleIds, ...shardIds].filter((value) => value > 0);
 
+    const transformInfo = extractChampionTransformInfo(
+      events,
+      participant.participantId,
+      participant.championTransform,
+    );
+
     const dto: ParsedParticipantDto = {
       matchId,
       puuid: participant.puuid,
@@ -470,6 +477,8 @@ export function parseMatch(
       needsRankFetch: false,
       role,
       championId: participant.championId,
+      championTransform: transformInfo.championTransform,
+      transformTimestampMs: transformInfo.transformTimestampMs,
       teamId: participant.teamId as 100 | 200,
       win: participant.win,
       firstBloodKill: participant.firstBloodKill === true,

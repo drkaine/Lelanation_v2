@@ -121,6 +121,16 @@ async function main(): Promise<void> {
     }
   }
 
+  const kaynHudSync = await communityDragonService.syncKaynHudImages()
+  if (kaynHudSync.isErr()) {
+    console.warn('[sync:data] Kayn HUD images sync failed:', kaynHudSync.unwrapErr())
+  } else {
+    const kaynHudData = kaynHudSync.unwrap()
+    if (kaynHudData.failed > 0) {
+      console.warn(`[sync:data] Kayn HUD images sync completed with ${kaynHudData.failed} failures`)
+    }
+  }
+
   // --- YouTube ---
   const youtubeChannelsFile = join(process.cwd(), 'data', 'youtube', 'channels.json')
   const youtubeService = new YouTubeService()

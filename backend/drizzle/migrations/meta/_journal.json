@@ -155,6 +155,13 @@
       "when": 1749129600000,
       "tag": "0021_patch_notes_stats",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1749216000000,
+      "tag": "0022_champion_transform_pkey",
+      "breakpoints": true
     }
   ]
 }

@@ -534,6 +534,23 @@
               </div>
             </div>
             <div v-show="activeTab === 'championTable'">
+              <div class="mb-1 text-sm font-medium text-text">
+                {{ t('statisticsPage.filterTransform') }}
+              </div>
+              <button
+                type="button"
+                class="mb-3 w-full rounded border px-2 py-1.5 text-left text-xs font-medium transition-colors"
+                :class="
+                  statsSplitTransformEnabled
+                    ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                    : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                "
+                :aria-pressed="statsSplitTransformEnabled"
+                @click="toggleStatsSplitTransformEnabled()"
+              >
+                {{ t('statisticsPage.filterTransformSplit') }}
+                <span class="ml-2 text-[10px] text-text/50">Shift + T</span>
+              </button>
               <div class="mb-1 text-sm font-medium text-text">Colonnes champion</div>
               <div class="flex flex-wrap gap-1">
                 <button
@@ -755,6 +772,9 @@
               <div v-else-if="activeTab === 'abandons'" class="space-y-4">
                 <StatisticsAbandonsTab />
               </div>
+              <div v-else-if="activeTab === 'pings'" class="space-y-4">
+                <StatisticsPingsTab />
+              </div>
               <div v-else-if="activeTab === 'patchNotes'" class="space-y-4">
                 <StatisticsPatchNotesTab />
               </div>
@@ -844,6 +864,7 @@ import {
   useStatisticsPatchNotesTab,
   type PatchNotesTargetType,
 } from '~/composables/statistics/useStatisticsPatchNotesTab'
+import { useStatisticsPingsTab } from '~/composables/statistics/useStatisticsPingsTab'
 import {
   appendStatisticsCohortParams,
   cohortFiltersForTab,
@@ -854,6 +875,14 @@ import {
 } from '~/composables/statistics/statisticsTabFilters'
 import { parseRankTierQuery, rankTierSelectionsEqual } from '~/utils/statisticsRankTierQuery'
 import { getChampionImageUrl, getItemImageUrl } from '~/utils/imageUrl'
+import {
+  championRowMatchesGlobalSearch,
+  championTransformRowKey,
+  isTransformableChampion,
+  normalizeChampionTransform,
+  type ChampionTransform,
+} from '~/utils/championTransformStats'
+import { useStatisticsSplitTransformPreference } from '~/composables/useStatisticsSplitTransformPreference'
 import { formatItemStatsForDisplay, formatItemEconomicForDisplay } from '~/utils/formatItemStats'
 import {
   scoreboardDrakeIconByKey,
@@ -906,6 +935,9 @@ const StatisticsSpellsTab = defineAsyncComponent(
 )
 const StatisticsAbandonsTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsAbandonsTab.vue')
+)
+const StatisticsPingsTab = defineAsyncComponent(
+  () => import('~/components/statistics/tabs/StatisticsPingsTab.vue')
 )
 const StatisticsPatchNotesTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsPatchNotesTab.vue')
@@ -1005,6 +1037,7 @@ function normalizeLegacyTab(tab: string): StatisticsMainTab {
     tab === 'items' ||
     tab === 'spells' ||
     tab === 'infos' ||
+    tab === 'pings' ||
     tab === 'patchNotes'
   ) {
     return tab
@@ -1041,6 +1074,7 @@ const activeTab = ref<
   | 'duration'
   | 'abandons'
   | 'bans'
+  | 'pings'
   | 'patchNotes'
 >(initialActiveTabFromRoute())
 
@@ -1056,8 +1090,9 @@ const STATISTICS_TAB_NAV_ORDER: readonly StatisticsMainTab[] = [
   'runes',
   'spells',
   'items',
-  'infos',
+  'pings',
   'patchNotes',
+  'infos',
 ]
 
 const allTabs = computed(() => [
@@ -1080,8 +1115,9 @@ const allTabs = computed(() => [
   { id: 'runes' as const, label: t('statisticsPage.tabRunes'), widgetId: 'runes' },
   { id: 'spells' as const, label: t('statisticsPage.tabSummonerSpells'), widgetId: 'spells' },
   { id: 'items' as const, label: t('statisticsPage.tabItems'), widgetId: 'items' },
-  { id: 'infos' as const, label: t('statisticsPage.tabInfos'), widgetId: 'infos' },
+  { id: 'pings' as const, label: t('statisticsPage.tabPings'), widgetId: 'pings' },
   { id: 'patchNotes' as const, label: t('statisticsPage.tabPatchNotes'), widgetId: 'patchNotes' },
+  { id: 'infos' as const, label: t('statisticsPage.tabInfos'), widgetId: 'infos' },
 ])
 const activeSection = computed<StatisticsTabSection | null>(() => sectionFromQuery())
 const tabs = computed(() => {
@@ -1489,6 +1525,8 @@ const statsVersionFilter = ref('')
 const statsDivisionFilter = ref<string[]>([])
 const statsRoleFilter = ref('')
 const statsOtpFilter = ref<'oui' | 'non' | 'solo'>('non')
+const { statsSplitTransformEnabled, toggleStatsSplitTransformEnabled } =
+  useStatisticsSplitTransformPreference()
 
 function statsCohortFilters(): StatisticsCohortFilterValues {
   return {
@@ -1531,6 +1569,14 @@ function applyStatisticsStateFromQuery(): void {
     statsDivisionFilter.value = divisionsRaw
   }
   statsOtpFilter.value = otpRaw === 'oui' || otpRaw === 'solo' || otpRaw === 'non' ? otpRaw : 'non'
+  const splitTransformRaw = queryFirst(
+    route.query.splitTransform as string | string[] | null | undefined
+  )
+  if (splitTransformRaw === '1' || splitTransformRaw === 'true') {
+    statsSplitTransformEnabled.value = true
+  } else if (splitTransformRaw === '0' || splitTransformRaw === 'false') {
+    statsSplitTransformEnabled.value = false
+  }
   isApplyingQueryState.value = false
   if (import.meta.client) {
     syncProgressionDeltaToVersionBeforeFilter()
@@ -1559,6 +1605,10 @@ function syncStatisticsStateToQuery(): void {
     nextQuery.rankTier = [...statsDivisionFilter.value]
   } else delete nextQuery.rankTier
 
+  if (activeTab.value === 'championTable' && statsSplitTransformEnabled.value) {
+    nextQuery.splitTransform = '1'
+  } else delete nextQuery.splitTransform
+
   isSyncingQueryState.value = true
   router.replace({ query: nextQuery }).finally(() => {
     isSyncingQueryState.value = false
@@ -1580,6 +1630,7 @@ const activeStatsFiltersCount = computed(() => {
   if (cohortFlags.role && statsRoleFilter.value) count++
   if (cohortFlags.otp && statsOtpFilter.value !== 'non') count++
   if (cohortFlags.championSearch && championSearchQuery.value.trim()) count++
+  if (activeTab.value === 'championTable' && statsSplitTransformEnabled.value) count++
   if (activeTab.value === 'balance') {
     if (balanceGlobalFilter.value !== 'ALL') count++
     if (balanceNeedFilter.value !== 'ALL') count++
@@ -4109,6 +4160,7 @@ const championsError = ref<string | null>(null)
 
 type ChampionGlobalTableRow = {
   championId: number
+  championTransform?: ChampionTransform
   blue: {
     games: number
     wins: number
@@ -4189,11 +4241,12 @@ const championGlobalTableError = ref<string | null>(null)
 const championGlobalTableData = ref<{
   matchCount: number
   rows: ChampionGlobalTableRow[]
+  transformBreakdown?: ChampionGlobalTableRow[]
   error?: string
   message?: string
 } | null>(null)
 /** Lignes du même endpoint pour la version de référence (progressions), pour Δ sous WR/PR/BR et stats. */
-const championGlobalTableRefById = ref(new Map<number, ChampionGlobalTableRow>())
+const championGlobalTableRefByKey = ref(new Map<string, ChampionGlobalTableRow>())
 const championGlobalTableRefMatchCount = ref(0)
 
 /** Largeur minimale du tableau champion (scroll) selon les groupes de colonnes affichés. */
@@ -4210,15 +4263,71 @@ const championGlobalTableMinWidthPx = computed(() => {
 
 const championGlobalPage = ref(1)
 
+const championGlobalTransformBreakdownByChampion = computed(() => {
+  const map = new Map<number, ChampionGlobalTableRow[]>()
+  for (const row of championGlobalTableData.value?.transformBreakdown ?? []) {
+    const list = map.get(row.championId) ?? []
+    list.push(row)
+    map.set(row.championId, list)
+  }
+  for (const list of map.values()) {
+    list.sort((a, b) => (a.championTransform ?? 0) - (b.championTransform ?? 0))
+  }
+  return map
+})
+
+function championHasTransformBreakdown(championId: number): boolean {
+  if (!isTransformableChampion(championId)) return false
+  return championGlobalTransformRows(championId).length > 0
+}
+
+function championGlobalTransformRows(championId: number): ChampionGlobalTableRow[] {
+  return championGlobalTransformBreakdownByChampion.value.get(championId) ?? []
+}
+
+function championGlobalRowKey(row: ChampionGlobalTableRow): string {
+  return championTransformRowKey(row.championId, normalizeChampionTransform(row.championTransform))
+}
+
+function findChampionGlobalCurrentRow(
+  championId: number,
+  transform?: ChampionTransform
+): ChampionGlobalTableRow | undefined {
+  const rows = championGlobalTableData.value?.rows ?? []
+  if (statsSplitTransformEnabled.value) {
+    const t = transform ?? 0
+    return rows.find(
+      r => r.championId === championId && normalizeChampionTransform(r.championTransform) === t
+    )
+  }
+  return rows.find(r => r.championId === championId)
+}
+
+function findChampionGlobalRefRow(
+  championId: number,
+  transform?: ChampionTransform
+): ChampionGlobalTableRow | undefined {
+  const map = championGlobalTableRefByKey.value
+  if (statsSplitTransformEnabled.value) {
+    const key = championTransformRowKey(championId, transform ?? 0)
+    return map.get(key)
+  }
+  return map.get(championTransformRowKey(championId, 0))
+}
+
 const championGlobalFilteredRows = computed(() => {
   const list = championGlobalTableData.value?.rows ?? []
-  const raw = championSearchQuery.value.trim().toLowerCase()
+  const raw = championSearchQuery.value.trim()
   if (!raw) return list
-  return list.filter(row => {
-    const name = championName(row.championId)?.toLowerCase() ?? ''
-    const idStr = String(row.championId)
-    return name.includes(raw) || idStr === raw || idStr.includes(raw)
-  })
+  return list.filter(row =>
+    championRowMatchesGlobalSearch({
+      championId: row.championId,
+      championName: championName(row.championId),
+      championTransform: row.championTransform,
+      query: raw,
+      splitTransform: statsSplitTransformEnabled.value,
+    })
+  )
 })
 
 const championGlobalSortColumn = ref<ChampionGlobalSortColumn>('totalGames')
@@ -4265,14 +4374,14 @@ function championGlobalSideStatDeltaSortValue(
   side: 'blue' | 'red',
   stat: 'winrate' | 'pickrate'
 ): number {
-  return championGlobalSideStatDeltaPp(row.championId, side, stat) ?? 0
+  return championGlobalSideStatDeltaPp(row.championId, side, stat, row.championTransform) ?? 0
 }
 
 function championGlobalNumericDeltaSortValue(
   row: ChampionGlobalTableRow,
   key: ChampionGlobalNumericDeltaKey
 ): number {
-  const refRow = championGlobalTableRefById.value.get(row.championId)
+  const refRow = findChampionGlobalRefRow(row.championId, row.championTransform)
   if (!refRow) return 0
   return row[key] - refRow[key]
 }
@@ -4290,7 +4399,13 @@ function championGlobalCompare(
     case 'champion': {
       const na = championName(a.championId) || String(a.championId)
       const nb = championName(b.championId) || String(b.championId)
-      return na.localeCompare(nb, locale.value, { sensitivity: 'base' }) * m
+      const nameCmp = na.localeCompare(nb, locale.value, { sensitivity: 'base' })
+      if (nameCmp !== 0) return nameCmp * m
+      return (
+        (normalizeChampionTransform(a.championTransform) -
+          normalizeChampionTransform(b.championTransform)) *
+        m
+      )
     }
     case 'blueWinrate':
       return (a.blue.winrate - b.blue.winrate) * m
@@ -4521,6 +4636,9 @@ function championGlobalTableQueryForVersion(
   const v = (versionFull ?? '').trim()
   if (v) params.set('version', v)
   appendStatisticsCohortParams(params, tab, statsCohortFilters(), { alwaysSendOtp: true })
+  if (tab === 'championTable' && statsSplitTransformEnabled.value) {
+    params.set('splitTransform', '1')
+  }
   const s = params.toString()
   return s ? `?${s}` : ''
 }
@@ -4555,6 +4673,17 @@ const bansTab = useStatisticsBansTab({
   championName,
   overviewTeamsData,
   overviewTeamsBaselineData,
+})
+
+const pingsTab = useStatisticsPingsTab({
+  championSearchQuery,
+  statsVersionFilter,
+  statsFetch,
+  apiUrl,
+  championGlobalTableQueryForVersion: (versionFull: string | null | undefined) =>
+    championGlobalTableQueryForVersion(versionFull, 'pings'),
+  gameVersion,
+  championName,
 })
 
 const patchNotesTab = useStatisticsPatchNotesTab({
@@ -4601,7 +4730,7 @@ async function loadPatchNotesVersionOptions(): Promise<void> {
 async function loadChampionGlobalTable() {
   championGlobalTablePending.value = true
   championGlobalTableError.value = null
-  championGlobalTableRefById.value = new Map()
+  championGlobalTableRefByKey.value = new Map()
   championGlobalTableRefMatchCount.value = 0
   try {
     const mainVer = (statsVersionFilter.value || gameVersion.value || '').trim()
@@ -4611,11 +4740,16 @@ async function loadChampionGlobalTable() {
       statsFetch<{
         matchCount: number
         rows: ChampionGlobalTableRow[]
+        transformBreakdown?: ChampionGlobalTableRow[]
         error?: string
         message?: string
       }>(apiUrl('/api/stats/champions/global-table' + championGlobalTableQueryForVersion(mainVer))),
       refVer
-        ? statsFetch<{ matchCount: number; rows: ChampionGlobalTableRow[] }>(
+        ? statsFetch<{
+            matchCount: number
+            rows: ChampionGlobalTableRow[]
+            transformBreakdown?: ChampionGlobalTableRow[]
+          }>(
             apiUrl('/api/stats/champions/global-table' + championGlobalTableQueryForVersion(refVer))
           )
         : Promise.resolve(null),
@@ -4630,9 +4764,11 @@ async function loadChampionGlobalTable() {
 
     if (refData) {
       championGlobalTableRefMatchCount.value = Math.max(0, Number(refData.matchCount ?? 0))
-      const m = new Map<number, ChampionGlobalTableRow>()
-      for (const r of refData.rows ?? []) m.set(r.championId, r)
-      championGlobalTableRefById.value = m
+      const m = new Map<string, ChampionGlobalTableRow>()
+      for (const r of refData.rows ?? []) {
+        m.set(championGlobalRowKey(r), r)
+      }
+      championGlobalTableRefByKey.value = m
     }
   } catch (e) {
     championGlobalTableError.value = e instanceof Error ? e.message : String(e)
@@ -4645,11 +4781,12 @@ async function loadChampionGlobalTable() {
 function championGlobalSideStatDeltaPp(
   championId: number,
   side: 'blue' | 'red',
-  stat: 'winrate' | 'pickrate'
+  stat: 'winrate' | 'pickrate',
+  transform?: ChampionTransform
 ): number | undefined {
   if (!championGlobalPatchDeltaRefLabel.value) return undefined
-  const refRow = championGlobalTableRefById.value.get(championId)
-  const curRow = championGlobalTableData.value?.rows.find(r => r.championId === championId)
+  const refRow = findChampionGlobalRefRow(championId, transform)
+  const curRow = findChampionGlobalCurrentRow(championId, transform)
   if (!refRow || !curRow) return undefined
   const cur = side === 'blue' ? curRow.blue : curRow.red
   const rf = side === 'blue' ? refRow.blue : refRow.red
@@ -4669,11 +4806,12 @@ function championGlobalSideStatDeltaPp(
 
 function championGlobalNumericDelta(
   championId: number,
-  key: ChampionGlobalNumericDeltaKey
+  key: ChampionGlobalNumericDeltaKey,
+  transform?: ChampionTransform
 ): number | undefined {
   if (!championGlobalPatchDeltaRefLabel.value) return undefined
-  const refRow = championGlobalTableRefById.value.get(championId)
-  const curRow = championGlobalTableData.value?.rows.find(r => r.championId === championId)
+  const refRow = findChampionGlobalRefRow(championId, transform)
+  const curRow = findChampionGlobalCurrentRow(championId, transform)
   if (!refRow || !curRow) return undefined
   return curRow[key] - refRow[key]
 }
@@ -4696,6 +4834,12 @@ watch([statsRoleFilter, statsOtpFilter], () => {
   const tab = activeTab.value
   if (tab === 'overview') loadChampions()
   if (tab === 'championTable') loadChampionGlobalTable()
+})
+
+watch(statsSplitTransformEnabled, () => {
+  if (isApplyingQueryState.value) return
+  syncStatisticsStateToQuery()
+  if (activeTab.value === 'championTable') loadChampionGlobalTable()
 })
 
 watch(
@@ -4778,6 +4922,7 @@ watch(activeTab, async tab => {
   }
   if (tab === 'abandons') loadOverviewAbandons()
   if (tab === 'surrender') loadSurrenderMatrix()
+  if (tab === 'pings') pingsTab.loadPingsTable()
   if (tab === 'patchNotes') {
     runInBackground(loadPatchNotesVersionOptions())
     patchNotesTab.loadPatchNotesStats()
@@ -4811,6 +4956,7 @@ watch([statsVersionFilter, statsRoleFilter, statsOtpFilter], () => {
     loadOverviewTeams()
     loadObjectivesBaseline()
   }
+  if (activeTab.value === 'pings') pingsTab.loadPingsTable()
   if (activeTab.value === 'surrender') loadSurrenderMatrix()
   if (activeTab.value === 'duration') loadOverviewDurationWinrate()
   if (activeTab.value === 'abandons') loadOverviewAbandons()
@@ -4852,6 +4998,7 @@ watch(progressionFromVersion, () => {
     bansTab.loadBansTable()
     loadObjectivesBaseline()
   }
+  if (activeTab.value === 'pings') pingsTab.loadPingsTable()
   if (activeTab.value === 'surrender') loadSurrenderMatrix()
   if (activeTab.value === 'duration') loadOverviewDurationWinrate()
   if (activeTab.value === 'abandons') loadOverviewAbandons()
@@ -4918,12 +5065,16 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   bansExpandByLoss,
   bansExpandByWin,
   cardIsFavorite,
+  compareVersionsDesc,
   championByKey,
   championGlobalNumericDelta,
   championGlobalNumericDeltaClass,
   championGlobalPatchDeltaRefLabel,
   championGlobalPickrateClass,
+  championGlobalRowKey,
   championGlobalSideStatDeltaPp,
+  championGlobalTransformRows,
+  championHasTransformBreakdown,
   championGlobalPage,
   championGlobalSortIcon,
   championGlobalSortedRows,
@@ -5103,6 +5254,7 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   sidesRedTopWinrateSince,
   sidesSurrenderBySide,
   spellsModeFilter,
+  statsSplitTransformEnabled,
   itemsLegendaryFilter,
   itemsTypeFilter,
   teamPercent,
@@ -5154,6 +5306,14 @@ if (__statisticsVm?.proxy) {
             patchNotesTab.patchNotesPage.value = v
           }
         }
+        if (key === 'onPingsPageUpdated') {
+          return (v: number) => {
+            pingsTab.pingsPage.value = v
+          }
+        }
+        if (Object.prototype.hasOwnProperty.call(pingsTab, key)) {
+          return unref((pingsTab as any)[key])
+        }
         if (Object.prototype.hasOwnProperty.call(patchNotesTab, key)) {
           return unref((patchNotesTab as any)[key])
         }
@@ -5174,6 +5334,13 @@ if (__statisticsVm?.proxy) {
       },
       set(_target, key: string | symbol, value: unknown) {
         if (typeof key === 'string') {
+          if (Object.prototype.hasOwnProperty.call(pingsTab, key)) {
+            const binding = (pingsTab as Record<string, unknown>)[key]
+            if (isRef(binding)) {
+              ;(binding as { value: unknown }).value = value
+              return true
+            }
+          }
           if (Object.prototype.hasOwnProperty.call(patchNotesTab, key)) {
             const binding = (patchNotesTab as Record<string, unknown>)[key]
             if (isRef(binding)) {

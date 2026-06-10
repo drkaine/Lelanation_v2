@@ -17,6 +17,7 @@ export function resolveDisplayedBuild(base: Build, subIndex: number | null): Bui
     tags: sub.tags !== undefined ? sub.tags : (base.tags ?? []),
     description: sub.description ?? base.description,
     gameVersion: sub.gameVersion || base.gameVersion,
+    kaynForm: sub.kaynForm ?? 0,
   } as Build
 }
 

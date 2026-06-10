@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import type {
   Build,
   SubBuild,
+  type KaynForm,
   Champion,
   Item,
   RuneSelection,
@@ -238,6 +239,7 @@ export const useBuildStore = defineStore('build', {
         tags: sub.tags !== undefined ? sub.tags : (this.currentBuild.tags ?? []),
         description: sub.description ?? this.currentBuild.description,
         gameVersion: sub.gameVersion || this.currentBuild.gameVersion,
+        kaynForm: sub.kaynForm ?? 0,
       } as Build
     },
 
@@ -1048,6 +1050,7 @@ export const useBuildStore = defineStore('build', {
         roles: [...(b.roles ?? [])],
         tags: [...(b.tags ?? [])],
         gameVersion: b.gameVersion || '',
+        kaynForm: 0,
       }
       if (!b.subBuilds) b.subBuilds = []
       b.subBuilds.push(newSub)
@@ -1126,6 +1129,7 @@ export const useBuildStore = defineStore('build', {
       }
       if (this.currentBuild) {
         this.currentBuild.champion = championWithStatsForBuild(champion)
+        this.currentBuild.kaynForm = 0
         this.currentBuild.updatedAt = new Date().toISOString()
         if (this.builderSession === 'theorycraft') {
           this.clearTheorycraftStackContext()
@@ -1133,6 +1137,18 @@ export const useBuildStore = defineStore('build', {
         this.recalculateStats()
       }
       return true
+    },
+
+    setActiveKaynForm(form: KaynForm) {
+      if (!this.currentBuild) return
+      const b = this.currentBuild
+      if (this.displayedVariant === 'main') {
+        b.kaynForm = form
+      } else if (typeof this.displayedVariant === 'number') {
+        const sub = b.subBuilds?.[this.displayedVariant]
+        if (sub) sub.kaynForm = form
+      }
+      b.updatedAt = new Date().toISOString()
     },
 
     clearChampion() {
@@ -1143,6 +1159,7 @@ export const useBuildStore = defineStore('build', {
         this.currentBuild.champion = null
         this.currentBuild.updatedAt = new Date().toISOString()
         this.pendingChampionChange = null
+        this.currentBuild.kaynForm = 0
         if (this.builderSession === 'theorycraft') {
           this.clearTheorycraftStackContext()
         }
@@ -1154,6 +1171,7 @@ export const useBuildStore = defineStore('build', {
     confirmChampionChange() {
       if (!this.pendingChampionChange || !this.currentBuild) return
       this.currentBuild.champion = this.pendingChampionChange
+      this.currentBuild.kaynForm = 0
       this.currentBuild.subBuilds = []
       this.currentBuild.updatedAt = new Date().toISOString()
       this.displayedVariant = 'main'
@@ -1339,6 +1357,7 @@ export const useBuildStore = defineStore('build', {
       skillOrder: SkillOrder | null
       description: string
       tags: BuildTag[]
+      kaynForm: KaynForm
     } | null {
       if (!this.currentBuild) return null
       const b = this.currentBuild
@@ -1351,6 +1370,7 @@ export const useBuildStore = defineStore('build', {
           skillOrder: b.skillOrder ?? null,
           description: b.description ?? '',
           tags: [...(b.tags ?? [])],
+          kaynForm: b.kaynForm ?? 0,
         }
       }
       const subs = b.subBuilds as SubBuild[] | undefined
@@ -1364,6 +1384,7 @@ export const useBuildStore = defineStore('build', {
         skillOrder: sub.skillOrder ?? null,
         description: sub.description ?? '',
         tags: sub.tags !== undefined ? [...sub.tags] : [...(b.tags ?? [])],
+        kaynForm: sub.kaynForm ?? 0,
       }
     },
 
@@ -1384,6 +1405,7 @@ export const useBuildStore = defineStore('build', {
         skillUpOrder?: boolean
         description?: boolean
         tags?: boolean
+        kaynForm?: boolean
       }
     ) {
       const data = this.getSourceBuildData(source)
@@ -1400,6 +1422,13 @@ export const useBuildStore = defineStore('build', {
         destBuild.summonerSpells = [data.summonerSpells[0], data.summonerSpells[1]]
       if (fields.description) destBuild.description = data.description
       if (fields.tags) destBuild.tags = [...data.tags]
+      if (fields.kaynForm) {
+        if (destination === 'main') {
+          b.kaynForm = data.kaynForm
+        } else {
+          destBuild.kaynForm = data.kaynForm
+        }
+      }
 
       if (fields.skillOrder && data.skillOrder) {
         destBuild.skillOrder = data.skillOrder

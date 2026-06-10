@@ -24,6 +24,7 @@ import {
 import { getTierList } from '../services/TierListService.js'
 import { getChampionGlobalTable } from '../services/ChampionGlobalTableService.js'
 import { getChampionBansTable } from '../services/ChampionBansTableService.js'
+import { getChampionPingsTable } from '../services/ChampionPingsTableService.js'
 import { getChampionDamageSplit } from '../services/ChampionDamageSplitService.js'
 import { getChampionMiscSummary } from '../services/ChampionMiscStatsService.js'
 import {
@@ -677,12 +678,15 @@ router.get('/champions/global-table', async (req: Request, res: Response) => {
   const rankTier = queryStringArray(req.query.rankTier)
   const role = queryString(req.query.role)
   const otpMode = otpModeFromQuery(req.query.otp)
+  const splitTransform =
+    queryString(req.query.splitTransform) === '1' || req.query.splitTransform === 'true'
   const sqlStart = Date.now()
   try {
     const data = await getChampionGlobalTable(
       version.length ? version : null,
       rankTier.length ? rankTier : null,
-      role
+      role,
+      splitTransform
     )
     ;(res as Response & { locals: { sqlMs?: number } }).locals.sqlMs = Date.now() - sqlStart
     if (!data) {
@@ -700,6 +704,33 @@ router.get('/champions/global-table', async (req: Request, res: Response) => {
       matchCount: 0,
       rows: [],
       error: 'Champion global table failed',
+      message,
+    })
+  }
+})
+
+/** GET /api/stats/champions/pings-table — pings moyens par champion. Query: ?version=…&rankTier=…&role=… */
+router.get('/champions/pings-table', async (req: Request, res: Response) => {
+  res.set('Cache-Control', 'no-store')
+  const version = queryStringArray(req.query.version)
+  const rankTier = queryStringArray(req.query.rankTier)
+  const role = queryString(req.query.role)
+  try {
+    const data = await getChampionPingsTable(
+      version.length ? version : null,
+      rankTier.length ? rankTier : null,
+      role
+    )
+    if (!data) {
+      return res.status(200).json({ rows: [], message: 'Database not configured.' })
+    }
+    return res.json(data)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('[champions/pings-table]', message, err)
+    return res.status(200).json({
+      rows: [],
+      error: 'Champion pings table failed',
       message,
     })
   }

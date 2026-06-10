@@ -272,6 +272,9 @@ export interface SkillOrder {
 export type Role = 'top' | 'jungle' | 'mid' | 'adc' | 'support'
 export type BuildTag = 'pro' | 'otp' | 'exotique' | 'troll'
 
+/** Kayn transformation form: 0 = base, 1 = Darkin, 2 = Assassin. */
+export type KaynForm = 0 | 1 | 2
+
 /** Build flagged because champion/items/runes appear in patch notes. */
 export interface PatchStaleInfo {
   patchVersion: string
@@ -292,6 +295,8 @@ export interface SubBuild {
   roles: Role[]
   tags?: BuildTag[]
   gameVersion: string
+  /** Kayn only: portrait + tooltip form for this variant. */
+  kaynForm?: KaynForm
 }
 
 /** Lightweight (serialized) version of SubBuild for storage. */
@@ -307,6 +312,7 @@ export interface StoredSubBuild {
   roles: Role[]
   tags?: BuildTag[]
   gameVersion: string
+  kaynForm?: KaynForm
 }
 
 export interface Build {
@@ -331,6 +337,8 @@ export interface Build {
   subBuilds?: SubBuild[]
   descriptionMode?: 'single' | 'multiple'
   patchStale?: PatchStaleInfo | null
+  /** Kayn only: portrait + tooltip form for the main variant. */
+  kaynForm?: KaynForm
 }
 
 export interface ChampionRef {
@@ -372,6 +380,7 @@ export interface StoredBuild {
   subBuilds?: StoredSubBuild[]
   descriptionMode?: 'single' | 'multiple'
   patchStale?: PatchStaleInfo | null
+  kaynForm?: KaynForm
 }
 
 export interface CalculatedStats {

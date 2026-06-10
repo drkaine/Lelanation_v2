@@ -93,6 +93,11 @@ export const STATS_ENDPOINT_SOURCE_POLICY: StatsEndpointSourceRule[] = [
     allowedSources: ['champion_bans_by_banner', 'match_outcome_stats'],
   },
   {
+    path: '/champions/pings-table',
+    policy: 'mv_only',
+    allowedSources: ['champion_stats'],
+  },
+  {
     path: '/tier-list',
     policy: 'mv_only',
     allowedSources: ['champion_stats', 'champion_vs_stats', 'match_outcome_stats'],

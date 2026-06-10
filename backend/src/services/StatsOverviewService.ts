@@ -24,6 +24,7 @@ import {
   invalidateAggArchivePartitionCache,
   buildProgressionOldestOnlySql,
   buildProgressionSinceSql,
+  comparePatchMajorMinor,
   listDistinctPatchVersions,
   matchVersionedAggFrom,
   normalizePatchMajorMinor,
@@ -2844,11 +2845,13 @@ export async function getInfosPatchDivisionMatrix(): Promise<InfosPatchDivisionM
       entry.all += mc
       byVersion.set(version, entry)
     }
-    const rows = [...byVersion.entries()].map(([version, data]) => ({
-      version,
-      all: data.all,
-      byDivision: data.byDivision,
-    }))
+    const rows = [...byVersion.entries()]
+      .map(([version, data]) => ({
+        version,
+        all: data.all,
+        byDivision: data.byDivision,
+      }))
+      .sort((a, b) => comparePatchMajorMinor(b.version, a.version))
     return { divisions: [...divisionSet], rows }
   } catch (err) {
     console.error('[getInfosPatchDivisionMatrix]', err)

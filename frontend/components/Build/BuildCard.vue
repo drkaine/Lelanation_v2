@@ -149,9 +149,20 @@
               @click.stop
               @input="onMainTitleInput(($event.target as HTMLInputElement).value)"
             />
+            <span v-if="isKaynBuild" class="variants-popover-form-hint">
+              {{
+                kaynVariantFormLabel(buildStore.currentBuild?.kaynForm) ||
+                ` · ${t('buildCard.kaynFormBase')}`
+              }}
+            </span>
           </template>
           <span v-else class="variants-popover-label">
-            {{ displayBuild?.name || t('buildCard.mainBuildName') }}
+            {{ displayBuild?.name || t('buildCard.mainBuildName')
+            }}{{
+              isKaynBuild
+                ? kaynVariantFormLabel((props.build ?? buildStore.currentBuild)?.kaynForm)
+                : ''
+            }}
           </span>
         </li>
         <li
@@ -171,9 +182,13 @@
               @click.stop
               @input="onSubTitleInput(idx, ($event.target as HTMLInputElement).value)"
             />
+            <span v-if="isKaynBuild" class="variants-popover-form-hint">
+              {{ kaynVariantFormLabel(sub.kaynForm) || ` · ${t('buildCard.kaynFormBase')}` }}
+            </span>
           </template>
           <span v-else class="variants-popover-label">
-            {{ sub.title || t('buildCard.variantN', { n: idx + 2 }) }}
+            {{ sub.title || t('buildCard.variantN', { n: idx + 2 })
+            }}{{ isKaynBuild ? kaynVariantFormLabel(sub.kaynForm) : '' }}
           </span>
           <button
             v-if="!readonly"
@@ -255,6 +270,10 @@
           <input v-model="copySelection.skillUpOrder" type="checkbox" />
           <span>{{ t('buildCard.copySkillUpOrder') }}</span>
         </label>
+        <label v-if="isKaynBuild" class="variants-copy-option">
+          <input v-model="copySelection.kaynForm" type="checkbox" />
+          <span>{{ t('buildCard.copyKaynForm') }}</span>
+        </label>
         <div class="variants-copy-picker-actions">
           <button type="button" class="variants-copy-picker-cancel" @click="closeCopyPicker()">
             {{ t('buildCard.cancel') }}
@@ -284,6 +303,14 @@
       >
         <!-- Version (top right) -->
         <div class="build-version">{{ version }}</div>
+
+        <KaynFormSelector
+          v-if="showKaynFormSelector && selectedChampion?.passive?.image?.full"
+          v-model="builderKaynFormModel"
+          :version="versionForImages"
+          :passive-image-full="selectedChampion.passive.image.full"
+          :base-image-full="selectedChampion.image.full"
+        />
 
         <div v-if="showFrontVariantsTagsStack" class="variants-tags-stack">
           <button
@@ -419,7 +446,7 @@
                 v-show="!showChampionSplashArt"
                 ref="championPortraitRef"
                 :src="championIconSrc"
-                :alt="selectedChampion.name"
+                :alt="kaynTooltipChampionName || selectedChampion.name"
                 class="champion-portrait"
                 loading="eager"
                 decoding="sync"
@@ -431,7 +458,7 @@
                 v-show="showChampionSplashArt"
                 ref="championPortraitRef"
                 :src="championSplashSrc"
-                :alt="selectedChampion.name"
+                :alt="kaynTooltipChampionName || selectedChampion.name"
                 class="champion-portrait champion-portrait--splash"
                 loading="eager"
                 decoding="sync"
@@ -940,8 +967,8 @@
             <div class="tooltip-top">
               <div class="tooltip-present">
                 <img
-                  :src="getChampionImageUrl(versionForImages, selectedChampion.image.full)"
-                  :alt="selectedChampion.name"
+                  :src="championIconSrc"
+                  :alt="kaynTooltipChampionName"
                   class="tooltip-champion-image"
                 />
                 <div
@@ -953,7 +980,7 @@
                   </div>
                 </div>
                 <div class="tooltip-text">
-                  <div class="tooltip-champion-name">{{ selectedChampion.name }}</div>
+                  <div class="tooltip-champion-name">{{ kaynTooltipChampionName }}</div>
                   <div class="tooltip-champion-title">{{ selectedChampion.title }}</div>
                 </div>
               </div>
@@ -1739,6 +1766,7 @@ import { useRunesStore } from '~/stores/RunesStore'
 import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import {
   getChampionImageUrl,
+  getKaynHudImageUrl,
   getChampionSplashImageUrl,
   getChampionSpellImageUrl,
   getChampionPassiveImageUrl,
@@ -1769,8 +1797,14 @@ import DescriptionEditor from '~/components/Build/DescriptionEditor.vue'
 import PatchStaleBuildBadge from '~/components/Build/PatchStaleBuildBadge.vue'
 import TheorycraftCardStatsBack from '~/components/Build/TheorycraftCardStatsBack.vue'
 import TheorycraftItemManagerSlot from '~/components/Build/TheorycraftItemManagerSlot.vue'
+import KaynFormSelector from '~/components/Build/KaynFormSelector.vue'
 import { isTheorycraftActivatableItemPassive } from '~/utils/theorycraftItemPassives'
 import DescriptionVideoPreviews from '~/components/Build/DescriptionVideoPreviews.vue'
+import {
+  getKaynDisplayName,
+  KAYN_CHAMPION_ID,
+  type KaynFormFilter,
+} from '~/utils/kaynFormTooltipMarkup'
 
 interface RegionsPayload {
   regionsData: Record<string, [string, string]>
@@ -1927,7 +1961,12 @@ const copySelection = ref({
   tags: true,
   firstThreeUps: false,
   skillUpOrder: false,
+  kaynForm: true,
 })
+
+const isKaynBuild = computed(
+  () => (props.build ?? buildStore.currentBuild)?.champion?.id === KAYN_CHAMPION_ID
+)
 
 /** Liste des sous-builds du build affiché (prop ou store). */
 const buildSubBuilds = computed<SubBuild[]>(() => {
@@ -1979,7 +2018,8 @@ const copyAllSelected = computed(
     copySelection.value.summonerSpells &&
     copySelection.value.tags &&
     copySelection.value.firstThreeUps &&
-    copySelection.value.skillUpOrder
+    copySelection.value.skillUpOrder &&
+    (!isKaynBuild.value || copySelection.value.kaynForm)
 )
 const hasCopySelection = computed(
   () =>
@@ -1989,7 +2029,8 @@ const hasCopySelection = computed(
     copySelection.value.summonerSpells ||
     copySelection.value.tags ||
     copySelection.value.firstThreeUps ||
-    copySelection.value.skillUpOrder
+    copySelection.value.skillUpOrder ||
+    (isKaynBuild.value && copySelection.value.kaynForm)
 )
 const canApplyCopy = computed(() => hasCopySelection.value && copyDestinations.value.length > 0)
 const regionsPayload = ref<RegionsPayload | null>(null)
@@ -2113,6 +2154,7 @@ function toggleCopyAll(event: Event) {
     tags: checked,
     firstThreeUps: checked,
     skillUpOrder: checked,
+    kaynForm: checked,
   }
 }
 
@@ -2128,6 +2170,7 @@ function applyCopySelection() {
     tags: copySelection.value.tags,
     firstThreeUps: copySelection.value.firstThreeUps,
     skillUpOrder: copySelection.value.skillUpOrder,
+    kaynForm: isKaynBuild.value && copySelection.value.kaynForm,
   }
   for (const dest of copyDestinations.value) {
     if (dest === source) continue
@@ -2435,6 +2478,7 @@ const displayBuild = computed<Build | null>(() => {
         tags: sub.tags !== undefined ? sub.tags : (baseBuild.tags ?? []),
         description: sub.description ?? baseBuild.description,
         gameVersion: sub.gameVersion || baseBuild.gameVersion,
+        kaynForm: sub.kaynForm ?? 0,
       } as Build
     }
   }
@@ -2570,11 +2614,73 @@ const buildCardThemeVars = computed<CSSProperties>(() => {
   }
 })
 
+const showKaynFormSelector = computed(
+  () =>
+    !props.readonly &&
+    !props.build &&
+    (isBuilderPage.value || props.selectionMode === 'theorycraft') &&
+    selectedChampion.value?.id === KAYN_CHAMPION_ID &&
+    Boolean(selectedChampion.value?.passive?.image?.full)
+)
+
+const activeKaynForm = computed((): 0 | 1 | 2 => {
+  const raw = displayBuild.value?.kaynForm
+  const n = Math.trunc(Number(raw ?? 0))
+  if (n === 1) return 1
+  if (n === 2) return 2
+  return 0
+})
+
+const builderKaynFormModel = computed({
+  get: () => activeKaynForm.value,
+  set: (value: 0 | 1 | 2) => buildStore.setActiveKaynForm(value),
+})
+
+const kaynFormFilter = computed((): KaynFormFilter | undefined => {
+  if (selectedChampion.value?.id !== KAYN_CHAMPION_ID) return undefined
+  const form = activeKaynForm.value
+  return form === 1 || form === 2 ? form : undefined
+})
+
+const kaynTooltipChampionName = computed(() => {
+  if (!selectedChampion.value) return ''
+  if (selectedChampion.value.id === KAYN_CHAMPION_ID) {
+    return getKaynDisplayName(activeKaynForm.value)
+  }
+  return selectedChampion.value.name
+})
+
 const championIconSrc = computed(() => {
   const champion = selectedChampion.value
   if (!champion) return ''
+  if (champion.id === KAYN_CHAMPION_ID) {
+    if (activeKaynForm.value === 1) return getKaynHudImageUrl('slay')
+    if (activeKaynForm.value === 2) return getKaynHudImageUrl('ass')
+  }
   return getChampionImageUrl(versionForImages.value, champion.image.full)
 })
+
+function kaynBuildCardTitle(form: 0 | 1 | 2): string {
+  if (form === 1) return String(t('buildCard.kaynFormRed')).toUpperCase()
+  if (form === 2) return String(t('buildCard.kaynFormBlue')).toUpperCase()
+  return String(t('buildCard.kaynFormBase')).toUpperCase()
+}
+
+function defaultChampionCardTitle(
+  champion: { id: string; name: string } | null | undefined
+): string {
+  if (!champion) return ''
+  if (champion.id === KAYN_CHAMPION_ID) {
+    return kaynBuildCardTitle(activeKaynForm.value)
+  }
+  return champion.name.toUpperCase()
+}
+
+function kaynVariantFormLabel(form: 0 | 1 | 2 | undefined): string {
+  if (form === 1) return ` · ${t('buildCard.kaynFormRed')}`
+  if (form === 2) return ` · ${t('buildCard.kaynFormBlue')}`
+  return ''
+}
 
 const championSplashSrc = computed(() => {
   const champion = selectedChampion.value
@@ -2597,7 +2703,7 @@ const cardTitle = computed(() => {
       if (!isDefaultBuildName(b.name)) {
         return b.name as string
       }
-      return selectedChampion.value ? selectedChampion.value.name.toUpperCase() : ''
+      return defaultChampionCardTitle(selectedChampion.value)
     }
     const idx = buildStore.displayedVariant as number
     const sub = (b.subBuilds as SubBuild[] | undefined)?.[idx]
@@ -2607,7 +2713,7 @@ const cardTitle = computed(() => {
     if (!isDefaultBuildName(b.name)) {
       return b.name as string
     }
-    return selectedChampion.value ? selectedChampion.value.name.toUpperCase() : ''
+    return defaultChampionCardTitle(selectedChampion.value)
   }
 
   // Mode readonly avec build en prop : utiliser sub sélectionné localement si présent
@@ -2625,8 +2731,8 @@ const cardTitle = computed(() => {
     }
   }
 
-  // Fallback : nom du champion en majuscules
-  return selectedChampion.value ? selectedChampion.value.name.toUpperCase() : ''
+  // Fallback : nom du champion en majuscules (Kayn → forme active)
+  return defaultChampionCardTitle(selectedChampion.value)
 })
 
 const CHAMPION_TITLE_FONT_MAX_PX = 15
@@ -3321,10 +3427,16 @@ function spellTooltipMeta(spell: any) {
   return formatSpellHeaderStatsHtml(normalizeSpellHeaderStatsForChampion(stats, partype))
 }
 
+function kaynTooltipOptions() {
+  const form = kaynFormFilter.value
+  return form ? { kaynForm: form } : undefined
+}
+
 function spellTooltipBody(spell: any) {
   if (!spell) return ''
-  const body = resolveSpellTooltipBodyHtml(spell)
-  const details = formatSpellDetailedTextsHtml(spell)
+  const options = kaynTooltipOptions()
+  const body = resolveSpellTooltipBodyHtml(spell, options)
+  const details = formatSpellDetailedTextsHtml(spell, options)
   return [body, details].filter(Boolean).join('<br>')
 }
 
@@ -3868,6 +3980,13 @@ defineExpose({
   white-space: nowrap;
   font-size: 12px;
   color: rgba(255, 255, 255, 0.88);
+}
+
+.variants-popover-form-hint {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: rgba(200, 155, 60, 0.9);
+  white-space: nowrap;
 }
 
 .variants-popover-copy,
@@ -4604,6 +4723,7 @@ defineExpose({
 
 /* Champion Section */
 .champion-section {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
