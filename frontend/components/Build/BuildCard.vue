@@ -4518,6 +4518,7 @@ defineExpose({
   position: absolute;
   top: 30px;
   right: 8px; /* Aligné à droite comme la version */
+  z-index: 5;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -4545,21 +4546,26 @@ defineExpose({
   cursor: pointer;
 }
 
-.role-unselected {
+.role-unselected .role-image {
   opacity: 0.3;
   filter: grayscale(100%);
 }
 
 .role-selected {
-  opacity: 1;
-  filter: grayscale(0%);
   background: rgba(200, 155, 60, 0.1);
 }
 
+.role-selected .role-image {
+  opacity: 1;
+  filter: grayscale(0%);
+}
+
 .role-image {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: contain;
+  pointer-events: none;
 }
 
 .variants-tags-stack {

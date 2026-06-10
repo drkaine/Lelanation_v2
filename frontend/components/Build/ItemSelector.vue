@@ -16,20 +16,43 @@
     </div>
 
     <!-- Tag Filters -->
-    <div class="mb-3 flex flex-wrap gap-0">
+    <div class="item-filter-bar mb-3 flex flex-wrap">
       <button
         v-for="tag in availableTags"
         :key="tag"
         :class="[
-          'rounded-lg border px-3 py-1.5 text-sm font-semibold transition-all',
+          'item-filter-btn rounded-lg border text-sm font-semibold transition-all',
           selectedTags.includes(tag)
             ? 'border-surface bg-accent text-background'
             : 'border-accent bg-surface text-text',
         ]"
-        style="margin-right: -1px"
         @click="toggleTag(tag)"
       >
         {{ translateTag(tag) }}
+      </button>
+      <button
+        type="button"
+        :class="[
+          'item-filter-btn rounded-lg border text-sm font-semibold transition-all',
+          showGoldValue
+            ? 'border-surface bg-primary text-primary-light'
+            : 'border-primary bg-surface text-text',
+        ]"
+        @click="showGoldValue = !showGoldValue"
+      >
+        {{ t('item.selector.showGoldValue') }}
+      </button>
+      <button
+        type="button"
+        :class="[
+          'item-filter-btn rounded-lg border text-sm font-semibold transition-all',
+          showGoldEfficiency
+            ? 'border-surface bg-primary text-primary-light'
+            : 'border-primary bg-surface text-text',
+        ]"
+        @click="showGoldEfficiency = !showGoldEfficiency"
+      >
+        {{ t('item.selector.showGoldEfficiency') }}
       </button>
     </div>
 
@@ -102,7 +125,15 @@
                   <span class="item-index">{{ getItemIndex(item) }}</span>
                 </div>
               </button>
-              <div class="item-price">{{ item.gold?.total || 0 }}</div>
+              <div class="item-meta">
+                <div class="item-price">{{ item.gold?.total || 0 }}</div>
+                <div v-if="showGoldValue" class="item-gold-value">
+                  {{ getItemGoldValue(item) }}
+                </div>
+                <div v-if="showGoldEfficiency" class="item-gold-efficiency">
+                  {{ formatItemGoldEfficiency(item) }}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -126,6 +157,13 @@
               <div class="item-tooltip-name">{{ hoveredItem.name }}</div>
               <div class="item-tooltip-price">
                 {{ hoveredItem.gold?.total || 0 }}
+              </div>
+              <div class="item-tooltip-gold-value">
+                {{ t('stats.labels.goldValue') }}: {{ getItemGoldValue(hoveredItem) }}
+              </div>
+              <div class="item-tooltip-gold-efficiency">
+                {{ t('stats.labels.goldEfficiency') }}:
+                {{ formatItemGoldEfficiency(hoveredItem) }}
               </div>
             </div>
           </div>
@@ -173,6 +211,7 @@ import {
   isSmiteSpell,
   isSupportLineStarter,
 } from '~/utils/buildItemRules'
+import { formatItemGoldEfficiency, getItemGoldValue } from '~/utils/formatItemStats'
 
 const props = withDefaults(defineProps<{ includeMasterwork?: boolean }>(), {
   includeMasterwork: false,
@@ -231,6 +270,8 @@ const translateTag = (tag: string): string => {
 
 const searchQuery = ref('')
 const selectedTags = ref<string[]>([])
+const showGoldValue = ref(false)
+const showGoldEfficiency = ref(false)
 
 const TAG_ALIASES: Record<string, string[]> = {
   // Data Dragon may expose AP as AbilityPower or SpellDamage depending on version/source.
@@ -938,6 +979,15 @@ watch(locale, () => {
   background: transparent !important;
 }
 
+.item-filter-bar {
+  gap: 5px;
+}
+
+.item-filter-btn {
+  padding: 5px;
+  margin: 0;
+}
+
 .item-selector-warning {
   margin: 0;
   font-size: 0.8125rem;
@@ -1040,12 +1090,29 @@ watch(locale, () => {
   overflow: visible;
 }
 
+.item-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.125rem;
+}
+
 .item-price {
   font-size: 0.75rem;
   color: rgb(var(--rgb-text) / 0.8);
   text-align: center;
   white-space: nowrap;
   padding-top: 3px;
+}
+
+.item-gold-value,
+.item-gold-efficiency {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: rgb(var(--rgb-primary-light));
+  text-align: center;
+  white-space: nowrap;
+  line-height: 1;
 }
 
 .gold-icon {
@@ -1115,13 +1182,6 @@ watch(locale, () => {
   }
 }
 
-.item-price {
-  font-size: 0.75rem;
-  color: rgb(var(--rgb-text) / 0.8);
-  text-align: center;
-  white-space: nowrap;
-}
-
 .item-tooltip {
   width: min(320px, calc(100vw - 2rem));
   max-width: min(320px, calc(100vw - 2rem));
@@ -1170,6 +1230,14 @@ watch(locale, () => {
 .item-tooltip-price {
   font-size: 0.875rem;
   color: rgb(var(--rgb-text) / 0.8);
+  line-height: 1.3;
+}
+
+.item-tooltip-gold-value,
+.item-tooltip-gold-efficiency {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: rgb(var(--rgb-primary-light));
   line-height: 1.3;
 }
 

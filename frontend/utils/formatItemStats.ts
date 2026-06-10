@@ -4,7 +4,11 @@
  * Lethality: "(X - Y%)" when both flat and percent exist.
  */
 import type { Item, ItemStats } from '@lelanation/shared-types'
-import { calculateItemGoldEfficiency, getGoldPer10FromItem } from '@lelanation/builds-stats'
+import {
+  calculateItemGoldEfficiency,
+  calculateItemGoldValue,
+  getGoldPer10FromItem,
+} from '@lelanation/builds-stats'
 
 type StatRecord = Record<string, number | undefined>
 
@@ -129,6 +133,32 @@ export function formatItemStatsForDisplay(
 type ItemWithGold = {
   gold?: { total: number; base?: number; sell: number; purchasable?: boolean }
   stats?: Record<string, number | undefined>
+}
+
+/** Gold value of item stats (wiki reference prices via @lelanation/builds-stats). */
+export function getItemGoldValue(item: ItemWithGold | undefined): number {
+  return calculateItemGoldValue(item?.stats)
+}
+
+/** Gold efficiency of item stats vs price (%), or null when not computable. */
+export function getItemGoldEfficiency(item: ItemWithGold | undefined): number | null {
+  if (!item?.gold?.total) return null
+  return calculateItemGoldEfficiency({
+    stats: item.stats,
+    gold: {
+      total: item.gold.total,
+      sell: item.gold.sell,
+      base: item.gold.base ?? item.gold.total,
+      purchasable: item.gold.purchasable ?? true,
+    },
+  })
+}
+
+/** Format gold efficiency for display (e.g. "98%"). */
+export function formatItemGoldEfficiency(item: ItemWithGold | undefined): string {
+  const eff = getItemGoldEfficiency(item)
+  if (eff == null || !Number.isFinite(eff)) return '—'
+  return `${Math.round(eff)}%`
 }
 
 /**

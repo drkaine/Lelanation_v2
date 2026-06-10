@@ -9,6 +9,9 @@ export {
 export {
   calculateGoldValue,
   calculateGoldEfficiency,
+  calculateItemGoldValue,
   calculateItemGoldEfficiency,
   calculateBuildGoldEfficiency,
+  itemStatsToGoldValueStats,
+  type GoldValueStats,
 } from "./goldEfficiency";

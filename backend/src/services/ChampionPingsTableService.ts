@@ -47,14 +47,17 @@ export async function getChampionPingsTable(
   if (roleDb) whereParts.push(`cs.role = '${statsRoleSqlLiteral(roleDb)}'`)
   const where = whereParts.join(' AND ')
 
-  const sumSelect = CHAMPION_PING_METRIC_KEYS.map(
-    key => `COALESCE(SUM(cs.${CHAMPION_PING_SQL_COLUMN[key]}), 0)::bigint AS sum_${key}`
-  ).join(',\n      ')
+  // Alias SQL en snake_case (nom de colonne) : PostgreSQL lower-case les identifiants non quotés
+  // (`AS sum_onMyWay` → `sum_onmyway`), ce qui cassait la lecture `row.sum_onMyWay` côté Node.
+  const sumSelect = CHAMPION_PING_METRIC_KEYS.map(key => {
+    const col = CHAMPION_PING_SQL_COLUMN[key]
+    return `COALESCE(SUM(cs.${col}), 0)::bigint AS ${col}`
+  }).join(',\n      ')
 
   type SqlRow = {
     champion_id: number
     games: bigint
-  } & Record<`sum_${ChampionPingMetricKey}`, bigint>
+  } & Record<(typeof CHAMPION_PING_SQL_COLUMN)[ChampionPingMetricKey], bigint>
 
   const raw = await queryRawUnsafe<SqlRow[]>(`
     SELECT
@@ -73,7 +76,7 @@ export async function getChampionPingsTable(
     const pings = {} as Record<ChampionPingMetricKey, number>
     let totalSum = 0
     for (const key of CHAMPION_PING_METRIC_KEYS) {
-      const sum = Number(row[`sum_${key}`] ?? 0)
+      const sum = Number(row[CHAMPION_PING_SQL_COLUMN[key]] ?? 0)
       totalSum += sum
       pings[key] = avgPerGame(sum, games)
     }

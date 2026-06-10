@@ -58,14 +58,15 @@ export async function getChampionVisionTable(
   if (roleDb) whereParts.push(`cs.role = '${statsRoleSqlLiteral(roleDb)}'`)
   const where = whereParts.join(' AND ')
 
-  const sumSelect = CHAMPION_VISION_METRIC_KEYS.map(
-    key => `COALESCE(SUM(cs.${VISION_SQL_COLUMN[key]}), 0)::double precision AS sum_${key}`
-  ).join(',\n      ')
+  const sumSelect = CHAMPION_VISION_METRIC_KEYS.map(key => {
+    const col = VISION_SQL_COLUMN[key]
+    return `COALESCE(SUM(cs.${col}), 0)::double precision AS ${col}`
+  }).join(',\n      ')
 
   type SqlRow = {
     champion_id: number
     games: bigint
-  } & Record<`sum_${ChampionVisionMetricKey}`, number>
+  } & Record<(typeof VISION_SQL_COLUMN)[ChampionVisionMetricKey], number>
 
   const raw = await queryRawUnsafe<SqlRow[]>(`
     SELECT
@@ -83,7 +84,7 @@ export async function getChampionVisionTable(
     const games = Number(row.games ?? 0)
     const metrics = {} as Record<ChampionVisionMetricKey, number>
     for (const key of CHAMPION_VISION_METRIC_KEYS) {
-      metrics[key] = avgPerGame(Number(row[`sum_${key}`] ?? 0), games)
+      metrics[key] = avgPerGame(Number(row[VISION_SQL_COLUMN[key]] ?? 0), games)
     }
     return {
       championId: Number(row.champion_id),
