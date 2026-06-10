@@ -109,6 +109,18 @@ async function main(): Promise<void> {
     }
   }
 
+  const pingIconsSync = await communityDragonService.syncMinimapPingIcons()
+  if (pingIconsSync.isErr()) {
+    console.warn('[sync:data] Minimap ping icons sync failed:', pingIconsSync.unwrapErr())
+  } else {
+    const pingIconsData = pingIconsSync.unwrap()
+    if (pingIconsData.failed > 0) {
+      console.warn(
+        `[sync:data] Minimap ping icons sync completed with ${pingIconsData.failed} failures`
+      )
+    }
+  }
+
   const mapPlannerSync = await communityDragonService.syncMapPlannerAssets()
   if (mapPlannerSync.isErr()) {
     console.warn('[sync:data] Map planner assets sync failed:', mapPlannerSync.unwrapErr())

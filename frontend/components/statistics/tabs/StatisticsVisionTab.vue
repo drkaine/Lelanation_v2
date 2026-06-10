@@ -1,9 +1,5 @@
 <script setup lang="ts">
 import { computed, inject } from 'vue'
-import { storeToRefs } from 'pinia'
-import { useChampionsStore } from '~/stores/ChampionsStore'
-import { useVersionStore } from '~/stores/VersionStore'
-import { getChampionImageUrl } from '~/utils/imageUrl'
 import {
   VISION_METRIC_KEYS,
   visionMobileSortOptions,
@@ -12,10 +8,7 @@ import {
   type VisionTableRow,
 } from '~/composables/statistics/useStatisticsVisionTab'
 
-const p = inject('statisticsPageCtx') as Record<string, unknown>
-
-const championsStore = useChampionsStore()
-const { currentVersion: gameVersionFromStore } = storeToRefs(useVersionStore())
+const p = inject('statisticsPageCtx') as Record<string, any>
 
 const visionMobileSortColumn = computed({
   get: () => String(p.visionSortColumn ?? 'visionScore'),
@@ -35,19 +28,9 @@ const visionMobileSortOptionsComputed = computed(() =>
   visionMobileSortOptions((key: string) => String(p.t?.(key) ?? key))
 )
 
-function championById(championId: number) {
-  return championsStore.champions.find(c => Number(c.key) === championId) ?? null
-}
-
-function championLabel(row: VisionTableRow): string {
-  return championById(row.championId)?.name ?? String(row.championId)
-}
-
-function championImageUrl(row: VisionTableRow): string | null {
-  const version = String(p.gameVersion ?? gameVersionFromStore.value ?? '').trim()
-  const champion = championById(row.championId)
-  if (!version || !champion?.image?.full) return null
-  return getChampionImageUrl(version, champion.image.full)
+function championPortraitSrc(championId: number): string | null {
+  if (!p.gameVersion || !p.championByKey(championId)) return null
+  return p.getChampionImageUrl(p.gameVersion, p.championByKey(championId)!.image.full)
 }
 
 function formatVisionValue(key: VisionMetricKey, value: number): string {
@@ -56,13 +39,22 @@ function formatVisionValue(key: VisionMetricKey, value: number): string {
   return n.toFixed(2)
 }
 
+function formatVisionDelta(key: VisionMetricKey, value: number): string {
+  const sign = value > 0 ? '+' : ''
+  if (key === 'visionScore') return `${sign}${Number(value).toFixed(1)}`
+  return `${sign}${Number(value).toFixed(2)}`
+}
+
 function visionValue(row: VisionTableRow, key: VisionMetricKey): number {
   return Number(row[key] ?? 0)
 }
 
+function visionDelta(row: VisionTableRow, key: VisionMetricKey): number | null {
+  return p.visionDelta?.(row, key) ?? null
+}
+
 function sortIndicator(col: VisionSortCol): string {
-  if (p.visionSortColumn !== col) return ''
-  return p.visionSortDir === 'asc' ? ' ▲' : ' ▼'
+  return p.visionSortHint?.(col) ?? ''
 }
 
 function visionMessage(message: string | undefined): string {
@@ -71,6 +63,10 @@ function visionMessage(message: string | undefined): string {
     return String(p.t?.('statisticsPage.visionDbNotConfigured') ?? message)
   }
   return message
+}
+
+function deltaSortKey(key: VisionMetricKey): VisionSortCol {
+  return `${key}Delta`
 }
 </script>
 
@@ -101,46 +97,54 @@ function visionMessage(message: string | undefined): string {
         <article
           v-for="row in p.paginatedVisionRows"
           :key="'vision-mobile-' + row.championId"
-          class="statistics-vision-mobile-card rounded-lg border border-primary/30 bg-surface/40 p-3"
+          class="statistics-champion-stats-mobile-card statistics-vision-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
         >
-          <div class="flex items-center gap-3">
-            <img
-              v-if="championImageUrl(row)"
-              :src="championImageUrl(row)!"
-              :alt="championLabel(row)"
-              class="h-11 w-11 shrink-0 rounded-full object-cover"
-              width="44"
-              height="44"
+          <div
+            class="statistics-champion-stats-mobile-card-header flex w-full items-center gap-3 p-3"
+          >
+            <StatisticsChampionStatsMobileCardHeader
+              :champion-id="row.championId"
+              :champion-name="String(p.championName(row.championId) || row.championId)"
+              :search-query="p.championSearchQuery"
+              :portrait-src="championPortraitSrc(row.championId)"
+              :portrait-alt="p.championName(row.championId) || ''"
             />
-            <div
-              v-else
-              class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-text/70"
-            >
-              ?
-            </div>
-            <div class="min-w-0 flex-1">
-              <div class="truncate text-sm font-semibold text-accent">{{ championLabel(row) }}</div>
-            </div>
-            <div class="text-right">
-              <div class="text-[10px] uppercase text-text/50">
+            <div class="min-w-0 flex-1 text-right">
+              <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
                 {{ p.t('statisticsPage.visionMetric.visionScore') }}
               </div>
-              <div class="text-xl font-bold tabular-nums text-text">
+              <div class="text-2xl font-bold tabular-nums leading-none text-text sm:text-3xl">
                 {{ formatVisionValue('visionScore', row.visionScore) }}
+              </div>
+              <div
+                v-if="visionDelta(row, 'visionScore') != null"
+                class="mt-0.5 text-xs tabular-nums leading-none"
+                :class="p.championGlobalNumericDeltaClass(visionDelta(row, 'visionScore')!)"
+              >
+                {{ formatVisionDelta('visionScore', visionDelta(row, 'visionScore')!) }}
               </div>
             </div>
           </div>
-          <div class="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
-            <div
-              v-for="key in VISION_METRIC_KEYS"
-              :key="'vision-mobile-metric-' + row.championId + '-' + key"
-              class="rounded bg-primary/10 px-2 py-1.5"
-            >
-              <div class="text-[10px] uppercase text-text/55">
-                {{ p.t('statisticsPage.visionMetric.' + key) }}
-              </div>
-              <div class="font-bold tabular-nums text-text">
-                {{ formatVisionValue(key, visionValue(row, key)) }}
+          <div class="border-t border-primary/15 px-3 py-2.5">
+            <div class="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
+              <div
+                v-for="key in VISION_METRIC_KEYS.filter(k => k !== 'visionScore')"
+                :key="'vision-mobile-metric-' + row.championId + '-' + key"
+                class="rounded bg-primary/10 px-2 py-1.5"
+              >
+                <div class="text-[10px] uppercase text-text/55">
+                  {{ p.t('statisticsPage.visionMetric.' + key) }}
+                </div>
+                <div class="font-bold tabular-nums text-text">
+                  {{ formatVisionValue(key, visionValue(row, key)) }}
+                </div>
+                <div
+                  v-if="visionDelta(row, key) != null"
+                  class="mt-0.5 text-[10px] tabular-nums leading-none"
+                  :class="p.championGlobalNumericDeltaClass(visionDelta(row, key)!)"
+                >
+                  {{ formatVisionDelta(key, visionDelta(row, key)!) }}
+                </div>
               </div>
             </div>
           </div>
@@ -167,13 +171,24 @@ function visionMessage(message: string | undefined): string {
                 :key="'vision-th-' + key"
                 class="px-2 py-2 text-right"
               >
-                <button
-                  type="button"
-                  class="font-semibold hover:text-text"
-                  @click="p.setVisionSort(key)"
-                >
-                  {{ p.t('statisticsPage.visionMetric.' + key) }}{{ sortIndicator(key) }}
-                </button>
+                <div class="flex items-center justify-end gap-1">
+                  <button
+                    type="button"
+                    class="font-semibold hover:text-text"
+                    @click="p.setVisionSort(key)"
+                  >
+                    {{ p.t('statisticsPage.visionMetric.' + key) }}{{ sortIndicator(key) }}
+                  </button>
+                  <button
+                    v-if="p.visionTableRefData"
+                    type="button"
+                    class="text-[10px] text-text/70 hover:text-text"
+                    :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
+                    @click="p.setVisionSort(deltaSortKey(key))"
+                  >
+                    Δ{{ sortIndicator(deltaSortKey(key)) }}
+                  </button>
+                </div>
               </th>
             </tr>
           </thead>
@@ -183,18 +198,30 @@ function visionMessage(message: string | undefined): string {
               :key="'vision-' + row.championId"
               class="border-b border-primary/15 hover:bg-primary/5"
             >
-              <td class="sticky left-0 z-[1] bg-surface px-2 py-2">
-                <div class="flex min-w-0 items-center gap-2">
+              <td class="sticky left-0 z-[1] min-w-[220px] bg-surface px-2 py-2">
+                <StatisticsChampionDetailLink
+                  :champion-id="row.championId"
+                  class="flex min-w-0 items-center gap-2"
+                >
                   <img
-                    v-if="championImageUrl(row)"
-                    :src="championImageUrl(row)!"
-                    :alt="championLabel(row)"
-                    class="h-8 w-8 shrink-0 rounded-full object-cover"
-                    width="32"
-                    height="32"
+                    v-if="championPortraitSrc(row.championId)"
+                    :src="championPortraitSrc(row.championId)!"
+                    :alt="p.championName(row.championId) || ''"
+                    class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover"
+                    width="50"
+                    height="50"
+                    loading="lazy"
+                    decoding="async"
                   />
-                  <div class="min-w-0 truncate font-medium text-text">{{ championLabel(row) }}</div>
-                </div>
+                  <span
+                    class="min-w-0 truncate text-[12px] text-accent underline decoration-accent/40 underline-offset-2"
+                  >
+                    <StatisticsChampionNameHighlight
+                      :name="String(p.championName(row.championId) || row.championId)"
+                      :query="p.championSearchQuery"
+                    />
+                  </span>
+                </StatisticsChampionDetailLink>
               </td>
               <td
                 v-for="key in VISION_METRIC_KEYS"
@@ -202,7 +229,16 @@ function visionMessage(message: string | undefined): string {
                 class="px-2 py-2 text-right tabular-nums"
                 :class="key === 'visionScore' ? 'font-semibold' : ''"
               >
-                {{ formatVisionValue(key, visionValue(row, key)) }}
+                <div class="flex flex-col items-end gap-0 leading-tight">
+                  <span>{{ formatVisionValue(key, visionValue(row, key)) }}</span>
+                  <span
+                    v-if="visionDelta(row, key) != null"
+                    class="text-[10px] leading-none"
+                    :class="p.championGlobalNumericDeltaClass(visionDelta(row, key)!)"
+                  >
+                    {{ formatVisionDelta(key, visionDelta(row, key)!) }}
+                  </span>
+                </div>
               </td>
             </tr>
           </tbody>

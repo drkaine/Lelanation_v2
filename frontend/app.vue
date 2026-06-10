@@ -815,6 +815,7 @@ html[data-stats-cards='1'] .statistics-balance-mobile-list,
 html[data-stats-cards='1'] .statistics-infos-mobile-list,
 html[data-stats-cards='1'] .statistics-surrender-mobile-list,
 html[data-stats-cards='1'] .statistics-pings-mobile-list,
+html[data-stats-cards='1'] .statistics-vision-mobile-list,
 html[data-stats-cards='1'] .statistics-patch-notes-mobile-list {
   display: block !important;
 }
@@ -847,6 +848,7 @@ html[data-stats-cards='1'] .champion-stats .hidden.md\:block {
       .statistics-objectives-mobile-list,
       .statistics-surrender-mobile-list,
       .statistics-pings-mobile-list,
+      .statistics-vision-mobile-list,
       .statistics-patch-notes-mobile-list
     ) {
     display: flex !important;
@@ -874,6 +876,7 @@ html[data-stats-cards='1'] .champion-stats .hidden.md\:block {
       .statistics-objectives-mobile-list,
       .statistics-surrender-mobile-list,
       .statistics-pings-mobile-list,
+      .statistics-vision-mobile-list,
       .statistics-patch-notes-mobile-list
     )
     > * {
@@ -896,6 +899,7 @@ html[data-stats-cards='1'] .champion-stats .hidden.md\:block {
       .statistics-surrender-mobile-card,
       .statistics-surrender-mobile-side-card,
       .statistics-pings-mobile-card,
+      .statistics-vision-mobile-card,
       .statistics-patch-notes-mobile-card,
       .champion-spell-order-card
     ) {

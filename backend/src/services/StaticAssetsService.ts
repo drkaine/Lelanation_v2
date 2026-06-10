@@ -916,7 +916,7 @@ export class StaticAssetsService {
   async copyCommunityDragonDataToFrontend(): Promise<
     Result<{ copied: number; deleted: number }, AppError>
   > {
-    const assetSubdirs = ['ranked-emblem', 'scoreboard-objectives', 'map-planner']
+    const assetSubdirs = ['ranked-emblem', 'scoreboard-objectives', 'minimap-pings', 'map-planner']
     let copied = 0
     let deleted = 0
 

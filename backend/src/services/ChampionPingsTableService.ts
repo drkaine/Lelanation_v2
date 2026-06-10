@@ -5,6 +5,7 @@ import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
 import {
   CHAMPION_PING_METRIC_KEYS,
   CHAMPION_PING_SQL_COLUMN,
+  CHAMPION_PING_TOTAL_SQL_COLUMNS,
   type ChampionPingMetricKey,
 } from '../constants/championPingMetrics.js'
 import { buildRawMatchCond } from './ChampionGlobalTableService.js'
@@ -49,15 +50,14 @@ export async function getChampionPingsTable(
 
   // Alias SQL en snake_case (nom de colonne) : PostgreSQL lower-case les identifiants non quotés
   // (`AS sum_onMyWay` → `sum_onmyway`), ce qui cassait la lecture `row.sum_onMyWay` côté Node.
-  const sumSelect = CHAMPION_PING_METRIC_KEYS.map(key => {
-    const col = CHAMPION_PING_SQL_COLUMN[key]
-    return `COALESCE(SUM(cs.${col}), 0)::bigint AS ${col}`
-  }).join(',\n      ')
+  const sumSelect = CHAMPION_PING_TOTAL_SQL_COLUMNS.map(
+    col => `COALESCE(SUM(cs.${col}), 0)::bigint AS ${col}`,
+  ).join(',\n      ')
 
   type SqlRow = {
     champion_id: number
     games: bigint
-  } & Record<(typeof CHAMPION_PING_SQL_COLUMN)[ChampionPingMetricKey], bigint>
+  } & Record<(typeof CHAMPION_PING_TOTAL_SQL_COLUMNS)[number], bigint>
 
   const raw = await queryRawUnsafe<SqlRow[]>(`
     SELECT
@@ -75,10 +75,11 @@ export async function getChampionPingsTable(
     const games = Number(row.games ?? 0)
     const pings = {} as Record<ChampionPingMetricKey, number>
     let totalSum = 0
+    for (const col of CHAMPION_PING_TOTAL_SQL_COLUMNS) {
+      totalSum += Number(row[col] ?? 0)
+    }
     for (const key of CHAMPION_PING_METRIC_KEYS) {
-      const sum = Number(row[CHAMPION_PING_SQL_COLUMN[key]] ?? 0)
-      totalSum += sum
-      pings[key] = avgPerGame(sum, games)
+      pings[key] = avgPerGame(Number(row[CHAMPION_PING_SQL_COLUMN[key]] ?? 0), games)
     }
     return {
       championId: Number(row.champion_id),

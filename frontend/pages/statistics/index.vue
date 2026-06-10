@@ -4695,6 +4695,8 @@ const pingsTab = useStatisticsPingsTab({
     championGlobalTableQueryForVersion(versionFull, 'pings'),
   gameVersion,
   championName,
+  resolveBaselineVersion: resolveStatsBaselineVersion,
+  patchFromVersion,
 })
 
 const visionTab = useStatisticsVisionTab({
@@ -4706,6 +4708,8 @@ const visionTab = useStatisticsVisionTab({
     championGlobalTableQueryForVersion(versionFull, 'vision'),
   gameVersion,
   championName,
+  resolveBaselineVersion: resolveStatsBaselineVersion,
+  patchFromVersion,
 })
 
 const patchNotesTab = useStatisticsPatchNotesTab({

@@ -33,6 +33,9 @@ export async function runCommunityDragonSyncOnce(): Promise<
   await log.step('Syncing scoreboard objective icons')
   const objectiveIconsResult = await communityDragonService.syncScoreboardObjectiveIcons()
 
+  await log.step('Syncing minimap ping icons')
+  const pingIconsResult = await communityDragonService.syncMinimapPingIcons()
+
   await log.step('Syncing map planner assets')
   const mapPlannerResult = await communityDragonService.syncMapPlannerAssets()
 
@@ -42,6 +45,7 @@ export async function runCommunityDragonSyncOnce(): Promise<
   if (
     emblemResult.isErr() ||
     objectiveIconsResult.isErr() ||
+    pingIconsResult.isErr() ||
     mapPlannerResult.isErr() ||
     kaynHudResult.isErr()
   ) {
@@ -49,9 +53,11 @@ export async function runCommunityDragonSyncOnce(): Promise<
       ? emblemResult.unwrapErr()
       : objectiveIconsResult.isErr()
         ? objectiveIconsResult.unwrapErr()
-        : mapPlannerResult.isErr()
-          ? mapPlannerResult.unwrapErr()
-          : kaynHudResult.unwrapErr()
+        : pingIconsResult.isErr()
+          ? pingIconsResult.unwrapErr()
+          : mapPlannerResult.isErr()
+            ? mapPlannerResult.unwrapErr()
+            : kaynHudResult.unwrapErr()
     await log.error('Community Dragon assets sync failed:', firstError)
     await cronStatus.markFailure('communityDragonSync', firstError)
     return { ok: false, error: firstError instanceof Error ? firstError.message : String(firstError) }
@@ -59,12 +65,21 @@ export async function runCommunityDragonSyncOnce(): Promise<
 
   const emblemData = emblemResult.unwrap()
   const objectiveIconsData = objectiveIconsResult.unwrap()
+  const pingIconsData = pingIconsResult.unwrap()
   const mapPlannerData = mapPlannerResult.unwrap()
   const kaynHudData = kaynHudResult.unwrap()
   const synced =
-    emblemData.synced + objectiveIconsData.synced + mapPlannerData.synced + kaynHudData.synced
+    emblemData.synced +
+    objectiveIconsData.synced +
+    pingIconsData.synced +
+    mapPlannerData.synced +
+    kaynHudData.synced
   const failed =
-    emblemData.failed + objectiveIconsData.failed + mapPlannerData.failed + kaynHudData.failed
+    emblemData.failed +
+    objectiveIconsData.failed +
+    pingIconsData.failed +
+    mapPlannerData.failed +
+    kaynHudData.failed
 
   await log.info('Ranked emblems:', emblemData.synced, 'synced,', emblemData.failed, 'failed')
   await log.info(
@@ -72,6 +87,13 @@ export async function runCommunityDragonSyncOnce(): Promise<
     objectiveIconsData.synced,
     'synced,',
     objectiveIconsData.failed,
+    'failed'
+  )
+  await log.info(
+    'Minimap ping icons:',
+    pingIconsData.synced,
+    'synced,',
+    pingIconsData.failed,
     'failed'
   )
   await log.info(
@@ -97,6 +119,7 @@ export async function runCommunityDragonSyncOnce(): Promise<
     const allErrors = [
       ...emblemData.errors,
       ...objectiveIconsData.errors,
+      ...pingIconsData.errors,
       ...mapPlannerData.errors,
       ...kaynHudData.errors,
     ]

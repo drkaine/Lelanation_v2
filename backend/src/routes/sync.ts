@@ -104,10 +104,11 @@ router.post('/trigger', async (_req, res) => {
 router.post('/community-dragon', async (_req, res) => {
 
   try {
-    const [emblemsResult, objectiveIconsResult, mapPlannerResult, kaynHudResult] =
+    const [emblemsResult, objectiveIconsResult, pingIconsResult, mapPlannerResult, kaynHudResult] =
       await Promise.all([
         communityDragonService.syncRankedEmblems(),
         communityDragonService.syncScoreboardObjectiveIcons(),
+        communityDragonService.syncMinimapPingIcons(),
         communityDragonService.syncMapPlannerAssets(),
         communityDragonService.syncKaynHudImages(),
       ])
@@ -115,6 +116,7 @@ router.post('/community-dragon', async (_req, res) => {
     if (
       emblemsResult.isErr() ||
       objectiveIconsResult.isErr() ||
+      pingIconsResult.isErr() ||
       mapPlannerResult.isErr() ||
       kaynHudResult.isErr()
     ) {
@@ -122,9 +124,11 @@ router.post('/community-dragon', async (_req, res) => {
         ? emblemsResult.unwrapErr()
         : objectiveIconsResult.isErr()
           ? objectiveIconsResult.unwrapErr()
-          : mapPlannerResult.isErr()
-            ? mapPlannerResult.unwrapErr()
-            : kaynHudResult.unwrapErr()
+          : pingIconsResult.isErr()
+            ? pingIconsResult.unwrapErr()
+            : mapPlannerResult.isErr()
+              ? mapPlannerResult.unwrapErr()
+              : kaynHudResult.unwrapErr()
       console.error('[Manual Sync] Community Dragon assets sync failed:', error)
       return res.status(500).json({
         error: 'Community Dragon assets sync failed',
@@ -134,13 +138,17 @@ router.post('/community-dragon', async (_req, res) => {
 
     const emblems = emblemsResult.unwrap()
     const objectiveIcons = objectiveIconsResult.unwrap()
+    const pingIcons = pingIconsResult.unwrap()
     const mapPlanner = mapPlannerResult.unwrap()
     const kaynHud = kaynHudResult.unwrap()
-    const synced = emblems.synced + objectiveIcons.synced + mapPlanner.synced + kaynHud.synced
-    const failed = emblems.failed + objectiveIcons.failed + mapPlanner.failed + kaynHud.failed
+    const synced =
+      emblems.synced + objectiveIcons.synced + pingIcons.synced + mapPlanner.synced + kaynHud.synced
+    const failed =
+      emblems.failed + objectiveIcons.failed + pingIcons.failed + mapPlanner.failed + kaynHud.failed
     const errors = [
       ...emblems.errors,
       ...objectiveIcons.errors,
+      ...pingIcons.errors,
       ...mapPlanner.errors,
       ...kaynHud.errors,
     ]

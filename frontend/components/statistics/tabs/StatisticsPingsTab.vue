@@ -1,21 +1,18 @@
 <script setup lang="ts">
-import { computed, inject } from 'vue'
-import { storeToRefs } from 'pinia'
-import { useChampionsStore } from '~/stores/ChampionsStore'
-import { useVersionStore } from '~/stores/VersionStore'
-import { getChampionImageUrl } from '~/utils/imageUrl'
+import { computed, inject, ref } from 'vue'
 import {
   PING_METRIC_KEYS,
+  PING_MOBILE_EXPANDED_KEYS,
+  PING_MOBILE_PREVIEW_KEYS,
   pingsMobileSortOptions,
   type PingMetricKey,
+  type PingsNumericKey,
   type PingsSortCol,
   type PingsTableRow,
 } from '~/composables/statistics/useStatisticsPingsTab'
 
-const p = inject('statisticsPageCtx') as Record<string, unknown>
-
-const championsStore = useChampionsStore()
-const { currentVersion: gameVersionFromStore } = storeToRefs(useVersionStore())
+const p = inject('statisticsPageCtx') as Record<string, any>
+const expandedPingsIds = ref<Set<number>>(new Set())
 
 const pingsMobileSortColumn = computed({
   get: () => String(p.pingsSortColumn ?? 'totalPerGame'),
@@ -35,32 +32,30 @@ const pingsMobileSortOptionsComputed = computed(() =>
   pingsMobileSortOptions((key: string) => String(p.t?.(key) ?? key))
 )
 
-function championById(championId: number) {
-  return championsStore.champions.find(c => Number(c.key) === championId) ?? null
-}
-
-function championLabel(row: PingsTableRow): string {
-  return championById(row.championId)?.name ?? String(row.championId)
-}
-
-function championImageUrl(row: PingsTableRow): string | null {
-  const version = String(p.gameVersion ?? gameVersionFromStore.value ?? '').trim()
-  const champion = championById(row.championId)
-  if (!version || !champion?.image?.full) return null
-  return getChampionImageUrl(version, champion.image.full)
+function championPortraitSrc(championId: number): string | null {
+  if (!p.gameVersion || !p.championByKey(championId)) return null
+  return p.getChampionImageUrl(p.gameVersion, p.championByKey(championId)!.image.full)
 }
 
 function formatPing(value: number): string {
   return Number(value).toFixed(2)
 }
 
+function formatPingDelta(value: number): string {
+  const sign = value > 0 ? '+' : ''
+  return `${sign}${Number(value).toFixed(2)}`
+}
+
 function pingValue(row: PingsTableRow, key: PingMetricKey): number {
   return Number(row[key] ?? 0)
 }
 
+function pingDelta(row: PingsTableRow, key: PingsNumericKey): number | null {
+  return p.pingsDelta?.(row, key) ?? null
+}
+
 function sortIndicator(col: PingsSortCol): string {
-  if (p.pingsSortColumn !== col) return ''
-  return p.pingsSortDir === 'asc' ? ' ▲' : ' ▼'
+  return p.pingsSortHint?.(col) ?? ''
 }
 
 function pingsMessage(message: string | undefined): string {
@@ -69,6 +64,21 @@ function pingsMessage(message: string | undefined): string {
     return String(p.t?.('statisticsPage.pingsDbNotConfigured') ?? message)
   }
   return message
+}
+
+function togglePingsCardExpanded(championId: number): void {
+  const next = new Set(expandedPingsIds.value)
+  if (next.has(championId)) next.delete(championId)
+  else next.add(championId)
+  expandedPingsIds.value = next
+}
+
+function deltaSortKey(key: PingsNumericKey): PingsSortCol {
+  return `${key}Delta`
+}
+
+function pingMetricLabel(key: PingMetricKey): string {
+  return String(p.t?.('statisticsPage.pingsMetric.' + key) ?? key)
 }
 </script>
 
@@ -88,6 +98,7 @@ function pingsMessage(message: string | undefined): string {
       {{ p.t('statisticsPage.noData') }}
     </div>
     <template v-else>
+      <p class="text-xs text-text/55">{{ p.t('statisticsPage.pingsDeprecatedNote') }}</p>
       <StatisticsMobileSortBar
         id="pings-mobile-sort"
         v-model:column="pingsMobileSortColumn"
@@ -99,48 +110,92 @@ function pingsMessage(message: string | undefined): string {
         <article
           v-for="row in p.paginatedPingsRows"
           :key="'ping-mobile-' + row.championId"
-          class="statistics-pings-mobile-card rounded-lg border border-primary/30 bg-surface/40 p-3"
+          class="statistics-champion-stats-mobile-card statistics-pings-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
         >
-          <div class="flex items-center gap-3">
-            <img
-              v-if="championImageUrl(row)"
-              :src="championImageUrl(row)!"
-              :alt="championLabel(row)"
-              class="h-11 w-11 shrink-0 rounded-full object-cover"
-              width="44"
-              height="44"
+          <div
+            class="statistics-champion-stats-mobile-card-header flex w-full items-center gap-3 p-3"
+          >
+            <StatisticsChampionStatsMobileCardHeader
+              :champion-id="row.championId"
+              :champion-name="String(p.championName(row.championId) || row.championId)"
+              :search-query="p.championSearchQuery"
+              :portrait-src="championPortraitSrc(row.championId)"
+              :portrait-alt="p.championName(row.championId) || ''"
             />
-            <div
-              v-else
-              class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-text/70"
+            <button
+              type="button"
+              class="flex min-w-0 flex-1 flex-col items-end justify-center text-right"
+              @click="togglePingsCardExpanded(row.championId)"
             >
-              ?
-            </div>
-            <div class="min-w-0 flex-1">
-              <div class="truncate text-sm font-semibold text-accent">{{ championLabel(row) }}</div>
-            </div>
-            <div class="text-right">
-              <div class="text-[10px] uppercase text-text/50">
+              <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
                 {{ p.t('statisticsPage.pingsColTotal') }}
               </div>
-              <div class="text-xl font-bold tabular-nums text-text">
+              <div class="text-2xl font-bold tabular-nums leading-none text-text sm:text-3xl">
                 {{ formatPing(row.totalPerGame) }}
               </div>
-            </div>
+              <div
+                v-if="pingDelta(row, 'totalPerGame') != null"
+                class="mt-0.5 text-xs tabular-nums leading-none"
+                :class="p.championGlobalNumericDeltaClass(pingDelta(row, 'totalPerGame')!)"
+              >
+                {{ formatPingDelta(pingDelta(row, 'totalPerGame')!) }}
+              </div>
+            </button>
           </div>
-          <div class="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
-            <div
-              v-for="key in PING_METRIC_KEYS"
-              :key="'ping-mobile-metric-' + row.championId + '-' + key"
-              class="rounded bg-primary/10 px-2 py-1.5"
-            >
-              <div class="text-[10px] uppercase text-text/55">
-                {{ p.t('statisticsPage.pingsMetric.' + key) }}
-              </div>
-              <div class="font-bold tabular-nums text-text">
-                {{ formatPing(pingValue(row, key)) }}
-              </div>
+
+          <div class="border-t border-primary/15 px-3 py-2.5">
+            <div class="grid grid-cols-3 gap-2 text-xs">
+              <StatisticsPingMetricCardCell
+                v-for="key in PING_MOBILE_PREVIEW_KEYS"
+                :key="'ping-mobile-preview-' + row.championId + '-' + key"
+                :metric-key="key"
+                :label="pingMetricLabel(key)"
+                :value="formatPing(pingValue(row, key))"
+                :delta="pingDelta(row, key) != null ? formatPingDelta(pingDelta(row, key)!) : null"
+                :delta-class="
+                  pingDelta(row, key) != null
+                    ? p.championGlobalNumericDeltaClass(pingDelta(row, key)!)
+                    : null
+                "
+              />
             </div>
+
+            <button
+              v-if="!expandedPingsIds.has(row.championId)"
+              type="button"
+              class="mt-2 w-full text-center text-xs font-medium text-accent underline decoration-accent/40 underline-offset-2"
+              @click="togglePingsCardExpanded(row.championId)"
+            >
+              {{ p.t('statisticsPage.pingsShowMoreMetrics') }}
+            </button>
+          </div>
+
+          <div
+            v-if="expandedPingsIds.has(row.championId)"
+            class="space-y-1.5 border-t border-primary/20 bg-black/20 px-3 py-2.5 text-sm text-text/85"
+          >
+            <div class="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
+              <StatisticsPingMetricCardCell
+                v-for="key in PING_MOBILE_EXPANDED_KEYS"
+                :key="'ping-mobile-expanded-' + row.championId + '-' + key"
+                :metric-key="key"
+                :label="pingMetricLabel(key)"
+                :value="formatPing(pingValue(row, key))"
+                :delta="pingDelta(row, key) != null ? formatPingDelta(pingDelta(row, key)!) : null"
+                :delta-class="
+                  pingDelta(row, key) != null
+                    ? p.championGlobalNumericDeltaClass(pingDelta(row, key)!)
+                    : null
+                "
+              />
+            </div>
+            <button
+              type="button"
+              class="w-full text-center text-xs font-medium text-text/70 underline decoration-text/30 underline-offset-2"
+              @click="togglePingsCardExpanded(row.championId)"
+            >
+              {{ p.t('statisticsPage.pingsShowLessMetrics') }}
+            </button>
           </div>
         </article>
       </div>
@@ -161,26 +216,48 @@ function pingsMessage(message: string | undefined): string {
                 </button>
               </th>
               <th class="px-2 py-2 text-right">
-                <button
-                  type="button"
-                  class="font-semibold hover:text-text"
-                  @click="p.setPingsSort('totalPerGame')"
-                >
-                  {{ p.t('statisticsPage.pingsColTotal') }}{{ sortIndicator('totalPerGame') }}
-                </button>
+                <div class="flex items-center justify-end gap-1">
+                  <button
+                    type="button"
+                    class="font-semibold hover:text-text"
+                    @click="p.setPingsSort('totalPerGame')"
+                  >
+                    {{ p.t('statisticsPage.pingsColTotal') }}{{ sortIndicator('totalPerGame') }}
+                  </button>
+                  <button
+                    v-if="p.pingsTableRefData"
+                    type="button"
+                    class="text-[10px] text-text/70 hover:text-text"
+                    :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
+                    @click="p.setPingsSort('totalPerGameDelta')"
+                  >
+                    Δ{{ sortIndicator('totalPerGameDelta') }}
+                  </button>
+                </div>
               </th>
               <th
                 v-for="key in PING_METRIC_KEYS"
                 :key="'ping-th-' + key"
                 class="px-2 py-2 text-right"
               >
-                <button
-                  type="button"
-                  class="font-semibold hover:text-text"
-                  @click="p.setPingsSort(key)"
-                >
-                  {{ p.t('statisticsPage.pingsMetric.' + key) }}{{ sortIndicator(key) }}
-                </button>
+                <div class="flex items-center justify-end gap-1">
+                  <button
+                    type="button"
+                    class="font-semibold hover:text-text"
+                    @click="p.setPingsSort(key)"
+                  >
+                    {{ p.t('statisticsPage.pingsMetric.' + key) }}{{ sortIndicator(key) }}
+                  </button>
+                  <button
+                    v-if="p.pingsTableRefData"
+                    type="button"
+                    class="text-[10px] text-text/70 hover:text-text"
+                    :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
+                    @click="p.setPingsSort(deltaSortKey(key))"
+                  >
+                    Δ{{ sortIndicator(deltaSortKey(key)) }}
+                  </button>
+                </div>
               </th>
             </tr>
           </thead>
@@ -190,28 +267,58 @@ function pingsMessage(message: string | undefined): string {
               :key="'ping-' + row.championId"
               class="border-b border-primary/15 hover:bg-primary/5"
             >
-              <td class="sticky left-0 z-[1] bg-surface px-2 py-2">
-                <div class="flex min-w-0 items-center gap-2">
+              <td class="sticky left-0 z-[1] min-w-[220px] bg-surface px-2 py-2">
+                <StatisticsChampionDetailLink
+                  :champion-id="row.championId"
+                  class="flex min-w-0 items-center gap-2"
+                >
                   <img
-                    v-if="championImageUrl(row)"
-                    :src="championImageUrl(row)!"
-                    :alt="championLabel(row)"
-                    class="h-8 w-8 shrink-0 rounded-full object-cover"
-                    width="32"
-                    height="32"
+                    v-if="championPortraitSrc(row.championId)"
+                    :src="championPortraitSrc(row.championId)!"
+                    :alt="p.championName(row.championId) || ''"
+                    class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover"
+                    width="50"
+                    height="50"
+                    loading="lazy"
+                    decoding="async"
                   />
-                  <div class="min-w-0 truncate font-medium text-text">{{ championLabel(row) }}</div>
-                </div>
+                  <span
+                    class="min-w-0 truncate text-[12px] text-accent underline decoration-accent/40 underline-offset-2"
+                  >
+                    <StatisticsChampionNameHighlight
+                      :name="String(p.championName(row.championId) || row.championId)"
+                      :query="p.championSearchQuery"
+                    />
+                  </span>
+                </StatisticsChampionDetailLink>
               </td>
-              <td class="px-2 py-2 text-right font-semibold tabular-nums">
-                {{ formatPing(row.totalPerGame) }}
+              <td class="px-2 py-2 text-right tabular-nums">
+                <div class="flex flex-col items-end gap-0 leading-tight">
+                  <span class="font-semibold">{{ formatPing(row.totalPerGame) }}</span>
+                  <span
+                    v-if="pingDelta(row, 'totalPerGame') != null"
+                    class="text-[10px] leading-none"
+                    :class="p.championGlobalNumericDeltaClass(pingDelta(row, 'totalPerGame')!)"
+                  >
+                    {{ formatPingDelta(pingDelta(row, 'totalPerGame')!) }}
+                  </span>
+                </div>
               </td>
               <td
                 v-for="key in PING_METRIC_KEYS"
                 :key="'ping-td-' + row.championId + '-' + key"
                 class="px-2 py-2 text-right tabular-nums"
               >
-                {{ formatPing(pingValue(row, key)) }}
+                <div class="flex flex-col items-end gap-0 leading-tight">
+                  <span>{{ formatPing(pingValue(row, key)) }}</span>
+                  <span
+                    v-if="pingDelta(row, key) != null"
+                    class="text-[10px] leading-none"
+                    :class="p.championGlobalNumericDeltaClass(pingDelta(row, key)!)"
+                  >
+                    {{ formatPingDelta(pingDelta(row, key)!) }}
+                  </span>
+                </div>
               </td>
             </tr>
           </tbody>

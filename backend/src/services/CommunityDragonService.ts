@@ -11,6 +11,7 @@ const CD_RANKED_EMBLEM_BASE =
   'https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-emblem'
 const CD_SCOREBOARD_BASE = 'https://raw.communitydragon.org/latest/game/assets/ux/scoreboard'
 const CD_MINIMAP_ICONS_BASE = 'https://raw.communitydragon.org/latest/game/assets/ux/minimap/icons'
+const CD_MINIMAP_PINGS_BASE = 'https://raw.communitydragon.org/latest/game/assets/ux/minimap/pings'
 const CD_MATCH_HISTORY_BASE =
   'https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-match-history/global/default'
 
@@ -48,6 +49,31 @@ const MINIMAP_OBJECTIVE_ICONS: Array<{ source: string; target: string }> = [
 const CD_KAYN_HUD_BASE =
   'https://raw.communitydragon.org/latest/game/assets/characters/kayn/hud'
 const KAYN_HUD_FILES = ['kayn_slay_square.png', 'kayn_ass_square.png'] as const
+
+/** Minimap ping icons (stats onglet Pings). */
+const MINIMAP_PING_FILES = [
+  'all_in.png',
+  'area_is_warded_small_red_new.png',
+  'assist.png',
+  'bait.png',
+  'caution.png',
+  'cleared.png',
+  'dive.png',
+  'enemychampsighted.png',
+  'focus.png',
+  'get_back_small.png',
+  'group.png',
+  'hold.png',
+  'kite_back.png',
+  'mia_new.png',
+  'need_ward.png',
+  'on_my_way_new.png',
+  'ping.png',
+  'push.png',
+  'reset.png',
+  'retreat.png',
+  'target.png',
+] as const
 
 const MAP_PLANNER_FILES: Array<{ source: string; target: string }> = [
   { source: 'map11.png', target: 'map11.png' },
@@ -187,6 +213,48 @@ export class CommunityDragonService {
         const errorMessage = error instanceof Error ? error.message : String(error)
         errors.push({ file: icon.source, error: errorMessage })
         console.error(`[CommunityDragon] Failed to sync minimap icon ${icon.source}: ${errorMessage}`)
+      }
+    }
+
+    return Result.ok({ synced, failed, errors })
+  }
+
+  /**
+   * Sync minimap ping icons from Community Dragon.
+   * Saves to {dataDir}/minimap-pings/*.png for frontend usage.
+   */
+  async syncMinimapPingIcons(): Promise<
+    Result<
+      { synced: number; failed: number; errors: Array<{ file: string; error: string }> },
+      AppError
+    >
+  > {
+    const pingDir = join(this.dataDir, 'minimap-pings')
+    const dirResult = await FileManager.ensureDir(pingDir)
+    if (dirResult.isErr()) {
+      return Result.err(dirResult.unwrapErr())
+    }
+
+    let synced = 0
+    let failed = 0
+    const errors: Array<{ file: string; error: string }> = []
+
+    for (const file of MINIMAP_PING_FILES) {
+      try {
+        const data = await this.fetchBinary(CD_MINIMAP_PINGS_BASE, `/${file}`)
+        if (data == null || data.byteLength === 0) {
+          failed++
+          errors.push({ file, error: 'No data returned' })
+          continue
+        }
+        const targetPath = join(pingDir, file)
+        await fs.writeFile(targetPath, Buffer.from(data))
+        synced++
+      } catch (error) {
+        failed++
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        errors.push({ file, error: errorMessage })
+        console.error(`[CommunityDragon] Failed to sync minimap ping icon ${file}: ${errorMessage}`)
       }
     }
 

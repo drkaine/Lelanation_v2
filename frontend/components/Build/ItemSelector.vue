@@ -987,16 +987,18 @@ watch(locale, () => {
   flex-wrap: wrap;
   align-items: center;
   gap: 5px;
+  width: 100%;
 }
 
 .item-search-input {
-  width: 6.5rem;
+  flex: 1 1 5rem;
   min-width: 5rem;
-  flex: 0 0 auto;
+  max-width: 100%;
+  width: auto;
 }
 
 .item-filter-bar {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   gap: 5px;
 }
 

@@ -26,6 +26,7 @@ import { getChampionGlobalTable } from '../services/ChampionGlobalTableService.j
 import { getChampionBansTable } from '../services/ChampionBansTableService.js'
 import { getChampionPingsTable } from '../services/ChampionPingsTableService.js'
 import { getChampionVisionTable } from '../services/ChampionVisionTableService.js'
+import { getItemTierSnapshotsForCharts } from '../services/ItemTierDailySnapshotService.js'
 import { getChampionDamageSplit } from '../services/ChampionDamageSplitService.js'
 import { getChampionMiscSummary } from '../services/ChampionMiscStatsService.js'
 import {
@@ -1276,6 +1277,40 @@ router.get('/tier-list', async (req: Request, res: Response) => {
       message: message,
     })
   }
+})
+
+/** GET /api/stats/items/:itemId/tier-trend-snapshots — séries quotidiennes item (games/wins/pick%). */
+router.get('/items/:itemId/tier-trend-snapshots', async (req: Request, res: Response) => {
+  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
+  const rawR = req.params.itemId
+  const itemId = parseInt(Array.isArray(rawR) ? rawR[0] : rawR, 10)
+  if (Number.isNaN(itemId) || itemId <= 0) {
+    return res.status(400).json({ error: 'Invalid item ID' })
+  }
+  if (!isDatabaseConfigured()) {
+    return res.status(200).json({ itemId, points: [], message: 'Database not configured.' })
+  }
+  const rankTier = rankTierParam(req.query.rankTier)
+  const role = queryString(req.query.role)
+  const fromDate = queryString(req.query.from)
+  const toDate = queryString(req.query.to)
+  const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 365
+  const points = await getItemTierSnapshotsForCharts({
+    itemId,
+    rankTier: rankTier?.length ? rankTier : null,
+    role: role ?? null,
+    fromDate: fromDate ?? null,
+    toDate: toDate ?? null,
+    limit: Number.isFinite(limit) ? Math.min(2000, Math.max(1, limit)) : 365,
+  })
+  return res.json({
+    itemId,
+    rankTier: rankTier ?? null,
+    role: role ?? null,
+    fromDate: fromDate ?? null,
+    toDate: toDate ?? null,
+    points,
+  })
 })
 
 /** GET /api/stats/champions/:championId/tier-trend-snapshots — séries quotidiennes (UTC) games/wins, pick% et ban% par tier+role (winrate = wins/games). Query: ?rankTier=DIAMOND&role=SUPPORT&from=… (role=UTILITY → SUPPORT) */

@@ -3,12 +3,25 @@ import { computed, inject, ref, watch, unref } from 'vue'
 import type { Item } from '@lelanation/shared-types'
 import { useItemsStore } from '~/stores/ItemsStore'
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
+import {
+  formatItemGoldEfficiency,
+  getItemGoldEfficiency,
+  getItemGoldValue,
+} from '~/utils/formatItemStats'
 
 const p = inject('statisticsPageCtx') as any
 const itemsStore = useItemsStore()
 
 type ItemType = 'starter' | 'core' | 'boots' | 'final'
-type SortKey = 'item' | 'type' | 'pickrate' | 'winrate' | 'deltaPick' | 'deltaWin'
+type SortKey =
+  | 'item'
+  | 'type'
+  | 'goldValue'
+  | 'goldEfficiency'
+  | 'pickrate'
+  | 'winrate'
+  | 'deltaPick'
+  | 'deltaWin'
 
 type RawItemRow = {
   itemId: number
@@ -22,6 +35,8 @@ type TableRow = RawItemRow & {
   type: ItemType
   deltaPick: number | null
   deltaWin: number | null
+  goldValue: number | null
+  goldEfficiency: number | null
 }
 
 const sortBy = ref<SortKey | null>(null)
@@ -58,11 +73,14 @@ const baseRows = computed<TableRow[]>(() => {
 
   const pushTyped = (type: ItemType, rows: RawItemRow[] | undefined, out: TableRow[]) => {
     for (const row of rows ?? []) {
+      const item = itemById.value.get(row.itemId)
       out.push({
         ...row,
         type,
         deltaPick: null,
         deltaWin: null,
+        goldValue: item ? getItemGoldValue(item) : null,
+        goldEfficiency: item ? getItemGoldEfficiency(item) : null,
       })
     }
   }
@@ -211,6 +229,8 @@ const sortedRows = computed<TableRow[]>(() => {
       if (av === bv) return 0
       return dir === 'asc' ? (av < bv ? -1 : 1) : av < bv ? 1 : -1
     }
+    if (key === 'goldValue') return sortNumber(a.goldValue, b.goldValue, dir)
+    if (key === 'goldEfficiency') return sortNumber(a.goldEfficiency, b.goldEfficiency, dir)
     if (key === 'pickrate') return sortNumber(a.pickrate, b.pickrate, dir)
     if (key === 'winrate') return sortNumber(a.winrate, b.winrate, dir)
     if (key === 'deltaPick') return sortNumber(a.deltaPick, b.deltaPick, dir)
@@ -259,6 +279,8 @@ const itemsMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
   const opts: StatisticsMobileSortOption[] = [
     { value: 'item', label: t('statisticsPage.itemsColumn') },
     { value: 'type', label: t('statisticsPage.itemsColType') },
+    { value: 'goldValue', label: t('statisticsPage.itemsColGoldValue') },
+    { value: 'goldEfficiency', label: t('statisticsPage.itemsColGoldEfficiency') },
     { value: 'pickrate', label: t('statisticsPage.pickrate') },
     { value: 'winrate', label: t('statisticsPage.winrate') },
   ]
@@ -274,6 +296,17 @@ const itemsMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
 function fmtPct(value: number | null | undefined): string {
   if (value == null) return '—'
   return `${Number(value).toFixed(2)}%`
+}
+
+function fmtGoldValue(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value) || value <= 0) return '—'
+  return String(Math.round(value))
+}
+
+function fmtGoldEfficiency(row: TableRow): string {
+  const item = itemById.value.get(row.itemId)
+  if (!item) return '—'
+  return formatItemGoldEfficiency(item)
 }
 
 function fmtDelta(value: number | null | undefined): string {
@@ -399,7 +432,7 @@ function deltaClass(value: number | null | undefined): string {
         <div
           class="statistics-overview-surface hidden w-full overflow-x-auto rounded-lg border border-primary/30 md:block"
         >
-          <div class="tier-list-lolalytics w-full min-w-[980px] text-[13px]">
+          <div class="tier-list-lolalytics w-full min-w-[1180px] text-[13px]">
             <div
               class="tier-list-lolalytics-head sticky top-0 z-10 flex h-auto min-h-8 w-full items-stretch justify-between border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
             >
@@ -424,6 +457,20 @@ function deltaClass(value: number | null | undefined): string {
                   {{ p.t('statisticsPage.itemsColType') }}{{ sortIcon('type') }}
                 </button>
               </div>
+              <button
+                type="button"
+                class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[100px] shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
+                @click="toggleSort('goldValue')"
+              >
+                {{ p.t('statisticsPage.itemsColGoldValue') }}{{ sortIcon('goldValue') }}
+              </button>
+              <button
+                type="button"
+                class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[100px] shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
+                @click="toggleSort('goldEfficiency')"
+              >
+                {{ p.t('statisticsPage.itemsColGoldEfficiency') }}{{ sortIcon('goldEfficiency') }}
+              </button>
               <button
                 type="button"
                 class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[120px] shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
@@ -472,14 +519,26 @@ function deltaClass(value: number | null | undefined): string {
                   width="50"
                   height="50"
                 />
-                <span class="min-w-0 truncate text-left font-medium text-accent">{{
-                  p.itemName(row.itemId) || row.itemId
-                }}</span>
+                <StatisticsItemDetailLink :item-id="row.itemId" class="min-w-0 truncate text-left">
+                  <span class="font-medium text-accent underline decoration-accent/40">{{
+                    p.itemName(row.itemId) || row.itemId
+                  }}</span>
+                </StatisticsItemDetailLink>
               </div>
               <div
                 class="tier-list-lolalytics-td flex w-[160px] shrink-0 items-center px-2 text-text/90"
               >
                 {{ typeLabel(row.type) }}
+              </div>
+              <div
+                class="tier-list-lolalytics-td flex w-[100px] shrink-0 items-center justify-center tabular-nums text-text/90"
+              >
+                {{ fmtGoldValue(row.goldValue) }}
+              </div>
+              <div
+                class="tier-list-lolalytics-td flex w-[100px] shrink-0 items-center justify-center tabular-nums text-text/90"
+              >
+                {{ fmtGoldEfficiency(row) }}
               </div>
               <div
                 class="tier-list-lolalytics-td flex w-[120px] shrink-0 items-center justify-center tabular-nums text-text/90"
