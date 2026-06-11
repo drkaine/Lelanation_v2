@@ -457,7 +457,6 @@ function deltaClass(value: number | null | undefined): string {
                 class="block text-center text-xs font-medium text-accent underline decoration-accent/40 underline-offset-2"
                 :stop-propagation="false"
               >
-                {{ p.t('statisticsPage.itemStatsOpenDetail') }}
               </StatisticsItemDetailLink>
             </div>
           </article>

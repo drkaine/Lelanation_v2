@@ -1,10 +1,10 @@
 <template>
-  <div class="statistics flex min-h-screen flex-col text-text">
+  <div class="statistics flex min-h-screen min-w-0 flex-col overflow-x-hidden text-text">
     <!-- Onglets : scroll horizontal + snap (mobile) -->
     <div
-      class="statistics-tabs-bar flex w-full flex-shrink-0 items-start gap-2 bg-surface/30 px-4 pb-2 pt-4"
+      class="statistics-tabs-bar flex w-full min-w-0 flex-shrink-0 items-start gap-2 overflow-x-hidden bg-surface/30 px-4 pb-2 pt-4"
     >
-      <div class="statistics-tabs-scroll-wrap relative min-w-0 flex-1">
+      <div class="statistics-tabs-scroll-wrap relative min-w-0 flex-1 overflow-hidden">
         <div
           ref="tabsNavEl"
           role="tablist"
@@ -1142,6 +1142,7 @@ const tabs = computed(() => {
   )
 })
 const tabsNavEl = ref<HTMLElement | null>(null)
+useHorizontalScrollContainer(tabsNavEl)
 type VisibleStatisticsTabId = (typeof allTabs.value)[number]['id']
 
 function scrollActiveTabIntoView(behavior: ScrollBehavior = 'smooth'): void {
@@ -5609,15 +5610,7 @@ if (__statisticsVm?.proxy) {
  * Surfaces & fast-stat : hors scoped pour que les composants enfants (objets, tooltips)
  * héritent le même fond #08101f que les cartes « Vue d’ensemble ».
  */
-/* Onglets : scroll snap + fade bords */
-.statistics-tabs-nav {
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-.statistics-tabs-nav::-webkit-scrollbar {
-  display: none;
-}
+/* Onglets : scroll snap + fade bords (width/overflow rules in app.vue) */
 .statistics-tabs-scroll-wrap::before,
 .statistics-tabs-scroll-wrap::after {
   content: '';

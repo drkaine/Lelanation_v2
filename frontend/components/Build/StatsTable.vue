@@ -19,31 +19,33 @@
             </select>
           </div>
           <div class="text-sm font-semibold text-text/90">Base statistics</div>
-          <div v-if="!hideCategoryTabs" class="stats-tabs">
-            <button
-              type="button"
-              class="stats-tab"
-              :class="{ 'stats-tab--active': activeCategory === 'basic' }"
-              @click="setStatsCategory('basic')"
-            >
-              {{ t('stats.categories.basic') }}
-            </button>
-            <button
-              type="button"
-              class="stats-tab"
-              :class="{ 'stats-tab--active': activeCategory === 'advanced' }"
-              @click="setStatsCategory('advanced')"
-            >
-              {{ t('stats.categories.advanced') }}
-            </button>
-            <button
-              type="button"
-              class="stats-tab"
-              :class="{ 'stats-tab--active': activeCategory === 'economic' }"
-              @click="setStatsCategory('economic')"
-            >
-              {{ t('stats.categories.economic') }}
-            </button>
+          <div v-if="!hideCategoryTabs" class="scrollable-tabs-scroll-wrap min-w-0 max-w-full">
+            <div class="stats-tabs scrollable-tabs-nav">
+              <button
+                type="button"
+                class="stats-tab"
+                :class="{ 'stats-tab--active': activeCategory === 'basic' }"
+                @click="setStatsCategory('basic')"
+              >
+                {{ t('stats.categories.basic') }}
+              </button>
+              <button
+                type="button"
+                class="stats-tab"
+                :class="{ 'stats-tab--active': activeCategory === 'advanced' }"
+                @click="setStatsCategory('advanced')"
+              >
+                {{ t('stats.categories.advanced') }}
+              </button>
+              <button
+                type="button"
+                class="stats-tab"
+                :class="{ 'stats-tab--active': activeCategory === 'economic' }"
+                @click="setStatsCategory('economic')"
+              >
+                {{ t('stats.categories.economic') }}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1180,9 +1182,11 @@ const formatValue = (
 
 .stats-tabs {
   display: inline-flex;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 0.2rem;
   min-height: 36px;
+  max-width: 100%;
   border: 1px solid rgb(var(--rgb-primary) / 0.8);
   border-radius: 0.5rem;
   background: rgb(var(--rgb-background) / 0.25);
@@ -1190,6 +1194,9 @@ const formatValue = (
 }
 
 .stats-tab {
+  flex-shrink: 0;
+  scroll-snap-align: start;
+  white-space: nowrap;
   border: none;
   border-radius: 0.375rem;
   background: transparent;

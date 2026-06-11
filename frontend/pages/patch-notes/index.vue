@@ -217,6 +217,7 @@ const activeTab = ref<PatchNotesTabId>('summary')
 const isLightboxOpen = ref(false)
 const searchQuery = ref('')
 const tabsNavEl = ref<HTMLElement | null>(null)
+useHorizontalScrollContainer(tabsNavEl)
 
 const isSearchActive = computed(() => searchQuery.value.trim().length > 0)
 
@@ -419,14 +420,7 @@ useHead(() => ({
 </script>
 
 <style>
-.patch-notes-tabs-nav {
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-.patch-notes-tabs-nav::-webkit-scrollbar {
-  display: none;
-}
+/* width/overflow scroll rules in app.vue */
 .patch-notes-tabs-scroll-wrap::before,
 .patch-notes-tabs-scroll-wrap::after {
   content: '';

@@ -1,10 +1,14 @@
 <template>
-  <div class="champion-stats flex min-h-screen flex-col bg-background text-text">
+  <div
+    class="champion-stats flex min-h-screen min-w-0 flex-col overflow-x-hidden bg-background text-text"
+  >
     <div class="w-full flex-shrink-0 px-4 pb-2 pt-4 max-lg:px-3">
       <div
-        class="statistics-tabs-bar champion-tabs-bar flex w-full items-start gap-2 bg-surface/30"
+        class="statistics-tabs-bar champion-tabs-bar flex w-full min-w-0 items-start gap-2 overflow-x-hidden bg-surface/30"
       >
-        <div class="statistics-tabs-scroll-wrap champion-tabs-scroll-wrap relative min-w-0 flex-1">
+        <div
+          class="statistics-tabs-scroll-wrap champion-tabs-scroll-wrap relative min-w-0 flex-1 overflow-hidden"
+        >
           <nav
             ref="championTabsNavEl"
             role="tablist"
@@ -2856,6 +2860,7 @@ const championTabs = [
   { id: 'misc' as const, label: 'statisticsPage.championStatsTabMisc' },
 ]
 const championTabsNavEl = ref<HTMLElement | null>(null)
+useHorizontalScrollContainer(championTabsNavEl)
 
 function scrollActiveChampionTabIntoView(behavior: ScrollBehavior = 'smooth'): void {
   if (!import.meta.client || !championTabsNavEl.value) return
@@ -4553,14 +4558,7 @@ useHead({
 
 <style>
 /* Onglets : scroll snap + fade bords (aligné /statistics) */
-.statistics-tabs-nav {
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-.statistics-tabs-nav::-webkit-scrollbar {
-  display: none;
-}
+/* width/overflow scroll rules in app.vue */
 .statistics-tabs-scroll-wrap::before,
 .statistics-tabs-scroll-wrap::after {
   content: '';

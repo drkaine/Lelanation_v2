@@ -11,7 +11,8 @@
       >
         <div class="w-full flex-1 md:order-2">
           <div class="info-toolbar mb-6">
-            <div class="stats-tabs info-toolbar-category-tabs">
+            <div class="scrollable-tabs-scroll-wrap min-w-0 max-w-full flex-1">
+              <div class="stats-tabs info-toolbar-category-tabs scrollable-tabs-nav">
               <button
                 type="button"
                 class="stats-tab"
@@ -36,6 +37,7 @@
               >
                 {{ economicLabel }}
               </button>
+              </div>
             </div>
           </div>
 
@@ -141,21 +143,33 @@ const emit = defineEmits<{
 .info-toolbar-category-tabs {
   flex: 1;
   min-width: 0;
-  flex-wrap: wrap;
 }
 
 .info-toolbar-category-tabs.stats-tabs {
   display: inline-flex;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 0.2rem;
   min-height: 36px;
+  max-width: 100%;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
   border: 1px solid rgb(var(--rgb-primary) / 0.8);
   border-radius: 0.5rem;
   background: rgb(var(--rgb-background) / 0.25);
   padding: 0.2rem;
 }
 
+.info-toolbar-category-tabs.stats-tabs::-webkit-scrollbar {
+  display: none;
+}
+
 .info-toolbar-category-tabs .stats-tab {
+  flex-shrink: 0;
+  scroll-snap-align: start;
+  white-space: nowrap;
   border: none;
   border-radius: 0.375rem;
   background: transparent;

@@ -1397,23 +1397,25 @@
     <!-- Items Manager (under the card): drag & drop, remove & reset items (seulement si pas readonly) -->
     <div v-if="!readonly" class="items-manager">
       <div class="items-manager-header">
-        <div class="items-manager-tabs">
-          <button
-            class="items-manager-tab-btn"
-            :class="{ 'is-active': !showItemStats }"
-            type="button"
-            @click="showItemStats = false"
-          >
-            {{ t('buildCard.itemsManagement') }}
-          </button>
-          <button
-            class="items-manager-tab-btn"
-            :class="{ 'is-active': showItemStats }"
-            type="button"
-            @click="showItemStats = true"
-          >
-            {{ t('buildCard.itemsStatsTab') }}
-          </button>
+        <div class="scrollable-tabs-scroll-wrap min-w-0 flex-1">
+          <div class="items-manager-tabs scrollable-tabs-nav">
+            <button
+              class="items-manager-tab-btn"
+              :class="{ 'is-active': !showItemStats }"
+              type="button"
+              @click="showItemStats = false"
+            >
+              {{ t('buildCard.itemsManagement') }}
+            </button>
+            <button
+              class="items-manager-tab-btn"
+              :class="{ 'is-active': showItemStats }"
+              type="button"
+              @click="showItemStats = true"
+            >
+              {{ t('buildCard.itemsStatsTab') }}
+            </button>
+          </div>
         </div>
         <div class="items-manager-header-actions">
           <span
@@ -5204,7 +5206,6 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
 }
 
 .items-manager-header-actions {

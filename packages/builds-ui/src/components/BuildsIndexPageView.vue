@@ -1,8 +1,9 @@
 <template>
   <div class="builds-page min-h-screen px-[10px] pb-4 text-text">
     <div class="mx-auto max-w-8xl px-0">
-      <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
-        <div class="streamer-tabs">
+      <div class="flex w-full min-w-0 flex-wrap items-center justify-center gap-2 sm:gap-3">
+        <div class="scrollable-tabs-scroll-wrap w-full min-w-0 max-w-full sm:max-w-none">
+          <div class="streamer-tabs scrollable-tabs-nav">
           <button
             type="button"
             class="streamer-tab-button"
@@ -35,6 +36,7 @@
           >
             {{ t('buildsPage.createBuild') }}
           </component>
+          </div>
         </div>
         <div v-if="allowShare" class="flex flex-wrap items-center justify-center gap-2">
           <button
@@ -366,22 +368,33 @@ const emit = defineEmits<{
 
 .streamer-tabs {
   display: inline-flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 0.25rem;
   border: 1px solid rgb(var(--rgb-accent) / 0.2);
   border-radius: 9999px;
   background: rgb(var(--rgb-background) / 0.22);
   padding: 0.2rem;
   max-width: 100%;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.streamer-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .streamer-tab-button {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
+  scroll-snap-align: start;
+  white-space: nowrap;
   border: none;
   border-radius: 9999px;
   background: transparent;

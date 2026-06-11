@@ -239,23 +239,25 @@
 
           <div class="flex-1">
             <div class="space-y-4">
-              <div v-if="hasDescriptionTab" class="detail-page-tabs stats-tabs">
-                <button
-                  type="button"
-                  class="stats-tab"
-                  :class="{ 'stats-tab--active': activeDetailTab === 'description' }"
-                  @click="activeDetailTab = 'description'"
-                >
-                  {{ t('createBuild.description') }}
-                </button>
-                <button
-                  type="button"
-                  class="stats-tab"
-                  :class="{ 'stats-tab--active': activeDetailTab === 'statistics' }"
-                  @click="activeDetailTab = 'statistics'"
-                >
-                  {{ t('createBuild.stats') }}
-                </button>
+              <div v-if="hasDescriptionTab" class="scrollable-tabs-scroll-wrap max-w-full">
+                <div class="detail-page-tabs stats-tabs scrollable-tabs-nav">
+                  <button
+                    type="button"
+                    class="stats-tab"
+                    :class="{ 'stats-tab--active': activeDetailTab === 'description' }"
+                    @click="activeDetailTab = 'description'"
+                  >
+                    {{ t('createBuild.description') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="stats-tab"
+                    :class="{ 'stats-tab--active': activeDetailTab === 'statistics' }"
+                    @click="activeDetailTab = 'statistics'"
+                  >
+                    {{ t('createBuild.stats') }}
+                  </button>
+                </div>
               </div>
 
               <div
@@ -909,7 +911,6 @@ onMounted(() => {
 
 .detail-page-tabs.stats-tabs {
   display: inline-flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 0.2rem;
   min-height: 36px;

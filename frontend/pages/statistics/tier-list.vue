@@ -5,6 +5,7 @@
     >
       <div class="statistics-tabs-scroll-wrap relative min-w-0 flex-1 overflow-hidden">
         <div
+          ref="tierListTabsNavEl"
           class="statistics-tabs-nav flex flex-nowrap gap-1 overflow-x-auto border-b border-primary/30 pb-2"
         >
           <button
@@ -486,6 +487,8 @@ const { filtersOpen } = storeToRefs(statisticsUiStore)
 const { effectiveFiltersSheetMode, showDesktopFiltersTrigger, filtersFabClass } =
   useStatisticsFiltersSheetMode()
 const { version: gameVersion } = useGameVersion()
+const tierListTabsNavEl = ref<HTMLElement | null>(null)
+useHorizontalScrollContainer(tierListTabsNavEl)
 
 useHead({
   title: () => t('statisticsPage.tabTierList'),
@@ -1109,15 +1112,7 @@ if (__vm) {
 </script>
 
 <style>
-/* Aligné sur /statistics : seule la barre d’onglets scroll horizontalement */
-.statistics-tabs-nav {
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-.statistics-tabs-nav::-webkit-scrollbar {
-  display: none;
-}
+/* width/overflow scroll rules in app.vue */
 .statistics-tabs-scroll-wrap::before,
 .statistics-tabs-scroll-wrap::after {
   content: '';

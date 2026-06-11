@@ -1,6 +1,7 @@
 <template>
   <div class="companion-builds-panel">
-    <nav v-if="companionMode === 'full'" class="tabs">
+    <div v-if="companionMode === 'full'" class="scrollable-tabs-scroll-wrap">
+      <nav class="tabs scrollable-tabs-nav">
     <button class="tab-btn" :class="{ active: activeTab === 'builds' }" @click="emit('update:activeTab', 'builds')">
       {{ t('tabs.discover') }}
     </button>
@@ -23,9 +24,11 @@
     <button class="tab-btn" :class="{ active: activeTab === 'settings' }" @click="emit('update:activeTab', 'settings')">
       {{ t('tabs.settings') }}
     </button>
-    </nav>
+      </nav>
+    </div>
 
-    <nav v-else class="tabs">
+    <div v-else class="scrollable-tabs-scroll-wrap">
+      <nav class="tabs scrollable-tabs-nav">
       <button class="tab-btn" :class="{ active: activeTab === 'builds' }" @click="emit('update:activeTab', 'builds')">
         {{ t('tabs.discover') }}
       </button>
@@ -37,7 +40,8 @@
       >
         {{ t('tabs.favorites') }} ({{ favoriteCount }})
       </button>
-    </nav>
+      </nav>
+    </div>
 
     <div v-if="activeTab !== 'settings'" class="filters-bar">
       <BuildsFilterBar
@@ -235,7 +239,20 @@ const onSortByUpdate = (value: string) => {
 </script>
 
 <style scoped>
-.tabs { display: flex; gap: 0.5rem; margin-bottom: 0.9rem; }
+.tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.5rem;
+  margin-bottom: 0.9rem;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
 .companion-builds-panel {
   border: 1px solid rgba(200, 155, 60, 0.2);
   border-radius: 10px;
@@ -243,6 +260,9 @@ const onSortByUpdate = (value: string) => {
   padding: 0.75rem;
 }
 .tab-btn {
+  flex-shrink: 0;
+  scroll-snap-align: start;
+  white-space: nowrap;
   border: 1px solid rgba(200, 155, 60, 0.5); border-radius: 8px;
   background: rgba(30, 40, 45, 0.75); color: #f0e6d2; padding: 0.45rem 0.75rem;
   font-size: 0.84rem; cursor: pointer; transition: background-color 0.15s ease;

@@ -144,7 +144,7 @@
     >
       {{ streamerPanelsOpen ? '▴' : '▾' }}
     </button>
-    <main id="main" tabindex="-1" class="app-main flex-1">
+    <main id="main" tabindex="-1" class="app-main min-w-0 flex-1">
       <NuxtPage />
     </main>
     <AppFooter v-show="showStandardAppChrome && !isAdminRoute && !isBuildCardRenderRoute" />
@@ -971,5 +971,112 @@ html[data-stats-cards='1'] .champion-stats .hidden.md\:block {
     + .statistics-champion-stats-mobile-card {
     border-top-width: 1px !important;
   }
+}
+
+/* Horizontal scroll for tab bars on narrow viewports (stats-style) */
+.scrollable-tabs-scroll-wrap,
+.statistics-tabs-scroll-wrap,
+.patch-notes-tabs-scroll-wrap {
+  position: relative;
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.scrollable-tabs-nav,
+.statistics-tabs-nav,
+.patch-notes-tabs-nav {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  cursor: grab;
+  touch-action: pan-x;
+}
+
+/* Scrollbar visible only when tabs overflow (class set by useHorizontalScrollContainer) */
+.scrollable-tabs-nav.has-horizontal-scroll,
+.statistics-tabs-nav.has-horizontal-scroll,
+.patch-notes-tabs-nav.has-horizontal-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--rgb-accent) / 0.7) rgb(var(--rgb-primary) / 0.22);
+  padding-bottom: 6px;
+}
+
+.scrollable-tabs-nav.has-horizontal-scroll::-webkit-scrollbar,
+.statistics-tabs-nav.has-horizontal-scroll::-webkit-scrollbar,
+.patch-notes-tabs-nav.has-horizontal-scroll::-webkit-scrollbar {
+  display: block;
+  height: 5px;
+}
+
+.scrollable-tabs-nav.has-horizontal-scroll::-webkit-scrollbar-track,
+.statistics-tabs-nav.has-horizontal-scroll::-webkit-scrollbar-track,
+.patch-notes-tabs-nav.has-horizontal-scroll::-webkit-scrollbar-track {
+  margin-top: 4px;
+  border-radius: 9999px;
+  background: rgb(var(--rgb-primary) / 0.22);
+}
+
+.scrollable-tabs-nav.has-horizontal-scroll::-webkit-scrollbar-thumb,
+.statistics-tabs-nav.has-horizontal-scroll::-webkit-scrollbar-thumb,
+.patch-notes-tabs-nav.has-horizontal-scroll::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: rgb(var(--rgb-accent) / 0.72);
+}
+
+.scrollable-tabs-nav.has-horizontal-scroll::-webkit-scrollbar-thumb:hover,
+.statistics-tabs-nav.has-horizontal-scroll::-webkit-scrollbar-thumb:hover,
+.patch-notes-tabs-nav.has-horizontal-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--rgb-accent) / 0.9);
+}
+
+.scrollable-tabs-nav.is-drag-scrolling,
+.statistics-tabs-nav.is-drag-scrolling,
+.patch-notes-tabs-nav.is-drag-scrolling {
+  cursor: grabbing;
+  scroll-snap-type: none;
+  user-select: none;
+}
+
+.scrollable-tabs-nav:not(.has-horizontal-scroll)::-webkit-scrollbar,
+.statistics-tabs-nav:not(.has-horizontal-scroll)::-webkit-scrollbar,
+.patch-notes-tabs-nav:not(.has-horizontal-scroll)::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollable-tabs-scroll-wrap::before,
+.scrollable-tabs-scroll-wrap::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 20px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.scrollable-tabs-scroll-wrap::before {
+  left: 0;
+  background: linear-gradient(to right, rgb(8 16 31 / 0.92), transparent);
+}
+
+.scrollable-tabs-scroll-wrap::after {
+  right: 0;
+  background: linear-gradient(to left, rgb(8 16 31 / 0.92), transparent);
+}
+
+.scrollable-tabs-nav > * {
+  flex-shrink: 0;
+  scroll-snap-align: start;
+  white-space: nowrap;
 }
 </style>
