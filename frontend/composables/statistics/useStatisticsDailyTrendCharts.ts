@@ -10,7 +10,13 @@ export type DailyTrendSnapshotPoint = {
   pickRatePct: number
 }
 
-export type DailyTrendMetricId = 'games' | 'winrate' | 'pickrate' | 'banrate'
+export type DailyTrendMetricId =
+  | 'games'
+  | 'winrate'
+  | 'pickrate'
+  | 'banrate'
+  | 'duration'
+  | 'orderPosition'
 export type DailyTrendGranularity = 'day' | 'week' | 'month' | 'patch'
 export type DailyTrendDivisionPreset = 'selected' | 'average' | 'skilled' | 'elite'
 
@@ -97,6 +103,9 @@ function metricValue(
   if (metric === 'games') return raw.games
   if (metric === 'winrate') return raw.games > 0 ? (100 * raw.wins) / raw.games : 0
   if (metric === 'pickrate') return raw.weight > 0 ? raw.pickNum / raw.weight : 0
+  if (metric === 'duration' || metric === 'orderPosition') {
+    return raw.weight > 0 ? raw.pickNum / raw.weight : 0
+  }
   return raw.weight > 0 ? raw.banNum / raw.weight : 0
 }
 
@@ -105,7 +114,12 @@ export function useStatisticsDailyTrendCharts(options: {
   filterRank: Ref<string[]>
   showBanrate: Ref<boolean> | ComputedRef<boolean>
   versionsCatalog: Ref<Array<{ patchLabel: string; releaseDate: string }>>
-  metricTitles: ComputedRef<Record<DailyTrendMetricId, string>>
+  metricTitles: ComputedRef<Partial<Record<DailyTrendMetricId, string>>>
+  enabledMetrics?: Ref<DailyTrendMetricId[]> | ComputedRef<DailyTrendMetricId[]>
+  seriesLabel?: (tier: string) => string
+  tierColor?: (tier: string) => string
+  formatMetricValue?: (metric: DailyTrendMetricId, value: number) => string
+  tierSortOrder?: (a: string, b: string) => number
 }) {
   const trendGranularity = ref<DailyTrendGranularity>('day')
   const trendRangeMode = ref<'7d' | '14d' | 'months'>('7d')
@@ -116,8 +130,11 @@ export function useStatisticsDailyTrendCharts(options: {
   const trendTooltip = ref<{
     metricId: DailyTrendMetricId
     tier: string
+    label: string
     bucketLabel: string
     value: number
+    winrate: number | null
+    games: number
     mouseX: number
     mouseY: number
   } | null>(null)
@@ -165,28 +182,36 @@ export function useStatisticsDailyTrendCharts(options: {
     const fromData = Array.from(
       new Set(options.points.value.map(p => normalizeRankTier(p.rankTier)))
     ).filter(Boolean)
-    return fromData.sort(
-      (a, b) =>
-        (!RANK_TIERS.includes(a as (typeof RANK_TIERS)[number])
-          ? 999
-          : RANK_TIERS.indexOf(a as (typeof RANK_TIERS)[number])) -
-        (!RANK_TIERS.includes(b as (typeof RANK_TIERS)[number])
-          ? 999
-          : RANK_TIERS.indexOf(b as (typeof RANK_TIERS)[number]))
-    )
+    const defaultSort = (a: string, b: string) =>
+      (!RANK_TIERS.includes(a as (typeof RANK_TIERS)[number])
+        ? 999
+        : RANK_TIERS.indexOf(a as (typeof RANK_TIERS)[number])) -
+      (!RANK_TIERS.includes(b as (typeof RANK_TIERS)[number])
+        ? 999
+        : RANK_TIERS.indexOf(b as (typeof RANK_TIERS)[number]))
+    return fromData.sort(options.tierSortOrder ?? defaultSort)
   })
 
   const trendMetricDefs = computed(() => {
     const titles = options.metricTitles.value
-    const defs: Array<{ id: DailyTrendMetricId; title: string }> = [
-      { id: 'games', title: titles.games },
-      { id: 'winrate', title: titles.winrate },
-      { id: 'pickrate', title: titles.pickrate },
+    const coreDefs: Array<{ id: DailyTrendMetricId; title: string }> = [
+      { id: 'games', title: titles.games ?? '' },
+      { id: 'winrate', title: titles.winrate ?? '' },
+      { id: 'pickrate', title: titles.pickrate ?? '' },
     ]
     if (options.showBanrate.value) {
-      defs.push({ id: 'banrate', title: titles.banrate })
+      coreDefs.push({ id: 'banrate', title: titles.banrate ?? '' })
     }
-    return defs
+    const optionalDefs: Array<{ id: DailyTrendMetricId; title: string }> = [
+      { id: 'duration', title: titles.duration ?? '' },
+      { id: 'orderPosition', title: titles.orderPosition ?? '' },
+    ]
+    const enabled = options.enabledMetrics?.value
+    if (!enabled?.length) return coreDefs
+    const enabledSet = new Set(enabled)
+    return [...coreDefs, ...optionalDefs].filter(
+      def => enabledSet.has(def.id) && Boolean(def.title)
+    )
   })
 
   const trendBuckets = computed(() => {
@@ -284,33 +309,63 @@ export function useStatisticsDailyTrendCharts(options: {
       })
 
       const pendingSeries = tiers.map(tier => {
-        const rawValues: Array<{ idx: number; value: number; bucketLabel: string }> = []
+        const rawValues: Array<{
+          idx: number
+          value: number
+          bucketLabel: string
+          games: number
+          wins: number
+          winrate: number | null
+        }> = []
         buckets.forEach((bucket, index) => {
           const raw = bucket.byTier.get(tier)
           if (!raw) return
+          const games = Number(raw.games) || 0
+          const wins = Number(raw.wins) || 0
           rawValues.push({
             idx: index,
             value: metricValue(metric.id, raw),
             bucketLabel: bucket.label,
+            games,
+            wins,
+            winrate: games > 0 ? (100 * wins) / games : null,
           })
         })
-        return { tier, color: RANK_COLOR_MAP[tier] ?? '#64748b', rawValues }
+        return {
+          tier,
+          label: options.seriesLabel?.(tier) ?? tier,
+          color: options.tierColor?.(tier) ?? RANK_COLOR_MAP[tier] ?? '#64748b',
+          rawValues,
+        }
       })
 
       if (trendShowGlobalLine.value) {
-        const rawValues: Array<{ idx: number; value: number; bucketLabel: string }> = []
+        const rawValues: Array<{
+          idx: number
+          value: number
+          bucketLabel: string
+          games: number
+          wins: number
+          winrate: number | null
+        }> = []
         globalRawByIndex.forEach((raw, idx) => {
           if (raw.weight <= 0 && raw.games <= 0) return
+          const games = Number(raw.games) || 0
+          const wins = Number(raw.wins) || 0
           rawValues.push({
             idx,
             value: metricValue(metric.id, raw),
             bucketLabel: buckets[idx]?.label ?? '',
+            games,
+            wins,
+            winrate: games > 0 ? (100 * wins) / games : null,
           })
         })
         if (rawValues.length) {
           pendingSeries.push({
             tier: 'GLOBAL',
-            color: RANK_COLOR_MAP.GLOBAL ?? '#c084fc',
+            label: options.seriesLabel?.('GLOBAL') ?? 'GLOBAL',
+            color: options.tierColor?.('GLOBAL') ?? RANK_COLOR_MAP.GLOBAL ?? '#c084fc',
             rawValues,
           })
         }
@@ -332,11 +387,25 @@ export function useStatisticsDailyTrendCharts(options: {
       if (metric.id === 'games') {
         minVal = 0
         if (maxVal <= 0) maxVal = 1
+      } else if (metric.id === 'orderPosition') {
+        minVal = Math.max(1, minVal)
+        if (maxVal <= minVal) maxVal = minVal + 1
       } else if (maxVal <= minVal) {
-        maxVal = minVal + (metric.id === 'pickrate' || metric.id === 'banrate' ? 0.5 : 1)
+        maxVal =
+          minVal +
+          (metric.id === 'pickrate' || metric.id === 'banrate'
+            ? 0.5
+            : metric.id === 'duration'
+              ? 60_000
+              : 1)
       }
       const spread = Math.max(1e-6, maxVal - minVal)
-      const domainMin = metric.id === 'games' ? 0 : Math.max(0, minVal - spread * 0.12)
+      const domainMin =
+        metric.id === 'games'
+          ? 0
+          : metric.id === 'orderPosition'
+            ? Math.max(1, minVal - spread * 0.15)
+            : Math.max(0, minVal - spread * 0.12)
       const domainMax = maxVal + spread * 0.08
       const domainSpan = Math.max(1e-6, domainMax - domainMin)
 
@@ -351,10 +420,14 @@ export function useStatisticsDailyTrendCharts(options: {
               (1 - (value - domainMin) / domainSpan) * DAILY_TREND_PLOT_H,
             value,
             bucketLabel: v.bucketLabel,
+            games: v.games,
+            wins: v.wins,
+            winrate: v.winrate,
           }
         })
         return {
           tier: serie.tier,
+          label: serie.label ?? serie.tier,
           color: serie.color,
           path: buildPath(points.map(p => ({ x: p.x, y: p.y }))),
           points,
@@ -367,7 +440,11 @@ export function useStatisticsDailyTrendCharts(options: {
         yTicks.push({
           value,
           y: DAILY_TREND_CHART_PAD.top + (1 - i / 4) * DAILY_TREND_PLOT_H,
-          label: metric.id === 'games' ? `${Math.round(value)}` : `${value.toFixed(1)}%`,
+          label: options.formatMetricValue
+            ? options.formatMetricValue(metric.id, value)
+            : metric.id === 'games'
+              ? `${Math.round(value)}`
+              : `${value.toFixed(1)}%`,
         })
       }
       const tickCount = Math.min(6, Math.max(2, buckets.length))
@@ -395,6 +472,7 @@ export function useStatisticsDailyTrendCharts(options: {
   })
 
   function formatTrendValue(metric: DailyTrendMetricId, value: number): string {
+    if (options.formatMetricValue) return options.formatMetricValue(metric, value)
     if (metric === 'games') return `${Math.round(value)}`
     return `${Number(value).toFixed(2)}%`
   }
@@ -403,13 +481,22 @@ export function useStatisticsDailyTrendCharts(options: {
     event: MouseEvent,
     metricId: DailyTrendMetricId,
     tier: string,
-    pt: { bucketLabel: string; value: number }
+    pt: {
+      bucketLabel: string
+      value: number
+      winrate?: number | null
+      games?: number
+    },
+    label?: string
   ): void {
     trendTooltip.value = {
       metricId,
       tier,
+      label: label ?? options.seriesLabel?.(tier) ?? tier,
       bucketLabel: pt.bucketLabel,
       value: pt.value,
+      winrate: pt.winrate ?? null,
+      games: Number(pt.games) || 0,
       mouseX: event.clientX,
       mouseY: event.clientY,
     }

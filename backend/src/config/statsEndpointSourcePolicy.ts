@@ -108,6 +108,16 @@ export const STATS_ENDPOINT_SOURCE_POLICY: StatsEndpointSourceRule[] = [
     allowedSources: ['item_tier_daily_snapshots', 'champion_tier_daily_snapshots'],
   },
   {
+    path: '/items/:itemId/breakdown',
+    policy: 'mv_only',
+    allowedSources: ['item_tier_daily_snapshots'],
+  },
+  {
+    path: '/items/:itemId/purchase-order',
+    policy: 'mv_only',
+    allowedSources: ['item_tier_daily_snapshots'],
+  },
+  {
     path: '/tier-list',
     policy: 'mv_only',
     allowedSources: ['champion_stats', 'champion_vs_stats', 'match_outcome_stats'],

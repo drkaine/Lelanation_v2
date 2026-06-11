@@ -20,23 +20,37 @@ const props = withDefaults(
     filterRank: string[]
     showBanrate?: boolean
     versionsCatalog?: Array<{ patchLabel: string; releaseDate: string }>
+    title?: string
+    showDivisionPresets?: boolean
+    showGlobalLineToggle?: boolean
+    enabledMetrics?: DailyTrendMetricId[]
+    metricTitlesOverride?: Partial<Record<DailyTrendMetricId, string>>
+    seriesLabel?: (tier: string) => string
+    tierColor?: (tier: string) => string
+    formatMetricValue?: (metric: DailyTrendMetricId, value: number) => string
+    tierSortOrder?: (a: string, b: string) => number
   }>(),
   {
     pending: false,
     error: null,
     showBanrate: false,
     versionsCatalog: () => [],
+    showDivisionPresets: true,
+    showGlobalLineToggle: true,
   }
 )
 
 const { t } = useI18n()
 
-const metricTitles = computed(() => ({
-  games: t('statisticsPage.championStatsTrendGames'),
-  winrate: t('statisticsPage.championStatsTrendWinrate'),
-  pickrate: t('statisticsPage.championStatsTrendPickrate'),
-  banrate: t('statisticsPage.championStatsTrendBanrate'),
-}))
+const metricTitles = computed(() => {
+  const base = {
+    games: t('statisticsPage.championStatsTrendGames'),
+    winrate: t('statisticsPage.championStatsTrendWinrate'),
+    pickrate: t('statisticsPage.championStatsTrendPickrate'),
+    banrate: t('statisticsPage.championStatsTrendBanrate'),
+  }
+  return { ...base, ...props.metricTitlesOverride }
+})
 
 const charts = useStatisticsDailyTrendCharts({
   points: toRef(props, 'points'),
@@ -44,6 +58,11 @@ const charts = useStatisticsDailyTrendCharts({
   showBanrate: computed(() => props.showBanrate),
   versionsCatalog: computed(() => props.versionsCatalog ?? []),
   metricTitles,
+  enabledMetrics: computed(() => props.enabledMetrics ?? []),
+  seriesLabel: props.seriesLabel,
+  tierColor: props.tierColor,
+  formatMetricValue: props.formatMetricValue,
+  tierSortOrder: props.tierSortOrder,
 })
 </script>
 
@@ -51,7 +70,7 @@ const charts = useStatisticsDailyTrendCharts({
   <div class="space-y-3">
     <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
       <h2 class="shrink-0 text-base font-semibold text-text">
-        {{ t('statisticsPage.championStatsTrendsTitle') }}
+        {{ title ?? t('statisticsPage.championStatsTrendsTitle') }}
       </h2>
       <label class="inline-flex shrink-0 items-center gap-2 text-text/80">
         <span>{{ t('statisticsPage.championStatsTrendsGranularity') }}</span>
@@ -103,7 +122,7 @@ const charts = useStatisticsDailyTrendCharts({
           {{ t('statisticsPage.championStatsTrendsRangeMonths') }}
         </button>
       </div>
-      <div class="flex flex-wrap items-center gap-2">
+      <div v-if="showDivisionPresets" class="flex flex-wrap items-center gap-2">
         <button
           type="button"
           class="rounded px-2 py-1 font-medium transition-colors"
@@ -152,7 +171,7 @@ const charts = useStatisticsDailyTrendCharts({
         >
           Elite
         </button>
-        <label class="inline-flex items-center gap-1 text-text/80">
+        <label v-if="showGlobalLineToggle" class="inline-flex items-center gap-1 text-text/80">
           <input
             v-model="charts.trendShowGlobalLine.value"
             type="checkbox"
@@ -161,13 +180,24 @@ const charts = useStatisticsDailyTrendCharts({
           <span>{{ t('statisticsPage.championStatsTrendsGlobalLine') }}</span>
         </label>
       </div>
+      <label v-else-if="showGlobalLineToggle" class="inline-flex items-center gap-1 text-text/80">
+        <input
+          v-model="charts.trendShowGlobalLine.value"
+          type="checkbox"
+          class="rounded border-primary/50"
+        />
+        <span>{{ t('statisticsPage.championStatsTrendsGlobalLine') }}</span>
+      </label>
     </div>
 
     <div v-if="pending" class="py-4 text-text/70">{{ t('statisticsPage.loading') }}</div>
     <p v-else-if="error" class="py-2 text-sm text-red-400">{{ error }}</p>
     <div
       v-else-if="charts.trendChartCards.value.length"
-      class="grid w-full min-w-0 grid-cols-1 gap-4 lg:grid-cols-2"
+      class="grid w-full min-w-0 gap-4"
+      :class="
+        charts.trendChartCards.value.length === 1 ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'
+      "
     >
       <article
         v-for="card in charts.trendChartCards.value"
@@ -243,7 +273,8 @@ const charts = useStatisticsDailyTrendCharts({
                     $event,
                     card.metricId as DailyTrendMetricId,
                     serie.tier,
-                    pt
+                    pt,
+                    serie.label
                   )
                 "
                 @mousemove="
@@ -251,7 +282,8 @@ const charts = useStatisticsDailyTrendCharts({
                     $event,
                     card.metricId as DailyTrendMetricId,
                     serie.tier,
-                    pt
+                    pt,
+                    serie.label
                   )
                 "
                 @mouseleave="charts.trendTooltip.value = null"
@@ -278,7 +310,7 @@ const charts = useStatisticsDailyTrendCharts({
             transform: 'translate(-50%, -110%)',
           }"
         >
-          <strong>{{ charts.trendTooltip.value.tier }}</strong> ·
+          <strong>{{ charts.trendTooltip.value.label }}</strong> ·
           {{ charts.trendTooltip.value.bucketLabel }} ·
           {{
             charts.formatTrendValue(
@@ -286,6 +318,9 @@ const charts = useStatisticsDailyTrendCharts({
               charts.trendTooltip.value.value
             )
           }}
+          <template v-if="charts.trendTooltip.value.winrate != null && card.metricId !== 'winrate'">
+            · {{ t('statisticsPage.winrate') }} {{ charts.trendTooltip.value.winrate.toFixed(1) }}%
+          </template>
         </div>
         <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-text/80">
           <button
@@ -304,7 +339,7 @@ const charts = useStatisticsDailyTrendCharts({
               class="inline-block h-2.5 w-2.5 rounded-full"
               :style="{ backgroundColor: serie.color }"
             />
-            {{ serie.tier }}
+            {{ serie.label }}
           </button>
         </div>
       </article>

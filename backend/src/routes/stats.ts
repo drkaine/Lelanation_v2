@@ -26,7 +26,11 @@ import { getChampionGlobalTable } from '../services/ChampionGlobalTableService.j
 import { getChampionBansTable } from '../services/ChampionBansTableService.js'
 import { getChampionPingsTable } from '../services/ChampionPingsTableService.js'
 import { getChampionVisionTable } from '../services/ChampionVisionTableService.js'
-import { getItemTierSnapshotsForCharts } from '../services/ItemTierDailySnapshotService.js'
+import {
+  getItemPurchaseOrderStats,
+  getItemTierBreakdown,
+  getItemTierSnapshotsForCharts,
+} from '../services/ItemTierDailySnapshotService.js'
 import { getChampionDamageSplit } from '../services/ChampionDamageSplitService.js'
 import { getChampionMiscSummary } from '../services/ChampionMiscStatsService.js'
 import {
@@ -1311,6 +1315,68 @@ router.get('/items/:itemId/tier-trend-snapshots', async (req: Request, res: Resp
     toDate: toDate ?? null,
     points,
   })
+})
+
+/** GET /api/stats/items/:itemId/breakdown — winrate par division pour chaque rôle + timing d'achat moyen. */
+router.get('/items/:itemId/breakdown', async (req: Request, res: Response) => {
+  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
+  const rawR = req.params.itemId
+  const itemId = parseInt(Array.isArray(rawR) ? rawR[0] : rawR, 10)
+  if (Number.isNaN(itemId) || itemId <= 0) {
+    return res.status(400).json({ error: 'Invalid item ID' })
+  }
+  if (!isDatabaseConfigured()) {
+    return res.status(200).json({
+      itemId,
+      roles: [],
+      roleTrendPoints: [],
+      purchaseTiming: [],
+      overallAvgPurchaseMs: null,
+      message: 'Database not configured.',
+    })
+  }
+  const rankTier = rankTierParam(req.query.rankTier)
+  const fromDate = queryString(req.query.from)
+  const toDate = queryString(req.query.to)
+  const breakdown = await getItemTierBreakdown({
+    itemId,
+    rankTier: rankTier?.length ? rankTier : null,
+    fromDate: fromDate ?? null,
+    toDate: toDate ?? null,
+  })
+  return res.json({ itemId, ...breakdown })
+})
+
+/** GET /api/stats/items/:itemId/purchase-order — winrate par ordre d'achat + timing moyen. */
+router.get('/items/:itemId/purchase-order', async (req: Request, res: Response) => {
+  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
+  const rawR = req.params.itemId
+  const itemId = parseInt(Array.isArray(rawR) ? rawR[0] : rawR, 10)
+  if (Number.isNaN(itemId) || itemId <= 0) {
+    return res.status(400).json({ error: 'Invalid item ID' })
+  }
+  if (!isDatabaseConfigured()) {
+    return res.status(200).json({
+      itemId,
+      byOrder: [],
+      orderTrendPoints: [],
+      orderDivisionTrendPoints: [],
+      timingTrendPoints: [],
+      purchaseTiming: [],
+      overallAvgPurchaseMs: null,
+      message: 'Database not configured.',
+    })
+  }
+  const rankTier = rankTierParam(req.query.rankTier)
+  const fromDate = queryString(req.query.from)
+  const toDate = queryString(req.query.to)
+  const stats = await getItemPurchaseOrderStats({
+    itemId,
+    rankTier: rankTier?.length ? rankTier : null,
+    fromDate: fromDate ?? null,
+    toDate: toDate ?? null,
+  })
+  return res.json({ itemId, ...stats })
 })
 
 /** GET /api/stats/champions/:championId/tier-trend-snapshots — séries quotidiennes (UTC) games/wins, pick% et ban% par tier+role (winrate = wins/games). Query: ?rankTier=DIAMOND&role=SUPPORT&from=… (role=UTILITY → SUPPORT) */
