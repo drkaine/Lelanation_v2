@@ -59,19 +59,42 @@ export function getSpellImageUrl(_version: string, imageName: string): string {
 }
 
 /**
+ * Folder segment for champion spell images (Data Dragon `id`, e.g. `Senna`, not numeric key).
+ */
+export function championSpellImageFolder(
+  championSlug: string | null | undefined,
+  championNumericId?: number | string | null
+): string {
+  const slug = String(championSlug ?? '').trim()
+  if (slug) return slug
+  return String(championNumericId ?? '').trim()
+}
+
+/**
  * Get champion spell image URL (local)
  * Stored as: /images/game/latest/champion-spell/{ChampionId}/{SpellImage}.png
  */
 export function getChampionSpellImageUrl(
   _version: string,
-  championId: string,
+  championFolder: string,
   imageName: string
 ): string {
-  if (!imageName || !championId) return ''
+  if (!imageName || !championFolder) return ''
   if (imageName.includes('/')) {
     return `/images/game/latest/champion-spell/${imageName}`
   }
-  return getImageUrl('champion-spell', 'latest', imageName, championId)
+  return getImageUrl('champion-spell', 'latest', imageName, championFolder)
+}
+
+/** Resolve spell image URL using slug when available (stats pages pass numeric id + slug). */
+export function resolveChampionSpellImageUrl(
+  version: string,
+  opts: { slug?: string | null; numericId?: number | string | null },
+  imageName: string
+): string {
+  const folder = championSpellImageFolder(opts.slug, opts.numericId)
+  if (!folder || !imageName) return ''
+  return getChampionSpellImageUrl(version, folder, imageName)
 }
 
 /**

@@ -13,7 +13,6 @@ const props = defineProps<{
   data: ChampionVisionSummary | null
   baseline: ChampionVisionSummary | null
   pending: boolean
-  comparisonLabel?: string | null
 }>()
 
 const { t } = useI18n()
@@ -61,15 +60,7 @@ function metricLabel(key: VisionMetricKey): string {
       {{ t('statisticsPage.noData') }}
     </div>
     <template v-else>
-      <p v-if="comparisonLabel" class="text-xs text-text/55">
-        {{ t('statisticsPage.visionPatchDeltaLabel', { patch: comparisonLabel }) }}
-      </p>
-
       <div class="fast-stat-card rounded-lg border border-primary/30 bg-surface/30 p-3">
-        <p class="mb-3 text-xs text-text/55">
-          {{ t('statisticsPage.championVisionGames', { count: data?.games ?? 0 }) }}
-        </p>
-
         <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3">
           <div
             v-for="key in VISION_METRIC_KEYS"

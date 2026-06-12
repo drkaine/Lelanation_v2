@@ -14,7 +14,6 @@ const props = defineProps<{
   data: ChampionPingsSummary | null
   baseline: ChampionPingsSummary | null
   pending: boolean
-  comparisonLabel?: string | null
 }>()
 
 const { t } = useI18n()
@@ -62,10 +61,6 @@ function metricLabel(key: PingMetricKey): string {
       {{ t('statisticsPage.noData') }}
     </div>
     <template v-else>
-      <p v-if="comparisonLabel" class="text-xs text-text/55">
-        {{ t('statisticsPage.pingsPatchDeltaLabel', { patch: comparisonLabel }) }}
-      </p>
-
       <div class="fast-stat-card rounded-lg border border-primary/30 bg-surface/30 p-3">
         <div class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
           <h3 class="text-sm font-semibold text-text">
@@ -84,9 +79,6 @@ function metricLabel(key: PingMetricKey): string {
             </div>
           </div>
         </div>
-        <p class="mb-3 text-xs text-text/55">
-          {{ t('statisticsPage.championPingsGames', { count: data?.games ?? 0 }) }}
-        </p>
 
         <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           <StatisticsPingMetricCardCell

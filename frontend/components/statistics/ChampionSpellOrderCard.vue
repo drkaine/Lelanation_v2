@@ -1,6 +1,6 @@
 <template>
   <article
-    class="champion-spell-order-card flex flex-col rounded-lg border border-primary/25 bg-background/35 p-2.5 transition-colors"
+    class="champion-spell-order-card flex h-full w-full min-w-0 flex-col rounded-lg border border-primary/25 bg-background/35 p-2.5 transition-colors"
     :class="[
       canExpandLevels ? 'cursor-pointer touch-manipulation hover:border-primary/40' : '',
       levelsExpanded ? 'border-accent/35 bg-background/45' : '',
@@ -101,7 +101,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getChampionSpellImageUrl } from '~/utils/imageUrl'
+import { resolveChampionSpellImageUrl } from '~/utils/imageUrl'
 import ChampionSpellOrderInlineRecap from '~/components/statistics/ChampionSpellOrderInlineRecap.vue'
 import {
   spellOrderRowRecap,
@@ -182,11 +182,22 @@ function skillTitle(key: SkillKey | null): string {
 
 function skillIconUrl(key: SkillKey | null): string | null {
   if (!key || props.championId <= 0 || !props.gameVersion) return null
-  const file = props.spells?.[skillIndex(key)]?.image?.full
-  if (file) return getChampionSpellImageUrl(props.gameVersion, String(props.championId), file)
   const slug = (props.championSlug ?? '').trim()
+  const file = props.spells?.[skillIndex(key)]?.image?.full
+  if (file) {
+    return (
+      resolveChampionSpellImageUrl(
+        props.gameVersion,
+        {
+          slug,
+          numericId: props.championId,
+        },
+        file
+      ) || null
+    )
+  }
   if (!slug) return null
-  return getChampionSpellImageUrl(props.gameVersion, slug, `${slug}${key}.png`)
+  return resolveChampionSpellImageUrl(props.gameVersion, { slug }, `${slug}${key}.png`) || null
 }
 
 function cellClass(key: SkillKey | null): string {

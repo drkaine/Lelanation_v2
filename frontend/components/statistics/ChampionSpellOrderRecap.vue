@@ -87,7 +87,7 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { getChampionSpellImageUrl } from '~/utils/imageUrl'
+import { resolveChampionSpellImageUrl } from '~/utils/imageUrl'
 import type { SpellOrderRecapEntry, SpellOrderSkillKey } from '~/utils/championSpellOrderMerge'
 import SpellOrderRecapPickrate from '~/components/statistics/SpellOrderRecapPickrate.vue'
 
@@ -97,6 +97,7 @@ const props = defineProps<{
     topMaxOrder: SpellOrderRecapEntry[]
   }
   championId: number
+  championSlug?: string
   gameVersion: string
   spells?: Array<{ name?: string; image?: { full?: string } }>
 }>()
@@ -118,6 +119,15 @@ function skillIconUrl(key: SpellOrderSkillKey): string | null {
   if (props.championId <= 0) return null
   const file = props.spells?.[skillIndex(key)]?.image?.full
   if (!file || !props.gameVersion) return null
-  return getChampionSpellImageUrl(props.gameVersion, String(props.championId), file)
+  return (
+    resolveChampionSpellImageUrl(
+      props.gameVersion,
+      {
+        slug: props.championSlug,
+        numericId: props.championId,
+      },
+      file
+    ) || null
+  )
 }
 </script>

@@ -52,7 +52,7 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { getChampionSpellImageUrl } from '~/utils/imageUrl'
+import { resolveChampionSpellImageUrl } from '~/utils/imageUrl'
 import ChampionSpellIconBadge from '~/components/statistics/ChampionSpellIconBadge.vue'
 import type { SpellOrderSkillKey } from '~/utils/championSpellOrderMerge'
 
@@ -80,10 +80,21 @@ function skillLabel(key: SpellOrderSkillKey): string {
 
 function skillIconUrl(key: SpellOrderSkillKey): string | null {
   if (props.championId <= 0 || !props.gameVersion) return null
-  const file = props.spells?.[skillIndex(key)]?.image?.full
-  if (file) return getChampionSpellImageUrl(props.gameVersion, String(props.championId), file)
   const slug = (props.championSlug ?? '').trim()
+  const file = props.spells?.[skillIndex(key)]?.image?.full
+  if (file) {
+    return (
+      resolveChampionSpellImageUrl(
+        props.gameVersion,
+        {
+          slug,
+          numericId: props.championId,
+        },
+        file
+      ) || null
+    )
+  }
   if (!slug) return null
-  return getChampionSpellImageUrl(props.gameVersion, slug, `${slug}${key}.png`)
+  return resolveChampionSpellImageUrl(props.gameVersion, { slug }, `${slug}${key}.png`) || null
 }
 </script>

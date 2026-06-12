@@ -5532,7 +5532,7 @@ defineExpose({
 .first-three-ups-section {
   position: absolute;
   left: 200px;
-  top: 305px;
+  top: 308px;
   z-index: 40;
 }
 

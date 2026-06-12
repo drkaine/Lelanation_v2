@@ -900,13 +900,23 @@ html[data-stats-cards='1'] .champion-stats .hidden.md\:block {
       .statistics-surrender-mobile-side-card,
       .statistics-pings-mobile-card,
       .statistics-vision-mobile-card,
-      .statistics-patch-notes-mobile-card,
-      .champion-spell-order-card
+      .statistics-patch-notes-mobile-card
     ) {
     width: var(--stats-simplified-card-width) !important;
     max-width: var(--stats-simplified-card-width) !important;
     min-width: 0;
     flex: 0 1 var(--stats-simplified-card-width);
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    border-radius: 0.5rem !important;
+    border: 1px solid rgb(var(--rgb-accent) / 0.55) !important;
+    box-sizing: border-box;
+  }
+
+  html[data-stats-cards='1'] .champion-skills-cards-grid .champion-spell-order-card {
+    width: auto !important;
+    max-width: none !important;
+    flex: unset !important;
     margin-left: 0 !important;
     margin-right: 0 !important;
     border-radius: 0.5rem !important;

@@ -1690,7 +1690,7 @@
                     <h3 class="mb-3 text-xs font-semibold" :class="section.titleClass">
                       {{ section.title }}
                     </h3>
-                    <div class="grid grid-cols-1 gap-2 lg:grid-cols-2 2xl:grid-cols-3">
+                    <div class="champion-skills-cards-grid">
                       <ChampionSpellOrderCard
                         v-for="row in section.rows"
                         :key="section.key + '-' + row.key"
@@ -1726,7 +1726,6 @@
                   :data="championPingsData"
                   :baseline="championPingsBaselineData"
                   :pending="championPingsPending"
-                  :comparison-label="championPingsComparisonLabel"
                 />
               </div>
               <div
@@ -1739,7 +1738,6 @@
                   :data="championVisionData"
                   :baseline="championVisionBaselineData"
                   :pending="championVisionPending"
-                  :comparison-label="championVisionComparisonLabel"
                 />
               </div>
               <div
@@ -3195,14 +3193,6 @@ function championBaselineQueryParams() {
   if (filterRole.value) p.set('role', filterRole.value)
   return '?' + p.toString()
 }
-
-const championPingsComparisonLabel = computed(() => {
-  const ref = (championProgressionFromVersion.value ?? '').trim()
-  if (!ref) return null
-  return patchFromVersion(ref) ?? ref
-})
-
-const championVisionComparisonLabel = computed(() => championPingsComparisonLabel.value)
 
 /** Logs de perf (dev ou ?stats_perf=1) pour la page champion. */
 function isStatsPerfEnabled(): boolean {
@@ -5209,6 +5199,13 @@ useHead({
   color: rgb(var(--rgb-text) / 0.5);
   font-size: 0.7rem;
 }
+.champion-skills-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16.5rem), 1fr));
+  gap: 0.5rem;
+  width: 100%;
+}
+
 .champion-skills-orders-table {
   width: 100%;
   border-collapse: separate;
