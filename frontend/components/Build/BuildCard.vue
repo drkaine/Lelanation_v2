@@ -5532,7 +5532,7 @@ defineExpose({
 .first-three-ups-section {
   position: absolute;
   left: 200px;
-  top: 300px;
+  top: 305px;
   z-index: 40;
 }
 
@@ -5630,7 +5630,7 @@ defineExpose({
 .skill-order-section {
   position: absolute;
   right: var(--build-card-edge-inset);
-  top: 303px;
+  top: 308px;
   z-index: 50;
 }
 

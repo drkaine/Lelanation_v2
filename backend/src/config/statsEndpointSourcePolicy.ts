@@ -103,6 +103,16 @@ export const STATS_ENDPOINT_SOURCE_POLICY: StatsEndpointSourceRule[] = [
     allowedSources: ['champion_stats'],
   },
   {
+    path: '/champions/:championId/pings',
+    policy: 'mv_only',
+    allowedSources: ['champion_stats'],
+  },
+  {
+    path: '/champions/:championId/vision',
+    policy: 'mv_only',
+    allowedSources: ['champion_stats'],
+  },
+  {
     path: '/items/:itemId/tier-trend-snapshots',
     policy: 'mv_only',
     allowedSources: ['item_tier_daily_snapshots', 'champion_tier_daily_snapshots'],

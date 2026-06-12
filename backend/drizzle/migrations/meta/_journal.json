@@ -162,6 +162,13 @@
       "when": 1749216000000,
       "tag": "0022_champion_transform_pkey",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1749302400000,
+      "tag": "0023_champion_vs_stats_set_item",
+      "breakpoints": true
     }
   ]
 }

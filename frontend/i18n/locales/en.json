@@ -458,8 +458,12 @@
     "pingsColChampion": "Champion",
     "pingsColGames": "Games",
     "pingsColTotal": "Total / game",
+    "pingsPatchDeltaLabel": "Δ vs patch {patch}",
+    "championPingsGames": "Based on {count} games",
     "pingsDbNotConfigured": "Database not configured.",
     "visionColChampion": "Champion",
+    "visionPatchDeltaLabel": "Δ vs patch {patch}",
+    "championVisionGames": "Based on {count} games",
     "visionDbNotConfigured": "Database not configured.",
     "visionMetric": {
       "visionScore": "Vision score",

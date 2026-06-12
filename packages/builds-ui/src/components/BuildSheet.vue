@@ -318,8 +318,8 @@ const getBootBg = (item: { image: { full: string } }) =>
 .bs-arrow-r { color: #c89b3c; font-size: 14px; font-weight: bold; }
 
 /* Skills */
-.bs-first3 { position: absolute; left: 200px; top: 300px; z-index: 10; }
-.bs-skillorder { position: absolute; right: 20px; top: 300px; }
+.bs-first3 { position: absolute; left: 200px; top: 305px; z-index: 10; }
+.bs-skillorder { position: absolute; right: 20px; top: 308px; }
 .bs-skill-col { display: flex; flex-direction: column; gap: 6px; align-items: center; }
 .bs-skill-item { display: flex; flex-direction: column; align-items: center; gap: 2px; position: relative; }
 .bs-skill-icon-wrap { position: relative; display: flex; align-items: center; justify-content: center; }

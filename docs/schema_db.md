@@ -68,9 +68,12 @@ erDiagram
     text rank_tier PK
     text region PK
     int champion_id PK
+    smallint champion_transform PK
     int opponent_champion_id PK
+    text set_item PK
     int count_game
     int count_win
+    jsonb order_items
   }
 
   champion_spell_stats {
@@ -265,7 +268,7 @@ Toutes ces tables sont partitionnées par `patch`.
 - `champion_stats`  
   Agrégat principal par `(patch, role, rank_tier, region, champion_id, team)`.
 - `champion_vs_stats`  
-  Matchups champion vs champion.
+  Matchups champion vs champion, par set d’items (`set_item`) ; `order_items` agrège l’ordre d’achat (position → games/wins).
 - `champion_duo_role_stats`  
   Synergies champion + allié.
 - `botlane_duo_vs_duo_stats`  

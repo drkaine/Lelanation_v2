@@ -24,8 +24,14 @@ import {
 import { getTierList } from '../services/TierListService.js'
 import { getChampionGlobalTable } from '../services/ChampionGlobalTableService.js'
 import { getChampionBansTable } from '../services/ChampionBansTableService.js'
-import { getChampionPingsTable } from '../services/ChampionPingsTableService.js'
-import { getChampionVisionTable } from '../services/ChampionVisionTableService.js'
+import {
+  getChampionPingsSummary,
+  getChampionPingsTable,
+} from '../services/ChampionPingsTableService.js'
+import {
+  getChampionVisionSummary,
+  getChampionVisionTable,
+} from '../services/ChampionVisionTableService.js'
 import {
   getItemPurchaseOrderStats,
   getItemTierBreakdown,
@@ -1545,6 +1551,50 @@ router.get('/champions/:championId/misc', async (req: Request, res: Response) =>
   })
   if (!data) {
     return res.status(200).json({ championId, games: 0, groups: [] })
+  }
+  return res.json(data)
+})
+
+/** GET /api/stats/champions/:championId/pings — pings moyens pour un champion. */
+router.get('/champions/:championId/pings', async (req: Request, res: Response) => {
+  const raw = req.params.championId
+  const championId = parseInt(Array.isArray(raw) ? raw[0] : raw, 10)
+  if (Number.isNaN(championId)) {
+    return res.status(400).json({ error: 'Invalid champion ID' })
+  }
+  const version = queryString(req.query.version)
+  const rankTier = rankTierParam(req.query.rankTier)
+  const role = queryString(req.query.role)
+  const data = await getChampionPingsSummary({
+    championId,
+    version: version ?? null,
+    rankTier: rankTier ?? null,
+    role: role ?? null,
+  })
+  if (!data) {
+    return res.status(200).json({ championId, games: 0, totalPerGame: 0 })
+  }
+  return res.json(data)
+})
+
+/** GET /api/stats/champions/:championId/vision — stats vision moyennes pour un champion. */
+router.get('/champions/:championId/vision', async (req: Request, res: Response) => {
+  const raw = req.params.championId
+  const championId = parseInt(Array.isArray(raw) ? raw[0] : raw, 10)
+  if (Number.isNaN(championId)) {
+    return res.status(400).json({ error: 'Invalid champion ID' })
+  }
+  const version = queryString(req.query.version)
+  const rankTier = rankTierParam(req.query.rankTier)
+  const role = queryString(req.query.role)
+  const data = await getChampionVisionSummary({
+    championId,
+    version: version ?? null,
+    rankTier: rankTier ?? null,
+    role: role ?? null,
+  })
+  if (!data) {
+    return res.status(200).json({ championId, games: 0, visionScore: 0 })
   }
   return res.json(data)
 })

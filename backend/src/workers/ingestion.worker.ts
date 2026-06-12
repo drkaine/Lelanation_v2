@@ -19,6 +19,11 @@ import {
   normalizeParticipantRankTier,
 } from "./match-rank-readiness.js";
 import { buildStarterLegendaryOrderByItemId } from "../parsers/itemOrderSnapshot.js";
+import {
+  buildGameOrderItemsJson,
+  buildOrderItemsMergeSqlExpr,
+  uniquePurchaseOrderPositions,
+} from "../parsers/purchaseOrderItemsJson.js";
 import { itemTierRoleGameWinCounts } from "../parsers/itemTierDailySnapshotRole.js";
 import { rehydrateParticipantRanksForIngestion } from "../services/matchIngestionPayload.js";
 import { riotConfig } from "../riot-gateway/config/riotConfig.js";
@@ -318,10 +323,56 @@ async function upsertChampionVsStats(tx: any, participants: ParsedParticipantDto
     const { championTransform } = championTransformFields(participant);
     const m = championDuoRoleEconomyFromParticipant(participant);
     const u = u15IngestSums(participant.u15);
-    await tx`
+    const winCount = participantWinCount(participant);
+    const setItem = participant.finalKey ?? "";
+    const orderByItemId = buildStarterLegendaryOrderByItemId(participant.items);
+    const orderPositions = uniquePurchaseOrderPositions(orderByItemId);
+    const orderItemsJson = JSON.stringify(buildGameOrderItemsJson(orderPositions, winCount));
+    const orderItemsMergeSql =
+      orderPositions.length > 0
+        ? buildOrderItemsMergeSqlExpr("champion_vs_stats.order_items", orderPositions, winCount)
+        : "champion_vs_stats.order_items";
+
+    const values: unknown[] = [
+      participant.patch,
+      participant.role,
+      participant.rankTier,
+      participant.region,
+      participant.championId,
+      championTransform,
+      participant.opponentChampionId,
+      setItem,
+      winCount,
+      1,
+      orderItemsJson,
+      m.goldEarned,
+      m.goldSpent,
+      m.maxLevelLeadLaneOpponent,
+      m.maxKillDeficit,
+      m.moreEnemyJungleThanOpponent,
+      m.maxCsAdvantageOnLaneOpponent,
+      m.visionScoreAdvantageLaneOpponent,
+      m.laningPhaseGoldExpAdvantage,
+      m.earlyLaningPhaseGoldExpAdvantage,
+      u.phys,
+      u.magic,
+      u.trueDmg,
+      u.kill,
+      u.assist,
+      u.death,
+      u.vision,
+      u.shield,
+      u.cs,
+    ];
+
+    const orderItemsParamIndex = 11;
+    const placeholders = values
+      .map((_, i) => (i + 1 === orderItemsParamIndex ? `$${i + 1}::jsonb` : `$${i + 1}`))
+      .join(", ");
+    const q = `
       INSERT INTO champion_vs_stats (
-        patch, role, rank_tier, region, champion_id, champion_transform, opponent_champion_id,
-        count_win, count_game,
+        patch, role, rank_tier, region, champion_id, champion_transform, opponent_champion_id, set_item,
+        count_win, count_game, order_items,
         sum_gold_earned, sum_gold_spent,
         sum_max_level_lead_lane_opponent, sum_max_kill_deficit, sum_more_enemy_jungle_than_opponent,
         sum_max_cs_advantage_on_lane_opponent, sum_vision_score_advantage_lane_opponent,
@@ -329,21 +380,12 @@ async function upsertChampionVsStats(tx: any, participants: ParsedParticipantDto
         sum_physique_damage_done_to_champion_u15, sum_magic_damage_done_to_champion_u15, sum_true_damage_done_to_champion_u15,
         sum_kill_u15, sum_assist_u15, sum_death_u15, sum_vision_score_u15, sum_shield_and_heal_u15, sum_minions_killed_u15
       )
-      VALUES (
-        ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
-        ${participant.championId}, ${championTransform}, ${participant.opponentChampionId},
-        ${participantWinCount(participant)}, 1,
-        ${m.goldEarned}, ${m.goldSpent},
-        ${m.maxLevelLeadLaneOpponent}, ${m.maxKillDeficit}, ${m.moreEnemyJungleThanOpponent},
-        ${m.maxCsAdvantageOnLaneOpponent}, ${m.visionScoreAdvantageLaneOpponent},
-        ${m.laningPhaseGoldExpAdvantage}, ${m.earlyLaningPhaseGoldExpAdvantage},
-        ${u.phys}, ${u.magic}, ${u.trueDmg},
-        ${u.kill}, ${u.assist}, ${u.death}, ${u.vision}, ${u.shield}, ${u.cs}
-      )
-      ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, opponent_champion_id)
+      VALUES (${placeholders})
+      ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, opponent_champion_id, set_item)
       DO UPDATE SET
         count_game = champion_vs_stats.count_game + 1,
         count_win = champion_vs_stats.count_win + EXCLUDED.count_win,
+        order_items = ${orderItemsMergeSql},
         sum_gold_earned = champion_vs_stats.sum_gold_earned + EXCLUDED.sum_gold_earned,
         sum_gold_spent = champion_vs_stats.sum_gold_spent + EXCLUDED.sum_gold_spent,
         sum_max_level_lead_lane_opponent =
@@ -373,6 +415,7 @@ async function upsertChampionVsStats(tx: any, participants: ParsedParticipantDto
         sum_minions_killed_u15 = champion_vs_stats.sum_minions_killed_u15 + EXCLUDED.sum_minions_killed_u15,
         updated_at = NOW()
     `;
+    await (tx as { unsafe: (query: string, params?: unknown[]) => Promise<unknown> }).unsafe(q, values);
   }
 }
 

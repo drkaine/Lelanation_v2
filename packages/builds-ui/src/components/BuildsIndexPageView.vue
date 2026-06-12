@@ -1,8 +1,8 @@
 <template>
   <div class="builds-page min-h-screen px-[10px] pb-4 text-text">
     <div class="mx-auto max-w-8xl px-0">
-      <div class="flex w-full min-w-0 flex-wrap items-center justify-center gap-2 sm:gap-3">
-        <div class="scrollable-tabs-scroll-wrap w-full min-w-0 max-w-full sm:max-w-none">
+      <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
+        <div class="scrollable-tabs-scroll-wrap min-w-0 max-w-full">
           <div class="streamer-tabs scrollable-tabs-nav">
           <button
             type="button"
@@ -38,7 +38,7 @@
           </component>
           </div>
         </div>
-        <div v-if="allowShare" class="flex flex-wrap items-center justify-center gap-2">
+        <div v-if="allowShare" class="flex shrink-0 items-center gap-2">
           <button
             type="button"
             class="inline-flex h-[38px] shrink-0 items-center gap-2 rounded-lg border border-primary/80 bg-background/25 px-3 text-sm text-text transition-colors hover:bg-primary/20 disabled:opacity-50"
@@ -370,7 +370,7 @@ const emit = defineEmits<{
   display: inline-flex;
   flex-wrap: nowrap;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   gap: 0.25rem;
   border: 1px solid rgb(var(--rgb-accent) / 0.2);
   border-radius: 9999px;

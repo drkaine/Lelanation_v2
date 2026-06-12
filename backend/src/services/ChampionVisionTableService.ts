@@ -2,7 +2,8 @@
  * Stats vision moyennes par champion (score, balises posées / détruites, etc.).
  */
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
-import { buildRawMatchCond } from './ChampionGlobalTableService.js'
+import { buildChampionScopedWhere, buildRawMatchCond } from './ChampionGlobalTableService.js'
+import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { matchVersionedAggFrom } from './statsAggArchive.js'
 import {
   normalizeStatsRoleForChampion,
@@ -32,6 +33,12 @@ const VISION_SQL_COLUMN: Record<ChampionVisionMetricKey, string> = {
 
 export type ChampionVisionTableRow = {
   championId: number
+  games?: number
+} & Record<ChampionVisionMetricKey, number>
+
+export type ChampionVisionSummary = {
+  championId: number
+  games: number
 } & Record<ChampionVisionMetricKey, number>
 
 function round2(n: number): number {
@@ -40,6 +47,77 @@ function round2(n: number): number {
 
 function avgPerGame(sum: number, games: number): number {
   return games > 0 ? round2(sum / games) : 0
+}
+
+type ChampionVisionScope = {
+  championId: number
+  version?: string | string[] | null
+  rankTier?: string | string[] | null
+  role?: string | null
+}
+
+function mapVisionSqlRow(row: {
+  champion_id: number
+  games: bigint
+} & Record<(typeof VISION_SQL_COLUMN)[ChampionVisionMetricKey], number>): ChampionVisionSummary {
+  const games = Number(row.games ?? 0)
+  const metrics = {} as Record<ChampionVisionMetricKey, number>
+  for (const key of CHAMPION_VISION_METRIC_KEYS) {
+    metrics[key] = avgPerGame(Number(row[VISION_SQL_COLUMN[key]] ?? 0), games)
+  }
+  return {
+    championId: Number(row.champion_id),
+    games,
+    ...metrics,
+  }
+}
+
+/** Stats vision moyennes pour un seul champion (fiche champion). */
+export async function getChampionVisionSummary(
+  scope: ChampionVisionScope
+): Promise<ChampionVisionSummary | null> {
+  if (!isDatabaseConfigured() || scope.championId <= 0) return null
+
+  const version = toQueryStringArrayParam(scope.version)
+  const rankTier = toQueryStringArrayParam(scope.rankTier)
+  const role = normalizeStatsRoleForChampion(scope.role ?? null)
+
+  const csFrom = await matchVersionedAggFrom(
+    'agg_champion_team_objective_stats',
+    version.length ? version : null,
+    'cs'
+  )
+  const where = buildChampionScopedWhere('cs', {
+    championId: scope.championId,
+    version: version.length ? version : null,
+    rankTier: rankTier.length ? rankTier : null,
+    role,
+  })
+
+  const sumSelect = CHAMPION_VISION_METRIC_KEYS.map(key => {
+    const col = VISION_SQL_COLUMN[key]
+    return `COALESCE(SUM(cs.${col}), 0)::double precision AS ${col}`
+  }).join(',\n      ')
+
+  type SqlRow = {
+    champion_id: number
+    games: bigint
+  } & Record<(typeof VISION_SQL_COLUMN)[ChampionVisionMetricKey], number>
+
+  const raw = await queryRawUnsafe<SqlRow[]>(`
+    SELECT
+      cs.champion_id::int AS champion_id,
+      COALESCE(SUM(cs.count_game), 0)::bigint AS games,
+      ${sumSelect}
+    FROM ${csFrom}
+    WHERE ${where}
+    GROUP BY cs.champion_id
+    HAVING COALESCE(SUM(cs.count_game), 0) > 0
+  `)
+
+  const row = raw[0]
+  if (!row) return null
+  return mapVisionSqlRow(row)
 }
 
 export async function getChampionVisionTable(
@@ -80,17 +158,7 @@ export async function getChampionVisionTable(
     ORDER BY champion_id ASC
   `)
 
-  const rows: ChampionVisionTableRow[] = raw.map(row => {
-    const games = Number(row.games ?? 0)
-    const metrics = {} as Record<ChampionVisionMetricKey, number>
-    for (const key of CHAMPION_VISION_METRIC_KEYS) {
-      metrics[key] = avgPerGame(Number(row[VISION_SQL_COLUMN[key]] ?? 0), games)
-    }
-    return {
-      championId: Number(row.champion_id),
-      ...metrics,
-    }
-  })
+  const rows: ChampionVisionTableRow[] = raw.map(row => mapVisionSqlRow(row))
 
   rows.sort((a, b) => b.visionScore - a.visionScore || a.championId - b.championId)
   return { rows }

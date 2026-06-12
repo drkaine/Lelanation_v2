@@ -1717,6 +1717,32 @@
                 />
               </div>
               <div
+                v-if="activeChampionTab === 'pings'"
+                id="champion-tab-panel-pings"
+                role="tabpanel"
+                class="champion-tab-panel p-4 max-lg:px-3 max-lg:py-3"
+              >
+                <ChampionPingsTab
+                  :data="championPingsData"
+                  :baseline="championPingsBaselineData"
+                  :pending="championPingsPending"
+                  :comparison-label="championPingsComparisonLabel"
+                />
+              </div>
+              <div
+                v-if="activeChampionTab === 'vision'"
+                id="champion-tab-panel-vision"
+                role="tabpanel"
+                class="champion-tab-panel p-4 max-lg:px-3 max-lg:py-3"
+              >
+                <ChampionVisionTab
+                  :data="championVisionData"
+                  :baseline="championVisionBaselineData"
+                  :pending="championVisionPending"
+                  :comparison-label="championVisionComparisonLabel"
+                />
+              </div>
+              <div
                 v-if="activeChampionTab === 'misc'"
                 id="champion-tab-panel-misc"
                 role="tabpanel"
@@ -1778,6 +1804,12 @@ import ChampionObjectivesTab, {
 import ChampionMiscTab, {
   type ChampionMiscSummary,
 } from '~/components/statistics/ChampionMiscTab.vue'
+import ChampionPingsTab, {
+  type ChampionPingsSummary,
+} from '~/components/statistics/ChampionPingsTab.vue'
+import ChampionVisionTab, {
+  type ChampionVisionSummary,
+} from '~/components/statistics/ChampionVisionTab.vue'
 import ChampionSpellOrderCard from '~/components/statistics/ChampionSpellOrderCard.vue'
 import { mergeChampionSpellOrderRows } from '~/utils/championSpellOrderMerge'
 import {
@@ -2383,6 +2415,12 @@ const championDamageSplit = ref<{
 } | null>(null)
 const championMiscData = ref<ChampionMiscSummary | null>(null)
 const championMiscPending = ref(false)
+const championPingsData = ref<ChampionPingsSummary | null>(null)
+const championPingsBaselineData = ref<ChampionPingsSummary | null>(null)
+const championPingsPending = ref(false)
+const championVisionData = ref<ChampionVisionSummary | null>(null)
+const championVisionBaselineData = ref<ChampionVisionSummary | null>(null)
+const championVisionPending = ref(false)
 
 const CHAMPION_ROLE_ORDER = ['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT'] as const
 
@@ -2827,7 +2865,16 @@ const trendPoints = ref<TrendSnapshotPoint[]>([])
 const trendVersionsCatalog = ref<Array<{ patchLabel: string; releaseDate: string }>>([])
 
 const activeChampionTab = ref<
-  'overview' | 'matchups' | 'synergy' | 'runes' | 'spells' | 'skills' | 'objectives' | 'misc'
+  | 'overview'
+  | 'matchups'
+  | 'synergy'
+  | 'runes'
+  | 'spells'
+  | 'skills'
+  | 'objectives'
+  | 'pings'
+  | 'vision'
+  | 'misc'
 >('overview')
 type ChampionTabId =
   | 'overview'
@@ -2837,6 +2884,8 @@ type ChampionTabId =
   | 'spells'
   | 'skills'
   | 'objectives'
+  | 'pings'
+  | 'vision'
   | 'misc'
 const championPageBootstrapped = ref(false)
 const championTabLoaded = ref<Record<ChampionTabId, boolean>>({
@@ -2847,6 +2896,8 @@ const championTabLoaded = ref<Record<ChampionTabId, boolean>>({
   spells: false,
   skills: false,
   objectives: false,
+  pings: false,
+  vision: false,
   misc: false,
 })
 const championTabs = [
@@ -2857,6 +2908,8 @@ const championTabs = [
   { id: 'spells' as const, label: 'statisticsPage.championStatsTabSpells' },
   { id: 'skills' as const, label: 'statisticsPage.championStatsTabSkills' },
   { id: 'objectives' as const, label: 'statisticsPage.objectivesTabMain' },
+  { id: 'pings' as const, label: 'statisticsPage.tabPings' },
+  { id: 'vision' as const, label: 'statisticsPage.tabVision' },
   { id: 'misc' as const, label: 'statisticsPage.championStatsTabMisc' },
 ]
 const championTabsNavEl = ref<HTMLElement | null>(null)
@@ -2892,6 +2945,12 @@ function focusPrevNextChampionTab(currentTabId: ChampionTabId, direction: -1 | 1
   if (nextId) focusChampionTabButton(nextId)
 }
 
+function focusChampionTabEdge(which: 'first' | 'last'): void {
+  const ids = championTabs.map(t => t.id)
+  const nextId = which === 'first' ? ids[0] : ids[ids.length - 1]
+  if (nextId) focusChampionTabButton(nextId)
+}
+
 function onChampionTabsKeydown(e: KeyboardEvent, tabId: ChampionTabId): void {
   if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
     e.preventDefault()
@@ -2901,6 +2960,16 @@ function onChampionTabsKeydown(e: KeyboardEvent, tabId: ChampionTabId): void {
   if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
     e.preventDefault()
     focusPrevNextChampionTab(tabId, 1)
+    return
+  }
+  if (e.key === 'Home') {
+    e.preventDefault()
+    focusChampionTabEdge('first')
+    return
+  }
+  if (e.key === 'End') {
+    e.preventDefault()
+    focusChampionTabEdge('last')
   }
 }
 const championTabIds = new Set<ChampionTabId>(championTabs.map(t => t.id))
@@ -2923,6 +2992,8 @@ function resetChampionTabLoadState(): void {
     spells: false,
     skills: false,
     objectives: false,
+    pings: false,
+    vision: false,
     misc: false,
   }
 }
@@ -3114,6 +3185,24 @@ function overviewQueryParams() {
   if (filterRole.value) p.set('role', filterRole.value)
   return p.toString() ? '?' + p.toString() : ''
 }
+
+function championBaselineQueryParams() {
+  const refV = (championProgressionFromVersion.value ?? '').trim()
+  if (!refV) return null
+  const p = new URLSearchParams()
+  p.set('version', refV)
+  for (const t of filterRank.value) p.append('rankTier', t)
+  if (filterRole.value) p.set('role', filterRole.value)
+  return '?' + p.toString()
+}
+
+const championPingsComparisonLabel = computed(() => {
+  const ref = (championProgressionFromVersion.value ?? '').trim()
+  if (!ref) return null
+  return patchFromVersion(ref) ?? ref
+})
+
+const championVisionComparisonLabel = computed(() => championPingsComparisonLabel.value)
 
 /** Logs de perf (dev ou ?stats_perf=1) pour la page champion. */
 function isStatsPerfEnabled(): boolean {
@@ -3545,6 +3634,58 @@ async function loadChampionMisc() {
   }
 }
 
+async function loadChampionPings() {
+  if (!championId.value) return
+  championPingsPending.value = true
+  championPingsBaselineData.value = null
+  try {
+    const baselineQ = championBaselineQueryParams()
+    const [current, baseline] = await Promise.all([
+      statsFetch<ChampionPingsSummary>(
+        apiUrl(`/api/stats/champions/${championId.value}/pings${overviewQueryParams()}`)
+      ),
+      baselineQ
+        ? statsFetch<ChampionPingsSummary>(
+            apiUrl(`/api/stats/champions/${championId.value}/pings${baselineQ}`)
+          ).catch(() => null)
+        : Promise.resolve(null),
+    ])
+    championPingsData.value = current
+    championPingsBaselineData.value = baseline && Number(baseline.games ?? 0) > 0 ? baseline : null
+  } catch {
+    championPingsData.value = null
+    championPingsBaselineData.value = null
+  } finally {
+    championPingsPending.value = false
+  }
+}
+
+async function loadChampionVision() {
+  if (!championId.value) return
+  championVisionPending.value = true
+  championVisionBaselineData.value = null
+  try {
+    const baselineQ = championBaselineQueryParams()
+    const [current, baseline] = await Promise.all([
+      statsFetch<ChampionVisionSummary>(
+        apiUrl(`/api/stats/champions/${championId.value}/vision${overviewQueryParams()}`)
+      ),
+      baselineQ
+        ? statsFetch<ChampionVisionSummary>(
+            apiUrl(`/api/stats/champions/${championId.value}/vision${baselineQ}`)
+          ).catch(() => null)
+        : Promise.resolve(null),
+    ])
+    championVisionData.value = current
+    championVisionBaselineData.value = baseline && Number(baseline.games ?? 0) > 0 ? baseline : null
+  } catch {
+    championVisionData.value = null
+    championVisionBaselineData.value = null
+  } finally {
+    championVisionPending.value = false
+  }
+}
+
 /** Query durée par tier : version + rôle seulement (rankTier non envoyé ; ligues = presets des graphes). */
 function durationByTierQueryParams() {
   const p = new URLSearchParams()
@@ -3645,8 +3786,20 @@ async function loadChampionDataForTab(tab: ChampionTabId, force = false): Promis
     markChampionTabLoaded('objectives')
     return
   }
-  await loadChampionMisc()
-  markChampionTabLoaded('misc')
+  if (tab === 'pings') {
+    await loadChampionPings()
+    markChampionTabLoaded('pings')
+    return
+  }
+  if (tab === 'vision') {
+    await loadChampionVision()
+    markChampionTabLoaded('vision')
+    return
+  }
+  if (tab === 'misc') {
+    await loadChampionMisc()
+    markChampionTabLoaded('misc')
+  }
 }
 
 async function reloadChampionBaseAndActiveTabData(): Promise<void> {
