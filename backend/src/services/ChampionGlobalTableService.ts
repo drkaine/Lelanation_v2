@@ -122,6 +122,12 @@ export type ChampionGlobalTableRow = {
   avgKills: number
   avgDeaths: number
   avgAssists: number
+  avgTotalHeal: number
+  avgHealsOnTeammates: number
+  avgEffectiveHealShield: number
+  avgDamageShieldedOnTeammates: number
+  avgDamageSelfMitigated: number
+  avgTimeCcDealt: number
 }
 
 type SideAgg = {
@@ -320,6 +326,59 @@ export async function getChampionGlobalTable(
     })
   }
 
+  /** Soins / boucliers / CC : colonnes absentes du fragment `agg_champion_core_stats`. */
+  const healFrom = await matchVersionedAggFrom('agg_champion_team_objective_stats', version, 'hs')
+  const healWhere = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'hs.')
+  const healRoleSql = roleFilterSqlValueList ? ` AND hs.role IN (${roleFilterSqlValueList})` : ''
+  const healRows = await queryRawUnsafe<
+    Array<{
+      champion_id: number
+      champion_transform: number
+      sum_heal: bigint
+      sum_heal_team: bigint
+      sum_effective: bigint
+      sum_shield_team: bigint
+      sum_mitigated: bigint
+      sum_cc: bigint
+    }>
+  >(`
+    SELECT
+      hs.champion_id,
+      COALESCE(hs.champion_transform, 0)::int AS champion_transform,
+      COALESCE(SUM(hs.sum_total_heal), 0)::bigint AS sum_heal,
+      COALESCE(SUM(hs.sum_total_heals_on_teammates), 0)::bigint AS sum_heal_team,
+      COALESCE(SUM(hs.sum_effective_heal_and_shielding), 0)::bigint AS sum_effective,
+      COALESCE(SUM(hs.sum_total_damage_shielded_on_teammates), 0)::bigint AS sum_shield_team,
+      COALESCE(SUM(hs.sum_damage_self_mitigated), 0)::bigint AS sum_mitigated,
+      COALESCE(SUM(hs.sum_total_time_cc_dealt), 0)::bigint AS sum_cc
+    FROM ${healFrom}
+    WHERE ${healWhere}
+    ${healRoleSql}
+    GROUP BY hs.champion_id, hs.champion_transform
+  `)
+  const healByKey = new Map<
+    string,
+    {
+      heal: number
+      healTeam: number
+      effective: number
+      shieldTeam: number
+      mitigated: number
+      cc: number
+    }
+  >()
+  for (const r of healRows) {
+    const transform = normalizeChampionTransform(r.champion_transform)
+    healByKey.set(rowKey(Number(r.champion_id), transform), {
+      heal: Number(r.sum_heal ?? 0),
+      healTeam: Number(r.sum_heal_team ?? 0),
+      effective: Number(r.sum_effective ?? 0),
+      shieldTeam: Number(r.sum_shield_team ?? 0),
+      mitigated: Number(r.sum_mitigated ?? 0),
+      cc: Number(r.sum_cc ?? 0),
+    })
+  }
+
   const bucketWhere = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'cb.')
   const bucketRoleSql = roleFilterSqlValueList ? ` AND cb.role IN (${roleFilterSqlValueList})` : ''
   const takenRows = await queryRawUnsafe<
@@ -438,6 +497,31 @@ export async function getChampionGlobalTable(
     return found ? { k, d, a } : undefined
   }
 
+  const sumHealForChampion = (
+    championId: number
+  ):
+    | { heal: number; healTeam: number; effective: number; shieldTeam: number; mitigated: number; cc: number }
+    | undefined => {
+    let heal = 0
+    let healTeam = 0
+    let effective = 0
+    let shieldTeam = 0
+    let mitigated = 0
+    let cc = 0
+    let found = false
+    for (const [key, val] of healByKey) {
+      if (!key.startsWith(`${championId}:`)) continue
+      heal += val.heal
+      healTeam += val.healTeam
+      effective += val.effective
+      shieldTeam += val.shieldTeam
+      mitigated += val.mitigated
+      cc += val.cc
+      found = true
+    }
+    return found ? { heal, healTeam, effective, shieldTeam, mitigated, cc } : undefined
+  }
+
   const sumTakenForChampion = (
     championId: number
   ): { phys: number; magic: number; true: number; total: number } | undefined => {
@@ -485,6 +569,17 @@ export async function getChampionGlobalTable(
     const totalDe = kda?.d ?? sides.blue.sum_de + sides.red.sum_de
     const totalA = kda?.a ?? sides.blue.sum_a + sides.red.sum_a
 
+    const healStats =
+      transform == null
+        ? sumHealForChampion(championId)
+        : healByKey.get(rowKey(championId, transform))
+    const totalHeal = healStats?.heal ?? 0
+    const totalHealTeam = healStats?.healTeam ?? 0
+    const totalEffective = healStats?.effective ?? 0
+    const totalShieldTeam = healStats?.shieldTeam ?? 0
+    const totalMitigated = healStats?.mitigated ?? 0
+    const totalCc = healStats?.cc ?? 0
+
     const row: ChampionGlobalTableRow = {
       championId,
       blue: mkSide(championId, sides.blue, 100),
@@ -501,6 +596,12 @@ export async function getChampionGlobalTable(
       avgKills: round1(totalK / tg),
       avgDeaths: round1(totalDe / tg),
       avgAssists: round1(totalA / tg),
+      avgTotalHeal: round1(totalHeal / tg),
+      avgHealsOnTeammates: round1(totalHealTeam / tg),
+      avgEffectiveHealShield: round1(totalEffective / tg),
+      avgDamageShieldedOnTeammates: round1(totalShieldTeam / tg),
+      avgDamageSelfMitigated: round1(totalMitigated / tg),
+      avgTimeCcDealt: round1(totalCc / tg),
     }
     if (transform != null) row.championTransform = transform
     return row

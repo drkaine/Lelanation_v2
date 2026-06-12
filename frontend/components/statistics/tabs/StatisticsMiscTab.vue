@@ -5,14 +5,16 @@ import {
   CHAMPION_MISC_BASE_STAT_KEYS,
   CHAMPION_MISC_GROWTH_STAT_KEYS,
   CHAMPION_MISC_STAT_ICON_KEYS,
-  championMiscStatUnavailable,
-  championMiscStatValueAtLevel,
   formatChampionMiscStatValue,
   type ChampionMiscBaseStatKey,
   type ChampionMiscGrowthStatKey,
   type ChampionMiscSortCol,
   type ChampionMiscStatRow,
 } from '~/utils/championBaseStatsFromJson'
+import {
+  championMiscStatUnavailable,
+  championMiscStatValueAtLevel,
+} from '~/utils/championMiscStatLevel'
 import {
   championMiscStatDisplayName,
   championMiscStatRowKey,
@@ -181,45 +183,71 @@ function rowKey(row: ChampionMiscStatRow): string {
         <article
           v-for="row in p.paginatedMiscRows"
           :key="'misc-mobile-' + rowKey(row)"
-          class="statistics-champion-stats-mobile-card statistics-misc-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
+          class="statistics-champion-stats-mobile-card statistics-misc-mobile-card w-full cursor-pointer overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
+          role="button"
+          tabindex="0"
+          :aria-expanded="isMiscCardExpanded(row)"
+          @click="toggleMiscCardExpanded(row)"
+          @keydown.enter.prevent="toggleMiscCardExpanded(row)"
+          @keydown.space.prevent="toggleMiscCardExpanded(row)"
         >
           <div
-            class="statistics-champion-stats-mobile-card-header flex w-full items-start gap-3 p-3"
+            class="statistics-misc-mobile-identity flex w-full min-w-0 items-center gap-2.5 px-2.5 py-2"
           >
-            <StatisticsChampionStatsMobileCardHeader
+            <StatisticsChampionDetailLink
               :champion-id="row.championId"
-              :champion-name="rowDisplayName(row)"
-              :search-query="p.championSearchQuery"
-              :portrait-src="championPortraitSrc(row)"
-              :portrait-alt="rowDisplayName(row)"
-            />
+              class="shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+              @click.stop
+            >
+              <img
+                v-if="championPortraitSrc(row)"
+                :src="championPortraitSrc(row)!"
+                :alt="rowDisplayName(row)"
+                class="h-11 w-11 border-2 border-black object-cover"
+                width="44"
+                height="44"
+                loading="lazy"
+                decoding="async"
+              />
+            </StatisticsChampionDetailLink>
+            <StatisticsChampionDetailLink
+              :champion-id="row.championId"
+              class="min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+              @click.stop
+            >
+              <div
+                class="truncate text-sm font-semibold leading-tight text-accent underline decoration-accent/40 underline-offset-2"
+              >
+                <StatisticsChampionNameHighlight
+                  :name="rowDisplayName(row)"
+                  :query="p.championSearchQuery"
+                />
+              </div>
+            </StatisticsChampionDetailLink>
           </div>
 
-          <div class="border-t border-primary/15 px-3 py-2.5">
-            <div class="grid grid-cols-3 gap-2">
+          <div class="border-t border-primary/15 px-2.5 py-2">
+            <div class="grid grid-cols-3 gap-1.5">
               <div
                 v-for="key in MISC_MOBILE_PREVIEW_KEYS"
                 :key="'misc-mobile-preview-' + rowKey(row) + '-' + key"
-                class="flex min-w-0 flex-col gap-1 rounded border border-primary/20 bg-black/15 px-2 py-1.5"
+                class="flex min-w-0 flex-col items-center gap-0.5 rounded border border-primary/15 bg-black/15 px-1.5 py-1.5 text-center"
               >
-                <span class="inline-flex min-w-0 items-center gap-1 text-[10px] text-text/70">
-                  <span
-                    v-if="statIconSrc(key)"
-                    class="stat-inline-icon stat-inline-icon--sm shrink-0"
-                    :class="statIconToneClass(key)"
-                    aria-hidden="true"
-                  >
-                    <img
-                      :src="statIconSrc(key)!"
-                      alt=""
-                      :class="['stat-inline-icon-image', statIconImageClass(key)]"
-                      width="14"
-                      height="14"
-                      loading="lazy"
-                      decoding="async"
-                    />
-                  </span>
-                  <span class="truncate">{{ statLabel(key) }}</span>
+                <span
+                  v-if="statIconSrc(key)"
+                  class="stat-inline-icon stat-inline-icon--sm shrink-0"
+                  :class="statIconToneClass(key)"
+                  :title="statLabel(key)"
+                >
+                  <img
+                    :src="statIconSrc(key)!"
+                    :alt="statLabel(key)"
+                    :class="['stat-inline-icon-image', statIconImageClass(key)]"
+                    width="14"
+                    height="14"
+                    loading="lazy"
+                    decoding="async"
+                  />
                 </span>
                 <span class="text-sm font-semibold tabular-nums leading-none text-text">
                   {{ formatBase(row, key) }}
@@ -233,61 +261,39 @@ function rowKey(row: ChampionMiscStatRow): string {
               </div>
             </div>
 
-            <button
-              v-if="!isMiscCardExpanded(row)"
-              type="button"
-              class="mt-2 w-full text-center text-xs font-medium text-accent underline decoration-accent/40 underline-offset-2"
-              @click="toggleMiscCardExpanded(row)"
-            >
-              {{ p.t('statisticsPage.miscShowMoreStats') }}
-            </button>
-          </div>
-
-          <div
-            v-if="isMiscCardExpanded(row)"
-            class="space-y-2 border-t border-primary/20 bg-black/20 px-3 py-2.5"
-          >
-            <div
-              v-for="key in MISC_MOBILE_EXPANDED_KEYS"
-              :key="'misc-mobile-expanded-' + rowKey(row) + '-' + key"
-              class="flex items-center justify-between gap-2 text-xs"
-            >
-              <span class="inline-flex min-w-0 items-center gap-1.5 text-text/75">
+            <div v-if="isMiscCardExpanded(row)" class="mt-1.5 grid grid-cols-4 gap-1.5">
+              <div
+                v-for="key in MISC_MOBILE_EXPANDED_KEYS"
+                :key="'misc-mobile-expanded-' + rowKey(row) + '-' + key"
+                class="flex min-w-0 flex-col items-center gap-0.5 rounded border border-primary/15 bg-black/15 px-1.5 py-1.5 text-center"
+              >
                 <span
                   v-if="statIconSrc(key)"
                   class="stat-inline-icon stat-inline-icon--sm shrink-0"
                   :class="statIconToneClass(key)"
-                  aria-hidden="true"
+                  :title="statLabel(key)"
                 >
                   <img
                     :src="statIconSrc(key)!"
-                    alt=""
+                    :alt="statLabel(key)"
                     :class="['stat-inline-icon-image', statIconImageClass(key)]"
-                    width="16"
-                    height="16"
+                    width="14"
+                    height="14"
                     loading="lazy"
                     decoding="async"
                   />
                 </span>
-                <span class="truncate">{{ statLabel(key) }}</span>
-              </span>
-              <span class="shrink-0 tabular-nums text-text">
-                <span class="font-semibold">{{ formatBase(row, key) }}</span>
-                <template v-if="hasMiscGrowthColumn(key)">
-                  <span class="text-text/45"> · </span>
-                  <span class="text-text/70">{{
-                    formatGrowthDisplay(row, key as ChampionMiscGrowthStatKey)
-                  }}</span>
-                </template>
-              </span>
+                <span class="text-xs font-semibold tabular-nums leading-none text-text">
+                  {{ formatBase(row, key) }}
+                </span>
+                <span
+                  v-if="hasMiscGrowthColumn(key)"
+                  class="text-[10px] tabular-nums leading-none text-text/60"
+                >
+                  {{ formatGrowthDisplay(row, key as ChampionMiscGrowthStatKey) }}
+                </span>
+              </div>
             </div>
-            <button
-              type="button"
-              class="w-full text-center text-xs font-medium text-text/70 underline decoration-text/30 underline-offset-2"
-              @click="toggleMiscCardExpanded(row)"
-            >
-              {{ p.t('statisticsPage.miscShowLessStats') }}
-            </button>
           </div>
         </article>
       </div>

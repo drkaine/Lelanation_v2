@@ -1,10 +1,8 @@
 <script setup lang="ts">
-import { computed, inject, ref } from 'vue'
+import { computed, inject } from 'vue'
 import { onPingIconError, pingIconSrc } from '~/utils/pingIcons'
 import {
   PING_METRIC_KEYS,
-  PING_MOBILE_EXPANDED_KEYS,
-  PING_MOBILE_PREVIEW_KEYS,
   pingsMobileSortOptions,
   type PingMetricKey,
   type PingsNumericKey,
@@ -13,7 +11,6 @@ import {
 } from '~/composables/statistics/useStatisticsPingsTab'
 
 const p = inject('statisticsPageCtx') as Record<string, any>
-const expandedPingsIds = ref<Set<number>>(new Set())
 
 const pingsMobileSortColumn = computed({
   get: () => String(p.pingsSortColumn ?? 'totalPerGame'),
@@ -65,13 +62,6 @@ function pingsMessage(message: string | undefined): string {
     return String(p.t?.('statisticsPage.pingsDbNotConfigured') ?? message)
   }
   return message
-}
-
-function togglePingsCardExpanded(championId: number): void {
-  const next = new Set(expandedPingsIds.value)
-  if (next.has(championId)) next.delete(championId)
-  else next.add(championId)
-  expandedPingsIds.value = next
 }
 
 function deltaSortKey(key: PingsNumericKey): PingsSortCol {
@@ -129,11 +119,7 @@ const pingsPageSize = computed({
               :portrait-src="championPortraitSrc(row.championId)"
               :portrait-alt="p.championName(row.championId) || ''"
             />
-            <button
-              type="button"
-              class="flex min-w-0 flex-1 flex-col items-end justify-center text-right"
-              @click="togglePingsCardExpanded(row.championId)"
-            >
+            <div class="flex min-w-0 flex-1 flex-col items-end justify-center text-right">
               <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
                 {{ p.t('statisticsPage.pingsColTotal') }}
               </div>
@@ -147,14 +133,14 @@ const pingsPageSize = computed({
               >
                 {{ formatPingDelta(pingDelta(row, 'totalPerGame')!) }}
               </div>
-            </button>
+            </div>
           </div>
 
           <div class="border-t border-primary/15 px-3 py-2.5">
-            <div class="grid grid-cols-3 gap-2 text-xs">
+            <div class="grid grid-cols-3 gap-2 text-xs sm:grid-cols-4">
               <StatisticsPingMetricCardCell
-                v-for="key in PING_MOBILE_PREVIEW_KEYS"
-                :key="'ping-mobile-preview-' + row.championId + '-' + key"
+                v-for="key in PING_METRIC_KEYS"
+                :key="'ping-mobile-metric-' + row.championId + '-' + key"
                 :metric-key="key"
                 :label="pingMetricLabel(key)"
                 :value="formatPing(pingValue(row, key))"
@@ -166,43 +152,6 @@ const pingsPageSize = computed({
                 "
               />
             </div>
-
-            <button
-              v-if="!expandedPingsIds.has(row.championId)"
-              type="button"
-              class="mt-2 w-full text-center text-xs font-medium text-accent underline decoration-accent/40 underline-offset-2"
-              @click="togglePingsCardExpanded(row.championId)"
-            >
-              {{ p.t('statisticsPage.pingsShowMoreMetrics') }}
-            </button>
-          </div>
-
-          <div
-            v-if="expandedPingsIds.has(row.championId)"
-            class="space-y-1.5 border-t border-primary/20 bg-black/20 px-3 py-2.5 text-sm text-text/85"
-          >
-            <div class="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
-              <StatisticsPingMetricCardCell
-                v-for="key in PING_MOBILE_EXPANDED_KEYS"
-                :key="'ping-mobile-expanded-' + row.championId + '-' + key"
-                :metric-key="key"
-                :label="pingMetricLabel(key)"
-                :value="formatPing(pingValue(row, key))"
-                :delta="pingDelta(row, key) != null ? formatPingDelta(pingDelta(row, key)!) : null"
-                :delta-class="
-                  pingDelta(row, key) != null
-                    ? p.championGlobalNumericDeltaClass(pingDelta(row, key)!)
-                    : null
-                "
-              />
-            </div>
-            <button
-              type="button"
-              class="w-full text-center text-xs font-medium text-text/70 underline decoration-text/30 underline-offset-2"
-              @click="togglePingsCardExpanded(row.championId)"
-            >
-              {{ p.t('statisticsPage.pingsShowLessMetrics') }}
-            </button>
           </div>
         </article>
       </div>

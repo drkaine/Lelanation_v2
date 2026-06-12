@@ -3,16 +3,18 @@ import type { StatisticsMobileSortOption } from '~/components/statistics/Statist
 import {
   CHAMPION_MISC_BASE_STAT_KEYS,
   CHAMPION_MISC_GROWTH_STAT_KEYS,
-  CHAMPION_MISC_MAX_LEVEL,
-  CHAMPION_MISC_MIN_LEVEL,
-  championMiscStatUnavailable,
-  championMiscStatValueAtLevel,
   loadAllChampionMiscStatsFromJson,
   type ChampionMiscBaseStatKey,
   type ChampionMiscGrowthStatKey,
   type ChampionMiscSortCol,
   type ChampionMiscStatRow,
 } from '~/utils/championBaseStatsFromJson'
+import {
+  CHAMPION_MISC_MAX_LEVEL,
+  CHAMPION_MISC_MIN_LEVEL,
+  championMiscStatUnavailable,
+  championMiscStatValueAtLevel,
+} from '~/utils/championMiscStatLevel'
 import {
   championMiscRowMatchesSearch,
   compareChampionMiscStatRowsByChampion,

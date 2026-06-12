@@ -1,25 +1,6 @@
 import { expandKledMiscStatRows } from './championMiscStatVariants'
 import type { ChampionMiscStatVariant } from './championMiscStatVariants'
-import {
-  CHAMPION_MISC_MAX_LEVEL,
-  CHAMPION_MISC_MIN_LEVEL,
-  championMiscManaUnavailable,
-  championMiscStatUnavailable,
-  championMiscStatValueAtLevel,
-  clampChampionMiscLevel,
-  computeChampionMiscStatAtLevel,
-} from './championMiscStatLevel'
 import { getChampionDetailUrl, getChampionIndexUrl } from '~/utils/staticDataUrl'
-
-export {
-  CHAMPION_MISC_MAX_LEVEL,
-  CHAMPION_MISC_MIN_LEVEL,
-  championMiscManaUnavailable,
-  championMiscStatUnavailable,
-  championMiscStatValueAtLevel,
-  clampChampionMiscLevel,
-  computeChampionMiscStatAtLevel,
-}
 
 export const CHAMPION_MISC_BASE_STAT_KEYS = [
   'hp',

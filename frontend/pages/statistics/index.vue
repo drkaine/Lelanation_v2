@@ -581,13 +581,13 @@
                   type="button"
                   class="rounded border px-2 py-1 text-xs font-medium transition-colors"
                   :class="
-                    showChampionSideColumns
+                    showChampionHealColumns
                       ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
                       : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
                   "
-                  @click="toggleChampionColumnGroup('side')"
+                  @click="toggleChampionColumnGroup('heal')"
                 >
-                  Côté
+                  {{ t('statisticsPage.championTableGroupHeal') }}
                 </button>
                 <button
                   type="button"
@@ -898,7 +898,7 @@ import {
 import { useStatisticsPingsTab } from '~/composables/statistics/useStatisticsPingsTab'
 import { useStatisticsVisionTab } from '~/composables/statistics/useStatisticsVisionTab'
 import { useStatisticsMiscTab } from '~/composables/statistics/useStatisticsMiscTab'
-import { CHAMPION_MISC_MAX_LEVEL, CHAMPION_MISC_MIN_LEVEL } from '~/utils/championBaseStatsFromJson'
+import { CHAMPION_MISC_MAX_LEVEL, CHAMPION_MISC_MIN_LEVEL } from '~/utils/championMiscStatLevel'
 import {
   appendStatisticsCohortParams,
   cohortFiltersForTab,
@@ -1933,7 +1933,7 @@ function setStatsOtpFilter(value: 'oui' | 'non' | 'solo') {
 }
 const showBansOutcomeColumns = ref(true)
 const showBansSideColumns = ref(true)
-const showChampionSideColumns = ref(true)
+const showChampionHealColumns = ref(true)
 const showChampionDealtColumns = ref(true)
 const showChampionTakenColumns = ref(true)
 const roleToBansColumnKey = Object.freeze({
@@ -1952,14 +1952,14 @@ function toggleBansSideColumns() {
   showBansSideColumns.value = !showBansSideColumns.value
 }
 
-function toggleChampionColumnGroup(group: 'side' | 'dealt' | 'taken') {
+function toggleChampionColumnGroup(group: 'heal' | 'dealt' | 'taken') {
   const activeCount =
-    Number(showChampionSideColumns.value) +
+    Number(showChampionHealColumns.value) +
     Number(showChampionDealtColumns.value) +
     Number(showChampionTakenColumns.value)
-  if (group === 'side') {
-    if (showChampionSideColumns.value && activeCount <= 1) return
-    showChampionSideColumns.value = !showChampionSideColumns.value
+  if (group === 'heal') {
+    if (showChampionHealColumns.value && activeCount <= 1) return
+    showChampionHealColumns.value = !showChampionHealColumns.value
     return
   }
   if (group === 'dealt') {
@@ -2064,7 +2064,7 @@ function resetStatsFilters() {
   itemsTypeFilter.value = 'all'
   showBansOutcomeColumns.value = true
   showBansSideColumns.value = true
-  showChampionSideColumns.value = true
+  showChampionHealColumns.value = true
   showChampionDealtColumns.value = true
   showChampionTakenColumns.value = true
   onStatsFilterChange()
@@ -4245,6 +4245,12 @@ type ChampionGlobalTableRow = {
   avgKills: number
   avgDeaths: number
   avgAssists: number
+  avgTotalHeal: number
+  avgHealsOnTeammates: number
+  avgEffectiveHealShield: number
+  avgDamageShieldedOnTeammates: number
+  avgDamageSelfMitigated: number
+  avgTimeCcDealt: number
 }
 
 type ChampionGlobalNumericDeltaKey =
@@ -4259,6 +4265,12 @@ type ChampionGlobalNumericDeltaKey =
   | 'avgKills'
   | 'avgDeaths'
   | 'avgAssists'
+  | 'avgTotalHeal'
+  | 'avgHealsOnTeammates'
+  | 'avgEffectiveHealShield'
+  | 'avgDamageShieldedOnTeammates'
+  | 'avgDamageSelfMitigated'
+  | 'avgTimeCcDealt'
 
 type ChampionGlobalSortColumn =
   | 'champion'
@@ -4292,6 +4304,18 @@ type ChampionGlobalSortColumn =
   | 'deathsDelta'
   | 'assists'
   | 'assistsDelta'
+  | 'healTotal'
+  | 'healTotalDelta'
+  | 'healTeam'
+  | 'healTeamDelta'
+  | 'healEffective'
+  | 'healEffectiveDelta'
+  | 'shieldTeam'
+  | 'shieldTeamDelta'
+  | 'mitigated'
+  | 'mitigatedDelta'
+  | 'ccTime'
+  | 'ccTimeDelta'
   | 'totalGames'
 
 const championGlobalTablePending = ref(false)
@@ -4313,7 +4337,7 @@ const championGlobalTableMinWidthPx = computed(() => {
   const wStat = 48
   const wKda = 160
   let statCols = 0
-  if (showChampionSideColumns.value) statCols += 4
+  if (showChampionHealColumns.value) statCols += 3
   if (showChampionDealtColumns.value) statCols += 4
   if (showChampionTakenColumns.value) statCols += 4
   return wChamp + statCols * wStat + wKda
@@ -4583,6 +4607,54 @@ function championGlobalCompare(
       return (
         (championGlobalNumericDeltaSortValue(a, 'avgAssists') -
           championGlobalNumericDeltaSortValue(b, 'avgAssists')) *
+        m
+      )
+    case 'healTotal':
+      return (a.avgTotalHeal - b.avgTotalHeal) * m
+    case 'healTotalDelta':
+      return (
+        (championGlobalNumericDeltaSortValue(a, 'avgTotalHeal') -
+          championGlobalNumericDeltaSortValue(b, 'avgTotalHeal')) *
+        m
+      )
+    case 'healTeam':
+      return (a.avgHealsOnTeammates - b.avgHealsOnTeammates) * m
+    case 'healTeamDelta':
+      return (
+        (championGlobalNumericDeltaSortValue(a, 'avgHealsOnTeammates') -
+          championGlobalNumericDeltaSortValue(b, 'avgHealsOnTeammates')) *
+        m
+      )
+    case 'healEffective':
+      return (a.avgEffectiveHealShield - b.avgEffectiveHealShield) * m
+    case 'healEffectiveDelta':
+      return (
+        (championGlobalNumericDeltaSortValue(a, 'avgEffectiveHealShield') -
+          championGlobalNumericDeltaSortValue(b, 'avgEffectiveHealShield')) *
+        m
+      )
+    case 'shieldTeam':
+      return (a.avgDamageShieldedOnTeammates - b.avgDamageShieldedOnTeammates) * m
+    case 'shieldTeamDelta':
+      return (
+        (championGlobalNumericDeltaSortValue(a, 'avgDamageShieldedOnTeammates') -
+          championGlobalNumericDeltaSortValue(b, 'avgDamageShieldedOnTeammates')) *
+        m
+      )
+    case 'mitigated':
+      return (a.avgDamageSelfMitigated - b.avgDamageSelfMitigated) * m
+    case 'mitigatedDelta':
+      return (
+        (championGlobalNumericDeltaSortValue(a, 'avgDamageSelfMitigated') -
+          championGlobalNumericDeltaSortValue(b, 'avgDamageSelfMitigated')) *
+        m
+      )
+    case 'ccTime':
+      return (a.avgTimeCcDealt - b.avgTimeCcDealt) * m
+    case 'ccTimeDelta':
+      return (
+        (championGlobalNumericDeltaSortValue(a, 'avgTimeCcDealt') -
+          championGlobalNumericDeltaSortValue(b, 'avgTimeCcDealt')) *
         m
       )
     default:
@@ -5312,7 +5384,7 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   showBansOutcomeColumns,
   showBansSideColumns,
   showChampionDealtColumns,
-  showChampionSideColumns,
+  showChampionHealColumns,
   showChampionTakenColumns,
   showBansRoleColumn,
   showBansRoleColumns,
