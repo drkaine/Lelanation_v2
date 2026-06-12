@@ -17,6 +17,7 @@ export type StatisticsMainTab =
   | 'bans'
   | 'pings'
   | 'vision'
+  | 'misc'
   | 'patchNotes'
 
 interface StatisticsUiState {
@@ -38,6 +39,7 @@ const VALID_TABS: StatisticsMainTab[] = [
   'items',
   'pings',
   'vision',
+  'misc',
   'patchNotes',
   'infos',
   'trends',

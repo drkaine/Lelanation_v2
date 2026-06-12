@@ -34,6 +34,15 @@ describe('statisticsTabFilterFlags', () => {
     expect(statisticsTabFilterFlags('team').championSearch).toBe(false)
     expect(statisticsTabFilterFlags('championTable').championSearch).toBe(true)
   })
+
+  it('misc: champion search only', () => {
+    expect(statisticsTabFilterFlags('misc')).toEqual({
+      division: false,
+      role: false,
+      otp: false,
+      championSearch: true,
+    })
+  })
 })
 
 describe('appendStatisticsCohortParams', () => {

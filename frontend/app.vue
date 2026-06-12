@@ -352,8 +352,33 @@ const onKeyDown = (event: KeyboardEvent) => {
 
   if (isEditableTarget) return
 
-  const statisticsRootMatch = String(route.path).match(/^\/(?:fr\/|en\/)?statistics\/?$/)
-  if (statisticsRootMatch) {
+  const path = String(route.path)
+  const direction = event.key === 'ArrowLeft' ? -1 : 1
+
+  function pushTabQuery(nextTab: string, opts?: { omitOverviewTab?: boolean }) {
+    const nextQuery = { ...route.query } as Record<string, string | string[]>
+    if (opts?.omitOverviewTab && nextTab === 'overview') {
+      delete nextQuery.tab
+    } else {
+      nextQuery.tab = nextTab
+    }
+    router.push({ path: route.path, query: nextQuery })
+  }
+
+  function navigateTabOrder<T extends string>(
+    tabOrder: readonly T[],
+    currentTab: string,
+    opts?: { omitOverviewTab?: boolean }
+  ) {
+    const currentIndex = tabOrder.includes(currentTab as T) ? tabOrder.indexOf(currentTab as T) : 0
+    const nextIndex = currentIndex + direction
+    if (nextIndex < 0 || nextIndex >= tabOrder.length) return false
+    event.preventDefault()
+    pushTabQuery(tabOrder[nextIndex]!, opts)
+    return true
+  }
+
+  if (path.match(/^\/(?:fr\/|en\/)?statistics\/?$/)) {
     const tabOrder = [
       'overview',
       'team',
@@ -367,30 +392,46 @@ const onKeyDown = (event: KeyboardEvent) => {
       'items',
       'pings',
       'vision',
+      'misc',
       'patchNotes',
       'infos',
     ] as const
     const currentTabRaw = route.query.tab
     const currentTab = typeof currentTabRaw === 'string' ? currentTabRaw : 'overview'
-    const currentIndex = tabOrder.includes(currentTab as (typeof tabOrder)[number])
-      ? tabOrder.indexOf(currentTab as (typeof tabOrder)[number])
-      : 0
-    const nextIndex = event.key === 'ArrowLeft' ? currentIndex - 1 : currentIndex + 1
-    if (nextIndex >= 0 && nextIndex < tabOrder.length) {
-      event.preventDefault()
-      const nextTab = tabOrder[nextIndex]!
-      const nextQuery = { ...route.query } as Record<string, string>
-      if (nextTab === 'overview') {
-        delete nextQuery.tab
-      } else {
-        nextQuery.tab = nextTab
-      }
-      router.push(localePath({ path: '/statistics', query: nextQuery }))
-    }
+    if (navigateTabOrder(tabOrder, currentTab, { omitOverviewTab: true })) return
     return
   }
 
-  const match = String(route.path).match(/\/builds\/create\/(champion|rune|item|info)(?:\/|$)/)
+  const championStatsMatch = path.match(/^\/(?:fr\/|en\/)?statistics\/champion\/[^/]+\/?$/)
+  if (championStatsMatch) {
+    const tabOrder = [
+      'overview',
+      'matchups',
+      'synergy',
+      'runes',
+      'spells',
+      'skills',
+      'objectives',
+      'pings',
+      'vision',
+      'misc',
+    ] as const
+    const currentTabRaw = route.query.tab
+    const currentTab = typeof currentTabRaw === 'string' ? currentTabRaw : 'overview'
+    if (navigateTabOrder(tabOrder, currentTab)) return
+    return
+  }
+
+  const itemStatsMatch = path.match(/^\/(?:fr\/|en\/)?statistics\/item\/[^/]+\/?$/)
+  if (itemStatsMatch) {
+    const tabOrder = ['overview', 'purchase'] as const
+    const currentTabRaw = route.query.tab
+    const currentTab = typeof currentTabRaw === 'string' ? currentTabRaw : 'overview'
+    if (navigateTabOrder(tabOrder, currentTab)) return
+    return
+  }
+
+  const match = path.match(/\/builds\/create\/(champion|rune|item|info)(?:\/|$)/)
   if (!match) return
 
   const stepOrder = ['champion', 'rune', 'item', 'info'] as const
@@ -849,6 +890,7 @@ html[data-stats-cards='1'] .champion-stats .hidden.md\:block {
       .statistics-surrender-mobile-list,
       .statistics-pings-mobile-list,
       .statistics-vision-mobile-list,
+      .statistics-misc-mobile-list,
       .statistics-patch-notes-mobile-list
     ) {
     display: flex !important;
@@ -877,6 +919,7 @@ html[data-stats-cards='1'] .champion-stats .hidden.md\:block {
       .statistics-surrender-mobile-list,
       .statistics-pings-mobile-list,
       .statistics-vision-mobile-list,
+      .statistics-misc-mobile-list,
       .statistics-patch-notes-mobile-list
     )
     > * {
@@ -900,6 +943,7 @@ html[data-stats-cards='1'] .champion-stats .hidden.md\:block {
       .statistics-surrender-mobile-side-card,
       .statistics-pings-mobile-card,
       .statistics-vision-mobile-card,
+      .statistics-misc-mobile-card,
       .statistics-patch-notes-mobile-card
     ) {
     width: var(--stats-simplified-card-width) !important;
@@ -1088,5 +1132,108 @@ html[data-stats-cards='1'] .champion-stats .hidden.md\:block {
   flex-shrink: 0;
   scroll-snap-align: start;
   white-space: nowrap;
+}
+
+/* Pastilles colorées des icônes de stats (builder infos + onglet Divers). */
+.stat-inline-icon {
+  display: inline-flex;
+  width: 1rem;
+  height: 1rem;
+  overflow: visible;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+  border-radius: 9999px;
+  transform: scale(2);
+  transform-origin: center;
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.24),
+    0 0 8px rgb(255 255 255 / 0.14);
+}
+
+.stat-inline-icon--sm {
+  transform: none;
+}
+
+.stat-inline-icon-image {
+  width: 0.85rem;
+  height: 0.85rem;
+  object-fit: contain;
+  filter: saturate(1.25) brightness(1.08) contrast(1.08);
+}
+
+.stat-inline-icon--sm .stat-inline-icon-image {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.stat-inline-icon-image--compact {
+  width: calc(0.85rem - 2px);
+  height: calc(0.85rem - 2px);
+}
+
+.stat-inline-icon--sm .stat-inline-icon-image--compact {
+  width: calc(0.75rem - 2px);
+  height: calc(0.75rem - 2px);
+}
+
+.stat-inline-icon--hp {
+  background: rgb(22 255 117 / 0.52);
+}
+
+.stat-inline-icon--armor {
+  background: rgb(191 107 28 / 0.54);
+}
+
+.stat-inline-icon--mana {
+  background: rgb(66 220 255 / 0.52);
+}
+
+.stat-inline-icon--ap {
+  background: rgb(182 77 255 / 0.52);
+}
+
+.stat-inline-icon--haste {
+  background: rgb(255 255 255 / 0.5);
+}
+
+.stat-inline-icon--crit {
+  background: rgb(255 44 44 / 0.56);
+}
+
+.stat-inline-icon--vamp {
+  background: rgb(255 0 0 / 0.72);
+}
+
+.stat-inline-icon--ad {
+  background: rgb(255 132 0 / 0.58);
+}
+
+.stat-inline-icon--as {
+  background: rgb(255 231 43 / 0.62);
+}
+
+.stat-inline-icon--gold {
+  background: rgb(255 196 25 / 0.62);
+}
+
+.stat-inline-icon--mr {
+  background: rgb(232 224 255 / 0.62);
+}
+
+.stat-inline-icon--tenacity {
+  background: rgb(88 28 135 / 0.72);
+}
+
+.stat-inline-icon--arpen {
+  background: rgb(127 29 29 / 0.74);
+}
+
+.stat-inline-icon--shield {
+  background: rgb(220 252 231 / 0.62);
+}
+
+.stat-inline-icon--default {
+  background: rgb(148 163 184 / 0.38);
 }
 </style>

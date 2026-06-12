@@ -201,7 +201,27 @@
                 </select>
               </div>
             </template>
-            <template v-else>
+            <template v-else-if="activeTab === 'misc'">
+              <div>
+                <label for="misc-level-filter" class="mb-1 block text-sm font-medium text-text">
+                  {{ t('statisticsPage.miscLevelLabel') }}
+                </label>
+                <select
+                  id="misc-level-filter"
+                  v-model.number="miscLevel"
+                  class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+                >
+                  <option
+                    v-for="lvl in miscLevelFilterOptions"
+                    :key="'misc-filter-lvl-' + lvl"
+                    :value="lvl"
+                  >
+                    {{ lvl }}
+                  </option>
+                </select>
+              </div>
+            </template>
+            <template v-else-if="activeTab !== 'misc'">
               <div>
                 <label for="stats-filter-version" class="mb-1 block text-sm font-medium text-text">
                   {{ t('statisticsPage.overviewFilterByVersion') }}
@@ -295,7 +315,10 @@
             </div>
             <div
               v-if="
-                activeTab !== 'balance' && activeTab !== 'surrender' && activeTab !== 'patchNotes'
+                activeTab !== 'balance' &&
+                activeTab !== 'surrender' &&
+                activeTab !== 'patchNotes' &&
+                activeTab !== 'misc'
               "
             >
               <div class="mb-1 text-sm font-medium text-text">
@@ -453,7 +476,8 @@
               v-if="
                 activeTab !== 'objectives' &&
                 activeTab !== 'surrender' &&
-                activeTab !== 'patchNotes'
+                activeTab !== 'patchNotes' &&
+                activeTab !== 'misc'
               "
             >
               <div class="mb-1 text-sm font-medium text-text">
@@ -596,7 +620,8 @@
                 activeTab !== 'bans' &&
                 activeTab !== 'objectives' &&
                 activeTab !== 'surrender' &&
-                activeTab !== 'patchNotes'
+                activeTab !== 'patchNotes' &&
+                activeTab !== 'misc'
               "
             >
               <div class="mb-1 text-sm font-medium text-text">
@@ -778,6 +803,9 @@
               <div v-else-if="activeTab === 'vision'" class="space-y-4">
                 <StatisticsVisionTab />
               </div>
+              <div v-else-if="activeTab === 'misc'" class="space-y-4">
+                <StatisticsMiscTab />
+              </div>
               <div v-else-if="activeTab === 'patchNotes'" class="space-y-4">
                 <StatisticsPatchNotesTab />
               </div>
@@ -869,6 +897,8 @@ import {
 } from '~/composables/statistics/useStatisticsPatchNotesTab'
 import { useStatisticsPingsTab } from '~/composables/statistics/useStatisticsPingsTab'
 import { useStatisticsVisionTab } from '~/composables/statistics/useStatisticsVisionTab'
+import { useStatisticsMiscTab } from '~/composables/statistics/useStatisticsMiscTab'
+import { CHAMPION_MISC_MAX_LEVEL, CHAMPION_MISC_MIN_LEVEL } from '~/utils/championBaseStatsFromJson'
 import {
   appendStatisticsCohortParams,
   cohortFiltersForTab,
@@ -945,6 +975,9 @@ const StatisticsPingsTab = defineAsyncComponent(
 )
 const StatisticsVisionTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsVisionTab.vue')
+)
+const StatisticsMiscTab = defineAsyncComponent(
+  () => import('~/components/statistics/tabs/StatisticsMiscTab.vue')
 )
 const StatisticsPatchNotesTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsPatchNotesTab.vue')
@@ -1046,6 +1079,7 @@ function normalizeLegacyTab(tab: string): StatisticsMainTab {
     tab === 'infos' ||
     tab === 'pings' ||
     tab === 'vision' ||
+    tab === 'misc' ||
     tab === 'patchNotes'
   ) {
     return tab
@@ -1084,6 +1118,7 @@ const activeTab = ref<
   | 'bans'
   | 'pings'
   | 'vision'
+  | 'misc'
   | 'patchNotes'
 >(initialActiveTabFromRoute())
 
@@ -1101,6 +1136,7 @@ const STATISTICS_TAB_NAV_ORDER: readonly StatisticsMainTab[] = [
   'items',
   'pings',
   'vision',
+  'misc',
   'patchNotes',
   'infos',
 ]
@@ -1127,6 +1163,7 @@ const allTabs = computed(() => [
   { id: 'items' as const, label: t('statisticsPage.tabItems'), widgetId: 'items' },
   { id: 'pings' as const, label: t('statisticsPage.tabPings'), widgetId: 'pings' },
   { id: 'vision' as const, label: t('statisticsPage.tabVision'), widgetId: 'vision' },
+  { id: 'misc' as const, label: t('statisticsPage.tabMisc'), widgetId: 'misc' },
   { id: 'patchNotes' as const, label: t('statisticsPage.tabPatchNotes'), widgetId: 'patchNotes' },
   { id: 'infos' as const, label: t('statisticsPage.tabInfos'), widgetId: 'infos' },
 ])
@@ -1225,6 +1262,13 @@ const {
 } = useStatisticsMobileViewport()
 
 const championSearchQuery = ref('')
+const miscLevel = ref(1)
+const miscLevelFilterOptions = computed(() =>
+  Array.from(
+    { length: CHAMPION_MISC_MAX_LEVEL - CHAMPION_MISC_MIN_LEVEL + 1 },
+    (_, i) => CHAMPION_MISC_MIN_LEVEL + i
+  )
+)
 const championSearchFocused = ref(false)
 const championSearchInputEl = ref<HTMLInputElement | null>(null)
 let championSearchBlurTimer: ReturnType<typeof setTimeout> | null = null
@@ -1634,7 +1678,7 @@ const activeStatsFiltersCount = computed(() => {
   if (activeTab.value === 'patchNotes') {
     if (patchNotesFromVersion.value.trim()) count++
     if (patchNotesToVersion.value.trim()) count++
-  } else {
+  } else if (activeTab.value !== 'misc') {
     if (statsVersionFilter.value) count++
     if (progressionFromVersionOverride.value) count++
   }
@@ -1654,6 +1698,7 @@ const activeStatsFiltersCount = computed(() => {
   if (activeTab.value === 'items' && itemsLegendaryFilter.value !== 'all') count++
   if (activeTab.value === 'items' && itemsTypeFilter.value !== 'all') count++
   if (activeTab.value === 'patchNotes' && patchNotesTargetFilters.value.size < 3) count++
+  if (activeTab.value === 'misc' && miscLevel.value !== 1) count++
   return count
 })
 
@@ -2014,6 +2059,7 @@ function resetStatsFilters() {
   balanceEliteFilter.value = 'ALL'
   progressionFromVersionOverride.value = ''
   championSearchQuery.value = ''
+  miscLevel.value = 1
   itemsLegendaryFilter.value = 'all'
   itemsTypeFilter.value = 'all'
   showBansOutcomeColumns.value = true
@@ -4715,6 +4761,20 @@ const visionTab = useStatisticsVisionTab({
   patchFromVersion,
 })
 
+const miscTab = useStatisticsMiscTab({
+  championSearchQuery,
+  gameVersion,
+  riotLocale,
+  championsPageSize,
+  miscLevel,
+  resolveGameVersion: async () => {
+    if (!versionStore.currentVersion) {
+      await versionStore.loadCurrentVersion()
+    }
+    return (versionStore.currentVersion || gameVersion.value || '').trim()
+  },
+})
+
 const patchNotesTab = useStatisticsPatchNotesTab({
   patchNotesFromVersion,
   patchNotesToVersion,
@@ -4953,6 +5013,7 @@ watch(activeTab, async tab => {
   if (tab === 'surrender') loadSurrenderMatrix()
   if (tab === 'pings') pingsTab.loadPingsTable()
   if (tab === 'vision') visionTab.loadVisionTable()
+  if (tab === 'misc') miscTab.loadMiscTable()
   if (tab === 'patchNotes') {
     runInBackground(loadPatchNotesVersionOptions())
     patchNotesTab.loadPatchNotesStats()
@@ -5079,6 +5140,9 @@ onMounted(async () => {
     runInBackground(loadOverviewTeams())
     runInBackground(loadObjectivesBaseline())
   }
+  if (activeTab.value === 'misc') miscTab.loadMiscTable()
+  if (activeTab.value === 'pings') pingsTab.loadPingsTable()
+  if (activeTab.value === 'vision') visionTab.loadVisionTable()
   nextTick(() => scrollActiveTabIntoView('auto'))
 })
 
@@ -5364,11 +5428,30 @@ if (__statisticsVm?.proxy) {
             visionTab.visionPage.value = 1
           }
         }
+        if (key === 'onMiscPageUpdated') {
+          return (v: number) => {
+            miscTab.miscPage.value = v
+          }
+        }
+        if (key === 'onMiscPageSizeUpdated') {
+          return (v: number) => {
+            const n = Number(v)
+            const next = Number.isFinite(n) && n > 0 ? Math.floor(n) : 20
+            championsPageSize.value = PAGE_SIZE_OPTIONS.includes(next) ? next : 20
+            miscTab.miscPage.value = 1
+          }
+        }
+        if (key === 'setMiscSort') {
+          return (col: Parameters<typeof miscTab.setMiscSort>[0]) => miscTab.setMiscSort(col)
+        }
         if (Object.prototype.hasOwnProperty.call(pingsTab, key)) {
           return unref((pingsTab as any)[key])
         }
         if (Object.prototype.hasOwnProperty.call(visionTab, key)) {
           return unref((visionTab as any)[key])
+        }
+        if (Object.prototype.hasOwnProperty.call(miscTab, key)) {
+          return unref((miscTab as any)[key])
         }
         if (Object.prototype.hasOwnProperty.call(patchNotesTab, key)) {
           return unref((patchNotesTab as any)[key])
@@ -5399,6 +5482,13 @@ if (__statisticsVm?.proxy) {
           }
           if (Object.prototype.hasOwnProperty.call(visionTab, key)) {
             const binding = (visionTab as Record<string, unknown>)[key]
+            if (isRef(binding)) {
+              ;(binding as { value: unknown }).value = value
+              return true
+            }
+          }
+          if (Object.prototype.hasOwnProperty.call(miscTab, key)) {
+            const binding = (miscTab as Record<string, unknown>)[key]
             if (isRef(binding)) {
               ;(binding as { value: unknown }).value = value
               return true

@@ -17,6 +17,7 @@ export type StatisticsCohortTab =
   | 'infos'
   | 'pings'
   | 'vision'
+  | 'misc'
   | 'patchNotes'
   | 'duration'
   | 'abandons'
@@ -45,13 +46,20 @@ export interface StatisticsTabFilterFlags {
 export function statisticsTabFilterFlags(tab: StatisticsCohortTab): StatisticsTabFilterFlags {
   const t = tab
   return {
-    division: t !== 'balance' && t !== 'surrender' && t !== 'infos' && t !== 'patchNotes',
-    role: t !== 'objectives' && t !== 'surrender' && t !== 'infos' && t !== 'patchNotes',
+    division:
+      t !== 'balance' && t !== 'surrender' && t !== 'infos' && t !== 'misc' && t !== 'patchNotes',
+    role:
+      t !== 'objectives' &&
+      t !== 'surrender' &&
+      t !== 'infos' &&
+      t !== 'misc' &&
+      t !== 'patchNotes',
     otp:
       t !== 'bans' &&
       t !== 'objectives' &&
       t !== 'surrender' &&
       t !== 'infos' &&
+      t !== 'misc' &&
       t !== 'patchNotes',
     championSearch:
       t !== 'overview' &&
