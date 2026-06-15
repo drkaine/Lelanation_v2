@@ -1854,6 +1854,18 @@ function championByKey(id: number) {
 function championName(id: number) {
   return championByKey(id)?.name ?? null
 }
+
+await useAsyncData(
+  () => `stats-champion-bootstrap-${championId.value}-${riotLocale.value}`,
+  async () => {
+    await Promise.all([
+      versionStore.currentVersion ? Promise.resolve() : versionStore.loadCurrentVersion(),
+      championsStore.loadChampions(riotLocale.value),
+    ])
+    return championName(championId.value)
+  },
+  { watch: [championId, riotLocale] }
+)
 function _itemName(itemId: number) {
   return itemsStore.items.find(i => i.id === String(itemId))?.name ?? null
 }
@@ -4625,7 +4637,17 @@ useHead({
   title: () =>
     championStats.value && championName(championId.value)
       ? `${championName(championId.value)} – ${t('statisticsPage.championStatsTitle')}`
-      : t('statisticsPage.championStatsTitle'),
+      : championName(championId.value)
+        ? `${championName(championId.value)} – ${t('statisticsPage.championStatsTitle')}`
+        : t('statisticsPage.championStatsTitle'),
+})
+useSeoMeta({
+  description: () => {
+    const name = championName(championId.value)
+    return name
+      ? `Statistiques ${name} en Ranked Solo/Duo : winrate, pickrate, builds, matchups et runes sur Lelanation.`
+      : 'Statistiques champion League of Legends : winrate, matchups, builds et runes.'
+  },
 })
 </script>
 

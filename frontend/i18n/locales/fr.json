@@ -79,6 +79,40 @@
   },
   "home": {
     "subtitle": "La plateforme de référence pour créer, optimiser et partager vos builds League of Legends. La plateforme pour t’aider à réfléchir, créer, analyser, organiser, apprendre ou simplement explorer une idée.",
+    "heroEyebrow": "League of Legends",
+    "heroTitle": "Créez, optimisez et partagez vos builds LoL",
+    "heroSubtitle": "Builds communautaires, tier list data-driven, statistiques ranked et contenus Lelariva — tout pour passer au niveau supérieur.",
+    "heroImageAlt": "Lelanation — plateforme de builds League of Legends",
+    "ctaCreateBuild": "Créer un build",
+    "ctaDiscoverBuilds": "Découvrir les builds",
+    "popularBuildsTitle": "Builds populaires",
+    "popularBuildsSubtitle": "Les builds les plus consultés par la communauté.",
+    "seeAllBuilds": "Voir tous les builds →",
+    "viewBuild": "Voir le build →",
+    "noBuildsYet": "Aucun build public pour le moment. Soyez le premier à en créer un !",
+    "loading": "Chargement…",
+    "tierListTitle": "Tier list rapide",
+    "tierListSubtitle": "Top 5 par rôle — saison {season}, patch {patch}",
+    "fullTierList": "Tier list complète →",
+    "tierNoData": "Pas encore de données",
+    "tierRoles": {
+      "top": "Top",
+      "jungle": "Jungle",
+      "mid": "Mid",
+      "adc": "ADC",
+      "support": "Support"
+    },
+    "latestVideoTitle": "Dernière vidéo Lelariva",
+    "latestVideoSubtitle": "Guides, builds et analyses meta sur YouTube.",
+    "watchVideo": "Regarder sur YouTube",
+    "allVideos": "Toutes les vidéos",
+    "appTitle": "App compagnon Lelanation",
+    "appSubtitle": "Importez vos builds, gérez vos favoris et synchronisez entre navigateur et bureau.",
+    "appDownload": "Télécharger l'app",
+    "statBuilds": "builds créés",
+    "statPlayers": "joueurs analysés",
+    "statVideos": "vidéos Lelariva",
+    "followUs": "Suivez Lelariva",
     "features": "Fonctionnalités",
     "quickActions": "Actions Rapides",
     "links": {
@@ -423,6 +457,8 @@
     "description": "Winrate et pickrate par champion, calculés à partir des matchs Ranked Solo/Duo (EUW + EUNE). Filtrez par rang ou rôle.",
     "metaTitle": "Statistiques LoL - Winrate et pickrate par champion | Lelanation",
     "metaDescription": "Statistiques League of Legends : winrate et pickrate par champion, builds et runes populaires. Données Ranked Solo/Duo EUW et EUNE. Filtres par rang et rôle.",
+    "tierListMetaTitle": "Tier list LoL saison {season} — patch {patch}",
+    "tierListMetaDescription": "Tier list League of Legends saison {season} (patch {patch}) : classement des champions par rôle, winrate et pickrate. Données Ranked Solo/Duo EUW et EUNE.",
     "tabOverview": "Vue d'ensemble",
     "tabTierList": "Tier list",
     "tabChampionTable": "Champion",
@@ -1475,6 +1511,16 @@
         "rune": "runes"
       }
     }
+  },
+  "championBuildsPage": {
+    "metaTitle": "Build {champion} LoL — runes, objets et sorts",
+    "metaTitleFallback": "Builds champion LoL",
+    "metaDescription": "Meilleurs builds {champion} League of Legends saison {season} (patch {patch}) : runes, objets et ordre de sorts. Communauté Lelariva sur Lelanation.",
+    "metaDescriptionFallback": "Découvrez les builds League of Legends par champion : runes, objets et ordre de sorts sur Lelanation.",
+    "heading": "Build {champion} LoL",
+    "headingFallback": "Builds {slug} LoL",
+    "breadcrumb": "Build {champion}",
+    "backToBuilds": "← Retour aux builds"
   },
   "buildDiscovery": {
     "searchPlaceholder": "Rechercher un build par champion ou auteur...",

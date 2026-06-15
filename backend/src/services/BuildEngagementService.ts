@@ -97,3 +97,12 @@ export async function getBuildEngagement(buildId: string): Promise<BuildEngageme
   return store.builds[id] ?? createEmptyEntry(id)
 }
 
+export async function getEngagementViewCounts(): Promise<Map<string, number>> {
+  const store = await readStore()
+  const out = new Map<string, number>()
+  for (const [id, entry] of Object.entries(store.builds)) {
+    if (entry.views > 0) out.set(id, entry.views)
+  }
+  return out
+}
+

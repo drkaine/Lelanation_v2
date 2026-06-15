@@ -1,12 +1,10 @@
 <template>
-  <BuildDetailsPage :build-id="buildId" />
+  <BuildDetailsPage :build-id="buildId" :initial-build="initialBuild ?? null" />
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useRoute } from 'vue-router'
 import BuildDetailsPage from '~/components/Build/BuildDetailsPage.vue'
+import { useBuildDetailPage } from '~/composables/useBuildDetailPage'
 
-const route = useRoute()
-const buildId = computed(() => route.params.id as string)
+const { buildId, initialBuild } = useBuildDetailPage()
 </script>

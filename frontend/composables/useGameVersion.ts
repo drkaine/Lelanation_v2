@@ -4,6 +4,7 @@ import { getFallbackGameVersion } from '~/config/version'
 
 export function useGameVersion() {
   const versionStore = useVersionStore()
+  const fallbackVersion = getFallbackGameVersion()
 
   onMounted(() => {
     if (!versionStore.currentVersion) {
@@ -11,7 +12,7 @@ export function useGameVersion() {
     }
   })
 
-  const version = computed(() => versionStore.currentVersion || getFallbackGameVersion())
+  const version = computed(() => versionStore.currentVersion || fallbackVersion)
 
   return { version, versionStore }
 }

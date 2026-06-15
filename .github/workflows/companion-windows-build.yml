@@ -178,12 +178,10 @@ jobs:
           foreach ($file in $signedFiles) {
             $sig = Get-AuthenticodeSignature -FilePath $file.FullName
             Write-Host "$($file.Name): $($sig.Status)"
-            # Self-signed certs return UnknownError (signature present but chain untrusted).
-            # Only fail if the file has no signature at all.
             if ($sig.Status -eq "NotSigned") {
               throw "File is not signed: $($file.FullName)"
             }
-            Write-Host "  -> Signature present (status: $($sig.Status))"
+            Write-Host "  -> Signer: $($sig.SignerCertificate.Subject)"
           }
 
       # Authenticode signing changes the installer bytes; regenerate minisign .sig for the updater.
@@ -258,6 +256,30 @@ jobs:
             Write-Host "Updater signature captured from $($updaterSig.Name)"
           }
 
+      - name: Require EV Authenticode for release installer
+        if: steps.version.outputs.is_release == 'true'
+        run: |
+          if ("${{ env.SHOULD_SIGN }}" -ne "true") {
+            throw "Release builds must be signed (enable sign=true or push a companion-v* tag with WINDOWS_CODESIGN_PFX_B64 configured)."
+          }
+          $dest = Join-Path $env:GITHUB_WORKSPACE "installer\Lelanation.exe"
+          if (!(Test-Path $dest)) {
+            throw "Release installer not found at $dest"
+          }
+          $sig = Get-AuthenticodeSignature -FilePath $dest
+          Write-Host "Release installer signature: $($sig.Status)"
+          Write-Host "Signer: $($sig.SignerCertificate.Subject)"
+          if ($sig.Status -eq "NotSigned") {
+            throw "Release installer is not signed. Configure WINDOWS_CODESIGN_PFX_B64 with an EV code signing certificate."
+          }
+          if ($sig.Status -ne "Valid") {
+            throw @"
+          Release installer signature status is '$($sig.Status)' (expected Valid).
+          SmartScreen 'Unknown publisher' requires a trusted EV code signing certificate.
+          See companion-app/CODE_SIGNING_WINDOWS.md
+          "@
+          }
+
       - name: Generate latest.json for auto-updater
         if: steps.version.outputs.is_release == 'true'
         run: |
@@ -304,7 +326,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Create tag and publish GitHub Release
-        if: steps.version.outputs.is_release == 'true'
+        if: steps.version.outputs.is_release == 'true' && env.SHOULD_SIGN == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         working-directory: .

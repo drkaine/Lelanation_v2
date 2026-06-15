@@ -453,6 +453,7 @@ import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useVersionStore } from '~/stores/VersionStore'
 import { useStatisticsUiStore } from '~/stores/StatisticsUiStore'
 import { useGameVersion } from '~/composables/useGameVersion'
+import { lolSeasonFromGameVersion } from '~/utils/lolSeason'
 import { apiUrl } from '~/utils/apiUrl'
 import { useStatisticsTierListPage } from '~/composables/statistics/useStatisticsTierListPage'
 import {
@@ -490,9 +491,21 @@ const { version: gameVersion } = useGameVersion()
 const tierListTabsNavEl = ref<HTMLElement | null>(null)
 useHorizontalScrollContainer(tierListTabsNavEl)
 
-useHead({
-  title: () => t('statisticsPage.tabTierList'),
-  meta: [{ name: 'description', content: () => t('statisticsPage.metaDescription') }],
+const tierListSeoTitle = computed(() =>
+  t('statisticsPage.tierListMetaTitle', {
+    season: lolSeasonFromGameVersion(gameVersion.value),
+    patch: gameVersion.value,
+  })
+)
+const tierListSeoDescription = computed(() =>
+  t('statisticsPage.tierListMetaDescription', {
+    season: lolSeasonFromGameVersion(gameVersion.value),
+    patch: gameVersion.value,
+  })
+)
+useSeoMeta({
+  title: tierListSeoTitle,
+  description: tierListSeoDescription,
 })
 
 const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
@@ -729,7 +742,27 @@ const {
   TIER_DIVERGING_LEGEND,
   toggleTierListChartTier,
   tierListChartTierEnabled,
+  championName,
 } = tierList
+
+const tierListSiteUrl = String(useRuntimeConfig().public.siteUrl ?? 'https://lelanation.fr')
+useJsonLdHead(
+  'tier-list',
+  computed(() => {
+    const rows = tierList.tierListData.value?.rows ?? []
+    if (rows.length === 0) return null
+    return itemListJsonLd(tierListSiteUrl, {
+      name: t('statisticsPage.tabTierList'),
+      description: t('statisticsPage.metaDescription'),
+      path: '/statistics/tier-list',
+      items: rows.slice(0, 30).map((row, index) => ({
+        name: championName(row.championId) ?? `Champion ${row.championId}`,
+        url: `/statistics/champion/${row.championId}`,
+        position: index + 1,
+      })),
+    })
+  })
+)
 
 type BotlaneTierPayload = {
   version: string | null
@@ -1036,11 +1069,7 @@ watch(
   }
 )
 
-onMounted(async () => {
-  if (import.meta.client) {
-    statisticsUiStore.init()
-    document.addEventListener('keydown', onFiltersEscapeKey)
-  }
+async function bootstrapTierListPage(): Promise<number> {
   applyTierListStateFromQuery()
   if (!versionStore.currentVersion) {
     await versionStore.loadCurrentVersion()
@@ -1053,7 +1082,26 @@ onMounted(async () => {
   } else {
     await tierList.loadTierList()
   }
-  championsStore.loadChampions(riotLocale.value)
+  await championsStore.loadChampions(riotLocale.value)
+  return tierList.tierListData.value?.rows?.length ?? 0
+}
+
+const tierListBootstrapKey = computed(
+  () =>
+    `${route.fullPath}|${riotLocale.value}|${statsVersionFilter.value}|${tierListViewModel.value}`
+)
+
+await useAsyncData(
+  () => `tier-list-bootstrap-${tierListBootstrapKey.value}`,
+  bootstrapTierListPage,
+  { watch: [tierListBootstrapKey] }
+)
+
+onMounted(() => {
+  if (import.meta.client) {
+    statisticsUiStore.init()
+    document.addEventListener('keydown', onFiltersEscapeKey)
+  }
 })
 
 onUnmounted(() => {

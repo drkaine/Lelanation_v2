@@ -510,7 +510,7 @@ ENV=dev   # ou prod
 | `RANK_DRAIN_MODE` | — | Mode drain (PM2 : `1`) |
 | `RIOT_RATE_LIMIT_PER_120S` | 95 (dev) / 28500 (prod) | Override budget 120s |
 | `POLLER_PATCH_ROLLOUT_GRACE_DAYS` | 2 | Grâce changement patch |
-| `POLLER_PATCH_RETENTION_DAYS` | 5 | Purge processed_matches / rank history |
+| `POLLER_PATCH_RETENTION_DAYS` | *(absent / false)* | Purge `processed_matches` / `player_rank_history` : `false` = off, `true` = 5 j, entier = jours |
 | `POLLER_EXTERNAL` | — | Poller externe à l'API |
 | `PLAYER_KEY_VERSION` | = `ENV` | Version clé PUUID |
 

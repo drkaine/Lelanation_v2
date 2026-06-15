@@ -8,7 +8,12 @@
         </NuxtLink>
       </div>
 
-      <button class="menu-mobile" aria-label="Toggle menu" @click="toggleMenu">
+      <button
+        v-if="isMobileViewport"
+        class="menu-mobile"
+        aria-label="Toggle menu"
+        @click="toggleMenu"
+      >
         <svg
           width="24"
           height="24"
@@ -25,7 +30,7 @@
         </svg>
       </button>
 
-      <div class="mobile-nav" :class="{ 'is-open': isMenuOpen }">
+      <div v-if="isMobileViewport" class="mobile-nav" :class="{ 'is-open': isMenuOpen }">
         <div class="mobile-builds-menu">
           <button
             type="button"
@@ -158,7 +163,7 @@
         </NuxtLink>
       </div>
 
-      <div class="right-header">
+      <div v-if="!isMobileViewport" class="right-header">
         <div
           class="builds-menu"
           @mouseenter="isBuildsMenuOpen = true"
@@ -286,31 +291,30 @@ import { useRoute } from 'vue-router'
 import LanguageSwitcher from '~/components/LanguageSwitcher.vue'
 import { getFallbackGameVersion } from '~/config/version'
 import { useAdminAuth } from '~/composables/useAdminAuth'
+import { useMobileViewport } from '~/composables/useMobileViewport'
 import { useFavoritesStore } from '~/stores/FavoritesStore'
 import { useVersionStore } from '~/stores/VersionStore'
 
 const isMenuOpen = ref(false)
 const isBuildsMenuOpen = ref(false)
 const isMobileBuildsMenuOpen = ref(false)
+const { isMobileViewport } = useMobileViewport()
 const { t, locale } = useI18n()
 const { isLoggedIn: isAdminLoggedIn, checkLoggedIn } = useAdminAuth()
 const localePath = useLocalePath()
 const route = useRoute()
 const versionStore = useVersionStore()
 const gameVersion = computed(() => versionStore.currentVersion || getFallbackGameVersion())
-const discoverBuildsLink = computed(() => ({
-  path: localePath('/builds'),
-  query: { tab: 'discover' },
-}))
-const myBuildsLink = computed(() => ({ path: localePath('/builds'), query: { tab: 'my-builds' } }))
-const favoriteBuildsLink = computed(() => ({
-  path: localePath('/builds'),
-  query: { tab: 'favoris' },
-}))
+const discoverBuildsLink = computed(() => localePath('/builds/discover'))
+const myBuildsLink = computed(() => localePath('/builds/my-builds'))
+const favoriteBuildsLink = computed(() => localePath('/builds/favoris'))
 const theorycraftLink = computed(() => localePath('/builds/theorycraft'))
 const isTheorycraftActive = computed(() => route.path.includes('/builds/theorycraft'))
 const isBuildsSectionActive = computed(() => route.path.includes('/builds'))
 const currentBuildsTab = computed(() => {
+  if (route.path.endsWith('/builds/discover')) return 'discover'
+  if (route.path.endsWith('/builds/my-builds')) return 'my-builds'
+  if (route.path.endsWith('/builds/favoris')) return 'favoris'
   if (!route.path.includes('/builds') || route.path.includes('/builds/create')) return null
   return typeof route.query.tab === 'string' ? route.query.tab : 'discover'
 })
@@ -382,6 +386,13 @@ onMounted(() => {
     versionStore.loadCurrentVersion().catch(() => undefined)
   }
   favoritesStore.init()
+})
+
+watch(isMobileViewport, mobile => {
+  if (!mobile) {
+    isMenuOpen.value = false
+    isMobileBuildsMenuOpen.value = false
+  }
 })
 
 watch(

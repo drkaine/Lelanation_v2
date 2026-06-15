@@ -195,7 +195,9 @@ async function runPatchRetentionPurge(): Promise<void> {
   try {
     const result = await purgeStaleProcessedMatchesAndRankHistory();
     if (result.skipped) {
-      console.warn(`[poller-main] patch_retention_purge_skipped reason=${result.skipReason ?? 'unknown'}`);
+      if (result.skipReason !== 'retention_disabled') {
+        console.warn(`[poller-main] patch_retention_purge_skipped reason=${result.skipReason ?? 'unknown'}`);
+      }
       return;
     }
     console.log(

@@ -62,6 +62,17 @@ export const useYouTubeStore = defineStore('youtube', {
       this.loadingStatus = true
       this.error = null
       try {
+        // SSR / prerender: read static JSON from disk (public/data/youtube)
+        if (import.meta.server) {
+          const { loadYouTubeStatusFromDisk, resolveFrontendRoot } =
+            await import('~/utils/youtubeCatalog')
+          const status = loadYouTubeStatusFromDisk(resolveFrontendRoot())
+          if (status.length > 0) {
+            this.status = status
+            return
+          }
+        }
+
         // Try static file first (only in browser, not SSR)
         let data: ChannelsStatusResponse | null = null
         let useStatic = false
@@ -268,6 +279,13 @@ export const useYouTubeStore = defineStore('youtube', {
       try {
         let data: YouTubeChannelData | null = null
         let useStatic = false
+
+        if (import.meta.server) {
+          const { readYouTubeChannelDataFromDisk, resolveFrontendRoot } =
+            await import('~/utils/youtubeCatalog')
+          data = readYouTubeChannelDataFromDisk(resolveFrontendRoot(), channelId)
+          if (data) useStatic = true
+        }
 
         // Try static file first (only in browser, not SSR)
         if (process.client) {

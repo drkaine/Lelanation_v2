@@ -78,7 +78,41 @@
     "close": "Close"
   },
   "home": {
-    "subtitle": "The go-to platform to create, optimize and share your League of Legends builds. The platform to help you think, create, analyze, organize, learn, or simply explore an idea.",
+    "subtitle": "The go-to platform to create, optimize and share your League of Legends builds.",
+    "heroEyebrow": "League of Legends",
+    "heroTitle": "Create, optimize and share your LoL builds",
+    "heroSubtitle": "Community builds, data-driven tier lists, ranked stats and Lelariva content — everything to level up your game.",
+    "heroImageAlt": "Lelanation — League of Legends build platform",
+    "ctaCreateBuild": "Create a build",
+    "ctaDiscoverBuilds": "Discover builds",
+    "popularBuildsTitle": "Popular builds",
+    "popularBuildsSubtitle": "Most viewed builds from the community.",
+    "seeAllBuilds": "See all builds →",
+    "viewBuild": "View build →",
+    "noBuildsYet": "No public builds yet. Be the first to create one!",
+    "loading": "Loading…",
+    "tierListTitle": "Quick tier list",
+    "tierListSubtitle": "Top 5 per role — season {season}, patch {patch}",
+    "fullTierList": "Full tier list →",
+    "tierNoData": "No data yet",
+    "tierRoles": {
+      "top": "Top",
+      "jungle": "Jungle",
+      "mid": "Mid",
+      "adc": "ADC",
+      "support": "Support"
+    },
+    "latestVideoTitle": "Latest Lelariva video",
+    "latestVideoSubtitle": "Guides, builds and meta analysis on YouTube.",
+    "watchVideo": "Watch on YouTube",
+    "allVideos": "All videos",
+    "appTitle": "Lelanation companion app",
+    "appSubtitle": "Import builds, manage favorites and sync between browser and desktop.",
+    "appDownload": "Download the app",
+    "statBuilds": "builds created",
+    "statPlayers": "players analyzed",
+    "statVideos": "Lelariva videos",
+    "followUs": "Follow Lelariva",
     "features": "Features",
     "quickActions": "Quick actions",
     "links": {
@@ -423,6 +457,8 @@
     "description": "Winrate and pickrate per champion, computed from Ranked Solo/Duo matches (EUW + EUNE). Filter by rank or role.",
     "metaTitle": "LoL Statistics - Winrate and pickrate by champion | Lelanation",
     "metaDescription": "League of Legends statistics: winrate and pickrate by champion, popular builds and runes. Ranked Solo/Duo EUW and EUNE. Filter by rank and role.",
+    "tierListMetaTitle": "LoL tier list season {season} — patch {patch}",
+    "tierListMetaDescription": "League of Legends tier list for season {season} (patch {patch}): champion rankings by role, winrate and pickrate. Ranked Solo/Duo EUW and EUNE data.",
     "tabOverview": "Overview",
     "tabTierList": "Tier list",
     "tabChampionTable": "Champion",
@@ -1473,6 +1509,16 @@
         "rune": "runes"
       }
     }
+  },
+  "championBuildsPage": {
+    "metaTitle": "{champion} LoL build — runes, items and skill order",
+    "metaTitleFallback": "Champion LoL builds",
+    "metaDescription": "Best {champion} League of Legends builds for season {season} (patch {patch}): runes, items and skill order. Lelariva community on Lelanation.",
+    "metaDescriptionFallback": "Discover League of Legends builds by champion: runes, items and skill order on Lelanation.",
+    "heading": "{champion} LoL builds",
+    "headingFallback": "{slug} LoL builds",
+    "breadcrumb": "{champion} builds",
+    "backToBuilds": "← Back to builds"
   },
   "buildDiscovery": {
     "searchPlaceholder": "Search builds by champion or author...",

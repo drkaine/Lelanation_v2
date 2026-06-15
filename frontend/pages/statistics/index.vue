@@ -5173,33 +5173,40 @@ watch(progressionFromVersion, () => {
   }
 })
 
-onMounted(async () => {
-  document.addEventListener('keydown', onFiltersEscapeKey)
+async function bootstrapStatisticsPage(): Promise<void> {
   const versionPromise = versionStore.currentVersion
     ? Promise.resolve()
     : versionStore.loadCurrentVersion()
-  const tPage = statsPerfStart('page mount')
-  const tVersion = statsPerfStart('version')
   await versionPromise
-  statsPerfEnd('version', tVersion)
   await loadVersionsWithMatches()
   await loadOverview()
+  applyDefaultVersionFiltersFromKnownVersions()
+  await Promise.all([
+    championsStore.loadChampions(riotLocale.value),
+    itemsStore.loadItems(riotLocale.value),
+    runesStore.loadRunes(riotLocale.value),
+    summonerSpellsStore.loadSummonerSpells(riotLocale.value),
+  ])
   if (activeTab.value === 'overview') {
-    loadChampions()
-    loadObjectivesBaseline()
+    await loadChampions()
   }
-  // Apply default version only after first overview call, so we can prefer patches
-  // that actually have matches (matchesByVersion), not only catalog versions.
-  const defaultVersionApplied = applyDefaultVersionFiltersFromKnownVersions()
-  if (defaultVersionApplied) {
-    await loadOverview()
-  }
+}
+
+const statisticsBootstrapKey = computed(
+  () => `${route.fullPath}|${riotLocale.value}|${activeTab.value}`
+)
+
+await useAsyncData(
+  () => `statistics-bootstrap-${statisticsBootstrapKey.value}`,
+  bootstrapStatisticsPage,
+  { watch: [statisticsBootstrapKey] }
+)
+
+onMounted(() => {
+  document.addEventListener('keydown', onFiltersEscapeKey)
+  const tPage = statsPerfStart('page mount')
   runInBackground(Promise.allSettled([loadInfosMeta(), loadInfosPatchDivisionMatrix()]))
-  statsPerfEnd('page mount', tPage)
-  championsStore.loadChampions(riotLocale.value)
-  itemsStore.loadItems(riotLocale.value)
-  runesStore.loadRunes(riotLocale.value)
-  summonerSpellsStore.loadSummonerSpells(riotLocale.value)
+  if (activeTab.value === 'overview') loadObjectivesBaseline()
   if (activeTab.value === 'team') loadOverviewSides()
   if (activeTab.value === 'objectives') loadOverviewSides()
   if (activeTab.value === 'objectives') loadObjectivesBaseline()
@@ -5215,6 +5222,7 @@ onMounted(async () => {
   if (activeTab.value === 'misc') miscTab.loadMiscTable()
   if (activeTab.value === 'pings') pingsTab.loadPingsTable()
   if (activeTab.value === 'vision') visionTab.loadVisionTable()
+  statsPerfEnd('page mount', tPage)
   nextTick(() => scrollActiveTabIntoView('auto'))
 })
 

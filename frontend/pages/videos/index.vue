@@ -8,7 +8,10 @@
         {{ youtube.error }}
       </div>
 
-      <div v-if="youtube.loadingStatus || isLoadingAll" class="py-8 text-center text-sky-200">
+      <div
+        v-if="youtube.loadingStatus || isLoadingAll"
+        class="videos-loading py-8 text-center text-sky-200"
+      >
         {{ t('videosPage.loading') }}
       </div>
 
@@ -181,12 +184,10 @@ const youtube = useYouTubeStore()
 const isLoadingAll = ref(false)
 const route = useRoute()
 const { t } = useI18n()
+const runtimeConfig = useRuntimeConfig()
+const videosSiteUrl = String(runtimeConfig.public.siteUrl ?? 'https://lelanation.fr')
 
-// This page depends heavily on client-only YouTube/static JSON data.
-// Disable SSR for this route to avoid subtle SSR/CSR hydration mismatches.
-definePageMeta({
-  ssr: false,
-})
+// Données YouTube servies depuis /public/data/youtube — compatible SSR.
 
 useHead({
   title: () => t('videosPage.metaTitle'),
@@ -284,6 +285,44 @@ const allVideos = computed<YouTubeVideo[]>(() => {
 
   return result
 })
+
+useJsonLdHead(
+  'videos-graph',
+  computed(() => {
+    const videos = allVideos.value
+    if (videos.length === 0) return null
+    return graphJsonLd(
+      videos.map(video =>
+        videoObjectNode({
+          name: video.title,
+          description: video.description,
+          thumbnailUrl: video.thumbnailUrl,
+          uploadDate: video.publishedAt,
+          url: video.url,
+          duration: video.duration,
+        })
+      )
+    )
+  })
+)
+
+useJsonLdHead(
+  'videos-itemlist',
+  computed(() => {
+    const videos = allVideos.value.slice(0, 24)
+    if (videos.length === 0) return null
+    return itemListJsonLd(videosSiteUrl, {
+      name: t('videosPage.metaTitle'),
+      description: t('videosPage.metaDescription'),
+      path: '/videos',
+      items: videos.map((video, index) => ({
+        name: video.title,
+        url: video.url,
+        position: index + 1,
+      })),
+    })
+  })
+)
 
 const filteredVideos = computed<YouTubeVideo[]>(() => {
   const q = normalize(query.value.trim())
@@ -445,6 +484,10 @@ onMounted(async () => {
 }
 .no-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+.videos-loading {
+  min-height: 40vh;
 }
 
 .videos-results {

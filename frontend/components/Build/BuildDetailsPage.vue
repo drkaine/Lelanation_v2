@@ -366,7 +366,7 @@ import type { Build, SubBuild } from '~/types/build'
 import { useClientHydrated } from '~/composables/useClientHydrated'
 import { useChampionSplashPreference } from '~/composables/useChampionSplashPreference'
 
-const props = defineProps<{ buildId: string }>()
+const props = defineProps<{ buildId: string; initialBuild?: Build | null }>()
 
 const buildStore = useBuildStore()
 const voteStore = useVoteStore()
@@ -378,9 +378,9 @@ const route = useRoute()
 const { hydrated } = useClientHydrated()
 const { championSplashEnabled } = useChampionSplashPreference()
 
-const loading = ref(true)
+const loading = ref(!props.initialBuild)
 const error = ref<string | null>(null)
-const detailRootBuild = ref<Build | null>(null)
+const detailRootBuild = ref<Build | null>(props.initialBuild ?? null)
 const build = computed(() => detailRootBuild.value)
 const openShareDropdown = ref(false)
 const openShareDropdownAbove = ref(false)
@@ -774,9 +774,15 @@ const updateToCurrentVersion = async () => {
 }
 
 watch(
-  () => props.buildId,
-  async id => {
+  () => [props.buildId, props.initialBuild] as const,
+  async ([id, seededBuild]) => {
     if (!id) return
+    if (seededBuild && seededBuild.id === id) {
+      detailRootBuild.value = seededBuild
+      loading.value = false
+      error.value = null
+      return
+    }
     loading.value = true
     error.value = null
     detailDisplayedSubIndex.value = null

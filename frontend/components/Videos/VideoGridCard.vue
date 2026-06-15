@@ -5,13 +5,16 @@
     rel="noopener noreferrer"
     class="group overflow-hidden rounded-2xl border border-accent/70 bg-surface/80 shadow-lg shadow-black/20 backdrop-blur-sm transition hover:border-accent hover:shadow-black/35"
   >
-    <div class="relative">
+    <div class="relative aspect-video w-full overflow-hidden bg-black/40">
       <img
         :src="video.thumbnailUrl"
         :alt="video.title"
-        class="h-44 w-full object-cover"
+        width="640"
+        height="360"
+        class="h-full w-full object-cover"
         :loading="fetchPriority === 'high' ? 'eager' : 'lazy'"
         :fetchpriority="fetchPriority"
+        decoding="async"
       />
       <div class="pointer-events-none absolute inset-0 ring-1 ring-inset ring-sky-200/20" />
     </div>

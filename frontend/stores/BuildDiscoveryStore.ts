@@ -111,7 +111,8 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
 
       // Filter by champion
       if (this.selectedChampion) {
-        results = results.filter(build => build.champion?.id === this.selectedChampion)
+        const selected = this.selectedChampion.toLowerCase()
+        results = results.filter(build => build.champion?.id?.toLowerCase() === selected)
       }
 
       // Filter by role (using build.roles field)

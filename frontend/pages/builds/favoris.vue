@@ -1,5 +1,5 @@
 <template>
-  <BuildsIndexTabPage tab="discover" />
+  <BuildsIndexTabPage tab="favoris" />
 </template>
 
 <script setup lang="ts">

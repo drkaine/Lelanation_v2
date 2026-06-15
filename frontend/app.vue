@@ -6,7 +6,7 @@
     >
       Skip to content
     </a>
-    <AppNavbar v-show="showStandardAppChrome && !isBuildCardRenderRoute" />
+    <AppNavbar v-if="showStandardAppChrome && !isBuildCardRenderRoute" />
     <div
       v-show="showStandardAppChrome && !isBuildCardRenderRoute && !commandBarHiddenByScroll"
       class="command-bar-fixed-wrapper"
@@ -128,11 +128,11 @@
       aria-hidden="true"
     ></div>
     <div
-      v-show="showStreamerPanels"
+      v-if="showStreamerPanels"
       class="streamer-panel streamer-panel-top"
       :class="{ 'is-open': streamerPanelsOpen }"
     >
-      <AppNavbar />
+      <AppNavbar v-if="streamerPanelsOpen" />
     </div>
     <button
       v-show="showStreamerPanels"
@@ -147,13 +147,13 @@
     <main id="main" tabindex="-1" class="app-main min-w-0 flex-1">
       <NuxtPage />
     </main>
-    <AppFooter v-show="showStandardAppChrome && !isAdminRoute && !isBuildCardRenderRoute" />
+    <AppFooter v-if="showStandardAppChrome && !isAdminRoute && !isBuildCardRenderRoute" />
     <div
-      v-show="showStreamerPanels"
+      v-if="showStreamerPanels"
       class="streamer-panel streamer-panel-bottom"
       :class="{ 'is-open': streamerPanelsOpen }"
     >
-      <AppFooter />
+      <AppFooter v-if="streamerPanelsOpen" />
     </div>
     <CookieConsentBanner v-show="!isBuildCardRenderRoute" />
     <CommandShortcutsModal

@@ -1100,6 +1100,7 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: flex-start;
   gap: 0;
+  min-height: 420px;
 }
 
 .build-grid-top-icon-slot {

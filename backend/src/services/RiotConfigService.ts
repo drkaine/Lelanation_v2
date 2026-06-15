@@ -160,14 +160,38 @@ export function getPollerPatchRolloutGraceDays(): number {
 
 /**
  * Rétention poller : supprimer `processed_matches` / `player_rank_history` antérieurs à
- * `releaseDate(patch courant) − retentionDays` (UTC). Env: POLLER_PATCH_RETENTION_DAYS (défaut 5).
+ * `releaseDate(patch courant) − retentionDays` (UTC).
+ *
+ * Env `POLLER_PATCH_RETENTION_DAYS` :
+ * - absent / `false` / `0` → pas de purge
+ * - `true` → purge avec 5 jours (comportement historique)
+ * - entier positif → nombre de jours de rétention
  */
+export type PollerPatchRetentionConfig =
+  | { enabled: false }
+  | { enabled: true; days: number };
+
+const DEFAULT_POLLER_PATCH_RETENTION_DAYS = 5;
+
+export function getPollerPatchRetentionConfig(): PollerPatchRetentionConfig {
+  const raw = process.env.POLLER_PATCH_RETENTION_DAYS?.trim() ?? '';
+  if (!raw || raw.toLowerCase() === 'false' || raw === '0') {
+    return { enabled: false };
+  }
+  if (raw.toLowerCase() === 'true') {
+    return { enabled: true, days: DEFAULT_POLLER_PATCH_RETENTION_DAYS };
+  }
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 1) {
+    return { enabled: false };
+  }
+  return { enabled: true, days: Math.min(n, 90) };
+}
+
+/** @deprecated Prefer getPollerPatchRetentionConfig — 0 when retention disabled. */
 export function getPollerPatchRetentionDays(): number {
-  const raw = process.env.POLLER_PATCH_RETENTION_DAYS
-  if (raw == null || raw === '') return 5
-  const n = Number.parseInt(raw, 10)
-  if (!Number.isFinite(n) || n < 0) return 5
-  return Math.min(n, 90)
+  const config = getPollerPatchRetentionConfig();
+  return config.enabled ? config.days : 0;
 }
 
 /** Date ISO (YYYY-MM-DD) : conserver les lignes avec date >= cutoff ; supprimer si date < cutoff. */

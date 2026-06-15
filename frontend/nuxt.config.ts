@@ -2,6 +2,7 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { collectPrerenderRoutes, collectSitemapEntries } from './utils/seoCatalog'
 
 /** Read fallback game version from backend/data/game/version.json at build time */
 function getFallbackGameVersionFromBackend(): string {
@@ -132,26 +133,66 @@ export default defineNuxtConfig({
   } as any,
   robots: {
     disallow: ['/admin', '/api/admin', '/render'],
+    sitemap: [`${defaultSiteUrl}/sitemap.xml`, `${defaultSiteUrl}/sitemap_index.xml`],
   },
   sitemap: {
+    sitemapName: 'sitemap.xml',
+    cacheMaxAgeSeconds: 3600,
     sitemaps: {
       default: {
+        urls: collectSitemapEntries,
         include: [
           '/',
           '/builds',
           '/builds/create',
           '/videos',
           '/statistics',
+          '/statistics/tier-list',
           '/statistics/recap',
+          '/patch-notes',
           '/privacy',
           '/legal',
           '/lelanation-app',
+          '/app',
         ],
-        exclude: ['/api/**', '/admin', '/admin/**', '/render/**'],
+        exclude: ['/api/**', '/admin', '/admin/**', '/render/**', '/map/**'],
       },
     },
   },
+  routeRules: {
+    '/': { swr: 3600 },
+    '/builds/discover': { prerender: true },
+    '/builds/my-builds': { prerender: true },
+    '/builds/favoris': { prerender: true },
+    '/builds/**': { prerender: true },
+    '/champion/**': { prerender: true },
+    '/champions/**': { prerender: true },
+    '/statistics': { prerender: true },
+    '/statistics/tier-list': { prerender: true },
+    '/statistics/recap': { prerender: true },
+    '/statistics/champion/**': { swr: 1800, prerender: false },
+    '/statistics/item/**': { swr: 1800, prerender: false },
+    '/videos': { prerender: true },
+    '/patch-notes': { prerender: true },
+    '/patch-notes/**': { prerender: true },
+    '/privacy': { prerender: true },
+    '/legal': { prerender: true },
+    '/admin/**': { ssr: false },
+    '/app': { ssr: false },
+    '/map/**': { ssr: false },
+    '/render/**': { ssr: false },
+  },
   nitro: {
+    prerender: {
+      crawlLinks: true,
+      // Champion stat pages are SWR at runtime; crawling them from tier-list blows up build time.
+      ignore: [
+        '/statistics/champion/**',
+        '/en/statistics/champion/**',
+        '/fr/statistics/champion/**',
+      ],
+      routes: collectPrerenderRoutes(),
+    },
     devProxy: {
       '/api': {
         target: defaultApiBase,

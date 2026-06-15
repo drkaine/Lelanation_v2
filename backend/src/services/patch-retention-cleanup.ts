@@ -1,10 +1,10 @@
 /**
  * Purge `processed_matches` et `player_rank_history` plus vieux que
- * release(patch courant) − POLLER_PATCH_RETENTION_DAYS (défaut 5).
+ * release(patch courant) − POLLER_PATCH_RETENTION_DAYS (si activé).
  */
 import { sql } from "../db/client.js";
 import {
-  getPollerPatchRetentionDays,
+  getPollerPatchRetentionConfig,
   loadCurrentGameVersion,
   patchRetentionCutoffDateIso,
 } from "./RiotConfigService.js";
@@ -23,7 +23,11 @@ export async function resolvePatchRetentionCutoffDateIso(): Promise<{
   retentionDays: number;
   skipReason?: string;
 }> {
-  const retentionDays = getPollerPatchRetentionDays();
+  const retentionConfig = getPollerPatchRetentionConfig();
+  if (!retentionConfig.enabled) {
+    return { cutoffDate: null, retentionDays: 0, skipReason: "retention_disabled" };
+  }
+  const retentionDays = retentionConfig.days;
   const currentRes = await loadCurrentGameVersion();
   if (currentRes.isErr()) {
     return { cutoffDate: null, retentionDays, skipReason: "version_load_failed" };
