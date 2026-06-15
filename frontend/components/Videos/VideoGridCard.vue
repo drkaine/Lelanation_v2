@@ -4,6 +4,7 @@
     target="_blank"
     rel="noopener noreferrer"
     class="group overflow-hidden rounded-2xl border border-accent/70 bg-surface/80 shadow-lg shadow-black/20 backdrop-blur-sm transition hover:border-accent hover:shadow-black/35"
+    :class="{ 'video-grid-card--compact': compact }"
   >
     <div class="relative aspect-video w-full overflow-hidden bg-black/40">
       <img
@@ -19,8 +20,8 @@
       <div class="pointer-events-none absolute inset-0 ring-1 ring-inset ring-sky-200/20" />
     </div>
 
-    <div class="p-3">
-      <p class="title-2l text-sm font-semibold text-yellow-500">
+    <div class="p-3" :class="{ 'p-2': compact }">
+      <p class="title-2l text-sm font-semibold text-yellow-500" :class="{ 'text-xs': compact }">
         {{ video.title }}
       </p>
       <p class="mt-1 text-xs text-sky-200">{{ formatDate(video.publishedAt) }}</p>
@@ -36,8 +37,10 @@ withDefaults(
     video: YouTubeVideo
     /** Set 'high' for the first card (LCP) to improve Lighthouse. */
     fetchPriority?: 'high' | 'low' | undefined
+    /** Smaller card for dense grids (e.g. homepage). */
+    compact?: boolean
   }>(),
-  { fetchPriority: undefined }
+  { fetchPriority: undefined, compact: false }
 )
 
 const formatDate = (iso: string) => {
@@ -54,5 +57,10 @@ const formatDate = (iso: string) => {
   line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.video-grid-card--compact {
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
 }
 </style>

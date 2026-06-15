@@ -152,7 +152,7 @@
           </div>
         </div>
 
-        <div class="mt-[5px] flex w-full items-stretch gap-1.5">
+        <div v-if="!props.hideBottomActions" class="mt-[5px] flex w-full items-stretch gap-1.5">
           <!-- Boutons de vote (désactivés pour les builds de l'utilisateur) -->
           <!-- Bouton Favori -->
           <button
@@ -569,6 +569,10 @@ interface Props {
   customBuilds?: Build[]
   showUserActions?: boolean
   showFavoriteToggle?: boolean
+  /** Hide votes, share and companion actions under the card (e.g. homepage preview). */
+  hideBottomActions?: boolean
+  /** Show every custom build without discovery pagination. */
+  showAllCustomBuilds?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -576,6 +580,8 @@ const props = withDefaults(defineProps<Props>(), {
   customBuilds: undefined,
   showUserActions: false,
   showFavoriteToggle: false,
+  hideBottomActions: false,
+  showAllCustomBuilds: false,
 })
 
 defineEmits<{
@@ -595,6 +601,7 @@ const isCompanionAppEmbed = computed(
 // Filtrer les customBuilds avec les mêmes critères que discoveryStore
 const filteredCustomBuilds = computed(() => {
   if (!props.customBuilds) return null
+  if (props.showAllCustomBuilds) return [...props.customBuilds]
 
   let results = [...props.customBuilds]
   // Search by build name, variant titles, champion name or author
@@ -683,7 +690,7 @@ const customTotalPages = computed(() => {
 const customPaginatedBuilds = computed(() => {
   const list = filteredCustomBuilds.value
   if (!list) return []
-  if (discoveryStore.pageSize === 'all') return list
+  if (props.showAllCustomBuilds || discoveryStore.pageSize === 'all') return list
   const start = (discoveryStore.currentPage - 1) * discoveryStore.pageSize
   return list.slice(start, start + discoveryStore.pageSize)
 })
@@ -694,7 +701,9 @@ const builds = computed(() =>
 const totalPagesForPagination = computed(() =>
   props.customBuilds ? customTotalPages.value : discoveryStore.totalPages
 )
-const showPagination = computed(() => totalPagesForPagination.value > 1)
+const showPagination = computed(
+  () => !props.showAllCustomBuilds && totalPagesForPagination.value > 1
+)
 
 // Clamp current page when custom list has fewer pages (e.g. switch tab or filter)
 watch(
@@ -761,9 +770,8 @@ async function sendBuildToCompanion(build: Build) {
       body: JSON.stringify({ build: serialized }),
     })
     if (res.ok) return
-    console.warn('[companion-import] bridge HTTP', res.status, await res.text())
-  } catch (error) {
-    console.warn('[companion-import] bridge unreachable', error)
+  } catch {
+    // Bridge unavailable — fall through to postMessage
   }
 
   // 2) postMessage fallback (browser / same-origin embeds)
@@ -775,8 +783,8 @@ async function sendBuildToCompanion(build: Build) {
       },
       '*'
     )
-  } catch (error) {
-    console.error('[companion-import] postMessage failed', error)
+  } catch {
+    // postMessage not available in this context
   }
 }
 
@@ -959,7 +967,6 @@ const copyBuildImage = async (build: Build) => {
       shareImageOptionsForBuild(build.id, false)
     )
     if (!blob) {
-      console.warn('[BuildGrid] fetch build card png returned null', build.id)
       showShareToast(t('buildDiscovery.imageCopyError'), 'error')
       return
     }
@@ -986,7 +993,6 @@ async function copyBuildImageWithAuthorAndDescription(build: Build) {
       shareImageOptionsForBuild(build.id, true)
     )
     if (!blob) {
-      console.warn('[BuildGrid] fetch build card png (meta) returned null', build.id)
       showShareToast(t('buildDiscovery.imageCopyError'), 'error')
       return
     }

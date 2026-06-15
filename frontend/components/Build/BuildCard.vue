@@ -2554,9 +2554,15 @@ const selectedChampion = computed(() => {
 })
 
 watch(
-  () => [selectedChampion.value?.id, riotLocale.value] as const,
+  () =>
+    [
+      selectedChampion.value?.id,
+      riotLocale.value,
+      championsStore.status,
+      championsStore.champions.length,
+    ] as const,
   ([championId, lang]) => {
-    if (!championId) return
+    if (!championId || championsStore.champions.length === 0) return
     championsStore.loadChampionDetails(championId, lang).catch(() => undefined)
   },
   { immediate: true }

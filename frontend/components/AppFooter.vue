@@ -65,82 +65,14 @@
               <Icon name="mdi:close" size="20" />
             </button>
           </div>
-          <form class="space-y-4 p-4" @submit.prevent="submitContact">
-            <div>
-              <label for="contact-type" class="mb-1 block text-sm font-medium text-text">
-                {{ t('contactModal.type') }}
-              </label>
-              <select
-                id="contact-type"
-                v-model="contactForm.type"
-                required
-                class="w-full rounded border border-primary/50 bg-background px-3 py-2 text-text"
-              >
-                <option value="suggestion">{{ t('contactModal.types.suggestion') }}</option>
-                <option value="bug">{{ t('contactModal.types.bug') }}</option>
-                <option value="reclamation">{{ t('contactModal.types.reclamation') }}</option>
-                <option value="autre">{{ t('contactModal.types.autre') }}</option>
-              </select>
-            </div>
-            <div>
-              <label for="contact-name" class="mb-1 block text-sm font-medium text-text">
-                {{ t('contactModal.name') }}
-              </label>
-              <input
-                id="contact-name"
-                v-model="contactForm.name"
-                type="text"
-                required
-                maxlength="256"
-                class="w-full rounded border border-primary/50 bg-background px-3 py-2 text-text"
-              />
-            </div>
-            <div>
-              <label for="contact-contact" class="mb-1 block text-sm font-medium text-text">
-                {{ t('contactModal.contact') }}
-              </label>
-              <input
-                id="contact-contact"
-                v-model="contactForm.contact"
-                type="text"
-                maxlength="256"
-                :placeholder="t('contactModal.contactPlaceholder')"
-                class="w-full rounded border border-primary/50 bg-background px-3 py-2 text-text placeholder:text-text/50"
-              />
-            </div>
-            <div>
-              <label for="contact-message" class="mb-1 block text-sm font-medium text-text">
-                {{ t('contactModal.message') }}
-              </label>
-              <textarea
-                id="contact-message"
-                v-model="contactForm.message"
-                required
-                rows="4"
-                maxlength="5000"
-                class="w-full resize-y rounded border border-primary/50 bg-background px-3 py-2 text-text"
-              />
-            </div>
-            <p v-if="contactFeedback" :class="contactError ? 'text-error' : 'text-green-600'">
-              {{ contactFeedback }}
-            </p>
-            <div class="flex justify-end gap-2">
-              <button
-                type="button"
-                class="rounded border border-primary/50 px-4 py-2 text-sm text-text transition-colors hover:bg-primary/20"
-                @click="closeContactModal"
-              >
-                {{ t('contactModal.close') }}
-              </button>
-              <button
-                type="submit"
-                class="rounded bg-accent px-4 py-2 text-sm text-white transition-colors hover:opacity-90 disabled:opacity-50"
-                :disabled="contactSending"
-              >
-                {{ contactSending ? '…' : t('contactModal.submit') }}
-              </button>
-            </div>
-          </form>
+          <div class="p-4">
+            <ContactForm
+              id-prefix="footer-contact-"
+              show-cancel
+              @cancel="closeContactModal"
+              @success="onContactSuccess"
+            />
+          </div>
         </div>
       </div>
     </Teleport>
@@ -148,7 +80,7 @@
 </template>
 
 <script setup lang="ts">
-import { apiUrl } from '~/utils/apiUrl'
+import ContactForm from '~/components/Contact/ContactForm.vue'
 import { useAdminAuth } from '~/composables/useAdminAuth'
 
 const { t } = useI18n()
@@ -157,52 +89,17 @@ const localePath = useLocalePath()
 const { isLoggedIn: adminMode } = useAdminAuth()
 
 const contactModalOpen = ref(false)
-const contactSending = ref(false)
-const contactFeedback = ref('')
-const contactError = ref(false)
-const contactForm = ref({
-  type: 'suggestion' as 'suggestion' | 'bug' | 'reclamation' | 'autre',
-  name: '',
-  contact: '',
-  message: '',
-})
 
 function openContactModal() {
   contactModalOpen.value = true
-  contactFeedback.value = ''
-  contactError.value = false
 }
 
 function closeContactModal() {
   contactModalOpen.value = false
 }
 
-async function submitContact() {
-  contactSending.value = true
-  contactFeedback.value = ''
-  contactError.value = false
-  try {
-    const res = await fetch(apiUrl('/api/contact'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(contactForm.value),
-    })
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      contactFeedback.value = (data.error as string) || t('contactModal.error')
-      contactError.value = true
-      return
-    }
-    contactFeedback.value = t('contactModal.success')
-    contactError.value = false
-    contactForm.value = { type: 'suggestion', name: '', contact: '', message: '' }
-    setTimeout(() => closeContactModal(), 1500)
-  } catch {
-    contactFeedback.value = t('contactModal.error')
-    contactError.value = true
-  } finally {
-    contactSending.value = false
-  }
+function onContactSuccess() {
+  setTimeout(() => closeContactModal(), 1500)
 }
 </script>
 

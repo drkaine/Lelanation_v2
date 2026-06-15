@@ -38,6 +38,13 @@ export default defineNuxtConfig({
   // SSR enabled by default in Nuxt 3 for MPA support
   // File-based routing via pages/ directory automatically creates routes
   ssr: true,
+  experimental: {
+    defaults: {
+      nuxtLink: {
+        prefetchOn: { visibility: false, interaction: true },
+      },
+    },
+  },
   app: {
     head: {
       title: 'Lelanation - Builds League of Legends',
@@ -187,6 +194,10 @@ export default defineNuxtConfig({
       crawlLinks: true,
       // Champion stat pages are SWR at runtime; crawling them from tier-list blows up build time.
       ignore: [
+        // Homepage is SWR SSR only — prerendered index.html goes stale vs hashed /_nuxt chunks.
+        '/',
+        '/en',
+        '/fr',
         '/statistics/champion/**',
         '/en/statistics/champion/**',
         '/fr/statistics/champion/**',

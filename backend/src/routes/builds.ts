@@ -103,6 +103,51 @@ router.post('/', async (req, res) => {
 })
 
 /**
+ * Latest public builds by creation date.
+ * GET /api/builds/recent?limit=6
+ */
+router.get('/recent', async (req, res) => {
+  try {
+    const limit = Math.min(12, Math.max(1, parseInt(String(req.query.limit ?? '6'), 10) || 6))
+    const { promises: fs } = await import('fs')
+    const files = await fs.readdir(buildsDir)
+    const buildFiles = files.filter(file => BUILD_FILE_REGEX.test(file))
+
+    const builds = (
+      await Promise.all(
+        buildFiles.map(async file => {
+          const filePath = join(buildsDir, file)
+          const readResult = await FileManager.readJson<
+            BuildPayload & { id?: string; createdAt?: string; visibility?: string }
+          >(filePath)
+          if (readResult.isErr()) return null
+          const build = readResult.unwrap()
+          if (build.visibility === 'private') return null
+          const id = String(build.id ?? file.replace(/\.json$/i, ''))
+          return {
+            build,
+            id,
+            createdAt: build.createdAt ?? '',
+          }
+        })
+      )
+    ).filter((row): row is NonNullable<typeof row> => row !== null)
+
+    builds.sort(
+      (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    )
+
+    res.set('Cache-Control', 'public, max-age=300')
+    return res.json({
+      totalBuilds: buildFiles.length,
+      builds: builds.slice(0, limit).map(row => row.build),
+    })
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to load recent builds' })
+  }
+})
+
+/**
  * Top public builds by engagement views (fallback: most recent).
  * GET /api/builds/popular?limit=6
  */

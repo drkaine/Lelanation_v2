@@ -17,7 +17,7 @@ export type SeoCatalogEntry = {
 const BUILD_FILE_REGEX = /^[0-9a-f-]{36}\.json$/i
 
 const STATIC_ROUTES: string[] = [
-  '/',
+  // Homepage: SWR at runtime only (see nuxt.config routeRules '/') — not prerendered.
   '/builds/discover',
   '/builds/my-builds',
   '/builds/favoris',
@@ -51,7 +51,12 @@ export function readCurrentGameVersion(frontendRoot: string): string {
   }
 }
 
-type ChampionIndexRow = { id?: string; key?: number; name?: string }
+type ChampionIndexRow = {
+  id?: string
+  key?: number
+  name?: string
+  image?: { full?: string }
+}
 
 export function listChampionsFromIndex(frontendRoot: string, version: string): ChampionIndexRow[] {
   const indexPath = join(frontendRoot, `public/data/game/${version}/fr_FR/champions/index.json`)

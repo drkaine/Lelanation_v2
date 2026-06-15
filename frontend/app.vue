@@ -6,127 +6,121 @@
     >
       Skip to content
     </a>
-    <AppNavbar v-if="showStandardAppChrome && !isBuildCardRenderRoute" />
-    <div
-      v-show="showStandardAppChrome && !isBuildCardRenderRoute && !commandBarHiddenByScroll"
-      class="command-bar-fixed-wrapper"
-    >
-      <button
-        v-show="!isHomeRoute && commandsCollapsed"
-        type="button"
-        class="command-collapse-floating"
-        title="Afficher les commandes"
-        :aria-expanded="false"
-        @click="commandsCollapsed = false"
-      >
-        ▾
-      </button>
-      <div
-        v-show="isHomeRoute || !commandsCollapsed"
-        ref="commandBarRef"
-        class="command-bar-overlay"
-      >
-        <div
-          class="command-bar"
-          :class="{ 'command-bar-collapsed': !isHomeRoute && commandsCollapsed }"
+    <header v-if="showStandardAppChrome && !isBuildCardRenderRoute" class="app-chrome-sticky">
+      <AppNavbar />
+      <div v-show="isHomeRoute || !commandBarHiddenByScroll" class="command-bar-sticky-row">
+        <button
+          v-show="!isHomeRoute && commandsCollapsed"
+          type="button"
+          class="command-collapse-floating"
+          title="Afficher les commandes"
+          :aria-expanded="false"
+          @click="commandsCollapsed = false"
         >
-          <div v-show="!commandsCollapsed" class="command-bar-content">
-            <label class="command-toggle">
-              <input
-                type="checkbox"
-                :checked="tooltipsDisabled"
-                class="command-toggle-checkbox"
-                @change="toggleTooltipsDisabled()"
-              />
-              <span class="command-toggle-track" :class="{ active: tooltipsDisabled }">
-                <span class="command-toggle-thumb" />
-              </span>
-              <span>{{ t('nav.disableTooltips') }}</span>
-            </label>
+          ▾
+        </button>
+        <div
+          v-show="isHomeRoute || !commandsCollapsed"
+          ref="commandBarRef"
+          class="command-bar-overlay"
+        >
+          <div
+            class="command-bar"
+            :class="{ 'command-bar-collapsed': !isHomeRoute && commandsCollapsed }"
+          >
+            <div v-show="!commandsCollapsed" class="command-bar-content">
+              <label class="command-toggle">
+                <input
+                  type="checkbox"
+                  :checked="tooltipsDisabled"
+                  class="command-toggle-checkbox"
+                  @change="toggleTooltipsDisabled()"
+                />
+                <span class="command-toggle-track" :class="{ active: tooltipsDisabled }">
+                  <span class="command-toggle-thumb" />
+                </span>
+                <span>{{ t('nav.disableTooltips') }}</span>
+              </label>
+              <button
+                type="button"
+                class="command-toggle command-toggle-button"
+                :aria-pressed="isStreamerMode"
+                @click="toggleStreamerMode()"
+              >
+                <span class="command-toggle-track" :class="{ active: isStreamerMode }">
+                  <span class="command-toggle-thumb" />
+                </span>
+                <span>{{ t('footer.presentationMode') }}</span>
+              </button>
+              <button
+                type="button"
+                class="command-toggle command-toggle-button"
+                :aria-pressed="isPresentationZoom"
+                @click="togglePresentationZoom()"
+              >
+                <span class="command-toggle-track" :class="{ active: isPresentationZoom }">
+                  <span class="command-toggle-thumb" />
+                </span>
+                <span>{{ t('commandBar.presentationZoom') }}</span>
+              </button>
+              <button
+                type="button"
+                class="command-toggle command-toggle-button"
+                :aria-pressed="championSplashEnabled"
+                @click="toggleChampionSplashEnabled()"
+              >
+                <span class="command-toggle-track" :class="{ active: championSplashEnabled }">
+                  <span class="command-toggle-thumb" />
+                </span>
+                <span>{{ t('commandBar.championSplash') }}</span>
+              </button>
+              <button
+                type="button"
+                class="command-toggle command-toggle-button"
+                :aria-pressed="simplifiedStatsEnabled"
+                @click="toggleSimplifiedStatsEnabled()"
+              >
+                <span class="command-toggle-track" :class="{ active: simplifiedStatsEnabled }">
+                  <span class="command-toggle-thumb" />
+                </span>
+                <span>{{ t('commandBar.simplifiedStats') }}</span>
+              </button>
+              <button
+                type="button"
+                class="command-toggle command-toggle-button"
+                :aria-pressed="statsSplitTransformEnabled"
+                @click="toggleStatsSplitTransformEnabled()"
+              >
+                <span class="command-toggle-track" :class="{ active: statsSplitTransformEnabled }">
+                  <span class="command-toggle-thumb" />
+                </span>
+                <span>{{ t('commandBar.splitTransformStats') }}</span>
+              </button>
+              <button
+                type="button"
+                class="command-help-button"
+                :title="t('commandBar.shortcutsModalTitle')"
+                :aria-label="t('commandBar.openShortcutsModal')"
+                :aria-expanded="commandsModalOpen"
+                @click="openCommandsModal"
+              >
+                ?
+              </button>
+            </div>
             <button
+              v-if="!isHomeRoute"
               type="button"
-              class="command-toggle command-toggle-button"
-              :aria-pressed="isStreamerMode"
-              @click="toggleStreamerMode()"
+              class="command-collapse-button"
+              :title="commandsCollapsed ? 'Afficher les commandes' : 'Masquer les commandes'"
+              :aria-expanded="!commandsCollapsed"
+              @click="commandsCollapsed = !commandsCollapsed"
             >
-              <span class="command-toggle-track" :class="{ active: isStreamerMode }">
-                <span class="command-toggle-thumb" />
-              </span>
-              <span>{{ t('footer.presentationMode') }}</span>
-            </button>
-            <button
-              type="button"
-              class="command-toggle command-toggle-button"
-              :aria-pressed="isPresentationZoom"
-              @click="togglePresentationZoom()"
-            >
-              <span class="command-toggle-track" :class="{ active: isPresentationZoom }">
-                <span class="command-toggle-thumb" />
-              </span>
-              <span>{{ t('commandBar.presentationZoom') }}</span>
-            </button>
-            <button
-              type="button"
-              class="command-toggle command-toggle-button"
-              :aria-pressed="championSplashEnabled"
-              @click="toggleChampionSplashEnabled()"
-            >
-              <span class="command-toggle-track" :class="{ active: championSplashEnabled }">
-                <span class="command-toggle-thumb" />
-              </span>
-              <span>{{ t('commandBar.championSplash') }}</span>
-            </button>
-            <button
-              type="button"
-              class="command-toggle command-toggle-button"
-              :aria-pressed="simplifiedStatsEnabled"
-              @click="toggleSimplifiedStatsEnabled()"
-            >
-              <span class="command-toggle-track" :class="{ active: simplifiedStatsEnabled }">
-                <span class="command-toggle-thumb" />
-              </span>
-              <span>{{ t('commandBar.simplifiedStats') }}</span>
-            </button>
-            <button
-              type="button"
-              class="command-toggle command-toggle-button"
-              :aria-pressed="statsSplitTransformEnabled"
-              @click="toggleStatsSplitTransformEnabled()"
-            >
-              <span class="command-toggle-track" :class="{ active: statsSplitTransformEnabled }">
-                <span class="command-toggle-thumb" />
-              </span>
-              <span>{{ t('commandBar.splitTransformStats') }}</span>
-            </button>
-            <button
-              type="button"
-              class="command-help-button"
-              :title="t('commandBar.shortcutsModalTitle')"
-              :aria-label="t('commandBar.openShortcutsModal')"
-              :aria-expanded="commandsModalOpen"
-              @click="openCommandsModal"
-            >
-              ?
+              {{ commandsCollapsed ? '▾' : '▴' }}
             </button>
           </div>
-          <button
-            v-if="!isHomeRoute"
-            type="button"
-            class="command-collapse-button"
-            :title="commandsCollapsed ? 'Afficher les commandes' : 'Masquer les commandes'"
-            :aria-expanded="!commandsCollapsed"
-            @click="commandsCollapsed = !commandsCollapsed"
-          >
-            {{ commandsCollapsed ? '▾' : '▴' }}
-          </button>
         </div>
       </div>
-    </div>
-    <div
-      v-show="showStandardAppChrome && !isBuildCardRenderRoute"
-      class="command-bar-spacer"
-      aria-hidden="true"
-    ></div>
+    </header>
     <div
       v-if="showStreamerPanels"
       class="streamer-panel streamer-panel-top"
@@ -460,6 +454,10 @@ const onDocumentPointerDown = (event: MouseEvent) => {
 
 function onWindowScroll() {
   if (!import.meta.client) return
+  if (isHomeRoute.value) {
+    commandBarHiddenByScroll.value = false
+    return
+  }
   commandBarHiddenByScroll.value = window.scrollY > COMMAND_BAR_SCROLL_THRESHOLD
 }
 
@@ -468,8 +466,7 @@ watch(
   isHome => {
     if (isHome) {
       commandsCollapsed.value = false
-      if (import.meta.client) onWindowScroll()
-      else commandBarHiddenByScroll.value = false
+      commandBarHiddenByScroll.value = false
       return
     }
     commandsCollapsed.value = true
@@ -602,8 +599,7 @@ if (import.meta.client) {
 }
 
 @media (max-width: 768px) {
-  .command-bar-fixed-wrapper,
-  .command-bar-spacer {
+  .app-chrome-sticky .command-bar-sticky-row {
     display: none !important;
   }
 
@@ -613,32 +609,29 @@ if (import.meta.client) {
   }
 }
 
-.command-bar-fixed-wrapper {
-  position: fixed;
-  top: 50px;
-  left: 0;
-  right: 0;
-  z-index: 55;
+.app-chrome-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 58;
+  background: #08101f;
+}
+
+.app-chrome-sticky :deep(.header) {
+  position: static;
+  top: auto;
+  margin-bottom: 0;
+  z-index: auto;
+}
+
+.command-bar-sticky-row {
+  position: relative;
   min-height: 24px;
-  pointer-events: none;
-}
-
-.command-bar-fixed-wrapper > * {
-  pointer-events: auto;
-}
-
-.command-bar-spacer {
-  height: 0;
-  flex-shrink: 0;
 }
 
 .command-bar-overlay {
-  left: 0;
-  right: 0;
   display: flex;
   justify-content: flex-end;
   padding: 0 6px;
-  pointer-events: none;
 }
 
 .command-bar {
@@ -653,7 +646,6 @@ if (import.meta.client) {
   font-size: 11px;
   color: rgb(var(--rgb-text) / 0.6);
   backdrop-filter: blur(10px);
-  pointer-events: auto;
 }
 
 .command-bar.command-bar-collapsed {
@@ -727,10 +719,10 @@ if (import.meta.client) {
 
 .command-collapse-floating {
   position: absolute;
-  top: 0;
+  top: 2px;
   right: 6px;
   left: auto;
-  z-index: 56;
+  z-index: 1;
   width: 24px;
   height: 24px;
   display: inline-flex;

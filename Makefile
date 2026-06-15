@@ -1,5 +1,5 @@
 .PHONY: help setup dev dev-backend dev-frontend build build-all build-backend build-frontend build-companion build-companion-exe companion-tag exe-windows \
-	pm2-status pm2-start pm2-restart pm2-restart-no-poller pm2-stop pm2-delete pm2-logs pm2-logs-backend pm2-logs-poller pm2-restart-poller pm2-logs-frontend \
+	pm2-status pm2-start pm2-restart pm2-restart-no-poller pm2-restart-frontend pm2-stop pm2-delete pm2-logs pm2-logs-backend pm2-logs-poller pm2-restart-poller pm2-logs-frontend \
 	deploy sync-data typecheck typecheck-frontend typecheck-companion lint lint-frontend format format-frontend \
 	test test-packages clean \
 	docker-db-up docker-db-down docker-db-restart docker-db-wait-healthy docker-db-verify wait-redis \
@@ -153,7 +153,13 @@ docker-db-verify:
 	@echo "docker-db-verify: OK"
 
 build-frontend:
+	rm -rf "$(FRONTEND_DIR)/.output" "$(FRONTEND_DIR)/node_modules/.cache/nuxt"
 	$(NPM) --prefix "$(FRONTEND_DIR)" run build
+	rm -f "$(FRONTEND_DIR)/.output/public/index.html"
+	@$(MAKE) pm2-restart-frontend
+
+pm2-restart-frontend:
+	$(PM2) restart lelanation-frontend --update-env
 
 build-companion:
 	$(NPM) --prefix "$(COMPANION_APP_DIR)" run build
