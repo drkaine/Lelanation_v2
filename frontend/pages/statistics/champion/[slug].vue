@@ -1999,6 +1999,9 @@ const MATCHUP_LANE_PROFILE_DIMENSION_KEYS = [
   'level',
   'cs',
   'vision',
+  'items',
+  'objectives',
+  'pressure',
 ] as const satisfies readonly MatchupsExtDominanceKey[]
 
 const matchupLaneProfileFilter = ref<'ALL' | 'balanced' | MatchupsExtDominanceKey>('ALL')

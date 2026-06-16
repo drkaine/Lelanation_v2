@@ -1263,7 +1263,10 @@
       "kills": "Kills",
       "level": "Level",
       "cs": "CS",
-      "vision": "Vision"
+      "vision": "Vision",
+      "items": "Items",
+      "objectives": "Objectives",
+      "pressure": "Pressure"
     },
     "championMatchupSignalLevel": {
       "bigAdvantage": "big advantage",

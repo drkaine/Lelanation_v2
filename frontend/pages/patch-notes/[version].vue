@@ -1,5 +1,13 @@
 <template>
-  <div class="min-h-screen overflow-x-hidden bg-background text-text">
+  <div
+    :key="`patch-notes-page-${routeVersion}`"
+    :class="[
+      'bg-background text-text',
+      summaryLayoutLocked
+        ? 'flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden'
+        : 'min-h-screen overflow-x-hidden',
+    ]"
+  >
     <!-- Header -->
     <div class="border-b border-primary/20 bg-surface/30 px-4 py-3">
       <div class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-3 gap-y-2">
@@ -25,17 +33,17 @@
           />
         </div>
 
-        <div v-if="availablePatches.length > 0" class="shrink-0">
+        <div v-if="patchOptions.length > 0" class="shrink-0">
           <label class="sr-only" for="patch-version-select">{{
             t('patchNotesPage.selectPatch')
           }}</label>
           <select
             id="patch-version-select"
-            :value="selectedVersion ?? currentPatchVersion"
+            :value="routeVersion"
             class="rounded-lg border border-primary/30 bg-background px-3 py-1.5 text-sm text-text focus:border-accent focus:outline-none"
             @change="onPatchChange"
           >
-            <option v-for="patch in availablePatches" :key="patch.version" :value="patch.version">
+            <option v-for="patch in patchOptions" :key="patch.version" :value="patch.version">
               {{ formatPatchOption(patch.version) }}
             </option>
           </select>
@@ -88,8 +96,11 @@
 
     <!-- Content - reduced padding for more cards per row -->
     <div
-      class="mx-auto max-w-full px-2 md:px-4 lg:px-6"
-      :class="activeTab === 'summary' && !isSearchActive ? 'py-1' : 'py-4'"
+      :class="[
+        'mx-auto max-w-full px-2 md:px-4 lg:px-6',
+        summaryLayoutLocked ? 'flex min-h-0 flex-1 flex-col' : '',
+        activeTab === 'summary' && !isSearchActive ? 'py-1' : 'py-4',
+      ]"
     >
       <!-- Loading State -->
       <div
@@ -120,12 +131,11 @@
       <!-- Summary Tab Content - fit viewport without scroll -->
       <div
         v-else-if="activeTab === 'summary' && !isSearchActive"
-        class="flex flex-col items-center"
+        class="flex min-h-0 flex-1 flex-col items-center"
       >
         <div
           v-if="summaryImageUrl"
-          class="flex w-full cursor-pointer flex-col items-center justify-center"
-          style="height: calc(100dvh - 14rem)"
+          class="flex min-h-0 w-full flex-1 cursor-pointer flex-col items-center justify-center"
           @click="isLightboxOpen = true"
         >
           <img
@@ -149,7 +159,7 @@
       >
         <PatchEntityCard
           v-for="(entity, idx) in filteredEntities"
-          :key="entity.patchSlug || entity.name || idx"
+          :key="`${routeVersion}-${entity.patchSlug || entity.name || idx}`"
           :entity="entity"
         />
       </div>
@@ -176,7 +186,14 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
-import { usePatchNotesStore, type PatchEntity } from '~/stores/PatchNotesStore'
+import {
+  usePatchNotesStore,
+  normalizePatchNotesVersion,
+  resolveSummaryImageUrl,
+  type PatchData,
+  type PatchEntity,
+  type PatchIndexEntry,
+} from '~/stores/PatchNotesStore'
 import PatchEntityCard from '~/components/PatchEntityCard.vue'
 import PatchImageLightbox from '~/components/PatchImageLightbox.vue'
 import { articleJsonLd } from '~/utils/jsonLd'
@@ -184,6 +201,7 @@ import { useJsonLdHead } from '~/composables/useJsonLdHead'
 import { useSiteUrl } from '~/composables/useSiteUrl'
 
 definePageMeta({
+  key: route => String(route.params.version ?? ''),
   validate(route) {
     const version = String(route.params.version ?? '')
     return version.length > 0 && !version.startsWith('_')
@@ -194,28 +212,34 @@ const { t, locale } = useI18n()
 const route = useRoute()
 const localePath = useLocalePath()
 const patchNotesStore = usePatchNotesStore()
+const requestFetch = useRequestFetch()
 const runtimeConfig = useRuntimeConfig()
 const siteUrl = useSiteUrl()
 const fallbackGameVersion = String(runtimeConfig.public.fallbackGameVersion ?? '16.12')
 
-// Use storeToRefs for reactive state extraction
-const {
-  status,
-  error,
-  currentPatch,
-  selectedVersion,
-  latestVersion,
-  availablePatches,
-  getSummaryImagePath,
-  champions,
-  items,
-  runes,
-  systems,
-  aram,
-  aramChaos,
-  arena,
-  bugfix,
-} = storeToRefs(patchNotesStore)
+const { latestVersion, availablePatches } = storeToRefs(patchNotesStore)
+
+function localeToPatchLocale(loc: string): string {
+  return loc === 'fr' ? 'fr-FR' : 'en-GB'
+}
+
+async function fetchPatchJsonForPage(version: string, loc: string): Promise<PatchData | null> {
+  const patchLocale = localeToPatchLocale(loc)
+  const primaryUrl = `/data/patch-notes/${version}/patch-${version}-${patchLocale}.json`
+  try {
+    return await requestFetch<PatchData>(primaryUrl, { cache: 'no-cache' })
+  } catch {
+    if (patchLocale === 'en-GB') return null
+    try {
+      return await requestFetch<PatchData>(
+        `/data/patch-notes/${version}/patch-${version}-en-GB.json`,
+        { cache: 'no-cache' }
+      )
+    } catch {
+      return null
+    }
+  }
+}
 
 type PatchNotesTabId =
   | 'summary'
@@ -228,6 +252,59 @@ type PatchNotesTabId =
   | 'arena'
   | 'bugfix'
 
+const routeVersion = computed(() =>
+  normalizePatchNotesVersion(String(route.params.version ?? '').trim())
+)
+
+await useAsyncData(
+  () => `patch-notes-index-${locale.value}`,
+  async () => {
+    await patchNotesStore.loadIndex(false, requestFetch)
+    return patchNotesStore.index?.patches.length ?? 0
+  },
+  { watch: [locale] }
+)
+
+const {
+  data: patchData,
+  status: patchFetchStatus,
+  error: patchFetchError,
+  refresh: refreshPatchData,
+} = await useAsyncData(
+  () => `patch-notes-page-${locale.value}-${String(route.params.version ?? '')}`,
+  async () => {
+    const version = normalizePatchNotesVersion(String(route.params.version ?? '').trim())
+    if (!version) return null
+    return await fetchPatchJsonForPage(version, locale.value)
+  },
+  {
+    watch: [locale, () => route.params.version],
+    dedupe: 'cancel',
+  }
+)
+
+const status = computed<'loading' | 'success' | 'error'>(() => {
+  if (patchFetchStatus.value === 'pending') return 'loading'
+  if (patchFetchStatus.value === 'error') return 'error'
+  if (!patchData.value) return 'error'
+  return 'success'
+})
+
+const error = computed(() => patchFetchError.value?.message ?? null)
+
+function entitiesForCategory(category: PatchEntity['category']): PatchEntity[] {
+  return patchData.value?.entities?.filter(entity => entity.category === category) ?? []
+}
+
+const champions = computed(() => entitiesForCategory('champion'))
+const items = computed(() => entitiesForCategory('item'))
+const runes = computed(() => entitiesForCategory('rune'))
+const systems = computed(() => entitiesForCategory('system'))
+const aram = computed(() => entitiesForCategory('aram'))
+const aramChaos = computed(() => entitiesForCategory('aram-chaos'))
+const arena = computed(() => entitiesForCategory('arena'))
+const bugfix = computed(() => entitiesForCategory('bugfix'))
+
 const activeTab = ref<PatchNotesTabId>('summary')
 const isLightboxOpen = ref(false)
 const searchQuery = ref('')
@@ -236,10 +313,27 @@ useHorizontalScrollContainer(tabsNavEl)
 
 const isSearchActive = computed(() => searchQuery.value.trim().length > 0)
 
-const currentPatchVersion = computed(() => currentPatch.value?.patchVersion ?? '')
-const currentPatchDate = computed(() => currentPatch.value?.scrapedAt)
+const summaryLayoutLocked = computed(
+  () =>
+    activeTab.value === 'summary' &&
+    !isSearchActive.value &&
+    status.value !== 'loading' &&
+    status.value !== 'error'
+)
 
-const summaryImageUrl = computed(() => getSummaryImagePath.value)
+const currentPatchVersion = computed(() => patchData.value?.patchVersion ?? routeVersion.value)
+const currentPatchDate = computed(() => patchData.value?.scrapedAt)
+
+const summaryImageUrl = computed(() => {
+  const patch = patchData.value
+  if (!patch?.patchVersion) return null
+  return resolveSummaryImageUrl(
+    patch.patchVersion,
+    patch.locale,
+    patchNotesStore.index,
+    patch.summaryImage
+  )
+})
 
 const tabs = computed(() => [
   {
@@ -345,7 +439,7 @@ const filteredEntities = computed<PatchEntity[]>(() => {
   const query = normalizeSearch(searchQuery.value)
   if (!query) return tabEntities.value
 
-  const entities = currentPatch.value?.entities ?? []
+  const entities = patchData.value?.entities ?? []
   return entities.filter(entity => {
     const name = entity.name?.trim()
     if (!name) return false
@@ -371,21 +465,29 @@ function formatPatchOption(version: string): string {
   return version
 }
 
-const routeVersion = computed(() => String(route.params.version ?? '').trim())
-
-function retryLoad() {
-  const version = routeVersion.value || selectedVersion.value || latestVersion.value
-  if (version) {
-    patchNotesStore.loadPatch(version, locale.value)
-  } else {
-    patchNotesStore.loadLatestPatch(locale.value)
-  }
+if (import.meta.client) {
+  watch(
+    () => route.params.version,
+    raw => {
+      const normalized = normalizePatchNotesVersion(String(raw ?? '').trim())
+      if (raw && normalized && String(raw) !== normalized) {
+        navigateTo(localePath(`/patch-notes/${normalized}`), { replace: true }).catch(() => {})
+      }
+    },
+    { immediate: true }
+  )
 }
 
-function onPatchChange(event: Event) {
+function retryLoad() {
+  refreshPatchData()
+}
+
+async function onPatchChange(event: Event) {
   const version = (event.target as HTMLSelectElement).value
+  if (!version || version === routeVersion.value) return
   searchQuery.value = ''
-  navigateTo(localePath(`/patch-notes/${version}`))
+  activeTab.value = 'summary'
+  await navigateTo(localePath(`/patch-notes/${version}`))
 }
 
 function scrollActiveTabIntoView(behavior: ScrollBehavior = 'smooth'): void {
@@ -402,34 +504,7 @@ function selectTab(tabId: PatchNotesTabId): void {
   requestAnimationFrame(() => scrollActiveTabIntoView())
 }
 
-// Load patch on mount
-await useAsyncData(
-  () => `patch-notes-${locale.value}-${routeVersion.value}`,
-  async () => {
-    await patchNotesStore.loadIndex()
-    const version = routeVersion.value || patchNotesStore.latestVersion
-    if (!version) return ''
-    await patchNotesStore.loadPatch(version, locale.value)
-    patchNotesStore.selectPatch(version, locale.value)
-    return version
-  },
-  { watch: [locale, routeVersion] }
-)
-
-onMounted(() => {
-  if (!currentPatch.value && routeVersion.value) {
-    patchNotesStore.loadPatch(routeVersion.value, locale.value)
-  }
-})
-
-// Watch locale changes
-watch(locale, () => {
-  searchQuery.value = ''
-  const version = routeVersion.value || latestVersion.value
-  if (version) {
-    patchNotesStore.loadPatch(version, locale.value)
-  }
-})
+const patchOptions = computed<PatchIndexEntry[]>(() => availablePatches.value)
 
 watch(visibleTabs, tabs => {
   if (tabs.length === 0) return
@@ -443,9 +518,7 @@ watch(activeTab, () => {
   requestAnimationFrame(() => scrollActiveTabIntoView('auto'))
 })
 
-const seoPatchVersion = computed(
-  () => routeVersion.value || currentPatchVersion.value || latestVersion.value || ''
-)
+const seoPatchVersion = computed(() => routeVersion.value || currentPatchVersion.value || '')
 
 const patchNotesCanonicalPath = computed(() =>
   seoPatchVersion.value ? `/patch-notes/${seoPatchVersion.value}` : '/patch-notes'

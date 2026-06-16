@@ -268,7 +268,7 @@ Toutes ces tables sont partitionnées par `patch`.
 - `champion_stats`  
   Agrégat principal par `(patch, role, rank_tier, region, champion_id, team)`.
 - `champion_vs_stats`  
-  Matchups champion vs champion, par set d’items (`set_item`) ; `order_items` agrège l’ordre d’achat (position → games/wins).
+  Matchups champion vs champion, par set d’items (`set_item`) ; `order_items` agrège l’ordre d’achat ; ~90 métriques lane timeline (gold/cs/kills @5/10/15, items, objectifs, pression).
 - `champion_duo_role_stats`  
   Synergies champion + allié.
 - `botlane_duo_vs_duo_stats`  

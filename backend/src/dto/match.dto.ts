@@ -85,6 +85,7 @@ export interface ParsedParticipantDto {
 
   // Donnees matchup
   opponentChampionId: number;
+  opponentParticipantId: number;
   opponentRole: string;
 
   // Ordre de level up

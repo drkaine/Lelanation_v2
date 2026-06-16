@@ -8,17 +8,23 @@
 </template>
 
 <script setup lang="ts">
+import { normalizePatchNotesVersion, usePatchNotesStore } from '~/stores/PatchNotesStore'
+
 const localePath = useLocalePath()
 const patchNotesStore = usePatchNotesStore()
+const requestFetch = useRequestFetch()
 const { locale, t } = useI18n()
 const runtimeConfig = useRuntimeConfig()
-const fallbackVersion = String(runtimeConfig.public.fallbackGameVersion ?? '16.12')
+const fallbackVersion = normalizePatchNotesVersion(
+  String(runtimeConfig.public.fallbackGameVersion ?? '16.12')
+)
 
 const { data: latestVersion } = await useAsyncData(
   () => `patch-notes-index-redirect-${locale.value}`,
   async () => {
-    await patchNotesStore.loadIndex()
-    return patchNotesStore.latestVersion || fallbackVersion
+    await patchNotesStore.loadIndex(false, requestFetch)
+    const fromIndex = patchNotesStore.index?.latest
+    return fromIndex || fallbackVersion
   },
   { watch: [locale] }
 )

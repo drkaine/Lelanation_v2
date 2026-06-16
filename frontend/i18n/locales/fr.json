@@ -1265,7 +1265,10 @@
       "kills": "Kills",
       "level": "Niveau",
       "cs": "CS",
-      "vision": "Vision"
+      "vision": "Vision",
+      "items": "Items",
+      "objectives": "Objectifs",
+      "pressure": "Pression"
     },
     "championMatchupSignalLevel": {
       "bigAdvantage": "gros avantage",
@@ -1288,15 +1291,21 @@
       "kills": "Pression kills",
       "level": "Avantage de niveau",
       "cs": "Avantage CS",
-      "vision": "Contrôle vision"
+      "vision": "Contrôle vision",
+      "items": "Timing items (légendaires / bottes)",
+      "objectives": "Contrôle objectifs neutres",
+      "pressure": "Pression map (roams, ganks, plaques)"
     },
     "championMatchupDominanceDetail": {
-      "early": "Mesure l'avantage de ressources et tempo très tôt dans la lane (gold/xp précoces).",
-      "laneEconomy": "Mesure l'avantage économique global sur la phase de lane (or et xp convertis en avance).",
-      "kills": "Mesure la pression offensive et la capacité à créer des écarts de kills en lane.",
-      "level": "Mesure l'avance de niveaux obtenue sur l'adversaire direct.",
-      "cs": "Mesure l'écart de farm (creeps) créé en phase de lane.",
-      "vision": "Mesure la capacité à générer du contrôle vision utile en phase de lane."
+      "early": "Écart d'or à 5 min vs l'adversaire de lane (timeline).",
+      "laneEconomy": "Écart d'or à 15 min vs l'adversaire de lane (timeline).",
+      "kills": "Kills vs l'adversaire de lane avant 15 min (moins les morts subies).",
+      "level": "Écart de niveau à 15 min vs l'adversaire de lane.",
+      "cs": "Écart de CS à 15 min vs l'adversaire de lane.",
+      "vision": "Écart de score vision (wards) à 15 min vs l'adversaire de lane.",
+      "items": "Premier item légendaire / timing d'achat vs l'adversaire.",
+      "objectives": "Participation drakes / herald / voidgrubs vs l'adversaire de lane.",
+      "pressure": "First tower, plaques, roams et ganks avant 15 min."
     },
     "championStatsTabRunes": "Runes",
     "championStatsTabSkills": "Skills",

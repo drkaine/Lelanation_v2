@@ -172,6 +172,31 @@ describe('cleaner', () => {
       expect(deduped).toHaveLength(2);
     });
 
+    it('should not merge same name across categories (e.g. champion + arena Nocturne)', () => {
+      const entities: EntityChanges[] = [
+        {
+          name: 'Nocturne',
+          category: 'champion',
+          changes: [{ stat: 'Dégâts', before: '245', after: '225', type: 'nerf' as ChangeType }],
+        },
+        {
+          name: 'Nocturne',
+          category: 'arena',
+          changes: [
+            { stat: 'Z - Délai', before: '20', after: '18', type: 'nerf' as ChangeType },
+            { stat: 'Passive', before: '12', after: '9', type: 'buff' as ChangeType },
+          ],
+        },
+      ];
+
+      const deduped = deduplicateEntities(entities);
+      expect(deduped).toHaveLength(2);
+      expect(deduped.find(e => e.category === 'champion')?.changes).toHaveLength(1);
+      expect(deduped.find(e => e.category === 'arena')?.changes).toHaveLength(2);
+    });
+  });
+
+  describe('mergeEntityVariants', () => {
     it('should merge ability blocks into one champion entity', () => {
       const entities: EntityChanges[] = [
         {

@@ -16,6 +16,7 @@ import { normalizePlatformRegion } from "../riot/platform-region.js";
 import { isBootsTier2Or3ItemId } from "./bootItemClassification.js";
 import { isLegendaryCompleteItem } from "./itemLegendaryClassification.js";
 import { isStarterPurchase } from "./starterItemClassification.js";
+import { computeChampionVsLaneMetrics } from "./championVsLaneMetrics.js";
 const U15_WINDOW_MS = 900_000;
 
 function extractPatchFromVersion(gameVersion: string): string {
@@ -210,6 +211,40 @@ const CHALLENGE_SUM_SUFFIX_OVERRIDE: Record<string, string> = {
   wardTakedownsBefore20M: "ward_takedowns_before_20_m",
 };
 
+function buildParticipantPhasedPurchases(
+  events: MatchTimelineEventDto[],
+  participant: ParticipantDto,
+): {
+  phasedPurchases: ParsedItemDto[];
+  finalIds: number[];
+  finalInventorySet: Set<number>;
+} {
+  const purchases = getPurchaseItems(events, participant.participantId, participant.win);
+  const finalIds = [
+    Number(participant.item0 ?? 0),
+    Number(participant.item1 ?? 0),
+    Number(participant.item2 ?? 0),
+    Number(participant.item3 ?? 0),
+    Number(participant.item4 ?? 0),
+    Number(participant.item5 ?? 0),
+  ].filter((id) => id > 0);
+  const finalInventorySet = new Set(finalIds);
+  const firstPurchaseTsByItem = new Map<number, number>();
+  for (const purchase of purchases) {
+    const existing = firstPurchaseTsByItem.get(purchase.itemId);
+    if (existing == null || purchase.timestampMs < existing) {
+      firstPurchaseTsByItem.set(purchase.itemId, purchase.timestampMs);
+    }
+  }
+  const phasedPurchases = mergeFinalBootItemsIntoPurchases(
+    classifyPurchasePhases(purchases, finalInventorySet),
+    finalIds,
+    firstPurchaseTsByItem,
+    participant.win,
+  );
+  return { phasedPurchases, finalIds, finalInventorySet };
+}
+
 function mapChallengeSums(challenges: ChallengesDto | undefined): Record<string, number> {
   if (!challenges) {
     return {};
@@ -401,32 +436,23 @@ export function parseMatch(
       participants.find((candidate) => candidate.teamId !== participant.teamId && mapRole(candidate.teamPosition) === role) ??
       null;
 
-    const purchases = getPurchaseItems(events, participant.participantId, participant.win);
-    const starterIds = purchases
+    const { phasedPurchases, finalIds, finalInventorySet } = buildParticipantPhasedPurchases(
+      events,
+      participant,
+    );
+    const opponentBuild = opponent
+      ? buildParticipantPhasedPurchases(events, opponent)
+      : null;
+    const starterIds = phasedPurchases
       .filter((item) => isStarterPurchase(item.timestampMs, item.itemId))
       .map((item) => item.itemId);
-    const finalIds = [
-      Number(participant.item0 ?? 0),
-      Number(participant.item1 ?? 0),
-      Number(participant.item2 ?? 0),
-      Number(participant.item3 ?? 0),
-      Number(participant.item4 ?? 0),
-      Number(participant.item5 ?? 0),
-    ].filter((id) => id > 0);
-    const finalInventorySet = new Set(finalIds);
     const firstPurchaseTsByItem = new Map<number, number>();
-    for (const purchase of purchases) {
+    for (const purchase of phasedPurchases) {
       const existing = firstPurchaseTsByItem.get(purchase.itemId);
       if (existing == null || purchase.timestampMs < existing) {
         firstPurchaseTsByItem.set(purchase.itemId, purchase.timestampMs);
       }
     }
-    const phasedPurchases = mergeFinalBootItemsIntoPurchases(
-      classifyPurchasePhases(purchases, finalInventorySet),
-      finalIds,
-      firstPurchaseTsByItem,
-      participant.win,
-    );
     const bootsIds = finalIds.filter((itemId) => isBootsTier2Or3ItemId(itemId));
     const uniqueFinalIdsByFirstPurchase = Array.from(new Set(finalIds)).sort((a, b) => {
       const ta = firstPurchaseTsByItem.get(a) ?? Number.MAX_SAFE_INTEGER;
@@ -494,6 +520,7 @@ export function parseMatch(
       goldEarned: participant.goldEarned,
       goldSpent: participant.goldSpent,
       opponentChampionId: Number(opponent?.championId ?? 0),
+      opponentParticipantId: Number(opponent?.participantId ?? 0),
       opponentRole: opponent ? mapRole(opponent.teamPosition) : "UNKNOWN",
       spellOrder: computeSpellOrder(events, participant.participantId),
       spellLevelUpTimestampSumMs: computeSpellLevelUpTimestampSumMs(events, participant.participantId),
@@ -529,6 +556,22 @@ export function parseMatch(
       ),
       ...mapParticipantBucketIngestMetrics(participant, frames),
       ...mapChampionStatsRiotMetrics(participant),
+      ...(opponent && opponentBuild
+        ? computeChampionVsLaneMetrics({
+            frames,
+            events,
+            participantId: participant.participantId,
+            opponentParticipantId: opponent.participantId,
+            participantTeamId: participant.teamId as 100 | 200,
+            opponentTeamId: opponent.teamId as 100 | 200,
+            participant,
+            opponent,
+            participantItems: phasedPurchases,
+            opponentItems: opponentBuild.phasedPurchases,
+            finalInventorySet,
+            opponentFinalInventorySet: opponentBuild.finalInventorySet,
+          })
+        : {}),
     };
 
     return dto;

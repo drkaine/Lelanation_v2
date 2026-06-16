@@ -2,7 +2,16 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-export type MatchupsExtDominanceKey = 'early' | 'laneEconomy' | 'kills' | 'level' | 'cs' | 'vision'
+export type MatchupsExtDominanceKey =
+  | 'early'
+  | 'laneEconomy'
+  | 'kills'
+  | 'level'
+  | 'cs'
+  | 'vision'
+  | 'items'
+  | 'objectives'
+  | 'pressure'
 
 export type MatchupsExtSignalLevel =
   | 'bigAdvantage'

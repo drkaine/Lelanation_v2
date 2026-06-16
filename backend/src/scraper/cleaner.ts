@@ -177,24 +177,24 @@ export function mergeEntityVariants(entities: EntityChanges[]): EntityChanges[] 
 }
 
 /**
- * Remove duplicate entities (by name, keeping the one with most changes)
+ * Remove duplicate entities (by category + name, keeping the one with most changes)
  */
 export function deduplicateEntities(entities: EntityChanges[]): EntityChanges[] {
-  const byName = new Map<string, EntityChanges[]>();
+  const byKey = new Map<string, EntityChanges[]>();
 
   for (const entity of entities) {
     const key = entity.name
-      ? `${entity.name.toLowerCase().trim()}`
+      ? `${entity.category}::${entity.name.toLowerCase().trim()}`
       : `__unnamed__:${entity.category}:${entity.changes[0]?.after?.slice(0, 80) ?? ''}`;
-    if (!byName.has(key)) {
-      byName.set(key, []);
+    if (!byKey.has(key)) {
+      byKey.set(key, []);
     }
-    byName.get(key)!.push(entity);
+    byKey.get(key)!.push(entity);
   }
 
   const deduplicated: EntityChanges[] = [];
 
-  for (const [, duplicates] of byName) {
+  for (const [, duplicates] of byKey) {
     if (duplicates.length === 1) {
       deduplicated.push(duplicates[0]);
     } else {
@@ -203,7 +203,7 @@ export function deduplicateEntities(entities: EntityChanges[]): EntityChanges[] 
         a.changes.length >= b.changes.length ? a : b
       );
       logger.debug(
-        { entity: best.name, duplicates: duplicates.length, kept: best.changes.length },
+        { entity: best.name, category: best.category, duplicates: duplicates.length, kept: best.changes.length },
         'Deduplicated entity'
       );
       deduplicated.push(best);

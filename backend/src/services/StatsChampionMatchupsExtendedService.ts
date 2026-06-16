@@ -9,14 +9,16 @@ import {
 } from '../utils/statsFilters.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
 import { computeDelta, matchupScoreFromDeltaAndWeight } from './MatchupTierService.js'
+import {
+  buildChampionMatchupLaneSumSelect,
+  CHAMPION_MATCHUP_DOMINANCE_KEYS,
+  computeLaneDominanceValue,
+  type ChampionMatchupDominanceKey,
+  type ChampionMatchupCoreDominanceKey,
+  type LaneSumRow,
+} from './championMatchupLaneProfile.js'
 
-export type ChampionMatchupDominanceKey =
-  | 'early'
-  | 'laneEconomy'
-  | 'kills'
-  | 'level'
-  | 'cs'
-  | 'vision'
+export type { ChampionMatchupDominanceKey, ChampionMatchupCoreDominanceKey }
 
 export type ChampionMatchupSignalLevel =
   | 'bigAdvantage'
@@ -64,31 +66,19 @@ export interface ChampionMatchupExportResult {
   rows: Array<Record<string, number | string | null>>
 }
 
-type RawMyRow = {
+type RawMyRow = LaneSumRow & {
   opponent_champion_id: number
   role: string
   games: bigint
   wins: bigint
-  sum_level: number
-  sum_kill_def: number
-  sum_cs: number
-  sum_vision: number
-  sum_laning: number
-  sum_early: number
 }
 
-type RawPeerRow = {
+type RawPeerRow = LaneSumRow & {
   opponent_champion_id: number
   role: string
   champion_id: number
   games: bigint
   wins: bigint
-  sum_level: number
-  sum_kill_def: number
-  sum_cs: number
-  sum_vision: number
-  sum_laning: number
-  sum_early: number
 }
 
 type RawOverallRow = {
@@ -226,6 +216,57 @@ function signalLevelFromZ(z: number): ChampionMatchupSignalLevel {
   return 'even'
 }
 
+function laneZscoresFromRow(
+  myRow: LaneSumRow,
+  games: number,
+  cohort: RawPeerRow[],
+  selfChampionId: number,
+): Record<ChampionMatchupDominanceKey, number> {
+  const z = {} as Record<ChampionMatchupDominanceKey, number>
+  const peers = cohort.filter(
+    (p) => Number(p.champion_id) !== selfChampionId && Number(p.games ?? 0) >= 3,
+  )
+  for (const key of CHAMPION_MATCHUP_DOMINANCE_KEYS) {
+    const myVal = computeLaneDominanceValue(key, myRow, games)
+    const peerVals = peers.map((p) =>
+      computeLaneDominanceValue(key, p, Number(p.games ?? 0)),
+    )
+    const m = meanStd(peerVals)
+    z[key] = zscore(myVal, m.mean, m.std)
+  }
+  return z
+}
+
+function laneScoreFromZ(z: Record<ChampionMatchupDominanceKey, number>): number {
+  const laneComponents = CHAMPION_MATCHUP_DOMINANCE_KEYS.map((k) => z[k]).filter(Number.isFinite)
+  const laneScoreRaw =
+    laneComponents.length > 0
+      ? Number((laneComponents.reduce((a, b) => a + b, 0) / laneComponents.length).toFixed(2))
+      : 0
+  return laneScoreRaw * 100
+}
+
+function laneProfileFromZ(
+  z: Record<ChampionMatchupDominanceKey, number>,
+  cohortSize: number,
+): {
+  dominanceKeys: ChampionMatchupDominanceKey[]
+  weaknessKeys: ChampionMatchupDominanceKey[]
+  laneProfileByKey: Partial<Record<ChampionMatchupDominanceKey, ChampionMatchupSignalLevel>>
+} {
+  if (cohortSize < 2) {
+    return { dominanceKeys: [], weaknessKeys: [], laneProfileByKey: {} }
+  }
+  const laneProfileByKey = Object.fromEntries(
+    CHAMPION_MATCHUP_DOMINANCE_KEYS.map((k) => [k, signalLevelFromZ(z[k])]),
+  ) as Partial<Record<ChampionMatchupDominanceKey, ChampionMatchupSignalLevel>>
+  return {
+    dominanceKeys: dominanceFromZscores(z),
+    weaknessKeys: weaknessFromZscores(z),
+    laneProfileByKey,
+  }
+}
+
 export async function getChampionMatchupsExtendedTable(options: {
   championId: number
   version?: string | null
@@ -249,6 +290,8 @@ export async function getChampionMatchupsExtendedTable(options: {
   const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', version, 'ac')
   const vsFrom = await matchVersionedAggFrom('agg_champion_vs_stats', version, 'vs')
 
+  const laneSumSelect = buildChampionMatchupLaneSumSelect('vs')
+
   const myWhere = buildVsWhere(championId, version, options.rankTier, roleFilter)
   const mySql = `
     SELECT
@@ -256,12 +299,7 @@ export async function getChampionMatchupsExtendedTable(options: {
       vs.role,
       SUM(vs.count_game)::bigint AS games,
       SUM(vs.count_win)::bigint AS wins,
-      SUM(vs.sum_max_level_lead_lane_opponent)::double precision AS sum_level,
-      SUM(vs.sum_max_kill_deficit)::double precision AS sum_kill_def,
-      SUM(vs.sum_max_cs_advantage_on_lane_opponent)::double precision AS sum_cs,
-      SUM(vs.sum_vision_score_advantage_lane_opponent)::double precision AS sum_vision,
-      SUM(vs.sum_laning_phase_gold_exp_advantage)::double precision AS sum_laning,
-      SUM(vs.sum_early_laning_phase_gold_exp_advantage)::double precision AS sum_early
+      ${laneSumSelect}
     FROM ${vsFrom}
     WHERE ${myWhere}
     GROUP BY vs.opponent_champion_id, vs.role
@@ -297,12 +335,7 @@ export async function getChampionMatchupsExtendedTable(options: {
       vs.champion_id,
       SUM(vs.count_game)::bigint AS games,
       SUM(vs.count_win)::bigint AS wins,
-      SUM(vs.sum_max_level_lead_lane_opponent)::double precision AS sum_level,
-      SUM(vs.sum_max_kill_deficit)::double precision AS sum_kill_def,
-      SUM(vs.sum_max_cs_advantage_on_lane_opponent)::double precision AS sum_cs,
-      SUM(vs.sum_vision_score_advantage_lane_opponent)::double precision AS sum_vision,
-      SUM(vs.sum_laning_phase_gold_exp_advantage)::double precision AS sum_laning,
-      SUM(vs.sum_early_laning_phase_gold_exp_advantage)::double precision AS sum_early
+      ${laneSumSelect}
     FROM ${vsFrom}
     WHERE ${peerVsWhere}
       AND vs.opponent_champion_id IN (${oppIds.join(',')})
@@ -344,12 +377,7 @@ export async function getChampionMatchupsExtendedTable(options: {
         vs.role,
         SUM(vs.count_game)::bigint AS games,
         SUM(vs.count_win)::bigint AS wins,
-        SUM(vs.sum_max_level_lead_lane_opponent)::double precision AS sum_level,
-        SUM(vs.sum_max_kill_deficit)::double precision AS sum_kill_def,
-        SUM(vs.sum_max_cs_advantage_on_lane_opponent)::double precision AS sum_cs,
-        SUM(vs.sum_vision_score_advantage_lane_opponent)::double precision AS sum_vision,
-        SUM(vs.sum_laning_phase_gold_exp_advantage)::double precision AS sum_laning,
-        SUM(vs.sum_early_laning_phase_gold_exp_advantage)::double precision AS sum_early
+        ${laneSumSelect}
       FROM ${refVsFrom}
       WHERE ${refMyWhere}
       GROUP BY vs.opponent_champion_id, vs.role
@@ -366,12 +394,7 @@ export async function getChampionMatchupsExtendedTable(options: {
           vs.champion_id,
           SUM(vs.count_game)::bigint AS games,
           SUM(vs.count_win)::bigint AS wins,
-          SUM(vs.sum_max_level_lead_lane_opponent)::double precision AS sum_level,
-          SUM(vs.sum_max_kill_deficit)::double precision AS sum_kill_def,
-          SUM(vs.sum_max_cs_advantage_on_lane_opponent)::double precision AS sum_cs,
-          SUM(vs.sum_vision_score_advantage_lane_opponent)::double precision AS sum_vision,
-          SUM(vs.sum_laning_phase_gold_exp_advantage)::double precision AS sum_laning,
-          SUM(vs.sum_early_laning_phase_gold_exp_advantage)::double precision AS sum_early
+          ${laneSumSelect}
         FROM ${refVsFrom}
         WHERE ${refPeerWhere}
           AND vs.opponent_champion_id IN (${refOppIds.join(',')})
@@ -412,44 +435,8 @@ export async function getChampionMatchupsExtendedTable(options: {
           gamesInMatchup: g,
           totalGamesChampion: Math.max(1, totalRoleGames),
         })
-        const perGame = (sum: number | bigint) => (g > 0 ? Number(sum) / g : 0)
-        const myLevel = perGame(mr.sum_level)
-        const myKill = -perGame(mr.sum_kill_def)
-        const myCs = perGame(mr.sum_cs)
-        const myVision = perGame(mr.sum_vision)
-        const myLaning = perGame(mr.sum_laning)
-        const myEarly = perGame(mr.sum_early)
         const cohort = peers.filter((p) => Number(p.champion_id) !== championId && Number(p.games ?? 0) >= 3)
-        const peerAvg = (row: RawPeerRow, sumField: keyof RawPeerRow): number => {
-          const gg = Number(row.games ?? 0)
-          if (gg <= 0) return 0
-          const v = row[sumField]
-          return Number(v) / gg
-        }
-        const levels = cohort.map((p) => peerAvg(p, 'sum_level'))
-        const kills = cohort.map((p) => -peerAvg(p, 'sum_kill_def'))
-        const css = cohort.map((p) => peerAvg(p, 'sum_cs'))
-        const visions = cohort.map((p) => peerAvg(p, 'sum_vision'))
-        const lanings = cohort.map((p) => peerAvg(p, 'sum_laning'))
-        const earlys = cohort.map((p) => peerAvg(p, 'sum_early'))
-        const mL = meanStd(levels)
-        const mK = meanStd(kills)
-        const mC = meanStd(css)
-        const mV = meanStd(visions)
-        const mN = meanStd(lanings)
-        const mE = meanStd(earlys)
-        const laneComponents = [
-          zscore(myLevel, mL.mean, mL.std),
-          zscore(myKill, mK.mean, mK.std),
-          zscore(myCs, mC.mean, mC.std),
-          zscore(myVision, mV.mean, mV.std),
-          zscore(myLaning, mN.mean, mN.std),
-          zscore(myEarly, mE.mean, mE.std),
-        ].filter(Number.isFinite)
-        const laneScoreRaw =
-          laneComponents.length > 0
-            ? Number((laneComponents.reduce((a, b) => a + b, 0) / laneComponents.length).toFixed(2))
-            : 0
+        const z = laneZscoresFromRow(mr, g, cohort, championId)
         const key = `${opp}|${role}`
         referenceScoreByOppRole.set(key, score * 100)
         referenceWinrateByOppRole.set(key, Math.round(wrPct * 100) / 100)
@@ -457,7 +444,7 @@ export async function getChampionMatchupsExtendedTable(options: {
           key,
           refTotalGames > 0 ? Math.round((10000 * g) / refTotalGames) / 100 : 0
         )
-        referenceLaneScoreByOppRole.set(key, laneScoreRaw * 100)
+        referenceLaneScoreByOppRole.set(key, laneScoreFromZ(z))
       }
     }
   }
@@ -512,68 +499,10 @@ export async function getChampionMatchupsExtendedTable(options: {
       totalGamesChampion: Math.max(1, totalRoleGames),
     })
 
-    const perGame = (sum: number | bigint) => (g > 0 ? Number(sum) / g : 0)
-    const myLevel = perGame(mr.sum_level)
-    const myKill = -perGame(mr.sum_kill_def)
-    const myCs = perGame(mr.sum_cs)
-    const myVision = perGame(mr.sum_vision)
-    const myLaning = perGame(mr.sum_laning)
-    const myEarly = perGame(mr.sum_early)
-
     const cohort = peers.filter((p) => Number(p.champion_id) !== championId && Number(p.games ?? 0) >= 3)
-    const peerAvg = (row: RawPeerRow, sumField: keyof RawPeerRow): number => {
-      const gg = Number(row.games ?? 0)
-      if (gg <= 0) return 0
-      const v = row[sumField]
-      return Number(v) / gg
-    }
-    const levels = cohort.map((p) => peerAvg(p, 'sum_level'))
-    const kills = cohort.map((p) => -peerAvg(p, 'sum_kill_def'))
-    const css = cohort.map((p) => peerAvg(p, 'sum_cs'))
-    const visions = cohort.map((p) => peerAvg(p, 'sum_vision'))
-    const lanings = cohort.map((p) => peerAvg(p, 'sum_laning'))
-    const earlys = cohort.map((p) => peerAvg(p, 'sum_early'))
-
-    const mL = meanStd(levels)
-    const mK = meanStd(kills)
-    const mC = meanStd(css)
-    const mV = meanStd(visions)
-    const mN = meanStd(lanings)
-    const mE = meanStd(earlys)
-
-    const z: Record<ChampionMatchupDominanceKey, number> = {
-      level: zscore(myLevel, mL.mean, mL.std),
-      kills: zscore(myKill, mK.mean, mK.std),
-      cs: zscore(myCs, mC.mean, mC.std),
-      vision: zscore(myVision, mV.mean, mV.std),
-      laneEconomy: zscore(myLaning, mN.mean, mN.std),
-      early: zscore(myEarly, mE.mean, mE.std),
-    }
-
-    const laneComponents = [z.level, z.kills, z.cs, z.vision, z.laneEconomy, z.early].filter(Number.isFinite)
-    const laneScoreRaw =
-      laneComponents.length > 0
-        ? Number(
-            (
-              laneComponents.reduce((a, b) => a + b, 0) / laneComponents.length
-            ).toFixed(2),
-          )
-        : 0
-    const laneScore = laneScoreRaw * 100
-
-    const dominanceKeys = cohort.length >= 2 ? dominanceFromZscores(z) : []
-    const weaknessKeys = cohort.length >= 2 ? weaknessFromZscores(z) : []
-    const laneProfileByKey: Partial<Record<ChampionMatchupDominanceKey, ChampionMatchupSignalLevel>> =
-      cohort.length >= 2
-        ? {
-            level: signalLevelFromZ(z.level),
-            kills: signalLevelFromZ(z.kills),
-            cs: signalLevelFromZ(z.cs),
-            vision: signalLevelFromZ(z.vision),
-            laneEconomy: signalLevelFromZ(z.laneEconomy),
-            early: signalLevelFromZ(z.early),
-          }
-        : {}
+    const z = laneZscoresFromRow(mr, g, cohort, championId)
+    const laneScore = laneScoreFromZ(z)
+    const { dominanceKeys, weaknessKeys, laneProfileByKey } = laneProfileFromZ(z, cohort.length)
 
     const matchupScorePct = matchupScore * 100
     built.push({

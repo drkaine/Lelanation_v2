@@ -169,6 +169,13 @@
       "when": 1749302400000,
       "tag": "0023_champion_vs_stats_set_item",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1749388800000,
+      "tag": "0024_champion_vs_stats_lane_metrics",
+      "breakpoints": true
     }
   ]
 }

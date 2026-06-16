@@ -72,6 +72,15 @@ function localeToPatchLocale(locale: string): string {
   return 'en-GB'
 }
 
+/** Patch notes use major.minor (16.12), not game micro version (16.12.1). */
+export function normalizePatchNotesVersion(version: string | null | undefined): string {
+  const parts = String(version ?? '')
+    .trim()
+    .split('.')
+  if (parts.length >= 2) return `${parts[0]}.${parts[1]}`
+  return parts[0] || ''
+}
+
 export function resolvePatchNotesAssetPath(
   localPath: string | undefined,
   patchVersion: string
@@ -119,10 +128,24 @@ function getPatchJsonUrl(version: string, patchLocale: string): string {
   return `${getPatchNotesBaseUrl()}/${version}/patch-${version}-${patchLocale}.json`
 }
 
+type PatchNotesFetcher = (input: string, init?: RequestInit) => Promise<unknown>
+
+async function fetchPatchJson(url: string, fetcher?: PatchNotesFetcher): Promise<unknown> {
+  if (fetcher) {
+    return fetcher(url, { cache: 'no-cache' })
+  }
+  const response = await fetch(url, { cache: 'no-cache' })
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status}`)
+  }
+  return response.json()
+}
+
 /** Single-flight: parallel loads share one fetch. */
 let loadIndexInflight: Promise<void> | null = null
 let loadPatchInflight: Promise<PatchData | null> | null = null
 let loadPatchInflightKey: string | null = null
+let patchLoadGeneration = 0
 
 export const usePatchNotesStore = defineStore('patchNotes', () => {
   const index = ref<PatchIndex | null>(null)
@@ -170,31 +193,22 @@ export const usePatchNotesStore = defineStore('patchNotes', () => {
     )
   })
 
-  async function loadIndex(force = false): Promise<void> {
+  async function loadIndex(force = false, fetcher?: PatchNotesFetcher): Promise<void> {
     if (index.value && !force) return
     if (loadIndexInflight) {
       await loadIndexInflight
       return
     }
 
+    const doFetch = fetcher ?? undefined
     loadIndexInflight = (async () => {
       try {
-        status.value = 'loading'
-        error.value = null
-
-        const response = await fetch(`${getPatchNotesBaseUrl()}/index.json`, {
-          cache: 'no-cache',
-        })
-
-        if (!response.ok) {
-          throw new Error(`Failed to load patch index: ${response.status}`)
-        }
-
-        index.value = await response.json()
-        status.value = 'success'
-      } catch (err) {
-        error.value = err instanceof Error ? err.message : 'Failed to load patch index'
-        status.value = 'error'
+        index.value = (await fetchPatchJson(
+          `${getPatchNotesBaseUrl()}/index.json`,
+          doFetch
+        )) as PatchIndex
+      } catch {
+        // Index optional for direct patch URLs; keep existing index if any.
       } finally {
         loadIndexInflight = null
       }
@@ -203,7 +217,11 @@ export const usePatchNotesStore = defineStore('patchNotes', () => {
     await loadIndexInflight
   }
 
-  async function loadPatch(version: string, locale: string): Promise<PatchData | null> {
+  async function loadPatch(
+    version: string,
+    locale: string,
+    fetcher?: PatchNotesFetcher
+  ): Promise<PatchData | null> {
     const patchLocale = localeToPatchLocale(locale)
     const inflightKey = `${version}-${patchLocale}`
 
@@ -220,54 +238,69 @@ export const usePatchNotesStore = defineStore('patchNotes', () => {
     }
 
     loadPatchInflightKey = inflightKey
+    const requestKey = inflightKey
+    const generation = ++patchLoadGeneration
     loadPatchInflight = (async (): Promise<PatchData | null> => {
       try {
+        if (currentPatch.value?.patchVersion !== version) {
+          currentPatch.value = null
+        }
         status.value = 'loading'
         error.value = null
 
-        const response = await fetch(getPatchJsonUrl(version, patchLocale), { cache: 'no-cache' })
-
-        if (!response.ok) {
+        let patch: PatchData | null = null
+        try {
+          patch = (await fetchPatchJson(
+            getPatchJsonUrl(version, patchLocale),
+            fetcher
+          )) as PatchData
+        } catch {
           if (patchLocale !== 'en-GB') {
-            const fallbackResponse = await fetch(getPatchJsonUrl(version, 'en-GB'), {
-              cache: 'no-cache',
-            })
-            if (fallbackResponse.ok) {
-              currentPatch.value = await fallbackResponse.json()
-              selectedVersion.value = version
-              status.value = 'success'
-              return currentPatch.value
-            }
+            patch = (await fetchPatchJson(getPatchJsonUrl(version, 'en-GB'), fetcher)) as PatchData
           }
-          throw new Error(`Failed to load patch ${version}: ${response.status}`)
+          if (!patch) {
+            throw new Error(`Failed to load patch ${version}`)
+          }
         }
 
-        currentPatch.value = await response.json()
+        if (generation !== patchLoadGeneration || loadPatchInflightKey !== requestKey) return null
+
+        currentPatch.value = patch
         selectedVersion.value = version
         status.value = 'success'
         return currentPatch.value
       } catch (err) {
+        if (generation !== patchLoadGeneration || loadPatchInflightKey !== requestKey) return null
         error.value = err instanceof Error ? err.message : 'Failed to load patch'
         status.value = 'error'
         return null
       } finally {
-        loadPatchInflight = null
-        loadPatchInflightKey = null
+        if (loadPatchInflightKey === requestKey) {
+          loadPatchInflight = null
+          loadPatchInflightKey = null
+        }
       }
     })()
 
     return await loadPatchInflight
   }
 
-  async function loadLatestPatch(locale: string): Promise<PatchData | null> {
-    await loadIndex()
+  async function loadLatestPatch(
+    locale: string,
+    fetcher?: PatchNotesFetcher
+  ): Promise<PatchData | null> {
+    await loadIndex(false, fetcher)
     if (!latestVersion.value) return null
-    return loadPatch(latestVersion.value, locale)
+    return loadPatch(latestVersion.value, locale, fetcher)
   }
 
-  async function selectPatch(version: string, locale: string): Promise<PatchData | null> {
-    await loadIndex()
-    return loadPatch(version, locale)
+  async function selectPatch(
+    version: string,
+    locale: string,
+    fetcher?: PatchNotesFetcher
+  ): Promise<PatchData | null> {
+    await loadIndex(false, fetcher)
+    return loadPatch(version, locale, fetcher)
   }
 
   return {

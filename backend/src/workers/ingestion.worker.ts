@@ -3,6 +3,8 @@ import { config } from "../config/index.js";
 import { normalizePlatformRegion } from "../riot/platform-region.js";
 import { sql } from "../db/client.js";
 import { CHAMPION_STATS_METRIC_COLUMNS } from "../constants/championStatsMetricColumns.js";
+import { CHAMPION_VS_STATS_ALL_METRIC_COLUMNS } from "../constants/championVsStatsMetricColumns.js";
+import { championVsMetricValue } from "../parsers/champion-vs-metric-value.js";
 import type { IngestionJobData, ParsedParticipantDto, TeamObjectiveDto } from "../dto/match.dto.js";
 import { championStatsMetricValue } from "../parsers/champion-stats-metric-value.js";
 import { recordIngestionWorker } from "../observability/poller-metrics/instrumentation.js";
@@ -319,10 +321,9 @@ async function upsertChampionStats(tx: any, participants: ParsedParticipantDto[]
 }
 
 async function upsertChampionVsStats(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
+  const metricCols = CHAMPION_VS_STATS_ALL_METRIC_COLUMNS;
   for (const participant of participants.filter((p) => p.opponentChampionId > 0)) {
     const { championTransform } = championTransformFields(participant);
-    const m = championDuoRoleEconomyFromParticipant(participant);
-    const u = u15IngestSums(participant.u15);
     const winCount = participantWinCount(participant);
     const setItem = participant.finalKey ?? "";
     const orderByItemId = buildStarterLegendaryOrderByItemId(participant.items);
@@ -345,40 +346,21 @@ async function upsertChampionVsStats(tx: any, participants: ParsedParticipantDto
       winCount,
       1,
       orderItemsJson,
-      m.goldEarned,
-      m.goldSpent,
-      m.maxLevelLeadLaneOpponent,
-      m.maxKillDeficit,
-      m.moreEnemyJungleThanOpponent,
-      m.maxCsAdvantageOnLaneOpponent,
-      m.visionScoreAdvantageLaneOpponent,
-      m.laningPhaseGoldExpAdvantage,
-      m.earlyLaningPhaseGoldExpAdvantage,
-      u.phys,
-      u.magic,
-      u.trueDmg,
-      u.kill,
-      u.assist,
-      u.death,
-      u.vision,
-      u.shield,
-      u.cs,
+      ...metricCols.map((col) => championVsMetricValue(participant, col)),
     ];
 
     const orderItemsParamIndex = 11;
     const placeholders = values
       .map((_, i) => (i + 1 === orderItemsParamIndex ? `$${i + 1}::jsonb` : `$${i + 1}`))
       .join(", ");
+    const metricUpdateParts = metricCols.map(
+      (col) => `${col} = champion_vs_stats.${col} + EXCLUDED.${col}`,
+    );
     const q = `
       INSERT INTO champion_vs_stats (
         patch, role, rank_tier, region, champion_id, champion_transform, opponent_champion_id, set_item,
         count_win, count_game, order_items,
-        sum_gold_earned, sum_gold_spent,
-        sum_max_level_lead_lane_opponent, sum_max_kill_deficit, sum_more_enemy_jungle_than_opponent,
-        sum_max_cs_advantage_on_lane_opponent, sum_vision_score_advantage_lane_opponent,
-        sum_laning_phase_gold_exp_advantage, sum_early_laning_phase_gold_exp_advantage,
-        sum_physique_damage_done_to_champion_u15, sum_magic_damage_done_to_champion_u15, sum_true_damage_done_to_champion_u15,
-        sum_kill_u15, sum_assist_u15, sum_death_u15, sum_vision_score_u15, sum_shield_and_heal_u15, sum_minions_killed_u15
+        ${metricCols.join(", ")}
       )
       VALUES (${placeholders})
       ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, opponent_champion_id, set_item)
@@ -386,33 +368,7 @@ async function upsertChampionVsStats(tx: any, participants: ParsedParticipantDto
         count_game = champion_vs_stats.count_game + 1,
         count_win = champion_vs_stats.count_win + EXCLUDED.count_win,
         order_items = ${orderItemsMergeSql},
-        sum_gold_earned = champion_vs_stats.sum_gold_earned + EXCLUDED.sum_gold_earned,
-        sum_gold_spent = champion_vs_stats.sum_gold_spent + EXCLUDED.sum_gold_spent,
-        sum_max_level_lead_lane_opponent =
-          champion_vs_stats.sum_max_level_lead_lane_opponent + EXCLUDED.sum_max_level_lead_lane_opponent,
-        sum_max_kill_deficit = champion_vs_stats.sum_max_kill_deficit + EXCLUDED.sum_max_kill_deficit,
-        sum_more_enemy_jungle_than_opponent =
-          champion_vs_stats.sum_more_enemy_jungle_than_opponent + EXCLUDED.sum_more_enemy_jungle_than_opponent,
-        sum_max_cs_advantage_on_lane_opponent =
-          champion_vs_stats.sum_max_cs_advantage_on_lane_opponent + EXCLUDED.sum_max_cs_advantage_on_lane_opponent,
-        sum_vision_score_advantage_lane_opponent =
-          champion_vs_stats.sum_vision_score_advantage_lane_opponent + EXCLUDED.sum_vision_score_advantage_lane_opponent,
-        sum_laning_phase_gold_exp_advantage =
-          champion_vs_stats.sum_laning_phase_gold_exp_advantage + EXCLUDED.sum_laning_phase_gold_exp_advantage,
-        sum_early_laning_phase_gold_exp_advantage =
-          champion_vs_stats.sum_early_laning_phase_gold_exp_advantage + EXCLUDED.sum_early_laning_phase_gold_exp_advantage,
-        sum_physique_damage_done_to_champion_u15 =
-          champion_vs_stats.sum_physique_damage_done_to_champion_u15 + EXCLUDED.sum_physique_damage_done_to_champion_u15,
-        sum_magic_damage_done_to_champion_u15 =
-          champion_vs_stats.sum_magic_damage_done_to_champion_u15 + EXCLUDED.sum_magic_damage_done_to_champion_u15,
-        sum_true_damage_done_to_champion_u15 =
-          champion_vs_stats.sum_true_damage_done_to_champion_u15 + EXCLUDED.sum_true_damage_done_to_champion_u15,
-        sum_kill_u15 = champion_vs_stats.sum_kill_u15 + EXCLUDED.sum_kill_u15,
-        sum_assist_u15 = champion_vs_stats.sum_assist_u15 + EXCLUDED.sum_assist_u15,
-        sum_death_u15 = champion_vs_stats.sum_death_u15 + EXCLUDED.sum_death_u15,
-        sum_vision_score_u15 = champion_vs_stats.sum_vision_score_u15 + EXCLUDED.sum_vision_score_u15,
-        sum_shield_and_heal_u15 = champion_vs_stats.sum_shield_and_heal_u15 + EXCLUDED.sum_shield_and_heal_u15,
-        sum_minions_killed_u15 = champion_vs_stats.sum_minions_killed_u15 + EXCLUDED.sum_minions_killed_u15,
+        ${metricUpdateParts.join(", ")},
         updated_at = NOW()
     `;
     await (tx as { unsafe: (query: string, params?: unknown[]) => Promise<unknown> }).unsafe(q, values);

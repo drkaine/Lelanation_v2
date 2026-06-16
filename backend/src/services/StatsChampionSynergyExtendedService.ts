@@ -10,7 +10,7 @@ import {
 import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
 import { computeDelta, matchupScoreFromDeltaAndWeight } from './MatchupTierService.js'
 import type {
-  ChampionMatchupDominanceKey,
+  ChampionMatchupCoreDominanceKey,
   ChampionMatchupSignalLevel,
 } from './StatsChampionMatchupsExtendedService.js'
 
@@ -31,9 +31,9 @@ export interface ChampionSynergyExtendedRow {
   delta2: number
   laneScore: number
   laneScoreDeltaVsReference: number | null
-  dominanceKeys: ChampionMatchupDominanceKey[]
-  weaknessKeys: ChampionMatchupDominanceKey[]
-  laneProfileByKey: Partial<Record<ChampionMatchupDominanceKey, ChampionMatchupSignalLevel>>
+  dominanceKeys: ChampionMatchupCoreDominanceKey[]
+  weaknessKeys: ChampionMatchupCoreDominanceKey[]
+  laneProfileByKey: Partial<Record<ChampionMatchupCoreDominanceKey, ChampionMatchupSignalLevel>>
 }
 
 export interface ChampionSynergyExtendedResult {
@@ -154,16 +154,16 @@ function zscore(v: number, mean: number, std: number): number {
   return (v - mean) / s
 }
 
-function dominanceFromZscores(z: Record<ChampionMatchupDominanceKey, number>): ChampionMatchupDominanceKey[] {
-  const entries = (Object.keys(z) as ChampionMatchupDominanceKey[])
+function dominanceFromZscores(z: Record<ChampionMatchupCoreDominanceKey, number>): ChampionMatchupCoreDominanceKey[] {
+  const entries = (Object.keys(z) as ChampionMatchupCoreDominanceKey[])
     .map((k) => ({ k, z: z[k] ?? 0 }))
     .filter((e) => e.z >= 0.35)
     .sort((a, b) => b.z - a.z)
   return entries.slice(0, 3).map((e) => e.k)
 }
 
-function weaknessFromZscores(z: Record<ChampionMatchupDominanceKey, number>): ChampionMatchupDominanceKey[] {
-  const entries = (Object.keys(z) as ChampionMatchupDominanceKey[])
+function weaknessFromZscores(z: Record<ChampionMatchupCoreDominanceKey, number>): ChampionMatchupCoreDominanceKey[] {
+  const entries = (Object.keys(z) as ChampionMatchupCoreDominanceKey[])
     .map((k) => ({ k, z: z[k] ?? 0 }))
     .filter((e) => e.z <= -0.35)
     .sort((a, b) => a.z - b.z)
@@ -498,7 +498,7 @@ export async function getChampionSynergyExtendedTable(options: {
     const mN = meanStd(lanings)
     const mE = meanStd(earlys)
 
-    const z: Record<ChampionMatchupDominanceKey, number> = {
+    const z: Record<ChampionMatchupCoreDominanceKey, number> = {
       level: zscore(myLevel, mL.mean, mL.std),
       kills: zscore(myKill, mK.mean, mK.std),
       cs: zscore(myCs, mC.mean, mC.std),
@@ -516,7 +516,7 @@ export async function getChampionSynergyExtendedTable(options: {
 
     const dominanceKeys = cohort.length >= 2 ? dominanceFromZscores(z) : []
     const weaknessKeys = cohort.length >= 2 ? weaknessFromZscores(z) : []
-    const laneProfileByKey: Partial<Record<ChampionMatchupDominanceKey, ChampionMatchupSignalLevel>> =
+    const laneProfileByKey: Partial<Record<ChampionMatchupCoreDominanceKey, ChampionMatchupSignalLevel>> =
       cohort.length >= 2
         ? {
             level: signalLevelFromZ(z.level),
