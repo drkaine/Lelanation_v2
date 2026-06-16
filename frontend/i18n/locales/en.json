@@ -1224,13 +1224,186 @@
     "championSynergyTooltipLaneProfile": "Duo strengths and watchouts compared to other pairings with the same ally.",
     "championStatsTabStats": "Stats",
     "championStatsTabCounters": "Compos / Counters",
-    "championMatchupColScore": "Matchup score",
+    "championMatchupColScore": "Matchup score (composite)",
     "championMatchupColScoreDelta": "Δ matchup score",
     "championMatchupColDelta1": "Delta 1",
     "championMatchupColDelta2": "Delta 2",
     "exportMinPickrateLabel": "Min pickrate %",
     "exportMinGamesLabel": "Min games",
     "championMatchupColPickrate": "Matchup pick rate",
+    "championMatchupDetailGames": "{count} games",
+    "championMatchupDetailUnavailable": "Lane detail unavailable for this matchup (insufficient data).",
+    "championMatchupDetailTabProfile": "Lane profile",
+    "championMatchupDetailTabLane": "Lane",
+    "championMatchupDetailTabGankDive": "Gank / Dive",
+    "championMatchupDetailTabItems": "Items",
+    "championMatchupDetailTabObjectives": "Objectives",
+    "championMatchupDetailGoldDiff": "Gold diff",
+    "championMatchupDetailCsDiff": "CS diff",
+    "championMatchupDetailVisionDiff": "Vision diff",
+    "championMatchupDetailLevelXp": "Level / XP",
+    "championMatchupDetailLevelShort": "lvl",
+    "championMatchupDetailKillsDeathsVs": "Kills / deaths vs opponent",
+    "championMatchupDetailDeathsShort": "D",
+    "championMatchupDetailGanks": "Ganks",
+    "championMatchupDetailDives": "Dives",
+    "championMatchupDetailRoams": "Roams",
+    "championMatchupDetailDeathsPerGame": "deaths / game",
+    "championMatchupDetailKillsPerGame": "kills / game",
+    "championMatchupDetailAssistsPerGame": "assists / game",
+    "championMatchupDetailLegendaryFirst": "1st legendary item",
+    "championMatchupDetailBootsFirst": "1st boots",
+    "championMatchupDetailBootsTier2": "T2 boots first",
+    "championMatchupDetailConsumables": "Consumables",
+    "championMatchupDetailYou": "You",
+    "championMatchupDetailOpponent": "Opponent",
+    "championMatchupDetailOpponentShort": "Opp.",
+    "championMatchupDetailAvgTimestamp": "Avg timestamp",
+    "championMatchupDetailPerGame": "game",
+    "championMatchupDetailDrakes": "Drakes",
+    "championMatchupDetailHeraldVoid": "Herald / Void",
+    "championMatchupDetailTowers": "Towers",
+    "championMatchupDetailFirstTower": "First tower",
+    "championMatchupDetailPlates": "Plates",
+    "championMatchupDetailProfileTitle": "Detailed lane profile",
+    "championMatchupDetailProfileHint": "Comparison vs lane opponent on this matchup (relative to other champions in the same role).",
+    "championMatchupDetailProfileBalanced": "Balanced matchup: no clear lane signal stands out in this duel.",
+    "championMatchupInsight": {
+      "category": {
+        "dive": "Dive",
+        "gank": "Gank",
+        "roam": "Roam",
+        "goldHoard": "Economy"
+      },
+      "strength": {
+        "early": {
+          "title": "Strong very early lane",
+          "detail": "Gold diff {gold5} at 5 min vs lane opponent."
+        },
+        "laneEconomy": {
+          "title": "Better lane economy",
+          "detail": "Gold diff {gold15} at 15 min — gold converted into tempo."
+        },
+        "kills": {
+          "title": "More kill pressure in lane",
+          "detail": "{kills} kills vs opponent / game before 15 min ({deaths} deaths)."
+        },
+        "level": {
+          "title": "Level / XP advantage",
+          "detail": "{level} level and {xp} XP diff at 15 min."
+        },
+        "cs": {
+          "title": "Better lane farm",
+          "detail": "CS diff {cs15} at 15 min vs opponent."
+        },
+        "vision": {
+          "title": "Better vision control",
+          "detail": "Places more wards (vision diff {vision15} at 15 min)."
+        },
+        "items": {
+          "title": "Better item timing",
+          "detail": "1st legendary {legendaryYou} vs {legendaryOpp} · boots {bootsYou} vs {bootsOpp}."
+        },
+        "objectives": {
+          "title": "More objective presence",
+          "detail": "~{objectives} drake/herald/void involvements per game."
+        },
+        "pressure": {
+          "title": "More map pressure",
+          "detail": "First tower {firstTower} · {plates} plates taken / game."
+        },
+        "diveKills": {
+          "title": "Effective tower dives",
+          "detail": "{kills} dive kills / game for {deaths} dive deaths."
+        },
+        "roamKills": {
+          "title": "Rewarding roams",
+          "detail": "{kills} roam kills / game ({deaths} roam deaths)."
+        },
+        "legendaryFirst": {
+          "title": "Buys legendary item first",
+          "detail": "First legendary before opponent in {you} of games (opp. {opp})."
+        },
+        "bootsFirst": {
+          "title": "Buys boots before opponent",
+          "detail": "Boots first in {you} of games (opp. {opp})."
+        },
+        "visionHigh": {
+          "title": "Places more wards / control wards",
+          "detail": "Vision score +{vision15} at 15 min vs lane opponent."
+        }
+      },
+      "weakness": {
+        "early": {
+          "title": "Weak very early lane",
+          "detail": "Gold diff {gold5} at 5 min — rough lane start."
+        },
+        "laneEconomy": {
+          "title": "Behind in lane economy",
+          "detail": "Gold diff {gold15} at 15 min — gold not converted well."
+        },
+        "kills": {
+          "title": "Suffers kill pressure",
+          "detail": "{deaths} deaths vs opponent / game before 15 min ({kills} kills)."
+        },
+        "level": {
+          "title": "Behind in level / XP",
+          "detail": "{level} level and {xp} XP diff at 15 min."
+        },
+        "cs": {
+          "title": "Behind in lane farm",
+          "detail": "CS diff {cs15} at 15 min vs opponent."
+        },
+        "vision": {
+          "title": "Places fewer wards",
+          "detail": "Weak vision control (diff {vision15} at 15 min)."
+        },
+        "items": {
+          "title": "Behind on item timing",
+          "detail": "1st legendary {legendaryYou} vs {legendaryOpp} · boots {bootsYou} vs {bootsOpp}."
+        },
+        "objectives": {
+          "title": "Less objective presence",
+          "detail": "Lower drake/herald/void involvement than opponent."
+        },
+        "pressure": {
+          "title": "Suffers map pressure",
+          "detail": "First tower {firstTower} · fewer plates taken."
+        },
+        "diveDeaths": {
+          "title": "Often dies while diving",
+          "detail": "{deaths} dive deaths / game for only {kills} dive kills."
+        },
+        "gankDeaths": {
+          "title": "Often dies to ganks",
+          "detail": "{deaths} gank deaths / game ({kills} gank kills)."
+        },
+        "legendaryLate": {
+          "title": "Opponent finishes 1st legendary first",
+          "detail": "1st legendary in {you} of games vs {opp} (~{delay}s slower on average)."
+        },
+        "bootsLate": {
+          "title": "Buys boots after opponent",
+          "detail": "Boots first in {you} of games (opp. {opp})."
+        },
+        "goldHoard": {
+          "title": "Holds gold too long",
+          "detail": "1st item ~{delay}s later despite similar lane gold ({gold15} at 15 min)."
+        },
+        "visionLow": {
+          "title": "Places fewer control wards / wards",
+          "detail": "Vision score {vision15} at 15 min — less vision than opponent."
+        },
+        "consumablesLow": {
+          "title": "Buys fewer consumables",
+          "detail": "{you} pots/cons. / game vs {opp} for opponent."
+        },
+        "platesLost": {
+          "title": "Loses more tower plates",
+          "detail": "{you} plates taken / game vs {opp} for opponent."
+        }
+      }
+    },
     "championMatchupColLaneScore": "Lane score (vs peers)",
     "championMatchupColDominance": "Lane profile",
     "championMatchupFilterLaneProfile": "Filter by lane profile",

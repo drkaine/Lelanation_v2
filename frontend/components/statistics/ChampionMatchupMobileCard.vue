@@ -41,6 +41,63 @@ export type MatchupsExtRow = {
   dominanceKeys: MatchupsExtDominanceKey[]
   weaknessKeys?: MatchupsExtDominanceKey[]
   laneProfileByKey?: Partial<Record<MatchupsExtDominanceKey, MatchupsExtSignalLevel>>
+  matchupDetail?: {
+    lane: {
+      goldDiff5Min: number
+      goldDiff10Min: number
+      goldDiff15Min: number
+      csDiff5Min: number
+      csDiff10Min: number
+      csDiff15Min: number
+      visionDiff5Min: number
+      visionDiff10Min: number
+      visionDiff15Min: number
+      levelDiff15Min: number
+      xpDiff15Min: number
+      killsVsOpponent5Min: number
+      killsVsOpponent10Min: number
+      killsVsOpponent15Min: number
+      deathsVsOpponent5Min: number
+      deathsVsOpponent10Min: number
+      deathsVsOpponent15Min: number
+    }
+    gankDiveRoam: {
+      gankKillsPerGame: number
+      gankDeathsPerGame: number
+      diveKillsPerGame: number
+      diveDeathsPerGame: number
+      roamingKillsPerGame: number
+      roamingDeathsPerGame: number
+    }
+    itemsFirst: {
+      legendaryFirstRate: number
+      opponentLegendaryFirstRate: number
+      legendaryFirstAvgTimestampMs: number
+      opponentLegendaryFirstAvgTimestampMs: number
+      bootsFirstRate: number
+      opponentBootsFirstRate: number
+      bootsFirstAvgTimestampMs: number
+      opponentBootsFirstAvgTimestampMs: number
+      bootsTier2FirstRate: number
+      opponentBootsTier2FirstRate: number
+      bootsTier2FirstAvgTimestampMs: number
+      opponentBootsTier2FirstAvgTimestampMs: number
+      consumablesBoughtPerGame: number
+      opponentConsumablesBoughtPerGame: number
+    }
+    objectivesAndMap: {
+      drakeKillsPerGame: number
+      drakeAssistsPerGame: number
+      heraldKillsPerGame: number
+      heraldAssistsPerGame: number
+      voidKillsPerGame: number
+      voidAssistsPerGame: number
+      firstTowerRate: number
+      opponentFirstTowerRate: number
+      platesTakenPerGame: number
+      opponentPlatesTakenPerGame: number
+    }
+  }
 }
 
 const props = withDefaults(
@@ -48,6 +105,7 @@ const props = withDefaults(
     row: MatchupsExtRow
     displayRank: number
     expanded: boolean
+    selected?: boolean
     showRole: boolean
     portraitSrc: string | null
     championName: string
@@ -66,6 +124,7 @@ const props = withDefaults(
     profileContext?: 'matchup' | 'synergy'
   }>(),
   {
+    selected: false,
     referenceVersion: null,
     roleIconSrc: null,
     portraitSrc: null,
@@ -158,7 +217,8 @@ function laneProfileChipTitle(
 
 <template>
   <article
-    class="statistics-champion-stats-mobile-card statistics-champion-matchup-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
+    class="statistics-champion-stats-mobile-card statistics-champion-matchup-mobile-card w-full overflow-hidden rounded-lg border bg-surface/40"
+    :class="selected ? 'border-primary/60 ring-1 ring-primary/35' : 'border-primary/30'"
   >
     <div
       class="statistics-champion-stats-mobile-card-header flex w-full min-w-0 items-center gap-3 p-3"

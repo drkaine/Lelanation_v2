@@ -40,18 +40,52 @@ function hasTimelineGold(row: LaneSumRow): boolean {
 
 /** Colonnes SUM utilisées dans les requêtes matchups-extended. */
 export const CHAMPION_MATCHUP_LANE_SUM_COLUMNS = [
+  // Timeline lane diffs vs lane opponent (detail + dominance)
   'sum_gold_difference_5min',
+  'sum_gold_difference_10min',
   'sum_gold_difference_15min',
+  'sum_kill_opponent_5min',
+  'sum_kill_opponent_10min',
   'sum_kill_opponent_15min',
+  'sum_death_by_opponent_5min',
+  'sum_death_by_opponent_10min',
   'sum_death_by_opponent_15min',
+  'sum_cs_difference_5min',
+  'sum_cs_difference_10min',
   'sum_cs_difference_15min',
+  'sum_vision_score_difference_5min',
+  'sum_vision_score_difference_10min',
   'sum_vision_score_difference_15min',
+  'sum_level_5min',
+  'sum_level_10min',
   'sum_level_15min',
+  'sum_level_opponent_5min',
+  'sum_level_opponent_10min',
   'sum_level_opponent_15min',
+  'sum_xp_5min',
+  'sum_xp_10min',
+  'sum_xp_15min',
+  'sum_xp_opponent_5min',
+  'sum_xp_opponent_10min',
+  'sum_xp_opponent_15min',
+
+  // Items timing (detail + dominance)
   'sum_have_legendary_item_first',
   'sum_opponent_have_legendary_item_first',
   'sum_buy_legendary_item_timestamp',
   'sum_opponent_buy_legendary_item_timestamp',
+  'sum_have_boots_item_first',
+  'sum_opponent_have_boots_item_first',
+  'sum_buy_boots_item_timestamp',
+  'sum_opponent_buy_boots_item_timestamp',
+  'sum_have_boots_tier2_item_first',
+  'sum_opponent_have_boots_tier2_item_first',
+  'sum_buy_boots_tier2_item_timestamp',
+  'sum_opponent_buy_boots_tier2_item_timestamp',
+  'sum_consumable_item_bought',
+  'sum_consumable_item_bought_by_opponent',
+
+  // Objectives (detail + dominance)
   'sum_drake_kill',
   'sum_drake_assist',
   'sum_herald_kill',
@@ -64,10 +98,22 @@ export const CHAMPION_MATCHUP_LANE_SUM_COLUMNS = [
   'sum_herald_assist_by_opponent',
   'sum_void_kill_by_opponent',
   'sum_void_assist_by_opponent',
+
+  // Map tempo / structures (detail + dominance)
   'sum_first_tower',
+  'sum_first_tower_by_opponent',
   'sum_turret_plate_taken',
-  'sum_kill_by_roaming',
+  'sum_turret_plate_taken_by_opponent',
+
+  // Gank / dive / roaming (detail + dominance)
+  'sum_kill_by_dive',
+  'sum_death_by_dive',
   'sum_kill_by_gank',
+  'sum_death_by_gank',
+  'sum_kill_by_roaming',
+  'sum_death_by_roaming',
+
+  // Legacy fallback lane economy/pressure keys
   'sum_max_level_lead_lane_opponent',
   'sum_max_kill_deficit',
   'sum_max_cs_advantage_on_lane_opponent',

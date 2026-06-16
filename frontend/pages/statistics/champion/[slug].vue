@@ -524,13 +524,16 @@
         class="champion-page-main min-w-0 flex-1 p-4 max-lg:px-0 max-lg:py-2 max-lg:pb-20 lg:px-3 lg:pb-4 lg:pt-0"
       >
         <div class="w-full">
-          <ChampionStatsSeoSummary
-            v-if="championStats && championName(championId)"
-            :champion-name="championName(championId)!"
-            :season="lolSeasonLabel"
-            :patch="gameVersion || versionStore.currentVersion || ''"
-            :stats="championStats"
-          />
+          <!-- SEO-only summary block (visuellement masqué car informations déjà présentes dans la section résumé). -->
+          <div class="sr-only">
+            <ChampionStatsSeoSummary
+              v-if="championStats && championName(championId)"
+              :champion-name="championName(championId)!"
+              :season="lolSeasonLabel"
+              :patch="gameVersion || versionStore.currentVersion || ''"
+              :stats="championStats"
+            />
+          </div>
           <!-- Loading / error -->
           <div
             v-if="pending && !championStats"
@@ -1286,29 +1289,41 @@
                   <div
                     class="statistics-champion-matchup-mobile-list statistics-tier-list-mobile-list w-full space-y-1 md:hidden"
                   >
-                    <ChampionMatchupMobileCard
-                      v-for="(row, idx) in paginatedMatchupsExt"
-                      :key="matchupCardKey(row)"
-                      :row="row"
-                      :display-rank="(matchupPage - 1) * matchupPageSize + idx + 1"
-                      :expanded="expandedMatchupKeys.has(matchupCardKey(row))"
-                      :show-role="!filterRole"
-                      :portrait-src="
-                        gameVersion && championByKey(row.opponentChampionId)?.image?.full
-                          ? getChampionImageUrl(
-                              gameVersion,
-                              championByKey(row.opponentChampionId)!.image!.full
-                            )
-                          : null
-                      "
-                      :champion-name="
-                        championName(row.opponentChampionId) ?? String(row.opponentChampionId)
-                      "
-                      :role-label="roleLabel(row.role)"
-                      :role-icon-src="roleIconPath(row.role)"
-                      :reference-version="matchupsExtData?.referenceVersion ?? null"
-                      @toggle="toggleMatchupCard(row)"
-                    />
+                    <template v-for="(row, idx) in paginatedMatchupsExt" :key="matchupCardKey(row)">
+                      <ChampionMatchupMobileCard
+                        :row="row"
+                        :display-rank="(matchupPage - 1) * matchupPageSize + idx + 1"
+                        :expanded="expandedMatchupKeys.has(matchupCardKey(row))"
+                        :selected="isMatchupDetailActive(row)"
+                        :show-role="!filterRole"
+                        :portrait-src="
+                          gameVersion && championByKey(row.opponentChampionId)?.image?.full
+                            ? getChampionImageUrl(
+                                gameVersion,
+                                championByKey(row.opponentChampionId)!.image!.full
+                              )
+                            : null
+                        "
+                        :champion-name="
+                          championName(row.opponentChampionId) ?? String(row.opponentChampionId)
+                        "
+                        :role-label="roleLabel(row.role)"
+                        :role-icon-src="roleIconPath(row.role)"
+                        :reference-version="matchupsExtData?.referenceVersion ?? null"
+                        @toggle="toggleMatchupCard(row)"
+                      />
+                      <ChampionMatchupDetailPanel
+                        v-if="isMatchupDetailActive(row)"
+                        :id="'matchup-detail-' + matchupCardKey(row)"
+                        v-model:tab="matchupDetailTab"
+                        :row="row"
+                        :champion-label="
+                          championName(row.opponentChampionId) ?? String(row.opponentChampionId)
+                        "
+                        :role-label="roleLabel(row.role)"
+                        class="mb-1"
+                      />
+                    </template>
                   </div>
                   <div
                     class="champion-matchups-table-wrap champion-tab-data-surface hidden overflow-x-auto md:block"
@@ -1320,7 +1335,7 @@
                             <button
                               type="button"
                               class="inline-flex items-center gap-1 hover:text-accent"
-                              @click="setMatchupSort('rank')"
+                              @click.stop="setMatchupSort('rank')"
                             >
                               {{ t('statisticsPage.tierListRank') }}{{ matchupSortIcon('rank') }}
                             </button>
@@ -1329,7 +1344,7 @@
                             <button
                               type="button"
                               class="inline-flex items-center gap-1 hover:text-accent"
-                              @click="setMatchupSort('champion')"
+                              @click.stop="setMatchupSort('champion')"
                             >
                               {{ t('statisticsPage.champion') }}{{ matchupSortIcon('champion') }}
                             </button>
@@ -1339,7 +1354,7 @@
                               type="button"
                               class="inline-flex items-center gap-1 hover:text-accent"
                               :title="t('statisticsPage.championMatchupTooltipScore')"
-                              @click="setMatchupSort('score')"
+                              @click.stop="setMatchupSort('score')"
                             >
                               {{ t('statisticsPage.championMatchupColScore')
                               }}{{ matchupSortIcon('score') }}
@@ -1356,7 +1371,7 @@
                                     t('statisticsPage.overviewVersionAll'),
                                 })
                               "
-                              @click="setMatchupSort('scoreDelta')"
+                              @click.stop="setMatchupSort('scoreDelta')"
                             >
                               {{ t('statisticsPage.championMatchupColScoreDelta')
                               }}{{ matchupSortIcon('scoreDelta') }}
@@ -1366,7 +1381,7 @@
                             <button
                               type="button"
                               class="inline-flex items-center gap-1 hover:text-accent"
-                              @click="setMatchupSort('role')"
+                              @click.stop="setMatchupSort('role')"
                             >
                               {{ t('statisticsPage.filterRole') }}{{ matchupSortIcon('role') }}
                             </button>
@@ -1376,7 +1391,7 @@
                               type="button"
                               class="inline-flex items-center gap-1 hover:text-accent"
                               :title="t('statisticsPage.championMatchupTooltipWinrate')"
-                              @click="setMatchupSort('winrate')"
+                              @click.stop="setMatchupSort('winrate')"
                             >
                               {{ t('statisticsPage.winrate') }}{{ matchupSortIcon('winrate') }}
                             </button>
@@ -1386,7 +1401,7 @@
                               type="button"
                               class="inline-flex items-center gap-1 hover:text-accent"
                               :title="t('statisticsPage.championMatchupTooltipPickrate')"
-                              @click="setMatchupSort('pickrate')"
+                              @click.stop="setMatchupSort('pickrate')"
                             >
                               {{ t('statisticsPage.championMatchupColPickrate')
                               }}{{ matchupSortIcon('pickrate') }}
@@ -1397,7 +1412,7 @@
                               type="button"
                               class="inline-flex items-center gap-1 hover:text-accent"
                               :title="t('statisticsPage.championMatchupDelta1Formula')"
-                              @click="setMatchupSort('delta1')"
+                              @click.stop="setMatchupSort('delta1')"
                             >
                               {{ t('statisticsPage.championMatchupColDelta1')
                               }}{{ matchupSortIcon('delta1') }}
@@ -1408,7 +1423,7 @@
                               type="button"
                               class="inline-flex items-center gap-1 hover:text-accent"
                               :title="t('statisticsPage.championMatchupDelta2Formula')"
-                              @click="setMatchupSort('delta2')"
+                              @click.stop="setMatchupSort('delta2')"
                             >
                               {{ t('statisticsPage.championMatchupColDelta2')
                               }}{{ matchupSortIcon('delta2') }}
@@ -1419,7 +1434,7 @@
                               type="button"
                               class="inline-flex items-center gap-1 hover:text-accent"
                               :title="t('statisticsPage.championMatchupTooltipLaneScore')"
-                              @click="setMatchupSort('laneScore')"
+                              @click.stop="setMatchupSort('laneScore')"
                             >
                               {{ t('statisticsPage.championMatchupColLaneScore')
                               }}{{ matchupSortIcon('laneScore') }}
@@ -1430,7 +1445,7 @@
                               type="button"
                               class="inline-flex items-center gap-1 hover:text-accent"
                               :title="t('statisticsPage.championMatchupTooltipLaneProfile')"
-                              @click="setMatchupSort('dominance')"
+                              @click.stop="setMatchupSort('dominance')"
                             >
                               {{ t('statisticsPage.championMatchupColDominance')
                               }}{{ matchupSortIcon('dominance') }}
@@ -1439,190 +1454,214 @@
                         </tr>
                       </thead>
                       <tbody>
-                        <tr
+                        <template
                           v-for="(row, idx) in paginatedMatchupsExt"
-                          :key="row.opponentChampionId + '-' + row.role"
-                          class="border-b border-primary/15 odd:bg-white/[0.02]"
+                          :key="matchupCardKey(row)"
                         >
-                          <td class="px-2 py-2 tabular-nums text-text/90">
-                            {{ (matchupPage - 1) * matchupPageSize + idx + 1 }}
-                          </td>
-                          <td class="px-2 py-2">
-                            <span class="inline-flex min-w-0 items-center gap-2">
-                              <img
-                                v-if="
-                                  gameVersion && championByKey(row.opponentChampionId)?.image?.full
-                                "
-                                :src="
-                                  getChampionImageUrl(
-                                    gameVersion,
-                                    championByKey(row.opponentChampionId)!.image!.full
-                                  )
-                                "
-                                :alt="championName(row.opponentChampionId) ?? ''"
-                                class="h-9 w-9 shrink-0 rounded border border-black/40 object-cover"
-                                width="36"
-                                height="36"
-                              />
-                              <span class="min-w-0 truncate font-medium text-text/90">{{
-                                championName(row.opponentChampionId) ?? row.opponentChampionId
-                              }}</span>
-                            </span>
-                          </td>
-                          <td class="px-2 py-2 text-right tabular-nums text-text/90">
-                            {{ row.matchupScore.toFixed(2) }}
-                          </td>
-                          <td class="px-2 py-2 text-right tabular-nums">
-                            <span :class="matchupDeltaClass(row.matchupScoreDeltaVsReference)">
-                              {{ formatSignedDelta(row.matchupScoreDeltaVsReference) }}
-                            </span>
-                          </td>
-                          <td v-if="!filterRole" class="px-2 py-2 text-text/85">
-                            <span class="inline-flex items-center gap-1">
-                              <img
-                                v-if="roleIconPath(row.role)"
-                                :src="roleIconPath(row.role)"
-                                :alt="roleLabel(row.role)"
-                                class="h-4 w-4 object-contain"
-                                width="16"
-                                height="16"
-                              />
-                              {{ roleLabel(row.role) }}
-                            </span>
-                          </td>
-                          <td class="px-2 py-2 text-right tabular-nums">
-                            <div>{{ row.winrate.toFixed(2) }}%</div>
-                            <div
-                              class="text-[11px]"
-                              :class="matchupDeltaClass(row.winrateDeltaVsReference)"
-                            >
-                              {{ formatSignedDelta(row.winrateDeltaVsReference) }}
-                            </div>
-                          </td>
-                          <td class="px-2 py-2 text-right tabular-nums text-text/85">
-                            <div>{{ row.pickrate.toFixed(2) }}%</div>
-                            <div
-                              class="text-[11px]"
-                              :class="matchupDeltaClass(row.pickrateDeltaVsReference)"
-                            >
-                              {{ formatSignedDelta(row.pickrateDeltaVsReference) }}
-                            </div>
-                          </td>
-                          <td
-                            class="px-2 py-2 text-right tabular-nums text-text/85"
-                            :title="t('statisticsPage.championMatchupDelta1Formula')"
-                          >
-                            <span :class="matchupDeltaClass(row.delta1)">
-                              {{ formatSignedDelta(row.delta1) }}
-                            </span>
-                          </td>
-                          <td
-                            class="px-2 py-2 text-right tabular-nums text-text/85"
-                            :title="t('statisticsPage.championMatchupDelta2Formula')"
-                          >
-                            <span :class="matchupDeltaClass(row.delta2)">
-                              {{ formatSignedDelta(row.delta2) }}
-                            </span>
-                          </td>
-                          <td class="px-2 py-2 text-right tabular-nums text-text/85">
-                            <div>{{ row.laneScore.toFixed(2) }}</div>
-                            <div
-                              class="text-[11px]"
-                              :class="matchupDeltaClass(row.laneScoreDeltaVsReference)"
-                            >
-                              {{ formatSignedDelta(row.laneScoreDeltaVsReference) }}
-                            </div>
-                          </td>
-                          <td
-                            class="max-w-md px-2 py-2 align-top"
-                            :title="
-                              dominanceTooltip(
-                                row.dominanceKeys,
-                                row.weaknessKeys,
-                                row.laneProfileByKey
-                              )
+                          <tr
+                            class="cursor-pointer border-b border-primary/15 odd:bg-white/[0.02] hover:bg-white/[0.04]"
+                            :class="
+                              isMatchupDetailActive(row)
+                                ? 'bg-primary/10 ring-1 ring-inset ring-primary/35'
+                                : ''
                             "
+                            @click="openMatchupDetail(row)"
                           >
-                            <div v-if="row.dominanceKeys?.length" class="mb-1.5">
-                              <div
-                                class="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-400"
-                              >
-                                <span
-                                  class="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400"
-                                  aria-hidden="true"
+                            <td class="px-2 py-2 tabular-nums text-text/90">
+                              {{ (matchupPage - 1) * matchupPageSize + idx + 1 }}
+                            </td>
+                            <td class="px-2 py-2">
+                              <span class="inline-flex min-w-0 items-center gap-2">
+                                <img
+                                  v-if="
+                                    gameVersion &&
+                                    championByKey(row.opponentChampionId)?.image?.full
+                                  "
+                                  :src="
+                                    getChampionImageUrl(
+                                      gameVersion,
+                                      championByKey(row.opponentChampionId)!.image!.full
+                                    )
+                                  "
+                                  :alt="championName(row.opponentChampionId) ?? ''"
+                                  class="h-9 w-9 shrink-0 rounded border border-black/40 object-cover"
+                                  width="36"
+                                  height="36"
                                 />
-                                {{ t('statisticsPage.championMatchupProfileChampion') }}
-                              </div>
-                              <div class="flex flex-wrap gap-1">
-                                <span
-                                  v-for="k in row.dominanceKeys"
-                                  :key="'dom-' + k"
-                                  :class="
-                                    laneProfileSignalChipClass(
-                                      row.laneProfileByKey?.[k] ?? 'smallAdvantage',
-                                      'strength'
-                                    )
-                                  "
-                                  :title="
-                                    laneProfileChipTitle(k, row.laneProfileByKey?.[k], 'strength')
-                                  "
-                                >
-                                  <span class="font-semibold">{{
-                                    t(`statisticsPage.championMatchupDominanceShort.${k}`)
-                                  }}</span>
-                                  <span class="opacity-70" aria-hidden="true">·</span>
-                                  <span class="opacity-90">{{
-                                    t(
-                                      `statisticsPage.championMatchupSignalLevelShort.${row.laneProfileByKey?.[k] ?? 'smallAdvantage'}`
-                                    )
-                                  }}</span>
-                                </span>
-                              </div>
-                            </div>
-                            <div v-if="row.weaknessKeys?.length">
-                              <div
-                                class="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-rose-400"
-                              >
-                                <span
-                                  class="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400"
-                                  aria-hidden="true"
+                                <span class="min-w-0 truncate font-medium text-text/90">{{
+                                  championName(row.opponentChampionId) ?? row.opponentChampionId
+                                }}</span>
+                              </span>
+                            </td>
+                            <td class="px-2 py-2 text-right tabular-nums text-text/90">
+                              {{ row.matchupScore.toFixed(2) }}
+                            </td>
+                            <td class="px-2 py-2 text-right tabular-nums">
+                              <span :class="matchupDeltaClass(row.matchupScoreDeltaVsReference)">
+                                {{ formatSignedDelta(row.matchupScoreDeltaVsReference) }}
+                              </span>
+                            </td>
+                            <td v-if="!filterRole" class="px-2 py-2 text-text/85">
+                              <span class="inline-flex items-center gap-1">
+                                <img
+                                  v-if="roleIconPath(row.role)"
+                                  :src="roleIconPath(row.role)"
+                                  :alt="roleLabel(row.role)"
+                                  class="h-4 w-4 object-contain"
+                                  width="16"
+                                  height="16"
                                 />
-                                {{ t('statisticsPage.championMatchupProfileOpponent') }}
+                                {{ roleLabel(row.role) }}
+                              </span>
+                            </td>
+                            <td class="px-2 py-2 text-right tabular-nums">
+                              <div>{{ row.winrate.toFixed(2) }}%</div>
+                              <div
+                                class="text-[11px]"
+                                :class="matchupDeltaClass(row.winrateDeltaVsReference)"
+                              >
+                                {{ formatSignedDelta(row.winrateDeltaVsReference) }}
                               </div>
-                              <div class="flex flex-wrap gap-1">
-                                <span
-                                  v-for="k in row.weaknessKeys"
-                                  :key="'weak-' + k"
-                                  :class="
-                                    laneProfileSignalChipClass(
-                                      row.laneProfileByKey?.[k] ?? 'smallDisadvantage',
-                                      'weakness'
-                                    )
-                                  "
-                                  :title="
-                                    laneProfileChipTitle(k, row.laneProfileByKey?.[k], 'weakness')
-                                  "
-                                >
-                                  <span class="font-semibold">{{
-                                    t(`statisticsPage.championMatchupDominanceShort.${k}`)
-                                  }}</span>
-                                  <span class="opacity-70" aria-hidden="true">·</span>
-                                  <span class="opacity-90">{{
-                                    t(
-                                      `statisticsPage.championMatchupSignalLevelShort.${row.laneProfileByKey?.[k] ?? 'smallDisadvantage'}`
-                                    )
-                                  }}</span>
-                                </span>
+                            </td>
+                            <td class="px-2 py-2 text-right tabular-nums text-text/85">
+                              <div>{{ row.pickrate.toFixed(2) }}%</div>
+                              <div
+                                class="text-[11px]"
+                                :class="matchupDeltaClass(row.pickrateDeltaVsReference)"
+                              >
+                                {{ formatSignedDelta(row.pickrateDeltaVsReference) }}
                               </div>
-                            </div>
-                            <div
-                              v-if="!row.dominanceKeys?.length && !row.weaknessKeys?.length"
-                              class="inline-flex items-center gap-1 rounded border border-primary/25 bg-white/[0.03] px-2 py-1 text-[11px] text-text/65"
+                            </td>
+                            <td
+                              class="px-2 py-2 text-right tabular-nums text-text/85"
+                              :title="t('statisticsPage.championMatchupDelta1Formula')"
                             >
-                              {{ t('statisticsPage.championMatchupDominanceBalancedShort') }}
-                            </div>
-                          </td>
-                        </tr>
+                              <span :class="matchupDeltaClass(row.delta1)">
+                                {{ formatSignedDelta(row.delta1) }}
+                              </span>
+                            </td>
+                            <td
+                              class="px-2 py-2 text-right tabular-nums text-text/85"
+                              :title="t('statisticsPage.championMatchupDelta2Formula')"
+                            >
+                              <span :class="matchupDeltaClass(row.delta2)">
+                                {{ formatSignedDelta(row.delta2) }}
+                              </span>
+                            </td>
+                            <td class="px-2 py-2 text-right tabular-nums text-text/85">
+                              <div>{{ row.laneScore.toFixed(2) }}</div>
+                              <div
+                                class="text-[11px]"
+                                :class="matchupDeltaClass(row.laneScoreDeltaVsReference)"
+                              >
+                                {{ formatSignedDelta(row.laneScoreDeltaVsReference) }}
+                              </div>
+                            </td>
+                            <td
+                              class="max-w-md px-2 py-2 align-top"
+                              :title="
+                                dominanceTooltip(
+                                  row.dominanceKeys,
+                                  row.weaknessKeys,
+                                  row.laneProfileByKey
+                                )
+                              "
+                            >
+                              <div v-if="row.dominanceKeys?.length" class="mb-1.5">
+                                <div
+                                  class="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-400"
+                                >
+                                  <span
+                                    class="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400"
+                                    aria-hidden="true"
+                                  />
+                                  {{ t('statisticsPage.championMatchupProfileChampion') }}
+                                </div>
+                                <div class="flex flex-wrap gap-1">
+                                  <span
+                                    v-for="k in row.dominanceKeys"
+                                    :key="'dom-' + k"
+                                    :class="
+                                      laneProfileSignalChipClass(
+                                        row.laneProfileByKey?.[k] ?? 'smallAdvantage',
+                                        'strength'
+                                      )
+                                    "
+                                    :title="
+                                      laneProfileChipTitle(k, row.laneProfileByKey?.[k], 'strength')
+                                    "
+                                  >
+                                    <span class="font-semibold">{{
+                                      t(`statisticsPage.championMatchupDominanceShort.${k}`)
+                                    }}</span>
+                                    <span class="opacity-70" aria-hidden="true">·</span>
+                                    <span class="opacity-90">{{
+                                      t(
+                                        `statisticsPage.championMatchupSignalLevelShort.${row.laneProfileByKey?.[k] ?? 'smallAdvantage'}`
+                                      )
+                                    }}</span>
+                                  </span>
+                                </div>
+                              </div>
+                              <div v-if="row.weaknessKeys?.length">
+                                <div
+                                  class="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-rose-400"
+                                >
+                                  <span
+                                    class="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400"
+                                    aria-hidden="true"
+                                  />
+                                  {{ t('statisticsPage.championMatchupProfileOpponent') }}
+                                </div>
+                                <div class="flex flex-wrap gap-1">
+                                  <span
+                                    v-for="k in row.weaknessKeys"
+                                    :key="'weak-' + k"
+                                    :class="
+                                      laneProfileSignalChipClass(
+                                        row.laneProfileByKey?.[k] ?? 'smallDisadvantage',
+                                        'weakness'
+                                      )
+                                    "
+                                    :title="
+                                      laneProfileChipTitle(k, row.laneProfileByKey?.[k], 'weakness')
+                                    "
+                                  >
+                                    <span class="font-semibold">{{
+                                      t(`statisticsPage.championMatchupDominanceShort.${k}`)
+                                    }}</span>
+                                    <span class="opacity-70" aria-hidden="true">·</span>
+                                    <span class="opacity-90">{{
+                                      t(
+                                        `statisticsPage.championMatchupSignalLevelShort.${row.laneProfileByKey?.[k] ?? 'smallDisadvantage'}`
+                                      )
+                                    }}</span>
+                                  </span>
+                                </div>
+                              </div>
+                              <div
+                                v-if="!row.dominanceKeys?.length && !row.weaknessKeys?.length"
+                                class="inline-flex items-center gap-1 rounded border border-primary/25 bg-white/[0.03] px-2 py-1 text-[11px] text-text/65"
+                              >
+                                {{ t('statisticsPage.championMatchupDominanceBalancedShort') }}
+                              </div>
+                            </td>
+                          </tr>
+                          <tr v-if="isMatchupDetailActive(row)" class="border-b border-primary/15">
+                            <td :colspan="matchupTableColspan" class="bg-black/15 px-2 py-3">
+                              <ChampionMatchupDetailPanel
+                                :id="'matchup-detail-' + matchupCardKey(row)"
+                                v-model:tab="matchupDetailTab"
+                                :row="row"
+                                :champion-label="
+                                  championName(row.opponentChampionId) ??
+                                  String(row.opponentChampionId)
+                                "
+                                :role-label="roleLabel(row.role)"
+                              />
+                            </td>
+                          </tr>
+                        </template>
                       </tbody>
                     </table>
                   </div>
@@ -1783,7 +1822,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, provide } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, provide, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -1800,6 +1839,9 @@ import ChampionMatchupMobileCard, {
   type MatchupsExtRow,
   type MatchupsExtSignalLevel,
 } from '~/components/statistics/ChampionMatchupMobileCard.vue'
+import ChampionMatchupDetailPanel, {
+  type MatchupDetailTabId,
+} from '~/components/statistics/ChampionMatchupDetailPanel.vue'
 import ChampionSynergyTab, {
   type SynergyExtRow,
 } from '~/components/statistics/ChampionSynergyTab.vue'
@@ -2027,8 +2069,25 @@ const matchupSortKey = ref<MatchupSortKey>('score')
 const matchupSortDir = ref<'asc' | 'desc'>('desc')
 const expandedMatchupKeys = ref<Set<string>>(new Set())
 
+const matchupDetailTab = ref<MatchupDetailTabId>('profile')
+const activeMatchupDetailKey = ref<string | null>(null)
+
+const matchupTableColspan = computed(() => (filterRole.value ? 10 : 11))
+
+function isMatchupDetailActive(row: MatchupsExtRow): boolean {
+  return activeMatchupDetailKey.value === matchupCardKey(row)
+}
+
 function matchupCardKey(row: MatchupsExtRow): string {
   return `${row.opponentChampionId}-${row.role}`
+}
+
+function scrollToMatchupDetail(key: string): void {
+  nextTick(() => {
+    document
+      .getElementById(`matchup-detail-${key}`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  })
 }
 
 function toggleMatchupCard(row: MatchupsExtRow): void {
@@ -2037,6 +2096,27 @@ function toggleMatchupCard(row: MatchupsExtRow): void {
   if (next.has(key)) next.delete(key)
   else next.add(key)
   expandedMatchupKeys.value = next
+  if (next.has(key)) {
+    activeMatchupDetailKey.value = key
+    matchupDetailTab.value = 'profile'
+    scrollToMatchupDetail(key)
+  } else if (activeMatchupDetailKey.value === key) {
+    activeMatchupDetailKey.value = null
+  }
+}
+
+function openMatchupDetail(row: MatchupsExtRow): void {
+  const key = matchupCardKey(row)
+  if (activeMatchupDetailKey.value === key) {
+    activeMatchupDetailKey.value = null
+    return
+  }
+  activeMatchupDetailKey.value = key
+  matchupDetailTab.value = 'profile'
+  const next = new Set(expandedMatchupKeys.value)
+  next.add(key)
+  expandedMatchupKeys.value = next
+  scrollToMatchupDetail(key)
 }
 
 function setMatchupSort(key: MatchupSortKey): void {

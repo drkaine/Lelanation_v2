@@ -48,6 +48,63 @@ export interface ChampionMatchupExtendedRow {
   dominanceKeys: ChampionMatchupDominanceKey[]
   weaknessKeys: ChampionMatchupDominanceKey[]
   laneProfileByKey: Partial<Record<ChampionMatchupDominanceKey, ChampionMatchupSignalLevel>>
+  matchupDetail?: {
+    lane: {
+      goldDiff5Min: number
+      goldDiff10Min: number
+      goldDiff15Min: number
+      csDiff5Min: number
+      csDiff10Min: number
+      csDiff15Min: number
+      visionDiff5Min: number
+      visionDiff10Min: number
+      visionDiff15Min: number
+      levelDiff15Min: number
+      xpDiff15Min: number
+      killsVsOpponent5Min: number
+      killsVsOpponent10Min: number
+      killsVsOpponent15Min: number
+      deathsVsOpponent5Min: number
+      deathsVsOpponent10Min: number
+      deathsVsOpponent15Min: number
+    }
+    gankDiveRoam: {
+      gankKillsPerGame: number
+      gankDeathsPerGame: number
+      diveKillsPerGame: number
+      diveDeathsPerGame: number
+      roamingKillsPerGame: number
+      roamingDeathsPerGame: number
+    }
+    itemsFirst: {
+      legendaryFirstRate: number
+      opponentLegendaryFirstRate: number
+      legendaryFirstAvgTimestampMs: number
+      opponentLegendaryFirstAvgTimestampMs: number
+      bootsFirstRate: number
+      opponentBootsFirstRate: number
+      bootsFirstAvgTimestampMs: number
+      opponentBootsFirstAvgTimestampMs: number
+      bootsTier2FirstRate: number
+      opponentBootsTier2FirstRate: number
+      bootsTier2FirstAvgTimestampMs: number
+      opponentBootsTier2FirstAvgTimestampMs: number
+      consumablesBoughtPerGame: number
+      opponentConsumablesBoughtPerGame: number
+    }
+    objectivesAndMap: {
+      drakeKillsPerGame: number
+      drakeAssistsPerGame: number
+      heraldKillsPerGame: number
+      heraldAssistsPerGame: number
+      voidKillsPerGame: number
+      voidAssistsPerGame: number
+      firstTowerRate: number
+      opponentFirstTowerRate: number
+      platesTakenPerGame: number
+      opponentPlatesTakenPerGame: number
+    }
+  }
 }
 
 export interface ChampionMatchupExtendedResult {
@@ -246,6 +303,33 @@ function laneScoreFromZ(z: Record<ChampionMatchupDominanceKey, number>): number 
   return laneScoreRaw * 100
 }
 
+function matchupScoreFromSignals(
+  wrDelta: number,
+  gamesInMatchup: number,
+  totalGamesChampion: number,
+  z: Record<ChampionMatchupDominanceKey, number>,
+): number {
+  const baseScore = matchupScoreFromDeltaAndWeight({
+    delta: wrDelta,
+    gamesInMatchup,
+    totalGamesChampion: Math.max(1, totalGamesChampion),
+  })
+  // Blend historical WR edge with timeline lane signals.
+  const laneCore =
+    ((z.early ?? 0) +
+      (z.laneEconomy ?? 0) +
+      (z.kills ?? 0) +
+      (z.level ?? 0) +
+      (z.cs ?? 0) +
+      (z.vision ?? 0)) /
+    6
+  const contextual =
+    ((z.items ?? 0) + (z.objectives ?? 0) + (z.pressure ?? 0)) / 3
+  const laneComposite = laneCore * 0.7 + contextual * 0.3
+  const sampleWeight = Math.min(1, Math.max(0.2, gamesInMatchup / 80))
+  return baseScore * 0.65 + laneComposite * sampleWeight * 0.35
+}
+
 function laneProfileFromZ(
   z: Record<ChampionMatchupDominanceKey, number>,
   cohortSize: number,
@@ -430,13 +514,9 @@ export async function getChampionMatchupsExtendedTable(options: {
         const avgOthersWrPct = sumOtherGames > 0 ? (100 * sumOtherWins) / sumOtherGames : wrPct
         const delta = computeDelta(wrPct, avgOthersWrPct)
         const totalRoleGames = refGamesInRole.get(role) ?? g
-        const score = matchupScoreFromDeltaAndWeight({
-          delta,
-          gamesInMatchup: g,
-          totalGamesChampion: Math.max(1, totalRoleGames),
-        })
         const cohort = peers.filter((p) => Number(p.champion_id) !== championId && Number(p.games ?? 0) >= 3)
         const z = laneZscoresFromRow(mr, g, cohort, championId)
+        const score = matchupScoreFromSignals(delta, g, totalRoleGames, z)
         const key = `${opp}|${role}`
         referenceScoreByOppRole.set(key, score * 100)
         referenceWinrateByOppRole.set(key, Math.round(wrPct * 100) / 100)
@@ -493,16 +573,78 @@ export async function getChampionMatchupsExtendedTable(options: {
     const delta2 = wrPct - normalizedWinrateExpected
     const delta = computeDelta(wrPct, avgOthersWrPct)
     const totalRoleGames = gamesInRole.get(role) ?? g
-    const matchupScore = matchupScoreFromDeltaAndWeight({
-      delta,
-      gamesInMatchup: g,
-      totalGamesChampion: Math.max(1, totalRoleGames),
-    })
-
     const cohort = peers.filter((p) => Number(p.champion_id) !== championId && Number(p.games ?? 0) >= 3)
     const z = laneZscoresFromRow(mr, g, cohort, championId)
+    const matchupScore = matchupScoreFromSignals(delta, g, totalRoleGames, z)
     const laneScore = laneScoreFromZ(z)
     const { dominanceKeys, weaknessKeys, laneProfileByKey } = laneProfileFromZ(z, cohort.length)
+
+    const per = (field: string): number => (g > 0 ? Number((mr as Record<string, unknown>)[field] ?? 0) / g : 0)
+    const laneDetail = {
+      goldDiff5Min: per('sum_gold_difference_5min'),
+      goldDiff10Min: per('sum_gold_difference_10min'),
+      goldDiff15Min: per('sum_gold_difference_15min'),
+      csDiff5Min: per('sum_cs_difference_5min'),
+      csDiff10Min: per('sum_cs_difference_10min'),
+      csDiff15Min: per('sum_cs_difference_15min'),
+      visionDiff5Min: per('sum_vision_score_difference_5min'),
+      visionDiff10Min: per('sum_vision_score_difference_10min'),
+      visionDiff15Min: per('sum_vision_score_difference_15min'),
+      levelDiff15Min: per('sum_level_15min') - per('sum_level_opponent_15min'),
+      xpDiff15Min: per('sum_xp_15min') - per('sum_xp_opponent_15min'),
+      killsVsOpponent5Min: per('sum_kill_opponent_5min'),
+      killsVsOpponent10Min: per('sum_kill_opponent_10min'),
+      killsVsOpponent15Min: per('sum_kill_opponent_15min'),
+      deathsVsOpponent5Min: per('sum_death_by_opponent_5min'),
+      deathsVsOpponent10Min: per('sum_death_by_opponent_10min'),
+      deathsVsOpponent15Min: per('sum_death_by_opponent_15min'),
+    }
+
+    const gankDiveRoam = {
+      gankKillsPerGame: per('sum_kill_by_gank'),
+      gankDeathsPerGame: per('sum_death_by_gank'),
+      diveKillsPerGame: per('sum_kill_by_dive'),
+      diveDeathsPerGame: per('sum_death_by_dive'),
+      roamingKillsPerGame: per('sum_kill_by_roaming'),
+      roamingDeathsPerGame: per('sum_death_by_roaming'),
+    }
+
+    const itemsFirst = {
+      legendaryFirstRate: per('sum_have_legendary_item_first'),
+      opponentLegendaryFirstRate: per('sum_opponent_have_legendary_item_first'),
+      legendaryFirstAvgTimestampMs: per('sum_buy_legendary_item_timestamp'),
+      opponentLegendaryFirstAvgTimestampMs: per('sum_opponent_buy_legendary_item_timestamp'),
+      bootsFirstRate: per('sum_have_boots_item_first'),
+      opponentBootsFirstRate: per('sum_opponent_have_boots_item_first'),
+      bootsFirstAvgTimestampMs: per('sum_buy_boots_item_timestamp'),
+      opponentBootsFirstAvgTimestampMs: per('sum_opponent_buy_boots_item_timestamp'),
+      bootsTier2FirstRate: per('sum_have_boots_tier2_item_first'),
+      opponentBootsTier2FirstRate: per('sum_opponent_have_boots_tier2_item_first'),
+      bootsTier2FirstAvgTimestampMs: per('sum_buy_boots_tier2_item_timestamp'),
+      opponentBootsTier2FirstAvgTimestampMs: per('sum_opponent_buy_boots_tier2_item_timestamp'),
+      consumablesBoughtPerGame: per('sum_consumable_item_bought'),
+      opponentConsumablesBoughtPerGame: per('sum_consumable_item_bought_by_opponent'),
+    }
+
+    const objectivesAndMap = {
+      drakeKillsPerGame: per('sum_drake_kill'),
+      drakeAssistsPerGame: per('sum_drake_assist'),
+      heraldKillsPerGame: per('sum_herald_kill'),
+      heraldAssistsPerGame: per('sum_herald_assist'),
+      voidKillsPerGame: per('sum_void_kill'),
+      voidAssistsPerGame: per('sum_void_assist'),
+      firstTowerRate: per('sum_first_tower'),
+      opponentFirstTowerRate: per('sum_first_tower_by_opponent'),
+      platesTakenPerGame: per('sum_turret_plate_taken'),
+      opponentPlatesTakenPerGame: per('sum_turret_plate_taken_by_opponent'),
+    }
+
+    const matchupDetail = {
+      lane: laneDetail,
+      gankDiveRoam,
+      itemsFirst,
+      objectivesAndMap,
+    }
 
     const matchupScorePct = matchupScore * 100
     built.push({
@@ -532,6 +674,7 @@ export async function getChampionMatchupsExtendedTable(options: {
       dominanceKeys,
       weaknessKeys,
       laneProfileByKey,
+      matchupDetail,
       _sort: matchupScorePct,
     })
   }
