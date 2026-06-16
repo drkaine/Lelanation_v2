@@ -1,6 +1,8 @@
 //! Shared application state for LCU export.
 
+use crate::checklist::SavedChecklist;
 use crate::lcu::{ItemSetData, RunePageData};
+use crate::live_client::LiveCsSnapshot;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 
@@ -56,6 +58,8 @@ pub struct AppState {
     pub gameflow_phase: Mutex<String>,
     pub champion_id: Mutex<Option<u32>>,
     pub pending_build: Mutex<Option<BuildPayload>>,
+    pub live_cs_snapshot: Mutex<LiveCsSnapshot>,
+    pub checklist_draft: Mutex<Option<SavedChecklist>>,
 }
 
 impl AppState {
@@ -65,6 +69,8 @@ impl AppState {
             gameflow_phase: Mutex::new("None".into()),
             champion_id: Mutex::new(None),
             pending_build: Mutex::new(None),
+            live_cs_snapshot: Mutex::new(LiveCsSnapshot::default()),
+            checklist_draft: Mutex::new(None),
         }
     }
 

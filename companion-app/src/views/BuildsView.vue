@@ -16,10 +16,19 @@ import type { CompanionConfig } from "../companionConfig";
 import { importBuildToLcu, describeApplyResult } from "../lcuBuildImport";
 import { useLcuExport } from "../composables/useLcuExport";
 import KeyboardShortcutsView from "./KeyboardShortcutsView.vue";
+import ChecklistView from "./ChecklistView.vue";
 
 const settings = ref(getSettings());
 const { lcuStatus, refreshStatus } = useLcuExport();
 const lcuOk = computed(() => lcuStatus.value.connected);
+
+const lcuStatusTitle = computed(() => {
+  const base = lcuOk.value ? t("status.connected") : t("status.disconnected");
+  if (lcuOk.value && lcuStatus.value.phase) {
+    return `${base} · ${translateLcuPhase(settings.value.language, lcuStatus.value.phase)}`;
+  }
+  return base;
+});
 const iframeError = ref(false);
 const iframeLoadedOrigin = ref<string | null>(null);
 const importInProgress = ref(false);
@@ -52,6 +61,7 @@ const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 let updateCheckTimer: ReturnType<typeof setInterval> | null = null;
 let importNotificationTimer: ReturnType<typeof setTimeout> | null = null;
 let bridgeUnlisten: UnlistenFn | null = null;
+let postgameUnlisten: UnlistenFn | null = null;
 
 type QueuedImportMessage = {
   origin?: string;
@@ -64,6 +74,7 @@ type AppPage =
   | "statistics"
   | "tier-list"
   | "patch-notes"
+  | "checklist"
   | "shortcuts"
   | "settings";
 const currentPage = ref<AppPage>("builds");
@@ -89,12 +100,16 @@ const navEntries = computed(() =>
 );
 
 const embeddedPageUrl = computed(() => {
-  if (currentPage.value === "settings" || currentPage.value === "shortcuts") {
+  if (
+    currentPage.value === "settings" ||
+    currentPage.value === "shortcuts" ||
+    currentPage.value === "checklist"
+  ) {
     return "";
   }
   const locale = settings.value.language === "en" ? "/en" : "";
-  const pathMap: Record<Exclude<AppPage, "settings" | "shortcuts">, string> = {
-    builds: `${locale}/builds/discover`,
+  const pathMap: Record<Exclude<AppPage, "settings" | "shortcuts" | "checklist">, string> = {
+    builds: `${locale}/builds?tab=discover`,
     videos: `${locale}/videos`,
     statistics: `${locale}/statistics`,
     "tier-list": `${locale}/statistics/tier-list`,
@@ -110,7 +125,10 @@ const embeddedPageUrl = computed(() => {
   return target;
 });
 const isEmbeddedPage = computed(
-  () => currentPage.value !== "settings" && currentPage.value !== "shortcuts"
+  () =>
+    currentPage.value !== "settings" &&
+    currentPage.value !== "shortcuts" &&
+    currentPage.value !== "checklist"
 );
 
 watch(currentPage, () => {
@@ -131,7 +149,16 @@ function showImportNotification(message: string, ok: boolean) {
   }, 12000);
 }
 
+const isDev = import.meta.env.DEV;
+
 async function checkForUpdates() {
+  if (isDev) {
+    updateCheckMessage.value =
+      settings.value.language === "en"
+        ? "Auto-update disabled in dev mode."
+        : "Mises a jour desactivees en mode dev.";
+    return;
+  }
   updateChecking.value = true;
   updateCheckMessage.value = "";
   updateError.value = "";
@@ -183,6 +210,7 @@ async function checkForUpdates() {
 }
 
 async function installUpdate() {
+  if (isDev) return;
   const update = pendingUpdate.value;
   if (!update) return;
   updateInstalling.value = true;
@@ -449,6 +477,15 @@ onMounted(async () => {
     }
   );
 
+  try {
+    postgameUnlisten = await listen("lcu:checklist-saved", () => {
+      currentPage.value = "checklist";
+      showImportNotification(t("checklist.notifySaved"), true);
+    });
+  } catch {
+    /* browser preview */
+  }
+
   window.addEventListener("message", onIframeMessage, true);
   document.addEventListener("message", onIframeMessage as EventListener, true);
 });
@@ -456,6 +493,7 @@ onUnmounted(() => {
   if (updateCheckTimer) clearInterval(updateCheckTimer);
   if (importNotificationTimer) clearTimeout(importNotificationTimer);
   if (bridgeUnlisten) void bridgeUnlisten();
+  if (postgameUnlisten) void postgameUnlisten();
   window.removeEventListener("message", onIframeMessage, true);
   document.removeEventListener("message", onIframeMessage as EventListener, true);
 });
@@ -464,10 +502,35 @@ onUnmounted(() => {
 <template>
   <div class="app-frame">
     <header class="top-bar">
-      <div class="brand">
-        <span class="brand-title">Lelanation Companion</span>
+      <div class="top-bar-row">
+        <div class="brand">
+          <span class="brand-title">Lelanation Companion</span>
+        </div>
+        <div class="top-actions">
+          <button
+            type="button"
+            class="checklist-header-btn"
+            :class="{ active: currentPage === 'checklist' }"
+            :title="t('nav.checklist')"
+            @click="currentPage = 'checklist'"
+          >
+            {{ t("nav.checklist") }}
+          </button>
+          <button type="button" class="icon-btn" :title="t('settings.more')" @click="currentPage = 'settings'">
+            ⚙
+          </button>
+          <span
+            class="lcu-pill"
+            :data-ok="lcuOk ? '1' : '0'"
+            :title="lcuStatusTitle"
+            :aria-label="lcuStatusTitle"
+            role="status"
+          >
+            <span class="lcu-status-icon" aria-hidden="true">{{ lcuOk ? "✓" : "✕" }}</span>
+          </span>
+        </div>
       </div>
-      <nav class="app-nav">
+      <nav class="app-nav" aria-label="Navigation">
         <button
           v-for="entry in navEntries"
           :key="entry.id"
@@ -479,19 +542,6 @@ onUnmounted(() => {
           {{ entry.label }}
         </button>
       </nav>
-      <div class="top-actions">
-        <span class="lcu-pill" :data-ok="lcuOk ? '1' : '0'" :title="lcuStatus.phase">
-          {{
-            lcuOk
-              ? t("status.connected")
-              : t("status.disconnected")
-          }}
-          <span v-if="lcuOk" class="lcu-phase"> · {{ translateLcuPhase(settings.language, lcuStatus.phase) }}</span>
-        </span>
-        <button type="button" class="icon-btn" :title="t('settings.more')" @click="currentPage = 'settings'">
-          ⚙
-        </button>
-      </div>
     </header>
 
     <div
@@ -509,6 +559,11 @@ onUnmounted(() => {
       <span v-else>{{ t("update.available", { version: latestVersion }) }}</span>
       <p v-if="updateError" class="update-err">{{ t("update.error") }}: {{ updateError }}</p>
     </div>
+
+    <ChecklistView
+      v-if="currentPage === 'checklist'"
+      :language="settings.language"
+    />
 
     <KeyboardShortcutsView
       v-if="currentPage === 'shortcuts'"
@@ -684,8 +739,8 @@ onUnmounted(() => {
 <style scoped>
 .app-frame {
   width: 100%;
-  height: 100vh;
-  height: 100dvh;
+  flex: 1;
+  min-height: 0;
   margin: 0;
   padding: 0.5rem 0 0;
   box-sizing: border-box;
@@ -699,14 +754,21 @@ onUnmounted(() => {
 .top-bar {
   flex-shrink: 0;
   display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 1rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.45rem;
   margin: 0 1rem 0.5rem;
   padding: 0.5rem 0.65rem;
   border: 1px solid rgba(200, 155, 60, 0.35);
   border-radius: 12px;
   background: linear-gradient(145deg, rgba(10, 20, 40, 0.92), rgba(10, 20, 40, 0.72));
+}
+.top-bar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-width: 0;
 }
 .brand-title {
   font-weight: 700;
@@ -719,9 +781,29 @@ onUnmounted(() => {
 }
 .app-nav {
   display: flex;
-  flex: 1;
-  flex-wrap: wrap;
   gap: 0.45rem;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  padding-bottom: 0.1rem;
+}
+.checklist-header-btn {
+  padding: 0.38rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(126, 231, 135, 0.65);
+  background: rgba(126, 231, 135, 0.14);
+  color: #b8f0c8;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.checklist-header-btn:hover,
+.checklist-header-btn.active {
+  background: rgba(126, 231, 135, 0.28);
+  border-color: rgba(126, 231, 135, 0.95);
 }
 .nav-btn {
   padding: 0.42rem 0.7rem;
@@ -747,21 +829,37 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  flex-shrink: 0;
 }
 .lcu-pill {
-  font-size: 0.78rem;
-  padding: 0.25rem 0.55rem;
-  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
   border: 1px solid rgba(200, 155, 60, 0.45);
   background: rgba(10, 30, 50, 0.6);
+  cursor: default;
 }
 .lcu-pill[data-ok="1"] {
-  border-color: rgba(80, 200, 120, 0.6);
-  color: #b8f0c8;
+  border-color: rgba(80, 200, 120, 0.65);
+  background: rgba(40, 90, 55, 0.35);
 }
-.lcu-phase {
-  opacity: 0.85;
-  font-size: 0.72rem;
+.lcu-pill[data-ok="0"] {
+  border-color: rgba(220, 90, 90, 0.55);
+  background: rgba(90, 30, 30, 0.35);
+}
+.lcu-status-icon {
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.lcu-pill[data-ok="1"] .lcu-status-icon {
+  color: #7ee787;
+}
+.lcu-pill[data-ok="0"] .lcu-status-icon {
+  color: #f28b82;
 }
 .icon-btn {
   width: 36px;

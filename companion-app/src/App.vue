@@ -7,22 +7,21 @@ import type { CompanionConfig } from "./companionConfig";
 
 const booted = ref(false);
 const needsOnboarding = ref(true);
+const isDev = import.meta.env.DEV;
 const DEV_ONBOARDING_BYPASS_KEY = "lelanation-companion-dev-onboarding-bypass";
+
+function devSkipsOnboarding(): boolean {
+  if (!isDev) return false;
+  if (typeof window === "undefined") return true;
+  return window.localStorage.getItem(DEV_ONBOARDING_BYPASS_KEY) !== "0";
+}
 
 onMounted(async () => {
   try {
     const cfg = await invoke<CompanionConfig>("companion_get_config");
-    const bypassedInDev =
-      import.meta.env.DEV &&
-      typeof window !== "undefined" &&
-      window.localStorage.getItem(DEV_ONBOARDING_BYPASS_KEY) === "1";
-    needsOnboarding.value = cfg.onboardingComplete !== true && !bypassedInDev;
+    needsOnboarding.value = cfg.onboardingComplete !== true && !devSkipsOnboarding();
   } catch {
-    const bypassedInDev =
-      import.meta.env.DEV &&
-      typeof window !== "undefined" &&
-      window.localStorage.getItem(DEV_ONBOARDING_BYPASS_KEY) === "1";
-    needsOnboarding.value = !bypassedInDev;
+    needsOnboarding.value = !devSkipsOnboarding();
   } finally {
     booted.value = true;
   }
@@ -72,6 +71,10 @@ body,
   height: 100%;
   min-height: 100vh;
   min-height: 100dvh;
+}
+.app-root {
+  display: flex;
+  flex-direction: column;
 }
 .boot {
   padding: 2rem;

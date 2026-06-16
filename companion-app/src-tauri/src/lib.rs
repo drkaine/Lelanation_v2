@@ -1,15 +1,23 @@
 //! Lelanation Companion: LCU integration and Tauri commands.
 
 mod app_config;
+mod checklist;
 mod commands;
+mod progression;
 mod image_cache;
 mod import_bridge;
+mod live_client;
 mod lcu;
+mod postgame;
 mod state;
 
 use app_config::{load_companion_config, save_companion_config, CompanionConfig};
 use commands::{
-    apply_build, companion_import_build, get_lcu_status, get_pending_build, resolve_champion_id,
+    apply_build, check_internet_connection, companion_import_build, delete_checklist,
+    get_checklist_draft, get_checklist_history, get_lcu_status, get_pending_build, get_progression,
+    load_progression, resolve_champion_id, save_checklist, save_progression,
+    confirm_internet_for_progression, test_internet_for_progression,
+    update_checklist,
 };
 use image_cache::ImageCacheState;
 use lcu::watcher;
@@ -350,7 +358,18 @@ pub fn run() {
             uninstall_app,
             set_image_api_base,
             prefetch_images,
-            clear_image_cache
+            clear_image_cache,
+            get_checklist_history,
+            get_checklist_draft,
+            save_checklist,
+            update_checklist,
+            delete_checklist,
+            get_progression,
+            load_progression,
+            test_internet_for_progression,
+            confirm_internet_for_progression,
+            save_progression,
+            check_internet_connection
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -26,13 +26,49 @@ Application Windows (Tauri 2 + Vue 3) pour importer les builds du site dans le c
 
 ```bash
 npm install
-npm run tauri dev    # Développement
+npm run tauri dev    # Développement (voir ci-dessous)
 npm run tauri build  # Build (Windows : .msi/.exe dans src-tauri/target/release/bundle/)
 ```
+
+### Développement local (`npm run tauri dev`)
+
+| Comportement | Normal ? |
+|---|---|
+| Le terminal revient au prompt `PS>` | **Oui**, si tu **fermes** la fenêtre Companion — le processus s’arrête. Relance `npm run tauri dev` et **laisse le terminal ouvert** tant que tu testes. |
+| Une « installation » / écran de config (dossier League, CGU) | En **prod** : premier lancement. En **dev** : ignoré par défaut (bandeau vert **MODE DEV** en haut). |
+| Pas de « Checklist jeu » | Tu utilises probablement l’**app installée** (menu Démarrer / raccourci bureau), pas le build dev. Seul `tauri dev` charge le code local non publié. |
+
+**Vérifier que tu es en dev :**
+
+1. Lance `npm run tauri dev` dans `companion-app/`.
+2. Une fenêtre s’ouvre **sans fermer le terminal**.
+3. Titre **Lelanation Companion** + bouton vert **Checklist jeu** à droite.
+
+**Ne pas confondre :**
+
+- Fenêtre **Companion** (barre au-dessus du site) = bonne app.
+- Navbar **Lelanation** *dans* l’iframe = site web, pas la checklist.
+- App **installée** (v0.28 MSI) = pas encore la checklist tant qu’on n’a pas rebuild + réinstallé.
+
+**Mises à jour auto en dev :** désactivées pour éviter que l’updater installe le MSI release et remplace le build local.
 
 ## Version (une seule source de vérité)
 
 La version est pilotée par **`companion-app/package.json`**. Le script `scripts/sync-version.mjs` propage vers `tauri.conf.json` et `Cargo.toml`.
+
+### Pourquoi le terminal affiche `0.28.0` alors que l’app installée est `1.0.1` ?
+
+Ce sont **deux builds différents** :
+
+| | `npm run tauri dev` | App installée (MSI / menu Démarrer) |
+|---|---|---|
+| Version affichée | `package.json` du dépôt (**0.28.0** aujourd’hui) | Version du **tag release** (ex. **1.0.1** injectée par la CI) |
+| Binaire | `target/debug/lelanation-companion.exe` | `C:\Users\…\AppData\Local\…` (installateur) |
+| Code checklist (non publié) | Oui, si tu as les sources locales à jour | Non, tant qu’il n’y a pas eu de release avec cette feature |
+
+Les releases GitHub (`companion-v1.0.1`, etc.) **réécrivent la version au moment du build CI** sans forcément mettre à jour `package.json` sur `main`. D’où l’écart normal entre dev et install.
+
+Pour aligner la version locale (cosmétique) : `npm run version:sync -- 1.0.1`
 
 ### Release + tag CI (`companion-v*`)
 
