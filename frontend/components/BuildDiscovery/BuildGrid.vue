@@ -18,7 +18,7 @@
       </NuxtLink>
     </div>
 
-    <div v-else class="build-grid-list">
+    <div v-else class="build-grid-list" :class="{ 'build-grid-list--six': props.sixColumnGrid }">
       <div
         v-for="build in builds"
         :key="build.id"
@@ -573,6 +573,8 @@ interface Props {
   hideBottomActions?: boolean
   /** Show every custom build without discovery pagination. */
   showAllCustomBuilds?: boolean
+  /** Home preview: 6-column grid with equal card slots. */
+  sixColumnGrid?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -582,6 +584,7 @@ const props = withDefaults(defineProps<Props>(), {
   showFavoriteToggle: false,
   hideBottomActions: false,
   showAllCustomBuilds: false,
+  sixColumnGrid: false,
 })
 
 defineEmits<{
@@ -1097,6 +1100,49 @@ onUnmounted(() => {
   gap: 15px;
   padding-inline: 5px;
   box-sizing: border-box;
+}
+
+.build-grid-list--six {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  justify-items: center;
+  padding-inline: 0;
+}
+
+@media (min-width: 640px) {
+  .build-grid-list--six {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .build-grid-list--six {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+.build-grid-list--six .build-grid-item {
+  width: 100%;
+  max-width: 300px;
+  min-height: 0;
+  padding-bottom: 8px;
+}
+
+.build-grid-list--six .build-grid-item > .relative {
+  display: flex;
+  justify-content: center;
+}
+
+.build-grid-list--six .build-grid-item > .relative > div {
+  transform: scale(min(1, calc((100vw - 48px) / 6 / 303)));
+  transform-origin: top center;
+}
+
+@media (min-width: 1024px) {
+  .build-grid-list--six .build-grid-item > .relative > div {
+    transform: scale(min(1, calc((100vw - 80px) / 6 / 303)));
+  }
 }
 
 .build-grid-item {

@@ -73,6 +73,7 @@
         :show-comparison-buttons="false"
         :hide-bottom-actions="true"
         :show-all-custom-builds="true"
+        :six-column-grid="true"
       />
     </section>
 
@@ -116,7 +117,7 @@
           <ul v-if="roleBlock.champions.length" class="space-y-2">
             <li v-for="row in roleBlock.champions" :key="`${roleBlock.role}-${row.championId}`">
               <NuxtLink
-                :to="localePath(`/statistics/champion/${row.championId}`)"
+                :to="championStatsDetailPath(row.championId, localePath, championsStore.champions)"
                 class="flex items-center gap-2 rounded-lg px-1 py-1 transition hover:bg-background/30"
               >
                 <img
@@ -237,23 +238,19 @@
 </template>
 
 <script setup lang="ts">
+import { championStatsDetailPath } from '~/utils/championStatsRoutes'
+import { useChampionsStore } from '~/stores/ChampionsStore'
 import BuildGrid from '~/components/BuildDiscovery/BuildGrid.vue'
 import ContactForm from '~/components/Contact/ContactForm.vue'
 import VideoGridCard from '~/components/Videos/VideoGridCard.vue'
 import { getChampionImageUrl } from '~/utils/imageUrl'
+import { usePageOgImage } from '~/composables/usePageOgImage'
+
+const championsStore = useChampionsStore()
 
 const { locale } = useI18n()
-const {
-  pending,
-  recentBuilds,
-  tierByRole,
-  latestVideos,
-  stats,
-  localePath,
-  siteUrl,
-  t,
-  championForId,
-} = useHomePage()
+const { pending, recentBuilds, tierByRole, latestVideos, stats, localePath, t, championForId } =
+  useHomePage()
 
 useHead({
   title: () => t('seo.homeTitle'),
@@ -264,12 +261,11 @@ useSeoMeta({
   ogTitle: () => t('seo.homeTitle'),
   ogDescription: () => t('seo.homeDescription'),
   ogType: 'website',
-  ogUrl: siteUrl,
-  twitterCard: 'summary_large_image',
 })
-
-useJsonLdHead('home-website', () => webSiteJsonLd(siteUrl))
-useJsonLdHead('home-organization', () => organizationJsonLd(siteUrl))
+usePageOgImage({
+  title: () => t('seo.homeTitle'),
+  subtitle: () => t('seo.homeDescription'),
+})
 
 interface SocialLink {
   href: string

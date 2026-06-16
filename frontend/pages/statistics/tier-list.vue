@@ -460,6 +460,9 @@ import {
   enrichBotlaneRowsWithPatchDeltas,
   type BotlaneTierRowWithPatchDelta,
 } from '~/composables/statistics/botlanePatchDeltas'
+import { usePageOgImage } from '~/composables/usePageOgImage'
+import { useSiteUrl } from '~/composables/useSiteUrl'
+import { championStatsDetailPath } from '~/utils/championStatsRoutes'
 import { parseRankTierQuery, rankTierSelectionsEqual } from '~/utils/statisticsRankTierQuery'
 
 definePageMeta({
@@ -506,6 +509,10 @@ const tierListSeoDescription = computed(() =>
 useSeoMeta({
   title: tierListSeoTitle,
   description: tierListSeoDescription,
+})
+usePageOgImage({
+  title: tierListSeoTitle,
+  subtitle: tierListSeoDescription,
 })
 
 const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
@@ -745,7 +752,7 @@ const {
   championName,
 } = tierList
 
-const tierListSiteUrl = String(useRuntimeConfig().public.siteUrl ?? 'https://lelanation.fr')
+const tierListSiteUrl = useSiteUrl()
 useJsonLdHead(
   'tier-list',
   computed(() => {
@@ -757,7 +764,7 @@ useJsonLdHead(
       path: '/statistics/tier-list',
       items: rows.slice(0, 30).map((row, index) => ({
         name: championName(row.championId) ?? `Champion ${row.championId}`,
-        url: `/statistics/champion/${row.championId}`,
+        url: championStatsDetailPath(row.championId, p => p, championsStore.champions),
         position: index + 1,
       })),
     })
@@ -934,6 +941,7 @@ watch([filtersOpen, effectiveFiltersSheetMode], () => {
 })
 
 function applyTierListStateFromQuery(): void {
+  if (isSyncingQueryState.value) return
   const versionRaw = queryFirst(route.query.version as string | string[] | null | undefined)
   const roleRaw = queryFirst(route.query.role as string | string[] | null | undefined).toUpperCase()
   const otpRaw = queryFirst(route.query.otp as string | string[] | null | undefined)
@@ -1070,7 +1078,9 @@ watch(
 )
 
 async function bootstrapTierListPage(): Promise<number> {
-  applyTierListStateFromQuery()
+  if (import.meta.server) {
+    applyTierListStateFromQuery()
+  }
   if (!versionStore.currentVersion) {
     await versionStore.loadCurrentVersion()
   }
@@ -1086,9 +1096,16 @@ async function bootstrapTierListPage(): Promise<number> {
   return tierList.tierListData.value?.rows?.length ?? 0
 }
 
-const tierListBootstrapKey = computed(
-  () =>
-    `${route.fullPath}|${riotLocale.value}|${statsVersionFilter.value}|${tierListViewModel.value}`
+/** Filtres API uniquement — pas la vue ni l’URL complète (évite de réappliquer ?view=chart après un clic onglet). */
+const tierListBootstrapKey = computed(() =>
+  [
+    riotLocale.value,
+    statsVersionFilter.value,
+    statsDivisionFilter.value.join(','),
+    statsRoleFilter.value,
+    statsOtpFilter.value,
+    progressionFromVersion.value,
+  ].join('|')
 )
 
 await useAsyncData(

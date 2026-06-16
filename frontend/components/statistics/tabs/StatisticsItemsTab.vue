@@ -344,8 +344,16 @@ function deltaClass(value: number | null | undefined): string {
     <div v-else-if="p.overviewDetailError" class="rounded border border-error/50 p-3 text-error">
       {{ p.t('statisticsPage.overviewDetailTimeout') }}
     </div>
-    <template v-else-if="tableRows.length > 0">
-      <div class="statistics-items-tab space-y-3">
+    <template v-else-if="tableRows.length > 0 || (p.overviewDetailData?.itemSets?.length ?? 0) > 0">
+      <StatisticsItemSetsOverviewPanel
+        v-if="p.overviewDetailData?.itemSets?.length"
+        :game-version="p.gameVersion || p.versionStore.currentVersion || ''"
+        :data="p.overviewDetailData"
+        :baseline="p.overviewDetailBaselineData"
+        :baseline-pending="p.overviewDetailBaselinePending"
+        :comparison-version="p.overviewDetailComparisonVersion"
+      />
+      <div v-if="tableRows.length > 0" class="statistics-items-tab space-y-3">
         <StatisticsMobileSortBar
           id="items-mobile-sort"
           v-model:column="itemsMobileSortColumn"

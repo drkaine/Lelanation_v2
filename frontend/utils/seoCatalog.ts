@@ -5,6 +5,7 @@
  */
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { normalizeChampionSlug } from './championSlug'
 
 export type SeoCatalogEntry = {
   loc: string
@@ -34,14 +35,46 @@ const STATIC_ROUTES: string[] = [
 ]
 
 export function resolveFrontendRoot(cwd = process.cwd()): string {
-  if (existsSync(join(cwd, 'nuxt.config.ts'))) return cwd
-  const nested = join(cwd, 'frontend')
-  if (existsSync(join(nested, 'nuxt.config.ts'))) return nested
+  const candidates = [
+    cwd,
+    join(cwd, 'frontend'),
+    join(cwd, '..'),
+    join(cwd, '../..'),
+    join(cwd, '../frontend'),
+    join(cwd, '../../frontend'),
+  ]
+  for (const root of candidates) {
+    if (existsSync(join(root, 'nuxt.config.ts'))) return root
+  }
+  for (const root of candidates) {
+    if (existsSync(join(root, 'public/data/game/version.json'))) return root
+  }
+  // Nitro bundle: `.output/server` + `.output/public`
+  if (existsSync(join(cwd, '../public/data/game/version.json'))) return join(cwd, '..')
   return cwd
 }
 
+function resolvePublicRoot(frontendRoot: string): string {
+  const nested = join(frontendRoot, 'public')
+  if (existsSync(join(nested, 'data/game/version.json'))) return nested
+  const outputPublic = join(frontendRoot, 'public')
+  return outputPublic
+}
+
+function resolveBackendRoot(frontendRoot: string): string {
+  const candidates = [
+    join(frontendRoot, 'backend'),
+    join(frontendRoot, '..', 'backend'),
+    join(frontendRoot, '../backend'),
+  ]
+  for (const root of candidates) {
+    if (existsSync(join(root, 'data/builds'))) return root
+  }
+  return join(frontendRoot, '..', 'backend')
+}
+
 export function readCurrentGameVersion(frontendRoot: string): string {
-  const versionPath = join(frontendRoot, 'public/data/game/version.json')
+  const versionPath = join(resolvePublicRoot(frontendRoot), 'data/game/version.json')
   if (!existsSync(versionPath)) return '16.12.1'
   try {
     const data = JSON.parse(readFileSync(versionPath, 'utf-8')) as { currentVersion?: string }
@@ -59,7 +92,10 @@ type ChampionIndexRow = {
 }
 
 export function listChampionsFromIndex(frontendRoot: string, version: string): ChampionIndexRow[] {
-  const indexPath = join(frontendRoot, `public/data/game/${version}/fr_FR/champions/index.json`)
+  const indexPath = join(
+    resolvePublicRoot(frontendRoot),
+    `data/game/${version}/fr_FR/champions/index.json`
+  )
   if (!existsSync(indexPath)) return []
   try {
     const data = JSON.parse(readFileSync(indexPath, 'utf-8')) as { champions?: ChampionIndexRow[] }
@@ -76,7 +112,7 @@ export function listPatchNoteVersions(frontendRoot: string): string[] {
 export function listPatchNoteEntries(
   frontendRoot: string
 ): Array<{ version: string; scrapedAt?: string }> {
-  const indexPath = join(frontendRoot, 'public/data/patch-notes/index.json')
+  const indexPath = join(resolvePublicRoot(frontendRoot), 'data/patch-notes/index.json')
   if (!existsSync(indexPath)) return []
   try {
     const data = JSON.parse(readFileSync(indexPath, 'utf-8')) as {
@@ -153,7 +189,7 @@ export function collectPrerenderRoutes(cwd = process.cwd()): string[] {
 
 export function collectSitemapEntries(cwd = process.cwd()): SeoCatalogEntry[] {
   const frontendRoot = resolveFrontendRoot(cwd)
-  const backendRoot = join(frontendRoot, '..', 'backend')
+  const backendRoot = resolveBackendRoot(frontendRoot)
   const version = readCurrentGameVersion(frontendRoot)
   const champions = listChampionsFromIndex(frontendRoot, version)
   const builds = listPublicBuilds(backendRoot)
@@ -188,7 +224,6 @@ export function collectSitemapEntries(cwd = process.cwd()): SeoCatalogEntry[] {
 
   for (const champ of champions) {
     const slug = String(champ.id ?? '').toLowerCase()
-    const key = champ.key
     if (slug) {
       entries.push({
         loc: `/champion/${slug}/builds`,
@@ -208,12 +243,10 @@ export function collectSitemapEntries(cwd = process.cwd()): SeoCatalogEntry[] {
         priority: 0.5,
         _i18nTransform: true,
       })
-    }
-    if (typeof key === 'number' && key > 0) {
       entries.push({
-        loc: `/statistics/champion/${key}`,
+        loc: `/statistics/champion/${normalizeChampionSlug(slug)}`,
         changefreq: 'daily',
-        priority: 0.85,
+        priority: 0.9,
         _i18nTransform: true,
       })
     }

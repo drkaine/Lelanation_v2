@@ -7,6 +7,7 @@ import { useGameVersion } from '~/composables/useGameVersion'
 import { lolSeasonFromGameVersion } from '~/utils/lolSeason'
 import { getChampionImageUrl } from '~/utils/imageUrl'
 import { breadcrumbJsonLd, itemListJsonLd } from '~/utils/jsonLd'
+import { useSiteUrl } from '~/composables/useSiteUrl'
 
 const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
 
@@ -20,8 +21,7 @@ export function useChampionBuildsPage() {
   const championsStore = useChampionsStore()
   const localePath = useLocalePath()
   const { locale, t } = useI18n()
-  const config = useRuntimeConfig()
-  const siteUrl = String(config.public.siteUrl || 'https://lelanation.fr')
+  const siteUrl = useSiteUrl()
   const { version: gameVersion } = useGameVersion()
 
   const championSlug = computed(() => {

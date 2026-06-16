@@ -2,6 +2,9 @@ import { computed, type ComputedRef, type Ref } from 'vue'
 import type { Build } from '@lelanation/shared-types'
 import { fetchPublicBuildDetail } from '~/composables/useBuildDetailFetch'
 import { buildHowToJsonLdDocument } from '~/utils/buildHowToJsonLd'
+import { useSiteUrl } from '~/composables/useSiteUrl'
+import { usePageOgImage } from '~/composables/usePageOgImage'
+import { useJsonLdHead } from '~/composables/useJsonLdHead'
 
 type BuildDetailPageResult = {
   buildId: ComputedRef<string>
@@ -11,7 +14,7 @@ type BuildDetailPageResult = {
 /** SSR + SEO + JSON-LD pour les pages détail build (`/builds/:id`, `/builds/view/:id`). */
 export function useBuildDetailPage(): BuildDetailPageResult {
   const route = useRoute()
-  const config = useRuntimeConfig()
+  const siteUrl = useSiteUrl()
   const buildId = computed(() => String(route.params.id ?? ''))
 
   const { data: initialBuild } = useAsyncData<Build | null>(
@@ -41,19 +44,22 @@ export function useBuildDetailPage(): BuildDetailPageResult {
     ogTitle: () => initialBuild.value?.name || 'Build Lelanation',
   })
 
-  useHead({
-    script: computed(() => {
-      const b = initialBuild.value
-      if (!b) return []
-      const siteUrl = String(config.public.siteUrl ?? 'https://lelanation.fr')
-      return [
-        {
-          type: 'application/ld+json',
-          children: JSON.stringify(buildHowToJsonLdDocument(b, siteUrl)),
-        },
-      ]
-    }),
+  const buildOgTitle = computed(() => {
+    const b = initialBuild.value
+    if (!b?.name) return 'Build Lelanation'
+    return championLabel.value ? `${b.name} — ${championLabel.value}` : b.name
   })
+  const buildOgSubtitle = computed(() => championLabel.value || 'Build League of Legends')
+  usePageOgImage({ title: buildOgTitle, subtitle: buildOgSubtitle })
+
+  useJsonLdHead(
+    'build-howto',
+    computed(() => {
+      const b = initialBuild.value
+      if (!b) return null
+      return buildHowToJsonLdDocument(b, siteUrl)
+    })
+  )
 
   return { buildId, initialBuild }
 }

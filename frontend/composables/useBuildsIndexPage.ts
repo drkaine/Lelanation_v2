@@ -13,6 +13,7 @@ import { serializeBuild, hydrateBuild, isStoredBuild } from '~/utils/buildSerial
 import { useAdminAuth } from '~/composables/useAdminAuth'
 import { useClientHydrated } from '~/composables/useClientHydrated'
 import { useStreamerMode } from '~/composables/useStreamerMode'
+import { usePageOgImage } from '~/composables/usePageOgImage'
 
 export type BuildsIndexTab = 'discover' | 'my-builds' | 'favoris' | 'lelariva'
 
@@ -63,10 +64,22 @@ export function useBuildsIndexPage(fixedTab?: BuildsIndexTab) {
     ogType: 'website',
   })
 
+  const buildsOgTitle = computed(() => {
+    if (routeTab.value === 'my-builds') return t('buildsPage.myBuilds')
+    if (routeTab.value === 'favoris') return t('buildsPage.myFavorites')
+    return t('buildsPage.metaTitle')
+  })
+  usePageOgImage({
+    title: buildsOgTitle,
+    subtitle: () => t('buildsPage.metaDescription'),
+  })
+
+  const requestFetch = useRequestFetch()
+
   useAsyncData(
     () => `builds-index-${routeTab.value}`,
     async () => {
-      await discoveryStore.loadBuilds()
+      await discoveryStore.loadBuilds({ fetcher: requestFetch })
       return discoveryStore.builds.length
     },
     { watch: [routeTab] }

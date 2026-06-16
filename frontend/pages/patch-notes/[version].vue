@@ -181,13 +181,21 @@ import PatchEntityCard from '~/components/PatchEntityCard.vue'
 import PatchImageLightbox from '~/components/PatchImageLightbox.vue'
 import { articleJsonLd } from '~/utils/jsonLd'
 import { useJsonLdHead } from '~/composables/useJsonLdHead'
+import { useSiteUrl } from '~/composables/useSiteUrl'
+
+definePageMeta({
+  validate(route) {
+    const version = String(route.params.version ?? '')
+    return version.length > 0 && !version.startsWith('_')
+  },
+})
 
 const { t, locale } = useI18n()
 const route = useRoute()
 const localePath = useLocalePath()
 const patchNotesStore = usePatchNotesStore()
 const runtimeConfig = useRuntimeConfig()
-const siteUrl = String(runtimeConfig.public.siteUrl ?? 'https://lelanation.fr')
+const siteUrl = useSiteUrl()
 const fallbackGameVersion = String(runtimeConfig.public.fallbackGameVersion ?? '16.12')
 
 // Use storeToRefs for reactive state extraction

@@ -5,6 +5,7 @@ import { useItemsStore } from '~/stores/ItemsStore'
 import { useRunesStore } from '~/stores/RunesStore'
 import { useVersionStore } from '~/stores/VersionStore'
 import { lolSeasonFromGameVersion } from '~/utils/lolSeason'
+import { useSiteUrl } from '~/composables/useSiteUrl'
 
 export type HomeTierListRow = {
   rank: number
@@ -75,8 +76,7 @@ async function ensureBuildChampionDetails(
 export function useHomePage() {
   const { t, locale } = useI18n()
   const localePath = useLocalePath()
-  const config = useRuntimeConfig()
-  const siteUrl = String(config.public.siteUrl || 'https://lelanation.fr')
+  const siteUrl = useSiteUrl()
   const versionStore = useVersionStore()
   const championsStore = useChampionsStore()
   const itemsStore = useItemsStore()

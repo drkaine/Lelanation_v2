@@ -180,13 +180,14 @@ import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 import { useChampionSplashPreference } from '~/composables/useChampionSplashPreference'
 import { usePresentationZoom } from '~/composables/usePresentationZoom'
 import { useLayoutScaled } from '~/composables/useLayoutScaled'
-import { useMobileViewport } from '~/composables/useMobileViewport'
+import { useGlobalSeo } from '~/composables/useGlobalSeo'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const localePath = useLocalePath()
 const localeHead = useLocaleHead({ addDirAttribute: true, addSeoAttributes: true } as any)
+useGlobalSeo()
 const { isStreamerMode, toggleStreamerMode } = useStreamerMode()
 const { isPresentationZoom, togglePresentationZoom } = usePresentationZoom()
 const { isLayoutScaled } = useLayoutScaled()

@@ -3,6 +3,7 @@ import { computed, useAttrs } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { navigateTo } from '#app'
 import { useLocalePath } from '#i18n'
+import { useChampionsStore } from '~/stores/ChampionsStore'
 import { championStatsDetailPathIfValid } from '~/utils/championStatsRoutes'
 
 defineOptions({ inheritAttrs: false })
@@ -22,7 +23,11 @@ const attrs = useAttrs()
 const localePath = useLocalePath()
 const { t } = useI18n()
 
-const to = computed(() => championStatsDetailPathIfValid(props.championId, localePath))
+const championsStore = useChampionsStore()
+
+const to = computed(() =>
+  championStatsDetailPathIfValid(props.championId, localePath, championsStore.champions)
+)
 
 const linkAriaLabel = computed(() => props.ariaLabel ?? t('statisticsPage.championStatsOpenDetail'))
 

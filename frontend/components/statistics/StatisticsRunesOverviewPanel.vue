@@ -33,6 +33,8 @@ type DetailPayload = {
   }>
 }
 
+const SET_CARD_LIMIT = 6
+
 const props = defineProps<{
   gameVersion: string
   data: DetailPayload | null
@@ -212,10 +214,10 @@ const runeSetsHighlights = computed(() => {
     }
   }
   return {
-    topPick: [...valid].sort((a, b) => b.pickrate - a.pickrate).slice(0, 5),
-    lowPick: [...valid].sort((a, b) => a.pickrate - b.pickrate).slice(0, 5),
-    bestWr: [...valid].sort((a, b) => b.winrate - a.winrate).slice(0, 5),
-    worstWr: [...valid].sort((a, b) => a.winrate - b.winrate).slice(0, 5),
+    topPick: [...valid].sort((a, b) => b.pickrate - a.pickrate).slice(0, SET_CARD_LIMIT),
+    lowPick: [...valid].sort((a, b) => a.pickrate - b.pickrate).slice(0, SET_CARD_LIMIT),
+    bestWr: [...valid].sort((a, b) => b.winrate - a.winrate).slice(0, SET_CARD_LIMIT),
+    worstWr: [...valid].sort((a, b) => a.winrate - b.winrate).slice(0, SET_CARD_LIMIT),
   }
 })
 
@@ -223,7 +225,7 @@ const allRuneSetsListed = computed(() => {
   const sets = props.data?.runeSets ?? []
   const valid = runeSetsValidForHighlights(sets, props.data?.totalParticipants ?? 0)
   const list = valid.length > 0 ? valid : sets.filter(s => Number(s.games ?? 0) > 0)
-  return [...list].sort((a, b) => b.games - a.games)
+  return [...list].sort((a, b) => b.games - a.games).slice(0, SET_CARD_LIMIT)
 })
 
 function getRuneById(runeId: number): { id: number; name: string; icon: string } | null {
@@ -660,14 +662,14 @@ function runeSetLayout(
           <h3 class="text-sm font-semibold text-text">
             {{ t('statisticsPage.runeSetsSectionTitle') }}
           </h3>
-          <div class="rune-set-cards-grid grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div class="build-set-cards-grid rune-set-cards-grid">
             <div
               v-for="(row, idx) in allRuneSetsListed.map(s => ({
                 set: s,
                 ly: runeSetLayout(s.runes, s),
               }))"
               :key="'unified-set-' + idx"
-              class="rune-set-card relative h-full w-full min-w-0 rounded-lg border border-primary/30 bg-black/20 px-4 pb-3 pt-5"
+              class="build-set-card rune-set-card relative h-full w-full min-w-0 rounded-lg border border-primary/30 bg-black/20 px-4 pb-3 pt-5"
             >
               <span
                 class="absolute left-0 top-0 z-10 flex h-5 min-w-5 items-center justify-center rounded-md bg-primary/30 px-1 text-[10px] font-bold tabular-nums text-text/90"
@@ -676,7 +678,7 @@ function runeSetLayout(
                 {{ idx + 1 }}
               </span>
               <div
-                class="rune-set-build-strip flex w-full min-w-0 flex-col items-center gap-2 sm:items-stretch"
+                class="build-set-build-strip rune-set-build-strip flex w-full min-w-0 flex-col items-center gap-2 sm:items-stretch"
               >
                 <div
                   v-if="row.ly.keystone && getRuneById(row.ly.keystone)"
@@ -724,10 +726,10 @@ function runeSetLayout(
                   >
                     <div
                       v-if="row.ly.secondaryPath"
-                      class="rune-set-path-icon flex h-9 w-9 shrink-0 items-center justify-center rounded-full sm:h-7 sm:w-7"
+                      class="rune-set-path-icon flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
                     >
                       <span
-                        class="rune-set-path-mask block h-9 w-9 rounded-full sm:h-7 sm:w-7"
+                        class="rune-set-path-mask block h-7 w-7 rounded-full"
                         :style="{
                           backgroundColor: getRunePathColor(
                             row.ly.secondaryPath.icon,
@@ -785,7 +787,7 @@ function runeSetLayout(
                 </div>
               </div>
               <div
-                class="rune-set-stats mt-3 flex w-full flex-wrap items-baseline justify-center gap-x-5 gap-y-2 pt-1 text-center sm:justify-start sm:text-left"
+                class="build-set-stats rune-set-stats mt-3 flex w-full flex-wrap items-baseline justify-center gap-x-5 gap-y-2 pt-1 text-center sm:justify-start sm:text-left"
               >
                 <span
                   class="rune-set-stat-item inline-flex flex-wrap items-baseline justify-center gap-x-1 sm:justify-start"
@@ -865,14 +867,14 @@ function runeSetLayout(
         <h4 class="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-accent/90">
           {{ block.title }}
         </h4>
-        <div class="rune-set-cards-grid grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div class="build-set-cards-grid rune-set-cards-grid">
           <div
             v-for="(row, idx) in block.list.map(s => ({
               set: s,
               ly: runeSetLayout(s.runes, s),
             }))"
             :key="block.key + '-' + idx"
-            class="rune-set-card statistics-overview-surface relative h-full w-full min-w-0 rounded-lg border border-primary/30 px-4 pb-3 pt-5"
+            class="build-set-card rune-set-card statistics-overview-surface relative h-full w-full min-w-0 rounded-lg border border-primary/30 px-4 pb-3 pt-5"
           >
             <span
               class="absolute left-0 top-0 z-10 flex h-5 min-w-5 items-center justify-center rounded-md bg-primary/30 px-1 text-[10px] font-bold tabular-nums text-text/90"
@@ -881,7 +883,7 @@ function runeSetLayout(
               {{ idx + 1 }}
             </span>
             <div
-              class="rune-set-build-strip flex w-full min-w-0 flex-col items-center gap-2 sm:items-stretch"
+              class="build-set-build-strip rune-set-build-strip flex w-full min-w-0 flex-col items-center gap-2 sm:items-stretch"
             >
               <!-- Clé de voûte seule (hors ligne d’alignement avec le secondaire) -->
               <div
@@ -930,10 +932,10 @@ function runeSetLayout(
                 >
                   <div
                     v-if="row.ly.secondaryPath"
-                    class="rune-set-path-icon flex h-9 w-9 shrink-0 items-center justify-center rounded-full sm:h-7 sm:w-7"
+                    class="rune-set-path-icon flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
                   >
                     <span
-                      class="rune-set-path-mask block h-9 w-9 rounded-full sm:h-7 sm:w-7"
+                      class="rune-set-path-mask block h-7 w-7 rounded-full"
                       :style="{
                         backgroundColor: getRunePathColor(
                           row.ly.secondaryPath.icon,
@@ -991,7 +993,7 @@ function runeSetLayout(
               </div>
             </div>
             <div
-              class="rune-set-stats mt-3 flex w-full flex-wrap items-baseline justify-center gap-x-5 gap-y-2 pt-1 text-center sm:justify-start sm:text-left"
+              class="build-set-stats rune-set-stats mt-3 flex w-full flex-wrap items-baseline justify-center gap-x-5 gap-y-2 pt-1 text-center sm:justify-start sm:text-left"
             >
               <span
                 class="rune-set-stat-item inline-flex flex-wrap items-baseline justify-center gap-x-1 sm:justify-start"
@@ -1057,16 +1059,13 @@ function runeSetLayout(
   flex-shrink: 0;
 }
 .rune-set-cards-grid {
-  grid-auto-rows: 1fr;
-  align-items: stretch;
+  /* hérite de .build-set-cards-grid */
 }
+
 .rune-set-card {
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-  min-height: 20rem;
-  height: 100%;
+  /* hérite de .build-set-card */
 }
+
 .rune-set-keystone-img {
   width: 64px;
   height: 64px;
@@ -1102,7 +1101,7 @@ function runeSetLayout(
 .rune-set-build-strip {
   flex: 1 1 auto;
   min-height: 11.75rem;
-  justify-content: flex-start;
+  justify-content: center;
 }
 .rune-set-shards-row {
   box-sizing: border-box;
@@ -1121,20 +1120,6 @@ function runeSetLayout(
 @media (max-width: 768px) {
   .rune-set-cards-grid {
     width: 100%;
-  }
-
-  .rune-set-card {
-    min-height: 21.5rem;
-  }
-
-  .rune-set-build-strip {
-    min-height: 12.5rem;
-  }
-
-  .rune-set-stats {
-    min-height: 5.25rem;
-    font-size: 0.9375rem;
-    gap: 0.625rem 1.25rem;
   }
 
   .rune-set-keystone-img {
@@ -1183,4 +1168,8 @@ function runeSetLayout(
     margin-inline: auto;
   }
 }
+</style>
+
+<style>
+@import '~/assets/css/statistics-build-set-cards.css';
 </style>

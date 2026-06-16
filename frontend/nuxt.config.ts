@@ -2,7 +2,7 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { collectPrerenderRoutes, collectSitemapEntries } from './utils/seoCatalog'
+import { DEFAULT_SITE_URL } from './utils/siteUrl'
 
 /** Read fallback game version from backend/data/game/version.json at build time */
 function getFallbackGameVersionFromBackend(): string {
@@ -27,7 +27,7 @@ function getFallbackGameVersionFromBackend(): string {
   return '16.3.1'
 }
 
-const defaultSiteUrl = process.env.NUXT_PUBLIC_SITE_URL || 'https://lelanation.fr'
+const defaultSiteUrl = process.env.NUXT_PUBLIC_SITE_URL || DEFAULT_SITE_URL
 const defaultApiBase =
   process.env.NUXT_PUBLIC_API_BASE ||
   (process.env.NODE_ENV === 'development' ? 'http://localhost:3500' : defaultSiteUrl)
@@ -58,18 +58,14 @@ export default defineNuxtConfig({
             'Plateforme de builds et guides League of Legends par la communauté Lelariva. Créez, optimisez et partagez vos builds. Statistiques, theorycraft, vidéos.',
         },
         { name: 'robots', content: 'index, follow' },
+        { property: 'og:image', content: `${defaultSiteUrl}/og-default.png` },
+        { name: 'twitter:card', content: 'summary_large_image' },
+        { name: 'twitter:image', content: `${defaultSiteUrl}/og-default.png` },
       ],
       link: [{ rel: 'canonical', href: defaultSiteUrl }],
     },
   },
-  modules: [
-    '@nuxtjs/tailwindcss',
-    '@nuxt/icon',
-    '@pinia/nuxt',
-    '@nuxtjs/i18n',
-    '@nuxtjs/sitemap',
-    '@nuxtjs/robots',
-  ],
+  modules: ['@nuxtjs/tailwindcss', '@nuxt/icon', '@pinia/nuxt', '@nuxtjs/i18n', '@nuxtjs/robots'],
   icon: {
     clientBundle: {
       scan: true,
@@ -140,50 +136,30 @@ export default defineNuxtConfig({
   } as any,
   robots: {
     disallow: ['/admin', '/api/admin', '/render'],
-    sitemap: [`${defaultSiteUrl}/sitemap.xml`, `${defaultSiteUrl}/sitemap_index.xml`],
-  },
-  sitemap: {
-    sitemapName: 'sitemap.xml',
-    cacheMaxAgeSeconds: 3600,
-    sitemaps: {
-      default: {
-        urls: collectSitemapEntries,
-        include: [
-          '/',
-          '/builds',
-          '/builds/create',
-          '/videos',
-          '/statistics',
-          '/statistics/tier-list',
-          '/statistics/recap',
-          '/patch-notes',
-          '/privacy',
-          '/legal',
-          '/lelanation-app',
-          '/app',
-        ],
-        exclude: ['/api/**', '/admin', '/admin/**', '/render/**', '/map/**'],
-      },
-    },
+    sitemap: [`${defaultSiteUrl}/sitemap.xml`],
   },
   routeRules: {
     '/': { swr: 3600 },
-    '/builds/discover': { prerender: true },
-    '/builds/my-builds': { prerender: true },
-    '/builds/favoris': { prerender: true },
-    '/builds/**': { prerender: true },
-    '/champion/**': { prerender: true },
-    '/champions/**': { prerender: true },
-    '/statistics': { prerender: true },
-    '/statistics/tier-list': { prerender: true },
-    '/statistics/recap': { prerender: true },
+    // SSR + SWR (pas prerender) : prerender:true sans fichiers générés déclenchait
+    // des prefetch _payload.json → 404 en navigation client.
+    '/builds/discover': { swr: 3600, prerender: false },
+    '/builds/my-builds': { swr: 3600, prerender: false },
+    '/builds/favoris': { swr: 3600, prerender: false },
+    '/builds/create': { swr: 3600, prerender: false },
+    '/builds/**': { swr: 3600, prerender: false },
+    '/champion/**': { swr: 3600, prerender: false },
+    '/champions/**': { swr: 3600, prerender: false },
+    '/statistics': { swr: 3600, prerender: false },
+    '/statistics/tier-list': { swr: 3600, prerender: false },
+    '/statistics/recap': { swr: 3600, prerender: false },
     '/statistics/champion/**': { swr: 1800, prerender: false },
     '/statistics/item/**': { swr: 1800, prerender: false },
-    '/videos': { prerender: true },
-    '/patch-notes': { prerender: true },
-    '/patch-notes/**': { prerender: true },
-    '/privacy': { prerender: true },
-    '/legal': { prerender: true },
+    '/videos': { swr: 3600, prerender: false },
+    '/patch-notes': { swr: 3600, prerender: false },
+    '/patch-notes/**': { swr: 3600, prerender: false },
+    '/privacy': { swr: 3600, prerender: false },
+    '/legal': { swr: 3600, prerender: false },
+    '/lelanation-app': { swr: 3600, prerender: false },
     '/admin/**': { ssr: false },
     '/app': { ssr: false },
     '/map/**': { ssr: false },
@@ -191,18 +167,9 @@ export default defineNuxtConfig({
   },
   nitro: {
     prerender: {
-      crawlLinks: true,
-      // Champion stat pages are SWR at runtime; crawling them from tier-list blows up build time.
-      ignore: [
-        // Homepage is SWR SSR only — prerendered index.html goes stale vs hashed /_nuxt chunks.
-        '/',
-        '/en',
-        '/fr',
-        '/statistics/champion/**',
-        '/en/statistics/champion/**',
-        '/fr/statistics/champion/**',
-      ],
-      routes: collectPrerenderRoutes(),
+      crawlLinks: false,
+      // Sitemap uniquement — collectPrerenderRoutes() (~644 routes) ne produisait que 2 fichiers.
+      routes: [],
     },
     devProxy: {
       '/api': {

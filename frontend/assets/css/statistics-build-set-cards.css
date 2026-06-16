@@ -1,0 +1,80 @@
+/* Cartes sets (items / runes) — gabarit partagé */
+.build-set-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  grid-auto-rows: 1fr;
+  align-items: stretch;
+}
+
+@media (min-width: 640px) {
+  .build-set-cards-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .build-set-cards-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+.build-set-card {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-height: 18rem;
+  height: 100%;
+}
+
+.build-set-build-strip {
+  flex: 1 1 auto;
+  min-height: 11.75rem;
+  justify-content: center;
+}
+
+.build-set-stats {
+  flex-shrink: 0;
+  margin-top: auto;
+  min-height: 4.75rem;
+  align-content: flex-end;
+  font-size: 0.875rem;
+  line-height: 1.35;
+  color: rgb(var(--rgb-text) / 0.88);
+}
+
+.build-set-stat-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.build-set-stat-value {
+  font-size: 1rem;
+}
+
+.build-set-stat-delta {
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.build-set-item-icon {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.build-set-items-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 7.5rem;
+}

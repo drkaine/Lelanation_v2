@@ -94,7 +94,7 @@ const embeddedPageUrl = computed(() => {
   }
   const locale = settings.value.language === "en" ? "/en" : "";
   const pathMap: Record<Exclude<AppPage, "settings" | "shortcuts">, string> = {
-    builds: `${locale}/builds?tab=discover`,
+    builds: `${locale}/builds/discover`,
     videos: `${locale}/videos`,
     statistics: `${locale}/statistics`,
     "tier-list": `${locale}/statistics/tier-list`,

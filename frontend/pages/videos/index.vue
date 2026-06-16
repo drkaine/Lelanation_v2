@@ -179,13 +179,14 @@ import { useAsyncData } from '#app'
 import { useYouTubeStore } from '~/stores/YouTubeStore'
 import VideoGridCard from '~/components/Videos/VideoGridCard.vue'
 import type { YouTubeVideo } from '~/types/youtube'
+import { useSiteUrl } from '~/composables/useSiteUrl'
+import { usePageOgImage } from '~/composables/usePageOgImage'
 
 const youtube = useYouTubeStore()
 const isLoadingAll = ref(false)
 const route = useRoute()
 const { t } = useI18n()
-const runtimeConfig = useRuntimeConfig()
-const videosSiteUrl = String(runtimeConfig.public.siteUrl ?? 'https://lelanation.fr')
+const videosSiteUrl = useSiteUrl()
 
 // Données YouTube servies depuis /public/data/youtube — compatible SSR.
 
@@ -201,6 +202,10 @@ useSeoMeta({
   ogTitle: () => t('videosPage.metaTitle'),
   ogDescription: () => t('videosPage.metaDescription'),
   ogType: 'website',
+})
+usePageOgImage({
+  title: () => t('videosPage.metaTitle'),
+  subtitle: () => t('videosPage.metaDescription'),
 })
 const router = useRouter()
 

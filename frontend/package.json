@@ -3,8 +3,9 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "nuxt build",
+    "build": "node scripts/generate-og-default.mjs && nuxt build",
     "generate:webp": "node scripts/generate-lelariva-webp.mjs",
+    "generate:og": "node scripts/generate-og-default.mjs",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
@@ -31,6 +32,7 @@
     "nuxt-charts": "^2.1.4",
     "pinia": "^3.0.4",
     "playwright": "^1.50.1",
+    "sharp": "^0.33.5",
     "vue": "^3.5.26",
     "vue-matomo": "^4.2.0",
     "vue-router": "^4.6.4"
@@ -45,7 +47,6 @@
     "postcss": "^8.5.6",
     "prettier": "^3.8.1",
     "prettier-plugin-tailwindcss": "^0.7.2",
-    "sharp": "^0.33.5",
     "tailwindcss": "^3.4.19",
     "vite-tsconfig-paths": "^6.0.5",
     "vue-tsc": "^3.2.4"

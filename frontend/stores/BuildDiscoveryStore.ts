@@ -202,8 +202,18 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
   },
 
   actions: {
-    async loadBuilds() {
+    async loadBuilds(options?: { fetcher?: typeof $fetch }) {
       const buildStore = useBuildStore()
+      const fetchJson = async (path: string): Promise<unknown> => {
+        if (options?.fetcher) {
+          return options.fetcher(path)
+        }
+        const response = await fetch(apiUrl(path))
+        if (!response.ok) {
+          throw new Error(`Request failed: ${response.status}`)
+        }
+        return response.json()
+      }
 
       await buildStore.syncPatchStaleFromServer().catch(() => undefined)
 
@@ -221,28 +231,25 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
       // Charger les builds publics depuis l'API
       let publicBuilds: Build[] = []
       try {
-        const response = await fetch(apiUrl('/api/builds'))
-        if (response.ok) {
-          const allBuilds = (await response.json()) as (Build | StoredBuild)[]
-          const patchStaleById = extractPatchStaleMap(allBuilds)
-          const localBuildIds = new Set(localBuilds.map(b => b.id))
-          const filtered = allBuilds.filter(
-            b => !localBuildIds.has(b.id) && b.visibility !== 'private'
-          )
-          publicBuilds = filtered.map(b => (isStoredBuild(b) ? hydrateBuild(b) : (b as Build)))
-          const localPublicBuilds = mergePatchStaleIntoBuilds(
-            localBuilds.filter(b => b.visibility !== 'private'),
-            patchStaleById
-          )
-          this.builds = [...localPublicBuilds, ...publicBuilds]
+        const allBuilds = (await fetchJson('/api/builds')) as (Build | StoredBuild)[]
+        const patchStaleById = extractPatchStaleMap(allBuilds)
+        const localBuildIds = new Set(localBuilds.map(b => b.id))
+        const filtered = allBuilds.filter(
+          b => !localBuildIds.has(b.id) && b.visibility !== 'private'
+        )
+        publicBuilds = filtered.map(b => (isStoredBuild(b) ? hydrateBuild(b) : (b as Build)))
+        const localPublicBuilds = mergePatchStaleIntoBuilds(
+          localBuilds.filter(b => b.visibility !== 'private'),
+          patchStaleById
+        )
+        this.builds = [...localPublicBuilds, ...publicBuilds]
 
-          const versionStore = useVersionStore()
-          if (!versionStore.currentVersion) {
-            await versionStore.loadCurrentVersion()
-          }
-          this.applyFilters()
-          return
+        const versionStore = useVersionStore()
+        if (!versionStore.currentVersion) {
+          await versionStore.loadCurrentVersion()
         }
+        this.applyFilters()
+        return
       } catch {
         // Failed to load public builds
       }

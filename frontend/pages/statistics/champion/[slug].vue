@@ -524,9 +524,16 @@
         class="champion-page-main min-w-0 flex-1 p-4 max-lg:px-0 max-lg:py-2 max-lg:pb-20 lg:px-3 lg:pb-4 lg:pt-0"
       >
         <div class="w-full">
+          <ChampionStatsSeoSummary
+            v-if="championStats && championName(championId)"
+            :champion-name="championName(championId)!"
+            :season="lolSeasonLabel"
+            :patch="gameVersion || versionStore.currentVersion || ''"
+            :stats="championStats"
+          />
           <!-- Loading / error -->
           <div
-            v-if="pending"
+            v-if="pending && !championStats"
             class="rounded-lg border border-primary/30 bg-surface/30 p-8 text-center"
           >
             <p class="text-text/70">{{ t('statisticsPage.loading') }}</p>
@@ -1821,25 +1828,34 @@ import { getRankedEmblemUrl } from '~/utils/rankedEmblem'
 import { rankTierSelectionsEqual } from '~/utils/statisticsRankTierQuery'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { statsRoleIconPath, statsRoleLabel } from '~/utils/statsRoleDisplay'
+import { championKeyFromRouteParam } from '~/utils/championSlug'
+import { useChampionPageSsr } from '~/composables/statistics/useChampionStatsSsr'
+import ChampionStatsSeoSummary from '~/components/statistics/ChampionStatsSeoSummary.vue'
+import { breadcrumbJsonLd } from '~/utils/jsonLd'
+import { useJsonLdHead } from '~/composables/useJsonLdHead'
+import { usePageOgImage } from '~/composables/usePageOgImage'
+import { useSiteUrl } from '~/composables/useSiteUrl'
+import { absoluteSitePath } from '~/utils/siteUrl'
+import { lolSeasonFromGameVersion } from '~/utils/lolSeason'
 const StatisticsRunesTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsRunesTab.vue')
 )
 const StatisticsSpellsTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsSpellsTab.vue')
 )
+
 definePageMeta({
   layout: 'default',
+  validate(route) {
+    const raw = route.params.slug
+    const slug = Array.isArray(raw) ? String(raw[0] ?? '') : String(raw ?? '')
+    return slug.length > 0 && !slug.startsWith('_')
+  },
 })
 
 const route = useRoute()
 const router = useRouter()
 const { t, locale } = useI18n()
-const championId = computed(() => {
-  const id = route.params.championId
-  if (Array.isArray(id)) return parseInt(id[0] ?? '0', 10)
-  return parseInt(id ?? '0', 10)
-})
-
 const versionStore = useVersionStore()
 const championsStore = useChampionsStore()
 const itemsStore = useItemsStore()
@@ -1847,25 +1863,31 @@ const runesStore = useRunesStore()
 const summonerSpellsStore = useSummonerSpellsStore()
 const { version: gameVersion } = useGameVersion()
 const riotLocale = computed(() => (locale.value === 'fr' ? 'fr_FR' : 'en_US'))
+const championRouteParam = computed(() => {
+  const raw = route.params.slug
+  return Array.isArray(raw) ? String(raw[0] ?? '') : String(raw ?? '')
+})
+const championId = computed(() => {
+  const key = championKeyFromRouteParam(championRouteParam.value, championsStore.champions)
+  return key ?? 0
+})
 
 function championByKey(id: number) {
   return championsStore.champions.find(c => c.key === String(id)) ?? null
 }
 function championName(id: number) {
-  return championByKey(id)?.name ?? null
+  return championByKey(id)?.name ?? championPageSsr.value?.championName ?? null
 }
 
-await useAsyncData(
-  () => `stats-champion-bootstrap-${championId.value}-${riotLocale.value}`,
-  async () => {
-    await Promise.all([
-      versionStore.currentVersion ? Promise.resolve() : versionStore.loadCurrentVersion(),
-      championsStore.loadChampions(riotLocale.value),
-    ])
-    return championName(championId.value)
-  },
-  { watch: [championId, riotLocale] }
+await versionStore.loadCurrentVersion().catch(() => undefined)
+await championsStore.loadChampions(riotLocale.value).catch(() => undefined)
+
+const { data: championPageSsr, pending: championPageSsrPending } = await useChampionPageSsr(
+  championRouteParam,
+  riotLocale
 )
+
+const lolSeasonLabel = computed(() => lolSeasonFromGameVersion(gameVersion.value))
 function _itemName(itemId: number) {
   return itemsStore.items.find(i => i.id === String(itemId))?.name ?? null
 }
@@ -2411,7 +2433,16 @@ const championStats = ref<{
   byRole?: Record<string, { games: number; wins: number; winrate: number }>
   totalGames: number
   generatedAt: string | null
-} | null>(null)
+} | null>(championPageSsr.value?.stats ?? null)
+
+pending.value = Boolean(championPageSsrPending.value && !championPageSsr.value?.stats)
+
+watch(championPageSsr, value => {
+  if (value?.stats) {
+    championStats.value = value.stats
+    pending.value = false
+  }
+})
 const championDamageSplit = ref<{
   phys: number
   magic: number
@@ -3301,7 +3332,8 @@ async function loadChampion() {
     return
   }
   const t = statsPerfStart('loadChampion')
-  pending.value = true
+  const showPending = !championStats.value
+  if (showPending) pending.value = true
   error.value = null
   try {
     const url = apiUrl(`/api/stats/champions/${championId.value}${queryParams()}`)
@@ -4634,21 +4666,100 @@ onUnmounted(() => {
 })
 
 useHead({
-  title: () =>
-    championStats.value && championName(championId.value)
-      ? `${championName(championId.value)} – ${t('statisticsPage.championStatsTitle')}`
-      : championName(championId.value)
-        ? `${championName(championId.value)} – ${t('statisticsPage.championStatsTitle')}`
-        : t('statisticsPage.championStatsTitle'),
+  title: () => {
+    const name = championName(championId.value)
+    if (!name) return t('statisticsPage.championStatsMetaTitleFallback')
+    return t('statisticsPage.championStatsMetaTitle', {
+      champion: name,
+      season: lolSeasonFromGameVersion(gameVersion.value),
+      patch: gameVersion.value,
+    })
+  },
 })
 useSeoMeta({
   description: () => {
     const name = championName(championId.value)
-    return name
-      ? `Statistiques ${name} en Ranked Solo/Duo : winrate, pickrate, builds, matchups et runes sur Lelanation.`
-      : 'Statistiques champion League of Legends : winrate, matchups, builds et runes.'
+    const stats = championStats.value ?? championPageSsr.value?.stats
+    if (name && stats) {
+      return t('statisticsPage.championStatsMetaDescriptionWithStats', {
+        champion: name,
+        winrate: Number(stats.winrate).toFixed(1),
+        pickrate: Number(stats.pickrate).toFixed(1),
+        patch: gameVersion.value || versionStore.currentVersion || '',
+      })
+    }
+    if (name) {
+      return t('statisticsPage.championStatsMetaDescription', {
+        champion: name,
+        season: lolSeasonFromGameVersion(gameVersion.value),
+        patch: gameVersion.value,
+      })
+    }
+    return t('statisticsPage.championStatsMetaDescriptionFallback')
   },
 })
+
+const championStatsSiteUrl = useSiteUrl()
+const championStatsOgTitle = computed(() => {
+  const name = championName(championId.value)
+  return name
+    ? t('statisticsPage.championStatsMetaTitle', {
+        champion: name,
+        season: lolSeasonFromGameVersion(gameVersion.value),
+        patch: gameVersion.value,
+      })
+    : t('statisticsPage.championStatsMetaTitleFallback')
+})
+const championStatsOgSubtitle = computed(() => {
+  const name = championName(championId.value)
+  const stats = championStats.value ?? championPageSsr.value?.stats
+  if (name && stats) {
+    return `${Number(stats.winrate).toFixed(1)}% WR · ${Number(stats.pickrate).toFixed(1)}% PR · patch ${gameVersion.value}`
+  }
+  return name ? `Winrate, builds, matchups — patch ${gameVersion.value}` : 'Stats League of Legends'
+})
+usePageOgImage({ title: championStatsOgTitle, subtitle: championStatsOgSubtitle })
+
+useJsonLdHead(
+  'champion-stats-page',
+  computed(() => {
+    const name = championName(championId.value)
+    const stats = championStats.value ?? championPageSsr.value?.stats
+    if (!name || !stats) return null
+    return {
+      '@context': 'https://schema.org',
+      '@type': 'WebPage',
+      name: t('statisticsPage.championStatsMetaTitle', {
+        champion: name,
+        season: lolSeasonFromGameVersion(gameVersion.value),
+        patch: gameVersion.value,
+      }),
+      description: t('statisticsPage.championStatsMetaDescriptionWithStats', {
+        champion: name,
+        winrate: Number(stats.winrate).toFixed(1),
+        pickrate: Number(stats.pickrate).toFixed(1),
+        patch: gameVersion.value || versionStore.currentVersion || '',
+      }),
+      url: absoluteSitePath(
+        championStatsSiteUrl,
+        `/statistics/champion/${championRouteParam.value}`
+      ),
+    }
+  })
+)
+
+useJsonLdHead(
+  'champion-stats-breadcrumb',
+  computed(() => {
+    const name = championName(championId.value)
+    if (!name) return null
+    return breadcrumbJsonLd(championStatsSiteUrl, [
+      { name: 'Lelanation', path: '/' },
+      { name: t('nav.statistics'), path: '/statistics' },
+      { name, path: `/statistics/champion/${championRouteParam.value}` },
+    ])
+  })
+)
 </script>
 
 <style scoped>

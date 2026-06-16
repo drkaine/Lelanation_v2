@@ -1,4 +1,4 @@
-import { useRuntimeConfig } from '#app'
+import { resolveSiteUrl } from './siteUrl'
 
 function getRuntimeConfigSafe(): any {
   try {
@@ -34,9 +34,9 @@ export function apiUrl(path: string): string {
     return configuredBase.replace(/\/$/, '') + path
   }
 
-  const siteUrl =
+  const siteUrl = resolveSiteUrl(
     (cfg.public?.siteUrl as string | undefined) ||
-    (process.env.NUXT_PUBLIC_SITE_URL as string | undefined) ||
-    'https://www.lelanation.fr'
+      (process.env.NUXT_PUBLIC_SITE_URL as string | undefined)
+  )
   return siteUrl.replace(/\/$/, '') + path
 }
