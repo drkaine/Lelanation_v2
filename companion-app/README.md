@@ -62,7 +62,7 @@ Ce sont **deux builds différents** :
 
 | | `npm run tauri dev` | App installée (MSI / menu Démarrer) |
 |---|---|---|
-| Version affichée | `package.json` du dépôt (**0.28.0** aujourd’hui) | Version du **tag release** (ex. **1.0.1** injectée par la CI) |
+| Version affichée | `package.json` du dépôt (**1.1.0** aujourd’hui) | Version du **tag release** (ex. **1.0.1** injectée par la CI) |
 | Binaire | `target/debug/lelanation-companion.exe` | `C:\Users\…\AppData\Local\…` (installateur) |
 | Code checklist (non publié) | Oui, si tu as les sources locales à jour | Non, tant qu’il n’y a pas eu de release avec cette feature |
 
