@@ -99,7 +99,7 @@
         >
           {{ t('nav.videos') }}
         </NuxtLink>
-        <NuxtLink
+        <!-- <NuxtLink
           v-if="isAdminLoggedIn"
           :to="localePath('/map')"
           :title="t('nav.map')"
@@ -107,7 +107,7 @@
           @click="toggleMenu"
         >
           {{ t('nav.map') }}
-        </NuxtLink>
+        </NuxtLink> -->
         <div class="mobile-builds-menu">
           <button
             type="button"
@@ -150,24 +150,37 @@
         >
           {{ t('nav.tierList') }}
         </NuxtLink>
-        <a
-          :href="patchNotesUrl"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="version"
-          @click="toggleMenu"
-        >
-          {{ gameVersion }}
-        </a>
-        <NuxtLink
-          :to="localePath('/patch-notes')"
-          :title="t('nav.patchNotes')"
-          class="version"
-          :class="{ 'router-link-active': isPatchNotesActive }"
-          @click="toggleMenu"
-        >
-          {{ t('nav.patchNotes') }}
-        </NuxtLink>
+        <div class="mobile-builds-menu">
+          <button
+            type="button"
+            class="version mobile-builds-trigger"
+            :class="{ 'is-active': isPatchNotesActive }"
+            @click="toggleMobilePatchMenu"
+          >
+            <a
+              :href="officialPatchNotesUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="patch-version-link"
+              :title="t('nav.officialPatchNotes')"
+              @click.stop
+            >
+              {{ activePatchVersion }}
+            </a>
+            <span class="builds-menu-chevron" :class="{ 'is-open': isMobilePatchMenuOpen }">▾</span>
+          </button>
+          <div v-if="isMobilePatchMenuOpen" class="mobile-builds-dropdown">
+            <NuxtLink
+              :to="patchSummaryLink"
+              :title="t('nav.patchSummary')"
+              class="version builds-submenu-link"
+              :class="{ 'is-active': isPatchNotesActive }"
+              @click="handlePatchNavigation"
+            >
+              {{ t('nav.patchSummary') }}
+            </NuxtLink>
+          </div>
+        </div>
         <NuxtLink
           v-if="isAdminLoggedIn"
           :to="localePath('/admin')"
@@ -252,14 +265,14 @@
         <NuxtLink :to="localePath('/videos')" :title="t('nav.videos')" class="version">
           {{ t('nav.videos') }}
         </NuxtLink>
-        <NuxtLink
+        <!-- <NuxtLink
           v-if="isAdminLoggedIn"
           :to="localePath('/map')"
           :title="t('nav.map')"
           class="version"
         >
           {{ t('nav.map') }}
-        </NuxtLink>
+        </NuxtLink> -->
         <div
           class="builds-menu"
           @mouseenter="isStatisticsMenuOpen = true"
@@ -313,23 +326,35 @@
         <NuxtLink :to="localePath('/app')" :title="t('nav.download')" class="version">
           {{ t('nav.download') }}
         </NuxtLink>
-        <NuxtLink
-          :to="localePath('/patch-notes')"
-          :title="t('nav.patchNotes')"
-          class="version"
-          :class="{ 'router-link-active': isPatchNotesActive }"
+        <div
+          class="builds-menu patch-menu"
+          @mouseenter="isPatchMenuOpen = true"
+          @mouseleave="isPatchMenuOpen = false"
         >
-          {{ t('nav.patchNotes') }}
-        </NuxtLink>
-        <a
-          :href="patchNotesUrl"
-          title="Patch Notes"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="link"
-        >
-          {{ gameVersion }}
-        </a>
+          <div class="version builds-menu-trigger patch-menu-trigger">
+            <a
+              :href="officialPatchNotesUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="patch-version-link"
+              :title="t('nav.officialPatchNotes')"
+            >
+              {{ activePatchVersion }}
+            </a>
+            <span class="builds-menu-chevron" :class="{ 'is-open': isPatchMenuOpen }">▾</span>
+          </div>
+          <div v-show="isPatchMenuOpen" class="builds-menu-dropdown patch-menu-dropdown">
+            <NuxtLink
+              :to="patchSummaryLink"
+              :title="t('nav.patchSummary')"
+              class="builds-submenu-link"
+              :class="{ 'is-active': isPatchNotesActive }"
+              @click="closePatchMenu"
+            >
+              {{ t('nav.patchSummary') }}
+            </NuxtLink>
+          </div>
+        </div>
       </div>
     </nav>
   </header>
@@ -344,18 +369,22 @@ import { useAdminAuth } from '~/composables/useAdminAuth'
 import { useMobileViewport } from '~/composables/useMobileViewport'
 import { useFavoritesStore } from '~/stores/FavoritesStore'
 import { useVersionStore } from '~/stores/VersionStore'
+import { normalizePatchNotesVersion, usePatchNotesStore } from '~/stores/PatchNotesStore'
 
 const isMenuOpen = ref(false)
 const isBuildsMenuOpen = ref(false)
 const isMobileBuildsMenuOpen = ref(false)
 const isStatisticsMenuOpen = ref(false)
 const isMobileStatisticsMenuOpen = ref(false)
+const isPatchMenuOpen = ref(false)
+const isMobilePatchMenuOpen = ref(false)
 const { isMobileViewport } = useMobileViewport()
 const { t, locale } = useI18n()
 const { isLoggedIn: isAdminLoggedIn, checkLoggedIn } = useAdminAuth()
 const localePath = useLocalePath()
 const route = useRoute()
 const versionStore = useVersionStore()
+const patchNotesStore = usePatchNotesStore()
 const gameVersion = computed(() => versionStore.currentVersion || getFallbackGameVersion())
 const discoverBuildsLink = computed(() => localePath('/builds/discover'))
 const myBuildsLink = computed(() => localePath('/builds/my-builds'))
@@ -386,6 +415,40 @@ const isStatisticsSectionActive = computed(() => {
   return route.path.includes('/statistics')
 })
 const isPatchNotesActive = computed(() => route.path.includes('/patch-notes'))
+
+const activePatchVersion = computed(() => {
+  const fromRoute = normalizePatchNotesVersion(String(route.params.version ?? '').trim())
+  if (fromRoute && route.path.includes('/patch-notes')) return fromRoute
+  const latest = normalizePatchNotesVersion(patchNotesStore.index?.latest ?? '')
+  if (latest) return latest
+  return normalizePatchNotesVersion(gameVersion.value) || gameVersion.value
+})
+
+const patchSummaryLink = computed(() => localePath(`/patch-notes/${activePatchVersion.value}`))
+
+const getRiotLocale = (currentLocale: string): string => {
+  const localeMap: Record<string, string> = {
+    fr: 'fr-fr',
+    en: 'en-us',
+  }
+  return localeMap[currentLocale] || 'en-us'
+}
+
+const officialPatchNotesUrl = computed(() => {
+  const riotLocale = getRiotLocale(locale.value)
+  const v = String(activePatchVersion.value || '').trim()
+  const parts = v.match(/\d+/g) ?? []
+  const gameMajor = Number(parts[0] ?? NaN)
+  const gameMinor = Number(parts[1] ?? NaN)
+
+  if (Number.isFinite(gameMajor) && Number.isFinite(gameMinor)) {
+    const patchMajor = gameMajor + 10
+    return `https://www.leagueoflegends.com/${riotLocale}/news/game-updates/league-of-legends-patch-${patchMajor}-${gameMinor}-notes/`
+  }
+
+  const slug = v.replace(/\./g, '-')
+  return `https://www.leagueoflegends.com/${riotLocale}/news/game-updates/league-of-legends-patch-${slug}-notes/`
+})
 
 /** Keep version / rank / role / OTP (and tab or sort) when switching between statistics pages. */
 function pickStatisticsSharedQuery(keys: readonly string[]): Record<string, string | string[]> {
@@ -421,35 +484,12 @@ const statisticsSettingsLink = computed(() =>
   })
 )
 
-const getRiotLocale = (currentLocale: string): string => {
-  const localeMap: Record<string, string> = {
-    fr: 'fr-fr',
-    en: 'en-us',
-  }
-  return localeMap[currentLocale] || 'en-us'
-}
-
-const patchNotesUrl = computed(() => {
-  const riotLocale = getRiotLocale(locale.value)
-  const v = String(gameVersion.value || '').trim()
-  const parts = v.match(/\d+/g) ?? []
-  const gameMajor = Number(parts[0] ?? NaN)
-  const gameMinor = Number(parts[1] ?? NaN)
-
-  if (Number.isFinite(gameMajor) && Number.isFinite(gameMinor)) {
-    const patchMajor = gameMajor + 10
-    return `https://www.leagueoflegends.com/${riotLocale}/news/game-updates/league-of-legends-patch-${patchMajor}-${gameMinor}-notes/`
-  }
-
-  const slug = v.replace(/\./g, '-')
-  return `https://www.leagueoflegends.com/${riotLocale}/news/game-updates/league-of-legends-patch-${slug}-notes/`
-})
-
 onMounted(() => {
   checkLoggedIn()
   if (!versionStore.currentVersion) {
     versionStore.loadCurrentVersion().catch(() => undefined)
   }
+  patchNotesStore.loadIndex().catch(() => undefined)
   favoritesStore.init()
 })
 
@@ -458,6 +498,7 @@ watch(isMobileViewport, mobile => {
     isMenuOpen.value = false
     isMobileBuildsMenuOpen.value = false
     isMobileStatisticsMenuOpen.value = false
+    isMobilePatchMenuOpen.value = false
   }
 })
 
@@ -495,6 +536,19 @@ const closeStatisticsMenu = () => {
 
 const handleStatisticsNavigation = () => {
   isMobileStatisticsMenuOpen.value = false
+  isMenuOpen.value = false
+}
+
+const closePatchMenu = () => {
+  isPatchMenuOpen.value = false
+}
+
+const toggleMobilePatchMenu = () => {
+  isMobilePatchMenuOpen.value = !isMobilePatchMenuOpen.value
+}
+
+const handlePatchNavigation = () => {
+  isMobilePatchMenuOpen.value = false
   isMenuOpen.value = false
 }
 </script>
@@ -623,6 +677,28 @@ const handleStatisticsNavigation = () => {
 .builds-submenu-link.router-link-exact-active:not(.is-active) {
   background: transparent;
   color: var(--color-blue-50);
+}
+
+.patch-menu-trigger {
+  cursor: default;
+}
+
+.patch-version-link {
+  color: inherit;
+  font-weight: inherit;
+  text-decoration: none;
+}
+
+.patch-version-link:hover {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.patch-menu .builds-menu-dropdown {
+  left: auto;
+  right: 0;
+  min-width: 160px;
+  transform: none;
 }
 
 .menu-mobile {

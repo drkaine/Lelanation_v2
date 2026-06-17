@@ -8,9 +8,9 @@
     </a>
     <header v-if="showStandardAppChrome && !isBuildCardRenderRoute" class="app-chrome-sticky">
       <AppNavbar />
-      <div v-show="isHomeRoute || !commandBarHiddenByScroll" class="command-bar-sticky-row">
+      <div v-show="!commandBarHiddenByScroll" class="command-bar-sticky-row">
         <button
-          v-show="!isHomeRoute && commandsCollapsed"
+          v-show="commandsCollapsed"
           type="button"
           class="command-collapse-floating"
           title="Afficher les commandes"
@@ -19,15 +19,8 @@
         >
           ▾
         </button>
-        <div
-          v-show="isHomeRoute || !commandsCollapsed"
-          ref="commandBarRef"
-          class="command-bar-overlay"
-        >
-          <div
-            class="command-bar"
-            :class="{ 'command-bar-collapsed': !isHomeRoute && commandsCollapsed }"
-          >
+        <div v-show="!commandsCollapsed" ref="commandBarRef" class="command-bar-overlay">
+          <div class="command-bar" :class="{ 'command-bar-collapsed': commandsCollapsed }">
             <div v-show="!commandsCollapsed" class="command-bar-content">
               <label class="command-toggle">
                 <input
@@ -108,7 +101,6 @@
               </button>
             </div>
             <button
-              v-if="!isHomeRoute"
               type="button"
               class="command-collapse-button"
               :title="commandsCollapsed ? 'Afficher les commandes' : 'Masquer les commandes'"
@@ -204,7 +196,7 @@ const streamerNavOpen = useState<boolean>('streamer-nav-open', () => false)
 const streamerFooterOpen = useState<boolean>('streamer-footer-open', () => false)
 const streamerPanelsOpen = computed(() => streamerNavOpen.value && streamerFooterOpen.value)
 const commandsCollapsed = useState<boolean>('commands-collapsed', () => true)
-const commandsModalOpen = ref(false)
+const commandsModalOpen = useState<boolean>('commands-modal-open', () => false)
 const commandBarRef = ref<HTMLElement | null>(null)
 
 function openCommandsModal() {
@@ -236,13 +228,6 @@ const isBuildCardRenderRoute = computed(() => {
   let i = 0
   if (segs[0] === 'en' || segs[0] === 'fr') i = 1
   return segs[i] === 'render' && segs[i + 1] === 'build-card'
-})
-const isHomeRoute = computed(() => {
-  const path = String(route.path || '').replace(/\/+$/, '') || '/'
-  const segments = path.split('/').filter(Boolean)
-  if (segments.length === 0) return true
-  if (segments.length !== 1) return false
-  return ['fr', 'en'].includes(segments[0] || '')
 })
 
 provide('tooltipsEnabled', tooltipsEnabled)
@@ -286,7 +271,7 @@ const onKeyDown = (event: KeyboardEvent) => {
     !event.shiftKey &&
     (event.key === 'ArrowDown' || event.key === 'ArrowUp')
   ) {
-    if (!isEditableTarget && !isHomeRoute.value) {
+    if (!isEditableTarget) {
       event.preventDefault()
       if (event.key === 'ArrowDown') {
         commandsCollapsed.value = false
@@ -445,7 +430,6 @@ const onKeyDown = (event: KeyboardEvent) => {
 }
 
 const onDocumentPointerDown = (event: MouseEvent) => {
-  if (isHomeRoute.value) return
   if (commandsCollapsed.value) return
   const target = event.target as Node | null
   if (!target) return
@@ -455,21 +439,12 @@ const onDocumentPointerDown = (event: MouseEvent) => {
 
 function onWindowScroll() {
   if (!import.meta.client) return
-  if (isHomeRoute.value) {
-    commandBarHiddenByScroll.value = false
-    return
-  }
   commandBarHiddenByScroll.value = window.scrollY > COMMAND_BAR_SCROLL_THRESHOLD
 }
 
 watch(
-  isHomeRoute,
-  isHome => {
-    if (isHome) {
-      commandsCollapsed.value = false
-      commandBarHiddenByScroll.value = false
-      return
-    }
+  () => route.path,
+  () => {
     commandsCollapsed.value = true
     commandBarHiddenByScroll.value = false
     if (import.meta.client) onWindowScroll()

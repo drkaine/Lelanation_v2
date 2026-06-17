@@ -281,7 +281,7 @@ export default defineNuxtConfig({
   },
   vite: {
     build: {
-      chunkSizeWarningLimit: 900,
+      chunkSizeWarningLimit: 600,
       rollupOptions: {
         output: {
           manualChunks(id) {
@@ -293,25 +293,27 @@ export default defineNuxtConfig({
             }
             if (
               id.includes('node_modules/@nuxtjs/i18n') ||
+              id.includes('node_modules/vue-i18n') ||
               id.includes('/frontend/i18n/') ||
               id.includes('/frontend/locales/')
             ) {
               return 'i18n'
             }
+            if (id.includes('node_modules/@lelanation/builds-ui')) {
+              return 'builds-ui'
+            }
             if (id.includes('/frontend/stores/') && id.includes('Statistics')) {
               return 'statistics-store'
             }
-            // Pages, composables et composants stats dans le même chunk pour éviter
-            // statistics-composables ↔ statistics (dépendances croisées via utils partagés).
-            if (
-              id.includes('frontend/pages/statistics') ||
-              id.includes('/components/statistics/') ||
-              id.includes('/frontend/composables/statistics/')
-            ) {
-              return 'statistics'
-            }
-            if (id.includes('node_modules/@lelanation/builds-ui')) {
-              return 'builds-ui'
+            // Per-route stats pages only — do NOT lump all components/composables together.
+            if (id.includes('/frontend/pages/statistics/')) {
+              if (id.includes('/champion/')) return 'page-stats-champion'
+              if (id.includes('/statistics/index.')) return 'page-stats-index'
+              if (id.includes('/tier-list')) return 'page-stats-tier-list'
+              if (id.includes('/settings')) return 'page-stats-settings'
+              if (id.includes('/recap')) return 'page-stats-recap'
+              if (id.includes('/item/')) return 'page-stats-item'
+              return 'page-stats-misc'
             }
             return undefined
           },
