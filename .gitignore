@@ -61,3 +61,10 @@ yarn-error.log*
 *~
 
 installer/Lelanation.exe
+
+# Code signing — private keys and certificates (store outside the repo)
+*.pfx
+*.p12
+darkaine.key
+darkaine.crt
+darkaine.pfx

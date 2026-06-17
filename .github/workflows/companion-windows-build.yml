@@ -181,6 +181,11 @@ jobs:
             if ($sig.Status -eq "NotSigned") {
               throw "File is not signed: $($file.FullName)"
             }
+            if ($sig.Status -ne "Valid") {
+              $msg = "Authenticode status '$($sig.Status)' on $($file.Name) — signed but not CA-trusted (self-signed OK for dev). SmartScreen may still warn users."
+              Write-Warning $msg
+              Write-Host "::warning title=Authenticode not CA-trusted::$msg"
+            }
             Write-Host "  -> Signer: $($sig.SignerCertificate.Subject)"
           }
 
@@ -256,7 +261,7 @@ jobs:
             Write-Host "Updater signature captured from $($updaterSig.Name)"
           }
 
-      - name: Require EV Authenticode for release installer
+      - name: Verify release installer Authenticode signature
         if: steps.version.outputs.is_release == 'true'
         run: |
           if ("${{ env.SHOULD_SIGN }}" -ne "true") {
@@ -270,14 +275,18 @@ jobs:
           Write-Host "Release installer signature: $($sig.Status)"
           Write-Host "Signer: $($sig.SignerCertificate.Subject)"
           if ($sig.Status -eq "NotSigned") {
-            throw "Release installer is not signed. Configure WINDOWS_CODESIGN_PFX_B64 with an EV code signing certificate."
+            throw "Release installer is not signed. Configure WINDOWS_CODESIGN_PFX_B64 (self-signed or CA-issued PFX)."
           }
-          if ($sig.Status -ne "Valid") {
-            throw @"
-          Release installer signature status is '$($sig.Status)' (expected Valid).
-          SmartScreen 'Unknown publisher' requires a trusted EV code signing certificate.
-          See companion-app/CODE_SIGNING_WINDOWS.md
+          if ($sig.Status -eq "Valid") {
+            Write-Host "Release installer has a CA-trusted Authenticode signature."
+          } else {
+            $msg = @"
+          Release installer signature status is '$($sig.Status)' (not CA-trusted).
+          Publishing anyway — self-signed certs show the signer name but Windows/SmartScreen may still display 'Unknown publisher'.
+          For a trusted publisher without warnings, use an EV code signing certificate (see companion-app/CODE_SIGNING_WINDOWS.md).
           "@
+            Write-Warning $msg
+            Write-Host "::warning title=Self-signed / untrusted Authenticode::$($msg -replace '\s+', ' ')"
           }
 
       - name: Generate latest.json for auto-updater
