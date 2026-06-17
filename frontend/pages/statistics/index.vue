@@ -4,12 +4,12 @@
     <div
       class="statistics-tabs-bar flex w-full min-w-0 flex-shrink-0 items-start gap-2 overflow-x-hidden bg-surface/30 px-4 pb-2 pt-4"
     >
-      <div class="statistics-tabs-scroll-wrap relative min-w-0 flex-1 overflow-hidden">
+      <div class="statistics-tabs-scroll-wrap statistics-tabs-wrap-mode relative min-w-0 flex-1">
         <div
           ref="tabsNavEl"
           role="tablist"
           :aria-label="t('statisticsPage.title')"
-          class="statistics-tabs-nav flex flex-nowrap gap-1 overflow-x-auto border-b border-primary/30 pb-2"
+          class="statistics-tabs-nav statistics-tabs-nav--wrap flex flex-wrap items-center gap-1 border-b border-primary/30 pb-2"
         >
           <button
             v-for="tab in tabs"
@@ -18,11 +18,11 @@
             type="button"
             role="tab"
             :data-tab-id="tab.id"
-            :aria-selected="activeTab === tab.id"
-            :tabindex="activeTab === tab.id ? 0 : -1"
+            :aria-selected="displayedActiveTab === tab.id"
+            :tabindex="displayedActiveTab === tab.id ? 0 : -1"
             :class="[
-              'statistics-tab-btn shrink-0 snap-start whitespace-nowrap rounded px-3 py-1.5 text-sm font-medium transition-colors',
-              activeTab === tab.id
+              'statistics-tab-btn shrink-0 snap-start whitespace-nowrap rounded px-2.5 py-1 text-sm font-medium transition-colors lg:px-3 lg:py-1.5',
+              displayedActiveTab === tab.id
                 ? 'border border-accent/50 bg-accent/20 text-accent'
                 : 'border border-transparent text-text/80 hover:bg-primary/10 hover:text-text',
             ]"
@@ -129,7 +129,7 @@
         </div>
         <div class="flex min-h-0 flex-1 flex-col overflow-y-auto p-2 lg:flex-none">
           <div
-            v-if="statisticsTabFilterFlags(activeTab).championSearch"
+            v-if="statisticsTabFilterFlags(displayedActiveTab).championSearch"
             :class="[
               championSearchFocused
                 ? 'statistics-search-sticky mb-2 max-lg:sticky max-lg:top-0 max-lg:z-20 max-lg:-mx-2 max-lg:border-b max-lg:border-primary/25 max-lg:bg-surface/95 max-lg:px-2 max-lg:pb-2 max-lg:pt-1 max-lg:backdrop-blur-sm'
@@ -166,7 +166,7 @@
             v-show="!championSearchFocused || !isMobileViewport"
             class="statistics-filters-fields flex flex-col gap-3"
           >
-            <template v-if="activeTab === 'patchNotes'">
+            <template v-if="displayedActiveTab === 'patchNotes'">
               <div>
                 <label for="patch-notes-filter-to" class="mb-1 block text-sm font-medium text-text">
                   {{ t('statisticsPage.patchNotesFilterTo') }}
@@ -201,7 +201,7 @@
                 </select>
               </div>
             </template>
-            <template v-else-if="activeTab === 'misc'">
+            <template v-else-if="displayedActiveTab === 'misc'">
               <div>
                 <label for="misc-level-filter" class="mb-1 block text-sm font-medium text-text">
                   {{ t('statisticsPage.miscLevelLabel') }}
@@ -221,7 +221,7 @@
                 </select>
               </div>
             </template>
-            <template v-else-if="activeTab !== 'misc'">
+            <template v-else-if="displayedActiveTab !== 'misc'">
               <div>
                 <label for="stats-filter-version" class="mb-1 block text-sm font-medium text-text">
                   {{ t('statisticsPage.overviewFilterByVersion') }}
@@ -260,7 +260,7 @@
                 </select>
               </div>
             </template>
-            <div v-if="activeTab === 'patchNotes'">
+            <div v-if="displayedActiveTab === 'patchNotes'">
               <div class="mb-1 text-sm font-medium text-text">
                 {{ t('statisticsPage.patchNotesTargetFilterTitle') }}
               </div>
@@ -315,10 +315,10 @@
             </div>
             <div
               v-if="
-                activeTab !== 'balance' &&
-                activeTab !== 'surrender' &&
-                activeTab !== 'patchNotes' &&
-                activeTab !== 'misc'
+                displayedActiveTab !== 'balance' &&
+                displayedActiveTab !== 'surrender' &&
+                displayedActiveTab !== 'patchNotes' &&
+                displayedActiveTab !== 'misc'
               "
             >
               <div class="mb-1 text-sm font-medium text-text">
@@ -382,7 +382,7 @@
                 </button>
               </div>
             </div>
-            <div v-else-if="activeTab === 'balance'">
+            <div v-else-if="displayedActiveTab === 'balance'">
               <div class="mb-1 text-sm font-medium text-text">
                 {{ t('statisticsPage.balanceGlobalStatus') }}
               </div>
@@ -474,10 +474,10 @@
             </div>
             <div
               v-if="
-                activeTab !== 'objectives' &&
-                activeTab !== 'surrender' &&
-                activeTab !== 'patchNotes' &&
-                activeTab !== 'misc'
+                displayedActiveTab !== 'objectives' &&
+                displayedActiveTab !== 'surrender' &&
+                displayedActiveTab !== 'patchNotes' &&
+                displayedActiveTab !== 'misc'
               "
             >
               <div class="mb-1 text-sm font-medium text-text">
@@ -528,7 +528,7 @@
                 </button>
               </div>
             </div>
-            <div v-show="activeTab === 'bans'">
+            <div v-show="displayedActiveTab === 'bans'">
               <div class="mb-1 text-sm font-medium text-text">Colonnes bans</div>
               <div class="flex flex-wrap gap-1">
                 <button
@@ -557,7 +557,7 @@
                 </button>
               </div>
             </div>
-            <div v-show="activeTab === 'championTable'">
+            <div v-show="displayedActiveTab === 'championTable'">
               <div class="mb-1 text-sm font-medium text-text">
                 {{ t('statisticsPage.filterTransform') }}
               </div>
@@ -617,11 +617,11 @@
             </div>
             <div
               v-show="
-                activeTab !== 'bans' &&
-                activeTab !== 'objectives' &&
-                activeTab !== 'surrender' &&
-                activeTab !== 'patchNotes' &&
-                activeTab !== 'misc'
+                displayedActiveTab !== 'bans' &&
+                displayedActiveTab !== 'objectives' &&
+                displayedActiveTab !== 'surrender' &&
+                displayedActiveTab !== 'patchNotes' &&
+                displayedActiveTab !== 'misc'
               "
             >
               <div class="mb-1 text-sm font-medium text-text">
@@ -666,7 +666,7 @@
                 </button>
               </div>
             </div>
-            <div v-if="activeTab === 'spells'">
+            <div v-if="displayedActiveTab === 'spells'">
               <label for="spells-mode-filter" class="mb-1 block text-sm font-medium text-text">
                 {{ t('statisticsPage.overviewDetailSummonerSpells') }}
               </label>
@@ -700,7 +700,7 @@
                 </button>
               </div>
             </div>
-            <div v-if="activeTab === 'items'">
+            <div v-if="displayedActiveTab === 'items'">
               <label for="items-type-filter" class="mb-1 block text-sm font-medium text-text">
                 {{ t('statisticsPage.itemsColType') }}
               </label>
@@ -757,56 +757,56 @@
           </div>
 
           <Transition name="statistics-tab" mode="out-in">
-            <div :key="activeTab" class="statistics-tab-panel min-h-[12rem]">
-              <div v-if="activeTab === 'overview'" class="space-y-6">
+            <div :key="displayedActiveTab" class="statistics-tab-panel min-h-[12rem]">
+              <div v-if="displayedActiveTab === 'overview'" class="space-y-6">
                 <StatisticsOverviewTab />
               </div>
-              <div v-else-if="activeTab === 'runes'" class="space-y-6">
+              <div v-else-if="displayedActiveTab === 'runes'" class="space-y-6">
                 <StatisticsRunesTab />
               </div>
-              <div v-else-if="activeTab === 'team'" class="space-y-6">
+              <div v-else-if="displayedActiveTab === 'team'" class="space-y-6">
                 <StatisticsTeamTab />
               </div>
-              <div v-else-if="activeTab === 'objectives'" class="space-y-6">
+              <div v-else-if="displayedActiveTab === 'objectives'" class="space-y-6">
                 <StatisticsObjectivesTab />
               </div>
-              <div v-else-if="activeTab === 'surrender'" class="space-y-6">
+              <div v-else-if="displayedActiveTab === 'surrender'" class="space-y-6">
                 <StatisticsSurrenderTab />
               </div>
-              <div v-else-if="activeTab === 'infos'">
+              <div v-else-if="displayedActiveTab === 'infos'">
                 <StatisticsInfosTab />
               </div>
-              <div v-else-if="activeTab === 'bans'">
+              <div v-else-if="displayedActiveTab === 'bans'">
                 <StatisticsBansTab />
               </div>
-              <div v-else-if="activeTab === 'championTable'" class="space-y-4">
+              <div v-else-if="displayedActiveTab === 'championTable'" class="space-y-4">
                 <StatisticsChampionTableTab />
               </div>
-              <div v-else-if="activeTab === 'balance'" class="space-y-4">
+              <div v-else-if="displayedActiveTab === 'balance'" class="space-y-4">
                 <StatisticsBalanceTab />
               </div>
-              <div v-else-if="activeTab === 'duration'" class="space-y-4">
+              <div v-else-if="displayedActiveTab === 'duration'" class="space-y-4">
                 <StatisticsDurationTab />
               </div>
-              <div v-else-if="activeTab === 'items'" class="space-y-6">
+              <div v-else-if="displayedActiveTab === 'items'" class="space-y-6">
                 <StatisticsItemsTab />
               </div>
-              <div v-else-if="activeTab === 'spells'" class="space-y-4">
+              <div v-else-if="displayedActiveTab === 'spells'" class="space-y-4">
                 <StatisticsSpellsTab />
               </div>
-              <div v-else-if="activeTab === 'abandons'" class="space-y-4">
+              <div v-else-if="displayedActiveTab === 'abandons'" class="space-y-4">
                 <StatisticsAbandonsTab />
               </div>
-              <div v-else-if="activeTab === 'pings'" class="space-y-4">
+              <div v-else-if="displayedActiveTab === 'pings'" class="space-y-4">
                 <StatisticsPingsTab />
               </div>
-              <div v-else-if="activeTab === 'vision'" class="space-y-4">
+              <div v-else-if="displayedActiveTab === 'vision'" class="space-y-4">
                 <StatisticsVisionTab />
               </div>
-              <div v-else-if="activeTab === 'misc'" class="space-y-4">
+              <div v-else-if="displayedActiveTab === 'misc'" class="space-y-4">
                 <StatisticsMiscTab />
               </div>
-              <div v-else-if="activeTab === 'patchNotes'" class="space-y-4">
+              <div v-else-if="displayedActiveTab === 'patchNotes'" class="space-y-4">
                 <StatisticsPatchNotesTab />
               </div>
             </div>
@@ -887,6 +887,7 @@ import { useRunesStore } from '~/stores/RunesStore'
 import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import { useVersionStore } from '~/stores/VersionStore'
 import { useStatisticsUiStore, type StatisticsMainTab } from '~/stores/StatisticsUiStore'
+import { STATISTICS_MAIN_TAB_ORDER } from '~/constants/statisticsMainTabs'
 import { useStatisticsCustomStore } from '~/stores/StatisticsCustomStore'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { useStatisticsMobileViewport } from '~/composables/useStatisticsMobileViewport'
@@ -1006,7 +1007,10 @@ const runesStore = useRunesStore()
 const summonerSpellsStore = useSummonerSpellsStore()
 const versionStore = useVersionStore()
 const statisticsUiStore = useStatisticsUiStore()
-const { filtersOpen } = storeToRefs(statisticsUiStore)
+if (import.meta.client) {
+  statisticsUiStore.init()
+}
+const { filtersOpen, hiddenTabs } = storeToRefs(statisticsUiStore)
 const { effectiveFiltersSheetMode, showDesktopFiltersTrigger, filtersFabClass } =
   useStatisticsFiltersSheetMode()
 const statisticsCustomStore = useStatisticsCustomStore()
@@ -1091,6 +1095,7 @@ function normalizeLegacyTab(tab: string): StatisticsMainTab {
 function initialActiveTabFromRoute(): StatisticsMainTab {
   const tabRaw = queryFirst(route.query.tab as string | string[] | null | undefined)
   if (tabRaw) return normalizeLegacyTab(tabRaw)
+  if (import.meta.client) return statisticsUiStore.resolveDefaultMainTab
   return 'overview'
 }
 
@@ -1123,23 +1128,7 @@ const activeTab = ref<
 >(initialActiveTabFromRoute())
 
 /** Ordre unique barre d’onglets + navigation clavier (←/→/↑/↓, Home, End). */
-const STATISTICS_TAB_NAV_ORDER: readonly StatisticsMainTab[] = [
-  'overview',
-  'team',
-  'objectives',
-  'surrender',
-  'bans',
-  'championTable',
-  'balance',
-  'runes',
-  'spells',
-  'items',
-  'pings',
-  'vision',
-  'misc',
-  'patchNotes',
-  'infos',
-]
+const STATISTICS_TAB_NAV_ORDER: readonly StatisticsMainTab[] = STATISTICS_MAIN_TAB_ORDER
 
 const allTabs = computed(() => [
   { id: 'overview' as const, label: t('statisticsPage.tabOverview'), widgetId: 'overview' },
@@ -1170,14 +1159,62 @@ const allTabs = computed(() => [
 const activeSection = computed<StatisticsTabSection | null>(() => sectionFromQuery())
 const tabs = computed(() => {
   const section = activeSection.value
+  const hidden = new Set(hiddenTabs.value)
   const byId = new Map(allTabs.value.map(tab => [tab.id, tab]))
   const allowedIds = section
     ? new Set(STATISTICS_SECTION_TABS[section])
     : new Set(STATISTICS_TAB_NAV_ORDER)
   return STATISTICS_TAB_NAV_ORDER.map(id => byId.get(id)).filter(
-    (tab): tab is (typeof allTabs.value)[number] => tab != null && allowedIds.has(tab.id)
+    (tab): tab is (typeof allTabs.value)[number] =>
+      tab != null && allowedIds.has(tab.id) && !hidden.has(tab.id)
   )
 })
+
+/** Onglet affiché : toujours parmi ceux activés dans les paramètres. */
+const displayedActiveTab = computed<StatisticsMainTab>(() => {
+  const current = normalizeLegacyTab(String(activeTab.value))
+  if (!hiddenTabs.value.includes(current)) return current
+  const fallback = STATISTICS_TAB_NAV_ORDER.find(id => !hiddenTabs.value.includes(id))
+  return fallback ?? 'overview'
+})
+
+function isStatisticsMainTab(tab: string): tab is StatisticsMainTab {
+  return (STATISTICS_MAIN_TAB_ORDER as readonly string[]).includes(tab)
+}
+
+function isStatisticsTabConfiguredVisible(tab: string): boolean {
+  const normalized = normalizeLegacyTab(tab)
+  if (!isStatisticsMainTab(normalized)) return true
+  return statisticsUiStore.isTabVisible(normalized)
+}
+
+function statisticsTabNeedsOverviewLoad(tab: StatisticsMainTab): boolean {
+  return tab === 'overview' || tab === 'objectives' || tab === 'infos'
+}
+
+function visibleTabsNeedChampionsStore(): boolean {
+  return statisticsUiStore.visibleMainTabs.some(
+    t =>
+      statisticsTabFilterFlags(t).championSearch ||
+      t === 'overview' ||
+      t === 'championTable' ||
+      t === 'balance' ||
+      t === 'bans'
+  )
+}
+
+function visibleTabsNeedItemsStore(): boolean {
+  return statisticsUiStore.visibleMainTabs.some(t => t === 'items' || t === 'patchNotes')
+}
+
+function visibleTabsNeedRunesStore(): boolean {
+  return statisticsUiStore.visibleMainTabs.some(t => t === 'runes' || t === 'patchNotes')
+}
+
+function visibleTabsNeedSpellsStore(): boolean {
+  return statisticsUiStore.visibleMainTabs.includes('spells')
+}
+
 const tabsNavEl = ref<HTMLElement | null>(null)
 useHorizontalScrollContainer(tabsNavEl)
 type VisibleStatisticsTabId = (typeof allTabs.value)[number]['id']
@@ -1185,7 +1222,7 @@ type VisibleStatisticsTabId = (typeof allTabs.value)[number]['id']
 function scrollActiveTabIntoView(behavior: ScrollBehavior = 'smooth'): void {
   if (!import.meta.client || !tabsNavEl.value) return
   const el = tabsNavEl.value.querySelector<HTMLButtonElement>(
-    `button[data-tab-id="${activeTab.value}"]`
+    `button[data-tab-id="${displayedActiveTab.value}"]`
   )
   el?.scrollIntoView({ inline: 'start', block: 'nearest', behavior })
 }
@@ -1617,8 +1654,10 @@ function applyStatisticsStateFromQuery(): void {
 
   isApplyingQueryState.value = true
   const section = sectionFromQuery()
-  const tabCandidate = tabRaw ? normalizeLegacyTab(tabRaw) : 'overview'
-  activeTab.value = normalizeTabForSection(section, tabCandidate)
+  const tabCandidate = tabRaw ? normalizeLegacyTab(tabRaw) : statisticsUiStore.resolveDefaultMainTab
+  activeTab.value = statisticsUiStore.ensureActiveTabVisible(
+    normalizeTabForSection(section, tabCandidate)
+  )
   statsVersionFilter.value = versionRaw
   statsRoleFilter.value = roleRaw
   if (!rankTierSelectionsEqual(statsDivisionFilter.value, divisionsRaw)) {
@@ -1670,7 +1709,7 @@ function syncStatisticsStateToQuery(): void {
     isSyncingQueryState.value = false
   })
 }
-const showFiltersPanel = computed(() => activeTab.value !== 'infos')
+const showFiltersPanel = computed(() => displayedActiveTab.value !== 'infos')
 
 const activeStatsFiltersCount = computed(() => {
   let count = 0
@@ -1732,6 +1771,15 @@ watch([filtersOpen, effectiveFiltersSheetMode, showFiltersPanel], () => {
 })
 
 const statsKnownVersions = ref<Array<{ version: string; matchCount: number }>>([])
+
+watch(
+  displayedActiveTab,
+  tab => {
+    if (!import.meta.client) return
+    if (activeTab.value !== tab) activeTab.value = tab
+  },
+  { immediate: true }
+)
 
 watch(activeTab, value => {
   if (!import.meta.client) return
@@ -1822,12 +1870,22 @@ const statsVersionOptions = computed(() => {
   return [...fallback].sort((a, b) => compareVersionsDesc(a.version, b.version))
 })
 
-// Init client après statsVersionOptions (applyStatisticsStateFromQuery → syncProgressionDelta).
+// Init client (plugin statistics-ui.client.ts charge aussi le store au démarrage).
 if (import.meta.client) {
-  statisticsUiStore.init()
   statisticsCustomStore.init()
+  activeTab.value = statisticsUiStore.ensureActiveTabVisible(initialActiveTabFromRoute())
   applyStatisticsStateFromQuery()
 }
+
+watch(
+  () => statisticsUiStore.hiddenTabs,
+  () => {
+    if (!import.meta.client) return
+    const ensured = statisticsUiStore.ensureActiveTabVisible(activeTab.value as StatisticsMainTab)
+    if (ensured !== activeTab.value) activeTab.value = ensured
+  },
+  { deep: true }
+)
 
 watch(
   () => queryFirst(route.query.tab as string | string[] | null | undefined),
@@ -1999,6 +2057,7 @@ function selectAllDivisions() {
   statsDivisionFilter.value = []
 }
 function onStatsFilterChange() {
+  if (!isStatisticsTabConfiguredVisible(activeTab.value)) return
   overviewDetailData.value = null
   overviewDetailBaselineData.value = null
   overviewDetailError.value = false
@@ -5042,8 +5101,8 @@ function itemEconomicForItem(itemId: number): string[] {
   return formatItemEconomicForDisplay(item)
 }
 
-watch(activeTab, async tab => {
-  syncStatisticsStateToQuery()
+async function loadStatisticsTabData(tab: typeof activeTab.value): Promise<void> {
+  if (!isStatisticsTabConfiguredVisible(tab)) return
   if (!statisticsTabFilterFlags(tab).championSearch) {
     championSearchQuery.value = ''
     championSearchFocused.value = false
@@ -5058,12 +5117,6 @@ watch(activeTab, async tab => {
     loadOverviewSides()
     loadObjectivesBaseline()
   }
-  // if (tab === 'trends') {
-  //   if (!overviewData.value?.matchesByVersion?.length) await loadOverview()
-  //   if (!progressionFromVersion.value && !versionStore.currentVersion)
-  //     await versionStore.loadCurrentVersion()
-  //   loadProgressionsFull()
-  // }
   if (tab === 'team') loadOverviewSides()
   if (tab === 'infos') loadInfosPatchDivisionMatrix()
   if (tab === 'infos') loadInfosMeta()
@@ -5073,6 +5126,7 @@ watch(activeTab, async tab => {
   if (tab === 'bans') {
     bansTab.loadBansTable()
     loadObjectivesBaseline()
+    runInBackground(loadOverviewTeams())
   }
   if (tab === 'spells' || tab === 'items') {
     loadOverviewDetail()
@@ -5090,8 +5144,14 @@ watch(activeTab, async tab => {
     runInBackground(loadPatchNotesVersionOptions())
     patchNotesTab.loadPatchNotesStats()
   }
+}
+
+watch(activeTab, async tab => {
+  syncStatisticsStateToQuery()
+  await loadStatisticsTabData(tab)
 })
 watch([statsVersionFilter, statsRoleFilter, statsOtpFilter], () => {
+  if (!isStatisticsTabConfiguredVisible(activeTab.value)) return
   if (activeTab.value === 'overview') {
     loadVersionsWithMatches()
     loadOverview()
@@ -5133,12 +5193,14 @@ watch([statsVersionFilter, statsRoleFilter, statsOtpFilter], () => {
 watch(
   patchNotesTargetFilters,
   () => {
+    if (!isStatisticsTabConfiguredVisible('patchNotes')) return
     if (activeTab.value === 'patchNotes') patchNotesTab.loadPatchNotesStats()
   },
   { deep: true }
 )
 
 watch([patchNotesFromVersion, patchNotesToVersion], () => {
+  if (!isStatisticsTabConfiguredVisible('patchNotes')) return
   if (activeTab.value === 'patchNotes') patchNotesTab.loadPatchNotesStats()
 })
 
@@ -5146,6 +5208,7 @@ watch([activeTab, statsVersionFilter, statsRoleFilter, statsOtpFilter], () => {
   syncStatisticsStateToQuery()
 })
 watch(progressionFromVersion, () => {
+  if (!isStatisticsTabConfiguredVisible(activeTab.value)) return
   if (activeTab.value === 'overview') {
     loadOverviewProgression()
     loadProgressionsFull()
@@ -5179,15 +5242,26 @@ async function bootstrapStatisticsPage(): Promise<void> {
     : versionStore.loadCurrentVersion()
   await versionPromise
   await loadVersionsWithMatches()
-  await loadOverview()
+  const currentTab = normalizeLegacyTab(String(activeTab.value)) as StatisticsMainTab
+  if (isStatisticsTabConfiguredVisible(currentTab) && statisticsTabNeedsOverviewLoad(currentTab)) {
+    await loadOverview()
+  }
   applyDefaultVersionFiltersFromKnownVersions()
-  await Promise.all([
-    championsStore.loadChampions(riotLocale.value),
-    itemsStore.loadItems(riotLocale.value),
-    runesStore.loadRunes(riotLocale.value),
-    summonerSpellsStore.loadSummonerSpells(riotLocale.value),
-  ])
-  if (activeTab.value === 'overview') {
+  const storeLoads: Promise<unknown>[] = []
+  if (visibleTabsNeedChampionsStore()) {
+    storeLoads.push(championsStore.loadChampions(riotLocale.value))
+  }
+  if (visibleTabsNeedItemsStore()) {
+    storeLoads.push(itemsStore.loadItems(riotLocale.value))
+  }
+  if (visibleTabsNeedRunesStore()) {
+    storeLoads.push(runesStore.loadRunes(riotLocale.value))
+  }
+  if (visibleTabsNeedSpellsStore()) {
+    storeLoads.push(summonerSpellsStore.loadSummonerSpells(riotLocale.value))
+  }
+  if (storeLoads.length) await Promise.all(storeLoads)
+  if (currentTab === 'overview' && isStatisticsTabConfiguredVisible('overview')) {
     await loadChampions()
   }
 }
@@ -5205,23 +5279,10 @@ await useAsyncData(
 onMounted(() => {
   document.addEventListener('keydown', onFiltersEscapeKey)
   const tPage = statsPerfStart('page mount')
-  runInBackground(Promise.allSettled([loadInfosMeta(), loadInfosPatchDivisionMatrix()]))
-  if (activeTab.value === 'overview') loadObjectivesBaseline()
-  if (activeTab.value === 'team') loadOverviewSides()
-  if (activeTab.value === 'objectives') loadOverviewSides()
-  if (activeTab.value === 'objectives') loadObjectivesBaseline()
-  if (activeTab.value === 'surrender') loadSurrenderMatrix()
-  if (activeTab.value === 'championTable') loadChampionGlobalTable()
-  if (activeTab.value === 'balance') loadBalanceFramework()
-  if (activeTab.value === 'infos') loadBalanceFramework()
-  if (activeTab.value === 'bans') {
-    runInBackground(bansTab.loadBansTable())
-    runInBackground(loadOverviewTeams())
-    runInBackground(loadObjectivesBaseline())
+  if (isStatisticsTabConfiguredVisible('infos')) {
+    runInBackground(Promise.allSettled([loadInfosMeta(), loadInfosPatchDivisionMatrix()]))
   }
-  if (activeTab.value === 'misc') miscTab.loadMiscTable()
-  if (activeTab.value === 'pings') pingsTab.loadPingsTable()
-  if (activeTab.value === 'vision') visionTab.loadVisionTable()
+  runInBackground(loadStatisticsTabData(activeTab.value))
   statsPerfEnd('page mount', tPage)
   nextTick(() => scrollActiveTabIntoView('auto'))
 })
@@ -5780,9 +5841,28 @@ if (__statisticsVm?.proxy) {
  * Surfaces & fast-stat : hors scoped pour que les composants enfants (objets, tooltips)
  * héritent le même fond #08101f que les cartes « Vue d’ensemble ».
  */
-/* Onglets : scroll snap + fade bords (width/overflow rules in app.vue) */
-.statistics-tabs-scroll-wrap::before,
-.statistics-tabs-scroll-wrap::after {
+/* Onglets : retour à la ligne sur /statistics (évite le scroll horizontal quand possible) */
+.statistics .statistics-tabs-wrap-mode {
+  overflow: visible;
+}
+.statistics .statistics-tabs-wrap-mode::before,
+.statistics .statistics-tabs-wrap-mode::after {
+  display: none;
+}
+.statistics .statistics-tabs-nav--wrap {
+  flex-wrap: wrap;
+  overflow: visible;
+  scroll-snap-type: none;
+  cursor: default;
+  touch-action: auto;
+  row-gap: 0.35rem;
+}
+.statistics .statistics-tabs-nav--wrap .statistics-tab-btn {
+  scroll-snap-align: unset;
+}
+/* Onglets : scroll snap + fade bords (autres pages stats-style) */
+.statistics-tabs-scroll-wrap:not(.statistics-tabs-wrap-mode)::before,
+.statistics-tabs-scroll-wrap:not(.statistics-tabs-wrap-mode)::after {
   content: '';
   position: absolute;
   top: 0;
@@ -5791,11 +5871,11 @@ if (__statisticsVm?.proxy) {
   z-index: 2;
   pointer-events: none;
 }
-.statistics-tabs-scroll-wrap::before {
+.statistics-tabs-scroll-wrap:not(.statistics-tabs-wrap-mode)::before {
   left: 0;
   background: linear-gradient(to right, rgb(8 16 31 / 0.95), transparent);
 }
-.statistics-tabs-scroll-wrap::after {
+.statistics-tabs-scroll-wrap:not(.statistics-tabs-wrap-mode)::after {
   right: 0;
   background: linear-gradient(to left, rgb(8 16 31 / 0.95), transparent);
 }

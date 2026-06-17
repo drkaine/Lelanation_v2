@@ -108,15 +108,39 @@
         >
           {{ t('nav.map') }}
         </NuxtLink>
-        <NuxtLink
-          :to="statisticsIndexLink"
-          :title="t('nav.statistics')"
-          class="version"
-          :class="{ 'router-link-active': isStatisticsIndexActive }"
-          @click="toggleMenu"
-        >
-          {{ t('nav.statistics') }}
-        </NuxtLink>
+        <div class="mobile-builds-menu">
+          <button
+            type="button"
+            class="version mobile-builds-trigger"
+            :class="{ 'is-active': isStatisticsSectionActive }"
+            @click="toggleMobileStatisticsMenu"
+          >
+            <span>{{ t('nav.statistics') }}</span>
+            <span class="builds-menu-chevron" :class="{ 'is-open': isMobileStatisticsMenuOpen }"
+              >▾</span
+            >
+          </button>
+          <div v-if="isMobileStatisticsMenuOpen" class="mobile-builds-dropdown">
+            <NuxtLink
+              :to="statisticsIndexLink"
+              :title="t('nav.statistics')"
+              class="version builds-submenu-link"
+              :class="{ 'is-active': isStatisticsIndexActive }"
+              @click="handleStatisticsNavigation"
+            >
+              {{ t('nav.statistics') }}
+            </NuxtLink>
+            <NuxtLink
+              :to="statisticsSettingsLink"
+              :title="t('nav.statisticsCustom')"
+              class="version builds-submenu-link"
+              :class="{ 'is-active': isStatisticsSettingsActive }"
+              @click="handleStatisticsNavigation"
+            >
+              {{ t('nav.statisticsCustom') }}
+            </NuxtLink>
+          </div>
+        </div>
         <NuxtLink
           :to="statisticsTierListLink"
           :title="t('nav.tierList')"
@@ -236,14 +260,40 @@
         >
           {{ t('nav.map') }}
         </NuxtLink>
-        <NuxtLink
-          :to="statisticsIndexLink"
-          :title="t('nav.statistics')"
-          class="version"
-          :class="{ 'router-link-active': isStatisticsIndexActive }"
+        <div
+          class="builds-menu"
+          @mouseenter="isStatisticsMenuOpen = true"
+          @mouseleave="isStatisticsMenuOpen = false"
         >
-          {{ t('nav.statistics') }}
-        </NuxtLink>
+          <NuxtLink
+            :to="statisticsIndexLink"
+            class="version builds-menu-trigger"
+            :class="{ 'is-active': isStatisticsSectionActive }"
+          >
+            <span>{{ t('nav.statistics') }}</span>
+            <span class="builds-menu-chevron" :class="{ 'is-open': isStatisticsMenuOpen }">▾</span>
+          </NuxtLink>
+          <div v-show="isStatisticsMenuOpen" class="builds-menu-dropdown">
+            <NuxtLink
+              :to="statisticsIndexLink"
+              :title="t('nav.statistics')"
+              class="builds-submenu-link"
+              :class="{ 'is-active': isStatisticsIndexActive }"
+              @click="closeStatisticsMenu"
+            >
+              {{ t('nav.statistics') }}
+            </NuxtLink>
+            <NuxtLink
+              :to="statisticsSettingsLink"
+              :title="t('nav.statisticsCustom')"
+              class="builds-submenu-link"
+              :class="{ 'is-active': isStatisticsSettingsActive }"
+              @click="closeStatisticsMenu"
+            >
+              {{ t('nav.statisticsCustom') }}
+            </NuxtLink>
+          </div>
+        </div>
         <NuxtLink
           :to="statisticsTierListLink"
           :title="t('nav.tierList')"
@@ -298,6 +348,8 @@ import { useVersionStore } from '~/stores/VersionStore'
 const isMenuOpen = ref(false)
 const isBuildsMenuOpen = ref(false)
 const isMobileBuildsMenuOpen = ref(false)
+const isStatisticsMenuOpen = ref(false)
+const isMobileStatisticsMenuOpen = ref(false)
 const { isMobileViewport } = useMobileViewport()
 const { t, locale } = useI18n()
 const { isLoggedIn: isAdminLoggedIn, checkLoggedIn } = useAdminAuth()
@@ -327,6 +379,12 @@ const isStatisticsIndexActive = computed(() => route.path === localePath('/stati
 const isStatisticsTierListActive = computed(
   () => route.path === localePath('/statistics/tier-list')
 )
+const isStatisticsSettingsActive = computed(() => route.path === localePath('/statistics/settings'))
+const isStatisticsSectionActive = computed(() => {
+  const tierListPath = localePath('/statistics/tier-list')
+  if (route.path === tierListPath || route.path.startsWith(`${tierListPath}/`)) return false
+  return route.path.includes('/statistics')
+})
 const isPatchNotesActive = computed(() => route.path.includes('/patch-notes'))
 
 /** Keep version / rank / role / OTP (and tab or sort) when switching between statistics pages. */
@@ -353,6 +411,13 @@ const statisticsTierListLink = computed(() =>
   localePath({
     path: '/statistics/tier-list',
     query: pickStatisticsSharedQuery(['version', 'role', 'otp', 'rankTier', 'sort', 'view']),
+  })
+)
+
+const statisticsSettingsLink = computed(() =>
+  localePath({
+    path: '/statistics/settings',
+    query: pickStatisticsSharedQuery(['version', 'role', 'otp', 'rankTier']),
   })
 )
 
@@ -392,6 +457,7 @@ watch(isMobileViewport, mobile => {
   if (!mobile) {
     isMenuOpen.value = false
     isMobileBuildsMenuOpen.value = false
+    isMobileStatisticsMenuOpen.value = false
   }
 })
 
@@ -414,8 +480,21 @@ const toggleMobileBuildsMenu = () => {
   isMobileBuildsMenuOpen.value = !isMobileBuildsMenuOpen.value
 }
 
+const toggleMobileStatisticsMenu = () => {
+  isMobileStatisticsMenuOpen.value = !isMobileStatisticsMenuOpen.value
+}
+
 const handleBuildsNavigation = () => {
   isMobileBuildsMenuOpen.value = false
+  isMenuOpen.value = false
+}
+
+const closeStatisticsMenu = () => {
+  isStatisticsMenuOpen.value = false
+}
+
+const handleStatisticsNavigation = () => {
+  isMobileStatisticsMenuOpen.value = false
   isMenuOpen.value = false
 }
 </script>
