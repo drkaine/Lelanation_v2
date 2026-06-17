@@ -1870,6 +1870,7 @@ import { getRankedEmblemUrl } from '~/utils/rankedEmblem'
 import { rankTierSelectionsEqual } from '~/utils/statisticsRankTierQuery'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { statsRoleIconPath, statsRoleLabel } from '~/utils/statsRoleDisplay'
+import { buildChampionRoleDistribution } from '~/utils/championRoleDistribution'
 import { championKeyFromRouteParam } from '~/utils/championSlug'
 import { useChampionPageSsr } from '~/composables/statistics/useChampionStatsSsr'
 import ChampionStatsSeoSummary from '~/components/statistics/ChampionStatsSeoSummary.vue'
@@ -2546,26 +2547,12 @@ const championVisionData = ref<ChampionVisionSummary | null>(null)
 const championVisionBaselineData = ref<ChampionVisionSummary | null>(null)
 const championVisionPending = ref(false)
 
-const CHAMPION_ROLE_ORDER = ['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT'] as const
-
 type ByRoleRow = { role: string; games: number; winrate: number; pickrate: number }
 
 /** Toutes les positions (TOP…SUPPORT) : parts sur le total champion toutes positions (même avec filtre rôle sur le reste de la page). */
 const byRoleList = computed((): ByRoleRow[] => {
   if (!championStats.value) return []
-  const br = championStats.value.byRole
-  const safe = br && typeof br === 'object' ? br : {}
-  const totalAll = CHAMPION_ROLE_ORDER.reduce((sum, role) => sum + (safe[role]?.games ?? 0), 0)
-  return CHAMPION_ROLE_ORDER.map(role => {
-    const data = safe[role]
-    const games = data?.games ?? 0
-    return {
-      role,
-      games,
-      winrate: data?.winrate ?? 0,
-      pickrate: totalAll > 0 ? (100 * games) / totalAll : 0,
-    }
-  })
+  return buildChampionRoleDistribution(championStats.value.byRole)
 })
 
 /** Rôles avec au moins une partie dans la répartition (hors filtre rôle courant). */
@@ -2573,7 +2560,9 @@ const rolesWithData = computed(
   () => new Set(byRoleList.value.filter(r => r.games > 0).map(r => r.role))
 )
 
-const roleDistribution = computed(() => [...byRoleList.value].sort((a, b) => b.games - a.games))
+const roleDistribution = computed(() =>
+  [...byRoleList.value].filter(r => r.games > 0).sort((a, b) => b.games - a.games)
+)
 
 const roleOptions = [
   { value: 'TOP', label: 'Top', icon: '/icons/roles/top.png' },

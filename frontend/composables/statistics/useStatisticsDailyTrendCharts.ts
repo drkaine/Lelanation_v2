@@ -1,4 +1,4 @@
-import { computed, ref, type ComputedRef, type Ref } from 'vue'
+import { computed, ref, type ComputedRef, type InjectionKey, type Ref } from 'vue'
 
 export type DailyTrendSnapshotPoint = {
   dateOfGame: string
@@ -53,6 +53,20 @@ const TREND_PRESET_TIERS: Record<Exclude<DailyTrendDivisionPreset, 'selected'>, 
   elite: ['DIAMOND', 'MASTER', 'GRANDMASTER', 'CHALLENGER'],
 }
 
+export { TREND_PRESET_TIERS }
+
+export type SharedDailyTrendChartUi = {
+  trendGranularity: Ref<DailyTrendGranularity>
+  trendRangeMode: Ref<'7d' | '14d' | 'months'>
+  trendMonthsWindow: Ref<number>
+  trendDivisionPreset: Ref<DailyTrendDivisionPreset>
+  trendShowGlobalLine: Ref<boolean>
+  setTrendDivisionPreset: (preset: DailyTrendDivisionPreset) => void
+}
+
+export const SHARED_DAILY_TREND_CHART_UI_KEY: InjectionKey<SharedDailyTrendChartUi> =
+  Symbol('sharedDailyTrendChartUi')
+
 export const DAILY_TREND_CHART_W = 620
 export const DAILY_TREND_CHART_H = 220
 export const DAILY_TREND_CHART_PAD = { left: 40, right: 16, top: 12, bottom: 30 }
@@ -101,7 +115,10 @@ function metricValue(
   raw: { games: number; wins: number; pickNum: number; banNum: number; weight: number }
 ): number {
   if (metric === 'games') return raw.games
-  if (metric === 'winrate') return raw.games > 0 ? (100 * raw.wins) / raw.games : 0
+  if (metric === 'winrate') {
+    const wr = raw.games > 0 ? (100 * raw.wins) / raw.games : 0
+    return Math.min(100, Math.max(0, wr))
+  }
   if (metric === 'pickrate') return raw.weight > 0 ? raw.pickNum / raw.weight : 0
   if (metric === 'duration' || metric === 'orderPosition') {
     return raw.weight > 0 ? raw.pickNum / raw.weight : 0
@@ -120,12 +137,15 @@ export function useStatisticsDailyTrendCharts(options: {
   tierColor?: (tier: string) => string
   formatMetricValue?: (metric: DailyTrendMetricId, value: number) => string
   tierSortOrder?: (a: string, b: string) => number
+  sharedTrendUi?: SharedDailyTrendChartUi
 }) {
-  const trendGranularity = ref<DailyTrendGranularity>('day')
-  const trendRangeMode = ref<'7d' | '14d' | 'months'>('7d')
-  const trendMonthsWindow = ref(1)
-  const trendDivisionPreset = ref<DailyTrendDivisionPreset>('selected')
-  const trendShowGlobalLine = ref(true)
+  const trendGranularity =
+    options.sharedTrendUi?.trendGranularity ?? ref<DailyTrendGranularity>('day')
+  const trendRangeMode = options.sharedTrendUi?.trendRangeMode ?? ref<'7d' | '14d' | 'months'>('7d')
+  const trendMonthsWindow = options.sharedTrendUi?.trendMonthsWindow ?? ref(1)
+  const trendDivisionPreset =
+    options.sharedTrendUi?.trendDivisionPreset ?? ref<DailyTrendDivisionPreset>('selected')
+  const trendShowGlobalLine = options.sharedTrendUi?.trendShowGlobalLine ?? ref(true)
   const hiddenLegendTiers = ref<string[]>([])
   const trendTooltip = ref<{
     metricId: DailyTrendMetricId
@@ -140,6 +160,10 @@ export function useStatisticsDailyTrendCharts(options: {
   } | null>(null)
 
   function setTrendDivisionPreset(preset: DailyTrendDivisionPreset): void {
+    if (options.sharedTrendUi) {
+      options.sharedTrendUi.setTrendDivisionPreset(preset)
+      return
+    }
     trendDivisionPreset.value = preset
     if (preset === 'selected') return
     options.filterRank.value = [...TREND_PRESET_TIERS[preset]]

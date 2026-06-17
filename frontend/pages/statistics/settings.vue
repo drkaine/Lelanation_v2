@@ -1,13 +1,7 @@
 <template>
-  <div class="statistics-settings min-h-screen p-4 text-text">
-    <div class="mx-auto max-w-5xl space-y-4">
+  <div class="statistics-settings min-h-screen w-full px-3 py-4 text-text sm:px-5 lg:px-6">
+    <div class="w-full space-y-4">
       <header class="space-y-2">
-        <NuxtLink
-          :to="statisticsIndexLink"
-          class="inline-flex items-center gap-1 text-sm text-text/65 hover:text-accent"
-        >
-          ← {{ t('statisticsPage.settingsBack') }}
-        </NuxtLink>
         <h1 class="text-xl font-semibold text-text-accent">
           {{ t('statisticsPage.settingsTitle') }}
         </h1>
@@ -17,28 +11,30 @@
         <p class="text-xs text-text/55">
           {{ t('statisticsPage.settingsDefaultTabHint') }}
         </p>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <span class="text-xs text-text/55">
+            {{
+              t('statisticsPage.settingsVisibleCount', {
+                count: visibleCount,
+                total: tabRows.length,
+              })
+            }}
+          </span>
+          <button
+            type="button"
+            class="rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs hover:bg-primary/10"
+            @click="resetTabs"
+          >
+            {{ t('statisticsPage.settingsReset') }}
+          </button>
+        </div>
       </header>
 
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <span class="text-xs text-text/55">
-          {{
-            t('statisticsPage.settingsVisibleCount', { count: visibleCount, total: tabRows.length })
-          }}
-        </span>
-        <button
-          type="button"
-          class="rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs hover:bg-primary/10"
-          @click="resetTabs"
-        >
-          {{ t('statisticsPage.settingsReset') }}
-        </button>
-      </div>
-
-      <ul class="flex flex-wrap gap-2">
+      <ul class="grid w-full gap-2 [grid-template-columns:repeat(auto-fill,minmax(9.5rem,1fr))]">
         <li
           v-for="row in tabRows"
           :key="row.id"
-          class="flex w-[9.5rem] flex-col gap-2 rounded-lg border border-primary/25 bg-surface/30 px-2.5 py-2"
+          class="flex min-w-0 flex-col gap-2 rounded-lg border border-primary/25 bg-surface/30 px-2.5 py-2"
           :class="row.visible ? 'opacity-100' : 'opacity-55'"
         >
           <div class="min-h-[2.25rem] text-xs font-medium leading-snug text-text/90">
@@ -74,6 +70,47 @@
           </div>
         </li>
       </ul>
+
+      <section class="space-y-3 border-t border-primary/20 pt-6">
+        <header class="space-y-1">
+          <h2 class="text-base font-semibold text-text-accent">
+            {{ t('statisticsPage.settingsWatchlistTitle') }}
+          </h2>
+          <p class="text-sm text-text/70">
+            {{ t('statisticsPage.settingsWatchlistDescription') }}
+          </p>
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+            <span class="text-xs text-text/55">
+              {{
+                t('statisticsPage.settingsWatchlistCount', {
+                  count: watchedChampionCount,
+                })
+              }}
+            </span>
+            <button
+              v-if="watchedChampionCount > 0"
+              type="button"
+              class="rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs hover:bg-primary/10"
+              @click="clearWatchlist"
+            >
+              {{ t('statisticsPage.settingsWatchlistClear') }}
+            </button>
+          </div>
+        </header>
+
+        <StatisticsWatchedChampionPicker
+          :model-value="statisticsUiStore.watchedChampionIds"
+          @update:model-value="setWatchedChampions"
+        />
+
+        <NuxtLink
+          v-if="watchedChampionCount > 0"
+          :to="localePath('/statistics/surveillance')"
+          class="inline-flex rounded border border-primary/35 bg-accent/15 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/25"
+        >
+          {{ t('statisticsPage.surveillanceOpen') }}
+        </NuxtLink>
+      </section>
     </div>
   </div>
 </template>
@@ -95,6 +132,10 @@ if (import.meta.client) {
   statisticsUiStore.init()
 }
 
+if (Object.keys(route.query).length > 0) {
+  await navigateTo(localePath('/statistics/settings'), { replace: true })
+}
+
 const tabRows = computed(() =>
   STATISTICS_MAIN_TAB_ORDER.map(id => ({
     id,
@@ -105,25 +146,7 @@ const tabRows = computed(() =>
 )
 
 const visibleCount = computed(() => tabRows.value.filter(row => row.visible).length)
-
-function pickStatisticsSharedQuery(keys: readonly string[]): Record<string, string | string[]> {
-  const q = route.query as Record<string, string | string[] | undefined>
-  const out: Record<string, string | string[]> = {}
-  for (const key of keys) {
-    const v = q[key]
-    if (v === undefined || v === null || v === '') continue
-    if (Array.isArray(v) && v.length === 0) continue
-    out[key] = v
-  }
-  return out
-}
-
-const statisticsIndexLink = computed(() =>
-  localePath({
-    path: '/statistics',
-    query: pickStatisticsSharedQuery(['version', 'role', 'otp', 'rankTier', 'tab']),
-  })
-)
+const watchedChampionCount = computed(() => statisticsUiStore.watchedChampionIds.length)
 
 function toggleTab(tab: StatisticsMainTab): void {
   statisticsUiStore.setTabVisible(tab, !statisticsUiStore.isTabVisible(tab))
@@ -135,6 +158,14 @@ function setDefaultTab(tab: StatisticsMainTab): void {
 
 function resetTabs(): void {
   statisticsUiStore.resetTabVisibility()
+}
+
+function setWatchedChampions(ids: string[]): void {
+  statisticsUiStore.setWatchedChampionIds(ids)
+}
+
+function clearWatchlist(): void {
+  statisticsUiStore.clearWatchedChampions()
 }
 
 useHead({

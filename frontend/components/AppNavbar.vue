@@ -139,6 +139,16 @@
             >
               {{ t('nav.statisticsCustom') }}
             </NuxtLink>
+            <NuxtLink
+              v-if="hasWatchedChampions"
+              :to="statisticsSurveillanceLink"
+              :title="t('nav.statisticsSurveillance')"
+              class="version builds-submenu-link"
+              :class="{ 'is-active': isStatisticsSurveillanceActive }"
+              @click="handleStatisticsNavigation"
+            >
+              {{ t('nav.statisticsSurveillance') }}
+            </NuxtLink>
           </div>
         </div>
         <NuxtLink
@@ -305,6 +315,16 @@
             >
               {{ t('nav.statisticsCustom') }}
             </NuxtLink>
+            <NuxtLink
+              v-if="hasWatchedChampions"
+              :to="statisticsSurveillanceLink"
+              :title="t('nav.statisticsSurveillance')"
+              class="builds-submenu-link"
+              :class="{ 'is-active': isStatisticsSurveillanceActive }"
+              @click="closeStatisticsMenu"
+            >
+              {{ t('nav.statisticsSurveillance') }}
+            </NuxtLink>
           </div>
         </div>
         <NuxtLink
@@ -366,8 +386,10 @@ import { useRoute } from 'vue-router'
 import LanguageSwitcher from '~/components/LanguageSwitcher.vue'
 import { getFallbackGameVersion } from '~/config/version'
 import { useAdminAuth } from '~/composables/useAdminAuth'
+import { useClientHydrated } from '~/composables/useClientHydrated'
 import { useMobileViewport } from '~/composables/useMobileViewport'
 import { useFavoritesStore } from '~/stores/FavoritesStore'
+import { useStatisticsUiStore } from '~/stores/StatisticsUiStore'
 import { useVersionStore } from '~/stores/VersionStore'
 import { normalizePatchNotesVersion, usePatchNotesStore } from '~/stores/PatchNotesStore'
 
@@ -403,12 +425,20 @@ const isDiscoverBuildsActive = computed(() => currentBuildsTab.value === 'discov
 const isMyBuildsActive = computed(() => currentBuildsTab.value === 'my-builds')
 const isFavoriteBuildsActive = computed(() => currentBuildsTab.value === 'favoris')
 const favoritesStore = useFavoritesStore()
+const statisticsUiStore = useStatisticsUiStore()
+const { hydrated: clientHydrated } = useClientHydrated()
 const hasFavorites = computed(() => favoritesStore.favoriteBuildIds.length > 0)
+const hasWatchedChampions = computed(
+  () => clientHydrated.value && statisticsUiStore.watchedChampionIds.length > 0
+)
 const isStatisticsIndexActive = computed(() => route.path === localePath('/statistics'))
 const isStatisticsTierListActive = computed(
   () => route.path === localePath('/statistics/tier-list')
 )
 const isStatisticsSettingsActive = computed(() => route.path === localePath('/statistics/settings'))
+const isStatisticsSurveillanceActive = computed(
+  () => route.path === localePath('/statistics/surveillance')
+)
 const isStatisticsSectionActive = computed(() => {
   const tierListPath = localePath('/statistics/tier-list')
   if (route.path === tierListPath || route.path.startsWith(`${tierListPath}/`)) return false
@@ -477,9 +507,10 @@ const statisticsTierListLink = computed(() =>
   })
 )
 
-const statisticsSettingsLink = computed(() =>
+const statisticsSettingsLink = computed(() => localePath('/statistics/settings'))
+const statisticsSurveillanceLink = computed(() =>
   localePath({
-    path: '/statistics/settings',
+    path: '/statistics/surveillance',
     query: pickStatisticsSharedQuery(['version', 'role', 'otp', 'rankTier']),
   })
 )

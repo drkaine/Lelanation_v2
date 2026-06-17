@@ -46,6 +46,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { ChampionStatsSummary } from '~/composables/statistics/useChampionStatsSsr'
+import { buildChampionRoleDistribution } from '~/utils/championRoleDistribution'
 
 const props = defineProps<{
   championName: string
@@ -77,22 +78,9 @@ const caption = computed(() =>
   t('statisticsPage.championStatsSeoTableCaption', { champion: props.championName })
 )
 
-const ROLE_ORDER = ['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT'] as const
-
-const roleRows = computed(() => {
-  const byRole = props.stats.byRole ?? {}
-  const total = ROLE_ORDER.reduce((sum, role) => sum + (byRole[role]?.games ?? 0), 0)
-  return ROLE_ORDER.map(role => {
-    const data = byRole[role]
-    const games = data?.games ?? 0
-    return {
-      role,
-      games,
-      winrate: data?.winrate ?? 0,
-      pickrate: total > 0 ? (100 * games) / total : 0,
-    }
-  }).filter(row => row.games > 0)
-})
+const roleRows = computed(() =>
+  buildChampionRoleDistribution(props.stats.byRole).filter(row => row.games > 0)
+)
 
 function formatPct(value: number): string {
   if (!Number.isFinite(value)) return '—'

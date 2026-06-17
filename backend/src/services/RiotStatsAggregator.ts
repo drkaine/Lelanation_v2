@@ -18,6 +18,33 @@ const championsCache = new Map<
   string,
   { data: AggregatedStats; expiresAt: number }
 >()
+function canonicalChampionRoleForApi(role: string): string | null {
+  const u = String(role ?? '')
+    .trim()
+    .toUpperCase()
+  switch (u) {
+    case 'TOP':
+    case 'TOPLANE':
+      return 'TOP'
+    case 'JUNGLE':
+    case 'JGL':
+      return 'JUNGLE'
+    case 'MIDDLE':
+    case 'MID':
+    case 'MIDLANE':
+      return 'MIDDLE'
+    case 'BOTTOM':
+    case 'ADC':
+    case 'BOT':
+      return 'BOTTOM'
+    case 'SUPPORT':
+    case 'UTILITY':
+      return 'SUPPORT'
+    default:
+      return null
+  }
+}
+
 function championsCacheKey(
   rankTier: string | string[] | null,
   pRole: string | null,
@@ -180,7 +207,8 @@ export class RiotStatsAggregator {
         }
         entry.games += games
         entry.wins += wins
-        const roleKey = row.role
+        const roleKey = canonicalChampionRoleForApi(row.role)
+        if (!roleKey) continue
         if (!entry.byRole[roleKey]) entry.byRole[roleKey] = { games: 0, wins: 0 }
         entry.byRole[roleKey].games += games
         entry.byRole[roleKey].wins += wins

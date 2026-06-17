@@ -152,6 +152,8 @@ export default defineNuxtConfig({
     '/statistics': { swr: 3600, prerender: false },
     '/statistics/tier-list': { swr: 3600, prerender: false },
     '/statistics/recap': { swr: 3600, prerender: false },
+    '/statistics/settings': { ssr: false },
+    '/statistics/surveillance': { ssr: false },
     '/statistics/champion/**': { swr: 1800, prerender: false },
     '/statistics/item/**': { swr: 1800, prerender: false },
     '/videos': { swr: 3600, prerender: false },

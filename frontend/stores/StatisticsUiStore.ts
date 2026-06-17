@@ -26,6 +26,7 @@ interface StatisticsUiState {
   activeTab: StatisticsMainTab
   hiddenTabs: StatisticsMainTab[]
   defaultTab: StatisticsMainTab
+  watchedChampionIds: string[]
 }
 
 /** Même ordre que la barre d’onglets stats (navigation clavier / persistance). */
@@ -43,6 +44,11 @@ function normalizeHiddenTabs(value: unknown): StatisticsMainTab[] {
     (tab): tab is StatisticsMainTab =>
       typeof tab === 'string' && VALID_TABS.includes(tab as StatisticsMainTab)
   )
+}
+
+function normalizeWatchedChampionIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((id): id is string => typeof id === 'string' && id.length > 0)
 }
 
 function defaultFiltersOpen(): boolean {
@@ -65,7 +71,13 @@ function resolveDefaultTab(
 function loadUiState(): StatisticsUiState {
   // SSR : panneau fermé pour éviter un mismatch d’hydratation (le client réapplique init()).
   if (import.meta.server) {
-    return { filtersOpen: false, activeTab: 'overview', hiddenTabs: [], defaultTab: 'overview' }
+    return {
+      filtersOpen: false,
+      activeTab: 'overview',
+      hiddenTabs: [],
+      defaultTab: 'overview',
+      watchedChampionIds: [],
+    }
   }
   const filtersDefault = defaultFiltersOpen()
   const fallbackDefault = STATISTICS_MAIN_TAB_ORDER[0] ?? 'overview'
@@ -77,6 +89,7 @@ function loadUiState(): StatisticsUiState {
         activeTab: 'overview',
         hiddenTabs: [],
         defaultTab: fallbackDefault,
+        watchedChampionIds: [],
       }
     }
     const parsed = JSON.parse(raw) as Partial<StatisticsUiState>
@@ -88,6 +101,7 @@ function loadUiState(): StatisticsUiState {
       activeTab: isValidTab(parsed.activeTab) ? parsed.activeTab : 'overview',
       hiddenTabs,
       defaultTab: resolveDefaultTab(hiddenTabs, preferredDefault),
+      watchedChampionIds: normalizeWatchedChampionIds(parsed.watchedChampionIds),
     }
   } catch {
     return {
@@ -95,6 +109,7 @@ function loadUiState(): StatisticsUiState {
       activeTab: 'overview',
       hiddenTabs: [],
       defaultTab: fallbackDefault,
+      watchedChampionIds: [],
     }
   }
 }
@@ -123,6 +138,7 @@ export const useStatisticsUiStore = defineStore('statisticsUi', {
     activeTab: 'overview',
     hiddenTabs: [],
     defaultTab: STATISTICS_MAIN_TAB_ORDER[0] ?? 'overview',
+    watchedChampionIds: [],
   }),
   getters: {
     isTabVisible:
@@ -138,11 +154,13 @@ export const useStatisticsUiStore = defineStore('statisticsUi', {
   },
   actions: {
     init() {
+      if (import.meta.server) return
       const data = loadUiState()
       this.filtersOpen = data.filtersOpen
       this.activeTab = data.activeTab
       this.hiddenTabs = data.hiddenTabs
       this.defaultTab = data.defaultTab
+      this.watchedChampionIds = data.watchedChampionIds
     },
     setFiltersOpen(value: boolean) {
       this.filtersOpen = value
@@ -172,6 +190,22 @@ export const useStatisticsUiStore = defineStore('statisticsUi', {
     resetTabVisibility() {
       this.hiddenTabs = []
       this.defaultTab = STATISTICS_MAIN_TAB_ORDER[0] ?? 'overview'
+      persistState(this.$state)
+    },
+    setWatchedChampionIds(ids: string[]) {
+      this.watchedChampionIds = normalizeWatchedChampionIds(ids)
+      persistState(this.$state)
+    },
+    toggleWatchedChampion(championId: string) {
+      if (!championId) return
+      const exists = this.watchedChampionIds.includes(championId)
+      this.watchedChampionIds = exists
+        ? this.watchedChampionIds.filter(id => id !== championId)
+        : [...this.watchedChampionIds, championId]
+      persistState(this.$state)
+    },
+    clearWatchedChampions() {
+      this.watchedChampionIds = []
       persistState(this.$state)
     },
     ensureActiveTabVisible(preferred?: StatisticsMainTab): StatisticsMainTab {

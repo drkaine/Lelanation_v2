@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, toRef } from 'vue'
+import { computed, inject, provide, toRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   DAILY_TREND_CHART_H,
@@ -7,6 +7,7 @@ import {
   DAILY_TREND_CHART_W,
   DAILY_TREND_PLOT_H,
   DAILY_TREND_PLOT_W,
+  SHARED_DAILY_TREND_CHART_UI_KEY,
   useStatisticsDailyTrendCharts,
   type DailyTrendMetricId,
   type DailyTrendSnapshotPoint,
@@ -21,6 +22,7 @@ const props = withDefaults(
     showBanrate?: boolean
     versionsCatalog?: Array<{ patchLabel: string; releaseDate: string }>
     title?: string
+    showToolbar?: boolean
     showDivisionPresets?: boolean
     showGlobalLineToggle?: boolean
     enabledMetrics?: DailyTrendMetricId[]
@@ -35,12 +37,22 @@ const props = withDefaults(
     error: null,
     showBanrate: false,
     versionsCatalog: () => [],
+    title: undefined,
+    showToolbar: true,
     showDivisionPresets: true,
     showGlobalLineToggle: true,
+    enabledMetrics: () => [],
+    metricTitlesOverride: () => ({}),
+    seriesLabel: undefined,
+    tierColor: undefined,
+    formatMetricValue: undefined,
+    tierSortOrder: undefined,
   }
 )
 
 const { t } = useI18n()
+const sharedTrendUi = inject(SHARED_DAILY_TREND_CHART_UI_KEY, null)
+const showToolbarBlock = computed(() => props.showToolbar && !sharedTrendUi)
 
 const metricTitles = computed(() => {
   const base = {
@@ -63,132 +75,29 @@ const charts = useStatisticsDailyTrendCharts({
   tierColor: props.tierColor,
   formatMetricValue: props.formatMetricValue,
   tierSortOrder: props.tierSortOrder,
+  sharedTrendUi: sharedTrendUi ?? undefined,
 })
+
+if (!sharedTrendUi) {
+  provide(SHARED_DAILY_TREND_CHART_UI_KEY, {
+    trendGranularity: charts.trendGranularity,
+    trendRangeMode: charts.trendRangeMode,
+    trendMonthsWindow: charts.trendMonthsWindow,
+    trendDivisionPreset: charts.trendDivisionPreset,
+    trendShowGlobalLine: charts.trendShowGlobalLine,
+    setTrendDivisionPreset: charts.setTrendDivisionPreset,
+  })
+}
 </script>
 
 <template>
   <div class="space-y-3">
-    <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
-      <h2 class="shrink-0 text-base font-semibold text-text">
-        {{ title ?? t('statisticsPage.championStatsTrendsTitle') }}
-      </h2>
-      <label class="inline-flex shrink-0 items-center gap-2 text-text/80">
-        <span>{{ t('statisticsPage.championStatsTrendsGranularity') }}</span>
-        <select
-          v-model="charts.trendGranularity.value"
-          class="rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-        >
-          <option value="day">{{ t('statisticsPage.championStatsTrendsDay') }}</option>
-          <option value="week">{{ t('statisticsPage.championStatsTrendsWeek') }}</option>
-          <option value="month">{{ t('statisticsPage.championStatsTrendsMonth') }}</option>
-          <option value="patch">{{ t('statisticsPage.championStatsTrendsPatch') }}</option>
-        </select>
-      </label>
-      <div class="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          class="rounded px-2 py-1 font-medium transition-colors"
-          :class="
-            charts.trendRangeMode.value === '7d'
-              ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
-              : 'bg-black/20 text-text/85 hover:bg-white/10'
-          "
-          @click="charts.trendRangeMode.value = '7d'"
-        >
-          {{ t('statisticsPage.championStatsTrendsRange7d') }}
-        </button>
-        <button
-          type="button"
-          class="rounded px-2 py-1 font-medium transition-colors"
-          :class="
-            charts.trendRangeMode.value === '14d'
-              ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
-              : 'bg-black/20 text-text/85 hover:bg-white/10'
-          "
-          @click="charts.trendRangeMode.value = '14d'"
-        >
-          {{ t('statisticsPage.championStatsTrendsRange14d') }}
-        </button>
-        <button
-          type="button"
-          class="rounded px-2 py-1 font-medium transition-colors"
-          :class="
-            charts.trendRangeMode.value === 'months'
-              ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
-              : 'bg-black/20 text-text/85 hover:bg-white/10'
-          "
-          @click="charts.trendRangeMode.value = 'months'"
-        >
-          {{ t('statisticsPage.championStatsTrendsRangeMonths') }}
-        </button>
-      </div>
-      <div v-if="showDivisionPresets" class="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          class="rounded px-2 py-1 font-medium transition-colors"
-          :class="
-            charts.trendDivisionPreset.value === 'selected'
-              ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
-              : 'bg-black/20 text-text/85 hover:bg-white/10'
-          "
-          @click="charts.setTrendDivisionPreset('selected')"
-        >
-          {{ t('statisticsPage.championStatsTrendsPresetSelected') }}
-        </button>
-        <button
-          type="button"
-          class="rounded px-2 py-1 font-medium transition-colors"
-          :class="
-            charts.trendDivisionPreset.value === 'average'
-              ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
-              : 'bg-black/20 text-text/85 hover:bg-white/10'
-          "
-          @click="charts.setTrendDivisionPreset('average')"
-        >
-          Average
-        </button>
-        <button
-          type="button"
-          class="rounded px-2 py-1 font-medium transition-colors"
-          :class="
-            charts.trendDivisionPreset.value === 'skilled'
-              ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
-              : 'bg-black/20 text-text/85 hover:bg-white/10'
-          "
-          @click="charts.setTrendDivisionPreset('skilled')"
-        >
-          Skilled
-        </button>
-        <button
-          type="button"
-          class="rounded px-2 py-1 font-medium transition-colors"
-          :class="
-            charts.trendDivisionPreset.value === 'elite'
-              ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
-              : 'bg-black/20 text-text/85 hover:bg-white/10'
-          "
-          @click="charts.setTrendDivisionPreset('elite')"
-        >
-          Elite
-        </button>
-        <label v-if="showGlobalLineToggle" class="inline-flex items-center gap-1 text-text/80">
-          <input
-            v-model="charts.trendShowGlobalLine.value"
-            type="checkbox"
-            class="rounded border-primary/50"
-          />
-          <span>{{ t('statisticsPage.championStatsTrendsGlobalLine') }}</span>
-        </label>
-      </div>
-      <label v-else-if="showGlobalLineToggle" class="inline-flex items-center gap-1 text-text/80">
-        <input
-          v-model="charts.trendShowGlobalLine.value"
-          type="checkbox"
-          class="rounded border-primary/50"
-        />
-        <span>{{ t('statisticsPage.championStatsTrendsGlobalLine') }}</span>
-      </label>
-    </div>
+    <StatisticsDailyTrendToolbar
+      v-if="showToolbarBlock"
+      :title="title ?? t('statisticsPage.championStatsTrendsTitle')"
+      :show-division-presets="showDivisionPresets"
+      :show-global-line-toggle="showGlobalLineToggle"
+    />
 
     <div v-if="pending" class="py-4 text-text/70">{{ t('statisticsPage.loading') }}</div>
     <p v-else-if="error" class="py-2 text-sm text-red-400">{{ error }}</p>
