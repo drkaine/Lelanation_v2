@@ -42,7 +42,7 @@ help:
 	@echo "  make build-frontend     Build frontend only"
 	@echo "  make build-companion    Build companion Vite app only"
 	@echo "  make build-companion-exe  Build companion Windows .exe at project root"
-	@echo "  make companion-tag      Sync version files + commit + tag companion-v* (VERSION=1.0.0 MSG=...)"
+	@echo "  make companion-tag      Sync version + commit + tag + push companion-v* (VERSION=1.0.0 MSG=..., NO_PUSH=1 to skip)"
 	@echo "  make exe-windows        Build Tauri app and copy it to ./Lelanation.exe"
 	@echo ""
 	@echo "Bases de données (migrations)"
@@ -175,12 +175,13 @@ build-companion-exe:
 	cp "$$EXE_PATH" "$(ROOT_DIR)/$(COMPANION_EXE_NAME)"; \
 	echo "Copied companion installer to $(ROOT_DIR)/$(COMPANION_EXE_NAME)"
 
-# Sync companion-app version files, commit bump, create annotated tag companion-v*.
+# Sync companion-app version files, commit bump, tag companion-v*, push to origin (triggers CI).
 # Example: make companion-tag VERSION=1.0.0 MSG="Companion installer 1.0.0"
 companion-tag:
-	@test -n "$(VERSION)" || (echo "Usage: make companion-tag VERSION=1.0.0 [MSG='Companion installer 1.0.0']" && exit 1)
+	@test -n "$(VERSION)" || (echo "Usage: make companion-tag VERSION=1.0.0 [MSG='Companion installer 1.0.0'] [NO_PUSH=1]" && exit 1)
 	@ARGS="$(VERSION)"; \
 	if [ -n "$(MSG)" ]; then ARGS="$$ARGS -m $(MSG)"; fi; \
+	if [ -n "$(NO_PUSH)" ]; then ARGS="$$ARGS --no-push"; fi; \
 	node "$(COMPANION_APP_DIR)/scripts/companion-tag.mjs" $$ARGS
 
 exe-windows:

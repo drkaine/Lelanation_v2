@@ -5,6 +5,7 @@
  * Usage :
  *   node scripts/companion-tag.mjs 1.0.0
  *   node scripts/companion-tag.mjs companion-v1.0.0 -m "Companion installer 1.0.0"
+ *   node scripts/companion-tag.mjs 1.0.0 --no-push
  *   npm run release:tag -- 1.0.0 -m "Companion installer 1.0.0"
  *
  * Depuis la racine du monorepo :
@@ -30,12 +31,17 @@ function parseArgs(argv) {
   let version = "";
   let message = "";
   let commit = true;
+  let push = true;
   let dryRun = false;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--no-commit") {
       commit = false;
+      continue;
+    }
+    if (arg === "--no-push") {
+      push = false;
       continue;
     }
     if (arg === "--dry-run") {
@@ -54,15 +60,15 @@ function parseArgs(argv) {
 
   if (!version) {
     throw new Error(
-      "Usage: companion-tag.mjs <version> [-m message] [--no-commit] [--dry-run]\n" +
+      "Usage: companion-tag.mjs <version> [-m message] [--no-commit] [--no-push] [--dry-run]\n" +
         "  version: 1.0.0 or companion-v1.0.0"
     );
   }
 
-  return { version, message, commit, dryRun };
+  return { version, message, commit, push, dryRun };
 }
 
-const { version: versionArg, message, commit, dryRun } = parseArgs(process.argv.slice(2));
+const { version: versionArg, message, commit, push, dryRun } = parseArgs(process.argv.slice(2));
 
 // Resolve target version without writing (reuse sync-version parser via subprocess in check mode)
 const resolved = runCapture(
@@ -84,6 +90,7 @@ if (dryRun) {
   console.log("Dry-run: would sync version files, then:");
   if (commit) console.log(`  git commit -m "release: companion ${resolved}"`);
   console.log(`  git tag -a ${tag} -m "${tagMessage}"`);
+  if (push) console.log(`  git push origin HEAD ${tag}`);
   process.exit(0);
 }
 
@@ -107,7 +114,11 @@ if (commit) {
 run(`git tag -a ${JSON.stringify(tag)} -m ${JSON.stringify(tagMessage)}`);
 
 console.log(`\n✓ Tag ${tag} created.`);
-console.log(`  Push with: git push origin ${tag}`);
-if (commit) {
-  console.log("  (and branch if needed: git push origin HEAD)");
+
+if (push) {
+  console.log(`Pushing branch and tag to origin…`);
+  run(`git push origin HEAD ${JSON.stringify(tag)}`);
+  console.log(`✓ Pushed HEAD and ${tag} — GitHub Actions should start on tag push.`);
+} else {
+  console.log(`  Skipped push (--no-push). Run: git push origin HEAD ${tag}`);
 }
