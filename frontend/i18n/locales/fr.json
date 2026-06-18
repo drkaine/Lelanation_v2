@@ -489,6 +489,7 @@
     "itemsStatsEmpty": "Aucune stat item détectée"
   },
   "statisticsPage": {
+    "surveillanceTitle": "Surveillance",
     "title": "Statistiques LoL",
     "description": "Winrate et pickrate par champion, calculés à partir des matchs Ranked Solo/Duo (EUW + EUNE). Filtrez par rang ou rôle.",
     "metaTitle": "Statistiques LoL - Winrate et pickrate par champion | Lelanation",
@@ -501,6 +502,7 @@
     "tabBalance": "Balance",
     "tabTrends": "Tendance",
     "tabTeam": "Team",
+    "lelarivaExportDivisionsCombined": "Divisions combinées",
     "tabObjectives": "Objectifs",
     "tabSurrender": "Surrender",
     "tabTierlistBotlane": "Tier-liste botlane",

@@ -87,14 +87,24 @@
                 })
               }}
             </span>
-            <button
-              v-if="watchedChampionCount > 0"
-              type="button"
-              class="rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs hover:bg-primary/10"
-              @click="clearWatchlist"
-            >
-              {{ t('statisticsPage.settingsWatchlistClear') }}
-            </button>
+            <div class="flex flex-wrap gap-2">
+              <button
+                type="button"
+                class="rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+                :disabled="allWatchedSelected || championsStore.status !== 'success'"
+                @click="selectAllWatchedChampions"
+              >
+                {{ t('statisticsPage.settingsWatchlistSelectAll') }}
+              </button>
+              <button
+                v-if="watchedChampionCount > 0"
+                type="button"
+                class="rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs hover:bg-primary/10"
+                @click="clearWatchlist"
+              >
+                {{ t('statisticsPage.settingsWatchlistClear') }}
+              </button>
+            </div>
           </div>
         </header>
 
@@ -126,12 +136,14 @@ import {
 } from '~/constants/statisticsMainTabs'
 import StatisticsSurveillanceAlertSettings from '~/components/statistics/StatisticsSurveillanceAlertSettings.vue'
 import { useSurveillanceAlertEvaluation } from '~/composables/useSurveillanceAlertEvaluation'
+import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useStatisticsUiStore, type StatisticsMainTab } from '~/stores/StatisticsUiStore'
 
 const { t } = useI18n()
 const localePath = useLocalePath()
 const route = useRoute()
 const statisticsUiStore = useStatisticsUiStore()
+const championsStore = useChampionsStore()
 const { runSurveillanceAlertCheck } = useSurveillanceAlertEvaluation()
 
 if (import.meta.client) {
@@ -157,6 +169,10 @@ const tabRows = computed(() =>
 
 const visibleCount = computed(() => tabRows.value.filter(row => row.visible).length)
 const watchedChampionCount = computed(() => statisticsUiStore.watchedChampionIds.length)
+const allWatchedSelected = computed(() => {
+  const total = championsStore.champions.length
+  return total > 0 && watchedChampionCount.value >= total
+})
 
 function toggleTab(tab: StatisticsMainTab): void {
   statisticsUiStore.setTabVisible(tab, !statisticsUiStore.isTabVisible(tab))
@@ -176,6 +192,11 @@ function setWatchedChampions(ids: string[]): void {
 
 function clearWatchlist(): void {
   statisticsUiStore.clearWatchedChampions()
+}
+
+function selectAllWatchedChampions(): void {
+  if (championsStore.champions.length === 0) return
+  statisticsUiStore.setWatchedChampionIds(championsStore.champions.map(champion => champion.id))
 }
 
 useHead({

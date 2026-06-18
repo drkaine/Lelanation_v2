@@ -272,7 +272,6 @@ export function useSurveillanceAlertEvaluation() {
 
     const run = async (): Promise<SurveillanceAlertCheckResult> => {
       statisticsUiStore.init()
-      alertStore.init()
 
       const watchedIds = statisticsUiStore.watchedChampionIds
       const result: SurveillanceAlertCheckResult = {

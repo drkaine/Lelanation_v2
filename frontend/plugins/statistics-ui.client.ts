@@ -4,15 +4,25 @@ export default defineNuxtPlugin({
   enforce: 'post',
   setup(nuxtApp) {
     const statisticsUiStore = useStatisticsUiStore()
+    const alertStore = useStatisticsSurveillanceAlertStore()
 
-    const hydrateFromLocalStorage = () => {
+    const hydrateStatisticsUi = () => {
       statisticsUiStore.init()
-      useStatisticsSurveillanceAlertStore().init()
     }
 
-    hydrateFromLocalStorage()
+    const hydrateAlertStore = () => {
+      alertStore.init()
+    }
 
-    nuxtApp.hook('app:mounted', hydrateFromLocalStorage)
-    nuxtApp.hook('page:finish', hydrateFromLocalStorage)
+    hydrateStatisticsUi()
+    hydrateAlertStore()
+
+    nuxtApp.hook('app:mounted', () => {
+      hydrateStatisticsUi()
+      hydrateAlertStore()
+    })
+    // Ne pas recharger le store alertes à chaque navigation : cela écrase l’accusé de lecture
+    // en mémoire et relance des comparaisons instables avec les re-vérifications en cours.
+    nuxtApp.hook('page:finish', hydrateStatisticsUi)
   },
 })

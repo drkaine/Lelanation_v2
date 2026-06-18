@@ -1,10 +1,15 @@
 import type {
   SurveillanceAlertTrigger,
   SurveillanceMetricId,
-} from '~/utils/statisticsSurveillanceAlerts'
-import { formatSurveillanceCohortLabel } from '~/utils/statisticsSurveillanceAlerts'
+  formatSurveillanceCohortLabel,
+  surveillanceAlertTone,
+  type SurveillanceAlertTone,
+} from './statisticsSurveillanceAlerts'
 
 type TranslateFn = (key: string, params?: Record<string, string | number>) => string
+
+export type { SurveillanceAlertTone }
+export { surveillanceAlertTone }
 
 const METRIC_LABEL_KEYS: Record<SurveillanceMetricId, string> = {
   winrate: 'statisticsPage.winrate',
@@ -67,9 +72,17 @@ export function formatSurveillanceAlertTrigger(
   )
 }
 
+export type SurveillanceAlertLine = {
+  text: string
+  tone: SurveillanceAlertTone
+}
+
 export function formatSurveillanceAlertSummary(
   triggers: SurveillanceAlertTrigger[],
   t: TranslateFn
-): string[] {
-  return triggers.map(trigger => formatSurveillanceAlertTrigger(trigger, t))
+): SurveillanceAlertLine[] {
+  return triggers.map(trigger => ({
+    text: formatSurveillanceAlertTrigger(trigger, t),
+    tone: surveillanceAlertTone(trigger),
+  }))
 }

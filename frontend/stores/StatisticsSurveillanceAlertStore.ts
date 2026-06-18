@@ -4,6 +4,9 @@ import type {
   SurveillanceAlertTrigger,
   SurveillanceCohortProfile,
   SurveillanceTestBaseline,
+  SurveillanceReferenceSettings,
+} from '~/utils/statisticsSurveillanceAlerts'
+import {
   SURVEILLANCE_GLOBAL_COHORT_KEY,
   defaultSurveillanceCohortProfile,
   defaultSurveillanceReferenceSettings,
@@ -15,7 +18,7 @@ import type {
   normalizeSurveillanceReferenceSettings,
   serializeSurveillanceThresholdProfiles,
   surveillanceCohortKey,
-  type SurveillanceReferenceSettings,
+  stableSurveillanceAlertsFingerprint,
 } from '~/utils/statisticsSurveillanceAlerts'
 
 const THRESHOLDS_KEY = 'lelanation_surveillance_alert_thresholds'
@@ -23,6 +26,7 @@ const REFERENCE_SETTINGS_KEY = 'lelanation_surveillance_reference_settings'
 const ACTIVE_ALERTS_KEY = 'lelanation_surveillance_active_alerts'
 const TEST_BASELINES_KEY = 'lelanation_surveillance_test_baselines'
 const ALERTS_ACK_AT_KEY = 'lelanation_surveillance_alerts_ack_at'
+const ALERTS_ACK_SNAPSHOT_KEY = 'lelanation_surveillance_alerts_ack_snapshot'
 
 interface SurveillanceAlertState {
   thresholdProfiles: SurveillanceCohortProfile[]
@@ -32,6 +36,7 @@ interface SurveillanceAlertState {
   checking: boolean
   lastCheckedAt: string | null
   alertsAcknowledgedAt: string | null
+  alertsAcknowledgedSnapshot: string | null
 }
 
 function loadThresholdProfiles(): SurveillanceCohortProfile[] {
@@ -132,6 +137,33 @@ function persistAlertsAcknowledgedAt(value: string | null): void {
   }
 }
 
+function loadAlertsAcknowledgedSnapshot(): string | null {
+  if (import.meta.server) return null
+  try {
+    const raw = localStorage.getItem(ALERTS_ACK_SNAPSHOT_KEY)
+    if (!raw) return null
+    // Ancien format JSON (avant empreinte stable) — invalide pour la comparaison.
+    if (raw.startsWith('{') || raw.startsWith('[')) return null
+    return String(raw)
+  } catch {
+    return null
+  }
+}
+
+function persistAlertsAcknowledgedSnapshot(value: string | null): void {
+  if (import.meta.server) return
+  try {
+    if (value) localStorage.setItem(ALERTS_ACK_SNAPSHOT_KEY, value)
+    else localStorage.removeItem(ALERTS_ACK_SNAPSHOT_KEY)
+  } catch {
+    // ignore
+  }
+}
+
+function snapshotActiveAlerts(activeAlerts: Record<string, SurveillanceAlertTrigger[]>): string {
+  return stableSurveillanceAlertsFingerprint(activeAlerts)
+}
+
 function persistTestBaselines(testBaselines: Record<string, SurveillanceTestBaseline>): void {
   if (import.meta.server) return
   try {
@@ -150,6 +182,7 @@ export const useStatisticsSurveillanceAlertStore = defineStore('statisticsSurvei
     checking: false,
     lastCheckedAt: null,
     alertsAcknowledgedAt: null,
+    alertsAcknowledgedSnapshot: null,
   }),
   getters: {
     /** @deprecated Utiliser thresholdProfiles. Conservé pour compatibilité interne. */
@@ -162,10 +195,10 @@ export const useStatisticsSurveillanceAlertStore = defineStore('statisticsSurvei
     alertCount(state): number {
       const count = Object.keys(state.activeAlerts).length
       if (count === 0) return 0
+      const currentSnapshot = snapshotActiveAlerts(state.activeAlerts)
       if (
-        state.alertsAcknowledgedAt &&
-        state.lastCheckedAt &&
-        state.alertsAcknowledgedAt >= state.lastCheckedAt
+        state.alertsAcknowledgedSnapshot !== null &&
+        state.alertsAcknowledgedSnapshot === currentSnapshot
       ) {
         return 0
       }
@@ -200,6 +233,7 @@ export const useStatisticsSurveillanceAlertStore = defineStore('statisticsSurvei
       this.activeAlerts = loadActiveAlerts()
       this.testBaselines = loadTestBaselines()
       this.alertsAcknowledgedAt = loadAlertsAcknowledgedAt()
+      this.alertsAcknowledgedSnapshot = loadAlertsAcknowledgedSnapshot()
     },
     setProfileThresholds(cohortKey: string, next: Partial<SurveillanceAlertThresholds>) {
       const key = String(cohortKey ?? '').trim() || SURVEILLANCE_GLOBAL_COHORT_KEY
@@ -286,12 +320,17 @@ export const useStatisticsSurveillanceAlertStore = defineStore('statisticsSurvei
       persistReferenceSettings(this.referenceSettings)
     },
     setActiveAlerts(next: Record<string, SurveillanceAlertTrigger[]>) {
-      const changed = JSON.stringify(this.activeAlerts) !== JSON.stringify(next)
+      const nextSnapshot = snapshotActiveAlerts(next)
+      const changed = snapshotActiveAlerts(this.activeAlerts) !== nextSnapshot
       this.activeAlerts = next
-      this.lastCheckedAt = new Date().toISOString()
-      if (Object.keys(next).length > 0 && changed) {
-        this.alertsAcknowledgedAt = null
-        persistAlertsAcknowledgedAt(null)
+      if (changed) {
+        this.lastCheckedAt = new Date().toISOString()
+        if (Object.keys(next).length > 0) {
+          this.alertsAcknowledgedAt = null
+          this.alertsAcknowledgedSnapshot = null
+          persistAlertsAcknowledgedAt(null)
+          persistAlertsAcknowledgedSnapshot(null)
+        }
       }
       persistActiveAlerts(this.activeAlerts)
     },
@@ -302,7 +341,9 @@ export const useStatisticsSurveillanceAlertStore = defineStore('statisticsSurvei
     acknowledgeAlerts() {
       if (Object.keys(this.activeAlerts).length === 0) return
       this.alertsAcknowledgedAt = new Date().toISOString()
+      this.alertsAcknowledgedSnapshot = snapshotActiveAlerts(this.activeAlerts)
       persistAlertsAcknowledgedAt(this.alertsAcknowledgedAt)
+      persistAlertsAcknowledgedSnapshot(this.alertsAcknowledgedSnapshot)
     },
     setChecking(value: boolean) {
       this.checking = value

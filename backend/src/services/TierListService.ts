@@ -76,7 +76,7 @@ function normalizeTierListRole(role: string | null | undefined): string {
     .trim()
     .toUpperCase()
   if (u === 'MID') return 'MIDDLE'
-  if (u === 'ADC') return 'BOTTOM'
+  if (u === 'ADC' || u === 'BOT') return 'BOTTOM'
   if (u === 'UTILITY') return 'SUPPORT'
   return u
 }

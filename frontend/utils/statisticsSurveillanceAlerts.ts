@@ -556,6 +556,42 @@ export function surveillanceReferenceDateDaysAgo(daysAgo: number): string {
   return date.toISOString().slice(0, 10)
 }
 
+export type SurveillanceAlertTone = 'positive' | 'negative'
+
+/** Vert = hausse / au-dessus du max ; rouge = sous le min / baisse. Banrate inversé. */
+export function surveillanceAlertTone(trigger: SurveillanceAlertTrigger): SurveillanceAlertTone {
+  const inverted = trigger.metric === 'banrate'
+
+  if (trigger.kind === 'min') {
+    return inverted ? 'positive' : 'negative'
+  }
+  if (trigger.kind === 'max') {
+    return inverted ? 'negative' : 'positive'
+  }
+
+  const delta = trigger.current - trigger.reference
+  if (delta > 0) return inverted ? 'negative' : 'positive'
+  if (delta < 0) return inverted ? 'positive' : 'negative'
+  return 'negative'
+}
+
+/** Empreinte stable pour badge / accusé de lecture (ignore les valeurs courantes qui bougent à chaque fetch). */
+export function stableSurveillanceAlertsFingerprint(
+  activeAlerts: Record<string, SurveillanceAlertTrigger[]>
+): string {
+  const keys = Object.keys(activeAlerts).sort((a, b) => a.localeCompare(b))
+  return keys
+    .map(championKey => {
+      const triggers = activeAlerts[championKey] ?? []
+      const sig = triggers
+        .map(trigger => `${trigger.kind}:${trigger.metric}:${trigger.cohortKey}`)
+        .sort()
+        .join(',')
+      return `${championKey}=[${sig}]`
+    })
+    .join(';')
+}
+
 export interface SurveillanceAlertCheckResult {
   alertCount: number
   watchedCount: number

@@ -8,12 +8,18 @@
   >
     <div
       v-if="hasAlerts"
-      class="rounded-md border border-error/40 bg-error/10 px-3 py-2 text-xs text-error"
+      class="rounded-md border border-primary/30 bg-surface/30 px-3 py-2 text-xs"
       role="status"
     >
-      <p class="font-semibold">{{ t('statisticsPage.surveillanceAlertTitle') }}</p>
+      <p class="font-semibold text-text/90">{{ t('statisticsPage.surveillanceAlertTitle') }}</p>
       <ul class="mt-1 list-disc space-y-0.5 pl-4">
-        <li v-for="(line, index) in alertLines" :key="index">{{ line }}</li>
+        <li
+          v-for="(line, index) in alertLines"
+          :key="index"
+          :class="line.tone === 'positive' ? 'text-emerald-400' : 'text-red-400'"
+        >
+          {{ line.text }}
+        </li>
       </ul>
     </div>
 

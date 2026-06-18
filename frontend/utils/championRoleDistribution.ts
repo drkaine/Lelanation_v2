@@ -9,7 +9,10 @@ export type ChampionByRoleRow = {
   pickrate: number
 }
 
-export type ChampionByRoleMap = Record<string, { games?: number; wins?: number; winrate?: number }>
+export type ChampionByRoleMap = Record<
+  string,
+  { games?: number; wins?: number; winrate?: number; pickrate?: number }
+>
 
 /** Alias API / DB → clé UI. L'ordre dans chaque liste = priorité (évite le double comptage MID+MIDDLE). */
 const ROLE_KEY_ALIASES: Record<ChampionRoleKey, readonly string[]> = {
@@ -113,6 +116,75 @@ export function championRoleDistributionSorted(
   return buildChampionRoleDistribution(byRole)
     .filter(row => row.games >= minGames)
     .sort((a, b) => b.games - a.games)
+}
+
+export type ChampionRoleSummaryRow = {
+  role: ChampionRoleKey
+  games: number
+  winrate: number
+  pickrate: number
+  banrate: number
+}
+
+function pickRoleEntryWithPickrate(
+  byRole: ChampionByRoleMap,
+  canonical: ChampionRoleKey
+): { games: number; wins: number; winrate?: number; pickrate?: number } | null {
+  for (const alias of ROLE_KEY_ALIASES[canonical]) {
+    const data = byRole[alias]
+    const games = Number(data?.games ?? 0)
+    if (games > 0) {
+      return {
+        games,
+        wins: Number(data?.wins ?? 0),
+        winrate: data?.winrate != null ? Number(data.winrate) : undefined,
+        pickrate: data?.pickrate != null ? Number(data.pickrate) : undefined,
+      }
+    }
+  }
+  for (const [key, data] of Object.entries(byRole)) {
+    if (canonicalChampionRoleKey(key) !== canonical) continue
+    const games = Number(data?.games ?? 0)
+    if (games > 0) {
+      return {
+        games,
+        wins: Number(data?.wins ?? 0),
+        winrate: data?.winrate != null ? Number(data.winrate) : undefined,
+        pickrate: data?.pickrate != null ? Number(data.pickrate) : undefined,
+      }
+    }
+  }
+  return null
+}
+
+/** Stats par rôle (TOP…SUPPORT) avec pickrate cohorte API, pour badges / filtres. */
+export function buildChampionRoleSummaryRows(
+  byRole: ChampionByRoleMap | null | undefined,
+  globalBanrate = 0
+): ChampionRoleSummaryRow[] {
+  const safe = byRole && typeof byRole === 'object' ? byRole : {}
+  return CHAMPION_ROLE_ORDER.map(role => {
+    const picked = pickRoleEntryWithPickrate(safe, role)
+    const games = picked?.games ?? 0
+    const wins = picked?.wins ?? 0
+    const winrate =
+      picked?.winrate != null && Number.isFinite(picked.winrate)
+        ? clampPercent(picked.winrate)
+        : games > 0
+          ? clampPercent((wins / games) * 100)
+          : 0
+    const pickrate =
+      picked?.pickrate != null && Number.isFinite(picked.pickrate)
+        ? clampPercent(picked.pickrate)
+        : 0
+    return {
+      role,
+      games,
+      winrate,
+      pickrate,
+      banrate: clampPercent(globalBanrate),
+    }
+  })
 }
 
 export function formatChampionRolePercent(value: number): string {

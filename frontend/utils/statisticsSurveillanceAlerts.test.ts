@@ -13,6 +13,8 @@ import {
   migrateSurveillanceThresholdsStorage,
   normalizeSurveillanceCohortProfiles,
   resolveSurveillanceReference,
+  stableSurveillanceAlertsFingerprint,
+  surveillanceAlertTone,
   surveillanceCohortKey,
   SURVEILLANCE_GLOBAL_COHORT_KEY,
 } from './statisticsSurveillanceAlerts'
@@ -250,5 +252,92 @@ describe('hasConfiguredSurveillanceThresholds', () => {
         banrateMax: 15,
       })
     ).toBe(true)
+  })
+})
+
+describe('stableSurveillanceAlertsFingerprint', () => {
+  it('ignores current metric values between checks', () => {
+    const a = stableSurveillanceAlertsFingerprint({
+      '166': [
+        {
+          kind: 'min',
+          metric: 'winrate',
+          threshold: 50,
+          current: 48.2,
+          cohortKey: 'GLOBAL',
+        },
+      ],
+    })
+    const b = stableSurveillanceAlertsFingerprint({
+      '166': [
+        {
+          kind: 'min',
+          metric: 'winrate',
+          threshold: 50,
+          current: 47.9,
+          cohortKey: 'GLOBAL',
+        },
+      ],
+    })
+    expect(a).toBe(b)
+  })
+
+  it('changes when alert kind or champion changes', () => {
+    const base = stableSurveillanceAlertsFingerprint({
+      '166': [{ kind: 'min', metric: 'winrate', threshold: 50, current: 48, cohortKey: 'GLOBAL' }],
+    })
+    const otherChampion = stableSurveillanceAlertsFingerprint({
+      '267': [{ kind: 'min', metric: 'winrate', threshold: 50, current: 48, cohortKey: 'GLOBAL' }],
+    })
+    const otherKind = stableSurveillanceAlertsFingerprint({
+      '166': [{ kind: 'max', metric: 'winrate', threshold: 70, current: 72, cohortKey: 'GLOBAL' }],
+    })
+    expect(base).not.toBe(otherChampion)
+    expect(base).not.toBe(otherKind)
+  })
+})
+
+describe('surveillanceAlertTone', () => {
+  it('uses green for max and red for min on winrate', () => {
+    expect(
+      surveillanceAlertTone({
+        kind: 'max',
+        metric: 'winrate',
+        threshold: 55,
+        current: 60,
+        cohortKey: 'GLOBAL',
+      })
+    ).toBe('positive')
+    expect(
+      surveillanceAlertTone({
+        kind: 'min',
+        metric: 'winrate',
+        threshold: 50,
+        current: 45,
+        cohortKey: 'GLOBAL',
+      })
+    ).toBe('negative')
+  })
+
+  it('inverts colors for banrate', () => {
+    expect(
+      surveillanceAlertTone({
+        kind: 'max',
+        metric: 'banrate',
+        threshold: 10,
+        current: 15,
+        cohortKey: 'GLOBAL',
+      })
+    ).toBe('negative')
+    expect(
+      surveillanceAlertTone({
+        kind: 'delta',
+        metric: 'banrate',
+        threshold: 1,
+        current: 3,
+        reference: 5,
+        cohortKey: 'GLOBAL',
+      })
+    ).toBe('positive')
   })
 })

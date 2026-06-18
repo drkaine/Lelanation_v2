@@ -7,122 +7,107 @@
       <p class="text-sm text-text/70">
         {{ t('statisticsPage.settingsAlertsDescription') }}
       </p>
-      <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
-        <span class="text-xs text-text/55">
-          {{ t('statisticsPage.settingsAlertsHint') }}
-        </span>
-        <div class="flex flex-wrap gap-2">
-          <button
-            type="button"
-            class="rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs hover:bg-primary/10"
-            @click="resetCurrentCohort"
-          >
-            {{ t('statisticsPage.settingsAlertsResetCohort') }}
-          </button>
-          <button
-            type="button"
-            class="rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs hover:bg-primary/10"
-            @click="resetAllThresholds"
-          >
-            {{ t('statisticsPage.settingsAlertsReset') }}
-          </button>
-        </div>
-      </div>
+      <p class="pt-1 text-xs text-text/55">
+        {{ t('statisticsPage.settingsAlertsHint') }}
+      </p>
     </header>
 
-    <div class="flex flex-wrap items-center gap-1.5">
-      <button
-        v-for="profile in alertStore.thresholdProfiles"
-        :key="profile.cohortKey"
-        type="button"
-        class="rounded-full border px-3 py-1 text-xs transition"
-        :class="
-          selectedCohortKey === profile.cohortKey
-            ? 'border-primary/60 bg-primary/15 text-text'
-            : 'border-primary/25 bg-surface/40 text-text/70 hover:bg-primary/10'
-        "
-        @click="selectedCohortKey = profile.cohortKey"
-      >
-        {{ cohortLabel(profile.cohortKey) }}
-      </button>
-      <button
-        type="button"
-        class="rounded-full border border-dashed border-primary/35 px-2.5 py-1 text-xs text-text/70 hover:bg-primary/10"
-        :title="t('statisticsPage.settingsAlertsAddCohort')"
-        @click="showAddCohort = !showAddCohort"
-      >
-        +
-      </button>
-      <button
-        v-if="canRemoveSelectedCohort"
-        type="button"
-        class="rounded border border-error/35 px-2.5 py-1 text-xs text-error hover:bg-error/10"
-        @click="removeSelectedCohort"
-      >
-        {{ t('statisticsPage.settingsAlertsRemoveCohort') }}
-      </button>
-    </div>
-
-    <div
-      v-if="showAddCohort"
-      class="space-y-2 rounded-lg border border-dashed border-primary/30 bg-surface/20 p-3"
+    <nav
+      class="flex flex-wrap gap-1 border-b border-primary/20 pb-0.5"
+      role="tablist"
+      :aria-label="t('statisticsPage.settingsAlertsTabsAria')"
     >
-      <p class="text-xs text-text/65">{{ t('statisticsPage.settingsAlertsAddCohortHint') }}</p>
-      <div class="flex flex-wrap gap-1">
+      <button
+        v-for="tab in settingsTabs"
+        :key="tab.id"
+        type="button"
+        role="tab"
+        class="rounded-t border px-3 py-2 text-xs font-medium transition"
+        :class="
+          activeSettingsTab === tab.id
+            ? 'border-primary/40 border-b-transparent bg-surface/40 text-text'
+            : 'border-transparent text-text/60 hover:bg-surface/20 hover:text-text'
+        "
+        :aria-selected="activeSettingsTab === tab.id"
+        @click="activeSettingsTab = tab.id"
+      >
+        {{ tab.label }}
+      </button>
+    </nav>
+
+    <p v-if="feedback" class="text-xs" :class="feedbackOk ? 'text-emerald-300' : 'text-amber-200'">
+      {{ feedback }}
+    </p>
+
+    <div v-show="activeSettingsTab === 'cohorts'" class="space-y-3" role="tabpanel">
+      <div class="flex flex-wrap items-center justify-end gap-2">
         <button
-          v-for="tier in RANK_TIERS"
-          :key="'new-' + tier"
           type="button"
-          class="stats-division-btn rounded p-0.5 transition-colors"
-          :class="
-            pendingRankTiers.includes(tier)
-              ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
-              : 'bg-black/20 hover:bg-white/10'
-          "
-          :title="formatDivisionLabel(tier)"
-          @click="togglePendingTier(tier)"
+          class="rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs hover:bg-primary/10"
+          @click="resetCurrentCohort"
         >
-          <img
-            v-if="getRankedEmblemUrl(tier)"
-            :src="getRankedEmblemUrl(tier)!"
-            :alt="tier"
-            class="h-3 w-3 object-contain"
-            width="12"
-            height="12"
-          />
+          {{ t('statisticsPage.settingsAlertsResetCohort') }}
+        </button>
+        <button
+          type="button"
+          class="rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs hover:bg-primary/10"
+          @click="resetAllThresholds"
+        >
+          {{ t('statisticsPage.settingsAlertsReset') }}
         </button>
       </div>
-      <button
-        type="button"
-        class="rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs hover:bg-primary/10 disabled:opacity-50"
-        :disabled="pendingRankTiers.length === 0"
-        @click="confirmAddCohort"
-      >
-        {{ t('statisticsPage.settingsAlertsAddCohort') }}
-      </button>
-    </div>
 
-    <div v-if="selectedProfile" class="space-y-2">
-      <div>
-        <div class="mb-1 text-xs font-medium text-text/70">
-          {{ t('statisticsPage.settingsAlertsCohortDivisions') }}
-        </div>
-        <p v-if="isGlobalCohort" class="text-xs text-text/55">
-          {{ t('statisticsPage.settingsAlertsGlobalCohortHint') }}
-        </p>
-        <div v-else class="flex flex-wrap gap-1">
+      <div class="flex flex-wrap items-center gap-1.5">
+        <button
+          v-for="profile in alertStore.thresholdProfiles"
+          :key="profile.cohortKey"
+          type="button"
+          class="rounded-full border px-3 py-1 text-xs transition"
+          :class="
+            selectedCohortKey === profile.cohortKey
+              ? 'border-primary/60 bg-primary/15 text-text'
+              : 'border-primary/25 bg-surface/40 text-text/70 hover:bg-primary/10'
+          "
+          @click="selectedCohortKey = profile.cohortKey"
+        >
+          {{ cohortLabel(profile.cohortKey) }}
+        </button>
+        <button
+          type="button"
+          class="rounded-full border border-dashed border-primary/35 px-2.5 py-1 text-xs text-text/70 hover:bg-primary/10"
+          :title="t('statisticsPage.settingsAlertsAddCohort')"
+          @click="showAddCohort = !showAddCohort"
+        >
+          +
+        </button>
+        <button
+          v-if="canRemoveSelectedCohort"
+          type="button"
+          class="rounded border border-error/35 px-2.5 py-1 text-xs text-error hover:bg-error/10"
+          @click="removeSelectedCohort"
+        >
+          {{ t('statisticsPage.settingsAlertsRemoveCohort') }}
+        </button>
+      </div>
+
+      <div
+        v-if="showAddCohort"
+        class="space-y-2 rounded-lg border border-dashed border-primary/30 bg-surface/20 p-3"
+      >
+        <p class="text-xs text-text/65">{{ t('statisticsPage.settingsAlertsAddCohortHint') }}</p>
+        <div class="flex flex-wrap gap-1">
           <button
             v-for="tier in RANK_TIERS"
-            :key="'edit-' + tier"
+            :key="'new-' + tier"
             type="button"
             class="stats-division-btn rounded p-0.5 transition-colors"
             :class="
-              selectedProfile.rankTiers.includes(tier)
+              pendingRankTiers.includes(tier)
                 ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
                 : 'bg-black/20 hover:bg-white/10'
             "
             :title="formatDivisionLabel(tier)"
-            @click="toggleSelectedCohortTier(tier)"
+            @click="togglePendingTier(tier)"
           >
             <img
               v-if="getRankedEmblemUrl(tier)"
@@ -134,8 +119,113 @@
             />
           </button>
         </div>
+        <button
+          type="button"
+          class="rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs hover:bg-primary/10 disabled:opacity-50"
+          :disabled="pendingRankTiers.length === 0"
+          @click="confirmAddCohort"
+        >
+          {{ t('statisticsPage.settingsAlertsAddCohort') }}
+        </button>
       </div>
 
+      <div v-if="selectedProfile" class="space-y-2">
+        <div>
+          <div class="mb-1 text-xs font-medium text-text/70">
+            {{ t('statisticsPage.settingsAlertsCohortDivisions') }}
+          </div>
+          <p v-if="isGlobalCohort" class="text-xs text-text/55">
+            {{ t('statisticsPage.settingsAlertsGlobalCohortHint') }}
+          </p>
+          <div v-else class="flex flex-wrap gap-1">
+            <button
+              v-for="tier in RANK_TIERS"
+              :key="'edit-' + tier"
+              type="button"
+              class="stats-division-btn rounded p-0.5 transition-colors"
+              :class="
+                selectedProfile.rankTiers.includes(tier)
+                  ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
+                  : 'bg-black/20 hover:bg-white/10'
+              "
+              :title="formatDivisionLabel(tier)"
+              @click="toggleSelectedCohortTier(tier)"
+            >
+              <img
+                v-if="getRankedEmblemUrl(tier)"
+                :src="getRankedEmblemUrl(tier)!"
+                :alt="tier"
+                class="h-3 w-3 object-contain"
+                width="12"
+                height="12"
+              />
+            </button>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto rounded-lg border border-primary/25 bg-surface/30">
+          <table class="w-full min-w-[28rem] text-left text-xs">
+            <thead>
+              <tr class="border-b border-primary/20 text-text/60">
+                <th class="px-3 py-2 font-medium">
+                  {{ t('statisticsPage.settingsAlertsMetric') }}
+                </th>
+                <th class="px-3 py-2 font-medium">{{ t('statisticsPage.settingsAlertsMin') }}</th>
+                <th class="px-3 py-2 font-medium">{{ t('statisticsPage.settingsAlertsMax') }}</th>
+                <th class="px-3 py-2 font-medium">{{ t('statisticsPage.settingsAlertsDelta') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="row in rows"
+                :key="row.metric"
+                class="border-b border-primary/10 last:border-b-0"
+              >
+                <th class="px-3 py-2 font-medium text-text/85">{{ row.label }}</th>
+                <td class="px-3 py-2">
+                  <input
+                    :value="displayValue(row.minKey)"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    class="w-full max-w-[5.5rem] rounded border border-primary/35 bg-background px-2 py-1 text-text"
+                    :placeholder="t('statisticsPage.settingsAlertsPlaceholder')"
+                    @input="onInput(row.minKey, ($event.target as HTMLInputElement).value)"
+                  />
+                </td>
+                <td class="px-3 py-2">
+                  <input
+                    :value="displayValue(row.maxKey)"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    class="w-full max-w-[5.5rem] rounded border border-primary/35 bg-background px-2 py-1 text-text"
+                    :placeholder="t('statisticsPage.settingsAlertsPlaceholder')"
+                    @input="onInput(row.maxKey, ($event.target as HTMLInputElement).value)"
+                  />
+                </td>
+                <td class="px-3 py-2">
+                  <input
+                    :value="displayValue(row.deltaKey)"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    class="w-full max-w-[5.5rem] rounded border border-primary/35 bg-background px-2 py-1 text-text"
+                    :placeholder="t('statisticsPage.settingsAlertsPlaceholder')"
+                    @input="onInput(row.deltaKey, ($event.target as HTMLInputElement).value)"
+                  />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div v-show="activeSettingsTab === 'reference'" class="space-y-3" role="tabpanel">
       <div class="space-y-2 rounded-lg border border-primary/20 bg-surface/20 p-3">
         <div class="text-xs font-medium text-text/80">
           {{ t('statisticsPage.settingsAlertsReferenceTitle') }}
@@ -201,67 +291,19 @@
             })
           }}
         </p>
+        <p v-if="resolvedReferenceLabel" class="text-xs text-text/55">
+          {{
+            t('statisticsPage.settingsAlertsReferenceActive', { reference: resolvedReferenceLabel })
+          }}
+        </p>
       </div>
+    </div>
 
-      <div class="overflow-x-auto rounded-lg border border-primary/25 bg-surface/30">
-        <table class="w-full min-w-[28rem] text-left text-xs">
-          <thead>
-            <tr class="border-b border-primary/20 text-text/60">
-              <th class="px-3 py-2 font-medium">{{ t('statisticsPage.settingsAlertsMetric') }}</th>
-              <th class="px-3 py-2 font-medium">{{ t('statisticsPage.settingsAlertsMin') }}</th>
-              <th class="px-3 py-2 font-medium">{{ t('statisticsPage.settingsAlertsMax') }}</th>
-              <th class="px-3 py-2 font-medium">{{ t('statisticsPage.settingsAlertsDelta') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="row in rows"
-              :key="row.metric"
-              class="border-b border-primary/10 last:border-b-0"
-            >
-              <th class="px-3 py-2 font-medium text-text/85">{{ row.label }}</th>
-              <td class="px-3 py-2">
-                <input
-                  :value="displayValue(row.minKey)"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  class="w-full max-w-[5.5rem] rounded border border-primary/35 bg-background px-2 py-1 text-text"
-                  :placeholder="t('statisticsPage.settingsAlertsPlaceholder')"
-                  @input="onInput(row.minKey, ($event.target as HTMLInputElement).value)"
-                />
-              </td>
-              <td class="px-3 py-2">
-                <input
-                  :value="displayValue(row.maxKey)"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  class="w-full max-w-[5.5rem] rounded border border-primary/35 bg-background px-2 py-1 text-text"
-                  :placeholder="t('statisticsPage.settingsAlertsPlaceholder')"
-                  @input="onInput(row.maxKey, ($event.target as HTMLInputElement).value)"
-                />
-              </td>
-              <td class="px-3 py-2">
-                <input
-                  :value="displayValue(row.deltaKey)"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  class="w-full max-w-[5.5rem] rounded border border-primary/35 bg-background px-2 py-1 text-text"
-                  :placeholder="t('statisticsPage.settingsAlertsPlaceholder')"
-                  @input="onInput(row.deltaKey, ($event.target as HTMLInputElement).value)"
-                />
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="flex flex-wrap items-center gap-3 pt-1">
+    <div v-show="activeSettingsTab === 'verify'" class="space-y-3" role="tabpanel">
+      <p class="text-xs text-text/65">
+        {{ t('statisticsPage.settingsAlertsVerifyHint') }}
+      </p>
+      <div class="flex flex-wrap items-center gap-3">
         <button
           type="button"
           class="rounded border border-primary bg-primary/20 px-4 py-2 text-sm font-medium text-text hover:bg-primary/30 disabled:opacity-50"
@@ -276,10 +318,15 @@
           }}
         </span>
       </div>
+      <p v-if="watchedCount === 0" class="text-xs text-amber-200/90">
+        {{ t('statisticsPage.settingsAlertsTestNoWatchlist') }}
+      </p>
     </div>
 
-    <section
+    <div
+      v-show="activeSettingsTab === 'test'"
       class="space-y-3 rounded-lg border border-dashed border-amber-500/40 bg-amber-500/5 p-3"
+      role="tabpanel"
     >
       <header class="space-y-1">
         <h3 class="text-sm font-semibold text-amber-200/90">
@@ -348,15 +395,7 @@
           {{ t('statisticsPage.settingsAlertsTestClear') }}
         </button>
       </div>
-
-      <p
-        v-if="feedback"
-        class="text-xs"
-        :class="feedbackOk ? 'text-emerald-300' : 'text-amber-200'"
-      >
-        {{ feedback }}
-      </p>
-    </section>
+    </div>
   </section>
 </template>
 
@@ -369,14 +408,16 @@ import { getRankedEmblemUrl } from '~/utils/rankedEmblem'
 import { RANK_TIERS } from '~/utils/rankTiers'
 import type {
   SurveillanceAlertThresholds,
+  SurveillanceReferenceMode,
+  SurveillanceVersionsCatalogEntry,
+} from '~/utils/statisticsSurveillanceAlerts'
+import {
   SURVEILLANCE_GLOBAL_COHORT_KEY,
   configuredSurveillanceCohortProfiles,
   formatSurveillanceCohortLabel,
   hasConfiguredSurveillanceThresholds,
   parseSurveillanceBaselineKey,
   resolveSurveillanceReference,
-  type SurveillanceReferenceMode,
-  type SurveillanceVersionsCatalogEntry,
 } from '~/utils/statisticsSurveillanceAlerts'
 
 const { t } = useI18n()
@@ -393,6 +434,7 @@ if (import.meta.client) {
 const busy = ref(false)
 const feedback = ref('')
 const feedbackOk = ref(true)
+const activeSettingsTab = ref<'cohorts' | 'reference' | 'verify' | 'test'>('cohorts')
 const selectedCohortKey = ref(SURVEILLANCE_GLOBAL_COHORT_KEY)
 const showAddCohort = ref(false)
 const pendingRankTiers = ref<string[]>([])
@@ -401,6 +443,13 @@ const versionsCatalog = ref<SurveillanceVersionsCatalogEntry[]>([])
 type ThresholdKey = keyof SurveillanceAlertThresholds
 
 const watchedCount = computed(() => statisticsUiStore.watchedChampionIds.length)
+
+const settingsTabs = computed(() => [
+  { id: 'cohorts' as const, label: t('statisticsPage.settingsAlertsTabCohorts') },
+  { id: 'reference' as const, label: t('statisticsPage.settingsAlertsTabReference') },
+  { id: 'verify' as const, label: t('statisticsPage.settingsAlertsTabVerify') },
+  { id: 'test' as const, label: t('statisticsPage.settingsAlertsTabTest') },
+])
 
 const referenceMode = computed({
   get: () => alertStore.referenceSettings.mode,
