@@ -55,6 +55,37 @@ const TREND_PRESET_TIERS: Record<Exclude<DailyTrendDivisionPreset, 'selected'>, 
 
 export { TREND_PRESET_TIERS }
 
+export function trendDaysBackFromRangeMode(
+  rangeMode: '7d' | '14d' | 'months',
+  monthsWindow: number
+): number {
+  if (rangeMode === '7d') return 7
+  if (rangeMode === '14d') return 14
+  return Math.max(1, Math.min(24, Number(monthsWindow) || 1)) * 30
+}
+
+export function trendRangeFromIso(
+  rangeMode: '7d' | '14d' | 'months',
+  monthsWindow: number,
+  referenceDate = new Date()
+): string {
+  const daysBack = trendDaysBackFromRangeMode(rangeMode, monthsWindow)
+  const from = new Date(referenceDate)
+  from.setUTCDate(from.getUTCDate() - (daysBack - 1))
+  return from.toISOString().slice(0, 10)
+}
+
+export function resolveTrendSnapshotsQueryFrom(options: {
+  userFrom?: string | null
+  rangeMode: '7d' | '14d' | 'months'
+  monthsWindow: number
+  referenceDate?: Date
+}): string {
+  const userFrom = String(options.userFrom ?? '').trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(userFrom)) return userFrom
+  return trendRangeFromIso(options.rangeMode, options.monthsWindow, options.referenceDate)
+}
+
 export type SharedDailyTrendChartUi = {
   trendGranularity: Ref<DailyTrendGranularity>
   trendRangeMode: Ref<'7d' | '14d' | 'months'>
@@ -294,12 +325,7 @@ export function useStatisticsDailyTrendCharts(options: {
     if (!sorted.length) return sorted
     const latestTs = sorted[sorted.length - 1]?.ts ?? 0
     if (!Number.isFinite(latestTs) || latestTs <= 0) return sorted
-    const daysBack =
-      trendRangeMode.value === '7d'
-        ? 7
-        : trendRangeMode.value === '14d'
-          ? 14
-          : Math.max(1, Math.min(24, Number(trendMonthsWindow.value) || 1)) * 30
+    const daysBack = trendDaysBackFromRangeMode(trendRangeMode.value, trendMonthsWindow.value)
     const minTs = latestTs - (daysBack - 1) * 24 * 60 * 60 * 1000
     return sorted.filter(b => b.ts >= minTs)
   })

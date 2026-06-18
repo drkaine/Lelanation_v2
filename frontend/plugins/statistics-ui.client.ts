@@ -7,6 +7,7 @@ export default defineNuxtPlugin({
 
     const hydrateFromLocalStorage = () => {
       statisticsUiStore.init()
+      useStatisticsSurveillanceAlertStore().init()
     }
 
     hydrateFromLocalStorage()

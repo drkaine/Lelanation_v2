@@ -111,26 +111,36 @@
           {{ t('statisticsPage.surveillanceOpen') }}
         </NuxtLink>
       </section>
+
+      <StatisticsSurveillanceAlertSettings />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   STATISTICS_MAIN_TAB_LABEL_KEYS,
   STATISTICS_MAIN_TAB_ORDER,
 } from '~/constants/statisticsMainTabs'
+import StatisticsSurveillanceAlertSettings from '~/components/statistics/StatisticsSurveillanceAlertSettings.vue'
+import { useSurveillanceAlertEvaluation } from '~/composables/useSurveillanceAlertEvaluation'
 import { useStatisticsUiStore, type StatisticsMainTab } from '~/stores/StatisticsUiStore'
 
 const { t } = useI18n()
 const localePath = useLocalePath()
 const route = useRoute()
 const statisticsUiStore = useStatisticsUiStore()
+const { runSurveillanceAlertCheck } = useSurveillanceAlertEvaluation()
+
 if (import.meta.client) {
   statisticsUiStore.init()
 }
+
+onMounted(() => {
+  runSurveillanceAlertCheck().catch(() => undefined)
+})
 
 if (Object.keys(route.query).length > 0) {
   await navigateTo(localePath('/statistics/settings'), { replace: true })

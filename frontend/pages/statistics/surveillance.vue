@@ -67,7 +67,7 @@
               <div v-else class="space-y-8">
                 <ClientOnly>
                   <ChampionOverviewPanel
-                    v-for="champion in filteredWatchedChampions"
+                    v-for="champion in sortedWatchedChampions"
                     :key="champion.slug"
                     :champion-key="champion.key"
                     :champion-slug="champion.slug"
@@ -77,6 +77,8 @@
                     :filter-rank="filterRank"
                     :filter-version="filterVersion"
                     :versions-catalog="versionsCatalog"
+                    :shared-trend-ui="sharedTrendSettings"
+                    :alert-triggers="alertTriggersFor(champion.key)"
                   />
                 </ClientOnly>
               </div>
@@ -99,8 +101,10 @@ import StatisticsFiltersPanel from '~/components/statistics/StatisticsFiltersPan
 import { SHARED_DAILY_TREND_CHART_UI_KEY } from '~/composables/statistics/useStatisticsDailyTrendCharts'
 import { createSharedDailyTrendChartSettings } from '~/composables/statistics/useSharedDailyTrendChartSettings'
 import { useChampionsStore } from '~/stores/ChampionsStore'
+import { useStatisticsSurveillanceAlertStore } from '~/stores/StatisticsSurveillanceAlertStore'
 import { useStatisticsUiStore } from '~/stores/StatisticsUiStore'
 import { useVersionStore } from '~/stores/VersionStore'
+import { useSurveillanceAlertEvaluation } from '~/composables/useSurveillanceAlertEvaluation'
 import { championKeyFromRouteParam, normalizeChampionSlug } from '~/utils/championSlug'
 import { parseRankTierQuery, rankTierSelectionsEqual } from '~/utils/statisticsRankTierQuery'
 
@@ -114,7 +118,9 @@ const route = useRoute()
 const router = useRouter()
 const championsStore = useChampionsStore()
 const statisticsUiStore = useStatisticsUiStore()
+const alertStore = useStatisticsSurveillanceAlertStore()
 const versionStore = useVersionStore()
+const { runSurveillanceAlertCheck } = useSurveillanceAlertEvaluation()
 
 const { watchedChampionIds } = storeToRefs(statisticsUiStore)
 
@@ -267,6 +273,21 @@ const filteredWatchedChampions = computed(() => {
   })
 })
 
+const sortedWatchedChampions = computed(() => {
+  const champions = filteredWatchedChampions.value
+  return [...champions].sort((a, b) => {
+    const aAlert = alertStore.hasAlert(String(a.key))
+    const bAlert = alertStore.hasAlert(String(b.key))
+    if (aAlert && !bAlert) return -1
+    if (!aAlert && bAlert) return 1
+    return 0
+  })
+})
+
+function alertTriggersFor(championKey: number) {
+  return alertStore.triggersFor(String(championKey))
+}
+
 async function loadVersionsCatalog(): Promise<void> {
   try {
     const versionsData = await $fetch<{
@@ -287,10 +308,13 @@ async function loadVersionsCatalog(): Promise<void> {
 
 async function bootstrapPage(): Promise<void> {
   statisticsUiStore.init()
+  alertStore.init()
   await versionStore.loadCurrentVersion().catch(() => undefined)
   const lang = locale.value === 'fr' ? 'fr_FR' : 'en_US'
   await championsStore.loadChampions(lang).catch(() => undefined)
   await loadVersionsCatalog()
+  await runSurveillanceAlertCheck().catch(() => undefined)
+  alertStore.acknowledgeAlerts()
 }
 
 onMounted(async () => {

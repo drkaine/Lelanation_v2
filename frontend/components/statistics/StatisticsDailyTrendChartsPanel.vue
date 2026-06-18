@@ -11,6 +11,7 @@ import {
   useStatisticsDailyTrendCharts,
   type DailyTrendMetricId,
   type DailyTrendSnapshotPoint,
+  type SharedDailyTrendChartUi,
 } from '~/composables/statistics/useStatisticsDailyTrendCharts'
 
 const props = withDefaults(
@@ -31,6 +32,7 @@ const props = withDefaults(
     tierColor?: (tier: string) => string
     formatMetricValue?: (metric: DailyTrendMetricId, value: number) => string
     tierSortOrder?: (a: string, b: string) => number
+    sharedTrendUi?: SharedDailyTrendChartUi
   }>(),
   {
     pending: false,
@@ -47,12 +49,14 @@ const props = withDefaults(
     tierColor: undefined,
     formatMetricValue: undefined,
     tierSortOrder: undefined,
+    sharedTrendUi: undefined,
   }
 )
 
 const { t } = useI18n()
-const sharedTrendUi = inject(SHARED_DAILY_TREND_CHART_UI_KEY, null)
-const showToolbarBlock = computed(() => props.showToolbar && !sharedTrendUi)
+const injectedSharedTrendUi = inject(SHARED_DAILY_TREND_CHART_UI_KEY, null)
+const resolvedSharedTrendUi = props.sharedTrendUi ?? injectedSharedTrendUi ?? undefined
+const showToolbarBlock = computed(() => props.showToolbar && !resolvedSharedTrendUi)
 
 const metricTitles = computed(() => {
   const base = {
@@ -75,10 +79,19 @@ const charts = useStatisticsDailyTrendCharts({
   tierColor: props.tierColor,
   formatMetricValue: props.formatMetricValue,
   tierSortOrder: props.tierSortOrder,
-  sharedTrendUi: sharedTrendUi ?? undefined,
+  sharedTrendUi: resolvedSharedTrendUi,
 })
 
-if (!sharedTrendUi) {
+const {
+  trendChartCards,
+  trendTooltip,
+  isLegendTierVisible,
+  toggleLegendTierVisibility,
+  formatTrendValue,
+  onTrendPointHover,
+} = charts
+
+if (!resolvedSharedTrendUi) {
   provide(SHARED_DAILY_TREND_CHART_UI_KEY, {
     trendGranularity: charts.trendGranularity,
     trendRangeMode: charts.trendRangeMode,
@@ -102,15 +115,13 @@ if (!sharedTrendUi) {
     <div v-if="pending" class="py-4 text-text/70">{{ t('statisticsPage.loading') }}</div>
     <p v-else-if="error" class="py-2 text-sm text-red-400">{{ error }}</p>
     <div
-      v-else-if="charts.trendChartCards.value.length"
+      v-else-if="trendChartCards.length"
       class="grid w-full min-w-0 gap-4"
-      :class="
-        charts.trendChartCards.value.length === 1 ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'
-      "
+      :class="trendChartCards.length === 1 ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'"
     >
       <article
-        v-for="card in charts.trendChartCards.value"
-        :key="card.metricId"
+        v-for="card in trendChartCards"
+        :key="`${card.metricId}-${card.xTicks.length}-${card.series[0]?.points.length ?? 0}`"
         class="w-full min-w-0 rounded border border-primary/20 bg-background/30 p-3"
       >
         <h3 class="mb-2 text-sm font-medium text-text">{{ card.title }}</h3>
@@ -155,7 +166,7 @@ if (!sharedTrendUi) {
             </g>
             <path
               v-for="serie in card.series"
-              v-show="charts.isLegendTierVisible(serie.tier)"
+              v-show="isLegendTierVisible(serie.tier)"
               :key="`${card.metricId}-${serie.tier}`"
               :d="serie.path"
               fill="none"
@@ -166,7 +177,7 @@ if (!sharedTrendUi) {
             />
             <g
               v-for="serie in card.series"
-              v-show="charts.isLegendTierVisible(serie.tier)"
+              v-show="isLegendTierVisible(serie.tier)"
               :key="`${card.metricId}-${serie.tier}-points`"
             >
               <circle
@@ -178,7 +189,7 @@ if (!sharedTrendUi) {
                 :fill="serie.color"
                 class="cursor-pointer"
                 @mouseenter="
-                  charts.onTrendPointHover(
+                  onTrendPointHover(
                     $event,
                     card.metricId as DailyTrendMetricId,
                     serie.tier,
@@ -187,7 +198,7 @@ if (!sharedTrendUi) {
                   )
                 "
                 @mousemove="
-                  charts.onTrendPointHover(
+                  onTrendPointHover(
                     $event,
                     card.metricId as DailyTrendMetricId,
                     serie.tier,
@@ -195,7 +206,7 @@ if (!sharedTrendUi) {
                     serie.label
                   )
                 "
-                @mouseleave="charts.trendTooltip.value = null"
+                @mouseleave="trendTooltip = null"
               />
             </g>
             <g v-for="tick in card.xTicks" :key="`${card.metricId}-x-${tick.index}`">
@@ -211,24 +222,18 @@ if (!sharedTrendUi) {
           </svg>
         </div>
         <div
-          v-if="charts.trendTooltip.value && charts.trendTooltip.value.metricId === card.metricId"
+          v-if="trendTooltip && trendTooltip.metricId === card.metricId"
           class="pointer-events-none fixed z-[90] rounded border border-primary/30 bg-surface/90 px-2 py-1 text-[11px] text-text/85 shadow-lg"
           :style="{
-            left: `${charts.trendTooltip.value.mouseX}px`,
-            top: `${charts.trendTooltip.value.mouseY}px`,
+            left: `${trendTooltip.mouseX}px`,
+            top: `${trendTooltip.mouseY}px`,
             transform: 'translate(-50%, -110%)',
           }"
         >
-          <strong>{{ charts.trendTooltip.value.label }}</strong> ·
-          {{ charts.trendTooltip.value.bucketLabel }} ·
-          {{
-            charts.formatTrendValue(
-              card.metricId as DailyTrendMetricId,
-              charts.trendTooltip.value.value
-            )
-          }}
-          <template v-if="charts.trendTooltip.value.winrate != null && card.metricId !== 'winrate'">
-            · {{ t('statisticsPage.winrate') }} {{ charts.trendTooltip.value.winrate.toFixed(1) }}%
+          <strong>{{ trendTooltip.label }}</strong> · {{ trendTooltip.bucketLabel }} ·
+          {{ formatTrendValue(card.metricId as DailyTrendMetricId, trendTooltip.value) }}
+          <template v-if="trendTooltip.winrate != null && card.metricId !== 'winrate'">
+            · {{ t('statisticsPage.winrate') }} {{ trendTooltip.winrate.toFixed(1) }}%
           </template>
         </div>
         <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-text/80">
@@ -238,11 +243,11 @@ if (!sharedTrendUi) {
             type="button"
             class="inline-flex items-center gap-1 rounded px-1 py-0.5 transition hover:bg-primary/20"
             :class="
-              charts.isLegendTierVisible(serie.tier)
+              isLegendTierVisible(serie.tier)
                 ? 'text-text/85'
                 : 'text-text/45 line-through opacity-70'
             "
-            @click="charts.toggleLegendTierVisibility(serie.tier)"
+            @click="toggleLegendTierVisibility(serie.tier)"
           >
             <span
               class="inline-block h-2.5 w-2.5 rounded-full"

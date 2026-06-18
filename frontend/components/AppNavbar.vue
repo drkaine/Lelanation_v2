@@ -116,6 +116,13 @@
             @click="toggleMobileStatisticsMenu"
           >
             <span>{{ t('nav.statistics') }}</span>
+            <span
+              v-if="surveillanceAlertCount > 0"
+              class="nav-alert-badge"
+              :title="t('nav.statisticsSurveillanceAlerts', { count: surveillanceAlertCount })"
+            >
+              {{ surveillanceAlertCount }}
+            </span>
             <span class="builds-menu-chevron" :class="{ 'is-open': isMobileStatisticsMenuOpen }"
               >▾</span
             >
@@ -148,6 +155,9 @@
               @click="handleStatisticsNavigation"
             >
               {{ t('nav.statisticsSurveillance') }}
+              <span v-if="surveillanceAlertCount > 0" class="nav-alert-badge nav-alert-badge--sub">
+                {{ surveillanceAlertCount }}
+              </span>
             </NuxtLink>
           </div>
         </div>
@@ -294,6 +304,13 @@
             :class="{ 'is-active': isStatisticsSectionActive }"
           >
             <span>{{ t('nav.statistics') }}</span>
+            <span
+              v-if="surveillanceAlertCount > 0"
+              class="nav-alert-badge"
+              :title="t('nav.statisticsSurveillanceAlerts', { count: surveillanceAlertCount })"
+            >
+              {{ surveillanceAlertCount }}
+            </span>
             <span class="builds-menu-chevron" :class="{ 'is-open': isStatisticsMenuOpen }">▾</span>
           </NuxtLink>
           <div v-show="isStatisticsMenuOpen" class="builds-menu-dropdown">
@@ -324,6 +341,9 @@
               @click="closeStatisticsMenu"
             >
               {{ t('nav.statisticsSurveillance') }}
+              <span v-if="surveillanceAlertCount > 0" class="nav-alert-badge nav-alert-badge--sub">
+                {{ surveillanceAlertCount }}
+              </span>
             </NuxtLink>
           </div>
         </div>
@@ -426,10 +446,14 @@ const isMyBuildsActive = computed(() => currentBuildsTab.value === 'my-builds')
 const isFavoriteBuildsActive = computed(() => currentBuildsTab.value === 'favoris')
 const favoritesStore = useFavoritesStore()
 const statisticsUiStore = useStatisticsUiStore()
+const surveillanceAlertStore = useStatisticsSurveillanceAlertStore()
 const { hydrated: clientHydrated } = useClientHydrated()
 const hasFavorites = computed(() => favoritesStore.favoriteBuildIds.length > 0)
 const hasWatchedChampions = computed(
   () => clientHydrated.value && statisticsUiStore.watchedChampionIds.length > 0
+)
+const surveillanceAlertCount = computed(() =>
+  clientHydrated.value ? surveillanceAlertStore.alertCount : 0
 )
 const isStatisticsIndexActive = computed(() => route.path === localePath('/statistics'))
 const isStatisticsTierListActive = computed(
@@ -517,6 +541,8 @@ const statisticsSurveillanceLink = computed(() =>
 
 onMounted(() => {
   checkLoggedIn()
+  statisticsUiStore.init()
+  surveillanceAlertStore.init()
   if (!versionStore.currentVersion) {
     versionStore.loadCurrentVersion().catch(() => undefined)
   }
@@ -638,7 +664,30 @@ const handlePatchNavigation = () => {
 }
 
 .version {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   color: var(--color-blue-50);
+}
+
+.nav-alert-badge {
+  display: inline-flex;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0 0.25rem;
+}
+
+.nav-alert-badge--sub {
+  margin-left: 0.35rem;
 }
 
 .builds-menu-trigger,

@@ -1,8 +1,22 @@
 <template>
   <section
-    class="champion-overview-panel rounded-xl border border-primary/25 bg-surface/20 p-4"
-    :class="chartsExpanded ? 'space-y-4' : ''"
+    class="champion-overview-panel rounded-xl border p-4"
+    :class="[
+      hasAlerts ? 'border-error/50 bg-error/5' : 'border-primary/25 bg-surface/20',
+      chartsExpanded ? 'space-y-4' : '',
+    ]"
   >
+    <div
+      v-if="hasAlerts"
+      class="rounded-md border border-error/40 bg-error/10 px-3 py-2 text-xs text-error"
+      role="status"
+    >
+      <p class="font-semibold">{{ t('statisticsPage.surveillanceAlertTitle') }}</p>
+      <ul class="mt-1 list-disc space-y-0.5 pl-4">
+        <li v-for="(line, index) in alertLines" :key="index">{{ line }}</li>
+      </ul>
+    </div>
+
     <header class="flex flex-wrap items-center gap-2 lg:flex-nowrap">
       <img
         v-if="championImage && gameVersion"
@@ -74,6 +88,7 @@
         :versions-catalog="versionsCatalog"
         :show-banrate="true"
         :show-toolbar="false"
+        :shared-trend-ui="resolvedTrendChartUi"
         :title="t('statisticsPage.championStatsTrendsTitle')"
       />
 
@@ -88,7 +103,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, inject, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { apiUrl } from '~/utils/apiUrl'
 import {
@@ -98,8 +113,15 @@ import {
 import { getChampionImageUrl } from '~/utils/imageUrl'
 import { statsRoleIconPath, statsRoleLabel } from '~/utils/statsRoleDisplay'
 import { useGameVersion } from '~/composables/useGameVersion'
-import type { DailyTrendSnapshotPoint } from '~/composables/statistics/useStatisticsDailyTrendCharts'
+import {
+  SHARED_DAILY_TREND_CHART_UI_KEY,
+  resolveTrendSnapshotsQueryFrom,
+  type DailyTrendSnapshotPoint,
+  type SharedDailyTrendChartUi,
+} from '~/composables/statistics/useStatisticsDailyTrendCharts'
 import type { ChampionDurationByTierData } from '~/composables/statistics/useChampionDurationByTierCharts'
+import { formatSurveillanceAlertSummary } from '~/utils/formatSurveillanceAlert'
+import type { SurveillanceAlertTrigger } from '~/utils/statisticsSurveillanceAlerts'
 
 const props = defineProps<{
   championKey: number
@@ -110,13 +132,23 @@ const props = defineProps<{
   filterRank: string[]
   filterVersion: string
   versionsCatalog: Array<{ patchLabel: string; releaseDate: string }>
+  sharedTrendUi?: SharedDailyTrendChartUi
+  alertTriggers?: SurveillanceAlertTrigger[]
 }>()
 
-const chartsExpanded = ref(true)
+const injectedTrendChartUi = inject(SHARED_DAILY_TREND_CHART_UI_KEY, null)
+const resolvedTrendChartUi = computed(
+  () => props.sharedTrendUi ?? injectedTrendChartUi ?? undefined
+)
 
 const { t } = useI18n()
 const localePath = useLocalePath()
 const { version: gameVersion } = useGameVersion()
+
+const chartsExpanded = ref(true)
+
+const hasAlerts = computed(() => (props.alertTriggers?.length ?? 0) > 0)
+const alertLines = computed(() => formatSurveillanceAlertSummary(props.alertTriggers ?? [], t))
 
 const championStatsLink = computed(() =>
   localePath({
@@ -175,35 +207,6 @@ async function loadChampionRoleStats(): Promise<void> {
   }
 }
 
-function patchFromVersion(version: string): string | null {
-  const raw = (version ?? '').trim()
-  if (!raw) return null
-  const parts = raw.split('.')
-  if (parts.length < 2) return null
-  const major = Number(parts[0])
-  const minor = Number(parts[1])
-  if (!Number.isFinite(major) || !Number.isFinite(minor)) return null
-  return `${major}.${minor}`
-}
-
-function patchWindowFromFilterVersion(version: string): { from: string; to?: string } | null {
-  const patch = patchFromVersion(version) ?? version.trim()
-  if (!patch) return null
-  const catalog = props.versionsCatalog
-  const idx = catalog.findIndex(v => v.patchLabel === patch)
-  if (idx < 0) return null
-  const current = catalog[idx]
-  if (!current) return null
-  const next = idx + 1 < catalog.length ? catalog[idx + 1] : null
-  const from = current.releaseDate
-  if (!from) return null
-  if (!next?.releaseDate) return { from }
-  const nextStart = new Date(`${next.releaseDate}T00:00:00.000Z`)
-  if (Number.isNaN(nextStart.getTime())) return { from }
-  const end = new Date(nextStart.getTime() - 24 * 60 * 60 * 1000)
-  return { from, to: end.toISOString().slice(0, 10) }
-}
-
 async function loadTrendSnapshots(): Promise<void> {
   if (!props.championKey) return
   trendPending.value = true
@@ -218,10 +221,14 @@ async function loadTrendSnapshots(): Promise<void> {
         .split('_')[0]
       if (normalized) params.append('rankTier', normalized)
     }
-    const trendPatch = props.filterVersion.trim()
-    const patchWindow = trendPatch ? patchWindowFromFilterVersion(trendPatch) : null
-    if (patchWindow?.from) params.set('from', patchWindow.from)
-    if (patchWindow?.to) params.set('to', patchWindow.to)
+    const rangeUi = resolvedTrendChartUi.value
+    params.set(
+      'from',
+      resolveTrendSnapshotsQueryFrom({
+        rangeMode: rangeUi?.trendRangeMode.value ?? '7d',
+        monthsWindow: rangeUi?.trendMonthsWindow.value ?? 1,
+      })
+    )
     params.set('limit', '1200')
     const query = params.toString()
     const data = await $fetch<{ points?: DailyTrendSnapshotPoint[] }>(
@@ -263,10 +270,36 @@ async function reloadOverviewData(): Promise<void> {
 }
 
 watch(
-  () => [props.championKey, props.filterRole, props.filterRank, props.filterVersion] as const,
+  () =>
+    [
+      props.championKey,
+      props.filterRole,
+      props.filterRank.join('\0'),
+      props.filterVersion,
+    ] as const,
   () => {
     reloadOverviewData().catch(() => undefined)
   },
   { immediate: true }
+)
+
+function trendChartUiRefs(): SharedDailyTrendChartUi | null {
+  return props.sharedTrendUi ?? injectedTrendChartUi ?? null
+}
+
+watch(
+  () => trendChartUiRefs()?.trendRangeMode.value,
+  () => {
+    if (!props.championKey) return
+    loadTrendSnapshots().catch(() => undefined)
+  }
+)
+
+watch(
+  () => trendChartUiRefs()?.trendMonthsWindow.value,
+  () => {
+    if (!props.championKey) return
+    loadTrendSnapshots().catch(() => undefined)
+  }
 )
 </script>

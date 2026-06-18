@@ -812,7 +812,7 @@
                     >
                       <span>{{ t('statisticsPage.championStatsTrendsMonthsLabel') }}</span>
                       <input
-                        v-model.number="trendMonthsWindow"
+                        v-model.number="trendMonthsWindowModel"
                         type="number"
                         min="1"
                         max="24"
@@ -1873,6 +1873,10 @@ import { statsRoleIconPath, statsRoleLabel } from '~/utils/statsRoleDisplay'
 import { buildChampionRoleDistribution } from '~/utils/championRoleDistribution'
 import { championKeyFromRouteParam } from '~/utils/championSlug'
 import { useChampionPageSsr } from '~/composables/statistics/useChampionStatsSsr'
+import {
+  resolveTrendSnapshotsQueryFrom,
+  trendDaysBackFromRangeMode,
+} from '~/composables/statistics/useStatisticsDailyTrendCharts'
 import ChampionStatsSeoSummary from '~/components/statistics/ChampionStatsSeoSummary.vue'
 import { breadcrumbJsonLd } from '~/utils/jsonLd'
 import { useJsonLdHead } from '~/composables/useJsonLdHead'
@@ -2970,6 +2974,12 @@ const TREND_PRESET_TIERS: Record<Exclude<TrendDivisionPreset, 'selected'>, strin
 const trendGranularity = ref<TrendGranularity>('day')
 const trendRangeMode = ref<'7d' | '14d' | 'months'>('7d')
 const trendMonthsWindow = ref(1)
+const trendMonthsWindowModel = computed({
+  get: () => trendMonthsWindow.value,
+  set: (value: number) => {
+    trendMonthsWindow.value = Math.max(1, Math.min(24, Number(value) || 1))
+  },
+})
 const trendDivisionPreset = ref<TrendDivisionPreset>('selected')
 const trendShowGlobalLine = ref(true)
 const trendPending = ref(false)
@@ -3256,39 +3266,6 @@ function resetChampionFilters() {
   trendChartFromDate.value = ''
   championSearchQueryPlaceholder.value = ''
   championSpellsModeFilter.value = 'solo'
-}
-
-function patchFromVersion(version: string): string | null {
-  const raw = (version ?? '').trim()
-  if (!raw) return null
-  const parts = raw.split('.')
-  if (parts.length < 2) return null
-  const major = Number(parts[0])
-  const minor = Number(parts[1])
-  if (!Number.isFinite(major) || !Number.isFinite(minor)) return null
-  return `${major}.${minor}`
-}
-
-function dateToIso(value: Date): string {
-  return value.toISOString().slice(0, 10)
-}
-
-function patchWindowFromFilterVersion(version: string): { from: string; to?: string } | null {
-  const patch = patchFromVersion(version) ?? version.trim()
-  if (!patch) return null
-  const catalog = trendVersionsCatalog.value
-  const idx = catalog.findIndex(v => v.patchLabel === patch)
-  if (idx < 0) return null
-  const current = catalog[idx]
-  if (!current) return null
-  const next = idx + 1 < catalog.length ? catalog[idx + 1] : null
-  const from = current.releaseDate
-  if (!from) return null
-  if (!next?.releaseDate) return { from }
-  const nextStart = new Date(`${next.releaseDate}T00:00:00.000Z`)
-  if (Number.isNaN(nextStart.getTime())) return { from }
-  const end = new Date(nextStart.getTime() - 24 * 60 * 60 * 1000)
-  return { from, to: dateToIso(end) }
 }
 
 function overviewQueryParams() {
@@ -3833,14 +3810,14 @@ async function loadTrendSnapshots() {
       if (normalized) params.append('rankTier', normalized)
     }
     const userFrom = normalizeTrendChartFromDate(trendChartFromDate.value)
-    if (userFrom) {
-      params.set('from', userFrom)
-    } else {
-      const trendPatch = (championProgressionFromVersion.value ?? '').trim()
-      const patchWindow = trendPatch ? patchWindowFromFilterVersion(trendPatch) : null
-      if (patchWindow?.from) params.set('from', patchWindow.from)
-      if (patchWindow?.to) params.set('to', patchWindow.to)
-    }
+    params.set(
+      'from',
+      resolveTrendSnapshotsQueryFrom({
+        userFrom,
+        rangeMode: trendRangeMode.value,
+        monthsWindow: trendMonthsWindow.value,
+      })
+    )
     params.set('limit', '1200')
     const query = params.toString()
     const data = await statsFetch<{ points?: TrendSnapshotPoint[] }>(
@@ -4088,12 +4065,7 @@ const trendBuckets = computed(() => {
   if (!sorted.length) return sorted
   const latestTs = sorted[sorted.length - 1]?.ts ?? 0
   if (!Number.isFinite(latestTs) || latestTs <= 0) return sorted
-  const daysBack =
-    trendRangeMode.value === '7d'
-      ? 7
-      : trendRangeMode.value === '14d'
-        ? 14
-        : Math.max(1, Math.min(24, Number(trendMonthsWindow.value) || 1)) * 30
+  const daysBack = trendDaysBackFromRangeMode(trendRangeMode.value, trendMonthsWindow.value)
   const minTs = latestTs - (daysBack - 1) * 24 * 60 * 60 * 1000
   return sorted.filter(b => b.ts >= minTs)
 })
@@ -4663,6 +4635,12 @@ if (import.meta.client) {
       syncChampionProgressionDeltaToVersionBeforeFilter()
     }
   )
+  watch([trendRangeMode, trendMonthsWindow], () => {
+    if (!championPageBootstrapped.value) return
+    if (!championId.value || Number.isNaN(championId.value)) return
+    if (activeChampionTab.value !== 'overview') return
+    loadTrendSnapshots().catch(() => undefined)
+  })
 }
 
 async function loadVersionsForFilter() {

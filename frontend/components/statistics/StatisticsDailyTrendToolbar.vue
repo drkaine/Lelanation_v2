@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { inject } from 'vue'
+import { computed, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { SHARED_DAILY_TREND_CHART_UI_KEY } from '~/composables/statistics/useStatisticsDailyTrendCharts'
+import {
+  SHARED_DAILY_TREND_CHART_UI_KEY,
+  type DailyTrendGranularity,
+} from '~/composables/statistics/useStatisticsDailyTrendCharts'
 
 withDefaults(
   defineProps<{
@@ -21,6 +24,21 @@ withDefaults(
 
 const { t } = useI18n()
 const charts = inject(SHARED_DAILY_TREND_CHART_UI_KEY)
+
+const trendGranularityModel = computed({
+  get: (): DailyTrendGranularity => charts?.trendGranularity.value ?? 'day',
+  set: (value: DailyTrendGranularity) => {
+    if (charts) charts.trendGranularity.value = value
+  },
+})
+
+const trendMonthsWindowModel = computed({
+  get: (): number => charts?.trendMonthsWindow.value ?? 1,
+  set: (value: number) => {
+    if (!charts) return
+    charts.trendMonthsWindow.value = Math.max(1, Math.min(24, Number(value) || 1))
+  },
+})
 </script>
 
 <template>
@@ -41,7 +59,7 @@ const charts = inject(SHARED_DAILY_TREND_CHART_UI_KEY)
         {{ t('statisticsPage.championStatsTrendsGranularity') }}
       </div>
       <select
-        v-model="charts.trendGranularity.value"
+        v-model="trendGranularityModel"
         :class="
           stacked
             ? 'w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text'
@@ -103,7 +121,7 @@ const charts = inject(SHARED_DAILY_TREND_CHART_UI_KEY)
       >
         <span class="text-[11px]">{{ t('statisticsPage.championStatsTrendsMonthsLabel') }}</span>
         <input
-          v-model.number="charts.trendMonthsWindow.value"
+          v-model.number="trendMonthsWindowModel"
           type="number"
           min="1"
           max="24"

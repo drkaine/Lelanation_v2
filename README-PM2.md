@@ -45,6 +45,18 @@ sudo env PATH=$PATH:/home/ubuntu/.nvm/versions/node/v24.4.1/bin /home/ubuntu/.nv
 
 Cette commande crée un service systemd qui démarre PM2 au boot.
 
+## Déploiement frontend (éviter les 500 / chunks manquants)
+
+Ne jamais lancer `pm2 restart lelanation-frontend` **pendant** un `npm run build` : Nitro met à jour `server.mjs` avant tous les chunks, ce qui provoque des `ERR_MODULE_NOT_FOUND` et des pages qui s’affichent puis passent en 500.
+
+Utiliser le script atomique :
+
+```bash
+./scripts/deploy-frontend.sh
+```
+
+Ou manuellement : `pm2 stop lelanation-frontend` → `npm run build` (attendre la fin) → `pm2 start lelanation-frontend`.
+
 ## Configuration
 
 Le fichier `ecosystem.config.js` à la racine du projet contient la configuration PM2.
