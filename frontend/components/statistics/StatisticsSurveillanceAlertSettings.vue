@@ -1,100 +1,98 @@
 <template>
-  <section class="space-y-3 border-t border-primary/20 pt-6">
+  <section class="space-y-3">
     <header class="space-y-1">
-      <h2 class="text-base font-semibold text-text-accent">
-        {{ t('statisticsPage.settingsAlertsTitle') }}
-      </h2>
       <p class="text-sm text-text/70">
         {{ t('statisticsPage.settingsAlertsDescription') }}
       </p>
-      <p class="pt-1 text-xs text-text/55">
-        {{ t('statisticsPage.settingsAlertsHint') }}
-      </p>
+      <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+        <p class="text-xs text-text/55">
+          {{ t('statisticsPage.settingsAlertsHint') }}
+        </p>
+        <div class="flex flex-wrap gap-2">
+          <button
+            v-if="!alertStore.sharedThresholds"
+            type="button"
+            class="rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs hover:bg-primary/10"
+            @click="resetCurrentCohort"
+          >
+            {{ t('statisticsPage.settingsAlertsResetCohort') }}
+          </button>
+          <button
+            type="button"
+            class="rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs hover:bg-primary/10"
+            @click="resetAllThresholds"
+          >
+            {{ t('statisticsPage.settingsAlertsReset') }}
+          </button>
+        </div>
+      </div>
     </header>
-
-    <nav
-      class="flex flex-wrap gap-1 border-b border-primary/20 pb-0.5"
-      role="tablist"
-      :aria-label="t('statisticsPage.settingsAlertsTabsAria')"
-    >
-      <button
-        v-for="tab in settingsTabs"
-        :key="tab.id"
-        type="button"
-        role="tab"
-        class="rounded-t border px-3 py-2 text-xs font-medium transition"
-        :class="
-          activeSettingsTab === tab.id
-            ? 'border-primary/40 border-b-transparent bg-surface/40 text-text'
-            : 'border-transparent text-text/60 hover:bg-surface/20 hover:text-text'
-        "
-        :aria-selected="activeSettingsTab === tab.id"
-        @click="activeSettingsTab = tab.id"
-      >
-        {{ tab.label }}
-      </button>
-    </nav>
 
     <p v-if="feedback" class="text-xs" :class="feedbackOk ? 'text-emerald-300' : 'text-amber-200'">
       {{ feedback }}
     </p>
 
-    <div v-show="activeSettingsTab === 'cohorts'" class="space-y-3" role="tabpanel">
-      <div class="flex flex-wrap items-center justify-end gap-2">
-        <button
-          type="button"
-          class="rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs hover:bg-primary/10"
-          @click="resetCurrentCohort"
-        >
-          {{ t('statisticsPage.settingsAlertsResetCohort') }}
-        </button>
-        <button
-          type="button"
-          class="rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs hover:bg-primary/10"
-          @click="resetAllThresholds"
-        >
-          {{ t('statisticsPage.settingsAlertsReset') }}
-        </button>
-      </div>
-
-      <div class="flex flex-wrap items-center gap-1.5">
-        <button
-          v-for="profile in alertStore.thresholdProfiles"
-          :key="profile.cohortKey"
-          type="button"
-          class="rounded-full border px-3 py-1 text-xs transition"
-          :class="
-            selectedCohortKey === profile.cohortKey
-              ? 'border-primary/60 bg-primary/15 text-text'
-              : 'border-primary/25 bg-surface/40 text-text/70 hover:bg-primary/10'
-          "
-          @click="selectedCohortKey = profile.cohortKey"
-        >
-          {{ cohortLabel(profile.cohortKey) }}
-        </button>
-        <button
-          type="button"
-          class="rounded-full border border-dashed border-primary/35 px-2.5 py-1 text-xs text-text/70 hover:bg-primary/10"
-          :title="t('statisticsPage.settingsAlertsAddCohort')"
-          @click="showAddCohort = !showAddCohort"
-        >
-          +
-        </button>
-        <button
-          v-if="canRemoveSelectedCohort"
-          type="button"
-          class="rounded border border-error/35 px-2.5 py-1 text-xs text-error hover:bg-error/10"
-          @click="removeSelectedCohort"
-        >
-          {{ t('statisticsPage.settingsAlertsRemoveCohort') }}
-        </button>
-      </div>
-
-      <div
-        v-if="showAddCohort"
-        class="space-y-2 rounded-lg border border-dashed border-primary/30 bg-surface/20 p-3"
+    <div class="flex flex-wrap items-center gap-1.5">
+      <button
+        v-for="profile in alertStore.thresholdProfiles"
+        :key="profile.cohortKey"
+        type="button"
+        class="rounded-full border px-3 py-1 text-xs transition"
+        :class="
+          selectedCohortKey === profile.cohortKey
+            ? 'border-primary/60 bg-primary/15 text-text'
+            : 'border-primary/25 bg-surface/40 text-text/70 hover:bg-primary/10'
+        "
+        @click="selectCohort(profile.cohortKey)"
       >
-        <p class="text-xs text-text/65">{{ t('statisticsPage.settingsAlertsAddCohortHint') }}</p>
+        {{ cohortLabel(profile.cohortKey) }}
+      </button>
+      <button
+        type="button"
+        class="rounded-full border border-dashed border-primary/35 px-2.5 py-1 text-xs text-text/70 hover:bg-primary/10"
+        :title="t('statisticsPage.settingsAlertsAddCohort')"
+        @click="toggleAddCohort"
+      >
+        +
+      </button>
+      <button
+        v-if="canEditSelectedCohort"
+        type="button"
+        class="rounded border border-primary/35 px-2.5 py-1 text-xs text-text/80 hover:bg-primary/10"
+        :class="showEditCohort ? 'bg-primary/15' : 'bg-surface/40'"
+        @click="toggleEditCohort"
+      >
+        {{
+          showEditCohort
+            ? t('statisticsPage.settingsAlertsEditCohortDone')
+            : t('statisticsPage.settingsAlertsEditCohort')
+        }}
+      </button>
+      <button
+        v-if="canRemoveSelectedCohort"
+        type="button"
+        class="rounded border border-error/35 px-2.5 py-1 text-xs text-error hover:bg-error/10"
+        @click="removeSelectedCohort"
+      >
+        {{ t('statisticsPage.settingsAlertsRemoveCohort') }}
+      </button>
+    </div>
+
+    <div
+      v-if="showAddCohort"
+      class="space-y-2 rounded-lg border border-dashed border-primary/30 bg-surface/20 p-3"
+    >
+      <p class="text-xs text-text/65">{{ t('statisticsPage.settingsAlertsAddCohortHint') }}</p>
+      <div class="flex flex-wrap items-center gap-2">
+        <input
+          id="surveillance-new-cohort-name"
+          :value="pendingCohortName"
+          type="text"
+          maxlength="64"
+          class="min-w-[10rem] max-w-xs rounded border border-primary/35 bg-background px-2 py-1.5 text-xs text-text placeholder:text-text/45"
+          :placeholder="pendingCohortDefaultLabel || t('statisticsPage.settingsAlertsCohortName')"
+          @input="onPendingCohortNameInput(($event.target as HTMLInputElement).value)"
+        />
         <div class="flex flex-wrap gap-1">
           <button
             v-for="tier in RANK_TIERS"
@@ -119,214 +117,302 @@
             />
           </button>
         </div>
-        <button
-          type="button"
-          class="rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs hover:bg-primary/10 disabled:opacity-50"
-          :disabled="pendingRankTiers.length === 0"
-          @click="confirmAddCohort"
-        >
-          {{ t('statisticsPage.settingsAlertsAddCohort') }}
-        </button>
       </div>
-
-      <div v-if="selectedProfile" class="space-y-2">
-        <div>
-          <div class="mb-1 text-xs font-medium text-text/70">
-            {{ t('statisticsPage.settingsAlertsCohortDivisions') }}
-          </div>
-          <p v-if="isGlobalCohort" class="text-xs text-text/55">
-            {{ t('statisticsPage.settingsAlertsGlobalCohortHint') }}
-          </p>
-          <div v-else class="flex flex-wrap gap-1">
-            <button
-              v-for="tier in RANK_TIERS"
-              :key="'edit-' + tier"
-              type="button"
-              class="stats-division-btn rounded p-0.5 transition-colors"
-              :class="
-                selectedProfile.rankTiers.includes(tier)
-                  ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
-                  : 'bg-black/20 hover:bg-white/10'
-              "
-              :title="formatDivisionLabel(tier)"
-              @click="toggleSelectedCohortTier(tier)"
-            >
-              <img
-                v-if="getRankedEmblemUrl(tier)"
-                :src="getRankedEmblemUrl(tier)!"
-                :alt="tier"
-                class="h-3 w-3 object-contain"
-                width="12"
-                height="12"
-              />
-            </button>
-          </div>
-        </div>
-
-        <div class="overflow-x-auto rounded-lg border border-primary/25 bg-surface/30">
-          <table class="w-full min-w-[28rem] text-left text-xs">
-            <thead>
-              <tr class="border-b border-primary/20 text-text/60">
-                <th class="px-3 py-2 font-medium">
-                  {{ t('statisticsPage.settingsAlertsMetric') }}
-                </th>
-                <th class="px-3 py-2 font-medium">{{ t('statisticsPage.settingsAlertsMin') }}</th>
-                <th class="px-3 py-2 font-medium">{{ t('statisticsPage.settingsAlertsMax') }}</th>
-                <th class="px-3 py-2 font-medium">{{ t('statisticsPage.settingsAlertsDelta') }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="row in rows"
-                :key="row.metric"
-                class="border-b border-primary/10 last:border-b-0"
-              >
-                <th class="px-3 py-2 font-medium text-text/85">{{ row.label }}</th>
-                <td class="px-3 py-2">
-                  <input
-                    :value="displayValue(row.minKey)"
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    class="w-full max-w-[5.5rem] rounded border border-primary/35 bg-background px-2 py-1 text-text"
-                    :placeholder="t('statisticsPage.settingsAlertsPlaceholder')"
-                    @input="onInput(row.minKey, ($event.target as HTMLInputElement).value)"
-                  />
-                </td>
-                <td class="px-3 py-2">
-                  <input
-                    :value="displayValue(row.maxKey)"
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    class="w-full max-w-[5.5rem] rounded border border-primary/35 bg-background px-2 py-1 text-text"
-                    :placeholder="t('statisticsPage.settingsAlertsPlaceholder')"
-                    @input="onInput(row.maxKey, ($event.target as HTMLInputElement).value)"
-                  />
-                </td>
-                <td class="px-3 py-2">
-                  <input
-                    :value="displayValue(row.deltaKey)"
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    class="w-full max-w-[5.5rem] rounded border border-primary/35 bg-background px-2 py-1 text-text"
-                    :placeholder="t('statisticsPage.settingsAlertsPlaceholder')"
-                    @input="onInput(row.deltaKey, ($event.target as HTMLInputElement).value)"
-                  />
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <div v-show="activeSettingsTab === 'reference'" class="space-y-3" role="tabpanel">
-      <div class="space-y-2 rounded-lg border border-primary/20 bg-surface/20 p-3">
-        <div class="text-xs font-medium text-text/80">
-          {{ t('statisticsPage.settingsAlertsReferenceTitle') }}
-        </div>
-        <p class="text-xs text-text/55">
-          {{ t('statisticsPage.settingsAlertsReferenceHint') }}
-        </p>
-        <div class="flex flex-wrap gap-3 text-xs">
-          <label class="inline-flex items-center gap-1.5">
-            <input
-              v-model="referenceMode"
-              type="radio"
-              class="accent-primary"
-              value="current_patch"
-            />
-            {{ t('statisticsPage.settingsAlertsReferenceCurrentPatch') }}
-          </label>
-          <label class="inline-flex items-center gap-1.5">
-            <input v-model="referenceMode" type="radio" class="accent-primary" value="date" />
-            {{ t('statisticsPage.settingsAlertsReferenceDate') }}
-          </label>
-          <label class="inline-flex items-center gap-1.5">
-            <input v-model="referenceMode" type="radio" class="accent-primary" value="patch" />
-            {{ t('statisticsPage.settingsAlertsReferencePatch') }}
-          </label>
-        </div>
-        <div v-if="referenceMode === 'date'" class="flex flex-wrap items-center gap-2">
-          <label class="text-xs text-text/70" for="surveillance-ref-date">
-            {{ t('statisticsPage.settingsAlertsReferenceDateLabel') }}
-          </label>
-          <input
-            id="surveillance-ref-date"
-            v-model="referenceDateInput"
-            type="date"
-            class="rounded border border-primary/35 bg-background px-2 py-1 text-xs text-text"
-          />
-        </div>
-        <div v-else-if="referenceMode === 'patch'" class="flex flex-wrap items-center gap-2">
-          <label class="text-xs text-text/70" for="surveillance-ref-patch">
-            {{ t('statisticsPage.settingsAlertsReferencePatchLabel') }}
-          </label>
-          <select
-            id="surveillance-ref-patch"
-            v-model="referencePatchInput"
-            class="rounded border border-primary/35 bg-background px-2 py-1 text-xs text-text"
-          >
-            <option value="">
-              {{ t('statisticsPage.settingsAlertsReferencePatchPlaceholder') }}
-            </option>
-            <option
-              v-for="patch in versionsCatalog"
-              :key="patch.patchLabel"
-              :value="patch.patchLabel"
-            >
-              {{ patch.patchLabel }}
-            </option>
-          </select>
-        </div>
-        <p v-else class="text-xs text-text/55">
-          {{
-            t('statisticsPage.settingsAlertsReferenceCurrentPatchHint', {
-              patch: currentPatchLabel || '—',
-            })
-          }}
-        </p>
-        <p v-if="resolvedReferenceLabel" class="text-xs text-text/55">
-          {{
-            t('statisticsPage.settingsAlertsReferenceActive', { reference: resolvedReferenceLabel })
-          }}
-        </p>
-      </div>
-    </div>
-
-    <div v-show="activeSettingsTab === 'verify'" class="space-y-3" role="tabpanel">
-      <p class="text-xs text-text/65">
-        {{ t('statisticsPage.settingsAlertsVerifyHint') }}
+      <p class="text-xs text-text/55">
+        {{ t('statisticsPage.settingsAlertsCohortNameHint') }}
       </p>
-      <div class="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          class="rounded border border-primary bg-primary/20 px-4 py-2 text-sm font-medium text-text hover:bg-primary/30 disabled:opacity-50"
-          :disabled="busy || watchedCount === 0 || !canRunCheck"
-          @click="saveAndRunCheck"
-        >
-          {{ t('statisticsPage.settingsAlertsSaveAndCheck') }}
-        </button>
-        <span v-if="resolvedReferenceLabel" class="text-xs text-text/55">
-          {{
-            t('statisticsPage.settingsAlertsReferenceActive', { reference: resolvedReferenceLabel })
-          }}
-        </span>
-      </div>
-      <p v-if="watchedCount === 0" class="text-xs text-amber-200/90">
-        {{ t('statisticsPage.settingsAlertsTestNoWatchlist') }}
-      </p>
+      <button
+        type="button"
+        class="rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs hover:bg-primary/10 disabled:opacity-50"
+        :disabled="pendingRankTiers.length === 0"
+        @click="confirmAddCohort"
+      >
+        {{ t('statisticsPage.settingsAlertsAddCohort') }}
+      </button>
     </div>
 
     <div
-      v-show="activeSettingsTab === 'test'"
+      v-if="showEditCohort && selectedProfile"
+      class="space-y-2 rounded-lg border border-dashed border-primary/30 bg-surface/20 p-3"
+    >
+      <p class="text-xs text-text/65">{{ t('statisticsPage.settingsAlertsEditCohortHint') }}</p>
+      <div class="flex flex-wrap items-center gap-2">
+        <input
+          id="surveillance-cohort-name"
+          :value="cohortNameInput"
+          type="text"
+          maxlength="64"
+          class="min-w-[10rem] max-w-xs rounded border border-primary/35 bg-background px-2 py-1.5 text-xs text-text placeholder:text-text/45"
+          :placeholder="cohortDefaultLabel(selectedCohortKey)"
+          @input="onCohortNameInput(($event.target as HTMLInputElement).value)"
+        />
+        <div class="flex flex-wrap gap-1">
+          <button
+            v-for="tier in RANK_TIERS"
+            :key="'edit-' + tier"
+            type="button"
+            class="stats-division-btn rounded p-0.5 transition-colors"
+            :class="
+              selectedProfile.rankTiers.includes(tier)
+                ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
+                : 'bg-black/20 hover:bg-white/10'
+            "
+            :title="formatDivisionLabel(tier)"
+            @click="toggleSelectedCohortTier(tier)"
+          >
+            <img
+              v-if="getRankedEmblemUrl(tier)"
+              :src="getRankedEmblemUrl(tier)!"
+              :alt="tier"
+              class="h-3 w-3 object-contain"
+              width="12"
+              height="12"
+            />
+          </button>
+        </div>
+      </div>
+      <p class="text-xs text-text/55">
+        {{ t('statisticsPage.settingsAlertsCohortNameHint') }}
+      </p>
+    </div>
+
+    <div v-if="selectedProfile" class="space-y-2">
+      <p
+        v-if="!showEditCohort && canEditSelectedCohort"
+        class="flex flex-wrap items-center gap-2 text-xs text-text/60"
+      >
+        <span>{{ cohortLabel(selectedCohortKey) }}</span>
+        <span class="flex gap-0.5" aria-hidden="true">
+          <img
+            v-for="tier in selectedProfile.rankTiers"
+            v-show="getRankedEmblemUrl(tier)"
+            :key="'view-' + tier"
+            :src="getRankedEmblemUrl(tier)!"
+            :alt="formatDivisionLabel(tier)"
+            class="h-3 w-3 object-contain opacity-80"
+            width="12"
+            height="12"
+          />
+        </span>
+      </p>
+      <p v-else-if="isGlobalCohort" class="text-xs text-text/55">
+        {{ t('statisticsPage.settingsAlertsGlobalCohortHint') }}
+      </p>
+
+      <div
+        class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/20 bg-surface/20 px-3 py-2"
+      >
+        <div class="space-y-0.5">
+          <div class="text-xs font-medium text-text/80">
+            {{ t('statisticsPage.settingsAlertsThresholdModeTitle') }}
+          </div>
+          <p class="text-xs text-text/55">
+            {{
+              alertStore.sharedThresholds
+                ? t('statisticsPage.settingsAlertsThresholdModeSharedHint')
+                : t('statisticsPage.settingsAlertsThresholdModeSeparateHint')
+            }}
+          </p>
+        </div>
+        <button
+          type="button"
+          class="command-toggle command-toggle-button shrink-0 scale-90"
+          :aria-pressed="alertStore.sharedThresholds"
+          :aria-label="t('statisticsPage.settingsAlertsThresholdModeTitle')"
+          @click="toggleSharedThresholds"
+        >
+          <span class="command-toggle-track" :class="{ active: alertStore.sharedThresholds }">
+            <span class="command-toggle-thumb" />
+          </span>
+        </button>
+      </div>
+
+      <div class="overflow-x-auto rounded-lg border border-primary/25 bg-surface/30">
+        <table class="w-full min-w-[28rem] text-left text-xs">
+          <thead>
+            <tr class="border-b border-primary/20 text-text/60">
+              <th class="px-3 py-2 font-medium">
+                {{ t('statisticsPage.settingsAlertsMetric') }}
+              </th>
+              <th class="px-3 py-2 font-medium">{{ t('statisticsPage.settingsAlertsMin') }}</th>
+              <th class="px-3 py-2 font-medium">{{ t('statisticsPage.settingsAlertsMax') }}</th>
+              <th class="px-3 py-2 font-medium">{{ t('statisticsPage.settingsAlertsDelta') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="row in rows"
+              :key="row.metric"
+              class="border-b border-primary/10 last:border-b-0"
+            >
+              <th class="px-3 py-2 font-medium text-text/85">{{ row.label }}</th>
+              <td class="px-3 py-2">
+                <input
+                  :value="displayValue(row.minKey)"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  class="w-full max-w-[5.5rem] rounded border border-primary/35 bg-background px-2 py-1 text-text"
+                  :placeholder="t('statisticsPage.settingsAlertsPlaceholder')"
+                  @input="onInput(row.minKey, ($event.target as HTMLInputElement).value)"
+                />
+              </td>
+              <td class="px-3 py-2">
+                <input
+                  :value="displayValue(row.maxKey)"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  class="w-full max-w-[5.5rem] rounded border border-primary/35 bg-background px-2 py-1 text-text"
+                  :placeholder="t('statisticsPage.settingsAlertsPlaceholder')"
+                  @input="onInput(row.maxKey, ($event.target as HTMLInputElement).value)"
+                />
+              </td>
+              <td class="px-3 py-2">
+                <input
+                  :value="displayValue(row.deltaKey)"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  class="w-full max-w-[5.5rem] rounded border border-primary/35 bg-background px-2 py-1 text-text"
+                  :placeholder="t('statisticsPage.settingsAlertsPlaceholder')"
+                  @input="onInput(row.deltaKey, ($event.target as HTMLInputElement).value)"
+                />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="space-y-2 rounded-lg border border-primary/20 bg-surface/20 p-3">
+      <div class="text-xs font-medium text-text/80">
+        {{ t('statisticsPage.settingsAlertsReferenceTitle') }}
+      </div>
+      <p class="text-xs text-text/55">
+        {{ t('statisticsPage.settingsAlertsReferenceHint') }}
+      </p>
+      <div class="flex flex-wrap gap-3 text-xs">
+        <label class="inline-flex items-center gap-1.5">
+          <input
+            v-model="referenceMode"
+            type="radio"
+            class="accent-primary"
+            value="current_patch"
+          />
+          {{ t('statisticsPage.settingsAlertsReferenceCurrentPatch') }}
+        </label>
+        <label class="inline-flex items-center gap-1.5">
+          <input v-model="referenceMode" type="radio" class="accent-primary" value="date" />
+          {{ t('statisticsPage.settingsAlertsReferenceDate') }}
+        </label>
+        <label class="inline-flex items-center gap-1.5">
+          <input v-model="referenceMode" type="radio" class="accent-primary" value="patch" />
+          {{ t('statisticsPage.settingsAlertsReferencePatch') }}
+        </label>
+      </div>
+      <div v-if="referenceMode === 'date'" class="space-y-1.5">
+        <div class="flex flex-wrap items-center gap-2">
+          <label class="text-xs text-text/70" for="surveillance-ref-date-text">
+            {{ t('statisticsPage.settingsAlertsReferenceDateLabel') }}
+          </label>
+          <input
+            id="surveillance-ref-date-text"
+            :value="referenceDateText"
+            type="text"
+            inputmode="numeric"
+            autocomplete="off"
+            placeholder="YYYY-MM-DD"
+            maxlength="10"
+            class="min-w-[8.5rem] rounded border border-primary/35 bg-background px-2 py-1 text-xs text-text placeholder:text-text/45"
+            :class="referenceDateInvalid ? 'border-amber-500/60' : ''"
+            @input="onReferenceDateTextInput(($event.target as HTMLInputElement).value)"
+            @blur="commitReferenceDateText"
+          />
+          <input
+            id="surveillance-ref-date"
+            :value="referenceDatePickerValue"
+            type="date"
+            class="rounded border border-primary/35 bg-background px-2 py-1 text-xs text-text"
+            :min="dailySnapshotMinDate ?? undefined"
+            :max="dailySnapshotMaxDate ?? undefined"
+            @input="onReferenceDatePickerInput(($event.target as HTMLInputElement).value)"
+          />
+        </div>
+        <p v-if="dailySnapshotBoundsReady" class="text-xs text-text/55">
+          {{
+            t('statisticsPage.settingsAlertsReferenceDateRangeHint', {
+              min: dailySnapshotMinDate,
+              max: dailySnapshotMaxDate,
+            })
+          }}
+        </p>
+        <p v-else class="text-xs text-text/55">
+          {{ t('statisticsPage.settingsAlertsReferenceDateRangeLoading') }}
+        </p>
+        <p v-if="referenceDateInvalid" class="text-xs text-amber-200/90">
+          {{ t('statisticsPage.settingsAlertsReferenceDateInvalid') }}
+        </p>
+      </div>
+      <div v-else-if="referenceMode === 'patch'" class="flex flex-wrap items-center gap-2">
+        <label class="text-xs text-text/70" for="surveillance-ref-patch">
+          {{ t('statisticsPage.settingsAlertsReferencePatchLabel') }}
+        </label>
+        <select
+          id="surveillance-ref-patch"
+          v-model="referencePatchInput"
+          class="rounded border border-primary/35 bg-background px-2 py-1 text-xs text-text"
+        >
+          <option value="">
+            {{ t('statisticsPage.settingsAlertsReferencePatchPlaceholder') }}
+          </option>
+          <option
+            v-for="patch in versionsCatalog"
+            :key="patch.patchLabel"
+            :value="patch.patchLabel"
+          >
+            {{ patch.patchLabel }}
+          </option>
+        </select>
+      </div>
+      <p v-else class="text-xs text-text/55">
+        {{
+          t('statisticsPage.settingsAlertsReferenceCurrentPatchHint', {
+            patch: currentPatchLabel || '—',
+          })
+        }}
+      </p>
+      <p v-if="resolvedReferenceLabel" class="text-xs text-text/55">
+        {{
+          t('statisticsPage.settingsAlertsReferenceActive', { reference: resolvedReferenceLabel })
+        }}
+      </p>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-3 pt-1">
+      <button
+        type="button"
+        class="rounded border border-primary bg-primary/20 px-4 py-2 text-sm font-medium text-text hover:bg-primary/30 disabled:opacity-50"
+        :disabled="busy || watchedCount === 0 || !canRunCheck"
+        @click="saveAndRunCheck"
+      >
+        {{ t('statisticsPage.settingsAlertsSaveAndCheck') }}
+      </button>
+      <span v-if="resolvedReferenceLabel" class="text-xs text-text/55">
+        {{
+          t('statisticsPage.settingsAlertsReferenceActive', { reference: resolvedReferenceLabel })
+        }}
+      </span>
+    </div>
+    <p v-if="watchedCount === 0" class="text-xs text-amber-200/90">
+      {{ t('statisticsPage.settingsAlertsTestNoWatchlist') }}
+    </p>
+
+    <section
       class="space-y-3 rounded-lg border border-dashed border-amber-500/40 bg-amber-500/5 p-3"
-      role="tabpanel"
     >
       <header class="space-y-1">
         <h3 class="text-sm font-semibold text-amber-200/90">
@@ -395,7 +481,7 @@
           {{ t('statisticsPage.settingsAlertsTestClear') }}
         </button>
       </div>
-    </div>
+    </section>
   </section>
 </template>
 
@@ -404,6 +490,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useSurveillanceAlertEvaluation } from '~/composables/useSurveillanceAlertEvaluation'
 import { useStatisticsSurveillanceAlertStore } from '~/stores/StatisticsSurveillanceAlertStore'
 import { useStatisticsUiStore } from '~/stores/StatisticsUiStore'
+import { apiUrl } from '~/utils/apiUrl'
 import { getRankedEmblemUrl } from '~/utils/rankedEmblem'
 import { RANK_TIERS } from '~/utils/rankTiers'
 import type {
@@ -414,10 +501,14 @@ import type {
 import {
   SURVEILLANCE_GLOBAL_COHORT_KEY,
   configuredSurveillanceCohortProfiles,
+  clampIsoDate,
   formatSurveillanceCohortLabel,
   hasConfiguredSurveillanceThresholds,
+  parseTypedIsoDate,
   parseSurveillanceBaselineKey,
+  resolveSurveillanceCohortLabel,
   resolveSurveillanceReference,
+  surveillanceCohortKey,
 } from '~/utils/statisticsSurveillanceAlerts'
 
 const { t } = useI18n()
@@ -434,31 +525,36 @@ if (import.meta.client) {
 const busy = ref(false)
 const feedback = ref('')
 const feedbackOk = ref(true)
-const activeSettingsTab = ref<'cohorts' | 'reference' | 'verify' | 'test'>('cohorts')
 const selectedCohortKey = ref(SURVEILLANCE_GLOBAL_COHORT_KEY)
 const showAddCohort = ref(false)
+const showEditCohort = ref(false)
 const pendingRankTiers = ref<string[]>([])
+const pendingCohortName = ref('')
 const versionsCatalog = ref<SurveillanceVersionsCatalogEntry[]>([])
+const dailySnapshotMinDate = ref<string | null>(null)
+const dailySnapshotMaxDate = ref<string | null>(null)
+const dailySnapshotBoundsLoaded = ref(false)
+const referenceDateText = ref('')
+const referenceDateInvalid = ref(false)
 
 type ThresholdKey = keyof SurveillanceAlertThresholds
 
-const watchedCount = computed(() => statisticsUiStore.watchedChampionIds.length)
+const dailySnapshotBoundsReady = computed(
+  () =>
+    dailySnapshotBoundsLoaded.value &&
+    Boolean(dailySnapshotMinDate.value && dailySnapshotMaxDate.value)
+)
 
-const settingsTabs = computed(() => [
-  { id: 'cohorts' as const, label: t('statisticsPage.settingsAlertsTabCohorts') },
-  { id: 'reference' as const, label: t('statisticsPage.settingsAlertsTabReference') },
-  { id: 'verify' as const, label: t('statisticsPage.settingsAlertsTabVerify') },
-  { id: 'test' as const, label: t('statisticsPage.settingsAlertsTabTest') },
-])
+const referenceDatePickerValue = computed(() => {
+  const stored = alertStore.referenceSettings.referenceDate
+  return stored && parseTypedIsoDate(stored) ? stored : ''
+})
+
+const watchedCount = computed(() => statisticsUiStore.watchedChampionIds.length)
 
 const referenceMode = computed({
   get: () => alertStore.referenceSettings.mode,
   set: (mode: SurveillanceReferenceMode) => alertStore.setReferenceSettings({ mode }),
-})
-
-const referenceDateInput = computed({
-  get: () => alertStore.referenceSettings.referenceDate ?? '',
-  set: (value: string) => alertStore.setReferenceSettings({ referenceDate: value.trim() || null }),
 })
 
 const referencePatchInput = computed({
@@ -507,13 +603,86 @@ onMounted(async () => {
   } catch {
     versionsCatalog.value = []
   }
+
+  try {
+    const bounds = await $fetch<{ minDate: string | null; maxDate: string | null }>(
+      apiUrl('/api/stats/tier-daily-snapshots/date-bounds')
+    )
+    if (bounds.minDate && bounds.maxDate) {
+      dailySnapshotMinDate.value = bounds.minDate
+      dailySnapshotMaxDate.value = bounds.maxDate
+      const stored = alertStore.referenceSettings.referenceDate
+      if (stored) {
+        const clamped = clampIsoDate(stored, bounds.minDate, bounds.maxDate)
+        if (clamped !== stored) {
+          alertStore.setReferenceSettings({ referenceDate: clamped })
+        }
+        referenceDateText.value = clamped
+      }
+    }
+  } catch {
+    dailySnapshotMinDate.value = null
+    dailySnapshotMaxDate.value = null
+  } finally {
+    dailySnapshotBoundsLoaded.value = true
+  }
 })
+
+watch(
+  () => alertStore.referenceSettings.referenceDate,
+  value => {
+    referenceDateText.value = value ?? ''
+    referenceDateInvalid.value = false
+  },
+  { immediate: true }
+)
+
+function commitReferenceDate(iso: string | null): void {
+  referenceDateInvalid.value = false
+  if (!iso) {
+    referenceDateText.value = ''
+    alertStore.setReferenceSettings({ referenceDate: null })
+    return
+  }
+  const min = dailySnapshotMinDate.value
+  const max = dailySnapshotMaxDate.value
+  const clamped = min && max ? clampIsoDate(iso, min, max) : iso
+  referenceDateText.value = clamped
+  alertStore.setReferenceSettings({ referenceDate: clamped })
+}
+
+function onReferenceDateTextInput(raw: string): void {
+  referenceDateText.value = raw
+  referenceDateInvalid.value = false
+  const parsed = parseTypedIsoDate(raw)
+  if (parsed) commitReferenceDate(parsed)
+}
+
+function commitReferenceDateText(): void {
+  const raw = referenceDateText.value.trim()
+  if (!raw) {
+    commitReferenceDate(null)
+    return
+  }
+  const parsed = parseTypedIsoDate(raw)
+  if (!parsed) {
+    referenceDateInvalid.value = true
+    return
+  }
+  commitReferenceDate(parsed)
+}
+
+function onReferenceDatePickerInput(raw: string): void {
+  commitReferenceDate(raw.trim() || null)
+}
 
 const selectedProfile = computed(() =>
   alertStore.thresholdProfiles.find(p => p.cohortKey === selectedCohortKey.value)
 )
 
 const isGlobalCohort = computed(() => selectedCohortKey.value === SURVEILLANCE_GLOBAL_COHORT_KEY)
+
+const canEditSelectedCohort = computed(() => !isGlobalCohort.value)
 
 const canRemoveSelectedCohort = computed(() => !isGlobalCohort.value)
 
@@ -530,10 +699,28 @@ watch(
   keys => {
     if (!keys.includes(selectedCohortKey.value)) {
       selectedCohortKey.value = keys[0] ?? SURVEILLANCE_GLOBAL_COHORT_KEY
+      showEditCohort.value = false
     }
   },
   { immediate: true }
 )
+
+function selectCohort(cohortKey: string): void {
+  if (cohortKey !== selectedCohortKey.value) {
+    showEditCohort.value = false
+  }
+  selectedCohortKey.value = cohortKey
+}
+
+function toggleAddCohort(): void {
+  showAddCohort.value = !showAddCohort.value
+  if (showAddCohort.value) showEditCohort.value = false
+}
+
+function toggleEditCohort(): void {
+  showEditCohort.value = !showEditCohort.value
+  if (showEditCohort.value) showAddCohort.value = false
+}
 
 const rows = computed(() => [
   {
@@ -560,7 +747,33 @@ const rows = computed(() => [
 ])
 
 function cohortLabel(cohortKey: string): string {
+  const profile = alertStore.thresholdProfiles.find(p => p.cohortKey === cohortKey)
+  return resolveSurveillanceCohortLabel(profile ?? { cohortKey, label: null }, key => t(key))
+}
+
+function cohortDefaultLabel(cohortKey: string): string {
   return formatSurveillanceCohortLabel(cohortKey, key => t(key))
+}
+
+const cohortNameInput = computed({
+  get: () => selectedProfile.value?.label ?? '',
+  set: (value: string) => {
+    if (!selectedProfile.value) return
+    alertStore.setCohortLabel(selectedCohortKey.value, value)
+  },
+})
+
+function onCohortNameInput(raw: string): void {
+  cohortNameInput.value = raw
+}
+
+const pendingCohortDefaultLabel = computed(() => {
+  if (pendingRankTiers.value.length === 0) return ''
+  return formatSurveillanceCohortLabel(surveillanceCohortKey(pendingRankTiers.value), key => t(key))
+})
+
+function onPendingCohortNameInput(raw: string): void {
+  pendingCohortName.value = raw
 }
 
 function formatDivisionLabel(tier: string): string {
@@ -588,6 +801,16 @@ function onInput(key: ThresholdKey, raw: string): void {
   alertStore.setProfileThresholds(selectedCohortKey.value, { [key]: parseInput(raw) })
 }
 
+function toggleSharedThresholds(): void {
+  const next = !alertStore.sharedThresholds
+  alertStore.setSharedThresholds(next, selectedCohortKey.value)
+  showFeedback(
+    next
+      ? t('statisticsPage.settingsAlertsThresholdModeSharedEnabled')
+      : t('statisticsPage.settingsAlertsThresholdModeSeparateEnabled')
+  )
+}
+
 function resetCurrentCohort(): void {
   alertStore.resetProfileThresholds(selectedCohortKey.value)
   showFeedback(t('statisticsPage.settingsAlertsResetCohortDone'))
@@ -595,7 +818,6 @@ function resetCurrentCohort(): void {
 
 function resetAllThresholds(): void {
   alertStore.resetThresholds()
-  selectedCohortKey.value = SURVEILLANCE_GLOBAL_COHORT_KEY
   showFeedback(t('statisticsPage.settingsAlertsResetDone'))
 }
 
@@ -607,8 +829,12 @@ function togglePendingTier(tier: string): void {
 function confirmAddCohort(): void {
   if (pendingRankTiers.value.length === 0) return
   const key = alertStore.addCohortProfile(pendingRankTiers.value)
+  if (pendingCohortName.value.trim()) {
+    alertStore.setCohortLabel(key, pendingCohortName.value)
+  }
   selectedCohortKey.value = key
   pendingRankTiers.value = []
+  pendingCohortName.value = ''
   showAddCohort.value = false
 }
 
@@ -628,6 +854,7 @@ function removeSelectedCohort(): void {
   if (isGlobalCohort.value) return
   alertStore.removeCohortProfile(selectedCohortKey.value)
   selectedCohortKey.value = SURVEILLANCE_GLOBAL_COHORT_KEY
+  showEditCohort.value = false
 }
 
 async function withBusy<T>(fn: () => Promise<T>): Promise<T | undefined> {

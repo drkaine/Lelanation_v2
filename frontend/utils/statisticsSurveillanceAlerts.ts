@@ -28,11 +28,15 @@ export interface SurveillanceCohortProfile {
   cohortKey: string
   /** Vide = global (toutes divisions). */
   rankTiers: string[]
+  /** Libellé affiché ; vide = dérivé des divisions. */
+  label: string | null
   thresholds: SurveillanceAlertThresholds
 }
 
 export interface SurveillanceThresholdsStorageV2 {
   version: 2
+  /** Mêmes seuils pour toutes les cohortes. */
+  sharedThresholds?: boolean
   profiles: SurveillanceCohortProfile[]
 }
 
@@ -75,12 +79,19 @@ export function defaultSurveillanceCohortProfile(
   return {
     cohortKey: surveillanceCohortKey(tiers),
     rankTiers: tiers,
+    label: null,
     thresholds: defaultSurveillanceAlertThresholds(),
   }
 }
 
 export function defaultSurveillanceThresholdProfiles(): SurveillanceCohortProfile[] {
   return [defaultSurveillanceCohortProfile()]
+}
+
+export function normalizeSurveillanceCohortLabel(value: unknown): string | null {
+  const trimmed = String(value ?? '').trim()
+  if (!trimmed) return null
+  return trimmed.slice(0, 64)
 }
 
 export function formatSurveillanceCohortLabel(
@@ -92,6 +103,15 @@ export function formatSurveillanceCohortLabel(
     return translate?.('statisticsPage.allRanks') ?? 'Global'
   }
   return tiers.map(tier => tier.charAt(0) + tier.slice(1).toLowerCase()).join(' + ')
+}
+
+export function resolveSurveillanceCohortLabel(
+  profile: Pick<SurveillanceCohortProfile, 'cohortKey' | 'label'>,
+  translate?: (key: string) => string
+): string {
+  const custom = normalizeSurveillanceCohortLabel(profile.label)
+  if (custom) return custom
+  return formatSurveillanceCohortLabel(profile.cohortKey, translate)
 }
 
 export function buildSurveillanceBaselineKey(
@@ -219,6 +239,7 @@ export function normalizeSurveillanceCohortProfile(
   return {
     cohortKey,
     rankTiers,
+    label: normalizeSurveillanceCohortLabel(value.label),
     thresholds: normalizeSurveillanceAlertThresholds(value.thresholds),
   }
 }
@@ -244,36 +265,68 @@ export function normalizeSurveillanceCohortProfiles(value: unknown): Surveillanc
 }
 
 /** Migration v1 (seuils plats) → profils par cohorte. */
-export function migrateSurveillanceThresholdsStorage(raw: unknown): SurveillanceCohortProfile[] {
-  if (!raw || typeof raw !== 'object') return defaultSurveillanceThresholdProfiles()
+export function migrateSurveillanceThresholdsStorage(
+  raw: unknown
+): SurveillanceThresholdsStorageV2 {
+  if (!raw || typeof raw !== 'object') {
+    return serializeSurveillanceThresholdsStorage(defaultSurveillanceThresholdProfiles(), false)
+  }
 
   const record = raw as Record<string, unknown>
   if (record.version === 2 && Array.isArray(record.profiles)) {
-    return normalizeSurveillanceCohortProfiles(record.profiles)
+    return serializeSurveillanceThresholdsStorage(
+      normalizeSurveillanceCohortProfiles(record.profiles),
+      record.sharedThresholds === true
+    )
   }
 
   if ('winrateMin' in record || 'winrateMax' in record || 'winrateDeltaPct' in record) {
-    return [
-      {
-        cohortKey: SURVEILLANCE_GLOBAL_COHORT_KEY,
-        rankTiers: [],
-        thresholds: normalizeSurveillanceAlertThresholds(
-          record as Partial<SurveillanceAlertThresholds>
-        ),
-      },
-    ]
+    return serializeSurveillanceThresholdsStorage(
+      [
+        {
+          cohortKey: SURVEILLANCE_GLOBAL_COHORT_KEY,
+          rankTiers: [],
+          label: null,
+          thresholds: normalizeSurveillanceAlertThresholds(
+            record as Partial<SurveillanceAlertThresholds>
+          ),
+        },
+      ],
+      false
+    )
   }
 
-  return defaultSurveillanceThresholdProfiles()
+  return serializeSurveillanceThresholdsStorage(defaultSurveillanceThresholdProfiles(), false)
 }
 
 export function serializeSurveillanceThresholdProfiles(
   profiles: readonly SurveillanceCohortProfile[]
 ): SurveillanceThresholdsStorageV2 {
+  return serializeSurveillanceThresholdsStorage(profiles, false)
+}
+
+export function serializeSurveillanceThresholdsStorage(
+  profiles: readonly SurveillanceCohortProfile[],
+  sharedThresholds: boolean
+): SurveillanceThresholdsStorageV2 {
   return {
     version: 2,
+    sharedThresholds,
     profiles: normalizeSurveillanceCohortProfiles([...profiles]),
   }
+}
+
+export function syncProfilesSharedThresholds(
+  profiles: readonly SurveillanceCohortProfile[],
+  thresholds: SurveillanceAlertThresholds
+): SurveillanceCohortProfile[] {
+  const normalized = normalizeSurveillanceAlertThresholds(thresholds)
+  return normalizeSurveillanceCohortProfiles(
+    profiles.map(profile => ({
+      ...profile,
+      thresholds: { ...normalized },
+    }))
+  )
 }
 
 export function configuredSurveillanceCohortProfiles(
@@ -389,6 +442,18 @@ export function normalizeIsoDate(value: unknown): string | null {
   const raw = String(value ?? '').trim()
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null
   return raw
+}
+
+export function clampIsoDate(date: string, min: string, max: string): string {
+  const iso = normalizeIsoDate(date)
+  if (!iso) return min
+  if (iso < min) return min
+  if (iso > max) return max
+  return iso
+}
+
+export function parseTypedIsoDate(value: unknown): string | null {
+  return normalizeIsoDate(value)
 }
 
 export function normalizeSurveillanceReferenceSettings(

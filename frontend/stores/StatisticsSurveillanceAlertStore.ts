@@ -8,17 +8,20 @@ import type {
 } from '~/utils/statisticsSurveillanceAlerts'
 import {
   SURVEILLANCE_GLOBAL_COHORT_KEY,
+  defaultSurveillanceAlertThresholds,
   defaultSurveillanceCohortProfile,
   defaultSurveillanceReferenceSettings,
   defaultSurveillanceThresholdProfiles,
   migrateSurveillanceThresholdsStorage,
   normalizeSurveillanceAlertThresholds,
+  normalizeSurveillanceCohortLabel,
   normalizeSurveillanceCohortProfiles,
   normalizeSurveillanceRankTiers,
   normalizeSurveillanceReferenceSettings,
-  serializeSurveillanceThresholdProfiles,
+  serializeSurveillanceThresholdsStorage,
   surveillanceCohortKey,
   stableSurveillanceAlertsFingerprint,
+  syncProfilesSharedThresholds,
 } from '~/utils/statisticsSurveillanceAlerts'
 
 const THRESHOLDS_KEY = 'lelanation_surveillance_alert_thresholds'
@@ -30,6 +33,7 @@ const ALERTS_ACK_SNAPSHOT_KEY = 'lelanation_surveillance_alerts_ack_snapshot'
 
 interface SurveillanceAlertState {
   thresholdProfiles: SurveillanceCohortProfile[]
+  sharedThresholds: boolean
   referenceSettings: SurveillanceReferenceSettings
   activeAlerts: Record<string, SurveillanceAlertTrigger[]>
   testBaselines: Record<string, SurveillanceTestBaseline>
@@ -39,14 +43,17 @@ interface SurveillanceAlertState {
   alertsAcknowledgedSnapshot: string | null
 }
 
-function loadThresholdProfiles(): SurveillanceCohortProfile[] {
-  if (import.meta.server) return defaultSurveillanceThresholdProfiles()
+function loadThresholdsStorage() {
+  if (import.meta.server) {
+    return serializeSurveillanceThresholdsStorage(defaultSurveillanceThresholdProfiles(), false)
+  }
   try {
     const raw = localStorage.getItem(THRESHOLDS_KEY)
-    if (!raw) return defaultSurveillanceThresholdProfiles()
+    if (!raw)
+      return serializeSurveillanceThresholdsStorage(defaultSurveillanceThresholdProfiles(), false)
     return migrateSurveillanceThresholdsStorage(JSON.parse(raw))
   } catch {
-    return defaultSurveillanceThresholdProfiles()
+    return serializeSurveillanceThresholdsStorage(defaultSurveillanceThresholdProfiles(), false)
   }
 }
 
@@ -83,12 +90,15 @@ function persistReferenceSettings(settings: SurveillanceReferenceSettings): void
   }
 }
 
-function persistThresholdProfiles(profiles: SurveillanceCohortProfile[]): void {
+function persistThresholdProfiles(
+  profiles: SurveillanceCohortProfile[],
+  sharedThresholds: boolean
+): void {
   if (import.meta.server) return
   try {
     localStorage.setItem(
       THRESHOLDS_KEY,
-      JSON.stringify(serializeSurveillanceThresholdProfiles(profiles))
+      JSON.stringify(serializeSurveillanceThresholdsStorage(profiles, sharedThresholds))
     )
   } catch {
     // ignore
@@ -176,6 +186,7 @@ function persistTestBaselines(testBaselines: Record<string, SurveillanceTestBase
 export const useStatisticsSurveillanceAlertStore = defineStore('statisticsSurveillanceAlerts', {
   state: (): SurveillanceAlertState => ({
     thresholdProfiles: defaultSurveillanceThresholdProfiles(),
+    sharedThresholds: false,
     referenceSettings: defaultSurveillanceReferenceSettings(),
     activeAlerts: {},
     testBaselines: {},
@@ -228,27 +239,37 @@ export const useStatisticsSurveillanceAlertStore = defineStore('statisticsSurvei
   actions: {
     init() {
       if (import.meta.server) return
-      this.thresholdProfiles = loadThresholdProfiles()
+      const storage = loadThresholdsStorage()
+      this.thresholdProfiles = storage.profiles
+      this.sharedThresholds = storage.sharedThresholds
       this.referenceSettings = loadReferenceSettings()
       this.activeAlerts = loadActiveAlerts()
       this.testBaselines = loadTestBaselines()
       this.alertsAcknowledgedAt = loadAlertsAcknowledgedAt()
       this.alertsAcknowledgedSnapshot = loadAlertsAcknowledgedSnapshot()
     },
+    persistThresholds() {
+      persistThresholdProfiles(this.thresholdProfiles, this.sharedThresholds)
+    },
     setProfileThresholds(cohortKey: string, next: Partial<SurveillanceAlertThresholds>) {
       const key = String(cohortKey ?? '').trim() || SURVEILLANCE_GLOBAL_COHORT_KEY
       const profiles = [...this.thresholdProfiles]
       const index = profiles.findIndex(p => p.cohortKey === key)
       if (index < 0) return
-      profiles[index] = {
-        ...profiles[index]!,
-        thresholds: normalizeSurveillanceAlertThresholds({
-          ...profiles[index]!.thresholds,
-          ...next,
-        }),
+      const merged = normalizeSurveillanceAlertThresholds({
+        ...profiles[index]!.thresholds,
+        ...next,
+      })
+      if (this.sharedThresholds) {
+        this.thresholdProfiles = syncProfilesSharedThresholds(profiles, merged)
+      } else {
+        profiles[index] = {
+          ...profiles[index]!,
+          thresholds: merged,
+        }
+        this.thresholdProfiles = profiles
       }
-      this.thresholdProfiles = profiles
-      persistThresholdProfiles(this.thresholdProfiles)
+      this.persistThresholds()
     },
     /** @deprecated Préférer setProfileThresholds */
     setThresholds(next: Partial<SurveillanceAlertThresholds>) {
@@ -258,11 +279,19 @@ export const useStatisticsSurveillanceAlertStore = defineStore('statisticsSurvei
       const profile = defaultSurveillanceCohortProfile(rankTiers)
       const exists = this.thresholdProfiles.some(p => p.cohortKey === profile.cohortKey)
       if (!exists) {
+        if (this.sharedThresholds) {
+          const source =
+            this.thresholdProfiles.find(p => p.cohortKey === SURVEILLANCE_GLOBAL_COHORT_KEY) ??
+            this.thresholdProfiles[0]
+          if (source) {
+            profile.thresholds = normalizeSurveillanceAlertThresholds(source.thresholds)
+          }
+        }
         this.thresholdProfiles = normalizeSurveillanceCohortProfiles([
           ...this.thresholdProfiles,
           profile,
         ])
-        persistThresholdProfiles(this.thresholdProfiles)
+        this.persistThresholds()
       }
       return profile.cohortKey
     },
@@ -278,7 +307,7 @@ export const useStatisticsSurveillanceAlertStore = defineStore('statisticsSurvei
       const merged = profiles.find(p => p.cohortKey === newKey)
       if (merged) {
         this.thresholdProfiles = normalizeSurveillanceCohortProfiles(profiles)
-        persistThresholdProfiles(this.thresholdProfiles)
+        this.persistThresholds()
         return newKey
       }
 
@@ -288,7 +317,7 @@ export const useStatisticsSurveillanceAlertStore = defineStore('statisticsSurvei
         rankTiers: normalizeSurveillanceRankTiers(rankTiers),
       })
       this.thresholdProfiles = normalizeSurveillanceCohortProfiles(profiles)
-      persistThresholdProfiles(this.thresholdProfiles)
+      this.persistThresholds()
       return newKey
     },
     removeCohortProfile(cohortKey: string) {
@@ -299,14 +328,51 @@ export const useStatisticsSurveillanceAlertStore = defineStore('statisticsSurvei
         next.length > 0
           ? normalizeSurveillanceCohortProfiles(next)
           : defaultSurveillanceThresholdProfiles()
-      persistThresholdProfiles(this.thresholdProfiles)
+      this.persistThresholds()
     },
     resetProfileThresholds(cohortKey: string) {
-      this.setProfileThresholds(cohortKey, defaultSurveillanceCohortProfile().thresholds)
+      const defaults = defaultSurveillanceCohortProfile().thresholds
+      if (this.sharedThresholds) {
+        this.thresholdProfiles = syncProfilesSharedThresholds(this.thresholdProfiles, defaults)
+        this.persistThresholds()
+        return
+      }
+      this.setProfileThresholds(cohortKey, defaults)
+    },
+    setCohortLabel(cohortKey: string, label: string | null) {
+      const key = String(cohortKey ?? '').trim() || SURVEILLANCE_GLOBAL_COHORT_KEY
+      const profiles = [...this.thresholdProfiles]
+      const index = profiles.findIndex(p => p.cohortKey === key)
+      if (index < 0) return
+      profiles[index] = {
+        ...profiles[index]!,
+        label: normalizeSurveillanceCohortLabel(label),
+      }
+      this.thresholdProfiles = profiles
+      this.persistThresholds()
+    },
+    setSharedThresholds(value: boolean, sourceCohortKey?: string) {
+      if (value === this.sharedThresholds) return
+      if (value) {
+        const key = String(sourceCohortKey ?? '').trim() || SURVEILLANCE_GLOBAL_COHORT_KEY
+        const source =
+          this.thresholdProfiles.find(p => p.cohortKey === key) ?? this.thresholdProfiles[0]
+        if (source) {
+          this.thresholdProfiles = syncProfilesSharedThresholds(
+            this.thresholdProfiles,
+            source.thresholds
+          )
+        }
+      }
+      this.sharedThresholds = value
+      this.persistThresholds()
     },
     resetThresholds() {
-      this.thresholdProfiles = defaultSurveillanceThresholdProfiles()
-      persistThresholdProfiles(this.thresholdProfiles)
+      this.thresholdProfiles = this.thresholdProfiles.map(profile => ({
+        ...profile,
+        thresholds: defaultSurveillanceAlertThresholds(),
+      }))
+      this.persistThresholds()
     },
     setReferenceSettings(next: Partial<SurveillanceReferenceSettings>) {
       this.referenceSettings = normalizeSurveillanceReferenceSettings({

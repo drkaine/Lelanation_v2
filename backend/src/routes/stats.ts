@@ -68,7 +68,7 @@ import {
   getSummonerSpellsDuosByChampion,
 } from '../services/StatsSummonerSpellsService.js'
 import { getChampionSpellOrders } from '../services/StatsChampionSpellOrdersService.js'
-import { getChampionTierSnapshotsForCharts } from '../services/ChampionTierDailySnapshotService.js'
+import { getChampionTierSnapshotsForCharts, getChampionTierDailySnapshotDateBounds } from '../services/ChampionTierDailySnapshotService.js'
 import { getChampionObjectivesSummary } from '../services/StatsChampionObjectivesService.js'
 import {
   collapseBalanceRowsToMainRole,
@@ -1383,6 +1383,16 @@ router.get('/items/:itemId/purchase-order', async (req: Request, res: Response) 
     toDate: toDate ?? null,
   })
   return res.json({ itemId, ...stats })
+})
+
+/** GET /api/stats/tier-daily-snapshots/date-bounds — plage de dates disponibles (snapshots quotidiens). */
+router.get('/tier-daily-snapshots/date-bounds', async (_req: Request, res: Response) => {
+  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
+  if (!isDatabaseConfigured()) {
+    return res.status(200).json({ minDate: null, maxDate: null, message: 'Database not configured.' })
+  }
+  const bounds = await getChampionTierDailySnapshotDateBounds()
+  return res.json(bounds)
 })
 
 /** GET /api/stats/champions/:championId/tier-trend-snapshots — séries quotidiennes (UTC) games/wins, pick% et ban% par tier+role (winrate = wins/games). Query: ?rankTier=DIAMOND&role=SUPPORT&from=… (role=UTILITY → SUPPORT) */

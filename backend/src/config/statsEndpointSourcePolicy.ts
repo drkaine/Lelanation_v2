@@ -143,6 +143,11 @@ export const STATS_ENDPOINT_SOURCE_POLICY: StatsEndpointSourceRule[] = [
     allowedSources: ['botlane_duo_vs_duo_stats'],
   },
   {
+    path: '/tier-daily-snapshots/date-bounds',
+    policy: 'snapshot_only',
+    allowedSources: ['champion_tier_daily_snapshots'],
+  },
+  {
     path: '/champions/:championId/tier-trend-snapshots',
     policy: 'snapshot_only',
     allowedSources: ['champion_tier_daily_snapshots'],

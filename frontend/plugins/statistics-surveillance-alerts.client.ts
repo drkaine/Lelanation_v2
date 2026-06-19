@@ -46,7 +46,11 @@ export default defineNuxtPlugin({
       )
 
       watch(
-        () => [alertStore.thresholdProfiles, alertStore.referenceSettings],
+        () => [
+          alertStore.thresholdProfiles,
+          alertStore.sharedThresholds,
+          alertStore.referenceSettings,
+        ],
         () => scheduleCheck(),
         { deep: true }
       )

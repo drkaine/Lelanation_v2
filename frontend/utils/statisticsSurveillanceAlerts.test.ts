@@ -5,17 +5,22 @@ import {
   buildDemoReferenceSnapshot,
   buildSurveillanceBaselineKey,
   buildSurveillanceChampionStatsQuery,
+  clampIsoDate,
   computePatchStartMetrics,
   defaultSurveillanceAlertThresholds,
+  defaultSurveillanceThresholdProfiles,
   evaluateSurveillanceAlerts,
   formatSurveillanceCohortLabel,
   hasConfiguredSurveillanceThresholds,
   migrateSurveillanceThresholdsStorage,
   normalizeSurveillanceCohortProfiles,
+  resolveSurveillanceCohortLabel,
   resolveSurveillanceReference,
+  serializeSurveillanceThresholdsStorage,
   stableSurveillanceAlertsFingerprint,
   surveillanceAlertTone,
   surveillanceCohortKey,
+  syncProfilesSharedThresholds,
   SURVEILLANCE_GLOBAL_COHORT_KEY,
 } from './statisticsSurveillanceAlerts'
 import type { DailyTrendSnapshotPoint } from '~/composables/statistics/useStatisticsDailyTrendCharts'
@@ -50,14 +55,60 @@ describe('surveillance cohort helpers', () => {
     expect(formatSurveillanceCohortLabel('GOLD,PLATINUM')).toBe('Gold + Platinum')
   })
 
+  it('uses custom cohort label when set', () => {
+    expect(
+      resolveSurveillanceCohortLabel({
+        cohortKey: 'GOLD,PLATINUM',
+        label: 'Mon duo',
+      })
+    ).toBe('Mon duo')
+    expect(
+      resolveSurveillanceCohortLabel({
+        cohortKey: 'GOLD,PLATINUM',
+        label: '   ',
+      })
+    ).toBe('Gold + Platinum')
+  })
+
+  it('clamps iso dates to snapshot bounds', () => {
+    expect(clampIsoDate('2020-01-01', '2024-06-01', '2026-06-01')).toBe('2024-06-01')
+    expect(clampIsoDate('2030-01-01', '2024-06-01', '2026-06-01')).toBe('2026-06-01')
+    expect(clampIsoDate('2025-03-15', '2024-06-01', '2026-06-01')).toBe('2025-03-15')
+  })
+
   it('migrates legacy flat thresholds to global profile', () => {
-    const profiles = migrateSurveillanceThresholdsStorage({
+    const storage = migrateSurveillanceThresholdsStorage({
       winrateMin: 40,
       winrateMax: null,
     })
-    expect(profiles).toHaveLength(1)
-    expect(profiles[0]?.cohortKey).toBe(SURVEILLANCE_GLOBAL_COHORT_KEY)
-    expect(profiles[0]?.thresholds.winrateMin).toBe(40)
+    expect(storage.profiles).toHaveLength(1)
+    expect(storage.profiles[0]?.cohortKey).toBe(SURVEILLANCE_GLOBAL_COHORT_KEY)
+    expect(storage.profiles[0]?.thresholds.winrateMin).toBe(40)
+    expect(storage.sharedThresholds).toBe(false)
+  })
+
+  it('syncs shared thresholds across profiles', () => {
+    const profiles = normalizeSurveillanceCohortProfiles([
+      {
+        cohortKey: SURVEILLANCE_GLOBAL_COHORT_KEY,
+        rankTiers: [],
+        label: null,
+        thresholds: { winrateMin: 50 },
+      },
+      { cohortKey: 'GOLD', rankTiers: ['GOLD'], label: null, thresholds: { winrateMin: 40 } },
+    ])
+    const synced = syncProfilesSharedThresholds(profiles, profiles[0]!.thresholds)
+    expect(synced[0]?.thresholds.winrateMin).toBe(50)
+    expect(synced[1]?.thresholds.winrateMin).toBe(50)
+  })
+
+  it('persists shared threshold mode in storage', () => {
+    const storage = serializeSurveillanceThresholdsStorage(
+      defaultSurveillanceThresholdProfiles(),
+      true
+    )
+    const loaded = migrateSurveillanceThresholdsStorage(storage)
+    expect(loaded.sharedThresholds).toBe(true)
   })
 
   it('deduplicates cohort profiles', () => {

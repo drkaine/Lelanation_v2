@@ -1,15 +1,12 @@
-import type {
-  SurveillanceAlertTrigger,
-  SurveillanceMetricId,
+import {
   formatSurveillanceCohortLabel,
   surveillanceAlertTone,
   type SurveillanceAlertTone,
+  type SurveillanceAlertTrigger,
+  type SurveillanceMetricId,
 } from './statisticsSurveillanceAlerts'
 
 type TranslateFn = (key: string, params?: Record<string, string | number>) => string
-
-export type { SurveillanceAlertTone }
-export { surveillanceAlertTone }
 
 const METRIC_LABEL_KEYS: Record<SurveillanceMetricId, string> = {
   winrate: 'statisticsPage.winrate',

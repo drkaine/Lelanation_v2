@@ -11,9 +11,9 @@ import {
   computeTrendReferenceMetrics,
   configuredSurveillanceCohortProfiles,
   evaluateSurveillanceAlerts,
-  formatSurveillanceCohortLabel,
   formatSurveillanceReferenceDate,
   hasConfiguredSurveillanceThresholds,
+  resolveSurveillanceCohortLabel,
   resolveSurveillanceReference,
   surveillanceReferenceDateDaysAgo,
   type ChampionMetricSnapshot,
@@ -138,7 +138,7 @@ async function evaluateChampionAlertsForProfile(input: {
   referenceOverride?: ChampionMetricSnapshot | null
   referenceOverrideLabel?: string
 }): Promise<{ triggers: SurveillanceAlertTrigger[]; statsAvailable: boolean }> {
-  const cohortLabel = formatSurveillanceCohortLabel(input.profile.cohortKey)
+  const cohortLabel = resolveSurveillanceCohortLabel(input.profile)
   const [current, trendPoints] = await Promise.all([
     fetchChampionCurrentStats(input.championKey, {
       version: input.statsVersion,
@@ -342,7 +342,7 @@ export function useSurveillanceAlertEvaluation() {
                   thresholds: profile.thresholds,
                   patchLabel: 'demo',
                   cohortKey: profile.cohortKey,
-                  cohortLabel: formatSurveillanceCohortLabel(profile.cohortKey),
+                  cohortLabel: resolveSurveillanceCohortLabel(profile),
                 })
                 result.evaluatedCount++
                 if (triggers.length > 0) {

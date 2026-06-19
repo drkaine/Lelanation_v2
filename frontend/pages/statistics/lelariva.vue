@@ -1452,8 +1452,22 @@ function championGridId(c: { key: string | number }): number {
   return Number.isFinite(id) && id > 0 ? id : NaN
 }
 
+function hasActiveChampionGridFilters(): boolean {
+  return Boolean(
+    activeDisplayRole.value.trim() ||
+    activeDisplayRank.value.trim() ||
+    toSafeMinNumber(activeExportMinPickrate.value) > 0 ||
+    toSafeMinNumber(activeExportMinGames.value) > 0
+  )
+}
+
 async function loadChampionEligibility(): Promise<void> {
   if (selectedChampionId.value) return
+  if (!hasActiveChampionGridFilters()) {
+    championEligibilityById.value = new Map()
+    championEligibilityLoaded.value = true
+    return
+  }
   const requestSeq = ++championEligibilityRequestSeq
   const roleFilter = activeDisplayRole.value.trim()
   championEligibilityById.value = new Map()
@@ -1492,13 +1506,13 @@ async function loadChampionEligibility(): Promise<void> {
 
 function isChampionGridEligible(championId: number): boolean {
   if (!Number.isFinite(championId) || championId <= 0) return false
-  const roleFilter = activeDisplayRole.value.trim()
+  if (!hasActiveChampionGridFilters()) return true
   const meta = championEligibilityById.value.get(championId)
   const minPick = toSafeMinNumber(activeExportMinPickrate.value)
   const minGames = toSafeMinNumber(activeExportMinGames.value)
 
   if (!championEligibilityLoaded.value) {
-    if (championEligibilityById.value.size === 0) return !roleFilter
+    if (championEligibilityById.value.size === 0) return true
     if (!meta) return false
     return meta.games >= minGames && meta.pickrate >= minPick
   }
@@ -1509,6 +1523,7 @@ function isChampionGridEligible(championId: number): boolean {
 
 function championGridTitle(c: { name: string; key: string | number }): string {
   const id = championGridId(c)
+  if (!hasActiveChampionGridFilters()) return c.name
   if (!championEligibilityLoaded.value) return c.name
   if (isChampionGridEligible(id)) return c.name
   const meta = championEligibilityById.value.get(id)

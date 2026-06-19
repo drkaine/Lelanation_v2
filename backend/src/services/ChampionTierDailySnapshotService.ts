@@ -240,6 +240,26 @@ export async function getChampionTierSnapshotsForCharts(options: {
   })
 }
 
+export async function getChampionTierDailySnapshotDateBounds(): Promise<{
+  minDate: string | null
+  maxDate: string | null
+}> {
+  if (!isDatabaseConfigured()) return { minDate: null, maxDate: null }
+  const rows = await queryRawUnsafe<Array<{ min_date: Date | null; max_date: Date | null }>>(`
+    SELECT
+      MIN(date_of_game)::date AS min_date,
+      MAX(date_of_game)::date AS max_date
+    FROM champion_tier_daily_snapshots
+    WHERE date_of_game IS NOT NULL
+  `)
+  const row = rows[0]
+  if (!row?.min_date || !row?.max_date) return { minDate: null, maxDate: null }
+  return {
+    minDate: row.min_date.toISOString().slice(0, 10),
+    maxDate: row.max_date.toISOString().slice(0, 10),
+  }
+}
+
 export async function refreshActiveChampionTierSnapshotsIfDue(logger?: Logger): Promise<void> {
   if (process.env.CHAMPION_TIER_SNAPSHOT_DISABLED === '1') return
   const { hour, minute } = parseUtcSchedule()
