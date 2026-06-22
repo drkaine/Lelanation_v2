@@ -447,13 +447,14 @@ const isFavoriteBuildsActive = computed(() => currentBuildsTab.value === 'favori
 const favoritesStore = useFavoritesStore()
 const statisticsUiStore = useStatisticsUiStore()
 const surveillanceAlertStore = useStatisticsSurveillanceAlertStore()
+const buildSurveillanceStore = useStatisticsBuildSurveillanceStore()
 const { hydrated: clientHydrated } = useClientHydrated()
 const hasFavorites = computed(() => favoritesStore.favoriteBuildIds.length > 0)
 const hasWatchedChampions = computed(
   () => clientHydrated.value && statisticsUiStore.watchedChampionIds.length > 0
 )
 const surveillanceAlertCount = computed(() =>
-  clientHydrated.value ? surveillanceAlertStore.alertCount : 0
+  clientHydrated.value ? surveillanceAlertStore.alertCount + buildSurveillanceStore.alertCount : 0
 )
 const isStatisticsIndexActive = computed(() => route.path === localePath('/statistics'))
 const isStatisticsTierListActive = computed(
@@ -543,6 +544,7 @@ onMounted(() => {
   checkLoggedIn()
   statisticsUiStore.init()
   surveillanceAlertStore.init()
+  buildSurveillanceStore.init()
   if (!versionStore.currentVersion) {
     versionStore.loadCurrentVersion().catch(() => undefined)
   }

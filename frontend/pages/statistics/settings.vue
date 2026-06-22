@@ -25,10 +25,10 @@
       </nav>
 
       <div v-show="activeSettingsPageTab === 'tabs'" class="space-y-4" role="tabpanel">
-        <p class="text-xs text-text/55">
-          {{ t('statisticsPage.settingsDefaultTabHint') }}
-        </p>
-        <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <p class="text-xs text-text/55">
+            {{ t('statisticsPage.settingsDefaultTabHint') }}
+          </p>
           <span class="text-xs text-text/55">
             {{
               t('statisticsPage.settingsVisibleCount', {
@@ -39,7 +39,7 @@
           </span>
           <button
             type="button"
-            class="rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs hover:bg-primary/10"
+            class="rounded border border-primary/35 bg-surface/50 px-2.5 py-1 text-xs hover:bg-primary/10"
             @click="resetTabs"
           >
             {{ t('statisticsPage.settingsReset') }}
@@ -89,51 +89,14 @@
       </div>
 
       <section v-show="activeSettingsPageTab === 'watchlist'" class="space-y-3" role="tabpanel">
-        <header class="space-y-1">
-          <p class="text-sm text-text/70">
-            {{ t('statisticsPage.settingsWatchlistDescription') }}
-          </p>
-          <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
-            <span class="text-xs text-text/55">
-              {{
-                t('statisticsPage.settingsWatchlistCount', {
-                  count: watchedChampionCount,
-                })
-              }}
-            </span>
-            <div class="flex flex-wrap gap-2">
-              <button
-                type="button"
-                class="rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
-                :disabled="allWatchedSelected || championsStore.status !== 'success'"
-                @click="selectAllWatchedChampions"
-              >
-                {{ t('statisticsPage.settingsWatchlistSelectAll') }}
-              </button>
-              <button
-                v-if="watchedChampionCount > 0"
-                type="button"
-                class="rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs hover:bg-primary/10"
-                @click="clearWatchlist"
-              >
-                {{ t('statisticsPage.settingsWatchlistClear') }}
-              </button>
-            </div>
-          </div>
-        </header>
+        <p class="text-sm text-text/70">
+          {{ t('statisticsPage.settingsWatchlistDescription') }}
+        </p>
 
         <StatisticsWatchedChampionPicker
           :model-value="statisticsUiStore.watchedChampionIds"
           @update:model-value="setWatchedChampions"
         />
-
-        <NuxtLink
-          v-if="watchedChampionCount > 0"
-          :to="localePath('/statistics/surveillance')"
-          class="inline-flex rounded border border-primary/35 bg-accent/15 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/25"
-        >
-          {{ t('statisticsPage.surveillanceOpen') }}
-        </NuxtLink>
       </section>
 
       <div v-show="activeSettingsPageTab === 'alerts'" role="tabpanel">
@@ -144,15 +107,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   STATISTICS_MAIN_TAB_LABEL_KEYS,
   STATISTICS_MAIN_TAB_ORDER,
 } from '~/constants/statisticsMainTabs'
 import StatisticsSurveillanceAlertSettings from '~/components/statistics/StatisticsSurveillanceAlertSettings.vue'
-import { useSurveillanceAlertEvaluation } from '~/composables/useSurveillanceAlertEvaluation'
-import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useStatisticsUiStore, type StatisticsMainTab } from '~/stores/StatisticsUiStore'
 
 type SettingsPageTab = 'tabs' | 'watchlist' | 'alerts'
@@ -161,8 +122,6 @@ const { t } = useI18n()
 const localePath = useLocalePath()
 const route = useRoute()
 const statisticsUiStore = useStatisticsUiStore()
-const championsStore = useChampionsStore()
-const { runSurveillanceAlertCheck } = useSurveillanceAlertEvaluation()
 
 const activeSettingsPageTab = ref<SettingsPageTab>('tabs')
 
@@ -175,10 +134,6 @@ const settingsPageTabs = computed(() => [
 if (import.meta.client) {
   statisticsUiStore.init()
 }
-
-onMounted(() => {
-  runSurveillanceAlertCheck().catch(() => undefined)
-})
 
 if (Object.keys(route.query).length > 0) {
   await navigateTo(localePath('/statistics/settings'), { replace: true })
@@ -194,11 +149,6 @@ const tabRows = computed(() =>
 )
 
 const visibleCount = computed(() => tabRows.value.filter(row => row.visible).length)
-const watchedChampionCount = computed(() => statisticsUiStore.watchedChampionIds.length)
-const allWatchedSelected = computed(() => {
-  const total = championsStore.champions.length
-  return total > 0 && watchedChampionCount.value >= total
-})
 
 function toggleTab(tab: StatisticsMainTab): void {
   statisticsUiStore.setTabVisible(tab, !statisticsUiStore.isTabVisible(tab))
@@ -214,15 +164,6 @@ function resetTabs(): void {
 
 function setWatchedChampions(ids: string[]): void {
   statisticsUiStore.setWatchedChampionIds(ids)
-}
-
-function clearWatchlist(): void {
-  statisticsUiStore.clearWatchedChampions()
-}
-
-function selectAllWatchedChampions(): void {
-  if (championsStore.champions.length === 0) return
-  statisticsUiStore.setWatchedChampionIds(championsStore.champions.map(champion => champion.id))
 }
 
 useHead({

@@ -5,9 +5,12 @@ import {
   buildDemoReferenceSnapshot,
   buildSurveillanceBaselineKey,
   buildSurveillanceChampionStatsQuery,
+  canAddSurveillanceCohortProfile,
   clampIsoDate,
   computePatchStartMetrics,
+  countCustomSurveillanceCohortProfiles,
   defaultSurveillanceAlertThresholds,
+  defaultSurveillanceCohortProfile,
   defaultSurveillanceThresholdProfiles,
   evaluateSurveillanceAlerts,
   formatSurveillanceCohortLabel,
@@ -53,6 +56,18 @@ describe('surveillance cohort helpers', () => {
   it('formats cohort labels', () => {
     expect(formatSurveillanceCohortLabel(SURVEILLANCE_GLOBAL_COHORT_KEY)).toBe('Global')
     expect(formatSurveillanceCohortLabel('GOLD,PLATINUM')).toBe('Gold + Platinum')
+  })
+
+  it('limits custom cohort count to three besides global', () => {
+    const profiles = [
+      defaultSurveillanceCohortProfile(),
+      defaultSurveillanceCohortProfile(['GOLD']),
+      defaultSurveillanceCohortProfile(['PLATINUM']),
+      defaultSurveillanceCohortProfile(['DIAMOND']),
+    ]
+    expect(countCustomSurveillanceCohortProfiles(profiles)).toBe(3)
+    expect(canAddSurveillanceCohortProfile(profiles)).toBe(false)
+    expect(canAddSurveillanceCohortProfile(profiles.slice(0, 3))).toBe(true)
   })
 
   it('uses custom cohort label when set', () => {

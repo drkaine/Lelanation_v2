@@ -1,10 +1,23 @@
 import { RANK_TIERS } from './rankTiers'
+import type { DeltaDirectionFlags } from './surveillanceDeltaDirection'
+import {
+  defaultDeltaDirectionFlags,
+  demoReferenceForDeltaFlags,
+  normalizeDeltaDirectionFlags,
+  normalizeSurveillanceDeltaDirection,
+  passesDeltaDirectionFlags,
+} from './surveillanceDeltaDirection'
 import type { DailyTrendSnapshotPoint } from '~/composables/statistics/useStatisticsDailyTrendCharts'
+
+export type { DeltaDirectionFlags } from './surveillanceDeltaDirection'
 
 export type SurveillanceMetricId = 'winrate' | 'pickrate' | 'banrate'
 
 /** Cohorte « toutes divisions » (aucun rankTier dans l’API). */
 export const SURVEILLANCE_GLOBAL_COHORT_KEY = 'GLOBAL'
+
+/** Nombre max de cohortes personnalisées (hors global). */
+export const SURVEILLANCE_MAX_CUSTOM_COHORTS = 3
 
 export interface SurveillanceAlertThresholds {
   winrateMin: number | null
@@ -16,6 +29,9 @@ export interface SurveillanceAlertThresholds {
   winrateDeltaPct: number | null
   pickrateDeltaPct: number | null
   banrateDeltaPct: number | null
+  winrateDeltaDirection: DeltaDirectionFlags
+  pickrateDeltaDirection: DeltaDirectionFlags
+  banrateDeltaDirection: DeltaDirectionFlags
 }
 
 export interface ChampionMetricSnapshot {
@@ -190,6 +206,17 @@ export type SurveillanceAlertTrigger =
 
 const METRIC_KEYS: SurveillanceMetricId[] = ['winrate', 'pickrate', 'banrate']
 
+type NumericThresholdKey =
+  | 'winrateMin'
+  | 'winrateMax'
+  | 'pickrateMin'
+  | 'pickrateMax'
+  | 'banrateMin'
+  | 'banrateMax'
+  | 'winrateDeltaPct'
+  | 'pickrateDeltaPct'
+  | 'banrateDeltaPct'
+
 export function defaultSurveillanceAlertThresholds(): SurveillanceAlertThresholds {
   return {
     winrateMin: null,
@@ -201,6 +228,9 @@ export function defaultSurveillanceAlertThresholds(): SurveillanceAlertThreshold
     winrateDeltaPct: null,
     pickrateDeltaPct: null,
     banrateDeltaPct: null,
+    winrateDeltaDirection: defaultDeltaDirectionFlags(),
+    pickrateDeltaDirection: defaultDeltaDirectionFlags(),
+    banrateDeltaDirection: defaultDeltaDirectionFlags(),
   }
 }
 
@@ -210,8 +240,13 @@ export function normalizeSurveillanceAlertThresholds(
   const defaults = defaultSurveillanceAlertThresholds()
   if (!value || typeof value !== 'object') return defaults
 
-  const read = (key: keyof SurveillanceAlertThresholds): number | null => {
-    const raw = value[key]
+  const legacyGlobal =
+    'deltaDirection' in value
+      ? normalizeSurveillanceDeltaDirection((value as { deltaDirection?: unknown }).deltaDirection)
+      : undefined
+
+  const read = (key: NumericThresholdKey): number | null => {
+    const raw = value[key as keyof typeof value]
     if (raw === null || raw === undefined || raw === '') return null
     const n = Number(raw)
     return Number.isFinite(n) ? n : null
@@ -227,6 +262,18 @@ export function normalizeSurveillanceAlertThresholds(
     winrateDeltaPct: read('winrateDeltaPct'),
     pickrateDeltaPct: read('pickrateDeltaPct'),
     banrateDeltaPct: read('banrateDeltaPct'),
+    winrateDeltaDirection: normalizeDeltaDirectionFlags(
+      (value as Partial<SurveillanceAlertThresholds>).winrateDeltaDirection,
+      legacyGlobal
+    ),
+    pickrateDeltaDirection: normalizeDeltaDirectionFlags(
+      (value as Partial<SurveillanceAlertThresholds>).pickrateDeltaDirection,
+      legacyGlobal
+    ),
+    banrateDeltaDirection: normalizeDeltaDirectionFlags(
+      (value as Partial<SurveillanceAlertThresholds>).banrateDeltaDirection,
+      legacyGlobal
+    ),
   }
 }
 
@@ -335,6 +382,18 @@ export function configuredSurveillanceCohortProfiles(
   return profiles.filter(profile => hasConfiguredSurveillanceThresholds(profile.thresholds))
 }
 
+export function countCustomSurveillanceCohortProfiles(
+  profiles: readonly SurveillanceCohortProfile[]
+): number {
+  return profiles.filter(profile => profile.cohortKey !== SURVEILLANCE_GLOBAL_COHORT_KEY).length
+}
+
+export function canAddSurveillanceCohortProfile(
+  profiles: readonly SurveillanceCohortProfile[]
+): boolean {
+  return countCustomSurveillanceCohortProfiles(profiles) < SURVEILLANCE_MAX_CUSTOM_COHORTS
+}
+
 function metricValue(snapshot: ChampionMetricSnapshot, metric: SurveillanceMetricId): number {
   return snapshot[metric]
 }
@@ -364,6 +423,15 @@ function thresholdDelta(
   if (metric === 'winrate') return thresholds.winrateDeltaPct
   if (metric === 'pickrate') return thresholds.pickrateDeltaPct
   return thresholds.banrateDeltaPct
+}
+
+function thresholdDeltaDirection(
+  thresholds: SurveillanceAlertThresholds,
+  metric: SurveillanceMetricId
+): DeltaDirectionFlags {
+  if (metric === 'winrate') return thresholds.winrateDeltaDirection
+  if (metric === 'pickrate') return thresholds.pickrateDeltaDirection
+  return thresholds.banrateDeltaDirection
 }
 
 export function aggregateTrendPoints(
@@ -523,7 +591,11 @@ export function evaluateSurveillanceAlerts(input: {
     }
     if (delta !== null && patchStart) {
       const reference = metricValue(patchStart, metric)
-      if (Math.abs(value - reference) >= delta) {
+      const diff = value - reference
+      if (
+        Math.abs(diff) >= delta &&
+        passesDeltaDirectionFlags(diff, thresholdDeltaDirection(thresholds, metric))
+      ) {
         triggers.push({
           kind: 'delta',
           metric,
@@ -544,7 +616,17 @@ export function evaluateSurveillanceAlerts(input: {
 export function hasConfiguredSurveillanceThresholds(
   thresholds: SurveillanceAlertThresholds
 ): boolean {
-  return Object.values(thresholds).some(value => value !== null)
+  return (
+    thresholds.winrateMin !== null ||
+    thresholds.winrateMax !== null ||
+    thresholds.pickrateMin !== null ||
+    thresholds.pickrateMax !== null ||
+    thresholds.banrateMin !== null ||
+    thresholds.banrateMax !== null ||
+    thresholds.winrateDeltaPct !== null ||
+    thresholds.pickrateDeltaPct !== null ||
+    thresholds.banrateDeltaPct !== null
+  )
 }
 
 export interface SurveillanceTestBaseline {
@@ -584,7 +666,11 @@ export function buildDemoAlertScenario(thresholds: SurveillanceAlertThresholds):
     }
 
     if (delta !== null) {
-      reference[metric] = Math.max(0, current[metric] - delta - 1)
+      reference[metric] = demoReferenceForDeltaFlags(
+        current[metric],
+        delta,
+        thresholdDeltaDirection(thresholds, metric)
+      )
     }
   }
 
@@ -602,7 +688,11 @@ export function buildDemoReferenceSnapshot(
     const delta = deltaThresholdForMetric(thresholds, metric)
     if (delta === null) continue
     const value = metricValue(current, metric)
-    reference[metric] = Math.max(0, Math.min(100, value - delta - 1))
+    reference[metric] = demoReferenceForDeltaFlags(
+      value,
+      delta,
+      thresholdDeltaDirection(thresholds, metric)
+    )
   }
 
   return reference

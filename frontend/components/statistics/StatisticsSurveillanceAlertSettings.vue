@@ -1,32 +1,8 @@
 <template>
   <section class="space-y-3">
-    <header class="space-y-1">
-      <p class="text-sm text-text/70">
-        {{ t('statisticsPage.settingsAlertsDescription') }}
-      </p>
-      <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
-        <p class="text-xs text-text/55">
-          {{ t('statisticsPage.settingsAlertsHint') }}
-        </p>
-        <div class="flex flex-wrap gap-2">
-          <button
-            v-if="!alertStore.sharedThresholds"
-            type="button"
-            class="rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs hover:bg-primary/10"
-            @click="resetCurrentCohort"
-          >
-            {{ t('statisticsPage.settingsAlertsResetCohort') }}
-          </button>
-          <button
-            type="button"
-            class="rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs hover:bg-primary/10"
-            @click="resetAllThresholds"
-          >
-            {{ t('statisticsPage.settingsAlertsReset') }}
-          </button>
-        </div>
-      </div>
-    </header>
+    <p class="text-sm text-text/70">
+      {{ t('statisticsPage.settingsAlertsDescription') }}
+    </p>
 
     <p v-if="feedback" class="text-xs" :class="feedbackOk ? 'text-emerald-300' : 'text-amber-200'">
       {{ feedback }}
@@ -49,8 +25,15 @@
       </button>
       <button
         type="button"
-        class="rounded-full border border-dashed border-primary/35 px-2.5 py-1 text-xs text-text/70 hover:bg-primary/10"
-        :title="t('statisticsPage.settingsAlertsAddCohort')"
+        class="rounded-full border border-dashed border-primary/35 px-2.5 py-1 text-xs text-text/70 hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-40"
+        :disabled="!canAddMoreCohorts"
+        :title="
+          canAddMoreCohorts
+            ? t('statisticsPage.settingsAlertsAddCohort')
+            : t('statisticsPage.settingsAlertsCohortLimit', {
+                max: SURVEILLANCE_MAX_CUSTOM_COHORTS,
+              })
+        "
         @click="toggleAddCohort"
       >
         +
@@ -75,6 +58,47 @@
         @click="removeSelectedCohort"
       >
         {{ t('statisticsPage.settingsAlertsRemoveCohort') }}
+      </button>
+
+      <span
+        class="mx-0.5 hidden h-4 w-px shrink-0 self-center bg-primary/25 sm:block"
+        aria-hidden="true"
+      />
+
+      <button
+        v-if="!alertStore.sharedThresholds"
+        type="button"
+        class="rounded border border-primary/35 bg-surface/40 px-2.5 py-1 text-xs text-text/80 hover:bg-primary/10"
+        :title="t('statisticsPage.settingsAlertsResetCohort')"
+        @click="resetCurrentCohort"
+      >
+        {{ t('statisticsPage.settingsAlertsResetCohortShort') }}
+      </button>
+      <button
+        type="button"
+        class="rounded border border-primary/35 bg-surface/40 px-2.5 py-1 text-xs text-text/80 hover:bg-primary/10"
+        :title="t('statisticsPage.settingsAlertsReset')"
+        @click="resetAllThresholds"
+      >
+        {{ t('statisticsPage.settingsAlertsResetShort') }}
+      </button>
+      <button
+        type="button"
+        class="rounded border px-2.5 py-1 text-xs transition"
+        :class="
+          alertStore.sharedThresholds
+            ? 'border-primary/60 bg-primary/15 text-text'
+            : 'border-primary/35 bg-surface/40 text-text/80 hover:bg-primary/10'
+        "
+        :title="
+          alertStore.sharedThresholds
+            ? t('statisticsPage.settingsAlertsThresholdModeSharedHint')
+            : t('statisticsPage.settingsAlertsThresholdModeSeparateHint')
+        "
+        :aria-pressed="alertStore.sharedThresholds"
+        @click="toggleSharedThresholds"
+      >
+        {{ t('statisticsPage.settingsAlertsThresholdModeShort') }}
       </button>
     </div>
 
@@ -174,118 +198,6 @@
       <p class="text-xs text-text/55">
         {{ t('statisticsPage.settingsAlertsCohortNameHint') }}
       </p>
-    </div>
-
-    <div v-if="selectedProfile" class="space-y-2">
-      <p
-        v-if="!showEditCohort && canEditSelectedCohort"
-        class="flex flex-wrap items-center gap-2 text-xs text-text/60"
-      >
-        <span>{{ cohortLabel(selectedCohortKey) }}</span>
-        <span class="flex gap-0.5" aria-hidden="true">
-          <img
-            v-for="tier in selectedProfile.rankTiers"
-            v-show="getRankedEmblemUrl(tier)"
-            :key="'view-' + tier"
-            :src="getRankedEmblemUrl(tier)!"
-            :alt="formatDivisionLabel(tier)"
-            class="h-3 w-3 object-contain opacity-80"
-            width="12"
-            height="12"
-          />
-        </span>
-      </p>
-      <p v-else-if="isGlobalCohort" class="text-xs text-text/55">
-        {{ t('statisticsPage.settingsAlertsGlobalCohortHint') }}
-      </p>
-
-      <div
-        class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/20 bg-surface/20 px-3 py-2"
-      >
-        <div class="space-y-0.5">
-          <div class="text-xs font-medium text-text/80">
-            {{ t('statisticsPage.settingsAlertsThresholdModeTitle') }}
-          </div>
-          <p class="text-xs text-text/55">
-            {{
-              alertStore.sharedThresholds
-                ? t('statisticsPage.settingsAlertsThresholdModeSharedHint')
-                : t('statisticsPage.settingsAlertsThresholdModeSeparateHint')
-            }}
-          </p>
-        </div>
-        <button
-          type="button"
-          class="command-toggle command-toggle-button shrink-0 scale-90"
-          :aria-pressed="alertStore.sharedThresholds"
-          :aria-label="t('statisticsPage.settingsAlertsThresholdModeTitle')"
-          @click="toggleSharedThresholds"
-        >
-          <span class="command-toggle-track" :class="{ active: alertStore.sharedThresholds }">
-            <span class="command-toggle-thumb" />
-          </span>
-        </button>
-      </div>
-
-      <div class="overflow-x-auto rounded-lg border border-primary/25 bg-surface/30">
-        <table class="w-full min-w-[28rem] text-left text-xs">
-          <thead>
-            <tr class="border-b border-primary/20 text-text/60">
-              <th class="px-3 py-2 font-medium">
-                {{ t('statisticsPage.settingsAlertsMetric') }}
-              </th>
-              <th class="px-3 py-2 font-medium">{{ t('statisticsPage.settingsAlertsMin') }}</th>
-              <th class="px-3 py-2 font-medium">{{ t('statisticsPage.settingsAlertsMax') }}</th>
-              <th class="px-3 py-2 font-medium">{{ t('statisticsPage.settingsAlertsDelta') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="row in rows"
-              :key="row.metric"
-              class="border-b border-primary/10 last:border-b-0"
-            >
-              <th class="px-3 py-2 font-medium text-text/85">{{ row.label }}</th>
-              <td class="px-3 py-2">
-                <input
-                  :value="displayValue(row.minKey)"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  class="w-full max-w-[5.5rem] rounded border border-primary/35 bg-background px-2 py-1 text-text"
-                  :placeholder="t('statisticsPage.settingsAlertsPlaceholder')"
-                  @input="onInput(row.minKey, ($event.target as HTMLInputElement).value)"
-                />
-              </td>
-              <td class="px-3 py-2">
-                <input
-                  :value="displayValue(row.maxKey)"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  class="w-full max-w-[5.5rem] rounded border border-primary/35 bg-background px-2 py-1 text-text"
-                  :placeholder="t('statisticsPage.settingsAlertsPlaceholder')"
-                  @input="onInput(row.maxKey, ($event.target as HTMLInputElement).value)"
-                />
-              </td>
-              <td class="px-3 py-2">
-                <input
-                  :value="displayValue(row.deltaKey)"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  class="w-full max-w-[5.5rem] rounded border border-primary/35 bg-background px-2 py-1 text-text"
-                  :placeholder="t('statisticsPage.settingsAlertsPlaceholder')"
-                  @input="onInput(row.deltaKey, ($event.target as HTMLInputElement).value)"
-                />
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
     </div>
 
     <div class="space-y-2 rounded-lg border border-primary/20 bg-surface/20 p-3">
@@ -392,102 +304,119 @@
       </p>
     </div>
 
+    <div v-if="selectedProfile" class="space-y-2">
+      <p
+        v-if="!showEditCohort && canEditSelectedCohort"
+        class="flex flex-wrap items-center gap-2 text-xs text-text/60"
+      >
+        <span>{{ cohortLabel(selectedCohortKey) }}</span>
+        <span class="flex gap-0.5" aria-hidden="true">
+          <img
+            v-for="tier in selectedProfile.rankTiers"
+            v-show="getRankedEmblemUrl(tier)"
+            :key="'view-' + tier"
+            :src="getRankedEmblemUrl(tier)!"
+            :alt="formatDivisionLabel(tier)"
+            class="h-3 w-3 object-contain opacity-80"
+            width="12"
+            height="12"
+          />
+        </span>
+      </p>
+
+      <div class="overflow-x-auto rounded-lg border border-primary/25 bg-surface/30">
+        <table class="w-full min-w-[28rem] text-left text-xs">
+          <thead>
+            <tr class="border-b border-primary/20 text-text/60">
+              <th class="px-3 py-2 font-medium">
+                {{ t('statisticsPage.settingsAlertsMetric') }}
+              </th>
+              <th class="px-3 py-2 font-medium">{{ t('statisticsPage.settingsAlertsMin') }}</th>
+              <th class="px-3 py-2 font-medium">{{ t('statisticsPage.settingsAlertsMax') }}</th>
+              <th class="px-3 py-2 font-medium">{{ t('statisticsPage.settingsAlertsDelta') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="row in rows"
+              :key="row.metric"
+              class="border-b border-primary/10 last:border-b-0"
+            >
+              <th class="px-3 py-2 font-medium text-text/85">{{ row.label }}</th>
+              <td class="px-3 py-2">
+                <input
+                  :value="displayValue(row.minKey)"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  class="w-full max-w-[5.5rem] rounded border border-primary/35 bg-background px-2 py-1 text-text"
+                  :placeholder="t('statisticsPage.settingsAlertsPlaceholder')"
+                  @input="onInput(row.minKey, ($event.target as HTMLInputElement).value)"
+                />
+              </td>
+              <td class="px-3 py-2">
+                <input
+                  :value="displayValue(row.maxKey)"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  class="w-full max-w-[5.5rem] rounded border border-primary/35 bg-background px-2 py-1 text-text"
+                  :placeholder="t('statisticsPage.settingsAlertsPlaceholder')"
+                  @input="onInput(row.maxKey, ($event.target as HTMLInputElement).value)"
+                />
+              </td>
+              <td class="px-3 py-2">
+                <div v-if="row.deltaKey" class="flex items-center gap-1.5">
+                  <input
+                    :value="displayValue(row.deltaKey)"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    class="w-full max-w-[4.5rem] rounded border border-primary/35 bg-background px-2 py-1 text-text"
+                    :placeholder="t('statisticsPage.settingsAlertsPlaceholder')"
+                    @input="onInput(row.deltaKey, ($event.target as HTMLInputElement).value)"
+                  />
+                  <SurveillanceDeltaDirectionButtons
+                    :model-value="deltaDirectionValue(row.deltaDirectionKey)"
+                    @update:model-value="onDeltaDirectionChange(row.deltaDirectionKey, $event)"
+                  />
+                </div>
+                <span v-else class="text-text/35">—</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <StatisticsBuildSurveillanceSettings @feedback="showFeedback" />
+
     <div class="flex flex-wrap items-center gap-3 pt-1">
       <button
         type="button"
         class="rounded border border-primary bg-primary/20 px-4 py-2 text-sm font-medium text-text hover:bg-primary/30 disabled:opacity-50"
-        :disabled="busy || watchedCount === 0 || !canRunCheck"
+        :disabled="busy || watchedCount === 0 || !canSaveAndCheck"
         @click="saveAndRunCheck"
       >
         {{ t('statisticsPage.settingsAlertsSaveAndCheck') }}
       </button>
-      <span v-if="resolvedReferenceLabel" class="text-xs text-text/55">
-        {{
-          t('statisticsPage.settingsAlertsReferenceActive', { reference: resolvedReferenceLabel })
-        }}
-      </span>
     </div>
     <p v-if="watchedCount === 0" class="text-xs text-amber-200/90">
       {{ t('statisticsPage.settingsAlertsTestNoWatchlist') }}
     </p>
-
-    <section
-      class="space-y-3 rounded-lg border border-dashed border-amber-500/40 bg-amber-500/5 p-3"
-    >
-      <header class="space-y-1">
-        <h3 class="text-sm font-semibold text-amber-200/90">
-          {{ t('statisticsPage.settingsAlertsTestTitle') }}
-        </h3>
-        <p class="text-xs text-text/65">
-          {{ t('statisticsPage.settingsAlertsTestDescription') }}
-        </p>
-        <p class="text-xs text-text/55">
-          {{
-            t('statisticsPage.settingsAlertsTestCohortScope', {
-              cohort: cohortLabel(selectedCohortKey),
-            })
-          }}
-        </p>
-        <p v-if="testBaselineCount > 0" class="text-xs text-text/55">
-          {{
-            t('statisticsPage.settingsAlertsTestBaselineCount', {
-              count: testBaselineCount,
-              watched: watchedCount,
-            })
-          }}
-        </p>
-      </header>
-
-      <div class="flex flex-wrap gap-2">
-        <button
-          type="button"
-          class="rounded border border-amber-500/40 bg-surface/50 px-3 py-1.5 text-xs hover:bg-amber-500/10 disabled:opacity-50"
-          :disabled="busy || watchedCount === 0"
-          @click="captureYesterday"
-        >
-          {{ t('statisticsPage.settingsAlertsTestCaptureYesterday') }}
-        </button>
-        <button
-          type="button"
-          class="rounded border border-amber-500/40 bg-surface/50 px-3 py-1.5 text-xs hover:bg-amber-500/10 disabled:opacity-50"
-          :disabled="busy || watchedCount === 0"
-          @click="captureWeekAgo"
-        >
-          {{ t('statisticsPage.settingsAlertsTestCaptureWeek') }}
-        </button>
-        <button
-          type="button"
-          class="rounded border border-amber-500/40 bg-surface/50 px-3 py-1.5 text-xs hover:bg-amber-500/10 disabled:opacity-50"
-          :disabled="busy || testBaselineCount === 0"
-          @click="simulateLoginCheck"
-        >
-          {{ t('statisticsPage.settingsAlertsTestSimulateLogin') }}
-        </button>
-        <button
-          type="button"
-          class="rounded border border-error/40 bg-error/10 px-3 py-1.5 text-xs text-error hover:bg-error/20 disabled:opacity-50"
-          :disabled="busy || watchedCount === 0"
-          @click="forceDemoAlerts"
-        >
-          {{ t('statisticsPage.settingsAlertsTestForceDemo') }}
-        </button>
-        <button
-          v-if="testBaselineCount > 0"
-          type="button"
-          class="rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs hover:bg-primary/10 disabled:opacity-50"
-          :disabled="busy"
-          @click="clearTestBaselines"
-        >
-          {{ t('statisticsPage.settingsAlertsTestClear') }}
-        </button>
-      </div>
-    </section>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useBuildSurveillanceEvaluation } from '~/composables/useBuildSurveillanceEvaluation'
 import { useSurveillanceAlertEvaluation } from '~/composables/useSurveillanceAlertEvaluation'
+import StatisticsBuildSurveillanceSettings from '~/components/statistics/StatisticsBuildSurveillanceSettings.vue'
+import SurveillanceDeltaDirectionButtons from '~/components/statistics/SurveillanceDeltaDirectionButtons.vue'
+import { useStatisticsBuildSurveillanceStore } from '~/stores/StatisticsBuildSurveillanceStore'
 import { useStatisticsSurveillanceAlertStore } from '~/stores/StatisticsSurveillanceAlertStore'
 import { useStatisticsUiStore } from '~/stores/StatisticsUiStore'
 import { apiUrl } from '~/utils/apiUrl'
@@ -500,25 +429,31 @@ import type {
 } from '~/utils/statisticsSurveillanceAlerts'
 import {
   SURVEILLANCE_GLOBAL_COHORT_KEY,
+  SURVEILLANCE_MAX_CUSTOM_COHORTS,
+  canAddSurveillanceCohortProfile,
   configuredSurveillanceCohortProfiles,
   clampIsoDate,
   formatSurveillanceCohortLabel,
   hasConfiguredSurveillanceThresholds,
   parseTypedIsoDate,
-  parseSurveillanceBaselineKey,
   resolveSurveillanceCohortLabel,
   resolveSurveillanceReference,
   surveillanceCohortKey,
 } from '~/utils/statisticsSurveillanceAlerts'
+import { hasConfiguredBuildSurveillanceThresholds } from '~/utils/buildSurveillance'
+import type { DeltaDirectionFlags } from '~/utils/surveillanceDeltaDirection'
+import { defaultDeltaDirectionFlags } from '~/utils/surveillanceDeltaDirection'
 
 const { t } = useI18n()
-const localePath = useLocalePath()
 const alertStore = useStatisticsSurveillanceAlertStore()
+const buildStore = useStatisticsBuildSurveillanceStore()
 const statisticsUiStore = useStatisticsUiStore()
-const { captureTestReference, runSurveillanceAlertCheck } = useSurveillanceAlertEvaluation()
+const { runSurveillanceAlertCheck } = useSurveillanceAlertEvaluation()
+const { runBuildSurveillanceCheck } = useBuildSurveillanceEvaluation()
 
 if (import.meta.client) {
   alertStore.init()
+  buildStore.init()
   statisticsUiStore.init()
 }
 
@@ -537,7 +472,14 @@ const dailySnapshotBoundsLoaded = ref(false)
 const referenceDateText = ref('')
 const referenceDateInvalid = ref(false)
 
-type ThresholdKey = keyof SurveillanceAlertThresholds
+type ThresholdKey = Exclude<
+  keyof SurveillanceAlertThresholds,
+  'winrateDeltaDirection' | 'pickrateDeltaDirection' | 'banrateDeltaDirection'
+>
+type DeltaDirectionKey =
+  | 'winrateDeltaDirection'
+  | 'pickrateDeltaDirection'
+  | 'banrateDeltaDirection'
 
 const dailySnapshotBoundsReady = computed(
   () =>
@@ -586,6 +528,12 @@ const canRunCheck = computed(() => {
   }
   return versionsCatalog.value.length > 0
 })
+
+const canRunBuildCheck = computed(() =>
+  hasConfiguredBuildSurveillanceThresholds(buildStore.thresholds)
+)
+
+const canSaveAndCheck = computed(() => canRunCheck.value || canRunBuildCheck.value)
 
 onMounted(async () => {
   try {
@@ -682,17 +630,13 @@ const selectedProfile = computed(() =>
 
 const isGlobalCohort = computed(() => selectedCohortKey.value === SURVEILLANCE_GLOBAL_COHORT_KEY)
 
+const canAddMoreCohorts = computed(() =>
+  canAddSurveillanceCohortProfile(alertStore.thresholdProfiles)
+)
+
 const canEditSelectedCohort = computed(() => !isGlobalCohort.value)
 
 const canRemoveSelectedCohort = computed(() => !isGlobalCohort.value)
-
-const testBaselineCount = computed(() => {
-  const cohortKey = selectedCohortKey.value
-  return Object.keys(alertStore.testBaselines).filter(key => {
-    const parsed = parseSurveillanceBaselineKey(key)
-    return parsed.cohortKey === cohortKey
-  }).length
-})
 
 watch(
   () => alertStore.thresholdProfiles.map(p => p.cohortKey),
@@ -713,6 +657,13 @@ function selectCohort(cohortKey: string): void {
 }
 
 function toggleAddCohort(): void {
+  if (!canAddMoreCohorts.value) {
+    showFeedback(
+      t('statisticsPage.settingsAlertsCohortLimit', { max: SURVEILLANCE_MAX_CUSTOM_COHORTS }),
+      false
+    )
+    return
+  }
   showAddCohort.value = !showAddCohort.value
   if (showAddCohort.value) showEditCohort.value = false
 }
@@ -729,6 +680,7 @@ const rows = computed(() => [
     minKey: 'winrateMin' as const,
     maxKey: 'winrateMax' as const,
     deltaKey: 'winrateDeltaPct' as const,
+    deltaDirectionKey: 'winrateDeltaDirection' as const,
   },
   {
     metric: 'pickrate',
@@ -736,6 +688,7 @@ const rows = computed(() => [
     minKey: 'pickrateMin' as const,
     maxKey: 'pickrateMax' as const,
     deltaKey: 'pickrateDeltaPct' as const,
+    deltaDirectionKey: 'pickrateDeltaDirection' as const,
   },
   {
     metric: 'banrate',
@@ -743,6 +696,7 @@ const rows = computed(() => [
     minKey: 'banrateMin' as const,
     maxKey: 'banrateMax' as const,
     deltaKey: 'banrateDeltaPct' as const,
+    deltaDirectionKey: 'banrateDeltaDirection' as const,
   },
 ])
 
@@ -801,6 +755,14 @@ function onInput(key: ThresholdKey, raw: string): void {
   alertStore.setProfileThresholds(selectedCohortKey.value, { [key]: parseInput(raw) })
 }
 
+function deltaDirectionValue(key: DeltaDirectionKey): DeltaDirectionFlags {
+  return selectedProfile.value?.thresholds[key] ?? defaultDeltaDirectionFlags()
+}
+
+function onDeltaDirectionChange(key: DeltaDirectionKey, flags: DeltaDirectionFlags): void {
+  alertStore.setProfileThresholds(selectedCohortKey.value, { [key]: flags })
+}
+
 function toggleSharedThresholds(): void {
   const next = !alertStore.sharedThresholds
   alertStore.setSharedThresholds(next, selectedCohortKey.value)
@@ -829,6 +791,13 @@ function togglePendingTier(tier: string): void {
 function confirmAddCohort(): void {
   if (pendingRankTiers.value.length === 0) return
   const key = alertStore.addCohortProfile(pendingRankTiers.value)
+  if (!key) {
+    showFeedback(
+      t('statisticsPage.settingsAlertsCohortLimit', { max: SURVEILLANCE_MAX_CUSTOM_COHORTS }),
+      false
+    )
+    return
+  }
   if (pendingCohortName.value.trim()) {
     alertStore.setCohortLabel(key, pendingCohortName.value)
   }
@@ -867,89 +836,6 @@ async function withBusy<T>(fn: () => Promise<T>): Promise<T | undefined> {
   }
 }
 
-function formatCaptureFeedback(
-  result: {
-    captured: number
-    watchedCount: number
-    unresolvedCount: number
-    fetchFailedCount: number
-  },
-  whenLabel: string
-): string {
-  if (result.captured === 0) {
-    return formatCheckFeedback({
-      alertCount: 0,
-      unresolvedCount: result.unresolvedCount,
-      fetchFailedCount: result.fetchFailedCount,
-    })
-  }
-  if (result.captured < result.watchedCount) {
-    const issues: string[] = []
-    if (result.fetchFailedCount > 0) {
-      issues.push(
-        t('statisticsPage.settingsAlertsTestCaptureApiFailed', {
-          count: result.fetchFailedCount,
-        })
-      )
-    }
-    if (result.unresolvedCount > 0) {
-      issues.push(
-        t('statisticsPage.settingsAlertsTestCaptureUnresolved', {
-          count: result.unresolvedCount,
-        })
-      )
-    }
-    return [
-      t('statisticsPage.settingsAlertsTestCapturedPartial', {
-        captured: result.captured,
-        total: result.watchedCount,
-        when: whenLabel,
-      }),
-      ...issues,
-    ].join(' ')
-  }
-  return t('statisticsPage.settingsAlertsTestCaptured', {
-    count: result.captured,
-    when: whenLabel,
-  })
-}
-
-async function captureYesterday(): Promise<void> {
-  if (watchedCount.value === 0) {
-    showFeedback(t('statisticsPage.settingsAlertsTestNoWatchlist'), false)
-    return
-  }
-  const result = await withBusy(() => captureTestReference(1, selectedCohortKey.value))
-  if (result === undefined) return
-  const whenLabel = t('statisticsPage.settingsAlertsTestWhenYesterday')
-  showFeedback(formatCaptureFeedback(result, whenLabel), result.captured > 0)
-}
-
-async function captureWeekAgo(): Promise<void> {
-  if (watchedCount.value === 0) {
-    showFeedback(t('statisticsPage.settingsAlertsTestNoWatchlist'), false)
-    return
-  }
-  const result = await withBusy(() => captureTestReference(7, selectedCohortKey.value))
-  if (result === undefined) return
-  const whenLabel = t('statisticsPage.settingsAlertsTestWhenWeek')
-  showFeedback(formatCaptureFeedback(result, whenLabel), result.captured > 0)
-}
-
-async function simulateLoginCheck(): Promise<void> {
-  if (testBaselineCount.value === 0) {
-    showFeedback(t('statisticsPage.settingsAlertsTestNeedBaseline'), false)
-    return
-  }
-  await withBusy(async () => {
-    const result = await runSurveillanceAlertCheck({
-      useTestBaselines: true,
-      cohortKey: selectedCohortKey.value,
-    })
-    showFeedback(formatCheckFeedback(result), result.alertCount > 0)
-  })
-}
-
 function formatCheckFeedback(result: {
   alertCount: number
   unresolvedCount: number
@@ -971,38 +857,31 @@ function formatCheckFeedback(result: {
   return t('statisticsPage.settingsAlertsTestNoTrigger')
 }
 
-async function forceDemoAlerts(): Promise<void> {
-  if (watchedCount.value === 0) {
-    showFeedback(t('statisticsPage.settingsAlertsTestNoWatchlist'), false)
-    return
+function formatBuildCheckFeedback(result: {
+  alertCount: number
+  evaluatedCount: number
+  unresolvedCount: number
+  fetchFailedCount: number
+}): string {
+  if (result.alertCount > 0) {
+    return t('statisticsPage.settingsBuildAlertsCheckWithAlerts', { count: result.alertCount })
   }
-  await withBusy(async () => {
-    const result = await runSurveillanceAlertCheck({
-      demoMode: true,
-      cohortKey: selectedCohortKey.value,
+  if (result.unresolvedCount > 0) {
+    return t('statisticsPage.settingsAlertsTestUnresolved', {
+      count: result.unresolvedCount,
     })
-    if (result.alertCount > 0) {
-      showFeedback(
-        t('statisticsPage.settingsAlertsTestDemoDone', { count: result.alertCount }),
-        true
-      )
-      await navigateTo(localePath('/statistics/surveillance'))
-      return
-    }
-    showFeedback(formatCheckFeedback(result), false)
-  })
-}
-
-function clearTestBaselines(): void {
-  const cohortKey = selectedCohortKey.value
-  const next = { ...alertStore.testBaselines }
-  for (const key of Object.keys(next)) {
-    if (parseSurveillanceBaselineKey(key).cohortKey === cohortKey) {
-      delete next[key]
-    }
   }
-  alertStore.setTestBaselines(next)
-  showFeedback(t('statisticsPage.settingsAlertsTestCleared'))
+  if (result.fetchFailedCount > 0) {
+    return t('statisticsPage.settingsAlertsTestApiFailed', {
+      count: result.fetchFailedCount,
+    })
+  }
+  if (result.evaluatedCount === 0) {
+    return t('statisticsPage.settingsBuildAlertsCheckNoBuilds')
+  }
+  return t('statisticsPage.settingsBuildAlertsCheckDone', {
+    count: result.evaluatedCount,
+  })
 }
 
 async function saveAndRunCheck(): Promise<void> {
@@ -1010,21 +889,65 @@ async function saveAndRunCheck(): Promise<void> {
     showFeedback(t('statisticsPage.settingsAlertsTestNoWatchlist'), false)
     return
   }
-  if (!canRunCheck.value) {
-    showFeedback(t('statisticsPage.settingsAlertsSaveInvalidReference'), false)
+  if (!canSaveAndCheck.value) {
+    showFeedback(t('statisticsPage.settingsAlertsSaveInvalidThresholds'), false)
     return
   }
   await withBusy(async () => {
-    const result = await runSurveillanceAlertCheck()
-    if (result.alertCount > 0) {
+    let totalAlerts = 0
+    let hadError = false
+    let buildResult: Awaited<ReturnType<typeof runBuildSurveillanceCheck>> | null = null
+    let statsResult: Awaited<ReturnType<typeof runSurveillanceAlertCheck>> | null = null
+
+    if (canRunCheck.value) {
+      statsResult = await runSurveillanceAlertCheck()
+      totalAlerts += statsResult.alertCount
+      hadError = hadError || statsResult.fetchFailedCount > 0
+      if (statsResult.alertCount > 0) {
+        alertStore.clearAlertsAcknowledgement()
+      }
+    }
+
+    if (canRunBuildCheck.value) {
+      buildResult = await runBuildSurveillanceCheck({
+        rankTiers: [],
+        role: '',
+        patch: currentPatchLabel.value || '',
+      })
+      totalAlerts += buildResult.alertCount
+      hadError = hadError || buildResult.fetchFailedCount > 0
+      if (buildResult.alertCount > 0) {
+        buildStore.clearAlertsAcknowledgement()
+      }
+    }
+
+    if (totalAlerts > 0) {
       showFeedback(
-        t('statisticsPage.settingsAlertsSaveDoneWithAlerts', { count: result.alertCount }),
+        t('statisticsPage.settingsAlertsSaveDoneWithAlerts', { count: totalAlerts }),
         true
       )
-      await navigateTo(localePath('/statistics/surveillance'))
       return
     }
-    showFeedback(formatCheckFeedback(result), result.fetchFailedCount === 0)
+
+    if (buildResult && !statsResult) {
+      showFeedback(formatBuildCheckFeedback(buildResult), buildResult.fetchFailedCount === 0)
+      return
+    }
+    if (statsResult && !buildResult) {
+      showFeedback(formatCheckFeedback(statsResult), statsResult.fetchFailedCount === 0)
+      return
+    }
+    if (buildResult && statsResult) {
+      const ok = statsResult.fetchFailedCount === 0 && buildResult.fetchFailedCount === 0
+      if (buildResult.evaluatedCount > 0 || statsResult.evaluatedCount > 0) {
+        showFeedback(t('statisticsPage.settingsAlertsTestNoTrigger'), ok)
+        return
+      }
+      showFeedback(formatBuildCheckFeedback(buildResult), ok)
+      return
+    }
+
+    showFeedback(t('statisticsPage.settingsAlertsTestNoTrigger'), !hadError)
   })
 }
 </script>

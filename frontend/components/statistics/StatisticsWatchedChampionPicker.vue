@@ -27,6 +27,24 @@
           {{ translateRole(role) }}
         </button>
       </div>
+      <div class="champion-action-bar flex flex-wrap items-center gap-1.5">
+        <button
+          type="button"
+          class="rounded border border-primary/35 bg-surface/40 px-2.5 py-1 text-xs text-text/80 hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+          :disabled="championsStore.status !== 'success' || allFilteredSelected"
+          @click="selectAllFiltered"
+        >
+          {{ t('statisticsPage.settingsWatchlistSelectAll') }}
+        </button>
+        <button
+          v-if="hasSelection"
+          type="button"
+          class="rounded border border-primary/35 bg-surface/40 px-2.5 py-1 text-xs text-text/80 hover:bg-primary/10"
+          @click="clearAll"
+        >
+          {{ t('statisticsPage.settingsWatchlistClear') }}
+        </button>
+      </div>
     </div>
 
     <div v-if="championsStore.status === 'loading'" class="py-8 text-center">
@@ -130,6 +148,12 @@ const allChampions = computed(() => championsStore.champions)
 
 const hasSelection = computed(() => props.modelValue.length > 0)
 
+const allFilteredSelected = computed(() => {
+  const filtered = filteredChampions.value
+  if (filtered.length === 0) return true
+  return filtered.every(champion => props.modelValue.includes(champion.id))
+})
+
 const isFiltered = (champion: Champion): boolean => {
   if (selectedRoles.value.length === 0 && !searchQuery.value) return true
   return filteredChampions.value.some(c => c.id === champion.id)
@@ -148,6 +172,18 @@ const toggleRole = (role: string) => {
   const index = selectedRoles.value.indexOf(role)
   if (index > -1) selectedRoles.value.splice(index, 1)
   else selectedRoles.value.push(role)
+}
+
+function selectAllFiltered(): void {
+  const ids = new Set(props.modelValue)
+  for (const champion of filteredChampions.value) {
+    ids.add(champion.id)
+  }
+  emit('update:modelValue', Array.from(ids))
+}
+
+function clearAll(): void {
+  emit('update:modelValue', [])
 }
 
 const { version } = useGameVersion()
@@ -184,6 +220,10 @@ watch(locale, () => {
 .champion-filter-bar {
   flex: 0 1 auto;
   gap: 5px;
+}
+
+.champion-action-bar {
+  flex: 0 1 auto;
 }
 
 .champion-filter-btn {

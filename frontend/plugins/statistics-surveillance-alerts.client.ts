@@ -1,59 +1,37 @@
-import { SURVEILLANCE_ALERT_CHECK_INTERVAL_MS } from '~/constants/surveillanceAlerts'
+import { shouldRunScheduledSurveillanceCheck } from '~/constants/surveillanceAlerts'
 
-/** Vérifie les alertes surveillance à la connexion, puis toutes les 12 h si l’onglet reste ouvert. */
+/** Vérifie les alertes surveillance (stats + builds) à la connexion si > 24 h. */
 export default defineNuxtPlugin({
   name: 'lelanation-surveillance-alerts',
   enforce: 'post',
   setup(nuxtApp) {
-    let intervalId: ReturnType<typeof setInterval> | null = null
-    let runCheck: (() => Promise<unknown>) | null = null
-
-    const scheduleCheck = () => {
-      runCheck?.().catch(() => undefined)
-    }
-
-    const startPeriodicChecks = () => {
-      if (intervalId !== null) return
-      intervalId = setInterval(scheduleCheck, SURVEILLANCE_ALERT_CHECK_INTERVAL_MS)
-    }
-
-    const stopPeriodicChecks = () => {
-      if (intervalId === null) return
-      clearInterval(intervalId)
-      intervalId = null
-    }
-
-    if (import.meta.client) {
-      window.addEventListener('beforeunload', stopPeriodicChecks)
-    }
-
-    // Initialiser après montage : useI18n / composables dans un plugin au boot
-    // provoquaient SyntaxError côté client avant chargement des messages lazy.
-    nuxtApp.hook('app:mounted', () => {
-      const { runSurveillanceAlertCheck } = useSurveillanceAlertEvaluation()
-      runCheck = runSurveillanceAlertCheck
-
-      const statisticsUiStore = useStatisticsUiStore()
+    nuxtApp.hook('app:mounted', async () => {
       const alertStore = useStatisticsSurveillanceAlertStore()
+      const buildStore = useStatisticsBuildSurveillanceStore()
+      alertStore.init()
+      buildStore.init()
 
-      scheduleCheck()
-      startPeriodicChecks()
+      const { runSurveillanceAlertCheck } = useSurveillanceAlertEvaluation()
+      const { runBuildSurveillanceCheck } = useBuildSurveillanceEvaluation()
 
-      watch(
-        () => [...statisticsUiStore.watchedChampionIds],
-        () => scheduleCheck(),
-        { deep: true }
-      )
+      if (shouldRunScheduledSurveillanceCheck(alertStore.lastCheckedAt)) {
+        runSurveillanceAlertCheck().catch(() => undefined)
+      }
 
-      watch(
-        () => [
-          alertStore.thresholdProfiles,
-          alertStore.sharedThresholds,
-          alertStore.referenceSettings,
-        ],
-        () => scheduleCheck(),
-        { deep: true }
-      )
+      if (!shouldRunScheduledSurveillanceCheck(buildStore.lastCheckedAt)) return
+
+      let patch = ''
+      try {
+        const versionsData = await $fetch<{
+          versions?: Array<{ patchLabel?: string; version?: string }>
+        }>('/data/game/versions.json')
+        const rows = versionsData?.versions ?? []
+        patch = String(rows[rows.length - 1]?.patchLabel ?? rows[rows.length - 1]?.version ?? '')
+      } catch {
+        patch = ''
+      }
+
+      runBuildSurveillanceCheck({ rankTiers: [], role: '', patch }).catch(() => undefined)
     })
   },
 })

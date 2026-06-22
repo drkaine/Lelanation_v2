@@ -270,53 +270,53 @@ export function useSurveillanceAlertEvaluation() {
       return checkInFlight
     }
 
+    const shouldRecordCheck = !demoMode && !useTestBaselines
+
     const run = async (): Promise<SurveillanceAlertCheckResult> => {
-      statisticsUiStore.init()
-
-      const watchedIds = statisticsUiStore.watchedChampionIds
-      const result: SurveillanceAlertCheckResult = {
-        ...emptyCheckResult(),
-        watchedCount: watchedIds.length,
-      }
-
-      if (watchedIds.length === 0) {
-        alertStore.clearActiveAlerts()
-        return result
-      }
-
-      const profiles = (() => {
-        const all = options?.cohortKey
-          ? alertStore.thresholdProfiles.filter(p => p.cohortKey === options.cohortKey)
-          : configuredSurveillanceCohortProfiles(alertStore.thresholdProfiles)
-        return demoMode ? alertStore.thresholdProfiles : all
-      })()
-
-      if (profiles.length === 0) {
-        alertStore.clearActiveAlerts()
-        return result
-      }
-
-      if (
-        !demoMode &&
-        !profiles.some(profile => hasConfiguredSurveillanceThresholds(profile.thresholds))
-      ) {
-        alertStore.clearActiveAlerts()
-        return result
-      }
-
-      alertStore.setChecking(true)
       try {
+        statisticsUiStore.init()
+
+        const watchedIds = statisticsUiStore.watchedChampionIds
+        const result: SurveillanceAlertCheckResult = {
+          ...emptyCheckResult(),
+          watchedCount: watchedIds.length,
+        }
+
+        if (watchedIds.length === 0) {
+          alertStore.clearActiveAlerts()
+          return result
+        }
+
+        const profiles = (() => {
+          const all = options?.cohortKey
+            ? alertStore.thresholdProfiles.filter(p => p.cohortKey === options.cohortKey)
+            : configuredSurveillanceCohortProfiles(alertStore.thresholdProfiles)
+          return demoMode ? alertStore.thresholdProfiles : all
+        })()
+
+        if (profiles.length === 0) {
+          return result
+        }
+
+        if (
+          !demoMode &&
+          !profiles.some(profile => hasConfiguredSurveillanceThresholds(profile.thresholds))
+        ) {
+          alertStore.clearActiveAlerts()
+          return result
+        }
+
+        alertStore.setChecking(true)
+
         await ensureChampionsLoaded()
 
         const catalog = await loadVersionsCatalog()
         const latestPatch = latestPatchReleaseDate(catalog)
         const reference = resolveSurveillanceReference(alertStore.referenceSettings, catalog)
         if (!latestPatch && !useTestBaselines && !demoMode) {
-          alertStore.clearActiveAlerts()
           return result
         }
         if (!useTestBaselines && !demoMode && !reference) {
-          alertStore.clearActiveAlerts()
           return result
         }
 
@@ -388,6 +388,9 @@ export function useSurveillanceAlertEvaluation() {
         return result
       } finally {
         alertStore.setChecking(false)
+        if (shouldRecordCheck) {
+          alertStore.recordCheckCompleted()
+        }
       }
     }
 

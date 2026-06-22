@@ -31,60 +31,107 @@
           <p>{{ t('statisticsPage.surveillanceResolveError') }}</p>
         </div>
 
-        <StatisticsFiltersPanel
-          v-else
-          :active-filters-count="activeSurveillanceFiltersCount"
-          @reset="resetSurveillanceFilters"
-        >
-          <div class="statistics-filters-fields flex flex-col gap-3">
-            <div>
-              <label :for="searchInputId" class="mb-1 block text-sm font-medium text-text">
-                {{ t('statisticsPage.surveillanceSearchLabel') }}
-              </label>
-              <input
-                :id="searchInputId"
-                v-model="championSearchQuery"
-                type="search"
-                :placeholder="t('statisticsPage.surveillanceSearchPlaceholder')"
-                class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text placeholder:text-text/45 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50"
-              />
-            </div>
-
-            <StatisticsCohortFiltersFields
-              v-model:filter-rank="filterRank"
-              v-model:filter-role="filterRole"
-            />
-
-            <StatisticsDailyTrendToolbar stacked />
+        <div v-else class="space-y-4">
+          <div
+            class="inline-flex rounded-lg border border-primary/30 bg-surface/30 p-0.5"
+            role="tablist"
+            :aria-label="t('statisticsPage.surveillancePageTabsAria')"
+          >
+            <button
+              type="button"
+              role="tab"
+              class="rounded-md px-3 py-1.5 text-xs font-medium transition"
+              :class="
+                activePageTab === 'champions'
+                  ? 'bg-primary/20 text-text-accent'
+                  : 'text-text/70 hover:bg-primary/10'
+              "
+              :aria-selected="activePageTab === 'champions'"
+              @click="activePageTab = 'champions'"
+            >
+              {{ t('statisticsPage.surveillanceTabChampions') }}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              class="rounded-md px-3 py-1.5 text-xs font-medium transition"
+              :class="
+                activePageTab === 'summary'
+                  ? 'bg-primary/20 text-text-accent'
+                  : 'text-text/70 hover:bg-primary/10'
+              "
+              :aria-selected="activePageTab === 'summary'"
+              @click="activePageTab = 'summary'"
+            >
+              {{ t('statisticsPage.surveillanceTabSummary') }}
+            </button>
           </div>
 
-          <template #main>
-            <div class="w-full space-y-6">
-              <p v-if="filteredWatchedChampions.length === 0" class="text-sm text-text/60">
-                {{ t('statisticsPage.surveillanceSearchNoResults') }}
-              </p>
+          <StatisticsSurveillanceSummaryPanel v-if="activePageTab === 'summary'" />
 
-              <div v-else class="space-y-8">
-                <ClientOnly>
-                  <ChampionOverviewPanel
-                    v-for="champion in sortedWatchedChampions"
-                    :key="champion.slug"
-                    :champion-key="champion.key"
-                    :champion-slug="champion.slug"
-                    :champion-name="champion.name"
-                    :champion-image="champion.image"
-                    :filter-role="filterRole"
-                    :filter-rank="filterRank"
-                    :filter-version="filterVersion"
-                    :versions-catalog="versionsCatalog"
-                    :shared-trend-ui="sharedTrendSettings"
-                    :alert-triggers="alertTriggersFor(champion.key)"
-                  />
-                </ClientOnly>
+          <StatisticsFiltersPanel
+            v-else
+            :active-filters-count="activeSurveillanceFiltersCount"
+            @reset="resetSurveillanceFilters"
+          >
+            <div class="statistics-filters-fields flex flex-col gap-3">
+              <div>
+                <label :for="searchInputId" class="mb-1 block text-sm font-medium text-text">
+                  {{ t('statisticsPage.surveillanceSearchLabel') }}
+                </label>
+                <input
+                  :id="searchInputId"
+                  v-model="championSearchQuery"
+                  type="search"
+                  :placeholder="t('statisticsPage.surveillanceSearchPlaceholder')"
+                  class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text placeholder:text-text/45 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50"
+                />
               </div>
+
+              <StatisticsSurveillanceAlertFilters v-model="alertFilterIds" />
+
+              <StatisticsCohortFiltersFields
+                v-model:filter-rank="filterRank"
+                v-model:filter-role="filterRole"
+              />
+
+              <StatisticsDailyTrendToolbar stacked />
             </div>
-          </template>
-        </StatisticsFiltersPanel>
+
+            <template #main>
+              <div class="w-full space-y-6">
+                <p v-if="sortedWatchedChampions.length === 0" class="text-sm text-text/60">
+                  {{
+                    alertFilterIds.length > 0
+                      ? t('statisticsPage.surveillanceAlertFilterNoResults')
+                      : t('statisticsPage.surveillanceSearchNoResults')
+                  }}
+                </p>
+
+                <div v-else class="space-y-8">
+                  <ClientOnly>
+                    <ChampionOverviewPanel
+                      v-for="champion in sortedWatchedChampions"
+                      :key="champion.slug"
+                      :champion-key="champion.key"
+                      :champion-slug="champion.slug"
+                      :champion-name="champion.name"
+                      :champion-image="champion.image"
+                      :filter-role="filterRole"
+                      :filter-rank="filterRank"
+                      :filter-version="filterVersion"
+                      :versions-catalog="versionsCatalog"
+                      :shared-trend-ui="sharedTrendSettings"
+                      :alert-triggers="alertTriggersFor(champion.key)"
+                      :build-alert-triggers="buildAlertTriggersFor(champion.key)"
+                      :alert-filter-ids="alertFilterIds"
+                    />
+                  </ClientOnly>
+                </div>
+              </div>
+            </template>
+          </StatisticsFiltersPanel>
+        </div>
       </template>
     </div>
   </div>
@@ -98,13 +145,20 @@ import ChampionOverviewPanel from '~/components/statistics/ChampionOverviewPanel
 import StatisticsCohortFiltersFields from '~/components/statistics/StatisticsCohortFiltersFields.vue'
 import StatisticsDailyTrendToolbar from '~/components/statistics/StatisticsDailyTrendToolbar.vue'
 import StatisticsFiltersPanel from '~/components/statistics/StatisticsFiltersPanel.vue'
+import StatisticsSurveillanceSummaryPanel from '~/components/statistics/StatisticsSurveillanceSummaryPanel.vue'
+import StatisticsSurveillanceAlertFilters from '~/components/statistics/StatisticsSurveillanceAlertFilters.vue'
+import {
+  championMatchesAlertFilters,
+  filterBuildTriggers,
+  filterStatsTriggers,
+  type SurveillanceAlertFilterId,
+} from '~/utils/surveillanceAlertFilters'
 import { SHARED_DAILY_TREND_CHART_UI_KEY } from '~/composables/statistics/useStatisticsDailyTrendCharts'
 import { createSharedDailyTrendChartSettings } from '~/composables/statistics/useSharedDailyTrendChartSettings'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useStatisticsSurveillanceAlertStore } from '~/stores/StatisticsSurveillanceAlertStore'
 import { useStatisticsUiStore } from '~/stores/StatisticsUiStore'
 import { useVersionStore } from '~/stores/VersionStore'
-import { useSurveillanceAlertEvaluation } from '~/composables/useSurveillanceAlertEvaluation'
 import { championKeyFromRouteParam, normalizeChampionSlug } from '~/utils/championSlug'
 import { parseRankTierQuery, rankTierSelectionsEqual } from '~/utils/statisticsRankTierQuery'
 
@@ -119,8 +173,11 @@ const router = useRouter()
 const championsStore = useChampionsStore()
 const statisticsUiStore = useStatisticsUiStore()
 const alertStore = useStatisticsSurveillanceAlertStore()
+const buildStore = useStatisticsBuildSurveillanceStore()
+const historyStore = useStatisticsSurveillanceHistoryStore()
 const versionStore = useVersionStore()
-const { runSurveillanceAlertCheck } = useSurveillanceAlertEvaluation()
+
+const activePageTab = ref<'champions' | 'summary'>('champions')
 
 const { watchedChampionIds } = storeToRefs(statisticsUiStore)
 
@@ -128,6 +185,7 @@ const pageReady = ref(false)
 const versionsCatalog = ref<Array<{ patchLabel: string; releaseDate: string }>>([])
 const championSearchQuery = ref('')
 const searchInputId = 'surveillance-champion-search'
+const alertFilterIds = ref<SurveillanceAlertFilterId[]>([])
 
 const filterVersion = ref('')
 const filterRole = ref('')
@@ -145,6 +203,7 @@ const activeSurveillanceFiltersCount = computed(() => {
   if (filterRole.value) count++
   if (filterVersion.value) count++
   if (championSearchQuery.value.trim()) count++
+  if (alertFilterIds.value.length > 0) count++
   if (sharedTrendSettings.trendGranularity.value !== 'day') count++
   if (sharedTrendSettings.trendRangeMode.value !== '7d') count++
   if (sharedTrendSettings.trendDivisionPreset.value !== 'selected') count++
@@ -186,6 +245,7 @@ function resetSurveillanceFilters(): void {
   filterRole.value = ''
   filterVersion.value = ''
   championSearchQuery.value = ''
+  alertFilterIds.value = []
   resetSurveillanceTrendSettings()
 }
 
@@ -274,10 +334,19 @@ const filteredWatchedChampions = computed(() => {
 })
 
 const sortedWatchedChampions = computed(() => {
-  const champions = filteredWatchedChampions.value
+  let champions = filteredWatchedChampions.value
+  if (alertFilterIds.value.length > 0) {
+    champions = champions.filter(champion => {
+      const stats = alertStore.triggersFor(String(champion.key))
+      const builds = buildStore.triggersFor(String(champion.key))
+      return championMatchesAlertFilters(stats, builds, alertFilterIds.value)
+    })
+  }
   return [...champions].sort((a, b) => {
-    const aAlert = alertStore.hasAlert(String(a.key))
-    const bAlert = alertStore.hasAlert(String(b.key))
+    const aAlert =
+      alertStore.hasAlert(String(a.key)) || buildStore.triggersFor(String(a.key)).length > 0
+    const bAlert =
+      alertStore.hasAlert(String(b.key)) || buildStore.triggersFor(String(b.key)).length > 0
     if (aAlert && !bAlert) return -1
     if (!aAlert && bAlert) return 1
     return 0
@@ -285,7 +354,11 @@ const sortedWatchedChampions = computed(() => {
 })
 
 function alertTriggersFor(championKey: number) {
-  return alertStore.triggersFor(String(championKey))
+  return filterStatsTriggers(alertStore.triggersFor(String(championKey)), alertFilterIds.value)
+}
+
+function buildAlertTriggersFor(championKey: number) {
+  return filterBuildTriggers(buildStore.triggersFor(String(championKey)), alertFilterIds.value)
 }
 
 async function loadVersionsCatalog(): Promise<void> {
@@ -306,16 +379,31 @@ async function loadVersionsCatalog(): Promise<void> {
   }
 }
 
+function acknowledgeAndArchiveAlerts(): void {
+  if (alertStore.alertCount === 0 && buildStore.alertCount === 0) return
+  historyStore.appendEntry({
+    statsAlerts: alertStore.acknowledgeAlerts(),
+    buildAlerts: buildStore.acknowledgeAlerts(),
+  })
+}
+
 async function bootstrapPage(): Promise<void> {
   statisticsUiStore.init()
   alertStore.init()
+  buildStore.init()
+  historyStore.init()
   await versionStore.loadCurrentVersion().catch(() => undefined)
   const lang = locale.value === 'fr' ? 'fr_FR' : 'en_US'
   await championsStore.loadChampions(lang).catch(() => undefined)
   await loadVersionsCatalog()
-  await runSurveillanceAlertCheck().catch(() => undefined)
-  alertStore.acknowledgeAlerts()
+  acknowledgeAndArchiveAlerts()
 }
+
+watch(activePageTab, (tab, previous) => {
+  if (tab === 'summary' && previous !== 'summary') {
+    acknowledgeAndArchiveAlerts()
+  }
+})
 
 onMounted(async () => {
   pageReady.value = false

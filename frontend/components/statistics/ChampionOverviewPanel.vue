@@ -2,20 +2,38 @@
   <section
     class="champion-overview-panel rounded-xl border p-4"
     :class="[
-      hasAlerts ? 'border-error/50 bg-error/5' : 'border-primary/25 bg-surface/20',
-      chartsExpanded ? 'space-y-4' : '',
+      hasAnyAlerts ? 'border-error/50 bg-error/5' : 'border-primary/25 bg-surface/20',
+      panelExpanded ? 'space-y-4' : '',
     ]"
   >
     <div
-      v-if="hasAlerts"
+      v-if="hasAnyAlerts"
       class="rounded-md border border-primary/30 bg-surface/30 px-3 py-2 text-xs"
       role="status"
     >
-      <p class="font-semibold text-text/90">{{ t('statisticsPage.surveillanceAlertTitle') }}</p>
-      <ul class="mt-1 list-disc space-y-0.5 pl-4">
+      <p v-if="hasStatsAlerts" class="font-semibold text-text/90">
+        {{ t('statisticsPage.surveillanceAlertTitle') }}
+      </p>
+      <ul v-if="hasStatsAlerts" class="mt-1 list-disc space-y-0.5 pl-4">
         <li
           v-for="(line, index) in alertLines"
-          :key="index"
+          :key="'stats-' + index"
+          :class="line.tone === 'positive' ? 'text-emerald-400' : 'text-red-400'"
+        >
+          {{ line.text }}
+        </li>
+      </ul>
+      <p
+        v-if="hasBuildAlerts"
+        class="font-semibold text-text/90"
+        :class="hasStatsAlerts ? 'mt-2' : ''"
+      >
+        {{ t('statisticsPage.surveillanceBuildAlertTitle') }}
+      </p>
+      <ul v-if="hasBuildAlerts" class="mt-1 list-disc space-y-0.5 pl-4">
+        <li
+          v-for="(line, index) in buildAlertLines"
+          :key="'build-' + index"
           :class="line.tone === 'positive' ? 'text-emerald-400' : 'text-red-400'"
         >
           {{ line.text }}
@@ -67,17 +85,17 @@
       <button
         type="button"
         class="inline-flex h-7 w-7 shrink-0 items-center justify-center text-text/70 transition hover:text-text"
-        :aria-expanded="chartsExpanded"
+        :aria-expanded="panelExpanded"
         :aria-label="
-          chartsExpanded
+          panelExpanded
             ? t('statisticsPage.surveillanceCollapseCharts')
             : t('statisticsPage.surveillanceExpandCharts')
         "
-        @click="chartsExpanded = !chartsExpanded"
+        @click="panelExpanded = !panelExpanded"
       >
         <span
           class="inline-block text-sm leading-none transition-transform duration-200"
-          :class="chartsExpanded ? 'rotate-0' : '-rotate-90'"
+          :class="panelExpanded ? 'rotate-0' : '-rotate-90'"
           aria-hidden="true"
         >
           ▾
@@ -85,7 +103,40 @@
       </button>
     </header>
 
-    <template v-if="chartsExpanded">
+    <div v-if="panelExpanded" class="flex flex-wrap gap-1 border-b border-primary/20 pb-2">
+      <button
+        type="button"
+        class="rounded-t border px-3 py-1.5 text-xs font-medium transition"
+        :class="
+          activeTab === 'charts'
+            ? 'border-primary/40 border-b-transparent bg-surface/40 text-text'
+            : 'border-transparent text-text/60 hover:text-text'
+        "
+        @click="activeTab = 'charts'"
+      >
+        {{ t('statisticsPage.surveillanceTabCharts') }}
+      </button>
+      <button
+        type="button"
+        class="rounded-t border px-3 py-1.5 text-xs font-medium transition"
+        :class="
+          activeTab === 'builds'
+            ? 'border-primary/40 border-b-transparent bg-surface/40 text-text'
+            : 'border-transparent text-text/60 hover:text-text'
+        "
+        @click="activeTab = 'builds'"
+      >
+        {{ t('statisticsPage.surveillanceTabBuilds') }}
+        <span
+          v-if="hasBuildAlerts"
+          class="ml-1 inline-flex min-w-[1rem] items-center justify-center rounded-full bg-accent/20 px-1 text-[10px] text-accent"
+        >
+          {{ buildAlertTriggers?.length ?? 0 }}
+        </span>
+      </button>
+    </div>
+
+    <template v-if="panelExpanded && activeTab === 'charts'">
       <StatisticsDailyTrendChartsPanel
         :points="trendPoints"
         :pending="trendPending"
@@ -105,6 +156,16 @@
         :pending="durationPending"
       />
     </template>
+
+    <ChampionBuildsSurveillancePanel
+      v-if="panelExpanded && activeTab === 'builds'"
+      :champion-key="championKey"
+      :filter-role="filterRole"
+      :filter-rank="filterRank"
+      :filter-version="filterVersion"
+      :alert-filter-ids="alertFilterIds"
+      :build-alert-triggers="buildAlertTriggers ?? []"
+    />
   </section>
 </template>
 
@@ -127,7 +188,11 @@ import {
 } from '~/composables/statistics/useStatisticsDailyTrendCharts'
 import type { ChampionDurationByTierData } from '~/composables/statistics/useChampionDurationByTierCharts'
 import { formatSurveillanceAlertSummary } from '~/utils/formatSurveillanceAlert'
+import { formatBuildSurveillanceAlertSummary } from '~/utils/formatBuildSurveillanceAlert'
 import type { SurveillanceAlertTrigger } from '~/utils/statisticsSurveillanceAlerts'
+import type { BuildSurveillanceTrigger } from '~/utils/buildSurveillance'
+import type { SurveillanceAlertFilterId } from '~/utils/surveillanceAlertFilters'
+import ChampionBuildsSurveillancePanel from '~/components/statistics/ChampionBuildsSurveillancePanel.vue'
 
 const props = defineProps<{
   championKey: number
@@ -140,6 +205,8 @@ const props = defineProps<{
   versionsCatalog: Array<{ patchLabel: string; releaseDate: string }>
   sharedTrendUi?: SharedDailyTrendChartUi
   alertTriggers?: SurveillanceAlertTrigger[]
+  buildAlertTriggers?: BuildSurveillanceTrigger[]
+  alertFilterIds?: SurveillanceAlertFilterId[]
 }>()
 
 const injectedTrendChartUi = inject(SHARED_DAILY_TREND_CHART_UI_KEY, null)
@@ -151,10 +218,16 @@ const { t } = useI18n()
 const localePath = useLocalePath()
 const { version: gameVersion } = useGameVersion()
 
-const chartsExpanded = ref(true)
+const panelExpanded = ref(true)
+const activeTab = ref<'charts' | 'builds'>('charts')
 
-const hasAlerts = computed(() => (props.alertTriggers?.length ?? 0) > 0)
+const hasStatsAlerts = computed(() => (props.alertTriggers?.length ?? 0) > 0)
+const hasBuildAlerts = computed(() => (props.buildAlertTriggers?.length ?? 0) > 0)
+const hasAnyAlerts = computed(() => hasStatsAlerts.value || hasBuildAlerts.value)
 const alertLines = computed(() => formatSurveillanceAlertSummary(props.alertTriggers ?? [], t))
+const buildAlertLines = computed(() =>
+  formatBuildSurveillanceAlertSummary(props.buildAlertTriggers ?? [], t)
+)
 
 const championStatsLink = computed(() =>
   localePath({
