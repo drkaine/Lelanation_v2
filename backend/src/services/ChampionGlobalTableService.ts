@@ -200,27 +200,27 @@ export async function getChampionGlobalTable(
   if (!isDatabaseConfigured()) return null
   const roleFilterRaw = String(role ?? '').trim().toUpperCase()
   const roleFilter =
-    roleFilterRaw === 'MID'
+    roleFilterRaw === 'MID' || roleFilterRaw === 'MIDDLE'
       ? 'MIDDLE'
-      : roleFilterRaw === 'ADC'
+      : roleFilterRaw === 'ADC' || roleFilterRaw === 'BOTTOM'
         ? 'BOTTOM'
-        : roleFilterRaw === 'UTILITY'
-          ? 'SUPPORT'
+        : roleFilterRaw === 'UTILITY' || roleFilterRaw === 'SUPPORT'
+          ? 'UTILITY'
           : roleFilterRaw
   const roleFilterValues =
     roleFilter === 'TOP'
-      ? ['TOP', 'TOPLANE']
+      ? ['TOP']
       : roleFilter === 'JUNGLE'
-        ? ['JUNGLE', 'JGL']
+        ? ['JUNGLE']
         : roleFilter === 'MIDDLE'
-          ? ['MIDDLE', 'MID', 'MIDLANE']
-          : roleFilter === 'SUPPORT'
-            ? ['SUPPORT', 'UTILITY']
-      : roleFilter === 'BOTTOM'
-        ? ['BOTTOM', 'ADC', 'BOT']
-        : roleFilter
-          ? [roleFilter]
-          : []
+          ? ['MIDDLE']
+          : roleFilter === 'UTILITY'
+            ? ['UTILITY']
+            : roleFilter === 'BOTTOM'
+              ? ['BOTTOM']
+              : roleFilter
+                ? [roleFilter]
+                : []
   const roleFilterSqlValueList =
     roleFilterValues.length > 0 ? roleFilterValues.map((r) => `'${r.replace(/'/g, "''")}'`).join(',') : ''
 

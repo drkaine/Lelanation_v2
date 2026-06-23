@@ -12,6 +12,7 @@ import { ensureActivePatchVersion, syncActivePatchesFromConfigAndCounts } from '
 import { FileManager } from '../utils/fileManager.js'
 import { TheorycraftDataBuilderService } from '../services/TheorycraftDataBuilderService.js'
 import { scrapePatchNotesIfNeeded } from '../services/PatchNotesScraperService.js'
+import { refreshApiRiotFixturesOnPatchChange } from '../services/ApiRiotFixturesService.js'
 
 /**
  * Run Data Dragon sync once (used by cron schedule and manual trigger).
@@ -139,6 +140,26 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
     }
 
     await log.info('Data Dragon sync completed. Version:', syncData.version, 'Synced at:', syncData.syncedAt.toISOString())
+
+    if (patch) {
+      try {
+        const fixtureResult = await refreshApiRiotFixturesOnPatchChange(patch)
+        if (fixtureResult.refreshed) {
+          await log.info('API Riot reference fixtures refreshed', {
+            patch: fixtureResult.patch,
+            matchId: fixtureResult.matchId,
+          })
+        } else {
+          await log.info('API Riot fixtures refresh skipped', {
+            patch: fixtureResult.patch,
+            reason: fixtureResult.reason,
+          })
+        }
+      } catch (fixtureError) {
+        const message = fixtureError instanceof Error ? fixtureError.message : String(fixtureError)
+        await log.warn('API Riot fixtures refresh failed (non-blocking):', message)
+      }
+    }
 
     // Step 3: Scrape patch notes for new version (non-blocking, keeps previous patches)
     await log.step('Step 3/6: Scraping patch notes', { version: syncData.version })

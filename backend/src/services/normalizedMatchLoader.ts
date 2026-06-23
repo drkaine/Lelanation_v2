@@ -5,7 +5,6 @@ import type { IngestionJobData, TeamStatsDto } from "../dto/match.dto.js";
 import { sql } from "../db/client.js";
 import { participantRowsToParsedDtos } from "./normalizedParticipantMapper.js";
 import {
-  applyMatchRankFallbackToParticipants,
   averageMatchRankTierLabel,
   closestSnapshotsFromParticipants,
   matchReadyForAggregation,
@@ -78,6 +77,7 @@ function buildTeamStatsFromNormalized(
 
 export async function loadIngestionPayloadFromNormalizedTables(
   riotMatchId: string,
+  options?: { skipRankGate?: boolean },
 ): Promise<IngestionJobData | null> {
   const matchRows = await sql<MatchRow[]>`
     SELECT riot_match_id, patch, region, game_date, early_surrender, surrender, game_duration
@@ -116,17 +116,17 @@ export async function loadIngestionPayloadFromNormalizedTables(
   const teamStats = buildTeamStatsFromNormalized(match, teamRows, rankTier);
   const payload: IngestionJobData = { participants, teamStats };
 
-  await rehydrateParticipantRanksForIngestion(payload);
-  applyMatchRankFallbackToParticipants(payload.participants, teamStats.rankTier);
-
-  if (
-    !matchReadyForAggregation(
-      payload.participants,
-      closestSnapshotsFromParticipants(payload.participants),
-      teamStats.rankTier,
-    )
-  ) {
-    return null;
+  if (!options?.skipRankGate) {
+    await rehydrateParticipantRanksForIngestion(payload, { enqueueMissingRankFetch: true });
+    if (
+      !matchReadyForAggregation(
+        payload.participants,
+        closestSnapshotsFromParticipants(payload.participants),
+        teamStats.rankTier,
+      )
+    ) {
+      return null;
+    }
   }
 
   return payload;

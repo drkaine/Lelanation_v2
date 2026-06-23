@@ -1,6 +1,7 @@
 import type { RankSnapshot } from '../db/query.js';
 import { getBestEffortRankSnapshotsForMatch, getRankSnapshotsAtOrAfterForMatch } from '../db/query.js';
 import type { IngestionJobData, ParsedParticipantDto, TeamStatsDto } from '../dto/match.dto.js';
+import { enqueueRankGateJobsForParticipants } from '../queues/rank-jobs.js';
 import { resolveGameFirstObjective } from '../parsers/game-first-objective.js';
 import { parseMatch } from '../parsers/match.parser.js';
 import { sumObjectiveTimestampMsByTeamAndKey } from '../parsers/objective-timestamp-sums.js';
@@ -213,13 +214,22 @@ function resolveMatchRankTierForPayload(
   );
 }
 
+export type RehydrateParticipantRanksOptions = {
+  /**
+   * Si true (défaut false), enfile des fetch-rank pour les joueurs sans snapshot
+   * au lieu de matérialiser UNRANKED et bloquer l'agrégation sans retry.
+   */
+  enqueueMissingRankFetch?: boolean;
+};
+
 function finalizeParticipantRanksForAggregation(
   payload: IngestionJobData,
   closestSnapshots: Map<string, RankSnapshot>,
   gameDate: Date,
+  options?: { materializeMissing?: boolean },
 ): void {
   const missing = getMissingRankParticipants(payload.participants, closestSnapshots);
-  if (missing.length > 0) {
+  if (missing.length > 0 && options?.materializeMissing !== false) {
     materializeMissingRanksAsUnranked(payload.participants, closestSnapshots, gameDate);
     applySnapshotsToParticipants(payload.participants, closestSnapshots, { preserveRanked: true });
   }
@@ -294,16 +304,47 @@ async function buildClosestSnapshots(
   return fromDb;
 }
 
+/** Enfile fetch-rank pour les participants sans snapshot `player_rank_history`. */
+export async function enqueueRankFetchForMissingParticipants(
+  participants: ParsedParticipantDto[],
+  closestSnapshots: Map<string, RankSnapshot>,
+  region: string,
+): Promise<number> {
+  const missing = getMissingRankParticipants(participants, closestSnapshots);
+  if (missing.length === 0) return 0;
+
+  for (const participant of missing) {
+    participant.needsRankFetch = true;
+  }
+
+  const { enqueued } = await enqueueRankGateJobsForParticipants(missing, region);
+  return enqueued;
+}
+
 /** Recharge les rangs participants depuis la DB avant agrégation (jobs déjà en file, clé perso). */
-export async function rehydrateParticipantRanksForIngestion(payload: IngestionJobData): Promise<void> {
+export async function rehydrateParticipantRanksForIngestion(
+  payload: IngestionJobData,
+  options?: RehydrateParticipantRanksOptions,
+): Promise<{ missingRankFetchEnqueued: number }> {
   const participants = payload.participants;
-  if (participants.length === 0) return;
+  if (participants.length === 0) return { missingRankFetchEnqueued: 0 };
 
   const region = normalizePlatformRegion(participants[0].region);
   const gameDate = resolveMatchGameDate(participants);
   const closestSnapshots = await buildClosestSnapshots(participants, region, gameDate, new Map());
   applySnapshotsToParticipants(participants, closestSnapshots, { preserveRanked: true });
-  finalizeParticipantRanksForAggregation(payload, closestSnapshots, gameDate);
+
+  if (options?.enqueueMissingRankFetch) {
+    const enqueued = await enqueueRankFetchForMissingParticipants(participants, closestSnapshots, region);
+    if (enqueued > 0) {
+      return { missingRankFetchEnqueued: enqueued };
+    }
+  }
+
+  finalizeParticipantRanksForAggregation(payload, closestSnapshots, gameDate, {
+    materializeMissing: !options?.enqueueMissingRankFetch,
+  });
+  return { missingRankFetchEnqueued: 0 };
 }
 
 export async function buildIngestionPayloadFromMatchData(input: {
@@ -337,14 +378,11 @@ export async function buildIngestionPayloadFromMatchData(input: {
 
   if (!matchReadyForAggregation(participants, closestSnapshots)) {
     const missing = getMissingRankParticipants(participants, closestSnapshots);
-    if (missing.length === 0) {
+    if (missing.length > 0) {
+      await enqueueRankFetchForMissingParticipants(participants, closestSnapshots, region);
       return null;
     }
-    materializeMissingRanksAsUnranked(participants, closestSnapshots, gameDate);
-    applySnapshotsToParticipants(participants, closestSnapshots);
-    if (!matchReadyForAggregation(participants, closestSnapshots)) {
-      return null;
-    }
+    return null;
   }
 
   const teamStats = buildTeamStats(teamStatsBase, participants, closestSnapshots);

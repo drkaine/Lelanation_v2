@@ -136,6 +136,7 @@ function roleForClient(role: string): string {
   const v = String(role ?? '').toUpperCase()
   if (v === 'MID') return 'MIDDLE'
   if (v === 'ADC') return 'BOTTOM'
+  if (v === 'UTILITY') return 'SUPPORT'
   return v
 }
 
@@ -152,7 +153,7 @@ function balanceRoleKeyFromBannerColumn(role: string): string | null {
   return BALANCE_CLIENT_ROLES.has(banner) ? banner : null
 }
 
-/** Filtre rôle : SQL champion (MID/ADC) + bans (MIDDLE/BOTTOM), clé client unifiée. */
+/** Filtre rôle : SQL champion (`lol_role`) + bans (banner legacy), clé client unifiée. */
 function normalizeRoleFilter(role: string | null | undefined): BalanceRoleFilter | null {
   const raw = String(role ?? '').trim().toUpperCase()
   if (!raw) return null

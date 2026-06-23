@@ -260,6 +260,20 @@
       "when": 1750425600000,
       "tag": "0036_jungle_camp_history_doc",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1750512000000,
+      "tag": "0037_lol_enum_types",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1750598400000,
+      "tag": "0038_finalize_lol_enums",
+      "breakpoints": true
     }
   ]
 }

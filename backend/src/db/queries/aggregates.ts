@@ -85,7 +85,9 @@ export async function writeTeamAggregates(job: MatchDataJob): Promise<void> {
     VALUES (${job.patch}, ${job.rankTier}, ${job.region}, 1)
     ON CONFLICT (patch, rank_tier)
     DO UPDATE SET
-      count_match = match_outcome_stats.count_match + 1
+      count_match = match_outcome_stats.count_match + 1,
+      region = EXCLUDED.region,
+      updated_at = NOW()
   `
 
   const objectiveRows: Array<{

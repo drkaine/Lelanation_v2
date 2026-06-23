@@ -23,6 +23,7 @@ export type BatchAggregationResult = {
   skippedNotReady: number;
   skippedAlreadyDone: number;
   failed: number;
+  rankFetchEnqueued: number;
   durationMs: number;
 };
 
@@ -59,26 +60,36 @@ export async function listPendingAggregationMatchIds(limit: number): Promise<str
 
 export async function aggregateSingleMatchFromNormalized(
   riotMatchId: string,
-): Promise<"aggregated" | "skipped_not_ready" | "skipped_already_done"> {
+): Promise<{ outcome: "aggregated" | "skipped_not_ready" | "skipped_already_done"; rankFetchEnqueued: number }> {
   const matchId = String(riotMatchId ?? "").trim();
-  if (!matchId) return "skipped_not_ready";
+  if (!matchId) return { outcome: "skipped_not_ready", rankFetchEnqueued: 0 };
 
   if (await isMatchAlreadyAggregated(matchId)) {
-    return "skipped_already_done";
+    return { outcome: "skipped_already_done", rankFetchEnqueued: 0 };
   }
 
-  const payload = await loadIngestionPayloadFromNormalizedTables(matchId);
-  if (!payload) return "skipped_not_ready";
+  const payload = await loadIngestionPayloadFromNormalizedTables(matchId, { skipRankGate: true });
+  if (!payload) return { outcome: "skipped_not_ready", rankFetchEnqueued: 0 };
 
-  await rehydrateParticipantRanksForIngestion(payload);
+  const { missingRankFetchEnqueued } = await rehydrateParticipantRanksForIngestion(payload, {
+    enqueueMissingRankFetch: true,
+  });
   const snapshots = closestSnapshotsFromParticipants(payload.participants);
   if (!matchReadyForAggregation(payload.participants, snapshots, payload.teamStats.rankTier)) {
-    return "skipped_not_ready";
+    if (missingRankFetchEnqueued > 0) {
+      appendUnifiedLog({
+        section: "back",
+        type: "info",
+        script: "match_batch_aggregation",
+        message: `rank_fetch_enqueued matchId=${matchId} jobs=${missingRankFetchEnqueued}`,
+      });
+    }
+    return { outcome: "skipped_not_ready", rankFetchEnqueued: missingRankFetchEnqueued };
   }
 
   await runAggregationTransaction(payload);
   await recordAggregatedMatch(matchId);
-  return "aggregated";
+  return { outcome: "aggregated", rankFetchEnqueued: 0 };
 }
 
 export async function runMatchBatchAggregationOnce(): Promise<BatchAggregationResult> {
@@ -90,10 +101,12 @@ export async function runMatchBatchAggregationOnce(): Promise<BatchAggregationRe
   let skippedNotReady = 0;
   let skippedAlreadyDone = 0;
   let failed = 0;
+  let rankFetchEnqueued = 0;
 
   for (const matchId of matchIds) {
     try {
-      const outcome = await aggregateSingleMatchFromNormalized(matchId);
+      const { outcome, rankFetchEnqueued: enqueued } = await aggregateSingleMatchFromNormalized(matchId);
+      rankFetchEnqueued += enqueued;
       if (outcome === "aggregated") aggregated += 1;
       else if (outcome === "skipped_already_done") skippedAlreadyDone += 1;
       else skippedNotReady += 1;
@@ -115,6 +128,7 @@ export async function runMatchBatchAggregationOnce(): Promise<BatchAggregationRe
     skippedNotReady,
     skippedAlreadyDone,
     failed,
+    rankFetchEnqueued,
     durationMs: Date.now() - startedAt,
   };
 
@@ -123,11 +137,12 @@ export async function runMatchBatchAggregationOnce(): Promise<BatchAggregationRe
       section: "back",
       type: "info",
       script: "match_batch_aggregation",
-      message: `batch_complete candidates=${result.candidates} aggregated=${result.aggregated} skipped_not_ready=${result.skippedNotReady} skipped_done=${result.skippedAlreadyDone} failed=${result.failed} duration_ms=${result.durationMs}`,
+      message: `batch_complete candidates=${result.candidates} aggregated=${result.aggregated} skipped_not_ready=${result.skippedNotReady} skipped_done=${result.skippedAlreadyDone} rank_fetch_enqueued=${result.rankFetchEnqueued} failed=${result.failed} duration_ms=${result.durationMs}`,
     });
     console.log(
       `[match-batch-aggregation] candidates=${result.candidates} aggregated=${result.aggregated} ` +
-        `skipped_not_ready=${result.skippedNotReady} failed=${result.failed} duration_ms=${result.durationMs}`,
+        `skipped_not_ready=${result.skippedNotReady} rank_fetch_enqueued=${result.rankFetchEnqueued} ` +
+        `failed=${result.failed} duration_ms=${result.durationMs}`,
     );
   }
 

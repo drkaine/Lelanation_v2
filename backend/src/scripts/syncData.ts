@@ -8,6 +8,8 @@ import { DiscordService } from '../services/DiscordService.js'
 import { StaticAssetsService } from '../services/StaticAssetsService.js'
 import { TheorycraftDataBuilderService } from '../services/TheorycraftDataBuilderService.js'
 import { FileManager } from '../utils/fileManager.js'
+import { refreshApiRiotFixturesOnPatchChange } from '../services/ApiRiotFixturesService.js'
+import { normalizeGamePatchKey } from '../services/VersionService.js'
 
 interface YouTubeChannelConfig {
   channelId: string
@@ -82,6 +84,25 @@ async function main(): Promise<void> {
     )
     process.exitCode = 1
     return
+  }
+
+  const patchLabel = normalizeGamePatchKey(ddSyncData.version)
+  if (patchLabel) {
+    try {
+      const fixtureResult = await refreshApiRiotFixturesOnPatchChange(patchLabel)
+      if (fixtureResult.refreshed) {
+        console.log(
+          `[sync:data] API Riot fixtures refreshed patch=${fixtureResult.patch} matchId=${fixtureResult.matchId}`,
+        )
+      } else {
+        console.log(
+          `[sync:data] API Riot fixtures skipped patch=${fixtureResult.patch ?? patchLabel} reason=${fixtureResult.reason ?? 'unknown'}`,
+        )
+      }
+    } catch (fixtureError) {
+      const message = fixtureError instanceof Error ? fixtureError.message : String(fixtureError)
+      console.warn('[sync:data] API Riot fixtures refresh failed (non-blocking):', message)
+    }
   }
 
   // --- Community Dragon (static assets only; theorycraft CD data via TheorycraftDataBuilder) ---

@@ -8,7 +8,7 @@ import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
 
 type Logger = ReturnType<typeof createRiotPollerLogger>
 let lastActiveRefreshAtMs = 0
-const SNAPSHOT_ALLOWED_ROLES = ['TOP', 'JUNGLE', 'MIDDLE', 'SUPPORT', 'BOTTOM'] as const
+const SNAPSHOT_ALLOWED_ROLES = ['TOP', 'JUNGLE', 'MIDDLE', 'UTILITY', 'BOTTOM'] as const
 
 function parseUtcSchedule(): { hour: number; minute: number } {
   const hour = Math.min(23, Math.max(0, parseInt(process.env.CHAMPION_TIER_SNAPSHOT_UTC_HOUR ?? '0', 10) || 0))
@@ -44,7 +44,7 @@ async function cleanupInvalidSnapshotRoles(logger?: Logger): Promise<void> {
   const deletedActive = await queryRawUnsafe<number>(`
     WITH d AS (
       DELETE FROM champion_tier_daily_snapshots
-      WHERE role NOT IN ('TOP', 'JUNGLE', 'MIDDLE', 'SUPPORT', 'BOTTOM')
+      WHERE role NOT IN ('TOP', 'JUNGLE', 'MIDDLE', 'UTILITY', 'BOTTOM')
       RETURNING 1
     ) SELECT COUNT(*)::int FROM d
   `)
@@ -145,7 +145,7 @@ export async function getChampionTierSnapshotsForCharts(options: {
     .map((t) => t.trim().toUpperCase().split('_')[0]!)
     .filter(Boolean)
   let role = options.role
-  if (role && role.toUpperCase() === 'UTILITY') role = 'SUPPORT'
+  if (role && role.toUpperCase() === 'SUPPORT') role = 'UTILITY'
   if (role && role.toUpperCase() === 'MID') role = 'MIDDLE'
   if (role && role.toUpperCase() === 'ADC') role = 'BOTTOM'
 

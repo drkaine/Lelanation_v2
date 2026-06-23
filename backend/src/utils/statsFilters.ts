@@ -65,17 +65,17 @@ export function rankTierCacheKey(rankTier: string | string[] | null | undefined)
   return [...ranks].sort().join(',')
 }
 
-/** Rôles stockés dans `champion_stats` et tables dérivées (poller v2). */
+/** Rôles stockés dans `champion_stats` et tables dérivées (`lol_role`). */
 const STATS_ROLE_CHAMPION: Record<string, string> = {
   TOP: 'TOP',
   JUNGLE: 'JUNGLE',
-  MIDDLE: 'MID',
-  MID: 'MID',
-  BOTTOM: 'ADC',
-  ADC: 'ADC',
-  BOT: 'ADC',
-  SUPPORT: 'SUPPORT',
-  UTILITY: 'SUPPORT',
+  MIDDLE: 'MIDDLE',
+  MID: 'MIDDLE',
+  BOTTOM: 'BOTTOM',
+  ADC: 'BOTTOM',
+  BOT: 'BOTTOM',
+  SUPPORT: 'UTILITY',
+  UTILITY: 'UTILITY',
 }
 
 /** Libellés `banner_role_norm` (fragment bans SQL legacy). */

@@ -55,31 +55,37 @@ test('collapse to main role per champion', () => {
 test('normalizeRoleFilter maps UI roles to champion and banner SQL', () => {
   assert.deepEqual(__testOnly.normalizeRoleFilter('MIDDLE'), {
     client: 'MIDDLE',
-    championSql: 'MID',
+    championSql: 'MIDDLE',
     bannerSql: 'MIDDLE',
   })
   assert.deepEqual(__testOnly.normalizeRoleFilter('BOTTOM'), {
     client: 'BOTTOM',
-    championSql: 'ADC',
+    championSql: 'BOTTOM',
     bannerSql: 'BOTTOM',
   })
   assert.deepEqual(__testOnly.normalizeRoleFilter('MID'), {
     client: 'MIDDLE',
-    championSql: 'MID',
+    championSql: 'MIDDLE',
     bannerSql: 'MIDDLE',
   })
   assert.deepEqual(__testOnly.normalizeRoleFilter('ADC'), {
     client: 'BOTTOM',
-    championSql: 'ADC',
+    championSql: 'BOTTOM',
     bannerSql: 'BOTTOM',
+  })
+  assert.deepEqual(__testOnly.normalizeRoleFilter('SUPPORT'), {
+    client: 'SUPPORT',
+    championSql: 'UTILITY',
+    bannerSql: 'SUPPORT',
   })
   assert.equal(__testOnly.normalizeRoleFilter('TOP')?.championSql, 'TOP')
   assert.equal(__testOnly.normalizeRoleFilter(''), null)
 })
 
-test('balance role keys unify MID/ADC rows with MIDDLE/BOTTOM bans', () => {
-  assert.equal(__testOnly.balanceRoleKeyFromChampionColumn('MID'), 'MIDDLE')
-  assert.equal(__testOnly.balanceRoleKeyFromChampionColumn('ADC'), 'BOTTOM')
+test('balance role keys unify legacy rows with canonical client roles', () => {
+  assert.equal(__testOnly.balanceRoleKeyFromChampionColumn('MIDDLE'), 'MIDDLE')
+  assert.equal(__testOnly.balanceRoleKeyFromChampionColumn('BOTTOM'), 'BOTTOM')
+  assert.equal(__testOnly.balanceRoleKeyFromChampionColumn('UTILITY'), 'SUPPORT')
   assert.equal(__testOnly.balanceRoleKeyFromBannerColumn('MIDDLE'), 'MIDDLE')
   assert.equal(__testOnly.balanceRoleKeyFromBannerColumn('BOTTOM'), 'BOTTOM')
 })

@@ -76,7 +76,7 @@ function botlaneRankTierKey(p: ParsedParticipantDto): string {
 function firstBotlaneParticipant(
   participants: ParsedParticipantDto[],
   teamId: 100 | 200,
-  role: "ADC" | "SUPPORT",
+  role: "BOTTOM" | "UTILITY",
 ): ParsedParticipantDto | undefined {
   return participants.find((row) => row.teamId === teamId && row.role === role);
 }
@@ -785,10 +785,10 @@ async function upsertChampionBucket(tx: any, participants: ParsedParticipantDto[
 
 async function upsertBotlaneDuoVsDuoStats(tx: any, payload: IngestionJobData): Promise<void> {
   const { participants, teamStats } = payload;
-  const adc100 = firstBotlaneParticipant(participants, 100, "ADC");
-  const sup100 = firstBotlaneParticipant(participants, 100, "SUPPORT");
-  const adc200 = firstBotlaneParticipant(participants, 200, "ADC");
-  const sup200 = firstBotlaneParticipant(participants, 200, "SUPPORT");
+  const adc100 = firstBotlaneParticipant(participants, 100, "BOTTOM");
+  const sup100 = firstBotlaneParticipant(participants, 100, "UTILITY");
+  const adc200 = firstBotlaneParticipant(participants, 200, "BOTTOM");
+  const sup200 = firstBotlaneParticipant(participants, 200, "UTILITY");
   if (!adc100 || !sup100 || !adc200 || !sup200) return;
 
   const championIds = [adc100.championId, sup100.championId, adc200.championId, sup200.championId];
@@ -1088,7 +1088,8 @@ async function upsertMatchOutcomeStats(tx: any, payload: IngestionJobData): Prom
     ON CONFLICT (patch, rank_tier)
     DO UPDATE SET
       count_match = match_outcome_stats.count_match + 1,
-      region = EXCLUDED.region
+      region = EXCLUDED.region,
+      updated_at = NOW()
   `;
 }
 

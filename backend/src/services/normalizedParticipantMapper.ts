@@ -3,6 +3,7 @@
  */
 import type { ParsedItemDto, ParsedParticipantDto } from "../dto/match.dto.js";
 import { CHAMPION_STATS_METRIC_COLUMN_SET } from "../constants/championStatsMetricColumns.js";
+import { normalizeLolRole } from "../constants/lolEnums.js";
 import { CHALLENGE_COLUMN_MAP } from "./normalizedMatchPersistence.js";
 
 type ParticipantRow = Record<string, unknown>;
@@ -18,13 +19,7 @@ type MatchContext = {
 };
 
 function mapRole(teamPosition: unknown): ParsedParticipantDto["role"] {
-  const position = String(teamPosition ?? "").trim().toUpperCase();
-  if (position === "TOP") return "TOP";
-  if (position.startsWith("JUNGLE")) return "JUNGLE";
-  if (position === "MIDDLE" || position === "MID") return "MID";
-  if (position === "BOTTOM" || position === "ADC") return "ADC";
-  if (position === "UTILITY" || position === "SUPPORT") return "SUPPORT";
-  return "UNKNOWN";
+  return normalizeLolRole(String(teamPosition ?? ""));
 }
 
 function n(v: unknown): number {

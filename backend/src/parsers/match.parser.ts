@@ -17,6 +17,7 @@ import { isBootsTier2Or3ItemId } from "./bootItemClassification.js";
 import { isLegendaryCompleteItem } from "./itemLegendaryClassification.js";
 import { isStarterPurchase } from "./starterItemClassification.js";
 import { computeChampionVsLaneMetrics } from "./championVsLaneMetrics.js";
+import { normalizeLolRole, type LolRole } from "../constants/lolEnums.js";
 const U15_WINDOW_MS = 900_000;
 
 function extractPatchFromVersion(gameVersion: string): string {
@@ -27,14 +28,8 @@ function extractPatchFromVersion(gameVersion: string): string {
   return `${major}.${minor}`;
 }
 
-function mapRole(teamPosition: string | undefined): "TOP" | "JUNGLE" | "MID" | "ADC" | "SUPPORT" | "UNKNOWN" {
-  const position = (teamPosition ?? "").trim().toUpperCase();
-  if (position === "TOP") return "TOP";
-  if (position.startsWith("JUNGLE")) return "JUNGLE";
-  if (position === "MIDDLE" || position === "MID") return "MID";
-  if (position === "BOTTOM" || position === "ADC") return "ADC";
-  if (position === "UTILITY" || position === "SUPPORT") return "SUPPORT";
-  return "UNKNOWN";
+function mapRole(teamPosition: string | undefined): LolRole {
+  return normalizeLolRole(teamPosition);
 }
 
 function serializeItemSet(items: number[]): string {

@@ -56,7 +56,7 @@ function buildCohortRoleFilter(role: string | null | undefined, alias: string): 
   if (col === 'JUNGLE') return `${alias}.role = 'JUNGLE'`
   if (col === 'MIDDLE') return `${alias}.role = 'MIDDLE'`
   if (col === 'BOTTOM') return `${alias}.role = 'BOTTOM'`
-  if (col === 'SUPPORT') return `${alias}.role = 'SUPPORT'`
+  if (col === 'SUPPORT' || col === 'UTILITY') return `${alias}.role = 'UTILITY'`
   return 'TRUE'
 }
 
@@ -86,7 +86,7 @@ export async function getItemTierSnapshotsForCharts(options: {
     .map(t => t.trim().toUpperCase().split('_')[0]!)
     .filter(Boolean)
   let role = options.role
-  if (role && role.toUpperCase() === 'UTILITY') role = 'SUPPORT'
+  if (role && role.toUpperCase() === 'SUPPORT') role = 'UTILITY'
   if (role && role.toUpperCase() === 'MID') role = 'MIDDLE'
   if (role && role.toUpperCase() === 'ADC') role = 'BOTTOM'
   const normRole = role ? role.toUpperCase().replace(/'/g, "''") : null
