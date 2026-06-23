@@ -1,5 +1,6 @@
 import { sql } from '../db/client.js';
 import { parsePlatformFromMatchId } from '../poller/utils/parseMatchId.js';
+import { normalizePlatformRegion } from '../riot/platform-region.js';
 import type { MatchDto } from '../riot-gateway/routes/dto.js';
 import { orchestrationLogger } from './logger.js';
 
@@ -18,9 +19,9 @@ export class ParticipantDiscovery {
   extractFromMatch(matchId: string, match: MatchDto): ParticipantInfo[] {
     let region: string;
     try {
-      region = parsePlatformFromMatchId(matchId);
+      region = normalizePlatformRegion(parsePlatformFromMatchId(matchId));
     } catch {
-      region = String(match.info?.platformId ?? 'euw1').toLowerCase();
+      region = normalizePlatformRegion(String(match.info?.platformId ?? 'euw1'));
     }
 
     const result: ParticipantInfo[] = [];
@@ -56,11 +57,11 @@ export class ParticipantDiscovery {
     if (rows.length === 0) return 0;
 
     const puuids = rows.map((r) => r.puuid);
-    const regions = rows.map((r) => r.region);
+    const regions = rows.map((r) => normalizePlatformRegion(r.region));
 
     const inserted = await sql<{ puuid: string }[]>`
       INSERT INTO players (puuid, region, puuid_key_version, last_seen, updated_at)
-      SELECT x.puuid, x.region, ${getPlayerKeyVersion()}, NOW(), NOW()
+      SELECT x.puuid, x.region::lol_region, ${getPlayerKeyVersion()}, NOW(), NOW()
       FROM UNNEST(
         ${sql.array(puuids, 25)}::text[],
         ${sql.array(regions, 25)}::text[]

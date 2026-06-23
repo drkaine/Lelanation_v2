@@ -132,7 +132,7 @@ export async function getRankSnapshotsAtOrAfterForMatch(
       puuid, rank_tier, rank_division, rank_lp, date
     FROM player_rank_history
     WHERE puuid = ANY(${sql.array(puuids, 25)})
-      AND region = ANY(${sql.array(regionKeys, 25)})
+      AND region::text = ANY(${sql.array(regionKeys, 25)})
       AND date >= ${matchDateIso}::date
     ORDER BY puuid, date ASC
   `;

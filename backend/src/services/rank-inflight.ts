@@ -34,7 +34,7 @@ export async function hasRankSnapshotForMatchDate(
     SELECT 1 AS exists
     FROM player_rank_history
     WHERE puuid = ${puuid}
-      AND region = ANY(${sql.array(regionKeys, 25)})
+      AND region::text = ANY(${sql.array(regionKeys, 25)})
       AND date >= ${matchDateIso}::date
     LIMIT 1
   `;

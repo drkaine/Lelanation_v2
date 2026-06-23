@@ -27,7 +27,7 @@ export class RankFilter {
         SELECT 1 AS exists
         FROM player_rank_history
         WHERE puuid = ${puuid}
-          AND region = ${normalizedRegion}
+          AND region::text = ${normalizedRegion}
           AND date = CURRENT_DATE
         LIMIT 1
       `,

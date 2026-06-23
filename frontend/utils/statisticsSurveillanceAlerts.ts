@@ -439,24 +439,43 @@ export function aggregateTrendPoints(
 
   let totalGames = 0
   let totalWins = 0
-  let pickWeighted = 0
-  let banWeighted = 0
+  let totalCohort = 0
+  let totalBans = 0
 
   for (const point of points) {
     const games = Number(point.games ?? 0)
-    if (games <= 0) continue
-    totalGames += games
-    totalWins += Number(point.wins ?? 0)
-    pickWeighted += Number(point.pickRatePct ?? 0) * games
-    banWeighted += Number(point.banRatePct ?? 0) * games
+    const cohort =
+      Number(point.cohortPicks) > 0
+        ? Number(point.cohortPicks)
+        : games > 0 && Number(point.pickRatePct) > 0
+          ? Math.round((games * 100) / Number(point.pickRatePct))
+          : 0
+    const banCount =
+      point.banCount != null && Number.isFinite(Number(point.banCount))
+        ? Number(point.banCount)
+        : cohort > 0
+          ? Math.round((Number(point.banRatePct) || 0) * cohort) / 100
+          : 0
+
+    if (games > 0) {
+      totalGames += games
+      totalWins += Number(point.wins ?? 0)
+    }
+    if (cohort > 0) {
+      totalCohort += cohort
+      totalBans += banCount
+    } else if (games > 0) {
+      totalCohort += games
+      totalBans += Math.round(((Number(point.banRatePct) || 0) * games) / 100)
+    }
   }
 
-  if (totalGames <= 0) return null
+  if (totalGames <= 0 && totalBans <= 0) return null
 
   return {
-    winrate: Math.round((10000 * totalWins) / totalGames) / 100,
-    pickrate: Math.round((100 * pickWeighted) / totalGames) / 100,
-    banrate: Math.round((100 * banWeighted) / totalGames) / 100,
+    winrate: totalGames > 0 ? Math.round((10000 * totalWins) / totalGames) / 100 : 0,
+    pickrate: totalCohort > 0 ? Math.round((10000 * totalGames) / totalCohort) / 100 : 0,
+    banrate: totalCohort > 0 ? Math.round((10000 * totalBans) / totalCohort) / 100 : 0,
   }
 }
 

@@ -425,7 +425,7 @@ export async function persistNormalizedMatch(
     `INSERT INTO matchs (
        patch, riot_match_id, region, queue_id, game_date,
        early_surrender, surrender, game_duration
-     ) VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8)
+     ) VALUES ($1, $2, $3::lol_region, $4, $5::date, $6, $7, $8)
      ON CONFLICT (riot_match_id) DO NOTHING`,
     [
       patch,

@@ -4,10 +4,39 @@ export type DailyTrendSnapshotPoint = {
   dateOfGame: string
   rankTier: string
   role: string
+  championId?: number
   games: number
   wins: number
+  banCount?: number
+  cohortPicks?: number
   banRatePct: number
   pickRatePct: number
+}
+
+function accumulateTrendPoint(
+  prev: { games: number; wins: number; pickNum: number; banNum: number; weight: number },
+  p: DailyTrendSnapshotPoint
+): void {
+  const games = Number(p.games) || 0
+  const wins = Number(p.wins) || 0
+  const cohort =
+    Number(p.cohortPicks) > 0
+      ? Number(p.cohortPicks)
+      : games > 0 && Number(p.pickRatePct) > 0
+        ? Math.round((games * 100) / Number(p.pickRatePct))
+        : 0
+  const banCount =
+    p.banCount != null && Number.isFinite(Number(p.banCount))
+      ? Number(p.banCount)
+      : cohort > 0
+        ? Math.round((Number(p.banRatePct) || 0) * cohort) / 100
+        : 0
+
+  prev.games += games
+  prev.wins += wins
+  prev.pickNum += games
+  prev.banNum += banCount
+  prev.weight += cohort > 0 ? cohort : games
 }
 
 export type DailyTrendMetricId =
@@ -150,11 +179,11 @@ function metricValue(
     const wr = raw.games > 0 ? (100 * raw.wins) / raw.games : 0
     return Math.min(100, Math.max(0, wr))
   }
-  if (metric === 'pickrate') return raw.weight > 0 ? raw.pickNum / raw.weight : 0
+  if (metric === 'pickrate') return raw.weight > 0 ? (100 * raw.pickNum) / raw.weight : 0
   if (metric === 'duration' || metric === 'orderPosition') {
     return raw.weight > 0 ? raw.pickNum / raw.weight : 0
   }
-  return raw.weight > 0 ? raw.banNum / raw.weight : 0
+  return raw.weight > 0 ? (100 * raw.banNum) / raw.weight : 0
 }
 
 export function useStatisticsDailyTrendCharts(options: {
@@ -313,12 +342,7 @@ export function useStatisticsDailyTrendCharts(options: {
         banNum: 0,
         weight: 0,
       }
-      const games = Number(p.games) || 0
-      prev.games += games
-      prev.wins += Number(p.wins) || 0
-      prev.pickNum += (Number(p.pickRatePct) || 0) * games
-      prev.banNum += (Number(p.banRatePct) || 0) * games
-      prev.weight += games
+      accumulateTrendPoint(prev, p)
       bucket.byTier.set(tier, prev)
     }
     const sorted = Array.from(map.values()).sort((a, b) => a.ts - b.ts)
@@ -399,7 +423,7 @@ export function useStatisticsDailyTrendCharts(options: {
           winrate: number | null
         }> = []
         globalRawByIndex.forEach((raw, idx) => {
-          if (raw.weight <= 0 && raw.games <= 0) return
+          if (raw.weight <= 0 && raw.games <= 0 && raw.banNum <= 0) return
           const games = Number(raw.games) || 0
           const wins = Number(raw.wins) || 0
           rawValues.push({

@@ -3,30 +3,30 @@ import { test } from 'node:test'
 import {
   buildGameOrderItemsJson,
   buildOrderItemsMergeSqlExpr,
-  uniquePurchaseOrderPositions,
+  orderedEligibleItemIds,
 } from './purchaseOrderItemsJson.js'
 
-test('buildGameOrderItemsJson assigns games/wins per position', () => {
-  const json = buildGameOrderItemsJson([1, 2, 3], 1)
+test('buildGameOrderItemsJson assigns games/wins per item id', () => {
+  const json = buildGameOrderItemsJson([1055, 3031, 3078], 1)
   assert.deepEqual(json, {
-    '1': { games: 1, wins: 1 },
-    '2': { games: 1, wins: 1 },
-    '3': { games: 1, wins: 1 },
+    '1055': { games: 1, wins: 1 },
+    '3031': { games: 1, wins: 1 },
+    '3078': { games: 1, wins: 1 },
   })
 })
 
-test('uniquePurchaseOrderPositions deduplicates and sorts', () => {
+test('orderedEligibleItemIds sorts by purchase order position', () => {
   const map = new Map<number, number>([
     [3031, 3],
     [1055, 1],
     [3078, 3],
   ])
-  assert.deepEqual(uniquePurchaseOrderPositions(map), [1, 3])
+  assert.deepEqual(orderedEligibleItemIds(map), [1055, 3031, 3078])
 })
 
-test('buildOrderItemsMergeSqlExpr nests jsonb_set per position', () => {
-  const sql = buildOrderItemsMergeSqlExpr('champion_vs_stats.order_items', [1, 2], 1)
+test('buildOrderItemsMergeSqlExpr nests jsonb_set per item id', () => {
+  const sql = buildOrderItemsMergeSqlExpr('champion_vs_stats.order_items', [1055, 3031], 1)
   assert.match(sql, /jsonb_set/)
-  assert.match(sql, /ARRAY\['1'\]/)
-  assert.match(sql, /ARRAY\['2'\]/)
+  assert.match(sql, /ARRAY\['1055'\]/)
+  assert.match(sql, /ARRAY\['3031'\]/)
 })

@@ -1,6 +1,7 @@
 import { Worker, type Job } from "bullmq";
 import { config } from "../config/index.js";
 import { normalizePlatformRegion } from "../riot/platform-region.js";
+import { normalizeLolRankTier, normalizeLolRole } from "../constants/lolEnums.js";
 import { sql } from "../db/client.js";
 import { CHAMPION_STATS_METRIC_COLUMNS } from "../constants/championStatsMetricColumns.js";
 import { CHAMPION_VS_STATS_ALL_METRIC_COLUMNS } from "../constants/championVsStatsMetricColumns.js";
@@ -21,7 +22,7 @@ import { buildStarterLegendaryOrderByItemId } from "../parsers/itemOrderSnapshot
 import {
   buildGameOrderItemsJson,
   buildOrderItemsMergeSqlExpr,
-  uniquePurchaseOrderPositions,
+  orderedEligibleItemIds,
 } from "../parsers/purchaseOrderItemsJson.js";
 import { itemTierRoleGameWinCounts } from "../parsers/itemTierDailySnapshotRole.js";
 import { rehydrateParticipantRanksForIngestion } from "../services/matchIngestionPayload.js";
@@ -165,7 +166,7 @@ async function upsertPlayersFromParticipants(tx: any, participants: ParsedPartic
       )
       VALUES (
         ${puuid},
-        ${region},
+        ${region}::lol_region,
         ${config.PLAYER_KEY_VERSION},
         ${snapshotDate}
       )
@@ -177,7 +178,7 @@ async function upsertPlayersFromParticipants(tx: any, participants: ParsedPartic
     await tx`
       UPDATE players
       SET
-        region = ${region},
+        region = ${region}::lol_region,
         last_seen = GREATEST(COALESCE(last_seen, ${snapshotDate}), ${snapshotDate}),
         puuid_key_version = ${config.PLAYER_KEY_VERSION}
       WHERE puuid = ${puuid}
@@ -222,7 +223,7 @@ async function upsertPlayerRankHistoryFromParticipants(
 
     await tx`
       INSERT INTO player_rank_history (puuid, date, region, rank_tier, rank_division, rank_lp)
-      VALUES (${puuid}, ${gameDate.toISOString().slice(0, 10)}::date, ${region}, ${rankTier}, ${rankDivision}, ${rankLp})
+      VALUES (${puuid}, ${gameDate.toISOString().slice(0, 10)}::date, ${region}::lol_region, ${rankTier}::lol_rank_tier, ${rankDivision}, ${rankLp})
       ON CONFLICT (puuid, date, region)
       DO UPDATE SET
         rank_tier = CASE
@@ -294,11 +295,11 @@ async function upsertChampionVsStats(tx: any, participants: ParsedParticipantDto
     const winCount = participantWinCount(participant);
     const setItem = participant.finalKey ?? "";
     const orderByItemId = buildStarterLegendaryOrderByItemId(participant.items);
-    const orderPositions = uniquePurchaseOrderPositions(orderByItemId);
-    const orderItemsJson = JSON.stringify(buildGameOrderItemsJson(orderPositions, winCount));
+    const orderItemIds = orderedEligibleItemIds(orderByItemId);
+    const orderItemsJson = JSON.stringify(buildGameOrderItemsJson(orderItemIds, winCount));
     const orderItemsMergeSql =
-      orderPositions.length > 0
-        ? buildOrderItemsMergeSqlExpr("champion_vs_stats.order_items", orderPositions, winCount)
+      orderItemIds.length > 0
+        ? buildOrderItemsMergeSqlExpr("champion_vs_stats.order_items", orderItemIds, winCount)
         : "champion_vs_stats.order_items";
 
     const values: unknown[] = [
@@ -912,17 +913,27 @@ async function upsertBotlaneDuoVsDuoStats(tx: any, payload: IngestionJobData): P
   }
 }
 
+function snapshotDateOfGame(raw: string): string {
+  const trimmed = String(raw ?? "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  const parsed = new Date(trimmed);
+  if (!Number.isFinite(parsed.getTime())) return trimmed.slice(0, 10);
+  return parsed.toISOString().slice(0, 10);
+}
+
 async function upsertTierDailySnapshots(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
   for (const participant of participants) {
     const { championTransform } = championTransformFields(participant);
+    const dateOfGame = snapshotDateOfGame(participant.gameDate);
     await tx`
       INSERT INTO champion_tier_daily_snapshots (
         patch, role, rank_tier, region, champion_id, champion_transform, date_of_game,
         games, wins, count_ban
       )
       VALUES (
-        ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
-        ${participant.championId}, ${championTransform}, ${participant.gameDate},
+        ${participant.patch}, ${participant.role}::lol_role, ${participant.rankTier}::lol_rank_tier,
+        ${participant.region}::lol_region,
+        ${participant.championId}, ${championTransform}, ${dateOfGame}::date,
         1, ${participantWinCount(participant)}, 0
       )
       ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, date_of_game)
@@ -934,14 +945,16 @@ async function upsertTierDailySnapshots(tx: any, participants: ParsedParticipant
   for (const participant of participants) {
     const bannedId = Number(participant.bannedChampionId ?? 0)
     if (!Number.isFinite(bannedId) || bannedId <= 0) continue
+    const dateOfGame = snapshotDateOfGame(participant.gameDate);
     await tx`
       INSERT INTO champion_tier_daily_snapshots (
         patch, role, rank_tier, region, champion_id, champion_transform, date_of_game,
         games, wins, count_ban
       )
       VALUES (
-        ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
-        ${bannedId}, 0, ${participant.gameDate},
+        ${participant.patch}, ${participant.role}::lol_role, ${participant.rankTier}::lol_rank_tier,
+        ${participant.region}::lol_region,
+        ${bannedId}, 0, ${dateOfGame}::date,
         0, 0, 1
       )
       ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, date_of_game)
@@ -1181,6 +1194,17 @@ export async function runAggregationTransaction(payload: IngestionJobData): Prom
   }
   if (matchId && (await isMatchAlreadyAggregated(matchId))) {
     throw new AlreadyProcessedMatchError(matchId);
+  }
+
+  payload.teamStats.region = normalizePlatformRegion(payload.teamStats.region);
+  payload.teamStats.rankTier = normalizeLolRankTier(payload.teamStats.rankTier);
+  for (const participant of payload.participants) {
+    participant.region = normalizePlatformRegion(participant.region);
+    participant.role = normalizeLolRole(participant.role);
+    participant.rankTier = normalizeLolRankTier(participant.rankTier);
+    if (participant.rankTierValue) {
+      participant.rankTierValue = normalizeLolRankTier(participant.rankTierValue);
+    }
   }
 
   await sql.begin(async (tx) => {

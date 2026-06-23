@@ -2959,6 +2959,8 @@ type TrendSnapshotPoint = {
   championId: number
   games: number
   wins: number
+  banCount?: number
+  cohortPicks?: number
   banRatePct: number
   pickRatePct: number
 }
@@ -4054,11 +4056,23 @@ const trendBuckets = computed(() => {
     bucket.ts = Number.isFinite(bucket.ts) ? Math.min(bucket.ts, ts) : ts
     const prev = bucket.byTier.get(tier) ?? { games: 0, wins: 0, pickNum: 0, banNum: 0, weight: 0 }
     const games = Number(p.games) || 0
+    const cohort =
+      Number(p.cohortPicks) > 0
+        ? Number(p.cohortPicks)
+        : games > 0 && Number(p.pickRatePct) > 0
+          ? Math.round((games * 100) / Number(p.pickRatePct))
+          : 0
+    const banCount =
+      p.banCount != null && Number.isFinite(Number(p.banCount))
+        ? Number(p.banCount)
+        : cohort > 0
+          ? Math.round((Number(p.banRatePct) || 0) * cohort) / 100
+          : 0
     prev.games += games
     prev.wins += Number(p.wins) || 0
-    prev.pickNum += (Number(p.pickRatePct) || 0) * games
-    prev.banNum += (Number(p.banRatePct) || 0) * games
-    prev.weight += games
+    prev.pickNum += games
+    prev.banNum += banCount
+    prev.weight += cohort > 0 ? cohort : games
     bucket.byTier.set(tier, prev)
   }
   const sorted = Array.from(map.values()).sort((a, b) => a.ts - b.ts)
@@ -4111,8 +4125,8 @@ function metricValue(
 ): number {
   if (metric === 'games') return raw.games
   if (metric === 'winrate') return raw.games > 0 ? (100 * raw.wins) / raw.games : 0
-  if (metric === 'pickrate') return raw.weight > 0 ? raw.pickNum / raw.weight : 0
-  return raw.weight > 0 ? raw.banNum / raw.weight : 0
+  if (metric === 'pickrate') return raw.weight > 0 ? (100 * raw.pickNum) / raw.weight : 0
+  return raw.weight > 0 ? (100 * raw.banNum) / raw.weight : 0
 }
 
 function formatTrendValue(metric: TrendMetricId, value: number): string {

@@ -44,7 +44,8 @@ async function cleanupInvalidSnapshotRoles(logger?: Logger): Promise<void> {
   const deletedActive = await queryRawUnsafe<number>(`
     WITH d AS (
       DELETE FROM champion_tier_daily_snapshots
-      WHERE role NOT IN ('TOP', 'JUNGLE', 'MIDDLE', 'UTILITY', 'BOTTOM')
+      WHERE role::text NOT IN ('TOP', 'JUNGLE', 'MIDDLE', 'UTILITY', 'BOTTOM')
+         OR (games = 0 AND count_ban = 0)
       RETURNING 1
     ) SELECT COUNT(*)::int FROM d
   `)
@@ -92,6 +93,8 @@ export interface ChampionTierSnapshotRow {
   championId: number
   games: number
   wins: number
+  banCount: number
+  cohortPicks: number
   banRatePct: number
   pickRatePct: number
 }
@@ -124,7 +127,7 @@ function buildSnapshotFilterSql(options: {
     parts.push(`split_part(upper(trim(${a}.rank_tier::text)), '_', 1) <> 'UNRANKED'`)
   }
   if (options.role) {
-    parts.push(`${a}.role = '${options.role.toUpperCase().replace(/'/g, "''")}'`)
+    parts.push(`${a}.role::text = '${options.role.toUpperCase().replace(/'/g, "''")}'`)
   }
   if (options.fromDate) parts.push(`${a}.date_of_game >= '${options.fromDate.replace(/'/g, "''")}'::date`)
   if (options.toDate) parts.push(`${a}.date_of_game <= '${options.toDate.replace(/'/g, "''")}'::date`)
@@ -202,6 +205,7 @@ export async function getChampionTierSnapshotsForCharts(options: {
       FROM champion_tier_daily_snapshots champ
       WHERE ${champWhere}
       GROUP BY date_of_game, rank_tier, role, champion_id
+      HAVING SUM(games) > 0 OR SUM(count_ban) > 0
     )
     SELECT
       c.date_of_game,
@@ -224,9 +228,9 @@ export async function getChampionTierSnapshotsForCharts(options: {
   return [...rows].reverse().map((r) => {
     const games = Number(r.games ?? 0)
     const cohortPicks = Number(r.cohort_picks ?? 0)
-    const countBan = Number(r.count_ban ?? 0)
+    const banCount = Number(r.count_ban ?? 0)
     const pickRatePct = cohortPicks > 0 ? (games / cohortPicks) * 100 : 0
-    const banRatePct = cohortPicks > 0 ? (countBan / cohortPicks) * 100 : 0
+    const banRatePct = cohortPicks > 0 ? (banCount / cohortPicks) * 100 : 0
     return {
       dateOfGame: r.date_of_game.toISOString().slice(0, 10),
       rankTier: r.rank_tier,
@@ -234,6 +238,8 @@ export async function getChampionTierSnapshotsForCharts(options: {
       championId: r.champion_id,
       games,
       wins: r.wins,
+      banCount,
+      cohortPicks,
       banRatePct,
       pickRatePct,
     }

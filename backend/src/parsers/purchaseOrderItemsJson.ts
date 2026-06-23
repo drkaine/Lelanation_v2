@@ -5,35 +5,39 @@ export type PurchaseOrderItemSlot = {
 
 export type PurchaseOrderItemsJson = Record<string, PurchaseOrderItemSlot>
 
-/** JSON d'ordre d'achat pour une partie : chaque position reçoit +1 game et +wins. */
+/** JSON d'ordre d'achat pour une partie : chaque itemId reçoit +1 game et +wins. */
 export function buildGameOrderItemsJson(
-  orderPositions: Iterable<number>,
+  itemIds: Iterable<number>,
   winCount: number,
 ): PurchaseOrderItemsJson {
   const out: PurchaseOrderItemsJson = {}
-  for (const pos of orderPositions) {
-    if (!Number.isFinite(pos) || pos <= 0) continue
-    out[String(pos)] = { games: 1, wins: winCount }
+  for (const itemId of itemIds) {
+    if (!Number.isFinite(itemId) || itemId <= 0) continue
+    out[String(itemId)] = { games: 1, wins: winCount }
   }
   return out
 }
 
-/** Positions uniques triées à partir d'une map itemId → position. */
+/** Item IDs éligibles triés par ordre d'achat (starters + légendaires). */
+export function orderedEligibleItemIds(orderByItemId: Map<number, number>): number[] {
+  return Array.from(orderByItemId.entries())
+    .filter(([itemId, pos]) => Number.isFinite(itemId) && itemId > 0 && Number.isFinite(pos) && pos > 0)
+    .sort((a, b) => a[1] - b[1] || a[0] - b[0])
+    .map(([itemId]) => itemId)
+}
+
+/** @deprecated Préférer `orderedEligibleItemIds` — conservé pour compat tests legacy. */
 export function uniquePurchaseOrderPositions(orderByItemId: Map<number, number>): number[] {
-  const positions = new Set<number>()
-  for (const pos of orderByItemId.values()) {
-    if (Number.isFinite(pos) && pos > 0) positions.add(pos)
-  }
-  return Array.from(positions).sort((a, b) => a - b)
+  return orderedEligibleItemIds(orderByItemId)
 }
 
 /**
- * Expression SQL pour fusionner order_items à l'upsert (addition games/wins par position).
+ * Expression SQL pour fusionner order_items à l'upsert (addition games/wins par itemId).
  * `columnRef` doit être qualifié (ex. champion_vs_stats.order_items).
  */
 export function buildOrderItemsMergeSqlExpr(
   columnRef: string,
-  positions: number[],
+  itemIds: number[],
   winCount: number,
 ): string {
   let expr = `CASE
@@ -42,8 +46,8 @@ export function buildOrderItemsMergeSqlExpr(
     ELSE '{}'::jsonb
   END`
 
-  for (const pos of positions) {
-    const key = String(pos)
+  for (const itemId of itemIds) {
+    const key = String(itemId)
     expr = `jsonb_set(
       ${expr},
       ARRAY['${key}']::text[],

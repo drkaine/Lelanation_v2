@@ -3,6 +3,7 @@
  */
 import type { IngestionJobData, TeamStatsDto } from "../dto/match.dto.js";
 import { sql } from "../db/client.js";
+import { normalizePlatformRegion } from "../riot/platform-region.js";
 import { participantRowsToParsedDtos } from "./normalizedParticipantMapper.js";
 import {
   averageMatchRankTierLabel,
@@ -62,7 +63,7 @@ function buildTeamStatsFromNormalized(
   return {
     matchId: match.riot_match_id,
     patch: match.patch,
-    region: match.region,
+    region: normalizePlatformRegion(match.region),
     rankTier,
     team100Win,
     objectives,
@@ -98,10 +99,11 @@ export async function loadIngestionPayloadFromNormalizedTables(
   `;
 
   const gameDate = gameDateIso(match);
+  const region = normalizePlatformRegion(match.region);
   const participants = participantRowsToParsedDtos(participantRows, {
     riotMatchId: match.riot_match_id,
     patch: match.patch,
-    region: match.region,
+    region,
     gameDate,
     gameDurationSec: Math.max(0, Math.trunc(Number(match.game_duration) || 0)),
     earlySurrender: match.early_surrender === true,
