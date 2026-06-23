@@ -203,28 +203,11 @@ function applySnapshotsToParticipants(
   }
 }
 
-async function fetchProcessedMatchRankTier(payload: IngestionJobData): Promise<string | null> {
-  const matchId = String(payload.teamStats.matchId ?? '').trim();
-  const patch = String(payload.teamStats.patch ?? '').trim();
-  if (!matchId || !patch) return null;
-  const { sql } = await import('../db/client.js');
-  const rows = await sql<{ rank: string | null }[]>`
-    SELECT rank
-    FROM processed_matches
-    WHERE patch = ${patch}
-      AND riot_match_id = ${matchId}
-    LIMIT 1
-  `;
-  return normalizeParticipantRankTier(rows[0]?.rank);
-}
-
 function resolveMatchRankTierForPayload(
   payload: IngestionJobData,
   closestSnapshots: Map<string, RankSnapshot>,
-  processedMatchRank: string | null,
 ): string | null {
   return (
-    processedMatchRank ??
     normalizeParticipantRankTier(payload.teamStats.rankTier) ??
     normalizeParticipantRankTier(averageMatchRankTierLabel(payload.participants, closestSnapshots))
   );
@@ -234,7 +217,6 @@ function finalizeParticipantRanksForAggregation(
   payload: IngestionJobData,
   closestSnapshots: Map<string, RankSnapshot>,
   gameDate: Date,
-  processedMatchRank: string | null,
 ): void {
   const missing = getMissingRankParticipants(payload.participants, closestSnapshots);
   if (missing.length > 0) {
@@ -242,7 +224,7 @@ function finalizeParticipantRanksForAggregation(
     applySnapshotsToParticipants(payload.participants, closestSnapshots, { preserveRanked: true });
   }
 
-  const matchRankTier = resolveMatchRankTierForPayload(payload, closestSnapshots, processedMatchRank);
+  const matchRankTier = resolveMatchRankTierForPayload(payload, closestSnapshots);
   if (!matchRankTier) return;
 
   applyMatchRankFallbackToParticipants(payload.participants, matchRankTier);
@@ -319,10 +301,9 @@ export async function rehydrateParticipantRanksForIngestion(payload: IngestionJo
 
   const region = normalizePlatformRegion(participants[0].region);
   const gameDate = resolveMatchGameDate(participants);
-  const processedMatchRank = await fetchProcessedMatchRankTier(payload);
   const closestSnapshots = await buildClosestSnapshots(participants, region, gameDate, new Map());
   applySnapshotsToParticipants(participants, closestSnapshots, { preserveRanked: true });
-  finalizeParticipantRanksForAggregation(payload, closestSnapshots, gameDate, processedMatchRank);
+  finalizeParticipantRanksForAggregation(payload, closestSnapshots, gameDate);
 }
 
 export async function buildIngestionPayloadFromMatchData(input: {
@@ -371,7 +352,6 @@ export async function buildIngestionPayloadFromMatchData(input: {
     { participants, teamStats },
     closestSnapshots,
     gameDate,
-    null,
   );
   if (!matchReadyForAggregation(participants, closestSnapshots, teamStats.rankTier)) {
     return null;
@@ -387,9 +367,8 @@ export async function isMatchAlreadyIngested(matchId: string): Promise<boolean> 
   const { sql } = await import('../db/client.js');
   const rows = await sql<{ riot_match_id: string }[]>`
     SELECT riot_match_id
-    FROM processed_matches
+    FROM match_aggregated
     WHERE riot_match_id = ${matchId}
-      AND status = 'DONE'
     LIMIT 1
   `;
   return rows.length > 0;

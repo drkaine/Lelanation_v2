@@ -116,9 +116,9 @@
               Indicateurs depuis la base statistiques (<code class="text-[11px]"
                 >DATABASE_URL_STATISTIQUES</code
               >) : <code class="text-[11px]">players</code> et compteurs issus de
-              <code class="text-[11px]">processed_matches</code> (suivi d’agrégation des matchs déjà
-              ingérés). Cet écran ne lit pas la file Prisma
-              <code class="text-[11px]">tracked_matches</code> ni
+              <code class="text-[11px]">matchs</code> /
+              <code class="text-[11px]">match_aggregated</code> (suivi normalisé + ingérés). Cet
+              écran ne lit pas la file Prisma <code class="text-[11px]">tracked_matches</code> ni
               <code class="text-[11px]">match_ingest_raw</code>.
             </template>
             <template v-else-if="dataStats?.adminDataSource === 'stats_db'">
@@ -158,7 +158,7 @@
                 <div class="text-xs text-text/70">
                   {{
                     dataStats?.adminDataSource === 'statistiques_db'
-                      ? 'Total processed_matches'
+                      ? 'Total matchs normalisés'
                       : t('admin.data.stats.totalTrackedMatches')
                   }}
                 </div>
@@ -170,7 +170,7 @@
                 <div class="text-xs text-text/70">
                   {{
                     dataStats?.adminDataSource === 'statistiques_db'
-                      ? 'processed_matches créés (1 h)'
+                      ? 'matchs créés (1 h)'
                       : t('admin.data.stats.trackedMatches1h')
                   }}
                 </div>
@@ -230,7 +230,7 @@
                 <div class="text-xs text-text/70">
                   {{
                     dataStats?.adminDataSource === 'statistiques_db'
-                      ? 'En attente agrég. (processed_matches)'
+                      ? 'En attente agrég. (matchs sans match_aggregated)'
                       : 'Tracked pending (now)'
                   }}
                 </div>
@@ -258,7 +258,7 @@
                 <div class="text-xs text-text/70">
                   {{
                     dataStats?.adminDataSource === 'statistiques_db'
-                      ? 'Plus ancien pending (processed_matches)'
+                      ? 'Plus ancien en attente d’agrégation'
                       : 'Plus ancien tracked pending (created_at)'
                   }}
                 </div>
@@ -270,7 +270,7 @@
                 <div class="text-xs text-text/70">
                   {{
                     dataStats?.adminDataSource === 'statistiques_db'
-                      ? 'Différés rank / agrég. (processed_matches)'
+                      ? 'Différés rank (legacy — toujours 0)'
                       : 'Tracked deferred rank (agrégation en attente de tier)'
                   }}
                 </div>

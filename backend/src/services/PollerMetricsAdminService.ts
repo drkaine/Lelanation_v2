@@ -112,7 +112,7 @@ async function getDataLagSeconds(): Promise<number | null> {
   try {
     const rows = await sql<{ lag_seconds: number | null }[]>`
       SELECT EXTRACT(EPOCH FROM (NOW() - MAX(created_at)))::bigint AS lag_seconds
-      FROM processed_matches
+      FROM matchs
     `
     return rows[0]?.lag_seconds ?? null
   } catch {

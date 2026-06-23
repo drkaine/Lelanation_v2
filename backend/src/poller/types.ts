@@ -36,7 +36,7 @@ export interface PollConfig {
   participantRankConcurrency: number;
   /** Optional cap — process at most N new matchIds per player (integration / smoke). */
   maxMatchesToProcess?: number;
-  /** DB pre-filter: return matchIds not yet in processed_matches (done/pending). */
+  /** DB pre-filter: return matchIds not yet in `matchs`. */
   matchFilter?: (matchIds: string[]) => Promise<string[]>;
   /** DB pre-filter: true if rank already exists for (puuid, today). */
   rankFilter?: (puuid: string, region: string) => Promise<boolean>;

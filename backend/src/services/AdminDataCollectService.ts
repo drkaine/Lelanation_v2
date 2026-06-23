@@ -1,5 +1,5 @@
 /**
- * Métriques admin « collecte » depuis `lelanation_statistiques` (`players`, `processed_matches`).
+ * Métriques admin « collecte » depuis `lelanation_statistiques` (`players`, `matchs`, `match_aggregated`).
  */
 import { getStatistiquesPool, isStatistiquesDatabaseConfigured } from '../drizzle/statistiquesDb.js'
 
@@ -11,8 +11,9 @@ function playerKeyVersionForAdminStats(): string {
   return 'dev'
 }
 
-/** Statuts considérés « en attente » (hors DONE / error). */
-const PROCESSED_MATCH_PENDING_SQL = `LOWER(TRIM(status)) IN ('pending', 'p')`
+const MATCH_PENDING_AGG_SQL = `NOT EXISTS (
+  SELECT 1 FROM match_aggregated ma WHERE ma.riot_match_id = m.riot_match_id
+)`
 
 export type AdminDataCollectStats = {
   adminDataSource: 'statistiques_db'
@@ -26,9 +27,9 @@ export type AdminDataCollectStats = {
   trackedMatchesPendingNow: number
   trackedMatchesPendingOver1h: number
   trackedOldestPendingCreatedAt: string | null
-  /** Répartition par `processed_matches.status` (ex. pending, DONE, error). */
+  /** Répartition agrégation : `aggregated` / `pending`. */
   trackedAggregateStatus: Record<string, number>
-  /** Dernier match marqué DONE (proxy « dernière agrégation »). */
+  /** Dernière agrégation réussie (`match_aggregated.aggregated_at`). */
   trackedLastAggregatedAt: string | null
   playersCreatedLast1h: number
   playersLastSeenLast1h: number
@@ -71,18 +72,17 @@ export async function getAdminDataCollectStats(): Promise<AdminDataCollectStats>
       maxLastSeen,
       maxUpdated,
       totalPlayers,
-      pmTotal,
-      pm1h,
-      pmPendingNow,
-      pmPendingOver1h,
-      pmOldestPending,
-      pmByStatus,
-      pmLastDone,
+      matchTotal,
+      match1h,
+      matchPendingNow,
+      matchPendingOver1h,
+      matchOldestPending,
+      matchAggStatus,
+      matchLastAggregated,
       playersWrongKeyVersion,
       playersCreated1h,
       playersLastSeen1h,
       playersUpdated1h,
-      pmDeferredRank,
     ] = await Promise.all([
       pool.query<{ created_at: Date }>(
         `SELECT created_at FROM players ORDER BY created_at DESC NULLS LAST LIMIT 1`,
@@ -90,27 +90,32 @@ export async function getAdminDataCollectStats(): Promise<AdminDataCollectStats>
       pool.query<{ d: Date | null }>(`SELECT MAX(last_seen) AS d FROM players`),
       pool.query<{ d: Date | null }>(`SELECT MAX(updated_at) AS d FROM players`),
       pool.query<{ c: string }>(`SELECT COUNT(*)::text AS c FROM players`),
-      pool.query<{ c: string }>(`SELECT COUNT(*)::text AS c FROM processed_matches`),
+      pool.query<{ c: string }>(`SELECT COUNT(*)::text AS c FROM matchs`),
       pool.query<{ c: string }>(
-        `SELECT COUNT(*)::text AS c FROM processed_matches WHERE created_at >= $1`,
+        `SELECT COUNT(*)::text AS c FROM matchs WHERE created_at >= $1`,
         [since1h],
       ),
       pool.query<{ c: string }>(
-        `SELECT COUNT(*)::text AS c FROM processed_matches WHERE ${PROCESSED_MATCH_PENDING_SQL}`,
+        `SELECT COUNT(*)::text AS c FROM matchs m WHERE ${MATCH_PENDING_AGG_SQL}`,
       ),
       pool.query<{ c: string }>(
-        `SELECT COUNT(*)::text AS c FROM processed_matches
-         WHERE ${PROCESSED_MATCH_PENDING_SQL} AND created_at < $1`,
+        `SELECT COUNT(*)::text AS c FROM matchs m
+         WHERE ${MATCH_PENDING_AGG_SQL} AND m.created_at < $1`,
         [since1h],
       ),
       pool.query<{ d: Date | null }>(
-        `SELECT MIN(created_at) AS d FROM processed_matches WHERE ${PROCESSED_MATCH_PENDING_SQL}`,
+        `SELECT MIN(m.created_at) AS d FROM matchs m WHERE ${MATCH_PENDING_AGG_SQL}`,
       ),
       pool.query<{ status: string; c: string }>(
-        `SELECT status, COUNT(*)::text AS c FROM processed_matches GROUP BY status`,
+        `SELECT
+           CASE WHEN ma.riot_match_id IS NULL THEN 'pending' ELSE 'aggregated' END AS status,
+           COUNT(*)::text AS c
+         FROM matchs m
+         LEFT JOIN match_aggregated ma ON ma.riot_match_id = m.riot_match_id
+         GROUP BY 1`,
       ),
       pool.query<{ d: Date | null }>(
-        `SELECT MAX(created_at) AS d FROM processed_matches WHERE UPPER(TRIM(status)) = 'DONE'`,
+        `SELECT MAX(aggregated_at) AS d FROM match_aggregated`,
       ),
       pool.query<{ c: string }>(
         `SELECT COUNT(*)::text AS c FROM players WHERE puuid_key_version IS DISTINCT FROM $1`,
@@ -128,10 +133,6 @@ export async function getAdminDataCollectStats(): Promise<AdminDataCollectStats>
         `SELECT COUNT(*)::text AS c FROM players WHERE updated_at >= $1`,
         [since1h],
       ),
-      pool.query<{ c: string }>(
-        `SELECT COUNT(*)::text AS c FROM processed_matches
-         WHERE UPPER(TRIM(status)) = 'DEFERRED_RANK_PENDING'`,
-      ),
     ])
     const lp = lastPlayer.rows[0]
     return {
@@ -141,20 +142,20 @@ export async function getAdminDataCollectStats(): Promise<AdminDataCollectStats>
       lastNewPlayerAt: lp?.created_at?.toISOString() ?? null,
       lastPlayerLastSeenAt: maxLastSeen.rows[0]?.d?.toISOString() ?? null,
       lastPlayerUpdatedAt: maxUpdated.rows[0]?.d?.toISOString() ?? null,
-      totalTrackedMatches: parseInt(pmTotal.rows[0]?.c ?? '0', 10),
-      trackedMatchesCreatedLast1h: parseInt(pm1h.rows[0]?.c ?? '0', 10),
-      trackedMatchesPendingNow: parseInt(pmPendingNow.rows[0]?.c ?? '0', 10),
-      trackedMatchesPendingOver1h: parseInt(pmPendingOver1h.rows[0]?.c ?? '0', 10),
-      trackedOldestPendingCreatedAt: pmOldestPending.rows[0]?.d?.toISOString() ?? null,
+      totalTrackedMatches: parseInt(matchTotal.rows[0]?.c ?? '0', 10),
+      trackedMatchesCreatedLast1h: parseInt(match1h.rows[0]?.c ?? '0', 10),
+      trackedMatchesPendingNow: parseInt(matchPendingNow.rows[0]?.c ?? '0', 10),
+      trackedMatchesPendingOver1h: parseInt(matchPendingOver1h.rows[0]?.c ?? '0', 10),
+      trackedOldestPendingCreatedAt: matchOldestPending.rows[0]?.d?.toISOString() ?? null,
       trackedAggregateStatus: Object.fromEntries(
-        pmByStatus.rows.map((r) => [r.status, parseInt(r.c ?? '0', 10)]),
+        matchAggStatus.rows.map((r) => [r.status, parseInt(r.c ?? '0', 10)]),
       ),
-      trackedLastAggregatedAt: pmLastDone.rows[0]?.d?.toISOString() ?? null,
+      trackedLastAggregatedAt: matchLastAggregated.rows[0]?.d?.toISOString() ?? null,
       playersCreatedLast1h: parseInt(playersCreated1h.rows[0]?.c ?? '0', 10),
       playersLastSeenLast1h: parseInt(playersLastSeen1h.rows[0]?.c ?? '0', 10),
       playersUpdatedLast1h: parseInt(playersUpdated1h.rows[0]?.c ?? '0', 10),
       matchIngestRaw: null,
-      trackedMatchesDeferredRankPending: parseInt(pmDeferredRank.rows[0]?.c ?? '0', 10),
+      trackedMatchesDeferredRankPending: 0,
     }
   } catch (error) {
     console.error(

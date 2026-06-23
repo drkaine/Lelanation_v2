@@ -176,6 +176,48 @@
       "when": 1749388800000,
       "tag": "0024_champion_vs_stats_lane_metrics",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1749475200000,
+      "tag": "0025_normalized_match_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1749561600000,
+      "tag": "0026_match_aggregated_post_aggregation_only",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1749648000000,
+      "tag": "0027_matchs_drop_json_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1749734400000,
+      "tag": "0028_drop_legacy_ingestion_obs",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1749820800000,
+      "tag": "0029_spatial_aggregation_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1749907200000,
+      "tag": "0030_participants_drop_snowballs_hit",
+      "breakpoints": true
     }
   ]
 }

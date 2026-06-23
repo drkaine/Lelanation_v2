@@ -159,7 +159,7 @@ export function getPollerPatchRolloutGraceDays(): number {
 }
 
 /**
- * Rétention poller : supprimer `processed_matches` / `player_rank_history` antérieurs à
+ * Rétention poller : supprimer `player_rank_history` antérieur à
  * `releaseDate(patch courant) − retentionDays` (UTC).
  *
  * Env `POLLER_PATCH_RETENTION_DAYS` :

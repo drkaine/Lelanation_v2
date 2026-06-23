@@ -12,9 +12,9 @@ import { ingestionQueue } from '../../../../src/queues/index.js';
 
 export async function cleanupLivePipeline(puuid: string): Promise<void> {
   await sql`
-    DELETE FROM processed_matches
-    WHERE riot_match_id LIKE 'EUW1_%'
-      AND status IN ('pending', 'PENDING')
+    DELETE FROM participants
+    WHERE puuid = ${puuid}
+      AND riot_match_id LIKE 'EUW1_%'
   `;
   await sql`
     DELETE FROM player_rank_history
@@ -33,18 +33,9 @@ export async function ensurePlayerInDb(puuid: string, region = 'euw1'): Promise<
 
 export async function countProcessedMatchesForPlayer(puuid: string): Promise<number> {
   const rows = await sql<{ count: number }[]>`
-    SELECT COUNT(*)::int AS count
-    FROM processed_matches
-    WHERE participant1_puuid = ${puuid}
-       OR participant2_puuid = ${puuid}
-       OR participant3_puuid = ${puuid}
-       OR participant4_puuid = ${puuid}
-       OR participant5_puuid = ${puuid}
-       OR participant6_puuid = ${puuid}
-       OR participant7_puuid = ${puuid}
-       OR participant8_puuid = ${puuid}
-       OR participant9_puuid = ${puuid}
-       OR participant10_puuid = ${puuid}
+    SELECT COUNT(DISTINCT riot_match_id)::int AS count
+    FROM participants
+    WHERE puuid = ${puuid}
   `;
   return rows[0]?.count ?? 0;
 }

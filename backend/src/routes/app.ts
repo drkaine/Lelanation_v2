@@ -4,7 +4,7 @@
 import { Router, type Request, type Response } from 'express'
 import { isAbsolute, join } from 'path'
 import { promises as fs } from 'fs'
-import { tryReserveTrackedMatch } from '../worker/processedMatchReserve.js'
+import { tryReserveTrackedMatch } from '../worker/matchTrackingReserve.js'
 
 const router = Router()
 

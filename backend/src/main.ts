@@ -23,7 +23,9 @@ import { PollerEngine } from './poller/PollerEngine.js';
 import type { PollConfig } from './poller/types.js';
 import { ingestionQueue, getQueueMetrics } from './queues/index.js';
 import { trimCompletedQueueJobs } from './queues/queue-cleanup.js';
-import { purgeStaleProcessedMatchesAndRankHistory } from './services/patch-retention-cleanup.js';
+import { getMatchAggregationIntervalMs,
+  runMatchBatchAggregationOnce,
+} from './services/matchBatchAggregation.js';
 import { initRiotGateway, logRiotRoutingVerified, shutdownRiotGateway } from './riot/client.js';
 import { riotConfig } from './riot-gateway/config/riotConfig.js';
 import { RiotGateway } from './riot-gateway/index.js';
@@ -41,7 +43,7 @@ let ingestionWorker: Worker | null = null;
 let metricsInterval: NodeJS.Timeout | null = null;
 let summary30mInterval: NodeJS.Timeout | null = null;
 let summary1hInterval: NodeJS.Timeout | null = null;
-let patchRetentionInterval: NodeJS.Timeout | null = null;
+let matchAggregationInterval: NodeJS.Timeout | null = null;
 let leaderLockRenewInterval: NodeJS.Timeout | null = null;
 let dbConsumer: PollerDbConsumer | null = null;
 let observability: ObservabilityOrchestrator | null = null;
@@ -144,7 +146,7 @@ async function getDataLagSeconds(): Promise<number | null> {
   try {
     const rows = await sql<{ lag_seconds: number | null }[]>`
       SELECT EXTRACT(EPOCH FROM (NOW() - MAX(created_at)))::bigint AS lag_seconds
-      FROM processed_matches
+      FROM matchs
     `;
     return rows[0]?.lag_seconds ?? null;
   } catch {
@@ -178,7 +180,7 @@ async function queryDbWindowStats(windowStartMs: number, windowEndMs: number): P
       (SELECT COUNT(*)::int FROM players WHERE last_seen >= ${startIso}::timestamptz AND last_seen < ${endIso}::timestamptz) AS players_polled,
       (SELECT COUNT(*)::int FROM players WHERE updated_at >= ${startIso}::timestamptz AND updated_at < ${endIso}::timestamptz) AS players_updated,
       (SELECT COUNT(*)::int FROM players WHERE created_at >= ${startIso}::timestamptz AND created_at < ${endIso}::timestamptz) AS players_added,
-      (SELECT COUNT(*)::int FROM processed_matches WHERE created_at >= ${startIso}::timestamptz AND created_at < ${endIso}::timestamptz) AS matches_added
+      (SELECT COUNT(*)::int FROM matchs WHERE created_at >= ${startIso}::timestamptz AND created_at < ${endIso}::timestamptz) AS matches_added
   `;
   const first = rows[0];
   return {
@@ -191,20 +193,11 @@ async function queryDbWindowStats(windowStartMs: number, windowEndMs: number): P
   };
 }
 
-async function runPatchRetentionPurge(): Promise<void> {
+async function runMatchBatchAggregation(): Promise<void> {
   try {
-    const result = await purgeStaleProcessedMatchesAndRankHistory();
-    if (result.skipped) {
-      if (result.skipReason !== 'retention_disabled') {
-        console.warn(`[poller-main] patch_retention_purge_skipped reason=${result.skipReason ?? 'unknown'}`);
-      }
-      return;
-    }
-    console.log(
-      `[poller-main] patch_retention_purge deleted_processed=${result.deletedProcessedMatches} deleted_rank=${result.deletedRankHistory}`,
-    );
+    await runMatchBatchAggregationOnce();
   } catch (error) {
-    console.error('[poller-main] patch_retention_purge_failed', error);
+    console.error('[poller-main] match_batch_aggregation_failed', error);
   }
 }
 
@@ -364,8 +357,10 @@ async function bootstrap(): Promise<void> {
     throw new Error('database_healthcheck_failed');
   }
 
-  await runPatchRetentionPurge();
-  patchRetentionInterval = setInterval(() => void runPatchRetentionPurge(), 6 * 60 * 60_000);
+  const aggregationIntervalMs = getMatchAggregationIntervalMs();
+  void runMatchBatchAggregation();
+  matchAggregationInterval = setInterval(() => void runMatchBatchAggregation(), aggregationIntervalMs);
+  console.log(`[poller-main] match_batch_aggregation scheduled every ${aggregationIntervalMs}ms`);
 
   void startSessionPool();
 
@@ -381,7 +376,7 @@ async function gracefulShutdown(signal: string): Promise<void> {
   if (metricsInterval) clearInterval(metricsInterval);
   if (summary30mInterval) clearInterval(summary30mInterval);
   if (summary1hInterval) clearInterval(summary1hInterval);
-  if (patchRetentionInterval) clearInterval(patchRetentionInterval);
+  if (matchAggregationInterval) clearInterval(matchAggregationInterval);
 
   try {
     await sessionPool?.shutdown(60_000);

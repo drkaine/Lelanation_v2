@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { createSqlMock, resetSqlMockState, seedProcessedMatch } from '../helpers/sqlMockState.js';
+import { createSqlMock, resetSqlMockState, seedKnownMatch } from '../helpers/sqlMockState.js';
 
 vi.mock('../../../src/db/client.js', async () => {
   const { createSqlMock } = await import('../helpers/sqlMockState.js');
@@ -13,9 +13,9 @@ describe('MatchFilter (sql mock)', () => {
     resetSqlMockState();
   });
 
-  test('error status is not filtered out', async () => {
-    seedProcessedMatch('EUW1_FAILED', 'error');
+  test('known match in matchs is filtered out', async () => {
+    seedKnownMatch('EUW1_KNOWN');
     const filter = new MatchFilter();
-    expect(await filter.filterNew(['EUW1_FAILED', 'EUW1_NEW'])).toEqual(['EUW1_FAILED', 'EUW1_NEW']);
+    expect(await filter.filterNew(['EUW1_KNOWN', 'EUW1_NEW'])).toEqual(['EUW1_NEW']);
   });
 });

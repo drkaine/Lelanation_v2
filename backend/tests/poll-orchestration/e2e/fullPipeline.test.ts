@@ -3,7 +3,7 @@ import { PollerEngine } from '../../../src/poller/PollerEngine.js';
 import type { Player, PollerEvents } from '../../../src/poller/types.js';
 import { MatchFilter } from '../../../src/poll-orchestration/MatchFilter.js';
 import { RankFilter } from '../../../src/poll-orchestration/RankFilter.js';
-import { createSqlMock, resetSqlMockState, seedProcessedMatch } from '../helpers/sqlMockState.js';
+import { createSqlMock, resetSqlMockState, seedKnownMatch } from '../helpers/sqlMockState.js';
 import { buildMatch } from '../helpers/pipelineFixtures.js';
 
 vi.mock('../../../src/db/client.js', async () => {
@@ -32,10 +32,9 @@ vi.mock('../../../src/services/matchIngestionPayload.js', () => ({
   })),
 }));
 
-vi.mock('../../../src/poll-orchestration/processedMatchWrite.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../src/poll-orchestration/processedMatchWrite.js')>();
-  return actual;
-});
+vi.mock('../../../src/services/normalizedMatchPersistence.js', () => ({
+  persistNormalizedMatch: vi.fn().mockResolvedValue(undefined),
+}));
 
 import { sql } from '../../../src/db/client.js';
 import {
@@ -64,7 +63,7 @@ describe('fullPipeline e2e', () => {
 
   beforeEach(async () => {
     resetSqlMockState();
-    seedProcessedMatch(M5, 'done');
+    seedKnownMatch(M5);
     await PollerEngine.resetInstance();
     vi.clearAllMocks();
 

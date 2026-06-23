@@ -261,14 +261,15 @@ export class ExtendedSnapshotBuilder {
           }>
         >`
           SELECT
-            patch,
-            COUNT(*) FILTER (WHERE UPPER(TRIM(status)) = 'DONE')::int AS matches_processed,
-            COUNT(*) FILTER (WHERE UPPER(TRIM(status)) = 'ERROR')::int AS matches_failed,
-            COUNT(*) FILTER (WHERE LOWER(TRIM(status)) IN ('pending', 'p'))::int AS matches_pending,
-            MIN(created_at) AS first_seen_at
-          FROM processed_matches
-          GROUP BY patch
-          ORDER BY patch DESC
+            m.patch,
+            COUNT(*) FILTER (WHERE ma.riot_match_id IS NOT NULL)::int AS matches_processed,
+            0::int AS matches_failed,
+            COUNT(*) FILTER (WHERE ma.riot_match_id IS NULL)::int AS matches_pending,
+            MIN(m.created_at) AS first_seen_at
+          FROM matchs m
+          LEFT JOIN match_aggregated ma ON ma.riot_match_id = m.riot_match_id
+          GROUP BY m.patch
+          ORDER BY m.patch DESC
         `,
       ),
       timedDbOp('obs_players_rank_today', () =>

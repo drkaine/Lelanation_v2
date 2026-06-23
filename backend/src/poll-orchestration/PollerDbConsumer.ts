@@ -12,12 +12,7 @@ import { rankHistoryFromLeagueEntries, soloLeagueEntry } from '../services/rankF
 import type { MatchDto, MatchTimelineDto } from '../riot/types.js';
 import type { ParticipantDiscovery } from './ParticipantDiscovery.js';
 import type { PlayerDiscovery } from './PlayerDiscovery.js';
-import {
-  extractPatchFromMatch,
-  insertPendingProcessedMatch,
-  markProcessedMatchError,
-  updateProcessedMatchRank,
-} from './processedMatchWrite.js';
+import { extractPatchFromMatch } from './matchPatch.js';
 import type { PollerDbConsumerConfig } from './types.js';
 import { timedDbOp } from '../observability/poller-metrics/timedDbOp.js';
 import type { IngestionRankSource } from '../observability/poller-metrics/types.js';
@@ -27,6 +22,7 @@ import {
   recordRank,
 } from '../observability/poller-metrics/instrumentation.js';
 import { orchestrationLogger } from './logger.js';
+import { persistNormalizedMatch } from '../services/normalizedMatchPersistence.js';
 
 type PendingMatch = {
   event: MatchDataEvent;
@@ -142,6 +138,24 @@ export class PollerDbConsumer {
   }
 
   private async onMatchData(event: MatchDataEvent): Promise<void> {
+    try {
+      await sql.begin(async (tx) => {
+        await persistNormalizedMatch(
+          tx,
+          event.match as unknown as MatchDto,
+          event.timeline as unknown as MatchTimelineDto,
+          event.player.platform,
+        );
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      orchestrationLogger.warn(
+        { component: 'PollerDbConsumer', matchId: event.matchId, error: message },
+        'normalized match persist failed',
+      );
+      console.error(`[PollerDbConsumer] normalized match persist failed matchId=${event.matchId}`, error);
+    }
+
     if (!this.config.resolveParticipantRanks) {
       await this.processMatchData(event);
       return;
@@ -292,28 +306,6 @@ export class PollerDbConsumer {
         return;
       }
 
-      const inserted = await insertPendingProcessedMatch({
-        matchId,
-        match: event.match,
-        currentPatch: this.config.currentPatch,
-        rank,
-      });
-
-      if (!inserted) {
-        recordIngestionQueue({
-          matchId,
-          patch,
-          rank,
-          type: 'skipped',
-          skipReason: 'conflict_already_done',
-          rankSource,
-        });
-        orchestrationLogger.debug({ component: 'PollerDbConsumer', matchId }, 'match already in processed_matches, skipping');
-        return;
-      }
-
-      await updateProcessedMatchRank(patch, matchId, rank);
-
       try {
       await ingestionQueue.add('ingest-match', payload, {
         jobId: matchId,
@@ -364,17 +356,7 @@ export class PollerDbConsumer {
       if (queued) {
         orchestrationLogger.warn(
           { component: 'PollerDbConsumer', matchId, patch, error: message },
-          'match already queued; skipping processed_matches error status update',
-        );
-        return;
-      }
-      try {
-        await markProcessedMatchError(patch, matchId);
-      } catch (updateError) {
-        const updateMessage = updateError instanceof Error ? updateError.message : String(updateError);
-        orchestrationLogger.error(
-          { component: 'PollerDbConsumer', matchId, error: updateMessage },
-          'processed_matches status update failed',
+          'match already queued; ingestion may still complete',
         );
       }
     }

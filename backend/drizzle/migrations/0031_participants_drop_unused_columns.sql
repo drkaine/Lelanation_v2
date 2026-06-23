@@ -1,0 +1,9 @@
+ALTER TABLE participants DROP COLUMN IF EXISTS sight_wards_bought_in_game;
+ALTER TABLE participants DROP COLUMN IF EXISTS unreal_kills;
+ALTER TABLE participants DROP COLUMN IF EXISTS kills_on_recently_healed_by_aram_pack;
+ALTER TABLE participants DROP COLUMN IF EXISTS eligible_for_progression;
+ALTER TABLE participants DROP COLUMN IF EXISTS placement;
+ALTER TABLE participants DROP COLUMN IF EXISTS subteam_placement;
+ALTER TABLE participants DROP COLUMN IF EXISTS fist_bump_participation;
+ALTER TABLE participants DROP COLUMN IF EXISTS role_bound_item;
+ALTER TABLE participants DROP COLUMN IF EXISTS twenty_minions_in_3_seconds_count;

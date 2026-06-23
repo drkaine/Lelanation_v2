@@ -1,6 +1,6 @@
 import "dotenv/config";
-import { purgeStaleProcessedMatchesAndRankHistory } from "../src/services/patch-retention-cleanup.js";
+import { purgeStaleRankHistory } from "../src/services/patch-retention-cleanup.js";
 
-const result = await purgeStaleProcessedMatchesAndRankHistory();
+const result = await purgeStaleRankHistory();
 console.log("[purge-patch-retention]", result);
 process.exit(0);

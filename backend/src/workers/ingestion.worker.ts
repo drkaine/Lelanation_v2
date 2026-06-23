@@ -15,9 +15,6 @@ import { shouldPauseMatchPipelines } from "../queues/rank-backlog-policy.js";
 import { redis } from "../redis/client.js";
 import { recordAggregatedMatch } from "../redis/ingestion-metrics.js";
 import {
-  averageMatchRankTierLabel,
-  closestSnapshotsFromParticipants,
-  matchReadyForAggregation,
   normalizeParticipantRankTier,
 } from "./match-rank-readiness.js";
 import { buildStarterLegendaryOrderByItemId } from "../parsers/itemOrderSnapshot.js";
@@ -28,6 +25,10 @@ import {
 } from "../parsers/purchaseOrderItemsJson.js";
 import { itemTierRoleGameWinCounts } from "../parsers/itemTierDailySnapshotRole.js";
 import { rehydrateParticipantRanksForIngestion } from "../services/matchIngestionPayload.js";
+import { insertMatchAggregated,
+  isMatchAlreadyAggregated,
+} from "../services/normalizedMatchPersistence.js";
+import { loadIngestionPayloadFromNormalizedTables } from "../services/normalizedMatchLoader.js";
 import { riotConfig } from "../riot-gateway/config/riotConfig.js";
 import { normalizeChampionTransform } from "../parsers/championTransform.js";
 
@@ -121,40 +122,6 @@ function u15IngestSums(u: ParsedParticipantDto["u15"]) {
     shield: Math.trunc(Number(u.shieldAndHeal) || 0),
     cs: Math.trunc(Number(u.cs) || 0),
   };
-}
-
-async function insertProcessedMatchSentinel(
-  tx: any,
-  payload: IngestionJobData,
-): Promise<void> {
-  const first = payload.participants[0];
-  if (!first) throw new Error("ingestion_empty_participants");
-  const rankSnapshots = closestSnapshotsFromParticipants(payload.participants);
-  const rankTier = averageMatchRankTierLabel(payload.participants, rankSnapshots);
-  if (!rankTier) {
-    throw new Error(`processed_match_requires_ranked_average:${payload.teamStats.matchId}`);
-  }
-  const updatedPending = await tx<{ riot_match_id: string }[]>`
-    UPDATE processed_matches
-    SET
-      status = 'DONE',
-      rank = ${rankTier}
-    WHERE patch = ${payload.teamStats.patch}
-      AND riot_match_id = ${payload.teamStats.matchId}
-      AND status IN ('pending', 'PENDING', 'error', 'ERROR')
-    RETURNING riot_match_id
-  `;
-  if (updatedPending.length > 0) return;
-
-  const insertedDone = await tx<{ riot_match_id: string }[]>`
-    INSERT INTO processed_matches (patch, game_date, riot_match_id, status, rank)
-    VALUES (${payload.teamStats.patch}, ${first.gameDate}, ${payload.teamStats.matchId}, 'DONE', ${rankTier})
-    ON CONFLICT (patch, riot_match_id) DO NOTHING
-    RETURNING riot_match_id
-  `;
-  if (insertedDone.length === 0) {
-    throw new AlreadyProcessedMatchError(payload.teamStats.matchId);
-  }
 }
 
 function normalizeRankDivision(value: string | null | undefined): string | null {
@@ -1206,30 +1173,17 @@ async function upsertTeamCoreStat(tx: any, payload: IngestionJobData): Promise<v
   `;
 }
 
-export async function runIngestionTransaction(payload: IngestionJobData): Promise<{ insertedPlayers: number; aggregated: boolean }> {
-  if (payload.participants.length === 0) return { insertedPlayers: 0, aggregated: false };
-
-  await rehydrateParticipantRanksForIngestion(payload);
-
-  if (
-    !matchReadyForAggregation(
-      payload.participants,
-      closestSnapshotsFromParticipants(payload.participants),
-      payload.teamStats.rankTier,
-    )
-  ) {
-    let insertedPlayers = 0;
-    await sql.begin(async (tx) => {
-      insertedPlayers = await upsertPlayersFromParticipants(tx, payload.participants);
-      await upsertPlayerRankHistoryFromParticipants(tx, payload.participants);
-    });
-    return { insertedPlayers, aggregated: false };
+export async function runAggregationTransaction(payload: IngestionJobData): Promise<void> {
+  const matchId = String(payload.teamStats.matchId ?? "").trim();
+  if (payload.participants.length === 0) {
+    throw new Error("aggregation_empty_participants");
+  }
+  if (matchId && (await isMatchAlreadyAggregated(matchId))) {
+    throw new AlreadyProcessedMatchError(matchId);
   }
 
-  let insertedPlayers = 0;
   await sql.begin(async (tx) => {
-    await insertProcessedMatchSentinel(tx, payload);
-    insertedPlayers = await upsertPlayersFromParticipants(tx, payload.participants);
+    await upsertPlayersFromParticipants(tx, payload.participants);
     await upsertPlayerRankHistoryFromParticipants(tx, payload.participants);
     await upsertChampionStats(tx, payload.participants);
     await upsertChampionVsStats(tx, payload.participants);
@@ -1248,9 +1202,29 @@ export async function runIngestionTransaction(payload: IngestionJobData): Promis
     await upsertObjectiveOutcomeHistogram(tx, payload);
     await upsertMatchOutcomeStats(tx, payload);
     await upsertTeamCoreStat(tx, payload);
+    if (matchId) {
+      await insertMatchAggregated(tx, matchId);
+    }
+  });
+}
+
+/** Ingestion immédiate : joueurs + rangs uniquement. Agrégats = batch 30 min. */
+export async function runIngestionTransaction(payload: IngestionJobData): Promise<{ insertedPlayers: number; aggregated: boolean }> {
+  if (payload.participants.length === 0) return { insertedPlayers: 0, aggregated: false };
+
+  const matchId = String(payload.teamStats.matchId ?? "").trim();
+  const fromDb = matchId ? await loadIngestionPayloadFromNormalizedTables(matchId) : null;
+  const effectivePayload = fromDb ?? payload;
+
+  await rehydrateParticipantRanksForIngestion(effectivePayload);
+
+  let insertedPlayers = 0;
+  await sql.begin(async (tx) => {
+    insertedPlayers = await upsertPlayersFromParticipants(tx, effectivePayload.participants);
+    await upsertPlayerRankHistoryFromParticipants(tx, effectivePayload.participants);
   });
 
-  return { insertedPlayers, aggregated: true };
+  return { insertedPlayers, aggregated: false };
 }
 
 export interface IngestionJobDeps {
@@ -1283,7 +1257,7 @@ export async function processIngestionJob(
       durationMs,
       completedReason: "processed",
       tablesWritten: {
-        processed_matches_update: aggregated ? 1 : 0,
+        match_aggregated: aggregated ? 1 : 0,
         participants: insertedPlayers,
       },
     });

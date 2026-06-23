@@ -1,47 +1,38 @@
 import { vi } from 'vitest';
 
-export type ProcessedMatchRow = {
+export type KnownMatchRow = {
   riot_match_id: string;
-  status: string;
-  patch?: string;
 };
 
-const processedMatches = new Map<string, ProcessedMatchRow>();
+const knownMatches = new Map<string, KnownMatchRow>();
 const rankToday = new Set<string>();
 
 export function resetSqlMockState(): void {
-  processedMatches.clear();
+  knownMatches.clear();
   rankToday.clear();
 }
 
-export function seedProcessedMatch(matchId: string, status: string): void {
-  processedMatches.set(matchId, { riot_match_id: matchId, status });
+export function seedKnownMatch(matchId: string): void {
+  knownMatches.set(matchId, { riot_match_id: matchId });
 }
 
-export function getProcessedMatches(): Map<string, ProcessedMatchRow> {
-  return processedMatches;
+export function getKnownMatches(): Map<string, KnownMatchRow> {
+  return knownMatches;
 }
 
 export function getRankTodayKeys(): Set<string> {
   return rankToday;
 }
 
-function isKnownStatus(status: string): boolean {
-  const normalized = status.toLowerCase();
-  return normalized === 'done' || normalized === 'pending';
-}
-
 export function createSqlMock() {
   const sqlFn = vi.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const query = String(strings.join('?')).toLowerCase();
 
-    if (query.includes('from processed_matches') && query.includes('riot_match_id = any')) {
+    if (query.includes('from matchs') && query.includes('riot_match_id = any')) {
       const matchIds = values[0] as string[];
-      const known = matchIds.filter((id) => {
-        const row = processedMatches.get(id);
-        return row != null && isKnownStatus(row.status);
-      });
-      return known.map((riot_match_id) => ({ riot_match_id }));
+      return matchIds
+        .filter((id) => knownMatches.has(id))
+        .map((riot_match_id) => ({ riot_match_id }));
     }
 
     if (query.includes('from player_rank_history') && query.includes('current_date')) {
@@ -66,24 +57,6 @@ export function createSqlMock() {
       return [];
     }
 
-    if (query.includes('insert into processed_matches')) {
-      const matchId = values[2] as string;
-      if (processedMatches.has(matchId)) return [];
-      processedMatches.set(matchId, { riot_match_id: matchId, status: 'pending' });
-      return [{ riot_match_id: matchId }];
-    }
-
-    if (query.includes('update processed_matches') && query.includes("status = 'error'")) {
-      const matchId = values[1] as string;
-      const row = processedMatches.get(matchId);
-      if (row) row.status = 'error';
-      return [];
-    }
-
-    if (query.includes('update processed_matches') && query.includes('set rank')) {
-      return [];
-    }
-
     if (query.includes('insert into players')) {
       const count = (values[0] as string[])?.length ?? 0;
       return Array.from({ length: count }, (_, i) => ({ puuid: `new-${i}` }));
@@ -93,17 +66,21 @@ export function createSqlMock() {
       return [];
     }
 
-    if (query.includes("status = 'done'")) {
+    if (query.includes('from match_aggregated')) {
       const matchId = values[0] as string;
-      const row = processedMatches.get(matchId);
-      return row?.status.toLowerCase() === 'done' ? [{ riot_match_id: matchId }] : [];
+      return knownMatches.has(matchId) ? [{ riot_match_id: matchId }] : [];
     }
 
     return [];
   });
 
   return Object.assign(sqlFn, {
-    array: (values: unknown[]) => values,
-    begin: async (cb: (tx: typeof sqlFn) => Promise<unknown>) => cb(sqlFn),
+    array: (arr: string[]) => arr,
+    begin: async (fn: (tx: typeof sqlFn) => Promise<void>) => fn(sqlFn),
   });
 }
+
+/** @deprecated */
+export const seedProcessedMatch = seedKnownMatch;
+/** @deprecated */
+export const getProcessedMatches = getKnownMatches;

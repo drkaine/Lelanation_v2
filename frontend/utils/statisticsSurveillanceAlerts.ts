@@ -9,8 +9,6 @@ import {
 } from './surveillanceDeltaDirection'
 import type { DailyTrendSnapshotPoint } from '~/composables/statistics/useStatisticsDailyTrendCharts'
 
-export type { DeltaDirectionFlags } from './surveillanceDeltaDirection'
-
 export type SurveillanceMetricId = 'winrate' | 'pickrate' | 'banrate'
 
 /** Cohorte « toutes divisions » (aucun rankTier dans l’API). */

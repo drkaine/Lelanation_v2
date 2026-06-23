@@ -86,6 +86,9 @@ import {
 import { isDatabaseConfigured } from '../db/query.js'
 import { getPatchNotesAggregateStats, getPatchNotesVersionList } from '../services/StatsPatchNotesAggregateService.js'
 import type { PatchNotesTargetType } from '../services/patchNotesStatsBuilder.js'
+import {
+  queryJunglePaths,
+} from '../services/spatialStatsQueries.js'
 
 const router = Router()
 const aggregator = new RiotStatsAggregator()
@@ -1541,6 +1544,34 @@ router.get('/champions/:championId/objectives', async (req: Request, res: Respon
     })
   }
   return res.json(data)
+})
+
+function parseOptionalInt(value: unknown): number | null {
+  const raw = Array.isArray(value) ? value[0] : value
+  if (raw == null || raw === '') return null
+  const n = Number.parseInt(String(raw), 10)
+  return Number.isFinite(n) ? n : null
+}
+
+/** GET /api/stats/champions/:championId/jungle-paths */
+router.get('/champions/:championId/jungle-paths', async (req: Request, res: Response) => {
+  const raw = req.params.championId
+  const championId = parseInt(Array.isArray(raw) ? raw[0] : raw, 10)
+  if (Number.isNaN(championId)) {
+    return res.status(400).json({ error: 'Invalid champion ID' })
+  }
+  const patch = queryString(req.query.patch) ?? queryString(req.query.version)
+  if (!patch) {
+    return res.status(400).json({ error: 'patch or version query param required' })
+  }
+  const rows = await queryJunglePaths({
+    championId,
+    patch,
+    queueId: parseOptionalInt(req.query.queueId),
+    teamId: parseOptionalInt(req.query.teamId),
+    limit: parseOptionalInt(req.query.limit) ?? 20,
+  })
+  return res.json({ championId, patch, paths: rows })
 })
 
 /** GET /api/stats/champions/:championId/misc — soins, dégâts totaux, multikills (moyennes / partie). */

@@ -6,8 +6,6 @@ import {
   passesDeltaDirectionFlags,
 } from './surveillanceDeltaDirection'
 
-export type { DeltaDirectionFlags } from './surveillanceDeltaDirection'
-
 export const BUILD_SURVEILLANCE_DISPLAY_LIMIT = 20
 export const BUILD_SURVEILLANCE_MIN_ITEMS = 3
 

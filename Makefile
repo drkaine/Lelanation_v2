@@ -153,6 +153,7 @@ docker-db-verify:
 	@echo "docker-db-verify: OK"
 
 build-frontend:
+	$(PM2) stop lelanation-frontend 2>/dev/null || true
 	rm -rf "$(FRONTEND_DIR)/.output" "$(FRONTEND_DIR)/node_modules/.cache/nuxt"
 	$(NPM) --prefix "$(FRONTEND_DIR)" run build
 	rm -f "$(FRONTEND_DIR)/.output/public/index.html"

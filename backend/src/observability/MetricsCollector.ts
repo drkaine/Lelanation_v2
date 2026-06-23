@@ -148,7 +148,7 @@ export class MetricsCollector extends EventEmitter {
       ok: true,
     })
     this.hourlyCounters.dbRowsWritten += e.rows
-    if (e.table === 'processed_matches') this.hourlyCounters.matchesProcessed += e.rows
+    if (e.table === 'matchs' || e.table === 'match_aggregated') this.hourlyCounters.matchesProcessed += e.rows
     this.checkHourlyRollover()
   }
 

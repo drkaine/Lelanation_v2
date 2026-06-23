@@ -1,5 +1,5 @@
 /**
- * Compare processed_matches vs match_outcome_stats (avec / sans UNRANKED).
+ * Compare matchs / match_aggregated vs match_outcome_stats (avec / sans UNRANKED).
  * Usage: npx tsx src/scripts/diagMatchCounts.ts
  */
 import 'dotenv/config'
@@ -15,7 +15,7 @@ async function main(): Promise<void> {
   const patch = '16.10'
   const [pm, aggAll, aggNoUnr, aggUnr] = await Promise.all([
     queryRawUnsafe<Array<{ c: bigint }>>(
-      `SELECT COUNT(*)::bigint AS c FROM processed_matches WHERE patch LIKE '${patch}%'`
+      `SELECT COUNT(*)::bigint AS c FROM matchs WHERE patch LIKE '${patch}%'`
     ),
     queryRawUnsafe<Array<{ c: bigint }>>(
       `SELECT COALESCE(SUM(mo.count_match), 0)::bigint AS c FROM ${moUnion} WHERE mo.game_version LIKE '${patch}%'`
@@ -28,7 +28,7 @@ async function main(): Promise<void> {
     ),
   ])
   console.log({
-    processed_matches: Number(pm[0]?.c ?? 0),
+    matchs: Number(pm[0]?.c ?? 0),
     outcome_all_tiers: Number(aggAll[0]?.c ?? 0),
     outcome_excl_unranked: Number(aggNoUnr[0]?.c ?? 0),
     outcome_unranked_only: Number(aggUnr[0]?.c ?? 0),

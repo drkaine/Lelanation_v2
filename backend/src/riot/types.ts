@@ -235,6 +235,7 @@ export interface ChallengesDto {
   epicMonsterKillsWithin30SecondsOfSpawn?: number;
   epicMonsterSteals?: number;
   epicMonsterStolenWithoutSmite?: number;
+  fistBumpParticipation?: number;
   firstTurretKilledTime?: number;
   flawlessAces?: number;
   fullTeamTakedown?: number;
@@ -303,6 +304,7 @@ export interface ChallengesDto {
   turretsTakenWithRiftHerald?: number;
   twentyMinionsIn3SecondsCount?: number;
   unseenRecalls?: number;
+  voidMonsterKill?: number;
   visionScoreAdvantageLaneOpponent?: number;
   visionScorePerMinute?: number;
   wardTakedowns?: number;

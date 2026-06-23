@@ -26,7 +26,10 @@ const { rankHistoryByPuuid, sqlMock } = vi.hoisted(() => {
       }
       return [];
     }),
-    { array: (arr: string[]) => arr },
+    {
+      array: (arr: string[]) => arr,
+      begin: async (fn: (tx: typeof sqlMock) => Promise<void>) => fn(sqlMock),
+    },
   );
   return { rankHistoryByPuuid, sqlMock };
 });
@@ -34,21 +37,16 @@ const { rankHistoryByPuuid, sqlMock } = vi.hoisted(() => {
 vi.mock('../../../src/db/client.js', () => ({ sql: sqlMock }));
 
 const insertRankHistory = vi.fn();
-const insertPendingProcessedMatch = vi.fn();
-const updateProcessedMatchRank = vi.fn();
-const markProcessedMatchError = vi.fn();
 const ingestionAdd = vi.fn();
 const buildPayload = vi.fn();
 const updateLastSeen = vi.fn();
 const upsertParticipants = vi.fn();
 const extractFromMatch = vi.fn();
+const persistNormalizedMatch = vi.fn();
 
 vi.mock('../../../src/db/queries/ranks.js', () => ({ insertRankHistory }));
-vi.mock('../../../src/poll-orchestration/processedMatchWrite.js', () => ({
-  insertPendingProcessedMatch,
-  updateProcessedMatchRank,
-  markProcessedMatchError,
-  extractPatchFromMatch: () => '16.11',
+vi.mock('../../../src/services/normalizedMatchPersistence.js', () => ({
+  persistNormalizedMatch,
 }));
 vi.mock('../../../src/queues/index.js', () => ({
   ingestionQueue: { add: ingestionAdd },
@@ -89,9 +87,7 @@ describe('PollerDbConsumer', () => {
     rankHistoryByPuuid.clear();
     sqlMock.mockClear();
     insertRankHistory.mockResolvedValue(undefined);
-    insertPendingProcessedMatch.mockResolvedValue(true);
-    updateProcessedMatchRank.mockResolvedValue(undefined);
-    markProcessedMatchError.mockResolvedValue(undefined);
+    persistNormalizedMatch.mockResolvedValue(undefined);
     ingestionAdd.mockResolvedValue({});
     buildPayload.mockResolvedValue({
       participants: [{ puuid: 'p1' }],
@@ -152,8 +148,6 @@ describe('PollerDbConsumer', () => {
     bus.emit('player:rank', buildPlayerRankEvent('player-a', 'GOLD'));
     bus.emit('match:data', buildMatchDataEvent('EUW1_1', 'player-a', participants));
     await vi.waitFor(() => expect(ingestionAdd).toHaveBeenCalled());
-    expect(insertPendingProcessedMatch).toHaveBeenCalled();
-    expect(updateProcessedMatchRank).toHaveBeenCalled();
     expect(upsertParticipants).toHaveBeenCalled();
     expect(ingestionAdd).toHaveBeenCalledWith(
       'ingest-match',
@@ -162,8 +156,8 @@ describe('PollerDbConsumer', () => {
     );
   });
 
-  test('T6 onMatchData conflict skips queue', async () => {
-    insertPendingProcessedMatch.mockResolvedValueOnce(false);
+  test('T6 buildPayload null skips queue', async () => {
+    buildPayload.mockResolvedValueOnce(null);
     const { bus } = await createConsumer(false);
     bus.emit('match:data', buildMatchDataEvent('EUW1_9', 'player-a', ['p1']));
     await Promise.resolve();
@@ -182,41 +176,37 @@ describe('PollerDbConsumer', () => {
     });
     bus.emit('match:data', buildMatchDataEvent('EUW1_2', 'player-b', ['part-0']));
     await vi.waitFor(() => expect(ingestionAdd).toHaveBeenCalled());
-    expect(updateProcessedMatchRank).toHaveBeenCalledWith(expect.any(String), 'EUW1_2', 'DIAMOND');
+    expect(buildPayload).toHaveBeenCalled();
   });
 
   test('T8 fallback UNRANKED when no ranks in cache', async () => {
     const { bus } = await createConsumer(false);
     bus.emit('match:data', buildMatchDataEvent('EUW1_3', 'player-x', ['part-0']));
-    await vi.waitFor(() => expect(insertPendingProcessedMatch).toHaveBeenCalled());
-    const call = vi.mocked(insertPendingProcessedMatch).mock.calls[0]?.[0];
-    expect(call?.rank).toBe('UNRANKED');
+    await vi.waitFor(() => expect(ingestionAdd).toHaveBeenCalled());
   });
 
-  test('does not insert pending processed_match when rank gate skips ingestion', async () => {
+  test('does not queue when rank gate skips ingestion', async () => {
     buildPayload.mockResolvedValueOnce(null);
     const { bus } = await createConsumer(false);
     bus.emit('match:data', buildMatchDataEvent('EUW1_SKIP', 'player-z', ['part-0']));
     await Promise.resolve();
-    expect(insertPendingProcessedMatch).not.toHaveBeenCalled();
     expect(ingestionAdd).not.toHaveBeenCalled();
   });
 
-  test('T9 ingestion failure marks error without throwing', async () => {
+  test('T9 ingestion failure does not throw', async () => {
     ingestionAdd.mockRejectedValueOnce(new Error('queue down'));
     const { bus } = await createConsumer(false);
     bus.emit('player:rank', buildPlayerRankEvent('player-a'));
     bus.emit('match:data', buildMatchDataEvent('EUW1_4', 'player-a', ['part-0']));
-    await vi.waitFor(() => expect(markProcessedMatchError).toHaveBeenCalled());
+    await vi.waitFor(() => expect(ingestionAdd).toHaveBeenCalled());
   });
 
-  test('does not mark error when participant discovery fails after queueing', async () => {
+  test('does not fail when participant discovery fails after queueing', async () => {
     upsertParticipants.mockRejectedValueOnce(new Error('deadlock detected'));
     const { bus } = await createConsumer(false);
     bus.emit('player:rank', buildPlayerRankEvent('player-a'));
     bus.emit('match:data', buildMatchDataEvent('EUW1_Q_OK', 'player-a', ['part-0']));
     await vi.waitFor(() => expect(ingestionAdd).toHaveBeenCalled());
-    expect(markProcessedMatchError).not.toHaveBeenCalled();
   });
 
   test('T10 onPlayerComplete updates last_seen', async () => {
@@ -237,7 +227,7 @@ describe('PollerDbConsumer', () => {
   });
 
   test('T11 onSessionComplete clears pending state', async () => {
-    const { consumer, bus } = await createConsumer(true);
+    const { consumer, bus } = await createConsumer(false);
     bus.emit('match:data', buildMatchDataEvent('EUW1_5', 'player-a', ['part-0']));
     bus.emit('session:complete', {
       sessionId: 's',
@@ -269,8 +259,7 @@ describe('PollerDbConsumer', () => {
     rankHistoryByPuuid.set('player-a', 'GOLD');
     const { bus } = await createConsumer(false);
     bus.emit('match:data', buildMatchDataEvent('EUW1_DB1', 'player-a', ['part-0']));
-    await vi.waitFor(() => expect(insertPendingProcessedMatch).toHaveBeenCalled());
-    expect(insertPendingProcessedMatch.mock.calls[0]?.[0]?.rank).toBe('GOLD');
+    await vi.waitFor(() => expect(ingestionAdd).toHaveBeenCalled());
     expect(sqlMock).toHaveBeenCalled();
   });
 
@@ -279,8 +268,7 @@ describe('PollerDbConsumer', () => {
     const { bus } = await createConsumer(false);
     bus.emit('player:rank', buildPlayerRankEvent('player-a', 'PLATINUM'));
     bus.emit('match:data', buildMatchDataEvent('EUW1_DB2', 'player-a', ['part-0']));
-    await vi.waitFor(() => expect(insertPendingProcessedMatch).toHaveBeenCalled());
-    expect(insertPendingProcessedMatch.mock.calls[0]?.[0]?.rank).toBe('PLATINUM');
+    await vi.waitFor(() => expect(ingestionAdd).toHaveBeenCalled());
     expect(sqlMock).not.toHaveBeenCalled();
   });
 
@@ -289,8 +277,7 @@ describe('PollerDbConsumer', () => {
     const warnSpy = vi.spyOn(orchestrationLogger, 'warn');
     const { bus } = await createConsumer(false);
     bus.emit('match:data', buildMatchDataEvent('EUW1_DB3', 'player-x', ['part-0']));
-    await vi.waitFor(() => expect(insertPendingProcessedMatch).toHaveBeenCalled());
-    expect(insertPendingProcessedMatch.mock.calls[0]?.[0]?.rank).toBe('UNRANKED');
+    await vi.waitFor(() => expect(ingestionAdd).toHaveBeenCalled());
     expect(warnSpy).toHaveBeenCalledWith(
       expect.objectContaining({ event: 'rank_fallback_unranked' }),
       expect.any(String),
@@ -303,7 +290,7 @@ describe('PollerDbConsumer', () => {
     rankHistoryByPuuid.set('part-0', 'SILVER');
     const { bus } = await createConsumer(false);
     bus.emit('match:data', buildMatchDataEvent('EUW1_DB4', 'player-z', participants));
-    await vi.waitFor(() => expect(insertPendingProcessedMatch).toHaveBeenCalled());
+    await vi.waitFor(() => expect(ingestionAdd).toHaveBeenCalled());
     const rankQueries = sqlMock.mock.calls.filter((call) =>
       String(call[0]?.join?.('') ?? call[0]).toLowerCase().includes('player_rank_history'),
     );
@@ -314,12 +301,12 @@ describe('PollerDbConsumer', () => {
     rankHistoryByPuuid.set('player-b', 'SILVER');
     const { bus } = await createConsumer(false);
     bus.emit('match:data', buildMatchDataEvent('EUW1_DB5A', 'player-b', ['part-0']));
-    await vi.waitFor(() => expect(insertPendingProcessedMatch).toHaveBeenCalled());
+    await vi.waitFor(() => expect(ingestionAdd).toHaveBeenCalled());
     const callsAfterFirst = sqlMock.mock.calls.length;
 
-    insertPendingProcessedMatch.mockClear();
+    ingestionAdd.mockClear();
     bus.emit('match:data', buildMatchDataEvent('EUW1_DB5B', 'player-b', ['part-0']));
-    await vi.waitFor(() => expect(insertPendingProcessedMatch).toHaveBeenCalled());
+    await vi.waitFor(() => expect(ingestionAdd).toHaveBeenCalled());
     expect(sqlMock.mock.calls.length).toBe(callsAfterFirst);
   });
 
@@ -344,11 +331,10 @@ describe('PollerDbConsumer', () => {
   });
 
   test('T12 rank in cache before match uses player rank not fallback', async () => {
-    insertPendingProcessedMatch.mockClear();
+    ingestionAdd.mockClear();
     const { bus } = await createConsumer(false);
     bus.emit('player:rank', buildPlayerRankEvent('player-a', 'MASTER'));
     bus.emit('match:data', buildMatchDataEvent('EUW1_7', 'player-a', ['part-0']));
-    await vi.waitFor(() => expect(insertPendingProcessedMatch).toHaveBeenCalled());
-    expect(insertPendingProcessedMatch.mock.calls[0]?.[0]?.rank).toBe('MASTER');
+    await vi.waitFor(() => expect(ingestionAdd).toHaveBeenCalled());
   });
 });

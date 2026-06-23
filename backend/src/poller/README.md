@@ -20,7 +20,7 @@ poll-orchestration (downstream)
   ├── BackpressureMonitor → pause when ingestion queue > threshold
   └── PollerDbConsumer
         ├── player:rank / participant:rank → player_rank_history
-        ├── match:data → processed_matches (pending) + ingestion queue
+        ├── match:data → matchs / teams / participants + ingestion queue
         └── player:complete → players.last_seen
 ```
 
