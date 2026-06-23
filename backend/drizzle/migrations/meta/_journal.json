@@ -218,6 +218,48 @@
       "when": 1749907200000,
       "tag": "0030_participants_drop_snowballs_hit",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1749993600000,
+      "tag": "0031_participants_drop_unused_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1750080000000,
+      "tag": "0032_participants_analytics_buckets",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1750166400000,
+      "tag": "0033_participants_drop_unavailable_buckets",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1750252800000,
+      "tag": "0034_drop_spatial_heatmaps",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1750339200000,
+      "tag": "0035_drop_spatial_aggregation",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1750425600000,
+      "tag": "0036_jungle_camp_history_doc",
+      "breakpoints": true
     }
   ]
 }

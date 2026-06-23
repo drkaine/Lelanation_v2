@@ -25,6 +25,7 @@ function timelineWithWards(): MatchTimelineDto {
           participantFrames: {
             "1": {
               participantId: 1,
+              position: { x: 1200, y: 3400 },
               totalGold: 500,
               currentGold: 100,
               minionsKilled: 0,
@@ -37,6 +38,42 @@ function timelineWithWards(): MatchTimelineDto {
           },
         },
         {
+          timestamp: 60_000,
+          events: [],
+          participantFrames: {
+            "1": {
+              participantId: 1,
+              position: { x: 2800, y: 5100 },
+              totalGold: 1200,
+              currentGold: 200,
+              minionsKilled: 10,
+              jungleMinionsKilled: 0,
+              level: 3,
+              xp: 800,
+              timeEnemySpentControlled: 20_000,
+              damageStats: { totalDamageDone: 2000, totalDamageDoneToChampions: 500 },
+            },
+          },
+        },
+        {
+          timestamp: 180_000,
+          events: [],
+          participantFrames: {
+            "1": {
+              participantId: 1,
+              position: { x: 6400, y: 7200 },
+              totalGold: 2000,
+              currentGold: 400,
+              minionsKilled: 22,
+              jungleMinionsKilled: 0,
+              level: 4,
+              xp: 1500,
+              timeEnemySpentControlled: 35_000,
+              damageStats: { totalDamageDone: 3500, totalDamageDoneToChampions: 800 },
+            },
+          },
+        },
+        {
           timestamp: 300_000,
           events: [
             { type: "WARD_PLACED", timestamp: 240_000, creatorId: 1, wardType: "CONTROL_WARD" },
@@ -44,6 +81,7 @@ function timelineWithWards(): MatchTimelineDto {
           participantFrames: {
             "1": {
               participantId: 1,
+              position: { x: 6400, y: 7200 },
               totalGold: 2500,
               currentGold: 500,
               minionsKilled: 30,
@@ -98,6 +136,19 @@ test("extractParticipantTimelineData fills ward buckets and histories per window
   assert.equal(data.wardHistory[0]?.ward_type, "YELLOW_TRINKET");
   assert.equal(data.wardKilledHistory.length, 1);
   assert.equal(data.wardKilledHistory[0]?.ward_type, "YELLOW_TRINKET");
+  assert.deepEqual(data.wardHistory[0]?.position, { x: 1200, y: 3400 });
+  assert.deepEqual(data.wardKilledHistory[0]?.position, { x: 2800, y: 5100 });
+  assert.deepEqual(data.wardHistory[1]?.position, { x: 6400, y: 7200 });
+});
+
+test("extractParticipantTimelineData on real timeline sample has ward positions from frames", () => {
+  const timeline: MatchTimelineDto = { info: sampleTimeline.info };
+  const data = extractParticipantTimelineData(timeline, 7, 1800);
+  assert.ok(data.wardHistory.length > 0, "ward_history");
+  assert.ok(
+    data.wardHistory.some((w) => w.position.x > 0 || w.position.y > 0),
+    "ward_history position",
+  );
 });
 
 test("extractParticipantTimelineData on real timeline sample has non-zero analytics buckets", () => {

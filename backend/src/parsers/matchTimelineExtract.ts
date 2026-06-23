@@ -64,8 +64,8 @@ export type ParticipantTimelineHistories = {
   deathHistory: Array<{ death_by: number; timestamp_ms: number; position: { x: number; y: number } }>;
   killHistory: Array<{ kill_who: number; timestamp_ms: number; position: { x: number; y: number } }>;
   assistHistory: Array<{ assist_who: number; timestamp_ms: number; position: { x: number; y: number } }>;
-  wardHistory: Array<{ ward_type: string; timestamp_ms: number }>;
-  wardKilledHistory: Array<{ ward_type: string; timestamp_ms: number }>;
+  wardHistory: Array<{ ward_type: string; timestamp_ms: number; position: { x: number; y: number } }>;
+  wardKilledHistory: Array<{ ward_type: string; timestamp_ms: number; position: { x: number; y: number } }>;
   jungleCampHistory: Array<{ camp_type: string; timestamp_ms: number }>;
   buckets: TimelineBucketSet;
 };
@@ -168,11 +168,48 @@ function wardTypeFromEvent(ev: MatchTimelineEventDto): string {
   return raw || "UNKNOWN";
 }
 
+function frameAtTimestamp(
+  frames: MatchTimelineFrameDto[],
+  timestampMs: number,
+): MatchTimelineFrameDto | null {
+  let best: MatchTimelineFrameDto | null = null;
+  for (const frame of frames) {
+    const ts = ti(frame.timestamp);
+    if (ts <= timestampMs) best = frame;
+    else break;
+  }
+  return best;
+}
+
+function participantPositionAtTimestamp(
+  frames: MatchTimelineFrameDto[],
+  timestampMs: number,
+  participantId: number,
+): { x: number; y: number } {
+  const pf = frameAtTimestamp(frames, timestampMs)?.participantFrames?.[String(participantId)];
+  return {
+    x: ti(pf?.position?.x),
+    y: ti(pf?.position?.y),
+  };
+}
+
 function eventPosition(ev: MatchTimelineEventDto): { x: number; y: number } {
   return {
     x: ti((ev as { position?: { x?: unknown } }).position?.x),
     y: ti((ev as { position?: { y?: unknown } }).position?.y),
   };
+}
+
+/** Position événement Riot si présente, sinon position du joueur dans la frame timeline la plus proche. */
+function resolveParticipantEventPosition(
+  ev: MatchTimelineEventDto,
+  frames: MatchTimelineFrameDto[],
+  participantId: number,
+  timestampMs: number,
+): { x: number; y: number } {
+  const fromEvent = eventPosition(ev);
+  if (fromEvent.x > 0 || fromEvent.y > 0) return fromEvent;
+  return participantPositionAtTimestamp(frames, timestampMs, participantId);
 }
 
 function isParticipantInvolvedInEvent(ev: MatchTimelineEventDto, participantId: number): boolean {
@@ -375,6 +412,7 @@ export function extractParticipantTimelineData(
       wardHistory.push({
         ward_type: wardTypeFromEvent(ev),
         timestamp_ms: ts,
+        position: resolveParticipantEventPosition(ev, frames, pid, ts),
       });
       continue;
     }
@@ -382,6 +420,7 @@ export function extractParticipantTimelineData(
       wardKilledHistory.push({
         ward_type: wardTypeFromEvent(ev),
         timestamp_ms: ts,
+        position: resolveParticipantEventPosition(ev, frames, pid, ts),
       });
       continue;
     }
