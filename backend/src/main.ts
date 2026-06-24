@@ -40,6 +40,7 @@ const POLLER_LEADER_LOCK_TTL_SEC = 120;
 const orchEnv = loadPollOrchestrationEnv();
 
 let ingestionWorker: Worker | null = null;
+let rankWorker: Worker | null = null;
 let metricsInterval: NodeJS.Timeout | null = null;
 let summary30mInterval: NodeJS.Timeout | null = null;
 let summary1hInterval: NodeJS.Timeout | null = null;
@@ -140,6 +141,17 @@ async function releasePollerLeaderLock(): Promise<void> {
 async function startIngestionWorker(): Promise<Worker> {
   const mod = await import('./workers/ingestion.worker.js');
   return mod.ingestionWorker;
+}
+
+async function startRankWorkerIfProduction(): Promise<Worker | null> {
+  if (riotConfig.apiKeyType === 'personal') {
+    console.log('[poller-main] rank worker skipped (personal API key — materialize rank gate)');
+    return null;
+  }
+  const mod = await import('./workers/rank.worker.js');
+  const worker = await mod.createRankWorker();
+  console.log(`[poller-main] rank worker started concurrency=${worker.concurrency}`);
+  return worker;
 }
 
 async function getDataLagSeconds(): Promise<number | null> {
@@ -323,6 +335,8 @@ async function bootstrap(): Promise<void> {
   ingestionWorker = await startIngestionWorker();
   console.log('[poller-main] ingestion worker started');
 
+  rankWorker = await startRankWorkerIfProduction();
+
   const engine = PollerEngine.getInstance();
   dbConsumer = new PollerDbConsumer(participantDiscovery, playerDiscovery, {
     currentPatch: patchInfo.patch,
@@ -395,6 +409,11 @@ async function gracefulShutdown(signal: string): Promise<void> {
       await ingestionWorker.close();
       ingestionWorker = null;
     }
+    if (rankWorker) {
+      await rankWorker.pause(true);
+      await rankWorker.close();
+      rankWorker = null;
+    }
 
     await shutdownRiotGateway();
     await sql.end();
@@ -416,6 +435,10 @@ void bootstrap().catch(async (error) => {
     if (ingestionWorker) {
       await ingestionWorker.pause(true);
       await ingestionWorker.close();
+    }
+    if (rankWorker) {
+      await rankWorker.pause(true);
+      await rankWorker.close();
     }
     await releasePollerLeaderLock();
     await shutdownRiotGateway();

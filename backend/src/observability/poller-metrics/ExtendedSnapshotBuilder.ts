@@ -110,7 +110,10 @@ export class ExtendedSnapshotBuilder {
 
     const matchDiscovered = Math.max(1, poll.match_ids_discovered);
     const matchFetched = poll.matches_fetched_success + poll.matches_fetched_failed;
-    const matchesQueued = Math.max(1, ingestion.matches_queued);
+    const rankGateAttempts = Math.max(
+      1,
+      ingestion.matches_queued + ingestion.matches_skipped_total,
+    );
 
     const errors24h = this.store.ingestionWorker.inWindow(WINDOW_MS['24h']);
     const outcomeErrors = new Map<string, number>();
@@ -131,8 +134,8 @@ export class ExtendedSnapshotBuilder {
         ((poll.match_ids_skipped_memory + poll.match_ids_skipped_db) / matchDiscovered) * 100,
       matchFetchSuccessRatePct:
         matchFetched > 0 ? (poll.matches_fetched_success / matchFetched) * 100 : 100,
-      unrankedMatchRatePct: (ingestion.rank_unranked_fallback / matchesQueued) * 100,
-      rankDbFallbackRatePct: (ingestion.rank_resolved_from_db / matchesQueued) * 100,
+      unrankedMatchRatePct: (ingestion.rank_unranked_fallback / rankGateAttempts) * 100,
+      rankDbFallbackRatePct: (ingestion.rank_resolved_from_db / rankGateAttempts) * 100,
       ingestionRetryRateAvg:
         ingestion.matches_ingested > 0
           ? ingestion.matches_failed_attempts / ingestion.matches_ingested

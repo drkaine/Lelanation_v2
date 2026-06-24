@@ -6,7 +6,10 @@ import { sql } from "../db/client.js";
 import { appendUnifiedLog } from "../logging/unifiedAppLog.js";
 import { loadIngestionPayloadFromNormalizedTables } from "./normalizedMatchLoader.js";
 import { isMatchAlreadyAggregated } from "./normalizedMatchPersistence.js";
-import { rehydrateParticipantRanksForIngestion } from "./matchIngestionPayload.js";
+import {
+  rehydrateParticipantRanksForIngestion,
+  shouldEnqueueParticipantRankFetch,
+} from "./matchIngestionPayload.js";
 import {
   closestSnapshotsFromParticipants,
   matchReadyForAggregation,
@@ -72,7 +75,7 @@ export async function aggregateSingleMatchFromNormalized(
   if (!payload) return { outcome: "skipped_not_ready", rankFetchEnqueued: 0 };
 
   const { missingRankFetchEnqueued } = await rehydrateParticipantRanksForIngestion(payload, {
-    enqueueMissingRankFetch: true,
+    enqueueMissingRankFetch: shouldEnqueueParticipantRankFetch(),
   });
   const snapshots = closestSnapshotsFromParticipants(payload.participants);
   if (!matchReadyForAggregation(payload.participants, snapshots, payload.teamStats.rankTier)) {

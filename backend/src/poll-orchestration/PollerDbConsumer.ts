@@ -291,6 +291,7 @@ export class PollerDbConsumer {
         queueRegion: event.player.platform,
         rankByPuuid: this.rankEntriesCache,
         resolveParticipantRanks: this.config.resolveParticipantRanks,
+        matchRankTier: rank,
       });
 
       if (!payload) {

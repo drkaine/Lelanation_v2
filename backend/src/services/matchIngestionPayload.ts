@@ -17,6 +17,12 @@ import {
   normalizeParticipantRankTier,
 } from '../workers/match-rank-readiness.js';
 import { rankSnapshotFromLeagueEntries } from './rankFromLeagueEntries.js';
+import { riotConfig } from '../riot-gateway/config/riotConfig.js';
+
+/** Clé perso : pas de fetch-rank participants (quota API) — materialize + fallback rang match. */
+export function shouldEnqueueParticipantRankFetch(resolveParticipantRanks = true): boolean {
+  return resolveParticipantRanks && riotConfig.apiKeyType !== 'personal';
+}
 
 export type TeamStatsBase = Omit<TeamStatsDto, 'rankTier'>;
 
@@ -347,12 +353,33 @@ export async function rehydrateParticipantRanksForIngestion(
   return { missingRankFetchEnqueued: 0 };
 }
 
+function materializePersonalRankGate(
+  participants: ParsedParticipantDto[],
+  closestSnapshots: Map<string, RankSnapshot>,
+  teamStatsBase: TeamStatsBase,
+  gameDate: Date,
+  matchRankTier?: string,
+): IngestionJobData | null {
+  const normalizedMatchRank = normalizeParticipantRankTier(matchRankTier);
+  const draft: IngestionJobData = {
+    participants,
+    teamStats: { ...teamStatsBase, rankTier: normalizedMatchRank ?? 'UNRANKED' },
+  };
+  finalizeParticipantRanksForAggregation(draft, closestSnapshots, gameDate, { materializeMissing: true });
+  if (!matchReadyForAggregation(participants, closestSnapshots, draft.teamStats.rankTier)) {
+    return null;
+  }
+  return draft;
+}
+
 export async function buildIngestionPayloadFromMatchData(input: {
   match: MatchDto;
   timeline: MatchTimelineDto;
   queueRegion: string;
   rankByPuuid: ReadonlyMap<string, LeagueEntryDto[]>;
   resolveParticipantRanks: boolean;
+  /** Rang match résolu côté poller (joueur pollé / DB) — requis en mode personal. */
+  matchRankTier?: string;
 }): Promise<IngestionJobData | null> {
   const enrichedMatch = mergeRankEntriesIntoMatch(input.match, input.rankByPuuid);
   const patch = extractPatch(String(enrichedMatch.info?.gameVersion ?? ''));
@@ -376,11 +403,22 @@ export async function buildIngestionPayloadFromMatchData(input: {
 
   applySnapshotsToParticipants(participants, closestSnapshots);
 
-  if (!matchReadyForAggregation(participants, closestSnapshots)) {
+  const matchRankTier = normalizeParticipantRankTier(input.matchRankTier) ?? undefined;
+
+  if (!matchReadyForAggregation(participants, closestSnapshots, matchRankTier)) {
     const missing = getMissingRankParticipants(participants, closestSnapshots);
-    if (missing.length > 0) {
+    if (missing.length > 0 && shouldEnqueueParticipantRankFetch(input.resolveParticipantRanks)) {
       await enqueueRankFetchForMissingParticipants(participants, closestSnapshots, region);
       return null;
+    }
+    if (missing.length > 0 && !input.resolveParticipantRanks) {
+      return materializePersonalRankGate(
+        participants,
+        closestSnapshots,
+        teamStatsBase,
+        gameDate,
+        input.matchRankTier,
+      );
     }
     return null;
   }

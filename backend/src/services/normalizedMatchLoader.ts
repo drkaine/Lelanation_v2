@@ -10,7 +10,10 @@ import {
   closestSnapshotsFromParticipants,
   matchReadyForAggregation,
 } from "../workers/match-rank-readiness.js";
-import { rehydrateParticipantRanksForIngestion } from "./matchIngestionPayload.js";
+import {
+  rehydrateParticipantRanksForIngestion,
+  shouldEnqueueParticipantRankFetch,
+} from "./matchIngestionPayload.js";
 
 type MatchRow = {
   riot_match_id: string;
@@ -112,14 +115,19 @@ export async function loadIngestionPayloadFromNormalizedTables(
   if (participants.length === 0) return null;
 
   const closestSnapshots = closestSnapshotsFromParticipants(participants);
-  const rankTier = averageMatchRankTierLabel(participants, closestSnapshots);
-  if (!rankTier) return null;
+  let rankTier = averageMatchRankTierLabel(participants, closestSnapshots);
+  if (!rankTier) {
+    if (!options?.skipRankGate) return null;
+    rankTier = "UNRANKED";
+  }
 
   const teamStats = buildTeamStatsFromNormalized(match, teamRows, rankTier);
   const payload: IngestionJobData = { participants, teamStats };
 
   if (!options?.skipRankGate) {
-    await rehydrateParticipantRanksForIngestion(payload, { enqueueMissingRankFetch: true });
+    await rehydrateParticipantRanksForIngestion(payload, {
+      enqueueMissingRankFetch: shouldEnqueueParticipantRankFetch(),
+    });
     if (
       !matchReadyForAggregation(
         payload.participants,

@@ -298,7 +298,8 @@ export class AlertDetector {
     matchesQueued: number,
     matchesSkippedTotal: number,
   ): void {
-    const skipRatePct = (matchesSkippedTotal / Math.max(1, matchesQueued)) * 100;
+    const total = matchesQueued + matchesSkippedTotal;
+    const skipRatePct = total > 0 ? (matchesSkippedTotal / total) * 100 : 0;
     const entries = INGESTION_SKIP_REASONS.map((reason) => ({ reason, count: breakdown[reason] ?? 0 }));
     const totalSkipped = entries.reduce((sum, e) => sum + e.count, 0);
 
