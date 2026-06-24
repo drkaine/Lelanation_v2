@@ -9,6 +9,7 @@
 
 <script setup lang="ts">
 import { normalizePatchNotesVersion, usePatchNotesStore } from '~/stores/PatchNotesStore'
+import { pickLatestPatchVersion } from '~/utils/patchVersion'
 
 const localePath = useLocalePath()
 const patchNotesStore = usePatchNotesStore()
@@ -24,7 +25,7 @@ const { data: latestVersion } = await useAsyncData(
   async () => {
     await patchNotesStore.loadIndex(false, requestFetch)
     const fromIndex = patchNotesStore.index?.latest
-    return fromIndex || fallbackVersion
+    return pickLatestPatchVersion(fromIndex, fallbackVersion) || fallbackVersion
   },
   { watch: [locale] }
 )

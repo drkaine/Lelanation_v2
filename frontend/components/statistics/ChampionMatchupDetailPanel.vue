@@ -95,7 +95,7 @@ function insightCardClass(insight: MatchupInsight): string {
 
 function categoryLabel(insight: MatchupInsight): string {
   const key = insight.category
-  if (key === 'dive' || key === 'gank' || key === 'roam' || key === 'goldHoard') {
+  if (key === 'goldHoard') {
     return t(`statisticsPage.championMatchupInsight.category.${key}`)
   }
   return t(`statisticsPage.championMatchupDominanceShort.${key}`)

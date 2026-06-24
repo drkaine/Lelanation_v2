@@ -9,6 +9,9 @@ export type ChampionMatchupCoreDominanceKey =
 export type ChampionMatchupDominanceKey =
   | ChampionMatchupCoreDominanceKey
   | 'items'
+  | 'gank'
+  | 'dive'
+  | 'roam'
   | 'objectives'
   | 'pressure'
 
@@ -98,6 +101,12 @@ export const CHAMPION_MATCHUP_LANE_SUM_COLUMNS = [
   'sum_herald_assist_by_opponent',
   'sum_void_kill_by_opponent',
   'sum_void_assist_by_opponent',
+  'sum_objective_stolen',
+  'sum_objective_stolen_by_opponent',
+  'sum_kill_on_objective',
+  'sum_kill_on_objective_by_opponent',
+  'sum_death_on_objective',
+  'sum_death_on_objective_by_opponent',
 
   // Map tempo / structures (detail + dominance)
   'sum_first_tower',
@@ -172,9 +181,27 @@ export function computeLaneDominanceValue(
       const timingEdge = selfTs > 0 && oppTs > 0 ? (oppTs - selfTs) / 60_000 : 0
       return firstRate * 10 + timingEdge
     }
+    case 'gank':
+      return perGame(row, g, 'sum_kill_by_gank') - perGame(row, g, 'sum_death_by_gank')
+    case 'dive':
+      return perGame(row, g, 'sum_kill_by_dive') - perGame(row, g, 'sum_death_by_dive')
+    case 'roam':
+      return perGame(row, g, 'sum_kill_by_roaming') - perGame(row, g, 'sum_death_by_roaming')
     case 'objectives': {
       const selfObj =
-        perGame(row, g, 'sum_drake_kill', 'sum_drake_assist', 'sum_herald_kill', 'sum_herald_assist', 'sum_void_kill', 'sum_void_assist')
+        perGame(
+          row,
+          g,
+          'sum_drake_kill',
+          'sum_drake_assist',
+          'sum_herald_kill',
+          'sum_herald_assist',
+          'sum_void_kill',
+          'sum_void_assist',
+          'sum_kill_on_objective',
+        ) +
+        perGame(row, g, 'sum_objective_stolen') * 1.5 -
+        perGame(row, g, 'sum_death_on_objective') * 0.75
       const oppObj =
         perGame(
           row,
@@ -185,15 +212,19 @@ export function computeLaneDominanceValue(
           'sum_herald_assist_by_opponent',
           'sum_void_kill_by_opponent',
           'sum_void_assist_by_opponent',
-        )
+          'sum_kill_on_objective_by_opponent',
+        ) +
+        perGame(row, g, 'sum_objective_stolen_by_opponent') * 1.5 -
+        perGame(row, g, 'sum_death_on_objective_by_opponent') * 0.75
       return selfObj - oppObj
     }
     case 'pressure':
       return (
-        perGame(row, g, 'sum_first_tower') +
-        perGame(row, g, 'sum_turret_plate_taken') * 0.25 +
-        perGame(row, g, 'sum_kill_by_roaming') * 0.5 +
-        perGame(row, g, 'sum_kill_by_gank') * 0.5
+        perGame(row, g, 'sum_first_tower') -
+        perGame(row, g, 'sum_first_tower_by_opponent') +
+        (perGame(row, g, 'sum_turret_plate_taken') -
+          perGame(row, g, 'sum_turret_plate_taken_by_opponent')) *
+          0.25
       )
     default:
       return 0
@@ -208,6 +239,9 @@ export const CHAMPION_MATCHUP_DOMINANCE_KEYS: ChampionMatchupDominanceKey[] = [
   'cs',
   'vision',
   'items',
+  'gank',
+  'dive',
+  'roam',
   'objectives',
   'pressure',
 ]

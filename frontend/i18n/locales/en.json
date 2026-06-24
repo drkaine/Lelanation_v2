@@ -1500,11 +1500,23 @@
         },
         "objectives": {
           "title": "More objective presence",
-          "detail": "~{objectives} drake/herald/void involvements per game."
+          "detail": "~{objectives} drake/herald/void involvements per game (assists, steals and objective fight kills included)."
         },
         "pressure": {
           "title": "More map pressure",
           "detail": "First tower {firstTower} · {plates} plates taken / game."
+        },
+        "gank": {
+          "title": "Better gank trade",
+          "detail": "{kills} gank kills / game for {deaths} gank deaths."
+        },
+        "dive": {
+          "title": "Effective tower dives",
+          "detail": "{kills} dive kills / game for {deaths} dive deaths."
+        },
+        "roam": {
+          "title": "Rewarding roams",
+          "detail": "{kills} roam kills / game ({deaths} roam deaths)."
         },
         "diveKills": {
           "title": "Effective tower dives",
@@ -1558,11 +1570,23 @@
         },
         "objectives": {
           "title": "Less objective presence",
-          "detail": "Lower drake/herald/void involvement than opponent."
+          "detail": "Lower objective participation, steals and presence around drakes / herald / grubs than lane opponent."
         },
         "pressure": {
           "title": "Suffers map pressure",
           "detail": "First tower {firstTower} · fewer plates taken."
+        },
+        "gank": {
+          "title": "Suffers ganks",
+          "detail": "{deaths} gank deaths / game for {kills} gank kills."
+        },
+        "dive": {
+          "title": "Often dies while diving",
+          "detail": "{deaths} dive deaths / game for {kills} dive kills."
+        },
+        "roam": {
+          "title": "Costly roams",
+          "detail": "{deaths} roam deaths / game for {kills} roam kills."
         },
         "diveDeaths": {
           "title": "Often dies while diving",
@@ -1632,6 +1656,9 @@
       "cs": "CS",
       "vision": "Vision",
       "items": "Items",
+      "gank": "Gank",
+      "dive": "Dive",
+      "roam": "Roam",
       "objectives": "Objectives",
       "pressure": "Pressure"
     },
@@ -1656,15 +1683,27 @@
       "kills": "Kill pressure",
       "level": "Level advantage",
       "cs": "CS advantage",
-      "vision": "Vision control"
+      "vision": "Vision control",
+      "items": "Item timing (legendary / boots)",
+      "gank": "Ganks (help given or received)",
+      "dive": "Tower dives",
+      "roam": "Roams off-lane",
+      "objectives": "Neutral objectives (drake, herald, grubs)",
+      "pressure": "Structure pressure (towers, plates)"
     },
     "championMatchupDominanceDetail": {
-      "early": "Measures very-early lane resource and tempo edge (early gold/xp lead).",
-      "laneEconomy": "Measures overall lane-phase economy edge (gold and xp converted into advantage).",
-      "kills": "Measures offensive pressure and ability to generate kill leads in lane.",
-      "level": "Measures level lead generated against the direct lane opponent.",
-      "cs": "Measures lane CS lead created against the direct opponent.",
-      "vision": "Measures useful vision-control advantage generated during lane phase."
+      "early": "Gold diff at 5 min vs lane opponent (timeline).",
+      "laneEconomy": "Gold diff at 15 min vs lane opponent (timeline).",
+      "kills": "Kills vs lane opponent before 15 min (minus deaths taken).",
+      "level": "Level diff at 15 min vs lane opponent.",
+      "cs": "CS diff at 15 min vs lane opponent.",
+      "vision": "Vision score diff at 15 min vs lane opponent.",
+      "items": "First legendary item / purchase timing vs lane opponent.",
+      "gank": "Gank kills minus deaths to ganks (jungler or off-lane ally) before 15 min.",
+      "dive": "Dive kills under enemy tower minus dive deaths before 15 min.",
+      "roam": "Roam kills or assists off your lane minus roam deaths before 15 min.",
+      "objectives": "Drake / herald / void grub participation, objective fight kills and steals, minus deaths on objective — vs lane opponent.",
+      "pressure": "First tower and plates taken, minus opponent's."
     },
     "championStatsTabRunes": "Runes",
     "championStatsTabSkills": "Skills",
@@ -1998,6 +2037,191 @@
     "skillOrder": "Skill order",
     "skillOrderStepTitle": "Skill order"
   },
+  "information": {
+    "title": "How it works",
+    "metaTitle": "How it works — stats, scores & builds | Lelanation",
+    "metaDescription": "LoL stat formulas (winrate, pickrate, tier score, matchups), public/private build rules and the “out of date” badge on Lelanation.",
+    "lastUpdate": "Last updated:",
+    "tabsAria": "Information page sections",
+    "tabs": {
+      "calculations": "Calculations & stats",
+      "builds": "Builds",
+      "surveillance": "Surveillance",
+      "shortcuts": "Shortcuts",
+      "data": "Data"
+    },
+    "intro": "This page explains <strong>how Lelanation statistics are calculated</strong>, what <strong>scores and alerts</strong> mean, and <strong>build rules</strong> (public, private, out of date). Numbers come from ranked solo/duo games ingested via the Riot API, filtered by patch and rank when you change filters.",
+    "filters": {
+      "title": "Filters (patch, rank, role)",
+      "p1": "Most stats respect your active filters: <strong>patch version</strong> (e.g. 16.12), <strong>rank</strong> (e.g. Gold only, or all tiers), and sometimes <strong>role</strong> (top, jungle, mid…). Ahri mid Gold on patch 16.12 is not the same as a global all-ranks winrate.",
+      "p2": "The <strong>last update</strong> shown on the overview is the newest match in the current filter. If the poller lags or you filter a low-volume patch, percentages become less reliable."
+    },
+    "ranks": {
+      "title": "Ranks (solo/duo)",
+      "intro": "Stats come from <strong>ranked solo/duo</strong> games. On the site, the division filter uses the <strong>league tier</strong> (Iron → Challenger), not individual divisions I / II / III / IV.",
+      "individual": {
+        "title": "Per-player rank",
+        "definition": "For each participant, we keep the Solo/Duo tier closest to the match date (rank history).",
+        "formula": "effective_rank = player's solo tier (e.g. GOLD)",
+        "example": "Example: a player at Gold II when the game was played is aggregated as <strong>Gold</strong>."
+      },
+      "fallback": {
+        "title": "Match average rank (fallback)",
+        "definition": "If a player's solo rank is unknown, they inherit the match average rank of ranked players in that game.",
+        "formula": "match_rank = rounded tier( average of ranked players' league ordinals )",
+        "example": "Example: 3 Gold and 2 Plat in the match → average rank ≈ <strong>Gold</strong> for players without an individual rank."
+      },
+      "filter": {
+        "title": "Division filter on the site",
+        "p1": "No filter: all leagues. When you pick one or more divisions, only games where the participant's <strong>effective rank</strong> matches the selection are counted.",
+        "li1": "Available leagues: Iron, Bronze, Silver, Gold, Plat, Emerald, Diamond, Master, Grandmaster, Challenger.",
+        "li2": "You can combine several leagues (e.g. Gold + Plat = a wider cohort).",
+        "li3": "Matches with no identifiable ranked player are not aggregated into per-league stats."
+      }
+    },
+    "metrics": {
+      "title": "Champion statistics",
+      "intro": "Each metric uses a consistent notion of a “game”: one participant row (one champion in one match). Bans are counted at match level.",
+      "winrate": {
+        "title": "Winrate",
+        "definition": "Share of games won with this champion (within the active filter).",
+        "formula": "winrate = wins / games played × 100",
+        "example": "Example: Ahri has 72 wins in 120 games → winrate = 72 / 120 × 100 = 60.0%"
+      },
+      "pickrate": {
+        "title": "Pickrate",
+        "definition": "Share of filtered matches where the champion is picked (at most once per match).",
+        "formula": "pickrate = matches with champion / total matches × 100",
+        "example": "Example: Zed picked in 800 of 10,000 filtered matches → pickrate = 8.0%"
+      },
+      "banrate": {
+        "title": "Banrate",
+        "definition": "Share of matches where the champion is banned (at least once in the match).",
+        "formula": "banrate = matches with ban / total matches × 100",
+        "example": "Example: Yasuo banned in 1,200 of 10,000 matches → banrate = 12.0%"
+      },
+      "presence": {
+        "title": "Presence",
+        "definition": "Share of matches where the champion is picked or banned.",
+        "formula": "presence = (pick matches + ban matches) / total matches × 100",
+        "example": "Example: 800 picks + 400 bans in 10,000 matches → presence = 12.0%"
+      }
+    },
+    "tierList": {
+      "title": "Tier list — score & PBI",
+      "intro": "The tier list ranks champions <strong>by role</strong> on the selected patch. Tier letters (S, A, B…) derive from a numeric score; PBI is a complementary “meta strength” indicator.",
+      "tierScore": {
+        "title": "Tier score",
+        "definition": "Distance from a neutral 50% winrate, weighted by game volume on the role.",
+        "formula": "tierScore = (winrate − 0.50) × √(games)",
+        "example": "Example: 55% WR over 400 mid games → (0.55 − 0.50) × √400 = 0.05 × 20 = 1.0"
+      },
+      "pbi": {
+        "title": "PBI (Performance Beyond Impact)",
+        "definition": "Combines winrate distance from 50%, pickrate and banrate. Heavily banned champions have a smaller denominator (less often available).",
+        "formula": "PBI = (winrate% − 50) × pickrate% / (100 − banrate%)",
+        "example": "Example: 52% WR, 8% pick, 20% ban → (2 × 8) / 80 = 0.2"
+      }
+    },
+    "matchups": {
+      "title": "Matchups (lane)",
+      "intro": "Matchups compare a champion to their <strong>direct lane opponent</strong> (e.g. Ahri mid vs Sylas mid). Extended tables use a delta vs other lane champions.",
+      "delta": {
+        "title": "Delta",
+        "definition": "Gap between your matchup winrate and the average winrate of other eligible champions vs the same opponent.",
+        "formula": "Delta(A vs B) = winrate(A vs B) − avg(winrate(C vs B))",
+        "example": "Example: Ahri vs Sylas 54%, other mids vs Sylas avg 48% → Delta = +6 points"
+      },
+      "score": {
+        "title": "Matchup score",
+        "definition": "Delta is mapped to a −10…+10 score, then weighted by how often the matchup appears in your lane game pool.",
+        "formula": "weighted score = base_score(delta) × games(A vs B) / games(A on lane)",
+        "example": "Example: Delta +3 → base +3; if the matchup is 15% of your mid games, it contributes proportionally to the champion's overall note."
+      },
+      "laneProfile": {
+        "title": "Lane profile",
+        "intro": "The <strong>Lane profile</strong> chips in the matchups table summarize how you perform in lane vs a specific opponent, compared to <strong>other champions in the same role</strong> facing that opponent.",
+        "method": "For each signal, we compute a per-game average (gold, CS, lane kills, etc.), then a <strong>z-score</strong> vs the peer cohort (minimum 3 games per champion). Strengths and watchouts appear when the z-score crosses a threshold.",
+        "laneScore": {
+          "title": "Lane score",
+          "definition": "Synthetic note: average of z-scores across all 12 signals, scaled × 100.",
+          "formula": "laneScore = avg(z₁…z₁₂) × 100",
+          "example": "Example: average z +0.8 across signals → lane score ≈ +80 (favorable lane vs cohort on this matchup)."
+        },
+        "intensity": {
+          "title": "Chip intensity",
+          "definition": "Each signal is converted to a z-score vs other champions in the same role vs the same opponent, then mapped to a visual level.",
+          "formula": "z = (value − cohort_mean) / cohort_std",
+          "example": "The higher abs(z), the stronger the signal is shown as a strength or watchout.",
+          "thresholdsTitle": "Display thresholds",
+          "thresholds": {
+            "bigPlus": "z ≥ 1.0 → <strong>Big +</strong>",
+            "mediumPlus": "0.65 ≤ z &lt; 1.0 → <strong>Med. +</strong>",
+            "smallPlus": "0.35 ≤ z &lt; 0.65 → <strong>Small +</strong>",
+            "even": "abs(z) &lt; 0.35 → <strong>Even</strong>",
+            "smallMinus": "−0.65 &lt; z ≤ −0.35 → <strong>Small −</strong>",
+            "mediumMinus": "−1.0 &lt; z ≤ −0.65 → <strong>Med. −</strong>",
+            "bigMinus": "z ≤ −1.0 → <strong>Big −</strong>"
+          }
+        },
+        "signalsTitle": "The 12 signals",
+        "signalsIntro": "Each chip is one axis measured before 15 min (timeline when available, otherwise Riot fallback metrics). Gank, dive and roam are detected from the kill timeline; objectives also include deaths on objective, steals and kills around drakes / herald / grubs.",
+        "eventDetectionTitle": "Gank, dive, roam & objective detection",
+        "eventDetectionIntro": "These events are counted only <strong>before 15 min</strong> from the match timeline (when available).",
+        "eventDetection": {
+          "gank": "<strong>Gank</strong> — kill you are part of with jungler (or ally) help on a non-jungle lane, not classified as a dive.",
+          "dive": "<strong>Dive</strong> — kill you are part of under a standing enemy tower (tower aggro radius).",
+          "roam": "<strong>Roam</strong> — kill or assist on another lane than yours (not jungle), without gank/dive classification, before 20 min.",
+          "objectives": "<strong>Objectives</strong> — kills and assists on drake, herald and void grubs; kills around objectives; deaths on objective; epic steals (Riot challenges). The signal compares your tally to your lane opponent's."
+        }
+      }
+    },
+    "surveillance": {
+      "title": "Surveillance alerts (watchlist)",
+      "p1": "The <strong>Surveillance</strong> page compares current champion metrics (winrate, pickrate, banrate) to <strong>thresholds you set</strong>, per rank cohort (e.g. Gold + Plat, or global all ranks).",
+      "p2": "An alert fires when a value leaves the min/max range, or when the <strong>change</strong> (delta) vs a reference exceeds your threshold (up or down).",
+      "li1": "<strong>Min/max threshold</strong> — e.g. alert if winrate &lt; 48% or pickrate &gt; 12%.",
+      "li2": "<strong>Delta</strong> — e.g. alert if winrate drops more than 2 points vs yesterday or the reference period.",
+      "li3": "Alerts are <strong>indicative</strong>: low game volume on a cohort makes swings noisy."
+    },
+    "builds": {
+      "visibility": {
+        "title": "Public & private builds",
+        "p1": "When creating or editing a build, you choose <strong>visibility</strong>:",
+        "public": "<strong>Public</strong> — stored on the server, visible in Discover, shareable URL, listed in community feeds.",
+        "private": "<strong>Private</strong> — the build is stored only in your browser's <strong>localStorage</strong>; it is never sent to the server and does not appear in Discover or public lists.",
+        "votes": "<strong>Automatic removal</strong> — once a public build has at least <strong>10 votes</strong> (👍 + 👎), if it falls below <strong>30% upvotes</strong>, it becomes private again: the server copy is deleted and it disappears from Discover (it stays in your localStorage if you had saved it locally).",
+        "p2": "If your build is “no longer public”, check visibility in the editor or whether the vote threshold was hit. To republish: set <strong>Public</strong> and save. A private build stays on your device only — clearing site data or switching browsers will remove it."
+      },
+      "patchStale": {
+        "title": "“Out of date” badge",
+        "p1": "After patch notes are published, Lelanation compares your builds to <strong>champions, items or runes changed</strong> in that patch (from scraped patch notes).",
+        "li1": "If your build uses an entity touched by the patch and its game version is older than that patch, an <strong>Out of date</strong> badge appears.",
+        "li2": "Flagged builds can be hidden with the “Up to date” filter on Discover.",
+        "li3": "The badge clears when you <strong>update and save</strong> the build — saving removes the server flag.",
+        "p2": "This is a reminder that balance may have shifted — review runes, items and skill order.",
+        "note": "The badge does not clear on its own: once flagged for a patch, it stays until you review the build, even if you dismiss the banner."
+      }
+    },
+    "data": {
+      "title": "Data sources & limits",
+      "p1": "Aggregated stats come from our ingestion pipeline (ranked games, resolved ranks, DB aggregates). User builds are separate from these stats.",
+      "p2": "Lelanation is not affiliated with Riot Games. Numbers reflect our collected sample, not the entire Riot player base.",
+      "legalLink": "See legal notice"
+    },
+    "shortcuts": {
+      "intro": "These shortcuts work <strong>across the site</strong>. You can also open the full panel with the <strong>?</strong> button in the command bar below the navigation, or with <strong>Alt + H</strong>.",
+      "optionsTitle": "Display options",
+      "navigationTitle": "Navigation",
+      "statsTabs": "Statistics tabs",
+      "statsTabsDesc": "On the global Statistics page: move to the previous or next tab.",
+      "championTabs": "Champion tabs",
+      "championTabsDesc": "On a champion stats page: switch tabs (overview, matchups, runes…).",
+      "itemTabs": "Item tabs",
+      "itemTabsDesc": "On an item stats page: switch between overview and purchases.",
+      "editableNote": "Global shortcuts are ignored when focus is in a text field, dropdown or editable area."
+    }
+  },
   "legal": {
     "title": "Legal notice",
     "metaTitle": "Legal notice - Lelanation",
@@ -2103,6 +2327,7 @@
   "footer": {
     "legal": "Legal notice",
     "privacy": "Privacy & Cookies",
+    "information": "How it works",
     "app": "Lelanation App",
     "contact": "Contact",
     "presentationMode": "Presentation mode"

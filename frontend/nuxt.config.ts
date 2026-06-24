@@ -160,6 +160,7 @@ export default defineNuxtConfig({
     '/patch-notes': { swr: 3600, prerender: false },
     '/patch-notes/**': { swr: 3600, prerender: false },
     '/privacy': { swr: 3600, prerender: false },
+    '/information': { swr: 3600, prerender: false },
     '/legal': { swr: 3600, prerender: false },
     '/lelanation-app': { swr: 3600, prerender: false },
     '/admin/**': { ssr: false },

@@ -412,6 +412,7 @@ import { useFavoritesStore } from '~/stores/FavoritesStore'
 import { useStatisticsUiStore } from '~/stores/StatisticsUiStore'
 import { useVersionStore } from '~/stores/VersionStore'
 import { normalizePatchNotesVersion, usePatchNotesStore } from '~/stores/PatchNotesStore'
+import { pickLatestPatchVersion } from '~/utils/patchVersion'
 
 const isMenuOpen = ref(false)
 const isBuildsMenuOpen = ref(false)
@@ -474,9 +475,15 @@ const isPatchNotesActive = computed(() => route.path.includes('/patch-notes'))
 const activePatchVersion = computed(() => {
   const fromRoute = normalizePatchNotesVersion(String(route.params.version ?? '').trim())
   if (fromRoute && route.path.includes('/patch-notes')) return fromRoute
-  const latest = normalizePatchNotesVersion(patchNotesStore.index?.latest ?? '')
-  if (latest) return latest
-  return normalizePatchNotesVersion(gameVersion.value) || gameVersion.value
+  return (
+    pickLatestPatchVersion(
+      patchNotesStore.index?.latest,
+      gameVersion.value,
+      versionStore.currentVersion
+    ) ||
+    normalizePatchNotesVersion(gameVersion.value) ||
+    gameVersion.value
+  )
 })
 
 const patchSummaryLink = computed(() => localePath(`/patch-notes/${activePatchVersion.value}`))

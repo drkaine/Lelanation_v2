@@ -1502,11 +1502,23 @@
         },
         "objectives": {
           "title": "Plus présent sur les objectifs",
-          "detail": "~{objectives} participations drake/herald/void par game."
+          "detail": "~{objectives} participations drake/herald/void par game (aides, vols et kills autour des objectifs inclus)."
         },
         "pressure": {
           "title": "Plus de pression map",
           "detail": "First tower {firstTower} · {plates} plaques prises / game."
+        },
+        "gank": {
+          "title": "Meilleur bilan en gank",
+          "detail": "{kills} kills en gank / game pour {deaths} morts sous gank."
+        },
+        "dive": {
+          "title": "Dives efficaces sous tour",
+          "detail": "{kills} kills en dive / game pour {deaths} morts en dive."
+        },
+        "roam": {
+          "title": "Roams payants",
+          "detail": "{kills} kills en roam / game ({deaths} morts en roam)."
         },
         "diveKills": {
           "title": "Dive efficace sous tour",
@@ -1560,11 +1572,23 @@
         },
         "objectives": {
           "title": "Moins présent sur les objectifs",
-          "detail": "Participation drake/herald/void inférieure à l'adversaire."
+          "detail": "Participation, vols et présence autour des objectifs inférieurs à l'adversaire de lane."
         },
         "pressure": {
           "title": "Subit la pression map",
           "detail": "First tower {firstTower} · moins de plaques prises."
+        },
+        "gank": {
+          "title": "Subit les ganks",
+          "detail": "{deaths} morts sous gank / game pour {kills} kills en gank."
+        },
+        "dive": {
+          "title": "Meurt souvent en dive",
+          "detail": "{deaths} morts en dive / game pour {kills} kills en dive."
+        },
+        "roam": {
+          "title": "Roams coûteux",
+          "detail": "{deaths} morts en roam / game pour {kills} kills en roam."
         },
         "diveDeaths": {
           "title": "Meurt souvent en dive",
@@ -1634,6 +1658,9 @@
       "cs": "CS",
       "vision": "Vision",
       "items": "Items",
+      "gank": "Gank",
+      "dive": "Dive",
+      "roam": "Roam",
       "objectives": "Objectifs",
       "pressure": "Pression"
     },
@@ -1660,8 +1687,11 @@
       "cs": "Avantage CS",
       "vision": "Contrôle vision",
       "items": "Timing items (légendaires / bottes)",
-      "objectives": "Contrôle objectifs neutres",
-      "pressure": "Pression map (roams, ganks, plaques)"
+      "gank": "Ganks (aide reçue ou donnée)",
+      "dive": "Dives sous tour",
+      "roam": "Roams hors lane",
+      "objectives": "Objectifs neutres (drake, herald, grubs)",
+      "pressure": "Pression structures (tours, plaques)"
     },
     "championMatchupDominanceDetail": {
       "early": "Écart d'or à 5 min vs l'adversaire de lane (timeline).",
@@ -1671,8 +1701,11 @@
       "cs": "Écart de CS à 15 min vs l'adversaire de lane.",
       "vision": "Écart de score vision (wards) à 15 min vs l'adversaire de lane.",
       "items": "Premier item légendaire / timing d'achat vs l'adversaire.",
-      "objectives": "Participation drakes / herald / voidgrubs vs l'adversaire de lane.",
-      "pressure": "First tower, plaques, roams et ganks avant 15 min."
+      "gank": "Kills en gank moins morts sous gank (jungler ou allié hors lane adverse) avant 15 min.",
+      "dive": "Kills en dive sous tour adverse moins morts en dive avant 15 min.",
+      "roam": "Kills ou assists en roam (hors lane adverse) moins morts en roam avant 15 min.",
+      "objectives": "Participation drake / herald / voidgrubs, kills et vols autour des objectifs, moins morts sur objectif — comparé à l'adversaire de lane.",
+      "pressure": "First tower et plaques de tour prises, moins celles de l'adversaire."
     },
     "championStatsTabRunes": "Runes",
     "championStatsTabSkills": "Skills",
@@ -2006,6 +2039,191 @@
     "skillOrder": "Ordre des compétences",
     "skillOrderStepTitle": "Ordre des compétences"
   },
+  "information": {
+    "title": "Comment ça marche",
+    "metaTitle": "Comment ça marche — stats, scores et builds | Lelanation",
+    "metaDescription": "Formules des statistiques LoL (winrate, pickrate, tier score, matchups), règles des builds publics/privés et badge « plus à jour » sur Lelanation.",
+    "lastUpdate": "Dernière mise à jour :",
+    "tabsAria": "Sections de la page d'information",
+    "tabs": {
+      "calculations": "Calculs & stats",
+      "builds": "Builds",
+      "surveillance": "Surveillance",
+      "shortcuts": "Raccourcis",
+      "data": "Données"
+    },
+    "intro": "Cette page explique <strong>comment sont calculées les statistiques</strong> affichées sur Lelanation, ce que signifient les <strong>scores et alertes</strong>, et les <strong>règles des builds</strong> (public, privé, plus à jour). Les chiffres proviennent de parties classées solo/duo ingérées depuis l'API Riot, filtrées par patch et par rang lorsque vous changez les filtres.",
+    "filters": {
+      "title": "Filtres (patch, rang, rôle)",
+      "p1": "Presque toutes les stats respectent les filtres actifs : <strong>version de patch</strong> (ex. 16.12), <strong>rang</strong> (ex. Gold uniquement, ou toutes les divisions), et parfois le <strong>rôle</strong> (top, jungle, mid…). Un winrate « Ahri mid Gold patch 16.12 » n'est pas le même qu'un winrate global toutes divisions confondues.",
+      "p2": "La date de <strong>dernière mise à jour</strong> affichée sur l'overview correspond au match le plus récent inclus dans le filtre courant. Si le poller est en retard ou si vous filtrez un patch peu joué, le volume de parties peut être faible : les pourcentages deviennent alors moins fiables."
+    },
+    "ranks": {
+      "title": "Rangs (solo/duo)",
+      "intro": "Les stats proviennent de parties <strong>classées solo/duo</strong>. Sur le site, le filtre « division » utilise la <strong>ligue</strong> (Iron → Challenger), sans distinguer I / II / III / IV.",
+      "individual": {
+        "title": "Rang par joueur",
+        "definition": "Pour chaque participant, on retient le tier Solo/Duo connu le plus proche de la date du match (historique de rang).",
+        "formula": "rang_effectif = tier solo du joueur (ex. GOLD)",
+        "example": "Exemple : un joueur Gold II au moment de la partie est agrégé en <strong>Gold</strong>."
+      },
+      "fallback": {
+        "title": "Rang moyen du match (repli)",
+        "definition": "Si le rang solo d'un joueur est inconnu, on lui attribue le rang moyen des joueurs classés du match.",
+        "formula": "rang_match = tier arrondi( moyenne des ordres de ligue des joueurs classés )",
+        "example": "Exemple : 3 Gold et 2 Plat dans le match → rang moyen ≈ <strong>Gold</strong> pour les joueurs sans rang individuel."
+      },
+      "filter": {
+        "title": "Filtre division sur le site",
+        "p1": "Sans filtre : toutes les ligues. En sélectionnant une ou plusieurs divisions, seules les parties dont le <strong>rang effectif</strong> du participant entre dans la sélection sont comptées.",
+        "li1": "Ligues disponibles : Iron, Bronze, Silver, Gold, Plat, Emerald, Diamond, Master, Grandmaster, Challenger.",
+        "li2": "Vous pouvez combiner plusieurs ligues (ex. Gold + Plat = une cohorte plus large).",
+        "li3": "Les matchs sans aucun joueur classé identifiable ne sont pas agrégés dans les stats par ligue."
+      }
+    },
+    "metrics": {
+      "title": "Statistiques champion",
+      "intro": "Chaque métrique utilise le même dénominateur logique : une « partie » = une ligne participant (un champion dans un match). Les bans comptent au niveau du match.",
+      "winrate": {
+        "title": "Winrate",
+        "definition": "Part des parties gagnées avec ce champion (dans le filtre actif).",
+        "formula": "winrate = victoires / parties jouées × 100",
+        "example": "Exemple : Ahri a 72 victoires sur 120 parties → winrate = 72 / 120 × 100 = 60,0 %"
+      },
+      "pickrate": {
+        "title": "Pickrate",
+        "definition": "Part des matchs du filtre où le champion est pick (au plus une fois par match).",
+        "formula": "pickrate = matchs avec le champion / total des matchs × 100",
+        "example": "Exemple : 800 matchs avec Zed sur 10 000 matchs filtrés → pickrate = 8,0 %"
+      },
+      "banrate": {
+        "title": "Banrate",
+        "definition": "Part des matchs où le champion est banni (au moins une fois dans le match).",
+        "formula": "banrate = matchs où le champion est banni / total des matchs × 100",
+        "example": "Exemple : Yasuo banni dans 1 200 matchs sur 10 000 → banrate = 12,0 %"
+      },
+      "presence": {
+        "title": "Présence",
+        "definition": "Part des matchs où le champion apparaît en pick ou en ban.",
+        "formula": "présence = (matchs pick + matchs ban) / total des matchs × 100",
+        "example": "Exemple : 800 picks + 400 bans sur 10 000 matchs → présence = 12,0 %"
+      }
+    },
+    "tierList": {
+      "title": "Tier list — score et PBI",
+      "intro": "La tier list classe les champions <strong>par rôle</strong> sur le patch sélectionné. Le tier (S, A, B…) dérive d'un score numérique ; le PBI est un indicateur complémentaire de « force méta ».",
+      "tierScore": {
+        "title": "Tier score",
+        "definition": "Écart au winrate neutre (50 %), pondéré par le volume de parties sur le rôle. Plus il y a de games, plus un winrate éloigné de 50 % pèse.",
+        "formula": "tierScore = (winrate − 0,50) × √(parties)",
+        "example": "Exemple : 55 % WR sur 400 parties mid → (0,55 − 0,50) × √400 = 0,05 × 20 = 1,0"
+      },
+      "pbi": {
+        "title": "PBI (Performance Beyond Impact)",
+        "definition": "Combine l'écart de winrate à 50 %, la pickrate et la banrate. Un champion très banni voit son dénominateur réduit (moins souvent disponible).",
+        "formula": "PBI = (winrate% − 50) × pickrate% / (100 − banrate%)",
+        "example": "Exemple : 52 % WR, 8 % pick, 20 % ban → (2 × 8) / 80 = 0,2"
+      }
+    },
+    "matchups": {
+      "title": "Matchups (lane)",
+      "intro": "Les matchups comparent un champion à son <strong>opposant direct sur la même lane</strong> (ex. Ahri mid vs Sylas mid). Les tableaux étendus utilisent un delta par rapport aux autres champions de la lane.",
+      "delta": {
+        "title": "Delta",
+        "definition": "Écart entre votre winrate dans le matchup et le winrate moyen des autres champions (éligibles) face au même opposant.",
+        "formula": "Delta(A vs B) = winrate(A vs B) − moyenne(winrate(C vs B))",
+        "example": "Exemple : Ahri vs Sylas 54 %, moyenne des autres mids vs Sylas 48 % → Delta = +6 points"
+      },
+      "score": {
+        "title": "Score de matchup",
+        "definition": "Le delta est converti en note de −10 à +10 (matchup très difficile → très favorable), puis pondéré par la fréquence du matchup dans votre pool de parties sur la lane.",
+        "formula": "score pondéré = score_base(delta) × parties(A vs B) / parties(A sur la lane)",
+        "example": "Exemple : Delta +3 → score_base +3 ; si le matchup représente 15 % de vos parties mid, il contribue proportionnellement à la note globale du champion."
+      },
+      "laneProfile": {
+        "title": "Profil de lane",
+        "intro": "Les pastilles <strong>Profil de lane</strong> dans le tableau matchups résument comment vous vous comportez en lane face à un adversaire précis, par rapport aux <strong>autres champions du même rôle</strong> affrontant ce même opposant.",
+        "method": "Pour chaque signal, on calcule une valeur moyenne par partie (or, CS, kills lane, etc.), puis un <strong>z-score</strong> vs la cohorte des autres picks (minimum 3 parties par champion). Les forces et points de vigilance ressortent quand le z-score dépasse un seuil.",
+        "laneScore": {
+          "title": "Lane score",
+          "definition": "Note synthétique : moyenne des z-scores sur les 12 signaux, ramenée sur une échelle × 100.",
+          "formula": "laneScore = moyenne(z₁…z₁₂) × 100",
+          "example": "Exemple : z moyen +0,8 sur les signaux → lane score ≈ +80 (lane favorable vs la cohorte sur ce matchup)."
+        },
+        "intensity": {
+          "title": "Intensité des pastilles",
+          "definition": "Chaque signal est converti en z-score par rapport aux autres champions du même rôle face au même opposant, puis classé en niveau visuel.",
+          "formula": "z = (valeur − moyenne_cohorte) / écart-type_cohorte",
+          "example": "Plus abs(z) est élevé, plus le signal est marqué comme force ou point de vigilance.",
+          "thresholdsTitle": "Seuils d'affichage",
+          "thresholds": {
+            "bigPlus": "z ≥ 1,0 → <strong>Gros +</strong>",
+            "mediumPlus": "0,65 ≤ z &lt; 1,0 → <strong>Moy. +</strong>",
+            "smallPlus": "0,35 ≤ z &lt; 0,65 → <strong>Petit +</strong>",
+            "even": "abs(z) &lt; 0,35 → <strong>Équilibré</strong>",
+            "smallMinus": "−0,65 &lt; z ≤ −0,35 → <strong>Petit −</strong>",
+            "mediumMinus": "−1,0 &lt; z ≤ −0,65 → <strong>Moy. −</strong>",
+            "bigMinus": "z ≤ −1,0 → <strong>Gros −</strong>"
+          }
+        },
+        "signalsTitle": "Les 12 signaux",
+        "signalsIntro": "Chaque pastille correspond à un axe mesuré avant 15 min (timeline quand disponible, sinon métriques Riot de repli). Gank, dive et roam sont détectés sur la timeline des kills ; les objectifs incluent aussi morts sur objectif, vols et kills autour des drakes / herald / grubs.",
+        "eventDetectionTitle": "Détection gank, dive, roam et objectifs",
+        "eventDetectionIntro": "Ces événements sont comptés uniquement <strong>avant 15 min</strong> à partir de la timeline du match (quand elle est disponible).",
+        "eventDetection": {
+          "gank": "<strong>Gank</strong> — kill où vous participez avec l'aide du jungler (ou d'un allié) sur une lane autre que la jungle, sans être sous une tour adverse.",
+          "dive": "<strong>Dive</strong> — kill où vous participez sous une tour ennemie encore debout (rayon d'aggro de la tour).",
+          "roam": "<strong>Roam</strong> — kill ou assist sur une autre lane que la vôtre (hors jungle), sans classification gank/dive, avant 20 min.",
+          "objectives": "<strong>Objectifs</strong> — kills et assists sur drake, herald et void grubs ; kills autour des objectifs ; morts sur objectif ; vols d'épiques (challenges Riot). Le signal compare votre bilan à celui de l'adversaire de lane."
+        }
+      }
+    },
+    "surveillance": {
+      "title": "Alertes surveillance (watchlist)",
+      "p1": "La page <strong>Surveillance</strong> compare les métriques actuelles d'un champion (winrate, pickrate, banrate) à des <strong>seuils que vous définissez</strong>, par cohorte de rang (ex. Gold + Plat, ou global toutes divisions).",
+      "p2": "Une alerte se déclenche si une valeur sort de la plage min/max, ou si la <strong>variation</strong> (delta) par rapport à une référence dépasse votre seuil (hausse ou baisse selon le sens choisi).",
+      "li1": "<strong>Seuil min/max</strong> — ex. alerte si winrate &lt; 48 % ou pickrate &gt; 12 %.",
+      "li2": "<strong>Delta</strong> — ex. alerte si le winrate baisse de plus de 2 points par rapport à la veille ou à la période de référence.",
+      "li3": "Les alertes sont <strong>indicatives</strong> : un faible nombre de parties sur une cohorte rend les variations bruitées."
+    },
+    "builds": {
+      "visibility": {
+        "title": "Builds publics et privés",
+        "p1": "Lors de la création ou l'édition d'un build, vous choisissez sa <strong>visibilité</strong> :",
+        "public": "<strong>Public</strong> — le build est enregistré sur le serveur, visible dans Découvrir, peut avoir une page partageable et apparaît dans les listes communautaires.",
+        "private": "<strong>Privé</strong> — le build est enregistré uniquement dans le <strong>localStorage</strong> de votre navigateur ; il n'est jamais envoyé au serveur et n'apparaît pas dans Découvrir ni les listes publiques.",
+        "votes": "<strong>Retrait automatique</strong> — dès qu'un build public cumule au moins <strong>10 votes</strong> (👍 + 👎), s'il obtient <strong>moins de 30 % d'upvotes</strong>, il repasse en privé : la copie serveur est supprimée et il disparaît de Découvrir (il reste dans votre localStorage si vous l'aviez sauvegardé localement).",
+        "p2": "Si votre build « n'est plus en public », vérifiez la visibilité dans l'éditeur ou si le seuil de votes a été atteint. Pour republier : <strong>Public</strong> puis sauvegarde. Un build privé reste sur votre appareil — effacer les données du site ou changer de navigateur le fait disparaître."
+      },
+      "patchStale": {
+        "title": "Badge « Plus à jour »",
+        "p1": "Après la publication des notes de patch, Lelanation compare vos builds aux <strong>champions, objets ou runes modifiés</strong> dans ce patch (données issues des notes de patch scrapées).",
+        "li1": "Si votre build contient une entité touchée par le patch et que sa version de jeu est antérieure au patch concerné, un badge <strong>Plus à jour</strong> s'affiche.",
+        "li2": "Les builds marqués peuvent être masqués du filtre « À jour » sur la page Découvrir.",
+        "li3": "Le badge disparaît quand vous <strong>mettez à jour et sauvegardez</strong> le build (révision manuelle) — la sauvegarde efface le flag côté serveur.",
+        "p2": "Ce n'est pas une sanction : c'est un rappel que le meta ou les valeurs d'équilibrage ont pu changer. Vérifiez runes, objets et ordre de sorts.",
+        "note": "Le badge ne se retire pas tout seul si vous ne modifiez pas le build : une fois signalé pour un patch, il reste jusqu'à relecture, même si vous ne voyez plus la bannière (bouton Masquer)."
+      }
+    },
+    "data": {
+      "title": "Source des données et limites",
+      "p1": "Les statistiques agrégées proviennent de notre pipeline d'ingestion (matchs classés, rangs résolus, agrégats en base). Les builds et contenus utilisateur sont distincts de ces stats.",
+      "p2": "Lelanation n'est pas affilié à Riot Games. Les chiffres reflètent notre échantillon de parties collectées, pas l'ensemble de la base joueurs Riot.",
+      "legalLink": "Voir les mentions légales"
+    },
+    "shortcuts": {
+      "intro": "Ces raccourcis sont disponibles <strong>sur tout le site</strong>. Ouvrez aussi le panneau complet via le bouton <strong>?</strong> de la barre de commandes sous la navigation, ou avec <strong>Alt + H</strong>.",
+      "optionsTitle": "Options d'affichage",
+      "navigationTitle": "Navigation",
+      "statsTabs": "Onglets Statistiques",
+      "statsTabsDesc": "Sur la page Statistiques globales : passe à l'onglet précédent ou suivant.",
+      "championTabs": "Onglets champion",
+      "championTabsDesc": "Sur une fiche champion (stats) : change d'onglet (overview, matchups, runes…).",
+      "itemTabs": "Onglets objet",
+      "itemTabsDesc": "Sur une fiche objet : bascule entre overview et achats.",
+      "editableNote": "Les raccourcis globaux sont ignorés lorsque le focus est dans un champ texte, une liste déroulante ou une zone éditable."
+    }
+  },
   "legal": {
     "title": "Mentions légales",
     "metaTitle": "Mentions légales - Lelanation",
@@ -2115,6 +2333,7 @@
   "footer": {
     "legal": "Mentions légales",
     "privacy": "Confidentialité & Cookies",
+    "information": "Comment ça marche",
     "app": "Lelanation App",
     "contact": "Contact",
     "presentationMode": "Mode présentation"

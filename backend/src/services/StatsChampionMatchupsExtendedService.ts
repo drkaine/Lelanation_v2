@@ -324,7 +324,13 @@ function matchupScoreFromSignals(
       (z.vision ?? 0)) /
     6
   const contextual =
-    ((z.items ?? 0) + (z.objectives ?? 0) + (z.pressure ?? 0)) / 3
+    ((z.items ?? 0) +
+      (z.gank ?? 0) +
+      (z.dive ?? 0) +
+      (z.roam ?? 0) +
+      (z.objectives ?? 0) +
+      (z.pressure ?? 0)) /
+    6
   const laneComposite = laneCore * 0.7 + contextual * 0.3
   const sampleWeight = Math.min(1, Math.max(0.2, gamesInMatchup / 80))
   return baseScore * 0.65 + laneComposite * sampleWeight * 0.35

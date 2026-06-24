@@ -30,6 +30,7 @@ const STATIC_ROUTES: string[] = [
   '/patch-notes',
   '/app',
   '/privacy',
+  '/information',
   '/legal',
   '/lelanation-app',
 ]

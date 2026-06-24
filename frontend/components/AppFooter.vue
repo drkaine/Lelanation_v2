@@ -19,6 +19,14 @@
         >
           {{ t('footer.privacy') }}
         </NuxtLink>
+        <span class="hidden md:inline">•</span>
+        <NuxtLink
+          :to="localePath('/information')"
+          class="transition-colors hover:text-accent"
+          :title="t('footer.information')"
+        >
+          {{ t('footer.information') }}
+        </NuxtLink>
         <span v-if="adminMode" class="hidden md:inline">•</span>
         <NuxtLink
           v-if="adminMode"

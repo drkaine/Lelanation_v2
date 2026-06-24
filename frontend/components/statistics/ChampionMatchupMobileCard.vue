@@ -10,6 +10,9 @@ export type MatchupsExtDominanceKey =
   | 'cs'
   | 'vision'
   | 'items'
+  | 'gank'
+  | 'dive'
+  | 'roam'
   | 'objectives'
   | 'pressure'
 

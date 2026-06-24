@@ -9,7 +9,7 @@ export type MatchupInsightSide = 'strength' | 'weakness'
 export type MatchupInsight = {
   id: string
   side: MatchupInsightSide
-  category: MatchupsExtDominanceKey | 'dive' | 'gank' | 'roam' | 'goldHoard'
+  category: MatchupsExtDominanceKey | 'goldHoard'
   level: MatchupsExtSignalLevel
   titleKey: string
   detailKey: string
@@ -103,6 +103,24 @@ function insightFromDominanceKey(
         params.legendaryOpp = fmtPct(detail.itemsFirst.opponentLegendaryFirstRate)
         params.bootsYou = fmtPct(detail.itemsFirst.bootsFirstRate)
         params.bootsOpp = fmtPct(detail.itemsFirst.opponentBootsFirstRate)
+      }
+      break
+    case 'gank':
+      if (detail) {
+        params.kills = fmtNum(detail.gankDiveRoam.gankKillsPerGame)
+        params.deaths = fmtNum(detail.gankDiveRoam.gankDeathsPerGame)
+      }
+      break
+    case 'dive':
+      if (detail) {
+        params.kills = fmtNum(detail.gankDiveRoam.diveKillsPerGame)
+        params.deaths = fmtNum(detail.gankDiveRoam.diveDeathsPerGame)
+      }
+      break
+    case 'roam':
+      if (detail) {
+        params.kills = fmtNum(detail.gankDiveRoam.roamingKillsPerGame)
+        params.deaths = fmtNum(detail.gankDiveRoam.roamingDeathsPerGame)
       }
       break
     case 'objectives':
@@ -485,11 +503,11 @@ export const MATCHUP_CATEGORY_COLORS: Record<
     text: 'text-emerald-100',
     dot: 'bg-emerald-400',
   },
-  pressure: {
-    border: 'border-fuchsia-500/45',
-    bg: 'bg-fuchsia-500/12',
-    text: 'text-fuchsia-100',
-    dot: 'bg-fuchsia-400',
+  gank: {
+    border: 'border-pink-500/45',
+    bg: 'bg-pink-500/12',
+    text: 'text-pink-100',
+    dot: 'bg-pink-400',
   },
   dive: {
     border: 'border-red-500/45',
@@ -497,17 +515,17 @@ export const MATCHUP_CATEGORY_COLORS: Record<
     text: 'text-red-100',
     dot: 'bg-red-400',
   },
-  gank: {
-    border: 'border-pink-500/45',
-    bg: 'bg-pink-500/12',
-    text: 'text-pink-100',
-    dot: 'bg-pink-400',
-  },
   roam: {
     border: 'border-indigo-500/45',
     bg: 'bg-indigo-500/12',
     text: 'text-indigo-100',
     dot: 'bg-indigo-400',
+  },
+  pressure: {
+    border: 'border-fuchsia-500/45',
+    bg: 'bg-fuchsia-500/12',
+    text: 'text-fuchsia-100',
+    dot: 'bg-fuchsia-400',
   },
   goldHoard: {
     border: 'border-amber-600/45',

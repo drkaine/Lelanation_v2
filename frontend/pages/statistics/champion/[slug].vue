@@ -2047,6 +2047,9 @@ const MATCHUP_LANE_PROFILE_DIMENSION_KEYS = [
   'cs',
   'vision',
   'items',
+  'gank',
+  'dive',
+  'roam',
   'objectives',
   'pressure',
 ] as const satisfies readonly MatchupsExtDominanceKey[]
