@@ -1,9 +1,9 @@
 import cron from 'node-cron'
 import { CommunityDragonService } from '../services/CommunityDragonService.js'
-import { DiscordService } from '../services/DiscordService.js'
 import { CronStatusService } from '../services/CronStatusService.js'
 import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
 import { createCronLogger } from '../utils/cronLogger.js'
+import { notifyCommunityDragonSynced } from '../services/gameDataSyncAlerts.js'
 
 /**
  * Run Community Dragon sync once (used by cron schedule and manual trigger).
@@ -12,7 +12,6 @@ export async function runCommunityDragonSyncOnce(): Promise<
   { ok: true; synced: number; failed: number; skipped: number } | { ok: false; error: string }
 > {
   const communityDragonService = new CommunityDragonService()
-  const discordService = new DiscordService()
   const cronStatus = new CronStatusService()
   const log = createCronLogger('communityDragonSync')
 
@@ -115,34 +114,17 @@ export async function runCommunityDragonSyncOnce(): Promise<
     duration: `${duration}s`
   })
 
-  if (failed > 0) {
-    const allErrors = [
-      ...emblemData.errors,
-      ...objectiveIconsData.errors,
-      ...pingIconsData.errors,
-      ...mapPlannerData.errors,
-      ...kaynHudData.errors,
-    ]
-    const successContext: Record<string, unknown> = {
-      synced,
-      failed,
-      skipped: 0,
-      duration: `${duration}s`,
-      timestamp: new Date().toISOString(),
-    }
-    if (allErrors.length > 0) {
-      successContext.errors = allErrors.slice(0, 10)
-      if (allErrors.length > 10) {
-        successContext.moreErrors = `${allErrors.length - 10} more errors...`
-      }
-    }
-    await discordService.sendAlert(
-      '⚠️ Community Dragon Assets Sync Completed with Errors',
-      'Sync completed but some Community Dragon assets failed to sync',
-      new Error(`${failed} assets failed to sync`),
-      successContext
-    )
-  }
+  await notifyCommunityDragonSynced({
+    synced,
+    failed,
+    emblemsSynced: emblemData.synced,
+    objectiveIconsSynced: objectiveIconsData.synced,
+    pingIconsSynced: pingIconsData.synced,
+    mapPlannerSynced: mapPlannerData.synced,
+    kaynHudSynced: kaynHudData.synced,
+    durationSeconds: duration,
+    triggeredBy: 'communityDragonSync',
+  })
 
   await appendUnifiedLog({
     section: 'back',

@@ -13,6 +13,10 @@ import { FileManager } from '../utils/fileManager.js'
 import { TheorycraftDataBuilderService } from '../services/TheorycraftDataBuilderService.js'
 import { scrapePatchNotesIfNeeded } from '../services/PatchNotesScraperService.js'
 import { refreshApiRiotFixturesOnPatchChange } from '../services/ApiRiotFixturesService.js'
+import {
+  notifyDataDragonSynced,
+  notifyNewVersionDetected,
+} from '../services/gameDataSyncAlerts.js'
 
 /**
  * Run Data Dragon sync once (used by cron schedule and manual trigger).
@@ -63,6 +67,14 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
 
     const versionInfo = versionCheckResult.unwrap()
     const versionToSync = versionInfo.latest
+
+    if (versionInfo.hasNew) {
+      await notifyNewVersionDetected({
+        previousVersion: versionInfo.current,
+        latestVersion: versionToSync,
+        triggeredBy: 'dataDragonSync',
+      })
+    }
 
     // If no new version and we already have data, skip sync
     if (!versionInfo.hasNew && versionInfo.current) {
@@ -250,6 +262,17 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
             }
           : null,
       },
+    })
+
+    await notifyDataDragonSynced({
+      version: syncData.version,
+      previousVersion: versionInfo.current,
+      syncedAt: syncData.syncedAt.toISOString(),
+      durationSeconds: duration,
+      theorycraftChampions: theorycraftBuild.isOk() ? theorycraftBuild.unwrap().champions : undefined,
+      assetsDataFiles: assetsStats?.dataCopied,
+      assetsImagesCopied: assetsStats?.imagesCopied,
+      triggeredBy: 'dataDragonSync',
     })
 
     return { ok: true, version: syncData.version }

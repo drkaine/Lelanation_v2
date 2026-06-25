@@ -10,6 +10,8 @@ import { patchFileExists } from '../utils/fileWriter.js';
 import { normalizeGamePatchKey } from './VersionService.js';
 import { createCronLogger } from '../utils/cronLogger.js';
 import { appendUnifiedLog } from '../logging/unifiedAppLog.js';
+import { notifyPatchNotesScraped } from './gameDataSyncAlerts.js';
+import { readPatchScrapeStats } from './patchScrapeStats.js';
 
 export type PatchScrapeResult =
   | { ok: true; scraped: true; patchVersion: string; url: string; outputDir: string }
@@ -72,6 +74,17 @@ export async function scrapePatchNotesIfNeeded(
       script: 'patch_scraper',
       message: `Patch notes scrape terminé — v${patchVersion}`,
       json: { patchVersion, url, outputDir, triggeredBy: cronName },
+    });
+
+    const stats = await readPatchScrapeStats(patchVersion, outputDir);
+    await notifyPatchNotesScraped({
+      patchVersion,
+      url,
+      entitiesEn: stats?.entitiesEn,
+      changesEn: stats?.changesEn,
+      hasSummaryImage: stats?.hasSummaryImage ?? false,
+      locales: ['en-GB', 'fr-FR'],
+      triggeredBy: cronName,
     });
 
     return { ok: true, scraped: true, patchVersion, url, outputDir };

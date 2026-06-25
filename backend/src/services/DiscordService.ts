@@ -108,6 +108,51 @@ export class DiscordService {
   }
 
   /**
+   * Send informational notification (blue embed).
+   */
+  async sendInfo(
+    title: string,
+    message: string,
+    context?: Record<string, unknown>
+  ): Promise<Result<void, AppError>> {
+    if (!this.webhookUrl) {
+      return Result.ok(undefined)
+    }
+
+    try {
+      const embed: DiscordWebhookPayload['embeds'] = [
+        {
+          title,
+          description: message,
+          color: 0x3498db,
+          timestamp: new Date().toISOString(),
+          fields: [],
+        },
+      ]
+
+      if (context) {
+        for (const [key, value] of Object.entries(context)) {
+          embed[0].fields?.push({
+            name: key,
+            value: String(value).substring(0, 1024),
+            inline: true,
+          })
+        }
+      }
+
+      embed[0].footer = { text: 'Lelanation Backend' }
+
+      await postJson(this.webhookUrl, { embeds: embed }, { timeoutMs: 10_000 })
+      return Result.ok(undefined)
+    } catch (error) {
+      console.error('[DiscordService] Failed to send info notification:', error)
+      return Result.err(
+        new AppError('Failed to send Discord notification', 'DISCORD_ERROR', error)
+      )
+    }
+  }
+
+  /**
    * Send success notification (optional, for important operations)
    */
   async sendSuccess(
