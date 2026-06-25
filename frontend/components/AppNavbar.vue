@@ -457,8 +457,8 @@ const myBuildsLink = computed(() => localePath('/builds/my-builds'))
 const favoriteBuildsLink = computed(() => localePath('/builds/favoris'))
 const theorycraftLink = computed(() => localePath('/builds/theorycraft'))
 const isTheorycraftActive = computed(() => route.path.includes('/builds/theorycraft'))
-const matchupGuidesLink = computed(() => localePath('/guides/matchups'))
-const isMatchupGuidesActive = computed(() => route.path.includes('/guides/matchups'))
+const matchupGuidesLink = computed(() => localePath('/matchups/sheets'))
+const isMatchupGuidesActive = computed(() => route.path.includes('/matchups/sheets'))
 const isBuildsSectionActive = computed(() => route.path.includes('/builds'))
 const currentBuildsTab = computed(() => {
   if (route.path.endsWith('/builds/discover')) return 'discover'

@@ -43,6 +43,28 @@ export type PatchNotesScrapedContext = {
   triggeredBy?: string
 }
 
+export type ChampionRegionChange = {
+  championId: string
+  name: string
+  from?: string
+  to: string
+}
+
+export type ChampionRegionsUpdatedContext = {
+  applied: ChampionRegionChange[]
+  universeCount: number
+  triggeredBy?: string
+}
+
+export type ChampionRegionsCheckedContext = {
+  universeCount: number
+  applied: ChampionRegionChange[]
+  manualReview: ChampionRegionChange[]
+  unknownFactionSlugs: string[]
+  unresolved: Array<{ slug: string; name: string }>
+  triggeredBy?: string
+}
+
 async function notify(
   send: (discord: DiscordService) => Promise<unknown>,
   label: string
@@ -123,6 +145,83 @@ export async function notifyCommunityDragonSynced(
       }
     )
   }, 'cdragon sync')
+}
+
+function formatChampionRegionChanges(changes: ChampionRegionChange[], limit = 8): string {
+  if (changes.length === 0) return '—'
+  const lines = changes.slice(0, limit).map(change => {
+    if (change.from) return `${change.name} (${change.championId}): ${change.from} → ${change.to}`
+    return `${change.name} (${change.championId}): ${change.to}`
+  })
+  if (changes.length > limit) lines.push(`… +${changes.length - limit} autres`)
+  return lines.join('\n')
+}
+
+/** Champion regions auto-updated from LoL Universe. */
+export async function notifyChampionRegionsUpdated(
+  context: ChampionRegionsUpdatedContext
+): Promise<void> {
+  await notify(async discord => {
+    await discord.sendSuccess(
+      '✅ Régions champions mises à jour',
+      `${context.applied.length} entrée(s) synchronisée(s) depuis l’Univers LoL`,
+      {
+        universeChampions: context.universeCount,
+        updated: context.applied.length,
+        changes: formatChampionRegionChanges(context.applied),
+        ...(context.triggeredBy ? { triggeredBy: context.triggeredBy } : {}),
+      }
+    )
+  }, 'champion regions updated')
+}
+
+/** Champion regions checked — manual review or unknown factions. */
+export async function notifyChampionRegionsChecked(
+  context: ChampionRegionsCheckedContext
+): Promise<void> {
+  await notify(async discord => {
+    const needsAttention =
+      context.unknownFactionSlugs.length > 0 ||
+      context.manualReview.length > 0 ||
+      context.unresolved.length > 0
+
+    await discord.sendInfo(
+      needsAttention
+        ? '⚠️ Régions champions — revue manuelle'
+        : 'ℹ️ Régions champions vérifiées',
+      needsAttention
+        ? 'Écarts détectés entre Lelanation et l’Univers LoL'
+        : 'Aucune action automatique requise',
+      {
+        universeChampions: context.universeCount,
+        autoApplied: context.applied.length,
+        manualReview: context.manualReview.length,
+        unknownFactions: context.unknownFactionSlugs.join(', ') || 'none',
+        unresolved: context.unresolved.map(entry => entry.name).join(', ') || 'none',
+        ...(context.manualReview.length
+          ? { manualChanges: formatChampionRegionChanges(context.manualReview) }
+          : {}),
+        ...(context.triggeredBy ? { triggeredBy: context.triggeredBy } : {}),
+      }
+    )
+  }, 'champion regions checked')
+}
+
+/** Champion region sync failed. */
+export async function notifyChampionRegionsSyncFailure(
+  error: string,
+  context?: { triggeredBy?: string }
+): Promise<void> {
+  await notify(async discord => {
+    await discord.sendAlert(
+      '❌ Sync régions champions échouée',
+      'La vérification des régions champions depuis l’Univers LoL a échoué',
+      error,
+      {
+        ...(context?.triggeredBy ? { triggeredBy: context.triggeredBy } : {}),
+      }
+    )
+  }, 'champion regions sync failure')
 }
 
 /** Patch notes scrape + summary completed. */

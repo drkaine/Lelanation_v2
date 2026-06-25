@@ -1950,7 +1950,10 @@
     "title": "Guides matchup",
     "subtitle": "Conseils et stratégies par matchup — accès admin (bêta).",
     "metaTitle": "Guides matchup",
-    "metaDescription": "Liste des guides matchup League of Legends sur Lelanation."
+    "metaDescription": "Liste des guides matchup League of Legends sur Lelanation.",
+    "backToSheets": "← Retour aux sheets matchup",
+    "notFound": "Guide matchup introuvable",
+    "detailMetaTitle": "{champion} — guide matchup par {author}"
   },
   "matchupGuideDiscovery": {
     "searchPlaceholder": "Rechercher par champion, adversaire ou auteur...",
@@ -1977,7 +1980,10 @@
     "clearFilters": "Effacer les filtres",
     "lastUpdateVersion": "Version lors de la dernière modification",
     "bestMatchups": "Meilleurs matchups",
-    "worstMatchups": "Pires matchups"
+    "worstMatchups": "Pires matchups",
+    "authorAnonymous": "Anonyme",
+    "dateUpdated": "Mis à jour",
+    "dateCreated": "Créé le"
   },
   "buildDiscovery": {
     "searchPlaceholder": "Rechercher un build par champion ou auteur...",
@@ -2236,6 +2242,14 @@
         "li3": "Le badge disparaît quand vous <strong>mettez à jour et sauvegardez</strong> le build (révision manuelle) — la sauvegarde efface le flag côté serveur.",
         "p2": "Ce n'est pas une sanction : c'est un rappel que le meta ou les valeurs d'équilibrage ont pu changer. Vérifiez runes, objets et ordre de sorts.",
         "note": "Le badge ne se retire pas tout seul si vous ne modifiez pas le build : une fois signalé pour un patch, il reste jusqu'à relecture, même si vous ne voyez plus la bannière (bouton Masquer)."
+      },
+      "championRegions": {
+        "title": "Couleurs de région (bordures des cartes)",
+        "p1": "Les bordures colorées des cartes de builds et guides matchup reprennent la <strong>région d'origine du champion</strong> dans l'univers de Runeterra. La source de référence est le site officiel <a href=\"https://universe.leagueoflegends.com/fr_FR/champions/\" target=\"_blank\" rel=\"noopener noreferrer\">Univers de League of Legends</a> (faction affichée sur chaque fiche champion).",
+        "li1": "Chaque champion est associé à une région (Demacia, Noxus, Ionia, etc.) ou à <strong>Runeterra</strong> lorsque Riot le classe comme « sans faction » sur l'Univers.",
+        "li2": "Lelanation vérifie automatiquement cette liste à chaque contrôle de version Data Dragon : les <strong>nouveaux champions</strong> et les changements de faction explicites sont appliqués dans <code>regions.json</code>.",
+        "li3": "Si l'Univers classe un champion sans faction mais que nous conservons une région plus précise (ex. origine lore connue), une alerte Discord signale l'écart pour revue manuelle.",
+        "p2": "Les palettes de couleurs par région sont définies côté site ; seul le mapping champion → région est synchronisé avec Riot."
       }
     },
     "data": {

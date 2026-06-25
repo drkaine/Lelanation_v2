@@ -52,6 +52,7 @@
     "backfill:patch-notes-stats": "tsx src/scripts/backfillPatchNotesStats.ts",
     "flag:builds-patch-stale": "tsx src/scripts/flagBuildsPatchStale.ts",
     "flag:builds-patch-stale:all": "tsx src/scripts/flagBuildsPatchStale.ts --all",
+    "script:sync-champion-regions": "tsx src/scripts/syncChampionRegions.ts",
     "test:scraper": "vitest run --config vitest.scraper.config.ts"
   },
   "devDependencies": {
@@ -81,6 +82,7 @@
     "pg": "^8.18.0",
     "pino": "^10.3.1",
     "pino-pretty": "^11.3.0",
+    "playwright": "^1.61.1",
     "postgres": "^3.4.9",
     "sharp": "^0.33.5",
     "undici": "^6.21.0"

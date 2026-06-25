@@ -59,8 +59,8 @@ module.exports = {
           PORT: 3000,
           NITRO_PORT: 3000,
           NITRO_HOST: '127.0.0.1',
-          NUXT_PUBLIC_MATOMO_HOST: 'https://votre-instance-matomo.com',
-          NUXT_PUBLIC_MATOMO_SITE_ID: '1'
+          NUXT_PUBLIC_MATOMO_HOST: 'https://matomo.darkaine.fr',
+          NUXT_PUBLIC_MATOMO_SITE_ID: '2'
         },
         error_file: 'path',
         out_file: 'path',

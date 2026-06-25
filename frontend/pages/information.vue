@@ -229,6 +229,16 @@
             v-html="t('information.builds.patchStale.note')"
           />
         </InfoSection>
+
+        <InfoSection :title="t('information.builds.championRegions.title')">
+          <p class="text-text/80" v-html="t('information.builds.championRegions.p1')" />
+          <ul class="mt-3 list-inside list-disc space-y-2 text-text/80">
+            <li v-html="t('information.builds.championRegions.li1')" />
+            <li v-html="t('information.builds.championRegions.li2')" />
+            <li v-html="t('information.builds.championRegions.li3')" />
+          </ul>
+          <p class="mt-3 text-text/80" v-html="t('information.builds.championRegions.p2')" />
+        </InfoSection>
       </div>
 
       <div v-show="activeTab === 'surveillance'" class="grid w-full gap-4" role="tabpanel">

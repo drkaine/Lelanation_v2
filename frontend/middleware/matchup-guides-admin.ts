@@ -1,8 +1,11 @@
 /**
- * Admin-only access to matchup guides listing.
+ * Admin-only access to matchup sheets listing and detail.
  */
-export default defineNuxtRouteMiddleware(() => {
+export default defineNuxtRouteMiddleware(to => {
   if (!import.meta.client) return
+
+  const path = to.path
+  if (!/\/matchups\/sheets(\/|$)/.test(path)) return
 
   const token = localStorage.getItem('adminAuth')
   if (!token) {

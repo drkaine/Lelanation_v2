@@ -20,15 +20,19 @@ export function useMatomo() {
   const siteId = (config as { matomoSiteId?: string }).matomoSiteId
   const enabled = Boolean(host && siteId)
 
-  /** Envoie un seul hit anonyme (pixel) sans charger le script ni poser de cookie. */
+  /** Envoie un seul hit anonyme sans charger le script ni poser de cookie. */
   function sendAnonymousBeacon() {
     if (!enabled || typeof window === 'undefined') return
     const url = `${host!.replace(/\/$/, '')}/matomo.php?idsite=${encodeURIComponent(siteId!)}&rec=1`
+    if (typeof navigator.sendBeacon === 'function') {
+      navigator.sendBeacon(url)
+      return
+    }
     const img = new Image()
     img.src = url
   }
 
-  /** Charge le script Matomo et envoie la page vue courante. À appeler uniquement après acceptation. */
+  /** Charge le script Matomo. Appeler trackPageView ensuite pour la page courante. */
   function loadMatomo() {
     if (!enabled || typeof window === 'undefined') return
     if (document.getElementById(MATOMO_SCRIPT_ID)) return
@@ -37,7 +41,6 @@ export function useMatomo() {
     window._paq = window._paq || []
     window._paq.push(['setTrackerUrl', `${baseUrl}/matomo.php`])
     window._paq.push(['setSiteId', `${siteId}`])
-    window._paq.push(['trackPageView'])
     window._paq.push(['enableLinkTracking'])
 
     // Mark Matomo as initialized before loading the external script

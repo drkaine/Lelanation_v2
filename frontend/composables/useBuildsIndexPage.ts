@@ -119,10 +119,15 @@ export function useBuildsIndexPage(fixedTab?: BuildsIndexTab) {
     controller.activeTab.value = fixedTab
   }
 
+  const goToCreateBuild = async () => {
+    await navigateTo(localePath('/builds/create'))
+  }
+
   return {
     t,
     localePath,
     nuxtLinkComponent,
+    goToCreateBuild,
     adminMode,
     BuildSearch,
     BuildFilters,

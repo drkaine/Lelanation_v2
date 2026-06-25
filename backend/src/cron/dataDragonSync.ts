@@ -17,6 +17,7 @@ import {
   notifyDataDragonSynced,
   notifyNewVersionDetected,
 } from '../services/gameDataSyncAlerts.js'
+import { syncChampionRegions } from '../services/ChampionRegionSyncService.js'
 
 /**
  * Run Data Dragon sync once (used by cron schedule and manual trigger).
@@ -79,6 +80,17 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
     // If no new version and we already have data, skip sync
     if (!versionInfo.hasNew && versionInfo.current) {
       await syncActivePatchesFromConfigAndCounts().catch(() => undefined)
+
+      await log.step('Champion regions check (no new patch)')
+      const regionSyncResult = await syncChampionRegions({ triggeredBy: 'dataDragonSync' })
+      if (!regionSyncResult.ok) {
+        await log.warn('Champion region sync failed (non-blocking):', regionSyncResult.error)
+      } else if (regionSyncResult.fileUpdated) {
+        await log.info('Champion regions updated from Universe', {
+          applied: regionSyncResult.applied.length,
+        })
+      }
+
       await log.info('No new version available. Current:', versionInfo.current)
       await cronStatus.markSuccess('dataDragonSync')
       await appendUnifiedLog({
@@ -274,6 +286,16 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
       assetsImagesCopied: assetsStats?.imagesCopied,
       triggeredBy: 'dataDragonSync',
     })
+
+    await log.step('Champion regions check (new patch)')
+    const regionSyncResult = await syncChampionRegions({ triggeredBy: 'dataDragonSync' })
+    if (!regionSyncResult.ok) {
+      await log.warn('Champion region sync failed (non-blocking):', regionSyncResult.error)
+    } else if (regionSyncResult.fileUpdated) {
+      await log.info('Champion regions updated from Universe', {
+        applied: regionSyncResult.applied.length,
+      })
+    }
 
     return { ok: true, version: syncData.version }
   } catch (error) {

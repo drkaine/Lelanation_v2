@@ -25,6 +25,7 @@
     :share-error="shareError"
     @update:active-tab="activeTab = $event"
     @update:my-builds-visibility-filter="myBuildsVisibilityFilter = $event"
+    @create-build="goToCreateBuild"
     @share-builds="shareBuilds"
     @clear-comparison="clearComparison"
     @confirm-delete="confirmDelete"
@@ -54,6 +55,7 @@ const {
   BuildFilters,
   BuildGrid,
   activeTab,
+  goToCreateBuild,
   favoriteBuilds,
   comparisonBuilds,
   myBuildsVisibilityFilter,

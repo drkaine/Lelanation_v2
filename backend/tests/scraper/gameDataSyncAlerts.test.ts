@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   notifyCommunityDragonSynced,
+  notifyChampionRegionsChecked,
+  notifyChampionRegionsUpdated,
   notifyDataDragonSynced,
   notifyNewVersionDetected,
   notifyPatchNotesScraped,
@@ -8,12 +10,13 @@ import {
 
 const sendSuccess = vi.fn().mockResolvedValue({ isOk: () => true })
 const sendInfo = vi.fn().mockResolvedValue({ isOk: () => true })
+const sendAlert = vi.fn().mockResolvedValue({ isOk: () => true })
 
 vi.mock('../../src/services/DiscordService.js', () => ({
   DiscordService: class MockDiscordService {
     sendSuccess = sendSuccess
     sendInfo = sendInfo
-    sendAlert = vi.fn()
+    sendAlert = sendAlert
   },
 }))
 
@@ -21,6 +24,7 @@ describe('gameDataSyncAlerts', () => {
   beforeEach(() => {
     sendSuccess.mockClear()
     sendInfo.mockClear()
+    sendAlert.mockClear()
   })
 
   it('notifyNewVersionDetected uses sendInfo', async () => {
@@ -80,5 +84,32 @@ describe('gameDataSyncAlerts', () => {
       entitiesEn: 20,
       hasSummaryImage: 'yes',
     })
+  })
+
+  it('notifyChampionRegionsUpdated uses sendSuccess', async () => {
+    await notifyChampionRegionsUpdated({
+      universeCount: 174,
+      applied: [{ championId: 'Locke', name: 'Locke', to: 'demacia' }],
+      triggeredBy: 'test',
+    })
+
+    expect(sendSuccess).toHaveBeenCalledOnce()
+    expect(sendSuccess.mock.calls[0][0]).toContain('Régions champions')
+  })
+
+  it('notifyChampionRegionsChecked uses sendInfo for manual review', async () => {
+    await notifyChampionRegionsChecked({
+      universeCount: 174,
+      applied: [],
+      manualReview: [
+        { championId: 'Lucian', name: 'Lucian', from: 'demacia', to: 'runeterra' },
+      ],
+      unknownFactionSlugs: [],
+      unresolved: [],
+      triggeredBy: 'test',
+    })
+
+    expect(sendInfo).toHaveBeenCalledOnce()
+    expect(sendInfo.mock.calls[0][0]).toContain('revue manuelle')
   })
 })

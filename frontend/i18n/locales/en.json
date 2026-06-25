@@ -1948,7 +1948,10 @@
     "title": "Matchup guides",
     "subtitle": "Matchup tips and strategies — admin preview (beta).",
     "metaTitle": "Matchup guides",
-    "metaDescription": "League of Legends matchup guides on Lelanation."
+    "metaDescription": "League of Legends matchup guides on Lelanation.",
+    "backToSheets": "← Back to matchup sheets",
+    "notFound": "Matchup guide not found",
+    "detailMetaTitle": "{champion} — matchup guide by {author}"
   },
   "matchupGuideDiscovery": {
     "searchPlaceholder": "Search by champion, opponent or author...",
@@ -1975,7 +1978,10 @@
     "clearFilters": "Clear filters",
     "lastUpdateVersion": "Version at last update",
     "bestMatchups": "Best matchups",
-    "worstMatchups": "Worst matchups"
+    "worstMatchups": "Worst matchups",
+    "authorAnonymous": "Anonymous",
+    "dateUpdated": "Updated",
+    "dateCreated": "Created"
   },
   "buildDiscovery": {
     "searchPlaceholder": "Search builds by champion or author...",
@@ -2234,6 +2240,14 @@
         "li3": "The badge clears when you <strong>update and save</strong> the build — saving removes the server flag.",
         "p2": "This is a reminder that balance may have shifted — review runes, items and skill order.",
         "note": "The badge does not clear on its own: once flagged for a patch, it stays until you review the build, even if you dismiss the banner."
+      },
+      "championRegions": {
+        "title": "Region colors (card borders)",
+        "p1": "Colored borders on build and matchup guide cards reflect each champion's <strong>origin region</strong> in Runeterra. The reference source is the official <a href=\"https://universe.leagueoflegends.com/en_US/champions/\" target=\"_blank\" rel=\"noopener noreferrer\">League of Legends Universe</a> site (faction shown on each champion page).",
+        "li1": "Each champion is mapped to a region (Demacia, Noxus, Ionia, etc.) or to <strong>Runeterra</strong> when Riot lists them as unaffiliated on Universe.",
+        "li2": "Lelanation checks this list on every Data Dragon version cron run: <strong>new champions</strong> and explicit faction changes are applied to <code>regions.json</code>.",
+        "li3": "If Universe marks a champion unaffiliated but we keep a more specific region (known lore origin), a Discord alert flags the mismatch for manual review.",
+        "p2": "Region color palettes are defined on our side; only the champion → region mapping is synced with Riot."
       }
     },
     "data": {

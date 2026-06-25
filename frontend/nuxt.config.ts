@@ -135,7 +135,7 @@ export default defineNuxtConfig({
     vueI18n: './i18n.config.ts',
   } as any,
   robots: {
-    disallow: ['/admin', '/api/admin', '/render', '/guides/matchups'],
+    disallow: ['/admin', '/api/admin', '/render', '/matchups/sheets'],
     sitemap: [`${defaultSiteUrl}/sitemap.xml`],
   },
   routeRules: {
@@ -167,8 +167,12 @@ export default defineNuxtConfig({
     '/admin/**': { ssr: false },
     '/app': { ssr: false },
     '/map/**': { ssr: false },
-    '/guides/matchups': { ssr: false },
-    '/en/guides/matchups': { ssr: false },
+    '/matchups/sheets': { ssr: false },
+    '/matchups/sheets/**': { ssr: false },
+    '/en/matchups/sheets': { ssr: false },
+    '/en/matchups/sheets/**': { ssr: false },
+    '/guides/matchups': { redirect: { to: '/matchups/sheets', statusCode: 301 } },
+    '/en/guides/matchups': { redirect: { to: '/en/matchups/sheets', statusCode: 301 } },
     '/render/**': { ssr: false },
   },
   nitro: {

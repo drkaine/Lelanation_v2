@@ -29,13 +29,13 @@
           >
             {{ t('buildsPage.myFavorites') }}
           </button>
-          <component
-            :is="linkComponent"
-            :to="localePath('/builds/create')"
+          <button
+            type="button"
             class="streamer-tab-button"
+            @click="emit('create-build')"
           >
             {{ t('buildsPage.createBuild') }}
-          </component>
+          </button>
           </div>
         </div>
         <div v-if="allowShare" class="flex shrink-0 items-center gap-2">
@@ -343,6 +343,7 @@ defineProps<{
 const emit = defineEmits<{
   'update:activeTab': [value: string]
   'update:myBuildsVisibilityFilter': [value: VisibilityFilterValue]
+  'create-build': []
   'share-builds': []
   'open-import-modal': []
   'clear-comparison': []
