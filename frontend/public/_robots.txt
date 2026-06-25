@@ -1,2 +1,9 @@
-User-Agent: *
-Disallow:
+# https://www.lelanation.fr/robots.txt
+User-agent: *
+Disallow: /admin
+Disallow: /en/admin
+Disallow: /api/admin
+Disallow: /render
+Disallow: /en/render
+
+Sitemap: https://www.lelanation.fr/sitemap.xml

@@ -491,7 +491,6 @@
   "statisticsPage": {
     "surveillanceTitle": "Watchlist",
     "title": "LoL Statistics",
-    "description": "Winrate and pickrate per champion, computed from Ranked Solo/Duo matches (EUW + EUNE). Filter by rank or role.",
     "metaTitle": "LoL Statistics - Winrate and pickrate by champion | Lelanation",
     "metaDescription": "League of Legends statistics: winrate and pickrate by champion, popular builds and runes. Ranked Solo/Duo EUW and EUNE. Filter by rank and role.",
     "tierListMetaTitle": "LoL tier list season {season} — patch {patch}",

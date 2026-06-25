@@ -199,6 +199,7 @@ import PatchImageLightbox from '~/components/PatchImageLightbox.vue'
 import { articleJsonLd } from '~/utils/jsonLd'
 import { useJsonLdHead } from '~/composables/useJsonLdHead'
 import { useSiteUrl } from '~/composables/useSiteUrl'
+import { pageOgImageUrl } from '~/utils/siteUrl'
 
 definePageMeta({
   key: route => String(route.params.version ?? ''),
@@ -524,15 +525,48 @@ const patchNotesCanonicalPath = computed(() =>
   seoPatchVersion.value ? `/patch-notes/${seoPatchVersion.value}` : '/patch-notes'
 )
 
+const patchNotesSeoDescription = computed(() => {
+  const version = seoPatchVersion.value
+  if (!version) {
+    return t('patchNotesPage.metaDescription', { version: fallbackGameVersion })
+  }
+  const list = champions.value
+  if (list.length === 0) {
+    return t('patchNotesPage.metaDescription', { version })
+  }
+  const topChamps = list
+    .slice(0, 3)
+    .map(c => c.name)
+    .filter(Boolean)
+    .join(', ')
+  const countLabel =
+    locale.value === 'fr' ? `${list.length} champions modifiés` : `${list.length} champions changed`
+  return `Patch ${version} : ${countLabel} — ${topChamps}...`
+})
+
+const patchNotesOgTitle = computed(() => {
+  const version = seoPatchVersion.value
+  if (!version) return t('patchNotesPage.metaTitleFallback')
+  const resume = locale.value === 'fr' ? 'Résumé' : 'Summary'
+  return `Patch ${version} LoL - ${resume} | Lelanation`
+})
+
+const patchNotesOgImage = computed(() =>
+  seoPatchVersion.value
+    ? pageOgImageUrl(siteUrl, `patch-${seoPatchVersion.value}`)
+    : pageOgImageUrl(siteUrl, 'default')
+)
+
 useSeoMeta({
   title: () =>
     seoPatchVersion.value
       ? t('patchNotesPage.metaTitle', { version: seoPatchVersion.value })
       : t('patchNotesPage.metaTitleFallback'),
-  description: () =>
-    seoPatchVersion.value
-      ? t('patchNotesPage.metaDescription', { version: seoPatchVersion.value })
-      : t('patchNotesPage.metaDescription', { version: fallbackGameVersion }),
+  description: patchNotesSeoDescription,
+  ogTitle: patchNotesOgTitle,
+  ogImage: patchNotesOgImage,
+  twitterImage: patchNotesOgImage,
+  twitterCard: 'summary_large_image',
 })
 
 useJsonLdHead(
@@ -544,7 +578,7 @@ useJsonLdHead(
       siteUrl,
       path: patchNotesCanonicalPath.value,
       headline: t('patchNotesPage.metaTitle', { version }),
-      description: t('patchNotesPage.metaDescription', { version }),
+      description: patchNotesSeoDescription.value,
       datePublished: currentPatchDate.value,
       dateModified: currentPatchDate.value,
     })

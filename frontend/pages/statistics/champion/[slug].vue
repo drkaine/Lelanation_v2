@@ -524,16 +524,13 @@
         class="champion-page-main min-w-0 flex-1 p-4 max-lg:px-0 max-lg:py-2 max-lg:pb-20 lg:px-3 lg:pb-4 lg:pt-0"
       >
         <div class="w-full">
-          <!-- SEO-only summary block (visuellement masqué car informations déjà présentes dans la section résumé). -->
-          <div class="sr-only">
-            <ChampionStatsSeoSummary
-              v-if="championStats && championName(championId)"
-              :champion-name="championName(championId)!"
-              :season="lolSeasonLabel"
-              :patch="gameVersion || versionStore.currentVersion || ''"
-              :stats="championStats"
-            />
-          </div>
+          <ChampionStatsSeoSummary
+            v-if="championStats && resolvedChampionName"
+            :champion-name="resolvedChampionName"
+            :season="lolSeasonLabel"
+            :patch="resolvedGamePatch"
+            :stats="championStats"
+          />
           <!-- Loading / error -->
           <div
             v-if="pending && !championStats"
@@ -1871,19 +1868,21 @@ import { rankTierSelectionsEqual } from '~/utils/statisticsRankTierQuery'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { statsRoleIconPath, statsRoleLabel } from '~/utils/statsRoleDisplay'
 import { buildChampionRoleDistribution } from '~/utils/championRoleDistribution'
-import { championKeyFromRouteParam } from '~/utils/championSlug'
+import { championKeyFromRouteParam, championStatsSegment } from '~/utils/championSlug'
 import { useChampionPageSsr } from '~/composables/statistics/useChampionStatsSsr'
 import {
   resolveTrendSnapshotsQueryFrom,
   trendDaysBackFromRangeMode,
 } from '~/composables/statistics/useStatisticsDailyTrendCharts'
 import ChampionStatsSeoSummary from '~/components/statistics/ChampionStatsSeoSummary.vue'
+import { useChampionNames, championNameFromMap } from '~/composables/useChampionNames'
 import { breadcrumbJsonLd } from '~/utils/jsonLd'
 import { useJsonLdHead } from '~/composables/useJsonLdHead'
-import { usePageOgImage } from '~/composables/usePageOgImage'
 import { useSiteUrl } from '~/composables/useSiteUrl'
-import { absoluteSitePath } from '~/utils/siteUrl'
+import { absoluteSitePath, pageOgImageUrl } from '~/utils/siteUrl'
+import { useOgMetaTags } from '~/composables/useOgMetaTags'
 import { lolSeasonFromGameVersion } from '~/utils/lolSeason'
+import { getFallbackGameVersion } from '~/config/version'
 const StatisticsRunesTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsRunesTab.vue')
 )
@@ -1923,11 +1922,26 @@ function championByKey(id: number) {
   return championsStore.champions.find(c => c.key === String(id)) ?? null
 }
 function championName(id: number) {
-  return championByKey(id)?.name ?? championPageSsr.value?.championName ?? null
+  return (
+    championByKey(id)?.name ??
+    championPageSsr.value?.championName ??
+    championNameFromMap(championNamesMap.value, id) ??
+    null
+  )
 }
+
+const resolvedChampionName = computed(
+  () => championPageSsr.value?.championName ?? championName(championId.value) ?? null
+)
+
+const resolvedGamePatch = computed(
+  () => gameVersion.value || versionStore.currentVersion || getFallbackGameVersion()
+)
 
 await versionStore.loadCurrentVersion().catch(() => undefined)
 await championsStore.loadChampions(riotLocale.value).catch(() => undefined)
+
+const { data: championNamesMap } = await useChampionNames()
 
 const { data: championPageSsr, pending: championPageSsrPending } = await useChampionPageSsr(
   championRouteParam,
@@ -4734,58 +4748,103 @@ onUnmounted(() => {
 
 useHead({
   title: () => {
-    const name = championName(championId.value)
+    const name = resolvedChampionName.value
     if (!name) return t('statisticsPage.championStatsMetaTitleFallback')
     return t('statisticsPage.championStatsMetaTitle', {
       champion: name,
-      season: lolSeasonFromGameVersion(gameVersion.value),
-      patch: gameVersion.value,
+      season: lolSeasonFromGameVersion(resolvedGamePatch.value),
+      patch: resolvedGamePatch.value,
     })
   },
 })
 useSeoMeta({
   description: () => {
-    const name = championName(championId.value)
+    const name = resolvedChampionName.value
     const stats = championStats.value ?? championPageSsr.value?.stats
     if (name && stats) {
       return t('statisticsPage.championStatsMetaDescriptionWithStats', {
         champion: name,
         winrate: Number(stats.winrate).toFixed(1),
         pickrate: Number(stats.pickrate).toFixed(1),
-        patch: gameVersion.value || versionStore.currentVersion || '',
+        patch: resolvedGamePatch.value,
       })
     }
     if (name) {
       return t('statisticsPage.championStatsMetaDescription', {
         champion: name,
-        season: lolSeasonFromGameVersion(gameVersion.value),
-        patch: gameVersion.value,
+        season: lolSeasonFromGameVersion(resolvedGamePatch.value),
+        patch: resolvedGamePatch.value,
       })
     }
     return t('statisticsPage.championStatsMetaDescriptionFallback')
   },
+  ogTitle: () => {
+    const name = resolvedChampionName.value
+    if (!name) return t('statisticsPage.championStatsMetaTitleFallback')
+    return t('statisticsPage.championStatsMetaTitle', {
+      champion: name,
+      season: lolSeasonFromGameVersion(resolvedGamePatch.value),
+      patch: resolvedGamePatch.value,
+    })
+  },
 })
 
 const championStatsSiteUrl = useSiteUrl()
-const championStatsOgTitle = computed(() => {
-  const name = championName(championId.value)
-  return name
-    ? t('statisticsPage.championStatsMetaTitle', {
-        champion: name,
-        season: lolSeasonFromGameVersion(gameVersion.value),
-        patch: gameVersion.value,
-      })
-    : t('statisticsPage.championStatsMetaTitleFallback')
+const championStatsOgImage = computed(() => {
+  const slug = championRouteParam.value.toLowerCase()
+  if (/^\d+$/.test(slug)) {
+    const segment = championStatsSegment(championId.value, championsStore.champions)
+    return pageOgImageUrl(championStatsSiteUrl, segment || 'default')
+  }
+  return pageOgImageUrl(championStatsSiteUrl, slug || 'default')
 })
-const championStatsOgSubtitle = computed(() => {
-  const name = championName(championId.value)
+useSeoMeta({
+  ogImage: championStatsOgImage,
+  twitterImage: championStatsOgImage,
+  twitterCard: 'summary_large_image',
+})
+
+const championStatsCanonicalUrl = computed(() =>
+  absoluteSitePath(
+    championStatsSiteUrl,
+    `/statistics/champion/${championRouteParam.value.toLowerCase()}`
+  )
+)
+const championStatsOgTitle = computed(() => {
+  const name = resolvedChampionName.value
+  if (!name) return t('statisticsPage.championStatsMetaTitleFallback')
+  return t('statisticsPage.championStatsMetaTitle', {
+    champion: name,
+    season: lolSeasonFromGameVersion(resolvedGamePatch.value),
+    patch: resolvedGamePatch.value,
+  })
+})
+const championStatsOgDescription = computed(() => {
+  const name = resolvedChampionName.value
   const stats = championStats.value ?? championPageSsr.value?.stats
   if (name && stats) {
-    return `${Number(stats.winrate).toFixed(1)}% WR · ${Number(stats.pickrate).toFixed(1)}% PR · patch ${gameVersion.value}`
+    return t('statisticsPage.championStatsMetaDescriptionWithStats', {
+      champion: name,
+      winrate: Number(stats.winrate).toFixed(1),
+      pickrate: Number(stats.pickrate).toFixed(1),
+      patch: resolvedGamePatch.value,
+    })
   }
-  return name ? `Winrate, builds, matchups — patch ${gameVersion.value}` : 'Stats League of Legends'
+  if (name) {
+    return t('statisticsPage.championStatsMetaDescription', {
+      champion: name,
+      season: lolSeasonFromGameVersion(resolvedGamePatch.value),
+      patch: resolvedGamePatch.value,
+    })
+  }
+  return t('statisticsPage.championStatsMetaDescriptionFallback')
 })
-usePageOgImage({ title: championStatsOgTitle, subtitle: championStatsOgSubtitle })
+useOgMetaTags({
+  title: championStatsOgTitle,
+  description: championStatsOgDescription,
+  image: championStatsOgImage,
+  url: championStatsCanonicalUrl,
+})
 
 useJsonLdHead(
   'champion-stats-page',

@@ -388,6 +388,22 @@
 
       <div class="min-w-0 flex-1 p-4 max-lg:pb-20 lg:px-3 lg:pb-4 lg:pt-0">
         <div class="w-full space-y-4">
+          <section
+            v-if="tierListSeoRows.length > 0"
+            class="tier-list-seo-summary rounded-lg border border-primary/20 bg-surface/20 p-3 text-sm text-text/85"
+            aria-label="Résumé tier list"
+          >
+            <h1 class="text-lg font-bold text-accent">{{ tierListSeoTitle }}</h1>
+            <ul class="mt-2 space-y-1">
+              <li
+                v-for="row in tierListSeoRows"
+                :key="'tl-seo-' + row.championId"
+                class="tabular-nums"
+              >
+                {{ row.name }} — {{ row.tier }} — {{ row.winrate }}% WR — {{ row.pickrate }}% PR
+              </li>
+            </ul>
+          </section>
           <StatisticsTierListTab
             v-show="
               tierListViewModel !== 'botlaneMatchups' && tierListViewModel !== 'botlaneDuoRank'
@@ -442,11 +458,11 @@ import {
   provide,
   unref,
   isRef,
-  defineAsyncComponent,
 } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
+import StatisticsTierListTab from '~/components/statistics/tabs/StatisticsTierListTab.vue'
 import { RANK_TIERS } from '~/utils/rankTiers'
 import { getRankedEmblemUrl } from '~/utils/rankedEmblem'
 import { useChampionsStore } from '~/stores/ChampionsStore'
@@ -460,24 +476,18 @@ import {
   enrichBotlaneRowsWithPatchDeltas,
   type BotlaneTierRowWithPatchDelta,
 } from '~/composables/statistics/botlanePatchDeltas'
-import { usePageOgImage } from '~/composables/usePageOgImage'
+import { useChampionNames } from '~/composables/useChampionNames'
 import { useSiteUrl } from '~/composables/useSiteUrl'
+import { absoluteSitePath, pageOgImageUrl } from '~/utils/siteUrl'
+import { useOgMetaTags } from '~/composables/useOgMetaTags'
 import { championStatsDetailPath } from '~/utils/championStatsRoutes'
 import { parseRankTierQuery, rankTierSelectionsEqual } from '~/utils/statisticsRankTierQuery'
+import StatisticsBotlaneMatchupsTierTab from '~/components/statistics/tabs/StatisticsBotlaneMatchupsTierTab.vue'
+import StatisticsVsBotlaneTab from '~/components/statistics/tabs/StatisticsVsBotlaneTab.vue'
 
 definePageMeta({
   layout: 'default',
 })
-
-const StatisticsTierListTab = defineAsyncComponent(
-  () => import('~/components/statistics/tabs/StatisticsTierListTab.vue')
-)
-const StatisticsVsBotlaneTab = defineAsyncComponent(
-  () => import('~/components/statistics/tabs/StatisticsVsBotlaneTab.vue')
-)
-const StatisticsBotlaneMatchupsTierTab = defineAsyncComponent(
-  () => import('~/components/statistics/tabs/StatisticsBotlaneMatchupsTierTab.vue')
-)
 
 const BOTLANE_STATS_TIMEOUT_MS = 60_000
 
@@ -494,6 +504,8 @@ const { version: gameVersion } = useGameVersion()
 const tierListTabsNavEl = ref<HTMLElement | null>(null)
 useHorizontalScrollContainer(tierListTabsNavEl)
 
+const { data: championNames } = await useChampionNames()
+
 const tierListSeoTitle = computed(() =>
   t('statisticsPage.tierListMetaTitle', {
     season: lolSeasonFromGameVersion(gameVersion.value),
@@ -506,13 +518,21 @@ const tierListSeoDescription = computed(() =>
     patch: gameVersion.value,
   })
 )
+const tierListSiteUrl = useSiteUrl()
+const tierListOgImage = computed(() => pageOgImageUrl(tierListSiteUrl, 'tier-list'))
 useSeoMeta({
   title: tierListSeoTitle,
   description: tierListSeoDescription,
+  ogTitle: tierListSeoTitle,
+  ogImage: tierListOgImage,
+  twitterImage: tierListOgImage,
+  twitterCard: 'summary_large_image',
 })
-usePageOgImage({
+useOgMetaTags({
   title: tierListSeoTitle,
-  subtitle: tierListSeoDescription,
+  description: tierListSeoDescription,
+  image: tierListOgImage,
+  url: computed(() => absoluteSitePath(tierListSiteUrl, '/statistics/tier-list')),
 })
 
 const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
@@ -740,6 +760,7 @@ const tierList = useStatisticsTierListPage({
   progressionFromVersion,
   gameVersion,
   statsFetch,
+  championNames,
 })
 
 const {
@@ -752,13 +773,24 @@ const {
   championName,
 } = tierList
 
-const tierListSiteUrl = useSiteUrl()
+const tierListSeoRows = computed(() => {
+  const rows = tierList.tierListData.value?.rows ?? []
+  return rows.slice(0, 50).map(row => ({
+    championId: row.championId,
+    name: championName(row.championId) ?? String(row.championId),
+    tier: row.tier,
+    winrate: Number(row.winrate).toFixed(1),
+    pickrate: Number(row.pickrate).toFixed(1),
+  }))
+})
+
+const tierListSiteUrlForJsonLd = useSiteUrl()
 useJsonLdHead(
   'tier-list',
   computed(() => {
     const rows = tierList.tierListData.value?.rows ?? []
     if (rows.length === 0) return null
-    return itemListJsonLd(tierListSiteUrl, {
+    return itemListJsonLd(tierListSiteUrlForJsonLd, {
       name: t('statisticsPage.tabTierList'),
       description: t('statisticsPage.metaDescription'),
       path: '/statistics/tier-list',

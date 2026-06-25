@@ -3,6 +3,24 @@ import {
   championStatsSegment,
   isNumericChampionRouteParam,
 } from '~/utils/championSlug'
+import type { ChampionSlugRef } from '~/utils/championSlug'
+
+async function loadChampionsForSlugRedirect(): Promise<ChampionSlugRef[]> {
+  const store = useChampionsStore()
+  if (store.champions.length > 0) {
+    return store.champions.map(c => ({ id: c.id, key: c.key }))
+  }
+  await store.loadChampions('fr_FR').catch(() => undefined)
+  if (store.champions.length > 0) {
+    return store.champions.map(c => ({ id: c.id, key: c.key }))
+  }
+  try {
+    const lite = await $fetch<{ champions?: ChampionSlugRef[] }>('/data/champions-lite.json')
+    return lite.champions ?? []
+  } catch {
+    return []
+  }
+}
 
 function championStatsPathMatch(path: string): { localePrefix: string; param: string } | null {
   const normalized = path.replace(/\/+$/, '') || '/'
@@ -17,15 +35,12 @@ export default defineNuxtRouteMiddleware(async to => {
   const match = championStatsPathMatch(to.path)
   if (!match || !isNumericChampionRouteParam(match.param)) return
 
-  const championsStore = useChampionsStore()
-  if (championsStore.champions.length === 0) {
-    await championsStore.loadChampions('fr_FR').catch(() => undefined)
-  }
+  const champions = await loadChampionsForSlugRedirect()
 
-  const key = championKeyFromRouteParam(match.param, championsStore.champions)
+  const key = championKeyFromRouteParam(match.param, champions)
   if (!key) return
 
-  const slug = championStatsSegment(key, championsStore.champions)
+  const slug = championStatsSegment(key, champions)
   if (slug === match.param) return
 
   return navigateTo(`${match.localePrefix}/statistics/champion/${slug}`, { redirectCode: 301 })

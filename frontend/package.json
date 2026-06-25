@@ -3,9 +3,10 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "node scripts/generate-og-default.mjs && nuxt build",
+    "build": "node scripts/generate-og-default.mjs && node scripts/generate-champion-names.mjs && nuxt build",
     "generate:webp": "node scripts/generate-lelariva-webp.mjs",
     "generate:og": "node scripts/generate-og-default.mjs",
+    "generate:champion-names": "node scripts/generate-champion-names.mjs",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",

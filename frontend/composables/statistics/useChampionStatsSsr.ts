@@ -1,5 +1,6 @@
 import type { Ref } from 'vue'
 import { championKeyFromRouteParam } from '~/utils/championSlug'
+import { championNameFromMap, type ChampionNamesMap } from '~/composables/useChampionNames'
 import { getChampionIndexUrl, getVersionUrl } from '~/utils/staticDataUrl'
 
 export type ChampionStatsSummary = {
@@ -33,12 +34,28 @@ async function loadChampionIndexRows(
   requestFetch: typeof $fetch,
   language: string
 ): Promise<ChampionIndexRow[]> {
-  const versionPayload = await requestFetch<{ currentVersion?: string }>(getVersionUrl())
-  const version = String(versionPayload?.currentVersion ?? '16.12.1')
-  const indexPayload = await requestFetch<{ champions?: ChampionIndexRow[] }>(
-    getChampionIndexUrl(version, language)
-  )
-  return (indexPayload?.champions ?? []).map(row => ({
+  try {
+    const versionPayload = await requestFetch<{ currentVersion?: string }>(getVersionUrl())
+    const version = String(versionPayload?.currentVersion ?? '16.13.1')
+    const indexPayload = await requestFetch<{ champions?: ChampionIndexRow[] }>(
+      getChampionIndexUrl(version, language)
+    )
+    const rows = indexPayload?.champions ?? []
+    if (rows.length > 0) {
+      return rows.map(row => ({
+        id: String(row.id ?? ''),
+        key: row.key ?? '',
+        name: row.name,
+      }))
+    }
+  } catch {
+    // fall through to champions-lite.json
+  }
+
+  const lite = await requestFetch<{ champions?: ChampionIndexRow[] }>(
+    '/data/champions-lite.json'
+  ).catch(() => ({ champions: [] }))
+  return (lite.champions ?? []).map(row => ({
     id: String(row.id ?? ''),
     key: row.key ?? '',
     name: row.name,
@@ -58,7 +75,13 @@ export function useChampionPageSsr(championSlug: Ref<string>, riotLocale: Ref<st
         return { championId: 0, championName: null, stats: null }
       }
       const champ = champions.find(c => String(c.key) === String(id))
-      const championName = champ?.name ?? null
+      let championName = champ?.name ?? null
+      if (!championName) {
+        const names = await requestFetch<ChampionNamesMap>('/data/champion-names.json').catch(
+          () => ({}) as ChampionNamesMap
+        )
+        championName = championNameFromMap(names, id)
+      }
       try {
         const stats = await requestFetch<ChampionStatsSummary>(
           `/api/stats/champions/${id}${defaultChampionStatsQuery()}`

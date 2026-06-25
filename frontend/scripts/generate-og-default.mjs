@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 /**
- * Generate public/og-default.png (1200×630) for social previews fallback.
+ * Generate public/og/default.png (1200×630) for social previews fallback.
  * Run: node scripts/generate-og-default.mjs
  */
-import { writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const outPath = join(__dirname, '..', 'public', 'og-default.png')
+const outDir = join(__dirname, '..', 'public', 'og')
+const outPath = join(outDir, 'default.png')
 
 let sharp
 try {
@@ -34,5 +35,6 @@ const svg = `<?xml version="1.0" encoding="UTF-8"?>
 </svg>`
 
 const png = await sharp(Buffer.from(svg)).png().toBuffer()
+mkdirSync(outDir, { recursive: true })
 writeFileSync(outPath, png)
 console.log(`Wrote ${outPath} (${png.length} bytes)`)

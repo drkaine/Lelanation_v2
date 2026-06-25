@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n'
 import { useLocalePath } from '#i18n'
 import { apiUrl } from '~/utils/apiUrl'
 import { useChampionsStore } from '~/stores/ChampionsStore'
+import { championNameFromMap, type ChampionNamesMap } from '~/composables/useChampionNames'
 import { getChampionImageUrl } from '~/utils/imageUrl'
 import { TIER_CHART_COLORS, tierChartColor, tierChartColorMuted } from '~/utils/tierChartColors'
 
@@ -38,6 +39,7 @@ export type UseStatisticsTierListPageArgs = {
   progressionFromVersion: ComputedRef<string | null>
   gameVersion: Ref<string>
   statsFetch: <T = unknown>(url: string, options?: object) => Promise<T>
+  championNames?: Ref<ChampionNamesMap | null | undefined>
 }
 
 export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
@@ -51,6 +53,7 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     progressionFromVersion,
     gameVersion,
     statsFetch,
+    championNames,
   } = args
 
   const { t, locale } = useI18n()
@@ -85,7 +88,10 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
   }
 
   function championName(championId: number): string | null {
-    return championByKey(championId)?.name ?? null
+    const fromStatic = championNames?.value
+      ? championNameFromMap(championNames.value, championId)
+      : null
+    return fromStatic ?? championByKey(championId)?.name ?? null
   }
 
   const tierListViewModel = ref<'table' | 'chart' | 'botlaneMatchups' | 'botlaneDuoRank'>('table')

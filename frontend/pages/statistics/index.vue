@@ -752,10 +752,6 @@
         :class="[showFiltersPanel ? 'max-lg:pb-20' : 'pt-2']"
       >
         <div class="w-full">
-          <div v-if="!overviewData" class="mb-6 text-text/80">
-            <p>{{ t('statisticsPage.description') }}</p>
-          </div>
-
           <Transition name="statistics-tab" mode="out-in">
             <div :key="displayedActiveTab" class="statistics-tab-panel min-h-[12rem]">
               <div v-if="displayedActiveTab === 'overview'" class="space-y-6">

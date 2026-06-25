@@ -33,23 +33,19 @@ export const useVersionStore = defineStore('version', {
           this.status = 'loading'
           this.error = null
 
-          // Try static file first (only in browser, not SSR)
-          if (process.client) {
-            try {
-              const staticResponse = await fetch(getVersionUrl())
-              if (staticResponse.ok) {
-                const staticData = await staticResponse.json()
-                // Static file uses 'currentVersion', API uses 'version'
-                const version = staticData.currentVersion || staticData.version
-                if (version) {
-                  this.currentVersion = version
-                  this.status = 'success'
-                  return
-                }
-              }
-            } catch {
-              // Network error or other issue - will try API - silently continue
+          // Static file first (SSR + client) — avoids stale build-time fallback on tier-list / champion pages.
+          try {
+            const staticData = await $fetch<{ currentVersion?: string; version?: string }>(
+              getVersionUrl()
+            )
+            const version = staticData.currentVersion || staticData.version
+            if (version) {
+              this.currentVersion = version
+              this.status = 'success'
+              return
             }
+          } catch {
+            // fall through to API
           }
 
           // Fallback to API if static file not available or failed

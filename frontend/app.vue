@@ -173,13 +173,16 @@ import { useChampionSplashPreference } from '~/composables/useChampionSplashPref
 import { usePresentationZoom } from '~/composables/usePresentationZoom'
 import { useLayoutScaled } from '~/composables/useLayoutScaled'
 import { useGlobalSeo } from '~/composables/useGlobalSeo'
+import { absoluteSitePath } from '~/utils/siteUrl'
+import { useSiteUrl } from '~/composables/useSiteUrl'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const localePath = useLocalePath()
 const localeHead = useLocaleHead({ addDirAttribute: true, addSeoAttributes: true } as any)
-useGlobalSeo()
+const siteUrl = useSiteUrl()
+const { canonicalUrl } = useGlobalSeo()
 const { isStreamerMode, toggleStreamerMode } = useStreamerMode()
 const { isPresentationZoom, togglePresentationZoom } = usePresentationZoom()
 const { isLayoutScaled } = useLayoutScaled()
@@ -232,11 +235,27 @@ const isBuildCardRenderRoute = computed(() => {
 
 provide('tooltipsEnabled', tooltipsEnabled)
 
-useHead(() => ({
-  htmlAttrs: localeHead.value.htmlAttrs,
-  link: localeHead.value.link,
-  meta: localeHead.value.meta,
-}))
+useHead(() => {
+  const hreflangLinks = (localeHead.value.link ?? []).filter(
+    (link: { rel?: string; hreflang?: string }) =>
+      link.rel === 'alternate' && Boolean(link.hreflang)
+  )
+  return {
+    htmlAttrs: localeHead.value.htmlAttrs,
+    link: [
+      { rel: 'canonical', href: canonicalUrl.value, key: 'canonical' },
+      ...hreflangLinks.map((link: Record<string, unknown>, index: number) => ({
+        ...link,
+        href:
+          typeof link.href === 'string'
+            ? absoluteSitePath(siteUrl, new URL(link.href, siteUrl).pathname)
+            : link.href,
+        key: `hreflang-${String(link.hreflang ?? index)}`,
+      })),
+    ],
+    meta: localeHead.value.meta ?? [],
+  }
+})
 
 watch(isStreamerMode, enabled => {
   if (enabled) {
