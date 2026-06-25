@@ -89,6 +89,17 @@
             >
               {{ t('nav.theorycraft') }}
             </NuxtLink>
+            <ShowIf :show-if="isAdminLoggedIn">
+              <NuxtLink
+                :to="matchupGuidesLink"
+                :title="t('nav.matchupGuides')"
+                class="version builds-submenu-link"
+                :class="{ 'is-active': isMatchupGuidesActive }"
+                @click="handleBuildsNavigation"
+              >
+                {{ t('nav.matchupGuides') }}
+              </NuxtLink>
+            </ShowIf>
           </div>
         </div>
         <NuxtLink
@@ -280,6 +291,17 @@
             >
               {{ t('nav.theorycraft') }}
             </NuxtLink>
+            <ShowIf :show-if="isAdminLoggedIn">
+              <NuxtLink
+                :to="matchupGuidesLink"
+                :title="t('nav.matchupGuides')"
+                class="builds-submenu-link"
+                :class="{ 'is-active': isMatchupGuidesActive }"
+                @click="closeBuildsMenu"
+              >
+                {{ t('nav.matchupGuides') }}
+              </NuxtLink>
+            </ShowIf>
           </div>
         </div>
         <NuxtLink :to="localePath('/videos')" :title="t('nav.videos')" class="version">
@@ -404,6 +426,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import LanguageSwitcher from '~/components/LanguageSwitcher.vue'
+import ShowIf from '~/components/ShowIf.vue'
 import { getFallbackGameVersion } from '~/config/version'
 import { useAdminAuth } from '~/composables/useAdminAuth'
 import { useClientHydrated } from '~/composables/useClientHydrated'
@@ -434,6 +457,8 @@ const myBuildsLink = computed(() => localePath('/builds/my-builds'))
 const favoriteBuildsLink = computed(() => localePath('/builds/favoris'))
 const theorycraftLink = computed(() => localePath('/builds/theorycraft'))
 const isTheorycraftActive = computed(() => route.path.includes('/builds/theorycraft'))
+const matchupGuidesLink = computed(() => localePath('/guides/matchups'))
+const isMatchupGuidesActive = computed(() => route.path.includes('/guides/matchups'))
 const isBuildsSectionActive = computed(() => route.path.includes('/builds'))
 const currentBuildsTab = computed(() => {
   if (route.path.endsWith('/builds/discover')) return 'discover'

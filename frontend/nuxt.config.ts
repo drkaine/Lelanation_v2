@@ -135,7 +135,7 @@ export default defineNuxtConfig({
     vueI18n: './i18n.config.ts',
   } as any,
   robots: {
-    disallow: ['/admin', '/api/admin', '/render'],
+    disallow: ['/admin', '/api/admin', '/render', '/guides/matchups'],
     sitemap: [`${defaultSiteUrl}/sitemap.xml`],
   },
   routeRules: {
@@ -167,6 +167,8 @@ export default defineNuxtConfig({
     '/admin/**': { ssr: false },
     '/app': { ssr: false },
     '/map/**': { ssr: false },
+    '/guides/matchups': { ssr: false },
+    '/en/guides/matchups': { ssr: false },
     '/render/**': { ssr: false },
   },
   nitro: {
