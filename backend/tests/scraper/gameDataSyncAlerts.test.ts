@@ -97,15 +97,13 @@ describe('gameDataSyncAlerts', () => {
     expect(sendSuccess.mock.calls[0][0]).toContain('Régions champions')
   })
 
-  it('notifyChampionRegionsChecked uses sendInfo for manual review', async () => {
+  it('notifyChampionRegionsChecked uses sendInfo when unresolved champions remain', async () => {
     await notifyChampionRegionsChecked({
       universeCount: 174,
-      applied: [],
-      manualReview: [
-        { championId: 'Lucian', name: 'Lucian', from: 'demacia', to: 'runeterra' },
-      ],
+      applied: [{ championId: 'Lucian', name: 'Lucian', from: 'demacia', to: 'runeterra' }],
+      manualReview: [],
       unknownFactionSlugs: [],
-      unresolved: [],
+      unresolved: [{ slug: 'new-champ', name: 'New Champ' }],
       triggeredBy: 'test',
     })
 

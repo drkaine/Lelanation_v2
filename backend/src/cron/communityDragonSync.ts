@@ -1,19 +1,53 @@
-import cron from 'node-cron'
 import { CommunityDragonService } from '../services/CommunityDragonService.js'
 import { CronStatusService } from '../services/CronStatusService.js'
+import { VersionService } from '../services/VersionService.js'
 import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
 import { createCronLogger } from '../utils/cronLogger.js'
 import { notifyCommunityDragonSynced } from '../services/gameDataSyncAlerts.js'
 
+export type CommunityDragonSyncOptions = {
+  /** Bypass version gate (manual admin trigger or post–Data Dragon sync). */
+  force?: boolean
+  triggeredBy?: string
+}
+
 /**
- * Run Community Dragon sync once (used by cron schedule and manual trigger).
+ * Run Community Dragon sync once (manual trigger or after a new game version from Data Dragon).
  */
-export async function runCommunityDragonSyncOnce(): Promise<
-  { ok: true; synced: number; failed: number; skipped: number } | { ok: false; error: string }
+export async function runCommunityDragonSyncOnce(
+  options: CommunityDragonSyncOptions = {},
+): Promise<
+  { ok: true; synced: number; failed: number; skipped: number; updated?: boolean } | { ok: false; error: string }
 > {
   const communityDragonService = new CommunityDragonService()
   const cronStatus = new CronStatusService()
+  const versionService = new VersionService()
   const log = createCronLogger('communityDragonSync')
+  const triggeredBy = options.triggeredBy ?? 'communityDragonSync'
+
+  if (!options.force) {
+    const versionCheckResult = await versionService.checkForNewVersion()
+    if (versionCheckResult.isErr()) {
+      const error = versionCheckResult.unwrapErr()
+      await log.error('Failed to check game version:', error)
+      await cronStatus.markFailure('communityDragonSync', error)
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
+
+    const versionInfo = versionCheckResult.unwrap()
+    if (!versionInfo.hasNew && versionInfo.current) {
+      await log.info('No new game version — Community Dragon sync skipped. Current:', versionInfo.current)
+      await cronStatus.markSuccess('communityDragonSync')
+      await appendUnifiedLog({
+        section: 'back',
+        type: 'fin',
+        script: 'community_dragon',
+        message: 'Community Dragon sync ignoré (pas de nouvelle version)',
+        json: { updated: false, currentVersion: versionInfo.current },
+      })
+      return { ok: true, synced: 0, failed: 0, skipped: 0, updated: false }
+    }
+  }
 
   const startTime = new Date()
   await log.info('START Community Dragon synchronization')
@@ -123,7 +157,7 @@ export async function runCommunityDragonSyncOnce(): Promise<
     mapPlannerSynced: mapPlannerData.synced,
     kaynHudSynced: kaynHudData.synced,
     durationSeconds: duration,
-    triggeredBy: 'communityDragonSync',
+    triggeredBy,
   })
 
   await appendUnifiedLog({
@@ -135,6 +169,7 @@ export async function runCommunityDragonSyncOnce(): Promise<
       synced,
       failed,
       skipped: 0,
+      updated: true,
       durationSeconds: duration,
     },
   })
@@ -144,15 +179,14 @@ export async function runCommunityDragonSyncOnce(): Promise<
     synced,
     failed,
     skipped: 0,
+    updated: true,
   }
 }
 
 /**
- * Community Dragon synchronization cron job
- * Runs daily at 03:00 (3 AM) - after Data Dragon sync
+ * Community Dragon assets sync is version-gated: triggered by Data Dragon on patch change
+ * (`runDataDragonSyncOnce`) or manually via admin. No standalone daily schedule.
  */
 export function setupCommunityDragonSync(): void {
-  cron.schedule('0 3 * * *', () => void runCommunityDragonSyncOnce(), {
-    timezone: 'Etc/UTC'
-  })
+  // Intentionally empty — see dataDragonSync.ts
 }

@@ -18,6 +18,7 @@ import {
   notifyNewVersionDetected,
 } from '../services/gameDataSyncAlerts.js'
 import { syncChampionRegions } from '../services/ChampionRegionSyncService.js'
+import { runCommunityDragonSyncOnce } from './communityDragonSync.js'
 
 /**
  * Run Data Dragon sync once (used by cron schedule and manual trigger).
@@ -80,16 +81,6 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
     // If no new version and we already have data, skip sync
     if (!versionInfo.hasNew && versionInfo.current) {
       await syncActivePatchesFromConfigAndCounts().catch(() => undefined)
-
-      await log.step('Champion regions check (no new patch)')
-      const regionSyncResult = await syncChampionRegions({ triggeredBy: 'dataDragonSync' })
-      if (!regionSyncResult.ok) {
-        await log.warn('Champion region sync failed (non-blocking):', regionSyncResult.error)
-      } else if (regionSyncResult.fileUpdated) {
-        await log.info('Champion regions updated from Universe', {
-          applied: regionSyncResult.applied.length,
-        })
-      }
 
       await log.info('No new version available. Current:', versionInfo.current)
       await cronStatus.markSuccess('dataDragonSync')
@@ -287,6 +278,7 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
       triggeredBy: 'dataDragonSync',
     })
 
+    // Champion regions vs LoL Universe: only when a new game version was synced.
     await log.step('Champion regions check (new patch)')
     const regionSyncResult = await syncChampionRegions({ triggeredBy: 'dataDragonSync' })
     if (!regionSyncResult.ok) {
@@ -294,6 +286,20 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
     } else if (regionSyncResult.fileUpdated) {
       await log.info('Champion regions updated from Universe', {
         applied: regionSyncResult.applied.length,
+      })
+    }
+
+    await log.step('Community Dragon assets sync (new patch)')
+    const communityDragonResult = await runCommunityDragonSyncOnce({
+      force: true,
+      triggeredBy: 'dataDragonSync',
+    })
+    if (!communityDragonResult.ok) {
+      await log.warn('Community Dragon sync failed (non-blocking):', communityDragonResult.error)
+    } else if (communityDragonResult.updated) {
+      await log.info('Community Dragon assets synced', {
+        synced: communityDragonResult.synced,
+        failed: communityDragonResult.failed,
       })
     }
 
@@ -319,8 +325,9 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
  * Data Dragon synchronization cron job
  * Runs every hour at :00.
  * - Checks latest game version.
- * - If unchanged, exits quickly (no sync).
- * - If new version, fetches Data Dragon, updates version.json and copies assets.
+ * - If unchanged, exits quickly (no sync, no champion-region check).
+ * - If new version, fetches Data Dragon, updates version.json, copies assets,
+ *   then compares champion regions with LoL Universe.
  */
 export function setupDataDragonSync(): void {
   cron.schedule('0 * * * *', () => void runDataDragonSyncOnce(), {

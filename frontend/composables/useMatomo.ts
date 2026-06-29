@@ -1,7 +1,10 @@
 /**
  * Matomo: chargement conditionnel au consentement + trace anonyme au refus.
- * - Acceptation : chargement du script complet et suivi SPA.
- * - Refus (ou visite avec refus déjà enregistré) : un seul hit anonyme (pas de script, pas de cookie).
+ * - Acceptation : un hit par chargement de page (modèle MPA / SSR Nuxt).
+ * - Refus : un seul hit anonyme (pas de script, pas de cookie).
+ *
+ * Pas de suivi router.afterEach : chaque URL est rendue côté serveur ;
+ * on enregistre la page une fois matomo.js prêt (après redirects i18n éventuels).
  */
 
 declare global {
@@ -13,6 +16,34 @@ declare global {
 
 const MATOMO_SCRIPT_ID = 'matomo-tracker'
 const MATOMO_JS_ID = 'matomo-js'
+/** Coalesce client redirects on first paint (i18n, middleware) into one hit. */
+const TRACK_DEBOUNCE_MS = 400
+
+let trackDebounceTimer: ReturnType<typeof setTimeout> | null = null
+let lastTrackedUrl: string | null = null
+let pendingTrack = false
+
+function sendPageView() {
+  if (typeof window === 'undefined' || !window._paq || !window.__matomoLoaded) return
+
+  const url = window.location.href
+  if (lastTrackedUrl === url) return
+
+  lastTrackedUrl = url
+  window._paq.push(['setCustomUrl', url])
+  window._paq.push(['setDocumentTitle', document.title])
+  window._paq.push(['trackPageView'])
+}
+
+function flushPendingTrack() {
+  if (!pendingTrack) return
+  pendingTrack = false
+  if (trackDebounceTimer) {
+    clearTimeout(trackDebounceTimer)
+    trackDebounceTimer = null
+  }
+  sendPageView()
+}
 
 export function useMatomo() {
   const config = useRuntimeConfig().public
@@ -32,7 +63,7 @@ export function useMatomo() {
     img.src = url
   }
 
-  /** Charge le script Matomo. Appeler trackPageView ensuite pour la page courante. */
+  /** Charge le script Matomo. Appeler trackPageView ensuite (une fois par chargement document). */
   function loadMatomo() {
     if (!enabled || typeof window === 'undefined') return
     if (document.getElementById(MATOMO_SCRIPT_ID)) return
@@ -43,28 +74,43 @@ export function useMatomo() {
     window._paq.push(['setSiteId', `${siteId}`])
     window._paq.push(['enableLinkTracking'])
 
-    // Mark Matomo as initialized before loading the external script
-    // so repeated calls don't try to inject it again.
     const marker = document.createElement('meta')
     marker.id = MATOMO_SCRIPT_ID
     document.head.appendChild(marker)
 
-    if (!document.getElementById(MATOMO_JS_ID)) {
-      const trackerScript = document.createElement('script')
-      trackerScript.async = true
-      trackerScript.src = `${baseUrl}/matomo.js`
-      trackerScript.id = MATOMO_JS_ID
-      ;(document.head || document.body || document.documentElement).appendChild(trackerScript)
+    const existingScript = document.getElementById(MATOMO_JS_ID) as HTMLScriptElement | null
+    if (existingScript) {
+      if (window.__matomoLoaded) flushPendingTrack()
+      return
     }
 
-    window.__matomoLoaded = true
+    const trackerScript = document.createElement('script')
+    trackerScript.async = true
+    trackerScript.src = `${baseUrl}/matomo.js`
+    trackerScript.id = MATOMO_JS_ID
+    trackerScript.onload = () => {
+      window.__matomoLoaded = true
+      flushPendingTrack()
+    }
+    ;(document.head || document.body || document.documentElement).appendChild(trackerScript)
   }
 
-  /** Envoie une page vue via _paq (à utiliser après loadMatomo). */
-  function trackPageView(path: string) {
-    if (!enabled || typeof window === 'undefined' || !window._paq) return
-    window._paq.push(['setCustomUrl', path])
-    window._paq.push(['trackPageView'])
+  /**
+   * Enregistre la page courante (URL réelle au moment de l'envoi).
+   * Attend matomo.js ; regroupe les redirects client du premier paint.
+   */
+  function trackPageView() {
+    if (!enabled || typeof window === 'undefined') return
+
+    pendingTrack = true
+
+    if (!window.__matomoLoaded) return
+
+    if (trackDebounceTimer) clearTimeout(trackDebounceTimer)
+    trackDebounceTimer = setTimeout(() => {
+      trackDebounceTimer = null
+      flushPendingTrack()
+    }, TRACK_DEBOUNCE_MS)
   }
 
   return {

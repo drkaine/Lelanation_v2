@@ -181,9 +181,7 @@ export async function notifyChampionRegionsChecked(
 ): Promise<void> {
   await notify(async discord => {
     const needsAttention =
-      context.unknownFactionSlugs.length > 0 ||
-      context.manualReview.length > 0 ||
-      context.unresolved.length > 0
+      context.unknownFactionSlugs.length > 0 || context.unresolved.length > 0
 
     await discord.sendInfo(
       needsAttention

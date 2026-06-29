@@ -50,7 +50,6 @@
 import { computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
 import { useCookieConsentStore } from '~/stores/CookieConsentStore'
 import { useMatomo } from '~/composables/useMatomo'
 
@@ -59,7 +58,6 @@ const consent = useCookieConsentStore()
 const { choice } = storeToRefs(consent)
 const localePath = useLocalePath()
 const matomo = useMatomo()
-const router = useRouter()
 
 const shouldShow = computed(() => choice.value === 'unknown')
 
@@ -67,7 +65,7 @@ function accept() {
   consent.accept()
   if (matomo.enabled) {
     matomo.loadMatomo()
-    matomo.trackPageView(router.currentRoute.value.fullPath)
+    matomo.trackPageView()
   }
 }
 

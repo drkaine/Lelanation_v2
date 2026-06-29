@@ -50,7 +50,7 @@ describe('championRegionCompare', () => {
     ])
   })
 
-  it('auto-applies only missing and explicit mismatches', () => {
+  it('applies missing, explicit and unaffiliated mismatches', () => {
     const comparison = compareChampionRegions(
       [
         { slug: 'locke', name: 'Locke', factionSlug: 'demacia' },
@@ -66,10 +66,21 @@ describe('championRegionCompare', () => {
     )
 
     expect(mapping).toEqual({
-      Lucian: 'demacia',
+      Lucian: 'runeterra',
       Locke: 'demacia',
     })
-    expect(applied).toHaveLength(1)
-    expect(applied[0]?.championId).toBe('Locke')
+    expect(applied).toHaveLength(2)
+    expect(applied.map(entry => entry.championId).sort()).toEqual(['Locke', 'Lucian'])
+  })
+
+  it('ignores universe-only champions not yet in game (e.g. Norra)', () => {
+    const result = compareChampionRegions(
+      [{ slug: 'norra', name: 'Norra', factionSlug: 'bandle-city' }],
+      lookup,
+      {}
+    )
+
+    expect(result.unresolved).toEqual([])
+    expect(result.diffs).toEqual([])
   })
 })

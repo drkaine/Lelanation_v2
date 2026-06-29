@@ -1,13 +1,13 @@
 /**
- * Matomo : suivi SPA uniquement après acceptation des cookies.
- * - Si consentement déjà accepté au chargement : on charge le script et on enregistre les pages.
- * - Si consentement refusé au chargement : un seul hit anonyme (pas de script).
- * - Si inconnu : rien (le bandeau gère accept → loadMatomo, reject → beacon anonyme).
+ * Matomo : un hit par chargement de page (MPA / SSR), après acceptation des cookies.
+ * - Consentement accepté : charge matomo.js puis enregistre la page courante.
+ * - Consentement refusé : un seul hit anonyme.
+ * - Inconnu : le bandeau cookies gère accept / reject.
  */
 
 import { useMatomo } from '~/composables/useMatomo'
 
-export default defineNuxtPlugin(nuxtApp => {
+export default defineNuxtPlugin(() => {
   if (typeof window === 'undefined') return
 
   const consent = useCookieConsentStore()
@@ -15,18 +15,9 @@ export default defineNuxtPlugin(nuxtApp => {
 
   consent.load()
 
-  const router = nuxtApp.$router as {
-    currentRoute: { value: { fullPath: string } }
-    afterEach: (cb: (to: { fullPath: string }) => void) => void
-  }
-
-  router.afterEach((to: { fullPath: string }) => {
-    if (matomo.enabled && window.__matomoLoaded) matomo.trackPageView(to.fullPath)
-  })
-
   if (consent.choice === 'accepted' && matomo.enabled) {
     matomo.loadMatomo()
-    matomo.trackPageView(router.currentRoute.value.fullPath)
+    matomo.trackPageView()
   } else if (consent.choice === 'rejected' && matomo.enabled) {
     matomo.sendAnonymousBeacon()
   }

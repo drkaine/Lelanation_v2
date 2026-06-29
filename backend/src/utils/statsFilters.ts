@@ -40,7 +40,7 @@ export function applyRankTierWhere(
 export function normalizedRankTiers(rankTier: string | string[] | null | undefined): string[] {
   return toQueryStringArrayParam(rankTier)
     .map((r) => r.toUpperCase())
-    .filter((r) => r && r !== 'ALL' && r !== '*')
+    .filter((r) => r && r !== 'ALL' && r !== '*' && r !== 'GLOBAL')
 }
 
 /**

@@ -145,7 +145,9 @@ export async function syncChampionRegions(options?: {
       comparison.diffs
     )
 
-    const manualReview = comparison.diffs.filter(diff => diff.kind === 'unaffiliated_mismatch')
+    const manualReview = comparison.diffs.filter(
+      diff => !applied.some(entry => entry.championId === diff.championId)
+    )
     const fileUpdated = applied.length > 0 && !options?.dryRun
 
     if (fileUpdated) {
@@ -183,11 +185,6 @@ export async function syncChampionRegions(options?: {
         applied,
         universeCount: universeChampions.length,
         triggeredBy,
-      })
-    } else if (manualReview.length > 0) {
-      await log.info('Champion region manual review items (no Discord alert)', {
-        count: manualReview.length,
-        champions: manualReview.map(entry => entry.championId),
       })
     }
 

@@ -1,4 +1,14 @@
-import { mapUniverseFactionSlug } from './championRegionFactionMap.js'
+import { mapUniverseFactionSlug, normalizeChampionKey } from './championRegionFactionMap.js'
+
+/** Universe entries with no playable champion yet — excluded from sync alerts. */
+const UNIVERSE_CHAMPIONS_IGNORED = new Set(['norra'])
+
+function isIgnoredUniverseChampion(entry: UniverseChampionEntry): boolean {
+  return (
+    UNIVERSE_CHAMPIONS_IGNORED.has(normalizeChampionKey(entry.slug)) ||
+    UNIVERSE_CHAMPIONS_IGNORED.has(normalizeChampionKey(entry.name))
+  )
+}
 
 export type UniverseChampionEntry = {
   slug: string
@@ -30,6 +40,8 @@ export function compareChampionRegions(
   const unresolved: Array<{ slug: string; name: string }> = []
 
   for (const entry of universeChampions) {
+    if (isIgnoredUniverseChampion(entry)) continue
+
     const championId =
       championIdByNormKey.get(entry.slug.toLowerCase().replace(/[^a-z0-9]/g, '')) ??
       championIdByNormKey.get(entry.name.toLowerCase().replace(/[^a-z0-9]/g, ''))
@@ -93,10 +105,8 @@ export function applyAutoChampionRegionUpdates(
   const applied: ChampionRegionDiff[] = []
 
   for (const diff of diffs) {
-    if (diff.kind === 'missing' || diff.kind === 'explicit_mismatch') {
-      next[diff.championId] = diff.to
-      applied.push(diff)
-    }
+    next[diff.championId] = diff.to
+    applied.push(diff)
   }
 
   return { mapping: next, applied }

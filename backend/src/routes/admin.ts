@@ -637,7 +637,7 @@ router.post('/cron/trigger/:job', async (req, res) => {
       return res.status(500).json({ success: false, error: result.error })
     }
     if (job === 'communityDragonSync') {
-      const result = await runCommunityDragonSyncOnce()
+      const result = await runCommunityDragonSyncOnce({ force: true })
       if (result.ok) {
         return res.json({ success: true, synced: result.synced, failed: result.failed, skipped: result.skipped })
       }

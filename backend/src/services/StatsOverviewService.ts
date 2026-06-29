@@ -3416,7 +3416,6 @@ function buildObjectiveHistogramWhere(
     conditions.push(`oh.game_version LIKE '${escapeSqlLikePrefix(normalizePatchMajorMinor(pVersion))}%'`)
   }
   conditions.push(...buildRankTierSqlConditions('oh', rankTier))
-  conditions.push(`oh.region <> 'GLOBAL'`)
   return conditions.join(' AND ')
 }
 

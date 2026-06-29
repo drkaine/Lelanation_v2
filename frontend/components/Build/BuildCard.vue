@@ -435,11 +435,13 @@
               regionSelectionClass('champion'),
               {
                 'is-splash': showChampionSplashArt,
+                'champion-portrait-container--navigate': championPortraitNavigatesToSelector,
                 'validation-blink-frame':
                   props.highlightMissingFields && missingFieldChecks.champion,
               },
             ]"
-            @click="onSelectRegion('champion', $event)"
+            :title="championPortraitNavigatesToSelector ? t('buildCard.changeChampion') : undefined"
+            @click="onChampionPortraitClick($event)"
           >
             <template v-if="selectedChampion">
               <img
@@ -1896,6 +1898,24 @@ function onSelectRegion(region: 'champion' | 'items' | 'runes', event?: MouseEve
   if (props.selectionMode !== 'theorycraft' || props.readonly) return
   event?.stopPropagation()
   emit('select-region', region)
+}
+
+const championPortraitNavigatesToSelector = computed(
+  () => !props.readonly && !props.build && props.selectionMode !== 'theorycraft'
+)
+
+function onChampionPortraitClick(event?: MouseEvent) {
+  if (props.selectionMode === 'theorycraft') {
+    onSelectRegion('champion', event)
+    return
+  }
+  if (!championPortraitNavigatesToSelector.value) return
+  event?.stopPropagation()
+  const query: Record<string, string> = {}
+  const id = buildStore.editSourceBuildId
+  if (id) query.editId = id
+  if (route.query.app === 'on') query.app = 'on'
+  navigateTo(localePath({ path: '/builds/create/champion', query }))
 }
 
 // Global tooltip preference (shared state via composable)
@@ -4763,6 +4783,15 @@ defineExpose({
   position: relative;
   margin-bottom: 8px;
   flex-shrink: 0;
+}
+
+.champion-portrait-container--navigate {
+  cursor: pointer;
+}
+
+.champion-portrait-container--navigate:hover .champion-portrait,
+.champion-portrait-container--navigate:hover .champion-portrait--splash {
+  filter: brightness(1.08);
 }
 
 .champion-portrait-container.is-splash {

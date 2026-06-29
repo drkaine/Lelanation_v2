@@ -1,19 +1,61 @@
 {
   "regionsData": {
-    "demacia": ["#dbdbdb", "#C8AA6E"],
-    "noxus": ["#790000", "#240101"],
-    "ionia": ["#e4b5e4", "#36bfb1"],
-    "freljord": ["#00b4dd", "#003366"],
-    "shadow_isles": ["#00d1a7", "#00261f"],
-    "shurima": ["#bd9700", "#704b00"],
-    "piltover": ["#0088CC", "#D4AF37"],
-    "zaun": ["#5bba00", "#3D0075"],
-    "bilgewater": ["#ab4500", "#004040"],
-    "targon": ["#e7e7e7", "#8156d7"],
-    "void": [ "#6e008a", "#420042"],
-    "ixtal": [ "#ccac00", "#1e7c1e"],
-    "bandle": ["#d396d3", "#008200"],
-    "runeterra": ["#BBA077", "#2b3239"]
+    "demacia": [
+      "#dbdbdb",
+      "#C8AA6E"
+    ],
+    "noxus": [
+      "#790000",
+      "#240101"
+    ],
+    "ionia": [
+      "#e4b5e4",
+      "#36bfb1"
+    ],
+    "freljord": [
+      "#00b4dd",
+      "#003366"
+    ],
+    "shadow_isles": [
+      "#00d1a7",
+      "#00261f"
+    ],
+    "shurima": [
+      "#bd9700",
+      "#704b00"
+    ],
+    "piltover": [
+      "#0088CC",
+      "#D4AF37"
+    ],
+    "zaun": [
+      "#5bba00",
+      "#3D0075"
+    ],
+    "bilgewater": [
+      "#ab4500",
+      "#004040"
+    ],
+    "targon": [
+      "#e7e7e7",
+      "#8156d7"
+    ],
+    "void": [
+      "#6e008a",
+      "#420042"
+    ],
+    "ixtal": [
+      "#ccac00",
+      "#1e7c1e"
+    ],
+    "bandle": [
+      "#d396d3",
+      "#008200"
+    ],
+    "runeterra": [
+      "#BBA077",
+      "#2b3239"
+    ]
   },
   "championMapping": {
     "Aatrox": "runeterra",
@@ -27,7 +69,7 @@
     "Annie": "runeterra",
     "Aphelios": "targon",
     "Ashe": "freljord",
-    "AurelionSol": "targon",
+    "AurelionSol": "runeterra",
     "Aurora": "freljord",
     "Azir": "shurima",
     "Bard": "runeterra",
@@ -43,15 +85,15 @@
     "Corki": "bandle",
     "Darius": "noxus",
     "Diana": "targon",
-    "DrMundo": "zaun",
     "Draven": "noxus",
+    "DrMundo": "zaun",
     "Ekko": "zaun",
     "Elise": "shadow_isles",
     "Evelynn": "runeterra",
     "Ezreal": "piltover",
     "Fiddlesticks": "runeterra",
     "Fiora": "demacia",
-    "Fizz": "bilgewater",
+    "Fizz": "runeterra",
     "Galio": "demacia",
     "Gangplank": "bilgewater",
     "Garen": "demacia",
@@ -91,7 +133,7 @@
     "Lillia": "ionia",
     "Lissandra": "freljord",
     "Locke": "demacia",
-    "Lucian": "demacia",
+    "Lucian": "runeterra",
     "Lulu": "bandle",
     "Lux": "demacia",
     "Malphite": "ixtal",
@@ -101,6 +143,7 @@
     "Mel": "noxus",
     "Milio": "ixtal",
     "MissFortune": "bilgewater",
+    "MonkeyKing": "ionia",
     "Mordekaiser": "noxus",
     "Morgana": "demacia",
     "Naafiri": "shurima",
@@ -148,7 +191,7 @@
     "Swain": "noxus",
     "Sylas": "demacia",
     "Syndra": "ionia",
-    "TahmKench": "bilgewater",
+    "TahmKench": "runeterra",
     "Taliyah": "shurima",
     "Talon": "noxus",
     "Taric": "targon",
@@ -172,15 +215,14 @@
     "Vladimir": "noxus",
     "Volibear": "freljord",
     "Warwick": "zaun",
-    "MonkeyKing": "ionia",
     "Xayah": "ionia",
     "Xerath": "shurima",
     "XinZhao": "demacia",
     "Yasuo": "ionia",
     "Yone": "ionia",
     "Yorick": "shadow_isles",
-    "Yuumi": "bandle",
     "Yunara": "ionia",
+    "Yuumi": "bandle",
     "Zaahen": "runeterra",
     "Zac": "zaun",
     "Zed": "ionia",

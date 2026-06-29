@@ -21,7 +21,7 @@ Le cache CD intermédiaire est dans `backend/data/theorycraft-cache/` (pas versi
 
 ### Assets statiques (images)
 
-Le cron `communityDragonSync` et le script `syncData` appellent `CommunityDragonService` pour synchroniser uniquement :
+`CommunityDragonService` est synchronisé **uniquement lors d'un changement de version** (via `dataDragonSync`) ou manuellement (admin / script `syncData`). Pas de cron quotidien. Assets synchronisés :
 
 - `frontend/public/data/community-dragon/ranked-emblem/` — emblèmes de rang
 - `frontend/public/data/community-dragon/scoreboard-objectives/` — icônes objectifs
