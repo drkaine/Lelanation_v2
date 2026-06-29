@@ -13,7 +13,7 @@
     :cancel-label="t('matchupGuideCreate.cancel')"
     :confirm-label="t('matchupGuideCreate.confirm')"
     :build-card-component="BuildCard"
-    :build-save-button-component="MatchupGuideBuilderContinueButton"
+    :build-save-button-component="MatchupGuideBuildCardSpacer"
     :stats-table-component="StatsTable"
     :build-menu-steps-component="MatchupGuideBuildMenuSteps"
     @highlight-missing="highlightMissingFields = $event"
@@ -29,7 +29,7 @@ import { BuildCreateInfoPageView } from '@lelanation/builds-ui'
 import BuildCard from '~/components/Build/BuildCard.vue'
 import StatsTable from '~/components/Build/StatsTable.vue'
 import MatchupGuideBuildMenuSteps from '~/components/matchups/MatchupGuideBuildMenuSteps.vue'
-import MatchupGuideBuilderContinueButton from '~/components/matchups/MatchupGuideBuilderContinueButton.vue'
+import MatchupGuideBuildCardSpacer from '~/components/matchups/MatchupGuideBuildCardSpacer.vue'
 import { useLayoutScaled } from '~/composables/useLayoutScaled'
 import { useMatchupGuideCreateBuilder } from '~/composables/useMatchupGuideCreateBuilder'
 

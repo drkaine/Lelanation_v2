@@ -266,6 +266,16 @@
                 ✎
               </NuxtLink>
               <button
+                v-if="props.showUserActions && isAdmin"
+                type="button"
+                class="build-grid-action-button build-grid-action-button--icon build-grid-action-button--guide"
+                :title="t('buildDiscovery.matchupGuide')"
+                :aria-label="t('buildDiscovery.matchupGuide')"
+                @click.stop="openMatchupGuideFromBuild(build.id)"
+              >
+                {{ t('buildDiscovery.matchupGuideShort') }}
+              </button>
+              <button
                 :ref="el => setShareButtonRef(build.id, el)"
                 class="build-grid-action-button build-grid-action-button--icon flex-1"
                 :title="t('buildDiscovery.share')"
@@ -494,6 +504,7 @@ import {
   copyPngBlobToClipboard,
 } from '~/utils/buildCardShareImage'
 import { useChampionSplashPreference } from '~/composables/useChampionSplashPreference'
+import { startMatchupGuideFromBuild } from '~/utils/matchupGuideFromBuildSession'
 
 const { t, locale } = useI18n()
 const { championSplashEnabled } = useChampionSplashPreference()
@@ -732,6 +743,16 @@ const hasActiveFilters = computed(() => {
 const localePath = useLocalePath()
 const navigateToBuild = (buildId: string) => {
   router.push(localePath(`/builds/${buildId}`))
+}
+
+async function openMatchupGuideFromBuild(buildId: string) {
+  if (!startMatchupGuideFromBuild(buildId)) return
+  await router.push(
+    localePath({
+      path: '/matchups/sheets/create/matchups',
+      query: { fromBuildId: buildId },
+    })
+  )
 }
 
 const COMPANION_IMPORT_BRIDGE = 'http://127.0.0.1:17321/import'
@@ -1300,6 +1321,22 @@ onUnmounted(() => {
   border-color: rgb(14 165 233 / 1);
   background: rgb(14 165 233 / 0.42);
   color: rgb(224 242 254);
+}
+
+.build-grid-action-button--guide {
+  border-color: rgb(251 191 36 / 0.85);
+  background: rgb(251 191 36 / 0.18);
+  color: rgb(254 243 199);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.build-grid-action-button--guide:hover {
+  border-color: rgb(245 158 11 / 1);
+  background: rgb(245 158 11 / 0.35);
+  color: rgb(255 251 235);
 }
 
 .pagination-btn {

@@ -70,7 +70,7 @@
       </button>
 
       <input
-        v-if="!readonly && !isMatchupGuideBuilder"
+        v-if="!readonly"
         :value="cardAuthor"
         type="text"
         maxlength="30"
@@ -79,7 +79,7 @@
         @input="updateCardAuthor(($event.target as HTMLInputElement).value)"
       />
 
-      <div v-if="!readonly && !isMatchupGuideBuilder" class="card-top-visibility-toggle">
+      <div v-if="!readonly" class="card-top-visibility-toggle">
         <button
           type="button"
           class="card-top-visibility-button"
@@ -2282,11 +2282,17 @@ function onSubTitleInput(index: number, title: string) {
 function updateCardAuthor(author: string) {
   if (props.readonly || props.build) return
   buildStore.setAuthor(author)
+  if (isMatchupGuideBuilder.value) {
+    buildStore.persistCurrentBuildDraft()
+  }
 }
 
 function setCardVisibility(visibility: 'public' | 'private') {
   if (props.readonly || props.build) return
   buildStore.setVisibility(visibility)
+  if (isMatchupGuideBuilder.value) {
+    buildStore.persistCurrentBuildDraft()
+  }
 }
 
 /** Nom d'affichage de l'item — résolu depuis itemsStore (comme dans ItemSelector) */

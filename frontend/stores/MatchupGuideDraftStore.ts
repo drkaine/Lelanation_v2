@@ -13,6 +13,12 @@ import {
   syncMatchupEntryLegacyFields,
   type MatchupCopyFieldKey,
 } from '~/utils/matchupEntryUtils'
+import {
+  areAllMatchupsFinalizeReady,
+  inferMaxReachedStep,
+  MATCHUP_GUIDE_MIN_OPPONENTS_FOR_WRITE,
+  matchupGuideStepRank,
+} from '~/utils/matchupGuideCreateSteps'
 
 const STORAGE_KEY = 'lelanation_matchup_guide_draft'
 
@@ -30,6 +36,7 @@ type MatchupGuideDraftSnapshot = {
   matchupEntries: MatchupEntry[]
   guideChampionId: string | null
   lastStep: MatchupGuideDraftStep
+  maxReachedStep: MatchupGuideDraftStep
   meta: MatchupGuideMeta
   selectedOpponentIds: string[]
   savedOpponentIds: string[]
@@ -113,13 +120,37 @@ function migrateLegacySnapshot(parsed: Record<string, unknown>): MatchupGuideDra
     savedOpponentIds = parsed.savedOpponentIds.filter((id): id is string => typeof id === 'string')
   }
 
+  const resolvedLastStep = validSteps.includes(lastStep as MatchupGuideDraftStep)
+    ? (lastStep as MatchupGuideDraftStep)
+    : 'champion'
+
+  let maxReachedStep: MatchupGuideDraftStep = resolvedLastStep
+  if (
+    typeof parsed.maxReachedStep === 'string' &&
+    validSteps.includes(parsed.maxReachedStep as MatchupGuideDraftStep)
+  ) {
+    maxReachedStep = parsed.maxReachedStep as MatchupGuideDraftStep
+  } else {
+    maxReachedStep = inferMaxReachedStep(resolvedLastStep, matchupEntries.length)
+  }
+
+  if (
+    matchupGuideStepRank(maxReachedStep) <
+    matchupGuideStepRank(inferMaxReachedStep(resolvedLastStep, matchupEntries.length))
+  ) {
+    maxReachedStep = inferMaxReachedStep(resolvedLastStep, matchupEntries.length)
+  }
+
+  if (matchupGuideStepRank(maxReachedStep) < matchupGuideStepRank(resolvedLastStep)) {
+    maxReachedStep = resolvedLastStep
+  }
+
   return {
     guideId: parsed.guideId,
     matchupEntries,
     guideChampionId: typeof parsed.guideChampionId === 'string' ? parsed.guideChampionId : null,
-    lastStep: validSteps.includes(lastStep as MatchupGuideDraftStep)
-      ? (lastStep as MatchupGuideDraftStep)
-      : 'champion',
+    lastStep: resolvedLastStep,
+    maxReachedStep,
     meta,
     selectedOpponentIds,
     savedOpponentIds,
@@ -157,6 +188,7 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
     matchupEntries: [] as MatchupEntry[],
     guideChampionId: null as string | null,
     lastStep: 'champion' as MatchupGuideDraftStep,
+    maxReachedStep: 'champion' as MatchupGuideDraftStep,
     meta: {} as MatchupGuideMeta,
     selectedOpponentIds: [] as string[],
     savedOpponentIds: [] as string[],
@@ -184,6 +216,15 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
         state.matchupEntries.every(entry => state.savedOpponentIds.includes(entry.opponent.id))
       )
     },
+    hasMatchupScale(state): boolean {
+      return state.matchupEntries.length >= MATCHUP_GUIDE_MIN_OPPONENTS_FOR_WRITE
+    },
+    canOpenWriteStep(state): boolean {
+      return state.matchupEntries.length >= MATCHUP_GUIDE_MIN_OPPONENTS_FOR_WRITE
+    },
+    canOpenFinalizeStep(state): boolean {
+      return areAllMatchupsFinalizeReady(state.matchupEntries)
+    },
   },
 
   actions: {
@@ -193,6 +234,7 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
         matchupEntries: this.matchupEntries,
         guideChampionId: this.guideChampionId,
         lastStep: this.lastStep,
+        maxReachedStep: this.maxReachedStep,
         meta: this.meta,
         selectedOpponentIds: this.selectedOpponentIds,
         savedOpponentIds: this.savedOpponentIds,
@@ -208,16 +250,19 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
     },
 
     hydrateFromStorage() {
-      if (this.hydrated) return
-      this.hydrated = true
-
       const snapshot = readDraftSnapshot()
-      if (!snapshot) return
+      if (!snapshot) {
+        this.hydrated = true
+        return
+      }
+
+      if (this.hydrated && this.guideId === snapshot.guideId) return
 
       this.guideId = snapshot.guideId
       this.matchupEntries = snapshot.matchupEntries
       this.guideChampionId = snapshot.guideChampionId
       this.lastStep = snapshot.lastStep
+      this.maxReachedStep = snapshot.maxReachedStep
       this.meta = snapshot.meta
       this.selectedOpponentIds = snapshot.selectedOpponentIds
       this.savedOpponentIds = snapshot.savedOpponentIds.filter(id =>
@@ -226,11 +271,24 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
       if (this.selectedOpponentIds.length === 0 && this.matchupEntries[0]) {
         this.selectedOpponentIds = [this.matchupEntries[0].opponent.id]
       }
+      this.hydrated = true
     },
 
     setLastStep(step: MatchupGuideDraftStep) {
+      this.ensureGuideId()
+      if (matchupGuideStepRank(step) > matchupGuideStepRank(this.maxReachedStep)) {
+        this.maxReachedStep = step
+      }
       this.lastStep = step
       this.persist()
+    },
+
+    advanceMaxReachedStep(step: MatchupGuideDraftStep) {
+      this.ensureGuideId()
+      if (matchupGuideStepRank(step) > matchupGuideStepRank(this.maxReachedStep)) {
+        this.maxReachedStep = step
+        this.persist()
+      }
     },
 
     setSelectedOpponents(opponentIds: string[]) {
@@ -336,6 +394,7 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
           this.matchupEntries = []
           this.selectedOpponentIds = []
           this.savedOpponentIds = []
+          this.maxReachedStep = 'champion'
           this.persist()
         }
         return
@@ -352,6 +411,7 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
         this.matchupEntries = []
         this.selectedOpponentIds = []
         this.savedOpponentIds = []
+        this.maxReachedStep = 'champion'
         this.persist()
       }
     },
@@ -361,6 +421,7 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
       this.matchupEntries = []
       this.guideChampionId = null
       this.lastStep = 'champion'
+      this.maxReachedStep = 'champion'
       this.meta = {}
       this.selectedOpponentIds = []
       this.savedOpponentIds = []
@@ -418,7 +479,8 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
     buildGuideFromCurrentBuild(build: Build | null) {
       this.ensureGuideId()
       if (!build?.champion) return null
-      if (this.matchupEntries.length < 2) return null
+      if (this.matchupEntries.length < MATCHUP_GUIDE_MIN_OPPONENTS_FOR_WRITE) return null
+      if (!areAllMatchupsFinalizeReady(this.matchupEntries)) return null
       const matchups = this.matchupEntries.map(entry => syncMatchupEntryLegacyFields({ ...entry }))
       return buildMatchupGuideFromDraft(build, matchups, this.guideId, this.meta)
     },
@@ -428,6 +490,7 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
       this.matchupEntries = []
       this.guideChampionId = null
       this.lastStep = 'champion'
+      this.maxReachedStep = 'champion'
       this.meta = {}
       this.selectedOpponentIds = []
       this.savedOpponentIds = []
@@ -442,7 +505,14 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
       this.meta = guide.meta ?? {}
       this.selectedOpponentIds = this.matchupEntries[0] ? [this.matchupEntries[0].opponent.id] : []
       this.savedOpponentIds = []
-      this.lastStep = this.matchupEntries.length >= 2 ? 'finalize' : 'champion'
+      this.lastStep =
+        this.matchupEntries.length >= MATCHUP_GUIDE_MIN_OPPONENTS_FOR_WRITE
+          ? 'finalize'
+          : 'champion'
+      this.maxReachedStep =
+        this.matchupEntries.length >= MATCHUP_GUIDE_MIN_OPPONENTS_FOR_WRITE
+          ? 'finalize'
+          : 'champion'
       this.hydrated = true
       this.persist()
     },

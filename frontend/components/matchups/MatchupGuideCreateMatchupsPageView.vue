@@ -2,12 +2,17 @@
   <div class="matchup-guide-creator min-h-screen text-text">
     <div class="max-w-8xl mx-auto px-2">
       <div class="mb-3">
-        <MatchupGuideBuildMenuSteps
-          current-step="matchups"
-          :has-champion="hasChampion"
-          :can-open-matchups="true"
-        />
+        <MatchupGuideBuildMenuSteps current-step="matchups" :has-champion="hasChampion" />
       </div>
+
+      <p v-if="opponentProgress < requiredOpponents" class="matchup-guide-unlock-hint">
+        {{
+          t('matchupGuideCreate.opponentProgress', {
+            count: opponentProgress,
+            required: requiredOpponents,
+          })
+        }}
+      </p>
 
       <div
         class="matchup-guide-layout mb-6 flex flex-col items-start gap-4 md:flex-row"
@@ -18,7 +23,6 @@
         </div>
 
         <div class="matchup-scale-wrapper w-full flex-shrink-0 md:order-1">
-          <MatchupGuideContinueToWriteButton />
           <MatchupGuideMatchupScale />
         </div>
       </div>
@@ -27,22 +31,37 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import MatchupGuideBuildMenuSteps from '~/components/matchups/MatchupGuideBuildMenuSteps.vue'
-import MatchupGuideContinueToWriteButton from '~/components/matchups/MatchupGuideContinueToWriteButton.vue'
 import MatchupGuideMatchupScale from '~/components/matchups/MatchupGuideMatchupScale.vue'
 import MatchupGuideOpponentSelector from '~/components/matchups/MatchupGuideOpponentSelector.vue'
+import { useMatchupGuideDraftStore } from '~/stores/MatchupGuideDraftStore'
+import { MATCHUP_GUIDE_MIN_OPPONENTS_FOR_WRITE } from '~/utils/matchupGuideCreateSteps'
 
 defineProps<{
   isStreamerMode: boolean
   hasChampion: boolean
   guideChampionId: string | null
 }>()
+
+const { t } = useI18n()
+const draftStore = useMatchupGuideDraftStore()
+
+const requiredOpponents = MATCHUP_GUIDE_MIN_OPPONENTS_FOR_WRITE
+const opponentProgress = computed(() => draftStore.matchupEntries.length)
 </script>
 
 <style scoped>
 .matchup-guide-creator {
   padding: var(--build-create-page-padding-top, 1rem) 1rem 1rem;
   margin-top: var(--build-create-page-lift, 0px);
+}
+
+.matchup-guide-unlock-hint {
+  margin: 0 0 0.75rem;
+  text-align: center;
+  font-size: 0.78rem;
+  color: rgb(var(--rgb-text) / 0.65);
 }
 
 .matchup-guide-layout {

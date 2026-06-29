@@ -2,12 +2,7 @@
   <div class="matchup-guide-creator min-h-screen text-text">
     <div class="max-w-8xl mx-auto px-2">
       <div class="mb-3">
-        <MatchupGuideBuildMenuSteps
-          current-step="write"
-          :has-champion="hasChampion"
-          :can-open-matchups="true"
-          :can-open-write="true"
-        />
+        <MatchupGuideBuildMenuSteps current-step="write" :has-champion="hasChampion" />
       </div>
 
       <div
@@ -19,7 +14,6 @@
         </div>
 
         <div class="matchup-guide-sidebar w-full flex-shrink-0 lg:order-1 lg:w-[320px]">
-          <MatchupGuideContinueToFinalizeButton />
           <MatchupGuideMatchupTargetSelector />
         </div>
       </div>
@@ -29,7 +23,6 @@
 
 <script setup lang="ts">
 import MatchupGuideBuildMenuSteps from '~/components/matchups/MatchupGuideBuildMenuSteps.vue'
-import MatchupGuideContinueToFinalizeButton from '~/components/matchups/MatchupGuideContinueToFinalizeButton.vue'
 import MatchupGuideMatchupDetailEditor from '~/components/matchups/MatchupGuideMatchupDetailEditor.vue'
 import MatchupGuideMatchupTargetSelector from '~/components/matchups/MatchupGuideMatchupTargetSelector.vue'
 

@@ -17,7 +17,7 @@
       {{ saving ? t('matchupGuideCreate.saving') : t('matchupGuideCreate.saveGuide') }}
     </button>
     <p v-if="!canSave" class="matchup-guide-save-hint">
-      {{ t('matchupGuideCreate.rankAtLeastTwo') }}
+      {{ saveHint }}
     </p>
   </div>
 </template>
@@ -28,6 +28,12 @@ import { useBuildStore } from '~/stores/BuildStore'
 import { useMatchupGuideDraftStore } from '~/stores/MatchupGuideDraftStore'
 import { useMatchupGuideStore } from '~/stores/MatchupGuideStore'
 import { useLayoutScaled } from '~/composables/useLayoutScaled'
+import {
+  areAllMatchupsFinalizeReady,
+  canOpenFinalizeGuideStep,
+  buildMatchupGuideStepAccessContext,
+  MATCHUP_GUIDE_MIN_OPPONENTS_FOR_WRITE,
+} from '~/utils/matchupGuideCreateSteps'
 
 const buildStore = useBuildStore()
 const draftStore = useMatchupGuideDraftStore()
@@ -39,20 +45,40 @@ const { isLayoutScaled } = useLayoutScaled()
 
 const saving = ref(false)
 
-const canSave = computed(
-  () =>
-    buildStore.isBuildValid &&
-    draftStore.rankedOpponents.length >= 2 &&
-    Boolean(buildStore.currentBuild?.champion)
+const stepContext = computed(() =>
+  buildMatchupGuideStepAccessContext({
+    buildValid: buildStore.isBuildValid,
+    hasChampion: Boolean(buildStore.currentBuild?.champion),
+    matchupEntries: draftStore.matchupEntries,
+  })
 )
+
+const canSave = computed(
+  () => canOpenFinalizeGuideStep(stepContext.value) && Boolean(buildStore.currentBuild?.champion)
+)
+
+const saveHint = computed(() => {
+  if (!buildStore.isBuildValid) return t('matchupGuideCreate.completeBuildHint')
+  if (draftStore.matchupEntries.length < MATCHUP_GUIDE_MIN_OPPONENTS_FOR_WRITE) {
+    return t('matchupGuideCreate.rankAtLeastTen')
+  }
+  if (!areAllMatchupsFinalizeReady(draftStore.matchupEntries)) {
+    return t('matchupGuideCreate.finalizeUnlockHint')
+  }
+  return t('matchupGuideCreate.rankAtLeastTen')
+})
 
 async function handleSave() {
   if (!canSave.value || saving.value) return
-  const guide = draftStore.buildGuideFromCurrentBuild(buildStore.currentBuild)
-  if (!guide) return
 
   saving.value = true
   try {
+    const buildSaved = await buildStore.saveBuild()
+    if (!buildSaved) return
+
+    const guide = draftStore.buildGuideFromCurrentBuild(buildStore.currentBuild)
+    if (!guide) return
+
     const ok = await guideStore.saveGuide(guide)
     if (!ok) return
     draftStore.reset()

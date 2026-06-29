@@ -6,6 +6,11 @@
 import { computed, watch } from 'vue'
 import MatchupGuideCreateFinalizePageView from '~/components/matchups/MatchupGuideCreateFinalizePageView.vue'
 import { useMatchupGuideCreateBuilder } from '~/composables/useMatchupGuideCreateBuilder'
+import {
+  canNavigateToMatchupGuideStep,
+  buildMatchupGuideStepAccessContext,
+  MATCHUP_GUIDE_MIN_OPPONENTS_FOR_WRITE,
+} from '~/utils/matchupGuideCreateSteps'
 
 definePageMeta({
   layout: false,
@@ -21,15 +26,25 @@ const { buildStore, draftStore, sessionReady } = useMatchupGuideCreateBuilder('f
 const hasChampion = computed(() => Boolean(buildStore.currentBuild?.champion))
 
 watch(
-  () => [sessionReady.value, buildStore.isBuildValid, draftStore.matchupEntries.length] as const,
-  ([ready, valid, count]) => {
+  () => [sessionReady.value, buildStore.isBuildValid, draftStore.matchupEntries] as const,
+  ([ready]) => {
     if (!ready) return
-    if (!valid && route.path.includes('/matchups/sheets/create/finalize')) {
-      router.replace(localePath('/matchups/sheets/create/info'))
+    if (!route.path.includes('/matchups/sheets/create/finalize')) return
+    const context = buildMatchupGuideStepAccessContext({
+      buildValid: buildStore.isBuildValid,
+      hasChampion: Boolean(buildStore.currentBuild?.champion),
+      matchupEntries: draftStore.matchupEntries,
+    })
+    if (draftStore.matchupEntries.length < MATCHUP_GUIDE_MIN_OPPONENTS_FOR_WRITE) {
+      router.replace(localePath('/matchups/sheets/create/matchups'))
       return
     }
-    if (count < 2 && route.path.includes('/matchups/sheets/create/finalize')) {
+    if (!canNavigateToMatchupGuideStep('write', context)) {
       router.replace(localePath('/matchups/sheets/create/matchups'))
+      return
+    }
+    if (!canNavigateToMatchupGuideStep('finalize', context)) {
+      router.replace(localePath('/matchups/sheets/create/write'))
     }
   },
   { immediate: true }

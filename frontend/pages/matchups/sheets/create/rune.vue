@@ -5,7 +5,7 @@
     :highlight-missing-fields="highlightMissingFields"
     :rune-selector-component="RuneSelector"
     :build-card-component="BuildCard"
-    :build-save-button-component="MatchupGuideBuilderContinueButton"
+    :build-save-button-component="MatchupGuideBuildCardSpacer"
     :build-menu-steps-component="MatchupGuideBuildMenuSteps"
     @highlight-missing="highlightMissingFields = $event"
   />
@@ -17,7 +17,7 @@ import { BuildCreateRunePageView } from '@lelanation/builds-ui'
 import BuildCard from '~/components/Build/BuildCard.vue'
 import RuneSelector from '~/components/Build/RuneSelector.vue'
 import MatchupGuideBuildMenuSteps from '~/components/matchups/MatchupGuideBuildMenuSteps.vue'
-import MatchupGuideBuilderContinueButton from '~/components/matchups/MatchupGuideBuilderContinueButton.vue'
+import MatchupGuideBuildCardSpacer from '~/components/matchups/MatchupGuideBuildCardSpacer.vue'
 import { useLayoutScaled } from '~/composables/useLayoutScaled'
 import { useMatchupGuideCreateBuilder } from '~/composables/useMatchupGuideCreateBuilder'
 

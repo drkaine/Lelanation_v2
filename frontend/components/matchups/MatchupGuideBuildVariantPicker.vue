@@ -1,6 +1,11 @@
 <template>
   <div class="build-variant-picker">
-    <button type="button" class="build-variant-picker__trigger" @click="openModal">
+    <button
+      type="button"
+      class="build-variant-picker__trigger"
+      :class="{ 'build-variant-picker__trigger--invalid': invalid }"
+      @click="openModal"
+    >
       {{ triggerLabel }}
     </button>
     <ul v-if="summaryLines.length" class="build-variant-picker__summary">
@@ -114,6 +119,7 @@ import {
 
 const props = defineProps<{
   modelValue: MatchupBuildVariantPick[] | undefined
+  invalid?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -204,6 +210,13 @@ watch(modalOpen, open => {
   font-weight: 600;
   color: rgb(var(--rgb-text-accent));
   cursor: pointer;
+}
+
+.build-variant-picker__trigger--invalid {
+  border-color: rgb(248 113 113 / 0.85);
+  background: rgb(248 113 113 / 0.1);
+  color: rgb(254 202 202);
+  box-shadow: 0 0 0 1px rgb(248 113 113 / 0.25);
 }
 
 .build-variant-picker__summary {

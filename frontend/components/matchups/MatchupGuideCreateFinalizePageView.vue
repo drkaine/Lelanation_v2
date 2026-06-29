@@ -2,13 +2,7 @@
   <div class="matchup-guide-creator min-h-screen text-text">
     <div class="mx-auto max-w-3xl px-2">
       <div class="mb-3">
-        <MatchupGuideBuildMenuSteps
-          current-step="finalize"
-          :has-champion="hasChampion"
-          :can-open-matchups="true"
-          :can-open-write="true"
-          :can-open-finalize="true"
-        />
+        <MatchupGuideBuildMenuSteps current-step="finalize" :has-champion="hasChampion" />
       </div>
 
       <MatchupGuideFinalSaveButton class="mb-4" />

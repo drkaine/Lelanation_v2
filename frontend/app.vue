@@ -175,6 +175,16 @@ import { useLayoutScaled } from '~/composables/useLayoutScaled'
 import { useGlobalSeo } from '~/composables/useGlobalSeo'
 import { absoluteSitePath } from '~/utils/siteUrl'
 import { useSiteUrl } from '~/composables/useSiteUrl'
+import { useBuildStore } from '~/stores/BuildStore'
+import {
+  useMatchupGuideDraftStore,
+  type MatchupGuideDraftStep,
+} from '~/stores/MatchupGuideDraftStore'
+import {
+  navigateMatchupGuideCreateStepPath,
+  buildMatchupGuideStepAccessContext,
+} from '~/utils/matchupGuideCreateSteps'
+import { matchupGuideCreateRouteQuery } from '~/utils/matchupGuideFromBuildSession'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -195,6 +205,8 @@ const { championSplashEnabled, toggleChampionSplashEnabled } = useChampionSplash
 const { simplifiedStatsEnabled, toggleSimplifiedStatsEnabled } = useSimplifiedStatsPreference()
 const { statsSplitTransformEnabled, toggleStatsSplitTransformEnabled } =
   useStatisticsSplitTransformPreference()
+const buildStore = useBuildStore()
+const matchupGuideDraftStore = useMatchupGuideDraftStore()
 const streamerNavOpen = useState<boolean>('streamer-nav-open', () => false)
 const streamerFooterOpen = useState<boolean>('streamer-footer-open', () => false)
 const streamerPanelsOpen = computed(() => streamerNavOpen.value && streamerFooterOpen.value)
@@ -431,21 +443,45 @@ const onKeyDown = (event: KeyboardEvent) => {
   }
 
   const match = path.match(/\/builds\/create\/(champion|rune|item|info)(?:\/|$)/)
-  if (!match) return
+  if (match) {
+    const stepOrder = ['champion', 'rune', 'item', 'info'] as const
+    const currentStep = match[1] as (typeof stepOrder)[number]
+    const currentStepIndex = stepOrder.indexOf(currentStep)
+    const nextIndex = event.key === 'ArrowLeft' ? currentStepIndex - 1 : currentStepIndex + 1
+    if (nextIndex < 0 || nextIndex >= stepOrder.length) return
 
-  const stepOrder = ['champion', 'rune', 'item', 'info'] as const
-  const currentStep = match[1] as (typeof stepOrder)[number]
-  const currentStepIndex = stepOrder.indexOf(currentStep)
-  const nextIndex = event.key === 'ArrowLeft' ? currentStepIndex - 1 : currentStepIndex + 1
-  if (nextIndex < 0 || nextIndex >= stepOrder.length) return
+    event.preventDefault()
+    const nextStep = stepOrder[nextIndex]
+    const query: Record<string, string> = {}
+    const editId = route.query.editId
+    if (typeof editId === 'string' && editId.length > 0) query.editId = editId
+    if (route.query.app === 'on') query.app = 'on'
+    router.push(localePath({ path: `/builds/create/${nextStep}`, query }))
+    return
+  }
 
-  event.preventDefault()
-  const nextStep = stepOrder[nextIndex]
-  const query: Record<string, string> = {}
-  const editId = route.query.editId
-  if (typeof editId === 'string' && editId.length > 0) query.editId = editId
-  if (route.query.app === 'on') query.app = 'on'
-  router.push(localePath({ path: `/builds/create/${nextStep}`, query }))
+  const matchupMatch = path.match(
+    /\/matchups\/sheets\/create\/(champion|rune|item|info|matchups|write|finalize)(?:\/|$)/
+  )
+  if (matchupMatch) {
+    matchupGuideDraftStore.hydrateFromStorage()
+
+    const currentStep = matchupMatch[1] as MatchupGuideDraftStep
+    const nextStep = navigateMatchupGuideCreateStepPath(direction, {
+      currentStep,
+      ...buildMatchupGuideStepAccessContext({
+        buildValid: buildStore.isBuildValid,
+        hasChampion: Boolean(buildStore.currentBuild?.champion),
+        matchupEntries: matchupGuideDraftStore.matchupEntries,
+      }),
+    })
+    if (!nextStep) return
+
+    event.preventDefault()
+    matchupGuideDraftStore.setLastStep(nextStep)
+    const query = matchupGuideCreateRouteQuery(route.query)
+    router.push(localePath({ path: `/matchups/sheets/create/${nextStep}`, query }))
+  }
 }
 
 const onDocumentPointerDown = (event: MouseEvent) => {

@@ -3,6 +3,15 @@ import {
   bootstrapMatchupGuideCreateSession,
   resolveMatchupGuideCreateStep,
 } from '~/composables/useMatchupGuideCreateBuilder'
+import {
+  readMatchupGuideCreateQuery,
+  matchupGuideCreateRouteQuery,
+} from '~/utils/matchupGuideFromBuildSession'
+import { useBuildStore } from '~/stores/BuildStore'
+import {
+  canOpenMatchupsGuideStep,
+  buildMatchupGuideStepAccessContext,
+} from '~/utils/matchupGuideCreateSteps'
 
 definePageMeta({
   middleware: 'matchup-guides-admin',
@@ -11,15 +20,24 @@ definePageMeta({
 const router = useRouter()
 const route = useRoute()
 const localePath = useLocalePath()
+const buildStore = useBuildStore()
 
 onMounted(() => {
-  const editId = typeof route.query.editId === 'string' ? route.query.editId : null
-  bootstrapMatchupGuideCreateSession(editId)
+  bootstrapMatchupGuideCreateSession(route.query)
 
-  const query: Record<string, string> = {}
-  if (editId) query.editId = editId
+  const { fromBuildId } = readMatchupGuideCreateQuery(route.query)
+  const query = matchupGuideCreateRouteQuery(route.query)
 
-  const step = resolveMatchupGuideCreateStep()
+  let step = resolveMatchupGuideCreateStep()
+  if (fromBuildId) {
+    const context = buildMatchupGuideStepAccessContext({
+      buildValid: buildStore.isBuildValid,
+      hasChampion: Boolean(buildStore.currentBuild?.champion),
+      matchupEntries: [],
+    })
+    step = canOpenMatchupsGuideStep(context) ? 'matchups' : 'info'
+  }
+
   router.replace(localePath({ path: `/matchups/sheets/create/${step}`, query }))
 })
 </script>

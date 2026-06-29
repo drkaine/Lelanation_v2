@@ -53,6 +53,8 @@ export function buildMatchupGuideFromDraft(
     (tag): tag is MatchupGuideTag => tag === 'pro' || tag === 'otp'
   )
   const { bestMatchups, worstMatchups } = deriveBestWorstFromMatchups(matchups)
+  const visibility = build.visibility ?? 'public'
+  const buildSnapshot = serializeBuild({ ...build, visibility })
 
   return {
     id: guideId,
@@ -61,7 +63,7 @@ export function buildMatchupGuideFromDraft(
       ? truncateMatchupGuideText(description, MATCHUP_GUIDE_SHORT_DESCRIPTION_MAX)
       : undefined,
     description: description || undefined,
-    visibility: build.visibility ?? 'public',
+    visibility,
     champion: build.champion ? championToRef(build.champion) : null,
     role,
     tags: tags.length > 0 ? tags : undefined,
@@ -69,7 +71,7 @@ export function buildMatchupGuideFromDraft(
     createdAt: now,
     updatedAt: now,
     patchStale: null,
-    build: serializeBuild(build),
+    build: buildSnapshot,
     matchups,
     meta: meta && Object.values(meta).some(Boolean) ? meta : undefined,
     bestMatchups,

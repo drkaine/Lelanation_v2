@@ -1,11 +1,7 @@
 <template>
   <div class="matchup-target-selector">
-    <h2 class="matchup-target-selector__title">{{ t('matchupGuideCreate.pickMatchupTargets') }}</h2>
     <p class="matchup-target-selector__hint">
       {{ t('matchupGuideCreate.pickMatchupTargetsHint') }}
-    </p>
-    <p class="matchup-target-selector__progress">
-      {{ t('matchupGuideCreate.writeProgress', { saved: savedCount, total: entries.length }) }}
     </p>
 
     <div class="matchup-target-selector__list">
@@ -24,9 +20,9 @@
           class="matchup-target-selector__portrait"
         />
         <span class="matchup-target-selector__name">{{ entry.opponent.name }}</span>
-        <span v-if="isSaved(entry.opponent.id)" class="matchup-target-selector__done">✓</span>
+        <span v-if="isFinalizeReady(entry)" class="matchup-target-selector__done">✓</span>
         <span
-          v-else-if="hasDraftContent(entry)"
+          v-else-if="hasPartialContent(entry)"
           class="matchup-target-selector__draft"
           aria-hidden="true"
         >
@@ -43,29 +39,31 @@ import type { MatchupEntry } from '@lelanation/shared-types'
 import { useMatchupGuideDraftStore } from '~/stores/MatchupGuideDraftStore'
 import { getChampionImageUrl } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
-import { matchupEntryHasContent } from '~/utils/matchupEntryUtils'
+import { isMatchupEntryFinalizeReady } from '~/utils/matchupGuideCreateSteps'
 
 const { t } = useI18n()
 const draftStore = useMatchupGuideDraftStore()
 const { version } = useGameVersion()
 
 const entries = computed(() => draftStore.matchupEntries)
-const savedCount = computed(
-  () =>
-    draftStore.matchupEntries.filter(entry => draftStore.savedOpponentIdSet.has(entry.opponent.id))
-      .length
-)
 
 function isSelected(opponentId: string): boolean {
   return draftStore.selectedOpponentIds.includes(opponentId)
 }
 
-function isSaved(opponentId: string): boolean {
-  return draftStore.savedOpponentIdSet.has(opponentId)
+function isFinalizeReady(entry: MatchupEntry): boolean {
+  return isMatchupEntryFinalizeReady(entry)
 }
 
-function hasDraftContent(entry: MatchupEntry): boolean {
-  return matchupEntryHasContent(entry)
+function hasPartialContent(entry: MatchupEntry): boolean {
+  return (
+    !isFinalizeReady(entry) &&
+    (Boolean(entry.comments?.trim()) ||
+      entry.difficultyBand !== undefined ||
+      entry.difficultyScore !== undefined ||
+      entry.buildVariants?.length ||
+      entry.buildVariant !== undefined)
+  )
 }
 </script>
 
@@ -78,16 +76,9 @@ function hasDraftContent(entry: MatchupEntry): boolean {
 }
 
 .matchup-target-selector__hint {
-  margin: 0 0 0.35rem;
+  margin: 0 0 0.75rem;
   font-size: 0.78rem;
   color: rgb(var(--rgb-text) / 0.65);
-}
-
-.matchup-target-selector__progress {
-  margin: 0 0 0.75rem;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: rgb(74 222 128);
 }
 
 .matchup-target-selector__list {

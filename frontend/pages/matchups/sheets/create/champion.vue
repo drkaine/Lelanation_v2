@@ -10,7 +10,7 @@
     :confirm-label="t('matchupGuideCreate.confirm')"
     :champion-selector-component="ChampionSelector"
     :build-card-component="BuildCard"
-    :build-save-button-component="MatchupGuideBuilderContinueButton"
+    :build-save-button-component="MatchupGuideBuildCardSpacer"
     :build-menu-steps-component="MatchupGuideBuildMenuSteps"
     @highlight-missing="highlightMissingFields = $event"
     @cancel-champion-change="buildStore.cancelChampionChange()"
@@ -24,7 +24,7 @@ import { BuildCreateChampionPageView } from '@lelanation/builds-ui'
 import BuildCard from '~/components/Build/BuildCard.vue'
 import ChampionSelector from '~/components/Build/ChampionSelector.vue'
 import MatchupGuideBuildMenuSteps from '~/components/matchups/MatchupGuideBuildMenuSteps.vue'
-import MatchupGuideBuilderContinueButton from '~/components/matchups/MatchupGuideBuilderContinueButton.vue'
+import MatchupGuideBuildCardSpacer from '~/components/matchups/MatchupGuideBuildCardSpacer.vue'
 import { useLayoutScaled } from '~/composables/useLayoutScaled'
 import { useMatchupGuideCreateBuilder } from '~/composables/useMatchupGuideCreateBuilder'
 

@@ -1,41 +1,57 @@
 <template>
   <div class="menu-build" role="navigation" :aria-label="t('matchupGuideCreate.stepsAria')">
-    <NuxtLink :to="localePath(stepHref('champion'))" :class="linkClass('champion')">
+    <NuxtLink
+      :to="localePath(stepHref('champion'))"
+      :class="linkClass('champion')"
+      @click="onStepClick('champion')"
+    >
       {{ t('menu-build.champion') }}
     </NuxtLink>
     <span class="arrow" aria-hidden="true"></span>
-    <NuxtLink :to="localePath(stepHref('rune'))" :class="linkClass('rune')">
+    <NuxtLink
+      :to="localePath(stepHref('rune'))"
+      :class="linkClass('rune')"
+      @click="onStepClick('rune')"
+    >
       {{ t('menu-build.rune') }}
     </NuxtLink>
     <span class="arrow" aria-hidden="true"></span>
-    <NuxtLink :to="localePath(stepHref('item'))" :class="linkClass('item')">
+    <NuxtLink
+      :to="localePath(stepHref('item'))"
+      :class="linkClass('item')"
+      @click="onStepClick('item')"
+    >
       {{ t('menu-build.item') }}
     </NuxtLink>
     <span class="arrow" aria-hidden="true"></span>
     <NuxtLink
-      :to="hasChampion ? localePath(stepHref('info')) : '#'"
-      :class="[linkClass('info'), !hasChampion ? 'disabled' : '']"
+      :to="stepTo('info')"
+      :class="[linkClass('info'), !canOpenInfo ? 'disabled' : '']"
+      @click="onStepClick('info', $event)"
     >
       {{ t('menu-build.info') }}
     </NuxtLink>
     <span class="arrow" aria-hidden="true"></span>
     <NuxtLink
-      :to="canOpenMatchups ? localePath(stepHref('matchups')) : '#'"
+      :to="stepTo('matchups')"
       :class="[linkClass('matchups'), !canOpenMatchups ? 'disabled' : '']"
+      @click="onStepClick('matchups', $event)"
     >
       {{ t('matchupGuideCreate.stepMatchups') }}
     </NuxtLink>
     <span class="arrow" aria-hidden="true"></span>
     <NuxtLink
-      :to="canOpenWrite ? localePath(stepHref('write')) : '#'"
+      :to="stepTo('write')"
       :class="[linkClass('write'), !canOpenWrite ? 'disabled' : '']"
+      @click="onStepClick('write', $event)"
     >
       {{ t('matchupGuideCreate.stepWrite') }}
     </NuxtLink>
     <span class="arrow" aria-hidden="true"></span>
     <NuxtLink
-      :to="canOpenFinalize ? localePath(stepHref('finalize')) : '#'"
+      :to="stepTo('finalize')"
       :class="[linkClass('finalize'), !canOpenFinalize ? 'disabled' : '']"
+      @click="onStepClick('finalize', $event)"
     >
       {{ t('matchupGuideCreate.stepFinalize') }}
     </NuxtLink>
@@ -43,16 +59,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useMatchupGuideDraftStore } from '~/stores/MatchupGuideDraftStore'
+import {
+  canNavigateToMatchupGuideStep,
+  buildMatchupGuideStepAccessContext,
+} from '~/utils/matchupGuideCreateSteps'
+import { matchupGuideCreateRouteQuery } from '~/utils/matchupGuideFromBuildSession'
 
 const props = defineProps<{
   currentStep: string
   hasChampion: boolean
-  canOpenMatchups?: boolean
-  canOpenWrite?: boolean
-  canOpenFinalize?: boolean
 }>()
 
 const { t } = useI18n()
@@ -61,21 +80,61 @@ const localePath = useLocalePath()
 const buildStore = useBuildStore()
 const draftStore = useMatchupGuideDraftStore()
 
-const canOpenMatchups = computed(() => props.canOpenMatchups ?? buildStore.isBuildValid)
-const canOpenWrite = computed(
-  () => props.canOpenWrite ?? (canOpenMatchups.value && draftStore.matchupEntries.length >= 2)
+onMounted(() => {
+  draftStore.hydrateFromStorage()
+})
+
+const { matchupEntries } = storeToRefs(draftStore)
+
+const navigationContext = computed(() =>
+  buildMatchupGuideStepAccessContext({
+    buildValid: buildStore.isBuildValid,
+    hasChampion: props.hasChampion,
+    matchupEntries: matchupEntries.value,
+  })
 )
-const canOpenFinalize = computed(() => props.canOpenFinalize ?? canOpenWrite.value)
 
 type StepKey = 'champion' | 'rune' | 'item' | 'info' | 'matchups' | 'write' | 'finalize'
 
-function stepHref(step: StepKey): string {
-  const editId = route.query.editId
-  const base = `/matchups/sheets/create/${step}`
-  if (typeof editId === 'string' && editId.length > 0) {
-    return `${base}?editId=${encodeURIComponent(editId)}`
+const canOpenInfo = computed(() => props.hasChampion)
+
+const canOpenMatchups = computed(() =>
+  canNavigateToMatchupGuideStep('matchups', navigationContext.value)
+)
+
+const canOpenWrite = computed(() => canNavigateToMatchupGuideStep('write', navigationContext.value))
+
+const canOpenFinalize = computed(() =>
+  canNavigateToMatchupGuideStep('finalize', navigationContext.value)
+)
+
+function isStepAccessible(step: StepKey): boolean {
+  if (step === 'champion' || step === 'rune' || step === 'item') return true
+  if (step === 'info') return canOpenInfo.value
+  if (step === 'matchups') return canOpenMatchups.value
+  if (step === 'write') return canOpenWrite.value
+  return canOpenFinalize.value
+}
+
+function stepTo(step: StepKey): string {
+  if (!isStepAccessible(step)) return '#'
+  return localePath(stepHref(step))
+}
+
+function onStepClick(step: StepKey, event?: MouseEvent) {
+  if (!isStepAccessible(step)) {
+    event?.preventDefault()
+    return
   }
-  return base
+  draftStore.setLastStep(step)
+}
+
+function stepHref(step: StepKey): string {
+  const base = `/matchups/sheets/create/${step}`
+  const query = matchupGuideCreateRouteQuery(route.query)
+  const params = new URLSearchParams(query)
+  const qs = params.toString()
+  return qs ? `${base}?${qs}` : base
 }
 
 const stepMap = {
@@ -120,6 +179,7 @@ const linkClass = (key: keyof typeof stepMap) => (isActive(key) ? 'active' : '')
 }
 
 .menu-build a {
+  cursor: pointer;
   color: rgb(var(--rgb-text) / 0.75);
   text-decoration: none;
   padding: 0.25rem 0.5rem;
@@ -133,8 +193,9 @@ const linkClass = (key: keyof typeof stepMap) => (isActive(key) ? 'active' : '')
 }
 
 .menu-build a.disabled {
-  pointer-events: none;
   opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .arrow {
@@ -145,5 +206,11 @@ const linkClass = (key: keyof typeof stepMap) => (isActive(key) ? 'active' : '')
   border-bottom: 2px solid rgb(var(--rgb-text) / 0.45);
   transform: rotate(-45deg);
   margin: 0 0.1rem;
+}
+
+@media (hover: hover) {
+  .menu-build a:not(.disabled):hover {
+    color: rgb(var(--rgb-text-accent));
+  }
 }
 </style>

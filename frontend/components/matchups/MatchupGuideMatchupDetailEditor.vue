@@ -1,27 +1,43 @@
 <template>
   <section v-if="hasSelection" class="matchup-detail-editor">
     <header class="matchup-detail-editor__header">
-      <div class="matchup-detail-editor__header-main">
-        <h3 class="matchup-detail-editor__title">{{ selectionTitle }}</h3>
-        <p v-if="isGroupEdit" class="matchup-detail-editor__subtitle">
-          {{ t('matchupGuideCreate.groupEditHint') }}
+      <div class="matchup-detail-editor__header-row">
+        <div class="matchup-detail-editor__header-start">
+          <h3 class="matchup-detail-editor__title">{{ selectionTitle }}</h3>
+          <p v-if="isGroupEdit" class="matchup-detail-editor__subtitle">
+            {{ t('matchupGuideCreate.groupEditHint') }}
+          </p>
+        </div>
+        <p class="matchup-detail-editor__progress">
+          {{
+            t('matchupGuideCreate.finalizeProgress', {
+              ready: finalizeReadyCount,
+              total: totalEntries,
+            })
+          }}
         </p>
-        <p v-if="saveMessage" class="matchup-detail-editor__save-message">{{ saveMessage }}</p>
+        <div class="matchup-detail-editor__actions">
+          <MatchupGuideMatchupCopyPanel :has-selection="hasSelection" />
+          <button
+            type="button"
+            class="matchup-detail-editor__save-button"
+            :class="{ 'matchup-detail-editor__save-button--saved': selectionReady }"
+            @click="markSaved"
+          >
+            {{ saveButtonLabel }}
+          </button>
+        </div>
       </div>
-      <div class="matchup-detail-editor__actions">
-        <MatchupGuideMatchupCopyPanel :has-selection="hasSelection" />
-        <button
-          type="button"
-          class="matchup-detail-editor__save-button"
-          :class="{ 'matchup-detail-editor__save-button--done': allSelectedSaved }"
-          @click="markSaved"
-        >
-          {{ saveButtonLabel }}
-        </button>
-      </div>
+      <p v-if="showValidation" class="matchup-detail-editor__validation-message">
+        {{ t('matchupGuideCreate.markSavedMissingFields') }}
+      </p>
+      <p v-else-if="saveMessage" class="matchup-detail-editor__save-message">{{ saveMessage }}</p>
     </header>
 
-    <div class="matchup-detail-editor__section">
+    <div
+      class="matchup-detail-editor__section"
+      :class="{ 'matchup-detail-editor__section--missing': isFieldMissing('difficulty') }"
+    >
       <span class="matchup-detail-editor__label">{{
         t('matchupGuideCreate.fieldDifficulty')
       }}</span>
@@ -98,12 +114,16 @@
       </div>
     </div>
 
-    <div class="matchup-detail-editor__section">
+    <div
+      class="matchup-detail-editor__section"
+      :class="{ 'matchup-detail-editor__section--missing': isFieldMissing('build') }"
+    >
       <span class="matchup-detail-editor__label">{{
         t('matchupGuideCreate.fieldBuildVariant')
       }}</span>
       <MatchupGuideBuildVariantPicker
         :model-value="buildVariants"
+        :invalid="isFieldMissing('build')"
         @update:model-value="onBuildVariantsChange"
       />
     </div>
@@ -143,7 +163,10 @@
       />
     </div>
 
-    <label class="matchup-detail-editor__field">
+    <label
+      class="matchup-detail-editor__field"
+      :class="{ 'matchup-detail-editor__field--missing': isFieldMissing('comments') }"
+    >
       <span>{{ t('matchupGuideCreate.fieldComments') }}</span>
       <textarea
         rows="4"
@@ -173,6 +196,12 @@ import MatchupGuideMatchupCopyPanel from '~/components/matchups/MatchupGuideMatc
 import MatchupGuidePowerSpikeEditor from '~/components/matchups/MatchupGuidePowerSpikeEditor.vue'
 import { useMatchupGuideDraftStore } from '~/stores/MatchupGuideDraftStore'
 import {
+  countMatchupsFinalizeReady,
+  getMissingRequiredFieldsForEntries,
+  isMatchupEntryFinalizeReady,
+  type MatchupRequiredFieldKey,
+} from '~/utils/matchupGuideCreateSteps'
+import {
   DIFFICULTY_BANDS,
   DIFFICULTY_MODES,
   OUTCOME_KINDS,
@@ -185,11 +214,24 @@ const PHASES = [{ id: 'early' as const }, { id: 'mid' as const }, { id: 'late' a
 const { t } = useI18n()
 const draftStore = useMatchupGuideDraftStore()
 const saveMessage = ref('')
+const showValidation = ref(false)
 
 const selectedEntries = computed(() => draftStore.selectedEntries)
 const hasSelection = computed(() => selectedEntries.value.length > 0)
 const isGroupEdit = computed(() => selectedEntries.value.length > 1)
 const savedIds = computed(() => draftStore.savedOpponentIdSet)
+const totalEntries = computed(() => draftStore.matchupEntries.length)
+const finalizeReadyCount = computed(() => countMatchupsFinalizeReady(draftStore.matchupEntries))
+
+const selectionReady = computed(
+  () =>
+    selectedEntries.value.length > 0 &&
+    selectedEntries.value.every(entry => isMatchupEntryFinalizeReady(entry))
+)
+
+const missingRequiredFields = computed(() =>
+  getMissingRequiredFieldsForEntries(selectedEntries.value)
+)
 
 const allSelectedSaved = computed(() =>
   selectedEntries.value.every(entry => savedIds.value.has(entry.opponent.id))
@@ -203,6 +245,13 @@ const saveButtonLabel = computed(() =>
 
 watch(selectedEntries, () => {
   saveMessage.value = ''
+  showValidation.value = false
+})
+
+watch(missingRequiredFields, fields => {
+  if (fields.size === 0) {
+    showValidation.value = false
+  }
 })
 
 const selectionTitle = computed(() => {
@@ -211,6 +260,10 @@ const selectionTitle = computed(() => {
   if (entries.length === 1) return entries[0].opponent.name
   return t('matchupGuideCreate.groupSelectionTitle', { count: entries.length })
 })
+
+function isFieldMissing(field: MatchupRequiredFieldKey): boolean {
+  return showValidation.value && missingRequiredFields.value.has(field)
+}
 
 function commonValue<K extends keyof MatchupEntry>(key: K): MatchupEntry[K] | undefined {
   const entries = selectedEntries.value
@@ -280,6 +333,13 @@ function setPhaseNotes(phase: 'early' | 'mid' | 'late', notes: string) {
 
 function markSaved() {
   saveMessage.value = ''
+
+  if (!selectionReady.value) {
+    showValidation.value = true
+    return
+  }
+
+  showValidation.value = false
   const result = draftStore.markSelectedAsSaved()
   if (result === 'none') return
   if (result === 'all_done') {
@@ -306,18 +366,23 @@ function markSaved() {
 
 .matchup-detail-editor__header {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.65rem;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
-.matchup-detail-editor__header-main {
+.matchup-detail-editor__header-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.matchup-detail-editor__header-start {
   display: flex;
   min-width: 0;
-  flex: 1;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.15rem;
+  justify-self: start;
 }
 
 .matchup-detail-editor__actions {
@@ -326,25 +391,52 @@ function markSaved() {
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
+  justify-self: end;
   gap: 0.4rem;
 }
 
 .matchup-detail-editor__save-button {
-  border: 1px solid rgb(74 222 128 / 0.55);
+  border: 1px solid rgb(var(--rgb-primary) / 0.45);
   border-radius: 0.45rem;
-  background: rgb(74 222 128 / 0.12);
+  background: rgb(var(--rgb-background) / 0.45);
   padding: 0.38rem 0.65rem;
   font-size: 0.74rem;
   font-weight: 700;
-  color: rgb(74 222 128);
+  color: rgb(var(--rgb-text));
   cursor: pointer;
+  white-space: nowrap;
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.matchup-detail-editor__save-button--saved {
+  border-color: rgb(74 222 128 / 0.75);
+  background: rgb(74 222 128 / 0.22);
+  color: rgb(187 247 208);
+}
+
+.matchup-detail-editor__save-button--saved:hover {
+  border-color: rgb(74 222 128 / 0.95);
+  background: rgb(74 222 128 / 0.32);
+}
+
+.matchup-detail-editor__progress {
+  margin: 0;
+  justify-self: center;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgb(74 222 128);
   white-space: nowrap;
 }
 
-.matchup-detail-editor__save-button--done {
-  border-color: rgb(var(--rgb-primary) / 0.45);
-  background: rgb(var(--rgb-background) / 0.45);
-  color: rgb(var(--rgb-text));
+.matchup-detail-editor__validation-message {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: rgb(248 113 113);
 }
 
 .matchup-detail-editor__save-message {
@@ -358,6 +450,9 @@ function markSaved() {
   font-size: 1rem;
   font-weight: 700;
   color: rgb(var(--rgb-text-accent));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .matchup-detail-editor__subtitle {
@@ -370,6 +465,27 @@ function markSaved() {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
+  border-radius: 0.5rem;
+  padding: 0.15rem;
+  transition: box-shadow 0.2s ease;
+}
+
+.matchup-detail-editor__section--missing {
+  box-shadow: inset 0 0 0 1px rgb(248 113 113 / 0.75);
+  background: rgb(248 113 113 / 0.06);
+}
+
+.matchup-detail-editor__section--missing .matchup-detail-editor__label {
+  color: rgb(248 113 113);
+}
+
+.matchup-detail-editor__field--missing > span:first-child {
+  color: rgb(248 113 113);
+}
+
+.matchup-detail-editor__field--missing textarea {
+  border-color: rgb(248 113 113 / 0.85);
+  box-shadow: 0 0 0 1px rgb(248 113 113 / 0.25);
 }
 
 .matchup-detail-editor__label {
@@ -439,6 +555,14 @@ function markSaved() {
   font-size: 0.72rem;
   font-weight: 600;
   color: rgb(var(--rgb-text) / 0.75);
+  border-radius: 0.5rem;
+  padding: 0.15rem;
+  transition: box-shadow 0.2s ease;
+}
+
+.matchup-detail-editor__field--missing {
+  box-shadow: inset 0 0 0 1px rgb(248 113 113 / 0.75);
+  background: rgb(248 113 113 / 0.06);
 }
 
 .matchup-detail-editor__field input,

@@ -41,8 +41,11 @@ export const useMatchupGuideStore = defineStore('matchupGuide', {
         const newVisibility = guide.visibility ?? 'public'
 
         const now = new Date().toISOString()
+        const visibility = guide.visibility ?? 'public'
         const toSave: MatchupGuide = {
           ...guide,
+          visibility,
+          build: guide.build ? { ...guide.build, visibility } : guide.build,
           gameVersion: guide.gameVersion || versionStore.currentVersion || getFallbackGameVersion(),
           updatedAt: now,
           createdAt: existingIndex >= 0 ? guide.createdAt || now : now,
@@ -90,7 +93,11 @@ export const useMatchupGuideStore = defineStore('matchupGuide', {
       const nextVisibility: 'public' | 'private' =
         (existing.visibility ?? 'public') === 'private' ? 'public' : 'private'
 
-      return this.saveGuide({ ...existing, visibility: nextVisibility })
+      return this.saveGuide({
+        ...existing,
+        visibility: nextVisibility,
+        build: existing.build ? { ...existing.build, visibility: nextVisibility } : existing.build,
+      })
     },
 
     async deleteGuide(guideId: string): Promise<boolean> {
