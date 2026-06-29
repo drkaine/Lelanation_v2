@@ -1945,13 +1945,14 @@
     "backToBuilds": "← Back to builds"
   },
   "matchupGuidePage": {
-    "title": "Matchup guides",
-    "subtitle": "Matchup tips and strategies — admin preview (beta).",
     "metaTitle": "Matchup guides",
     "metaDescription": "League of Legends matchup guides on Lelanation.",
     "backToSheets": "← Back to matchup sheets",
     "notFound": "Matchup guide not found",
-    "detailMetaTitle": "{champion} — matchup guide by {author}"
+    "detailMetaTitle": "{champion} — matchup guide by {author}",
+    "myGuides": "My guides",
+    "createGuide": "Create a guide",
+    "createComingSoon": "The matchup guide editor is coming soon."
   },
   "matchupGuideDiscovery": {
     "searchPlaceholder": "Search by champion, opponent or author...",

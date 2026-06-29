@@ -1,7 +1,76 @@
 <template>
-  <div class="matchup-sheet" :class="{ 'matchup-sheet--detail': variant === 'detail' }">
+  <div
+    class="matchup-sheet"
+    :class="{
+      'matchup-sheet--detail': variant === 'detail',
+      'matchup-sheet--card': variant === 'card',
+    }"
+  >
     <header class="matchup-sheet__header">
-      <div class="matchup-sheet__top-row">
+      <template v-if="variant === 'card'">
+        <div class="matchup-sheet__card-top">
+          <div class="matchup-sheet__identity matchup-sheet__identity--card">
+            <img
+              v-if="championImageSrc"
+              :src="championImageSrc"
+              :alt="guide.champion?.name ?? ''"
+              class="matchup-sheet__champion-image"
+              :class="{ 'matchup-sheet__champion-image--icon': !championSplashEnabled }"
+            />
+            <div class="matchup-sheet__title-line">
+              <h3 class="matchup-sheet__champion-name">
+                {{ guide.champion?.name ?? '?' }}
+              </h3>
+              <img
+                :src="roleIcon(guide.role)"
+                :alt="roleLabel(guide.role)"
+                class="matchup-sheet__role-icon"
+                :title="roleLabel(guide.role)"
+              />
+              <div v-if="visibleTags.length" class="matchup-sheet__tags-inline">
+                <span
+                  v-for="tag in visibleTags"
+                  :key="tag.id"
+                  class="matchup-sheet__tag"
+                  :class="{
+                    'matchup-sheet__tag--pro': tag.id === 'pro',
+                    'matchup-sheet__tag--otp': tag.id === 'otp',
+                  }"
+                >
+                  {{ tag.label }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="matchup-sheet__version-block">
+            <span
+              class="matchup-sheet__version"
+              :title="t('matchupGuideDiscovery.lastUpdateVersion')"
+            >
+              v{{ guide.gameVersion }}
+            </span>
+            <time v-if="formattedDate" class="matchup-sheet__date" :datetime="displayDateIso">
+              {{ formattedDate }}
+            </time>
+            <span
+              v-if="(guide.visibility ?? 'public') === 'private'"
+              class="matchup-sheet__badge matchup-sheet__badge--private"
+            >
+              {{ t('buildsPage.private') }}
+            </span>
+            <span v-if="guide.patchStale" class="matchup-sheet__badge matchup-sheet__badge--stale">
+              {{ t('matchupGuideDiscovery.outdated') }}
+            </span>
+          </div>
+        </div>
+
+        <p class="matchup-sheet__author matchup-sheet__author--card">
+          {{ guide.author?.trim() || t('matchupGuideDiscovery.authorAnonymous') }}
+        </p>
+      </template>
+
+      <div v-else class="matchup-sheet__top-row">
         <div class="matchup-sheet__identity">
           <img
             v-if="championImageSrc"
@@ -11,17 +80,17 @@
             :class="{ 'matchup-sheet__champion-image--icon': !championSplashEnabled }"
           />
           <div class="matchup-sheet__identity-text">
-            <h3 class="matchup-sheet__champion-name">
-              {{ guide.champion?.name ?? '?' }}
-            </h3>
-            <div class="matchup-sheet__meta-row">
+            <div class="matchup-sheet__title-line matchup-sheet__title-line--detail">
+              <h3 class="matchup-sheet__champion-name">
+                {{ guide.champion?.name ?? '?' }}
+              </h3>
               <img
                 :src="roleIcon(guide.role)"
                 :alt="roleLabel(guide.role)"
                 class="matchup-sheet__role-icon"
                 :title="roleLabel(guide.role)"
               />
-              <div v-if="visibleTags.length" class="matchup-sheet__tags">
+              <div v-if="visibleTags.length" class="matchup-sheet__tags-inline">
                 <span
                   v-for="tag in visibleTags"
                   :key="tag.id"
@@ -66,17 +135,18 @@
     </header>
 
     <p
-      v-if="guide.description"
+      v-if="displayDescription"
       class="matchup-sheet__description"
       :class="{ 'matchup-sheet__description--clamped': variant === 'card' }"
     >
-      {{ guide.description }}
+      {{ displayDescription }}
     </p>
+    <p
+      v-else-if="variant === 'card'"
+      class="matchup-sheet__description matchup-sheet__description--empty"
+    />
 
-    <div
-      v-if="guide.bestMatchups?.length || guide.worstMatchups?.length"
-      class="matchup-sheet__matchups-mirror"
-    >
+    <div v-if="showMatchupsSection" class="matchup-sheet__matchups-mirror">
       <section v-if="guide.bestMatchups?.length" class="matchup-sheet__matchups-col">
         <h4 class="matchup-sheet__matchups-title matchup-sheet__matchups-title--best">
           {{ t('matchupGuideDiscovery.bestMatchups') }}
@@ -129,6 +199,10 @@ import { useChampionSplashPreference } from '~/composables/useChampionSplashPref
 import { useClientHydrated } from '~/composables/useClientHydrated'
 import { guideDisplayDate } from '~/composables/useMatchupGuideDetail'
 import { getChampionImageUrl, getChampionSplashImageUrl } from '~/utils/imageUrl'
+import {
+  matchupGuideCardDescription,
+  matchupGuideDetailDescription,
+} from '~/utils/matchupGuideText'
 
 const props = withDefaults(
   defineProps<{
@@ -150,6 +224,17 @@ const tagDefs: Array<{ id: MatchupGuideTag; label: string }> = [
 ]
 
 const visibleTags = computed(() => tagDefs.filter(tag => props.guide.tags?.includes(tag.id)))
+
+const displayDescription = computed(() =>
+  props.variant === 'detail'
+    ? matchupGuideDetailDescription(props.guide)
+    : matchupGuideCardDescription(props.guide)
+)
+
+const showMatchupsSection = computed(() => {
+  if (props.variant === 'card') return true
+  return Boolean(props.guide.bestMatchups?.length || props.guide.worstMatchups?.length)
+})
 
 const championImageSrc = computed(() => {
   const champion = props.guide.champion
@@ -207,11 +292,71 @@ function roleLabel(role: Role) {
   padding-bottom: 0;
 }
 
+.matchup-sheet--card {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.matchup-sheet__title-line {
+  display: flex;
+  min-width: 0;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.matchup-sheet__title-line--detail {
+  flex-wrap: wrap;
+}
+
+.matchup-sheet__tags-inline {
+  display: inline-flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.matchup-sheet__card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.matchup-sheet__identity--card {
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+}
+
+.matchup-sheet__identity--card .matchup-sheet__title-line {
+  flex: 1;
+  min-width: 0;
+}
+
+.matchup-sheet__identity--card .matchup-sheet__champion-name {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.matchup-sheet__author--card {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  text-align: center;
+}
+
 .matchup-sheet__champion-name {
   font-size: 1.05rem;
   font-weight: 700;
   line-height: 1.2;
   color: rgb(255 255 255);
+  margin: 0;
 }
 
 .matchup-sheet__identity {
@@ -242,22 +387,16 @@ function roleLabel(role: Role) {
 }
 
 .matchup-sheet__top-row {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  gap: 0.35rem;
-  margin-top: 0.35rem;
+  gap: 0.5rem;
 }
 
 .matchup-sheet__role-icon {
   width: 1.35rem;
   height: 1.35rem;
-}
-
-.matchup-sheet__tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
+  flex-shrink: 0;
 }
 
 .matchup-sheet__tag {
@@ -296,7 +435,7 @@ function roleLabel(role: Role) {
 
 .matchup-sheet__version {
   border-radius: 0.35rem;
-  border: 1px solid rgb(var(--rgb-primary) / 0.35);
+  border: 1px solid var(--card-border-color-soft, rgb(var(--rgb-primary) / 0.35));
   padding: 0.12rem 0.45rem;
   font-size: 0.75rem;
   font-weight: 700;
@@ -354,11 +493,21 @@ function roleLabel(role: Role) {
   color: rgb(var(--rgb-text) / 0.82);
   border-top: 1px solid var(--card-border-color-soft, rgb(var(--rgb-primary) / 0.35));
   padding-top: 0.65rem;
+  margin: 0;
+}
+
+.matchup-sheet--card .matchup-sheet__description {
+  flex: 0 0 auto;
+  min-height: 2.9rem;
+}
+
+.matchup-sheet__description--empty {
+  min-height: 2.9rem;
 }
 
 .matchup-sheet__description--clamped {
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -373,6 +522,11 @@ function roleLabel(role: Role) {
   gap: 0.5rem 0.65rem;
   border-top: 1px solid var(--card-border-color-soft, rgb(var(--rgb-primary) / 0.35));
   padding-top: 0.65rem;
+}
+
+.matchup-sheet--card .matchup-sheet__matchups-mirror {
+  flex: 1 1 auto;
+  min-height: 11.5rem;
 }
 
 .matchup-sheet__matchups-col {

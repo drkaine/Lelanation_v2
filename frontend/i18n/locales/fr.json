@@ -1947,13 +1947,14 @@
     "backToBuilds": "← Retour aux builds"
   },
   "matchupGuidePage": {
-    "title": "Guides matchup",
-    "subtitle": "Conseils et stratégies par matchup — accès admin (bêta).",
     "metaTitle": "Guides matchup",
     "metaDescription": "Liste des guides matchup League of Legends sur Lelanation.",
     "backToSheets": "← Retour aux sheets matchup",
     "notFound": "Guide matchup introuvable",
-    "detailMetaTitle": "{champion} — guide matchup par {author}"
+    "detailMetaTitle": "{champion} — guide matchup par {author}",
+    "myGuides": "Mes guides",
+    "createGuide": "Créer un guide",
+    "createComingSoon": "L’éditeur de guide matchup arrive bientôt."
   },
   "matchupGuideDiscovery": {
     "searchPlaceholder": "Rechercher par champion, adversaire ou auteur...",

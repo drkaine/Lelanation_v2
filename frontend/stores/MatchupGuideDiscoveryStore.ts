@@ -92,11 +92,41 @@ export const useMatchupGuideDiscoveryStore = defineStore('matchupGuideDiscovery'
 
   getters: {
     searchResults(): MatchupGuide[] {
-      let results = [...this.guides]
+      return this.filterGuides(this.guides)
+    },
+
+    totalPages(): number {
+      if (this.pageSize === 'all') return 1
+      const total = this.filteredGuides.length
+      return total === 0 ? 0 : Math.ceil(total / this.pageSize)
+    },
+
+    paginatedGuides(): MatchupGuide[] {
+      if (this.pageSize === 'all') return this.filteredGuides
+      const start = (this.currentPage - 1) * this.pageSize
+      return this.filteredGuides.slice(start, start + this.pageSize)
+    },
+
+    hasActiveFilters(): boolean {
+      return (
+        this.searchQuery !== '' ||
+        this.selectedChampion !== null ||
+        this.selectedOpponent !== null ||
+        this.selectedRole !== null ||
+        this.selectedVersion !== null ||
+        this.onlyUpToDate
+      )
+    },
+  },
+
+  actions: {
+    filterGuides(source: MatchupGuide[]): MatchupGuide[] {
+      let results = [...source]
 
       if (this.searchQuery) {
         const query = this.searchQuery.toLowerCase().trim()
         results = results.filter(guide => {
+          if (guide.shortDescription?.toLowerCase().includes(query)) return true
           if (guide.description?.toLowerCase().includes(query)) return true
           if (guide.champion?.name?.toLowerCase().includes(query)) return true
           if (guide.champion?.id?.toLowerCase().includes(query)) return true
@@ -145,8 +175,8 @@ export const useMatchupGuideDiscoveryStore = defineStore('matchupGuideDiscovery'
           break
         case 'name':
           sorted.sort((a, b) => {
-            const nameA = a.champion?.name ?? a.title ?? ''
-            const nameB = b.champion?.name ?? b.title ?? ''
+            const nameA = a.champion?.name ?? ''
+            const nameB = b.champion?.name ?? ''
             return nameA.localeCompare(nameB)
           })
           break
@@ -155,31 +185,14 @@ export const useMatchupGuideDiscoveryStore = defineStore('matchupGuideDiscovery'
       return sorted
     },
 
-    totalPages(): number {
-      if (this.pageSize === 'all') return 1
-      const total = this.filteredGuides.length
-      return total === 0 ? 0 : Math.ceil(total / this.pageSize)
+    clampPageToMax(maxPage: number) {
+      const safeMax = Math.max(1, maxPage)
+      if (this.currentPage > safeMax) {
+        this.currentPage = safeMax
+        writePaginationToStorage(this.pageSize, this.currentPage)
+      }
     },
 
-    paginatedGuides(): MatchupGuide[] {
-      if (this.pageSize === 'all') return this.filteredGuides
-      const start = (this.currentPage - 1) * this.pageSize
-      return this.filteredGuides.slice(start, start + this.pageSize)
-    },
-
-    hasActiveFilters(): boolean {
-      return (
-        this.searchQuery !== '' ||
-        this.selectedChampion !== null ||
-        this.selectedOpponent !== null ||
-        this.selectedRole !== null ||
-        this.selectedVersion !== null ||
-        this.onlyUpToDate
-      )
-    },
-  },
-
-  actions: {
     async loadGuides(options?: { fetcher?: typeof $fetch }) {
       this.loading = true
       this.loadError = null

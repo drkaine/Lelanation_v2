@@ -5,6 +5,9 @@ export type MatchupGuideTag = Extract<BuildTag, 'pro' | 'otp'>
 export interface MatchupGuide {
   id: string
   author?: string
+  /** Short teaser shown on discovery cards (optional; otherwise description is truncated). */
+  shortDescription?: string
+  /** Full guide description shown on the detail page. */
   description?: string
   visibility?: 'public' | 'private'
   champion: ChampionRef | null

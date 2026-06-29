@@ -2,7 +2,7 @@
   <div class="matchup-guide-detail min-h-screen px-[10px] pb-8 text-text">
     <div class="mx-auto max-w-2xl">
       <NuxtLink
-        :to="localePath('/matchups/sheets')"
+        :to="localePath('/matchups/sheets/discover')"
         class="mb-4 inline-flex items-center gap-1 text-sm text-text-secondary transition-colors hover:text-text"
       >
         {{ t('matchupGuidePage.backToSheets') }}
@@ -34,7 +34,7 @@ const { themeVars } = useBuildCardBorderTheme(() => props.guide.champion?.id)
   border-radius: 0.85rem;
   border: 2px solid transparent;
   background:
-    linear-gradient(rgb(var(--rgb-surface) / 0.5), rgb(var(--rgb-surface) / 0.5)) padding-box,
+    linear-gradient(rgb(var(--rgb-surface)), rgb(var(--rgb-surface))) padding-box,
     var(--card-border-gradient-strong) border-box;
   padding: 1rem;
 }
