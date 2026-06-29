@@ -1954,6 +1954,32 @@
     "createGuide": "Create a guide",
     "createComingSoon": "The matchup guide editor is coming soon."
   },
+  "matchupGuideCreate": {
+    "stepsAria": "Matchup guide creation steps",
+    "stepMatchups": "Matchups",
+    "continueToMatchups": "Continue — matchup ranking",
+    "saveGuide": "Save guide",
+    "saving": "Saving…",
+    "rankAtLeastTwo": "Rank at least 2 champions on the scale.",
+    "pickOpponents": "Pick opponents",
+    "matchupScaleTitle": "Matchup scale",
+    "scaleEmpty": "Click a champion to add them to the scale.",
+    "scaleHint": "Best matchup at the top, worst at the bottom. Drag or use arrows to reorder.",
+    "cannotRankSelf": "Guide champion",
+    "alreadyRanked": "Already ranked",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "removeFromScale": "Remove from scale",
+    "changeChampionTitle": "Change champion?",
+    "changeChampionBody": "You will lose all variants of this build. This cannot be undone.",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "titleChampion": "Create guide — Champion",
+    "titleRune": "Create guide — Runes",
+    "titleItem": "Create guide — Items",
+    "titleInfo": "Create guide — Info",
+    "titleMatchups": "Create guide — Matchups"
+  },
   "matchupGuideDiscovery": {
     "searchPlaceholder": "Search by champion, opponent or author...",
     "guideFound": "guide found",
@@ -2230,8 +2256,8 @@
         "p1": "When creating or editing a build, you choose <strong>visibility</strong>:",
         "public": "<strong>Public</strong> — stored on the server, visible in Discover, shareable URL, listed in community feeds.",
         "private": "<strong>Private</strong> — the build is stored only in your browser's <strong>localStorage</strong>; it is never sent to the server and does not appear in Discover or public lists.",
-        "votes": "<strong>Automatic removal</strong> — once a public build has at least <strong>10 votes</strong> (👍 + 👎), if it falls below <strong>30% upvotes</strong>, it becomes private again: the server copy is deleted and it disappears from Discover (it stays in your localStorage if you had saved it locally).",
-        "p2": "If your build is “no longer public”, check visibility in the editor or whether the vote threshold was hit. To republish: set <strong>Public</strong> and save. A private build stays on your device only — clearing site data or switching browsers will remove it."
+        "votes": "<strong>Automatic removal</strong> — once a public build or matchup guide has at least <strong>10 votes</strong> (👍 + 👎), if it falls below <strong>30% upvotes</strong>, it becomes private again: the server copy is deleted and it disappears from Discover (it stays in your localStorage if you had saved it locally).",
+        "p2": "If your build or guide is “no longer public”, check visibility in the editor or whether the vote threshold was hit. To republish: set <strong>Public</strong> and save. Private content stays on your device only — clearing site data or switching browsers will remove it."
       },
       "patchStale": {
         "title": "“Out of date” badge",

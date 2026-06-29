@@ -1956,6 +1956,32 @@
     "createGuide": "Créer un guide",
     "createComingSoon": "L’éditeur de guide matchup arrive bientôt."
   },
+  "matchupGuideCreate": {
+    "stepsAria": "Étapes de création du guide matchup",
+    "stepMatchups": "Matchups",
+    "continueToMatchups": "Continuer — classement des matchups",
+    "saveGuide": "Enregistrer le guide",
+    "saving": "Enregistrement…",
+    "rankAtLeastTwo": "Classez au moins 2 champions sur l’échelle.",
+    "pickOpponents": "Choisir les adversaires",
+    "matchupScaleTitle": "Échelle des matchups",
+    "scaleEmpty": "Cliquez sur un champion pour l’ajouter à l’échelle.",
+    "scaleHint": "Du meilleur matchup (haut) au pire (bas). Glissez ou utilisez les flèches pour réordonner.",
+    "cannotRankSelf": "Champion du guide",
+    "alreadyRanked": "Déjà classé",
+    "moveUp": "Monter",
+    "moveDown": "Descendre",
+    "removeFromScale": "Retirer de l’échelle",
+    "changeChampionTitle": "Changer de champion ?",
+    "changeChampionBody": "Vous allez perdre toutes les variantes de ce build. Cette action est irréversible.",
+    "cancel": "Annuler",
+    "confirm": "Confirmer",
+    "titleChampion": "Créer un guide — Champion",
+    "titleRune": "Créer un guide — Runes",
+    "titleItem": "Créer un guide — Objets",
+    "titleInfo": "Créer un guide — Infos",
+    "titleMatchups": "Créer un guide — Matchups"
+  },
   "matchupGuideDiscovery": {
     "searchPlaceholder": "Rechercher par champion, adversaire ou auteur...",
     "guideFound": "guide trouvé",
@@ -2232,8 +2258,8 @@
         "p1": "Lors de la création ou l'édition d'un build, vous choisissez sa <strong>visibilité</strong> :",
         "public": "<strong>Public</strong> — le build est enregistré sur le serveur, visible dans Découvrir, peut avoir une page partageable et apparaît dans les listes communautaires.",
         "private": "<strong>Privé</strong> — le build est enregistré uniquement dans le <strong>localStorage</strong> de votre navigateur ; il n'est jamais envoyé au serveur et n'apparaît pas dans Découvrir ni les listes publiques.",
-        "votes": "<strong>Retrait automatique</strong> — dès qu'un build public cumule au moins <strong>10 votes</strong> (👍 + 👎), s'il obtient <strong>moins de 30 % d'upvotes</strong>, il repasse en privé : la copie serveur est supprimée et il disparaît de Découvrir (il reste dans votre localStorage si vous l'aviez sauvegardé localement).",
-        "p2": "Si votre build « n'est plus en public », vérifiez la visibilité dans l'éditeur ou si le seuil de votes a été atteint. Pour republier : <strong>Public</strong> puis sauvegarde. Un build privé reste sur votre appareil — effacer les données du site ou changer de navigateur le fait disparaître."
+        "votes": "<strong>Retrait automatique</strong> — dès qu'un build public ou guide matchup public cumule au moins <strong>10 votes</strong> (👍 + 👎), s'il obtient <strong>moins de 30 % d'upvotes</strong>, il repasse en privé : la copie serveur est supprimée et il disparaît de Découvrir (il reste dans votre localStorage si vous l'aviez sauvegardé localement).",
+        "p2": "Si votre build ou guide « n'est plus en public », vérifiez la visibilité dans l'éditeur ou si le seuil de votes a été atteint. Pour republier : <strong>Public</strong> puis sauvegarde. Un contenu privé reste sur votre appareil — effacer les données du site ou changer de navigateur le fait disparaître."
       },
       "patchStale": {
         "title": "Badge « Plus à jour »",

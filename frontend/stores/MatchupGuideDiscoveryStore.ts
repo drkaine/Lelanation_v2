@@ -211,6 +211,7 @@ export const useMatchupGuideDiscoveryStore = defineStore('matchupGuideDiscovery'
       try {
         const guideStore = useMatchupGuideStore()
         const localGuides = guideStore.getSavedGuides()
+        const localPublicGuides = localGuides.filter(g => (g.visibility ?? 'public') !== 'private')
 
         let serverGuides: MatchupGuide[] = []
         try {
@@ -221,7 +222,7 @@ export const useMatchupGuideDiscoveryStore = defineStore('matchupGuideDiscovery'
           // API unreachable — local guides still shown
         }
 
-        this.guides = [...localGuides, ...serverGuides]
+        this.guides = [...localPublicGuides, ...serverGuides]
 
         const versionStore = useVersionStore()
         if (!versionStore.currentVersion) {

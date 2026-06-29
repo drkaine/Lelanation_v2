@@ -15,18 +15,23 @@
               :src="championImageSrc"
               :alt="guide.champion?.name ?? ''"
               class="matchup-sheet__champion-image"
-              :class="{ 'matchup-sheet__champion-image--icon': !championSplashEnabled }"
+              :class="{
+                'matchup-sheet__champion-image--icon': !championSplashEnabled,
+                'matchup-sheet__champion-image--splash': championSplashEnabled,
+              }"
             />
-            <div class="matchup-sheet__title-line">
-              <h3 class="matchup-sheet__champion-name">
-                {{ guide.champion?.name ?? '?' }}
-              </h3>
-              <img
-                :src="roleIcon(guide.role)"
-                :alt="roleLabel(guide.role)"
-                class="matchup-sheet__role-icon"
-                :title="roleLabel(guide.role)"
-              />
+            <div class="matchup-sheet__identity-meta">
+              <div class="matchup-sheet__name-line">
+                <h3 class="matchup-sheet__champion-name">
+                  {{ guide.champion?.name ?? '?' }}
+                </h3>
+                <img
+                  :src="roleIcon(guide.role)"
+                  :alt="roleLabel(guide.role)"
+                  class="matchup-sheet__role-icon"
+                  :title="roleLabel(guide.role)"
+                />
+              </div>
               <div v-if="visibleTags.length" class="matchup-sheet__tags-inline">
                 <span
                   v-for="tag in visibleTags"
@@ -64,10 +69,6 @@
             </span>
           </div>
         </div>
-
-        <p class="matchup-sheet__author matchup-sheet__author--card">
-          {{ guide.author?.trim() || t('matchupGuideDiscovery.authorAnonymous') }}
-        </p>
       </template>
 
       <div v-else class="matchup-sheet__top-row">
@@ -77,19 +78,24 @@
             :src="championImageSrc"
             :alt="guide.champion?.name ?? ''"
             class="matchup-sheet__champion-image"
-            :class="{ 'matchup-sheet__champion-image--icon': !championSplashEnabled }"
+            :class="{
+              'matchup-sheet__champion-image--icon': !championSplashEnabled,
+              'matchup-sheet__champion-image--splash': championSplashEnabled,
+            }"
           />
           <div class="matchup-sheet__identity-text">
-            <div class="matchup-sheet__title-line matchup-sheet__title-line--detail">
-              <h3 class="matchup-sheet__champion-name">
-                {{ guide.champion?.name ?? '?' }}
-              </h3>
-              <img
-                :src="roleIcon(guide.role)"
-                :alt="roleLabel(guide.role)"
-                class="matchup-sheet__role-icon"
-                :title="roleLabel(guide.role)"
-              />
+            <div class="matchup-sheet__identity-meta">
+              <div class="matchup-sheet__name-line">
+                <h3 class="matchup-sheet__champion-name">
+                  {{ guide.champion?.name ?? '?' }}
+                </h3>
+                <img
+                  :src="roleIcon(guide.role)"
+                  :alt="roleLabel(guide.role)"
+                  class="matchup-sheet__role-icon"
+                  :title="roleLabel(guide.role)"
+                />
+              </div>
               <div v-if="visibleTags.length" class="matchup-sheet__tags-inline">
                 <span
                   v-for="tag in visibleTags"
@@ -297,25 +303,30 @@ function roleLabel(role: Role) {
   min-height: 0;
 }
 
-.matchup-sheet__title-line {
+.matchup-sheet__identity-meta {
   display: flex;
   min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+}
+
+.matchup-sheet__name-line {
+  display: flex;
+  max-width: 100%;
   flex-wrap: nowrap;
   align-items: center;
   gap: 0.35rem;
-}
-
-.matchup-sheet__title-line--detail {
-  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .matchup-sheet__tags-inline {
-  display: inline-flex;
+  display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: center;
   gap: 0.25rem;
-  flex-shrink: 0;
 }
 
 .matchup-sheet__card-top {
@@ -328,12 +339,7 @@ function roleLabel(role: Role) {
 .matchup-sheet__identity--card {
   flex: 1;
   min-width: 0;
-  align-items: center;
-}
-
-.matchup-sheet__identity--card .matchup-sheet__title-line {
-  flex: 1;
-  min-width: 0;
+  align-items: flex-start;
 }
 
 .matchup-sheet__identity--card .matchup-sheet__champion-name {
@@ -342,13 +348,6 @@ function roleLabel(role: Role) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.matchup-sheet__author--card {
-  width: 100%;
-  margin: 0;
-  padding: 0;
-  text-align: center;
 }
 
 .matchup-sheet__champion-name {
@@ -380,6 +379,16 @@ function roleLabel(role: Role) {
 .matchup-sheet__champion-image--icon {
   border-radius: 9999px;
   object-position: center;
+}
+
+.matchup-sheet__champion-image--splash {
+  width: auto;
+  max-width: 200px;
+  height: 72px;
+  border: none;
+  border-radius: 0.35rem;
+  object-fit: contain;
+  object-position: left center;
 }
 
 .matchup-sheet__identity-text {

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { extractDiscordInviteCode } from './socialLinksHealthCheck.js'
+import { extractDiscordInviteCode, validateUrlOnlySocialLink } from './socialLinksHealthCheck.js'
 
 test('extractDiscordInviteCode extracts from discord.gg URL', () => {
   assert.equal(
@@ -22,4 +22,26 @@ test('extractDiscordInviteCode returns null for non-discord URL', () => {
 
 test('extractDiscordInviteCode returns null for invalid URL', () => {
   assert.equal(extractDiscordInviteCode('not-an-url'), null)
+})
+
+test('validateUrlOnlySocialLink accepts configured Patreon URL', () => {
+  assert.equal(
+    validateUrlOnlySocialLink({
+      name: 'Patreon',
+      url: 'https://www.patreon.com/Lelariva',
+      type: 'url-only',
+    }),
+    null,
+  )
+})
+
+test('validateUrlOnlySocialLink rejects wrong Patreon path', () => {
+  assert.equal(
+    validateUrlOnlySocialLink({
+      name: 'Patreon',
+      url: 'https://www.patreon.com/OtherCreator',
+      type: 'url-only',
+    }),
+    'unexpected path',
+  )
 })

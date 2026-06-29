@@ -25,6 +25,7 @@ import {
 } from '~/utils/mergePatchStale'
 import { useVersionStore } from '~/stores/VersionStore'
 import { useVoteStore } from '~/stores/VoteStore'
+import { shouldAutoPrivatizeFromCommunityVotes } from '~/utils/communityVoteVisibility'
 import {
   passiveRankForChampionLevel,
   clampChampionLevel,
@@ -1836,37 +1837,33 @@ export const useBuildStore = defineStore('build', {
       const voteStore = useVoteStore()
       const upvotes = voteStore.getUpvoteCount(targetId)
       const downvotes = voteStore.getDownvoteCount(targetId)
-      const totalVotes = upvotes + downvotes
 
-      if (totalVotes >= 10) {
-        const upvotePercentage = (upvotes / totalVotes) * 100
-        if (upvotePercentage < 30) {
-          // Passer le build en privé (public → privé = supprimer sur le serveur)
-          if (this.currentBuild && this.currentBuild.id === targetId) {
-            this.currentBuild.visibility = 'private'
-          }
+      if (shouldAutoPrivatizeFromCommunityVotes(upvotes, downvotes)) {
+        // Passer le build en privé (public → privé = supprimer sur le serveur)
+        if (this.currentBuild && this.currentBuild.id === targetId) {
+          this.currentBuild.visibility = 'private'
+        }
 
-          // Mettre à jour le build correspondant dans la liste sauvegardée
-          const savedBuilds = this.getSavedBuilds()
-          const existingIndex = savedBuilds.findIndex(b => b.id === targetId)
-          if (existingIndex >= 0) {
-            const existing = savedBuilds[existingIndex]
-            if (!existing) return
-            savedBuilds[existingIndex] = {
-              ...existing,
-              visibility: 'private',
-            }
-            const toStore = savedBuilds.map(b => serializeBuild(b))
-            localStorage.setItem('lelanation_builds', JSON.stringify(toStore))
+        // Mettre à jour le build correspondant dans la liste sauvegardée
+        const savedBuilds = this.getSavedBuilds()
+        const existingIndex = savedBuilds.findIndex(b => b.id === targetId)
+        if (existingIndex >= 0) {
+          const existing = savedBuilds[existingIndex]
+          if (!existing) return
+          savedBuilds[existingIndex] = {
+            ...existing,
+            visibility: 'private',
           }
+          const toStore = savedBuilds.map(b => serializeBuild(b))
+          localStorage.setItem('lelanation_builds', JSON.stringify(toStore))
+        }
 
-          try {
-            await fetch(apiUrl(`/api/builds/${encodeURIComponent(targetId)}`), {
-              method: 'DELETE',
-            })
-          } catch {
-            // Ignore errors
-          }
+        try {
+          await fetch(apiUrl(`/api/builds/${encodeURIComponent(targetId)}`), {
+            method: 'DELETE',
+          })
+        } catch {
+          // Ignore errors
         }
       }
     },

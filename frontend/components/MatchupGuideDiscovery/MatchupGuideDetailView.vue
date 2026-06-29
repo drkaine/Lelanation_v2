@@ -31,11 +31,12 @@ const { themeVars } = useBuildCardBorderTheme(() => props.guide.champion?.id)
 
 <style scoped>
 .matchup-guide-detail__panel {
-  border-radius: 0.85rem;
+  border-radius: 6px;
   border: 2px solid transparent;
   background:
-    linear-gradient(rgb(var(--rgb-surface)), rgb(var(--rgb-surface))) padding-box,
+    linear-gradient(var(--color-blue-500), var(--color-blue-500)) padding-box,
     var(--card-border-gradient-strong) border-box;
-  padding: 1rem;
+  padding: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
 }
 </style>

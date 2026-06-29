@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import type { MatchupGuide } from '@lelanation/shared-types'
 import { getFallbackGameVersion } from '~/config/version'
 import { apiUrl } from '~/utils/apiUrl'
+import { shouldAutoPrivatizeFromCommunityVotes } from '~/utils/communityVoteVisibility'
+import { useMatchupGuideVoteStore } from '~/stores/MatchupGuideVoteStore'
 import { useVersionStore } from '~/stores/VersionStore'
 
 const STORAGE_KEY = 'lelanation_matchup_guides'
@@ -98,6 +100,39 @@ export const useMatchupGuideStore = defineStore('matchupGuide', {
       } catch {
         return false
       }
+    },
+
+    async checkAndUpdateVisibility(guideId: string) {
+      if (!guideId || import.meta.server) return false
+
+      const voteStore = useMatchupGuideVoteStore()
+      const upvotes = voteStore.getUpvoteCount(guideId)
+      const downvotes = voteStore.getDownvoteCount(guideId)
+
+      if (!shouldAutoPrivatizeFromCommunityVotes(upvotes, downvotes)) return false
+
+      const savedGuides = this.getSavedGuides()
+      const existingIndex = savedGuides.findIndex(g => g.id === guideId)
+      if (existingIndex >= 0) {
+        const existing = savedGuides[existingIndex]
+        if (!existing) return false
+        savedGuides[existingIndex] = {
+          ...existing,
+          visibility: 'private',
+        }
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(savedGuides))
+        this.savedGuidesVersion++
+      }
+
+      try {
+        await fetch(apiUrl(`/api/matchup-guides/${encodeURIComponent(guideId)}`), {
+          method: 'DELETE',
+        })
+      } catch {
+        // Ignore errors
+      }
+
+      return true
     },
   },
 })

@@ -305,7 +305,7 @@ export class CommunityDragonService {
 
   /**
    * Sync Kayn transformation HUD squares (Darkin / Assassin) from Community Dragon.
-   * Saves to backend staging and frontend `/images/game/latest/champion/`.
+   * Saves to frontend `/images/game/latest/champion/` only (not backend data/images).
    */
   async syncKaynHudImages(): Promise<
     Result<
@@ -313,20 +313,24 @@ export class CommunityDragonService {
       AppError
     >
   > {
-    const targetDirs = [
-      join(process.cwd(), 'data', 'images', 'latest', 'champion'),
-      join(process.cwd(), '..', 'frontend', 'public', 'images', 'game', 'latest', 'champion'),
-    ]
+    const targetDir = join(
+      process.cwd(),
+      '..',
+      'frontend',
+      'public',
+      'images',
+      'game',
+      'latest',
+      'champion'
+    )
 
     let synced = 0
     let failed = 0
     const errors: Array<{ file: string; error: string }> = []
 
-    for (const dir of targetDirs) {
-      const dirResult = await FileManager.ensureDir(dir)
-      if (dirResult.isErr()) {
-        return Result.err(dirResult.unwrapErr())
-      }
+    const dirResult = await FileManager.ensureDir(targetDir)
+    if (dirResult.isErr()) {
+      return Result.err(dirResult.unwrapErr())
     }
 
     for (const file of KAYN_HUD_FILES) {
@@ -337,10 +341,7 @@ export class CommunityDragonService {
           errors.push({ file, error: 'No data returned' })
           continue
         }
-        const buffer = Buffer.from(data)
-        for (const dir of targetDirs) {
-          await fs.writeFile(join(dir, file), buffer)
-        }
+        await fs.writeFile(join(targetDir, file), Buffer.from(data))
         synced++
       } catch (error) {
         failed++

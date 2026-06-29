@@ -23,6 +23,18 @@
     <template v-else>
       <div class="matchup-guide-grid-list">
         <div v-for="guide in guides" :key="guide.id" class="matchup-guide-grid-item">
+          <div class="matchup-guide-grid-author-row">
+            <span class="truncate font-semibold">
+              {{ guide.author?.trim() || t('matchupGuideDiscovery.authorAnonymous') }}
+            </span>
+            <span
+              v-if="(guide.visibility ?? 'public') === 'private'"
+              class="matchup-guide-grid-author-badge matchup-guide-grid-author-badge--private"
+            >
+              {{ t('buildsPage.private') }}
+            </span>
+          </div>
+
           <NuxtLink :to="matchupGuideDetailPath(guide, localePath)" class="matchup-guide-card-link">
             <MatchupGuideCard :guide="guide" />
           </NuxtLink>
@@ -93,7 +105,7 @@
                     ? t('buildDiscovery.removeUpvote')
                     : t('buildDiscovery.upvoteBuild')
                 "
-                @click.stop="voteStore.upvote(guide.id)"
+                @click.stop="handleUpvote(guide.id)"
               >
                 <span>👍</span>
                 <span>{{ voteStore.getUpvoteCount(guide.id) }}</span>
@@ -111,7 +123,7 @@
                     ? t('buildDiscovery.removeDownvote')
                     : t('buildDiscovery.downvoteBuild')
                 "
-                @click.stop="voteStore.downvote(guide.id)"
+                @click.stop="handleDownvote(guide.id)"
               >
                 <span>👎</span>
                 <span>{{ voteStore.getDownvoteCount(guide.id) }}</span>
@@ -265,6 +277,25 @@ function isUserGuide(guideId: string): boolean {
   return guideStore.getSavedGuides().some(g => g.id === guideId)
 }
 
+function removeGuideFromDiscoverList(guideId: string) {
+  if (props.customGuides) return
+  if (!discoveryStore.guides.some(g => g.id === guideId)) return
+  discoveryStore.guides = discoveryStore.guides.filter(g => g.id !== guideId)
+  discoveryStore.applyFilters()
+}
+
+async function handleUpvote(guideId: string) {
+  voteStore.upvote(guideId)
+  const privatized = await guideStore.checkAndUpdateVisibility(guideId)
+  if (privatized) removeGuideFromDiscoverList(guideId)
+}
+
+async function handleDownvote(guideId: string) {
+  voteStore.downvote(guideId)
+  const privatized = await guideStore.checkAndUpdateVisibility(guideId)
+  if (privatized) removeGuideFromDiscoverList(guideId)
+}
+
 function showShareToast(message: string, type: 'success' | 'error' = 'success') {
   shareToastMessage.value = ''
   shareToastType.value = type
@@ -310,6 +341,37 @@ onMounted(() => {
   gap: 0;
   min-height: 420px;
   padding-bottom: 15px;
+}
+
+.matchup-guide-grid-author-row {
+  display: flex;
+  min-width: 0;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 3px;
+  padding: 0 6px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--color-gold-300);
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.matchup-guide-grid-author-badge {
+  flex-shrink: 0;
+  border-radius: 0.35rem;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.matchup-guide-grid-author-badge--private {
+  border: 1px solid rgb(244 63 94 / 0.45);
+  background: rgb(244 63 94 / 0.12);
+  color: rgb(251 113 133);
 }
 
 .matchup-guide-card-link {

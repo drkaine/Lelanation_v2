@@ -3,7 +3,7 @@ import { DiscordService } from '../services/DiscordService.js'
 import { CronStatusService } from '../services/CronStatusService.js'
 import { createCronLogger } from '../utils/cronLogger.js'
 
-type SocialLinkType = 'discord-invite' | 'generic'
+type SocialLinkType = 'discord-invite' | 'generic' | 'url-only'
 
 interface SocialLink {
   name: string
@@ -22,13 +22,23 @@ const HOME_SOCIAL_LINKS: SocialLink[] = [
   { name: 'Discord', url: 'https://discord.gg/RrXCpsFGrw', type: 'discord-invite' },
   { name: 'Instagram', url: 'https://www.instagram.com/lelariva_fr/', type: 'generic' },
   { name: 'Facebook', url: 'https://www.facebook.com/lelariva/', type: 'generic' },
-  { name: 'Patreon', url: 'https://www.patreon.com/Lelariva', type: 'generic' },
+  // Patreon bloque les requêtes datacenter (Cloudflare 403) : validation structurelle uniquement.
+  { name: 'Patreon', url: 'https://www.patreon.com/Lelariva', type: 'url-only' },
   { name: 'YouTube', url: 'https://www.youtube.com/@Lelariva_LoL/featured', type: 'generic' },
   { name: 'Twitch', url: 'https://www.twitch.tv/lelariva', type: 'generic' },
   { name: 'X', url: 'https://x.com/Lelariva_fr', type: 'generic' },
   { name: 'TikTok', url: 'https://www.tiktok.com/@lelariva_fr', type: 'generic' },
   { name: 'Website', url: 'https://www.lelariva.fr/', type: 'generic' }
 ]
+
+const URL_ONLY_VALIDATORS: Record<string, (url: URL) => string | null> = {
+  Patreon: (url) => {
+    const host = url.hostname.toLowerCase()
+    if (host !== 'www.patreon.com' && host !== 'patreon.com') return 'unexpected host'
+    if (!/^\/Lelariva\/?$/i.test(url.pathname)) return 'unexpected path'
+    return null
+  },
+}
 
 export function extractDiscordInviteCode(inviteUrl: string): string | null {
   try {
@@ -76,6 +86,25 @@ async function checkDiscordInvite(link: SocialLink): Promise<LinkCheckResult> {
   }
 }
 
+export function validateUrlOnlySocialLink(link: SocialLink): string | null {
+  let parsed: URL
+  try {
+    parsed = new URL(link.url)
+  } catch {
+    return 'invalid url'
+  }
+  if (parsed.protocol !== 'https:') return 'must use https'
+  const validator = URL_ONLY_VALIDATORS[link.name]
+  if (!validator) return 'no url-only validator configured'
+  return validator(parsed)
+}
+
+function checkUrlOnlyLink(link: SocialLink): LinkCheckResult {
+  const error = validateUrlOnlySocialLink(link)
+  if (error) return { link, ok: false, reason: error }
+  return { link, ok: true, reason: 'url-only (http probe skipped: bot shield)' }
+}
+
 async function checkGenericLink(link: SocialLink): Promise<LinkCheckResult> {
   try {
     const response = await fetch(link.url, {
@@ -97,6 +126,7 @@ async function checkGenericLink(link: SocialLink): Promise<LinkCheckResult> {
 
 async function checkLink(link: SocialLink): Promise<LinkCheckResult> {
   if (link.type === 'discord-invite') return checkDiscordInvite(link)
+  if (link.type === 'url-only') return checkUrlOnlyLink(link)
   return checkGenericLink(link)
 }
 
