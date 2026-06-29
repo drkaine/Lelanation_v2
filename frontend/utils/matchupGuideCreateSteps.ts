@@ -132,6 +132,42 @@ export function canOpenFinalizeGuideStep(context: MatchupGuideStepAccessContext)
   return canOpenWriteGuideStep(context) && areAllMatchupsFinalizeReady(context.matchupEntries)
 }
 
+export type MatchupGuideFinalizeIdentityField = 'guideName' | 'author' | 'shortDescription'
+
+export function getMissingFinalizeIdentityFields(options: {
+  guideName?: string
+  author?: string
+  shortDescription?: string
+}): MatchupGuideFinalizeIdentityField[] {
+  const missing: MatchupGuideFinalizeIdentityField[] = []
+  if (!options.guideName?.trim()) missing.push('guideName')
+  if (!options.author?.trim()) missing.push('author')
+  if (!options.shortDescription?.trim()) missing.push('shortDescription')
+  return missing
+}
+
+export function isMatchupGuideFinalizeIdentityReady(options: {
+  guideName?: string
+  author?: string
+  shortDescription?: string
+}): boolean {
+  return getMissingFinalizeIdentityFields(options).length === 0
+}
+
+export function canSaveMatchupGuide(
+  context: MatchupGuideStepAccessContext & {
+    guideName?: string
+    author?: string
+    shortDescription?: string
+  }
+): boolean {
+  return (
+    canOpenFinalizeGuideStep(context) &&
+    context.hasChampion &&
+    isMatchupGuideFinalizeIdentityReady(context)
+  )
+}
+
 export function canNavigateToMatchupGuideStep(
   step: MatchupGuideDraftStep,
   context: MatchupGuideStepAccessContext

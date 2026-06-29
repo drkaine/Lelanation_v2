@@ -1,6 +1,6 @@
 <template>
   <div class="matchup-guide-creator min-h-screen text-text">
-    <div class="mx-auto max-w-3xl px-2">
+    <div class="max-w-8xl mx-auto px-2">
       <div class="mb-3">
         <MatchupGuideBuildMenuSteps current-step="finalize" :has-champion="hasChampion" />
       </div>

@@ -30,8 +30,9 @@ import { useMatchupGuideStore } from '~/stores/MatchupGuideStore'
 import { useLayoutScaled } from '~/composables/useLayoutScaled'
 import {
   areAllMatchupsFinalizeReady,
-  canOpenFinalizeGuideStep,
   buildMatchupGuideStepAccessContext,
+  canSaveMatchupGuide,
+  getMissingFinalizeIdentityFields,
   MATCHUP_GUIDE_MIN_OPPONENTS_FOR_WRITE,
 } from '~/utils/matchupGuideCreateSteps'
 
@@ -53,8 +54,19 @@ const stepContext = computed(() =>
   })
 )
 
-const canSave = computed(
-  () => canOpenFinalizeGuideStep(stepContext.value) && Boolean(buildStore.currentBuild?.champion)
+const identityFields = computed(() => ({
+  guideName: buildStore.currentBuild?.name,
+  author: buildStore.currentBuild?.author,
+  shortDescription: draftStore.meta.shortDescription,
+}))
+
+const missingIdentityFields = computed(() => getMissingFinalizeIdentityFields(identityFields.value))
+
+const canSave = computed(() =>
+  canSaveMatchupGuide({
+    ...stepContext.value,
+    ...identityFields.value,
+  })
 )
 
 const saveHint = computed(() => {
@@ -64,6 +76,9 @@ const saveHint = computed(() => {
   }
   if (!areAllMatchupsFinalizeReady(draftStore.matchupEntries)) {
     return t('matchupGuideCreate.finalizeUnlockHint')
+  }
+  if (missingIdentityFields.value.length > 0) {
+    return t('matchupGuideCreate.finalizeMissingIdentity')
   }
   return t('matchupGuideCreate.rankAtLeastTen')
 })
@@ -111,7 +126,7 @@ async function handleSave() {
 
 .matchup-guide-save-hint {
   margin: 0;
-  max-width: 300px;
+  max-width: 420px;
   text-align: center;
   font-size: 0.75rem;
   color: rgb(var(--rgb-text) / 0.65);

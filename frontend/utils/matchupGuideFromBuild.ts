@@ -48,6 +48,7 @@ export function buildMatchupGuideFromDraft(
 ): MatchupGuide {
   const now = new Date().toISOString()
   const description = build.description?.trim() ?? ''
+  const shortDescription = meta?.shortDescription?.trim() ?? ''
   const role = (build.roles?.[0] ?? 'mid') as Role
   const tags = (build.tags ?? []).filter(
     (tag): tag is MatchupGuideTag => tag === 'pro' || tag === 'otp'
@@ -59,8 +60,8 @@ export function buildMatchupGuideFromDraft(
   return {
     id: guideId,
     author: build.author,
-    shortDescription: description
-      ? truncateMatchupGuideText(description, MATCHUP_GUIDE_SHORT_DESCRIPTION_MAX)
+    shortDescription: shortDescription
+      ? truncateMatchupGuideText(shortDescription, MATCHUP_GUIDE_SHORT_DESCRIPTION_MAX)
       : undefined,
     description: description || undefined,
     visibility,

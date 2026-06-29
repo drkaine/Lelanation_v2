@@ -22,14 +22,25 @@
 </template>
 
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import MatchupGuideBuildMenuSteps from '~/components/matchups/MatchupGuideBuildMenuSteps.vue'
 import MatchupGuideMatchupDetailEditor from '~/components/matchups/MatchupGuideMatchupDetailEditor.vue'
 import MatchupGuideMatchupTargetSelector from '~/components/matchups/MatchupGuideMatchupTargetSelector.vue'
+import { useMatchupGuideDraftStore } from '~/stores/MatchupGuideDraftStore'
 
 defineProps<{
   isStreamerMode: boolean
   hasChampion: boolean
 }>()
+
+const draftStore = useMatchupGuideDraftStore()
+
+onMounted(() => {
+  draftStore.hydrateFromStorage()
+  draftStore.ensureDefaultCohortAssignments()
+  draftStore.reconcileCohortColors()
+  draftStore.syncSelectedOpponentIds()
+})
 </script>
 
 <style scoped>

@@ -14,6 +14,13 @@ import {
   type MatchupCopyFieldKey,
 } from '~/utils/matchupEntryUtils'
 import {
+  DEFAULT_MATCHUP_COHORT_COLOR,
+  buildOpponentCohortColorsForEntries,
+  hasAnyCohortAssignments,
+  normalizeActiveCohortColor,
+  normalizeOpponentCohortColors,
+} from '~/utils/matchupGuideCohorts'
+import {
   areAllMatchupsFinalizeReady,
   inferMaxReachedStep,
   MATCHUP_GUIDE_MIN_OPPONENTS_FOR_WRITE,
@@ -40,6 +47,9 @@ type MatchupGuideDraftSnapshot = {
   meta: MatchupGuideMeta
   selectedOpponentIds: string[]
   savedOpponentIds: string[]
+  opponentCohortColors: Record<string, string>
+  activeCohortColor: string
+  soloSelectedOpponentIds: string[]
 }
 
 function newGuideId(): string {
@@ -69,9 +79,12 @@ function normalizeMeta(value: unknown): MatchupGuideMeta {
       )
     : undefined
   return {
+    shortDescription: typeof raw.shortDescription === 'string' ? raw.shortDescription : undefined,
     permabanNotes: typeof raw.permabanNotes === 'string' ? raw.permabanNotes : undefined,
     generalBuildNotes:
       typeof raw.generalBuildNotes === 'string' ? raw.generalBuildNotes : undefined,
+    authorAbout: typeof raw.authorAbout === 'string' ? raw.authorAbout : undefined,
+    opggUrl: typeof raw.opggUrl === 'string' ? raw.opggUrl : undefined,
     socialLinks: socialLinks?.length ? socialLinks : undefined,
   }
 }
@@ -145,6 +158,40 @@ function migrateLegacySnapshot(parsed: Record<string, unknown>): MatchupGuideDra
     maxReachedStep = resolvedLastStep
   }
 
+  let opponentCohortColors = normalizeOpponentCohortColors(parsed.opponentCohortColors)
+  const activeCohortColor = normalizeActiveCohortColor(parsed.activeCohortColor)
+
+  for (const id of selectedOpponentIds) {
+    if (matchupEntries.some(entry => entry.opponent.id === id) && !opponentCohortColors[id]) {
+      opponentCohortColors[id] = activeCohortColor
+    }
+  }
+
+  if (matchupEntries.length > 0 && !hasAnyCohortAssignments(opponentCohortColors)) {
+    opponentCohortColors = buildOpponentCohortColorsForEntries(
+      matchupEntries.map(entry => entry.opponent.id),
+      activeCohortColor
+    )
+  }
+
+  opponentCohortColors = normalizeOpponentCohortColors(opponentCohortColors)
+
+  let soloSelectedOpponentIds: string[] = []
+  if (Array.isArray(parsed.soloSelectedOpponentIds)) {
+    soloSelectedOpponentIds = parsed.soloSelectedOpponentIds.filter(
+      (id): id is string => typeof id === 'string'
+    )
+  }
+
+  soloSelectedOpponentIds = soloSelectedOpponentIds.filter(id =>
+    matchupEntries.some(entry => entry.opponent.id === id)
+  )
+
+  selectedOpponentIds = matchupEntries
+    .filter(entry => opponentCohortColors[entry.opponent.id] === activeCohortColor)
+    .map(entry => entry.opponent.id)
+  selectedOpponentIds = [...new Set([...selectedOpponentIds, ...soloSelectedOpponentIds])]
+
   return {
     guideId: parsed.guideId,
     matchupEntries,
@@ -154,6 +201,9 @@ function migrateLegacySnapshot(parsed: Record<string, unknown>): MatchupGuideDra
     meta,
     selectedOpponentIds,
     savedOpponentIds,
+    opponentCohortColors,
+    activeCohortColor,
+    soloSelectedOpponentIds,
   }
 }
 
@@ -192,6 +242,10 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
     meta: {} as MatchupGuideMeta,
     selectedOpponentIds: [] as string[],
     savedOpponentIds: [] as string[],
+    opponentCohortColors: {} as Record<string, string>,
+    activeCohortColor: DEFAULT_MATCHUP_COHORT_COLOR,
+    soloSelectedOpponentIds: [] as string[],
+    previewOpponentId: null as string | null,
     hydrated: false,
   }),
 
@@ -203,9 +257,26 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
       return new Set(state.matchupEntries.map(entry => entry.opponent.id))
     },
     selectedEntries(state): MatchupEntry[] {
-      if (state.selectedOpponentIds.length === 0) return []
-      const ids = new Set(state.selectedOpponentIds)
-      return state.matchupEntries.filter(entry => ids.has(entry.opponent.id))
+      const activeIds = new Set<string>([
+        ...state.soloSelectedOpponentIds,
+        ...state.matchupEntries
+          .filter(
+            entry => state.opponentCohortColors[entry.opponent.id] === state.activeCohortColor
+          )
+          .map(entry => entry.opponent.id),
+      ])
+      return state.matchupEntries.filter(entry => activeIds.has(entry.opponent.id))
+    },
+    activeEditOpponentIds(state): string[] {
+      const cohortIds = state.matchupEntries
+        .filter(entry => state.opponentCohortColors[entry.opponent.id] === state.activeCohortColor)
+        .map(entry => entry.opponent.id)
+      return [...new Set([...state.soloSelectedOpponentIds, ...cohortIds])]
+    },
+    activeCohortOpponentIds(state): string[] {
+      return state.matchupEntries
+        .filter(entry => state.opponentCohortColors[entry.opponent.id] === state.activeCohortColor)
+        .map(entry => entry.opponent.id)
     },
     savedOpponentIdSet(state): Set<string> {
       return new Set(state.savedOpponentIds)
@@ -238,7 +309,59 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
         meta: this.meta,
         selectedOpponentIds: this.selectedOpponentIds,
         savedOpponentIds: this.savedOpponentIds,
+        opponentCohortColors: this.opponentCohortColors,
+        activeCohortColor: this.activeCohortColor,
+        soloSelectedOpponentIds: this.soloSelectedOpponentIds,
       }
+    },
+
+    syncSelectedOpponentIds() {
+      this.selectedOpponentIds = this.activeEditOpponentIds
+    },
+
+    isOpponentInActiveSelection(opponentId: string): boolean {
+      if (this.soloSelectedOpponentIds.includes(opponentId)) return true
+      return this.opponentCohortColors[opponentId] === this.activeCohortColor
+    },
+
+    clearOpponentAssignment(opponentId: string) {
+      this.soloSelectedOpponentIds = this.soloSelectedOpponentIds.filter(id => id !== opponentId)
+      if (this.opponentCohortColors[opponentId]) {
+        const next = { ...this.opponentCohortColors }
+        delete next[opponentId]
+        this.opponentCohortColors = next
+      }
+    },
+
+    reconcileCohortColors() {
+      const previousColors = { ...this.opponentCohortColors }
+      const stripped = normalizeOpponentCohortColors(this.opponentCohortColors)
+      const nextSolos = [...this.soloSelectedOpponentIds]
+
+      for (const [opponentId, color] of Object.entries(previousColors)) {
+        if (stripped[opponentId]) continue
+        if (color === this.activeCohortColor && !nextSolos.includes(opponentId)) {
+          nextSolos.push(opponentId)
+        }
+      }
+
+      this.opponentCohortColors = stripped
+      this.soloSelectedOpponentIds = nextSolos.filter(id =>
+        this.matchupEntries.some(entry => entry.opponent.id === id)
+      )
+    },
+
+    ensureDefaultCohortAssignments(): boolean {
+      if (this.matchupEntries.length === 0) return false
+      if (hasAnyCohortAssignments(this.opponentCohortColors)) return false
+
+      this.opponentCohortColors = buildOpponentCohortColorsForEntries(
+        this.matchupEntries.map(entry => entry.opponent.id),
+        this.activeCohortColor
+      )
+      this.syncSelectedOpponentIds()
+      this.persist()
+      return true
     },
 
     persist() {
@@ -268,9 +391,12 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
       this.savedOpponentIds = snapshot.savedOpponentIds.filter(id =>
         this.matchupEntries.some(entry => entry.opponent.id === id)
       )
-      if (this.selectedOpponentIds.length === 0 && this.matchupEntries[0]) {
-        this.selectedOpponentIds = [this.matchupEntries[0].opponent.id]
-      }
+      this.opponentCohortColors = snapshot.opponentCohortColors
+      this.activeCohortColor = snapshot.activeCohortColor
+      this.soloSelectedOpponentIds = snapshot.soloSelectedOpponentIds
+      this.ensureDefaultCohortAssignments()
+      this.reconcileCohortColors()
+      this.syncSelectedOpponentIds()
       this.hydrated = true
     },
 
@@ -292,24 +418,101 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
     },
 
     setSelectedOpponents(opponentIds: string[]) {
-      this.selectedOpponentIds = opponentIds.filter(id =>
+      for (const entry of this.matchupEntries) {
+        if (this.isOpponentInActiveSelection(entry.opponent.id)) {
+          this.clearOpponentAssignment(entry.opponent.id)
+        }
+      }
+
+      const validIds = opponentIds.filter(id =>
         this.matchupEntries.some(entry => entry.opponent.id === id)
       )
-      if (this.selectedOpponentIds.length === 0 && this.matchupEntries[0]) {
-        this.selectedOpponentIds = [this.matchupEntries[0].opponent.id]
+
+      if (validIds.length >= 2) {
+        const next = { ...this.opponentCohortColors }
+        for (const id of validIds) {
+          next[id] = this.activeCohortColor
+        }
+        this.opponentCohortColors = next
+        this.soloSelectedOpponentIds = []
+      } else if (validIds.length === 1) {
+        this.soloSelectedOpponentIds = [validIds[0]]
+      } else {
+        this.soloSelectedOpponentIds = []
       }
+
+      this.reconcileCohortColors()
+      this.previewOpponentId = null
+      this.syncSelectedOpponentIds()
       this.persist()
     },
 
     toggleSelectedOpponent(opponentId: string) {
-      const ids = new Set(this.selectedOpponentIds)
-      if (ids.has(opponentId)) ids.delete(opponentId)
-      else ids.add(opponentId)
-      this.selectedOpponentIds = [...ids]
-      if (this.selectedOpponentIds.length === 0 && this.matchupEntries[0]) {
-        this.selectedOpponentIds = [this.matchupEntries[0].opponent.id]
+      if (this.isOpponentInActiveSelection(opponentId)) {
+        this.removeOpponentFromActiveSelection(opponentId)
+        return
       }
+      this.addOpponentToCohort(opponentId)
+    },
+
+    setActiveCohortColor(color: string) {
+      this.ensureGuideId()
+      this.activeCohortColor = normalizeActiveCohortColor(color)
+      this.soloSelectedOpponentIds = []
+      this.previewOpponentId = null
+      this.syncSelectedOpponentIds()
       this.persist()
+    },
+
+    addOpponentToCohort(opponentId: string) {
+      this.ensureGuideId()
+      if (!this.matchupEntries.some(entry => entry.opponent.id === opponentId)) return
+
+      this.clearOpponentAssignment(opponentId)
+      this.reconcileCohortColors()
+
+      const cohortIds = this.activeCohortOpponentIds.filter(id => id !== opponentId)
+      const soloIds = this.soloSelectedOpponentIds.filter(id => id !== opponentId)
+      const bucket = [...new Set([...cohortIds, ...soloIds, opponentId])]
+
+      if (bucket.length >= 2) {
+        const next = { ...this.opponentCohortColors }
+        for (const id of bucket) {
+          next[id] = this.activeCohortColor
+        }
+        this.opponentCohortColors = next
+        this.soloSelectedOpponentIds = this.soloSelectedOpponentIds.filter(
+          id => !bucket.includes(id)
+        )
+      } else {
+        this.soloSelectedOpponentIds = [opponentId]
+      }
+
+      this.reconcileCohortColors()
+      this.previewOpponentId = null
+      this.syncSelectedOpponentIds()
+      this.persist()
+    },
+
+    removeOpponentFromActiveSelection(opponentId: string) {
+      if (!this.isOpponentInActiveSelection(opponentId)) return
+
+      this.clearOpponentAssignment(opponentId)
+      this.reconcileCohortColors()
+
+      if (this.previewOpponentId === opponentId) {
+        this.previewOpponentId = null
+      }
+      this.syncSelectedOpponentIds()
+      this.persist()
+    },
+
+    removeOpponentFromCohort(opponentId: string) {
+      this.removeOpponentFromActiveSelection(opponentId)
+    },
+
+    setPreviewOpponent(opponentId: string | null) {
+      this.previewOpponentId = opponentId
     },
 
     updateMeta(patch: Partial<MatchupGuideMeta>) {
@@ -328,16 +531,18 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
     },
 
     updateSelectedMatchupEntries(patch: Partial<Omit<MatchupEntry, 'opponent'>>) {
-      const ids = new Set(this.selectedOpponentIds)
-      if (ids.size === 0) return
+      const activeIds = new Set(this.activeEditOpponentIds)
+      if (activeIds.size === 0) return
       this.matchupEntries = this.matchupEntries.map(entry =>
-        ids.has(entry.opponent.id) ? syncMatchupEntryLegacyFields({ ...entry, ...patch }) : entry
+        activeIds.has(entry.opponent.id)
+          ? syncMatchupEntryLegacyFields({ ...entry, ...patch })
+          : entry
       )
       this.persist()
     },
 
     markSelectedAsSaved(): 'saved' | 'advanced' | 'all_done' | 'none' {
-      const ids = this.selectedOpponentIds.filter(id =>
+      const ids = this.activeEditOpponentIds.filter(id =>
         this.matchupEntries.some(entry => entry.opponent.id === id)
       )
       if (!ids.length) return 'none'
@@ -353,9 +558,7 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
       this.savedOpponentIds = [...saved]
 
       const next = this.matchupEntries.find(entry => !saved.has(entry.opponent.id))
-      if (next) {
-        this.selectedOpponentIds = [next.opponent.id]
-      }
+      this.previewOpponentId = null
 
       this.persist()
       if (!next) return 'all_done'
@@ -394,6 +597,10 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
           this.matchupEntries = []
           this.selectedOpponentIds = []
           this.savedOpponentIds = []
+          this.opponentCohortColors = {}
+          this.activeCohortColor = DEFAULT_MATCHUP_COHORT_COLOR
+          this.soloSelectedOpponentIds = []
+          this.previewOpponentId = null
           this.maxReachedStep = 'champion'
           this.persist()
         }
@@ -411,6 +618,10 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
         this.matchupEntries = []
         this.selectedOpponentIds = []
         this.savedOpponentIds = []
+        this.opponentCohortColors = {}
+        this.activeCohortColor = DEFAULT_MATCHUP_COHORT_COLOR
+        this.soloSelectedOpponentIds = []
+        this.previewOpponentId = null
         this.maxReachedStep = 'champion'
         this.persist()
       }
@@ -425,6 +636,10 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
       this.meta = {}
       this.selectedOpponentIds = []
       this.savedOpponentIds = []
+      this.opponentCohortColors = {}
+      this.activeCohortColor = DEFAULT_MATCHUP_COHORT_COLOR
+      this.soloSelectedOpponentIds = []
+      this.previewOpponentId = null
       this.hydrated = true
       this.persist()
     },
@@ -440,7 +655,6 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
     addOpponent(opponent: ChampionRef) {
       if (this.matchupEntries.some(e => e.opponent.id === opponent.id)) return
       this.matchupEntries.push(createEmptyMatchupEntry(opponent))
-      this.selectedOpponentIds = [opponent.id]
       this.persist()
     },
 
@@ -448,9 +662,12 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
       this.matchupEntries = this.matchupEntries.filter(e => e.opponent.id !== opponentId)
       this.selectedOpponentIds = this.selectedOpponentIds.filter(id => id !== opponentId)
       this.savedOpponentIds = this.savedOpponentIds.filter(id => id !== opponentId)
-      if (this.selectedOpponentIds.length === 0 && this.matchupEntries[0]) {
-        this.selectedOpponentIds = [this.matchupEntries[0].opponent.id]
+      this.clearOpponentAssignment(opponentId)
+      this.reconcileCohortColors()
+      if (this.previewOpponentId === opponentId) {
+        this.previewOpponentId = null
       }
+      this.syncSelectedOpponentIds()
       this.persist()
     },
 
@@ -494,6 +711,10 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
       this.meta = {}
       this.selectedOpponentIds = []
       this.savedOpponentIds = []
+      this.opponentCohortColors = {}
+      this.activeCohortColor = DEFAULT_MATCHUP_COHORT_COLOR
+      this.soloSelectedOpponentIds = []
+      this.previewOpponentId = null
       this.hydrated = true
       writeDraftSnapshot(null)
     },
@@ -502,9 +723,16 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
       this.guideId = guide.id
       this.matchupEntries = matchupEntriesFromGuide(guide)
       this.guideChampionId = guide.champion?.id ?? null
-      this.meta = guide.meta ?? {}
-      this.selectedOpponentIds = this.matchupEntries[0] ? [this.matchupEntries[0].opponent.id] : []
+      this.meta = normalizeMeta({
+        ...guide.meta,
+        shortDescription: guide.meta?.shortDescription ?? guide.shortDescription,
+      })
+      this.selectedOpponentIds = []
       this.savedOpponentIds = []
+      this.opponentCohortColors = {}
+      this.activeCohortColor = DEFAULT_MATCHUP_COHORT_COLOR
+      this.soloSelectedOpponentIds = []
+      this.previewOpponentId = null
       this.lastStep =
         this.matchupEntries.length >= MATCHUP_GUIDE_MIN_OPPONENTS_FOR_WRITE
           ? 'finalize'

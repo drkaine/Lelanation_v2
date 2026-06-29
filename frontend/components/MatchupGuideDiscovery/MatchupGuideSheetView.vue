@@ -153,6 +153,21 @@
     />
 
     <div v-if="variant === 'detail' && hasMetaNotes" class="matchup-sheet__meta">
+      <section v-if="guide.meta?.authorAbout" class="matchup-sheet__meta-block">
+        <h4 class="matchup-sheet__meta-title">{{ t('matchupGuideDiscovery.authorAbout') }}</h4>
+        <p class="matchup-sheet__meta-text">{{ guide.meta.authorAbout }}</p>
+      </section>
+      <section v-if="guide.meta?.opggUrl" class="matchup-sheet__meta-block">
+        <h4 class="matchup-sheet__meta-title">{{ t('matchupGuideDiscovery.opggProfile') }}</h4>
+        <a
+          :href="guide.meta.opggUrl"
+          class="matchup-sheet__meta-link"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {{ guide.meta.opggUrl }}
+        </a>
+      </section>
       <section v-if="guide.meta?.permabanNotes" class="matchup-sheet__meta-block">
         <h4 class="matchup-sheet__meta-title">{{ t('matchupGuideDiscovery.permabanNotes') }}</h4>
         <p class="matchup-sheet__meta-text">{{ guide.meta.permabanNotes }}</p>
@@ -323,6 +338,8 @@ const guideBuild = computed(() => {
 
 const hasMetaNotes = computed(
   () =>
+    Boolean(props.guide.meta?.authorAbout?.trim()) ||
+    Boolean(props.guide.meta?.opggUrl?.trim()) ||
     Boolean(props.guide.meta?.permabanNotes?.trim()) ||
     Boolean(props.guide.meta?.generalBuildNotes?.trim())
 )
@@ -765,8 +782,15 @@ function formatPhaseCell(entry: MatchupEntry, phase: 'early' | 'mid' | 'late'): 
   margin: 0;
   font-size: 0.82rem;
   line-height: 1.45;
+  color: rgb(var(--rgb-text));
   white-space: pre-wrap;
-  color: rgb(var(--rgb-text) / 0.85);
+}
+
+.matchup-sheet__meta-link {
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: rgb(var(--rgb-text-accent));
+  word-break: break-all;
 }
 
 .matchup-sheet__table-section {

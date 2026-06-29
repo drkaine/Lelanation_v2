@@ -68,8 +68,11 @@ export interface MatchupEntry {
 
 /** Guide-level notes (permaban, general builds, socials…). */
 export interface MatchupGuideMeta {
+  shortDescription?: string
   permabanNotes?: string
   generalBuildNotes?: string
+  authorAbout?: string
+  opggUrl?: string
   socialLinks?: string[]
 }
 

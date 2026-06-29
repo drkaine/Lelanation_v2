@@ -1,5 +1,27 @@
 <template>
-  <section v-if="hasSelection" class="matchup-detail-editor">
+  <section v-if="previewEntry" class="matchup-detail-editor">
+    <header class="matchup-detail-editor__header">
+      <div class="matchup-detail-editor__header-row">
+        <div class="matchup-detail-editor__header-start">
+          <h3 class="matchup-detail-editor__title">{{ previewEntry.opponent.name }}</h3>
+          <p class="matchup-detail-editor__subtitle">
+            {{ t('matchupGuideCreate.previewModeHint') }}
+          </p>
+        </div>
+        <p class="matchup-detail-editor__progress">
+          {{
+            t('matchupGuideCreate.finalizeProgress', {
+              ready: finalizeReadyCount,
+              total: totalEntries,
+            })
+          }}
+        </p>
+      </div>
+    </header>
+    <MatchupGuideMatchupFilledPreview :entry="previewEntry" />
+  </section>
+
+  <section v-else-if="hasSelection" class="matchup-detail-editor">
     <header class="matchup-detail-editor__header">
       <div class="matchup-detail-editor__header-row">
         <div class="matchup-detail-editor__header-start">
@@ -34,156 +56,186 @@
       <p v-else-if="saveMessage" class="matchup-detail-editor__save-message">{{ saveMessage }}</p>
     </header>
 
-    <div
-      class="matchup-detail-editor__section"
-      :class="{ 'matchup-detail-editor__section--missing': isFieldMissing('difficulty') }"
-    >
-      <span class="matchup-detail-editor__label">{{
-        t('matchupGuideCreate.fieldDifficulty')
-      }}</span>
-      <div class="matchup-detail-editor__mode-row">
-        <button
-          v-for="mode in DIFFICULTY_MODES"
-          :key="mode"
-          type="button"
-          class="matchup-detail-editor__chip"
-          :class="{ 'matchup-detail-editor__chip--active': difficultyMode === mode }"
-          @click="patch({ difficultyMode: mode })"
-        >
-          {{ t(`matchupGuideCreate.difficultyMode.${mode}`) }}
-        </button>
-      </div>
-      <div v-if="difficultyMode === 'score'" class="matchup-detail-editor__score-row">
-        <input
-          type="range"
-          min="1"
-          max="10"
-          step="1"
-          :value="difficultyScore ?? 5"
-          @input="
-            patch({
-              difficultyScore: Number(($event.target as HTMLInputElement).value),
-              difficultyMode: 'score',
-            })
-          "
-        />
-        <span class="matchup-detail-editor__score-value">{{ difficultyScore ?? '—' }}/10</span>
-      </div>
-      <div v-else class="matchup-detail-editor__chip-row">
-        <button
-          v-for="band in DIFFICULTY_BANDS"
-          :key="band"
-          type="button"
-          class="matchup-detail-editor__chip"
-          :class="{ 'matchup-detail-editor__chip--active': difficultyBand === band }"
-          @click="patch({ difficultyBand: band, difficultyMode: 'band' })"
-        >
-          {{ t(`matchupGuideCreate.difficultyBand.${band}`) }}
-        </button>
-      </div>
-    </div>
-
-    <div class="matchup-detail-editor__section">
-      <span class="matchup-detail-editor__label">{{ t('matchupGuideCreate.fieldOutcome') }}</span>
-      <div class="matchup-detail-editor__chip-row">
-        <button
-          v-for="kind in OUTCOME_KINDS"
-          :key="kind"
-          type="button"
-          class="matchup-detail-editor__chip"
-          :class="{ 'matchup-detail-editor__chip--active': outcomeKind === kind }"
-          @click="patch({ outcomeKind: kind })"
-        >
-          {{ t(`matchupGuideCreate.outcomeKind.${kind}`) }}
-        </button>
-      </div>
-      <div v-if="outcomeKind === 'skill'" class="matchup-detail-editor__chip-row">
-        <span class="matchup-detail-editor__sub-label">{{
-          t('matchupGuideCreate.skillFavorLabel')
+    <div class="matchup-detail-editor__sections">
+      <div
+        class="matchup-detail-editor__section"
+        :class="{ 'matchup-detail-editor__section--missing': isFieldMissing('difficulty') }"
+      >
+        <span class="matchup-detail-editor__label">{{
+          t('matchupGuideCreate.fieldDifficulty')
         }}</span>
-        <button
-          v-for="favor in SKILL_FAVORS"
-          :key="favor"
-          type="button"
-          class="matchup-detail-editor__chip"
-          :class="{ 'matchup-detail-editor__chip--active': skillFavor === favor }"
-          @click="patch({ skillFavor: favor, outcomeKind: 'skill' })"
-        >
-          {{ t(`matchupGuideCreate.skillFavor.${favor}`) }}
-        </button>
+        <div class="matchup-detail-editor__mode-row">
+          <button
+            v-for="mode in DIFFICULTY_MODES"
+            :key="mode"
+            type="button"
+            class="matchup-detail-editor__chip"
+            :class="{ 'matchup-detail-editor__chip--active': difficultyMode === mode }"
+            @click="patch({ difficultyMode: mode })"
+          >
+            {{ t(`matchupGuideCreate.difficultyMode.${mode}`) }}
+          </button>
+        </div>
+        <div v-if="difficultyMode === 'score'" class="matchup-detail-editor__score-row">
+          <input
+            type="range"
+            min="1"
+            max="10"
+            step="1"
+            :value="difficultyScore ?? 5"
+            @input="
+              patch({
+                difficultyScore: Number(($event.target as HTMLInputElement).value),
+                difficultyMode: 'score',
+              })
+            "
+          />
+          <span class="matchup-detail-editor__score-value">{{ difficultyScore ?? '—' }}/10</span>
+        </div>
+        <div v-else class="matchup-detail-editor__chip-row">
+          <button
+            v-for="band in DIFFICULTY_BANDS"
+            :key="band"
+            type="button"
+            class="matchup-detail-editor__chip"
+            :class="{ 'matchup-detail-editor__chip--active': difficultyBand === band }"
+            @click="patch({ difficultyBand: band, difficultyMode: 'band' })"
+          >
+            {{ t(`matchupGuideCreate.difficultyBand.${band}`) }}
+          </button>
+        </div>
       </div>
-    </div>
 
-    <div
-      class="matchup-detail-editor__section"
-      :class="{ 'matchup-detail-editor__section--missing': isFieldMissing('build') }"
-    >
-      <span class="matchup-detail-editor__label">{{
-        t('matchupGuideCreate.fieldBuildVariant')
-      }}</span>
-      <MatchupGuideBuildVariantPicker
-        :model-value="buildVariants"
-        :invalid="isFieldMissing('build')"
-        @update:model-value="onBuildVariantsChange"
-      />
-    </div>
-
-    <div class="matchup-detail-editor__section">
-      <MatchupGuidePowerSpikeEditor
-        :model-value="powerSpike"
-        @update:model-value="onPowerSpikeChange"
-      />
-    </div>
-
-    <div
-      v-for="phase in PHASES"
-      :key="phase.id"
-      class="matchup-detail-editor__section matchup-detail-editor__phase"
-    >
-      <span class="matchup-detail-editor__label">{{
-        t(`matchupGuideCreate.phase.${phase.id}`)
-      }}</span>
-      <div class="matchup-detail-editor__chip-row">
-        <button
-          v-for="tag in PHASE_TAGS"
-          :key="`${phase.id}-${tag}`"
-          type="button"
-          class="matchup-detail-editor__chip matchup-detail-editor__chip--small"
-          :class="{ 'matchup-detail-editor__chip--active': hasPhaseTag(phase.id, tag) }"
-          @click="togglePhaseTag(phase.id, tag)"
-        >
-          {{ t(`matchupGuideCreate.phaseTag.${tag}`) }}
-        </button>
+      <div class="matchup-detail-editor__section">
+        <span class="matchup-detail-editor__label">{{ t('matchupGuideCreate.fieldOutcome') }}</span>
+        <div class="matchup-detail-editor__chip-row">
+          <button
+            v-for="kind in OUTCOME_KINDS"
+            :key="kind"
+            type="button"
+            class="matchup-detail-editor__chip"
+            :class="{ 'matchup-detail-editor__chip--active': outcomeKind === kind }"
+            @click="patch({ outcomeKind: kind })"
+          >
+            {{ t(`matchupGuideCreate.outcomeKind.${kind}`) }}
+          </button>
+        </div>
+        <div v-if="outcomeKind === 'skill'" class="matchup-detail-editor__chip-row">
+          <span class="matchup-detail-editor__sub-label">{{
+            t('matchupGuideCreate.skillFavorLabel')
+          }}</span>
+          <button
+            v-for="favor in SKILL_FAVORS"
+            :key="favor"
+            type="button"
+            class="matchup-detail-editor__chip"
+            :class="{ 'matchup-detail-editor__chip--active': skillFavor === favor }"
+            @click="patch({ skillFavor: favor, outcomeKind: 'skill' })"
+          >
+            {{ t(`matchupGuideCreate.skillFavor.${favor}`) }}
+          </button>
+        </div>
       </div>
-      <textarea
-        rows="2"
-        :value="phaseNotes(phase.id)"
-        :placeholder="t('matchupGuideCreate.phaseNotesPlaceholder')"
-        @input="setPhaseNotes(phase.id, ($event.target as HTMLTextAreaElement).value)"
-      />
-    </div>
 
-    <label
-      class="matchup-detail-editor__field"
-      :class="{ 'matchup-detail-editor__field--missing': isFieldMissing('comments') }"
-    >
-      <span>{{ t('matchupGuideCreate.fieldComments') }}</span>
-      <textarea
-        rows="4"
-        :value="comments"
-        :placeholder="t('matchupGuideCreate.fieldCommentsPlaceholder')"
-        @input="patch({ comments: ($event.target as HTMLTextAreaElement).value || undefined })"
-      />
-    </label>
+      <div
+        class="matchup-detail-editor__section"
+        :class="{ 'matchup-detail-editor__section--missing': isFieldMissing('build') }"
+      >
+        <span class="matchup-detail-editor__label">{{
+          t('matchupGuideCreate.fieldBuildVariant')
+        }}</span>
+        <MatchupGuideBuildVariantPicker
+          :model-value="buildVariants"
+          :invalid="isFieldMissing('build')"
+          @update:model-value="onBuildVariantsChange"
+        />
+      </div>
+
+      <div class="matchup-detail-editor__section">
+        <MatchupGuidePowerSpikeEditor
+          :model-value="powerSpike"
+          @update:model-value="onPowerSpikeChange"
+        />
+      </div>
+
+      <div
+        v-for="phase in PHASES"
+        :key="phase.id"
+        class="matchup-detail-editor__section matchup-detail-editor__phase"
+      >
+        <span class="matchup-detail-editor__label">{{
+          t(`matchupGuideCreate.phase.${phase.id}`)
+        }}</span>
+        <div class="matchup-detail-editor__chip-row">
+          <button
+            v-for="tag in PHASE_TAGS"
+            :key="`${phase.id}-${tag}`"
+            type="button"
+            class="matchup-detail-editor__chip matchup-detail-editor__chip--small"
+            :class="{ 'matchup-detail-editor__chip--active': hasPhaseTag(phase.id, tag) }"
+            @click="togglePhaseTag(phase.id, tag)"
+          >
+            {{ t(`matchupGuideCreate.phaseTag.${tag}`) }}
+          </button>
+        </div>
+        <textarea
+          rows="2"
+          :value="phaseNotes(phase.id)"
+          :placeholder="t('matchupGuideCreate.phaseNotesPlaceholder')"
+          @input="setPhaseNotes(phase.id, ($event.target as HTMLTextAreaElement).value)"
+        />
+      </div>
+
+      <label
+        class="matchup-detail-editor__field"
+        :class="{ 'matchup-detail-editor__field--missing': isFieldMissing('comments') }"
+      >
+        <span>{{ t('matchupGuideCreate.fieldComments') }}</span>
+        <textarea
+          rows="4"
+          :value="comments"
+          :placeholder="t('matchupGuideCreate.fieldCommentsPlaceholder')"
+          @input="patch({ comments: ($event.target as HTMLTextAreaElement).value || undefined })"
+        />
+      </label>
+    </div>
   </section>
 
-  <p v-else class="matchup-detail-editor__empty">
-    {{ t('matchupGuideCreate.selectEntryToEdit') }}
-  </p>
+  <section v-else class="matchup-detail-editor matchup-detail-editor--idle">
+    <header class="matchup-detail-editor__header">
+      <div class="matchup-detail-editor__header-row">
+        <div class="matchup-detail-editor__header-start">
+          <h3 class="matchup-detail-editor__title">
+            {{ t('matchupGuideCreate.cohortColorLabel') }}
+          </h3>
+          <p class="matchup-detail-editor__subtitle">
+            {{ t('matchupGuideCreate.cohortIdleSubtitle') }}
+          </p>
+        </div>
+        <p class="matchup-detail-editor__progress">
+          {{
+            t('matchupGuideCreate.finalizeProgress', {
+              ready: finalizeReadyCount,
+              total: totalEntries,
+            })
+          }}
+        </p>
+      </div>
+    </header>
+    <div class="matchup-detail-editor__idle-cohort">
+      <span
+        class="matchup-detail-editor__idle-swatch"
+        :style="{ backgroundColor: activeCohortColor }"
+        aria-hidden="true"
+      />
+      <p>{{ t('matchupGuideCreate.cohortEmptyHint') }}</p>
+    </div>
+  </section>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import type {
   MatchupBuildVariantPick,
   MatchupEntry,
@@ -193,6 +245,7 @@ import type {
 } from '@lelanation/shared-types'
 import MatchupGuideBuildVariantPicker from '~/components/matchups/MatchupGuideBuildVariantPicker.vue'
 import MatchupGuideMatchupCopyPanel from '~/components/matchups/MatchupGuideMatchupCopyPanel.vue'
+import MatchupGuideMatchupFilledPreview from '~/components/matchups/MatchupGuideMatchupFilledPreview.vue'
 import MatchupGuidePowerSpikeEditor from '~/components/matchups/MatchupGuidePowerSpikeEditor.vue'
 import { useMatchupGuideDraftStore } from '~/stores/MatchupGuideDraftStore'
 import {
@@ -213,10 +266,16 @@ const PHASES = [{ id: 'early' as const }, { id: 'mid' as const }, { id: 'late' a
 
 const { t } = useI18n()
 const draftStore = useMatchupGuideDraftStore()
+const { activeCohortColor, previewOpponentId } = storeToRefs(draftStore)
 const saveMessage = ref('')
 const showValidation = ref(false)
 
 const selectedEntries = computed(() => draftStore.selectedEntries)
+const previewEntry = computed(() => {
+  const id = previewOpponentId.value
+  if (!id) return null
+  return draftStore.matchupEntries.find(entry => entry.opponent.id === id) ?? null
+})
 const hasSelection = computed(() => selectedEntries.value.length > 0)
 const isGroupEdit = computed(() => selectedEntries.value.length > 1)
 const savedIds = computed(() => draftStore.savedOpponentIdSet)
@@ -422,6 +481,18 @@ function markSaved() {
   background: rgb(74 222 128 / 0.32);
 }
 
+.matchup-detail-editor__cohort-button {
+  border: 1px solid rgb(var(--rgb-accent) / 0.55);
+  border-radius: 0.45rem;
+  background: rgb(var(--rgb-accent) / 0.12);
+  padding: 0.38rem 0.65rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: rgb(var(--rgb-text-accent));
+  cursor: pointer;
+  white-space: nowrap;
+}
+
 .matchup-detail-editor__progress {
   margin: 0;
   justify-self: center;
@@ -592,5 +663,43 @@ function markSaved() {
   color: rgb(var(--rgb-text) / 0.6);
   border: 1px dashed rgb(var(--rgb-primary) / 0.35);
   border-radius: 0.75rem;
+}
+
+.matchup-detail-editor--idle {
+  min-height: 12rem;
+}
+
+.matchup-detail-editor__idle-cohort {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px dashed rgb(var(--rgb-primary) / 0.35);
+  border-radius: 0.55rem;
+  padding: 1rem 0.85rem;
+}
+
+.matchup-detail-editor__idle-swatch {
+  width: 1.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  box-shadow:
+    0 0 0 2px rgb(var(--rgb-background)),
+    0 0 0 3px rgb(var(--rgb-text) / 0.2);
+}
+
+.matchup-detail-editor__idle-cohort p {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: rgb(var(--rgb-text) / 0.72);
+}
+
+@media (min-width: 1280px) {
+  .matchup-detail-editor__sections {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.85rem 1.25rem;
+  }
 }
 </style>
