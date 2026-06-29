@@ -25,28 +25,57 @@
     >
       {{ t('matchupGuideCreate.stepMatchups') }}
     </NuxtLink>
+    <span class="arrow" aria-hidden="true"></span>
+    <NuxtLink
+      :to="canOpenWrite ? localePath(stepHref('write')) : '#'"
+      :class="[linkClass('write'), !canOpenWrite ? 'disabled' : '']"
+    >
+      {{ t('matchupGuideCreate.stepWrite') }}
+    </NuxtLink>
+    <span class="arrow" aria-hidden="true"></span>
+    <NuxtLink
+      :to="canOpenFinalize ? localePath(stepHref('finalize')) : '#'"
+      :class="[linkClass('finalize'), !canOpenFinalize ? 'disabled' : '']"
+    >
+      {{ t('matchupGuideCreate.stepFinalize') }}
+    </NuxtLink>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useBuildStore } from '~/stores/BuildStore'
+import { useMatchupGuideDraftStore } from '~/stores/MatchupGuideDraftStore'
 
 const props = defineProps<{
   currentStep: string
   hasChampion: boolean
   canOpenMatchups?: boolean
+  canOpenWrite?: boolean
+  canOpenFinalize?: boolean
 }>()
 
 const { t } = useI18n()
 const route = useRoute()
 const localePath = useLocalePath()
 const buildStore = useBuildStore()
+const draftStore = useMatchupGuideDraftStore()
 
 const canOpenMatchups = computed(() => props.canOpenMatchups ?? buildStore.isBuildValid)
+const canOpenWrite = computed(
+  () => props.canOpenWrite ?? (canOpenMatchups.value && draftStore.matchupEntries.length >= 2)
+)
+const canOpenFinalize = computed(() => props.canOpenFinalize ?? canOpenWrite.value)
 
-function stepHref(step: 'champion' | 'rune' | 'item' | 'info' | 'matchups'): string {
-  return `/matchups/sheets/create/${step}`
+type StepKey = 'champion' | 'rune' | 'item' | 'info' | 'matchups' | 'write' | 'finalize'
+
+function stepHref(step: StepKey): string {
+  const editId = route.query.editId
+  const base = `/matchups/sheets/create/${step}`
+  if (typeof editId === 'string' && editId.length > 0) {
+    return `${base}?editId=${encodeURIComponent(editId)}`
+  }
+  return base
 }
 
 const stepMap = {
@@ -55,11 +84,15 @@ const stepMap = {
   item: 'item',
   info: 'info',
   matchups: 'matchups',
+  write: 'write',
+  finalize: 'finalize',
 } as const
 
 const currentRouteStep = computed(() => {
   const path = route.path
-  if (path.includes('/matchups')) return 'matchups'
+  if (path.includes('/create/finalize')) return 'finalize'
+  if (path.includes('/create/write')) return 'write'
+  if (path.includes('/create/matchups')) return 'matchups'
   if (path.includes('/champion')) return 'champion'
   if (path.includes('/rune')) return 'rune'
   if (path.includes('/item')) return 'item'

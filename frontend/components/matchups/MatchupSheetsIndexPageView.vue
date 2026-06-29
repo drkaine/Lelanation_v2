@@ -55,7 +55,13 @@
               <MatchupGuideFilters />
             </div>
           </div>
-          <MatchupGuideGrid :custom-guides="myGuides" :show-favorite-toggle="true" />
+          <MatchupGuideGrid
+            :custom-guides="myGuides"
+            :show-favorite-toggle="true"
+            :show-user-actions="true"
+            @toggle-visibility="toggleGuideVisibility"
+            @delete-guide="confirmDeleteGuide"
+          />
         </div>
 
         <div v-if="activeTab === 'favoris'" class="tab-content">
@@ -66,6 +72,41 @@
             </div>
           </div>
           <MatchupGuideGrid :custom-guides="favoriteGuides" :show-favorite-toggle="true" />
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="guideToDelete"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black"
+      @click="guideToDelete = null"
+    >
+      <div
+        class="mx-4 w-full max-w-md rounded-lg bg-surface p-6"
+        style="background-color: var(--color-surface); opacity: 1"
+        @click.stop
+      >
+        <h3 class="mb-4 text-lg font-bold text-text">
+          {{ t('matchupGuidePage.deleteGuideTitle') }}
+        </h3>
+        <p class="mb-6 text-text">
+          {{ t('matchupGuidePage.deleteGuideConfirm') }}
+        </p>
+        <div class="flex gap-4">
+          <button
+            type="button"
+            class="rounded-lg bg-error px-4 py-2 text-text transition-colors hover:bg-error/80"
+            @click="deleteGuide"
+          >
+            {{ t('buildsPage.delete') }}
+          </button>
+          <button
+            type="button"
+            class="rounded-lg border border-accent/70 bg-surface px-4 py-2 text-text transition-colors hover:bg-accent/10"
+            @click="guideToDelete = null"
+          >
+            {{ t('buildsPage.cancel') }}
+          </button>
         </div>
       </div>
     </div>
@@ -86,8 +127,19 @@ const props = defineProps<{
   tab: MatchupSheetsTab
 }>()
 
-const { t, isAdmin, activeTab, myGuides, favoriteGuides, setTab, goToCreateGuide } =
-  useMatchupSheetsIndexPage(props.tab)
+const {
+  t,
+  isAdmin,
+  activeTab,
+  myGuides,
+  favoriteGuides,
+  setTab,
+  goToCreateGuide,
+  guideToDelete,
+  confirmDeleteGuide,
+  deleteGuide,
+  toggleGuideVisibility,
+} = useMatchupSheetsIndexPage(props.tab)
 </script>
 
 <style scoped>

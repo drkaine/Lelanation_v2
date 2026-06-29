@@ -44,7 +44,10 @@ const highlightMissingFields = ref(false)
 
 watch(hasChampion, value => {
   if (value && route.path.includes('/matchups/sheets/create/champion')) {
-    router.push(localePath('/matchups/sheets/create/rune'))
+    const query: Record<string, string> = {}
+    const editId = route.query.editId
+    if (typeof editId === 'string' && editId.length > 0) query.editId = editId
+    router.push(localePath({ path: '/matchups/sheets/create/rune', query }))
   }
 })
 

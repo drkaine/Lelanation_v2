@@ -70,7 +70,7 @@
       </button>
 
       <input
-        v-if="!readonly"
+        v-if="!readonly && !isMatchupGuideBuilder"
         :value="cardAuthor"
         type="text"
         maxlength="30"
@@ -79,7 +79,7 @@
         @input="updateCardAuthor(($event.target as HTMLInputElement).value)"
       />
 
-      <div v-if="!readonly" class="card-top-visibility-toggle">
+      <div v-if="!readonly && !isMatchupGuideBuilder" class="card-top-visibility-toggle">
         <button
           type="button"
           class="card-top-visibility-button"
@@ -1887,35 +1887,76 @@ const { isLayoutScaled } = useLayoutScaled()
 const hideTopActions = computed(() => props.hideTopActions)
 
 function regionSelectionClass(region: 'champion' | 'items' | 'runes'): Record<string, boolean> {
+  const selectable = isStepBuilderFlow.value || props.selectionMode === 'theorycraft'
   return {
-    'build-card-region--selectable': props.selectionMode === 'theorycraft',
+    'build-card-region--selectable': selectable,
     'build-card-region--active':
-      props.selectionMode === 'theorycraft' && props.activeSelectionRegion === region,
+      (props.selectionMode === 'theorycraft' && props.activeSelectionRegion === region) ||
+      (isStepBuilderFlow.value && activeBuilderRegion.value === region),
   }
+}
+
+const isStepBuilderFlow = computed(() => {
+  const path = route.path
+  return path.includes('/builds/create/') || path.includes('/matchups/sheets/create/')
+})
+
+const activeBuilderRegion = computed((): 'champion' | 'items' | 'runes' | null => {
+  if (!isStepBuilderFlow.value) return null
+  const path = route.path
+  if (path.includes('/champion')) return 'champion'
+  if (path.includes('/rune')) return 'runes'
+  if (path.includes('/item')) return 'item'
+  return null
+})
+
+function buildCreateQuery(): Record<string, string> {
+  const query: Record<string, string> = {}
+  const editId = route.query.editId ?? buildStore.editSourceBuildId
+  if (typeof editId === 'string' && editId.length > 0) query.editId = editId
+  if (route.query.app === 'on') query.app = 'on'
+  return query
+}
+
+function buildCreateStepPath(step: 'champion' | 'rune' | 'item'): string {
+  if (route.path.includes('/matchups/sheets/create')) {
+    return `/matchups/sheets/create/${step}`
+  }
+  return `/builds/create/${step}`
 }
 
 function onSelectRegion(region: 'champion' | 'items' | 'runes', event?: MouseEvent) {
-  if (props.selectionMode !== 'theorycraft' || props.readonly) return
+  if (props.readonly || props.build) return
+
+  if (props.selectionMode === 'theorycraft') {
+    event?.stopPropagation()
+    emit('select-region', region)
+    return
+  }
+
+  if (!isStepBuilderFlow.value) return
+
   event?.stopPropagation()
-  emit('select-region', region)
+  const step = region === 'champion' ? 'champion' : region === 'runes' ? 'rune' : 'item'
+  navigateTo(localePath({ path: buildCreateStepPath(step), query: buildCreateQuery() }))
 }
 
 const championPortraitNavigatesToSelector = computed(
-  () => !props.readonly && !props.build && props.selectionMode !== 'theorycraft'
+  () =>
+    !props.readonly &&
+    !props.build &&
+    (props.selectionMode === 'theorycraft' || isStepBuilderFlow.value)
 )
 
+function buildCreateChampionPath(): string {
+  return buildCreateStepPath('champion')
+}
+
 function onChampionPortraitClick(event?: MouseEvent) {
-  if (props.selectionMode === 'theorycraft') {
+  if (props.readonly || props.build) return
+  if (props.selectionMode === 'theorycraft' || isStepBuilderFlow.value) {
     onSelectRegion('champion', event)
-    return
   }
-  if (!championPortraitNavigatesToSelector.value) return
-  event?.stopPropagation()
-  const query: Record<string, string> = {}
-  const id = buildStore.editSourceBuildId
-  if (id) query.editId = id
-  if (route.query.app === 'on') query.app = 'on'
-  navigateTo(localePath({ path: '/builds/create/champion', query }))
 }
 
 // Global tooltip preference (shared state via composable)
@@ -2015,8 +2056,12 @@ const canShowCardBack = computed(() => {
   return canShowReadonlyDescription.value || (!props.readonly && hasChampion.value)
 })
 const isBuilderPage = computed(
-  () => route.path.includes('/builds/create') || route.path.includes('/builds/edit/')
+  () =>
+    route.path.includes('/builds/create') ||
+    route.path.includes('/builds/edit/') ||
+    route.path.includes('/matchups/sheets/create')
 )
+const isMatchupGuideBuilder = computed(() => route.path.includes('/matchups/sheets/create'))
 const canEditSkillOrder = computed(
   () =>
     (isBuilderPage.value || props.selectionMode === 'theorycraft') &&
@@ -3527,7 +3572,7 @@ const resetBuild = () => {
   showItemStats.value = false
   buildStore.createNewBuild()
   if (props.selectionMode === 'theorycraft') return
-  navigateTo(localePath('/builds/create/champion'))
+  navigateTo(localePath(buildCreateChampionPath()))
 }
 
 const resetItemsOnly = () => {

@@ -14,17 +14,11 @@
         :class="{ 'matchup-guide-layout--streamer': isStreamerMode }"
       >
         <div class="matchup-guide-selector-col w-full flex-1 md:order-2">
-          <h2 class="mb-3 text-lg font-bold text-text-accent">
-            {{ t('matchupGuideCreate.pickOpponents') }}
-          </h2>
           <MatchupGuideOpponentSelector :exclude-champion-id="guideChampionId" />
         </div>
 
         <div class="matchup-scale-wrapper w-full flex-shrink-0 md:order-1">
-          <MatchupGuideFinalSaveButton />
-          <h2 class="mb-2 text-center text-lg font-bold text-text-accent">
-            {{ t('matchupGuideCreate.matchupScaleTitle') }}
-          </h2>
+          <MatchupGuideContinueToWriteButton />
           <MatchupGuideMatchupScale />
         </div>
       </div>
@@ -34,7 +28,7 @@
 
 <script setup lang="ts">
 import MatchupGuideBuildMenuSteps from '~/components/matchups/MatchupGuideBuildMenuSteps.vue'
-import MatchupGuideFinalSaveButton from '~/components/matchups/MatchupGuideFinalSaveButton.vue'
+import MatchupGuideContinueToWriteButton from '~/components/matchups/MatchupGuideContinueToWriteButton.vue'
 import MatchupGuideMatchupScale from '~/components/matchups/MatchupGuideMatchupScale.vue'
 import MatchupGuideOpponentSelector from '~/components/matchups/MatchupGuideOpponentSelector.vue'
 
@@ -43,8 +37,6 @@ defineProps<{
   hasChampion: boolean
   guideChampionId: string | null
 }>()
-
-const { t } = useI18n()
 </script>
 
 <style scoped>

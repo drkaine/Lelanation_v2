@@ -80,6 +80,19 @@ export const useMatchupGuideStore = defineStore('matchupGuide', {
       }
     },
 
+    toggleGuideVisibility(guideId: string): Promise<boolean> {
+      if (import.meta.server) return Promise.resolve(false)
+
+      const savedGuides = this.getSavedGuides()
+      const existing = savedGuides.find(g => g.id === guideId)
+      if (!existing) return Promise.resolve(false)
+
+      const nextVisibility: 'public' | 'private' =
+        (existing.visibility ?? 'public') === 'private' ? 'public' : 'private'
+
+      return this.saveGuide({ ...existing, visibility: nextVisibility })
+    },
+
     async deleteGuide(guideId: string): Promise<boolean> {
       if (import.meta.server) return false
 

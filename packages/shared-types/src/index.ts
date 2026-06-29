@@ -5,4 +5,18 @@ export type { SummonerSpell } from './build'
 export type { SkillOrder, Role, BuildTag, KaynForm, Build, SubBuild } from './build'
 export type { ChampionRef, ItemRef, SummonerSpellRef, StoredBuild, StoredSubBuild, PatchStaleInfo } from './build'
 export type { CalculatedStats } from './build'
-export type { MatchupGuide, MatchupGuideTag } from './matchupGuide'
+export type {
+  MatchupGuide,
+  MatchupGuideTag,
+  MatchupEntry,
+  MatchupGuideMeta,
+  MatchupOutcomeKind,
+  MatchupSkillFavor,
+  MatchupDifficultyBand,
+  MatchupDifficultyMode,
+  MatchupPhaseTag,
+  MatchupPhaseNotes,
+  MatchupBuildVariantRef,
+  MatchupBuildVariantPick,
+  MatchupPowerSpike,
+} from './matchupGuide'

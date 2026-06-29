@@ -27,8 +27,30 @@
             <span class="truncate font-semibold">
               {{ guide.author?.trim() || t('matchupGuideDiscovery.authorAnonymous') }}
             </span>
+            <button
+              v-if="showUserActions"
+              type="button"
+              class="matchup-guide-grid-visibility-button"
+              :class="
+                (guide.visibility ?? 'public') === 'private'
+                  ? 'matchup-guide-grid-visibility-button--private'
+                  : 'matchup-guide-grid-visibility-button--public'
+              "
+              :title="
+                (guide.visibility ?? 'public') === 'private'
+                  ? t('buildsPage.public')
+                  : t('buildsPage.private')
+              "
+              @click.stop="emit('toggle-visibility', guide.id)"
+            >
+              {{
+                (guide.visibility ?? 'public') === 'private'
+                  ? t('buildsPage.private')
+                  : t('buildsPage.public')
+              }}
+            </button>
             <span
-              v-if="(guide.visibility ?? 'public') === 'private'"
+              v-else-if="(guide.visibility ?? 'public') === 'private'"
               class="matchup-guide-grid-author-badge matchup-guide-grid-author-badge--private"
             >
               {{ t('buildsPage.private') }}
@@ -154,6 +176,28 @@
                 <path d="M8.6 13.5 15.4 17.5M15.4 6.5 8.6 10.5" />
               </svg>
             </button>
+
+            <NuxtLink
+              v-if="showUserActions"
+              :to="localePath(`/matchups/sheets/create/champion?editId=${guide.id}`)"
+              class="matchup-guide-grid-action-button matchup-guide-grid-action-button--icon matchup-guide-grid-action-button--edit"
+              :title="t('matchupGuideDiscovery.editGuide')"
+              :aria-label="t('matchupGuideDiscovery.editGuide')"
+              @click.stop
+            >
+              ✎
+            </NuxtLink>
+
+            <button
+              v-if="showUserActions"
+              type="button"
+              class="matchup-guide-grid-action-button matchup-guide-grid-action-button--icon matchup-guide-grid-action-button--delete"
+              :title="t('matchupGuideDiscovery.deleteGuide')"
+              :aria-label="t('matchupGuideDiscovery.deleteGuide')"
+              @click.stop="emit('delete-guide', guide.id)"
+            >
+              ✕
+            </button>
           </div>
         </div>
       </div>
@@ -212,14 +256,21 @@ const props = withDefaults(
   defineProps<{
     customGuides?: MatchupGuide[]
     showFavoriteToggle?: boolean
+    showUserActions?: boolean
     hideBottomActions?: boolean
   }>(),
   {
     customGuides: undefined,
     showFavoriteToggle: false,
+    showUserActions: false,
     hideBottomActions: false,
   }
 )
+
+const emit = defineEmits<{
+  'toggle-visibility': [guideId: string]
+  'delete-guide': [guideId: string]
+}>()
 
 const { t } = useI18n()
 const localePath = useLocalePath()
@@ -374,6 +425,46 @@ onMounted(() => {
   color: rgb(251 113 133);
 }
 
+.matchup-guide-grid-visibility-button {
+  flex-shrink: 0;
+  border-radius: 0.35rem;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.58rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.matchup-guide-grid-visibility-button--public {
+  border: 1px solid rgb(16 185 129 / 0.5);
+  background: rgb(16 185 129 / 0.15);
+  color: rgb(52 211 153);
+}
+
+.matchup-guide-grid-visibility-button--public:hover {
+  background: rgb(244 63 94 / 0.15);
+  border-color: rgb(244 63 94 / 0.5);
+  color: rgb(251 113 133);
+}
+
+.matchup-guide-grid-visibility-button--private {
+  border: 1px solid rgb(244 63 94 / 0.5);
+  background: rgb(244 63 94 / 0.15);
+  color: rgb(251 113 133);
+}
+
+.matchup-guide-grid-visibility-button--private:hover {
+  background: rgb(16 185 129 / 0.15);
+  border-color: rgb(16 185 129 / 0.5);
+  color: rgb(52 211 153);
+}
+
 .matchup-guide-card-link {
   display: flex;
   flex: 1 1 auto;
@@ -419,6 +510,26 @@ onMounted(() => {
 
 .matchup-guide-grid-action-button--vote {
   flex: 1 1 0;
+}
+
+.matchup-guide-grid-action-button--edit {
+  flex: 0 0 32px;
+  border-color: rgb(59 130 246 / 0.55);
+  color: rgb(96 165 250);
+}
+
+.matchup-guide-grid-action-button--edit:hover {
+  background: rgb(59 130 246 / 0.12);
+}
+
+.matchup-guide-grid-action-button--delete {
+  flex: 0 0 32px;
+  border-color: rgb(244 63 94 / 0.55);
+  color: rgb(251 113 133);
+}
+
+.matchup-guide-grid-action-button--delete:hover {
+  background: rgb(244 63 94 / 0.12);
 }
 
 .pagination-btn {

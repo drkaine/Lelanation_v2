@@ -62,6 +62,7 @@ onMounted(() => {
   if (!buildStore.currentBuild?.roles) {
     buildStore.setRoles([])
   }
+  buildStore.ensureBuildChampionStats().catch(() => undefined)
 })
 
 useHead({

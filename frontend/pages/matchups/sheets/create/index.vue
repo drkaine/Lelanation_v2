@@ -1,21 +1,26 @@
 <script setup lang="ts">
-import { useBuildStore } from '~/stores/BuildStore'
-import { useMatchupGuideDraftStore } from '~/stores/MatchupGuideDraftStore'
+import {
+  bootstrapMatchupGuideCreateSession,
+  resolveMatchupGuideCreateStep,
+} from '~/composables/useMatchupGuideCreateBuilder'
 
 definePageMeta({
   middleware: 'matchup-guides-admin',
 })
 
 const router = useRouter()
+const route = useRoute()
 const localePath = useLocalePath()
-const buildStore = useBuildStore()
-const draftStore = useMatchupGuideDraftStore()
 
 onMounted(() => {
-  draftStore.startNewGuide()
-  buildStore.createNewBuild()
-  buildStore.ensureCurrentBuild()
-  router.replace(localePath('/matchups/sheets/create/champion'))
+  const editId = typeof route.query.editId === 'string' ? route.query.editId : null
+  bootstrapMatchupGuideCreateSession(editId)
+
+  const query: Record<string, string> = {}
+  if (editId) query.editId = editId
+
+  const step = resolveMatchupGuideCreateStep()
+  router.replace(localePath({ path: `/matchups/sheets/create/${step}`, query }))
 })
 </script>
 

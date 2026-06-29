@@ -267,6 +267,7 @@ import {
 import { formatLethality, formatPenetrationPercentFlat } from '~/utils/formatItemStats'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useItemsStore } from '~/stores/ItemsStore'
+import { championWithStatsForBuild, resolveChampionStatsForBuild } from '~/utils/theorycraftStats'
 import type { Build } from '~/types/build'
 
 const props = withDefaults(
@@ -334,6 +335,11 @@ const _activeBuild = computed(
   () => props.build || buildStore.displayedBuild || buildStore.currentBuild
 )
 const champion = computed(() => _activeBuild.value?.champion ?? null)
+const championForStats = computed(() => {
+  const value = champion.value
+  if (!value) return null
+  return championWithStatsForBuild(value)
+})
 /** Enrich build items with catalogue data (gold, tags, stats) — builds/API often store ItemRef-like rows without gold, which breaks gold value / cost / efficiency. */
 const items = computed(() => {
   const buildItems = _activeBuild.value?.items ?? []
@@ -355,22 +361,22 @@ const shards = computed(() => _activeBuild.value?.shards ?? null)
 
 // Calculate base stats at level
 const baseStatsAtLevel = computed(() => {
-  if (!champion.value) return null
+  const stats = resolveChampionStatsForBuild(championForStats.value)
+  if (!stats) return null
 
   const levelMultiplier = selectedLevel.value - 1
-  const base = champion.value.stats
 
   return {
-    hp: base.hp + base.hpperlevel * levelMultiplier,
-    mp: base.mp + base.mpperlevel * levelMultiplier,
-    armor: base.armor + base.armorperlevel * levelMultiplier,
-    spellblock: base.spellblock + base.spellblockperlevel * levelMultiplier,
-    hpregen: base.hpregen + base.hpregenperlevel * levelMultiplier,
-    mpregen: base.mpregen + base.mpregenperlevel * levelMultiplier,
-    attackdamage: base.attackdamage + base.attackdamageperlevel * levelMultiplier,
-    attackspeed: base.attackspeed * (1 + (base.attackspeedperlevel / 100) * levelMultiplier),
-    movespeed: base.movespeed,
-    attackrange: base.attackrange,
+    hp: stats.hp + stats.hpperlevel * levelMultiplier,
+    mp: stats.mp + stats.mpperlevel * levelMultiplier,
+    armor: stats.armor + stats.armorperlevel * levelMultiplier,
+    spellblock: stats.spellblock + stats.spellblockperlevel * levelMultiplier,
+    hpregen: stats.hpregen + stats.hpregenperlevel * levelMultiplier,
+    mpregen: stats.mpregen + stats.mpregenperlevel * levelMultiplier,
+    attackdamage: stats.attackdamage + stats.attackdamageperlevel * levelMultiplier,
+    attackspeed: stats.attackspeed * (1 + (stats.attackspeedperlevel / 100) * levelMultiplier),
+    movespeed: stats.movespeed,
+    attackrange: stats.attackrange,
   }
 })
 
@@ -533,8 +539,9 @@ const filteredItemsForStats = computed(() => filterItemsForStats(items.value))
 
 // Calculate total stats
 const totalStats = computed(() => {
-  if (!champion.value) return null
-  return calculateStats(champion.value, items.value, runes.value, shards.value, selectedLevel.value)
+  const value = championForStats.value
+  if (!value || !resolveChampionStatsForBuild(value)) return null
+  return calculateStats(value, items.value, runes.value, shards.value, selectedLevel.value)
 })
 
 // Helper to get shard value for a stat

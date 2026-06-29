@@ -152,6 +152,67 @@
       class="matchup-sheet__description matchup-sheet__description--empty"
     />
 
+    <div v-if="variant === 'detail' && hasMetaNotes" class="matchup-sheet__meta">
+      <section v-if="guide.meta?.permabanNotes" class="matchup-sheet__meta-block">
+        <h4 class="matchup-sheet__meta-title">{{ t('matchupGuideDiscovery.permabanNotes') }}</h4>
+        <p class="matchup-sheet__meta-text">{{ guide.meta.permabanNotes }}</p>
+      </section>
+      <section v-if="guide.meta?.generalBuildNotes" class="matchup-sheet__meta-block">
+        <h4 class="matchup-sheet__meta-title">
+          {{ t('matchupGuideDiscovery.generalBuildNotes') }}
+        </h4>
+        <p class="matchup-sheet__meta-text">{{ guide.meta.generalBuildNotes }}</p>
+      </section>
+    </div>
+
+    <section
+      v-if="variant === 'detail' && fullMatchups.length"
+      class="matchup-sheet__table-section"
+    >
+      <h4 class="matchup-sheet__table-title">{{ t('matchupGuideDiscovery.fullMatchupTable') }}</h4>
+      <div class="matchup-sheet__table-wrap">
+        <table class="matchup-sheet__table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>{{ t('matchupGuideDiscovery.colChampion') }}</th>
+              <th>{{ t('matchupGuideDiscovery.colOutcome') }}</th>
+              <th>{{ t('matchupGuideDiscovery.colBuildVariants') }}</th>
+              <th>{{ t('matchupGuideDiscovery.colPowerSpike') }}</th>
+              <th>{{ t('matchupGuideDiscovery.colDifficulty') }}</th>
+              <th>{{ t('matchupGuideDiscovery.colEarly') }}</th>
+              <th>{{ t('matchupGuideDiscovery.colMid') }}</th>
+              <th>{{ t('matchupGuideDiscovery.colLate') }}</th>
+              <th>{{ t('matchupGuideDiscovery.colComments') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(entry, index) in fullMatchups" :key="entry.opponent.id">
+              <td>{{ index + 1 }}</td>
+              <td>
+                <div class="matchup-sheet__table-champion">
+                  <img
+                    :src="getChampionImageUrl(gameVersion, entry.opponent.image.full)"
+                    :alt="entry.opponent.name"
+                    class="matchup-sheet__table-portrait"
+                  />
+                  <span>{{ entry.opponent.name }}</span>
+                </div>
+              </td>
+              <td>{{ formatOutcome(entry) }}</td>
+              <td>{{ formatBuildVariantsCell(entry, guideBuild, t) }}</td>
+              <td>{{ formatPowerSpikeCell(entry) }}</td>
+              <td>{{ formatDifficulty(entry) }}</td>
+              <td class="matchup-sheet__table-phase">{{ formatPhaseCell(entry, 'early') }}</td>
+              <td class="matchup-sheet__table-phase">{{ formatPhaseCell(entry, 'mid') }}</td>
+              <td class="matchup-sheet__table-phase">{{ formatPhaseCell(entry, 'late') }}</td>
+              <td class="matchup-sheet__table-comments">{{ entry.comments || '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <div v-if="showMatchupsSection" class="matchup-sheet__matchups-mirror">
       <section v-if="guide.bestMatchups?.length" class="matchup-sheet__matchups-col">
         <h4 class="matchup-sheet__matchups-title matchup-sheet__matchups-title--best">
@@ -198,17 +259,23 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { MatchupGuide, MatchupGuideTag, Role } from '@lelanation/shared-types'
+import type { MatchupEntry, MatchupGuide, MatchupGuideTag, Role } from '@lelanation/shared-types'
 import { useI18n } from 'vue-i18n'
 import { useVersionStore } from '~/stores/VersionStore'
 import { useChampionSplashPreference } from '~/composables/useChampionSplashPreference'
 import { useClientHydrated } from '~/composables/useClientHydrated'
 import { guideDisplayDate } from '~/composables/useMatchupGuideDetail'
+import { hydrateBuild } from '~/utils/buildSerialize'
 import { getChampionImageUrl, getChampionSplashImageUrl } from '~/utils/imageUrl'
 import {
   matchupGuideCardDescription,
   matchupGuideDetailDescription,
 } from '~/utils/matchupGuideText'
+import {
+  formatBuildVariantsCell,
+  formatPhaseTags,
+  formatPowerSpikeCell,
+} from '~/utils/matchupEntryUtils'
 
 const props = withDefaults(
   defineProps<{
@@ -238,9 +305,27 @@ const displayDescription = computed(() =>
 )
 
 const showMatchupsSection = computed(() => {
+  if (props.variant === 'detail' && fullMatchups.value.length) return false
   if (props.variant === 'card') return true
   return Boolean(props.guide.bestMatchups?.length || props.guide.worstMatchups?.length)
 })
+
+const fullMatchups = computed(() => props.guide.matchups ?? [])
+
+const guideBuild = computed(() => {
+  if (!props.guide.build) return null
+  try {
+    return hydrateBuild(props.guide.build)
+  } catch {
+    return null
+  }
+})
+
+const hasMetaNotes = computed(
+  () =>
+    Boolean(props.guide.meta?.permabanNotes?.trim()) ||
+    Boolean(props.guide.meta?.generalBuildNotes?.trim())
+)
 
 const championImageSrc = computed(() => {
   const champion = props.guide.champion
@@ -284,6 +369,37 @@ function roleLabel(role: Role) {
     support: 'Support',
   }
   return labels[role]
+}
+
+function formatOutcome(entry: MatchupEntry): string {
+  if (entry.outcomeKind) {
+    let label = t(`matchupGuideCreate.outcomeKind.${entry.outcomeKind}`)
+    if (entry.outcomeKind === 'skill' && entry.skillFavor) {
+      label += ` (${t(`matchupGuideCreate.skillFavor.${entry.skillFavor}`)})`
+    }
+    return label
+  }
+  return entry.outcome || '—'
+}
+
+function formatDifficulty(entry: MatchupEntry): string {
+  if (entry.difficultyMode === 'score' && entry.difficultyScore) {
+    return `${entry.difficultyScore}/10`
+  }
+  if (entry.difficultyBand) {
+    return t(`matchupGuideCreate.difficultyBand.${entry.difficultyBand}`)
+  }
+  return entry.difficulty || '—'
+}
+
+function formatPhaseCell(entry: MatchupEntry, phase: 'early' | 'mid' | 'late'): string {
+  const data = entry[phase]
+  if (!data) return '—'
+  const parts: string[] = []
+  const tags = formatPhaseTags(data.tags, t)
+  if (tags) parts.push(tags)
+  if (data.notes?.trim()) parts.push(data.notes.trim())
+  return parts.length ? parts.join(' — ') : '—'
 }
 </script>
 
@@ -626,5 +742,102 @@ function roleLabel(role: Role) {
 .matchup-sheet--detail .matchup-sheet__matchup-portrait {
   width: 3.5rem;
   height: 3.5rem;
+}
+
+.matchup-sheet__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  border-top: 1px solid var(--card-border-color-soft, rgb(var(--rgb-primary) / 0.35));
+  padding-top: 0.65rem;
+}
+
+.matchup-sheet__meta-title {
+  margin: 0 0 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgb(var(--rgb-text-accent));
+}
+
+.matchup-sheet__meta-text {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  color: rgb(var(--rgb-text) / 0.85);
+}
+
+.matchup-sheet__table-section {
+  border-top: 1px solid var(--card-border-color-soft, rgb(var(--rgb-primary) / 0.35));
+  padding-top: 0.65rem;
+}
+
+.matchup-sheet__table-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgb(var(--rgb-text-accent));
+}
+
+.matchup-sheet__table-wrap {
+  overflow-x: auto;
+}
+
+.matchup-sheet__table {
+  width: 100%;
+  min-width: 960px;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.matchup-sheet__table th,
+.matchup-sheet__table td {
+  border: 1px solid rgb(var(--rgb-primary) / 0.25);
+  padding: 0.4rem 0.45rem;
+  vertical-align: top;
+  text-align: left;
+}
+
+.matchup-sheet__table th {
+  background: rgb(var(--rgb-background) / 0.45);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: rgb(var(--rgb-text) / 0.75);
+}
+
+.matchup-sheet__table-champion {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 6.5rem;
+}
+
+.matchup-sheet__table-portrait {
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  object-fit: cover;
+}
+
+.matchup-sheet__table-comments {
+  min-width: 12rem;
+  max-width: 22rem;
+  white-space: pre-wrap;
+  line-height: 1.4;
+}
+
+.matchup-sheet__table-phase {
+  min-width: 7rem;
+  max-width: 14rem;
+  white-space: pre-wrap;
+  line-height: 1.35;
+  font-size: 0.74rem;
 }
 </style>

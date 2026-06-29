@@ -21,15 +21,16 @@ const { t } = useI18n()
 const router = useRouter()
 const route = useRoute()
 const localePath = useLocalePath()
-const { buildStore } = useMatchupGuideCreateBuilder('matchups')
+const { buildStore, sessionReady } = useMatchupGuideCreateBuilder('matchups')
 const { isLayoutScaled } = useLayoutScaled()
 
 const hasChampion = computed(() => Boolean(buildStore.currentBuild?.champion))
 const guideChampionId = computed(() => buildStore.currentBuild?.champion?.id ?? null)
 
 watch(
-  () => [buildStore.isBuildValid, buildStore.currentBuild?.champion] as const,
-  ([valid]) => {
+  () => [sessionReady.value, buildStore.isBuildValid] as const,
+  ([ready, valid]) => {
+    if (!ready) return
     if (!valid && route.path.includes('/matchups/sheets/create/matchups')) {
       router.replace(localePath('/matchups/sheets/create/info'))
     }

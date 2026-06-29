@@ -100,6 +100,29 @@ export function useMatchupSheetsIndexPage(fixedTab?: MatchupSheetsTab) {
     await navigateTo(localePath('/matchups/sheets/create'))
   }
 
+  const guideToDelete = ref<string | null>(null)
+
+  function confirmDeleteGuide(guideId: string) {
+    guideToDelete.value = guideId
+  }
+
+  async function deleteGuide() {
+    if (!guideToDelete.value) return
+    const success = await guideStore.deleteGuide(guideToDelete.value)
+    if (success) {
+      guideToDelete.value = null
+      await discoveryStore.loadGuides({ fetcher: requestFetch }).catch(() => undefined)
+    }
+  }
+
+  async function toggleGuideVisibility(guideId: string) {
+    if (!hydrated.value) return
+    const success = await guideStore.toggleGuideVisibility(guideId)
+    if (success) {
+      await discoveryStore.loadGuides({ fetcher: requestFetch }).catch(() => undefined)
+    }
+  }
+
   if (fixedTab && activeTab.value !== fixedTab) {
     activeTab.value = fixedTab
   }
@@ -116,5 +139,9 @@ export function useMatchupSheetsIndexPage(fixedTab?: MatchupSheetsTab) {
     favoriteGuides,
     setTab,
     goToCreateGuide,
+    guideToDelete,
+    confirmDeleteGuide,
+    deleteGuide,
+    toggleGuideVisibility,
   }
 }

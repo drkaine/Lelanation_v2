@@ -30,6 +30,7 @@ import { useBuildStore } from '~/stores/BuildStore'
 import { useLayoutScaled } from '~/composables/useLayoutScaled'
 
 const buildStore = useBuildStore()
+const route = useRoute()
 const router = useRouter()
 const localePath = useLocalePath()
 const { t } = useI18n()
@@ -65,7 +66,10 @@ async function handleContinue() {
     return
   }
   emit('highlight-missing', false)
-  await router.push(localePath('/matchups/sheets/create/matchups'))
+  const query: Record<string, string> = {}
+  const editId = route.query.editId
+  if (typeof editId === 'string' && editId.length > 0) query.editId = editId
+  await router.push(localePath({ path: '/matchups/sheets/create/matchups', query }))
 }
 </script>
 
@@ -80,7 +84,6 @@ async function handleContinue() {
   width: 100%;
   max-width: 300px;
   min-height: 38px;
-  line-height: 1.1;
 }
 
 .matchup-guide-continue-wrapper--streamer .matchup-guide-continue-button {

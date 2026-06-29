@@ -24,6 +24,7 @@ import {
   mergePatchStaleIntoBuilds,
 } from '~/utils/mergePatchStale'
 import { useVersionStore } from '~/stores/VersionStore'
+import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useVoteStore } from '~/stores/VoteStore'
 import { shouldAutoPrivatizeFromCommunityVotes } from '~/utils/communityVoteVisibility'
 import {
@@ -481,10 +482,65 @@ export const useBuildStore = defineStore('build', {
         const build = isStoredBuild(parsed) ? hydrateBuild(parsed) : (parsed as Build)
         this.setCurrentBuild(build)
         this.setRoles(this.currentBuild?.roles ?? [])
+        this.ensureBuildChampionStats().catch(() => undefined)
         return true
       } catch {
         return false
       }
+    },
+
+    async ensureBuildChampionStats() {
+      if (import.meta.server || !this.currentBuild?.champion) return
+
+      const rehydrateFromDraft = (): boolean => {
+        try {
+          const saved = localStorage.getItem(this.getCurrentDraftStorageKey())
+          if (!saved) return false
+          const parsed = JSON.parse(saved) as Build | StoredBuild
+          if (!isStoredBuild(parsed)) return false
+          const build = hydrateBuild(parsed)
+          this.currentBuild = {
+            ...build,
+            subBuilds: build.subBuilds ?? [],
+            descriptionMode: build.descriptionMode ?? 'single',
+          }
+          this.displayedVariant = 'main'
+          return resolveChampionStatsForBuild(this.currentBuild.champion) != null
+        } catch {
+          return false
+        }
+      }
+
+      if (resolveChampionStatsForBuild(this.currentBuild.champion)) {
+        this.recalculateStats()
+        return
+      }
+
+      const championsStore = useChampionsStore()
+      if (championsStore.champions.length === 0) {
+        await championsStore.loadChampions()
+      }
+
+      if (rehydrateFromDraft()) {
+        this.recalculateStats()
+        return
+      }
+
+      const championId = this.currentBuild.champion.id
+      let enriched = championsStore.champions.find(champion => champion.id === championId) ?? null
+      if (!resolveChampionStatsForBuild(enriched)) {
+        enriched = (await championsStore.loadChampionDetails(championId)) ?? enriched
+      }
+
+      if (enriched) {
+        this.currentBuild.champion = championWithStatsForBuild({
+          ...this.currentBuild.champion,
+          ...enriched,
+        })
+        this.persistCurrentBuildDraft()
+      }
+
+      this.recalculateStats()
     },
 
     persistCurrentBuildDraft() {
