@@ -43,27 +43,83 @@
           </a>
         </div>
 
-        <h2 class="home-section-title mt-4 text-center text-lg font-bold sm:text-xl">
-          {{ t('home.customizeTitle') }}
-        </h2>
-        <p class="home-section-subtitle mx-auto mt-1 max-w-3xl text-center text-xs sm:text-sm">
-          {{ t('home.customizeSubtitle') }}
-        </p>
+        <div
+          class="home-customize-block mx-auto mt-4 flex w-full max-w-3xl flex-col items-center text-center"
+        >
+          <h2 class="home-section-title text-lg font-bold sm:text-xl">
+            {{ t('home.customizeTitle') }}
+          </h2>
+          <p class="home-section-subtitle mt-1 max-w-2xl text-xs sm:text-sm">
+            {{ t('home.customizeSubtitle') }}
+          </p>
 
-        <div class="mt-2 w-full pb-0">
-          <div class="mx-auto max-w-lg rounded-lg border border-primary/20 bg-background/30 p-3">
-            <h3 class="text-xs font-bold uppercase tracking-wide text-accent">
-              {{ t('home.customizeStatsTitle') }}
+          <div
+            class="mt-3 w-full rounded-lg border border-primary/20 bg-background/30 p-4 text-center sm:p-5"
+          >
+            <p class="mx-auto max-w-2xl text-xs leading-relaxed text-text/70 sm:text-sm">
+              {{ t('home.customizeIntro') }}
+            </p>
+
+            <div class="mt-4 grid justify-items-center gap-6 sm:grid-cols-2">
+              <div class="w-full max-w-xs text-center sm:max-w-none">
+                <h3 class="text-xs font-bold uppercase tracking-wide text-accent">
+                  {{ t('home.customizeDisplayTitle') }}
+                </h3>
+                <p class="mt-1 text-[11px] leading-snug text-text/55 sm:text-xs">
+                  {{ t('home.customizeDisplayHint') }}
+                </p>
+                <ul class="mx-auto mt-2 inline-block space-y-1 text-left text-xs text-text/80">
+                  <li v-for="feature in customizeDisplayFeatures" :key="feature">
+                    • {{ feature }}
+                  </li>
+                </ul>
+              </div>
+
+              <div class="w-full max-w-xs text-center sm:max-w-none">
+                <h3 class="text-xs font-bold uppercase tracking-wide text-accent">
+                  {{ t('home.customizeStatsTitle') }}
+                </h3>
+                <p class="mt-1 text-[11px] leading-snug text-text/55 sm:text-xs">
+                  {{ t('home.customizeStatsHint') }}
+                </p>
+                <ul class="mx-auto mt-2 inline-block space-y-1 text-left text-xs text-text/80">
+                  <li v-for="feature in customizeStatsFeatures" :key="feature">• {{ feature }}</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+              <button
+                type="button"
+                class="inline-flex items-center gap-2 text-xs font-semibold text-accent hover:underline"
+                @click="openCustomizePanel()"
+              >
+                {{ t('home.customizeOpenPanel') }}
+                <kbd class="home-shortcut-kbd">Alt + H</kbd>
+              </button>
+              <NuxtLink
+                :to="localePath('/settings')"
+                class="inline-flex items-center text-xs font-semibold text-accent hover:underline"
+              >
+                {{ t('home.customizeSettingsLink') }}
+              </NuxtLink>
+            </div>
+          </div>
+
+          <div
+            class="mt-4 w-full rounded-lg border border-accent/30 bg-accent/5 p-4 text-center sm:p-5"
+          >
+            <h3 class="text-xs font-bold uppercase tracking-wide text-accent sm:text-sm">
+              {{ t('home.dataTransferTitle') }}
             </h3>
-            <p class="mt-1 text-xs text-text/65">{{ t('home.customizeStatsText') }}</p>
-            <ul class="mt-2 space-y-1 text-xs text-text/80">
-              <li v-for="feature in customizeFeatures" :key="feature">• {{ feature }}</li>
-            </ul>
+            <p class="mx-auto mt-2 max-w-2xl text-xs leading-relaxed text-text/70 sm:text-sm">
+              {{ t('home.dataTransferDescription') }}
+            </p>
             <NuxtLink
-              :to="localePath('/settings')"
-              class="mt-2 inline-flex items-center text-xs font-semibold text-accent hover:underline"
+              :to="localePath('/settings?tab=dataTransfer')"
+              class="mt-3 inline-flex items-center text-xs font-semibold text-accent hover:underline sm:text-sm"
             >
-              {{ t('home.customizeSettingsLink') }}
+              {{ t('home.dataTransferLink') }}
             </NuxtLink>
           </div>
         </div>
@@ -101,6 +157,7 @@
           :hide-bottom-actions="true"
           :show-all-custom-builds="true"
           :six-column-grid="true"
+          grid-gap="5px"
         />
       </section>
 
@@ -274,6 +331,7 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { championStatsDetailPath } from '~/utils/championStatsRoutes'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import BuildGrid from '~/components/BuildDiscovery/BuildGrid.vue'
@@ -288,10 +346,27 @@ const { locale, t } = useI18n()
 const localePath = useLocalePath()
 const { pending, recentBuilds, tierByRole, latestVideos, stats, championForId } = useHomePage()
 
-const customizeFeatures = computed(() => [
+const commandsModalOpen = useState<boolean>('commands-modal-open', () => false)
+
+const customizeDisplayFeatures = computed(() => [
+  t('home.customizeFeatureTooltips'),
+  t('home.customizeFeatureStreamer'),
+  t('home.customizeFeatureZoom'),
+  t('home.customizeFeatureSplash'),
+  t('home.customizeFeatureSimplified'),
+  t('home.customizeFeatureSplitTransform'),
+])
+
+const customizeStatsFeatures = computed(() => [
   t('home.customizeFeatureTabs'),
   t('home.customizeFeatureDefaultTab'),
+  t('home.customizeFeatureWatchlist'),
+  t('home.customizeFeatureAlerts'),
 ])
+
+function openCustomizePanel(): void {
+  commandsModalOpen.value = true
+}
 
 useHead({
   title: () => t('seo.homeTitle'),
@@ -392,5 +467,18 @@ function formatStat(value: number): string {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: rgb(251 191 36 / 0.75);
+}
+
+.home-shortcut-kbd {
+  display: inline-block;
+  border: 1px solid rgb(var(--rgb-accent) / 0.35);
+  border-radius: 6px;
+  background: rgb(var(--rgb-accent) / 0.08);
+  padding: 2px 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-blue-50);
+  white-space: nowrap;
 }
 </style>

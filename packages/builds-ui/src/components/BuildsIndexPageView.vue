@@ -38,31 +38,6 @@
           </button>
           </div>
         </div>
-        <div v-if="allowShare" class="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            class="inline-flex h-[38px] shrink-0 items-center gap-2 rounded-lg border border-primary/80 bg-background/25 px-3 text-sm text-text transition-colors hover:bg-primary/20 disabled:opacity-50"
-            :disabled="shareLoading"
-            @click="emit('share-builds')"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="h-4 w-4 shrink-0"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M3 7a2 2 0 0 1 2-2h8l5 5v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
-              <path d="M13 5v5h5" />
-              <path d="m8 14 3 3 5-5" />
-            </svg>
-            {{ shareLoading ? t('buildsPage.shareLoading') : t('buildsPage.shareToApp') }}
-          </button>
-        </div>
       </div>
 
       <div v-if="activeTab === 'discover'" class="tab-content">
@@ -209,102 +184,6 @@
         </div>
       </div>
     </div>
-
-    <div
-      v-if="shareModalOpen"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
-      @click="emit('close-share-code')"
-    >
-      <div
-        class="mx-4 w-full max-w-sm rounded-lg bg-surface p-6 text-center"
-        style="background-color: var(--color-surface); opacity: 1"
-        @click.stop
-      >
-        <h3 class="mb-2 text-lg font-bold text-text">
-          {{
-            shareModalMode === 'import'
-              ? t('buildsPage.importCodeTitle')
-              : t('buildsPage.shareCodeTitle')
-          }}
-        </h3>
-        <p class="mb-4 text-sm text-text-secondary">
-          {{
-            shareModalMode === 'import'
-              ? t('buildsPage.importCodeBlurb')
-              : t('buildsPage.shareCodeDescription')
-          }}
-        </p>
-        <template v-if="shareModalMode === 'share'">
-          <div
-            v-if="shareCode"
-            class="mx-auto mb-4 flex w-fit items-center gap-3 rounded-lg border-2 border-accent bg-background px-6 py-3 font-mono text-xl font-bold tracking-[0.25em] text-accent"
-          >
-            {{ shareCode }}
-            <button
-              type="button"
-              class="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded p-1 text-text-secondary transition-colors hover:text-accent"
-              :aria-label="t('buildsPage.shareCodeCopy')"
-              :title="t('buildsPage.shareCodeCopy')"
-              @click="emit('copy-share-code')"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="h-5 w-5"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-              </svg>
-            </button>
-          </div>
-          <p v-else class="mb-4 text-sm text-text-secondary">
-            {{ t('buildsPage.shareNoBuilds') }}
-          </p>
-        </template>
-        <div class="mb-3">
-          <input
-            :value="importCode"
-            type="text"
-            class="w-full rounded-lg border border-primary/60 bg-background px-3 py-2 font-mono text-sm text-text"
-            :placeholder="t('buildsPage.shareCodeInputPlaceholder')"
-            maxlength="24"
-            @input="emit('update:import-code', ($event.target as HTMLInputElement).value.toUpperCase())"
-            @keyup.enter="emit('import-by-code')"
-          />
-        </div>
-        <button
-          class="mb-3 w-full rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-background transition-colors hover:bg-accent-dark disabled:opacity-50"
-          :disabled="importLoading || !importCode.trim()"
-          @click="emit('import-by-code')"
-        >
-          {{ importLoading ? t('buildsPage.shareLoading') : t('buildsPage.shareCodeImportAction') }}
-        </button>
-        <p v-if="shareCopied && shareModalMode === 'share'" class="mb-2 text-sm text-green-400">
-          {{ t('buildsPage.shareCodeCopied') }}
-        </p>
-        <p v-if="shareModalMode === 'share'" class="mb-4 text-xs text-text-secondary">
-          {{ t('buildsPage.shareCodeExpiry') }}
-        </p>
-        <button
-          class="rounded-lg border border-accent/70 bg-surface px-4 py-2 text-sm text-text transition-colors hover:bg-accent/10"
-          @click="emit('close-share-code')"
-        >
-          {{ t('buildsPage.shareCodeClose') }}
-        </button>
-      </div>
-    </div>
-
-    <div
-      v-if="shareError"
-      class="fixed bottom-4 right-4 z-50 rounded-lg bg-error px-4 py-3 text-sm text-white shadow-lg"
-    >
-      {{ shareError }}
-    </div>
   </div>
 </template>
 
@@ -327,34 +206,19 @@ defineProps<{
   myBuildsVisibilityFilter: VisibilityFilterValue
   visibilityFilterOptions: { value: VisibilityFilterValue; label: string }[]
   adminMode: boolean
-  allowShare: boolean
-  shareLoading: boolean
-  importLoading: boolean
   buildsFilteredByVisibility: Build[]
   buildToDelete: string | null
-  shareModalOpen: boolean
-  shareModalMode: 'share' | 'import'
-  shareCode: string | null
-  importCode: string
-  shareCopied: boolean
-  shareError: string | null
 }>()
 
 const emit = defineEmits<{
   'update:activeTab': [value: string]
   'update:myBuildsVisibilityFilter': [value: VisibilityFilterValue]
   'create-build': []
-  'share-builds': []
-  'open-import-modal': []
   'clear-comparison': []
   'confirm-delete': [buildId: string]
   'toggle-visibility': [buildId: string]
   'delete-build': []
   'close-delete-modal': []
-  'close-share-code': []
-  'copy-share-code': []
-  'update:import-code': [value: string]
-  'import-by-code': []
 }>()
 </script>
 

@@ -497,6 +497,7 @@ import type { Build } from '~/types/build'
 import { useClientHydrated } from '~/composables/useClientHydrated'
 import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 import { useLayoutScaled } from '~/composables/useLayoutScaled'
+import { useMobileViewport } from '~/composables/useMobileViewport'
 import { useAdminAuth } from '~/composables/useAdminAuth'
 import { apiUrl } from '~/utils/apiUrl'
 import {
@@ -511,6 +512,7 @@ const { championSplashEnabled } = useChampionSplashPreference()
 const buildStore = useBuildStore()
 const { hydrated } = useClientHydrated()
 const { isLayoutScaled } = useLayoutScaled()
+const { isMobileViewport } = useMobileViewport()
 
 // Global tooltip preference (shared state via composable)
 const { tooltipsEnabled } = useTooltipsPreference()
@@ -537,11 +539,16 @@ const adminStatsData = ref<{
 /** Variante actuellement affichée par build (null = principale). */
 const displayedSubMap = ref<Record<string, number | null>>({})
 const { fetchWithAuth, checkLoggedIn } = useAdminAuth()
-const buildGridVars = computed(() => ({
-  '--build-grid-card-width': isLayoutScaled.value
+const buildGridVars = computed(() => {
+  const scaledWidth = isLayoutScaled.value
     ? 'min(390px, calc(100vw - 1.5rem))'
-    : 'min(300px, calc(100vw - 1.5rem))',
-}))
+    : 'min(300px, calc(100vw - 1.5rem))'
+
+  return {
+    '--build-grid-gap': props.gridGap,
+    '--build-grid-card-width': props.sixColumnGrid && isMobileViewport.value ? '100%' : scaledWidth,
+  }
+})
 
 function getDisplayedDescription(build: Build): string | undefined {
   const mode = build.descriptionMode ?? 'single'
@@ -586,6 +593,8 @@ interface Props {
   showAllCustomBuilds?: boolean
   /** Home preview: responsive grid that wraps build cards to multiple rows. */
   sixColumnGrid?: boolean
+  /** Gap between cards in the grid (e.g. `5px`, `15px`). */
+  gridGap?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -596,6 +605,7 @@ const props = withDefaults(defineProps<Props>(), {
   hideBottomActions: false,
   showAllCustomBuilds: false,
   sixColumnGrid: false,
+  gridGap: '15px',
 })
 
 defineEmits<{
@@ -1118,7 +1128,7 @@ onUnmounted(() => {
   flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-evenly;
-  gap: 15px;
+  gap: var(--build-grid-gap, 15px);
   padding-inline: 5px;
   box-sizing: border-box;
 }
@@ -1127,7 +1137,7 @@ onUnmounted(() => {
   display: grid;
   width: 100%;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
-  gap: 15px;
+  gap: var(--build-grid-gap, 15px);
   justify-items: center;
   align-items: start;
   padding-inline: 5px;
@@ -1338,6 +1348,17 @@ onUnmounted(() => {
   .build-grid-list {
     justify-content: center;
     padding-inline: 0;
+  }
+
+  .build-grid-list--six {
+    grid-template-columns: 1fr;
+    gap: var(--build-grid-gap, 15px);
+  }
+
+  .build-grid-list--six .build-grid-item {
+    width: 100%;
+    max-width: 100%;
+    min-height: 0;
   }
 }
 </style>

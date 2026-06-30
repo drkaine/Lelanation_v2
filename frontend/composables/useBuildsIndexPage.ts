@@ -1,8 +1,8 @@
 import { computed, resolveComponent, watch, type MaybeRefOrGetter } from 'vue'
 import { toValue } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useBuildsIndexController } from '@lelanation/builds-ui'
-import type { Build } from '@lelanation/shared-types'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import { useVoteStore } from '~/stores/VoteStore'
@@ -10,7 +10,6 @@ import { useFavoritesStore } from '~/stores/FavoritesStore'
 import BuildSearch from '~/components/BuildDiscovery/BuildSearch.vue'
 import BuildFilters from '~/components/BuildDiscovery/BuildFilters.vue'
 import BuildGrid from '~/components/BuildDiscovery/BuildGrid.vue'
-import { serializeBuild, hydrateBuild, isStoredBuild } from '~/utils/buildSerialize'
 import { filterStandaloneLibraryBuilds } from '~/utils/buildLibrary'
 import { useAdminAuth } from '~/composables/useAdminAuth'
 import { useClientHydrated } from '~/composables/useClientHydrated'
@@ -106,21 +105,6 @@ export function useBuildsIndexPage(fixedTab?: MaybeRefOrGetter<BuildsIndexTab | 
     discoveryStore,
     favoritesStore,
     voteStore,
-    serializeBuild,
-    shareBuildsRequest: payload =>
-      $fetch<{ code: string; expiresAt: string }>('/api/share-builds', {
-        method: 'POST',
-        body: payload,
-      }),
-    importBuildsByCodeRequest: code =>
-      $fetch<{ builds: unknown[]; favoriteIds?: string[] }>(
-        `/api/share-builds/${encodeURIComponent(code)}`
-      ),
-    hydrateSharedBuild: raw => {
-      if (!raw || typeof raw !== 'object') return null
-      if (isStoredBuild(raw)) return hydrateBuild(raw)
-      return raw as Build
-    },
   })
 
   watch(fixedTabValue, tab => {

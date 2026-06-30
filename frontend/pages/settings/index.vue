@@ -102,6 +102,14 @@
       <div v-show="activeSettingsPageTab === 'alerts'" role="tabpanel">
         <StatisticsSurveillanceAlertSettings />
       </div>
+
+      <div v-show="activeSettingsPageTab === 'howItWorks'" role="tabpanel">
+        <InformationTabsContent embedded />
+      </div>
+
+      <div v-show="activeSettingsPageTab === 'dataTransfer'" role="tabpanel">
+        <SettingsDataTransferPanel />
+      </div>
     </div>
   </div>
 </template>
@@ -109,14 +117,24 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import {
   STATISTICS_MAIN_TAB_LABEL_KEYS,
   STATISTICS_MAIN_TAB_ORDER,
 } from '~/constants/statisticsMainTabs'
 import StatisticsSurveillanceAlertSettings from '~/components/statistics/StatisticsSurveillanceAlertSettings.vue'
+import InformationTabsContent from '~/components/Information/InformationTabsContent.vue'
+import SettingsDataTransferPanel from '~/components/settings/SettingsDataTransferPanel.vue'
 import { useStatisticsUiStore, type StatisticsMainTab } from '~/stores/StatisticsUiStore'
 
-type SettingsPageTab = 'tabs' | 'watchlist' | 'alerts'
+const VALID_SETTINGS_PAGE_TABS = [
+  'tabs',
+  'watchlist',
+  'alerts',
+  'howItWorks',
+  'dataTransfer',
+] as const
+type SettingsPageTab = (typeof VALID_SETTINGS_PAGE_TABS)[number]
 
 const { t } = useI18n()
 const localePath = useLocalePath()
@@ -129,10 +147,21 @@ const settingsPageTabs = computed(() => [
   { id: 'tabs' as const, label: t('statisticsPage.settingsPageTabTabs') },
   { id: 'watchlist' as const, label: t('statisticsPage.settingsPageTabWatchlist') },
   { id: 'alerts' as const, label: t('statisticsPage.settingsPageTabAlerts') },
+  { id: 'howItWorks' as const, label: t('statisticsPage.settingsPageTabHowItWorks') },
+  { id: 'dataTransfer' as const, label: t('statisticsPage.settingsPageTabDataTransfer') },
 ])
 
 if (import.meta.client) {
   statisticsUiStore.init()
+}
+
+const tabFromQuery = route.query.tab
+const tabParam = (Array.isArray(tabFromQuery) ? tabFromQuery[0] : tabFromQuery) ?? ''
+if (
+  typeof tabParam === 'string' &&
+  (VALID_SETTINGS_PAGE_TABS as readonly string[]).includes(tabParam)
+) {
+  activeSettingsPageTab.value = tabParam as SettingsPageTab
 }
 
 if (Object.keys(route.query).length > 0) {

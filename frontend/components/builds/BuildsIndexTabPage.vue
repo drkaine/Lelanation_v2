@@ -12,31 +12,16 @@
     :my-builds-visibility-filter="myBuildsVisibilityFilter"
     :visibility-filter-options="visibilityFilterOptions"
     :admin-mode="adminMode"
-    :allow-share="true"
-    :share-loading="shareLoading"
-    :import-loading="importLoading"
     :builds-filtered-by-visibility="buildsFilteredByVisibility"
     :build-to-delete="buildToDelete"
-    :share-modal-open="shareModalOpen"
-    :share-modal-mode="shareModalMode"
-    :share-code="shareCode"
-    :import-code="importCode"
-    :share-copied="shareCopied"
-    :share-error="shareError"
     @update:active-tab="activeTab = $event"
     @update:my-builds-visibility-filter="myBuildsVisibilityFilter = $event"
     @create-build="goToCreateBuild"
-    @share-builds="shareBuilds"
     @clear-comparison="clearComparison"
     @confirm-delete="confirmDelete"
     @toggle-visibility="toggleBuildVisibility"
     @delete-build="deleteBuild"
     @close-delete-modal="buildToDelete = null"
-    @close-share-code="closeShareModal"
-    @copy-share-code="copyShareCode"
-    @update:import-code="importCode = $event"
-    @import-by-code="importBuildsByCode"
-    @open-import-modal="openImportCodeModal"
   />
 </template>
 
@@ -63,19 +48,6 @@ const {
   visibilityFilterOptions,
   buildsFilteredByVisibility,
   buildToDelete,
-  shareModalOpen,
-  shareModalMode,
-  shareCode,
-  shareLoading,
-  shareError,
-  shareCopied,
-  importCode,
-  importLoading,
-  shareBuilds,
-  openImportCodeModal,
-  importBuildsByCode,
-  copyShareCode,
-  closeShareModal,
   confirmDelete,
   deleteBuild,
   toggleBuildVisibility,

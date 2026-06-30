@@ -55,7 +55,7 @@ Utiliser le script atomique :
 ./scripts/deploy-frontend.sh
 ```
 
-Ou manuellement : `pm2 stop lelanation-frontend` → `npm run build` (attendre la fin) → `pm2 start lelanation-frontend`.
+Ou manuellement : `pm2 stop lelanation-frontend` → `npm run build:no-restart` (ou `./scripts/build-frontend.sh`) → `pm2 start lelanation-frontend`.
 
 ## Configuration
 

@@ -1,6 +1,7 @@
 import { computed, onMounted, ref, watch, type MaybeRefOrGetter } from 'vue'
 import { toValue } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import type { MatchupGuide } from '@lelanation/shared-types'
 import { useClientHydrated } from '~/composables/useClientHydrated'
 import { usePageOgImage } from '~/composables/usePageOgImage'

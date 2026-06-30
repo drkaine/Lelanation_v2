@@ -1,4 +1,5 @@
 import type { Build } from '@lelanation/shared-types'
+import { useI18n } from 'vue-i18n'
 import type { YouTubeVideo } from '~/types/youtube'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useItemsStore } from '~/stores/ItemsStore'

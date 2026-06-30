@@ -1,4 +1,4 @@
-.PHONY: help setup dev dev-backend dev-frontend build build-all build-backend build-frontend build-companion build-companion-exe companion-tag exe-windows \
+.PHONY: help setup dev dev-backend dev-frontend build build-all build-backend build-frontend build-frontend-only build-companion build-companion-exe companion-tag exe-windows \
 	pm2-status pm2-start pm2-restart pm2-restart-no-poller pm2-restart-frontend pm2-stop pm2-delete pm2-logs pm2-logs-backend pm2-logs-poller pm2-restart-poller pm2-logs-frontend \
 	deploy deploy-frontend sync-data typecheck typecheck-frontend typecheck-companion lint lint-frontend format format-frontend \
 	test test-packages clean \
@@ -40,6 +40,7 @@ help:
 	@echo "  make build-all          Compile + migrations schéma + PM2 (ne remplit pas les tables stats ; pas de merge SQL)"
 	@echo "  make build-backend      migrate-db (Drizzle) puis npm run build"
 	@echo "  make build-frontend     Stop PM2, clean build, verify chunks, start frontend"
+	@echo "  make build-frontend-only  Build frontend artifacts only (no PM2 restart)"
 	@echo "  make deploy-frontend    Same as build-frontend (atomic deploy script)"
 	@echo "  make build-companion    Build companion Vite app only"
 	@echo "  make build-companion-exe  Build companion Windows .exe at project root"
@@ -155,6 +156,9 @@ docker-db-verify:
 
 build-frontend deploy-frontend:
 	bash "$(ROOT_DIR)/scripts/deploy-frontend.sh"
+
+build-frontend-only:
+	bash "$(ROOT_DIR)/scripts/build-frontend.sh"
 
 pm2-restart-frontend:
 	$(PM2) restart lelanation-frontend --update-env
