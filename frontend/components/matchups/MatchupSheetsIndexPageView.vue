@@ -112,6 +112,7 @@
 </template>
 
 <script setup lang="ts">
+import { toRef } from 'vue'
 import MatchupGuideSearch from '~/components/MatchupGuideDiscovery/MatchupGuideSearch.vue'
 import MatchupGuideFilters from '~/components/MatchupGuideDiscovery/MatchupGuideFilters.vue'
 import MatchupGuideGrid from '~/components/MatchupGuideDiscovery/MatchupGuideGrid.vue'
@@ -135,7 +136,7 @@ const {
   confirmDeleteGuide,
   deleteGuide,
   toggleGuideVisibility,
-} = useMatchupSheetsIndexPage(props.tab)
+} = useMatchupSheetsIndexPage(toRef(props, 'tab'))
 </script>
 
 <style scoped>
@@ -150,11 +151,9 @@ const {
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(4px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 

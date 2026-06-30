@@ -2,7 +2,7 @@ import type { MatchupEntry } from '@lelanation/shared-types'
 import type { MatchupGuideDraftStep } from '~/stores/MatchupGuideDraftStore'
 import { getMatchupBuildVariants } from '~/utils/matchupEntryUtils'
 
-export const MATCHUP_GUIDE_MIN_OPPONENTS_FOR_WRITE = 10
+export const MATCHUP_GUIDE_MIN_OPPONENTS_FOR_WRITE = 2
 
 export const MATCHUP_GUIDE_STEP_ORDER: MatchupGuideDraftStep[] = [
   'champion',

@@ -1,4 +1,5 @@
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch, type MaybeRefOrGetter } from 'vue'
+import { toValue } from 'vue'
 import { useRoute } from 'vue-router'
 import type { MatchupGuide } from '@lelanation/shared-types'
 import { useClientHydrated } from '~/composables/useClientHydrated'
@@ -24,7 +25,9 @@ function tabFromPath(path: string): MatchupSheetsTab | undefined {
   return undefined
 }
 
-export function useMatchupSheetsIndexPage(fixedTab?: MatchupSheetsTab) {
+export function useMatchupSheetsIndexPage(
+  fixedTab?: MaybeRefOrGetter<MatchupSheetsTab | undefined>
+) {
   const { t } = useI18n()
   const localePath = useLocalePath()
   const route = useRoute()
@@ -33,9 +36,10 @@ export function useMatchupSheetsIndexPage(fixedTab?: MatchupSheetsTab) {
   const guideStore = useMatchupGuideStore()
   const favoritesStore = useMatchupGuideFavoritesStore()
   const requestFetch = useRequestFetch()
+  const fixedTabValue = computed(() => toValue(fixedTab))
 
   const routeTab = computed(() => {
-    if (fixedTab) return fixedTab
+    if (fixedTabValue.value) return fixedTabValue.value
     return tabFromPath(route.path) ?? 'discover'
   })
 
@@ -121,9 +125,11 @@ export function useMatchupSheetsIndexPage(fixedTab?: MatchupSheetsTab) {
     }
   }
 
-  if (fixedTab && activeTab.value !== fixedTab) {
-    activeTab.value = fixedTab
-  }
+  watch(fixedTabValue, tab => {
+    if (tab && activeTab.value !== tab) {
+      activeTab.value = tab
+    }
+  })
 
   onMounted(() => {
     favoritesStore.init()

@@ -72,7 +72,9 @@ const canSave = computed(() =>
 const saveHint = computed(() => {
   if (!buildStore.isBuildValid) return t('matchupGuideCreate.completeBuildHint')
   if (draftStore.matchupEntries.length < MATCHUP_GUIDE_MIN_OPPONENTS_FOR_WRITE) {
-    return t('matchupGuideCreate.rankAtLeastTen')
+    return t('matchupGuideCreate.rankAtLeastTen', {
+      required: MATCHUP_GUIDE_MIN_OPPONENTS_FOR_WRITE,
+    })
   }
   if (!areAllMatchupsFinalizeReady(draftStore.matchupEntries)) {
     return t('matchupGuideCreate.finalizeUnlockHint')
@@ -80,7 +82,9 @@ const saveHint = computed(() => {
   if (missingIdentityFields.value.length > 0) {
     return t('matchupGuideCreate.finalizeMissingIdentity')
   }
-  return t('matchupGuideCreate.rankAtLeastTen')
+  return t('matchupGuideCreate.rankAtLeastTen', {
+    required: MATCHUP_GUIDE_MIN_OPPONENTS_FOR_WRITE,
+  })
 })
 
 async function handleSave() {

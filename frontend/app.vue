@@ -1,5 +1,9 @@
 <template>
-  <div class="flex min-h-screen flex-col" :style="appShellVars">
+  <div
+    class="flex min-h-screen flex-col"
+    :class="{ 'has-mobile-tab-bar': showMobileTabBar }"
+    :style="appShellVars"
+  >
     <a
       href="#main"
       class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-surface focus:px-4 focus:py-2 focus:text-text"
@@ -134,6 +138,7 @@
       <NuxtPage />
     </main>
     <AppFooter v-if="showStandardAppChrome && !isAdminRoute && !isBuildCardRenderRoute" />
+    <AppMobileTabBar v-if="showMobileTabBar" />
     <div
       v-if="showStreamerPanels"
       class="streamer-panel streamer-panel-bottom"
@@ -166,6 +171,7 @@ import { computed, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import CookieConsentBanner from '~/components/CookieConsentBanner.vue'
 import AppFooter from '~/components/AppFooter.vue'
+import AppMobileTabBar from '~/components/AppMobileTabBar.vue'
 import CommandShortcutsModal from '~/components/CommandShortcutsModal.vue'
 import { useStreamerMode } from '~/composables/useStreamerMode'
 import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
@@ -226,13 +232,16 @@ function toggleCommandsModal() {
   commandsModalOpen.value = !commandsModalOpen.value
 }
 const commandBarHiddenByScroll = ref(false)
-const COMMAND_BAR_SCROLL_THRESHOLD = 80
+const COMMAND_BAR_HIDE_THRESHOLD = 96
+const COMMAND_BAR_SHOW_THRESHOLD = 24
+let commandBarScrollRaf: number | null = null
 
 const appShellVars = computed(() => ({
   '--build-create-page-padding-top': !isLayoutScaled.value ? '6px' : '1rem',
   '--build-create-card-top-gap': '11px',
   '--build-create-page-lift': '0px',
   '--build-page-padding-top': !isLayoutScaled.value ? '6px' : '1rem',
+  '--app-mobile-tab-bar-height': showMobileTabBar.value ? '3.5rem' : '0px',
 }))
 
 const isAdminRoute = computed(() => String(route.path).includes('/admin'))
@@ -244,6 +253,14 @@ const isBuildCardRenderRoute = computed(() => {
   if (segs[0] === 'en' || segs[0] === 'fr') i = 1
   return segs[i] === 'render' && segs[i + 1] === 'build-card'
 })
+
+const showMobileTabBar = computed(
+  () =>
+    showStandardAppChrome.value &&
+    !isAdminRoute.value &&
+    !isBuildCardRenderRoute.value &&
+    isMobileViewport.value
+)
 
 provide('tooltipsEnabled', tooltipsEnabled)
 
@@ -492,9 +509,27 @@ const onDocumentPointerDown = (event: MouseEvent) => {
   commandsCollapsed.value = true
 }
 
+function syncCommandBarHiddenByScroll(): void {
+  if (!import.meta.client) return
+  const scrollY = window.scrollY
+  if (commandBarHiddenByScroll.value) {
+    if (scrollY <= COMMAND_BAR_SHOW_THRESHOLD) {
+      commandBarHiddenByScroll.value = false
+    }
+    return
+  }
+  if (scrollY >= COMMAND_BAR_HIDE_THRESHOLD) {
+    commandBarHiddenByScroll.value = true
+  }
+}
+
 function onWindowScroll() {
   if (!import.meta.client) return
-  commandBarHiddenByScroll.value = window.scrollY > COMMAND_BAR_SCROLL_THRESHOLD
+  if (commandBarScrollRaf != null) return
+  commandBarScrollRaf = window.requestAnimationFrame(() => {
+    commandBarScrollRaf = null
+    syncCommandBarHiddenByScroll()
+  })
 }
 
 watch(
@@ -502,7 +537,7 @@ watch(
   () => {
     commandsCollapsed.value = true
     commandBarHiddenByScroll.value = false
-    if (import.meta.client) onWindowScroll()
+    if (import.meta.client) syncCommandBarHiddenByScroll()
   },
   { immediate: true }
 )
@@ -512,12 +547,16 @@ if (import.meta.client) {
     window.addEventListener('keydown', onKeyDown)
     document.addEventListener('mousedown', onDocumentPointerDown)
     window.addEventListener('scroll', onWindowScroll, { passive: true })
-    onWindowScroll()
+    syncCommandBarHiddenByScroll()
   })
   onUnmounted(() => {
     window.removeEventListener('keydown', onKeyDown)
     document.removeEventListener('mousedown', onDocumentPointerDown)
     window.removeEventListener('scroll', onWindowScroll)
+    if (commandBarScrollRaf != null) {
+      window.cancelAnimationFrame(commandBarScrollRaf)
+      commandBarScrollRaf = null
+    }
   })
 }
 </script>
@@ -1258,5 +1297,23 @@ html[data-stats-cards='1'] .champion-stats .hidden.md\:block {
 
 .stat-inline-icon--default {
   background: rgb(148 163 184 / 0.38);
+}
+
+.has-mobile-tab-bar {
+  padding-bottom: calc(var(--app-mobile-tab-bar-height, 0px) + env(safe-area-inset-bottom, 0px));
+}
+
+@media (max-width: 768px) {
+  .has-mobile-tab-bar .statistics-filters-fab {
+    bottom: calc(
+      var(--app-mobile-tab-bar-height, 3.5rem) + 1rem + env(safe-area-inset-bottom, 0px)
+    );
+  }
+
+  .has-mobile-tab-bar .statistics-mobile-view-toast {
+    bottom: calc(
+      var(--app-mobile-tab-bar-height, 3.5rem) + 5rem + env(safe-area-inset-bottom, 0px)
+    );
+  }
 }
 </style>

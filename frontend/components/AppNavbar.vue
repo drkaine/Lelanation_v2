@@ -11,7 +11,8 @@
       <button
         v-if="isMobileViewport"
         class="menu-mobile"
-        aria-label="Toggle menu"
+        :aria-label="t('nav.mobileMenu')"
+        :aria-expanded="isMenuOpen"
         @click="toggleMenu"
       >
         <svg
@@ -31,156 +32,6 @@
       </button>
 
       <div v-if="isMobileViewport" class="mobile-nav" :class="{ 'is-open': isMenuOpen }">
-        <div class="mobile-builds-menu">
-          <button
-            type="button"
-            class="version mobile-builds-trigger"
-            :class="{ 'is-active': isBuildsSectionActive }"
-            @click="toggleMobileBuildsMenu"
-          >
-            <span>{{ t('nav.builds') }}</span>
-            <span class="builds-menu-chevron" :class="{ 'is-open': isMobileBuildsMenuOpen }"
-              >▾</span
-            >
-          </button>
-          <div v-if="isMobileBuildsMenuOpen" class="mobile-builds-dropdown">
-            <NuxtLink
-              :to="discoverBuildsLink"
-              :title="t('buildsPage.discover')"
-              class="version builds-submenu-link"
-              :class="{ 'is-active': isDiscoverBuildsActive }"
-              @click="handleBuildsNavigation"
-            >
-              {{ t('buildsPage.discover') }}
-            </NuxtLink>
-            <NuxtLink
-              :to="myBuildsLink"
-              :title="t('buildsPage.myBuilds')"
-              class="version builds-submenu-link"
-              :class="{ 'is-active': isMyBuildsActive }"
-              @click="handleBuildsNavigation"
-            >
-              {{ t('buildsPage.myBuilds') }}
-            </NuxtLink>
-            <NuxtLink
-              v-if="hasFavorites"
-              :to="favoriteBuildsLink"
-              :title="t('buildsPage.myFavorites')"
-              class="version builds-submenu-link"
-              :class="{ 'is-active': isFavoriteBuildsActive }"
-              @click="handleBuildsNavigation"
-            >
-              {{ t('buildsPage.myFavorites') }}
-            </NuxtLink>
-            <NuxtLink
-              :to="localePath('/builds/create')"
-              :title="t('buildsPage.createBuild')"
-              class="version builds-submenu-link"
-              @click="handleBuildsNavigation"
-            >
-              {{ t('buildsPage.createBuild') }}
-            </NuxtLink>
-            <NuxtLink
-              :to="theorycraftLink"
-              :title="t('nav.theorycraft')"
-              class="version builds-submenu-link"
-              :class="{ 'is-active': isTheorycraftActive }"
-              @click="handleBuildsNavigation"
-            >
-              {{ t('nav.theorycraft') }}
-            </NuxtLink>
-            <ShowIf :show-if="isAdminLoggedIn">
-              <NuxtLink
-                :to="matchupGuidesLink"
-                :title="t('nav.matchupGuides')"
-                class="version builds-submenu-link"
-                :class="{ 'is-active': isMatchupGuidesActive }"
-                @click="handleBuildsNavigation"
-              >
-                {{ t('nav.matchupGuides') }}
-              </NuxtLink>
-            </ShowIf>
-          </div>
-        </div>
-        <NuxtLink
-          :to="localePath('/videos')"
-          :title="t('nav.videos')"
-          class="version"
-          @click="toggleMenu"
-        >
-          {{ t('nav.videos') }}
-        </NuxtLink>
-        <!-- <NuxtLink
-          v-if="isAdminLoggedIn"
-          :to="localePath('/map')"
-          :title="t('nav.map')"
-          class="version"
-          @click="toggleMenu"
-        >
-          {{ t('nav.map') }}
-        </NuxtLink> -->
-        <div class="mobile-builds-menu">
-          <button
-            type="button"
-            class="version mobile-builds-trigger"
-            :class="{ 'is-active': isStatisticsSectionActive }"
-            @click="toggleMobileStatisticsMenu"
-          >
-            <span>{{ t('nav.statistics') }}</span>
-            <span
-              v-if="surveillanceAlertCount > 0"
-              class="nav-alert-badge"
-              :title="t('nav.statisticsSurveillanceAlerts', { count: surveillanceAlertCount })"
-            >
-              {{ surveillanceAlertCount }}
-            </span>
-            <span class="builds-menu-chevron" :class="{ 'is-open': isMobileStatisticsMenuOpen }"
-              >▾</span
-            >
-          </button>
-          <div v-if="isMobileStatisticsMenuOpen" class="mobile-builds-dropdown">
-            <NuxtLink
-              :to="statisticsIndexLink"
-              :title="t('nav.statistics')"
-              class="version builds-submenu-link"
-              :class="{ 'is-active': isStatisticsIndexActive }"
-              @click="handleStatisticsNavigation"
-            >
-              {{ t('nav.statistics') }}
-            </NuxtLink>
-            <NuxtLink
-              :to="statisticsSettingsLink"
-              :title="t('nav.statisticsCustom')"
-              class="version builds-submenu-link"
-              :class="{ 'is-active': isStatisticsSettingsActive }"
-              @click="handleStatisticsNavigation"
-            >
-              {{ t('nav.statisticsCustom') }}
-            </NuxtLink>
-            <NuxtLink
-              v-if="hasWatchedChampions"
-              :to="statisticsSurveillanceLink"
-              :title="t('nav.statisticsSurveillance')"
-              class="version builds-submenu-link"
-              :class="{ 'is-active': isStatisticsSurveillanceActive }"
-              @click="handleStatisticsNavigation"
-            >
-              {{ t('nav.statisticsSurveillance') }}
-              <span v-if="surveillanceAlertCount > 0" class="nav-alert-badge nav-alert-badge--sub">
-                {{ surveillanceAlertCount }}
-              </span>
-            </NuxtLink>
-          </div>
-        </div>
-        <NuxtLink
-          :to="statisticsTierListLink"
-          :title="t('nav.tierList')"
-          class="version"
-          :class="{ 'router-link-active': isStatisticsTierListActive }"
-          @click="toggleMenu"
-        >
-          {{ t('nav.tierList') }}
-        </NuxtLink>
         <div class="mobile-builds-menu">
           <button
             type="button"
@@ -213,6 +64,14 @@
           </div>
         </div>
         <NuxtLink
+          :to="localePath('/app')"
+          :title="t('nav.download')"
+          class="version"
+          @click="toggleMenu"
+        >
+          {{ t('nav.download') }}
+        </NuxtLink>
+        <NuxtLink
           v-if="isAdminLoggedIn"
           :to="localePath('/admin')"
           :title="t('nav.admin')"
@@ -220,14 +79,6 @@
           @click="toggleMenu"
         >
           {{ t('nav.admin') }}
-        </NuxtLink>
-        <NuxtLink
-          :to="localePath('/app')"
-          :title="t('nav.download')"
-          class="version"
-          @click="toggleMenu"
-        >
-          {{ t('nav.download') }}
         </NuxtLink>
       </div>
 
@@ -439,9 +290,7 @@ import { pickLatestPatchVersion } from '~/utils/patchVersion'
 
 const isMenuOpen = ref(false)
 const isBuildsMenuOpen = ref(false)
-const isMobileBuildsMenuOpen = ref(false)
 const isStatisticsMenuOpen = ref(false)
-const isMobileStatisticsMenuOpen = ref(false)
 const isPatchMenuOpen = ref(false)
 const isMobilePatchMenuOpen = ref(false)
 const { isMobileViewport } = useMobileViewport()
@@ -587,8 +436,6 @@ onMounted(() => {
 watch(isMobileViewport, mobile => {
   if (!mobile) {
     isMenuOpen.value = false
-    isMobileBuildsMenuOpen.value = false
-    isMobileStatisticsMenuOpen.value = false
     isMobilePatchMenuOpen.value = false
   }
 })
@@ -597,6 +444,8 @@ watch(
   () => route.path,
   () => {
     if (import.meta.client) checkLoggedIn()
+    isMenuOpen.value = false
+    isMobilePatchMenuOpen.value = false
   }
 )
 
@@ -608,26 +457,8 @@ const closeBuildsMenu = () => {
   isBuildsMenuOpen.value = false
 }
 
-const toggleMobileBuildsMenu = () => {
-  isMobileBuildsMenuOpen.value = !isMobileBuildsMenuOpen.value
-}
-
-const toggleMobileStatisticsMenu = () => {
-  isMobileStatisticsMenuOpen.value = !isMobileStatisticsMenuOpen.value
-}
-
-const handleBuildsNavigation = () => {
-  isMobileBuildsMenuOpen.value = false
-  isMenuOpen.value = false
-}
-
 const closeStatisticsMenu = () => {
   isStatisticsMenuOpen.value = false
-}
-
-const handleStatisticsNavigation = () => {
-  isMobileStatisticsMenuOpen.value = false
-  isMenuOpen.value = false
 }
 
 const closePatchMenu = () => {
@@ -875,7 +706,7 @@ const handlePatchNavigation = () => {
   }
 }
 
-@media (max-width: 700px) {
+@media (max-width: 768px) {
   .menu-mobile {
     display: block;
   }

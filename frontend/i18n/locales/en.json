@@ -21,7 +21,14 @@
     "appAdmin": "Lelanation App",
     "download": "Download",
     "language": "Language",
-    "disableTooltips": "Disable tooltips"
+    "disableTooltips": "Disable tooltips",
+    "mobileMenu": "Menu"
+  },
+  "mobileTabBar": {
+    "ariaLabel": "Main navigation",
+    "statisticsShort": "Stats",
+    "tierListShort": "Tier list",
+    "matchupsShort": "Matchups"
   },
   "mapPlanner": {
     "metaTitle": "Map planner | Lelanation",
@@ -1968,7 +1975,7 @@
     "saveGuide": "Save guide",
     "saving": "Saving…",
     "completeBuildHint": "Complete the build card to access matchups.",
-    "rankAtLeastTen": "Rank at least 10 opponents on the scale to access the guide step.",
+    "rankAtLeastTen": "Rank at least {required} opponents on the scale to access the guide step.",
     "opponentProgress": "{count} / {required} opponents ranked",
     "finalizeProgress": "{ready} / {total} ready to finalize",
     "finalizeUnlockHint": "Fill in difficulty, build, and lane advice for every opponent.",

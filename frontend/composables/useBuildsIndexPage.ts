@@ -1,4 +1,5 @@
-import { computed, resolveComponent } from 'vue'
+import { computed, resolveComponent, watch, type MaybeRefOrGetter } from 'vue'
+import { toValue } from 'vue'
 import { useRoute } from 'vue-router'
 import { useBuildsIndexController } from '@lelanation/builds-ui'
 import type { Build } from '@lelanation/shared-types'
@@ -32,7 +33,7 @@ function tabFromPath(path: string): BuildsIndexTab | undefined {
   return undefined
 }
 
-export function useBuildsIndexPage(fixedTab?: BuildsIndexTab) {
+export function useBuildsIndexPage(fixedTab?: MaybeRefOrGetter<BuildsIndexTab | undefined>) {
   const buildStore = useBuildStore()
   const discoveryStore = useBuildDiscoveryStore()
   const voteStore = useVoteStore()
@@ -44,9 +45,10 @@ export function useBuildsIndexPage(fixedTab?: BuildsIndexTab) {
   const { isStreamerMode } = useStreamerMode()
   const nuxtLinkComponent = resolveComponent('NuxtLink')
   const { t } = useI18n()
+  const fixedTabValue = computed(() => toValue(fixedTab))
 
   const routeTab = computed(() => {
-    if (fixedTab) return fixedTab
+    if (fixedTabValue.value) return fixedTabValue.value
     const fromPath = tabFromPath(route.path)
     if (fromPath) return fromPath
     if (typeof route.query.tab === 'string') return route.query.tab
@@ -121,9 +123,11 @@ export function useBuildsIndexPage(fixedTab?: BuildsIndexTab) {
     },
   })
 
-  if (fixedTab && controller.activeTab.value !== fixedTab) {
-    controller.activeTab.value = fixedTab
-  }
+  watch(fixedTabValue, tab => {
+    if (tab && controller.activeTab.value !== tab) {
+      controller.activeTab.value = tab
+    }
+  })
 
   const goToCreateBuild = async () => {
     await navigateTo(localePath('/builds/create'))

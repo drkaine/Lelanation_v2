@@ -41,6 +41,7 @@
 </template>
 
 <script setup lang="ts">
+import { toRef } from 'vue'
 import { BuildsIndexPageView } from '@lelanation/builds-ui'
 import { useBuildsIndexPage, type BuildsIndexTab } from '~/composables/useBuildsIndexPage'
 
@@ -79,5 +80,5 @@ const {
   deleteBuild,
   toggleBuildVisibility,
   clearComparison,
-} = useBuildsIndexPage(props.tab)
+} = useBuildsIndexPage(toRef(props, 'tab'))
 </script>
