@@ -584,7 +584,7 @@ interface Props {
   hideBottomActions?: boolean
   /** Show every custom build without discovery pagination. */
   showAllCustomBuilds?: boolean
-  /** Home preview: 6-column grid with equal card slots. */
+  /** Home preview: responsive grid that wraps build cards to multiple rows. */
   sixColumnGrid?: boolean
 }
 
@@ -1125,27 +1125,18 @@ onUnmounted(() => {
 
 .build-grid-list--six {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  width: 100%;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 15px;
   justify-items: center;
-  padding-inline: 0;
-}
-
-@media (min-width: 640px) {
-  .build-grid-list--six {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-@media (min-width: 1024px) {
-  .build-grid-list--six {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-  }
+  align-items: start;
+  padding-inline: 5px;
+  box-sizing: border-box;
 }
 
 .build-grid-list--six .build-grid-item {
-  width: 100%;
-  max-width: 300px;
+  width: min(100%, var(--build-grid-card-width));
+  max-width: var(--build-grid-card-width);
   min-height: 0;
   padding-bottom: 8px;
 }
@@ -1153,17 +1144,7 @@ onUnmounted(() => {
 .build-grid-list--six .build-grid-item > .relative {
   display: flex;
   justify-content: center;
-}
-
-.build-grid-list--six .build-grid-item > .relative > div {
-  transform: scale(min(1, calc((100vw - 48px) / 6 / 303)));
-  transform-origin: top center;
-}
-
-@media (min-width: 1024px) {
-  .build-grid-list--six .build-grid-item > .relative > div {
-    transform: scale(min(1, calc((100vw - 80px) / 6 / 303)));
-  }
+  width: 100%;
 }
 
 .build-grid-item {

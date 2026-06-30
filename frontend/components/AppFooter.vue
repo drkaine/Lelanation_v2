@@ -27,6 +27,14 @@
         >
           {{ t('footer.information') }}
         </NuxtLink>
+        <span class="hidden md:inline">•</span>
+        <NuxtLink
+          :to="localePath('/app')"
+          class="transition-colors hover:text-accent"
+          :title="t('nav.download')"
+        >
+          {{ t('nav.download') }}
+        </NuxtLink>
         <span v-if="adminMode" class="hidden md:inline">•</span>
         <NuxtLink
           v-if="adminMode"

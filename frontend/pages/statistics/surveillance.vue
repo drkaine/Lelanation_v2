@@ -17,7 +17,7 @@
         >
           <p>{{ t('statisticsPage.surveillanceEmpty') }}</p>
           <NuxtLink
-            :to="localePath('/statistics/settings')"
+            :to="localePath('/settings')"
             class="mt-3 inline-flex rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs hover:bg-primary/10"
           >
             {{ t('statisticsPage.surveillanceSettingsLink') }}

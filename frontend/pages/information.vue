@@ -416,18 +416,6 @@ const navigationShortcuts = computed((): ShortcutRowData[] => [
     description: t('home.customizeShortcutBuilder'),
   },
   {
-    id: 'show-bar',
-    keys: 'Ctrl + ↓',
-    label: t('commandBar.showBar'),
-    description: t('home.customizeShortcutShowBar'),
-  },
-  {
-    id: 'hide-bar',
-    keys: 'Ctrl + ↑',
-    label: t('commandBar.hideBar'),
-    description: t('home.customizeShortcutHideBar'),
-  },
-  {
     id: 'stats-tabs',
     keys: 'Ctrl + ← / →',
     label: t('information.shortcuts.statsTabs'),

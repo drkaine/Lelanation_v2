@@ -1,7 +1,7 @@
 import type { Ref } from 'vue'
 import { championKeyFromRouteParam } from '~/utils/championSlug'
 import { championNameFromMap, type ChampionNamesMap } from '~/composables/useChampionNames'
-import { getChampionIndexUrl, getVersionUrl } from '~/utils/staticDataUrl'
+import { getChampionIndexUrl, getVersionUrl, fetchPublicJson } from '~/utils/staticDataUrl'
 
 export type ChampionStatsSummary = {
   championId: number
@@ -35,9 +35,9 @@ async function loadChampionIndexRows(
   language: string
 ): Promise<ChampionIndexRow[]> {
   try {
-    const versionPayload = await requestFetch<{ currentVersion?: string }>(getVersionUrl())
+    const versionPayload = await fetchPublicJson<{ currentVersion?: string }>(getVersionUrl())
     const version = String(versionPayload?.currentVersion ?? '16.13.1')
-    const indexPayload = await requestFetch<{ champions?: ChampionIndexRow[] }>(
+    const indexPayload = await fetchPublicJson<{ champions?: ChampionIndexRow[] }>(
       getChampionIndexUrl(version, language)
     )
     const rows = indexPayload?.champions ?? []

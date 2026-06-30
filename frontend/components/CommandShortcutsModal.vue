@@ -145,10 +145,6 @@
               <span class="command-shortcut">Ctrl + →</span>
               {{ t('commandBar.nextStep') }}
             </p>
-            <p class="command-help mt-3">
-              <span class="command-shortcut">Ctrl + ↓</span> {{ t('commandBar.showBar') }},
-              <span class="command-shortcut">Ctrl + ↑</span> {{ t('commandBar.hideBar') }}
-            </p>
           </section>
         </div>
       </div>

@@ -22,12 +22,14 @@
     "download": "Download",
     "language": "Language",
     "disableTooltips": "Disable tooltips",
-    "mobileMenu": "Menu"
+    "mobileMenu": "Menu",
+    "settings": "Settings"
   },
   "mobileTabBar": {
     "ariaLabel": "Main navigation",
     "statisticsShort": "Stats",
     "tierListShort": "Tier list",
+    "patchNotesShort": "Patch",
     "matchupsShort": "Matchups"
   },
   "mapPlanner": {

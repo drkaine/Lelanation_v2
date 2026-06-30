@@ -50,78 +50,8 @@
           {{ t('home.customizeSubtitle') }}
         </p>
 
-        <div class="mt-2 grid w-full gap-3 pb-0 lg:grid-cols-2">
-          <div class="rounded-lg border border-primary/20 bg-background/30 p-3">
-            <h3 class="text-xs font-bold uppercase tracking-wide text-accent">
-              {{ t('home.customizeCommandsTitle') }}
-            </h3>
-            <p class="mt-1 text-xs text-text/65">{{ t('home.customizeCommandsHint') }}</p>
-            <ul class="mt-2 grid gap-2 sm:grid-cols-2">
-              <li v-for="toggle in commandBarToggles" :key="toggle.id" class="min-w-0">
-                <label
-                  v-if="toggle.tag === 'label'"
-                  class="command-toggle home-toolbar-toggle w-full justify-between gap-2"
-                >
-                  <input
-                    type="checkbox"
-                    class="command-toggle-checkbox"
-                    :checked="toggle.active"
-                    @change="toggle.onToggle()"
-                  />
-                  <span class="command-toggle-track shrink-0" :class="{ active: toggle.active }">
-                    <span class="command-toggle-thumb" />
-                  </span>
-                  <span class="min-w-0 flex-1 truncate text-left text-xs">{{ toggle.label }}</span>
-                  <kbd class="home-shortcut-kbd shrink-0">{{ toggle.keys }}</kbd>
-                </label>
-                <button
-                  v-else
-                  type="button"
-                  class="command-toggle command-toggle-button home-toolbar-toggle w-full justify-between gap-2"
-                  :aria-pressed="toggle.active"
-                  @click="toggle.onToggle()"
-                >
-                  <span class="command-toggle-track shrink-0" :class="{ active: toggle.active }">
-                    <span class="command-toggle-thumb" />
-                  </span>
-                  <span class="min-w-0 flex-1 truncate text-left text-xs">{{ toggle.label }}</span>
-                  <kbd class="home-shortcut-kbd shrink-0">{{ toggle.keys }}</kbd>
-                </button>
-                <p class="mt-0.5 text-[11px] leading-snug text-text/55">{{ toggle.description }}</p>
-              </li>
-              <li v-for="shortcut in extraShortcuts" :key="shortcut.id" class="min-w-0">
-                <button
-                  v-if="shortcut.action"
-                  type="button"
-                  class="home-shortcut-row w-full text-left"
-                  @click="shortcut.action()"
-                >
-                  <span class="flex items-center justify-between gap-2">
-                    <span class="min-w-0 flex-1 truncate text-xs text-text/90">{{
-                      shortcut.label
-                    }}</span>
-                    <kbd class="home-shortcut-kbd shrink-0">{{ shortcut.keys }}</kbd>
-                  </span>
-                  <p class="mt-0.5 text-[11px] leading-snug text-text/55">
-                    {{ shortcut.description }}
-                  </p>
-                </button>
-                <div v-else class="home-shortcut-row">
-                  <span class="flex items-center justify-between gap-2">
-                    <span class="min-w-0 flex-1 truncate text-xs text-text/90">{{
-                      shortcut.label
-                    }}</span>
-                    <kbd class="home-shortcut-kbd shrink-0">{{ shortcut.keys }}</kbd>
-                  </span>
-                  <p class="mt-0.5 text-[11px] leading-snug text-text/55">
-                    {{ shortcut.description }}
-                  </p>
-                </div>
-              </li>
-            </ul>
-          </div>
-
-          <div class="rounded-lg border border-primary/20 bg-background/30 p-3">
+        <div class="mt-2 w-full pb-0">
+          <div class="mx-auto max-w-lg rounded-lg border border-primary/20 bg-background/30 p-3">
             <h3 class="text-xs font-bold uppercase tracking-wide text-accent">
               {{ t('home.customizeStatsTitle') }}
             </h3>
@@ -130,7 +60,7 @@
               <li v-for="feature in customizeFeatures" :key="feature">• {{ feature }}</li>
             </ul>
             <NuxtLink
-              :to="localePath('/statistics/settings')"
+              :to="localePath('/settings')"
               class="mt-2 inline-flex items-center text-xs font-semibold text-accent hover:underline"
             >
               {{ t('home.customizeSettingsLink') }}
@@ -142,7 +72,7 @@
 
     <div class="max-w-8xl mx-auto px-[10px] py-3">
       <!-- Recent builds -->
-      <section class="home-section mb-3">
+      <section class="home-section home-section--builds mb-3">
         <div class="home-section-header mb-2">
           <h2 class="home-section-title text-xl font-bold sm:text-2xl">
             {{ t('home.recentBuildsTitle') }}
@@ -351,12 +281,6 @@ import ContactForm from '~/components/Contact/ContactForm.vue'
 import VideoGridCard from '~/components/Videos/VideoGridCard.vue'
 import { getChampionImageUrl } from '~/utils/imageUrl'
 import { usePageOgImage } from '~/composables/usePageOgImage'
-import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
-import { useStreamerMode } from '~/composables/useStreamerMode'
-import { usePresentationZoom } from '~/composables/usePresentationZoom'
-import { useChampionSplashPreference } from '~/composables/useChampionSplashPreference'
-import { useSimplifiedStatsPreference } from '~/composables/useSimplifiedStatsPreference'
-import { useStatisticsSplitTransformPreference } from '~/composables/useStatisticsSplitTransformPreference'
 
 const championsStore = useChampionsStore()
 
@@ -364,133 +288,10 @@ const { locale, t } = useI18n()
 const localePath = useLocalePath()
 const { pending, recentBuilds, tierByRole, latestVideos, stats, championForId } = useHomePage()
 
-const commandsModalOpen = useState<boolean>('commands-modal-open', () => false)
-
-const { tooltipsDisabled, toggleTooltipsDisabled } = useTooltipsPreference()
-const { isStreamerMode, toggleStreamerMode } = useStreamerMode()
-const { isPresentationZoom, togglePresentationZoom } = usePresentationZoom()
-const { championSplashEnabled, toggleChampionSplashEnabled } = useChampionSplashPreference()
-const { simplifiedStatsEnabled, toggleSimplifiedStatsEnabled } = useSimplifiedStatsPreference()
-const { statsSplitTransformEnabled, toggleStatsSplitTransformEnabled } =
-  useStatisticsSplitTransformPreference()
-
-type CommandBarToggleRow = {
-  id: string
-  tag: 'label' | 'button'
-  label: string
-  keys: string
-  description: string
-  active: boolean
-  onToggle: () => void
-}
-
-const commandBarToggles = computed((): CommandBarToggleRow[] => [
-  {
-    id: 'tooltips',
-    tag: 'label',
-    label: t('nav.disableTooltips'),
-    keys: 'Alt + T',
-    description: t('home.customizeToolbarTooltips'),
-    active: tooltipsDisabled.value,
-    onToggle: () => toggleTooltipsDisabled(),
-  },
-  {
-    id: 'streamer',
-    tag: 'button',
-    label: t('footer.presentationMode'),
-    keys: 'Alt + P',
-    description: t('home.customizeToolbarStreamer'),
-    active: isStreamerMode.value,
-    onToggle: () => toggleStreamerMode(),
-  },
-  {
-    id: 'zoom',
-    tag: 'button',
-    label: t('commandBar.presentationZoom'),
-    keys: 'Alt + Z',
-    description: t('home.customizeToolbarZoom'),
-    active: isPresentationZoom.value,
-    onToggle: () => togglePresentationZoom(),
-  },
-  {
-    id: 'splash',
-    tag: 'button',
-    label: t('commandBar.championSplash'),
-    keys: 'Alt + S',
-    description: t('home.customizeToolbarSplash'),
-    active: championSplashEnabled.value,
-    onToggle: () => toggleChampionSplashEnabled(),
-  },
-  {
-    id: 'simplified',
-    tag: 'button',
-    label: t('commandBar.simplifiedStats'),
-    keys: 'Alt + C',
-    description: t('home.customizeToolbarSimplified'),
-    active: simplifiedStatsEnabled.value,
-    onToggle: () => toggleSimplifiedStatsEnabled(),
-  },
-  {
-    id: 'split-transform',
-    tag: 'button',
-    label: t('commandBar.splitTransformStats'),
-    keys: 'Shift + T',
-    description: t('home.customizeToolbarSplitTransform'),
-    active: statsSplitTransformEnabled.value,
-    onToggle: () => toggleStatsSplitTransformEnabled(),
-  },
-])
-
-type ExtraShortcutRow = {
-  id: string
-  keys: string
-  label: string
-  description: string
-  action?: () => void
-}
-
-const extraShortcuts = computed((): ExtraShortcutRow[] => [
-  {
-    id: 'open-modal',
-    keys: 'Alt + H',
-    label: t('commandBar.openShortcutsModal'),
-    description: t('home.customizeShortcutOpenModal'),
-    action: () => openCommandsModal(),
-  },
-  {
-    id: 'builder-prev',
-    keys: 'Ctrl + ←',
-    label: t('home.customizeShortcutBuilderPrev'),
-    description: t('home.customizeShortcutBuilder'),
-  },
-  {
-    id: 'builder-next',
-    keys: 'Ctrl + →',
-    label: t('home.customizeShortcutBuilderNext'),
-    description: t('home.customizeShortcutBuilder'),
-  },
-  {
-    id: 'show-bar',
-    keys: 'Ctrl + ↓',
-    label: t('commandBar.showBar'),
-    description: t('home.customizeShortcutShowBar'),
-  },
-  {
-    id: 'hide-bar',
-    keys: 'Ctrl + ↑',
-    label: t('commandBar.hideBar'),
-    description: t('home.customizeShortcutHideBar'),
-  },
-])
-
 const customizeFeatures = computed(() => [
   t('home.customizeFeatureTabs'),
   t('home.customizeFeatureDefaultTab'),
 ])
-
-function openCommandsModal(): void {
-  commandsModalOpen.value = true
-}
 
 useHead({
   title: () => t('seo.homeTitle'),
@@ -570,6 +371,13 @@ function formatStat(value: number): string {
 </script>
 
 <style scoped>
+.home-section--builds {
+  width: 100%;
+  min-width: 0;
+  overflow-x: clip;
+  text-align: left;
+}
+
 .home-section-title {
   color: var(--color-gold-300);
 }
@@ -584,43 +392,5 @@ function formatStat(value: number): string {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: rgb(251 191 36 / 0.75);
-}
-
-.home-shortcut-kbd {
-  display: inline-block;
-  border: 1px solid rgb(var(--rgb-accent) / 0.35);
-  border-radius: 6px;
-  background: rgb(var(--rgb-accent) / 0.08);
-  padding: 2px 8px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--color-blue-50);
-  white-space: nowrap;
-}
-
-.home-toolbar-toggle {
-  border-radius: 8px;
-  padding: 5px 8px;
-}
-
-.home-shortcut-row {
-  display: block;
-  border: 1px solid rgb(var(--rgb-accent) / 0.2);
-  border-radius: 8px;
-  padding: 5px 8px;
-  background: rgb(var(--rgb-background) / 0.12);
-}
-
-button.home-shortcut-row {
-  cursor: pointer;
-  transition:
-    background-color 0.2s ease,
-    border-color 0.2s ease;
-}
-
-button.home-shortcut-row:hover {
-  border-color: rgb(var(--rgb-accent) / 0.45);
-  background: rgb(var(--rgb-accent) / 0.08);
 }
 </style>

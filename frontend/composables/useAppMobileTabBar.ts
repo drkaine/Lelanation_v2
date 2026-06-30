@@ -1,7 +1,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 
-export type AppMobileTabId = 'builds' | 'videos' | 'statistics' | 'tierList' | 'matchups'
+export type AppMobileTabId = 'builds' | 'statistics' | 'videos' | 'patchNotes' | 'matchups'
 
 export type AppMobileTab = {
   id: AppMobileTabId
@@ -30,12 +30,6 @@ export function useAppMobileTabBar() {
       icon: 'mdi:hammer-wrench',
     },
     {
-      id: 'videos',
-      path: localePath('/videos'),
-      labelKey: 'nav.videos',
-      icon: 'mdi:play-circle-outline',
-    },
-    {
       id: 'statistics',
       path: localePath('/statistics'),
       labelKey: 'mobileTabBar.statisticsShort',
@@ -43,10 +37,16 @@ export function useAppMobileTabBar() {
       badge: surveillanceAlertCount.value > 0 ? surveillanceAlertCount.value : undefined,
     },
     {
-      id: 'tierList',
-      path: localePath('/statistics/tier-list'),
-      labelKey: 'mobileTabBar.tierListShort',
-      icon: 'mdi:trophy-outline',
+      id: 'videos',
+      path: localePath('/videos'),
+      labelKey: 'nav.videos',
+      icon: 'mdi:play-circle-outline',
+    },
+    {
+      id: 'patchNotes',
+      path: localePath('/patch-notes'),
+      labelKey: 'mobileTabBar.patchNotesShort',
+      icon: 'mdi:script-text-outline',
     },
     {
       id: 'matchups',
@@ -61,15 +61,12 @@ export function useAppMobileTabBar() {
     switch (tabId) {
       case 'builds':
         return path.includes('/builds')
+      case 'statistics':
+        return path.includes('/statistics')
       case 'videos':
         return path.includes('/videos')
-      case 'statistics': {
-        const tierListPath = localePath('/statistics/tier-list')
-        if (path === tierListPath || path.startsWith(`${tierListPath}/`)) return false
-        return path.includes('/statistics')
-      }
-      case 'tierList':
-        return path.includes('/statistics/tier-list')
+      case 'patchNotes':
+        return path.includes('/patch-notes')
       case 'matchups':
         return path.includes('/matchups/')
       default:

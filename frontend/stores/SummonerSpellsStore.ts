@@ -3,7 +3,7 @@ import type { SummonerSpell } from '@lelanation/shared-types'
 import { useVersionStore } from './VersionStore'
 import { getFallbackGameVersion } from '~/config/version'
 import { apiUrl } from '~/utils/apiUrl'
-import { getGameDataUrl } from '~/utils/staticDataUrl'
+import { getGameDataUrl, fetchPublicJson } from '~/utils/staticDataUrl'
 import { normalizeSummonerSpell, resolveSummonerSpellFromRef } from '~/utils/summonerSpellResolver'
 import type { SummonerSpellRefLike } from '~/utils/summonerSpellResolver'
 
@@ -63,7 +63,7 @@ export const useSummonerSpellsStore = defineStore('summonerSpells', {
         try {
           const staticUrl = getGameDataUrl(version, 'summoner', language)
           const urlWithCacheBust = `${staticUrl}?_v=${version.replace(/\./g, '_')}`
-          data = await $fetch<Record<string, unknown>>(urlWithCacheBust)
+          data = await fetchPublicJson<Record<string, unknown>>(urlWithCacheBust)
           useStatic = true
         } catch {
           // Static file not available, will try API

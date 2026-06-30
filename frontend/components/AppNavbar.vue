@@ -3,13 +3,22 @@
     <nav class="header">
       <div class="left-header">
         <LanguageSwitcher />
+        <NuxtLink
+          :to="localePath('/settings')"
+          class="settings-nav-link"
+          :class="{ 'is-active': isSettingsSectionActive }"
+          :title="t('nav.settings')"
+          :aria-label="t('nav.settings')"
+        >
+          <Icon name="mdi:cog-outline" size="20" />
+        </NuxtLink>
         <NuxtLink :to="localePath('/')" class="link" :aria-label="t('nav.home')">
           <span>Lelanation</span>
         </NuxtLink>
       </div>
 
       <button
-        v-if="isMobileViewport"
+        v-if="isMobileViewport && isAdminLoggedIn"
         class="menu-mobile"
         :aria-label="t('nav.mobileMenu')"
         :aria-expanded="isMenuOpen"
@@ -31,46 +40,11 @@
         </svg>
       </button>
 
-      <div v-if="isMobileViewport" class="mobile-nav" :class="{ 'is-open': isMenuOpen }">
-        <div class="mobile-builds-menu">
-          <button
-            type="button"
-            class="version mobile-builds-trigger"
-            :class="{ 'is-active': isPatchNotesActive }"
-            @click="toggleMobilePatchMenu"
-          >
-            <a
-              :href="officialPatchNotesUrl"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="patch-version-link"
-              :title="t('nav.officialPatchNotes')"
-              @click.stop
-            >
-              {{ activePatchVersion }}
-            </a>
-            <span class="builds-menu-chevron" :class="{ 'is-open': isMobilePatchMenuOpen }">▾</span>
-          </button>
-          <div v-if="isMobilePatchMenuOpen" class="mobile-builds-dropdown">
-            <NuxtLink
-              :to="patchSummaryLink"
-              :title="t('nav.patchSummary')"
-              class="version builds-submenu-link"
-              :class="{ 'is-active': isPatchNotesActive }"
-              @click="handlePatchNavigation"
-            >
-              {{ t('nav.patchSummary') }}
-            </NuxtLink>
-          </div>
-        </div>
-        <NuxtLink
-          :to="localePath('/app')"
-          :title="t('nav.download')"
-          class="version"
-          @click="toggleMenu"
-        >
-          {{ t('nav.download') }}
-        </NuxtLink>
+      <div
+        v-if="isMobileViewport && isAdminLoggedIn"
+        class="mobile-nav"
+        :class="{ 'is-open': isMenuOpen }"
+      >
         <NuxtLink
           v-if="isAdminLoggedIn"
           :to="localePath('/admin')"
@@ -155,17 +129,6 @@
             </ShowIf>
           </div>
         </div>
-        <NuxtLink :to="localePath('/videos')" :title="t('nav.videos')" class="version">
-          {{ t('nav.videos') }}
-        </NuxtLink>
-        <!-- <NuxtLink
-          v-if="isAdminLoggedIn"
-          :to="localePath('/map')"
-          :title="t('nav.map')"
-          class="version"
-        >
-          {{ t('nav.map') }}
-        </NuxtLink> -->
         <div
           class="builds-menu"
           @mouseenter="isStatisticsMenuOpen = true"
@@ -197,13 +160,13 @@
               {{ t('nav.statistics') }}
             </NuxtLink>
             <NuxtLink
-              :to="statisticsSettingsLink"
-              :title="t('nav.statisticsCustom')"
+              :to="statisticsTierListLink"
+              :title="t('nav.tierList')"
               class="builds-submenu-link"
-              :class="{ 'is-active': isStatisticsSettingsActive }"
+              :class="{ 'is-active': isStatisticsTierListActive }"
               @click="closeStatisticsMenu"
             >
-              {{ t('nav.statisticsCustom') }}
+              {{ t('nav.tierList') }}
             </NuxtLink>
             <NuxtLink
               v-if="hasWatchedChampions"
@@ -220,31 +183,18 @@
             </NuxtLink>
           </div>
         </div>
-        <NuxtLink
-          :to="statisticsTierListLink"
-          :title="t('nav.tierList')"
-          class="version"
-          :class="{ 'router-link-active': isStatisticsTierListActive }"
-        >
-          {{ t('nav.tierList') }}
-        </NuxtLink>
-        <NuxtLink
-          v-if="isAdminLoggedIn"
-          :to="localePath('/admin')"
-          :title="t('nav.admin')"
-          class="version"
-        >
-          {{ t('nav.admin') }}
-        </NuxtLink>
-        <NuxtLink :to="localePath('/app')" :title="t('nav.download')" class="version">
-          {{ t('nav.download') }}
+        <NuxtLink :to="localePath('/videos')" :title="t('nav.videos')" class="version">
+          {{ t('nav.videos') }}
         </NuxtLink>
         <div
           class="builds-menu patch-menu"
           @mouseenter="isPatchMenuOpen = true"
           @mouseleave="isPatchMenuOpen = false"
         >
-          <div class="version builds-menu-trigger patch-menu-trigger">
+          <div
+            class="version builds-menu-trigger patch-menu-trigger"
+            :class="{ 'is-active': isPatchNotesActive }"
+          >
             <a
               :href="officialPatchNotesUrl"
               target="_blank"
@@ -268,6 +218,14 @@
             </NuxtLink>
           </div>
         </div>
+        <NuxtLink
+          v-if="isAdminLoggedIn"
+          :to="localePath('/admin')"
+          :title="t('nav.admin')"
+          class="version"
+        >
+          {{ t('nav.admin') }}
+        </NuxtLink>
       </div>
     </nav>
   </header>
@@ -292,7 +250,6 @@ const isMenuOpen = ref(false)
 const isBuildsMenuOpen = ref(false)
 const isStatisticsMenuOpen = ref(false)
 const isPatchMenuOpen = ref(false)
-const isMobilePatchMenuOpen = ref(false)
 const { isMobileViewport } = useMobileViewport()
 const { t, locale } = useI18n()
 const { isLoggedIn: isAdminLoggedIn, checkLoggedIn } = useAdminAuth()
@@ -335,15 +292,14 @@ const isStatisticsIndexActive = computed(() => route.path === localePath('/stati
 const isStatisticsTierListActive = computed(
   () => route.path === localePath('/statistics/tier-list')
 )
-const isStatisticsSettingsActive = computed(() => route.path === localePath('/statistics/settings'))
 const isStatisticsSurveillanceActive = computed(
   () => route.path === localePath('/statistics/surveillance')
 )
-const isStatisticsSectionActive = computed(() => {
-  const tierListPath = localePath('/statistics/tier-list')
-  if (route.path === tierListPath || route.path.startsWith(`${tierListPath}/`)) return false
-  return route.path.includes('/statistics')
+const isSettingsSectionActive = computed(() => {
+  const path = route.path
+  return path === localePath('/settings') || path.startsWith(`${localePath('/settings')}/`)
 })
+const isStatisticsSectionActive = computed(() => route.path.includes('/statistics'))
 const isPatchNotesActive = computed(() => route.path.includes('/patch-notes'))
 
 const activePatchVersion = computed(() => {
@@ -413,7 +369,6 @@ const statisticsTierListLink = computed(() =>
   })
 )
 
-const statisticsSettingsLink = computed(() => localePath('/statistics/settings'))
 const statisticsSurveillanceLink = computed(() =>
   localePath({
     path: '/statistics/surveillance',
@@ -436,7 +391,6 @@ onMounted(() => {
 watch(isMobileViewport, mobile => {
   if (!mobile) {
     isMenuOpen.value = false
-    isMobilePatchMenuOpen.value = false
   }
 })
 
@@ -445,7 +399,6 @@ watch(
   () => {
     if (import.meta.client) checkLoggedIn()
     isMenuOpen.value = false
-    isMobilePatchMenuOpen.value = false
   }
 )
 
@@ -463,15 +416,6 @@ const closeStatisticsMenu = () => {
 
 const closePatchMenu = () => {
   isPatchMenuOpen.value = false
-}
-
-const toggleMobilePatchMenu = () => {
-  isMobilePatchMenuOpen.value = !isMobilePatchMenuOpen.value
-}
-
-const handlePatchNavigation = () => {
-  isMobilePatchMenuOpen.value = false
-  isMenuOpen.value = false
 }
 </script>
 
@@ -498,6 +442,26 @@ const handlePatchNavigation = () => {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.settings-nav-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-blue-50);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.settings-nav-link.is-active,
+.settings-nav-link.router-link-active {
+  color: var(--color-accent);
+}
+
+@media (hover: hover) {
+  .settings-nav-link:hover {
+    color: var(--color-accent);
+  }
 }
 
 .right-header {

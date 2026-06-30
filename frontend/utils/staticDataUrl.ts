@@ -35,6 +35,18 @@ export function getVersionUrl(): string {
   return '/data/game/version.json'
 }
 
+/** Fetch JSON from `public/` without triggering Vue Router navigation on the client. */
+export async function fetchPublicJson<T>(path: string): Promise<T> {
+  if (import.meta.client) {
+    const response = await fetch(path, { cache: 'no-cache' })
+    if (!response.ok) {
+      throw new Error(`Failed to fetch ${path}: ${response.status}`)
+    }
+    return (await response.json()) as T
+  }
+  return $fetch<T>(path)
+}
+
 /**
  * Get static image URL
  * Uses static files from frontend public directory

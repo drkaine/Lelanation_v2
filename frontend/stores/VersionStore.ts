@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { apiUrl } from '~/utils/apiUrl'
-import { getVersionUrl } from '~/utils/staticDataUrl'
+import { getVersionUrl, fetchPublicJson } from '~/utils/staticDataUrl'
 
 interface VersionState {
   currentVersion: string | null
@@ -35,7 +35,7 @@ export const useVersionStore = defineStore('version', {
 
           // Static file first (SSR + client) — avoids stale build-time fallback on tier-list / champion pages.
           try {
-            const staticData = await $fetch<{ currentVersion?: string; version?: string }>(
+            const staticData = await fetchPublicJson<{ currentVersion?: string; version?: string }>(
               getVersionUrl()
             )
             const version = staticData.currentVersion || staticData.version

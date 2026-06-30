@@ -12,110 +12,6 @@
     </a>
     <header v-if="showStandardAppChrome && !isBuildCardRenderRoute" class="app-chrome-sticky">
       <AppNavbar />
-      <div v-show="!commandBarHiddenByScroll" class="command-bar-sticky-row">
-        <button
-          v-show="commandsCollapsed"
-          type="button"
-          class="command-collapse-floating"
-          title="Afficher les commandes"
-          :aria-expanded="false"
-          @click="commandsCollapsed = false"
-        >
-          ▾
-        </button>
-        <div v-show="!commandsCollapsed" ref="commandBarRef" class="command-bar-overlay">
-          <div class="command-bar" :class="{ 'command-bar-collapsed': commandsCollapsed }">
-            <div v-show="!commandsCollapsed" class="command-bar-content">
-              <label class="command-toggle">
-                <input
-                  type="checkbox"
-                  :checked="tooltipsDisabled"
-                  class="command-toggle-checkbox"
-                  @change="toggleTooltipsDisabled()"
-                />
-                <span class="command-toggle-track" :class="{ active: tooltipsDisabled }">
-                  <span class="command-toggle-thumb" />
-                </span>
-                <span>{{ t('nav.disableTooltips') }}</span>
-              </label>
-              <button
-                type="button"
-                class="command-toggle command-toggle-button"
-                :aria-pressed="isStreamerMode"
-                @click="toggleStreamerMode()"
-              >
-                <span class="command-toggle-track" :class="{ active: isStreamerMode }">
-                  <span class="command-toggle-thumb" />
-                </span>
-                <span>{{ t('footer.presentationMode') }}</span>
-              </button>
-              <button
-                type="button"
-                class="command-toggle command-toggle-button"
-                :aria-pressed="isPresentationZoom"
-                @click="togglePresentationZoom()"
-              >
-                <span class="command-toggle-track" :class="{ active: isPresentationZoom }">
-                  <span class="command-toggle-thumb" />
-                </span>
-                <span>{{ t('commandBar.presentationZoom') }}</span>
-              </button>
-              <button
-                type="button"
-                class="command-toggle command-toggle-button"
-                :aria-pressed="championSplashEnabled"
-                @click="toggleChampionSplashEnabled()"
-              >
-                <span class="command-toggle-track" :class="{ active: championSplashEnabled }">
-                  <span class="command-toggle-thumb" />
-                </span>
-                <span>{{ t('commandBar.championSplash') }}</span>
-              </button>
-              <button
-                type="button"
-                class="command-toggle command-toggle-button"
-                :aria-pressed="simplifiedStatsEnabled"
-                @click="toggleSimplifiedStatsEnabled()"
-              >
-                <span class="command-toggle-track" :class="{ active: simplifiedStatsEnabled }">
-                  <span class="command-toggle-thumb" />
-                </span>
-                <span>{{ t('commandBar.simplifiedStats') }}</span>
-              </button>
-              <button
-                type="button"
-                class="command-toggle command-toggle-button"
-                :aria-pressed="statsSplitTransformEnabled"
-                @click="toggleStatsSplitTransformEnabled()"
-              >
-                <span class="command-toggle-track" :class="{ active: statsSplitTransformEnabled }">
-                  <span class="command-toggle-thumb" />
-                </span>
-                <span>{{ t('commandBar.splitTransformStats') }}</span>
-              </button>
-              <button
-                type="button"
-                class="command-help-button"
-                :title="t('commandBar.shortcutsModalTitle')"
-                :aria-label="t('commandBar.openShortcutsModal')"
-                :aria-expanded="commandsModalOpen"
-                @click="openCommandsModal"
-              >
-                ?
-              </button>
-            </div>
-            <button
-              type="button"
-              class="command-collapse-button"
-              :title="commandsCollapsed ? 'Afficher les commandes' : 'Masquer les commandes'"
-              :aria-expanded="!commandsCollapsed"
-              @click="commandsCollapsed = !commandsCollapsed"
-            >
-              {{ commandsCollapsed ? '▾' : '▴' }}
-            </button>
-          </div>
-        </div>
-      </div>
     </header>
     <div
       v-if="showStreamerPanels"
@@ -168,7 +64,6 @@
 
 <script setup lang="ts">
 import { computed, watch, onMounted, onUnmounted } from 'vue'
-import { useI18n } from 'vue-i18n'
 import CookieConsentBanner from '~/components/CookieConsentBanner.vue'
 import AppFooter from '~/components/AppFooter.vue'
 import AppMobileTabBar from '~/components/AppMobileTabBar.vue'
@@ -192,7 +87,6 @@ import {
 } from '~/utils/matchupGuideCreateSteps'
 import { matchupGuideCreateRouteQuery } from '~/utils/matchupGuideFromBuildSession'
 
-const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const localePath = useLocalePath()
@@ -216,13 +110,7 @@ const matchupGuideDraftStore = useMatchupGuideDraftStore()
 const streamerNavOpen = useState<boolean>('streamer-nav-open', () => false)
 const streamerFooterOpen = useState<boolean>('streamer-footer-open', () => false)
 const streamerPanelsOpen = computed(() => streamerNavOpen.value && streamerFooterOpen.value)
-const commandsCollapsed = useState<boolean>('commands-collapsed', () => true)
 const commandsModalOpen = useState<boolean>('commands-modal-open', () => false)
-const commandBarRef = ref<HTMLElement | null>(null)
-
-function openCommandsModal() {
-  commandsModalOpen.value = true
-}
 
 function closeCommandsModal() {
   commandsModalOpen.value = false
@@ -231,10 +119,6 @@ function closeCommandsModal() {
 function toggleCommandsModal() {
   commandsModalOpen.value = !commandsModalOpen.value
 }
-const commandBarHiddenByScroll = ref(false)
-const COMMAND_BAR_HIDE_THRESHOLD = 96
-const COMMAND_BAR_SHOW_THRESHOLD = 24
-let commandBarScrollRaf: number | null = null
 
 const appShellVars = computed(() => ({
   '--build-create-page-padding-top': !isLayoutScaled.value ? '6px' : '1rem',
@@ -245,7 +129,7 @@ const appShellVars = computed(() => ({
 }))
 
 const isAdminRoute = computed(() => String(route.path).includes('/admin'))
-/** Page capture PNG build card : pas de nav / barre de commandes / ▾ flottant. */
+/** Page capture PNG build card : pas de nav. */
 const isBuildCardRenderRoute = computed(() => {
   const path = String(route.path || '').replace(/\/+$/, '') || '/'
   const segs = path.split('/').filter(Boolean)
@@ -311,25 +195,6 @@ const onKeyDown = (event: KeyboardEvent) => {
       tagName === 'INPUT' ||
       tagName === 'TEXTAREA' ||
       tagName === 'SELECT')
-
-  if (
-    event.ctrlKey &&
-    !event.altKey &&
-    !event.metaKey &&
-    !event.shiftKey &&
-    (event.key === 'ArrowDown' || event.key === 'ArrowUp')
-  ) {
-    if (!isEditableTarget) {
-      event.preventDefault()
-      if (event.key === 'ArrowDown') {
-        commandsCollapsed.value = false
-        commandBarHiddenByScroll.value = false
-      } else {
-        commandsCollapsed.value = true
-      }
-    }
-    return
-  }
 
   if (event.altKey && key === 'h') {
     event.preventDefault()
@@ -501,62 +366,12 @@ const onKeyDown = (event: KeyboardEvent) => {
   }
 }
 
-const onDocumentPointerDown = (event: MouseEvent) => {
-  if (commandsCollapsed.value) return
-  const target = event.target as Node | null
-  if (!target) return
-  if (commandBarRef.value?.contains(target)) return
-  commandsCollapsed.value = true
-}
-
-function syncCommandBarHiddenByScroll(): void {
-  if (!import.meta.client) return
-  const scrollY = window.scrollY
-  if (commandBarHiddenByScroll.value) {
-    if (scrollY <= COMMAND_BAR_SHOW_THRESHOLD) {
-      commandBarHiddenByScroll.value = false
-    }
-    return
-  }
-  if (scrollY >= COMMAND_BAR_HIDE_THRESHOLD) {
-    commandBarHiddenByScroll.value = true
-  }
-}
-
-function onWindowScroll() {
-  if (!import.meta.client) return
-  if (commandBarScrollRaf != null) return
-  commandBarScrollRaf = window.requestAnimationFrame(() => {
-    commandBarScrollRaf = null
-    syncCommandBarHiddenByScroll()
-  })
-}
-
-watch(
-  () => route.path,
-  () => {
-    commandsCollapsed.value = true
-    commandBarHiddenByScroll.value = false
-    if (import.meta.client) syncCommandBarHiddenByScroll()
-  },
-  { immediate: true }
-)
-
 if (import.meta.client) {
   onMounted(() => {
     window.addEventListener('keydown', onKeyDown)
-    document.addEventListener('mousedown', onDocumentPointerDown)
-    window.addEventListener('scroll', onWindowScroll, { passive: true })
-    syncCommandBarHiddenByScroll()
   })
   onUnmounted(() => {
     window.removeEventListener('keydown', onKeyDown)
-    document.removeEventListener('mousedown', onDocumentPointerDown)
-    window.removeEventListener('scroll', onWindowScroll)
-    if (commandBarScrollRaf != null) {
-      window.cancelAnimationFrame(commandBarScrollRaf)
-      commandBarScrollRaf = null
-    }
   })
 }
 </script>
@@ -669,10 +484,6 @@ if (import.meta.client) {
 }
 
 @media (max-width: 768px) {
-  .app-chrome-sticky .command-bar-sticky-row {
-    display: none !important;
-  }
-
   .streamer-toggle,
   .streamer-panel {
     display: none !important;
@@ -691,126 +502,6 @@ if (import.meta.client) {
   top: auto;
   margin-bottom: 0;
   z-index: auto;
-}
-
-.command-bar-sticky-row {
-  position: relative;
-  min-height: 24px;
-}
-
-.command-bar-overlay {
-  display: flex;
-  justify-content: flex-end;
-  padding: 0 6px;
-}
-
-.command-bar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  width: 100%;
-  padding: 6px 16px;
-  background: #08101f;
-  border-bottom: 1px solid rgb(var(--rgb-accent) / 0.15);
-  font-size: 11px;
-  color: rgb(var(--rgb-text) / 0.6);
-  backdrop-filter: blur(10px);
-}
-
-.command-bar.command-bar-collapsed {
-  width: auto;
-  justify-content: flex-end;
-  padding: 2px 0 0;
-  background: transparent;
-  border-bottom: none;
-  backdrop-filter: none;
-}
-
-.command-bar-content {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  flex: 1;
-}
-
-.command-help-button {
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgb(var(--rgb-accent) / 0.28);
-  border-radius: 9999px;
-  background: rgb(var(--rgb-background) / 0.18);
-  color: var(--color-blue-50);
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition:
-    background-color 0.2s ease,
-    border-color 0.2s ease;
-}
-
-.command-help-button:hover,
-.command-help-button[aria-expanded='true'] {
-  background: rgb(var(--rgb-background) / 0.3);
-  border-color: rgb(var(--rgb-accent) / 0.45);
-}
-
-.command-collapse-button {
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgb(var(--rgb-accent) / 0.28);
-  border-radius: 4px;
-  background: rgb(var(--rgb-background) / 0.18);
-  color: var(--color-blue-50);
-  cursor: pointer;
-  transition:
-    background-color 0.2s ease,
-    border-color 0.2s ease;
-}
-
-.command-collapse-button:hover {
-  background: rgb(var(--rgb-background) / 0.3);
-  border-color: rgb(var(--rgb-accent) / 0.45);
-}
-
-.command-bar.command-bar-collapsed .command-collapse-button {
-  background: #08101f;
-}
-
-.command-collapse-floating {
-  position: absolute;
-  top: 2px;
-  right: 6px;
-  left: auto;
-  z-index: 1;
-  width: 24px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgb(var(--rgb-accent) / 0.28);
-  border-radius: 4px;
-  background: #08101f;
-  color: var(--color-blue-50);
-  cursor: pointer;
-  transition:
-    background-color 0.2s ease,
-    border-color 0.2s ease;
-}
-
-.command-collapse-floating:hover {
-  background: rgb(var(--rgb-background) / 0.3);
-  border-color: rgb(var(--rgb-accent) / 0.45);
 }
 
 .command-toggle {
