@@ -5,6 +5,7 @@ import { getFallbackGameVersion } from '~/config/version'
 import { apiUrl } from '~/utils/apiUrl'
 import { getGameDataUrl } from '~/utils/staticDataUrl'
 import { isExcludedGameItemId } from '~/utils/excludedGameItems'
+import { matchesItemSearch } from '~/utils/multilingualEntitySearch'
 
 interface ItemsState {
   items: Item[]
@@ -31,12 +32,13 @@ export const useItemsStore = defineStore('items', {
 
         // Search by name
         if (query) {
-          const lowerQuery = query.toLowerCase()
-          filtered = filtered.filter(
-            item =>
-              item.name.toLowerCase().includes(lowerQuery) ||
-              item.colloq?.toLowerCase().includes(lowerQuery) ||
-              item.plaintext?.toLowerCase().includes(lowerQuery)
+          filtered = filtered.filter(item =>
+            matchesItemSearch(query, {
+              id: item.id,
+              name: item.name,
+              colloq: item.colloq,
+              plaintext: item.plaintext,
+            })
           )
         }
 

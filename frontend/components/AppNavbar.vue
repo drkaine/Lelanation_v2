@@ -17,28 +17,218 @@
         </NuxtLink>
       </div>
 
-      <button
-        v-if="isMobileViewport && isAdminLoggedIn"
-        class="menu-mobile"
-        :aria-label="t('nav.mobileMenu')"
-        :aria-expanded="isMenuOpen"
-        @click="toggleMenu"
-      >
-        <svg
-          width="24"
-          height="24"
-          viewBox="0 0 24 24"
-          stroke-width="2"
-          stroke="currentColor"
-          fill="none"
-          stroke-linecap="round"
-          stroke-linejoin="round"
+      <div class="center-header">
+        <NuxtLink
+          :to="localePath('/download')"
+          class="companion-app-link version"
+          :class="{ 'is-active': isCompanionAppActive }"
+          :title="t('nav.companionApp')"
         >
-          <path d="M4 6l16 0"></path>
-          <path d="M4 12l16 0"></path>
-          <path d="M4 18l16 0"></path>
-        </svg>
-      </button>
+          {{ t('nav.companionApp') }}
+        </NuxtLink>
+      </div>
+
+      <div class="right-header-slot">
+        <button
+          v-if="isMobileViewport && isAdminLoggedIn"
+          class="menu-mobile"
+          :aria-label="t('nav.mobileMenu')"
+          :aria-expanded="isMenuOpen"
+          @click="toggleMenu"
+        >
+          <svg
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            stroke-width="2"
+            stroke="currentColor"
+            fill="none"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M4 6l16 0"></path>
+            <path d="M4 12l16 0"></path>
+            <path d="M4 18l16 0"></path>
+          </svg>
+        </button>
+
+        <div v-if="!isMobileViewport" class="right-header">
+          <div
+            class="builds-menu"
+            @mouseenter="isBuildsMenuOpen = true"
+            @mouseleave="isBuildsMenuOpen = false"
+          >
+            <NuxtLink
+              :to="discoverBuildsLink"
+              class="version builds-menu-trigger"
+              :class="{ 'is-active': isBuildsSectionActive }"
+            >
+              <span>{{ t('nav.builds') }}</span>
+              <span class="builds-menu-chevron" :class="{ 'is-open': isBuildsMenuOpen }">▾</span>
+            </NuxtLink>
+            <div v-show="isBuildsMenuOpen" class="builds-menu-dropdown">
+              <NuxtLink
+                :to="discoverBuildsLink"
+                :title="t('buildsPage.discover')"
+                class="builds-submenu-link"
+                :class="{ 'is-active': isDiscoverBuildsActive }"
+                @click="closeBuildsMenu"
+              >
+                {{ t('buildsPage.discover') }}
+              </NuxtLink>
+              <NuxtLink
+                :to="myBuildsLink"
+                :title="t('buildsPage.myBuilds')"
+                class="builds-submenu-link"
+                :class="{ 'is-active': isMyBuildsActive }"
+                @click="closeBuildsMenu"
+              >
+                {{ t('buildsPage.myBuilds') }}
+              </NuxtLink>
+              <NuxtLink
+                v-if="hasFavorites"
+                :to="favoriteBuildsLink"
+                :title="t('buildsPage.myFavorites')"
+                class="builds-submenu-link"
+                :class="{ 'is-active': isFavoriteBuildsActive }"
+                @click="closeBuildsMenu"
+              >
+                {{ t('buildsPage.myFavorites') }}
+              </NuxtLink>
+              <NuxtLink
+                :to="localePath('/builds/create')"
+                :title="t('buildsPage.createBuild')"
+                class="builds-submenu-link"
+                @click="closeBuildsMenu"
+              >
+                {{ t('buildsPage.createBuild') }}
+              </NuxtLink>
+              <NuxtLink
+                :to="theorycraftLink"
+                :title="t('nav.theorycraft')"
+                class="builds-submenu-link"
+                :class="{ 'is-active': isTheorycraftActive }"
+                @click="closeBuildsMenu"
+              >
+                {{ t('nav.theorycraft') }}
+              </NuxtLink>
+              <ShowIf :show-if="isAdminLoggedIn">
+                <NuxtLink
+                  :to="matchupGuidesLink"
+                  :title="t('nav.matchupGuides')"
+                  class="builds-submenu-link"
+                  :class="{ 'is-active': isMatchupGuidesActive }"
+                  @click="closeBuildsMenu"
+                >
+                  {{ t('nav.matchupGuides') }}
+                </NuxtLink>
+              </ShowIf>
+            </div>
+          </div>
+          <div
+            class="builds-menu"
+            @mouseenter="isStatisticsMenuOpen = true"
+            @mouseleave="isStatisticsMenuOpen = false"
+          >
+            <NuxtLink
+              :to="statisticsIndexLink"
+              class="version builds-menu-trigger"
+              :class="{ 'is-active': isStatisticsSectionActive }"
+            >
+              <span>{{ t('nav.statistics') }}</span>
+              <span
+                v-if="surveillanceAlertCount > 0"
+                class="nav-alert-badge"
+                :title="t('nav.statisticsSurveillanceAlerts', { count: surveillanceAlertCount })"
+              >
+                {{ surveillanceAlertCount }}
+              </span>
+              <span class="builds-menu-chevron" :class="{ 'is-open': isStatisticsMenuOpen }"
+                >▾</span
+              >
+            </NuxtLink>
+            <div v-show="isStatisticsMenuOpen" class="builds-menu-dropdown">
+              <NuxtLink
+                :to="statisticsIndexLink"
+                :title="t('nav.statistics')"
+                class="builds-submenu-link"
+                :class="{ 'is-active': isStatisticsIndexActive }"
+                @click="closeStatisticsMenu"
+              >
+                {{ t('nav.statistics') }}
+              </NuxtLink>
+              <NuxtLink
+                :to="statisticsTierListLink"
+                :title="t('nav.tierList')"
+                class="builds-submenu-link"
+                :class="{ 'is-active': isStatisticsTierListActive }"
+                @click="closeStatisticsMenu"
+              >
+                {{ t('nav.tierList') }}
+              </NuxtLink>
+              <NuxtLink
+                v-if="hasWatchedChampions"
+                :to="statisticsSurveillanceLink"
+                :title="t('nav.statisticsSurveillance')"
+                class="builds-submenu-link"
+                :class="{ 'is-active': isStatisticsSurveillanceActive }"
+                @click="closeStatisticsMenu"
+              >
+                {{ t('nav.statisticsSurveillance') }}
+                <span
+                  v-if="surveillanceAlertCount > 0"
+                  class="nav-alert-badge nav-alert-badge--sub"
+                >
+                  {{ surveillanceAlertCount }}
+                </span>
+              </NuxtLink>
+            </div>
+          </div>
+          <NuxtLink :to="localePath('/videos')" :title="t('nav.videos')" class="version">
+            {{ t('nav.videos') }}
+          </NuxtLink>
+          <div
+            class="builds-menu patch-menu"
+            @mouseenter="isPatchMenuOpen = true"
+            @mouseleave="isPatchMenuOpen = false"
+          >
+            <div
+              class="version builds-menu-trigger patch-menu-trigger"
+              :class="{ 'is-active': isPatchNotesActive }"
+            >
+              <a
+                :href="officialPatchNotesUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="patch-version-link"
+                :title="t('nav.officialPatchNotes')"
+              >
+                {{ activePatchVersion }}
+              </a>
+              <span class="builds-menu-chevron" :class="{ 'is-open': isPatchMenuOpen }">▾</span>
+            </div>
+            <div v-show="isPatchMenuOpen" class="builds-menu-dropdown patch-menu-dropdown">
+              <NuxtLink
+                :to="patchSummaryLink"
+                :title="t('nav.patchSummary')"
+                class="builds-submenu-link"
+                :class="{ 'is-active': isPatchNotesActive }"
+                @click="closePatchMenu"
+              >
+                {{ t('nav.patchSummary') }}
+              </NuxtLink>
+            </div>
+          </div>
+          <NuxtLink
+            v-if="isAdminLoggedIn"
+            :to="localePath('/admin')"
+            :title="t('nav.admin')"
+            class="version"
+          >
+            {{ t('nav.admin') }}
+          </NuxtLink>
+        </div>
+      </div>
 
       <div
         v-if="isMobileViewport && isAdminLoggedIn"
@@ -51,178 +241,6 @@
           :title="t('nav.admin')"
           class="version"
           @click="toggleMenu"
-        >
-          {{ t('nav.admin') }}
-        </NuxtLink>
-      </div>
-
-      <div v-if="!isMobileViewport" class="right-header">
-        <div
-          class="builds-menu"
-          @mouseenter="isBuildsMenuOpen = true"
-          @mouseleave="isBuildsMenuOpen = false"
-        >
-          <NuxtLink
-            :to="discoverBuildsLink"
-            class="version builds-menu-trigger"
-            :class="{ 'is-active': isBuildsSectionActive }"
-          >
-            <span>{{ t('nav.builds') }}</span>
-            <span class="builds-menu-chevron" :class="{ 'is-open': isBuildsMenuOpen }">▾</span>
-          </NuxtLink>
-          <div v-show="isBuildsMenuOpen" class="builds-menu-dropdown">
-            <NuxtLink
-              :to="discoverBuildsLink"
-              :title="t('buildsPage.discover')"
-              class="builds-submenu-link"
-              :class="{ 'is-active': isDiscoverBuildsActive }"
-              @click="closeBuildsMenu"
-            >
-              {{ t('buildsPage.discover') }}
-            </NuxtLink>
-            <NuxtLink
-              :to="myBuildsLink"
-              :title="t('buildsPage.myBuilds')"
-              class="builds-submenu-link"
-              :class="{ 'is-active': isMyBuildsActive }"
-              @click="closeBuildsMenu"
-            >
-              {{ t('buildsPage.myBuilds') }}
-            </NuxtLink>
-            <NuxtLink
-              v-if="hasFavorites"
-              :to="favoriteBuildsLink"
-              :title="t('buildsPage.myFavorites')"
-              class="builds-submenu-link"
-              :class="{ 'is-active': isFavoriteBuildsActive }"
-              @click="closeBuildsMenu"
-            >
-              {{ t('buildsPage.myFavorites') }}
-            </NuxtLink>
-            <NuxtLink
-              :to="localePath('/builds/create')"
-              :title="t('buildsPage.createBuild')"
-              class="builds-submenu-link"
-              @click="closeBuildsMenu"
-            >
-              {{ t('buildsPage.createBuild') }}
-            </NuxtLink>
-            <NuxtLink
-              :to="theorycraftLink"
-              :title="t('nav.theorycraft')"
-              class="builds-submenu-link"
-              :class="{ 'is-active': isTheorycraftActive }"
-              @click="closeBuildsMenu"
-            >
-              {{ t('nav.theorycraft') }}
-            </NuxtLink>
-            <ShowIf :show-if="isAdminLoggedIn">
-              <NuxtLink
-                :to="matchupGuidesLink"
-                :title="t('nav.matchupGuides')"
-                class="builds-submenu-link"
-                :class="{ 'is-active': isMatchupGuidesActive }"
-                @click="closeBuildsMenu"
-              >
-                {{ t('nav.matchupGuides') }}
-              </NuxtLink>
-            </ShowIf>
-          </div>
-        </div>
-        <div
-          class="builds-menu"
-          @mouseenter="isStatisticsMenuOpen = true"
-          @mouseleave="isStatisticsMenuOpen = false"
-        >
-          <NuxtLink
-            :to="statisticsIndexLink"
-            class="version builds-menu-trigger"
-            :class="{ 'is-active': isStatisticsSectionActive }"
-          >
-            <span>{{ t('nav.statistics') }}</span>
-            <span
-              v-if="surveillanceAlertCount > 0"
-              class="nav-alert-badge"
-              :title="t('nav.statisticsSurveillanceAlerts', { count: surveillanceAlertCount })"
-            >
-              {{ surveillanceAlertCount }}
-            </span>
-            <span class="builds-menu-chevron" :class="{ 'is-open': isStatisticsMenuOpen }">▾</span>
-          </NuxtLink>
-          <div v-show="isStatisticsMenuOpen" class="builds-menu-dropdown">
-            <NuxtLink
-              :to="statisticsIndexLink"
-              :title="t('nav.statistics')"
-              class="builds-submenu-link"
-              :class="{ 'is-active': isStatisticsIndexActive }"
-              @click="closeStatisticsMenu"
-            >
-              {{ t('nav.statistics') }}
-            </NuxtLink>
-            <NuxtLink
-              :to="statisticsTierListLink"
-              :title="t('nav.tierList')"
-              class="builds-submenu-link"
-              :class="{ 'is-active': isStatisticsTierListActive }"
-              @click="closeStatisticsMenu"
-            >
-              {{ t('nav.tierList') }}
-            </NuxtLink>
-            <NuxtLink
-              v-if="hasWatchedChampions"
-              :to="statisticsSurveillanceLink"
-              :title="t('nav.statisticsSurveillance')"
-              class="builds-submenu-link"
-              :class="{ 'is-active': isStatisticsSurveillanceActive }"
-              @click="closeStatisticsMenu"
-            >
-              {{ t('nav.statisticsSurveillance') }}
-              <span v-if="surveillanceAlertCount > 0" class="nav-alert-badge nav-alert-badge--sub">
-                {{ surveillanceAlertCount }}
-              </span>
-            </NuxtLink>
-          </div>
-        </div>
-        <NuxtLink :to="localePath('/videos')" :title="t('nav.videos')" class="version">
-          {{ t('nav.videos') }}
-        </NuxtLink>
-        <div
-          class="builds-menu patch-menu"
-          @mouseenter="isPatchMenuOpen = true"
-          @mouseleave="isPatchMenuOpen = false"
-        >
-          <div
-            class="version builds-menu-trigger patch-menu-trigger"
-            :class="{ 'is-active': isPatchNotesActive }"
-          >
-            <a
-              :href="officialPatchNotesUrl"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="patch-version-link"
-              :title="t('nav.officialPatchNotes')"
-            >
-              {{ activePatchVersion }}
-            </a>
-            <span class="builds-menu-chevron" :class="{ 'is-open': isPatchMenuOpen }">▾</span>
-          </div>
-          <div v-show="isPatchMenuOpen" class="builds-menu-dropdown patch-menu-dropdown">
-            <NuxtLink
-              :to="patchSummaryLink"
-              :title="t('nav.patchSummary')"
-              class="builds-submenu-link"
-              :class="{ 'is-active': isPatchNotesActive }"
-              @click="closePatchMenu"
-            >
-              {{ t('nav.patchSummary') }}
-            </NuxtLink>
-          </div>
-        </div>
-        <NuxtLink
-          v-if="isAdminLoggedIn"
-          :to="localePath('/admin')"
-          :title="t('nav.admin')"
-          class="version"
         >
           {{ t('nav.admin') }}
         </NuxtLink>
@@ -266,6 +284,10 @@ const isTheorycraftActive = computed(() => route.path.includes('/builds/theorycr
 const matchupGuidesLink = computed(() => localePath('/matchups/sheets'))
 const isMatchupGuidesActive = computed(() => route.path.includes('/matchups/sheets'))
 const isBuildsSectionActive = computed(() => route.path.includes('/builds'))
+const isCompanionAppActive = computed(() => {
+  const appPath = localePath('/download')
+  return route.path === appPath || route.path.startsWith(`${appPath}/`)
+})
 const currentBuildsTab = computed(() => {
   if (route.path.endsWith('/builds/discover')) return 'discover'
   if (route.path.endsWith('/builds/my-builds')) return 'my-builds'
@@ -424,9 +446,9 @@ const closePatchMenu = () => {
   position: sticky;
   top: 0;
   z-index: 58;
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   height: 50px;
   padding: 0 15px;
   backdrop-filter: blur(10px);
@@ -442,6 +464,21 @@ const closePatchMenu = () => {
   display: flex;
   align-items: center;
   gap: 12px;
+  justify-self: start;
+}
+
+.center-header {
+  display: flex;
+  justify-content: center;
+  justify-self: center;
+}
+
+.companion-app-link {
+  white-space: nowrap;
+}
+
+.companion-app-link.is-active {
+  color: var(--color-accent);
 }
 
 .settings-nav-link {
@@ -462,6 +499,13 @@ const closePatchMenu = () => {
   .settings-nav-link:hover {
     color: var(--color-accent);
   }
+}
+
+.right-header-slot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  justify-self: end;
 }
 
 .right-header {
@@ -677,6 +721,10 @@ const closePatchMenu = () => {
 
   .right-header {
     display: none;
+  }
+
+  .center-header {
+    font-size: 0.875rem;
   }
 }
 </style>

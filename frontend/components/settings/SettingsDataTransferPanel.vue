@@ -96,7 +96,7 @@
 
     <p class="text-xs text-text/55">
       {{ t('statisticsPage.settingsDataTransferCompanionNote') }}
-      <NuxtLink :to="localePath('/app')" class="text-accent underline hover:text-accent-dark">
+      <NuxtLink :to="localePath('/download')" class="text-accent underline hover:text-accent-dark">
         {{ t('statisticsPage.settingsDataTransferCompanionLink') }}
       </NuxtLink>
     </p>

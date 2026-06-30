@@ -156,6 +156,7 @@ import {
 import { SHARED_DAILY_TREND_CHART_UI_KEY } from '~/composables/statistics/useStatisticsDailyTrendCharts'
 import { createSharedDailyTrendChartSettings } from '~/composables/statistics/useSharedDailyTrendChartSettings'
 import { useChampionsStore } from '~/stores/ChampionsStore'
+import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
 import { useStatisticsSurveillanceAlertStore } from '~/stores/StatisticsSurveillanceAlertStore'
 import { useStatisticsUiStore } from '~/stores/StatisticsUiStore'
 import { useVersionStore } from '~/stores/VersionStore'
@@ -324,13 +325,15 @@ const watchedChampions = computed(() =>
 )
 
 const filteredWatchedChampions = computed(() => {
-  const query = championSearchQuery.value.trim().toLowerCase()
+  const query = championSearchQuery.value.trim()
   if (!query) return watchedChampions.value
-  return watchedChampions.value.filter(champion => {
-    const name = champion.name.toLowerCase()
-    const slug = champion.slug.toLowerCase()
-    return name.includes(query) || slug.includes(query)
-  })
+  return watchedChampions.value.filter(champion =>
+    matchesChampionSearch(query, {
+      id: champion.slug,
+      key: champion.key,
+      name: champion.name,
+    })
+  )
 })
 
 const sortedWatchedChampions = computed(() => {

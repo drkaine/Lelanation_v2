@@ -9,6 +9,7 @@ import ChampionMatchupMobileCard, {
   type MatchupsExtRow,
   type MatchupsExtSignalLevel,
 } from '~/components/statistics/ChampionMatchupMobileCard.vue'
+import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
 import StatisticsMobileSortBar from '~/components/statistics/StatisticsMobileSortBar.vue'
 import StatisticsTabPagination from '~/components/statistics/StatisticsTabPagination.vue'
 
@@ -126,10 +127,12 @@ function toMobileRow(row: SynergyExtRow): MatchupsExtRow {
 }
 
 function matchesSearch(allyChampionId: number): boolean {
-  const q = props.searchQuery.trim().toLowerCase()
+  const q = props.searchQuery.trim()
   if (!q) return true
-  const name = (championName(allyChampionId) ?? '').toLowerCase()
-  return name.includes(q) || String(allyChampionId).toLowerCase().includes(q)
+  return matchesChampionSearch(q, {
+    championId: allyChampionId,
+    name: championName(allyChampionId),
+  })
 }
 
 function matchesLaneProfile(row: SynergyExtRow): boolean {

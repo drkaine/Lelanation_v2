@@ -29,7 +29,7 @@
         </NuxtLink>
         <span class="hidden md:inline">•</span>
         <NuxtLink
-          :to="localePath('/app')"
+          :to="localePath('/download')"
           class="transition-colors hover:text-accent"
           :title="t('nav.download')"
         >

@@ -1,3 +1,4 @@
+import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
 import type {
   ChampionMiscBaseStatKey,
   ChampionMiscGrowthStatKey,
@@ -132,12 +133,19 @@ export function championMiscRowMatchesSearch(row: ChampionMiscStatRow, query: st
   const q = query.trim().toLowerCase()
   if (!q) return true
 
-  const name = row.name.toLowerCase()
   const slug = row.championSlug.toLowerCase()
   const idStr = String(row.championId)
 
   if (!isKledMiscStatChampion(row.championId) || !row.variant) {
-    return name.includes(q) || slug.includes(q) || idStr.includes(q)
+    return (
+      matchesChampionSearch(q, {
+        championId: row.championId,
+        id: row.championSlug,
+        name: row.name,
+      }) ||
+      slug.includes(q.toLowerCase()) ||
+      idStr.includes(q)
+    )
   }
 
   const qualifiedVariant = resolveKledVariantFromSearch(q)
@@ -145,7 +153,15 @@ export function championMiscRowMatchesSearch(row: ChampionMiscStatRow, query: st
     return row.variant === qualifiedVariant
   }
 
-  if (name.includes(q) || slug.includes(q) || idStr.includes(q)) {
+  if (
+    matchesChampionSearch(q, {
+      championId: row.championId,
+      id: row.championSlug,
+      name: row.name,
+    }) ||
+    slug.includes(q) ||
+    idStr.includes(q)
+  ) {
     return true
   }
 

@@ -23,7 +23,8 @@
     "language": "Langue",
     "disableTooltips": "Désactiver les tooltips",
     "mobileMenu": "Menu",
-    "settings": "Paramètres"
+    "settings": "Paramètres",
+    "companionApp": "Obtenir l'app in-game"
   },
   "mobileTabBar": {
     "ariaLabel": "Navigation principale",
@@ -102,13 +103,20 @@
     "popularBuildsTitle": "Builds populaires",
     "popularBuildsSubtitle": "Les builds les plus consultés par la communauté.",
     "recentBuildsTitle": "Derniers builds",
-    "recentBuildsSubtitle": "Les builds publics les plus récents de la communauté.",
+    "sections": {
+      "customize": "Un site qui s'adapte à vous",
+      "recentBuilds": "Derniers builds",
+      "tierList": "Tier list rapide",
+      "latestVideos": "Dernières vidéos",
+      "app": "App compagnon",
+      "contact": "Contact",
+      "globalStats": "Chiffres clés"
+    },
     "seeAllBuilds": "Voir tous les builds →",
     "viewBuild": "Voir le build →",
     "noBuildsYet": "Aucun build public pour le moment. Soyez le premier à en créer un !",
     "loading": "Chargement…",
     "tierListTitle": "Tier list rapide",
-    "tierListSubtitle": "Top 5 par rôle — saison {season}, patch {patch}",
     "fullTierList": "Tier list complète →",
     "tierNoData": "Pas encore de données",
     "tierRoles": {
@@ -121,7 +129,6 @@
     "latestVideoTitle": "Dernière vidéo Lelariva",
     "latestVideoSubtitle": "Guides, builds et analyses meta sur YouTube.",
     "latestVideosTitle": "Dernières vidéos",
-    "latestVideosSubtitle": "Les guides et analyses meta les plus récents sur YouTube.",
     "noVideosYet": "Aucune vidéo disponible pour le moment.",
     "watchVideo": "Regarder sur YouTube",
     "allVideos": "Toutes les vidéos",
@@ -135,8 +142,6 @@
     "statVideos": "vidéos Lelariva",
     "followUs": "Suivez Lelariva",
     "customizeTitle": "Un site qui s'adapte à vous",
-    "customizeSubtitle": "Affichage, statistiques et confort de lecture — réglages mémorisés dans votre navigateur, sans compte.",
-    "customizeIntro": "Deux endroits pour personnaliser Lelanation : le panneau rapide Alt + H (affichage et raccourcis, partout sur le site) et la page Paramètres (engrenage en haut à droite) pour vos onglets statistiques, champions suivis et alertes.",
     "customizeDisplayTitle": "Affichage & confort",
     "customizeDisplayHint": "Panneau Alt + H — effet immédiat sur tout le site",
     "customizeStatsTitle": "Statistiques & surveillance",
@@ -144,6 +149,7 @@
     "customizeOpenPanel": "Ouvrir le panneau",
     "customizeSettingsLink": "Ouvrir les paramètres →",
     "dataTransferTitle": "Partage builds & favoris",
+    "dataTransferHint": "Page Paramètres — export et import par code",
     "dataTransferDescription": "Utilise ce code pour importer et synchroniser tes builds/favoris entre navigateurs ou dans l'app Lelanation Companion.",
     "dataTransferLink": "Exporter ou importer →",
     "customizeFeatureTooltips": "Infobulles au survol activées ou désactivées",
@@ -680,6 +686,10 @@
     "settingsPageTabAlerts": "Alertes surveillance",
     "settingsPageTabHowItWorks": "Comment ça marche",
     "settingsPageTabDataTransfer": "Partage données",
+    "settingsPageTabHomeSections": "Page d'accueil",
+    "settingsHomeSectionsHint": "Choisissez les sections affichées sur l'accueil et leur ordre (↑ ↓). Le bandeau d'en-tête reste toujours visible.",
+    "settingsHomeSectionMoveUp": "Monter {section}",
+    "settingsHomeSectionMoveDown": "Descendre {section}",
     "settingsDataTransferCompanionNote": "L’app compagnon utilise le même format de code. Téléchargez-la depuis ",
     "settingsDataTransferCompanionLink": "la page App",
     "settingsDescription": "Activez ou masquez les onglets affichés sur la page Statistiques. Vos préférences sont enregistrées sur cet appareil.",
@@ -2313,9 +2323,31 @@
     "skillOrder": "Ordre des compétences",
     "skillOrderStepTitle": "Ordre des compétences"
   },
+  "howItWorks": {
+    "intro": "Lelanation agrège plusieurs sources officielles et communautaires. Voici d'où viennent les contenus affichés sur le site.",
+    "gameAssets": {
+      "title": "Images et données de jeu",
+      "p1": "Les portraits, icônes, textes et métadonnées des champions, objets, runes et sorts proviennent principalement de <strong>Data Dragon (DDragon)</strong>, l'API statique de Riot Games, synchronisée à chaque patch.",
+      "li1": "<strong>Community Dragon (CDragon)</strong> complète DDragon pour certains assets (emblèmes de rang, icônes scoreboard, theorycraft avancé, assets carte tactique…).",
+      "li2": "Les fichiers sont mis en cache localement sur le site pour des performances optimales ; la version affichée suit le patch de jeu actif."
+    },
+    "stats": {
+      "title": "Statistiques de parties",
+      "p1": "Les winrates, pickrates, matchups, builds populaires et autres agrégats proviennent de l'<strong>API Riot</strong> : matchs classés solo/duo collectés, rangs résolus et agrégés par patch, ligue et rôle. Ce ne sont pas des chiffres officiels publiés par Riot, mais un échantillon issu de notre pipeline d'ingestion."
+    },
+    "patchNotes": {
+      "title": "Notes de patch et résumés",
+      "p1": "Le contenu des pages patch (changements champions, objets, runes, image récap…) est extrait directement des <strong>notes de patch officielles</strong> publiées sur leagueoflegends.com, en français et en anglais selon votre langue."
+    },
+    "videos": {
+      "title": "Vidéos",
+      "p1": "Les vidéos listées sur le site (page Vidéos, accueil…) proviennent de la chaîne YouTube officielle <strong>Lelariva</strong>, synchronisée via l'API YouTube. Seules les vidéos publiées sur cette chaîne sont affichées."
+    },
+    "disclaimer": "Lelanation n'est pas affilié à Riot Games. "
+  },
   "information": {
-    "title": "Comment ça marche",
-    "metaTitle": "Comment ça marche — stats, scores et builds | Lelanation",
+    "title": "Informations",
+    "metaTitle": "Informations — calculs stats et builds | Lelanation",
     "metaDescription": "Formules des statistiques LoL (winrate, pickrate, tier score, matchups), règles des builds publics/privés et badge « plus à jour » sur Lelanation.",
     "lastUpdate": "Dernière mise à jour :",
     "tabsAria": "Sections de la page d'information",
@@ -2615,7 +2647,7 @@
   "footer": {
     "legal": "Mentions légales",
     "privacy": "Confidentialité & Cookies",
-    "information": "Comment ça marche",
+    "information": "Informations",
     "app": "Lelanation App",
     "contact": "Contact",
     "presentationMode": "Mode présentation"

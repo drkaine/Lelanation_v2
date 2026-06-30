@@ -104,28 +104,99 @@
       </div>
 
       <div v-show="activeSettingsPageTab === 'howItWorks'" role="tabpanel">
-        <InformationTabsContent embedded />
+        <SettingsHowItWorksPanel />
       </div>
 
       <div v-show="activeSettingsPageTab === 'dataTransfer'" role="tabpanel">
         <SettingsDataTransferPanel />
+      </div>
+
+      <div v-show="activeSettingsPageTab === 'homeSections'" class="space-y-4" role="tabpanel">
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <p class="text-xs text-text/55">
+            {{ t('statisticsPage.settingsHomeSectionsHint') }}
+          </p>
+          <span class="text-xs text-text/55">
+            {{
+              t('statisticsPage.settingsVisibleCount', {
+                count: visibleHomeSectionCount,
+                total: homeSectionRows.length,
+              })
+            }}
+          </span>
+          <button
+            type="button"
+            class="rounded border border-primary/35 bg-surface/50 px-2.5 py-1 text-xs hover:bg-primary/10"
+            @click="resetHomeSections"
+          >
+            {{ t('statisticsPage.settingsReset') }}
+          </button>
+        </div>
+
+        <ul class="grid w-full gap-2">
+          <li
+            v-for="(row, index) in homeSectionRows"
+            :key="row.id"
+            class="flex min-w-0 items-center gap-2 rounded-lg border border-primary/25 bg-surface/30 px-2.5 py-2"
+            :class="row.visible ? 'opacity-100' : 'opacity-55'"
+          >
+            <div class="flex shrink-0 flex-col gap-0.5">
+              <button
+                type="button"
+                class="rounded border border-primary/30 px-1.5 py-0.5 text-[10px] text-text/70 hover:bg-primary/10 disabled:opacity-30"
+                :disabled="index === 0"
+                :aria-label="t('statisticsPage.settingsHomeSectionMoveUp', { section: row.label })"
+                @click="moveHomeSection(row.id, 'up')"
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                class="rounded border border-primary/30 px-1.5 py-0.5 text-[10px] text-text/70 hover:bg-primary/10 disabled:opacity-30"
+                :disabled="index === homeSectionRows.length - 1"
+                :aria-label="
+                  t('statisticsPage.settingsHomeSectionMoveDown', { section: row.label })
+                "
+                @click="moveHomeSection(row.id, 'down')"
+              >
+                ↓
+              </button>
+            </div>
+            <div class="min-w-0 flex-1 text-xs font-medium leading-snug text-text/90">
+              {{ row.label }}
+            </div>
+            <button
+              type="button"
+              class="command-toggle command-toggle-button shrink-0 scale-90"
+              :aria-pressed="row.visible"
+              :aria-label="row.label"
+              @click="toggleHomeSection(row.id)"
+            >
+              <span class="command-toggle-track" :class="{ active: row.visible }">
+                <span class="command-toggle-thumb" />
+              </span>
+            </button>
+          </li>
+        </ul>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   STATISTICS_MAIN_TAB_LABEL_KEYS,
   STATISTICS_MAIN_TAB_ORDER,
 } from '~/constants/statisticsMainTabs'
+import { HOME_SECTION_LABEL_KEYS } from '~/constants/homeSections'
 import StatisticsSurveillanceAlertSettings from '~/components/statistics/StatisticsSurveillanceAlertSettings.vue'
-import InformationTabsContent from '~/components/Information/InformationTabsContent.vue'
+import SettingsHowItWorksPanel from '~/components/settings/SettingsHowItWorksPanel.vue'
 import SettingsDataTransferPanel from '~/components/settings/SettingsDataTransferPanel.vue'
 import { useStatisticsUiStore, type StatisticsMainTab } from '~/stores/StatisticsUiStore'
+import { useHomeUiStore, type HomeSectionId } from '~/stores/HomeUiStore'
 
 const VALID_SETTINGS_PAGE_TABS = [
   'tabs',
@@ -133,40 +204,57 @@ const VALID_SETTINGS_PAGE_TABS = [
   'alerts',
   'howItWorks',
   'dataTransfer',
+  'homeSections',
 ] as const
 type SettingsPageTab = (typeof VALID_SETTINGS_PAGE_TABS)[number]
 
 const { t } = useI18n()
 const localePath = useLocalePath()
 const route = useRoute()
+const router = useRouter()
 const statisticsUiStore = useStatisticsUiStore()
+const homeUiStore = useHomeUiStore()
 
 const activeSettingsPageTab = ref<SettingsPageTab>('tabs')
 
+function readTabFromRoute(): SettingsPageTab | null {
+  const tabFromQuery = route.query.tab
+  const tabParam = (Array.isArray(tabFromQuery) ? tabFromQuery[0] : tabFromQuery) ?? ''
+  if (
+    typeof tabParam === 'string' &&
+    (VALID_SETTINGS_PAGE_TABS as readonly string[]).includes(tabParam)
+  ) {
+    return tabParam as SettingsPageTab
+  }
+  return null
+}
+
+const tabFromRoute = readTabFromRoute()
+if (tabFromRoute) {
+  activeSettingsPageTab.value = tabFromRoute
+}
+
+onMounted(() => {
+  statisticsUiStore.init()
+  homeUiStore.init()
+
+  const tab = readTabFromRoute()
+  if (tab) {
+    activeSettingsPageTab.value = tab
+  }
+
+  if (Object.keys(route.query).length > 0) {
+    router.replace(localePath('/settings')).catch(() => undefined)
+  }
+})
 const settingsPageTabs = computed(() => [
   { id: 'tabs' as const, label: t('statisticsPage.settingsPageTabTabs') },
   { id: 'watchlist' as const, label: t('statisticsPage.settingsPageTabWatchlist') },
   { id: 'alerts' as const, label: t('statisticsPage.settingsPageTabAlerts') },
   { id: 'howItWorks' as const, label: t('statisticsPage.settingsPageTabHowItWorks') },
   { id: 'dataTransfer' as const, label: t('statisticsPage.settingsPageTabDataTransfer') },
+  { id: 'homeSections' as const, label: t('statisticsPage.settingsPageTabHomeSections') },
 ])
-
-if (import.meta.client) {
-  statisticsUiStore.init()
-}
-
-const tabFromQuery = route.query.tab
-const tabParam = (Array.isArray(tabFromQuery) ? tabFromQuery[0] : tabFromQuery) ?? ''
-if (
-  typeof tabParam === 'string' &&
-  (VALID_SETTINGS_PAGE_TABS as readonly string[]).includes(tabParam)
-) {
-  activeSettingsPageTab.value = tabParam as SettingsPageTab
-}
-
-if (Object.keys(route.query).length > 0) {
-  await navigateTo(localePath('/settings'), { replace: true })
-}
 
 const tabRows = computed(() =>
   STATISTICS_MAIN_TAB_ORDER.map(id => ({
@@ -193,6 +281,30 @@ function resetTabs(): void {
 
 function setWatchedChampions(ids: string[]): void {
   statisticsUiStore.setWatchedChampionIds(ids)
+}
+
+const homeSectionRows = computed(() =>
+  homeUiStore.sectionOrder.map(id => ({
+    id,
+    label: t(HOME_SECTION_LABEL_KEYS[id]),
+    visible: homeUiStore.isSectionVisible(id),
+  }))
+)
+
+const visibleHomeSectionCount = computed(
+  () => homeSectionRows.value.filter(row => row.visible).length
+)
+
+function toggleHomeSection(section: HomeSectionId): void {
+  homeUiStore.setSectionVisible(section, !homeUiStore.isSectionVisible(section))
+}
+
+function moveHomeSection(section: HomeSectionId, direction: 'up' | 'down'): void {
+  homeUiStore.moveSection(section, direction)
+}
+
+function resetHomeSections(): void {
+  homeUiStore.resetSections()
 }
 
 useHead({

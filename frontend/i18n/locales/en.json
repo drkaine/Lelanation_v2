@@ -23,7 +23,8 @@
     "language": "Language",
     "disableTooltips": "Disable tooltips",
     "mobileMenu": "Menu",
-    "settings": "Settings"
+    "settings": "Settings",
+    "companionApp": "Get the in-game app"
   },
   "mobileTabBar": {
     "ariaLabel": "Main navigation",
@@ -102,13 +103,20 @@
     "popularBuildsTitle": "Popular builds",
     "popularBuildsSubtitle": "Most viewed builds from the community.",
     "recentBuildsTitle": "Latest builds",
-    "recentBuildsSubtitle": "The newest public builds from the community.",
+    "sections": {
+      "customize": "A site that adapts to you",
+      "recentBuilds": "Latest builds",
+      "tierList": "Quick tier list",
+      "latestVideos": "Latest videos",
+      "app": "Companion app",
+      "contact": "Contact",
+      "globalStats": "Key figures"
+    },
     "seeAllBuilds": "See all builds →",
     "viewBuild": "View build →",
     "noBuildsYet": "No public builds yet. Be the first to create one!",
     "loading": "Loading…",
     "tierListTitle": "Quick tier list",
-    "tierListSubtitle": "Top 5 per role — season {season}, patch {patch}",
     "fullTierList": "Full tier list →",
     "tierNoData": "No data yet",
     "tierRoles": {
@@ -121,7 +129,6 @@
     "latestVideoTitle": "Latest Lelariva video",
     "latestVideoSubtitle": "Guides, builds and meta analysis on YouTube.",
     "latestVideosTitle": "Latest videos",
-    "latestVideosSubtitle": "The newest guides and meta breakdowns on YouTube.",
     "noVideosYet": "No videos available yet.",
     "watchVideo": "Watch on YouTube",
     "allVideos": "All videos",
@@ -135,8 +142,6 @@
     "statVideos": "Lelariva videos",
     "followUs": "Follow Lelariva",
     "customizeTitle": "A site that adapts to you",
-    "customizeSubtitle": "Layout, statistics and reading comfort — preferences saved in your browser, no account required.",
-    "customizeIntro": "Two places to customize Lelanation: the Alt + H quick panel (display and shortcuts, anywhere on the site) and the Settings page (gear icon, top right) for statistics tabs, watched champions and alerts.",
     "customizeDisplayTitle": "Display & comfort",
     "customizeDisplayHint": "Alt + H panel — takes effect instantly across the site",
     "customizeStatsTitle": "Statistics & monitoring",
@@ -144,6 +149,7 @@
     "customizeOpenPanel": "Open panel",
     "customizeSettingsLink": "Open settings →",
     "dataTransferTitle": "Share builds & favorites",
+    "dataTransferHint": "Settings page — export and import by code",
     "dataTransferDescription": "Use this code to import and sync your builds/favorites across browsers or in the Lelanation Companion app.",
     "dataTransferLink": "Export or import →",
     "customizeFeatureTooltips": "Hover tooltips on or off",
@@ -680,6 +686,10 @@
     "settingsPageTabAlerts": "Watchlist alerts",
     "settingsPageTabHowItWorks": "How it works",
     "settingsPageTabDataTransfer": "Data sharing",
+    "settingsPageTabHomeSections": "Home page",
+    "settingsHomeSectionsHint": "Choose which sections appear on the home page and their order (↑ ↓). The top hero banner always stays visible.",
+    "settingsHomeSectionMoveUp": "Move {section} up",
+    "settingsHomeSectionMoveDown": "Move {section} down",
     "settingsDataTransferCompanionNote": "The companion app uses the same code format. Download it from ",
     "settingsDataTransferCompanionLink": "the App page",
     "settingsDescription": "Show or hide tabs on the Statistics page. Your preferences are saved on this device.",
@@ -2310,9 +2320,31 @@
     "skillOrder": "Skill order",
     "skillOrderStepTitle": "Skill order"
   },
+  "howItWorks": {
+    "intro": "Lelanation combines several official and community sources. Here is where the content you see on the site comes from.",
+    "gameAssets": {
+      "title": "Images and game data",
+      "p1": "Champion, item, rune and spell portraits, icons, text and metadata mainly come from <strong>Data Dragon (DDragon)</strong>, Riot Games' static API, synced on each patch.",
+      "li1": "<strong>Community Dragon (CDragon)</strong> supplements DDragon for some assets (rank emblems, scoreboard icons, advanced theorycraft, map planner assets…).",
+      "li2": "Files are cached locally on the site for performance; the displayed version follows the active game patch."
+    },
+    "stats": {
+      "title": "Match statistics",
+      "p1": "Winrates, pickrates, matchups, popular builds and other aggregates come from the <strong>Riot API</strong>: ranked solo/duo matches collected, ranks resolved and aggregated by patch, tier and role. These are not official figures published by Riot, but a sample from our ingestion pipeline."
+    },
+    "patchNotes": {
+      "title": "Patch notes and summaries",
+      "p1": "Patch page content (champion, item and rune changes, summary image…) is taken directly from the <strong>official patch notes</strong> published on leagueoflegends.com, in French or English depending on your language."
+    },
+    "videos": {
+      "title": "Videos",
+      "p1": "Videos listed on the site (Videos page, home…) come from the official <strong>Lelariva</strong> YouTube channel, synced via the YouTube API. Only videos published on that channel are shown."
+    },
+    "disclaimer": "Lelanation is not affiliated with Riot Games. "
+  },
   "information": {
-    "title": "How it works",
-    "metaTitle": "How it works — stats, scores & builds | Lelanation",
+    "title": "Information",
+    "metaTitle": "Information — stat formulas & builds | Lelanation",
     "metaDescription": "LoL stat formulas (winrate, pickrate, tier score, matchups), public/private build rules and the “out of date” badge on Lelanation.",
     "lastUpdate": "Last updated:",
     "tabsAria": "Information page sections",
@@ -2608,7 +2640,7 @@
   "footer": {
     "legal": "Legal notice",
     "privacy": "Privacy & Cookies",
-    "information": "How it works",
+    "information": "Information",
     "app": "Lelanation App",
     "contact": "Contact",
     "presentationMode": "Presentation mode"
@@ -2630,8 +2662,8 @@
     "featuresTitle": "What the app does",
     "features": {
       "importBuilds": "Import builds into the LoL client (runes, items, summoner spells based on your settings).",
-      "localFavorites": "Favorites are stored locally on your device (no server storage).",
-      "matchSync": "Sends end-of-game info (matchId + region) to enrich website stats.",
+      "localFavorites": "Favorites stored locally on your device (no server storage).",
+      "matchSync": "Send end-of-game info (matchId + region) to enrich site statistics.",
       "settings": "Clear settings to control what gets imported."
     },
     "gdprTitle": "GDPR and privacy",

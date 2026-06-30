@@ -3,6 +3,7 @@ import type { Champion } from '@lelanation/shared-types'
 import { useVersionStore } from './VersionStore'
 import { getFallbackGameVersion } from '~/config/version'
 import { getChampionDetailUrl, getChampionIndexUrl } from '~/utils/staticDataUrl'
+import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
 
 const ABILITY_ORDER = ['Q', 'W', 'E', 'R'] as const
 
@@ -145,11 +146,12 @@ export const useChampionsStore = defineStore('champions', {
 
         // Search by name
         if (query) {
-          const lowerQuery = query.toLowerCase()
-          filtered = filtered.filter(
-            champion =>
-              champion.name.toLowerCase().includes(lowerQuery) ||
-              champion.id.toLowerCase().includes(lowerQuery)
+          filtered = filtered.filter(champion =>
+            matchesChampionSearch(query, {
+              id: champion.id,
+              key: champion.key,
+              name: champion.name,
+            })
           )
         }
 

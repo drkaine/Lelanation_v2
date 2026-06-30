@@ -1,4 +1,5 @@
 import { computed, ref, watch, type Ref } from 'vue'
+import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
 
 export type BansTableRow = {
   championId: number
@@ -210,12 +211,14 @@ export function useStatisticsBansTab(params: {
   const filteredBansRows = computed(() => {
     const list = bansTableData.value?.rows ?? []
     const mc = bansTableData.value?.matchCount ?? 0
-    const q = params.championSearchQuery.value.toLowerCase()
+    const q = params.championSearchQuery.value.trim()
     const filtered = q
-      ? list.filter(row => {
-          const name = params.championName(row.championId)?.toLowerCase() ?? ''
-          return name.includes(q) || String(row.championId).includes(q)
-        })
+      ? list.filter(row =>
+          matchesChampionSearch(q, {
+            championId: row.championId,
+            name: params.championName(row.championId),
+          })
+        )
       : [...list]
     const col = bansSortColumn.value
     const dir = bansSortDir.value

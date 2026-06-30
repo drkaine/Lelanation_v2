@@ -1,5 +1,6 @@
 import { computed, ref, watch, type Ref } from 'vue'
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
+import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
 
 /**
  * Métriques affichées (remap API Riot : basic→command, danger→getBack).
@@ -133,13 +134,15 @@ export function useStatisticsPingsTab(params: {
   }
 
   const filteredPingsRows = computed(() => {
-    const q = params.championSearchQuery.value.trim().toLowerCase()
+    const q = params.championSearchQuery.value.trim()
     const rows = pingsTableData.value?.rows ?? []
     if (!q) return rows
-    return rows.filter(row => {
-      const name = (params.championName(row.championId) ?? String(row.championId)).toLowerCase()
-      return name.includes(q) || String(row.championId).includes(q)
-    })
+    return rows.filter(row =>
+      matchesChampionSearch(q, {
+        championId: row.championId,
+        name: params.championName(row.championId),
+      })
+    )
   })
 
   function comparePingsRows(a: PingsTableRow, b: PingsTableRow): number {

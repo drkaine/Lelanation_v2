@@ -1,8 +1,8 @@
 <template>
   <div class="home-page text-center text-text">
-    <!-- Hero + personnalisation (pleine largeur) -->
+    <!-- Hero (pleine largeur) -->
     <section
-      class="home-hero home-section home-customize-section mb-2 w-full border-y border-primary/30 bg-surface/40 px-3 pb-0 pt-3 sm:px-5 sm:pt-4"
+      class="home-hero home-section mb-2 w-full border-y border-primary/30 bg-surface/40 px-3 pb-3 pt-3 sm:px-5 sm:pt-4"
     >
       <div class="mx-auto w-full max-w-[1600px]">
         <h1 class="text-2xl font-bold leading-tight text-text-accent sm:text-3xl lg:text-4xl">
@@ -42,290 +42,263 @@
             <span>{{ link.text }}</span>
           </a>
         </div>
-
-        <div
-          class="home-customize-block mx-auto mt-4 flex w-full max-w-3xl flex-col items-center text-center"
-        >
-          <h2 class="home-section-title text-lg font-bold sm:text-xl">
-            {{ t('home.customizeTitle') }}
-          </h2>
-          <p class="home-section-subtitle mt-1 max-w-2xl text-xs sm:text-sm">
-            {{ t('home.customizeSubtitle') }}
-          </p>
-
-          <div
-            class="mt-3 w-full rounded-lg border border-primary/20 bg-background/30 p-4 text-center sm:p-5"
-          >
-            <p class="mx-auto max-w-2xl text-xs leading-relaxed text-text/70 sm:text-sm">
-              {{ t('home.customizeIntro') }}
-            </p>
-
-            <div class="mt-4 grid justify-items-center gap-6 sm:grid-cols-2">
-              <div class="w-full max-w-xs text-center sm:max-w-none">
-                <h3 class="text-xs font-bold uppercase tracking-wide text-accent">
-                  {{ t('home.customizeDisplayTitle') }}
-                </h3>
-                <p class="mt-1 text-[11px] leading-snug text-text/55 sm:text-xs">
-                  {{ t('home.customizeDisplayHint') }}
-                </p>
-                <ul class="mx-auto mt-2 inline-block space-y-1 text-left text-xs text-text/80">
-                  <li v-for="feature in customizeDisplayFeatures" :key="feature">
-                    • {{ feature }}
-                  </li>
-                </ul>
-              </div>
-
-              <div class="w-full max-w-xs text-center sm:max-w-none">
-                <h3 class="text-xs font-bold uppercase tracking-wide text-accent">
-                  {{ t('home.customizeStatsTitle') }}
-                </h3>
-                <p class="mt-1 text-[11px] leading-snug text-text/55 sm:text-xs">
-                  {{ t('home.customizeStatsHint') }}
-                </p>
-                <ul class="mx-auto mt-2 inline-block space-y-1 text-left text-xs text-text/80">
-                  <li v-for="feature in customizeStatsFeatures" :key="feature">• {{ feature }}</li>
-                </ul>
-              </div>
-            </div>
-
-            <div class="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
-              <button
-                type="button"
-                class="inline-flex items-center gap-2 text-xs font-semibold text-accent hover:underline"
-                @click="openCustomizePanel()"
-              >
-                {{ t('home.customizeOpenPanel') }}
-                <kbd class="home-shortcut-kbd">Alt + H</kbd>
-              </button>
-              <NuxtLink
-                :to="localePath('/settings')"
-                class="inline-flex items-center text-xs font-semibold text-accent hover:underline"
-              >
-                {{ t('home.customizeSettingsLink') }}
-              </NuxtLink>
-            </div>
-          </div>
-
-          <div
-            class="mt-4 w-full rounded-lg border border-accent/30 bg-accent/5 p-4 text-center sm:p-5"
-          >
-            <h3 class="text-xs font-bold uppercase tracking-wide text-accent sm:text-sm">
-              {{ t('home.dataTransferTitle') }}
-            </h3>
-            <p class="mx-auto mt-2 max-w-2xl text-xs leading-relaxed text-text/70 sm:text-sm">
-              {{ t('home.dataTransferDescription') }}
-            </p>
-            <NuxtLink
-              :to="localePath('/settings?tab=dataTransfer')"
-              class="mt-3 inline-flex items-center text-xs font-semibold text-accent hover:underline sm:text-sm"
-            >
-              {{ t('home.dataTransferLink') }}
-            </NuxtLink>
-          </div>
-        </div>
       </div>
     </section>
 
-    <div class="max-w-8xl mx-auto px-[10px] py-3">
-      <!-- Recent builds -->
-      <section class="home-section home-section--builds mb-3">
-        <div class="home-section-header mb-2">
-          <h2 class="home-section-title text-xl font-bold sm:text-2xl">
-            {{ t('home.recentBuildsTitle') }}
-          </h2>
-          <p class="home-section-subtitle mt-1 text-sm">{{ t('home.recentBuildsSubtitle') }}</p>
-          <NuxtLink
-            :to="localePath('/builds/discover')"
-            class="mt-2 inline-block text-sm font-semibold text-accent hover:underline"
-          >
-            {{ t('home.seeAllBuilds') }}
-          </NuxtLink>
-        </div>
-        <div v-if="pending" class="py-8 text-center text-sm text-text/60">
-          {{ t('home.loading') }}
-        </div>
-        <div
-          v-else-if="recentBuilds.length === 0"
-          class="rounded-xl border border-primary/25 bg-surface/40 px-4 py-8 text-center text-sm text-text/70"
+    <div class="mx-auto w-full max-w-[1600px] px-[10px] py-3">
+      <template v-for="item in homeRenderItems" :key="homeRenderItemKey(item)">
+        <section
+          v-if="item.kind === 'appContact'"
+          class="home-section home-section--app-contact mb-3"
         >
-          {{ t('home.noBuildsYet') }}
-        </div>
-        <BuildGrid
-          v-else
-          :custom-builds="recentBuilds"
-          :show-comparison-buttons="false"
-          :hide-bottom-actions="true"
-          :show-all-custom-builds="true"
-          :six-column-grid="true"
-          grid-gap="5px"
-        />
-      </section>
-
-      <!-- Quick tier list -->
-      <section class="home-section mb-3">
-        <div class="home-section-header mb-2">
-          <h2 class="home-section-title text-xl font-bold sm:text-2xl">
-            {{ t('home.tierListTitle') }}
-          </h2>
-          <p class="home-section-subtitle mt-1 text-sm">
-            {{
-              t('home.tierListSubtitle', {
-                patch: stats.patch,
-                season: stats.season,
-              })
-            }}
-          </p>
-          <NuxtLink
-            :to="localePath('/statistics/tier-list')"
-            class="mt-2 inline-block text-sm font-semibold text-accent hover:underline"
-          >
-            {{ t('home.fullTierList') }}
-          </NuxtLink>
-        </div>
-        <div class="grid gap-4 text-left lg:grid-cols-5">
-          <div
-            v-for="roleBlock in tierByRole"
-            :key="roleBlock.role"
-            class="rounded-xl border border-primary/25 bg-surface/50 p-3"
-          >
-            <div class="mb-3 flex items-center gap-2 border-b border-primary/15 pb-2">
-              <img
-                :src="roleBlock.icon"
-                :alt="roleBlock.label"
-                width="20"
-                height="20"
-                class="h-5 w-5"
-              />
-              <h3 class="text-sm font-bold text-text">{{ roleBlock.label }}</h3>
+          <div class="grid gap-3 lg:grid-cols-2 lg:items-stretch">
+            <div
+              v-for="sectionId in item.order"
+              :key="sectionId"
+              :class="homeAppContactCardClass(sectionId)"
+            >
+              <HomeAppContactCardContent :section="sectionId" />
             </div>
-            <ul v-if="roleBlock.champions.length" class="space-y-2">
-              <li v-for="row in roleBlock.champions" :key="`${roleBlock.role}-${row.championId}`">
-                <NuxtLink
-                  :to="
-                    championStatsDetailPath(row.championId, localePath, championsStore.champions)
-                  "
-                  class="flex items-center gap-2 rounded-lg px-1 py-1 transition hover:bg-background/30"
-                >
-                  <img
-                    v-if="tierChampionImage(row)"
-                    :src="tierChampionImage(row)"
-                    :alt="tierChampionName(row)"
-                    width="28"
-                    height="28"
-                    class="h-7 w-7 shrink-0 rounded object-cover"
-                    loading="lazy"
-                  />
-                  <span class="min-w-0 flex-1 truncate text-xs font-medium text-text">
-                    {{ tierChampionName(row) }}
-                  </span>
-                  <span
-                    class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold"
-                    :class="tierBadgeClass(row.tier)"
+          </div>
+        </section>
+
+        <section v-else :class="homeSectionClass(item.id)">
+          <div
+            v-if="item.id === 'customize'"
+            class="home-customize-block mx-auto flex w-full max-w-5xl flex-col items-center text-center"
+          >
+            <h2 class="home-section-title text-lg font-bold sm:text-xl">
+              {{ t('home.customizeTitle') }}
+            </h2>
+
+            <div
+              class="mt-3 w-full rounded-lg border border-primary/20 bg-background/30 p-4 text-center sm:p-5"
+            >
+              <div class="grid justify-items-center gap-6 sm:grid-cols-2 xl:grid-cols-3">
+                <div class="w-full max-w-xs text-center sm:max-w-none">
+                  <h3 class="text-xs font-bold uppercase tracking-wide text-accent">
+                    {{ t('home.customizeDisplayTitle') }}
+                  </h3>
+                  <p class="mt-1 text-[11px] leading-snug text-text/55 sm:text-xs">
+                    {{ t('home.customizeDisplayHint') }}
+                  </p>
+                  <ul class="mx-auto mt-2 inline-block space-y-1 text-left text-xs text-text/80">
+                    <li v-for="feature in customizeDisplayFeatures" :key="feature">
+                      • {{ feature }}
+                    </li>
+                  </ul>
+                </div>
+
+                <div class="w-full max-w-xs text-center sm:max-w-none">
+                  <h3 class="text-xs font-bold uppercase tracking-wide text-accent">
+                    {{ t('home.customizeStatsTitle') }}
+                  </h3>
+                  <p class="mt-1 text-[11px] leading-snug text-text/55 sm:text-xs">
+                    {{ t('home.customizeStatsHint') }}
+                  </p>
+                  <ul class="mx-auto mt-2 inline-block space-y-1 text-left text-xs text-text/80">
+                    <li v-for="feature in customizeStatsFeatures" :key="feature">
+                      • {{ feature }}
+                    </li>
+                  </ul>
+                </div>
+
+                <div class="w-full max-w-xs text-center sm:col-span-2 sm:max-w-none xl:col-span-1">
+                  <h3 class="text-xs font-bold uppercase tracking-wide text-accent">
+                    {{ t('home.dataTransferTitle') }}
+                  </h3>
+                  <p class="mt-1 text-[11px] leading-snug text-text/55 sm:text-xs">
+                    {{ t('home.dataTransferHint') }}
+                  </p>
+                  <p class="mx-auto mt-2 max-w-sm text-xs leading-relaxed text-text/80">
+                    {{ t('home.dataTransferDescription') }}
+                  </p>
+                  <NuxtLink
+                    :to="localePath('/settings?tab=dataTransfer')"
+                    class="mt-3 inline-flex items-center text-xs font-semibold text-accent hover:underline"
                   >
-                    {{ row.tier }}
-                  </span>
+                    {{ t('home.dataTransferLink') }}
+                  </NuxtLink>
+                </div>
+              </div>
+
+              <div class="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-2 text-xs font-semibold text-accent hover:underline"
+                  @click="openCustomizePanel()"
+                >
+                  {{ t('home.customizeOpenPanel') }}
+                  <kbd class="home-shortcut-kbd">Alt + H</kbd>
+                </button>
+                <NuxtLink
+                  :to="localePath('/settings')"
+                  class="inline-flex items-center text-xs font-semibold text-accent hover:underline"
+                >
+                  {{ t('home.customizeSettingsLink') }}
                 </NuxtLink>
-              </li>
-            </ul>
-            <p v-else class="text-xs text-text/50">{{ t('home.tierNoData') }}</p>
+              </div>
+            </div>
           </div>
-        </div>
-      </section>
 
-      <!-- Latest videos -->
-      <section class="home-section mb-3">
-        <div class="home-section-header mb-2">
-          <h2 class="home-section-title text-xl font-bold sm:text-2xl">
-            {{ t('home.latestVideosTitle') }}
-          </h2>
-          <p class="home-section-subtitle mt-1 text-sm">{{ t('home.latestVideosSubtitle') }}</p>
-          <NuxtLink
-            :to="localePath('/videos')"
-            class="mt-2 inline-block text-sm font-semibold text-accent hover:underline"
-          >
-            {{ t('home.allVideos') }}
-          </NuxtLink>
-        </div>
-        <div
-          v-if="latestVideos.length === 0"
-          class="rounded-xl border border-primary/25 bg-surface/40 px-4 py-8 text-center text-sm text-text/70"
-        >
-          {{ t('home.noVideosYet') }}
-        </div>
-        <div v-else class="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          <VideoGridCard
-            v-for="(video, index) in latestVideos"
-            :key="video.id"
-            :video="video"
-            compact
-            :fetch-priority="index === 0 ? 'high' : undefined"
-          />
-        </div>
-      </section>
+          <template v-if="item.id === 'recentBuilds'">
+            <div class="home-section-header mb-2">
+              <h2 class="home-section-title text-xl font-bold sm:text-2xl">
+                {{ t('home.recentBuildsTitle') }}
+              </h2>
+              <NuxtLink
+                :to="localePath('/builds/discover')"
+                class="mt-2 inline-block text-sm font-semibold text-accent hover:underline"
+              >
+                {{ t('home.seeAllBuilds') }}
+              </NuxtLink>
+            </div>
+            <div v-if="pending" class="py-8 text-center text-sm text-text/60">
+              {{ t('home.loading') }}
+            </div>
+            <div
+              v-else-if="recentBuilds.length === 0"
+              class="rounded-xl border border-primary/25 bg-surface/40 px-4 py-8 text-center text-sm text-text/70"
+            >
+              {{ t('home.noBuildsYet') }}
+            </div>
+            <BuildGrid
+              v-else
+              :custom-builds="recentBuilds"
+              :show-comparison-buttons="false"
+              :hide-bottom-actions="true"
+              :show-all-custom-builds="true"
+              :six-column-grid="true"
+              grid-gap="5px"
+            />
+          </template>
 
-      <!-- Companion app CTA -->
-      <section
-        class="home-section mb-3 rounded-2xl border border-primary/30 bg-gradient-to-br from-surface/80 to-background/40 p-4 sm:p-5"
-      >
-        <h2 class="home-section-title text-xl font-bold sm:text-2xl">{{ t('home.appTitle') }}</h2>
-        <p class="home-section-subtitle mx-auto mt-2 max-w-xl text-sm sm:text-base">
-          {{ t('home.appSubtitle') }}
-        </p>
-        <ul class="mx-auto mt-4 max-w-md space-y-1 text-sm text-text/70">
-          <li>• {{ t('lelanationApp.features.importBuilds') }}</li>
-          <li>• {{ t('lelanationApp.features.localFavorites') }}</li>
-          <li>• {{ t('lelanationApp.features.settings') }}</li>
-        </ul>
-        <div class="mt-4 flex flex-wrap justify-center gap-3">
-          <NuxtLink
-            :to="localePath('/app')"
-            class="inline-flex items-center rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-background hover:bg-accent-dark"
-          >
-            {{ t('home.appDownload') }}
-          </NuxtLink>
-        </div>
-      </section>
+          <template v-if="item.id === 'tierList'">
+            <div class="home-section-header mb-2">
+              <h2 class="home-section-title text-xl font-bold sm:text-2xl">
+                {{ t('home.tierListTitle') }}
+              </h2>
+              <NuxtLink
+                :to="localePath('/statistics/tier-list')"
+                class="mt-2 inline-block text-sm font-semibold text-accent hover:underline"
+              >
+                {{ t('home.fullTierList') }}
+              </NuxtLink>
+            </div>
+            <div class="grid gap-4 text-left lg:grid-cols-5">
+              <div
+                v-for="roleBlock in tierByRole"
+                :key="roleBlock.role"
+                class="rounded-xl border border-primary/25 bg-surface/50 p-3"
+              >
+                <div class="mb-3 flex items-center gap-2 border-b border-primary/15 pb-2">
+                  <img
+                    :src="roleBlock.icon"
+                    :alt="roleBlock.label"
+                    width="20"
+                    height="20"
+                    class="h-5 w-5"
+                  />
+                  <h3 class="text-sm font-bold text-text">{{ roleBlock.label }}</h3>
+                </div>
+                <ul v-if="roleBlock.champions.length" class="space-y-2">
+                  <li
+                    v-for="row in roleBlock.champions"
+                    :key="`${roleBlock.role}-${row.championId}`"
+                  >
+                    <NuxtLink
+                      :to="
+                        championStatsDetailPath(
+                          row.championId,
+                          localePath,
+                          championsStore.champions
+                        )
+                      "
+                      class="flex items-center gap-2 rounded-lg px-1 py-1 transition hover:bg-background/30"
+                    >
+                      <img
+                        v-if="tierChampionImage(row)"
+                        :src="tierChampionImage(row)"
+                        :alt="tierChampionName(row)"
+                        width="28"
+                        height="28"
+                        class="h-7 w-7 shrink-0 rounded object-cover"
+                        loading="lazy"
+                      />
+                      <span class="min-w-0 flex-1 truncate text-xs font-medium text-text">
+                        {{ tierChampionName(row) }}
+                      </span>
+                      <span
+                        class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold"
+                        :class="tierBadgeClass(row.tier)"
+                      >
+                        {{ row.tier }}
+                      </span>
+                    </NuxtLink>
+                  </li>
+                </ul>
+                <p v-else class="text-xs text-text/50">{{ t('home.tierNoData') }}</p>
+              </div>
+            </div>
+          </template>
 
-      <!-- Contact -->
-      <section
-        class="home-section mb-3 rounded-2xl border border-primary/30 bg-surface/40 p-4 sm:p-5"
-      >
-        <div class="home-section-header mb-2">
-          <h2 class="home-section-title text-xl font-bold sm:text-2xl">
-            {{ t('home.contactTitle') }}
-          </h2>
-          <p class="home-section-subtitle mt-1 text-sm">{{ t('home.contactSubtitle') }}</p>
-        </div>
-        <div class="mx-auto max-w-2xl text-left">
-          <ContactForm id-prefix="home-contact-" />
-        </div>
-      </section>
+          <template v-if="item.id === 'latestVideos'">
+            <div class="home-section-header mb-2">
+              <h2 class="home-section-title text-xl font-bold sm:text-2xl">
+                {{ t('home.latestVideosTitle') }}
+              </h2>
+              <NuxtLink
+                :to="localePath('/videos')"
+                class="mt-2 inline-block text-sm font-semibold text-accent hover:underline"
+              >
+                {{ t('home.allVideos') }}
+              </NuxtLink>
+            </div>
+            <div
+              v-if="latestVideos.length === 0"
+              class="rounded-xl border border-primary/25 bg-surface/40 px-4 py-8 text-center text-sm text-text/70"
+            >
+              {{ t('home.noVideosYet') }}
+            </div>
+            <div v-else class="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              <VideoGridCard
+                v-for="(video, index) in latestVideos"
+                :key="video.id"
+                :video="video"
+                compact
+                :fetch-priority="index === 0 ? 'high' : undefined"
+              />
+            </div>
+          </template>
 
-      <!-- Global stats -->
-      <section class="home-section mb-3">
-        <div class="grid gap-2 sm:grid-cols-3">
-          <div class="rounded-lg border border-primary/25 bg-surface/50 px-3 py-2 text-center">
-            <p class="text-lg font-bold leading-tight text-accent">
-              {{ formatStat(stats.builds) }}
-            </p>
-            <p class="mt-0.5 text-xs text-text/70">{{ t('home.statBuilds') }}</p>
+          <template v-if="item.id === 'app' || item.id === 'contact'">
+            <HomeAppContactCardContent :section="item.id" />
+          </template>
+
+          <div v-if="item.id === 'globalStats'" class="grid gap-2 sm:grid-cols-3">
+            <div class="rounded-lg border border-primary/25 bg-surface/50 px-3 py-2 text-center">
+              <p class="text-lg font-bold leading-tight text-accent">
+                {{ formatStat(stats.builds) }}
+              </p>
+              <p class="mt-0.5 text-xs text-text/70">{{ t('home.statBuilds') }}</p>
+            </div>
+            <div class="rounded-lg border border-primary/25 bg-surface/50 px-3 py-2 text-center">
+              <p class="text-lg font-bold leading-tight text-accent">
+                {{ formatStat(stats.matches) }}
+              </p>
+              <p class="mt-0.5 text-xs text-text/70">
+                {{ t('home.statPatchMatches', { patch: stats.patch }) }}
+              </p>
+            </div>
+            <div class="rounded-lg border border-primary/25 bg-surface/50 px-3 py-2 text-center">
+              <p class="text-lg font-bold leading-tight text-accent">
+                {{ formatStat(stats.videos) }}
+              </p>
+              <p class="mt-0.5 text-xs text-text/70">{{ t('home.statVideos') }}</p>
+            </div>
           </div>
-          <div class="rounded-lg border border-primary/25 bg-surface/50 px-3 py-2 text-center">
-            <p class="text-lg font-bold leading-tight text-accent">
-              {{ formatStat(stats.matches) }}
-            </p>
-            <p class="mt-0.5 text-xs text-text/70">
-              {{ t('home.statPatchMatches', { patch: stats.patch }) }}
-            </p>
-          </div>
-          <div class="rounded-lg border border-primary/25 bg-surface/50 px-3 py-2 text-center">
-            <p class="text-lg font-bold leading-tight text-accent">
-              {{ formatStat(stats.videos) }}
-            </p>
-            <p class="mt-0.5 text-xs text-text/70">{{ t('home.statVideos') }}</p>
-          </div>
-        </div>
-      </section>
+        </section>
+      </template>
     </div>
   </div>
 </template>
@@ -335,16 +308,122 @@ import { useI18n } from 'vue-i18n'
 import { championStatsDetailPath } from '~/utils/championStatsRoutes'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import BuildGrid from '~/components/BuildDiscovery/BuildGrid.vue'
-import ContactForm from '~/components/Contact/ContactForm.vue'
+import HomeAppContactCardContent from '~/components/home/HomeAppContactCardContent.vue'
 import VideoGridCard from '~/components/Videos/VideoGridCard.vue'
 import { getChampionImageUrl } from '~/utils/imageUrl'
 import { usePageOgImage } from '~/composables/usePageOgImage'
+import { useHomeUiStore, type HomeSectionId } from '~/stores/HomeUiStore'
 
 const championsStore = useChampionsStore()
+const homeUiStore = useHomeUiStore()
 
 const { locale, t } = useI18n()
 const localePath = useLocalePath()
 const { pending, recentBuilds, tierByRole, latestVideos, stats, championForId } = useHomePage()
+
+const visibleHomeSections = computed(() => homeUiStore.visibleSections)
+
+type HomeRenderItem =
+  | { kind: 'section'; id: HomeSectionId }
+  | { kind: 'appContact'; order: ['app', 'contact'] | ['contact', 'app'] }
+
+const homeRenderItems = computed((): HomeRenderItem[] => {
+  const sections = visibleHomeSections.value
+  const showApp = sections.includes('app')
+  const showContact = sections.includes('contact')
+  const pairAppContact = showApp && showContact
+  const pairedHandled = { app: false, contact: false }
+  const items: HomeRenderItem[] = []
+
+  for (const id of sections) {
+    if (id === 'app' || id === 'contact') {
+      if (!pairAppContact) {
+        items.push({ kind: 'section', id })
+        continue
+      }
+      if (pairedHandled.app || pairedHandled.contact) continue
+
+      const appIndex = sections.indexOf('app')
+      const contactIndex = sections.indexOf('contact')
+      items.push({
+        kind: 'appContact',
+        order: appIndex < contactIndex ? ['app', 'contact'] : ['contact', 'app'],
+      })
+      pairedHandled.app = true
+      pairedHandled.contact = true
+      continue
+    }
+    items.push({ kind: 'section', id })
+  }
+
+  return items
+})
+
+function homeRenderItemKey(item: HomeRenderItem): string {
+  return item.kind === 'appContact' ? `app-contact-${item.order.join('-')}` : item.id
+}
+
+function homeAppContactCardClass(sectionId: 'app' | 'contact'): string[] {
+  const base = [
+    'flex',
+    'h-full',
+    'flex-col',
+    'rounded-2xl',
+    'border',
+    'border-primary/30',
+    'p-4',
+    'sm:p-5',
+  ]
+  if (sectionId === 'app') {
+    return [...base, 'bg-gradient-to-br', 'from-surface/80', 'to-background/40', 'text-center']
+  }
+  return [...base, 'bg-surface/40', 'text-center']
+}
+
+function homeSectionClass(sectionId: HomeSectionId): string[] {
+  const base = ['home-section', 'mb-3']
+  switch (sectionId) {
+    case 'customize':
+      return [
+        ...base,
+        'home-customize-section',
+        'w-full',
+        'border-y',
+        'border-primary/30',
+        'bg-surface/40',
+        'px-3',
+        'py-3',
+        'sm:px-5',
+        'sm:py-4',
+      ]
+    case 'recentBuilds':
+      return [...base, 'home-section--builds']
+    case 'app':
+      return [
+        ...base,
+        'rounded-2xl',
+        'border',
+        'border-primary/30',
+        'bg-gradient-to-br',
+        'from-surface/80',
+        'to-background/40',
+        'p-4',
+        'sm:p-5',
+      ]
+    case 'contact':
+      return [
+        ...base,
+        'rounded-2xl',
+        'border',
+        'border-primary/30',
+        'bg-surface/40',
+        'p-4',
+        'sm:p-5',
+      ]
+    default:
+      return base
+  }
+}
 
 const commandsModalOpen = useState<boolean>('commands-modal-open', () => false)
 

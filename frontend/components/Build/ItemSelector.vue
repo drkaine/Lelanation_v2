@@ -211,6 +211,7 @@ import {
   isSupportLineStarter,
 } from '~/utils/buildItemRules'
 import { formatItemGoldEfficiency, getItemGoldValue } from '~/utils/formatItemStats'
+import { matchesItemSearch } from '~/utils/multilingualEntitySearch'
 
 const props = withDefaults(defineProps<{ includeMasterwork?: boolean }>(), {
   includeMasterwork: false,
@@ -334,12 +335,13 @@ const filteredItems = computed<Item[]>(() => {
   // Filter by search query (if any)
   const searchTerm = searchQuery.value?.trim()
   if (searchTerm && searchTerm.length > 0) {
-    const lowerQuery = searchTerm.toLowerCase()
-    filtered = filtered.filter(
-      (item: Item) =>
-        item.name?.toLowerCase().includes(lowerQuery) ||
-        item.colloq?.toLowerCase().includes(lowerQuery) ||
-        item.plaintext?.toLowerCase().includes(lowerQuery)
+    filtered = filtered.filter((item: Item) =>
+      matchesItemSearch(searchTerm, {
+        id: item.id,
+        name: item.name,
+        colloq: item.colloq,
+        plaintext: item.plaintext,
+      })
     )
   }
 
@@ -611,12 +613,12 @@ const isItemFiltered = (item: Item): boolean => {
   let matchesSearch = true
   const searchTerm = searchQuery.value?.trim()
   if (searchTerm && searchTerm.length > 0) {
-    const lowerQuery = searchTerm.toLowerCase()
-    matchesSearch =
-      item.name?.toLowerCase().includes(lowerQuery) ||
-      item.colloq?.toLowerCase().includes(lowerQuery) ||
-      item.plaintext?.toLowerCase().includes(lowerQuery) ||
-      false
+    matchesSearch = matchesItemSearch(searchTerm, {
+      id: item.id,
+      name: item.name,
+      colloq: item.colloq,
+      plaintext: item.plaintext,
+    })
   }
 
   // Item is filtered (visible) if it matches both tag and search filters

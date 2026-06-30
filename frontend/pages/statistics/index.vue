@@ -875,6 +875,7 @@ import {
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { apiUrl } from '~/utils/apiUrl'
+import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
 import { RANK_TIERS } from '~/utils/rankTiers'
 import { getRankedEmblemUrl } from '~/utils/rankedEmblem'
 import { useChampionsStore } from '~/stores/ChampionsStore'
@@ -1425,21 +1426,25 @@ const progressionsPageSizeModel = computed({
 })
 const filteredProgressionsChampions = computed(() => {
   const list = progressionFullData.value?.champions ?? []
-  const q = championSearchQuery.value.trim().toLowerCase()
+  const q = championSearchQuery.value.trim()
   if (!q) return list
-  return list.filter(row => {
-    const name = championName(row.championId)?.toLowerCase() ?? ''
-    return name.includes(q) || String(row.championId).includes(q)
-  })
+  return list.filter(row =>
+    matchesChampionSearch(q, {
+      championId: row.championId,
+      name: championName(row.championId),
+    })
+  )
 })
 const filteredProgressionsByPickrate = computed(() => {
   const list = progressionFullByPickrate.value
-  const q = championSearchQuery.value.trim().toLowerCase()
+  const q = championSearchQuery.value.trim()
   if (!q) return list
-  return list.filter(row => {
-    const name = championName(row.championId)?.toLowerCase() ?? ''
-    return name.includes(q) || String(row.championId).includes(q)
-  })
+  return list.filter(row =>
+    matchesChampionSearch(q, {
+      championId: row.championId,
+      name: championName(row.championId),
+    })
+  )
 })
 const totalProgressionsCount = computed(() => filteredProgressionsChampions.value.length)
 const totalProgressionsPages = computed(() =>
@@ -1472,12 +1477,14 @@ watch(championsSortOrder, () => {
 })
 const filteredChampions = computed(() => {
   const list = championsData.value?.champions ?? []
-  const q = championSearchQuery.value.toLowerCase()
+  const q = championSearchQuery.value.trim()
   const filtered = q
-    ? list.filter(row => {
-        const name = championName(row.championId)?.toLowerCase() ?? ''
-        return name.includes(q) || String(row.championId).includes(q)
-      })
+    ? list.filter(row =>
+        matchesChampionSearch(q, {
+          championId: row.championId,
+          name: championName(row.championId),
+        })
+      )
     : [...list]
   const sort = championsSortOrder.value
   const dir = championsSortDir.value

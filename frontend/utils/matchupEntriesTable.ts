@@ -4,6 +4,7 @@ import type {
   MatchupOutcomeKind,
 } from '@lelanation/shared-types'
 import { formatBuildVariantsCell, matchupDifficultySortValue } from '~/utils/matchupEntryUtils'
+import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
 import type { Build } from '~/types/build'
 
 export type MatchupEntriesSortKey = 'rank' | 'difficulty'
@@ -74,8 +75,16 @@ function entryMatchesFilters(
   const rankMax = parseOptionalInt(filters.rankMax)
   if (rankMax !== null && rank > rankMax) return false
 
-  const championQ = filters.champion.trim().toLowerCase()
-  if (championQ && !entry.opponent.name.toLowerCase().includes(championQ)) return false
+  const championQ = filters.champion.trim()
+  if (
+    championQ &&
+    !matchesChampionSearch(championQ, {
+      id: entry.opponent.id,
+      name: entry.opponent.name,
+    })
+  ) {
+    return false
+  }
 
   const diffValue = matchupDifficultySortValue(entry)
   const diffMin = parseOptionalInt(filters.difficultyMin)

@@ -6,6 +6,7 @@ import { useChampionsStore } from '~/stores/ChampionsStore'
 import { championNameFromMap, type ChampionNamesMap } from '~/composables/useChampionNames'
 import { getChampionImageUrl } from '~/utils/imageUrl'
 import { TIER_CHART_COLORS, tierChartColor, tierChartColorMuted } from '~/utils/tierChartColors'
+import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
 
 type TierListSortColumn =
   | 'rank'
@@ -286,13 +287,14 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
   /** Tier list only: filtre par nom / id (champ de recherche). */
   const tierListSearchFilteredRows = computed(() => {
     const list = tierListRoleFilteredRows.value
-    const raw = championSearchQuery.value.trim().toLowerCase()
+    const raw = championSearchQuery.value.trim()
     if (!raw) return list
-    return list.filter(row => {
-      const name = championName(row.championId)?.toLowerCase() ?? ''
-      const idStr = String(row.championId)
-      return name.includes(raw) || idStr === raw || idStr.includes(raw)
-    })
+    return list.filter(row =>
+      matchesChampionSearch(raw, {
+        championId: row.championId,
+        name: championName(row.championId),
+      })
+    )
   })
 
   /** Rank displayed in table: recomputed on filtered cohort (role filter), independent from sort columns. */

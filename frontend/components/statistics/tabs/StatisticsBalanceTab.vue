@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, ref, unref, watch } from 'vue'
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
+import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
 
 const p = inject('statisticsPageCtx') as any
 
@@ -54,11 +55,7 @@ function toggleBalanceCardExpanded(row: BalanceRow): void {
 }
 
 const rows = computed<BalanceRow[]>(() => p.balanceFrameworkData?.rows ?? [])
-const searchQuery = computed(() =>
-  String(p.championSearchQuery ?? '')
-    .trim()
-    .toLowerCase()
-)
+const searchQuery = computed(() => String(p.championSearchQuery ?? '').trim())
 const rules = computed(() => p.balanceFrameworkData?.rules ?? null)
 const abrByLevel = computed<{
   average: number
@@ -193,9 +190,16 @@ const filteredRows = computed<BalanceRow[]>(() => {
   const source = roleFilter ? rows.value : collapseToMainRolePerChampion(rows.value)
   const out = source.filter(row => {
     if (searchQuery.value) {
-      const champ = String(p.championName(row.championId) ?? '').toLowerCase()
       const role = String(row.role ?? '').toLowerCase()
-      if (!champ.includes(searchQuery.value) && !role.includes(searchQuery.value)) return false
+      if (
+        !matchesChampionSearch(searchQuery.value, {
+          championId: row.championId,
+          name: p.championName(row.championId),
+        }) &&
+        !role.includes(searchQuery.value.toLowerCase())
+      ) {
+        return false
+      }
     }
     const gf = (p.balanceGlobalFilter as StatusFilter) ?? 'ALL'
     const af = (p.balanceAverageFilter as StatusFilter) ?? 'ALL'

@@ -2,6 +2,7 @@
 import { computed, inject, ref, unref, watch } from 'vue'
 import { getChampionImageUrl } from '~/utils/imageUrl'
 import { botlaneRowKey } from '~/composables/statistics/botlanePatchDeltas'
+import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
 
 const p = inject('statisticsPageCtx') as any
@@ -74,15 +75,15 @@ const activeError = computed(() =>
   Boolean(unref(props.rankingError !== undefined ? props.rankingError : p?.botlaneRankingError))
 )
 
-const searchQ = computed(() =>
-  String(unref(p?.championSearchQuery) ?? '')
-    .trim()
-    .toLowerCase()
-)
+const searchQ = computed(() => String(unref(p?.championSearchQuery) ?? '').trim())
 
-function champText(id: number): string {
-  const n = p?.championName?.(id)
-  return `${(n || '').toLowerCase()} ${id}`
+function championMatchesSearch(id: number): boolean {
+  const q = searchQ.value
+  if (!q) return true
+  return matchesChampionSearch(q, {
+    championId: id,
+    name: p?.championName?.(id),
+  })
 }
 
 const totalGames = computed(() => rows.value.reduce((sum, row) => sum + Number(row.games || 0), 0))
@@ -99,10 +100,9 @@ const rowsWithMetrics = computed<ViewRow[]>(() => {
 const filteredRows = computed(() => {
   const q = searchQ.value
   if (!q) return rowsWithMetrics.value
-  return rowsWithMetrics.value.filter(r => {
-    const parts = [champText(r.adcId), champText(r.supportId)]
-    return parts.join(' ').includes(q)
-  })
+  return rowsWithMetrics.value.filter(
+    r => championMatchesSearch(r.adcId) || championMatchesSearch(r.supportId)
+  )
 })
 
 function sortIcon(key: SortKey): string {

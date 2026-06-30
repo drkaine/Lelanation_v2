@@ -8,6 +8,7 @@ import {
   getItemGoldEfficiency,
   getItemGoldValue,
 } from '~/utils/formatItemStats'
+import { matchesItemSearch } from '~/utils/multilingualEntitySearch'
 
 const p = inject('statisticsPageCtx') as any
 const itemsStore = useItemsStore()
@@ -129,11 +130,7 @@ const tableRows = computed<TableRow[]>(() =>
   })
 )
 
-const itemSearchQuery = computed(() =>
-  String(unref(p.championSearchQuery) ?? '')
-    .trim()
-    .toLowerCase()
-)
+const itemSearchQuery = computed(() => String(unref(p.championSearchQuery) ?? '').trim())
 
 const itemById = computed<Map<number, Item>>(
   () => new Map(itemsStore.items.map(i => [Number(i.id), i] as const))
@@ -192,8 +189,13 @@ const filteredRows = computed<TableRow[]>(() => {
   const q = itemSearchQuery.value
   if (!q) return byType
   return byType.filter(r => {
-    const name = (p.itemName(r.itemId) || '').toLowerCase()
-    return name.includes(q) || String(r.itemId).includes(q)
+    const item = itemById.value.get(r.itemId)
+    return matchesItemSearch(q, {
+      id: r.itemId,
+      name: p.itemName(r.itemId),
+      colloq: item?.colloq,
+      plaintext: item?.plaintext,
+    })
   })
 })
 

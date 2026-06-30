@@ -777,6 +777,7 @@ import { useVersionStore } from '~/stores/VersionStore'
 import { useStatisticsUiStore } from '~/stores/StatisticsUiStore'
 import { getChampionImageUrl } from '~/utils/imageUrl'
 import { apiUrl } from '~/utils/apiUrl'
+import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
 import { getRankedEmblemUrl } from '~/utils/rankedEmblem'
 import { statsRoleIconPath, statsRoleLabel } from '~/utils/statsRoleDisplay'
 import {
@@ -932,10 +933,16 @@ const activeFiltersCount = computed(() => {
 })
 
 const filteredChampions = computed(() => {
-  const q = championSearch.value.trim().toLowerCase()
+  const q = championSearch.value.trim()
   const all = championsStore.champions
   if (!q) return all
-  return all.filter(c => c.name.toLowerCase().includes(q) || c.id.toLowerCase().includes(q))
+  return all.filter(c =>
+    matchesChampionSearch(q, {
+      id: c.id,
+      key: c.key,
+      name: c.name,
+    })
+  )
 })
 
 const selectedChampion = computed(

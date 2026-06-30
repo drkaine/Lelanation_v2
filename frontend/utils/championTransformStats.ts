@@ -1,4 +1,5 @@
 import { getKaynHudImageUrl } from '~/utils/imageUrl'
+import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
 
 /** Riot numeric champion keys with in-game transformation stats. */
 export const TRANSFORMABLE_CHAMPION_IDS = new Set<number>([141])
@@ -134,7 +135,6 @@ export function championRowMatchesGlobalSearch(opts: {
   const q = opts.query.trim().toLowerCase()
   if (!q) return true
 
-  const name = (opts.championName ?? '').toLowerCase()
   const idStr = String(opts.championId)
   const rowTransform = normalizeChampionTransform(opts.championTransform)
   const qualifiedTransform = resolveTransformFromSearchQuery(opts.championId, q)
@@ -146,7 +146,14 @@ export function championRowMatchesGlobalSearch(opts: {
     return opts.championId === 141
   }
 
-  if (name.includes(q) || idStr === q || idStr.includes(q)) {
+  if (
+    matchesChampionSearch(opts.query, {
+      championId: opts.championId,
+      name: opts.championName,
+    }) ||
+    idStr === q ||
+    idStr.includes(q)
+  ) {
     return true
   }
 

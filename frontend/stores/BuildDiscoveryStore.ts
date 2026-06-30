@@ -8,6 +8,7 @@ import { hydrateBuild, isStoredBuild } from '~/utils/buildSerialize'
 import { filterStandaloneLibraryBuilds } from '~/utils/buildLibrary'
 import { extractPatchStaleMap, mergePatchStaleIntoBuilds } from '~/utils/mergePatchStale'
 import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
+import { matchesChampionSearch, matchesLocalizedTextSearch } from '~/utils/multilingualEntitySearch'
 
 export type SortOption = 'recent' | 'popular' | 'name'
 export type FilterRole = 'top' | 'jungle' | 'mid' | 'adc' | 'support' | null
@@ -98,14 +99,20 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
 
       // Search by build name, variant titles, champion name or author
       if (this.searchQuery) {
-        const query = this.searchQuery.toLowerCase().trim()
+        const query = this.searchQuery
         results = results.filter(build => {
-          if (build.name?.toLowerCase().includes(query)) return true
-          if (build.champion?.name?.toLowerCase().includes(query)) return true
-          if (build.champion?.id?.toLowerCase().includes(query)) return true
-          if (build.author?.toLowerCase().includes(query)) return true
+          if (matchesLocalizedTextSearch(query, [build.name, build.author])) return true
+          if (
+            build.champion &&
+            matchesChampionSearch(query, {
+              id: build.champion.id,
+              name: build.champion.name,
+            })
+          ) {
+            return true
+          }
           const subBuilds = build.subBuilds ?? []
-          if (subBuilds.some(sub => sub.title?.toLowerCase().includes(query))) return true
+          if (subBuilds.some(sub => matchesLocalizedTextSearch(query, [sub.title]))) return true
           return false
         })
       }

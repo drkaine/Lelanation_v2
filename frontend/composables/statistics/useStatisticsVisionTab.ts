@@ -1,5 +1,6 @@
 import { computed, ref, watch, type Ref } from 'vue'
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
+import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
 
 export const VISION_METRIC_KEYS = [
   'visionScore',
@@ -112,13 +113,15 @@ export function useStatisticsVisionTab(params: {
   }
 
   const filteredVisionRows = computed(() => {
-    const q = params.championSearchQuery.value.trim().toLowerCase()
+    const q = params.championSearchQuery.value.trim()
     const rows = visionTableData.value?.rows ?? []
     if (!q) return rows
-    return rows.filter(row => {
-      const name = (params.championName(row.championId) ?? String(row.championId)).toLowerCase()
-      return name.includes(q) || String(row.championId).includes(q)
-    })
+    return rows.filter(row =>
+      matchesChampionSearch(q, {
+        championId: row.championId,
+        name: params.championName(row.championId),
+      })
+    )
   })
 
   function compareVisionRows(a: VisionTableRow, b: VisionTableRow): number {

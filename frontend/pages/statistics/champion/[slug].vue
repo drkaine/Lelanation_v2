@@ -1824,6 +1824,7 @@ import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { apiUrl } from '~/utils/apiUrl'
+import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useItemsStore } from '~/stores/ItemsStore'
 import { useRunesStore } from '~/stores/RunesStore'
@@ -2049,9 +2050,6 @@ function _runePathPanelStyle(icon: string): Record<string, string> {
   }
 }
 
-const normalizedChampionSearchQuery = computed(() =>
-  championSearchQueryPlaceholder.value.trim().toLowerCase()
-)
 const matchupOtpMode = ref<'oui' | 'non' | 'solo'>('non')
 const MATCHUP_LANE_PROFILE_DIMENSION_KEYS = [
   'early',
@@ -2188,10 +2186,12 @@ const matchupMobileSortOptions = computed(() => {
 })
 
 function matchupMatchesSearch(opponentChampionId: number): boolean {
-  const q = normalizedChampionSearchQuery.value
+  const q = championSearchQueryPlaceholder.value.trim()
   if (!q) return true
-  const name = (championName(opponentChampionId) ?? '').toLowerCase()
-  return name.includes(q) || String(opponentChampionId).toLowerCase().includes(q)
+  return matchesChampionSearch(q, {
+    championId: opponentChampionId,
+    name: championName(opponentChampionId),
+  })
 }
 
 /** Matchups filtrés par recherche champion (nom ou id). */

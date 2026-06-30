@@ -28,7 +28,7 @@ const STATIC_ROUTES: string[] = [
   '/statistics/tier-list',
   '/statistics/recap',
   '/patch-notes',
-  '/app',
+  '/download',
   '/privacy',
   '/information',
   '/legal',

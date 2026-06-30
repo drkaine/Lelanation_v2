@@ -3,6 +3,7 @@ import type { MatchupGuide } from '@lelanation/shared-types'
 import { useMatchupGuideStore } from '~/stores/MatchupGuideStore'
 import { useVersionStore } from '~/stores/VersionStore'
 import { apiUrl } from '~/utils/apiUrl'
+import { matchesChampionSearch, matchesLocalizedTextSearch } from '~/utils/multilingualEntitySearch'
 
 export type MatchupGuideSortOption = 'recent' | 'name'
 export type MatchupGuideFilterRole = 'top' | 'jungle' | 'mid' | 'adc' | 'support' | null
@@ -151,17 +152,33 @@ export const useMatchupGuideDiscoveryStore = defineStore('matchupGuideDiscovery'
       let results = [...source]
 
       if (this.searchQuery) {
-        const query = this.searchQuery.toLowerCase().trim()
+        const query = this.searchQuery
         results = results.filter(guide => {
-          if (guide.shortDescription?.toLowerCase().includes(query)) return true
-          if (guide.description?.toLowerCase().includes(query)) return true
-          if (guide.champion?.name?.toLowerCase().includes(query)) return true
-          if (guide.champion?.id?.toLowerCase().includes(query)) return true
-          if (guide.author?.toLowerCase().includes(query)) return true
+          if (
+            matchesLocalizedTextSearch(query, [
+              guide.shortDescription,
+              guide.description,
+              guide.author,
+            ])
+          ) {
+            return true
+          }
+          if (
+            guide.champion &&
+            matchesChampionSearch(query, {
+              id: guide.champion.id,
+              name: guide.champion.name,
+            })
+          ) {
+            return true
+          }
           const inMatchups = [...(guide.bestMatchups ?? []), ...(guide.worstMatchups ?? [])]
           if (
-            inMatchups.some(
-              m => m.name?.toLowerCase().includes(query) || m.id?.toLowerCase().includes(query)
+            inMatchups.some(m =>
+              matchesChampionSearch(query, {
+                id: m.id,
+                name: m.name,
+              })
             )
           ) {
             return true

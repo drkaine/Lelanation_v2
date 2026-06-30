@@ -506,6 +506,22 @@ import {
 } from '~/utils/buildCardShareImage'
 import { useChampionSplashPreference } from '~/composables/useChampionSplashPreference'
 import { startMatchupGuideFromBuild } from '~/utils/matchupGuideFromBuildSession'
+import { matchesChampionSearch, matchesLocalizedTextSearch } from '~/utils/multilingualEntitySearch'
+
+function buildMatchesSearchQuery(build: Build, query: string): boolean {
+  if (matchesLocalizedTextSearch(query, [build.name, build.author])) return true
+  if (
+    build.champion &&
+    matchesChampionSearch(query, {
+      id: build.champion.id,
+      name: build.champion.name,
+    })
+  ) {
+    return true
+  }
+  const subBuilds = build.subBuilds ?? []
+  return subBuilds.some(sub => matchesLocalizedTextSearch(query, [sub.title]))
+}
 
 const { t, locale } = useI18n()
 const { championSplashEnabled } = useChampionSplashPreference()
@@ -569,16 +585,11 @@ function hasBuildDescription(build: Build): boolean {
  * retourne l'index de la première variante qui matche pour afficher cette variante par défaut.
  */
 function getSearchMatchedVariantIndex(build: Build, searchQuery: string): number | null {
-  const query = searchQuery?.toLowerCase().trim()
+  const query = searchQuery?.trim()
   if (!query) return null
-  const mainMatches =
-    build.name?.toLowerCase().includes(query) ||
-    build.champion?.name?.toLowerCase().includes(query) ||
-    build.champion?.id?.toLowerCase().includes(query) ||
-    build.author?.toLowerCase().includes(query)
-  if (mainMatches) return null
+  if (buildMatchesSearchQuery(build, query)) return null
   const subBuilds = build.subBuilds ?? []
-  const idx = subBuilds.findIndex(sub => sub.title?.toLowerCase().includes(query))
+  const idx = subBuilds.findIndex(sub => matchesLocalizedTextSearch(query, [sub.title]))
   return idx >= 0 ? idx : null
 }
 
@@ -630,16 +641,8 @@ const filteredCustomBuilds = computed(() => {
   let results = [...props.customBuilds]
   // Search by build name, variant titles, champion name or author
   if (discoveryStore.searchQuery) {
-    const query = discoveryStore.searchQuery.toLowerCase().trim()
-    results = results.filter(build => {
-      if (build.name?.toLowerCase().includes(query)) return true
-      if (build.champion?.name?.toLowerCase().includes(query)) return true
-      if (build.champion?.id?.toLowerCase().includes(query)) return true
-      if (build.author?.toLowerCase().includes(query)) return true
-      const subBuilds = build.subBuilds ?? []
-      if (subBuilds.some(sub => sub.title?.toLowerCase().includes(query))) return true
-      return false
-    })
+    const query = discoveryStore.searchQuery
+    results = results.filter(build => buildMatchesSearchQuery(build, query))
   }
 
   // Filter by champion
