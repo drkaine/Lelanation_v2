@@ -187,29 +187,36 @@ function onDrop(targetIndex: number) {
         rgb(248 113 113 / 0.55) 100%
       )
       border-box;
-  padding: 0.65rem;
+  padding: 0.65rem 0.65rem 0.65rem 0;
 }
 
 .matchup-scale__row {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 0.45rem;
-  border-radius: 0.5rem;
+  border-radius: 0 0.5rem 0.5rem 0;
   border: 1px solid rgb(var(--rgb-primary) / 0.35);
+  border-left: none;
   background: rgb(var(--rgb-background) / 0.35);
-  padding: 0.35rem 0.45rem;
+  padding: 0.35rem 0.45rem 0.35rem 0;
   cursor: grab;
 }
 
 .matchup-scale__rank-label {
+  display: flex;
   flex-shrink: 0;
+  align-items: center;
+  margin-left: 0;
 }
 
 .matchup-scale__rank-input {
-  width: 2.65rem;
-  padding: 0.15rem 0.2rem;
-  border: 1px solid rgb(var(--rgb-primary) / 0.4);
-  border-radius: 0.35rem;
+  width: 2.15rem;
+  height: 100%;
+  min-height: 2.4rem;
+  padding: 0;
+  border: none;
+  border-right: 1px solid rgb(var(--rgb-primary) / 0.4);
+  border-radius: 0;
   background: rgb(var(--rgb-background) / 0.55);
   text-align: center;
   font-size: 0.75rem;
@@ -227,14 +234,15 @@ function onDrop(targetIndex: number) {
 
 .matchup-scale__rank-input:focus {
   outline: none;
-  border-color: rgb(var(--rgb-accent) / 0.75);
-  box-shadow: 0 0 0 1px rgb(var(--rgb-accent) / 0.35);
+  border-right-color: rgb(var(--rgb-accent) / 0.75);
+  box-shadow: inset -1px 0 0 rgb(var(--rgb-accent) / 0.75);
 }
 
 .matchup-scale__portrait {
   width: 2.4rem;
   height: 2.4rem;
   flex-shrink: 0;
+  align-self: center;
   border-radius: 9999px;
   border: 1px solid rgb(var(--rgb-primary) / 0.35);
   object-fit: cover;
@@ -243,6 +251,7 @@ function onDrop(targetIndex: number) {
 .matchup-scale__name {
   min-width: 0;
   flex: 1;
+  align-self: center;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -284,6 +293,7 @@ function onDrop(targetIndex: number) {
   display: flex;
   flex-shrink: 0;
   align-items: center;
+  align-self: center;
   gap: 0.2rem;
 }
 
@@ -314,7 +324,7 @@ function onDrop(targetIndex: number) {
 
 .matchup-scale__empty {
   margin: auto;
-  padding: 1rem;
+  padding: 1rem 1rem 1rem 0.65rem;
   text-align: center;
   font-size: 0.82rem;
   color: rgb(var(--rgb-text) / 0.65);

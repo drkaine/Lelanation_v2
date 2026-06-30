@@ -7,10 +7,11 @@ FRONTEND="$ROOT/frontend"
 echo "[deploy-frontend] Stopping PM2 app..."
 pm2 stop lelanation-frontend >/dev/null 2>&1 || true
 
-echo "[deploy-frontend] Building Nuxt (clean nitro cache)..."
+echo "[deploy-frontend] Building Nuxt (clean output + nitro cache)..."
 cd "$FRONTEND"
-rm -rf node_modules/.cache/nuxt
+rm -rf .output node_modules/.cache/nuxt
 npm run build
+rm -f .output/public/index.html
 
 echo "[deploy-frontend] Verifying server chunk manifest..."
 node -e "

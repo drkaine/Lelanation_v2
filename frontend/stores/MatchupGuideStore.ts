@@ -25,6 +25,21 @@ export const useMatchupGuideStore = defineStore('matchupGuide', {
       }
     },
 
+    /** Met à jour le localStorage sans synchroniser le serveur (ex. cache après fetch API). */
+    upsertGuideLocal(guide: MatchupGuide) {
+      if (import.meta.server) return
+
+      const savedGuides = this.getSavedGuides()
+      const existingIndex = savedGuides.findIndex(g => g.id === guide.id)
+      if (existingIndex >= 0) {
+        savedGuides[existingIndex] = guide
+      } else {
+        savedGuides.push(guide)
+      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(savedGuides))
+      this.savedGuidesVersion++
+    },
+
     async saveGuide(guide: MatchupGuide): Promise<boolean> {
       if (import.meta.server) return false
 

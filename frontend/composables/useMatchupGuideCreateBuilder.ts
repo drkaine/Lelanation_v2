@@ -1,5 +1,5 @@
 import type { LocationQuery } from 'vue-router'
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useBuildStore } from '~/stores/BuildStore'
 import {
   useMatchupGuideDraftStore,
@@ -28,21 +28,18 @@ export function bootstrapMatchupGuideCreateSession(routeQuery?: LocationQuery | 
 
   const { editId, fromBuildId } = readMatchupGuideCreateQuery(routeQuery ?? {})
 
+  // La session d'édition est chargée de façon asynchrone dans useMatchupGuideCreateBuilder.
+  if (editId) return
+
   if (fromBuildId) {
     bootstrapMatchupGuideFromBuild(fromBuildId)
     buildStore.ensureBuildChampionStats().catch(() => undefined)
     return
   }
 
-  if (editId) {
-    if (!draftStore.guideId || draftStore.guideId !== editId) {
-      startEditingMatchupGuide(editId)
-    }
-  } else {
-    draftStore.hydrateFromStorage()
-    if (!draftStore.guideId) {
-      draftStore.startNewGuide()
-    }
+  draftStore.hydrateFromStorage()
+  if (!draftStore.guideId) {
+    draftStore.startNewGuide()
   }
 
   buildStore.ensureCurrentBuild()
@@ -93,14 +90,28 @@ export function useMatchupGuideCreateBuilder(step: MatchupGuideBuilderStep) {
   const route = useRoute()
 
   const editId = typeof route.query.editId === 'string' ? route.query.editId : null
-  bootstrapMatchupGuideCreateSession(route.query)
+  const editSessionReady = ref(!editId)
+
+  if (import.meta.client && !editId) {
+    bootstrapMatchupGuideCreateSession(route.query)
+  }
 
   const sessionReady = computed(
-    () => import.meta.server || (draftStore.hydrated && Boolean(buildStore.currentBuild))
+    () =>
+      import.meta.server ||
+      ((!editId || editSessionReady.value) &&
+        draftStore.hydrated &&
+        Boolean(buildStore.currentBuild))
   )
 
-  onMounted(() => {
-    draftStore.hydrateFromStorage()
+  onMounted(async () => {
+    if (editId) {
+      await startEditingMatchupGuide(editId)
+      editSessionReady.value = true
+    } else {
+      draftStore.hydrateFromStorage()
+    }
+
     draftStore.setLastStep(step)
     if (BUILD_STEPS.includes(step)) {
       buildStore.setLastBuilderStep(step)

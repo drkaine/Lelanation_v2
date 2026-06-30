@@ -1,16 +1,23 @@
 import { useBuildStore } from '~/stores/BuildStore'
 import { useMatchupGuideDraftStore } from '~/stores/MatchupGuideDraftStore'
 import { useMatchupGuideStore } from '~/stores/MatchupGuideStore'
+import { fetchMatchupGuideById } from '~/composables/useMatchupGuideDetail'
 import { hydrateBuild } from '~/utils/buildSerialize'
 
-export function startEditingMatchupGuide(guideId: string): boolean {
+export async function startEditingMatchupGuide(guideId: string): Promise<boolean> {
   if (import.meta.server) return false
 
   const guideStore = useMatchupGuideStore()
   const draftStore = useMatchupGuideDraftStore()
   const buildStore = useBuildStore()
 
-  const guide = guideStore.getSavedGuides().find(g => g.id === guideId)
+  let guide = guideStore.getSavedGuides().find(g => g.id === guideId) ?? null
+  if (!guide) {
+    guide = await fetchMatchupGuideById(guideId)
+    if (guide) {
+      guideStore.upsertGuideLocal(guide)
+    }
+  }
   if (!guide) return false
 
   draftStore.loadFromGuide(guide)
@@ -22,9 +29,11 @@ export function startEditingMatchupGuide(guideId: string): boolean {
       author: guide.author ?? parsed.author,
       description: guide.description ?? parsed.description,
       visibility: guide.visibility ?? parsed.visibility ?? 'public',
+      matchupGuideEmbed: true,
       roles: guide.role ? [guide.role] : parsed.roles,
       tags: guide.tags ?? parsed.tags,
     })
+    buildStore.persistCurrentBuildDraft()
   } else {
     buildStore.createNewBuild()
     const current = buildStore.currentBuild
@@ -44,6 +53,9 @@ export function startEditingMatchupGuide(guideId: string): boolean {
       buildStore.persistCurrentBuildDraft()
     }
   }
+
+  const championId = buildStore.currentBuild?.champion?.id ?? guide.champion?.id ?? null
+  draftStore.syncGuideChampion(championId)
 
   return true
 }

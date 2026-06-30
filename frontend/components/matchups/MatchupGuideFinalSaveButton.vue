@@ -88,8 +88,12 @@ async function handleSave() {
 
   saving.value = true
   try {
-    const buildSaved = await buildStore.saveBuild()
-    if (!buildSaved) return
+    if (!buildStore.isBuildValid) return
+
+    const buildId = buildStore.currentBuild?.id
+    if (buildId) {
+      await buildStore.detachBuildFromLibrary(buildId)
+    }
 
     const guide = draftStore.buildGuideFromCurrentBuild(buildStore.currentBuild)
     if (!guide) return

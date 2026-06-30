@@ -347,4 +347,42 @@ export function extractMatchupCopyPatch(
   return patch
 }
 
+const DIFFICULTY_BAND_SORT: Record<MatchupDifficultyBand, number> = {
+  easy: 2,
+  medium: 5,
+  hard: 7,
+  very_hard: 9,
+}
+
+export function formatMatchupOutcome(entry: MatchupEntry, t: (key: string) => string): string {
+  if (entry.outcomeKind) {
+    let label = t(`matchupGuideCreate.outcomeKind.${entry.outcomeKind}`)
+    if (entry.outcomeKind === 'skill' && entry.skillFavor) {
+      label += ` (${t(`matchupGuideCreate.skillFavor.${entry.skillFavor}`)})`
+    }
+    return label
+  }
+  return entry.outcome?.trim() || '—'
+}
+
+export function formatMatchupDifficulty(entry: MatchupEntry, t: (key: string) => string): string {
+  if (entry.difficultyMode === 'score' && entry.difficultyScore) {
+    return `${entry.difficultyScore}/10`
+  }
+  if (entry.difficultyBand) {
+    return t(`matchupGuideCreate.difficultyBand.${entry.difficultyBand}`)
+  }
+  return entry.difficulty?.trim() || '—'
+}
+
+export function matchupDifficultySortValue(entry: MatchupEntry): number | null {
+  if (entry.difficultyMode === 'score' && typeof entry.difficultyScore === 'number') {
+    return entry.difficultyScore
+  }
+  if (entry.difficultyBand) {
+    return DIFFICULTY_BAND_SORT[entry.difficultyBand] ?? null
+  }
+  return null
+}
+
 export { PHASE_TAGS, OUTCOME_KINDS, SKILL_FAVORS, DIFFICULTY_BANDS, DIFFICULTY_MODES }

@@ -1,6 +1,6 @@
 <template>
   <div class="build-creator min-h-screen text-text">
-    <div class="mx-auto max-w-8xl px-2">
+    <div :class="fullWidth ? 'w-full px-3 sm:px-5 lg:px-6' : 'mx-auto max-w-8xl px-2'">
       <div class="mb-3">
         <component :is="buildMenuStepsComponent" :current-step="'info'" :has-champion="hasChampion" />
       </div>
@@ -95,6 +95,7 @@ defineProps<{
   buildSaveButtonComponent: Component | string
   statsTableComponent: Component | string
   buildMenuStepsComponent: Component | string
+  fullWidth?: boolean
 }>()
 
 const emit = defineEmits<{

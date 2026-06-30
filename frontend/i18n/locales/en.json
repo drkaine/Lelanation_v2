@@ -2011,6 +2011,23 @@
     "markSavedNextSuccess": "Moved to the next matchup.",
     "markSavedAllDone": "All matchups are saved.",
     "markSavedMissingFields": "Complete the required fields highlighted in red: difficulty, build, and lane advice.",
+    "entriesTable": {
+      "filtersTitle": "Filters",
+      "colRank": "Rank",
+      "colChampion": "Champion",
+      "colDifficulty": "Difficulty",
+      "colOutcome": "Outcome",
+      "colBuild": "Build",
+      "colComments": "Tips",
+      "min": "Min",
+      "max": "Max",
+      "searchChampion": "Filter by champion…",
+      "searchBuild": "Filter by build…",
+      "searchComments": "Filter by tips…",
+      "allBands": "All bands",
+      "allOutcomes": "All outcomes",
+      "noResults": "No matchups match the current filters."
+    },
     "copyField": {
       "difficulty": "Difficulty",
       "outcome": "Outcome",
@@ -2117,8 +2134,7 @@
     "fieldGuideDescriptionPlaceholder": "Guide overview, playstyle, lane context…",
     "finalizeMissingIdentity": "Fill in the guide name, author, and short description to save.",
     "finalizeVisibilityLabel": "Guide visibility",
-    "finalizeVisibilityHint": "The guide will be saved with this visibility. To change it, go back to the",
-    "finalizeVisibilityLink": "Info step (build card)"
+    "finalizeVisibilityHint": "Public: visible in Discover. Private: saved locally, not published."
   },
   "matchupGuideDiscovery": {
     "searchPlaceholder": "Search by champion, opponent or author...",
@@ -2151,7 +2167,10 @@
     "dateCreated": "Created",
     "fullMatchupTable": "All matchups",
     "permabanNotes": "Permaban / bans",
+    "builds": "Builds",
     "generalBuildNotes": "General builds",
+    "hideDetailExtras": "Hide description and details",
+    "showDetailExtras": "Show description and details",
     "authorAbout": "About the author",
     "opggProfile": "op.gg profile",
     "colChampion": "Champion",

@@ -15,8 +15,6 @@ import {
 } from '~/utils/matchupEntryUtils'
 import {
   DEFAULT_MATCHUP_COHORT_COLOR,
-  buildOpponentCohortColorsForEntries,
-  hasAnyCohortAssignments,
   normalizeActiveCohortColor,
   normalizeOpponentCohortColors,
 } from '~/utils/matchupGuideCohorts'
@@ -165,13 +163,6 @@ function migrateLegacySnapshot(parsed: Record<string, unknown>): MatchupGuideDra
     if (matchupEntries.some(entry => entry.opponent.id === id) && !opponentCohortColors[id]) {
       opponentCohortColors[id] = activeCohortColor
     }
-  }
-
-  if (matchupEntries.length > 0 && !hasAnyCohortAssignments(opponentCohortColors)) {
-    opponentCohortColors = buildOpponentCohortColorsForEntries(
-      matchupEntries.map(entry => entry.opponent.id),
-      activeCohortColor
-    )
   }
 
   opponentCohortColors = normalizeOpponentCohortColors(opponentCohortColors)
@@ -351,19 +342,6 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
       )
     },
 
-    ensureDefaultCohortAssignments(): boolean {
-      if (this.matchupEntries.length === 0) return false
-      if (hasAnyCohortAssignments(this.opponentCohortColors)) return false
-
-      this.opponentCohortColors = buildOpponentCohortColorsForEntries(
-        this.matchupEntries.map(entry => entry.opponent.id),
-        this.activeCohortColor
-      )
-      this.syncSelectedOpponentIds()
-      this.persist()
-      return true
-    },
-
     persist() {
       if (!this.guideId) {
         writeDraftSnapshot(null)
@@ -394,7 +372,6 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
       this.opponentCohortColors = snapshot.opponentCohortColors
       this.activeCohortColor = snapshot.activeCohortColor
       this.soloSelectedOpponentIds = snapshot.soloSelectedOpponentIds
-      this.ensureDefaultCohortAssignments()
       this.reconcileCohortColors()
       this.syncSelectedOpponentIds()
       this.hydrated = true
@@ -592,6 +569,9 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
       if (!this.hydrated) this.hydrateFromStorage()
 
       if (!championId) {
+        // En édition, le build peut ne pas être hydraté tout de suite — ne pas effacer le guide.
+        if (this.guideId && this.guideChampionId) return
+
         if (this.guideChampionId !== null || this.matchupEntries.length > 0) {
           this.guideChampionId = null
           this.matchupEntries = []

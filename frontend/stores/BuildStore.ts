@@ -16,7 +16,7 @@ import type {
 } from '@lelanation/shared-types'
 import { isStarterItem } from '@lelanation/builds-ui'
 import { getFallbackGameVersion } from '~/config/version'
-import { apiUrl } from '~/utils/apiUrl'
+import { isStandaloneLibraryBuild } from '~/utils/buildLibrary'
 import { serializeBuild, hydrateBuild, isStoredBuild } from '~/utils/buildSerialize'
 import {
   applyPatchStaleToBuild,
@@ -1795,7 +1795,8 @@ export const useBuildStore = defineStore('build', {
       })
     },
 
-    async saveBuild(): Promise<boolean> {
+    async saveBuild(options?: { publishToLibrary?: boolean }): Promise<boolean> {
+      const publishToLibrary = options?.publishToLibrary !== false
       if (!this.currentBuild) {
         this.error = 'No build to save'
         this.status = 'error'
@@ -1817,60 +1818,56 @@ export const useBuildStore = defineStore('build', {
         }
         this.currentBuild.gameVersion = versionStore.currentVersion || getFallbackGameVersion()
 
-        // 1) Sauvegarde locale (localStorage) pour l'UX rapide
-        const savedBuilds = this.getSavedBuilds()
-        const existingIndex = savedBuilds.findIndex(b => b.id === this.currentBuild!.id)
-        const previousBuild = existingIndex >= 0 ? savedBuilds[existingIndex] : null
-        const previousVisibility = previousBuild?.visibility ?? null
-        const newVisibility = this.currentBuild!.visibility ?? 'public'
-
         const now = new Date().toISOString()
         this.currentBuild.updatedAt = now
-        if (existingIndex >= 0) {
-          savedBuilds[existingIndex] = this.currentBuild
-        } else {
-          this.currentBuild.createdAt = now
-          savedBuilds.push(this.currentBuild)
-        }
-        const toStore = savedBuilds.map(b => serializeBuild(b))
-        localStorage.setItem('lelanation_builds', JSON.stringify(toStore))
-        this.savedBuildsVersion++
 
-        // 2) Sync serveur selon visibilité :
-        //    - Build privé : on ne sauvegarde que en local (pas d'envoi au serveur).
-        //    - Passage privé → public : on ajoute/met à jour sur le serveur (POST).
-        //    - Passage public → privé : on supprime sur le serveur (DELETE).
-        try {
-          if (newVisibility === 'private') {
-            // Privé : pas d'envoi au serveur. Si on passait de public à privé, supprimer du serveur.
-            if (previousVisibility === 'public' && this.currentBuild!.id) {
-              const delResponse = await fetch(
-                apiUrl(`/api/builds/${encodeURIComponent(this.currentBuild!.id)}`),
-                { method: 'DELETE' }
-              )
-              if (!delResponse.ok && delResponse.status !== 404) {
-                // Build saved locally but failed to remove from server (public→private)
-              }
-            }
+        // 1) Sauvegarde locale (localStorage) — sauf builds embarqués dans un guide matchup
+        if (publishToLibrary) {
+          const savedBuilds = this.getSavedBuilds()
+          const existingIndex = savedBuilds.findIndex(b => b.id === this.currentBuild!.id)
+          const previousBuild = existingIndex >= 0 ? savedBuilds[existingIndex] : null
+          const previousVisibility = previousBuild?.visibility ?? null
+          const newVisibility = this.currentBuild!.visibility ?? 'public'
+
+          if (existingIndex >= 0) {
+            savedBuilds[existingIndex] = this.currentBuild
           } else {
-            // Public : ajout ou mise à jour sur le serveur (best effort)
-            const response = await fetch(apiUrl('/api/builds'), {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(serializeBuild(this.currentBuild!)),
-            })
+            this.currentBuild.createdAt = now
+            savedBuilds.push(this.currentBuild)
+          }
+          const toStore = savedBuilds.map(b => serializeBuild(b))
+          localStorage.setItem('lelanation_builds', JSON.stringify(toStore))
+          this.savedBuildsVersion++
 
-            if (response.ok) {
-              const result = await response.json()
-              if (result.id && !this.currentBuild!.id) {
-                this.currentBuild!.id = result.id
+          // 2) Sync serveur selon visibilité
+          try {
+            if (newVisibility === 'private') {
+              if (previousVisibility === 'public' && this.currentBuild!.id) {
+                const delResponse = await fetch(
+                  apiUrl(`/api/builds/${encodeURIComponent(this.currentBuild!.id)}`),
+                  { method: 'DELETE' }
+                )
+                if (!delResponse.ok && delResponse.status !== 404) {
+                  // Build saved locally but failed to remove from server (public→private)
+                }
               }
             } else {
-              // Build saved locally but failed to save JSON on server
+              const response = await fetch(apiUrl('/api/builds'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(serializeBuild(this.currentBuild!)),
+              })
+
+              if (response.ok) {
+                const result = await response.json()
+                if (result.id && !this.currentBuild!.id) {
+                  this.currentBuild!.id = result.id
+                }
+              }
             }
+          } catch {
+            // Build saved locally but API /api/builds is unreachable
           }
-        } catch {
-          // Build saved locally but API /api/builds is unreachable
         }
 
         // 3) Vérifier si le build doit passer en privé automatiquement (votes)
@@ -2008,6 +2005,29 @@ export const useBuildStore = defineStore('build', {
       }
     },
 
+    /** Retire un build de la bibliothèque locale et du serveur (ex. build embarqué dans un guide). */
+    async detachBuildFromLibrary(buildId: string): Promise<void> {
+      if (import.meta.server || !buildId) return
+      try {
+        const savedBuilds = this.getSavedBuilds()
+        const filtered = savedBuilds.filter(b => b.id !== buildId)
+        if (filtered.length !== savedBuilds.length) {
+          localStorage.setItem(
+            'lelanation_builds',
+            JSON.stringify(filtered.map(b => serializeBuild(b)))
+          )
+          this.savedBuildsVersion++
+        }
+      } catch {
+        // ignore
+      }
+      try {
+        await fetch(apiUrl(`/api/builds/${encodeURIComponent(buildId)}`), { method: 'DELETE' })
+      } catch {
+        // best effort
+      }
+    },
+
     async deleteBuild(buildId: string): Promise<boolean> {
       try {
         const savedBuilds = this.getSavedBuilds()
@@ -2104,7 +2124,8 @@ export const useBuildStore = defineStore('build', {
      */
     async syncBuildToServer(build: Build): Promise<boolean> {
       if (!build || !build.id) return false
-      if (build.visibility === 'private') return true // Pas de sync pour les privés
+      if (build.visibility === 'private') return true
+      if (!isStandaloneLibraryBuild(build)) return true
 
       try {
         // Vérifier si le build existe sur le serveur

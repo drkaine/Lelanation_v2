@@ -321,6 +321,8 @@ export interface Build {
   author?: string
   description?: string
   visibility?: 'public' | 'private'
+  /** Build embarqué dans un guide matchup — hors bibliothèque Découvrir / Mes builds. */
+  matchupGuideEmbed?: boolean
   champion: Champion | null
   items: Item[]
   runes: RuneSelection | null
@@ -364,6 +366,8 @@ export interface StoredBuild {
   author?: string
   description?: string
   visibility?: 'public' | 'private'
+  /** Build embarqué dans un guide matchup — hors bibliothèque Découvrir / Mes builds. */
+  matchupGuideEmbed?: boolean
   champion: ChampionRef | null
   items: ItemRef[]
   runes: RuneSelection | null

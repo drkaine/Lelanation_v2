@@ -55,7 +55,7 @@ export function buildMatchupGuideFromDraft(
   )
   const { bestMatchups, worstMatchups } = deriveBestWorstFromMatchups(matchups)
   const visibility = build.visibility ?? 'public'
-  const buildSnapshot = serializeBuild({ ...build, visibility })
+  const buildSnapshot = serializeBuild({ ...build, visibility, matchupGuideEmbed: true })
 
   return {
     id: guideId,

@@ -10,6 +10,7 @@ import BuildSearch from '~/components/BuildDiscovery/BuildSearch.vue'
 import BuildFilters from '~/components/BuildDiscovery/BuildFilters.vue'
 import BuildGrid from '~/components/BuildDiscovery/BuildGrid.vue'
 import { serializeBuild, hydrateBuild, isStoredBuild } from '~/utils/buildSerialize'
+import { filterStandaloneLibraryBuilds } from '~/utils/buildLibrary'
 import { useAdminAuth } from '~/composables/useAdminAuth'
 import { useClientHydrated } from '~/composables/useClientHydrated'
 import { useStreamerMode } from '~/composables/useStreamerMode'
@@ -85,6 +86,11 @@ export function useBuildsIndexPage(fixedTab?: BuildsIndexTab) {
     { watch: [routeTab] }
   )
 
+  const libraryBuildStore = {
+    ...buildStore,
+    getSavedBuilds: () => filterStandaloneLibraryBuilds(buildStore.getSavedBuilds()),
+  }
+
   const controller = useBuildsIndexController({
     hydrated,
     isStreamerMode,
@@ -94,7 +100,7 @@ export function useBuildsIndexPage(fixedTab?: BuildsIndexTab) {
       await navigateTo(localePath(segment), { replace: true })
     },
     t,
-    buildStore,
+    buildStore: libraryBuildStore,
     discoveryStore,
     favoritesStore,
     voteStore,

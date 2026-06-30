@@ -2013,6 +2013,23 @@
     "markSavedNextSuccess": "Passage au matchup suivant.",
     "markSavedAllDone": "Tous les matchups sont enregistrés.",
     "markSavedMissingFields": "Complétez les champs obligatoires en rouge : difficulté, build et conseils lane.",
+    "entriesTable": {
+      "filtersTitle": "Filtres",
+      "colRank": "Rang",
+      "colChampion": "Champion",
+      "colDifficulty": "Difficulté",
+      "colOutcome": "Résultat",
+      "colBuild": "Build",
+      "colComments": "Conseils",
+      "min": "Min",
+      "max": "Max",
+      "searchChampion": "Filtrer par champion…",
+      "searchBuild": "Filtrer par build…",
+      "searchComments": "Filtrer par conseil…",
+      "allBands": "Toutes les bandes",
+      "allOutcomes": "Tous les résultats",
+      "noResults": "Aucun matchup ne correspond aux filtres."
+    },
     "copyField": {
       "difficulty": "Difficulté",
       "outcome": "Résultat",
@@ -2119,8 +2136,7 @@
     "fieldGuideDescriptionPlaceholder": "Présentation du guide, style de jeu, contexte de lane…",
     "finalizeMissingIdentity": "Renseignez le nom du guide, l’auteur et la description courte pour enregistrer.",
     "finalizeVisibilityLabel": "Visibilité du guide",
-    "finalizeVisibilityHint": "Le guide sera enregistré avec cette visibilité. Pour la modifier, retournez à l’étape",
-    "finalizeVisibilityLink": "Info (carte du build)"
+    "finalizeVisibilityHint": "Public : visible dans Découvrir. Privé : enregistré localement, non publié."
   },
   "matchupGuideDiscovery": {
     "searchPlaceholder": "Rechercher par champion, adversaire ou auteur...",
@@ -2152,8 +2168,12 @@
     "dateUpdated": "Mis à jour",
     "dateCreated": "Créé le",
     "fullMatchupTable": "Tous les matchups",
+    "colRank": "Rang",
     "permabanNotes": "Permaban / bans",
+    "builds": "Builds",
     "generalBuildNotes": "Builds généraux",
+    "hideDetailExtras": "Masquer la description et les infos",
+    "showDetailExtras": "Afficher la description et les infos",
     "authorAbout": "À propos de l’auteur",
     "opggProfile": "Profil op.gg",
     "colChampion": "Champion",

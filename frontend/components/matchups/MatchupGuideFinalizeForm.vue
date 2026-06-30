@@ -5,20 +5,29 @@
         <span class="matchup-finalize-form__visibility-label">
           {{ t('matchupGuideCreate.finalizeVisibilityLabel') }}
         </span>
-        <span
-          class="matchup-finalize-form__visibility-badge"
-          :class="{
-            'matchup-finalize-form__visibility-badge--private': visibility === 'private',
-          }"
-        >
-          {{ visibility === 'private' ? t('buildsPage.private') : t('buildsPage.public') }}
-        </span>
+        <div class="matchup-finalize-form__visibility-toggle">
+          <button
+            type="button"
+            class="matchup-finalize-form__visibility-button"
+            :class="{ 'matchup-finalize-form__visibility-button--active': visibility === 'public' }"
+            @click="setVisibility('public')"
+          >
+            {{ t('buildsPage.public') }}
+          </button>
+          <button
+            type="button"
+            class="matchup-finalize-form__visibility-button"
+            :class="{
+              'matchup-finalize-form__visibility-button--active': visibility === 'private',
+            }"
+            @click="setVisibility('private')"
+          >
+            {{ t('buildsPage.private') }}
+          </button>
+        </div>
       </div>
       <p class="matchup-finalize-form__visibility-hint">
         {{ t('matchupGuideCreate.finalizeVisibilityHint') }}
-        <NuxtLink :to="infoStepHref" class="matchup-finalize-form__visibility-link">
-          {{ t('matchupGuideCreate.finalizeVisibilityLink') }}
-        </NuxtLink>
       </p>
     </div>
 
@@ -114,23 +123,13 @@
       </h2>
 
       <div class="matchup-finalize-form__grid">
-        <label class="matchup-finalize-form__field">
+        <label class="matchup-finalize-form__field matchup-finalize-form__field--wide">
           <span>{{ t('matchupGuideCreate.fieldPermaban') }}</span>
           <textarea
             :value="meta.permabanNotes ?? ''"
             rows="5"
             :placeholder="t('matchupGuideCreate.fieldPermabanPlaceholder')"
             @input="onMeta('permabanNotes', ($event.target as HTMLTextAreaElement).value)"
-          />
-        </label>
-
-        <label class="matchup-finalize-form__field">
-          <span>{{ t('matchupGuideCreate.fieldGeneralBuild') }}</span>
-          <textarea
-            :value="meta.generalBuildNotes ?? ''"
-            rows="5"
-            :placeholder="t('matchupGuideCreate.fieldGeneralBuildPlaceholder')"
-            @input="onMeta('generalBuildNotes', ($event.target as HTMLTextAreaElement).value)"
           />
         </label>
       </div>
@@ -149,11 +148,8 @@ import {
   getMissingFinalizeIdentityFields,
   type MatchupGuideFinalizeIdentityField,
 } from '~/utils/matchupGuideCreateSteps'
-import { matchupGuideCreateRouteQuery } from '~/utils/matchupGuideFromBuildSession'
 
 const { t } = useI18n()
-const route = useRoute()
-const localePath = useLocalePath()
 const buildStore = useBuildStore()
 const draftStore = useMatchupGuideDraftStore()
 
@@ -164,13 +160,6 @@ const author = computed(() => buildStore.currentBuild?.author ?? '')
 const description = computed(() => buildStore.currentBuild?.description ?? '')
 const visibility = computed(
   () => (buildStore.currentBuild?.visibility as 'public' | 'private' | undefined) ?? 'public'
-)
-
-const infoStepHref = computed(() =>
-  localePath({
-    path: '/matchups/sheets/create/info',
-    query: matchupGuideCreateRouteQuery(route.query),
-  })
 )
 
 const showRequiredHints = computed(
@@ -211,9 +200,15 @@ function onDescription(value: string) {
   persistBuild()
 }
 
+function setVisibility(next: 'public' | 'private') {
+  if (visibility.value === next) return
+  buildStore.setVisibility(next)
+  persistBuild()
+}
+
 type MetaField = keyof Pick<
   MatchupGuideMeta,
-  'shortDescription' | 'permabanNotes' | 'generalBuildNotes' | 'authorAbout' | 'opggUrl'
+  'shortDescription' | 'permabanNotes' | 'authorAbout' | 'opggUrl'
 >
 
 function onMeta(field: MetaField, value: string) {
@@ -253,20 +248,39 @@ function onMeta(field: MetaField, value: string) {
   color: rgb(var(--rgb-text) / 0.75);
 }
 
-.matchup-finalize-form__visibility-badge {
+.matchup-finalize-form__visibility-toggle {
   display: inline-flex;
   align-items: center;
+  gap: 2px;
+  padding: 2px;
   border-radius: 9999px;
-  background: rgb(74 222 128 / 0.18);
-  padding: 0.15rem 0.55rem;
+  border: 1px solid rgb(var(--rgb-primary) / 0.35);
+  background: rgb(var(--rgb-surface) / 0.85);
+}
+
+.matchup-finalize-form__visibility-button {
+  border: none;
+  background: transparent;
+  color: rgb(var(--rgb-text) / 0.62);
   font-size: 0.72rem;
   font-weight: 700;
+  line-height: 1;
+  padding: 0.35rem 0.65rem;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.matchup-finalize-form__visibility-button--active:first-child {
+  background: rgb(74 222 128 / 0.22);
   color: rgb(187 247 208);
 }
 
-.matchup-finalize-form__visibility-badge--private {
-  background: rgb(var(--rgb-text) / 0.12);
-  color: rgb(var(--rgb-text) / 0.75);
+.matchup-finalize-form__visibility-button--active:last-child {
+  background: rgb(220 38 38 / 0.9);
+  color: rgb(255 255 255);
 }
 
 .matchup-finalize-form__visibility-hint {
@@ -274,13 +288,6 @@ function onMeta(field: MetaField, value: string) {
   font-size: 0.78rem;
   line-height: 1.45;
   color: rgb(var(--rgb-text) / 0.72);
-}
-
-.matchup-finalize-form__visibility-link {
-  font-weight: 600;
-  color: rgb(var(--rgb-text-accent));
-  text-decoration: underline;
-  text-underline-offset: 2px;
 }
 
 .matchup-finalize-form__section {

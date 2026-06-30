@@ -1,6 +1,6 @@
 .PHONY: help setup dev dev-backend dev-frontend build build-all build-backend build-frontend build-companion build-companion-exe companion-tag exe-windows \
 	pm2-status pm2-start pm2-restart pm2-restart-no-poller pm2-restart-frontend pm2-stop pm2-delete pm2-logs pm2-logs-backend pm2-logs-poller pm2-restart-poller pm2-logs-frontend \
-	deploy sync-data typecheck typecheck-frontend typecheck-companion lint lint-frontend format format-frontend \
+	deploy deploy-frontend sync-data typecheck typecheck-frontend typecheck-companion lint lint-frontend format format-frontend \
 	test test-packages clean \
 	docker-db-up docker-db-down docker-db-restart docker-db-wait-healthy docker-db-verify wait-redis \
 	migrate-drizzle-statistiques migrate-db merge-objective-histogram-global
@@ -39,7 +39,8 @@ help:
 	@echo "  make build              Build backend + frontend + companion; PM2 restart backend+frontend only (poller-v2 untouched)"
 	@echo "  make build-all          Compile + migrations schéma + PM2 (ne remplit pas les tables stats ; pas de merge SQL)"
 	@echo "  make build-backend      migrate-db (Drizzle) puis npm run build"
-	@echo "  make build-frontend     Build frontend only"
+	@echo "  make build-frontend     Stop PM2, clean build, verify chunks, start frontend"
+	@echo "  make deploy-frontend    Same as build-frontend (atomic deploy script)"
 	@echo "  make build-companion    Build companion Vite app only"
 	@echo "  make build-companion-exe  Build companion Windows .exe at project root"
 	@echo "  make companion-tag      Sync version + commit + tag + push companion-v* (VERSION=1.0.0 MSG=..., NO_PUSH=1 to skip)"
@@ -152,12 +153,8 @@ docker-db-verify:
 	@$(MAKE) docker-db-wait-healthy
 	@echo "docker-db-verify: OK"
 
-build-frontend:
-	$(PM2) stop lelanation-frontend 2>/dev/null || true
-	rm -rf "$(FRONTEND_DIR)/.output" "$(FRONTEND_DIR)/node_modules/.cache/nuxt"
-	$(NPM) --prefix "$(FRONTEND_DIR)" run build
-	rm -f "$(FRONTEND_DIR)/.output/public/index.html"
-	@$(MAKE) pm2-restart-frontend
+build-frontend deploy-frontend:
+	bash "$(ROOT_DIR)/scripts/deploy-frontend.sh"
 
 pm2-restart-frontend:
 	$(PM2) restart lelanation-frontend --update-env
@@ -200,7 +197,7 @@ pm2-restart: wait-redis
 	$(PM2) restart "$(ECOSYSTEM_FILE)" --update-env
 
 pm2-restart-no-poller:
-	$(PM2) restart lelanation-backend lelanation-frontend --update-env
+	$(PM2) restart lelanation-backend --update-env
 
 pm2-stop:
 	$(PM2) stop "$(ECOSYSTEM_FILE)"

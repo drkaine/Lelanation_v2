@@ -5,6 +5,7 @@ import { useVoteStore } from './VoteStore'
 import { useVersionStore } from './VersionStore'
 import { apiUrl } from '~/utils/apiUrl'
 import { hydrateBuild, isStoredBuild } from '~/utils/buildSerialize'
+import { filterStandaloneLibraryBuilds } from '~/utils/buildLibrary'
 import { extractPatchStaleMap, mergePatchStaleIntoBuilds } from '~/utils/mergePatchStale'
 import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 
@@ -239,7 +240,7 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
         )
         publicBuilds = filtered.map(b => (isStoredBuild(b) ? hydrateBuild(b) : (b as Build)))
         const localPublicBuilds = mergePatchStaleIntoBuilds(
-          localBuilds.filter(b => b.visibility !== 'private'),
+          filterStandaloneLibraryBuilds(localBuilds.filter(b => b.visibility !== 'private')),
           patchStaleById
         )
         this.builds = [...localPublicBuilds, ...publicBuilds]
@@ -256,7 +257,9 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
 
       // Combiner les builds locaux publics et les builds publics du serveur
       // (ne pas inclure nos builds privés dans la découverte)
-      const localPublicBuilds = localBuilds.filter(b => b.visibility !== 'private')
+      const localPublicBuilds = filterStandaloneLibraryBuilds(
+        localBuilds.filter(b => b.visibility !== 'private')
+      )
       this.builds = [...localPublicBuilds, ...publicBuilds]
 
       const versionStore = useVersionStore()

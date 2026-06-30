@@ -1,5 +1,6 @@
 <template>
   <BuildCreateRunePageView
+    full-width
     :is-streamer-mode="isLayoutScaled"
     :has-champion="hasChampion"
     :highlight-missing-fields="highlightMissingFields"

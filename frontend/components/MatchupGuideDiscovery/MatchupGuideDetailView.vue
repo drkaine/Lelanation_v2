@@ -1,6 +1,6 @@
 <template>
-  <div class="matchup-guide-detail min-h-screen px-[10px] pb-8 text-text">
-    <div class="mx-auto max-w-5xl">
+  <div class="matchup-guide-detail min-h-screen px-3 pb-8 text-text sm:px-5 lg:px-6">
+    <div class="w-full">
       <NuxtLink
         :to="localePath('/matchups/sheets/discover')"
         class="mb-4 inline-flex items-center gap-1 text-sm text-text-secondary transition-colors hover:text-text"

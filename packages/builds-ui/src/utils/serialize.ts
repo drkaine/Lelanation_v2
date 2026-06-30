@@ -46,6 +46,7 @@ export function serializeBuild(build: Build): StoredBuild {
     author: build.author,
     description: build.description,
     visibility: build.visibility,
+    matchupGuideEmbed: build.matchupGuideEmbed,
     champion: build.champion
       ? { id: build.champion.id, name: build.champion.name, image: build.champion.image }
       : null,
@@ -199,6 +200,7 @@ export function hydrateBuild(stored: StoredBuild, catalogs: HydrationCatalogs): 
   return {
     id: stored.id, name: stored.name, author: stored.author, description: stored.description,
     visibility: stored.visibility, champion, items, runes: stored.runes, shards: stored.shards,
+    matchupGuideEmbed: stored.matchupGuideEmbed,
     summonerSpells, skillOrder: normalizeSkillOrder(stored.skillOrder),
     roles: stored.roles, tags: stored.tags ?? [], upvote: stored.upvote, downvote: stored.downvote,
     gameVersion: stored.gameVersion, createdAt: stored.createdAt, updatedAt: stored.updatedAt,

@@ -140,44 +140,103 @@
       </div>
     </header>
 
-    <p
-      v-if="displayDescription"
-      class="matchup-sheet__description"
-      :class="{ 'matchup-sheet__description--clamped': variant === 'card' }"
-    >
-      {{ displayDescription }}
-    </p>
-    <p
-      v-else-if="variant === 'card'"
-      class="matchup-sheet__description matchup-sheet__description--empty"
-    />
+    <template v-if="variant === 'detail'">
+      <section v-if="hasDetailContent" class="matchup-sheet__description-section">
+        <p v-if="shortDescriptionText" class="matchup-sheet__short-description">
+          {{ shortDescriptionText }}
+        </p>
 
-    <div v-if="variant === 'detail' && hasMetaNotes" class="matchup-sheet__meta">
-      <section v-if="guide.meta?.authorAbout" class="matchup-sheet__meta-block">
-        <h4 class="matchup-sheet__meta-title">{{ t('matchupGuideDiscovery.authorAbout') }}</h4>
-        <p class="matchup-sheet__meta-text">{{ guide.meta.authorAbout }}</p>
-      </section>
-      <section v-if="guide.meta?.opggUrl" class="matchup-sheet__meta-block">
-        <h4 class="matchup-sheet__meta-title">{{ t('matchupGuideDiscovery.opggProfile') }}</h4>
-        <a
-          :href="guide.meta.opggUrl"
-          class="matchup-sheet__meta-link"
-          target="_blank"
-          rel="noopener noreferrer"
+        <button
+          v-if="hasCollapsibleDetailContent"
+          type="button"
+          class="matchup-sheet__description-toggle"
+          :aria-expanded="detailExtrasExpanded"
+          @click="detailExtrasExpanded = !detailExtrasExpanded"
         >
-          {{ guide.meta.opggUrl }}
-        </a>
+          <span class="matchup-sheet__description-toggle-label">
+            {{
+              detailExtrasExpanded
+                ? t('matchupGuideDiscovery.hideDetailExtras')
+                : t('matchupGuideDiscovery.showDetailExtras')
+            }}
+          </span>
+          <svg
+            class="matchup-sheet__description-toggle-chevron"
+            :class="{ 'matchup-sheet__description-toggle-chevron--open': detailExtrasExpanded }"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M19 9l-7 7-7-7"
+            />
+          </svg>
+        </button>
+
+        <div
+          v-show="!hasCollapsibleDetailContent || detailExtrasExpanded"
+          class="matchup-sheet__extras matchup-sheet__extras--detail"
+        >
+          <p v-if="longDescriptionText" class="matchup-sheet__description">
+            {{ longDescriptionText }}
+          </p>
+
+          <div v-if="hasMetaNotes" class="matchup-sheet__meta">
+            <section v-if="guide.meta?.authorAbout" class="matchup-sheet__meta-block">
+              <h4 class="matchup-sheet__meta-title">
+                {{ t('matchupGuideDiscovery.authorAbout') }}
+              </h4>
+              <p class="matchup-sheet__meta-text">{{ guide.meta.authorAbout }}</p>
+            </section>
+            <section v-if="guide.meta?.opggUrl" class="matchup-sheet__meta-block">
+              <h4 class="matchup-sheet__meta-title">
+                {{ t('matchupGuideDiscovery.opggProfile') }}
+              </h4>
+              <a
+                :href="guide.meta.opggUrl"
+                class="matchup-sheet__meta-link"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {{ guide.meta.opggUrl }}
+              </a>
+            </section>
+            <section v-if="guide.meta?.permabanNotes" class="matchup-sheet__meta-block">
+              <h4 class="matchup-sheet__meta-title">
+                {{ t('matchupGuideDiscovery.permabanNotes') }}
+              </h4>
+              <p class="matchup-sheet__meta-text">{{ guide.meta.permabanNotes }}</p>
+            </section>
+            <section
+              v-if="guideBuild"
+              class="matchup-sheet__meta-block matchup-sheet__meta-block--builds"
+            >
+              <h4 class="matchup-sheet__meta-title">{{ t('matchupGuideDiscovery.builds') }}</h4>
+              <div class="matchup-sheet__build-card-wrap">
+                <BuildCard :build="guideBuild" readonly hide-top-actions sheet-tooltips />
+              </div>
+            </section>
+          </div>
+        </div>
       </section>
-      <section v-if="guide.meta?.permabanNotes" class="matchup-sheet__meta-block">
-        <h4 class="matchup-sheet__meta-title">{{ t('matchupGuideDiscovery.permabanNotes') }}</h4>
-        <p class="matchup-sheet__meta-text">{{ guide.meta.permabanNotes }}</p>
-      </section>
-      <section v-if="guide.meta?.generalBuildNotes" class="matchup-sheet__meta-block">
-        <h4 class="matchup-sheet__meta-title">
-          {{ t('matchupGuideDiscovery.generalBuildNotes') }}
-        </h4>
-        <p class="matchup-sheet__meta-text">{{ guide.meta.generalBuildNotes }}</p>
-      </section>
+    </template>
+
+    <div v-else-if="displayDescription || variant === 'card'" class="matchup-sheet__extras">
+      <p
+        v-if="displayDescription"
+        class="matchup-sheet__description"
+        :class="{ 'matchup-sheet__description--clamped': variant === 'card' }"
+      >
+        {{ displayDescription }}
+      </p>
+      <p
+        v-else-if="variant === 'card'"
+        class="matchup-sheet__description matchup-sheet__description--empty"
+      />
     </div>
 
     <section
@@ -185,47 +244,7 @@
       class="matchup-sheet__table-section"
     >
       <h4 class="matchup-sheet__table-title">{{ t('matchupGuideDiscovery.fullMatchupTable') }}</h4>
-      <div class="matchup-sheet__table-wrap">
-        <table class="matchup-sheet__table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>{{ t('matchupGuideDiscovery.colChampion') }}</th>
-              <th>{{ t('matchupGuideDiscovery.colOutcome') }}</th>
-              <th>{{ t('matchupGuideDiscovery.colBuildVariants') }}</th>
-              <th>{{ t('matchupGuideDiscovery.colPowerSpike') }}</th>
-              <th>{{ t('matchupGuideDiscovery.colDifficulty') }}</th>
-              <th>{{ t('matchupGuideDiscovery.colEarly') }}</th>
-              <th>{{ t('matchupGuideDiscovery.colMid') }}</th>
-              <th>{{ t('matchupGuideDiscovery.colLate') }}</th>
-              <th>{{ t('matchupGuideDiscovery.colComments') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(entry, index) in fullMatchups" :key="entry.opponent.id">
-              <td>{{ index + 1 }}</td>
-              <td>
-                <div class="matchup-sheet__table-champion">
-                  <img
-                    :src="getChampionImageUrl(gameVersion, entry.opponent.image.full)"
-                    :alt="entry.opponent.name"
-                    class="matchup-sheet__table-portrait"
-                  />
-                  <span>{{ entry.opponent.name }}</span>
-                </div>
-              </td>
-              <td>{{ formatOutcome(entry) }}</td>
-              <td>{{ formatBuildVariantsCell(entry, guideBuild, t) }}</td>
-              <td>{{ formatPowerSpikeCell(entry) }}</td>
-              <td>{{ formatDifficulty(entry) }}</td>
-              <td class="matchup-sheet__table-phase">{{ formatPhaseCell(entry, 'early') }}</td>
-              <td class="matchup-sheet__table-phase">{{ formatPhaseCell(entry, 'mid') }}</td>
-              <td class="matchup-sheet__table-phase">{{ formatPhaseCell(entry, 'late') }}</td>
-              <td class="matchup-sheet__table-comments">{{ entry.comments || '—' }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <MatchupGuideEntriesTable mode="readonly" :entries="fullMatchups" :build="guideBuild" />
     </section>
 
     <div v-if="showMatchupsSection" class="matchup-sheet__matchups-mirror">
@@ -235,16 +254,21 @@
         </h4>
         <ul class="matchup-sheet__matchup-list">
           <li
-            v-for="opponent in guide.bestMatchups.slice(0, 3)"
-            :key="`best-${opponent.id}`"
+            v-for="row in bestMatchupRows"
+            :key="`best-${row.opponent.id}`"
             class="matchup-sheet__matchup-item matchup-sheet__matchup-item--best"
           >
             <img
-              :src="getChampionImageUrl(gameVersion, opponent.image.full)"
-              :alt="opponent.name"
+              :src="getChampionImageUrl(gameVersion, row.opponent.image.full)"
+              :alt="row.opponent.name"
               class="matchup-sheet__matchup-portrait"
             />
-            <span class="matchup-sheet__matchup-name">{{ opponent.name }}</span>
+            <span class="matchup-sheet__matchup-name">
+              {{ row.opponent.name
+              }}<span v-if="row.difficultyLabel" class="matchup-sheet__matchup-difficulty">
+                · {{ row.difficultyLabel }}</span
+              >
+            </span>
           </li>
         </ul>
       </section>
@@ -255,16 +279,21 @@
         </h4>
         <ul class="matchup-sheet__matchup-list">
           <li
-            v-for="opponent in guide.worstMatchups.slice(0, 3)"
-            :key="`worst-${opponent.id}`"
+            v-for="row in worstMatchupRows"
+            :key="`worst-${row.opponent.id}`"
             class="matchup-sheet__matchup-item matchup-sheet__matchup-item--worst"
           >
             <img
-              :src="getChampionImageUrl(gameVersion, opponent.image.full)"
-              :alt="opponent.name"
+              :src="getChampionImageUrl(gameVersion, row.opponent.image.full)"
+              :alt="row.opponent.name"
               class="matchup-sheet__matchup-portrait"
             />
-            <span class="matchup-sheet__matchup-name">{{ opponent.name }}</span>
+            <span class="matchup-sheet__matchup-name">
+              {{ row.opponent.name
+              }}<span v-if="row.difficultyLabel" class="matchup-sheet__matchup-difficulty">
+                · {{ row.difficultyLabel }}</span
+              >
+            </span>
           </li>
         </ul>
       </section>
@@ -273,24 +302,30 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { MatchupEntry, MatchupGuide, MatchupGuideTag, Role } from '@lelanation/shared-types'
+import { computed, ref } from 'vue'
+import type {
+  ChampionRef,
+  MatchupEntry,
+  MatchupGuide,
+  MatchupGuideTag,
+  Role,
+} from '@lelanation/shared-types'
 import { useI18n } from 'vue-i18n'
+import BuildCard from '~/components/Build/BuildCard.vue'
 import { useVersionStore } from '~/stores/VersionStore'
 import { useChampionSplashPreference } from '~/composables/useChampionSplashPreference'
 import { useClientHydrated } from '~/composables/useClientHydrated'
 import { guideDisplayDate } from '~/composables/useMatchupGuideDetail'
 import { hydrateBuild } from '~/utils/buildSerialize'
 import { getChampionImageUrl, getChampionSplashImageUrl } from '~/utils/imageUrl'
-import {
-  matchupGuideCardDescription,
-  matchupGuideDetailDescription,
-} from '~/utils/matchupGuideText'
-import {
-  formatBuildVariantsCell,
-  formatPhaseTags,
-  formatPowerSpikeCell,
-} from '~/utils/matchupEntryUtils'
+import { matchupGuideCardDescription } from '~/utils/matchupGuideText'
+import { formatMatchupDifficulty } from '~/utils/matchupEntryUtils'
+import MatchupGuideEntriesTable from '~/components/matchups/MatchupGuideEntriesTable.vue'
+
+type MatchupPreviewRow = {
+  opponent: ChampionRef
+  difficultyLabel: string
+}
 
 const props = withDefaults(
   defineProps<{
@@ -301,6 +336,7 @@ const props = withDefaults(
 )
 
 const { t, locale } = useI18n()
+const detailExtrasExpanded = ref(true)
 const versionStore = useVersionStore()
 const { championSplashEnabled } = useChampionSplashPreference()
 const { hydrated } = useClientHydrated()
@@ -313,10 +349,12 @@ const tagDefs: Array<{ id: MatchupGuideTag; label: string }> = [
 
 const visibleTags = computed(() => tagDefs.filter(tag => props.guide.tags?.includes(tag.id)))
 
+const shortDescriptionText = computed(() => props.guide.shortDescription?.trim() ?? '')
+
+const longDescriptionText = computed(() => props.guide.description?.trim() ?? '')
+
 const displayDescription = computed(() =>
-  props.variant === 'detail'
-    ? matchupGuideDetailDescription(props.guide)
-    : matchupGuideCardDescription(props.guide)
+  props.variant === 'detail' ? longDescriptionText.value : matchupGuideCardDescription(props.guide)
 )
 
 const showMatchupsSection = computed(() => {
@@ -326,6 +364,28 @@ const showMatchupsSection = computed(() => {
 })
 
 const fullMatchups = computed(() => props.guide.matchups ?? [])
+
+const matchupByOpponentId = computed(() => {
+  const map = new Map<string, MatchupEntry>()
+  for (const entry of fullMatchups.value) {
+    map.set(entry.opponent.id, entry)
+  }
+  return map
+})
+
+function toMatchupPreviewRow(opponent: ChampionRef): MatchupPreviewRow {
+  const entry = matchupByOpponentId.value.get(opponent.id)
+  const difficultyLabel = entry ? formatMatchupDifficulty(entry, t) : ''
+  return { opponent, difficultyLabel: difficultyLabel === '—' ? '' : difficultyLabel }
+}
+
+const bestMatchupRows = computed(() =>
+  (props.guide.bestMatchups ?? []).slice(0, 3).map(toMatchupPreviewRow)
+)
+
+const worstMatchupRows = computed(() =>
+  (props.guide.worstMatchups ?? []).slice(0, 3).map(toMatchupPreviewRow)
+)
 
 const guideBuild = computed(() => {
   if (!props.guide.build) return null
@@ -341,7 +401,18 @@ const hasMetaNotes = computed(
     Boolean(props.guide.meta?.authorAbout?.trim()) ||
     Boolean(props.guide.meta?.opggUrl?.trim()) ||
     Boolean(props.guide.meta?.permabanNotes?.trim()) ||
-    Boolean(props.guide.meta?.generalBuildNotes?.trim())
+    Boolean(guideBuild.value)
+)
+
+const hasDetailContent = computed(
+  () =>
+    Boolean(shortDescriptionText.value) ||
+    Boolean(longDescriptionText.value) ||
+    (props.variant === 'detail' && hasMetaNotes.value)
+)
+
+const hasCollapsibleDetailContent = computed(
+  () => Boolean(longDescriptionText.value) || hasMetaNotes.value
 )
 
 const championImageSrc = computed(() => {
@@ -386,37 +457,6 @@ function roleLabel(role: Role) {
     support: 'Support',
   }
   return labels[role]
-}
-
-function formatOutcome(entry: MatchupEntry): string {
-  if (entry.outcomeKind) {
-    let label = t(`matchupGuideCreate.outcomeKind.${entry.outcomeKind}`)
-    if (entry.outcomeKind === 'skill' && entry.skillFavor) {
-      label += ` (${t(`matchupGuideCreate.skillFavor.${entry.skillFavor}`)})`
-    }
-    return label
-  }
-  return entry.outcome || '—'
-}
-
-function formatDifficulty(entry: MatchupEntry): string {
-  if (entry.difficultyMode === 'score' && entry.difficultyScore) {
-    return `${entry.difficultyScore}/10`
-  }
-  if (entry.difficultyBand) {
-    return t(`matchupGuideCreate.difficultyBand.${entry.difficultyBand}`)
-  }
-  return entry.difficulty || '—'
-}
-
-function formatPhaseCell(entry: MatchupEntry, phase: 'early' | 'mid' | 'late'): string {
-  const data = entry[phase]
-  if (!data) return '—'
-  const parts: string[] = []
-  const tags = formatPhaseTags(data.tags, t)
-  if (tags) parts.push(tags)
-  if (data.notes?.trim()) parts.push(data.notes.trim())
-  return parts.length ? parts.join(' — ') : '—'
 }
 </script>
 
@@ -756,6 +796,11 @@ function formatPhaseCell(entry: MatchupEntry, phase: 'early' | 'mid' | 'late'): 
   color: rgb(var(--rgb-text) / 0.9);
 }
 
+.matchup-sheet__matchup-difficulty {
+  font-weight: 500;
+  color: rgb(var(--rgb-text) / 0.62);
+}
+
 .matchup-sheet--detail .matchup-sheet__matchup-portrait {
   width: 3.5rem;
   height: 3.5rem;
@@ -764,22 +809,35 @@ function formatPhaseCell(entry: MatchupEntry, phase: 'early' | 'mid' | 'late'): 
 .matchup-sheet__meta {
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
+  gap: 0.5rem;
   border-top: 1px solid var(--card-border-color-soft, rgb(var(--rgb-primary) / 0.35));
   padding-top: 0.65rem;
 }
 
+.matchup-sheet__meta-block {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.75rem 1rem;
+}
+
 .matchup-sheet__meta-title {
-  margin: 0 0 0.25rem;
+  margin: 0;
+  flex: 0 0 auto;
+  min-width: 7.5rem;
+  max-width: 11rem;
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: rgb(var(--rgb-text-accent));
+  line-height: 1.45;
 }
 
 .matchup-sheet__meta-text {
   margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 0.82rem;
   line-height: 1.45;
   color: rgb(var(--rgb-text));
@@ -787,10 +845,112 @@ function formatPhaseCell(entry: MatchupEntry, phase: 'early' | 'mid' | 'late'): 
 }
 
 .matchup-sheet__meta-link {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 0.82rem;
   line-height: 1.45;
   color: rgb(var(--rgb-text-accent));
   word-break: break-all;
+}
+
+.matchup-sheet__meta-block--builds {
+  align-items: flex-start;
+}
+
+.matchup-sheet__build-card-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 300px;
+}
+
+.matchup-sheet__build-card-wrap :deep(.build-card-wrapper) {
+  --build-card-width: 300px;
+}
+
+.matchup-sheet__description-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  border-top: 1px solid var(--card-border-color-soft, rgb(var(--rgb-primary) / 0.35));
+  padding-top: 0.65rem;
+}
+
+.matchup-sheet__short-description {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.45;
+  color: rgb(var(--rgb-text) / 0.92);
+}
+
+.matchup-sheet__description-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border: none;
+  border-radius: 0.375rem;
+  background: transparent;
+  padding: 0.15rem 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgb(var(--rgb-text) / 0.75);
+  cursor: pointer;
+  text-align: left;
+}
+
+.matchup-sheet__description-toggle:hover {
+  color: rgb(var(--rgb-text-accent));
+}
+
+.matchup-sheet__description-toggle-label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.matchup-sheet__description-toggle-chevron {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.matchup-sheet__description-toggle-chevron--open {
+  transform: rotate(180deg);
+}
+
+.matchup-sheet__extras--detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.matchup-sheet__extras--detail .matchup-sheet__description {
+  border-top: none;
+  padding-top: 0;
+}
+
+.matchup-sheet__extras--detail .matchup-sheet__meta {
+  border-top: none;
+  padding-top: 0;
+}
+
+.matchup-sheet__extras {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+@media (max-width: 640px) {
+  .matchup-sheet__meta-block {
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .matchup-sheet__meta-title {
+    max-width: none;
+  }
 }
 
 .matchup-sheet__table-section {

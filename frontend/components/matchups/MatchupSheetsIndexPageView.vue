@@ -1,7 +1,7 @@
 <template>
   <ShowIf :show-if="isAdmin">
     <div class="matchup-sheets-page min-h-screen px-[10px] pb-4 text-text">
-      <div class="max-w-8xl mx-auto px-0">
+      <div class="w-full px-0">
         <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
           <div class="scrollable-tabs-scroll-wrap min-w-0 max-w-full">
             <div class="matchup-sheets-tabs scrollable-tabs-nav">
