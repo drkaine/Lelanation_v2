@@ -1,6 +1,7 @@
 <template>
   <div class="matchup-entries-table">
     <section
+      v-if="showFilters"
       class="matchup-entries-table__filters rounded-lg border border-primary/25 bg-surface/30"
       :class="{ 'matchup-entries-table__filters--collapsed': !filtersOpen }"
     >
@@ -138,6 +139,34 @@
       </p>
     </div>
 
+    <div class="matchup-entries-table__mobile">
+      <p
+        v-if="displayRows.length === 0"
+        class="matchup-entries-table__empty matchup-entries-table__empty--mobile"
+      >
+        {{ t('matchupGuideCreate.entriesTable.noResults') }}
+      </p>
+      <ul v-else class="matchup-entries-table__mobile-list">
+        <li v-for="row in displayRows" :key="row.entry.opponent.id">
+          <MatchupGuideEntryMobileCard
+            :entry="row.entry"
+            :rank="row.rank"
+            :portrait-src="getChampionImageUrl(version, row.entry.opponent.image.full)"
+            :build="resolvedBuild"
+            :mode="mode"
+            :preview="previewOpponentId === row.entry.opponent.id"
+            :in-cohort="cohortUi(row.entry.opponent.id).inCohort"
+            :cohort-in-active="cohortUi(row.entry.opponent.id).inActive"
+            :cohort-color="cohortUi(row.entry.opponent.id).color"
+            :expanded="Boolean(expandedMobileOpponentIds[row.entry.opponent.id])"
+            @toggle="toggleMobileExpanded(row.entry.opponent.id)"
+            @toggle-cohort="toggleCohort(row.entry.opponent.id)"
+            @preview="openPreview(row.entry.opponent.id)"
+          />
+        </li>
+      </ul>
+    </div>
+
     <div class="matchup-entries-table__wrap overflow-x-auto">
       <table class="matchup-entries-table__table">
         <thead>
@@ -164,12 +193,16 @@
             </th>
             <th>{{ t('matchupGuideCreate.entriesTable.colOutcome') }}</th>
             <th>{{ t('matchupGuideCreate.entriesTable.colBuild') }}</th>
+            <th>{{ t('matchupGuideCreate.entriesTable.colPowerSpike') }}</th>
+            <th>{{ t('matchupGuideCreate.entriesTable.colEarly') }}</th>
+            <th>{{ t('matchupGuideCreate.entriesTable.colMid') }}</th>
+            <th>{{ t('matchupGuideCreate.entriesTable.colLate') }}</th>
             <th>{{ t('matchupGuideCreate.entriesTable.colComments') }}</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="displayRows.length === 0">
-            <td :colspan="mode === 'edit' ? 7 : 6" class="matchup-entries-table__empty">
+            <td :colspan="emptyColspan" class="matchup-entries-table__empty">
               {{ t('matchupGuideCreate.entriesTable.noResults') }}
             </td>
           </tr>
@@ -232,6 +265,10 @@
             >
               {{ formatBuildVariantsCell(row.entry, resolvedBuild, t) }}
             </td>
+            <td class="matchup-entries-table__phase">{{ formatPowerSpikeCell(row.entry) }}</td>
+            <td class="matchup-entries-table__phase">{{ formatPhaseCell(row.entry.early, t) }}</td>
+            <td class="matchup-entries-table__phase">{{ formatPhaseCell(row.entry.mid, t) }}</td>
+            <td class="matchup-entries-table__phase">{{ formatPhaseCell(row.entry.late, t) }}</td>
             <td class="matchup-entries-table__comments">{{ row.entry.comments?.trim() || '—' }}</td>
           </tr>
         </tbody>
@@ -266,24 +303,27 @@ import type { MatchupEntry } from '@lelanation/shared-types'
 import type { Build } from '~/types/build'
 import BuildCard from '~/components/Build/BuildCard.vue'
 import MatchupGuideCohortColorPicker from '~/components/matchups/MatchupGuideCohortColorPicker.vue'
+import MatchupGuideEntryMobileCard from '~/components/matchups/MatchupGuideEntryMobileCard.vue'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useMatchupGuideDraftStore } from '~/stores/MatchupGuideDraftStore'
 import { getChampionImageUrl } from '~/utils/imageUrl'
 import {
+  DIFFICULTY_BANDS,
   formatBuildVariantsCell,
   formatMatchupDifficulty,
   formatMatchupOutcome,
+  formatPhaseCell,
+  formatPowerSpikeCell,
   getMatchupBuildVariants,
+  OUTCOME_KINDS,
 } from '~/utils/matchupEntryUtils'
 import { isMatchupEntryFinalizeReady } from '~/utils/matchupGuideCreateSteps'
 import { opponentHasVisibleCohortColor } from '~/utils/matchupGuideCohorts'
 import {
   countActiveMatchupEntriesFilters,
   createEmptyMatchupEntriesFilters,
-  DIFFICULTY_BANDS,
   filterAndSortMatchupEntries,
-  OUTCOME_KINDS,
   type MatchupEntriesSortDir,
   type MatchupEntriesSortKey,
 } from '~/utils/matchupEntriesTable'
@@ -293,11 +333,13 @@ const props = withDefaults(
     entries?: MatchupEntry[]
     build?: Build | null
     mode?: 'edit' | 'readonly'
+    showFilters?: boolean
   }>(),
   {
     entries: undefined,
     build: undefined,
     mode: 'edit',
+    showFilters: undefined,
   }
 )
 
@@ -318,9 +360,11 @@ const filters = ref(createEmptyMatchupEntriesFilters())
 const sortKey = ref<MatchupEntriesSortKey>('rank')
 const sortDir = ref<MatchupEntriesSortDir>('asc')
 
+const showFilters = computed(() => props.showFilters ?? props.mode === 'edit')
+const emptyColspan = computed(() => (props.mode === 'edit' ? 11 : 10))
+
 const sourceEntries = computed(() => {
-  if (props.entries?.length) return props.entries
-  if (props.mode === 'edit') return matchupEntries.value
+  if (props.entries != null) return props.entries
   return matchupEntries.value
 })
 
@@ -352,6 +396,7 @@ type BuildPopoverState = {
 }
 
 const buildPopover = ref<BuildPopoverState | null>(null)
+const expandedMobileOpponentIds = ref<Record<string, true>>({})
 let hidePopoverTimer: ReturnType<typeof setTimeout> | null = null
 
 const buildPopoverStyle = computed(() => {
@@ -418,6 +463,16 @@ function toggleCohort(opponentId: string): void {
 
 function openPreview(opponentId: string): void {
   draftStore.setPreviewOpponent(opponentId)
+}
+
+function toggleMobileExpanded(opponentId: string): void {
+  const next = { ...expandedMobileOpponentIds.value }
+  if (next[opponentId]) {
+    delete next[opponentId]
+  } else {
+    next[opponentId] = true
+  }
+  expandedMobileOpponentIds.value = next
 }
 
 function isFinalizeReady(entry: MatchupEntry): boolean {
@@ -607,11 +662,27 @@ function cancelHideBuildPopover(): void {
   color: rgb(var(--rgb-text) / 0.65);
 }
 
+.matchup-entries-table__mobile {
+  display: block;
+  width: 100%;
+}
+
 .matchup-entries-table__wrap {
+  display: none;
   width: 100%;
   border: 1px solid rgb(var(--rgb-primary) / 0.3);
   border-radius: 0.5rem;
   background: rgb(var(--rgb-background) / 0.35);
+}
+
+@media (min-width: 768px) {
+  .matchup-entries-table__mobile {
+    display: none;
+  }
+
+  .matchup-entries-table__wrap {
+    display: block;
+  }
 }
 
 .matchup-entries-table__table {
@@ -719,6 +790,15 @@ function cancelHideBuildPopover(): void {
   cursor: default;
 }
 
+.matchup-entries-table__phase {
+  min-width: 7rem;
+  max-width: 14rem;
+  white-space: pre-wrap;
+  line-height: 1.35;
+  font-size: 0.74rem;
+  color: rgb(var(--rgb-text) / 0.85);
+}
+
 .matchup-entries-table__comments {
   max-width: 20rem;
   white-space: pre-wrap;
@@ -730,6 +810,20 @@ function cancelHideBuildPopover(): void {
   padding: 1.25rem !important;
   text-align: center;
   color: rgb(var(--rgb-text) / 0.6);
+}
+
+.matchup-entries-table__mobile-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+}
+
+.matchup-entries-table__empty--mobile {
+  padding: 1rem;
 }
 
 .matchup-entries-table__row--cohort {

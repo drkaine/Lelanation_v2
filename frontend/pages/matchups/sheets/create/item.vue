@@ -24,7 +24,6 @@ import { useMatchupGuideCreateBuilder } from '~/composables/useMatchupGuideCreat
 
 definePageMeta({
   layout: false,
-  middleware: 'matchup-guides-admin',
 })
 
 const { t } = useI18n()

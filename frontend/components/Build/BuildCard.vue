@@ -677,6 +677,7 @@
                 :alt="item.name"
                 class="item-icon"
                 :title="sheetTooltip(getItemDisplayName(item), 'Item')"
+                @error="onBuildItemImageError($event, item, buildItems.indexOf(item))"
               />
             </div>
             <div
@@ -695,6 +696,9 @@
                 class="boots-icon-single"
                 :title="
                   sheetTooltip(bootsItems[0] ? getItemDisplayName(bootsItems[0]) : '', 'Boots')
+                "
+                @error="
+                  onBuildItemImageError($event, bootsItems[0], buildItems.indexOf(bootsItems[0]))
                 "
                 @mouseenter="
                   onSheetElementEnter($event, 'item', bootsItems[0] ?? { id: '' }, 'Boots')
@@ -751,6 +755,7 @@
                     :alt="item.name"
                     class="item-icon"
                     :title="sheetTooltip(getItemDisplayName(item), 'Item')"
+                    @error="onBuildItemImageError($event, item, buildItems.indexOf(item))"
                   />
                 </div>
                 <span v-if="index < coreItemsPath1.length - 1" class="arrow-right">→</span>
@@ -781,6 +786,7 @@
                     :alt="item.name"
                     class="item-icon"
                     :title="sheetTooltip(getItemDisplayName(item), 'Item')"
+                    @error="onBuildItemImageError($event, item, buildItems.indexOf(item))"
                   />
                 </div>
                 <span v-if="index < coreItemsPath2.length - 1" class="arrow-right">→</span>
@@ -1096,6 +1102,13 @@
                       "
                       :alt="sheetElementTooltipResolved.item.name"
                       class="item-tooltip-image"
+                      @error="
+                        handleGameItemImageError(
+                          $event,
+                          version.value,
+                          sheetElementTooltipResolved.item.image.full
+                        )
+                      "
                     />
                     <div class="item-tooltip-text">
                       <div class="item-tooltip-name">
@@ -1780,6 +1793,7 @@ import {
   getRunePathMaskStyle,
   getRuneImageUrl,
   getItemImageUrl,
+  handleGameItemImageError,
 } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { useLayoutScaled } from '~/composables/useLayoutScaled'
@@ -2995,7 +3009,7 @@ const buildItems = computed(() => {
 
 const theorycraftBuildItemIds = computed(() => buildItems.value.map(item => item.id))
 
-function getBuildItemImageUrl(item: Item, buildIndex?: number): string {
+function resolveBuildItemImageFull(item: Item, buildIndex?: number): string {
   let imageFull = item.image.full
   if (props.selectionMode === 'theorycraft') {
     const index =
@@ -3015,7 +3029,15 @@ function getBuildItemImageUrl(item: Item, buildIndex?: number): string {
       id => itemsStore.items.find(candidate => candidate.id === id) ?? null
     )
   }
-  return getItemImageUrl(versionForImages.value, imageFull)
+  return imageFull
+}
+
+function getBuildItemImageUrl(item: Item, buildIndex?: number): string {
+  return getItemImageUrl(versionForImages.value, resolveBuildItemImageFull(item, buildIndex))
+}
+
+function onBuildItemImageError(event: Event, item: Item, buildIndex?: number) {
+  handleGameItemImageError(event, version.value, resolveBuildItemImageFull(item, buildIndex))
 }
 
 const theorycraftActiveItemCount = computed(() => {

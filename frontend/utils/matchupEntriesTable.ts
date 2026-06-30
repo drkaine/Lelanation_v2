@@ -3,14 +3,7 @@ import type {
   MatchupEntry,
   MatchupOutcomeKind,
 } from '@lelanation/shared-types'
-import {
-  DIFFICULTY_BANDS,
-  formatBuildVariantsCell,
-  formatMatchupDifficulty,
-  formatMatchupOutcome,
-  matchupDifficultySortValue,
-  OUTCOME_KINDS,
-} from '~/utils/matchupEntryUtils'
+import { formatBuildVariantsCell, matchupDifficultySortValue } from '~/utils/matchupEntryUtils'
 import type { Build } from '~/types/build'
 
 export type MatchupEntriesSortKey = 'rank' | 'difficulty'
@@ -134,5 +127,3 @@ export function filterAndSortMatchupEntries(options: {
 
   return filtered
 }
-
-export { DIFFICULTY_BANDS, OUTCOME_KINDS, formatMatchupDifficulty, formatMatchupOutcome }

@@ -127,6 +127,34 @@
           <time v-if="formattedDate" class="matchup-sheet__date" :datetime="displayDateIso">
             {{ formattedDate }}
           </time>
+          <button
+            v-if="hasDetailContent"
+            type="button"
+            class="matchup-sheet__detail-toggle"
+            :aria-expanded="detailExtrasExpanded"
+            :aria-label="
+              detailExtrasExpanded
+                ? t('matchupGuideDiscovery.hideDetailExtras')
+                : t('matchupGuideDiscovery.showDetailExtras')
+            "
+            @click="detailExtrasExpanded = !detailExtrasExpanded"
+          >
+            <svg
+              class="matchup-sheet__detail-toggle-chevron"
+              :class="{ 'matchup-sheet__detail-toggle-chevron--open': detailExtrasExpanded }"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M19 9l-7 7-7-7"
+              />
+            </svg>
+          </button>
           <span
             v-if="(guide.visibility ?? 'public') === 'private'"
             class="matchup-sheet__badge matchup-sheet__badge--private"
@@ -141,51 +169,31 @@
     </header>
 
     <template v-if="variant === 'detail'">
-      <section v-if="hasDetailContent" class="matchup-sheet__description-section">
-        <p v-if="shortDescriptionText" class="matchup-sheet__short-description">
-          {{ shortDescriptionText }}
-        </p>
+      <section
+        v-if="hasDetailContent"
+        v-show="detailExtrasExpanded"
+        class="matchup-sheet__detail-layout"
+      >
+        <aside v-if="guideBuild" class="matchup-sheet__detail-build">
+          <BuildCard :build="guideBuild" readonly hide-top-actions sheet-tooltips />
+        </aside>
 
-        <button
-          v-if="hasCollapsibleDetailContent"
-          type="button"
-          class="matchup-sheet__description-toggle"
-          :aria-expanded="detailExtrasExpanded"
-          @click="detailExtrasExpanded = !detailExtrasExpanded"
-        >
-          <span class="matchup-sheet__description-toggle-label">
-            {{
-              detailExtrasExpanded
-                ? t('matchupGuideDiscovery.hideDetailExtras')
-                : t('matchupGuideDiscovery.showDetailExtras')
-            }}
-          </span>
-          <svg
-            class="matchup-sheet__description-toggle-chevron"
-            :class="{ 'matchup-sheet__description-toggle-chevron--open': detailExtrasExpanded }"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M19 9l-7 7-7-7"
-            />
-          </svg>
-        </button>
+        <div class="matchup-sheet__detail-content">
+          <section v-if="shortDescriptionText" class="matchup-sheet__labeled-block">
+            <h4 class="matchup-sheet__label">
+              {{ t('matchupGuideDiscovery.shortDescriptionLabel') }}
+            </h4>
+            <p class="matchup-sheet__short-description">{{ shortDescriptionText }}</p>
+          </section>
 
-        <div
-          v-show="!hasCollapsibleDetailContent || detailExtrasExpanded"
-          class="matchup-sheet__extras matchup-sheet__extras--detail"
-        >
-          <p v-if="longDescriptionText" class="matchup-sheet__description">
-            {{ longDescriptionText }}
-          </p>
+          <section v-if="longDescriptionText" class="matchup-sheet__labeled-block">
+            <h4 class="matchup-sheet__label">{{ t('matchupGuideDiscovery.descriptionLabel') }}</h4>
+            <p class="matchup-sheet__description matchup-sheet__description--detail">
+              {{ longDescriptionText }}
+            </p>
+          </section>
 
-          <div v-if="hasMetaNotes" class="matchup-sheet__meta">
+          <div v-if="hasMetaNotes" class="matchup-sheet__meta matchup-sheet__meta--detail">
             <section v-if="guide.meta?.authorAbout" class="matchup-sheet__meta-block">
               <h4 class="matchup-sheet__meta-title">
                 {{ t('matchupGuideDiscovery.authorAbout') }}
@@ -211,15 +219,6 @@
               </h4>
               <p class="matchup-sheet__meta-text">{{ guide.meta.permabanNotes }}</p>
             </section>
-            <section
-              v-if="guideBuild"
-              class="matchup-sheet__meta-block matchup-sheet__meta-block--builds"
-            >
-              <h4 class="matchup-sheet__meta-title">{{ t('matchupGuideDiscovery.builds') }}</h4>
-              <div class="matchup-sheet__build-card-wrap">
-                <BuildCard :build="guideBuild" readonly hide-top-actions sheet-tooltips />
-              </div>
-            </section>
           </div>
         </div>
       </section>
@@ -244,7 +243,12 @@
       class="matchup-sheet__table-section"
     >
       <h4 class="matchup-sheet__table-title">{{ t('matchupGuideDiscovery.fullMatchupTable') }}</h4>
-      <MatchupGuideEntriesTable mode="readonly" :entries="fullMatchups" :build="guideBuild" />
+      <MatchupGuideEntriesTable
+        mode="readonly"
+        :entries="fullMatchups"
+        :build="guideBuild"
+        :show-filters="false"
+      />
     </section>
 
     <div v-if="showMatchupsSection" class="matchup-sheet__matchups-mirror">
@@ -400,19 +404,15 @@ const hasMetaNotes = computed(
   () =>
     Boolean(props.guide.meta?.authorAbout?.trim()) ||
     Boolean(props.guide.meta?.opggUrl?.trim()) ||
-    Boolean(props.guide.meta?.permabanNotes?.trim()) ||
-    Boolean(guideBuild.value)
+    Boolean(props.guide.meta?.permabanNotes?.trim())
 )
 
 const hasDetailContent = computed(
   () =>
     Boolean(shortDescriptionText.value) ||
     Boolean(longDescriptionText.value) ||
-    (props.variant === 'detail' && hasMetaNotes.value)
-)
-
-const hasCollapsibleDetailContent = computed(
-  () => Boolean(longDescriptionText.value) || hasMetaNotes.value
+    Boolean(guideBuild.value) ||
+    hasMetaNotes.value
 )
 
 const championImageSrc = computed(() => {
@@ -465,6 +465,12 @@ function roleLabel(role: Role) {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.matchup-sheet--detail {
+  overflow-x: clip;
 }
 
 .matchup-sheet__header {
@@ -630,6 +636,33 @@ function roleLabel(role: Role) {
   color: rgb(var(--rgb-text) / 0.65);
 }
 
+.matchup-sheet__detail-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.15rem;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: #d4af37;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.matchup-sheet__detail-toggle:hover {
+  color: #f0d060;
+}
+
+.matchup-sheet__detail-toggle-chevron {
+  width: 1.15rem;
+  height: 1.15rem;
+  transition: transform 0.2s ease;
+}
+
+.matchup-sheet__detail-toggle-chevron--open {
+  transform: rotate(180deg);
+}
+
 .matchup-sheet__badge {
   border-radius: 0.35rem;
   padding: 0.1rem 0.35rem;
@@ -676,6 +709,9 @@ function roleLabel(role: Role) {
   border-top: 1px solid var(--card-border-color-soft, rgb(var(--rgb-primary) / 0.35));
   padding-top: 0.65rem;
   margin: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .matchup-sheet--card .matchup-sheet__description {
@@ -838,10 +874,13 @@ function roleLabel(role: Role) {
   margin: 0;
   flex: 1 1 auto;
   min-width: 0;
+  max-width: 100%;
   font-size: 0.82rem;
   line-height: 1.45;
   color: rgb(var(--rgb-text));
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .matchup-sheet__meta-link {
@@ -875,49 +914,90 @@ function roleLabel(role: Role) {
   padding-top: 0.65rem;
 }
 
+.matchup-sheet__detail-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 300px) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+  border-top: 1px solid var(--card-border-color-soft, rgb(var(--rgb-primary) / 0.35));
+  padding-top: 0.65rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.matchup-sheet__detail-build {
+  position: sticky;
+  top: 0.75rem;
+  max-width: 100%;
+}
+
+.matchup-sheet__detail-build :deep(.build-card-wrapper) {
+  --build-card-width: 300px;
+  max-width: 100%;
+}
+
+@media (max-width: 640px) {
+  .matchup-sheet__detail-build :deep(.build-card-wrapper) {
+    --build-card-width: 100%;
+  }
+}
+
+.matchup-sheet__detail-content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.matchup-sheet__labeled-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.matchup-sheet__label {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgb(var(--rgb-text-accent));
+  overflow-wrap: anywhere;
+}
+
+.matchup-sheet__description--detail {
+  border-top: none;
+  padding-top: 0;
+}
+
+.matchup-sheet__meta--detail {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0.35rem;
+}
+
+@media (max-width: 900px) {
+  .matchup-sheet__detail-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .matchup-sheet__detail-build {
+    position: static;
+    justify-self: start;
+  }
+}
+
 .matchup-sheet__short-description {
   margin: 0;
   font-size: 0.92rem;
   font-weight: 600;
   line-height: 1.45;
   color: rgb(var(--rgb-text) / 0.92);
-}
-
-.matchup-sheet__description-toggle {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  border: none;
-  border-radius: 0.375rem;
-  background: transparent;
-  padding: 0.15rem 0;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: rgb(var(--rgb-text) / 0.75);
-  cursor: pointer;
-  text-align: left;
-}
-
-.matchup-sheet__description-toggle:hover {
-  color: rgb(var(--rgb-text-accent));
-}
-
-.matchup-sheet__description-toggle-label {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.matchup-sheet__description-toggle-chevron {
-  width: 1rem;
-  height: 1rem;
-  flex-shrink: 0;
-  transition: transform 0.2s ease;
-}
-
-.matchup-sheet__description-toggle-chevron--open {
-  transform: rotate(180deg);
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .matchup-sheet__extras--detail {

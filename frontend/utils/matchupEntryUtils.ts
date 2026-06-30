@@ -160,6 +160,17 @@ export function formatPowerSpikeCell(entry: MatchupEntry): string {
   return parts.join(' — ')
 }
 
+export function formatPhaseCell(
+  notes: MatchupPhaseNotes | undefined,
+  t: (key: string) => string
+): string {
+  if (!notes) return '—'
+  const tags = formatPhaseTags(notes.tags, t)
+  const text = notes.notes?.trim()
+  if (!tags && !text) return '—'
+  return [tags, text].filter(Boolean).join(' — ')
+}
+
 export function normalizeMatchupEntry(value: unknown): MatchupEntry | null {
   if (!value || typeof value !== 'object') return null
   const raw = value as Partial<MatchupEntry> & { opponent?: unknown }

@@ -14,11 +14,6 @@ import {
   canOpenMatchupsGuideStep,
   buildMatchupGuideStepAccessContext,
 } from '~/utils/matchupGuideCreateSteps'
-
-definePageMeta({
-  middleware: 'matchup-guides-admin',
-})
-
 const router = useRouter()
 const route = useRoute()
 const localePath = useLocalePath()

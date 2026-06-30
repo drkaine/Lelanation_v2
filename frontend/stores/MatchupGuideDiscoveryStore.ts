@@ -57,6 +57,33 @@ function guideRecencyTimestamp(guide: MatchupGuide): number {
   return 0
 }
 
+/** Fusionne guides API + localStorage pour Découvrir (publics uniquement). */
+export function mergeDiscoverableMatchupGuides(
+  serverGuides: MatchupGuide[],
+  localGuides: MatchupGuide[]
+): MatchupGuide[] {
+  const localById = new Map(localGuides.map(g => [g.id, g]))
+  const merged = new Map<string, MatchupGuide>()
+
+  for (const guide of serverGuides) {
+    if ((guide.visibility ?? 'public') === 'private') continue
+    const local = localById.get(guide.id)
+    if (local?.visibility === 'private') {
+      // Copie locale privée mais encore public côté serveur → afficher la version serveur.
+      merged.set(guide.id, guide)
+      continue
+    }
+    merged.set(guide.id, local ?? guide)
+  }
+
+  for (const guide of localGuides) {
+    if ((guide.visibility ?? 'public') === 'private') continue
+    merged.set(guide.id, guide)
+  }
+
+  return [...merged.values()]
+}
+
 interface MatchupGuideDiscoveryState {
   searchQuery: string
   selectedChampion: string | null
@@ -211,18 +238,15 @@ export const useMatchupGuideDiscoveryStore = defineStore('matchupGuideDiscovery'
       try {
         const guideStore = useMatchupGuideStore()
         const localGuides = guideStore.getSavedGuides()
-        const localPublicGuides = localGuides.filter(g => (g.visibility ?? 'public') !== 'private')
 
         let serverGuides: MatchupGuide[] = []
         try {
-          const allGuides = (await fetchJson('/api/matchup-guides')) as MatchupGuide[]
-          const localIds = new Set(localGuides.map(g => g.id))
-          serverGuides = allGuides.filter(g => !localIds.has(g.id) && g.visibility !== 'private')
+          serverGuides = (await fetchJson('/api/matchup-guides')) as MatchupGuide[]
         } catch {
-          // API unreachable — local guides still shown
+          // API unreachable — local public guides still shown
         }
 
-        this.guides = [...localPublicGuides, ...serverGuides]
+        this.guides = mergeDiscoverableMatchupGuides(serverGuides, localGuides)
 
         const versionStore = useVersionStore()
         if (!versionStore.currentVersion) {

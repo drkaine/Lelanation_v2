@@ -1,24 +1,15 @@
 <template>
-  <ShowIf :show-if="isAdmin">
-    <MatchupGuideDetailView :guide="guide" />
-  </ShowIf>
+  <MatchupGuideDetailView :guide="guide" />
 </template>
 
 <script setup lang="ts">
-import ShowIf from '~/components/ShowIf.vue'
 import MatchupGuideDetailView from '~/components/MatchupGuideDiscovery/MatchupGuideDetailView.vue'
-import { useAdminAuth } from '~/composables/useAdminAuth'
 import { fetchMatchupGuideById } from '~/composables/useMatchupGuideDetail'
 import { matchupGuideAuthorSlugMatches, matchupGuideDetailPath } from '~/utils/matchupGuideSlug'
-
-definePageMeta({
-  middleware: 'matchup-guides-admin',
-})
 
 const route = useRoute()
 const localePath = useLocalePath()
 const { t } = useI18n()
-const { isLoggedIn: isAdmin } = useAdminAuth()
 const requestFetch = useRequestFetch()
 
 const guideId = computed(() => String(route.params.id ?? ''))

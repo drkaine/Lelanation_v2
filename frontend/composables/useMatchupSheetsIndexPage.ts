@@ -1,7 +1,6 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import type { MatchupGuide } from '@lelanation/shared-types'
-import { useAdminAuth } from '~/composables/useAdminAuth'
 import { useClientHydrated } from '~/composables/useClientHydrated'
 import { usePageOgImage } from '~/composables/usePageOgImage'
 import { useMatchupGuideDiscoveryStore } from '~/stores/MatchupGuideDiscoveryStore'
@@ -29,7 +28,6 @@ export function useMatchupSheetsIndexPage(fixedTab?: MatchupSheetsTab) {
   const { t } = useI18n()
   const localePath = useLocalePath()
   const route = useRoute()
-  const { isLoggedIn: isAdmin } = useAdminAuth()
   const { hydrated } = useClientHydrated()
   const discoveryStore = useMatchupGuideDiscoveryStore()
   const guideStore = useMatchupGuideStore()
@@ -133,7 +131,6 @@ export function useMatchupSheetsIndexPage(fixedTab?: MatchupSheetsTab) {
 
   return {
     t,
-    isAdmin,
     activeTab,
     myGuides,
     favoriteGuides,

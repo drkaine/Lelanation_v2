@@ -1,5 +1,7 @@
 <template>
-  <div class="matchup-guide-detail min-h-screen px-3 pb-8 text-text sm:px-5 lg:px-6">
+  <div
+    class="matchup-guide-detail min-h-screen overflow-x-clip px-3 pb-8 text-text sm:px-5 lg:px-6"
+  >
     <div class="w-full">
       <NuxtLink
         :to="localePath('/matchups/sheets/discover')"
@@ -38,5 +40,8 @@ const { themeVars } = useBuildCardBorderTheme(() => props.guide.champion?.id)
     var(--card-border-gradient-strong) border-box;
   padding: 10px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
 }
 </style>

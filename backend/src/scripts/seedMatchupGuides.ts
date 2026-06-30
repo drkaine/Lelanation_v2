@@ -189,13 +189,13 @@ const sorceryPrimary = {
 const guideSeeds: GuideSeed[] = [
   {
     id: 'f1a10001-0001-4001-8001-000000000001',
-    guideName: 'Zed — Lane bully & roam',
+    guideName: 'Akali — Lane bully & roam',
     author: 'Lelariva',
     shortDescription:
-      'Assassin mid : short trades W, prio pour roam bot. Évite les all-in avant spike item.',
+      'Assassin AP mid : trades courts avec shroud, prio pour roam bot. Évite les all-in avant spike item. pas fait par Lelariva',
     description:
-      'Assassin mid orienté lane bully. Short trades avec W, évite les all-in longs avant item spike. Priorise la prio pour roam bot. Ce guide couvre les mages immobiles favorables et les matchups difficiles avec ulti défensif.',
-    champion: champ('Zed', 'Zed'),
+      'Assassin AP mid orienté lane bully. Trades courts avec shroud et energy, évite les all-in longs avant spike Rocketbelt. Priorise la prio pour roam bot. Ce guide couvre les mages immobiles favorables et les matchups difficiles avec ulti défensif.',
+    champion: champ('Akali', 'Akali'),
     role: 'mid',
     tags: ['pro'],
     gameVersion: currentPatch,
@@ -203,29 +203,29 @@ const guideSeeds: GuideSeed[] = [
     updatedAt: now,
     meta: {
       shortDescription:
-        'Assassin mid : short trades W, prio pour roam bot. Évite les all-in avant spike item.',
+        'Assassin AP mid : trades courts avec shroud, prio pour roam bot. Évite les all-in avant spike item.',
       authorAbout:
-        'OTP Zed depuis S8, stream régulier sur la lane mid. Focus tempo et roams.',
-      opggUrl: 'https://www.op.gg/summoners/euw/Lelariva-Zed',
+        'OTP Akali depuis S8, stream régulier sur la lane mid. Focus tempo et roams.',
+      opggUrl: 'https://www.op.gg/summoners/euw/Lelariva-Akali',
       permabanNotes: 'Malzahar, Annie, Lissandra — ulti point-and-click ou lockdown trop pénalisant.',
       generalBuildNotes:
-        'Lethality standard. Serylda si frontline tanky, axiom si snowball early.',
+        'Rocketbelt rush. Shadowflame second, Zhonya si besoin de survivabilité, Void Staff vs MR.',
     },
-    buildItems: ['1055', '2003', '6691', '6694', '6696', '6693', '3171', '3814'],
+    buildItems: ['1056', '2003', '3152', '4645', '3157', '3135', '3020', '3100'],
     buildRunes: dominationPrimary,
     buildShards: { slot1: 5008, slot2: 5008, slot3: 5001 },
     buildSpells: ['SummonerFlash', 'SummonerDot'],
     buildSkillOrder: {
       firstThreeUps: ['Q', 'W', 'E'],
-      skillUpOrder: ['Q', 'W', 'E'],
+      skillUpOrder: ['Q', 'E', 'W'],
     },
     matchups: [
       {
         opponent: champ('Veigar', 'Veigar'),
         difficultyScore: 2,
         outcomeKind: 'win',
-        comments: 'Cage facile à dodge avec R. Trade Q+W puis back.',
-        earlyNotes: 'Push level 2, zone avec W shadow.',
+        comments: 'Cage facile à dodge avec R. Trade Q+E puis back.',
+        earlyNotes: 'Push level 2, trade Q puis recule dans le shroud.',
         powerLevels: [3, 6],
       },
       {
@@ -233,7 +233,7 @@ const guideSeeds: GuideSeed[] = [
         difficultyScore: 3,
         outcomeKind: 'win',
         comments: 'Bind = death. Joue sur les cooldowns E/Q.',
-        earlyNotes: 'Dodge Q avec W, all-in level 3.',
+        earlyNotes: 'Dodge bind avec E/shroud, all-in level 6.',
       },
       {
         opponent: champ('Xerath', 'Xerath'),
@@ -256,7 +256,7 @@ const guideSeeds: GuideSeed[] = [
         difficultyScore: 6,
         outcomeKind: 'skill',
         skillFavor: 'opponent',
-        comments: 'Windwall annule Q. Attends le CD ou bait avec W.',
+        comments: 'Windwall annule Q. Attends le CD ou contourne avec E.',
       },
       {
         opponent: champ('Orianna', 'Orianna'),

@@ -1,4 +1,5 @@
 import { getStaticImageUrl } from './staticDataUrl.js'
+import { getFallbackGameVersion } from '~/config/version'
 
 /**
  * Generate local image URL for champions, items, spells, runes
@@ -41,12 +42,35 @@ export function getChampionSplashImageUrl(_version: string, championId: string):
 }
 
 /**
+ * Data Dragon fallback when a local item PNG is missing (new patch items).
+ */
+export function getDdragonItemImageUrl(version: string, imageName: string): string {
+  if (!imageName) return ''
+  const id = imageName.replace(/\.png$/i, '')
+  const patch =
+    version && version !== 'latest' && /^\d+\.\d+\.\d+$/.test(version)
+      ? version
+      : getFallbackGameVersion()
+  return `https://ddragon.leagueoflegends.com/cdn/${patch}/img/item/${id}.png`
+}
+
+/**
  * Get item image URL (local)
  */
 export function getItemImageUrl(_version: string, imageName: string): string {
   if (!imageName) return ''
   // Use local images instead of Data Dragon
   return `/images/game/latest/item/${imageName}`
+}
+
+/** Swap to Data Dragon when the local static asset 404s. */
+export function handleGameItemImageError(event: Event, version: string, imageName: string) {
+  const img = event.target as HTMLImageElement | null
+  if (!img || !imageName) return
+  const fallback = getDdragonItemImageUrl(version, imageName)
+  if (fallback && !img.src.includes('ddragon.leagueoflegends.com')) {
+    img.src = fallback
+  }
 }
 
 /**

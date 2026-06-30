@@ -6,8 +6,6 @@
       </div>
 
       <div class="matchup-guide-write-layout space-y-4">
-        <MatchupGuideEntriesTable mode="readonly" />
-
         <div class="matchup-guide-layout flex flex-col items-start gap-4 lg:flex-row">
           <div class="matchup-guide-sidebar w-full flex-shrink-0 lg:w-[320px]">
             <MatchupGuideMatchupTargetSelector />
@@ -25,7 +23,6 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import MatchupGuideBuildMenuSteps from '~/components/matchups/MatchupGuideBuildMenuSteps.vue'
-import MatchupGuideEntriesTable from '~/components/matchups/MatchupGuideEntriesTable.vue'
 import MatchupGuideMatchupDetailEditor from '~/components/matchups/MatchupGuideMatchupDetailEditor.vue'
 import MatchupGuideMatchupTargetSelector from '~/components/matchups/MatchupGuideMatchupTargetSelector.vue'
 import { useMatchupGuideDraftStore } from '~/stores/MatchupGuideDraftStore'

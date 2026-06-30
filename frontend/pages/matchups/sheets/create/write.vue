@@ -14,7 +14,6 @@ import {
 
 definePageMeta({
   layout: false,
-  middleware: 'matchup-guides-admin',
 })
 
 const { t } = useI18n()
