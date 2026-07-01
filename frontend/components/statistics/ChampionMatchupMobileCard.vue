@@ -157,20 +157,20 @@ function formatSignedDelta(v: number | null | undefined): string {
 
 function deltaClass(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v)) return 'text-text/55'
-  if (v > 0) return 'text-emerald-300'
-  if (v < 0) return 'text-rose-300'
+  if (v > 0) return 'text-info'
+  if (v < 0) return 'text-error/70'
   return 'text-text/70'
 }
 
 function winrateClass(v: number): string {
-  if (v >= 52) return 'text-emerald-300'
-  if (v <= 48) return 'text-rose-300'
+  if (v >= 52) return 'text-info'
+  if (v <= 48) return 'text-error/70'
   return 'text-text'
 }
 
 function scoreClass(v: number): string {
-  if (v > 0.5) return 'text-emerald-300'
-  if (v < -0.5) return 'text-rose-300'
+  if (v > 0.5) return 'text-info'
+  if (v < -0.5) return 'text-error/70'
   return 'text-text'
 }
 
@@ -183,21 +183,21 @@ function laneProfileSignalChipClass(
 ): string {
   if (side === 'strength') {
     if (level === 'bigAdvantage') {
-      return `${laneProfileChipBase} border-emerald-400/75 bg-emerald-500/35 font-semibold text-emerald-50`
+      return `${laneProfileChipBase} border-info/75 bg-info/35 font-semibold text-primary-light`
     }
     if (level === 'mediumAdvantage') {
-      return `${laneProfileChipBase} border-emerald-500/55 bg-emerald-500/22 text-emerald-100`
+      return `${laneProfileChipBase} border-info/55 bg-info/22 text-primary-light`
     }
     if (level === 'smallAdvantage') {
-      return `${laneProfileChipBase} border-emerald-600/40 bg-emerald-600/12 text-emerald-200`
+      return `${laneProfileChipBase} border-info/40 bg-info/12 text-info`
     }
     return `${laneProfileChipBase} border-primary/30 bg-white/[0.04] text-text/65`
   }
   if (level === 'bigDisadvantage') {
-    return `${laneProfileChipBase} border-rose-400/75 bg-rose-500/35 font-semibold text-rose-50`
+    return `${laneProfileChipBase} border-error/75 bg-error/35 font-semibold text-error/90`
   }
   if (level === 'mediumDisadvantage') {
-    return `${laneProfileChipBase} border-rose-500/55 bg-rose-500/22 text-rose-100`
+    return `${laneProfileChipBase} border-error/55 bg-error/22 text-error/80`
   }
   if (level === 'smallDisadvantage') {
     return `${laneProfileChipBase} border-orange-500/45 bg-orange-600/14 text-orange-100`
@@ -346,9 +346,9 @@ function laneProfileChipTitle(
         </div>
         <div v-if="row.dominanceKeys?.length" class="mb-2">
           <div
-            class="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-400"
+            class="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-info"
           >
-            <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" aria-hidden="true" />
+            <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-info" aria-hidden="true" />
             {{ t(strengthSideLabelKey) }}
           </div>
           <div class="flex flex-wrap gap-1">
@@ -377,9 +377,9 @@ function laneProfileChipTitle(
         </div>
         <div v-if="row.weaknessKeys?.length">
           <div
-            class="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-rose-400"
+            class="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-error"
           >
-            <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400" aria-hidden="true" />
+            <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-error" aria-hidden="true" />
             {{ t(weaknessSideLabelKey) }}
           </div>
           <p

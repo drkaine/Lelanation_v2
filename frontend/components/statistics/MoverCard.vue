@@ -15,9 +15,9 @@
     </div>
     <div class="shrink-0 text-right font-mono">
       <div class="flex items-center justify-end gap-1 text-sm">
-        <span v-if="up" class="text-emerald-400">▲</span>
-        <span v-else class="text-rose-500">▼</span>
-        <span :class="up ? 'text-emerald-400' : 'text-rose-500'" class="font-bold tracking-tight">
+        <span v-if="up" class="text-info">▲</span>
+        <span v-else class="text-error/900">▼</span>
+        <span :class="up ? 'text-info' : 'text-error/900'" class="font-bold tracking-tight">
           {{ formattedDelta }}
         </span>
       </div>

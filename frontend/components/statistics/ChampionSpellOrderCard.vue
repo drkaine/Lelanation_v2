@@ -28,16 +28,16 @@
           {{ row.winrate.toFixed(1) }}%
         </div>
       </div>
-      <div class="rounded-md bg-sky-500/15 px-2 py-1.5 ring-1 ring-sky-400/35">
-        <div class="text-[9px] font-semibold uppercase tracking-wide text-sky-200/70">
+      <div class="rounded-md bg-info/15 px-2 py-1.5 ring-1 ring-info/35">
+        <div class="text-[9px] font-semibold uppercase tracking-wide text-primary-light/70">
           {{ t('statisticsPage.pickrate') }}
         </div>
-        <div class="text-lg font-bold tabular-nums leading-tight text-sky-200">
+        <div class="text-lg font-bold tabular-nums leading-tight text-primary-light">
           {{ row.pickrate.toFixed(1) }}%
         </div>
         <div class="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-black/35" role="presentation">
           <div
-            class="h-full rounded-full bg-sky-400/90"
+            class="h-full rounded-full bg-info/90"
             :style="{ width: `${Math.min(100, Math.max(0, row.pickrate))}%` }"
           />
         </div>

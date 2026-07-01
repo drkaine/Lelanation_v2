@@ -113,7 +113,7 @@ function barColor(tier: string): string {
               :title="t('statisticsPage.tierListPbi')"
             >
               <div
-                class="pointer-events-none absolute bottom-0 top-0 z-[1] w-px bg-amber-400/55"
+                class="pointer-events-none absolute bottom-0 top-0 z-[1] w-px bg-accent/55"
                 :style="{ left: `calc(${zeroLinePct}% - 0.5px)` }"
                 aria-hidden="true"
               />

@@ -107,14 +107,14 @@ function formatDeltaPp(pp: number): string {
 }
 
 function deltaClassPp(pp: number): string {
-  if (pp > 0.05) return 'text-green-400/90'
-  if (pp < -0.05) return 'text-red-400/90'
+  if (pp > 0.05) return 'text-info/90'
+  if (pp < -0.05) return 'text-error/90'
   return 'text-text/55'
 }
 
 function deltaClassGames(n: number): string {
-  if (n > 0) return 'text-green-400/90'
-  if (n < 0) return 'text-red-400/90'
+  if (n > 0) return 'text-info/90'
+  if (n < 0) return 'text-error/90'
   return 'text-text/55'
 }
 
@@ -125,10 +125,10 @@ function formatDeltaGames(n: number): string {
 
 function winrateClass(pct: number): string {
   if (!Number.isFinite(pct)) return 'text-text/80'
-  if (pct >= 52.5) return 'font-medium text-green-400'
-  if (pct >= 51) return 'text-green-500/95'
-  if (pct >= 50) return 'text-sky-200/85'
-  return 'text-red-400/90'
+  if (pct >= 52.5) return 'font-medium text-info'
+  if (pct >= 51) return 'text-info/95'
+  if (pct >= 50) return 'text-primary-light/85'
+  return 'text-error/90'
 }
 
 const soloEnriched = computed((): SoloEnriched[] => {

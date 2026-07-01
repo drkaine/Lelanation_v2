@@ -120,7 +120,7 @@
           </h2>
           <button
             type="button"
-            class="statistics-filters-reset inline-flex shrink-0 touch-manipulation items-center gap-1.5 rounded px-2 py-1.5 text-xs font-semibold text-blue-300 transition-colors hover:bg-blue-500/15 hover:text-blue-200"
+            class="statistics-filters-reset inline-flex shrink-0 touch-manipulation items-center gap-1.5 rounded px-2 py-1.5 text-xs font-semibold text-primary-light transition-colors hover:bg-info/15 hover:text-primary-light"
             @click="resetStatsFilters"
           >
             <span class="iconify i-mdi:refresh" aria-hidden="true" />
@@ -270,7 +270,7 @@
                   class="rounded border px-2 py-1 text-xs font-medium transition-colors"
                   :class="
                     patchNotesTab.patchNotesTargetActive('champion')
-                      ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                      ? 'border-info/60 bg-info/20 text-primary-light'
                       : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
                   "
                   @click="patchNotesTab.togglePatchNotesTarget('champion')"
@@ -282,7 +282,7 @@
                   class="rounded border px-2 py-1 text-xs font-medium transition-colors"
                   :class="
                     patchNotesTab.patchNotesTargetActive('items')
-                      ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                      ? 'border-info/60 bg-info/20 text-primary-light'
                       : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
                   "
                   @click="patchNotesTab.togglePatchNotesTarget('items')"
@@ -294,7 +294,7 @@
                   class="rounded border px-2 py-1 text-xs font-medium transition-colors"
                   :class="
                     patchNotesTab.patchNotesTargetActive('runes')
-                      ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                      ? 'border-info/60 bg-info/20 text-primary-light'
                       : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
                   "
                   @click="patchNotesTab.togglePatchNotesTarget('runes')"
@@ -330,7 +330,7 @@
                   class="stats-division-btn rounded p-0.5 transition-colors"
                   :class="
                     statsDivisionFilter.length === 0
-                      ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
+                      ? 'bg-info/20 ring-1 ring-info/60'
                       : 'bg-black/20 hover:bg-white/10'
                   "
                   :title="t('statisticsPage.allRanks')"
@@ -358,7 +358,7 @@
                   class="stats-division-btn rounded p-0.5 transition-colors"
                   :class="
                     statsDivisionFilter.includes(tier)
-                      ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
+                      ? 'bg-info/20 ring-1 ring-info/60'
                       : 'bg-black/20 hover:bg-white/10'
                   "
                   :title="formatDivisionLabel(tier)"
@@ -487,7 +487,7 @@
                 <button
                   type="button"
                   class="stats-role-btn rounded p-0.5 transition-colors"
-                  :class="!statsRoleFilter ? 'bg-blue-500/20' : 'bg-black/20 hover:bg-white/10'"
+                  :class="!statsRoleFilter ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10'"
                   :title="t('statisticsPage.allRoles')"
                   @click="selectAllRoles()"
                 >
@@ -508,7 +508,7 @@
                   type="button"
                   class="stats-role-btn rounded p-0.5 transition-colors"
                   :class="
-                    statsRoleFilter === r.value ? 'bg-blue-500/20' : 'bg-black/20 hover:bg-white/10'
+                    statsRoleFilter === r.value ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10'
                   "
                   :title="r.label"
                   @click="toggleRoleFilter(r)"
@@ -536,7 +536,7 @@
                   class="rounded border px-2 py-1 text-xs font-medium transition-colors"
                   :class="
                     showBansOutcomeColumns
-                      ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                      ? 'border-info/60 bg-info/20 text-primary-light'
                       : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
                   "
                   @click="toggleBansOutcomeColumns()"
@@ -548,7 +548,7 @@
                   class="rounded border px-2 py-1 text-xs font-medium transition-colors"
                   :class="
                     showBansSideColumns
-                      ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                      ? 'border-info/60 bg-info/20 text-primary-light'
                       : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
                   "
                   @click="toggleBansSideColumns()"
@@ -566,7 +566,7 @@
                 class="mb-3 w-full rounded border px-2 py-1.5 text-left text-xs font-medium transition-colors"
                 :class="
                   statsSplitTransformEnabled
-                    ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                    ? 'border-info/60 bg-info/20 text-primary-light'
                     : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
                 "
                 :aria-pressed="statsSplitTransformEnabled"
@@ -582,7 +582,7 @@
                   class="rounded border px-2 py-1 text-xs font-medium transition-colors"
                   :class="
                     showChampionHealColumns
-                      ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                      ? 'border-info/60 bg-info/20 text-primary-light'
                       : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
                   "
                   @click="toggleChampionColumnGroup('heal')"
@@ -594,7 +594,7 @@
                   class="rounded border px-2 py-1 text-xs font-medium transition-colors"
                   :class="
                     showChampionDealtColumns
-                      ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                      ? 'border-info/60 bg-info/20 text-primary-light'
                       : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
                   "
                   @click="toggleChampionColumnGroup('dealt')"
@@ -606,7 +606,7 @@
                   class="rounded border px-2 py-1 text-xs font-medium transition-colors"
                   :class="
                     showChampionTakenColumns
-                      ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                      ? 'border-info/60 bg-info/20 text-primary-light'
                       : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
                   "
                   @click="toggleChampionColumnGroup('taken')"
@@ -633,7 +633,7 @@
                   class="rounded border px-2 py-1 text-xs font-medium transition-colors"
                   :class="
                     statsOtpFilter === 'non'
-                      ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                      ? 'border-info/60 bg-info/20 text-primary-light'
                       : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
                   "
                   @click="setStatsOtpFilter('non')"
@@ -645,7 +645,7 @@
                   class="rounded border px-2 py-1 text-xs font-medium transition-colors"
                   :class="
                     statsOtpFilter === 'oui'
-                      ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                      ? 'border-info/60 bg-info/20 text-primary-light'
                       : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
                   "
                   @click="setStatsOtpFilter('oui')"
@@ -657,7 +657,7 @@
                   class="rounded border px-2 py-1 text-xs font-medium transition-colors"
                   :class="
                     statsOtpFilter === 'solo'
-                      ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                      ? 'border-info/60 bg-info/20 text-primary-light'
                       : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
                   "
                   @click="setStatsOtpFilter('solo')"
@@ -679,7 +679,7 @@
                   class="px-2 py-1 text-xs font-medium transition-colors"
                   :class="
                     spellsModeFilter === 'solo'
-                      ? 'bg-blue-500/20 text-blue-200'
+                      ? 'bg-info/20 text-primary-light'
                       : 'text-text/75 hover:bg-white/10'
                   "
                   @click="spellsModeFilter = 'solo'"
@@ -691,7 +691,7 @@
                   class="border-l border-primary/30 px-2 py-1 text-xs font-medium transition-colors"
                   :class="
                     spellsModeFilter === 'pair'
-                      ? 'bg-blue-500/20 text-blue-200'
+                      ? 'bg-info/20 text-primary-light'
                       : 'text-text/75 hover:bg-white/10'
                   "
                   @click="spellsModeFilter = 'pair'"
@@ -710,7 +710,7 @@
                   class="rounded border px-2 py-1 text-xs font-medium transition-colors"
                   :class="
                     itemsLegendaryFilter === 'legendary'
-                      ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                      ? 'border-info/60 bg-info/20 text-primary-light'
                       : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
                   "
                   @click="
@@ -1527,18 +1527,18 @@ function setChampionsSort(col: 'games' | 'wins' | 'winrate' | 'pickrate') {
 /** Pickrate % (0–100) : vert / neutre / rouge pour lisibilité (tableau champion global). */
 function championGlobalPickrateClass(pct: number): string {
   if (!Number.isFinite(pct)) return 'text-text/80'
-  if (pct >= 15) return 'font-medium text-emerald-400/90'
-  if (pct >= 6) return 'text-sky-200/85'
+  if (pct >= 15) return 'font-medium text-info/90'
+  if (pct >= 6) return 'text-primary-light/85'
   if (pct >= 2) return 'text-text/85'
-  return 'text-rose-400/90'
+  return 'text-error/90'
 }
 
 function tierListWinrateClass(pct: number): string {
   if (!Number.isFinite(pct)) return 'text-text/80'
-  if (pct >= 52.5) return 'font-medium text-green-400'
-  if (pct >= 51) return 'text-green-500/95'
-  if (pct >= 50) return 'text-sky-200/85'
-  return 'text-red-400/90'
+  if (pct >= 52.5) return 'font-medium text-info'
+  if (pct >= 51) return 'text-info/95'
+  if (pct >= 50) return 'text-primary-light/85'
+  return 'text-error/90'
 }
 
 function formatTierListPatchDeltaPp(pp: number): string {
@@ -1552,14 +1552,14 @@ function formatTierListPatchDeltaGames(n: number): string {
 }
 
 function tierListPatchDeltaClass(pp: number): string {
-  if (pp > 0.05) return 'text-green-400/90'
-  if (pp < -0.05) return 'text-red-400/90'
+  if (pp > 0.05) return 'text-info/90'
+  if (pp < -0.05) return 'text-error/90'
   return 'text-text/55'
 }
 
 function tierListPatchDeltaGamesClass(n: number): string {
-  if (n > 0) return 'text-green-400/90'
-  if (n < 0) return 'text-red-400/90'
+  if (n > 0) return 'text-info/90'
+  if (n < 0) return 'text-error/90'
   return 'text-text/55'
 }
 
@@ -5042,8 +5042,8 @@ function championGlobalNumericDelta(
 function championGlobalNumericDeltaClass(delta: number, invert = false): string {
   const hi = invert ? delta < -0.05 : delta > 0.05
   const lo = invert ? delta > 0.05 : delta < -0.05
-  if (hi) return 'text-green-400/90'
-  if (lo) return 'text-red-400/90'
+  if (hi) return 'text-info/90'
+  if (lo) return 'text-error/90'
   return 'text-text/55'
 }
 
@@ -5754,7 +5754,7 @@ if (__statisticsVm?.proxy) {
   justify-content: center;
   border: 1px solid rgb(var(--rgb-accent) / 0.28);
   border-radius: 4px;
-  background: #08101f;
+  background: rgb(var(--rgb-chrome) / 1);
   color: var(--color-blue-50);
   cursor: pointer;
   transition:
@@ -5842,7 +5842,7 @@ if (__statisticsVm?.proxy) {
 <style>
 /**
  * Surfaces & fast-stat : hors scoped pour que les composants enfants (objets, tooltips)
- * héritent le même fond #08101f que les cartes « Vue d’ensemble ».
+ * héritent le même fond rgb(var(--rgb-chrome) / 1) que les cartes « Vue d’ensemble ».
  */
 /* Onglets : retour à la ligne sur /statistics (évite le scroll horizontal quand possible) */
 .statistics .statistics-tabs-wrap-mode {
@@ -5917,10 +5917,10 @@ if (__statisticsVm?.proxy) {
 }
 
 .statistics aside {
-  background: #08101f !important;
+  background: rgb(var(--rgb-chrome) / 1) !important;
 }
 .statistics .statistics-overview-surface {
-  background-color: #08101f !important;
+  background-color: rgb(var(--rgb-chrome) / 1) !important;
 }
 
 .statistics .fast-stat-card {
@@ -5933,7 +5933,7 @@ if (__statisticsVm?.proxy) {
   margin-left: auto;
   margin-right: auto;
   flex: 0 0 313px;
-  background: #08101f !important;
+  background: rgb(var(--rgb-chrome) / 1) !important;
   justify-self: center;
   overflow-x: hidden;
   overflow-y: visible;
@@ -5965,7 +5965,7 @@ if (__statisticsVm?.proxy) {
   margin-left: auto;
   margin-right: auto;
   flex: 0 0 313px;
-  background: #08101f !important;
+  background: rgb(var(--rgb-chrome) / 1) !important;
   justify-self: center;
   overflow: visible;
 }

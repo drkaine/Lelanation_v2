@@ -51,7 +51,9 @@
               <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
                 {{ p.t('statisticsPage.bansColRate') }}
               </div>
-              <div class="text-2xl font-bold tabular-nums leading-none text-amber-300 sm:text-3xl">
+              <div
+                class="text-2xl font-bold tabular-nums leading-none text-text-accent sm:text-3xl"
+              >
                 {{ p.banRateForBansRow(row, p.bansTableData?.matchCount ?? 0).toFixed(2) }}%
               </div>
               <div
@@ -139,7 +141,7 @@
             </div>
             <div
               v-if="p.showBansSideColumns"
-              class="flex flex-wrap items-baseline justify-between gap-x-2 text-blue-300/95"
+              class="flex flex-wrap items-baseline justify-between gap-x-2 text-primary-light/95"
             >
               <span>{{ p.t('statisticsPage.bansColBlueSide') }}</span>
               <span class="tabular-nums">
@@ -157,7 +159,7 @@
             </div>
             <div
               v-if="p.showBansSideColumns"
-              class="flex flex-wrap items-baseline justify-between gap-x-2 text-red-300/95"
+              class="text-error/70/95 flex flex-wrap items-baseline justify-between gap-x-2"
             >
               <span>{{ p.t('statisticsPage.bansColRedSide') }}</span>
               <span class="tabular-nums">
@@ -246,7 +248,7 @@
                   class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text"
                 >
                   <div class="flex items-center gap-1">
-                    <button type="button" class="text-blue-300" @click="p.setBansSort('blue')">
+                    <button type="button" class="text-primary-light" @click="p.setBansSort('blue')">
                       {{ p.t('statisticsPage.bansColBlueSide') }}{{ p.bansSortHint('blue') }}
                     </button>
                     <button
@@ -265,7 +267,7 @@
                   class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text"
                 >
                   <div class="flex items-center gap-1">
-                    <button type="button" class="text-red-300" @click="p.setBansSort('red')">
+                    <button type="button" class="text-error/70" @click="p.setBansSort('red')">
                       {{ p.t('statisticsPage.bansColRedSide') }}{{ p.bansSortHint('red') }}
                     </button>
                     <button
@@ -395,7 +397,7 @@
                 </td>
                 <td v-show="p.showBansSideColumns" class="px-1 py-0.5 align-middle">
                   <div
-                    class="flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight text-blue-300/95"
+                    class="flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight text-primary-light/95"
                   >
                     <span>{{
                       p.banPctForCount(row.bansBlue, p.bansTableData?.matchCount ?? 0, 1).toFixed(2)
@@ -411,7 +413,7 @@
                 </td>
                 <td v-show="p.showBansSideColumns" class="px-1 py-0.5 align-middle">
                   <div
-                    class="flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight text-red-300/95"
+                    class="text-error/70/95 flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight"
                   >
                     <span>{{
                       p.banPctForCount(row.bansRed, p.bansTableData?.matchCount ?? 0, 1).toFixed(2)

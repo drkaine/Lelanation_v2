@@ -11,9 +11,20 @@
     <!-- Header -->
     <div class="border-b border-primary/20 bg-surface/30 px-4 py-3">
       <div class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-3 gap-y-2">
-        <div class="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h1 class="text-base font-bold text-accent md:text-lg">
-            {{ t('patchNotesPage.title', { version: currentPatchVersion }) }}
+        <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+          <h1
+            class="flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-base font-bold md:text-lg"
+          >
+            <span class="text-text">{{ t('patchNotesPage.titleLabel') }}</span>
+            <a
+              :href="officialPatchNotesUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-accent underline decoration-accent/40 underline-offset-2 transition hover:decoration-accent"
+              :title="t('patchNotesPage.viewOfficial')"
+            >
+              {{ currentPatchVersion }}
+            </a>
           </h1>
           <p v-if="currentPatchDate" class="text-xs text-text/60">
             {{ t('patchNotesPage.publishedAt', { date: formatDate(currentPatchDate) }) }}
@@ -200,6 +211,7 @@ import { articleJsonLd } from '~/utils/jsonLd'
 import { useJsonLdHead } from '~/composables/useJsonLdHead'
 import { useSiteUrl } from '~/composables/useSiteUrl'
 import { pageOgImageUrl } from '~/utils/siteUrl'
+import { getOfficialPatchNotesUrl } from '~/utils/officialPatchNotesUrl'
 
 definePageMeta({
   key: route => String(route.params.version ?? ''),
@@ -324,6 +336,10 @@ const summaryLayoutLocked = computed(
 
 const currentPatchVersion = computed(() => patchData.value?.patchVersion ?? routeVersion.value)
 const currentPatchDate = computed(() => patchData.value?.scrapedAt)
+
+const officialPatchNotesUrl = computed(() =>
+  getOfficialPatchNotesUrl(currentPatchVersion.value, locale.value)
+)
 
 const summaryImageUrl = computed(() => {
   const patch = patchData.value

@@ -2686,6 +2686,7 @@
     "notFound": "No patch notes available.",
     "eyebrow": "League of Legends",
     "title": "Patch {version}",
+    "titleLabel": "Patch",
     "selectPatch": "Select patch",
     "searchPlaceholder": "Search champion, item…",
     "noSearchResults": "No results for \"{query}\"",

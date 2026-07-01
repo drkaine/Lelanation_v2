@@ -106,10 +106,10 @@
                   <th class="px-1 py-1.5 text-center font-medium">
                     {{ t('statisticsPage.overviewTeamsFirstByLoss') }}
                   </th>
-                  <th class="px-1 py-1.5 text-center font-medium text-blue-600 dark:text-blue-400">
+                  <th class="px-1 py-1.5 text-center font-medium text-info">
                     {{ t('statisticsPage.sidesBlue') }}
                   </th>
-                  <th class="py-1.5 pl-1 text-center font-medium text-red-600 dark:text-red-400">
+                  <th class="py-1.5 pl-1 text-center font-medium text-error">
                     {{ t('statisticsPage.sidesRed') }}
                   </th>
                 </tr>
@@ -228,10 +228,10 @@
                   <th class="px-1 py-1.5 text-center font-medium">
                     {{ t('statisticsPage.objectivesFirstWinrateColGlobal') }}
                   </th>
-                  <th class="px-1 py-1.5 text-center font-medium text-blue-600 dark:text-blue-400">
+                  <th class="px-1 py-1.5 text-center font-medium text-info">
                     {{ t('statisticsPage.sidesBlue') }}
                   </th>
-                  <th class="py-1.5 pl-1 text-center font-medium text-red-600 dark:text-red-400">
+                  <th class="py-1.5 pl-1 text-center font-medium text-error">
                     {{ t('statisticsPage.sidesRed') }}
                   </th>
                 </tr>

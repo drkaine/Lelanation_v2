@@ -52,7 +52,7 @@ function formatDelta(value: number | null): string {
 
 function deltaColorClass(delta: number | null): string {
   if (delta == null || delta === 0) return 'text-text/80'
-  return delta > 0 ? 'text-emerald-400' : 'text-rose-400'
+  return delta > 0 ? 'text-info' : 'text-error'
 }
 
 function teamFirstPctParts(
@@ -1485,7 +1485,7 @@ function drakeDropdownCountLabel(count: number): string {
           class="shrink-0 text-base leading-none transition-colors"
           :class="
             p.cardIsFavorite('overview.objectives')
-              ? 'text-amber-300 hover:text-amber-200'
+              ? 'text-text-accent hover:text-accent-light'
               : 'text-text/45 grayscale hover:text-text/75'
           "
           :title="
@@ -1610,10 +1610,10 @@ function drakeDropdownCountLabel(count: number): string {
                 <th class="px-1 py-1.5 text-center font-medium">
                   {{ p.t('statisticsPage.overviewTeamsFirstByLoss') }}
                 </th>
-                <th class="px-1 py-1.5 text-center font-medium text-blue-600 dark:text-blue-400">
+                <th class="px-1 py-1.5 text-center font-medium text-info">
                   {{ p.t('statisticsPage.sidesBlue') }}
                 </th>
-                <th class="py-1.5 pl-1 text-center font-medium text-red-600 dark:text-red-400">
+                <th class="py-1.5 pl-1 text-center font-medium text-error">
                   {{ p.t('statisticsPage.sidesRed') }}
                 </th>
               </tr>
@@ -1791,10 +1791,10 @@ function drakeDropdownCountLabel(count: number): string {
                 <th class="px-1 py-1.5 text-center font-medium">
                   {{ p.t('statisticsPage.overviewTeamsByLoss') }}
                 </th>
-                <th class="px-1 py-1.5 text-center font-medium text-blue-600 dark:text-blue-400">
+                <th class="px-1 py-1.5 text-center font-medium text-info">
                   {{ p.t('statisticsPage.sidesBlue') }}
                 </th>
-                <th class="py-1.5 pl-1 text-center font-medium text-red-600 dark:text-red-400">
+                <th class="py-1.5 pl-1 text-center font-medium text-error">
                   {{ p.t('statisticsPage.sidesRed') }}
                 </th>
               </tr>
@@ -1958,10 +1958,10 @@ function drakeDropdownCountLabel(count: number): string {
                 <th class="px-1 py-1.5 text-center font-medium">
                   {{ p.t('statisticsPage.objectivesFirstWinrateColGlobal') }}
                 </th>
-                <th class="px-1 py-1.5 text-center font-medium text-blue-600 dark:text-blue-400">
+                <th class="px-1 py-1.5 text-center font-medium text-info">
                   {{ p.t('statisticsPage.sidesBlue') }}
                 </th>
-                <th class="py-1.5 pl-1 text-center font-medium text-red-600 dark:text-red-400">
+                <th class="py-1.5 pl-1 text-center font-medium text-error">
                   {{ p.t('statisticsPage.sidesRed') }}
                 </th>
               </tr>
@@ -2110,10 +2110,10 @@ function drakeDropdownCountLabel(count: number): string {
                 <th class="px-1 py-1.5 text-center font-medium">
                   {{ p.t('statisticsPage.objectivesFirstWinrateColGlobal') }}
                 </th>
-                <th class="px-1 py-1.5 text-center font-medium text-blue-600 dark:text-blue-400">
+                <th class="px-1 py-1.5 text-center font-medium text-info">
                   {{ p.t('statisticsPage.sidesBlue') }}
                 </th>
-                <th class="py-1.5 pl-1 text-center font-medium text-red-600 dark:text-red-400">
+                <th class="py-1.5 pl-1 text-center font-medium text-error">
                   {{ p.t('statisticsPage.sidesRed') }}
                 </th>
               </tr>
@@ -2296,10 +2296,10 @@ function drakeDropdownCountLabel(count: number): string {
                 <th class="px-1 py-1.5 text-center font-medium">
                   {{ p.t('statisticsPage.overviewTeamsByLoss') }}
                 </th>
-                <th class="px-1 py-1.5 text-center font-medium text-blue-600 dark:text-blue-400">
+                <th class="px-1 py-1.5 text-center font-medium text-info">
                   {{ p.t('statisticsPage.sidesBlue') }}
                 </th>
-                <th class="py-1.5 pl-1 text-center font-medium text-red-600 dark:text-red-400">
+                <th class="py-1.5 pl-1 text-center font-medium text-error">
                   {{ p.t('statisticsPage.sidesRed') }}
                 </th>
               </tr>
@@ -2444,10 +2444,10 @@ function drakeDropdownCountLabel(count: number): string {
                 <th class="px-1 py-1.5 text-center font-medium">
                   {{ p.t('statisticsPage.objectivesFirstWinrateColGlobal') }}
                 </th>
-                <th class="px-1 py-1.5 text-center font-medium text-blue-600 dark:text-blue-400">
+                <th class="px-1 py-1.5 text-center font-medium text-info">
                   {{ p.t('statisticsPage.sidesBlue') }}
                 </th>
-                <th class="py-1.5 pl-1 text-center font-medium text-red-600 dark:text-red-400">
+                <th class="py-1.5 pl-1 text-center font-medium text-error">
                   {{ p.t('statisticsPage.sidesRed') }}
                 </th>
               </tr>
@@ -2582,7 +2582,7 @@ function drakeDropdownCountLabel(count: number): string {
                 <title v-if="tooltipsEnabled">{{ donutTooltip(row, drakeDistTotal) }}</title>
               </circle>
             </svg>
-            <span class="relative z-10 text-lg font-bold text-blue-600 dark:text-blue-300"
+            <span class="relative z-10 text-lg font-bold text-info dark:text-primary-light"
               >100%</span
             >
           </div>
@@ -2638,7 +2638,7 @@ function drakeDropdownCountLabel(count: number): string {
                 <title v-if="tooltipsEnabled">{{ donutTooltip(row, soulDistTotal) }}</title>
               </circle>
             </svg>
-            <span class="relative z-10 text-lg font-bold text-blue-600 dark:text-blue-300"
+            <span class="relative z-10 text-lg font-bold text-info dark:text-primary-light"
               >100%</span
             >
           </div>

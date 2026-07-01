@@ -4128,7 +4128,7 @@ defineExpose({
   padding: 12px;
   border-radius: 8px;
   border: 1px solid rgba(200, 155, 60, 0.25);
-  background: #08101f;
+  background: rgb(var(--rgb-chrome) / 1);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -5911,7 +5911,7 @@ defineExpose({
   padding: 1.2em;
   display: flex;
   flex-direction: column;
-  background: #08101f !important;
+  background: rgb(var(--rgb-chrome) / 1) !important;
   border: 1px solid rgb(125 211 252 / 0.75) !important;
 }
 
@@ -6280,7 +6280,7 @@ defineExpose({
 
 /* Sheet element tooltips (item / rune / spell) — même rendu que ItemSelector / RuneSelector */
 .sheet-element-tooltip-wrapper {
-  background: #08101f !important;
+  background: rgb(var(--rgb-chrome) / 1) !important;
   border: 1px solid rgb(125 211 252 / 0.75) !important;
 }
 

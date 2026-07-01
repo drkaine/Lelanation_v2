@@ -36,10 +36,10 @@
                 <span
                   v-for="tag in visibleTags"
                   :key="tag.id"
-                  class="matchup-sheet__tag"
+                  class="ui-tag"
                   :class="{
-                    'matchup-sheet__tag--pro': tag.id === 'pro',
-                    'matchup-sheet__tag--otp': tag.id === 'otp',
+                    'ui-tag--pro': tag.id === 'pro',
+                    'ui-tag--otp': tag.id === 'otp',
                   }"
                 >
                   {{ tag.label }}
@@ -100,10 +100,10 @@
                 <span
                   v-for="tag in visibleTags"
                   :key="tag.id"
-                  class="matchup-sheet__tag"
+                  class="ui-tag"
                   :class="{
-                    'matchup-sheet__tag--pro': tag.id === 'pro',
-                    'matchup-sheet__tag--otp': tag.id === 'otp',
+                    'ui-tag--pro': tag.id === 'pro',
+                    'ui-tag--otp': tag.id === 'otp',
                   }"
                 >
                   {{ tag.label }}
@@ -533,7 +533,7 @@ function roleLabel(role: Role) {
   font-size: 1.05rem;
   font-weight: 700;
   line-height: 1.2;
-  color: rgb(255 255 255);
+  color: rgb(var(--rgb-text));
   margin: 0;
 }
 
@@ -585,30 +585,6 @@ function roleLabel(role: Role) {
   width: 1.35rem;
   height: 1.35rem;
   flex-shrink: 0;
-}
-
-.matchup-sheet__tag {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.75rem;
-  height: 1.35rem;
-  padding: 0 0.4rem;
-  border-radius: 9999px;
-  font-size: 0.62rem;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  border: 1px solid rgb(255 255 255 / 0.28);
-  color: rgba(255, 255, 255, 0.95);
-}
-
-.matchup-sheet__tag--pro {
-  background: linear-gradient(130deg, #bd9700 0%, #704b00 100%);
-}
-
-.matchup-sheet__tag--otp {
-  background: linear-gradient(130deg, #00b4dd 0%, #003366 100%);
 }
 
 .matchup-sheet__version-block {

@@ -181,14 +181,14 @@ function bansByOutcomeEntries(
           <!-- Champions les plus choisis -->
           <div class="team-side-fast-stat fast-stat-card rounded-lg border border-primary/30 p-2">
             <h3
-              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-amber-300"
+              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-text-accent"
             >
               <button
                 type="button"
                 class="shrink-0 text-base leading-none transition-colors"
                 :class="
                   p.cardIsFavorite('overview.mostPicked')
-                    ? 'text-amber-300 hover:text-amber-200'
+                    ? 'text-text-accent hover:text-accent-light'
                     : 'text-text/45 grayscale hover:text-text/75'
                 "
                 :title="
@@ -249,14 +249,14 @@ function bansByOutcomeEntries(
           <!-- Meilleurs champions -->
           <div class="team-side-fast-stat fast-stat-card rounded-lg border border-primary/30 p-2">
             <h3
-              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-amber-300"
+              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-text-accent"
             >
               <button
                 type="button"
                 class="shrink-0 text-base leading-none transition-colors"
                 :class="
                   p.cardIsFavorite('overview.bestWinrate')
-                    ? 'text-amber-300 hover:text-amber-200'
+                    ? 'text-text-accent hover:text-accent-light'
                     : 'text-text/45 grayscale hover:text-text/75'
                 "
                 :title="
@@ -317,14 +317,14 @@ function bansByOutcomeEntries(
           <!-- Champions les plus bannis -->
           <div class="team-side-fast-stat fast-stat-card rounded-lg border border-primary/30 p-2">
             <h3
-              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-amber-300"
+              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-text-accent"
             >
               <button
                 type="button"
                 class="shrink-0 text-base leading-none transition-colors"
                 :class="
                   p.cardIsFavorite('overview.mostBanned')
-                    ? 'text-amber-300 hover:text-amber-200'
+                    ? 'text-text-accent hover:text-accent-light'
                     : 'text-text/45 grayscale hover:text-text/75'
                 "
                 :title="
@@ -392,14 +392,14 @@ function bansByOutcomeEntries(
           <!-- Winrate depuis X -->
           <div class="team-side-fast-stat fast-stat-card rounded-lg border border-primary/30 p-2">
             <h3
-              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-amber-300"
+              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-text-accent"
             >
               <button
                 type="button"
                 class="shrink-0 text-base leading-none transition-colors"
                 :class="
                   p.cardIsFavorite('overview.winrateSince')
-                    ? 'text-amber-300 hover:text-amber-200'
+                    ? 'text-text-accent hover:text-accent-light'
                     : 'text-text/45 grayscale hover:text-text/75'
                 "
                 :title="
@@ -465,14 +465,14 @@ function bansByOutcomeEntries(
           <!-- Pickrate depuis X -->
           <div class="team-side-fast-stat fast-stat-card rounded-lg border border-primary/30 p-2">
             <h3
-              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-amber-300"
+              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-text-accent"
             >
               <button
                 type="button"
                 class="shrink-0 text-base leading-none transition-colors"
                 :class="
                   p.cardIsFavorite('overview.pickrateSince')
-                    ? 'text-amber-300 hover:text-amber-200'
+                    ? 'text-text-accent hover:text-accent-light'
                     : 'text-text/45 grayscale hover:text-text/75'
                 "
                 :title="
@@ -534,14 +534,14 @@ function bansByOutcomeEntries(
           <!-- Banrate depuis X -->
           <div class="team-side-fast-stat fast-stat-card rounded-lg border border-primary/30 p-2">
             <h3
-              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-amber-300"
+              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-text-accent"
             >
               <button
                 type="button"
                 class="shrink-0 text-base leading-none transition-colors"
                 :class="
                   p.cardIsFavorite('overview.banrateSince')
-                    ? 'text-amber-300 hover:text-amber-200'
+                    ? 'text-text-accent hover:text-accent-light'
                     : 'text-text/45 grayscale hover:text-text/75'
                 "
                 :title="
@@ -603,14 +603,14 @@ function bansByOutcomeEntries(
           <!-- Winrate depuis X (baisse) -->
           <div class="team-side-fast-stat fast-stat-card rounded-lg border border-primary/30 p-2">
             <h3
-              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-amber-300"
+              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-text-accent"
             >
               <button
                 type="button"
                 class="shrink-0 text-base leading-none transition-colors"
                 :class="
                   p.cardIsFavorite('overview.winrateSinceDown')
-                    ? 'text-amber-300 hover:text-amber-200'
+                    ? 'text-text-accent hover:text-accent-light'
                     : 'text-text/45 grayscale hover:text-text/75'
                 "
                 :title="
@@ -672,14 +672,14 @@ function bansByOutcomeEntries(
           <!-- Pickrate depuis X (baisse) -->
           <div class="team-side-fast-stat fast-stat-card rounded-lg border border-primary/30 p-2">
             <h3
-              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-amber-300"
+              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-text-accent"
             >
               <button
                 type="button"
                 class="shrink-0 text-base leading-none transition-colors"
                 :class="
                   p.cardIsFavorite('overview.pickrateSinceDown')
-                    ? 'text-amber-300 hover:text-amber-200'
+                    ? 'text-text-accent hover:text-accent-light'
                     : 'text-text/45 grayscale hover:text-text/75'
                 "
                 :title="
@@ -741,14 +741,14 @@ function bansByOutcomeEntries(
           <!-- Banrate depuis X (baisse) -->
           <div class="team-side-fast-stat fast-stat-card rounded-lg border border-primary/30 p-2">
             <h3
-              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-amber-300"
+              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-text-accent"
             >
               <button
                 type="button"
                 class="shrink-0 text-base leading-none transition-colors"
                 :class="
                   p.cardIsFavorite('overview.banrateSinceDown')
-                    ? 'text-amber-300 hover:text-amber-200'
+                    ? 'text-text-accent hover:text-accent-light'
                     : 'text-text/45 grayscale hover:text-text/75'
                 "
                 :title="
@@ -810,14 +810,14 @@ function bansByOutcomeEntries(
           <!-- Répartition des parties (global uniquement) — donut SVG comme Solo/Duo -->
           <div class="team-side-fast-stat fast-stat-card rounded-lg border border-primary/30 p-2">
             <h3
-              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-amber-300"
+              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-text-accent"
             >
               <button
                 type="button"
                 class="shrink-0 text-base leading-none transition-colors"
                 :class="
                   p.cardIsFavorite('overview.matchOutcome')
-                    ? 'text-amber-300 hover:text-amber-200'
+                    ? 'text-text-accent hover:text-accent-light'
                     : 'text-text/45 grayscale hover:text-text/75'
                 "
                 :title="
@@ -859,19 +859,19 @@ function bansByOutcomeEntries(
                   Total: {{ p.overviewMatchOutcomeTotal.toLocaleString() }}
                 </div>
                 <div class="flex items-center gap-2 text-text/85">
-                  <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-300" />
+                  <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-accent" />
                   &lt;15 min surrender: {{ p.overviewEarlySurrenderCount.toLocaleString() }} ({{
                     p.overviewEarlySurrenderPct.toFixed(2)
                   }}%)
                 </div>
                 <div class="flex items-center gap-2 text-text/85">
-                  <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-100" />
+                  <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-accent-light" />
                   Surrender: {{ p.overviewSurrenderOnlyCount.toLocaleString() }} ({{
                     p.overviewSurrenderOnlyPct.toFixed(2)
                   }}%)
                 </div>
                 <div class="flex items-center gap-2 text-text/85">
-                  <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-blue-400" />
+                  <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-info" />
                   Jouees: {{ p.overviewPlayedCount.toLocaleString() }} ({{
                     p.overviewPlayedPct.toFixed(2)
                   }}%)
@@ -889,14 +889,14 @@ function bansByOutcomeEntries(
             class="team-side-fast-stat fast-stat-card rounded-lg border border-primary/30 p-2"
           >
             <h3
-              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-amber-300"
+              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-text-accent"
             >
               <button
                 type="button"
                 class="shrink-0 text-base leading-none transition-colors"
                 :class="
                   p.cardIsFavorite('overview.bansByWin')
-                    ? 'text-amber-300 hover:text-amber-200'
+                    ? 'text-text-accent hover:text-accent-light'
                     : 'text-text/45 grayscale hover:text-text/75'
                 "
                 :title="
@@ -954,14 +954,14 @@ function bansByOutcomeEntries(
             class="team-side-fast-stat fast-stat-card rounded-lg border border-primary/30 p-2"
           >
             <h3
-              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-amber-300"
+              class="mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug text-text-accent"
             >
               <button
                 type="button"
                 class="shrink-0 text-base leading-none transition-colors"
                 :class="
                   p.cardIsFavorite('overview.bansByLoss')
-                    ? 'text-amber-300 hover:text-amber-200'
+                    ? 'text-text-accent hover:text-accent-light'
                     : 'text-text/45 grayscale hover:text-text/75'
                 "
                 :title="

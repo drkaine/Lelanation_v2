@@ -147,7 +147,7 @@ function formatDeltaLabel(v: string | null): string {
 
 function statusClass(v: 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'): string {
   if (v === 'OVERPOWERED') return 'text-error'
-  if (v === 'UNDERPOWERED') return 'text-sky-300'
+  if (v === 'UNDERPOWERED') return 'text-info'
   return 'text-success'
 }
 

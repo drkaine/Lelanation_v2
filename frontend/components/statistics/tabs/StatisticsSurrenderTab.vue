@@ -34,7 +34,7 @@ function formatStatCount(value: number): string {
 function deltaClass(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return 'text-text/60'
   if (value === 0) return 'text-text/60'
-  return value > 0 ? 'text-rose-400' : 'text-emerald-400'
+  return value > 0 ? 'text-error' : 'text-info'
 }
 
 const rows = computed(() => p.surrenderMatrixRows ?? [])
@@ -150,7 +150,7 @@ function rankIcon(rank: string): string {
                 loading="lazy"
               />
               <h3
-                class="statistics-surrender-mobile-rank-title min-w-0 flex-1 text-base font-semibold leading-snug text-amber-300"
+                class="statistics-surrender-mobile-rank-title min-w-0 flex-1 text-base font-semibold leading-snug text-text-accent"
               >
                 {{ rankLabel(group.rank) }}
               </h3>
@@ -181,7 +181,7 @@ function rankIcon(rank: string): string {
                 </div>
                 <div class="statistics-surrender-stat-block">
                   <span class="statistics-surrender-stat-label">
-                    <span class="statistics-surrender-stat-dot bg-amber-300" />
+                    <span class="statistics-surrender-stat-dot bg-accent" />
                     <span>{{ p.t('statisticsPage.surrenderStatEarlyShort') }}</span>
                   </span>
                   <span class="statistics-surrender-stat-value">
@@ -205,7 +205,7 @@ function rankIcon(rank: string): string {
                 </div>
                 <div class="statistics-surrender-stat-block">
                   <span class="statistics-surrender-stat-label">
-                    <span class="statistics-surrender-stat-dot bg-amber-100" />
+                    <span class="statistics-surrender-stat-dot bg-accent-light" />
                     <span>{{ p.t('statisticsPage.surrenderStatSurrenderShort') }}</span>
                   </span>
                   <span class="statistics-surrender-stat-value">
@@ -226,7 +226,7 @@ function rankIcon(rank: string): string {
                 </div>
                 <div class="statistics-surrender-stat-block">
                   <span class="statistics-surrender-stat-label">
-                    <span class="statistics-surrender-stat-dot bg-blue-400" />
+                    <span class="statistics-surrender-stat-dot bg-info" />
                     <span>{{ p.t('statisticsPage.surrenderPlayedMatches') }}</span>
                   </span>
                   <span class="statistics-surrender-stat-value">
@@ -250,9 +250,9 @@ function rankIcon(rank: string): string {
             >
               <div
                 v-if="group.blue && Number(group.blue.matchCount) > 0"
-                class="statistics-surrender-mobile-side-card rounded-lg border border-primary/30 bg-sky-500/5 p-2"
+                class="statistics-surrender-mobile-side-card rounded-lg border border-primary/30 bg-info/5 p-2"
               >
-                <div class="mb-2 text-sm font-semibold text-sky-300">{{ teamLabel(100) }}</div>
+                <div class="mb-2 text-sm font-semibold text-info">{{ teamLabel(100) }}</div>
                 <div class="flex flex-col items-center gap-2 sm:flex-row sm:items-center">
                   <StatisticsMatchOutcomeDonut
                     side-accent="blue"
@@ -297,9 +297,9 @@ function rankIcon(rank: string): string {
               </div>
               <div
                 v-if="group.red && Number(group.red.matchCount) > 0"
-                class="statistics-surrender-mobile-side-card rounded-lg border border-primary/30 bg-rose-500/5 p-2"
+                class="statistics-surrender-mobile-side-card rounded-lg border border-primary/30 bg-error/5 p-2"
               >
-                <div class="mb-2 text-sm font-semibold text-rose-300">{{ teamLabel(200) }}</div>
+                <div class="mb-2 text-sm font-semibold text-error/70">{{ teamLabel(200) }}</div>
                 <div class="flex flex-col items-center gap-2 sm:flex-row sm:items-center">
                   <StatisticsMatchOutcomeDonut
                     side-accent="red"

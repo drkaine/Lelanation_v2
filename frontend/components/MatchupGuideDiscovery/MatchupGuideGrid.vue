@@ -5,7 +5,7 @@
     </div>
 
     <div v-else-if="discoveryStore.loadError" class="py-12 text-center">
-      <p class="text-lg text-red-400">{{ t('matchupGuideDiscovery.loadError') }}</p>
+      <p class="text-lg text-error">{{ t('matchupGuideDiscovery.loadError') }}</p>
       <p class="mt-2 text-sm text-text/70">{{ discoveryStore.loadError }}</p>
     </div>
 
@@ -66,11 +66,7 @@
               v-if="showFavoriteToggle"
               type="button"
               class="matchup-guide-grid-action-button matchup-guide-grid-action-button--icon"
-              :class="
-                favoritesStore.isFavorite(guide.id)
-                  ? 'border-amber-500 bg-amber-500/15 text-amber-500 hover:bg-amber-500/25'
-                  : 'border-amber-500/70 bg-surface text-amber-500/70 hover:bg-amber-500/15 hover:text-amber-500'
-              "
+              :class="uiFavoriteActionClass(favoritesStore.isFavorite(guide.id))"
               :title="
                 favoritesStore.isFavorite(guide.id)
                   ? t('buildDiscovery.removeFavorite')
@@ -117,11 +113,7 @@
               <button
                 type="button"
                 class="matchup-guide-grid-action-button matchup-guide-grid-action-button--vote"
-                :class="
-                  voteStore.getUserVote(guide.id) === 'up'
-                    ? 'bg-green-600 text-white hover:bg-green-700'
-                    : 'border border-green-600 bg-surface text-green-600 hover:bg-green-50'
-                "
+                :class="uiUpvoteActionClass(voteStore.getUserVote(guide.id) === 'up')"
                 :title="
                   voteStore.getUserVote(guide.id) === 'up'
                     ? t('buildDiscovery.removeUpvote')
@@ -135,11 +127,7 @@
               <button
                 type="button"
                 class="matchup-guide-grid-action-button matchup-guide-grid-action-button--vote"
-                :class="
-                  voteStore.getUserVote(guide.id) === 'down'
-                    ? 'bg-red-600 text-white hover:bg-red-700'
-                    : 'border border-red-600 bg-surface text-red-600 hover:bg-red-50'
-                "
+                :class="uiDownvoteActionClass(voteStore.getUserVote(guide.id) === 'down')"
                 :title="
                   voteStore.getUserVote(guide.id) === 'down'
                     ? t('buildDiscovery.removeDownvote')
@@ -251,6 +239,11 @@ import { useMatchupGuideFavoritesStore } from '~/stores/MatchupGuideFavoritesSto
 import { useMatchupGuideStore } from '~/stores/MatchupGuideStore'
 import { useMatchupGuideVoteStore } from '~/stores/MatchupGuideVoteStore'
 import { matchupGuideDetailPath } from '~/utils/matchupGuideSlug'
+import {
+  uiDownvoteActionClass,
+  uiFavoriteActionClass,
+  uiUpvoteActionClass,
+} from '~/utils/uiColorClasses'
 
 const props = withDefaults(
   defineProps<{

@@ -20,7 +20,7 @@
           </NuxtLink>
           <NuxtLink
             :to="localePath('/builds/discover')"
-            class="inline-flex items-center rounded-lg border border-accent/70 bg-surface/60 px-5 py-2.5 text-sm font-semibold text-text transition hover:border-accent hover:bg-surface"
+            class="ui-build-card-button inline-flex items-center px-5 py-2.5 text-sm font-semibold transition"
           >
             {{ t('home.ctaDiscoverBuilds') }}
           </NuxtLink>
@@ -33,7 +33,7 @@
           <a
             v-for="link in socialLinks"
             :key="link.href"
-            class="inline-flex items-center gap-2 rounded-lg border border-accent/50 px-4 py-2.5 text-sm font-medium text-text/90 transition hover:border-accent hover:bg-surface/60"
+            class="ui-build-card-button inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition"
             :href="link.href"
             target="_blank"
             rel="noopener noreferrer"
@@ -45,12 +45,12 @@
       </div>
     </section>
 
-    <div class="mx-auto w-full max-w-[1600px] px-[10px] py-3">
-      <template v-for="item in homeRenderItems" :key="homeRenderItemKey(item)">
-        <section
-          v-if="item.kind === 'appContact'"
-          class="home-section home-section--app-contact mb-3"
-        >
+    <template v-for="item in homeRenderItems" :key="homeRenderItemKey(item)">
+      <section
+        v-if="item.kind === 'appContact'"
+        class="home-section home-section--app-contact mb-2 w-full"
+      >
+        <div class="home-section-inner">
           <div class="grid gap-3 lg:grid-cols-2 lg:items-stretch">
             <div
               v-for="sectionId in item.order"
@@ -60,20 +60,20 @@
               <HomeAppContactCardContent :section="sectionId" />
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <section v-else :class="homeSectionClass(item.id)">
+      <section v-else :class="homeSectionClass(item.id)">
+        <div class="home-section-inner">
           <div
             v-if="item.id === 'customize'"
-            class="home-customize-block mx-auto flex w-full max-w-5xl flex-col items-center text-center"
+            class="home-customize-block flex w-full flex-col items-center text-center"
           >
             <h2 class="home-section-title text-lg font-bold sm:text-xl">
               {{ t('home.customizeTitle') }}
             </h2>
 
-            <div
-              class="mt-3 w-full rounded-lg border border-primary/20 bg-background/30 p-4 text-center sm:p-5"
-            >
+            <div class="ui-build-card-surface mt-3 w-full rounded-lg p-4 text-center sm:p-5">
               <div class="grid justify-items-center gap-6 sm:grid-cols-2 xl:grid-cols-3">
                 <div class="w-full max-w-xs text-center sm:max-w-none">
                   <h3 class="text-xs font-bold uppercase tracking-wide text-accent">
@@ -125,7 +125,7 @@
               <div class="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
                 <button
                   type="button"
-                  class="inline-flex items-center gap-2 text-xs font-semibold text-accent hover:underline"
+                  class="ui-build-card-button inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold transition"
                   @click="openCustomizePanel()"
                 >
                   {{ t('home.customizeOpenPanel') }}
@@ -133,7 +133,7 @@
                 </button>
                 <NuxtLink
                   :to="localePath('/settings')"
-                  class="inline-flex items-center text-xs font-semibold text-accent hover:underline"
+                  class="ui-build-card-button inline-flex items-center px-3 py-1.5 text-xs font-semibold transition"
                 >
                   {{ t('home.customizeSettingsLink') }}
                 </NuxtLink>
@@ -158,7 +158,7 @@
             </div>
             <div
               v-else-if="recentBuilds.length === 0"
-              class="rounded-xl border border-primary/25 bg-surface/40 px-4 py-8 text-center text-sm text-text/70"
+              class="ui-build-card-surface rounded-xl px-4 py-8 text-center text-sm text-text/70"
             >
               {{ t('home.noBuildsYet') }}
             </div>
@@ -168,8 +168,6 @@
               :show-comparison-buttons="false"
               :hide-bottom-actions="true"
               :show-all-custom-builds="true"
-              :six-column-grid="true"
-              grid-gap="5px"
             />
           </template>
 
@@ -189,7 +187,7 @@
               <div
                 v-for="roleBlock in tierByRole"
                 :key="roleBlock.role"
-                class="rounded-xl border border-primary/25 bg-surface/50 p-3"
+                class="home-tier-role-card p-3"
               >
                 <div class="mb-3 flex items-center gap-2 border-b border-primary/15 pb-2">
                   <img
@@ -214,7 +212,7 @@
                           championsStore.champions
                         )
                       "
-                      class="flex items-center gap-2 rounded-lg px-1 py-1 transition hover:bg-background/30"
+                      class="flex items-center gap-2 rounded-lg px-1 py-1 transition hover:bg-black/20"
                     >
                       <img
                         v-if="tierChampionImage(row)"
@@ -228,11 +226,8 @@
                       <span class="min-w-0 flex-1 truncate text-xs font-medium text-text">
                         {{ tierChampionName(row) }}
                       </span>
-                      <span
-                        class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold"
-                        :class="tierBadgeClass(row.tier)"
-                      >
-                        {{ row.tier }}
+                      <span class="shrink-0" :class="uiStatisticsTierBadgeClass(row.tier)">
+                        {{ homeTierLabel(row.tier) }}
                       </span>
                     </NuxtLink>
                   </li>
@@ -256,7 +251,7 @@
             </div>
             <div
               v-if="latestVideos.length === 0"
-              class="rounded-xl border border-primary/25 bg-surface/40 px-4 py-8 text-center text-sm text-text/70"
+              class="ui-build-card-surface rounded-xl px-4 py-8 text-center text-sm text-text/70"
             >
               {{ t('home.noVideosYet') }}
             </div>
@@ -276,13 +271,13 @@
           </template>
 
           <div v-if="item.id === 'globalStats'" class="grid gap-2 sm:grid-cols-3">
-            <div class="rounded-lg border border-primary/25 bg-surface/50 px-3 py-2 text-center">
+            <div class="ui-build-card-surface rounded-lg px-3 py-2 text-center">
               <p class="text-lg font-bold leading-tight text-accent">
                 {{ formatStat(stats.builds) }}
               </p>
               <p class="mt-0.5 text-xs text-text/70">{{ t('home.statBuilds') }}</p>
             </div>
-            <div class="rounded-lg border border-primary/25 bg-surface/50 px-3 py-2 text-center">
+            <div class="ui-build-card-surface rounded-lg px-3 py-2 text-center">
               <p class="text-lg font-bold leading-tight text-accent">
                 {{ formatStat(stats.matches) }}
               </p>
@@ -290,16 +285,16 @@
                 {{ t('home.statPatchMatches', { patch: stats.patch }) }}
               </p>
             </div>
-            <div class="rounded-lg border border-primary/25 bg-surface/50 px-3 py-2 text-center">
+            <div class="ui-build-card-surface rounded-lg px-3 py-2 text-center">
               <p class="text-lg font-bold leading-tight text-accent">
                 {{ formatStat(stats.videos) }}
               </p>
               <p class="mt-0.5 text-xs text-text/70">{{ t('home.statVideos') }}</p>
             </div>
           </div>
-        </section>
-      </template>
-    </div>
+        </div>
+      </section>
+    </template>
   </div>
 </template>
 
@@ -312,6 +307,7 @@ import HomeAppContactCardContent from '~/components/home/HomeAppContactCardConte
 import VideoGridCard from '~/components/Videos/VideoGridCard.vue'
 import { getChampionImageUrl } from '~/utils/imageUrl'
 import { usePageOgImage } from '~/composables/usePageOgImage'
+import { uiStatisticsTierBadgeClass } from '~/utils/uiColorClasses'
 import { useHomeUiStore, type HomeSectionId } from '~/stores/HomeUiStore'
 
 const championsStore = useChampionsStore()
@@ -363,63 +359,36 @@ function homeRenderItemKey(item: HomeRenderItem): string {
   return item.kind === 'appContact' ? `app-contact-${item.order.join('-')}` : item.id
 }
 
-function homeAppContactCardClass(sectionId: 'app' | 'contact'): string[] {
-  const base = [
+function homeAppContactCardClass(_sectionId: 'app' | 'contact'): string[] {
+  return [
+    'ui-build-card-surface',
     'flex',
     'h-full',
     'flex-col',
     'rounded-2xl',
-    'border',
-    'border-primary/30',
     'p-4',
     'sm:p-5',
+    'text-center',
   ]
-  if (sectionId === 'app') {
-    return [...base, 'bg-gradient-to-br', 'from-surface/80', 'to-background/40', 'text-center']
-  }
-  return [...base, 'bg-surface/40', 'text-center']
 }
 
 function homeSectionClass(sectionId: HomeSectionId): string[] {
-  const base = ['home-section', 'mb-3']
+  const base = ['home-section', 'mb-2', 'w-full']
   switch (sectionId) {
     case 'customize':
-      return [
-        ...base,
-        'home-customize-section',
-        'w-full',
-        'border-y',
-        'border-primary/30',
-        'bg-surface/40',
-        'px-3',
-        'py-3',
-        'sm:px-5',
-        'sm:py-4',
-      ]
+      return [...base, 'home-customize-section', 'border-y', 'border-primary/30', 'bg-surface/40']
     case 'recentBuilds':
-      return [...base, 'home-section--builds']
+      return [...base, 'home-section--builds', 'border-y', 'border-primary/30', 'bg-surface/40']
+    case 'tierList':
+      return [...base, 'home-section--tier-list', 'border-y', 'border-primary/30', 'bg-surface/40']
+    case 'latestVideos':
+      return [...base, 'home-section--videos', 'border-y', 'border-primary/30', 'bg-surface/40']
+    case 'globalStats':
+      return [...base, 'home-section--stats', 'border-y', 'border-primary/30', 'bg-surface/40']
     case 'app':
-      return [
-        ...base,
-        'rounded-2xl',
-        'border',
-        'border-primary/30',
-        'bg-gradient-to-br',
-        'from-surface/80',
-        'to-background/40',
-        'p-4',
-        'sm:p-5',
-      ]
+      return [...base, 'ui-build-card-surface', 'rounded-2xl', 'p-4', 'sm:p-5']
     case 'contact':
-      return [
-        ...base,
-        'rounded-2xl',
-        'border',
-        'border-primary/30',
-        'bg-surface/40',
-        'p-4',
-        'sm:p-5',
-      ]
+      return [...base, 'ui-build-card-surface', 'rounded-2xl', 'p-4', 'sm:p-5']
     default:
       return base
   }
@@ -510,21 +479,42 @@ function tierChampionImage(row: { championId: number; championImage?: string }):
   return getChampionImageUrl('latest', imageName)
 }
 
-function tierBadgeClass(tier: string): string {
-  const tierLabel = tier.toUpperCase()
-  if (tierLabel === 'S' || tierLabel === 'S+') return 'bg-amber-500/20 text-amber-300'
-  if (tierLabel === 'A' || tierLabel === 'A+') return 'bg-green-500/15 text-green-300'
-  if (tierLabel === 'B' || tierLabel === 'B+') return 'bg-sky-500/15 text-sky-200'
-  return 'bg-surface text-text/70'
-}
-
 function formatStat(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return '—'
   return value.toLocaleString(locale.value === 'en' ? 'en-US' : 'fr-FR')
 }
+
+function homeTierLabel(tier: string): string {
+  if (tier === 'D' || tier === 'F') return t('statisticsPage.tierF')
+  const labels: Record<string, string> = {
+    'S+': t('statisticsPage.tierS+'),
+    S: t('statisticsPage.tierS'),
+    A: t('statisticsPage.tierA'),
+    B: t('statisticsPage.tierB'),
+    C: t('statisticsPage.tierC'),
+  }
+  return labels[tier] ?? tier
+}
 </script>
 
 <style scoped>
+.home-page {
+  width: 100%;
+}
+
+.home-section-inner {
+  width: 100%;
+  max-width: 1600px;
+  margin-inline: auto;
+  padding: 0.75rem 10px;
+}
+
+@media (min-width: 640px) {
+  .home-section-inner {
+    padding-inline: 1.25rem;
+  }
+}
+
 .home-section--builds {
   width: 100%;
   min-width: 0;
@@ -545,19 +535,31 @@ function formatStat(value: number): string {
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgb(251 191 36 / 0.75);
+  color: rgb(var(--rgb-accent) / 0.75);
 }
 
 .home-shortcut-kbd {
   display: inline-block;
   border: 1px solid rgb(var(--rgb-accent) / 0.35);
   border-radius: 6px;
-  background: rgb(var(--rgb-accent) / 0.08);
+  background: rgb(0 0 0 / 0.25);
   padding: 2px 8px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 11px;
   font-weight: 600;
-  color: var(--color-blue-50);
+  color: var(--color-gold-300);
   white-space: nowrap;
+}
+
+.home-tier-role-card {
+  --card-border-gradient-strong: var(--card-border-gradient-default-strong);
+  border: 2px solid transparent;
+  border-radius: 0.75rem;
+  background-image:
+    linear-gradient(var(--color-blue-500), var(--color-blue-500)),
+    var(--card-border-gradient-strong);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.5);
 }
 </style>

@@ -178,9 +178,9 @@ function patchPpClass(v: number | undefined): string {
   return typeof p?.tierListPatchDeltaClass === 'function'
     ? p.tierListPatchDeltaClass(v)
     : v > 0.05
-      ? 'text-green-400/90'
+      ? 'text-info/90'
       : v < -0.05
-        ? 'text-red-400/90'
+        ? 'text-error/90'
         : 'text-text/55'
 }
 
@@ -196,9 +196,9 @@ function patchRankClass(v: number | undefined): string {
   return typeof p?.tierListPatchDeltaRankClass === 'function'
     ? p.tierListPatchDeltaRankClass(v)
     : v > 0
-      ? 'text-green-400/90'
+      ? 'text-info/90'
       : v < 0
-        ? 'text-red-400/90'
+        ? 'text-error/90'
         : 'text-text/55'
 }
 
@@ -433,9 +433,9 @@ const botlaneMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
                   row.deltaVsPeersPp == null
                     ? 'text-text/55'
                     : row.deltaVsPeersPp > 0
-                      ? 'text-green-400/90'
+                      ? 'text-info/90'
                       : row.deltaVsPeersPp < 0
-                        ? 'text-red-400/90'
+                        ? 'text-error/90'
                         : 'text-text/80'
                 "
                 >{{ fmtDeltaPp(row.deltaVsPeersPp) }}</span

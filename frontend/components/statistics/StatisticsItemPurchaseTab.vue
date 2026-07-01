@@ -213,7 +213,7 @@ const hasAnyData = computed(
 <template>
   <div class="item-purchase-tab space-y-4">
     <div v-if="pending" class="py-4 text-text/70">{{ t('statisticsPage.loading') }}</div>
-    <p v-else-if="error" class="py-2 text-sm text-red-400">{{ error }}</p>
+    <p v-else-if="error" class="py-2 text-sm text-error">{{ error }}</p>
     <p v-else-if="!hasAnyData" class="text-text/70">
       {{ t('statisticsPage.itemStatsPurchaseOrderEmpty') }}
     </p>

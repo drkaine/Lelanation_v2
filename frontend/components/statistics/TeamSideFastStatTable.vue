@@ -84,7 +84,7 @@ const displayValue = (row: Record<string, unknown>): string => {
 }
 
 const cardBorderClass = computed(() => {
-  if (props.side === 'blue') return 'border-[1.5px] border-blue-500/50'
+  if (props.side === 'blue') return 'border-[1.5px] border-info/50'
   if (props.side === 'red') return 'border-[1.5px] border-red-500/50'
   return 'border border-primary/30'
 })
@@ -92,16 +92,16 @@ const cardBorderClass = computed(() => {
 /** Comme `.fast-stat-title` vue d’ensemble (mb-2), teinte bleu/rouge côté Teams. */
 const headingClass = computed(() => {
   const base = 'mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug'
-  if (props.side === 'blue') return `${base} text-sky-300`
-  if (props.side === 'red') return `${base} text-rose-300`
+  if (props.side === 'blue') return `${base} text-info`
+  if (props.side === 'red') return `${base} text-error/70`
   return `${base} team-side-fast-stat-title-default`
 })
 
 const tooltipTriggerClass = computed(() => {
   if (props.side === 'blue')
-    return 'group/stat-tip relative ml-1 inline-flex cursor-help text-sky-400/55'
+    return 'group/stat-tip relative ml-1 inline-flex cursor-help text-info/55'
   if (props.side === 'red')
-    return 'group/stat-tip relative ml-1 inline-flex cursor-help text-rose-400/55'
+    return 'group/stat-tip relative ml-1 inline-flex cursor-help text-error/55'
   return 'group/stat-tip relative ml-1 inline-flex cursor-help text-text/50'
 })
 
@@ -110,27 +110,27 @@ const valueCellClass = computed(() => {
   const s = 'ml-auto w-9 shrink-0 text-right font-medium tabular-nums'
   const d = 'ml-auto w-10 shrink-0 text-right font-medium tabular-nums'
   if (props.variant === 'dWr') {
-    if (props.side === 'blue') return `${d} text-sky-300`
-    if (props.side === 'red') return `${d} text-rose-300`
+    if (props.side === 'blue') return `${d} text-info`
+    if (props.side === 'red') return `${d} text-error/70`
     return `${d} text-success`
   }
   if (props.variant === 'dPick') {
-    if (props.side === 'blue') return `${d} text-sky-200`
-    if (props.side === 'red') return `${d} text-rose-200`
+    if (props.side === 'blue') return `${d} text-primary-light`
+    if (props.side === 'red') return `${d} text-error/80`
     return `${d} text-accent`
   }
   if (props.variant === 'dBan') {
-    if (props.side === 'blue') return `${d} text-blue-200`
-    if (props.side === 'red') return `${d} text-red-200`
+    if (props.side === 'blue') return `${d} text-primary-light`
+    if (props.side === 'red') return `${d} text-error/80`
     return `${d} text-error`
   }
   if (props.variant === 'ban') {
-    if (props.side === 'blue') return `${s} text-blue-200`
-    if (props.side === 'red') return `${s} text-red-200`
+    if (props.side === 'blue') return `${s} text-primary-light`
+    if (props.side === 'red') return `${s} text-error/80`
     return `${s} text-text`
   }
-  if (props.side === 'blue') return `${s} text-sky-200`
-  if (props.side === 'red') return `${s} text-rose-200`
+  if (props.side === 'blue') return `${s} text-primary-light`
+  if (props.side === 'red') return `${s} text-error/80`
   return `${s} text-text`
 })
 
@@ -165,7 +165,7 @@ function progressionBeforeAfterLine(row: Record<string, unknown>): string {
         class="shrink-0 text-base leading-none transition-colors"
         :class="
           cardIsFavorite(favoriteCardId)
-            ? 'text-amber-300 hover:text-amber-200'
+            ? 'text-text-accent hover:text-accent-light'
             : 'text-text/45 grayscale hover:text-text/75'
         "
         :title="
@@ -262,7 +262,7 @@ function progressionBeforeAfterLine(row: Record<string, unknown>): string {
   margin-left: auto;
   margin-right: auto;
   flex: 0 0 313px;
-  background: #08101f !important;
+  background: rgb(var(--rgb-chrome) / 1) !important;
   justify-self: center;
   overflow: visible;
 }

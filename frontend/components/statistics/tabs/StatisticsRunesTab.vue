@@ -14,7 +14,7 @@ const p = inject('statisticsPageCtx') as any
     <template v-else>
       <div
         v-if="p.overviewDetailError"
-        class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4"
+        class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-accent/40 bg-accent/10 p-4"
       >
         <p class="text-text/90">{{ p.t('statisticsPage.overviewDetailTimeout') }}</p>
         <button

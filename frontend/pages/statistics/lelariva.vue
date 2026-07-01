@@ -89,7 +89,7 @@
           </h2>
           <button
             type="button"
-            class="statistics-filters-reset inline-flex shrink-0 touch-manipulation items-center gap-1.5 rounded px-2 py-1.5 text-xs font-semibold text-blue-300 transition-colors hover:bg-blue-500/15 hover:text-blue-200"
+            class="statistics-filters-reset inline-flex shrink-0 touch-manipulation items-center gap-1.5 rounded px-2 py-1.5 text-xs font-semibold text-primary-light transition-colors hover:bg-info/15 hover:text-primary-light"
             @click="resetLelarivaFilters"
           >
             <span class="iconify i-mdi:refresh" aria-hidden="true" />
@@ -125,7 +125,7 @@
                   class="stats-division-btn rounded p-0.5 transition-colors"
                   :class="
                     !activeDisplayRank
-                      ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
+                      ? 'bg-info/20 ring-1 ring-info/60'
                       : 'bg-black/20 hover:bg-white/10'
                   "
                   :title="t('statisticsPage.allRanks')"
@@ -151,7 +151,7 @@
                   class="stats-division-btn rounded p-0.5 transition-colors"
                   :class="
                     activeDisplayRank === tier
-                      ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
+                      ? 'bg-info/20 ring-1 ring-info/60'
                       : 'bg-black/20 hover:bg-white/10'
                   "
                   :title="formatDivisionLabel(tier)"
@@ -194,7 +194,7 @@
                 <button
                   type="button"
                   class="stats-role-btn rounded p-0.5 transition-colors"
-                  :class="!activeDisplayRole ? 'bg-blue-500/20' : 'bg-black/20 hover:bg-white/10'"
+                  :class="!activeDisplayRole ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10'"
                   :title="t('statisticsPage.allRoles')"
                   @click="clearActiveDisplayRole()"
                 >
@@ -215,9 +215,7 @@
                   type="button"
                   class="stats-role-btn rounded p-0.5 transition-colors"
                   :class="[
-                    activeDisplayRole === r.value
-                      ? 'bg-blue-500/20'
-                      : 'bg-black/20 hover:bg-white/10',
+                    activeDisplayRole === r.value ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10',
                     selectedChampionId && !isRoleFilterEligible(r.value)
                       ? 'champion-role-disabled'
                       : '',
@@ -268,7 +266,7 @@
 
               <button
                 type="button"
-                class="w-full rounded border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                class="w-full rounded border border-info/40 bg-info/10 px-3 py-2 text-xs font-semibold text-info hover:bg-info/20 disabled:cursor-not-allowed disabled:opacity-50"
                 :disabled="exporting"
                 @click="exportMatchupsExcel"
               >
@@ -300,7 +298,7 @@
 
               <button
                 type="button"
-                class="w-full rounded border border-blue-500/40 bg-blue-500/10 px-3 py-2 text-xs font-semibold text-blue-300 hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                class="w-full rounded border border-info/40 bg-info/10 px-3 py-2 text-xs font-semibold text-primary-light hover:bg-info/20 disabled:cursor-not-allowed disabled:opacity-50"
                 :disabled="exportingAll"
                 @click="exportAllChampionsExcel"
               >
@@ -593,7 +591,7 @@
                   <div v-if="pending" class="py-6 text-text/70">
                     {{ t('statisticsPage.loading') }}
                   </div>
-                  <div v-else-if="error" class="py-2 text-sm text-red-400">{{ error }}</div>
+                  <div v-else-if="error" class="py-2 text-sm text-error">{{ error }}</div>
                   <div v-else-if="!rows.length" class="py-4 text-text/70">
                     {{ t('statisticsPage.noData') }}
                   </div>
@@ -1340,8 +1338,8 @@ function formatSigned(v: number | null | undefined): string {
 
 function deltaClass(v: number | null | undefined): string {
   if (typeof v !== 'number' || !Number.isFinite(v)) return 'text-text/60'
-  if (v > 0.05) return 'text-emerald-300'
-  if (v < -0.05) return 'text-rose-300'
+  if (v > 0.05) return 'text-info'
+  if (v < -0.05) return 'text-error/70'
   return 'text-text/70'
 }
 

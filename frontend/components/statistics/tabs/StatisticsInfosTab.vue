@@ -131,7 +131,7 @@ watch(
                 <div class="text-[10px] uppercase tracking-wide text-text/55">
                   {{ p.t('statisticsPage.overviewVersionAll') }}
                 </div>
-                <div class="text-2xl font-bold tabular-nums leading-none text-amber-300">
+                <div class="text-2xl font-bold tabular-nums leading-none text-text-accent">
                   {{ cellValue(row, 'ALL').toLocaleString() }}
                 </div>
               </div>

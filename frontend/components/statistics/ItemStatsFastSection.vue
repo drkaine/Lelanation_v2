@@ -249,7 +249,7 @@ function scrollToItemsFullTable(): void {
         class="text-base leading-none transition-colors"
         :class="
           cardIsFavorite(favoritePrefix + '.mostPick')
-            ? 'text-amber-300 hover:text-amber-200'
+            ? 'text-text-accent hover:text-accent-light'
             : 'text-text/45 grayscale hover:text-text/75'
         "
         :title="
@@ -326,7 +326,7 @@ function scrollToItemsFullTable(): void {
         class="text-base leading-none transition-colors"
         :class="
           cardIsFavorite(favoritePrefix + '.leastPick')
-            ? 'text-amber-300 hover:text-amber-200'
+            ? 'text-text-accent hover:text-accent-light'
             : 'text-text/45 grayscale hover:text-text/75'
         "
         :title="
@@ -407,7 +407,7 @@ function scrollToItemsFullTable(): void {
         class="text-base leading-none transition-colors"
         :class="
           cardIsFavorite(favoritePrefix + '.bestWr')
-            ? 'text-amber-300 hover:text-amber-200'
+            ? 'text-text-accent hover:text-accent-light'
             : 'text-text/45 grayscale hover:text-text/75'
         "
         :title="
@@ -482,7 +482,7 @@ function scrollToItemsFullTable(): void {
         class="text-base leading-none transition-colors"
         :class="
           cardIsFavorite(favoritePrefix + '.worstWr')
-            ? 'text-amber-300 hover:text-amber-200'
+            ? 'text-text-accent hover:text-accent-light'
             : 'text-text/45 grayscale hover:text-text/75'
         "
         :title="
@@ -561,7 +561,7 @@ function scrollToItemsFullTable(): void {
         class="text-base leading-none transition-colors"
         :class="
           cardIsFavorite(favoritePrefix + '.deltaPickUp')
-            ? 'text-amber-300 hover:text-amber-200'
+            ? 'text-text-accent hover:text-accent-light'
             : 'text-text/45 grayscale hover:text-text/75'
         "
         :title="
@@ -656,7 +656,7 @@ function scrollToItemsFullTable(): void {
         class="text-base leading-none transition-colors"
         :class="
           cardIsFavorite(favoritePrefix + '.deltaPickDown')
-            ? 'text-amber-300 hover:text-amber-200'
+            ? 'text-text-accent hover:text-accent-light'
             : 'text-text/45 grayscale hover:text-text/75'
         "
         :title="
@@ -751,7 +751,7 @@ function scrollToItemsFullTable(): void {
         class="text-base leading-none transition-colors"
         :class="
           cardIsFavorite(favoritePrefix + '.deltaWrUp')
-            ? 'text-amber-300 hover:text-amber-200'
+            ? 'text-text-accent hover:text-accent-light'
             : 'text-text/45 grayscale hover:text-text/75'
         "
         :title="
@@ -846,7 +846,7 @@ function scrollToItemsFullTable(): void {
         class="text-base leading-none transition-colors"
         :class="
           cardIsFavorite(favoritePrefix + '.deltaWrDown')
-            ? 'text-amber-300 hover:text-amber-200'
+            ? 'text-text-accent hover:text-accent-light'
             : 'text-text/45 grayscale hover:text-text/75'
         "
         :title="

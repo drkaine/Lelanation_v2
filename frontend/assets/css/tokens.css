@@ -279,4 +279,62 @@ body {
   --rgb-error: 239 68 68;
   --rgb-warning: 245 158 11;
   --rgb-info: var(--rgb-blue-100);
+
+  /*
+   * Layout & UI chrome
+   * - chrome: sticky nav, footer, tab bars (slightly lighter than page bg for separation)
+   * - panel: cards and elevated surfaces
+   * - border: default interactive outline (gold-tinted)
+   */
+  --color-chrome: #08101f;
+  --color-panel: var(--color-blue-600);
+  --color-panel-elevated: var(--color-grey-400);
+  --color-border: var(--color-gold-300);
+  --color-border-subtle: var(--color-grey-200);
+  --color-muted: var(--color-grey-50);
+
+  --rgb-chrome: 8 16 31;
+  --rgb-panel: var(--rgb-blue-600);
+  --rgb-panel-elevated: var(--rgb-grey-400);
+  --rgb-border: var(--rgb-gold-300);
+  --rgb-border-subtle: var(--rgb-grey-200);
+  --rgb-muted: var(--rgb-grey-50);
+
+  /* Build / guide tag gradients (shared across cards & filters) */
+  --gradient-tag-pro: linear-gradient(130deg, var(--color-gold-300) 0%, var(--color-gold-400) 100%);
+  --gradient-tag-otp: linear-gradient(130deg, var(--color-blue-100) 0%, var(--color-blue-300) 100%);
+  --gradient-tag-exotique: linear-gradient(130deg, #6e008a 0%, #420042 100%);
+  --gradient-tag-troll: linear-gradient(130deg, #e4b5e4 0%, var(--color-blue-100) 100%);
+
+  /* Tier list badges (home + stats) — gold / teal / blue spectrum only */
+  --color-tier-s: var(--color-gold-300);
+  --color-tier-a: var(--color-blue-100);
+  --color-tier-b: var(--color-blue-200);
+  --rgb-tier-s: var(--rgb-gold-300);
+  --rgb-tier-a: var(--rgb-blue-100);
+  --rgb-tier-b: var(--rgb-blue-200);
+
+  /* Tier list note badges (solid fills — statistics table palette) */
+  --color-tier-badge-s-plus: #f5c542;
+  --color-tier-badge-s: #22c55e;
+  --color-tier-badge-a: #2563eb;
+  --color-tier-badge-b: #60a5fa;
+  --color-tier-badge-c: #a855f7;
+  --color-tier-badge-d: #dc2626;
+
+  /* Default build-card border (region palette fallback) */
+  --card-border-color-default: #bba077;
+  --card-border-color-soft-default: rgb(187 160 119 / 0.45);
+  --card-border-gradient-default-strong: linear-gradient(
+    130deg,
+    #bba077 0%,
+    #5d5548 45%,
+    #1e2328 100%
+  );
+  --card-border-gradient-default-soft: linear-gradient(
+    130deg,
+    rgb(187 160 119 / 0.7) 0%,
+    rgb(93 85 72 / 0.72) 45%,
+    rgb(30 35 40 / 0.82) 100%
+  );
 }

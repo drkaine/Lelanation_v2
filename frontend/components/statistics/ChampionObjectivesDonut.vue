@@ -23,7 +23,7 @@
           :stroke-dashoffset="`-${seg.offset}`"
         />
       </svg>
-      <span class="relative z-10 text-lg font-bold text-blue-600 dark:text-blue-300">100%</span>
+      <span class="relative z-10 text-lg font-bold text-info dark:text-primary-light">100%</span>
     </div>
     <ul class="grid w-full max-w-[360px] grid-cols-2 gap-x-3 gap-y-1 text-xs text-text/85">
       <li

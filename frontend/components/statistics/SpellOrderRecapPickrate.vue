@@ -3,12 +3,12 @@
     <div class="text-[9px] font-semibold uppercase tracking-wide text-text/50">
       {{ t('statisticsPage.pickrate') }}
     </div>
-    <div class="text-base font-bold tabular-nums leading-tight text-sky-300">
+    <div class="text-base font-bold tabular-nums leading-tight text-info">
       {{ pickrate.toFixed(1) }}%
     </div>
     <div class="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-black/35" role="presentation">
       <div
-        class="h-full rounded-full bg-sky-400/85 transition-[width]"
+        class="h-full rounded-full bg-info/85 transition-[width]"
         :style="{ width: `${Math.min(100, Math.max(0, pickrate))}%` }"
       />
     </div>

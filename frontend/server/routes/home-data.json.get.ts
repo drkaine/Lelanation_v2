@@ -20,6 +20,9 @@ type EnrichedTierRow = TierRow & {
 }
 
 const HOME_ROLES = ['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT'] as const
+const HOME_DATA_CACHE_TTL_MS = 60_000
+
+let homeDataCache: { expiresAt: number; payload: unknown } | null = null
 
 function normalizeRole(role: string): string {
   const r = role.trim().toUpperCase()
@@ -39,6 +42,11 @@ function sortVideosByDate(videos: YouTubeVideo[]): YouTubeVideo[] {
 }
 
 export default defineEventHandler(async () => {
+  const now = Date.now()
+  if (homeDataCache && homeDataCache.expiresAt > now) {
+    return homeDataCache.payload
+  }
+
   const frontendRoot = resolveFrontendRoot()
   const fallbackPatch = readCurrentGameVersion(frontendRoot)
   const apiBase = resolveBackendBase()
@@ -85,7 +93,7 @@ export default defineEventHandler(async () => {
 
   const sortedVideos = sortVideosByDate(listAllYouTubeVideosFromDisk(frontendRoot))
 
-  return {
+  const payload = {
     patch,
     season: lolSeasonFromGameVersion(patch),
     recentBuilds: recentPayload.builds ?? [],
@@ -95,4 +103,7 @@ export default defineEventHandler(async () => {
     videoCount: sortedVideos.length,
     latestVideos: sortedVideos.slice(0, 6),
   }
+
+  homeDataCache = { expiresAt: now + HOME_DATA_CACHE_TTL_MS, payload }
+  return payload
 })

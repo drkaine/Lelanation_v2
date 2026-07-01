@@ -3,7 +3,7 @@
     :href="video.url"
     target="_blank"
     rel="noopener noreferrer"
-    class="group overflow-hidden rounded-2xl border border-accent/70 bg-surface/80 shadow-lg shadow-black/20 backdrop-blur-sm transition hover:border-accent hover:shadow-black/35"
+    class="ui-build-card-surface group overflow-hidden rounded-2xl transition hover:shadow-[0_4px_18px_var(--card-border-color-soft)]"
     :class="{ 'video-grid-card--compact': compact }"
   >
     <div class="relative aspect-video w-full overflow-hidden bg-black/40">

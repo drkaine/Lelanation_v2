@@ -29,6 +29,12 @@ export default {
         error: 'rgb(var(--rgb-error) / <alpha-value>)',
         warning: 'rgb(var(--rgb-warning) / <alpha-value>)',
         info: 'rgb(var(--rgb-info) / <alpha-value>)',
+        chrome: 'rgb(var(--rgb-chrome) / <alpha-value>)',
+        panel: 'rgb(var(--rgb-panel) / <alpha-value>)',
+        'panel-elevated': 'rgb(var(--rgb-panel-elevated) / <alpha-value>)',
+        border: 'rgb(var(--rgb-border) / <alpha-value>)',
+        'border-subtle': 'rgb(var(--rgb-border-subtle) / <alpha-value>)',
+        muted: 'rgb(var(--rgb-muted) / <alpha-value>)',
       },
       spacing: {
         ...defaultTheme.spacing,

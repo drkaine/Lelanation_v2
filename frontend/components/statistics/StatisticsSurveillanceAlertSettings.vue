@@ -4,7 +4,7 @@
       {{ t('statisticsPage.settingsAlertsDescription') }}
     </p>
 
-    <p v-if="feedback" class="text-xs" :class="feedbackOk ? 'text-emerald-300' : 'text-amber-200'">
+    <p v-if="feedback" class="text-xs" :class="feedbackOk ? 'text-info' : 'text-accent-light'">
       {{ feedback }}
     </p>
 
@@ -125,7 +125,7 @@
             class="stats-division-btn rounded p-0.5 transition-colors"
             :class="
               pendingRankTiers.includes(tier)
-                ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
+                ? 'bg-info/20 ring-1 ring-info/60'
                 : 'bg-black/20 hover:bg-white/10'
             "
             :title="formatDivisionLabel(tier)"
@@ -178,7 +178,7 @@
             class="stats-division-btn rounded p-0.5 transition-colors"
             :class="
               selectedProfile.rankTiers.includes(tier)
-                ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
+                ? 'bg-info/20 ring-1 ring-info/60'
                 : 'bg-black/20 hover:bg-white/10'
             "
             :title="formatDivisionLabel(tier)"
@@ -240,7 +240,7 @@
             placeholder="YYYY-MM-DD"
             maxlength="10"
             class="min-w-[8.5rem] rounded border border-primary/35 bg-background px-2 py-1 text-xs text-text placeholder:text-text/45"
-            :class="referenceDateInvalid ? 'border-amber-500/60' : ''"
+            :class="referenceDateInvalid ? 'border-accent/60' : ''"
             @input="onReferenceDateTextInput(($event.target as HTMLInputElement).value)"
             @blur="commitReferenceDateText"
           />
@@ -265,7 +265,7 @@
         <p v-else class="text-xs text-text/55">
           {{ t('statisticsPage.settingsAlertsReferenceDateRangeLoading') }}
         </p>
-        <p v-if="referenceDateInvalid" class="text-xs text-amber-200/90">
+        <p v-if="referenceDateInvalid" class="text-xs text-accent-light/90">
           {{ t('statisticsPage.settingsAlertsReferenceDateInvalid') }}
         </p>
       </div>
@@ -404,7 +404,7 @@
         {{ t('statisticsPage.settingsAlertsSaveAndCheck') }}
       </button>
     </div>
-    <p v-if="watchedCount === 0" class="text-xs text-amber-200/90">
+    <p v-if="watchedCount === 0" class="text-xs text-accent-light/90">
       {{ t('statisticsPage.settingsAlertsTestNoWatchlist') }}
     </p>
   </section>

@@ -174,10 +174,10 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
   /** Couleurs type LoLalytics pour WR % (sur 0–100). */
   function tierListWinrateClass(pct: number): string {
     if (!Number.isFinite(pct)) return 'text-text/80'
-    if (pct >= 52.5) return 'font-medium text-green-400'
-    if (pct >= 51) return 'text-green-500/95'
-    if (pct >= 50) return 'text-sky-200/85'
-    return 'text-red-400/90'
+    if (pct >= 52.5) return 'font-medium text-info'
+    if (pct >= 51) return 'text-info/95'
+    if (pct >= 50) return 'text-primary-light/85'
+    return 'text-error/90'
   }
 
   /** Tier list rows with optional delta (global winrate - highElo winrate). */
@@ -220,14 +220,14 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
   }
 
   function tierListPatchDeltaClass(pp: number): string {
-    if (pp > 0.05) return 'text-green-400/90'
-    if (pp < -0.05) return 'text-red-400/90'
+    if (pp > 0.05) return 'text-info/90'
+    if (pp < -0.05) return 'text-error/90'
     return 'text-text/55'
   }
 
   function tierListPatchDeltaGamesClass(n: number): string {
-    if (n > 0) return 'text-green-400/90'
-    if (n < 0) return 'text-red-400/90'
+    if (n > 0) return 'text-info/90'
+    if (n < 0) return 'text-error/90'
     return 'text-text/55'
   }
 
@@ -424,8 +424,8 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
   }
 
   function tierListPatchDeltaRankClass(delta: number): string {
-    if (delta > 0) return 'text-green-400/90'
-    if (delta < 0) return 'text-red-400/90'
+    if (delta > 0) return 'text-info/90'
+    if (delta < 0) return 'text-error/90'
     return 'text-text/55'
   }
 

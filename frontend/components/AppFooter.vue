@@ -125,6 +125,6 @@ footer {
 }
 
 .footer-shell {
-  background: #08101f;
+  background: rgb(var(--rgb-chrome) / 1);
 }
 </style>

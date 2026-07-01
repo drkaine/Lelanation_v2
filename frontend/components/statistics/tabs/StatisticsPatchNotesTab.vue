@@ -116,9 +116,9 @@ function changeTypeLabel(type: PatchNotesChangeType): string {
 }
 
 function changeTypeClass(type: PatchNotesChangeType): string {
-  if (type === 'up') return 'text-emerald-300'
-  if (type === 'nerf') return 'text-rose-300'
-  return 'text-amber-200'
+  if (type === 'up') return 'text-info'
+  if (type === 'nerf') return 'text-error/70'
+  return 'text-accent-light'
 }
 
 function formatRegularity(value: number): string {
@@ -203,23 +203,23 @@ function patchNotesMessage(message: string | undefined): string {
             </div>
           </div>
           <div class="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
-            <div class="rounded bg-emerald-500/10 px-2 py-1.5">
+            <div class="rounded bg-info/10 px-2 py-1.5">
               <div class="text-[10px] uppercase text-text/55">
                 {{ p.t('statisticsPage.patchNotesColUp') }}
               </div>
-              <div class="font-bold tabular-nums text-emerald-300">{{ row.countUp }}</div>
+              <div class="font-bold tabular-nums text-info">{{ row.countUp }}</div>
             </div>
-            <div class="rounded bg-rose-500/10 px-2 py-1.5">
+            <div class="rounded bg-error/10 px-2 py-1.5">
               <div class="text-[10px] uppercase text-text/55">
                 {{ p.t('statisticsPage.patchNotesColNerf') }}
               </div>
-              <div class="font-bold tabular-nums text-rose-300">{{ row.countNerf }}</div>
+              <div class="font-bold tabular-nums text-error/70">{{ row.countNerf }}</div>
             </div>
-            <div class="rounded bg-amber-500/10 px-2 py-1.5">
+            <div class="rounded bg-accent/10 px-2 py-1.5">
               <div class="text-[10px] uppercase text-text/55">
                 {{ p.t('statisticsPage.patchNotesColAdjust') }}
               </div>
-              <div class="font-bold tabular-nums text-amber-200">{{ row.countAjust }}</div>
+              <div class="font-bold tabular-nums text-accent-light">{{ row.countAjust }}</div>
             </div>
           </div>
           <div
@@ -337,9 +337,11 @@ function patchNotesMessage(message: string | undefined): string {
                   </div>
                 </div>
               </td>
-              <td class="px-2 py-2 text-right tabular-nums text-emerald-300">{{ row.countUp }}</td>
-              <td class="px-2 py-2 text-right tabular-nums text-rose-300">{{ row.countNerf }}</td>
-              <td class="px-2 py-2 text-right tabular-nums text-amber-200">{{ row.countAjust }}</td>
+              <td class="px-2 py-2 text-right tabular-nums text-info">{{ row.countUp }}</td>
+              <td class="px-2 py-2 text-right tabular-nums text-error/70">{{ row.countNerf }}</td>
+              <td class="px-2 py-2 text-right tabular-nums text-accent-light">
+                {{ row.countAjust }}
+              </td>
               <td class="px-2 py-2 text-right font-semibold tabular-nums">
                 {{ row.totalChanges }}
               </td>

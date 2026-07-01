@@ -25,7 +25,7 @@ const p = inject('statisticsPageCtx') as any
                 class="shrink-0 text-base leading-none transition-colors"
                 :class="
                   p.cardIsFavorite('team.sideWinrateDonut')
-                    ? 'text-amber-300 hover:text-amber-200'
+                    ? 'text-text-accent hover:text-accent-light'
                     : 'text-text/45 grayscale hover:text-text/75'
                 "
                 :title="
@@ -82,7 +82,7 @@ const p = inject('statisticsPageCtx') as any
                   stroke="currentColor"
                   stroke-width="14"
                   stroke-linecap="butt"
-                  class="text-sky-500 dark:text-sky-400"
+                  class="text-info dark:text-info"
                   :stroke-dasharray="p.sidesDonutBlueDash + ' ' + p.sidesDonutCircumference"
                   stroke-dashoffset="0"
                 />
@@ -94,23 +94,23 @@ const p = inject('statisticsPageCtx') as any
                   stroke="currentColor"
                   stroke-width="14"
                   stroke-linecap="butt"
-                  class="text-rose-500 dark:text-rose-400"
+                  class="text-error/900 text-error"
                   :stroke-dasharray="p.sidesDonutRedDash + ' ' + p.sidesDonutCircumference"
                   :stroke-dashoffset="-p.sidesDonutBlueDash"
                 />
               </svg>
               <div class="relative z-10 flex flex-col items-center text-center">
-                <span class="block text-xl font-bold text-sky-600 dark:text-sky-300">
+                <span class="block text-xl font-bold text-info dark:text-info">
                   {{ p.sidesDonutBluePct }}%
                 </span>
-                <span class="block text-lg font-medium text-rose-600 dark:text-rose-300">
+                <span class="block text-lg font-medium text-error text-error/70">
                   {{ p.sidesDonutRedPct }}%
                 </span>
               </div>
             </div>
           </div>
           <div
-            class="fast-stat-card w-full max-w-full rounded-lg border border-sky-400/55 bg-sky-500/5 p-2"
+            class="fast-stat-card w-full max-w-full rounded-lg border border-info/55 bg-info/5 p-2"
           >
             <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
               <button
@@ -118,7 +118,7 @@ const p = inject('statisticsPageCtx') as any
                 class="shrink-0 text-base leading-none transition-colors"
                 :class="
                   p.cardIsFavorite('team.blueMatchOutcome')
-                    ? 'text-amber-300 hover:text-amber-200'
+                    ? 'text-text-accent hover:text-accent-light'
                     : 'text-text/45 grayscale hover:text-text/75'
                 "
                 :title="
@@ -168,7 +168,7 @@ const p = inject('statisticsPageCtx') as any
                   Total: {{ Number(p.sidesSurrenderBySide.blue.total).toLocaleString() }}
                 </div>
                 <div class="flex items-center gap-2 text-text/85">
-                  <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-300" />
+                  <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-accent" />
                   &lt;15 min surrender:
                   {{ Number(p.sidesSurrenderBySide.blue.earlySurrenderCount).toLocaleString() }}
                   ({{
@@ -179,7 +179,7 @@ const p = inject('statisticsPageCtx') as any
                   }}%)
                 </div>
                 <div class="flex items-center gap-2 text-text/85">
-                  <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-100" />
+                  <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-accent-light" />
                   Surrender: {{ p.sidesBlueSurrenderOnlyCount.toLocaleString() }} ({{
                     p.matchOutcomePct(
                       p.sidesBlueSurrenderOnlyCount,
@@ -188,9 +188,7 @@ const p = inject('statisticsPageCtx') as any
                   }}%)
                 </div>
                 <div class="flex items-center gap-2 text-text/85">
-                  <span
-                    class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-sky-400 dark:bg-sky-500"
-                  />
+                  <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-info" />
                   Jouees: {{ p.sidesBluePlayedCount.toLocaleString() }} ({{
                     p.matchOutcomePct(
                       p.sidesBluePlayedCount,
@@ -205,7 +203,7 @@ const p = inject('statisticsPageCtx') as any
             </div>
           </div>
           <div
-            class="fast-stat-card w-full max-w-full rounded-lg border border-rose-400/55 bg-rose-500/5 p-2"
+            class="fast-stat-card w-full max-w-full rounded-lg border border-error/55 bg-error/5 p-2"
           >
             <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
               <button
@@ -213,7 +211,7 @@ const p = inject('statisticsPageCtx') as any
                 class="shrink-0 text-base leading-none transition-colors"
                 :class="
                   p.cardIsFavorite('team.redMatchOutcome')
-                    ? 'text-amber-300 hover:text-amber-200'
+                    ? 'text-text-accent hover:text-accent-light'
                     : 'text-text/45 grayscale hover:text-text/75'
                 "
                 :title="
@@ -263,7 +261,7 @@ const p = inject('statisticsPageCtx') as any
                   Total: {{ Number(p.sidesSurrenderBySide.red.total).toLocaleString() }}
                 </div>
                 <div class="flex items-center gap-2 text-text/85">
-                  <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-300" />
+                  <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-accent" />
                   &lt;15 min surrender:
                   {{ Number(p.sidesSurrenderBySide.red.earlySurrenderCount).toLocaleString() }}
                   ({{
@@ -274,7 +272,7 @@ const p = inject('statisticsPageCtx') as any
                   }}%)
                 </div>
                 <div class="flex items-center gap-2 text-text/85">
-                  <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-100" />
+                  <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-accent-light" />
                   Surrender: {{ p.sidesRedSurrenderOnlyCount.toLocaleString() }} ({{
                     p.matchOutcomePct(
                       p.sidesRedSurrenderOnlyCount,
@@ -283,9 +281,7 @@ const p = inject('statisticsPageCtx') as any
                   }}%)
                 </div>
                 <div class="flex items-center gap-2 text-text/85">
-                  <span
-                    class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-rose-400 dark:bg-rose-500"
-                  />
+                  <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-error" />
                   Jouees: {{ p.sidesRedPlayedCount.toLocaleString() }} ({{
                     p.matchOutcomePct(
                       p.sidesRedPlayedCount,

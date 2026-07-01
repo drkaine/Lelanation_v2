@@ -324,8 +324,8 @@ function sortIcon(key: SortKey): string {
 
 function winrateClass(value: number | null | undefined): string {
   if (value == null) return 'text-text/55'
-  if (value > 51) return 'text-green-400/90'
-  if (value < 49) return 'text-red-400/90'
+  if (value > 51) return 'text-info/90'
+  if (value < 49) return 'text-error/90'
   return 'text-text/80'
 }
 

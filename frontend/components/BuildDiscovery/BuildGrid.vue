@@ -18,14 +18,14 @@
       </NuxtLink>
     </div>
 
-    <div v-else class="build-grid-list" :class="{ 'build-grid-list--six': props.sixColumnGrid }">
+    <div v-else class="build-grid-list">
       <div
         v-for="build in builds"
         :key="build.id"
         class="build-grid-item"
         :data-active-sub-index="displayedSubMap[build.id] ?? ''"
       >
-        <div class="mb-[3px] flex w-full items-center gap-2">
+        <div class="build-grid-top-bar mb-[3px] flex w-full items-center gap-2">
           <div class="build-grid-top-icon-slot">
             <button
               v-if="hasBuildDescription(build)"
@@ -158,11 +158,7 @@
           <button
             v-if="props.showFavoriteToggle"
             class="build-grid-action-button build-grid-action-button--icon"
-            :class="
-              favoritesStore.isFavorite(build.id)
-                ? 'border-amber-500 bg-amber-500/15 text-amber-500 hover:bg-amber-500/25'
-                : 'border-amber-500/70 bg-surface text-amber-500/70 hover:bg-amber-500/15 hover:text-amber-500'
-            "
+            :class="uiFavoriteActionClass(favoritesStore.isFavorite(build.id))"
             :title="
               favoritesStore.isFavorite(build.id)
                 ? t('buildDiscovery.removeFavorite')
@@ -208,11 +204,7 @@
             <!-- Bouton Upvote -->
             <button
               class="build-grid-action-button build-grid-action-button--vote"
-              :class="
-                getUserVote(build.id) === 'up'
-                  ? 'bg-green-600 text-white hover:bg-green-700'
-                  : 'border border-green-600 bg-surface text-green-600 hover:bg-green-50'
-              "
+              :class="uiUpvoteActionClass(getUserVote(build.id) === 'up')"
               :title="
                 getUserVote(build.id) === 'up'
                   ? t('buildDiscovery.removeUpvote')
@@ -231,11 +223,7 @@
             <!-- Bouton Downvote -->
             <button
               class="build-grid-action-button build-grid-action-button--vote"
-              :class="
-                getUserVote(build.id) === 'down'
-                  ? 'bg-red-600 text-white hover:bg-red-700'
-                  : 'border border-red-600 bg-surface text-red-600 hover:bg-red-50'
-              "
+              :class="uiDownvoteActionClass(getUserVote(build.id) === 'down')"
               :title="
                 getUserVote(build.id) === 'down'
                   ? t('buildDiscovery.removeDownvote')
@@ -497,7 +485,6 @@ import type { Build } from '~/types/build'
 import { useClientHydrated } from '~/composables/useClientHydrated'
 import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 import { useLayoutScaled } from '~/composables/useLayoutScaled'
-import { useMobileViewport } from '~/composables/useMobileViewport'
 import { useAdminAuth } from '~/composables/useAdminAuth'
 import { apiUrl } from '~/utils/apiUrl'
 import {
@@ -507,6 +494,11 @@ import {
 import { useChampionSplashPreference } from '~/composables/useChampionSplashPreference'
 import { startMatchupGuideFromBuild } from '~/utils/matchupGuideFromBuildSession'
 import { matchesChampionSearch, matchesLocalizedTextSearch } from '~/utils/multilingualEntitySearch'
+import {
+  uiDownvoteActionClass,
+  uiFavoriteActionClass,
+  uiUpvoteActionClass,
+} from '~/utils/uiColorClasses'
 
 function buildMatchesSearchQuery(build: Build, query: string): boolean {
   if (matchesLocalizedTextSearch(query, [build.name, build.author])) return true
@@ -528,7 +520,6 @@ const { championSplashEnabled } = useChampionSplashPreference()
 const buildStore = useBuildStore()
 const { hydrated } = useClientHydrated()
 const { isLayoutScaled } = useLayoutScaled()
-const { isMobileViewport } = useMobileViewport()
 
 // Global tooltip preference (shared state via composable)
 const { tooltipsEnabled } = useTooltipsPreference()
@@ -562,7 +553,7 @@ const buildGridVars = computed(() => {
 
   return {
     '--build-grid-gap': props.gridGap,
-    '--build-grid-card-width': props.sixColumnGrid && isMobileViewport.value ? '100%' : scaledWidth,
+    '--build-grid-card-width': scaledWidth,
   }
 })
 
@@ -602,9 +593,7 @@ interface Props {
   hideBottomActions?: boolean
   /** Show every custom build without discovery pagination. */
   showAllCustomBuilds?: boolean
-  /** Home preview: responsive grid that wraps build cards to multiple rows. */
-  sixColumnGrid?: boolean
-  /** Gap between cards in the grid (e.g. `5px`, `15px`). */
+  /** Gap between cards in the grid (e.g. `15px`). */
   gridGap?: string
 }
 
@@ -615,7 +604,6 @@ const props = withDefaults(defineProps<Props>(), {
   showFavoriteToggle: false,
   hideBottomActions: false,
   showAllCustomBuilds: false,
-  sixColumnGrid: false,
   gridGap: '15px',
 })
 
@@ -1136,30 +1124,6 @@ onUnmounted(() => {
   box-sizing: border-box;
 }
 
-.build-grid-list--six {
-  display: grid;
-  width: 100%;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
-  gap: var(--build-grid-gap, 15px);
-  justify-items: center;
-  align-items: start;
-  padding-inline: 5px;
-  box-sizing: border-box;
-}
-
-.build-grid-list--six .build-grid-item {
-  width: min(100%, var(--build-grid-card-width));
-  max-width: var(--build-grid-card-width);
-  min-height: 0;
-  padding-bottom: 8px;
-}
-
-.build-grid-list--six .build-grid-item > .relative {
-  display: flex;
-  justify-content: center;
-  width: 100%;
-}
-
 .build-grid-item {
   padding-bottom: 15px;
   display: flex;
@@ -1183,13 +1147,17 @@ onUnmounted(() => {
   flex: 0 0 30px;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgb(var(--rgb-accent) / 0.55);
+  border: 2px solid transparent;
   border-radius: 8px;
-  background: rgb(var(--rgb-background) / 0.22);
+  background-image:
+    linear-gradient(var(--color-blue-500), var(--color-blue-500)),
+    var(--card-border-gradient-default-strong);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.45);
   color: rgb(var(--rgb-text));
   transition:
-    background-color 0.2s ease,
-    border-color 0.2s ease,
+    box-shadow 0.2s ease,
     color 0.2s ease;
 }
 
@@ -1198,38 +1166,9 @@ onUnmounted(() => {
   height: 30px;
 }
 
-.build-grid-top-icon-button--delete {
-  border-color: rgb(127 29 29 / 0.85);
-  background: rgb(127 29 29 / 0.28);
-  color: rgb(254 202 202);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.build-grid-top-icon-button--delete:hover {
-  border-color: rgb(153 27 27 / 1);
-  background: rgb(153 27 27 / 0.5);
-  color: rgb(254 226 226);
-}
-
-.build-grid-top-icon-button--edit {
-  border-color: rgb(56 189 248 / 0.85);
-  background: rgb(56 189 248 / 0.24);
-  color: rgb(186 230 253);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.build-grid-top-icon-button--edit:hover {
-  border-color: rgb(14 165 233 / 1);
-  background: rgb(14 165 233 / 0.42);
-  color: rgb(224 242 254);
-}
-
 .build-grid-top-icon-button:hover {
-  background: rgb(var(--rgb-accent) / 0.14);
-  border-color: rgb(var(--rgb-accent) / 0.8);
-  color: var(--color-accent);
+  box-shadow: 0 4px 14px var(--card-border-color-soft-default);
+  color: var(--color-gold-300);
 }
 
 .build-grid-author-row {
@@ -1278,49 +1217,47 @@ onUnmounted(() => {
 }
 
 .build-grid-action-button--companion {
-  border-color: rgb(3 151 171 / 0.85);
-  background: rgb(3 151 171 / 0.16);
-  color: rgb(207 250 254);
+  border-color: rgb(var(--rgb-info) / 0.85);
+  background: rgb(var(--rgb-info) / 0.16);
+  color: rgb(var(--rgb-primary-light) / 1);
   font-weight: 700;
 }
 
 .build-grid-action-button--companion:hover {
-  border-color: rgb(3 151 171 / 1);
-  background: rgb(3 151 171 / 0.3);
+  border-color: rgb(var(--rgb-info) / 1);
+  background: rgb(var(--rgb-info) / 0.3);
 }
 
 .build-grid-action-button--delete {
-  border-color: rgb(127 29 29 / 0.85);
-  background: rgb(127 29 29 / 0.28);
-  color: rgb(254 202 202);
+  border-color: rgb(var(--rgb-error) / 0.85);
+  background: rgb(var(--rgb-error) / 0.28);
+  color: rgb(var(--rgb-text) / 1);
   font-size: 13px;
   font-weight: 700;
 }
 
 .build-grid-action-button--delete:hover {
-  border-color: rgb(153 27 27 / 1);
-  background: rgb(153 27 27 / 0.5);
-  color: rgb(254 226 226);
+  border-color: rgb(var(--rgb-error) / 1);
+  background: rgb(var(--rgb-error) / 0.5);
 }
 
 .build-grid-action-button--edit {
-  border-color: rgb(56 189 248 / 0.85);
-  background: rgb(56 189 248 / 0.24);
-  color: rgb(186 230 253);
+  border-color: rgb(var(--rgb-info) / 0.85);
+  background: rgb(var(--rgb-info) / 0.24);
+  color: rgb(var(--rgb-primary-light) / 1);
   font-size: 13px;
   font-weight: 700;
 }
 
 .build-grid-action-button--edit:hover {
-  border-color: rgb(14 165 233 / 1);
-  background: rgb(14 165 233 / 0.42);
-  color: rgb(224 242 254);
+  border-color: rgb(var(--rgb-info) / 1);
+  background: rgb(var(--rgb-info) / 0.42);
 }
 
 .build-grid-action-button--guide {
-  border-color: rgb(251 191 36 / 0.85);
-  background: rgb(251 191 36 / 0.18);
-  color: rgb(254 243 199);
+  border-color: rgb(var(--rgb-accent) / 0.85);
+  background: rgb(var(--rgb-accent) / 0.18);
+  color: rgb(var(--rgb-accent-light) / 1);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.02em;
@@ -1328,9 +1265,9 @@ onUnmounted(() => {
 }
 
 .build-grid-action-button--guide:hover {
-  border-color: rgb(245 158 11 / 1);
-  background: rgb(245 158 11 / 0.35);
-  color: rgb(255 251 235);
+  border-color: rgb(var(--rgb-accent) / 1);
+  background: rgb(var(--rgb-accent) / 0.35);
+  color: rgb(var(--rgb-text) / 1);
 }
 
 .pagination-btn {
@@ -1351,17 +1288,6 @@ onUnmounted(() => {
   .build-grid-list {
     justify-content: center;
     padding-inline: 0;
-  }
-
-  .build-grid-list--six {
-    grid-template-columns: 1fr;
-    gap: var(--build-grid-gap, 15px);
-  }
-
-  .build-grid-list--six .build-grid-item {
-    width: 100%;
-    max-width: 100%;
-    min-height: 0;
   }
 }
 </style>

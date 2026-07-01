@@ -70,11 +70,11 @@ const centerPct = computed(() => {
 const centerPctClass = computed(() => {
   switch (props.sideAccent) {
     case 'blue':
-      return 'block text-xl font-bold text-sky-600 dark:text-sky-300'
+      return 'block text-xl font-bold text-info dark:text-info'
     case 'red':
-      return 'block text-xl font-bold text-rose-600 dark:text-rose-300'
+      return 'block text-xl font-bold text-error text-error/70'
     default:
-      return 'block text-xl font-bold text-blue-600 dark:text-blue-400'
+      return 'block text-xl font-bold text-info text-info'
   }
 })
 </script>

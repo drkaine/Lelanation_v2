@@ -82,7 +82,7 @@ const trendMonthsWindowModel = computed({
           class="rounded px-2 py-1 font-medium transition-colors"
           :class="
             charts.trendRangeMode.value === '7d'
-              ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+              ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
               : 'bg-black/20 text-text/85 hover:bg-white/10'
           "
           @click="charts.trendRangeMode.value = '7d'"
@@ -94,7 +94,7 @@ const trendMonthsWindowModel = computed({
           class="rounded px-2 py-1 font-medium transition-colors"
           :class="
             charts.trendRangeMode.value === '14d'
-              ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+              ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
               : 'bg-black/20 text-text/85 hover:bg-white/10'
           "
           @click="charts.trendRangeMode.value = '14d'"
@@ -106,7 +106,7 @@ const trendMonthsWindowModel = computed({
           class="rounded px-2 py-1 font-medium transition-colors"
           :class="
             charts.trendRangeMode.value === 'months'
-              ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+              ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
               : 'bg-black/20 text-text/85 hover:bg-white/10'
           "
           @click="charts.trendRangeMode.value = 'months'"
@@ -139,7 +139,7 @@ const trendMonthsWindowModel = computed({
           class="rounded px-2 py-1 font-medium transition-colors"
           :class="
             charts.trendDivisionPreset.value === 'selected'
-              ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+              ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
               : 'bg-black/20 text-text/85 hover:bg-white/10'
           "
           @click="charts.setTrendDivisionPreset('selected')"
@@ -151,7 +151,7 @@ const trendMonthsWindowModel = computed({
           class="rounded px-2 py-1 font-medium transition-colors"
           :class="
             charts.trendDivisionPreset.value === 'average'
-              ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+              ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
               : 'bg-black/20 text-text/85 hover:bg-white/10'
           "
           @click="charts.setTrendDivisionPreset('average')"
@@ -163,7 +163,7 @@ const trendMonthsWindowModel = computed({
           class="rounded px-2 py-1 font-medium transition-colors"
           :class="
             charts.trendDivisionPreset.value === 'skilled'
-              ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+              ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
               : 'bg-black/20 text-text/85 hover:bg-white/10'
           "
           @click="charts.setTrendDivisionPreset('skilled')"
@@ -175,7 +175,7 @@ const trendMonthsWindowModel = computed({
           class="rounded px-2 py-1 font-medium transition-colors"
           :class="
             charts.trendDivisionPreset.value === 'elite'
-              ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+              ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
               : 'bg-black/20 text-text/85 hover:bg-white/10'
           "
           @click="charts.setTrendDivisionPreset('elite')"

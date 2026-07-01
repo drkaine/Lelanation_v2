@@ -9,7 +9,7 @@
       class="rounded p-1 transition"
       :class="
         modelValue.increase
-          ? 'bg-emerald-500/20 text-emerald-300'
+          ? 'bg-info/20 text-info'
           : 'text-text/40 hover:bg-primary/10 hover:text-text/70'
       "
       :title="t('statisticsPage.settingsAlertsDeltaDirectionIncrease')"
@@ -24,7 +24,7 @@
       class="rounded p-1 transition"
       :class="
         modelValue.decrease
-          ? 'bg-red-500/20 text-red-300'
+          ? 'bg-error/20 text-error/70'
           : 'text-text/40 hover:bg-primary/10 hover:text-text/70'
       "
       :title="t('statisticsPage.settingsAlertsDeltaDirectionDecrease')"

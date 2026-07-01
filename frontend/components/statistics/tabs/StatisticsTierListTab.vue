@@ -634,7 +634,7 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
           <div class="min-w-0 flex-1">
             <div class="flex gap-0.5">
               <div
-                class="relative z-[4] w-7 shrink-0 overflow-visible text-[10px] leading-none text-amber-100/80 md:w-8"
+                class="relative z-[4] w-7 shrink-0 overflow-visible text-[10px] leading-none text-accent-light/80 md:w-8"
               >
                 <div class="tier-list-chart-plot relative overflow-visible">
                   <div class="absolute inset-0 overflow-visible">
@@ -660,7 +660,7 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
                       v-for="(seg, idx) in p.tierListChartYBandSegments"
                       :key="'yband-' + idx"
                       class="pointer-events-none absolute left-0 right-0 z-0"
-                      :class="seg.shaded ? 'bg-amber-400/[0.09]' : 'bg-amber-950/[0.12]'"
+                      :class="seg.shaded ? 'bg-accent/[0.09]' : 'bg-accent-dark/[0.12]'"
                       :style="{
                         bottom: seg.bottomPct + '%',
                         height: seg.heightPct + '%',
@@ -672,10 +672,10 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
                       class="pointer-events-none absolute left-0 right-0 z-[1] h-px"
                       :class="
                         score === 0
-                          ? 'bg-amber-400/45'
+                          ? 'bg-accent/45'
                           : Math.abs(score) === 500
-                            ? 'bg-amber-400/35'
-                            : 'bg-amber-400/12'
+                            ? 'bg-accent/35'
+                            : 'bg-accent/12'
                       "
                       :style="{
                         bottom:
@@ -737,7 +737,7 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
                 <Teleport to="body">
                   <div
                     v-if="p.tierListChartTooltip && p.tierListChartTooltipRow"
-                    class="pointer-events-none fixed z-[300] w-max max-w-[17rem] rounded border border-amber-500/45 bg-[#0c1222] p-2 text-left text-xs text-amber-50 shadow-xl"
+                    class="pointer-events-none fixed z-[300] w-max max-w-[17rem] rounded border border-accent/45 bg-panel p-2 text-left text-xs text-accent-light shadow-xl"
                     :style="{
                       left: p.tierListChartTooltip.x + 'px',
                       top: p.tierListChartTooltip.y + 'px',
@@ -757,13 +757,13 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
                         class="h-8 w-8 shrink-0 rounded object-cover"
                       />
                       <div class="min-w-0">
-                        <div class="truncate font-semibold text-amber-100">
+                        <div class="truncate font-semibold text-accent-light">
                           {{
                             p.championName(p.tierListChartTooltipRow.championId) ||
                             p.tierListChartTooltipRow.championId
                           }}
                         </div>
-                        <div class="text-[11px] text-amber-200/75">
+                        <div class="text-[11px] text-accent-light/75">
                           Score {{ p.formatMatchupScore(p.tierListChartTooltipRow.pbi, 2) }}
                         </div>
                         <div
@@ -794,7 +794,7 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
                   </div>
                 </Teleport>
                 <div
-                  class="relative z-10 flex h-[52px] items-center justify-stretch gap-px border-t border-amber-400/25 bg-[#08101f] px-0.5 pt-1"
+                  class="relative z-10 flex h-[52px] items-center justify-stretch gap-px border-t border-accent/25 bg-chrome px-0.5 pt-1"
                 >
                   <div
                     v-for="c in p.tierListChartVisibleRows"
@@ -810,13 +810,13 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
                         )
                       "
                       :alt="p.championName(c.championId) || String(c.championId)"
-                      class="h-9 w-9 shrink-0 rounded-full border border-amber-400/30 object-cover"
+                      class="h-9 w-9 shrink-0 rounded-full border border-accent/30 object-cover"
                       width="36"
                       height="36"
                     />
                     <span
                       v-else
-                      class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-amber-400/25 bg-black/40 text-[10px] font-semibold text-white/80"
+                      class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-accent/25 bg-black/40 text-[10px] font-semibold text-white/80"
                     >
                       {{ (p.championName(c.championId) || String(c.championId)).slice(0, 2) }}
                     </span>

@@ -495,7 +495,7 @@ if (import.meta.client) {
   position: sticky;
   top: 0;
   z-index: 58;
-  background: #08101f;
+  background: rgb(var(--rgb-chrome) / 1);
 }
 
 .app-chrome-sticky :deep(.header) {
@@ -724,7 +724,7 @@ html[data-stats-cards='1'] .champion-stats .hidden.md\:block {
 
   html[data-stats-cards='1'] .statistics-surrender-mobile-card {
     padding: 0.75rem !important;
-    background: rgb(8 16 31 / 0.45) !important;
+    background: rgb(var(--rgb-chrome) / 0.45) !important;
     box-shadow: none !important;
   }
 
@@ -874,12 +874,12 @@ html[data-stats-cards='1'] .champion-stats .hidden.md\:block {
 
 .scrollable-tabs-scroll-wrap::before {
   left: 0;
-  background: linear-gradient(to right, rgb(8 16 31 / 0.92), transparent);
+  background: linear-gradient(to right, rgb(var(--rgb-chrome) / 0.92), transparent);
 }
 
 .scrollable-tabs-scroll-wrap::after {
   right: 0;
-  background: linear-gradient(to left, rgb(8 16 31 / 0.92), transparent);
+  background: linear-gradient(to left, rgb(var(--rgb-chrome) / 0.92), transparent);
 }
 
 .scrollable-tabs-nav > * {

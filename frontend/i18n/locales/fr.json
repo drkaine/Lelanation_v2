@@ -2693,6 +2693,7 @@
     "notFound": "Aucune note de patch disponible.",
     "eyebrow": "League of Legends",
     "title": "Patch {version}",
+    "titleLabel": "Patch",
     "selectPatch": "Choisir un patch",
     "searchPlaceholder": "Rechercher un champion, objet…",
     "noSearchResults": "Aucun résultat pour « {query} »",

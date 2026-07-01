@@ -17,6 +17,256 @@
   }
 }
 
+@layer components {
+  .ui-chrome-bg {
+    background-color: rgb(var(--rgb-chrome) / 1);
+  }
+
+  /* Same surface as BuildCard / MatchupGuideCard (blue fill + gold border gradient) */
+  .ui-build-card-surface {
+    --card-border-color: var(--card-border-color-default);
+    --card-border-color-soft: var(--card-border-color-soft-default);
+    --card-border-gradient-strong: var(--card-border-gradient-default-strong);
+    --card-border-gradient-soft: var(--card-border-gradient-default-soft);
+    border: 2px solid transparent;
+    border-radius: 6px;
+    background-image:
+      linear-gradient(var(--color-blue-500), var(--color-blue-500)),
+      var(--card-border-gradient-strong);
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
+    box-shadow: 0 4px 12px rgb(0 0 0 / 0.5);
+  }
+
+  /* Secondary buttons — same fill/border as build cards (not gold CTA) */
+  .ui-build-card-button {
+    --card-border-color: var(--card-border-color-default);
+    --card-border-color-soft: var(--card-border-color-soft-default);
+    --card-border-gradient-strong: var(--card-border-gradient-default-strong);
+    border: 2px solid transparent;
+    border-radius: 0.5rem;
+    background-image:
+      linear-gradient(var(--color-blue-500), var(--color-blue-500)),
+      var(--card-border-gradient-strong);
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
+    box-shadow: 0 2px 8px rgb(0 0 0 / 0.45);
+    color: rgb(var(--rgb-text) / 0.92);
+    transition:
+      box-shadow 0.2s ease,
+      color 0.2s ease;
+  }
+
+  .ui-build-card-button:hover {
+    box-shadow: 0 4px 14px var(--card-border-color-soft-default);
+    color: var(--color-gold-300);
+  }
+
+  .ui-action-favorite {
+    border: 1px solid rgb(var(--rgb-accent) / 0.7);
+    background-color: rgb(var(--rgb-surface) / 1);
+    color: rgb(var(--rgb-accent) / 0.7);
+  }
+
+  .ui-action-favorite:hover {
+    border-color: rgb(var(--rgb-accent) / 1);
+    background-color: rgb(var(--rgb-accent) / 0.15);
+    color: rgb(var(--rgb-accent) / 1);
+  }
+
+  .ui-action-favorite.is-active {
+    border-color: rgb(var(--rgb-accent) / 1);
+    background-color: rgb(var(--rgb-accent) / 0.15);
+    color: rgb(var(--rgb-accent) / 1);
+  }
+
+  .ui-action-favorite.is-active:hover {
+    background-color: rgb(var(--rgb-accent) / 0.25);
+  }
+
+  .ui-action-upvote {
+    border: 1px solid rgb(var(--rgb-info) / 0.85);
+    background-color: rgb(var(--rgb-surface) / 1);
+    color: rgb(var(--rgb-info) / 1);
+  }
+
+  .ui-action-upvote:hover {
+    background-color: rgb(var(--rgb-info) / 0.12);
+  }
+
+  .ui-action-upvote.is-active {
+    border-color: rgb(var(--rgb-info) / 1);
+    background-color: rgb(var(--rgb-info) / 0.85);
+    color: rgb(var(--rgb-background) / 1);
+  }
+
+  .ui-action-upvote.is-active:hover {
+    background-color: rgb(var(--rgb-info) / 1);
+  }
+
+  .ui-action-downvote {
+    border: 1px solid rgb(var(--rgb-error) / 0.85);
+    background-color: rgb(var(--rgb-surface) / 1);
+    color: rgb(var(--rgb-error) / 1);
+  }
+
+  .ui-action-downvote:hover {
+    background-color: rgb(var(--rgb-error) / 0.12);
+  }
+
+  .ui-action-downvote.is-active {
+    border-color: rgb(var(--rgb-error) / 1);
+    background-color: rgb(var(--rgb-error) / 0.85);
+    color: rgb(var(--rgb-text) / 1);
+  }
+
+  .ui-action-downvote.is-active:hover {
+    background-color: rgb(var(--rgb-error) / 1);
+  }
+
+  .ui-tier-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 0.25rem;
+    padding: 0.125rem 0.375rem;
+    font-size: 0.625rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .ui-tier-badge--s {
+    background-color: rgb(var(--rgb-tier-s) / 0.2);
+    color: rgb(var(--rgb-tier-s) / 1);
+  }
+
+  .ui-tier-badge--a {
+    background-color: rgb(var(--rgb-tier-a) / 0.18);
+    color: rgb(var(--rgb-primary-light) / 1);
+  }
+
+  .ui-tier-badge--b {
+    background-color: rgb(var(--rgb-tier-b) / 0.18);
+    color: rgb(var(--rgb-primary-light) / 0.92);
+  }
+
+  .ui-tier-badge--default {
+    background-color: rgb(var(--rgb-surface) / 1);
+    color: rgb(var(--rgb-text) / 0.7);
+  }
+
+  /* Solid tier note badges (statistics tier list palette) */
+  .ui-statistics-tier-badge {
+    display: inline-flex;
+    min-height: 1.25rem;
+    min-width: 1.25rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.25rem;
+    padding: 0 0.125rem;
+    font-size: 0.625rem;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--color-blue-500);
+  }
+
+  .ui-statistics-tier-badge--s-plus {
+    background-color: var(--color-tier-badge-s-plus);
+  }
+
+  .ui-statistics-tier-badge--s {
+    background-color: var(--color-tier-badge-s);
+  }
+
+  .ui-statistics-tier-badge--a {
+    background-color: var(--color-tier-badge-a);
+  }
+
+  .ui-statistics-tier-badge--b {
+    background-color: var(--color-tier-badge-b);
+  }
+
+  .ui-statistics-tier-badge--c {
+    background-color: var(--color-tier-badge-c);
+  }
+
+  .ui-statistics-tier-badge--d {
+    background-color: var(--color-tier-badge-d);
+  }
+
+  .ui-tag {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.75rem;
+    height: 1.35rem;
+    padding: 0 0.4rem;
+    border-radius: 9999px;
+    border: 1px solid rgb(var(--rgb-text) / 0.28);
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: rgb(var(--rgb-text) / 0.95);
+  }
+
+  .ui-tag--pro {
+    background: var(--gradient-tag-pro);
+  }
+
+  .ui-tag--otp {
+    background: var(--gradient-tag-otp);
+  }
+
+  .ui-tag--exotique {
+    background: var(--gradient-tag-exotique);
+  }
+
+  .ui-tag--troll {
+    background: var(--gradient-tag-troll);
+  }
+
+  .ui-action-companion {
+    border-color: rgb(var(--rgb-info) / 0.85);
+    background-color: rgb(var(--rgb-info) / 0.16);
+    color: rgb(var(--rgb-primary-light) / 1);
+    font-weight: 700;
+  }
+
+  .ui-action-companion:hover {
+    border-color: rgb(var(--rgb-info) / 1);
+    background-color: rgb(var(--rgb-info) / 0.3);
+  }
+
+  .ui-action-edit {
+    border-color: rgb(var(--rgb-info) / 0.85);
+    background-color: rgb(var(--rgb-info) / 0.24);
+    color: rgb(var(--rgb-primary-light) / 1);
+    font-weight: 700;
+  }
+
+  .ui-action-edit:hover {
+    border-color: rgb(var(--rgb-info) / 1);
+    background-color: rgb(var(--rgb-info) / 0.42);
+  }
+
+  .ui-action-delete {
+    border-color: rgb(var(--rgb-error) / 0.85);
+    background-color: rgb(var(--rgb-error) / 0.28);
+    color: rgb(var(--rgb-text) / 1);
+    font-weight: 700;
+  }
+
+  .ui-action-delete:hover {
+    border-color: rgb(var(--rgb-error) / 1);
+    background-color: rgb(var(--rgb-error) / 0.5);
+  }
+
+  .ui-chrome-bg-important {
+    background: rgb(var(--rgb-chrome) / 1) !important;
+    background-color: rgb(var(--rgb-chrome) / 1) !important;
+  }
+}
+
 /* Global tooltip visual system:
    - Same background tone as nav/command filters
    - Light blue frame for every tooltip surface
@@ -34,7 +284,7 @@
     .v-popper__inner
   ) {
   background: rgb(var(--rgb-background) / 0.25) !important;
-  border: 1px solid rgb(125 211 252 / 0.75) !important;
+  border: 1px solid rgb(var(--rgb-primary-light) / 0.75) !important;
   color: rgb(var(--rgb-text)) !important;
 }
 

@@ -238,7 +238,7 @@ function rankDeltaClass(v: number): string {
         </span>
       </div>
       <template v-if="hasHighElo">
-        <div class="flex flex-wrap items-baseline justify-between gap-x-2 text-amber-200/90">
+        <div class="flex flex-wrap items-baseline justify-between gap-x-2 text-accent-light/90">
           <span>{{ t('statisticsPage.tierListHighEloRank') }}</span>
           <span class="tabular-nums">
             {{ row.highEloRank ?? '—' }}

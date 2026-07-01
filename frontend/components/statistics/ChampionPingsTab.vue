@@ -39,8 +39,8 @@ function metricDelta(key: PingsNumericKey): number | null {
 }
 
 function deltaClass(delta: number): string {
-  if (delta > 0) return 'text-emerald-400'
-  if (delta < 0) return 'text-red-400'
+  if (delta > 0) return 'text-info'
+  if (delta < 0) return 'text-error'
   return 'text-text/55'
 }
 

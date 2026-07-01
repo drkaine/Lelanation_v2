@@ -280,7 +280,7 @@ function onMeta(field: MetaField, value: string) {
 
 .matchup-finalize-form__visibility-button--active:last-child {
   background: rgb(220 38 38 / 0.9);
-  color: rgb(255 255 255);
+  color: rgb(var(--rgb-text));
 }
 
 .matchup-finalize-form__visibility-hint {

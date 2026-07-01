@@ -37,21 +37,13 @@ const tabOptions = [
     'statisticsPage.championMatchupDetailTabProfile',
     'from-violet-500/20 to-fuchsia-500/10',
   ],
-  ['lane', 'statisticsPage.championMatchupDetailTabLane', 'from-sky-500/20 to-cyan-500/10'],
-  [
-    'gankDiveRoam',
-    'statisticsPage.championMatchupDetailTabGankDive',
-    'from-rose-500/20 to-orange-500/10',
-  ],
-  [
-    'itemsFirst',
-    'statisticsPage.championMatchupDetailTabItems',
-    'from-amber-500/20 to-yellow-500/10',
-  ],
+  ['lane', 'statisticsPage.championMatchupDetailTabLane', 'from-info/20 to-info/10'],
+  ['gankDiveRoam', 'statisticsPage.championMatchupDetailTabGankDive', 'from-error/20 to-error/10'],
+  ['itemsFirst', 'statisticsPage.championMatchupDetailTabItems', 'from-accent/20 to-accent/10'],
   [
     'objectivesAndMap',
     'statisticsPage.championMatchupDetailTabObjectives',
-    'from-emerald-500/20 to-teal-500/10',
+    'from-info/20 to-info/10',
   ],
 ] as const
 
@@ -70,26 +62,26 @@ function formatGameMs(ms: number | null | undefined): string {
 }
 
 function signedClass(v: number): string {
-  if (v > 0) return 'text-emerald-300'
-  if (v < 0) return 'text-rose-300'
+  if (v > 0) return 'text-info'
+  if (v < 0) return 'text-error/70'
   return 'text-text/80'
 }
 
 function levelPillClass(level: MatchupsExtSignalLevel, side: 'strength' | 'weakness'): string {
   const base = 'rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide'
   if (side === 'strength') {
-    if (level === 'bigAdvantage') return `${base} bg-emerald-500/35 text-emerald-50`
-    if (level === 'mediumAdvantage') return `${base} bg-emerald-600/25 text-emerald-100`
-    return `${base} bg-emerald-700/20 text-emerald-200`
+    if (level === 'bigAdvantage') return `${base} bg-info/35 text-primary-light`
+    if (level === 'mediumAdvantage') return `${base} bg-info/25 text-primary-light`
+    return `${base} bg-info/20 text-info`
   }
-  if (level === 'bigDisadvantage') return `${base} bg-rose-500/35 text-rose-50`
-  if (level === 'mediumDisadvantage') return `${base} bg-rose-600/25 text-rose-100`
+  if (level === 'bigDisadvantage') return `${base} bg-error/35 text-error/90`
+  if (level === 'mediumDisadvantage') return `${base} bg-error/25 text-error/80`
   return `${base} bg-orange-600/20 text-orange-100`
 }
 
 function insightCardClass(insight: MatchupInsight): string {
   const colors = MATCHUP_CATEGORY_COLORS[insight.category]
-  const sideRing = insight.side === 'strength' ? 'ring-emerald-500/25' : 'ring-rose-500/25'
+  const sideRing = insight.side === 'strength' ? 'ring-info/25' : 'ring-error/25'
   return `rounded-lg border ${colors.border} ${colors.bg} p-2.5 ring-1 ${sideRing}`
 }
 
@@ -112,10 +104,10 @@ function comparePct(you: number, opp: number): { youWidth: number; oppWidth: num
 
 <template>
   <div
-    class="champion-matchup-detail-panel overflow-hidden rounded-xl border border-primary/30 bg-gradient-to-br from-[#0a1224] via-[#0b1528] to-[#08101f] shadow-lg shadow-black/30"
+    class="champion-matchup-detail-panel overflow-hidden rounded-xl border border-primary/30 bg-gradient-to-br from-background via-panel to-chrome shadow-lg shadow-black/30"
   >
     <div
-      class="border-b border-primary/20 bg-gradient-to-r from-primary/15 via-violet-500/10 to-cyan-500/10 px-3 py-3 sm:px-4"
+      class="border-b border-primary/20 bg-gradient-to-r from-primary/15 via-info/10 to-info/5 px-3 py-3 sm:px-4"
     >
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div class="min-w-0">
@@ -130,11 +122,7 @@ function comparePct(you: number, opp: number): { youWidth: number; oppWidth: num
             </span>
             <span
               class="rounded-full px-2 py-0.5 tabular-nums"
-              :class="
-                row.matchupScore >= 0
-                  ? 'bg-emerald-500/15 text-emerald-200'
-                  : 'bg-rose-500/15 text-rose-200'
-              "
+              :class="row.matchupScore >= 0 ? 'bg-info/15 text-info' : 'bg-error/15 text-error/80'"
             >
               {{ t('statisticsPage.championMatchupColScore') }} {{ row.matchupScore.toFixed(2) }}
             </span>
@@ -181,12 +169,12 @@ function comparePct(you: number, opp: number): { youWidth: number; oppWidth: num
 
         <div v-else class="grid grid-cols-1 gap-3 lg:grid-cols-2">
           <div
-            class="rounded-lg border border-emerald-500/25 bg-gradient-to-br from-emerald-500/10 to-emerald-900/10 p-2.5"
+            class="rounded-lg border border-info/25 bg-gradient-to-br from-info/10 to-background/40 p-2.5"
           >
             <div
-              class="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-emerald-300"
+              class="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-info"
             >
-              <span class="h-2 w-2 rounded-full bg-emerald-400" aria-hidden="true" />
+              <span class="h-2 w-2 rounded-full bg-info" aria-hidden="true" />
               {{ t('statisticsPage.championMatchupProfileStrengths') }}
             </div>
             <div v-if="!insights.strengths.length" class="text-xs text-text/55">—</div>
@@ -223,12 +211,12 @@ function comparePct(you: number, opp: number): { youWidth: number; oppWidth: num
           </div>
 
           <div
-            class="rounded-lg border border-rose-500/25 bg-gradient-to-br from-rose-500/10 to-rose-900/10 p-2.5"
+            class="rounded-lg border border-error/25 bg-gradient-to-br from-error/10 to-background/40 p-2.5"
           >
             <div
-              class="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-rose-300"
+              class="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-error/70"
             >
-              <span class="h-2 w-2 rounded-full bg-rose-400" aria-hidden="true" />
+              <span class="h-2 w-2 rounded-full bg-error" aria-hidden="true" />
               {{ t('statisticsPage.championMatchupProfileWarnings') }}
             </div>
             <div v-if="!insights.weaknesses.length" class="text-xs text-text/55">—</div>
@@ -273,9 +261,9 @@ function comparePct(you: number, opp: number): { youWidth: number; oppWidth: num
 
         <div v-else-if="tab === 'lane'" class="grid grid-cols-1 gap-2 md:grid-cols-2">
           <div
-            class="rounded-lg border border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-amber-900/5 p-3"
+            class="rounded-lg border border-accent/30 bg-gradient-to-br from-accent/10 to-background/40 p-3"
           >
-            <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-200">
+            <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-accent-light">
               {{ t('statisticsPage.championMatchupDetailGoldDiff') }}
             </div>
             <div class="grid grid-cols-3 gap-2 text-center text-sm">
@@ -384,9 +372,9 @@ function comparePct(you: number, opp: number): { youWidth: number; oppWidth: num
           </div>
 
           <div
-            class="rounded-lg border border-sky-500/30 bg-gradient-to-br from-sky-500/10 to-sky-900/5 p-3"
+            class="rounded-lg border border-info/30 bg-gradient-to-br from-info/10 to-background/40 p-3"
           >
-            <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-sky-200">
+            <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-primary-light">
               {{ t('statisticsPage.championMatchupDetailLevelXp') }}
             </div>
             <div class="flex items-baseline justify-center gap-4 text-sm">
@@ -412,16 +400,16 @@ function comparePct(you: number, opp: number): { youWidth: number; oppWidth: num
           </div>
 
           <div
-            class="rounded-lg border border-rose-500/30 bg-gradient-to-br from-rose-500/10 to-rose-900/5 p-3 md:col-span-2"
+            class="rounded-lg border border-error/30 bg-gradient-to-br from-error/10 to-background/40 p-3 md:col-span-2"
           >
-            <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-rose-200">
+            <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-error/80">
               {{ t('statisticsPage.championMatchupDetailKillsDeathsVs') }}
             </div>
             <div class="grid grid-cols-3 gap-2 text-center text-sm">
               <div v-for="minute in [5, 10, 15] as const" :key="minute">
                 <div class="text-[10px] text-text/50">{{ minute }}m</div>
                 <div class="tabular-nums">
-                  <span class="font-semibold text-emerald-300">
+                  <span class="font-semibold text-info">
                     {{
                       minute === 5
                         ? detail.lane.killsVsOpponent5Min.toFixed(2)
@@ -431,7 +419,7 @@ function comparePct(you: number, opp: number): { youWidth: number; oppWidth: num
                     }}
                   </span>
                   <span class="text-text/45"> / </span>
-                  <span class="font-semibold text-rose-300">
+                  <span class="font-semibold text-error/70">
                     {{
                       minute === 5
                         ? detail.lane.deathsVsOpponent5Min.toFixed(2)
@@ -465,7 +453,7 @@ function comparePct(you: number, opp: number): { youWidth: number; oppWidth: num
                 deaths: detail.gankDiveRoam.diveDeathsPerGame,
                 border: 'border-red-500/35',
                 bg: 'from-red-500/12 to-red-900/5',
-                title: 'text-red-200',
+                title: 'text-error/80',
               },
               {
                 key: 'roam',
@@ -488,7 +476,7 @@ function comparePct(you: number, opp: number): { youWidth: number; oppWidth: num
                 <span class="text-text/60">{{
                   t('statisticsPage.championMatchupDetailKillsPerGame')
                 }}</span>
-                <span class="font-semibold tabular-nums text-emerald-300">{{
+                <span class="font-semibold tabular-nums text-info">{{
                   card.kills.toFixed(2)
                 }}</span>
               </div>
@@ -496,7 +484,7 @@ function comparePct(you: number, opp: number): { youWidth: number; oppWidth: num
                 <span class="text-text/60">{{
                   t('statisticsPage.championMatchupDetailDeathsPerGame')
                 }}</span>
-                <span class="font-semibold tabular-nums text-rose-300">{{
+                <span class="font-semibold tabular-nums text-error/70">{{
                   card.deaths.toFixed(2)
                 }}</span>
               </div>
@@ -545,25 +533,23 @@ function comparePct(you: number, opp: number): { youWidth: number; oppWidth: num
             </div>
             <div class="mb-1 flex h-2 overflow-hidden rounded-full bg-white/5">
               <div
-                class="bg-gradient-to-r from-emerald-500 to-emerald-400"
+                class="bg-gradient-to-r from-info to-info/80"
                 :style="{ width: `${comparePct(itemCard.you, itemCard.opp).youWidth}%` }"
               />
               <div
-                class="bg-gradient-to-r from-rose-400 to-rose-500"
+                class="bg-gradient-to-r from-error/80 to-error"
                 :style="{ width: `${comparePct(itemCard.you, itemCard.opp).oppWidth}%` }"
               />
             </div>
             <div class="flex justify-between text-sm tabular-nums">
               <span
-                :class="
-                  itemCard.you >= itemCard.opp ? 'font-semibold text-emerald-300' : 'text-text/70'
-                "
+                :class="itemCard.you >= itemCard.opp ? 'font-semibold text-info' : 'text-text/70'"
               >
                 {{ (itemCard.you * 100).toFixed(1) }}%
               </span>
               <span
                 :class="
-                  itemCard.opp > itemCard.you ? 'font-semibold text-rose-300' : 'text-text/70'
+                  itemCard.opp > itemCard.you ? 'font-semibold text-error/70' : 'text-text/70'
                 "
               >
                 {{ (itemCard.opp * 100).toFixed(1) }}%
@@ -584,13 +570,13 @@ function comparePct(you: number, opp: number): { youWidth: number; oppWidth: num
             <div class="flex justify-between text-sm tabular-nums">
               <span>
                 {{ t('statisticsPage.championMatchupDetailYou') }}:
-                <strong class="text-emerald-300">{{
+                <strong class="text-info">{{
                   detail.itemsFirst.consumablesBoughtPerGame.toFixed(2)
                 }}</strong>
               </span>
               <span>
                 {{ t('statisticsPage.championMatchupDetailOpponentShort') }}:
-                <strong class="text-rose-300">{{
+                <strong class="text-error/70">{{
                   detail.itemsFirst.opponentConsumablesBoughtPerGame.toFixed(2)
                 }}</strong>
               </span>
@@ -600,17 +586,17 @@ function comparePct(you: number, opp: number): { youWidth: number; oppWidth: num
 
         <div v-else class="grid grid-cols-1 gap-2 md:grid-cols-2">
           <div
-            class="rounded-lg border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-emerald-900/5 p-3"
+            class="rounded-lg border border-info/30 bg-gradient-to-br from-info/10 to-background/40 p-3"
           >
-            <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-emerald-200">
+            <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-info">
               {{ t('statisticsPage.championMatchupDetailDrakes') }}
             </div>
             <div class="text-sm tabular-nums">
-              <span class="font-semibold text-emerald-300">{{
+              <span class="font-semibold text-info">{{
                 detail.objectivesAndMap.drakeKillsPerGame.toFixed(2)
               }}</span>
               {{ t('statisticsPage.championMatchupDetailKillsPerGame') }} ·
-              <span class="font-semibold text-sky-300">{{
+              <span class="font-semibold text-info">{{
                 detail.objectivesAndMap.drakeAssistsPerGame.toFixed(2)
               }}</span>
               {{ t('statisticsPage.championMatchupDetailAssistsPerGame') }}
@@ -625,21 +611,21 @@ function comparePct(you: number, opp: number): { youWidth: number; oppWidth: num
             <div class="space-y-1 text-sm tabular-nums">
               <div>
                 Herald:
-                <span class="text-emerald-300">{{
+                <span class="text-info">{{
                   detail.objectivesAndMap.heraldKillsPerGame.toFixed(2)
                 }}</span>
                 /
-                <span class="text-sky-300">{{
+                <span class="text-info">{{
                   detail.objectivesAndMap.heraldAssistsPerGame.toFixed(2)
                 }}</span>
               </div>
               <div>
                 Void:
-                <span class="text-emerald-300">{{
+                <span class="text-info">{{
                   detail.objectivesAndMap.voidKillsPerGame.toFixed(2)
                 }}</span>
                 /
-                <span class="text-sky-300">{{
+                <span class="text-info">{{
                   detail.objectivesAndMap.voidAssistsPerGame.toFixed(2)
                 }}</span>
               </div>
@@ -654,23 +640,23 @@ function comparePct(you: number, opp: number): { youWidth: number; oppWidth: num
             <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <div class="text-sm">
                 {{ t('statisticsPage.championMatchupDetailFirstTower') }}:
-                <span class="font-semibold text-emerald-300">
+                <span class="font-semibold text-info">
                   {{ (detail.objectivesAndMap.firstTowerRate * 100).toFixed(1) }}%
                 </span>
                 · {{ t('statisticsPage.championMatchupDetailOpponentShort') }}:
-                <span class="font-semibold text-rose-300">
+                <span class="font-semibold text-error/70">
                   {{ (detail.objectivesAndMap.opponentFirstTowerRate * 100).toFixed(1) }}%
                 </span>
               </div>
               <div class="text-sm">
                 {{ t('statisticsPage.championMatchupDetailPlates') }}:
-                <span class="font-semibold text-emerald-300">
+                <span class="font-semibold text-info">
                   {{ detail.objectivesAndMap.platesTakenPerGame.toFixed(2) }}
                 </span>
                 /
                 {{ t('statisticsPage.championMatchupDetailPerGame') }} ·
                 {{ t('statisticsPage.championMatchupDetailOpponentShort') }}
-                <span class="font-semibold text-rose-300">
+                <span class="font-semibold text-error/70">
                   {{ detail.objectivesAndMap.opponentPlatesTakenPerGame.toFixed(2) }}
                 </span>
               </div>

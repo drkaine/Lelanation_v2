@@ -168,8 +168,8 @@ const pathsWithCells = computed(() => {
 })
 
 function wrClass(wr: number): string {
-  if (wr > 51) return 'text-green-400/90'
-  if (wr < 49) return 'text-red-400/90'
+  if (wr > 51) return 'text-info/90'
+  if (wr < 49) return 'text-error/90'
   return 'text-text/80'
 }
 
@@ -183,8 +183,8 @@ function formatDelta(cur: number, old: number | undefined): string {
 function deltaClass(cur: number, old: number | undefined): string {
   if (old === undefined || !Number.isFinite(old)) return 'text-text/40'
   const d = cur - old
-  if (d > 0.05) return 'text-sky-400/90'
-  if (d < -0.05) return 'text-red-400/80'
+  if (d > 0.05) return 'text-info/90'
+  if (d < -0.05) return 'text-error/80'
   return 'text-text/55'
 }
 

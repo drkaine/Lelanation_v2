@@ -125,7 +125,7 @@
           </h2>
           <button
             type="button"
-            class="statistics-filters-reset inline-flex shrink-0 touch-manipulation items-center gap-1.5 rounded px-2 py-1.5 text-xs font-semibold text-blue-300 transition-colors hover:bg-blue-500/15 hover:text-blue-200"
+            class="statistics-filters-reset inline-flex shrink-0 touch-manipulation items-center gap-1.5 rounded px-2 py-1.5 text-xs font-semibold text-primary-light transition-colors hover:bg-info/15 hover:text-primary-light"
             @click="resetChampionFilters"
           >
             <span class="iconify i-mdi:refresh" aria-hidden="true" />
@@ -183,7 +183,7 @@
                   class="stats-division-btn rounded p-0.5 transition-colors"
                   :class="
                     filterRank.length === 0
-                      ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
+                      ? 'bg-info/20 ring-1 ring-info/60'
                       : 'bg-black/20 hover:bg-white/10'
                   "
                   :title="t('statisticsPage.allRanks')"
@@ -211,7 +211,7 @@
                   class="stats-division-btn rounded p-0.5 transition-colors"
                   :class="
                     filterRank.includes(tier)
-                      ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
+                      ? 'bg-info/20 ring-1 ring-info/60'
                       : 'bg-black/20 hover:bg-white/10'
                   "
                   :title="formatDivisionLabel(tier)"
@@ -243,7 +243,7 @@
                 <button
                   type="button"
                   class="stats-role-btn rounded p-0.5 transition-colors"
-                  :class="!filterRole ? 'bg-blue-500/20' : 'bg-black/20 hover:bg-white/10'"
+                  :class="!filterRole ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10'"
                   :title="t('statisticsPage.allRoles')"
                   @click="selectAllChampionRoles()"
                 >
@@ -262,7 +262,7 @@
                   type="button"
                   class="stats-role-btn rounded p-0.5 transition-colors"
                   :class="[
-                    filterRole === r.value ? 'bg-blue-500/20' : 'bg-black/20 hover:bg-white/10',
+                    filterRole === r.value ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10',
                     !rolesWithData.has(r.value) ? 'champion-role-disabled' : '',
                   ]"
                   :title="r.label"
@@ -368,11 +368,8 @@
                   {{ t('statisticsPage.championMatchupLaneProfileLegendTitle') }}
                 </div>
                 <div class="space-y-1">
-                  <div class="inline-flex items-center gap-1 font-semibold text-emerald-400">
-                    <span
-                      class="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400"
-                      aria-hidden="true"
-                    />
+                  <div class="inline-flex items-center gap-1 font-semibold text-info">
+                    <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-info" aria-hidden="true" />
                     {{
                       activeChampionTab === 'synergy'
                         ? t('statisticsPage.championSynergyProfileStrengths')
@@ -391,11 +388,8 @@
                   </div>
                 </div>
                 <div class="space-y-1">
-                  <div class="inline-flex items-center gap-1 font-semibold text-rose-400">
-                    <span
-                      class="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400"
-                      aria-hidden="true"
-                    />
+                  <div class="inline-flex items-center gap-1 font-semibold text-error">
+                    <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-error" aria-hidden="true" />
                     {{
                       activeChampionTab === 'synergy'
                         ? t('statisticsPage.championSynergyProfileWarnings')
@@ -486,7 +480,7 @@
                   class="flex-1 px-2 py-1 text-xs font-medium transition-colors"
                   :class="
                     championSpellsModeFilter === 'solo'
-                      ? 'bg-blue-500/20 text-blue-200'
+                      ? 'bg-info/20 text-primary-light'
                       : 'text-text/75 hover:bg-white/10'
                   "
                   @click="championSpellsModeFilter = 'solo'"
@@ -498,7 +492,7 @@
                   class="flex-1 border-l border-primary/30 px-2 py-1 text-xs font-medium transition-colors"
                   :class="
                     championSpellsModeFilter === 'pair'
-                      ? 'bg-blue-500/20 text-blue-200'
+                      ? 'bg-info/20 text-primary-light'
                       : 'text-text/75 hover:bg-white/10'
                   "
                   @click="championSpellsModeFilter = 'pair'"
@@ -539,7 +533,7 @@
             <p class="text-text/70">{{ t('statisticsPage.loading') }}</p>
           </div>
           <div v-else-if="error" class="rounded-lg border border-red-500/30 bg-surface/30 p-6">
-            <p class="text-red-500">{{ error }}</p>
+            <p class="text-error">{{ error }}</p>
           </div>
           <template v-else-if="championStats">
             <div
@@ -772,7 +766,7 @@
                       class="rounded px-2 py-1 font-medium transition-colors"
                       :class="
                         trendRangeMode === '7d'
-                          ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+                          ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
                           : 'bg-black/20 text-text/85 hover:bg-white/10'
                       "
                       @click="trendRangeMode = '7d'"
@@ -784,7 +778,7 @@
                       class="rounded px-2 py-1 font-medium transition-colors"
                       :class="
                         trendRangeMode === '14d'
-                          ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+                          ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
                           : 'bg-black/20 text-text/85 hover:bg-white/10'
                       "
                       @click="trendRangeMode = '14d'"
@@ -796,7 +790,7 @@
                       class="rounded px-2 py-1 font-medium transition-colors"
                       :class="
                         trendRangeMode === 'months'
-                          ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+                          ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
                           : 'bg-black/20 text-text/85 hover:bg-white/10'
                       "
                       @click="trendRangeMode = 'months'"
@@ -823,7 +817,7 @@
                       class="rounded px-2 py-1 font-medium transition-colors"
                       :class="
                         trendDivisionPreset === 'selected'
-                          ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+                          ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
                           : 'bg-black/20 text-text/85 hover:bg-white/10'
                       "
                       @click="setTrendDivisionPreset('selected')"
@@ -835,7 +829,7 @@
                       class="rounded px-2 py-1 font-medium transition-colors"
                       :class="
                         trendDivisionPreset === 'average'
-                          ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+                          ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
                           : 'bg-black/20 text-text/85 hover:bg-white/10'
                       "
                       @click="setTrendDivisionPreset('average')"
@@ -847,7 +841,7 @@
                       class="rounded px-2 py-1 font-medium transition-colors"
                       :class="
                         trendDivisionPreset === 'skilled'
-                          ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+                          ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
                           : 'bg-black/20 text-text/85 hover:bg-white/10'
                       "
                       @click="setTrendDivisionPreset('skilled')"
@@ -859,7 +853,7 @@
                       class="rounded px-2 py-1 font-medium transition-colors"
                       :class="
                         trendDivisionPreset === 'elite'
-                          ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+                          ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
                           : 'bg-black/20 text-text/85 hover:bg-white/10'
                       "
                       @click="setTrendDivisionPreset('elite')"
@@ -880,7 +874,7 @@
                   {{ t('statisticsPage.loading') }}
                 </div>
                 <template v-else>
-                  <p v-if="trendError" class="py-2 text-sm text-red-400">{{ trendError }}</p>
+                  <p v-if="trendError" class="py-2 text-sm text-error">{{ trendError }}</p>
                   <div
                     v-if="
                       trendChartCards.length ||
@@ -1262,7 +1256,7 @@
                 <div v-if="matchupsExtPending" class="py-6 text-text/70">
                   {{ t('statisticsPage.loading') }}
                 </div>
-                <div v-else-if="matchupsExtError" class="py-2 text-sm text-red-400">
+                <div v-else-if="matchupsExtError" class="py-2 text-sm text-error">
                   {{ matchupsExtError }}
                 </div>
                 <div v-else-if="!filteredMatchupsExt.length" class="py-4 text-text/70">
@@ -1566,10 +1560,10 @@
                             >
                               <div v-if="row.dominanceKeys?.length" class="mb-1.5">
                                 <div
-                                  class="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-400"
+                                  class="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-info"
                                 >
                                   <span
-                                    class="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400"
+                                    class="h-1.5 w-1.5 shrink-0 rounded-full bg-info"
                                     aria-hidden="true"
                                   />
                                   {{ t('statisticsPage.championMatchupProfileChampion') }}
@@ -1602,10 +1596,10 @@
                               </div>
                               <div v-if="row.weaknessKeys?.length">
                                 <div
-                                  class="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-rose-400"
+                                  class="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-error"
                                 >
                                   <span
-                                    class="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400"
+                                    class="h-1.5 w-1.5 shrink-0 rounded-full bg-error"
                                     aria-hidden="true"
                                   />
                                   {{ t('statisticsPage.championMatchupProfileOpponent') }}
@@ -2276,21 +2270,21 @@ function laneProfileSignalChipClass(
 ): string {
   if (side === 'strength') {
     if (level === 'bigAdvantage') {
-      return `${laneProfileChipBase} border-emerald-400/75 bg-emerald-500/35 font-semibold text-emerald-50 shadow-sm shadow-emerald-950/30`
+      return `${laneProfileChipBase} border-info/75 bg-info/35 font-semibold text-primary-light shadow-sm shadow-info/20`
     }
     if (level === 'mediumAdvantage') {
-      return `${laneProfileChipBase} border-emerald-500/55 bg-emerald-500/22 text-emerald-100`
+      return `${laneProfileChipBase} border-info/55 bg-info/22 text-primary-light`
     }
     if (level === 'smallAdvantage') {
-      return `${laneProfileChipBase} border-emerald-600/40 bg-emerald-600/12 text-emerald-200`
+      return `${laneProfileChipBase} border-info/40 bg-info/12 text-info`
     }
     return `${laneProfileChipBase} border-primary/30 bg-white/[0.04] text-text/65`
   }
   if (level === 'bigDisadvantage') {
-    return `${laneProfileChipBase} border-rose-400/75 bg-rose-500/35 font-semibold text-rose-50 shadow-sm shadow-rose-950/30`
+    return `${laneProfileChipBase} border-error/75 bg-error/35 font-semibold text-error/90 shadow-sm shadow-error/20`
   }
   if (level === 'mediumDisadvantage') {
-    return `${laneProfileChipBase} border-rose-500/55 bg-rose-500/22 text-rose-100`
+    return `${laneProfileChipBase} border-error/55 bg-error/22 text-error/80`
   }
   if (level === 'smallDisadvantage') {
     return `${laneProfileChipBase} border-orange-500/45 bg-orange-600/14 text-orange-100`
@@ -2349,8 +2343,8 @@ function formatSignedDelta(v: number | null | undefined): string {
 
 function matchupDeltaClass(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v)) return 'text-text/55'
-  if (v > 0) return 'text-emerald-300'
-  if (v < 0) return 'text-rose-300'
+  if (v > 0) return 'text-info'
+  if (v < 0) return 'text-error/70'
   return 'text-text/70'
 }
 
@@ -2890,29 +2884,29 @@ const championSpellOrderSections = computed(() => [
     key: 'top-wr',
     title: t('statisticsPage.championSpellOrdersTopWinrate'),
     rows: championSpellOrdersTopWinrate.value,
-    borderClass: 'border-emerald-400/50 bg-emerald-950/25',
-    titleClass: 'text-emerald-200',
+    borderClass: 'border-info/50 bg-background/40',
+    titleClass: 'text-info',
   },
   {
     key: 'low-wr',
     title: t('statisticsPage.championSpellOrdersLowWinrate'),
     rows: championSpellOrdersLowWinrate.value,
-    borderClass: 'border-rose-400/50 bg-rose-950/25',
-    titleClass: 'text-rose-200',
+    borderClass: 'border-error/50 bg-background/40',
+    titleClass: 'text-error/80',
   },
   {
     key: 'top-pr',
     title: t('statisticsPage.championSpellOrdersTopPickrate'),
     rows: championSpellOrdersTopPickrate.value,
-    borderClass: 'border-sky-400/50 bg-sky-950/25',
-    titleClass: 'text-sky-200',
+    borderClass: 'border-info/50 bg-panel/40',
+    titleClass: 'text-primary-light',
   },
   {
     key: 'low-pr',
     title: t('statisticsPage.championSpellOrdersLowPickrate'),
     rows: championSpellOrdersLowPickrate.value,
-    borderClass: 'border-amber-400/50 bg-amber-950/25',
-    titleClass: 'text-amber-200',
+    borderClass: 'border-accent/50 bg-background/40',
+    titleClass: 'text-accent-light',
   },
 ])
 const championSpellOrderSectionsVisible = computed(() =>
@@ -4896,7 +4890,7 @@ useJsonLdHead(
   justify-content: center;
   border: 1px solid rgb(var(--rgb-accent) / 0.28);
   border-radius: 4px;
-  background: #08101f;
+  background: rgb(var(--rgb-chrome) / 1);
   color: var(--color-blue-50);
   cursor: pointer;
   transition:
@@ -4908,7 +4902,7 @@ useJsonLdHead(
   border-color: rgb(var(--rgb-accent) / 0.45);
 }
 .champion-stats aside {
-  background: #08101f !important;
+  background: rgb(var(--rgb-chrome) / 1) !important;
 }
 
 .champion-donut-svg {
@@ -5008,7 +5002,7 @@ useJsonLdHead(
 }
 
 .champion-stats .statistics-overview-surface {
-  background-color: #08101f !important;
+  background-color: rgb(var(--rgb-chrome) / 1) !important;
 }
 
 .champion-stats .champion-overview-filters {
@@ -5175,7 +5169,7 @@ useJsonLdHead(
   margin-left: 0 !important;
   margin-right: 0 !important;
   align-self: stretch;
-  background: #08101f !important;
+  background: rgb(var(--rgb-chrome) / 1) !important;
 }
 
 .champion-stats .fast-stat-card.fast-stat-card-misc,
@@ -5187,7 +5181,7 @@ useJsonLdHead(
   min-height: 0 !important;
   flex: 0 1 313px;
   overflow: hidden;
-  background: #08101f !important;
+  background: rgb(var(--rgb-chrome) / 1) !important;
 }
 
 .champion-stats .fast-stat-card.fast-stat-card-distribution {
@@ -5198,7 +5192,7 @@ useJsonLdHead(
   min-height: 0 !important;
   flex: 0 1 auto;
   overflow: hidden;
-  background: #08101f !important;
+  background: rgb(var(--rgb-chrome) / 1) !important;
 }
 
 @media (max-width: 1023px) {

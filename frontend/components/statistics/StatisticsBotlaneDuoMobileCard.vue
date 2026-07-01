@@ -108,8 +108,8 @@ function fmtDeltaPp(v: number | null | undefined): string {
 
 function deltaVsPeersClass(v: number | null | undefined): string {
   if (v == null) return 'text-text/55'
-  if (v > 0) return 'text-green-400/90'
-  if (v < 0) return 'text-red-400/90'
+  if (v > 0) return 'text-info/90'
+  if (v < 0) return 'text-error/90'
   return 'text-text/80'
 }
 

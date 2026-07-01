@@ -401,7 +401,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             @click.stop
           >
             <div v-if="p.showChampionHealColumns" class="space-y-1.5">
-              <div class="text-[10px] font-semibold uppercase tracking-wide text-emerald-300/90">
+              <div class="text-[10px] font-semibold uppercase tracking-wide text-info/90">
                 {{ p.t('statisticsPage.championTableGroupHeal') }}
               </div>
               <div class="grid grid-cols-2 gap-2 tabular-nums">
@@ -512,7 +512,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
               </div>
             </div>
             <div v-if="p.showChampionDealtColumns" class="space-y-1.5">
-              <div class="text-[10px] font-semibold uppercase tracking-wide text-amber-300/90">
+              <div class="text-[10px] font-semibold uppercase tracking-wide text-text-accent/90">
                 {{ p.t('statisticsPage.championTableGroupDealt') }}
               </div>
               <div class="grid grid-cols-2 gap-2 tabular-nums">
@@ -591,7 +591,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
               </div>
             </div>
             <div v-if="p.showChampionTakenColumns" class="space-y-1.5">
-              <div class="text-[10px] font-semibold uppercase tracking-wide text-red-300/90">
+              <div class="text-error/70/90 text-[10px] font-semibold uppercase tracking-wide">
                 {{ p.t('statisticsPage.championTableGroupTaken') }}
               </div>
               <div class="grid grid-cols-2 gap-2 tabular-nums">
@@ -790,7 +790,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             >
               <button
                 type="button"
-                class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight text-emerald-300 hover:bg-primary/25"
+                class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight text-info hover:bg-primary/25"
                 :title="p.t('statisticsPage.championTableColTotalHeal')"
                 @click="p.setChampionGlobalSort('healTotal')"
               >
@@ -821,7 +821,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             >
               <button
                 type="button"
-                class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight text-emerald-200 hover:bg-primary/25"
+                class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight text-info hover:bg-primary/25"
                 @click="p.setChampionGlobalSort('healTeam')"
               >
                 {{ p.t('statisticsPage.championTableColHealAllies')
@@ -843,7 +843,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             >
               <button
                 type="button"
-                class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight text-emerald-200 hover:bg-primary/25"
+                class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight text-info hover:bg-primary/25"
                 @click="p.setChampionGlobalSort('healEffective')"
               >
                 {{ p.t('statisticsPage.championTableColEffectiveHealShield')
@@ -865,7 +865,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             >
               <button
                 type="button"
-                class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight text-emerald-200 hover:bg-primary/25"
+                class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight text-info hover:bg-primary/25"
                 @click="p.setChampionGlobalSort('shieldTeam')"
               >
                 {{ p.t('statisticsPage.championTableColShieldAllies')
@@ -887,7 +887,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             >
               <button
                 type="button"
-                class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight text-cyan-300 hover:bg-primary/25"
+                class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight text-info hover:bg-primary/25"
                 :title="p.t('statisticsPage.championTableColMitigation')"
                 @click="p.setChampionGlobalSort('mitigated')"
               >
@@ -965,7 +965,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             >
               <button
                 type="button"
-                class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight text-amber-300 hover:bg-primary/25"
+                class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight text-text-accent hover:bg-primary/25"
                 :title="p.t('statisticsPage.championTableDealtPhys')"
                 @click="p.setChampionGlobalSort('dmgPhys')"
               >
@@ -1066,7 +1066,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             >
               <button
                 type="button"
-                class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight text-amber-300 hover:bg-primary/25"
+                class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight text-text-accent hover:bg-primary/25"
                 :title="p.t('statisticsPage.championTableTakenPhys')"
                 @click="p.setChampionGlobalSort('takenPhys')"
               >
@@ -1193,7 +1193,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
                 v-show="p.showChampionHealColumns"
                 class="champion-global-stat-col tier-list-lolalytics-td flex flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
               >
-                <span class="font-medium text-emerald-300">{{
+                <span class="font-medium text-info">{{
                   p.formatChampionGlobalNum(row.avgTotalHeal)
                 }}</span>
                 <span
@@ -1217,7 +1217,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
                 v-show="p.showChampionHealColumns && showChampionHealBreakdown"
                 class="champion-global-stat-col tier-list-lolalytics-td flex flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
               >
-                <span class="font-medium text-emerald-200">{{
+                <span class="font-medium text-info">{{
                   p.formatChampionGlobalNum(row.avgHealsOnTeammates)
                 }}</span>
                 <span
@@ -1243,7 +1243,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
                 v-show="p.showChampionHealColumns && showChampionHealBreakdown"
                 class="champion-global-stat-col tier-list-lolalytics-td flex flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
               >
-                <span class="font-medium text-emerald-200">{{
+                <span class="font-medium text-info">{{
                   p.formatChampionGlobalNum(row.avgEffectiveHealShield)
                 }}</span>
                 <span
@@ -1273,7 +1273,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
                 v-show="p.showChampionHealColumns && showChampionHealBreakdown"
                 class="champion-global-stat-col tier-list-lolalytics-td flex flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
               >
-                <span class="font-medium text-emerald-200">{{
+                <span class="font-medium text-info">{{
                   p.formatChampionGlobalNum(row.avgDamageShieldedOnTeammates)
                 }}</span>
                 <span
@@ -1303,7 +1303,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
                 v-show="p.showChampionHealColumns"
                 class="champion-global-stat-col tier-list-lolalytics-td flex flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
               >
-                <span class="font-medium text-cyan-300">{{
+                <span class="font-medium text-info">{{
                   p.formatChampionGlobalNum(row.avgDamageSelfMitigated)
                 }}</span>
                 <span
@@ -1385,7 +1385,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
                 v-show="p.showChampionDealtColumns && showChampionDealtBreakdown"
                 class="champion-global-stat-col tier-list-lolalytics-td flex flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
               >
-                <span class="font-medium text-amber-300">{{
+                <span class="font-medium text-text-accent">{{
                   p.formatChampionGlobalNum(row.avgDamageToChampsPhys)
                 }}</span>
                 <span
@@ -1504,7 +1504,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
                 v-show="p.showChampionTakenColumns && showChampionTakenBreakdown"
                 class="champion-global-stat-col tier-list-lolalytics-td flex flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
               >
-                <span class="font-medium text-amber-300">{{
+                <span class="font-medium text-text-accent">{{
                   p.formatChampionGlobalNum(row.avgDamageTakenPhys)
                 }}</span>
                 <span

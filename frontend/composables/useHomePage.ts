@@ -45,6 +45,8 @@ type HomeBootstrapPayload = {
   latestVideos: YouTubeVideo[]
 }
 
+type HomePagePayload = HomeBootstrapPayload & { recentBuilds: Build[] }
+
 function normalizeHomeBuild(raw: unknown): Build | null {
   if (!raw || typeof raw !== 'object') return null
   const candidate = raw as Build
@@ -74,6 +76,23 @@ async function ensureBuildChampionDetails(
   )
 }
 
+async function prefetchHomeAssets(
+  builds: Build[],
+  language: string,
+  stores: {
+    champions: ReturnType<typeof useChampionsStore>
+    items: ReturnType<typeof useItemsStore>
+    runes: ReturnType<typeof useRunesStore>
+  }
+) {
+  await Promise.all([
+    stores.champions.loadChampions(language).catch(() => undefined),
+    stores.items.loadItems(language).catch(() => undefined),
+    stores.runes.loadRunes(language).catch(() => undefined),
+  ])
+  await ensureBuildChampionDetails(builds, language, stores.champions)
+}
+
 export function useHomePage() {
   const { t, locale } = useI18n()
   const localePath = useLocalePath()
@@ -87,22 +106,27 @@ export function useHomePage() {
 
   const { data: homeData, pending } = useAsyncData(
     () => `home-page-${locale.value}`,
-    async (): Promise<HomeBootstrapPayload & { recentBuilds: Build[] }> => {
-      await versionStore.loadCurrentVersion()
+    async (): Promise<HomePagePayload> => {
+      const versionPromise = versionStore.currentVersion
+        ? Promise.resolve()
+        : versionStore.loadCurrentVersion().catch(() => undefined)
+
       const bootstrap = await $fetch<HomeBootstrapPayload>('/home-data.json')
+      await versionPromise
 
       const patch = bootstrap.patch || versionStore.currentVersion || '16.12.1'
-      await Promise.all([
-        championsStore.loadChampions(riotLocale.value),
-        itemsStore.loadItems(riotLocale.value).catch(() => undefined),
-        runesStore.loadRunes(riotLocale.value).catch(() => undefined),
-      ])
-
       const recentBuilds = (bootstrap.recentBuilds ?? [])
         .map(normalizeHomeBuild)
         .filter((build): build is Build => build !== null)
 
-      await ensureBuildChampionDetails(recentBuilds, riotLocale.value, championsStore)
+      // SSR: warm stores so build cards render with full assets.
+      if (import.meta.server) {
+        await prefetchHomeAssets(recentBuilds, riotLocale.value, {
+          champions: championsStore,
+          items: itemsStore,
+          runes: runesStore,
+        })
+      }
 
       return {
         ...bootstrap,
@@ -112,7 +136,16 @@ export function useHomePage() {
         totalBuilds: bootstrap.totalBuilds ?? recentBuilds.length,
       }
     },
-    { watch: [riotLocale] }
+    {
+      watch: [riotLocale],
+      lazy: true,
+      getCachedData(key, nuxtApp) {
+        const cached = nuxtApp.payload.data[key] ?? nuxtApp.static.data[key]
+        if (cached && typeof cached === 'object') {
+          return cached as HomePagePayload
+        }
+      },
+    }
   )
 
   const recentBuilds = computed(() => homeData.value?.recentBuilds ?? [])
@@ -121,11 +154,17 @@ export function useHomePage() {
     watch(
       [recentBuilds, riotLocale],
       ([builds, language]) => {
-        ensureBuildChampionDetails(builds, language, championsStore).catch(() => {})
+        if (!builds.length) return
+        prefetchHomeAssets(builds, language, {
+          champions: championsStore,
+          items: itemsStore,
+          runes: runesStore,
+        }).catch(() => undefined)
       },
       { immediate: true }
     )
   }
+
   const tierByRole = computed((): HomeTierByRole[] => {
     const rowsByRole = homeData.value?.tierByRole ?? []
     return HOME_ROLE_DEFS.map(def => {

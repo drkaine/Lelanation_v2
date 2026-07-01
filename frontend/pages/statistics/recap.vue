@@ -2,10 +2,7 @@
   <div class="min-h-screen bg-zinc-950 pb-12 pt-6 text-zinc-100">
     <div class="mx-auto max-w-3xl px-4">
       <div class="mb-6">
-        <NuxtLink
-          :to="localePath('/statistics')"
-          class="text-sm text-emerald-400/90 hover:text-emerald-300"
-        >
+        <NuxtLink :to="localePath('/statistics')" class="text-sm text-info/90 hover:text-info">
           ← {{ t('statisticsPage.recapBack') }}
         </NuxtLink>
         <h1 class="mt-3 text-2xl font-bold tracking-tight text-zinc-50">
@@ -17,14 +14,14 @@
       </div>
 
       <section class="mb-10">
-        <h2 class="mb-3 text-lg font-semibold text-emerald-300/95">
+        <h2 class="mb-3 text-lg font-semibold text-info/95">
           {{ t('statisticsPage.recapGlobalMovers') }}
         </h2>
         <p v-if="moversMeta" class="mb-3 text-xs text-zinc-500">{{ moversMeta }}</p>
         <div v-if="globalPending" class="text-sm text-zinc-500">
           {{ t('statisticsPage.recapLoading') }}
         </div>
-        <div v-else-if="globalError" class="text-sm text-rose-400">{{ globalError }}</div>
+        <div v-else-if="globalError" class="text-sm text-error">{{ globalError }}</div>
         <div v-else class="space-y-2">
           <StatisticsMoverCard
             v-for="m in globalMovers"
@@ -42,7 +39,7 @@
       </section>
 
       <section class="mb-10">
-        <h2 class="mb-3 text-lg font-semibold text-amber-300/95">
+        <h2 class="mb-3 text-lg font-semibold text-text-accent/95">
           {{ t('statisticsPage.recapWatchlist') }}
         </h2>
         <div v-if="alertsPending" class="text-sm text-zinc-500">
@@ -53,9 +50,9 @@
             <div
               v-for="a in triggeredAlerts"
               :key="a.rule.id"
-              class="rounded-md border border-emerald-700/50 bg-emerald-950/40 px-3 py-2 text-sm"
+              class="rounded-md border border-info/50 bg-info/10 px-3 py-2 text-sm"
             >
-              <span class="font-medium text-emerald-300">{{ formatRuleSummary(a.rule) }}</span>
+              <span class="font-medium text-info">{{ formatRuleSummary(a.rule) }}</span>
               <span v-if="a.delta.ok" class="ml-2 text-zinc-400">
                 {{ formatDeltaSnippet(a.rule, a.delta) }}
               </span>
@@ -80,7 +77,7 @@
               <span>{{ formatRuleSummary(r) }}</span>
               <button
                 type="button"
-                class="rounded border border-zinc-600 px-2 py-0.5 text-xs text-zinc-400 hover:border-rose-500 hover:text-rose-400"
+                class="rounded border border-zinc-600 px-2 py-0.5 text-xs text-zinc-400 hover:border-rose-500 hover:text-error"
                 @click="watchlist.removeRule(r.id)"
               >
                 {{ t('statisticsPage.recapRemove') }}
@@ -211,18 +208,18 @@
             </select>
           </label>
         </div>
-        <p v-if="formError" class="mt-2 text-sm text-rose-400">{{ formError }}</p>
+        <p v-if="formError" class="mt-2 text-sm text-error">{{ formError }}</p>
         <div class="mt-4 flex flex-wrap gap-2">
           <button
             type="button"
-            class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500"
+            class="rounded-lg bg-info px-4 py-2 text-sm font-medium text-background hover:bg-info/90"
             @click="submitRule"
           >
             {{ t('statisticsPage.recapAddRule') }}
           </button>
           <button
             type="button"
-            class="rounded-lg border border-zinc-600 px-4 py-2 text-sm text-zinc-300 hover:border-amber-500/60 hover:text-amber-200"
+            class="rounded-lg border border-zinc-600 px-4 py-2 text-sm text-zinc-300 hover:border-amber-500/60 hover:text-accent-light"
             @click="applyExampleRule"
           >
             {{ t('statisticsPage.recapExample') }}

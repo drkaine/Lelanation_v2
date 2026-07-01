@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-3">
     <div v-if="pending" class="text-xs text-text/60">{{ t('statisticsPage.loading') }}</div>
-    <div v-else-if="error" class="text-xs text-amber-200/90">{{ error }}</div>
+    <div v-else-if="error" class="text-xs text-accent-light/90">{{ error }}</div>
     <div v-else-if="visibleBuilds.length === 0" class="text-xs text-text/55">
       {{
         hasBuildAlertFilters
@@ -111,8 +111,8 @@ function formatPct(value: number): string {
 }
 
 function winrateClass(winrate: number): string {
-  if (winrate > 51) return 'text-emerald-400/90'
-  if (winrate < 49) return 'text-red-400/90'
+  if (winrate > 51) return 'text-info/90'
+  if (winrate < 49) return 'text-error/90'
   return 'text-text/85'
 }
 

@@ -12,7 +12,7 @@
         >
           <Icon name="mdi:cog-outline" size="20" />
         </NuxtLink>
-        <NuxtLink :to="localePath('/')" class="link" :aria-label="t('nav.home')">
+        <NuxtLink :to="localePath('/')" class="link" :aria-label="t('nav.home')" prefetch>
           <span>Lelanation</span>
         </NuxtLink>
       </div>
@@ -149,15 +149,6 @@
             </NuxtLink>
             <div v-show="isStatisticsMenuOpen" class="builds-menu-dropdown">
               <NuxtLink
-                :to="statisticsIndexLink"
-                :title="t('nav.statistics')"
-                class="builds-submenu-link"
-                :class="{ 'is-active': isStatisticsIndexActive }"
-                @click="closeStatisticsMenu"
-              >
-                {{ t('nav.statistics') }}
-              </NuxtLink>
-              <NuxtLink
                 :to="statisticsTierListLink"
                 :title="t('nav.tierList')"
                 class="builds-submenu-link"
@@ -187,38 +178,14 @@
           <NuxtLink :to="localePath('/videos')" :title="t('nav.videos')" class="version">
             {{ t('nav.videos') }}
           </NuxtLink>
-          <div
-            class="builds-menu patch-menu"
-            @mouseenter="isPatchMenuOpen = true"
-            @mouseleave="isPatchMenuOpen = false"
+          <NuxtLink
+            :to="patchSummaryLink"
+            :title="t('nav.patchSummary')"
+            class="version"
+            :class="{ 'is-active': isPatchNotesActive }"
           >
-            <div
-              class="version builds-menu-trigger patch-menu-trigger"
-              :class="{ 'is-active': isPatchNotesActive }"
-            >
-              <a
-                :href="officialPatchNotesUrl"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="patch-version-link"
-                :title="t('nav.officialPatchNotes')"
-              >
-                {{ activePatchVersion }}
-              </a>
-              <span class="builds-menu-chevron" :class="{ 'is-open': isPatchMenuOpen }">▾</span>
-            </div>
-            <div v-show="isPatchMenuOpen" class="builds-menu-dropdown patch-menu-dropdown">
-              <NuxtLink
-                :to="patchSummaryLink"
-                :title="t('nav.patchSummary')"
-                class="builds-submenu-link"
-                :class="{ 'is-active': isPatchNotesActive }"
-                @click="closePatchMenu"
-              >
-                {{ t('nav.patchSummary') }}
-              </NuxtLink>
-            </div>
-          </div>
+            {{ activePatchVersion }}
+          </NuxtLink>
           <NuxtLink
             v-if="isAdminLoggedIn"
             :to="localePath('/admin')"
@@ -267,9 +234,8 @@ import { pickLatestPatchVersion } from '~/utils/patchVersion'
 const isMenuOpen = ref(false)
 const isBuildsMenuOpen = ref(false)
 const isStatisticsMenuOpen = ref(false)
-const isPatchMenuOpen = ref(false)
 const { isMobileViewport } = useMobileViewport()
-const { t, locale } = useI18n()
+const { t } = useI18n()
 const { isLoggedIn: isAdminLoggedIn, checkLoggedIn } = useAdminAuth()
 const localePath = useLocalePath()
 const route = useRoute()
@@ -310,7 +276,6 @@ const hasWatchedChampions = computed(
 const surveillanceAlertCount = computed(() =>
   clientHydrated.value ? surveillanceAlertStore.alertCount + buildSurveillanceStore.alertCount : 0
 )
-const isStatisticsIndexActive = computed(() => route.path === localePath('/statistics'))
 const isStatisticsTierListActive = computed(
   () => route.path === localePath('/statistics/tier-list')
 )
@@ -339,30 +304,6 @@ const activePatchVersion = computed(() => {
 })
 
 const patchSummaryLink = computed(() => localePath(`/patch-notes/${activePatchVersion.value}`))
-
-const getRiotLocale = (currentLocale: string): string => {
-  const localeMap: Record<string, string> = {
-    fr: 'fr-fr',
-    en: 'en-us',
-  }
-  return localeMap[currentLocale] || 'en-us'
-}
-
-const officialPatchNotesUrl = computed(() => {
-  const riotLocale = getRiotLocale(locale.value)
-  const v = String(activePatchVersion.value || '').trim()
-  const parts = v.match(/\d+/g) ?? []
-  const gameMajor = Number(parts[0] ?? NaN)
-  const gameMinor = Number(parts[1] ?? NaN)
-
-  if (Number.isFinite(gameMajor) && Number.isFinite(gameMinor)) {
-    const patchMajor = gameMajor + 10
-    return `https://www.leagueoflegends.com/${riotLocale}/news/game-updates/league-of-legends-patch-${patchMajor}-${gameMinor}-notes/`
-  }
-
-  const slug = v.replace(/\./g, '-')
-  return `https://www.leagueoflegends.com/${riotLocale}/news/game-updates/league-of-legends-patch-${slug}-notes/`
-})
 
 /** Keep version / rank / role / OTP (and tab or sort) when switching between statistics pages. */
 function pickStatisticsSharedQuery(keys: readonly string[]): Record<string, string | string[]> {
@@ -435,10 +376,6 @@ const closeBuildsMenu = () => {
 const closeStatisticsMenu = () => {
   isStatisticsMenuOpen.value = false
 }
-
-const closePatchMenu = () => {
-  isPatchMenuOpen.value = false
-}
 </script>
 
 <style scoped>
@@ -452,7 +389,7 @@ const closePatchMenu = () => {
   height: 50px;
   padding: 0 15px;
   backdrop-filter: blur(10px);
-  background: #08101f;
+  background: rgb(var(--rgb-chrome) / 1);
   margin-bottom: -5px;
 }
 
@@ -602,7 +539,7 @@ const closePatchMenu = () => {
   transform: translateX(-50%);
   border: 1px solid rgb(var(--rgb-accent) / 0.35);
   border-radius: 10px;
-  background: #08101f;
+  background: rgb(var(--rgb-chrome) / 1);
   padding: 8px;
   box-shadow: 0 12px 24px rgb(0 0 0 / 0.28);
 }
@@ -632,28 +569,6 @@ const closePatchMenu = () => {
   color: var(--color-blue-50);
 }
 
-.patch-menu-trigger {
-  cursor: default;
-}
-
-.patch-version-link {
-  color: inherit;
-  font-weight: inherit;
-  text-decoration: none;
-}
-
-.patch-version-link:hover {
-  color: var(--color-accent);
-  text-decoration: none;
-}
-
-.patch-menu .builds-menu-dropdown {
-  left: auto;
-  right: 0;
-  min-width: 160px;
-  transform: none;
-}
-
 .menu-mobile {
   display: none;
   cursor: pointer;
@@ -668,7 +583,7 @@ const closePatchMenu = () => {
   top: 64px;
   left: 0;
   right: 0;
-  background: #08101f;
+  background: rgb(var(--rgb-chrome) / 1);
   padding: 14px 15px;
   flex-direction: column;
   gap: 12px;

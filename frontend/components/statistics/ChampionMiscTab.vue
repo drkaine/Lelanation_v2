@@ -112,14 +112,14 @@ const visibleGroups = computed(() =>
 const hasData = computed(() => gamesCount.value > 0 && visibleGroups.value.length > 0)
 
 const GROUP_CARD_CLASS: Record<string, string> = {
-  healing: 'border-emerald-500/45 bg-emerald-500/[0.06]',
+  healing: 'border-info/45 bg-info/[0.06]',
   damageTypes: 'border-primary/30 bg-surface/30',
   multikills: 'border-violet-500/45 bg-violet-500/[0.06]',
 }
 
 const GROUP_ICON_WRAP: Record<string, string> = {
-  healing: 'border-emerald-500/35 bg-emerald-500/10 text-emerald-300',
-  damageTypes: 'border-amber-500/35 bg-amber-500/10 text-amber-300',
+  healing: 'border-info/35 bg-info/10 text-info',
+  damageTypes: 'border-accent/35 bg-accent/10 text-text-accent',
   multikills: 'border-violet-500/35 bg-violet-500/10 text-violet-300',
 }
 
@@ -155,18 +155,18 @@ function metricSwatch(groupKey: string, metricKey: string): string | undefined {
 }
 
 function metricValueClass(groupKey: string): string {
-  if (groupKey === 'healing') return 'text-emerald-300'
+  if (groupKey === 'healing') return 'text-info'
   if (groupKey === 'multikills') return 'text-violet-200'
   return 'text-accent'
 }
 
 function metricBarClass(groupKey: string, metricKey: string): string {
   if (groupKey === 'damageTypes') {
-    if (metricKey === 'physicalDone') return 'bg-amber-400'
+    if (metricKey === 'physicalDone') return 'bg-accent'
     if (metricKey === 'magicDone') return 'bg-violet-500'
     if (metricKey === 'trueDone') return 'bg-slate-400'
   }
-  if (groupKey === 'healing') return 'bg-emerald-500/80'
+  if (groupKey === 'healing') return 'bg-info/80'
   if (groupKey === 'multikills') return 'bg-violet-500/80'
   return 'bg-accent/80'
 }
@@ -238,7 +238,7 @@ function formatMetric(metric: ChampionMiscMetric): string {
   flex: 0 0 313px;
   margin-left: auto;
   margin-right: auto;
-  background: #08101f !important;
+  background: rgb(var(--rgb-chrome) / 1) !important;
   justify-self: center;
   overflow: hidden;
   box-sizing: border-box;

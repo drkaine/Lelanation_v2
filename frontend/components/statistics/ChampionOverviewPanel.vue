@@ -18,7 +18,7 @@
         <li
           v-for="(line, index) in alertLines"
           :key="'stats-' + index"
-          :class="line.tone === 'positive' ? 'text-emerald-400' : 'text-red-400'"
+          :class="line.tone === 'positive' ? 'text-info' : 'text-error'"
         >
           {{ line.text }}
         </li>
@@ -34,7 +34,7 @@
         <li
           v-for="(line, index) in buildAlertLines"
           :key="'build-' + index"
-          :class="line.tone === 'positive' ? 'text-emerald-400' : 'text-red-400'"
+          :class="line.tone === 'positive' ? 'text-info' : 'text-error'"
         >
           {{ line.text }}
         </li>
