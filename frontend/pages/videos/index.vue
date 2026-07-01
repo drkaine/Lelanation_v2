@@ -1,41 +1,43 @@
 <template>
-  <div class="videos-page min-h-screen px-[15px] py-4 text-sky-200">
-    <div class="mx-auto max-w-none px-0">
+  <div class="videos-page min-h-screen w-full px-[10px] py-4 text-text sm:px-3 lg:px-6">
+    <div class="mx-auto w-full max-w-[1600px] space-y-4">
       <div
         v-if="youtube.error"
-        class="mb-4 rounded-lg border border-error bg-surface p-3 text-sm text-error"
+        class="ui-build-card-surface rounded-xl border-error/40 px-4 py-3 text-sm text-error"
       >
         {{ youtube.error }}
       </div>
 
       <div
         v-if="youtube.loadingStatus || isLoadingAll"
-        class="videos-loading py-8 text-center text-sky-200"
+        class="ui-build-card-surface videos-loading rounded-xl py-12 text-center text-sm text-text/70"
       >
         {{ t('videosPage.loading') }}
       </div>
 
-      <div v-else-if="creators.length === 0" class="py-12 text-center">
-        <p class="text-lg text-sky-200">{{ t('videosPage.noCreatorsTitle') }}</p>
-        <p class="mt-2 text-sm text-sky-200">{{ t('videosPage.noCreatorsText') }}</p>
+      <div
+        v-else-if="creators.length === 0"
+        class="ui-build-card-surface rounded-xl px-4 py-12 text-center"
+      >
+        <p class="text-lg font-semibold text-text-accent">{{ t('videosPage.noCreatorsTitle') }}</p>
+        <p class="mt-2 text-sm text-text/70">{{ t('videosPage.noCreatorsText') }}</p>
       </div>
 
-      <div v-else class="space-y-2.5">
-        <!-- Search and channel -->
-        <div class="mx-auto max-w-5xl">
+      <template v-else>
+        <section class="ui-build-card-surface rounded-xl p-4">
           <div class="flex flex-wrap items-center gap-2">
             <input
               v-model="query"
               type="search"
               placeholder="Rechercher une vidéo..."
-              class="w-full rounded-lg border border-accent/70 bg-surface/70 px-4 py-2 text-sm text-sky-200 shadow-sm placeholder:text-sky-200/70 focus:border-accent focus:outline-none sm:w-1/2"
+              class="w-full rounded-lg border border-primary/35 bg-background px-4 py-2 text-sm text-text placeholder:text-text/45 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40 sm:flex-1"
             />
 
             <label for="videos-channel-filter" class="sr-only">Chaîne</label>
             <select
               id="videos-channel-filter"
               v-model="selectedChannelId"
-              class="w-full rounded-lg border border-accent/70 bg-black px-4 py-2 text-sm text-sky-200 focus:border-accent focus:outline-none sm:w-[260px]"
+              class="w-full rounded-lg border border-primary/35 bg-background px-4 py-2 text-sm text-text focus:border-accent focus:outline-none sm:w-[260px]"
               aria-label="Filtrer par chaîne"
             >
               <option value="all">Toutes les chaînes</option>
@@ -43,15 +45,16 @@
                 {{ c.channelName || c.channelId }}
               </option>
             </select>
+
             <div class="flex flex-wrap items-center gap-2">
-              <div class="text-sm text-sky-200">
+              <div class="text-sm text-text/75">
                 {{ filteredVideos.length }} vidéo{{ filteredVideos.length > 1 ? 's' : '' }}
               </div>
               <label for="videos-per-page" class="sr-only">Résultats par page</label>
               <select
                 id="videos-per-page"
                 :value="String(perPage)"
-                class="rounded-lg border border-accent/70 bg-black px-2 py-1.5 text-xs text-sky-200 focus:border-accent focus:outline-none"
+                class="rounded-lg border border-primary/35 bg-background px-2 py-1.5 text-xs text-text focus:border-accent focus:outline-none"
                 aria-label="Résultats par page"
                 @change="onPerPageChange"
               >
@@ -61,23 +64,20 @@
               </select>
             </div>
           </div>
-        </div>
+        </section>
 
-        <!-- Filters: single responsive row (scrolls on small screens) -->
-        <div class="flex justify-center">
-          <div
-            class="no-scrollbar flex w-full max-w-5xl flex-wrap items-center justify-center gap-2 py-1"
-          >
+        <section class="ui-build-card-surface rounded-xl p-3">
+          <div class="no-scrollbar flex w-full flex-wrap items-center justify-center gap-2 py-0.5">
             <button
               type="button"
-              class="rounded-lg border border-accent/70 bg-surface/70 px-3 py-1.5 text-xs font-semibold text-sky-200 transition-colors hover:bg-accent/10 disabled:opacity-40"
+              class="ui-build-card-button px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
               :disabled="youtube.loadingStatus || isLoadingAll"
               @click="refresh"
             >
               Actualiser
             </button>
 
-            <div class="h-5 w-px shrink-0 bg-accent/30" aria-hidden="true"></div>
+            <div class="h-5 w-px shrink-0 bg-primary/25" aria-hidden="true" />
 
             <div class="flex flex-wrap items-center justify-center gap-2">
               <button
@@ -91,7 +91,7 @@
               </button>
             </div>
 
-            <div class="h-5 w-px shrink-0 bg-accent/30" aria-hidden="true"></div>
+            <div class="h-5 w-px shrink-0 bg-primary/25" aria-hidden="true" />
 
             <div class="flex flex-wrap items-center justify-center gap-2">
               <button
@@ -104,14 +104,7 @@
                 {{ opt.label }}
               </button>
             </div>
-          </div>
-        </div>
 
-        <!-- Pagination controls -->
-        <div
-          class="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-end"
-        >
-          <div class="flex flex-wrap items-center gap-2">
             <button
               v-if="
                 query ||
@@ -120,17 +113,19 @@
                 selectedFormat !== 'all'
               "
               type="button"
-              class="ml-2 text-xs font-semibold text-accent hover:text-accent-dark"
+              class="ui-build-card-button px-2.5 py-1 text-xs font-semibold"
               @click="resetFilters"
             >
               Réinitialiser
             </button>
           </div>
-        </div>
+        </section>
 
-        <!-- Results grid -->
         <div class="videos-results">
-          <div v-if="paginatedVideos.length === 0" class="py-10 text-center text-sky-200">
+          <div
+            v-if="paginatedVideos.length === 0"
+            class="ui-build-card-surface rounded-xl px-4 py-10 text-center text-sm text-text/70"
+          >
             Aucun résultat.
           </div>
 
@@ -144,30 +139,29 @@
           </div>
         </div>
 
-        <!-- Pager -->
         <div
           v-if="perPage !== 0 && totalPages > 1"
-          class="mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-2 pt-2"
+          class="flex flex-wrap items-center justify-center gap-2 pt-1"
         >
           <button
             type="button"
             :disabled="page === 1"
-            class="rounded-lg border border-accent/70 bg-surface/70 px-3 py-2 text-sm text-sky-200 disabled:opacity-40"
+            class="ui-build-card-button px-3 py-2 text-sm disabled:opacity-40"
             @click="page = Math.max(1, page - 1)"
           >
             ←
           </button>
-          <span class="px-2 text-sm text-sky-200">Page {{ page }} / {{ totalPages }}</span>
+          <span class="px-2 text-sm text-text/75">Page {{ page }} / {{ totalPages }}</span>
           <button
             type="button"
             :disabled="page === totalPages"
-            class="rounded-lg border border-accent/70 bg-surface/70 px-3 py-2 text-sm text-sky-200 disabled:opacity-40"
+            class="ui-build-card-button px-3 py-2 text-sm disabled:opacity-40"
             @click="page = Math.min(totalPages, page + 1)"
           >
             →
           </button>
         </div>
-      </div>
+      </template>
     </div>
   </div>
 </template>
@@ -175,6 +169,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAsyncData } from '#app'
 import { useYouTubeStore } from '~/stores/YouTubeStore'
 import VideoGridCard from '~/components/Videos/VideoGridCard.vue'
@@ -187,8 +182,6 @@ const isLoadingAll = ref(false)
 const route = useRoute()
 const { t } = useI18n()
 const videosSiteUrl = useSiteUrl()
-
-// Données YouTube servies depuis /public/data/youtube — compatible SSR.
 
 useHead({
   title: () => t('videosPage.metaTitle'),
@@ -236,10 +229,8 @@ const formatOptions = [
 
 const chipClass = (active: boolean) =>
   [
-    'shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-colors',
-    active
-      ? 'border-accent bg-accent/20 text-accent'
-      : 'border-accent/70 bg-background/10 text-accent-dark hover:border-accent hover:bg-accent/10 hover:text-accent',
+    'ui-build-card-button shrink-0 rounded-full px-3 py-1 text-xs font-semibold',
+    active ? 'is-active' : '',
   ].join(' ')
 
 const normalize = (s: string) =>
@@ -267,11 +258,8 @@ const detectFormat = (video: YouTubeVideo): Exclude<VideoFormat, 'all'> => {
   const desc = video.description || ''
   const t = normalize(`${title} ${desc}`)
 
-  // Primary: explicit markers
   if (/\bshorts?\b/.test(t) || /#shorts?\b/.test(t)) return 'shorts'
 
-  // Heuristic: many shorts are posted with hashtags in the title and a short title.
-  // (We don't have duration in the stored data.)
   const hasHashtags = /#\w+/.test(title)
   if (hasHashtags && title.length <= 90) return 'shorts'
 
@@ -280,15 +268,9 @@ const detectFormat = (video: YouTubeVideo): Exclude<VideoFormat, 'all'> => {
 
 const allVideos = computed<YouTubeVideo[]>(() => {
   const all = Object.values(youtube.channelDataById).flatMap(d => (d?.videos ? d.videos : []))
-  // Deduplicate by id (defensive)
   const byId = new Map<string, YouTubeVideo>()
   for (const v of all) byId.set(v.id, v)
-  const result = [...byId.values()]
-
-  // Debug: check if channels exist but no videos (only in dev)
-  // Silently continue - videos may be loading
-
-  return result
+  return [...byId.values()]
 })
 
 useJsonLdHead(
@@ -358,7 +340,6 @@ const filteredVideos = computed<YouTubeVideo[]>(() => {
     return Number.isFinite(t) ? t : -Infinity
   }
 
-  // Default: strict chronological (newest first), stable tie-breakers.
   return [...list].sort((a, b) => {
     const dt = toTime(b.publishedAt) - toTime(a.publishedAt)
     if (dt !== 0) return dt
@@ -389,7 +370,6 @@ watch([query, selectedChannelId, selectedType, selectedFormat, perPage], () => {
   page.value = 1
 })
 
-// Allow deep links like /videos?channelId=UC...
 watch(
   () => route.query.channelId,
   channelIdQuery => {
@@ -398,7 +378,6 @@ watch(
       selectedChannelId.value = 'all'
       return
     }
-    // Apply only if the channel exists in configured creators (defensive)
     if (creators.value.some(c => c.channelId === q)) {
       selectedChannelId.value = q
     }
@@ -406,7 +385,6 @@ watch(
   { immediate: true }
 )
 
-// Keep URL in sync when user changes channel filter.
 watch(selectedChannelId, next => {
   const current = typeof route.query.channelId === 'string' ? route.query.channelId : ''
   const nextQueryValue = next === 'all' ? '' : String(next)
@@ -452,7 +430,6 @@ const refresh = async () => {
   }
 }
 
-// SSR + client navigation: prefetch creators list.
 await useAsyncData('youtube-status', async () => {
   await youtube.loadStatus()
   isLoadingAll.value = true
@@ -464,19 +441,15 @@ await useAsyncData('youtube-status', async () => {
   return youtube.status
 })
 
-// Force reload on client side to ensure static files are loaded
-// (SSR doesn't have access to static files in public/)
 onMounted(async () => {
   youtube.initializeVideoPreferences()
   perPage.value = youtube.videosPerPage
-  // Always reload on client side to ensure static files are loaded
-  // (SSR can't access public/ files)
   isLoadingAll.value = true
   try {
     await youtube.loadStatus()
     await youtube.loadAllChannelsData()
-  } catch (error) {
-    // Error is handled by the store - silently continue
+  } catch {
+    // Error is handled by the store
   } finally {
     isLoadingAll.value = false
   }
@@ -484,15 +457,24 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.videos-page-title {
+  color: var(--color-gold-300);
+}
+
+.videos-page-subtitle {
+  color: rgb(125 211 252 / 0.88);
+}
+
 .no-scrollbar {
   scrollbar-width: none;
 }
+
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
 
 .videos-loading {
-  min-height: 40vh;
+  min-height: 28vh;
 }
 
 .videos-results {
@@ -502,8 +484,8 @@ onMounted(async () => {
 .videos-grid-list {
   display: flex;
   flex-wrap: wrap;
-  justify-content: space-evenly;
-  gap: 12px;
+  justify-content: flex-start;
+  gap: 15px;
 }
 
 .videos-grid-list > * {

@@ -17,14 +17,17 @@
         :fetchpriority="fetchPriority"
         decoding="async"
       />
-      <div class="pointer-events-none absolute inset-0 ring-1 ring-inset ring-sky-200/20" />
+      <div class="pointer-events-none absolute inset-0 ring-1 ring-inset ring-primary/15" />
     </div>
 
     <div class="p-3" :class="{ 'p-2': compact }">
-      <p class="title-2l text-sm font-semibold text-yellow-500" :class="{ 'text-xs': compact }">
+      <p
+        class="title-2l text-sm font-semibold text-text-accent group-hover:text-accent"
+        :class="{ 'text-xs': compact }"
+      >
         {{ video.title }}
       </p>
-      <p class="mt-1 text-xs text-sky-200">{{ formatDate(video.publishedAt) }}</p>
+      <p class="mt-1 text-xs text-text/65">{{ formatDate(video.publishedAt) }}</p>
     </div>
   </a>
 </template>

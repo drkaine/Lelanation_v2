@@ -1,27 +1,25 @@
 <template>
-  <div class="download-page w-full text-text">
-    <section
-      class="w-full border-b border-primary/25 bg-surface/30 px-3 py-8 sm:px-5 lg:px-8 lg:py-10"
-    >
-      <div class="mx-auto w-full max-w-[1600px]">
-        <h1 class="text-3xl font-bold text-text-accent sm:text-4xl">
+  <div class="download-page min-h-screen w-full px-3 py-4 text-text sm:px-5 lg:px-6">
+    <div class="mx-auto w-full max-w-[1600px] space-y-6">
+      <section class="ui-build-card-surface rounded-2xl p-5 sm:p-8 lg:p-10">
+        <h1 class="download-title text-2xl font-bold sm:text-3xl lg:text-4xl">
           {{ t('lelanationApp.title') }}
         </h1>
-        <p class="mt-3 max-w-3xl text-text/80 sm:text-lg">
+        <p class="download-subtitle mt-3 max-w-3xl text-sm sm:text-base">
           {{ t('lelanationApp.subtitle') }}
         </p>
 
         <div
           v-if="downloadStats"
-          class="mt-4 inline-block rounded-lg border border-primary/20 bg-surface/40 px-4 py-3 text-sm text-text/85"
+          class="ui-build-card-surface mt-5 inline-flex rounded-lg px-4 py-2.5 text-sm text-text/85"
         >
           {{ t('lelanationApp.downloadCount', { count: downloadStats.total }) }}
         </div>
 
-        <div class="mt-6 flex flex-wrap gap-3">
+        <div class="mt-6 flex flex-wrap items-center gap-3">
           <button
             type="button"
-            class="inline-flex items-center rounded-lg bg-accent px-5 py-2.5 font-semibold text-background transition hover:bg-accent-dark disabled:opacity-50"
+            class="inline-flex items-center rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-background transition hover:bg-accent-dark disabled:opacity-50"
             :disabled="downloading"
             @click="downloadCompanionApp"
           >
@@ -29,62 +27,77 @@
           </button>
           <NuxtLink
             :to="localePath('/privacy')"
-            class="inline-flex items-center rounded-lg border border-primary/50 bg-background px-5 py-2.5 font-semibold text-text transition hover:bg-primary/15"
+            class="ui-build-card-button inline-flex items-center px-5 py-2.5 text-sm font-semibold"
           >
             {{ t('lelanationApp.privacyButton') }}
           </NuxtLink>
+          <span
+            class="download-install-tip relative inline-flex shrink-0"
+            tabindex="0"
+            :aria-label="t('lelanationApp.smartScreenTitle')"
+          >
+            <span
+              class="inline-flex h-8 w-8 cursor-help items-center justify-center rounded-full border border-warning/45 bg-warning/10 text-sm font-bold text-warning"
+              aria-hidden="true"
+            >
+              !
+            </span>
+            <span role="tooltip" class="download-install-tooltip">
+              <span class="block font-semibold text-warning">
+                {{ t('lelanationApp.smartScreenTitle') }}
+              </span>
+              <span class="mt-1.5 block text-text/85">
+                {{ t('lelanationApp.smartScreenText') }}
+              </span>
+              <span class="mt-1.5 block font-medium text-text/90">
+                {{ t('lelanationApp.smartScreenSteps') }}
+              </span>
+            </span>
+          </span>
         </div>
 
-        <p v-if="message" :class="isError ? 'text-error' : 'text-green-600'" class="mt-3 text-sm">
+        <p v-if="message" class="mt-3 text-sm" :class="isError ? 'text-error' : 'text-info'">
           {{ message }}
         </p>
 
-        <p class="mt-3 text-xs text-text/60">
+        <p class="mt-3 text-xs text-text/55">
           {{ t('lelanationApp.downloadHint') }}
         </p>
+      </section>
 
-        <div class="mt-5 max-w-3xl rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
-          <h3 class="text-sm font-semibold text-amber-400">
-            ⚠ {{ t('lelanationApp.smartScreenTitle') }}
-          </h3>
-          <p class="mt-2 text-sm text-text/80">{{ t('lelanationApp.smartScreenText') }}</p>
-          <p class="mt-2 text-sm font-medium text-text/90">
-            {{ t('lelanationApp.smartScreenSteps') }}
-          </p>
-        </div>
-      </div>
-    </section>
-
-    <section class="w-full border-b border-primary/20 px-3 py-8 sm:px-5 lg:px-8 lg:py-10">
-      <div class="mx-auto w-full max-w-[1600px]">
-        <h2 class="text-xl font-semibold text-text-accent sm:text-2xl">
+      <section>
+        <h2 class="download-section-title text-xl font-bold sm:text-2xl">
           {{ t('lelanationApp.featuresTitle') }}
         </h2>
         <ul class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <li
             v-for="feature in featureItems"
             :key="feature"
-            class="rounded-lg border border-primary/20 bg-surface/30 px-4 py-3 text-sm text-text/85"
+            class="ui-build-card-surface rounded-lg px-4 py-3 text-sm leading-relaxed text-text/85"
           >
             {{ feature }}
           </li>
         </ul>
-      </div>
-    </section>
+      </section>
 
-    <section class="w-full px-3 py-8 sm:px-5 lg:px-8 lg:py-10">
-      <div class="mx-auto w-full max-w-[1600px]">
-        <h2 class="text-xl font-semibold text-text-accent sm:text-2xl">
+      <section class="ui-build-card-surface rounded-2xl p-5 sm:p-8">
+        <h2 class="download-section-title text-xl font-bold sm:text-2xl">
           {{ t('lelanationApp.gdprTitle') }}
         </h2>
-        <p class="mt-3 max-w-3xl text-text/85">{{ t('lelanationApp.gdprIntro') }}</p>
-        <ul class="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          <li class="text-sm text-text/85">• {{ t('lelanationApp.gdpr.items.consent') }}</li>
-          <li class="text-sm text-text/85">• {{ t('lelanationApp.gdpr.items.localOnly') }}</li>
-          <li class="text-sm text-text/85">• {{ t('lelanationApp.gdpr.items.rights') }}</li>
+        <p class="mt-3 max-w-3xl text-sm leading-relaxed text-text/80 sm:text-base">
+          {{ t('lelanationApp.gdprIntro') }}
+        </p>
+        <ul class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <li
+            v-for="item in gdprItems"
+            :key="item"
+            class="ui-build-card-surface rounded-lg px-4 py-3 text-sm text-text/85"
+          >
+            {{ item }}
+          </li>
         </ul>
-      </div>
-    </section>
+      </section>
+    </div>
   </div>
 </template>
 
@@ -106,6 +119,12 @@ const featureItems = computed(() => [
   t('lelanationApp.features.localFavorites'),
   t('lelanationApp.features.matchSync'),
   t('lelanationApp.features.settings'),
+])
+
+const gdprItems = computed(() => [
+  t('lelanationApp.gdpr.items.consent'),
+  t('lelanationApp.gdpr.items.localOnly'),
+  t('lelanationApp.gdpr.items.rights'),
 ])
 
 const downloadUrl = computed(() => {
@@ -210,3 +229,39 @@ onMounted(() => {
   loadDownloadStats()
 })
 </script>
+
+<style scoped>
+.download-title,
+.download-section-title {
+  color: var(--color-gold-300);
+}
+
+.download-subtitle {
+  color: rgb(125 211 252 / 0.88);
+}
+
+.download-install-tooltip {
+  pointer-events: none;
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 50%;
+  z-index: 50;
+  display: none;
+  width: max-content;
+  max-width: min(28rem, calc(100vw - 2rem));
+  transform: translateX(-50%);
+  border-radius: 0.5rem;
+  border: 1px solid rgb(var(--rgb-warning) / 0.35);
+  background: rgb(var(--rgb-chrome) / 1);
+  padding: 0.75rem 0.9rem;
+  text-align: left;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.45);
+}
+
+.download-install-tip:hover .download-install-tooltip,
+.download-install-tip:focus-within .download-install-tooltip {
+  display: block;
+}
+</style>

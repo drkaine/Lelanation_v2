@@ -17,10 +17,8 @@
           :key="role"
           type="button"
           :class="[
-            'champion-filter-btn rounded-lg border text-sm font-semibold transition-all',
-            selectedRoles.includes(role)
-              ? 'border-surface bg-accent text-background'
-              : 'border-accent bg-surface text-text',
+            'champion-filter-btn ui-build-card-button px-2 py-1 text-sm font-semibold',
+            selectedRoles.includes(role) ? 'is-active' : '',
           ]"
           @click="toggleRole(role)"
         >
@@ -30,7 +28,7 @@
       <div class="champion-action-bar flex flex-wrap items-center gap-1.5">
         <button
           type="button"
-          class="rounded border border-primary/35 bg-surface/40 px-2.5 py-1 text-xs text-text/80 hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+          class="ui-build-card-button px-2.5 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
           :disabled="championsStore.status !== 'success' || allFilteredSelected"
           @click="selectAllFiltered"
         >
@@ -39,7 +37,7 @@
         <button
           v-if="hasSelection"
           type="button"
-          class="rounded border border-primary/35 bg-surface/40 px-2.5 py-1 text-xs text-text/80 hover:bg-primary/10"
+          class="ui-build-card-button px-2.5 py-1 text-xs"
           @click="clearAll"
         >
           {{ t('statisticsPage.settingsWatchlistClear') }}

@@ -22,7 +22,10 @@ export function uiTierBadgeClass(tier: string): string {
 
 /** Solid tier note badge — same palette as statistics tier list table. */
 export function uiStatisticsTierBadgeClass(tier: string): string {
-  const label = tier === 'F' ? 'D' : tier
+  const label = String(tier ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/^F$/, 'D')
   if (label === 'S+') return 'ui-statistics-tier-badge ui-statistics-tier-badge--s-plus'
   if (label === 'S') return 'ui-statistics-tier-badge ui-statistics-tier-badge--s'
   if (label === 'A') return 'ui-statistics-tier-badge ui-statistics-tier-badge--a'

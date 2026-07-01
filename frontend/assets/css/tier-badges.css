@@ -1,0 +1,40 @@
+/* Tier list note badges — same palette as StatisticsTierListTab */
+@layer components {
+  .ui-statistics-tier-badge {
+    display: inline-flex;
+    min-height: 1.25rem;
+    min-width: 1.25rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.25rem;
+    padding: 0 0.125rem;
+    font-size: 0.625rem;
+    font-weight: 700;
+    line-height: 1;
+    color: rgb(var(--rgb-background) / 1);
+  }
+
+  .ui-statistics-tier-badge--s-plus {
+    background-color: #f5c542;
+  }
+
+  .ui-statistics-tier-badge--s {
+    background-color: #22c55e;
+  }
+
+  .ui-statistics-tier-badge--a {
+    background-color: #2563eb;
+  }
+
+  .ui-statistics-tier-badge--b {
+    background-color: #60a5fa;
+  }
+
+  .ui-statistics-tier-badge--c {
+    background-color: #a855f7;
+  }
+
+  .ui-statistics-tier-badge--d {
+    background-color: #dc2626;
+  }
+}

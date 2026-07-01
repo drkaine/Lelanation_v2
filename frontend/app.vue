@@ -379,6 +379,8 @@ if (import.meta.client) {
 
 <style>
 @import './assets/css/tokens.css';
+@import './assets/css/tier-badges.css';
+@import './assets/css/ui-build-card.css';
 
 @tailwind base;
 @tailwind components;

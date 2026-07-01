@@ -64,7 +64,39 @@
       </section>
 
       <section v-else :class="homeSectionClass(item.id)">
-        <div class="home-section-inner">
+        <template v-if="item.id === 'recentBuilds'">
+          <div class="home-section-inner">
+            <div class="home-section-header mb-2">
+              <h2 class="home-section-title text-xl font-bold sm:text-2xl">
+                {{ t('home.recentBuildsTitle') }}
+              </h2>
+              <NuxtLink
+                :to="localePath('/builds/discover')"
+                class="mt-2 inline-block text-sm font-semibold text-accent hover:underline"
+              >
+                {{ t('home.seeAllBuilds') }}
+              </NuxtLink>
+            </div>
+            <div v-if="pending" class="py-8 text-center text-sm text-text/60">
+              {{ t('home.loading') }}
+            </div>
+            <div
+              v-else-if="recentBuilds.length === 0"
+              class="ui-build-card-surface rounded-xl px-4 py-8 text-center text-sm text-text/70"
+            >
+              {{ t('home.noBuildsYet') }}
+            </div>
+          </div>
+          <div v-if="!pending && recentBuilds.length > 0" class="home-builds-grid-wrap">
+            <BuildGrid
+              :custom-builds="recentBuilds"
+              :show-comparison-buttons="false"
+              :hide-bottom-actions="true"
+              :show-all-custom-builds="true"
+            />
+          </div>
+        </template>
+        <div v-else class="home-section-inner">
           <div
             v-if="item.id === 'customize'"
             class="home-customize-block flex w-full flex-col items-center text-center"
@@ -140,36 +172,6 @@
               </div>
             </div>
           </div>
-
-          <template v-if="item.id === 'recentBuilds'">
-            <div class="home-section-header mb-2">
-              <h2 class="home-section-title text-xl font-bold sm:text-2xl">
-                {{ t('home.recentBuildsTitle') }}
-              </h2>
-              <NuxtLink
-                :to="localePath('/builds/discover')"
-                class="mt-2 inline-block text-sm font-semibold text-accent hover:underline"
-              >
-                {{ t('home.seeAllBuilds') }}
-              </NuxtLink>
-            </div>
-            <div v-if="pending" class="py-8 text-center text-sm text-text/60">
-              {{ t('home.loading') }}
-            </div>
-            <div
-              v-else-if="recentBuilds.length === 0"
-              class="ui-build-card-surface rounded-xl px-4 py-8 text-center text-sm text-text/70"
-            >
-              {{ t('home.noBuildsYet') }}
-            </div>
-            <BuildGrid
-              v-else
-              :custom-builds="recentBuilds"
-              :show-comparison-buttons="false"
-              :hide-bottom-actions="true"
-              :show-all-custom-builds="true"
-            />
-          </template>
 
           <template v-if="item.id === 'tierList'">
             <div class="home-section-header mb-2">
@@ -518,8 +520,14 @@ function homeTierLabel(tier: string): string {
 .home-section--builds {
   width: 100%;
   min-width: 0;
-  overflow-x: clip;
   text-align: left;
+}
+
+/* Même conteneur horizontal que builds-page (px-[10px], pleine largeur) */
+.home-builds-grid-wrap {
+  width: 100%;
+  padding-inline: 10px;
+  box-sizing: border-box;
 }
 
 .home-section-title {

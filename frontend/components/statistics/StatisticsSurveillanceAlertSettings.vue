@@ -17,7 +17,7 @@
         :class="
           selectedCohortKey === profile.cohortKey
             ? 'border-primary/60 bg-primary/15 text-text'
-            : 'border-primary/25 bg-surface/40 text-text/70 hover:bg-primary/10'
+            : 'border-primary/25 bg-panel-elevated/50 text-text/70 hover:bg-primary/10'
         "
         @click="selectCohort(profile.cohortKey)"
       >
@@ -41,8 +41,8 @@
       <button
         v-if="canEditSelectedCohort"
         type="button"
-        class="rounded border border-primary/35 px-2.5 py-1 text-xs text-text/80 hover:bg-primary/10"
-        :class="showEditCohort ? 'bg-primary/15' : 'bg-surface/40'"
+        class="ui-build-card-button px-2.5 py-1 text-xs"
+        :class="showEditCohort ? 'ring-1 ring-primary/40' : ''"
         @click="toggleEditCohort"
       >
         {{
@@ -68,7 +68,7 @@
       <button
         v-if="!alertStore.sharedThresholds"
         type="button"
-        class="rounded border border-primary/35 bg-surface/40 px-2.5 py-1 text-xs text-text/80 hover:bg-primary/10"
+        class="ui-build-card-button px-2.5 py-1 text-xs"
         :title="t('statisticsPage.settingsAlertsResetCohort')"
         @click="resetCurrentCohort"
       >
@@ -76,7 +76,7 @@
       </button>
       <button
         type="button"
-        class="rounded border border-primary/35 bg-surface/40 px-2.5 py-1 text-xs text-text/80 hover:bg-primary/10"
+        class="ui-build-card-button px-2.5 py-1 text-xs"
         :title="t('statisticsPage.settingsAlertsReset')"
         @click="resetAllThresholds"
       >
@@ -84,12 +84,8 @@
       </button>
       <button
         type="button"
-        class="rounded border px-2.5 py-1 text-xs transition"
-        :class="
-          alertStore.sharedThresholds
-            ? 'border-primary/60 bg-primary/15 text-text'
-            : 'border-primary/35 bg-surface/40 text-text/80 hover:bg-primary/10'
-        "
+        class="ui-build-card-button px-2.5 py-1 text-xs transition"
+        :class="alertStore.sharedThresholds ? 'ring-1 ring-primary/40' : ''"
         :title="
           alertStore.sharedThresholds
             ? t('statisticsPage.settingsAlertsThresholdModeSharedHint')
@@ -102,10 +98,7 @@
       </button>
     </div>
 
-    <div
-      v-if="showAddCohort"
-      class="space-y-2 rounded-lg border border-dashed border-primary/30 bg-surface/20 p-3"
-    >
+    <div v-if="showAddCohort" class="ui-build-card-surface space-y-2 rounded-lg p-3">
       <p class="text-xs text-text/65">{{ t('statisticsPage.settingsAlertsAddCohortHint') }}</p>
       <div class="flex flex-wrap items-center gap-2">
         <input
@@ -147,7 +140,7 @@
       </p>
       <button
         type="button"
-        class="rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs hover:bg-primary/10 disabled:opacity-50"
+        class="ui-build-card-button px-3 py-1.5 text-xs disabled:opacity-50"
         :disabled="pendingRankTiers.length === 0"
         @click="confirmAddCohort"
       >
@@ -157,7 +150,7 @@
 
     <div
       v-if="showEditCohort && selectedProfile"
-      class="space-y-2 rounded-lg border border-dashed border-primary/30 bg-surface/20 p-3"
+      class="ui-build-card-surface space-y-2 rounded-lg p-3"
     >
       <p class="text-xs text-text/65">{{ t('statisticsPage.settingsAlertsEditCohortHint') }}</p>
       <div class="flex flex-wrap items-center gap-2">
@@ -200,7 +193,7 @@
       </p>
     </div>
 
-    <div class="space-y-2 rounded-lg border border-primary/20 bg-surface/20 p-3">
+    <div class="ui-build-card-surface space-y-2 rounded-lg p-3">
       <div class="text-xs font-medium text-text/80">
         {{ t('statisticsPage.settingsAlertsReferenceTitle') }}
       </div>
@@ -324,7 +317,7 @@
         </span>
       </p>
 
-      <div class="overflow-x-auto rounded-lg border border-primary/25 bg-surface/30">
+      <div class="ui-build-card-surface overflow-x-auto rounded-lg">
         <table class="w-full min-w-[28rem] text-left text-xs">
           <thead>
             <tr class="border-b border-primary/20 text-text/60">

@@ -1,6 +1,6 @@
 <template>
   <section class="space-y-6">
-    <div class="rounded-lg border border-primary/25 bg-surface/30 p-4">
+    <div class="ui-build-card-surface rounded-lg p-4">
       <h3 class="text-sm font-semibold text-text-accent">
         {{ t('buildsPage.shareCodeTitle') }}
       </h3>
@@ -53,7 +53,7 @@
       </p>
       <button
         type="button"
-        class="mt-3 rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs font-semibold text-text hover:bg-primary/10 disabled:opacity-40"
+        class="ui-build-card-button mt-3 px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
         :disabled="shareLoading"
         @click="shareBuilds()"
       >
@@ -61,7 +61,7 @@
       </button>
     </div>
 
-    <div class="rounded-lg border border-primary/25 bg-surface/30 p-4">
+    <div class="ui-build-card-surface rounded-lg p-4">
       <h3 class="text-sm font-semibold text-text-accent">
         {{ t('buildsPage.importCodeTitle') }}
       </h3>

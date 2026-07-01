@@ -2,7 +2,7 @@
   <div class="statistics-settings min-h-screen w-full px-3 py-4 text-text sm:px-5 lg:px-6">
     <div class="w-full space-y-4">
       <nav
-        class="flex flex-wrap gap-1 border-b border-primary/20 pb-0.5"
+        class="flex flex-wrap gap-2"
         role="tablist"
         :aria-label="t('statisticsPage.settingsPageTabsAria')"
       >
@@ -11,12 +11,8 @@
           :key="tab.id"
           type="button"
           role="tab"
-          class="rounded-t border px-3 py-2 text-sm font-medium transition"
-          :class="
-            activeSettingsPageTab === tab.id
-              ? 'border-primary/40 border-b-transparent bg-surface/40 text-text'
-              : 'border-transparent text-text/60 hover:bg-surface/20 hover:text-text'
-          "
+          class="ui-build-card-button px-3 py-2 text-sm font-medium transition"
+          :class="{ 'is-active': activeSettingsPageTab === tab.id }"
           :aria-selected="activeSettingsPageTab === tab.id"
           @click="activeSettingsPageTab = tab.id"
         >
@@ -37,11 +33,7 @@
               })
             }}
           </span>
-          <button
-            type="button"
-            class="rounded border border-primary/35 bg-surface/50 px-2.5 py-1 text-xs hover:bg-primary/10"
-            @click="resetTabs"
-          >
+          <button type="button" class="ui-build-card-button px-2.5 py-1 text-xs" @click="resetTabs">
             {{ t('statisticsPage.settingsReset') }}
           </button>
         </div>
@@ -50,7 +42,7 @@
           <li
             v-for="row in tabRows"
             :key="row.id"
-            class="flex min-w-0 flex-col gap-2 rounded-lg border border-primary/25 bg-surface/30 px-2.5 py-2"
+            class="ui-build-card-surface flex min-w-0 flex-col gap-2 rounded-lg px-2.5 py-2"
             :class="row.visible ? 'opacity-100' : 'opacity-55'"
           >
             <div class="min-h-[2.25rem] text-xs font-medium leading-snug text-text/90">
@@ -126,7 +118,7 @@
           </span>
           <button
             type="button"
-            class="rounded border border-primary/35 bg-surface/50 px-2.5 py-1 text-xs hover:bg-primary/10"
+            class="ui-build-card-button px-2.5 py-1 text-xs"
             @click="resetHomeSections"
           >
             {{ t('statisticsPage.settingsReset') }}
@@ -137,13 +129,13 @@
           <li
             v-for="(row, index) in homeSectionRows"
             :key="row.id"
-            class="flex min-w-0 items-center gap-2 rounded-lg border border-primary/25 bg-surface/30 px-2.5 py-2"
+            class="ui-build-card-surface flex min-w-0 items-center gap-2 rounded-lg px-2.5 py-2"
             :class="row.visible ? 'opacity-100' : 'opacity-55'"
           >
             <div class="flex shrink-0 flex-col gap-0.5">
               <button
                 type="button"
-                class="rounded border border-primary/30 px-1.5 py-0.5 text-[10px] text-text/70 hover:bg-primary/10 disabled:opacity-30"
+                class="ui-build-card-button px-1.5 py-0.5 text-[10px] disabled:opacity-30"
                 :disabled="index === 0"
                 :aria-label="t('statisticsPage.settingsHomeSectionMoveUp', { section: row.label })"
                 @click="moveHomeSection(row.id, 'up')"
@@ -152,7 +144,7 @@
               </button>
               <button
                 type="button"
-                class="rounded border border-primary/30 px-1.5 py-0.5 text-[10px] text-text/70 hover:bg-primary/10 disabled:opacity-30"
+                class="ui-build-card-button px-1.5 py-0.5 text-[10px] disabled:opacity-30"
                 :disabled="index === homeSectionRows.length - 1"
                 :aria-label="
                   t('statisticsPage.settingsHomeSectionMoveDown', { section: row.label })

@@ -1,4 +1,6 @@
 @import './tokens.css';
+@import './ui-build-card.css';
+@import './tier-badges.css';
 
 @tailwind base;
 @tailwind components;
@@ -20,46 +22,6 @@
 @layer components {
   .ui-chrome-bg {
     background-color: rgb(var(--rgb-chrome) / 1);
-  }
-
-  /* Same surface as BuildCard / MatchupGuideCard (blue fill + gold border gradient) */
-  .ui-build-card-surface {
-    --card-border-color: var(--card-border-color-default);
-    --card-border-color-soft: var(--card-border-color-soft-default);
-    --card-border-gradient-strong: var(--card-border-gradient-default-strong);
-    --card-border-gradient-soft: var(--card-border-gradient-default-soft);
-    border: 2px solid transparent;
-    border-radius: 6px;
-    background-image:
-      linear-gradient(var(--color-blue-500), var(--color-blue-500)),
-      var(--card-border-gradient-strong);
-    background-origin: border-box;
-    background-clip: padding-box, border-box;
-    box-shadow: 0 4px 12px rgb(0 0 0 / 0.5);
-  }
-
-  /* Secondary buttons — same fill/border as build cards (not gold CTA) */
-  .ui-build-card-button {
-    --card-border-color: var(--card-border-color-default);
-    --card-border-color-soft: var(--card-border-color-soft-default);
-    --card-border-gradient-strong: var(--card-border-gradient-default-strong);
-    border: 2px solid transparent;
-    border-radius: 0.5rem;
-    background-image:
-      linear-gradient(var(--color-blue-500), var(--color-blue-500)),
-      var(--card-border-gradient-strong);
-    background-origin: border-box;
-    background-clip: padding-box, border-box;
-    box-shadow: 0 2px 8px rgb(0 0 0 / 0.45);
-    color: rgb(var(--rgb-text) / 0.92);
-    transition:
-      box-shadow 0.2s ease,
-      color 0.2s ease;
-  }
-
-  .ui-build-card-button:hover {
-    box-shadow: 0 4px 14px var(--card-border-color-soft-default);
-    color: var(--color-gold-300);
   }
 
   .ui-action-favorite {

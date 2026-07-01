@@ -1118,7 +1118,7 @@ onUnmounted(() => {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
-  justify-content: space-evenly;
+  justify-content: flex-start;
   gap: var(--build-grid-gap, 15px);
   padding-inline: 5px;
   box-sizing: border-box;
@@ -1286,7 +1286,7 @@ onUnmounted(() => {
 
 @media (max-width: 639px) {
   .build-grid-list {
-    justify-content: center;
+    justify-content: flex-start;
     padding-inline: 0;
   }
 }
