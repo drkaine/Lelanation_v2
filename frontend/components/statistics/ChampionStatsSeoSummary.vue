@@ -1,46 +1,40 @@
 <template>
-  <section
-    class="champion-stats-seo-summary statistics-panel-surface mb-4 p-4"
-    aria-label="Résumé statistiques"
-  >
-    <h1 class="text-xl font-bold text-accent">
-      {{ heading }}
-    </h1>
-    <p class="mt-2 text-sm text-text/80">{{ intro }}</p>
-    <table class="mt-4 w-full max-w-lg border-collapse text-sm">
-      <caption class="sr-only">
+  <div class="sr-only" aria-hidden="true">
+    <p class="font-bold">{{ heading }}</p>
+    <p>{{ intro }}</p>
+    <table class="w-full max-w-lg border-collapse text-sm">
+      <caption>
         {{
           caption
         }}
       </caption>
       <thead>
-        <tr class="border-b border-primary/30 text-left text-text/70">
-          <th scope="col" class="py-2 pr-3">{{ t('statisticsPage.filterRole') }}</th>
-          <th scope="col" class="py-2 pr-3">{{ t('statisticsPage.winrate') }}</th>
-          <th scope="col" class="py-2 pr-3">{{ t('statisticsPage.pickrate') }}</th>
-          <th scope="col" class="py-2">{{ t('statisticsPage.games') }}</th>
+        <tr>
+          <th scope="col">{{ t('statisticsPage.filterRole') }}</th>
+          <th scope="col">{{ t('statisticsPage.winrate') }}</th>
+          <th scope="col">{{ t('statisticsPage.pickrate') }}</th>
+          <th scope="col">{{ t('statisticsPage.games') }}</th>
         </tr>
       </thead>
       <tbody>
-        <tr class="border-b border-primary/20 font-medium text-text">
-          <th scope="row" class="py-2 pr-3">{{ t('statisticsPage.championStatsGlobalRow') }}</th>
-          <td class="py-2 pr-3 tabular-nums">{{ formatPct(stats.winrate) }}%</td>
-          <td class="py-2 pr-3 tabular-nums">{{ formatPct(stats.pickrate) }}%</td>
-          <td class="py-2 tabular-nums">{{ stats.games }}</td>
+        <tr>
+          <th scope="row">{{ t('statisticsPage.championStatsGlobalRow') }}</th>
+          <td>{{ formatPct(stats.winrate) }}%</td>
+          <td>{{ formatPct(stats.pickrate) }}%</td>
+          <td>{{ stats.games }}</td>
         </tr>
-        <tr v-for="row in roleRows" :key="row.role" class="border-b border-primary/10 text-text/90">
-          <th scope="row" class="py-2 pr-3">{{ roleLabel(row.role) }}</th>
-          <td class="py-2 pr-3 tabular-nums">{{ formatPct(row.winrate) }}%</td>
-          <td class="py-2 pr-3 tabular-nums">{{ formatPct(row.pickrate) }}%</td>
-          <td class="py-2 tabular-nums">{{ row.games }}</td>
+        <tr v-for="row in roleRows" :key="row.role">
+          <th scope="row">{{ roleLabel(row.role) }}</th>
+          <td>{{ formatPct(row.winrate) }}%</td>
+          <td>{{ formatPct(row.pickrate) }}%</td>
+          <td>{{ row.games }}</td>
         </tr>
       </tbody>
     </table>
-    <p v-if="stats.banrate != null" class="mt-3 text-sm text-text/75">
-      {{ t('statisticsPage.championStatsBanrateTitle') }}:
-      <strong class="tabular-nums">{{ formatPct(stats.banrate) }}%</strong>
+    <p v-if="stats.banrate != null">
+      {{ t('statisticsPage.championStatsBanrateTitle') }}: {{ formatPct(stats.banrate) }}%
     </p>
-  </section>
+  </div>
 </template>
 
 <script setup lang="ts">

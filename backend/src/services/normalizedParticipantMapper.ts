@@ -39,13 +39,14 @@ function itemsFromItemHistory(raw: unknown, win: boolean): ParsedItemDto[] {
     .filter((item) => item.itemId > 0);
 }
 
-function spellOrderFromHistory(raw: unknown): string {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return "";
-  return Object.entries(raw as Record<string, number>)
-    .sort(([, a], [, b]) => a - b)
-    .map(([slot]) => slot)
-    .join("-");
-}
+import {
+  spellOrderFromHistoryDoc,
+  spellTimestampSumFromHistoryDoc,
+} from '../parsers/spellHistoryDoc.js'
+import {
+  readTeamFirstObjectiveFlags,
+  type TeamFirstObjectiveFlags,
+} from '../parsers/teamFirstObjectives.js'
 
 function perksFromRow(row: ParticipantRow): number[] {
   const out: number[] = [];
@@ -146,10 +147,29 @@ function findOpponent(
   };
 }
 
+function teamFirstFlagsFromRow(teamRow: ParticipantRow | undefined): TeamFirstObjectiveFlags {
+  if (!teamRow) {
+    return readTeamFirstObjectiveFlags(null)
+  }
+  return {
+    teamFirstBaron: teamRow.baron_first === true,
+    teamFirstDragon: teamRow.dragon_first === true,
+    teamFirstTower: teamRow.tower_first === true,
+    teamFirstInhibitor: teamRow.inhibitor_first === true,
+    teamFirstRiftHerald: teamRow.rift_herald_first === true,
+    teamFirstHorde: teamRow.horde_first === true,
+  }
+}
+
 export function participantRowsToParsedDtos(
   rows: ParticipantRow[],
   match: MatchContext,
+  teamRows: ParticipantRow[] = [],
 ): ParsedParticipantDto[] {
+  const teamById = new Map<number, ParticipantRow>()
+  for (const team of teamRows) {
+    teamById.set(n(team.team_id), team)
+  }
   const sorted = [...rows].sort((a, b) => n(a.participant_id) - n(b.participant_id));
   const out: ParsedParticipantDto[] = [];
 
@@ -160,6 +180,7 @@ export function participantRowsToParsedDtos(
     const opponent = findOpponent(row, sorted);
     const perks = perksFromRow(row);
     const gameDateIso = match.gameDate.includes("T") ? match.gameDate : `${match.gameDate}T00:00:00.000Z`;
+    const teamFirst = teamFirstFlagsFromRow(teamById.get(n(row.team_id)));
 
     const dto: Record<string, unknown> = {
       matchId: match.riotMatchId,
@@ -181,6 +202,12 @@ export function participantRowsToParsedDtos(
       firstBloodAssist: row.first_blood_assist === true,
       firstTowerKill: row.first_tower_kill === true,
       firstTowerAssist: row.first_tower_assist === true,
+      teamFirstBaron: teamFirst.teamFirstBaron,
+      teamFirstDragon: teamFirst.teamFirstDragon,
+      teamFirstTower: teamFirst.teamFirstTower,
+      teamFirstInhibitor: teamFirst.teamFirstInhibitor,
+      teamFirstRiftHerald: teamFirst.teamFirstRiftHerald,
+      teamFirstHorde: teamFirst.teamFirstHorde,
       gameEndedInEarlySurrender: match.earlySurrender,
       gameEndedInSurrender: match.surrender,
       teamEarlySurrendered: match.earlySurrender,
@@ -192,12 +219,12 @@ export function participantRowsToParsedDtos(
       opponentChampionId: opponent.championId,
       opponentParticipantId: opponent.participantId,
       opponentRole: opponent.role,
-      spellOrder: spellOrderFromHistory(row.spell_history),
+      spellOrder: spellOrderFromHistoryDoc(row.spell_history),
       spell1Casts: n(row.spell1_casts),
       spell2Casts: n(row.spell2_casts),
       spell3Casts: n(row.spell3_casts),
       spell4Casts: n(row.spell4_casts),
-      spellLevelUpTimestampSumMs: 0,
+      spellLevelUpTimestampSumMs: spellTimestampSumFromHistoryDoc(row.spell_history),
       starterKey: "",
       coreKey: "",
       materialKey: "",

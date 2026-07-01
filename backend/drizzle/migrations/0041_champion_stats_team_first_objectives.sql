@@ -1,0 +1,13 @@
+-- Team-first objective flags per game (for champion objectives « First baron/dragon/… » columns).
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_team_first_baron_win BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_team_first_baron_loss BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_team_first_dragon_win BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_team_first_dragon_loss BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_team_first_tower_win BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_team_first_tower_loss BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_team_first_inhibitor_win BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_team_first_inhibitor_loss BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_team_first_rift_herald_win BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_team_first_rift_herald_loss BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_team_first_horde_win BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE champion_stats ADD COLUMN IF NOT EXISTS count_team_first_horde_loss BIGINT NOT NULL DEFAULT 0;

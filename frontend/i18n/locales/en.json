@@ -933,7 +933,7 @@
     "tierListWinrateTooltip": "Share of games won (wins / games × 100).",
     "tierListPickrateTooltip": "Share of picks in the role (champion-role games / total role games).",
     "tierListBanrateTooltip": "Share of matches where the champion is banned (bans / total matches).",
-    "tierListPbiTooltip": "Pick Ban Influence: (winrate − bracket-average winrate) × 100 × pick% ÷ (100 − ban%). High PBI often means contested picks, strong meta presence, and valuable global bans.",
+    "tierListPbiTooltip": "Matchup score (higher is better): same formula as the champion Matchups tab — WR delta vs other champions facing the same opponent, Lolalytics base bands, weight games(A vs B)/games(A on role), blended with lane timeline signals (gold, CS, kills, vision, items, ganks, objectives…). Champion score = sum over all opponents on the role. Display ×100.",
     "tierListApexRankTooltip": "Apex = Master + Grandmaster + Challenger.",
     "tierListHighEloWinTooltip": "Win rate in Apex (Master + Grandmaster + Challenger).",
     "tierListDeltaTooltip": "Difference between all-ranks win rate and Apex win rate (Master + Grandmaster + Challenger) (positive = better in high elo).",
@@ -1492,6 +1492,8 @@
     "championMatchupDetailProfileTitle": "Detailed lane profile",
     "championMatchupDetailProfileHint": "Comparison vs lane opponent on this matchup (relative to other champions in the same role).",
     "championMatchupDetailProfileBalanced": "Balanced matchup: no clear lane signal stands out in this duel.",
+    "championMatchupDetailProfileNoTimeline": "The matchup score is driven mainly by relative win rate (WR vs other champions into this opponent). Lane timeline metrics (gold, vision, CS…) are not yet available for this duel.",
+    "championMatchupDetailTimelineEmpty": "Lane timeline metrics are unavailable for this duel — displayed values stay at 0 until data is ingested.",
     "championMatchupInsight": {
       "category": {
         "dive": "Dive",
@@ -1555,6 +1557,14 @@
         "roamKills": {
           "title": "Rewarding roams",
           "detail": "{kills} roam kills / game ({deaths} roam deaths)."
+        },
+        "matchupScore": {
+          "title": "Favorable win-rate duel",
+          "detail": "Composite score {score} · {wr}% WR over {games} games — better than average for other champions into this opponent."
+        },
+        "laneScore": {
+          "title": "Lane profile above norm",
+          "detail": "Relative lane score {laneScore} (vs other champions on this matchup)."
         },
         "legendaryFirst": {
           "title": "Buys legendary item first",
@@ -1649,6 +1659,14 @@
         "platesLost": {
           "title": "Loses more tower plates",
           "detail": "{you} plates taken / game vs {opp} for opponent."
+        },
+        "matchupScore": {
+          "title": "Unfavorable win-rate duel",
+          "detail": "Composite score {score} · {wr}% WR over {games} games — worse than average for other champions into this opponent."
+        },
+        "laneScore": {
+          "title": "Lane profile below norm",
+          "detail": "Relative lane score {laneScore} (vs other champions on this matchup)."
         }
       }
     },

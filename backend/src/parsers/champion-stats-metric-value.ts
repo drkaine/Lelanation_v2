@@ -1,5 +1,9 @@
 import type { ChampionStatsMetricColumn } from "../constants/championStatsMetricColumns.js";
 import type { ParsedParticipantDto } from "../dto/match.dto.js";
+import {
+  type TeamFirstObjectiveMetricColumn,
+  teamFirstObjectiveMetricValue,
+} from "./teamFirstObjectives.js";
 
 /**
  * Colonnes `champion_stats` en double precision (migration 0008) : challenges Riot
@@ -53,6 +57,30 @@ export function championStatsMetricValue(
       return participant.firstTowerKill ? 1 : 0;
     case "count_first_tower_assist_true":
       return participant.firstTowerAssist ? 1 : 0;
+    case "count_team_first_baron_win":
+    case "count_team_first_baron_loss":
+    case "count_team_first_dragon_win":
+    case "count_team_first_dragon_loss":
+    case "count_team_first_tower_win":
+    case "count_team_first_tower_loss":
+    case "count_team_first_inhibitor_win":
+    case "count_team_first_inhibitor_loss":
+    case "count_team_first_rift_herald_win":
+    case "count_team_first_rift_herald_loss":
+    case "count_team_first_horde_win":
+    case "count_team_first_horde_loss":
+      return teamFirstObjectiveMetricValue(
+        {
+          teamFirstBaron: participant.teamFirstBaron === true,
+          teamFirstDragon: participant.teamFirstDragon === true,
+          teamFirstTower: participant.teamFirstTower === true,
+          teamFirstInhibitor: participant.teamFirstInhibitor === true,
+          teamFirstRiftHerald: participant.teamFirstRiftHerald === true,
+          teamFirstHorde: participant.teamFirstHorde === true,
+        },
+        col as TeamFirstObjectiveMetricColumn,
+        participant.win === true
+      );
     case "sum_game_ended_in_early_surrender":
       return participant.gameEndedInEarlySurrender ? 1 : 0;
     case "sum_game_ended_in_surrender":

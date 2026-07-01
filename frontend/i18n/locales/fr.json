@@ -933,7 +933,7 @@
     "tierListWinrateTooltip": "Part des parties gagnées (victoires / parties × 100).",
     "tierListPickrateTooltip": "Part des picks dans le rôle (parties champion-rôle / total parties du rôle).",
     "tierListBanrateTooltip": "Part des matchs où le champion est banni (bans / total matchs).",
-    "tierListPbiTooltip": "Score matchup (plus haut = meilleur): Delta(A→B) = WR(A vs B) - moyenne WR des autres champions éligibles (>100 games) vs B. Les Delta sont recentrés autour de 0 puis convertis en score de base (-10/-6/-3/0/3/6/10) selon la bande de Delta. Chaque score est multiplié par la pondération games(A vs B) / games(A), puis additionné pour obtenir la note finale affichée (décimales incluses).",
+    "tierListPbiTooltip": "Score matchup (plus haut = meilleur) : même formule que l’onglet Matchups de la fiche champion — delta WR vs les autres champions face au même opposant, bandes Lolalytics, pondération games(A vs B)/games(A sur le rôle), mélange avec les signaux lane (or, CS, kills, vision, items, ganks, objectifs…). Note champion = somme sur tous les opposants du rôle. Affichage ×100.",
     "tierListApexRankTooltip": "Apex = Master + Grandmaster + Challenger.",
     "tierListHighEloWinTooltip": "Win rate en Apex (Master + Grandmaster + Challenger).",
     "tierListDeltaTooltip": "Différence entre win rate tous rangs et win rate Apex (Master + Grandmaster + Challenger).",
@@ -1494,6 +1494,8 @@
     "championMatchupDetailProfileTitle": "Profil de lane détaillé",
     "championMatchupDetailProfileHint": "Comparaison vs l'adversaire de lane sur ce matchup (par rapport aux autres champions du même rôle).",
     "championMatchupDetailProfileBalanced": "Matchup équilibré : pas de signal lane net ressorti sur ce duel.",
+    "championMatchupDetailProfileNoTimeline": "Le score matchup repose surtout sur le winrate relatif (WR vs les autres champions face à cet adversaire). Les métriques timeline lane (or, vision, CS…) ne sont pas encore disponibles pour ce duel.",
+    "championMatchupDetailTimelineEmpty": "Métriques timeline lane indisponibles pour ce duel — les valeurs affichées restent à 0 tant que les données ne sont pas ingérées.",
     "championMatchupInsight": {
       "category": {
         "dive": "Dive",
@@ -1557,6 +1559,14 @@
         "roamKills": {
           "title": "Roams payants",
           "detail": "{kills} kills en roam / game ({deaths} morts en roam)."
+        },
+        "matchupScore": {
+          "title": "Duel favorable au winrate",
+          "detail": "Score composite {score} · WR {wr}% sur {games} parties — meilleure performance que la moyenne des autres champions face à cet adversaire."
+        },
+        "laneScore": {
+          "title": "Profil lane au-dessus de la norme",
+          "detail": "Score lane relatif {laneScore} (vs les autres champions sur ce matchup)."
         },
         "legendaryFirst": {
           "title": "Achète son item légendaire en premier",
@@ -1651,6 +1661,14 @@
         "platesLost": {
           "title": "Perd plus de plaques de tour",
           "detail": "{you} plaques prises / game vs {opp} pour l'adversaire."
+        },
+        "matchupScore": {
+          "title": "Duel défavorable au winrate",
+          "detail": "Score composite {score} · WR {wr}% sur {games} parties — performance inférieure à la moyenne des autres champions face à cet adversaire."
+        },
+        "laneScore": {
+          "title": "Profil lane en dessous de la norme",
+          "detail": "Score lane relatif {laneScore} (vs les autres champions sur ce matchup)."
         }
       }
     },

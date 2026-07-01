@@ -17,6 +17,7 @@ import { isBootsTier2Or3ItemId } from "./bootItemClassification.js";
 import { isLegendaryCompleteItem } from "./itemLegendaryClassification.js";
 import { isStarterPurchase } from "./starterItemClassification.js";
 import { computeChampionVsLaneMetrics } from "./championVsLaneMetrics.js";
+import { readTeamFirstObjectiveFlags } from "./teamFirstObjectives.js";
 import { normalizeLolRole, type LolRole } from "../constants/lolEnums.js";
 const U15_WINDOW_MS = 900_000;
 
@@ -485,6 +486,10 @@ export function parseMatch(
       participant.participantId,
       participant.championTransform,
     );
+    const playerTeam = (match.info?.teams ?? []).find((t) => t.teamId === participant.teamId);
+    const teamFirst = readTeamFirstObjectiveFlags(
+      playerTeam?.objectives as Record<string, { first?: boolean } | undefined> | undefined
+    );
 
     const dto: ParsedParticipantDto = {
       matchId,
@@ -506,6 +511,12 @@ export function parseMatch(
       firstBloodAssist: participant.firstBloodAssist === true,
       firstTowerKill: participant.firstTowerKill === true,
       firstTowerAssist: participant.firstTowerAssist === true,
+      teamFirstBaron: teamFirst.teamFirstBaron,
+      teamFirstDragon: teamFirst.teamFirstDragon,
+      teamFirstTower: teamFirst.teamFirstTower,
+      teamFirstInhibitor: teamFirst.teamFirstInhibitor,
+      teamFirstRiftHerald: teamFirst.teamFirstRiftHerald,
+      teamFirstHorde: teamFirst.teamFirstHorde,
       gameEndedInEarlySurrender: participant.gameEndedInEarlySurrender === true,
       gameEndedInSurrender: participant.gameEndedInSurrender === true,
       teamEarlySurrendered: participant.teamEarlySurrendered === true,

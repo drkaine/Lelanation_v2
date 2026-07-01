@@ -59,6 +59,181 @@ function pushInsight(
   })
 }
 
+const DOMINANCE_KEYS: MatchupsExtDominanceKey[] = [
+  'early',
+  'laneEconomy',
+  'kills',
+  'level',
+  'cs',
+  'vision',
+  'items',
+  'gank',
+  'dive',
+  'roam',
+  'objectives',
+  'pressure',
+]
+
+function isAdvantageLevel(level: MatchupsExtSignalLevel): boolean {
+  return level === 'bigAdvantage' || level === 'mediumAdvantage' || level === 'smallAdvantage'
+}
+
+function isDisadvantageLevel(level: MatchupsExtSignalLevel): boolean {
+  return (
+    level === 'bigDisadvantage' || level === 'mediumDisadvantage' || level === 'smallDisadvantage'
+  )
+}
+
+export function hasUsableMatchupDetailMetrics(
+  detail: MatchupsExtRow['matchupDetail'] | null | undefined
+): boolean {
+  if (!detail) return false
+  const { lane, gankDiveRoam, itemsFirst, objectivesAndMap } = detail
+  const laneValues = [
+    lane.goldDiff5Min,
+    lane.goldDiff10Min,
+    lane.goldDiff15Min,
+    lane.csDiff5Min,
+    lane.csDiff10Min,
+    lane.csDiff15Min,
+    lane.visionDiff5Min,
+    lane.visionDiff10Min,
+    lane.visionDiff15Min,
+    lane.levelDiff15Min,
+    lane.xpDiff15Min,
+    lane.killsVsOpponent5Min,
+    lane.killsVsOpponent10Min,
+    lane.killsVsOpponent15Min,
+    lane.deathsVsOpponent5Min,
+    lane.deathsVsOpponent10Min,
+    lane.deathsVsOpponent15Min,
+  ]
+  if (laneValues.some(v => Math.abs(v) > 0.01)) return true
+  const gankValues = [
+    gankDiveRoam.gankKillsPerGame,
+    gankDiveRoam.gankDeathsPerGame,
+    gankDiveRoam.diveKillsPerGame,
+    gankDiveRoam.diveDeathsPerGame,
+    gankDiveRoam.roamingKillsPerGame,
+    gankDiveRoam.roamingDeathsPerGame,
+  ]
+  if (gankValues.some(v => v > 0.01)) return true
+  const itemValues = [
+    itemsFirst.legendaryFirstRate,
+    itemsFirst.opponentLegendaryFirstRate,
+    itemsFirst.bootsFirstRate,
+    itemsFirst.opponentBootsFirstRate,
+    itemsFirst.bootsTier2FirstRate,
+    itemsFirst.opponentBootsTier2FirstRate,
+    itemsFirst.consumablesBoughtPerGame,
+    itemsFirst.opponentConsumablesBoughtPerGame,
+  ]
+  if (itemValues.some(v => v > 0.01)) return true
+  const objValues = [
+    objectivesAndMap.drakeKillsPerGame,
+    objectivesAndMap.drakeAssistsPerGame,
+    objectivesAndMap.heraldKillsPerGame,
+    objectivesAndMap.voidKillsPerGame,
+    objectivesAndMap.firstTowerRate,
+    objectivesAndMap.opponentFirstTowerRate,
+    objectivesAndMap.platesTakenPerGame,
+    objectivesAndMap.opponentPlatesTakenPerGame,
+  ]
+  return objValues.some(v => v > 0.01)
+}
+
+function insightsFromLaneProfileByKey(row: MatchupsExtRow): MatchupInsight[] {
+  const out: MatchupInsight[] = []
+  for (const key of DOMINANCE_KEYS) {
+    const level = row.laneProfileByKey?.[key]
+    if (!level || level === 'even') continue
+    const side: MatchupInsightSide | null = isAdvantageLevel(level)
+      ? 'strength'
+      : isDisadvantageLevel(level)
+        ? 'weakness'
+        : null
+    if (!side) continue
+    const insight = insightFromDominanceKey(row, key, side)
+    if (insight) out.push(insight)
+  }
+  return out
+}
+
+function scoreInsights(row: MatchupsExtRow): MatchupInsight[] {
+  const out: MatchupInsight[] = []
+  if (row.games < 5 || !Number.isFinite(row.matchupScore)) return out
+  const score = row.matchupScore
+  if (score >= 5) {
+    pushInsight(out, {
+      id: 'strength-matchup-score',
+      side: 'strength',
+      category: 'laneEconomy',
+      level: score >= 30 ? 'bigAdvantage' : score >= 15 ? 'mediumAdvantage' : 'smallAdvantage',
+      titleKey: 'statisticsPage.championMatchupInsight.strength.matchupScore.title',
+      detailKey: 'statisticsPage.championMatchupInsight.strength.matchupScore.detail',
+      params: {
+        score: fmtNum(score, 1),
+        wr: fmtNum(row.winrate, 1),
+        games: row.games,
+      },
+    })
+  } else if (score <= -5) {
+    pushInsight(out, {
+      id: 'weakness-matchup-score',
+      side: 'weakness',
+      category: 'laneEconomy',
+      level:
+        score <= -30
+          ? 'bigDisadvantage'
+          : score <= -15
+            ? 'mediumDisadvantage'
+            : 'smallDisadvantage',
+      titleKey: 'statisticsPage.championMatchupInsight.weakness.matchupScore.title',
+      detailKey: 'statisticsPage.championMatchupInsight.weakness.matchupScore.detail',
+      params: {
+        score: fmtNum(score, 1),
+        wr: fmtNum(row.winrate, 1),
+        games: row.games,
+      },
+    })
+  }
+  return out
+}
+
+function laneScoreInsights(row: MatchupsExtRow): MatchupInsight[] {
+  const out: MatchupInsight[] = []
+  const laneScore = row.laneScore
+  if (!Number.isFinite(laneScore) || Math.abs(laneScore) < 12 || row.games < 5) return out
+  if (laneScore >= 12) {
+    pushInsight(out, {
+      id: 'strength-lane-score',
+      side: 'strength',
+      category: 'early',
+      level:
+        laneScore >= 45 ? 'bigAdvantage' : laneScore >= 28 ? 'mediumAdvantage' : 'smallAdvantage',
+      titleKey: 'statisticsPage.championMatchupInsight.strength.laneScore.title',
+      detailKey: 'statisticsPage.championMatchupInsight.strength.laneScore.detail',
+      params: { laneScore: fmtNum(laneScore, 0) },
+    })
+  } else if (laneScore <= -12) {
+    pushInsight(out, {
+      id: 'weakness-lane-score',
+      side: 'weakness',
+      category: 'early',
+      level:
+        laneScore <= -45
+          ? 'bigDisadvantage'
+          : laneScore <= -28
+            ? 'mediumDisadvantage'
+            : 'smallDisadvantage',
+      titleKey: 'statisticsPage.championMatchupInsight.weakness.laneScore.title',
+      detailKey: 'statisticsPage.championMatchupInsight.weakness.laneScore.detail',
+      params: { laneScore: fmtNum(laneScore, 0) },
+    })
+  }
+  return out
+}
+
 function insightFromDominanceKey(
   row: MatchupsExtRow,
   key: MatchupsExtDominanceKey,
@@ -349,7 +524,7 @@ function metricInsights(row: MatchupsExtRow): MatchupInsight[] {
     })
   }
 
-  if (lane.visionDiff15Min <= -0.8) {
+  if (lane.visionDiff15Min <= -0.35) {
     pushInsight(out, {
       id: 'weakness-vision-low',
       side: 'weakness',
@@ -364,7 +539,7 @@ function metricInsights(row: MatchupsExtRow): MatchupInsight[] {
       detailKey: 'statisticsPage.championMatchupInsight.weakness.visionLow.detail',
       params: { vision15: fmtSigned(lane.visionDiff15Min) },
     })
-  } else if (lane.visionDiff15Min >= 0.8) {
+  } else if (lane.visionDiff15Min >= 0.35) {
     pushInsight(out, {
       id: 'strength-vision-high',
       side: 'strength',
@@ -443,7 +618,10 @@ export function buildChampionMatchupInsights(row: MatchupsExtRow): {
     if (insight) raw.push(insight)
   }
 
+  raw.push(...insightsFromLaneProfileByKey(row))
   raw.push(...metricInsights(row))
+  raw.push(...scoreInsights(row))
+  raw.push(...laneScoreInsights(row))
 
   const strengths = dedupeInsights(raw.filter(i => i.side === 'strength')).slice(0, 6)
   const weaknesses = dedupeInsights(raw.filter(i => i.side === 'weakness')).slice(0, 6)

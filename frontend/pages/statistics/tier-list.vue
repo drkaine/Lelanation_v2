@@ -374,22 +374,6 @@
 
       <div class="min-w-0 flex-1 p-4 max-lg:pb-20 lg:px-3 lg:pb-4 lg:pt-0">
         <div class="w-full space-y-4">
-          <section
-            v-if="tierListSeoRows.length > 0"
-            class="tier-list-seo-summary statistics-panel-surface p-3 text-sm text-text/85"
-            aria-label="Résumé tier list"
-          >
-            <h1 class="text-lg font-bold text-accent">{{ tierListSeoTitle }}</h1>
-            <ul class="mt-2 space-y-1">
-              <li
-                v-for="row in tierListSeoRows"
-                :key="'tl-seo-' + row.championId"
-                class="tabular-nums"
-              >
-                {{ row.name }} — {{ row.tier }} — {{ row.winrate }}% WR — {{ row.pickrate }}% PR
-              </li>
-            </ul>
-          </section>
           <StatisticsTierListTab
             v-show="
               tierListViewModel !== 'botlaneMatchups' && tierListViewModel !== 'botlaneDuoRank'
@@ -758,17 +742,6 @@ const {
   tierListChartTierEnabled,
   championName,
 } = tierList
-
-const tierListSeoRows = computed(() => {
-  const rows = tierList.tierListData.value?.rows ?? []
-  return rows.slice(0, 50).map(row => ({
-    championId: row.championId,
-    name: championName(row.championId) ?? String(row.championId),
-    tier: row.tier,
-    winrate: Number(row.winrate).toFixed(1),
-    pickrate: Number(row.pickrate).toFixed(1),
-  }))
-})
 
 const tierListSiteUrlForJsonLd = useSiteUrl()
 useJsonLdHead(

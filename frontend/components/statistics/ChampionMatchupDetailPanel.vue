@@ -7,6 +7,7 @@ import type {
 } from '~/components/statistics/ChampionMatchupMobileCard.vue'
 import {
   buildChampionMatchupInsights,
+  hasUsableMatchupDetailMetrics,
   MATCHUP_CATEGORY_COLORS,
   type MatchupInsight,
 } from '~/utils/championMatchupInsights'
@@ -30,6 +31,17 @@ const { t } = useI18n()
 
 const detail = computed(() => props.row.matchupDetail)
 const insights = computed(() => buildChampionMatchupInsights(props.row))
+const hasLaneMetricData = computed(() => hasUsableMatchupDetailMetrics(detail.value))
+const showProfileBalanced = computed(
+  () =>
+    !insights.value.strengths.length && !insights.value.weaknesses.length && hasLaneMetricData.value
+)
+const showProfileNoTimeline = computed(
+  () =>
+    !insights.value.strengths.length &&
+    !insights.value.weaknesses.length &&
+    !hasLaneMetricData.value
+)
 
 const tabOptions = [
   [
@@ -161,10 +173,17 @@ function comparePct(you: number, opp: number): { youWidth: number; oppWidth: num
         </div>
 
         <div
-          v-if="!insights.strengths.length && !insights.weaknesses.length"
+          v-if="showProfileBalanced"
           class="rounded-lg border border-primary/15 bg-white/[0.03] px-3 py-2 text-sm text-text/65"
         >
           {{ t('statisticsPage.championMatchupDetailProfileBalanced') }}
+        </div>
+
+        <div
+          v-else-if="showProfileNoTimeline"
+          class="rounded-lg border border-primary/15 bg-white/[0.03] px-3 py-2 text-sm text-text/65"
+        >
+          {{ t('statisticsPage.championMatchupDetailProfileNoTimeline') }}
         </div>
 
         <div v-else class="grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -255,6 +274,13 @@ function comparePct(you: number, opp: number): { youWidth: number; oppWidth: num
       </section>
 
       <template v-else>
+        <div
+          v-if="detail && !hasLaneMetricData"
+          class="rounded-lg border border-primary/15 bg-white/[0.03] px-3 py-2 text-sm text-text/65"
+        >
+          {{ t('statisticsPage.championMatchupDetailTimelineEmpty') }}
+        </div>
+
         <div v-if="!detail" class="text-sm text-text/65">
           {{ t('statisticsPage.championMatchupDetailUnavailable') }}
         </div>

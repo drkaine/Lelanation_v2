@@ -2765,6 +2765,7 @@ type ChampionSpellSoloApiRow = {
   spellId: number
   games: number
   wins: number
+  casts?: number
   pickrate: number
   winrate: number
   countSlot0?: number
@@ -2827,7 +2828,7 @@ function mapChampionSpellsTableSolo(spells: ChampionSpellSoloApiRow[]) {
       wins: Number(s.wins ?? 0),
       pickrate: Number(s.pickrate ?? 0),
       winrate: Number(s.winrate ?? 0),
-      casts: 0,
+      casts: Number(s.casts ?? 0),
       pctSlotD: games > 0 ? Math.round((slot0 / games) * 10000) / 100 : undefined,
       pctSlotF: games > 0 ? Math.round((slot1 / games) * 10000) / 100 : undefined,
     }

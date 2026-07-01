@@ -10,6 +10,7 @@ export interface SummonerSpellRow {
   spellId: number
   games: number
   wins: number
+  casts: number
   pickrate: number
   winrate: number
   countSlot0?: number
@@ -81,6 +82,39 @@ export async function getSummonerSpellsByChampion(
       GROUP BY ss.spell_id
     `)
 
+    const pairFrom = await matchVersionedAggFrom(
+      'agg_champion_summoner_spell_pair_stats',
+      pVersion,
+      'sp',
+    )
+    const pairWhere = buildChampionScopedWhere('sp', {
+      championId,
+      version: pVersion,
+      rankTier: rankTier ?? null,
+      role: pRole,
+    })
+    const pairCastRows = await queryRawUnsafe<
+      Array<{ spellId: number; casts: bigint }>
+    >(`
+      SELECT spell_id AS "spellId", SUM(casts)::bigint AS casts
+      FROM (
+        SELECT sp.spell_d AS spell_id, SUM(sp.spell_d_casts)::bigint AS casts
+        FROM ${pairFrom}
+        WHERE ${pairWhere}
+        GROUP BY sp.spell_d
+        UNION ALL
+        SELECT sp.spell_f AS spell_id, SUM(sp.spell_f_casts)::bigint AS casts
+        FROM ${pairFrom}
+        WHERE ${pairWhere}
+        GROUP BY sp.spell_f
+      ) u
+      GROUP BY spell_id
+    `)
+    const castBySpell = new Map<number, number>()
+    for (const row of pairCastRows) {
+      castBySpell.set(Number(row.spellId), Number(row.casts ?? 0))
+    }
+
     const spells: SummonerSpellRow[] = spellRows.map((row) => {
       const games = Number(row.countGame ?? 0)
       const wins = Number(row.countWin ?? 0)
@@ -88,6 +122,7 @@ export async function getSummonerSpellsByChampion(
         spellId: row.spellId,
         games,
         wins,
+        casts: castBySpell.get(row.spellId) ?? 0,
         pickrate: totalGames > 0 ? Math.round((games / totalGames) * 10000) / 100 : 0,
         winrate: games > 0 ? Math.round((wins / games) * 10000) / 100 : 0,
         countSlot0: Number(row.countSlot0 ?? 0),

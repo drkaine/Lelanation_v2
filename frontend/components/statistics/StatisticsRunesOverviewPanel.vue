@@ -6,7 +6,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { RunePath } from '@lelanation/shared-types'
 import { useRunesStore } from '~/stores/RunesStore'
-import { getRuneImageUrl, getRunePathColor, getRunePathImageUrl } from '~/utils/imageUrl'
+import { getRuneImageUrl } from '~/utils/imageUrl'
 import { parseShardList } from '~/utils/parseShardList'
 
 type RuneStat = { pickrate: number; winrate: number; games: number }
@@ -669,7 +669,7 @@ function runeSetLayout(
                 ly: runeSetLayout(s.runes, s),
               }))"
               :key="'unified-set-' + idx"
-              class="build-set-card rune-set-card relative h-full w-full min-w-0 rounded-xl border border-primary/30 px-4 pb-3 pt-5"
+              class="build-set-card rune-set-card relative h-full w-full min-w-0 rounded-xl border border-primary/30 px-1.5 pb-1.5 pt-3.5"
             >
               <span
                 class="absolute left-0 top-0 z-10 flex h-5 min-w-5 items-center justify-center rounded-md bg-primary/30 px-1 text-[10px] font-bold tabular-nums text-text/90"
@@ -677,117 +677,19 @@ function runeSetLayout(
               >
                 {{ idx + 1 }}
               </span>
+              <StatisticsRuneSetBuildStrip
+                :game-version="gameVersion"
+                :keystone="row.ly.keystone"
+                :primary-row="row.ly.primaryRow"
+                :secondary-path="row.ly.secondaryPath"
+                :secondary-runes="row.ly.secondaryRunes"
+                :shards="row.ly.shards"
+                :get-rune-by-id="getRuneById"
+                :get-shard-icon="getShardIcon"
+                :shard-name="shardName"
+              />
               <div
-                class="build-set-build-strip rune-set-build-strip flex w-full min-w-0 flex-col items-center gap-2 sm:items-stretch"
-              >
-                <div
-                  v-if="row.ly.keystone && getRuneById(row.ly.keystone)"
-                  class="flex w-full shrink-0 justify-center"
-                >
-                  <img
-                    :src="getRuneImageUrl(gameVersion, getRuneById(row.ly.keystone)!.icon)"
-                    :alt="getRuneById(row.ly.keystone)!.name"
-                    class="rune-set-keystone-img shrink-0 rounded-full object-contain"
-                    width="64"
-                    height="64"
-                  />
-                </div>
-                <div
-                  v-if="
-                    row.ly.primaryRow.length || row.ly.secondaryPath || row.ly.secondaryRunes.length
-                  "
-                  class="rune-set-trees-grid grid w-full min-w-0 items-start justify-items-center gap-x-4 gap-y-1 sm:justify-items-stretch sm:gap-x-3"
-                  :class="
-                    row.ly.primaryRow.length &&
-                    (row.ly.secondaryPath || row.ly.secondaryRunes.length)
-                      ? 'grid-cols-2'
-                      : 'grid-cols-1'
-                  "
-                >
-                  <div
-                    v-if="row.ly.primaryRow.length"
-                    class="flex min-w-0 flex-col items-center gap-1.5 sm:items-start"
-                  >
-                    <template v-for="rid in row.ly.primaryRow" :key="'up-' + rid">
-                      <img
-                        v-if="getRuneById(rid)"
-                        :src="getRuneImageUrl(gameVersion, getRuneById(rid)!.icon)"
-                        :alt="getRuneById(rid)!.name"
-                        :title="getRuneById(rid)!.name"
-                        class="rune-set-small-rune rounded-full object-contain"
-                        width="28"
-                        height="28"
-                      />
-                    </template>
-                  </div>
-                  <div
-                    v-if="row.ly.secondaryPath || row.ly.secondaryRunes.length"
-                    class="rune-set-secondary-group flex min-w-0 flex-col items-center gap-1.5 sm:items-start"
-                  >
-                    <div
-                      v-if="row.ly.secondaryPath"
-                      class="rune-set-path-icon flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
-                    >
-                      <span
-                        class="rune-set-path-mask block h-7 w-7 rounded-full"
-                        :style="{
-                          backgroundColor: getRunePathColor(
-                            row.ly.secondaryPath.icon,
-                            row.ly.secondaryPath.id,
-                            row.ly.secondaryPath.name
-                          ),
-                          WebkitMaskImage: `url(${getRunePathImageUrl(
-                            gameVersion,
-                            row.ly.secondaryPath.icon,
-                            row.ly.secondaryPath.id,
-                            row.ly.secondaryPath.name
-                          )})`,
-                          maskImage: `url(${getRunePathImageUrl(
-                            gameVersion,
-                            row.ly.secondaryPath.icon,
-                            row.ly.secondaryPath.id,
-                            row.ly.secondaryPath.name
-                          )})`,
-                          WebkitMaskSize: 'contain',
-                          maskSize: 'contain',
-                          WebkitMaskRepeat: 'no-repeat',
-                          maskRepeat: 'no-repeat',
-                          WebkitMaskPosition: 'center',
-                          maskPosition: 'center',
-                        }"
-                      />
-                    </div>
-                    <template v-for="rid in row.ly.secondaryRunes" :key="'us-' + rid">
-                      <img
-                        v-if="getRuneById(rid)"
-                        :src="getRuneImageUrl(gameVersion, getRuneById(rid)!.icon)"
-                        :alt="getRuneById(rid)!.name"
-                        :title="getRuneById(rid)!.name"
-                        class="rune-set-small-rune rounded-full object-contain"
-                        width="28"
-                        height="28"
-                      />
-                    </template>
-                  </div>
-                </div>
-                <div
-                  v-if="row.ly.shards.length"
-                  class="rune-set-shards-row mt-2 flex w-full min-w-0 items-center justify-center gap-3 self-stretch sm:justify-between sm:gap-2"
-                >
-                  <img
-                    v-for="sid in row.ly.shards"
-                    :key="'ush-' + sid"
-                    :src="getShardIcon(sid)"
-                    :alt="shardName(sid)"
-                    :title="shardName(sid)"
-                    class="rune-set-shard-img shrink-0 rounded-full bg-black/25 object-contain"
-                    width="32"
-                    height="32"
-                  />
-                </div>
-              </div>
-              <div
-                class="build-set-stats rune-set-stats mt-3 flex w-full flex-wrap items-baseline justify-center gap-x-5 gap-y-2 pt-1 text-center sm:justify-start sm:text-left"
+                class="build-set-stats rune-set-stats mt-2 flex w-full flex-wrap items-baseline justify-center gap-x-3 gap-y-1 pt-0.5 text-center sm:justify-start sm:text-left"
               >
                 <span
                   class="rune-set-stat-item inline-flex flex-wrap items-baseline justify-center gap-x-1 sm:justify-start"
@@ -874,7 +776,7 @@ function runeSetLayout(
               ly: runeSetLayout(s.runes, s),
             }))"
             :key="block.key + '-' + idx"
-            class="build-set-card rune-set-card relative h-full w-full min-w-0 rounded-xl border border-primary/30 px-4 pb-3 pt-5"
+            class="build-set-card rune-set-card relative h-full w-full min-w-0 rounded-xl border border-primary/30 px-1.5 pb-1.5 pt-3.5"
           >
             <span
               class="absolute left-0 top-0 z-10 flex h-5 min-w-5 items-center justify-center rounded-md bg-primary/30 px-1 text-[10px] font-bold tabular-nums text-text/90"
@@ -882,118 +784,19 @@ function runeSetLayout(
             >
               {{ idx + 1 }}
             </span>
+            <StatisticsRuneSetBuildStrip
+              :game-version="gameVersion"
+              :keystone="row.ly.keystone"
+              :primary-row="row.ly.primaryRow"
+              :secondary-path="row.ly.secondaryPath"
+              :secondary-runes="row.ly.secondaryRunes"
+              :shards="row.ly.shards"
+              :get-rune-by-id="getRuneById"
+              :get-shard-icon="getShardIcon"
+              :shard-name="shardName"
+            />
             <div
-              class="build-set-build-strip rune-set-build-strip flex w-full min-w-0 flex-col items-center gap-2 sm:items-stretch"
-            >
-              <!-- Clé de voûte seule (hors ligne d’alignement avec le secondaire) -->
-              <div
-                v-if="row.ly.keystone && getRuneById(row.ly.keystone)"
-                class="flex w-full shrink-0 justify-center"
-              >
-                <img
-                  :src="getRuneImageUrl(gameVersion, getRuneById(row.ly.keystone)!.icon)"
-                  :alt="getRuneById(row.ly.keystone)!.name"
-                  class="rune-set-keystone-img shrink-0 rounded-full object-contain"
-                  width="64"
-                  height="64"
-                />
-              </div>
-              <!-- Primaire / secondaire : deux colonnes, runes empilées et alignées en haut -->
-              <div
-                v-if="
-                  row.ly.primaryRow.length || row.ly.secondaryPath || row.ly.secondaryRunes.length
-                "
-                class="rune-set-trees-grid grid w-full min-w-0 items-start justify-items-center gap-x-4 gap-y-1 sm:justify-items-stretch sm:gap-x-3"
-                :class="
-                  row.ly.primaryRow.length && (row.ly.secondaryPath || row.ly.secondaryRunes.length)
-                    ? 'grid-cols-2'
-                    : 'grid-cols-1'
-                "
-              >
-                <div
-                  v-if="row.ly.primaryRow.length"
-                  class="flex min-w-0 flex-col items-center gap-1.5 sm:items-start"
-                >
-                  <template v-for="rid in row.ly.primaryRow" :key="'p-' + rid">
-                    <img
-                      v-if="getRuneById(rid)"
-                      :src="getRuneImageUrl(gameVersion, getRuneById(rid)!.icon)"
-                      :alt="getRuneById(rid)!.name"
-                      :title="getRuneById(rid)!.name"
-                      class="rune-set-small-rune rounded-full object-contain"
-                      width="28"
-                      height="28"
-                    />
-                  </template>
-                </div>
-                <div
-                  v-if="row.ly.secondaryPath || row.ly.secondaryRunes.length"
-                  class="rune-set-secondary-group flex min-w-0 flex-col items-center gap-1.5 sm:items-start"
-                >
-                  <div
-                    v-if="row.ly.secondaryPath"
-                    class="rune-set-path-icon flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
-                  >
-                    <span
-                      class="rune-set-path-mask block h-7 w-7 rounded-full"
-                      :style="{
-                        backgroundColor: getRunePathColor(
-                          row.ly.secondaryPath.icon,
-                          row.ly.secondaryPath.id,
-                          row.ly.secondaryPath.name
-                        ),
-                        WebkitMaskImage: `url(${getRunePathImageUrl(
-                          gameVersion,
-                          row.ly.secondaryPath.icon,
-                          row.ly.secondaryPath.id,
-                          row.ly.secondaryPath.name
-                        )})`,
-                        maskImage: `url(${getRunePathImageUrl(
-                          gameVersion,
-                          row.ly.secondaryPath.icon,
-                          row.ly.secondaryPath.id,
-                          row.ly.secondaryPath.name
-                        )})`,
-                        WebkitMaskSize: 'contain',
-                        maskSize: 'contain',
-                        WebkitMaskRepeat: 'no-repeat',
-                        maskRepeat: 'no-repeat',
-                        WebkitMaskPosition: 'center',
-                        maskPosition: 'center',
-                      }"
-                    />
-                  </div>
-                  <template v-for="rid in row.ly.secondaryRunes" :key="'s-' + rid">
-                    <img
-                      v-if="getRuneById(rid)"
-                      :src="getRuneImageUrl(gameVersion, getRuneById(rid)!.icon)"
-                      :alt="getRuneById(rid)!.name"
-                      :title="getRuneById(rid)!.name"
-                      class="rune-set-small-rune rounded-full object-contain"
-                      width="28"
-                      height="28"
-                    />
-                  </template>
-                </div>
-              </div>
-              <div
-                v-if="row.ly.shards.length"
-                class="rune-set-shards-row mt-2 flex w-full min-w-0 items-center justify-center gap-3 self-stretch sm:justify-between sm:gap-2"
-              >
-                <img
-                  v-for="sid in row.ly.shards"
-                  :key="'sh-' + sid"
-                  :src="getShardIcon(sid)"
-                  :alt="shardName(sid)"
-                  :title="shardName(sid)"
-                  class="rune-set-shard-img shrink-0 rounded-full bg-black/25 object-contain"
-                  width="32"
-                  height="32"
-                />
-              </div>
-            </div>
-            <div
-              class="build-set-stats rune-set-stats mt-3 flex w-full flex-wrap items-baseline justify-center gap-x-5 gap-y-2 pt-1 text-center sm:justify-start sm:text-left"
+              class="build-set-stats rune-set-stats mt-2 flex w-full flex-wrap items-baseline justify-center gap-x-3 gap-y-1 pt-0.5 text-center sm:justify-start sm:text-left"
             >
               <span
                 class="rune-set-stat-item inline-flex flex-wrap items-baseline justify-center gap-x-1 sm:justify-start"
@@ -1068,53 +871,25 @@ function runeSetLayout(
   isolation: isolate;
 }
 
-.rune-set-keystone-img {
-  width: 64px;
-  height: 64px;
-  min-width: 64px;
-  min-height: 64px;
-}
-.rune-set-small-rune {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  min-height: 28px;
-  flex-shrink: 0;
-}
-.rune-set-shard-img {
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  min-height: 32px;
-}
 .rune-set-stat-label {
-  font-size: 0.75rem;
+  font-size: 0.625rem;
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 .rune-set-stat-value {
-  font-size: 1rem;
+  font-size: 0.8125rem;
 }
 .rune-set-stat-delta {
-  font-size: 0.8125rem;
+  font-size: 0.6875rem;
   font-weight: 500;
-}
-.rune-set-build-strip {
-  flex: 1 1 auto;
-  min-height: 11.75rem;
-  justify-content: center;
-}
-.rune-set-shards-row {
-  box-sizing: border-box;
-  min-height: 2.25rem;
 }
 .rune-set-stats {
   flex-shrink: 0;
   margin-top: auto;
-  min-height: 4.75rem;
+  min-height: 2.75rem;
   align-content: flex-end;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   line-height: 1.35;
   color: rgb(var(--rgb-text) / 0.88);
 }
@@ -1124,50 +899,16 @@ function runeSetLayout(
     width: 100%;
   }
 
-  .rune-set-keystone-img {
-    width: 4.5rem;
-    height: 4.5rem;
-    min-width: 4.5rem;
-    min-height: 4.5rem;
-  }
-
-  .rune-set-small-rune {
-    width: 2.25rem;
-    height: 2.25rem;
-    min-width: 2.25rem;
-    min-height: 2.25rem;
-  }
-
-  .rune-set-shard-img {
-    width: 2.75rem;
-    height: 2.75rem;
-    min-width: 2.75rem;
-    min-height: 2.75rem;
-  }
-
   .rune-set-stat-label {
-    font-size: 0.6875rem;
+    font-size: 0.625rem;
   }
 
   .rune-set-stat-value {
-    font-size: 1.125rem;
-  }
-
-  .rune-set-stat-delta {
     font-size: 0.875rem;
   }
 
-  .rune-set-path-icon,
-  .rune-set-path-mask {
-    width: 2.5rem !important;
-    height: 2.5rem !important;
-    min-width: 2.5rem;
-    min-height: 2.5rem;
-  }
-
-  .rune-set-trees-grid {
-    max-width: 16rem;
-    margin-inline: auto;
+  .rune-set-stat-delta {
+    font-size: 0.75rem;
   }
 }
 </style>

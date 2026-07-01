@@ -236,6 +236,18 @@ export const CHAMPION_STATS_METRIC_COLUMNS = [
   "sum_unreal_kills",
   "sum_vision_cleared_pings",
   "sum_vision_wards_bought_in_game",
+  "count_team_first_baron_win",
+  "count_team_first_baron_loss",
+  "count_team_first_dragon_win",
+  "count_team_first_dragon_loss",
+  "count_team_first_tower_win",
+  "count_team_first_tower_loss",
+  "count_team_first_inhibitor_win",
+  "count_team_first_inhibitor_loss",
+  "count_team_first_rift_herald_win",
+  "count_team_first_rift_herald_loss",
+  "count_team_first_horde_win",
+  "count_team_first_horde_loss",
 ] as const
 
 export type ChampionStatsMetricColumn = (typeof CHAMPION_STATS_METRIC_COLUMNS)[number]

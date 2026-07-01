@@ -1,9 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { __testables } from './TierListService.js'
+import { deltaToMatchupBaseScore } from './MatchupTierService.js'
 
 test('deltaToMatchupBaseScore applies Lolalytics bands', () => {
-  const { deltaToMatchupBaseScore } = __testables
   assert.equal(deltaToMatchupBaseScore(-6), -10)
   assert.equal(deltaToMatchupBaseScore(-3), -6)
   assert.equal(deltaToMatchupBaseScore(-1), -3)

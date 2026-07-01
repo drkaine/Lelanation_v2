@@ -191,6 +191,18 @@ type RawObjectiveAgg = {
   sum_turrets_taken_with_rift_herald: bigint
   sum_solo_baron_kills: bigint
   sum_quick_solo_kills: bigint
+  team_first_baron_win: bigint
+  team_first_baron_loss: bigint
+  team_first_dragon_win: bigint
+  team_first_dragon_loss: bigint
+  team_first_tower_win: bigint
+  team_first_tower_loss: bigint
+  team_first_inhibitor_win: bigint
+  team_first_inhibitor_loss: bigint
+  team_first_rift_herald_win: bigint
+  team_first_rift_herald_loss: bigint
+  team_first_horde_win: bigint
+  team_first_horde_loss: bigint
 }
 
 function involvedWinExpr(killCol: string, assistCol: string): string {
@@ -465,7 +477,19 @@ export async function getChampionObjectivesSummary(options: {
         COALESCE(SUM(cs.sum_turret_takedowns), 0)::bigint AS sum_turret_takedowns,
         COALESCE(SUM(cs.sum_turrets_taken_with_rift_herald), 0)::bigint AS sum_turrets_taken_with_rift_herald,
         COALESCE(SUM(cs.sum_solo_baron_kills), 0)::bigint AS sum_solo_baron_kills,
-        COALESCE(SUM(cs.sum_quick_solo_kills), 0)::bigint AS sum_quick_solo_kills
+        COALESCE(SUM(cs.sum_quick_solo_kills), 0)::bigint AS sum_quick_solo_kills,
+        COALESCE(SUM(cs.count_team_first_baron_win), 0)::bigint AS team_first_baron_win,
+        COALESCE(SUM(cs.count_team_first_baron_loss), 0)::bigint AS team_first_baron_loss,
+        COALESCE(SUM(cs.count_team_first_dragon_win), 0)::bigint AS team_first_dragon_win,
+        COALESCE(SUM(cs.count_team_first_dragon_loss), 0)::bigint AS team_first_dragon_loss,
+        COALESCE(SUM(cs.count_team_first_tower_win), 0)::bigint AS team_first_tower_win,
+        COALESCE(SUM(cs.count_team_first_tower_loss), 0)::bigint AS team_first_tower_loss,
+        COALESCE(SUM(cs.count_team_first_inhibitor_win), 0)::bigint AS team_first_inhibitor_win,
+        COALESCE(SUM(cs.count_team_first_inhibitor_loss), 0)::bigint AS team_first_inhibitor_loss,
+        COALESCE(SUM(cs.count_team_first_rift_herald_win), 0)::bigint AS team_first_rift_herald_win,
+        COALESCE(SUM(cs.count_team_first_rift_herald_loss), 0)::bigint AS team_first_rift_herald_loss,
+        COALESCE(SUM(cs.count_team_first_horde_win), 0)::bigint AS team_first_horde_win,
+        COALESCE(SUM(cs.count_team_first_horde_loss), 0)::bigint AS team_first_horde_loss
       FROM ${csFrom}
       WHERE ${where}
     `)
@@ -528,6 +552,8 @@ export async function getChampionObjectivesSummary(options: {
         label: 'Baron',
         involvedGame: Number(row?.baron_involved_game ?? 0),
         involvedWin: Number(row?.baron_involved_win ?? 0),
+        teamFirstWin: Number(row?.team_first_baron_win ?? 0),
+        teamFirstLoss: Number(row?.team_first_baron_loss ?? 0),
         killGame: Number(row?.baron_kill_game ?? 0),
         assistGame: Number(row?.baron_assist_game ?? 0),
         soloGame: Number(row?.baron_solo_game ?? 0),
@@ -537,6 +563,8 @@ export async function getChampionObjectivesSummary(options: {
         label: 'Dragon',
         involvedGame: Number(row?.dragon_involved_game ?? 0),
         involvedWin: Number(row?.dragon_involved_win ?? 0),
+        teamFirstWin: Number(row?.team_first_dragon_win ?? 0),
+        teamFirstLoss: Number(row?.team_first_dragon_loss ?? 0),
         killGame: Number(row?.dragon_kill_game ?? 0),
         assistGame: Number(row?.dragon_assist_game ?? 0),
         soloGame: Number(row?.dragon_solo_game ?? 0),
@@ -546,6 +574,8 @@ export async function getChampionObjectivesSummary(options: {
         label: 'Rift Herald',
         involvedGame: Number(row?.rift_herald_involved_game ?? 0),
         involvedWin: Number(row?.rift_herald_involved_win ?? 0),
+        teamFirstWin: Number(row?.team_first_rift_herald_win ?? 0),
+        teamFirstLoss: Number(row?.team_first_rift_herald_loss ?? 0),
         killGame: Number(row?.rift_herald_kill_game ?? 0),
         assistGame: Number(row?.rift_herald_assist_game ?? 0),
         soloGame: Number(row?.rift_herald_solo_game ?? 0),
@@ -555,6 +585,8 @@ export async function getChampionObjectivesSummary(options: {
         label: 'Void Grub',
         involvedGame: Number(row?.horde_involved_game ?? 0),
         involvedWin: Number(row?.horde_involved_win ?? 0),
+        teamFirstWin: Number(row?.team_first_horde_win ?? 0),
+        teamFirstLoss: Number(row?.team_first_horde_loss ?? 0),
         killGame: Number(row?.horde_kill_game ?? 0),
         assistGame: Number(row?.horde_assist_game ?? 0),
         soloGame: Number(row?.horde_solo_game ?? 0),
@@ -564,6 +596,8 @@ export async function getChampionObjectivesSummary(options: {
         label: 'Tower',
         involvedGame: Number(row?.tower_involved_game ?? 0),
         involvedWin: Number(row?.tower_involved_win ?? 0),
+        teamFirstWin: Number(row?.team_first_tower_win ?? 0),
+        teamFirstLoss: Number(row?.team_first_tower_loss ?? 0),
         killGame: Number(row?.tower_kill_game ?? 0),
         assistGame: Number(row?.tower_assist_game ?? 0),
         soloGame: Number(row?.tower_solo_game ?? 0),
@@ -573,6 +607,8 @@ export async function getChampionObjectivesSummary(options: {
         label: 'Inhibitor',
         involvedGame: Number(row?.inhibitor_involved_game ?? 0),
         involvedWin: Number(row?.inhibitor_involved_win ?? 0),
+        teamFirstWin: Number(row?.team_first_inhibitor_win ?? 0),
+        teamFirstLoss: Number(row?.team_first_inhibitor_loss ?? 0),
         killGame: Number(row?.inhibitor_kill_game ?? 0),
         assistGame: Number(row?.inhibitor_assist_game ?? 0),
         soloGame: Number(row?.inhibitor_solo_game ?? 0),
@@ -596,6 +632,12 @@ export async function getChampionObjectivesSummary(options: {
       horde_involved_win: bigint
       tower_involved_win: bigint
       inhibitor_involved_win: bigint
+      baron_team_first: bigint
+      dragon_team_first: bigint
+      rift_herald_team_first: bigint
+      horde_team_first: bigint
+      tower_team_first: bigint
+      inhibitor_team_first: bigint
     }
 
     let sideByTeam: Map<number, SideObjectiveAgg> = new Map()
@@ -617,7 +659,13 @@ export async function getChampionObjectivesSummary(options: {
           ${involvedWinExpr('cs.count_rift_herald_kill', 'cs.count_rift_herald_assist')}::bigint AS rift_herald_involved_win,
           ${involvedWinExpr('cs.count_horde_kill', 'cs.count_horde_assist')}::bigint AS horde_involved_win,
           ${involvedWinExpr('cs.count_tower_kill', 'cs.count_tower_assist')}::bigint AS tower_involved_win,
-          ${involvedWinExpr('cs.count_inhibitor_kill', 'cs.count_inhibitor_assist')}::bigint AS inhibitor_involved_win
+          ${involvedWinExpr('cs.count_inhibitor_kill', 'cs.count_inhibitor_assist')}::bigint AS inhibitor_involved_win,
+          COALESCE(SUM(cs.count_team_first_baron_win + cs.count_team_first_baron_loss), 0)::bigint AS baron_team_first,
+          COALESCE(SUM(cs.count_team_first_dragon_win + cs.count_team_first_dragon_loss), 0)::bigint AS dragon_team_first,
+          COALESCE(SUM(cs.count_team_first_rift_herald_win + cs.count_team_first_rift_herald_loss), 0)::bigint AS rift_herald_team_first,
+          COALESCE(SUM(cs.count_team_first_horde_win + cs.count_team_first_horde_loss), 0)::bigint AS horde_team_first,
+          COALESCE(SUM(cs.count_team_first_tower_win + cs.count_team_first_tower_loss), 0)::bigint AS tower_team_first,
+          COALESCE(SUM(cs.count_team_first_inhibitor_win + cs.count_team_first_inhibitor_loss), 0)::bigint AS inhibitor_team_first
         FROM ${csFrom}
         WHERE ${where}
         GROUP BY cs.team
@@ -659,15 +707,45 @@ export async function getChampionObjectivesSummary(options: {
       return Number(map[key] ?? 0)
     }
 
+    const sideTeamFirst = (side: SideObjectiveAgg | undefined, key: string): number => {
+      if (!side) return 0
+      const map: Record<string, bigint | undefined> = {
+        baron: side.baron_team_first,
+        dragon: side.dragon_team_first,
+        riftHerald: side.rift_herald_team_first,
+        horde: side.horde_team_first,
+        tower: side.tower_team_first,
+        inhibitor: side.inhibitor_team_first,
+      }
+      return Number(map[key] ?? 0)
+    }
+
     const rowsOut = objectiveBaseRows.map((r) => {
       const involvedLoss = Math.max(0, r.involvedGame - r.involvedWin)
+      const lossGames = Math.max(0, games - wins)
+      const teamFirstWin = Number((r as { teamFirstWin?: number }).teamFirstWin ?? 0)
+      const teamFirstLoss = Number((r as { teamFirstLoss?: number }).teamFirstLoss ?? 0)
+      const hasTeamFirst = teamFirstWin + teamFirstLoss > 0
+      const firstWinGames = r.key === 'firstBlood' || !hasTeamFirst ? r.involvedWin : teamFirstWin
+      const firstLossGames =
+        r.key === 'firstBlood' || !hasTeamFirst ? involvedLoss : teamFirstLoss
+      const firstWinDen = r.key === 'firstBlood' || !hasTeamFirst ? games : wins
+      const firstLossDen = r.key === 'firstBlood' || !hasTeamFirst ? games : lossGames
+      const blueCount =
+        r.key === 'firstBlood' || !hasTeamFirst
+          ? sideInvolved(blueSide, r.key)
+          : sideTeamFirst(blueSide, r.key)
+      const redCount =
+        r.key === 'firstBlood' || !hasTeamFirst
+          ? sideInvolved(redSide, r.key)
+          : sideTeamFirst(redSide, r.key)
       return {
         key: r.key,
         label: r.label,
-        firstByWin: toPct(r.involvedWin, games),
-        firstByLoss: toPct(involvedLoss, games),
-        blue: toPct(sideInvolved(blueSide, r.key), blueGames),
-        red: toPct(sideInvolved(redSide, r.key), redGames),
+        firstByWin: toPct(firstWinGames, firstWinDen),
+        firstByLoss: toPct(firstLossGames, firstLossDen),
+        blue: toPct(blueCount, blueGames),
+        red: toPct(redCount, redGames),
         objectiveWinrate: toPct(r.involvedWin, r.involvedGame),
         winrateBlue: toPct(sideInvolvedWin(blueSide, r.key), sideInvolved(blueSide, r.key)),
         winrateRed: toPct(sideInvolvedWin(redSide, r.key), sideInvolved(redSide, r.key)),

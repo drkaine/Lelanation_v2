@@ -8,6 +8,7 @@ import {
   inferNeutralJungleCampClears,
   mergeJungleCampHistory,
 } from "./jungleCampInfer.js";
+import { buildSpellHistoryDocFromEvents, type SpellHistoryDoc } from "./spellHistoryDoc.js";
 
 function ti(v: unknown): number {
   const x = typeof v === "number" ? v : Number(v);
@@ -60,7 +61,7 @@ export type TimelineBucketSet = {
 
 export type ParticipantTimelineHistories = {
   itemHistory: Record<string, number>;
-  spellHistory: Record<string, number>;
+  spellHistory: SpellHistoryDoc;
   deathHistory: Array<{ death_by: number; timestamp_ms: number; position: { x: number; y: number } }>;
   killHistory: Array<{ kill_who: number; timestamp_ms: number; position: { x: number; y: number } }>;
   assistHistory: Array<{ assist_who: number; timestamp_ms: number; position: { x: number; y: number } }>;
@@ -363,7 +364,6 @@ export function extractParticipantTimelineData(
 
   const pid = ti(participantId);
   const itemHistory: Record<string, number> = {};
-  const spellHistory: Record<string, number> = {};
   const deathHistory: ParticipantTimelineHistories["deathHistory"] = [];
   const killHistory: ParticipantTimelineHistories["killHistory"] = [];
   const assistHistory: ParticipantTimelineHistories["assistHistory"] = [];
@@ -378,11 +378,6 @@ export function extractParticipantTimelineData(
     if (evType === "ITEM_PURCHASED" && ti(ev.participantId) === pid) {
       const itemId = ti((ev as { itemId?: unknown }).itemId);
       if (itemId > 0) itemHistory[String(itemId)] = ts;
-      continue;
-    }
-    if (evType === "SKILL_LEVEL_UP" && ti(ev.participantId) === pid) {
-      const slot = ti((ev as { skillSlot?: unknown }).skillSlot);
-      if (slot > 0) spellHistory[String(slot)] = ts;
       continue;
     }
     if (evType === "CHAMPION_KILL") {
@@ -432,6 +427,7 @@ export function extractParticipantTimelineData(
   );
 
   const buckets = extractBucketsForParticipant(frames, events, pid, gameDurationSec);
+  const spellHistory = buildSpellHistoryDocFromEvents(events, pid);
 
   return {
     itemHistory,

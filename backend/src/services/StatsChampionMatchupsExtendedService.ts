@@ -8,15 +8,18 @@ import {
   toQueryStringArrayParam,
 } from '../utils/statsFilters.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
-import { computeDelta, matchupScoreFromDeltaAndWeight } from './MatchupTierService.js'
 import {
   buildChampionMatchupLaneSumSelect,
   CHAMPION_MATCHUP_DOMINANCE_KEYS,
-  computeLaneDominanceValue,
   type ChampionMatchupDominanceKey,
   type ChampionMatchupCoreDominanceKey,
   type LaneSumRow,
 } from './championMatchupLaneProfile.js'
+import {
+  computeMatchupWrDelta,
+  laneZscoresFromRow,
+  matchupScoreFromSignals,
+} from './championMatchupScoreCompute.js'
 
 export type { ChampionMatchupDominanceKey, ChampionMatchupCoreDominanceKey }
 
@@ -223,24 +226,10 @@ function buildPeerVsWhere(
   return parts.join(' AND ')
 }
 
-function meanStd(values: number[]): { mean: number; std: number } {
-  if (values.length === 0) return { mean: 0, std: 0 }
-  const mean = values.reduce((a, b) => a + b, 0) / values.length
-  if (values.length < 2) return { mean, std: 0 }
-  const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / (values.length - 1)
-  return { mean, std: Math.sqrt(Math.max(0, variance)) }
-}
-
-function zscore(v: number, mean: number, std: number): number {
-  if (!Number.isFinite(v) || !Number.isFinite(mean)) return 0
-  const s = std > 1e-9 ? std : 1e-9
-  return (v - mean) / s
-}
-
 function dominanceFromZscores(z: Record<ChampionMatchupDominanceKey, number>): ChampionMatchupDominanceKey[] {
   const entries = (Object.keys(z) as ChampionMatchupDominanceKey[])
     .map((k) => ({ k, z: z[k] ?? 0 }))
-    .filter((e) => e.z >= 0.35)
+    .filter((e) => e.z >= 0.25)
     .sort((a, b) => b.z - a.z)
   if (entries.length === 0) return []
   const out: ChampionMatchupDominanceKey[] = []
@@ -253,7 +242,7 @@ function dominanceFromZscores(z: Record<ChampionMatchupDominanceKey, number>): C
 function weaknessFromZscores(z: Record<ChampionMatchupDominanceKey, number>): ChampionMatchupDominanceKey[] {
   const entries = (Object.keys(z) as ChampionMatchupDominanceKey[])
     .map((k) => ({ k, z: z[k] ?? 0 }))
-    .filter((e) => e.z <= -0.35)
+    .filter((e) => e.z <= -0.25)
     .sort((a, b) => a.z - b.z)
   if (entries.length === 0) return []
   const out: ChampionMatchupDominanceKey[] = []
@@ -266,32 +255,11 @@ function weaknessFromZscores(z: Record<ChampionMatchupDominanceKey, number>): Ch
 function signalLevelFromZ(z: number): ChampionMatchupSignalLevel {
   if (z >= 1.0) return 'bigAdvantage'
   if (z >= 0.65) return 'mediumAdvantage'
-  if (z >= 0.35) return 'smallAdvantage'
+  if (z >= 0.25) return 'smallAdvantage'
   if (z <= -1.0) return 'bigDisadvantage'
   if (z <= -0.65) return 'mediumDisadvantage'
-  if (z <= -0.35) return 'smallDisadvantage'
+  if (z <= -0.25) return 'smallDisadvantage'
   return 'even'
-}
-
-function laneZscoresFromRow(
-  myRow: LaneSumRow,
-  games: number,
-  cohort: RawPeerRow[],
-  selfChampionId: number,
-): Record<ChampionMatchupDominanceKey, number> {
-  const z = {} as Record<ChampionMatchupDominanceKey, number>
-  const peers = cohort.filter(
-    (p) => Number(p.champion_id) !== selfChampionId && Number(p.games ?? 0) >= 3,
-  )
-  for (const key of CHAMPION_MATCHUP_DOMINANCE_KEYS) {
-    const myVal = computeLaneDominanceValue(key, myRow, games)
-    const peerVals = peers.map((p) =>
-      computeLaneDominanceValue(key, p, Number(p.games ?? 0)),
-    )
-    const m = meanStd(peerVals)
-    z[key] = zscore(myVal, m.mean, m.std)
-  }
-  return z
 }
 
 function laneScoreFromZ(z: Record<ChampionMatchupDominanceKey, number>): number {
@@ -301,39 +269,6 @@ function laneScoreFromZ(z: Record<ChampionMatchupDominanceKey, number>): number 
       ? Number((laneComponents.reduce((a, b) => a + b, 0) / laneComponents.length).toFixed(2))
       : 0
   return laneScoreRaw * 100
-}
-
-function matchupScoreFromSignals(
-  wrDelta: number,
-  gamesInMatchup: number,
-  totalGamesChampion: number,
-  z: Record<ChampionMatchupDominanceKey, number>,
-): number {
-  const baseScore = matchupScoreFromDeltaAndWeight({
-    delta: wrDelta,
-    gamesInMatchup,
-    totalGamesChampion: Math.max(1, totalGamesChampion),
-  })
-  // Blend historical WR edge with timeline lane signals.
-  const laneCore =
-    ((z.early ?? 0) +
-      (z.laneEconomy ?? 0) +
-      (z.kills ?? 0) +
-      (z.level ?? 0) +
-      (z.cs ?? 0) +
-      (z.vision ?? 0)) /
-    6
-  const contextual =
-    ((z.items ?? 0) +
-      (z.gank ?? 0) +
-      (z.dive ?? 0) +
-      (z.roam ?? 0) +
-      (z.objectives ?? 0) +
-      (z.pressure ?? 0)) /
-    6
-  const laneComposite = laneCore * 0.7 + contextual * 0.3
-  const sampleWeight = Math.min(1, Math.max(0.2, gamesInMatchup / 80))
-  return baseScore * 0.65 + laneComposite * sampleWeight * 0.35
 }
 
 function laneProfileFromZ(
@@ -510,15 +445,7 @@ export async function getChampionMatchupsExtendedTable(options: {
         const w = Number(mr.wins ?? 0)
         const wrPct = g > 0 ? (100 * w) / g : 0
         const peers = refByOppRole.get(`${opp}|${role}`) ?? []
-        let sumOtherGames = 0
-        let sumOtherWins = 0
-        for (const p of peers) {
-          if (Number(p.champion_id) === championId) continue
-          sumOtherGames += Number(p.games ?? 0)
-          sumOtherWins += Number(p.wins ?? 0)
-        }
-        const avgOthersWrPct = sumOtherGames > 0 ? (100 * sumOtherWins) / sumOtherGames : wrPct
-        const delta = computeDelta(wrPct, avgOthersWrPct)
+        const delta = computeMatchupWrDelta(wrPct, peers, championId)
         const totalRoleGames = refGamesInRole.get(role) ?? g
         const cohort = peers.filter((p) => Number(p.champion_id) !== championId && Number(p.games ?? 0) >= 3)
         const z = laneZscoresFromRow(mr, g, cohort, championId)
@@ -563,21 +490,12 @@ export async function getChampionMatchupsExtendedTable(options: {
     const wrPct = g > 0 ? (100 * w) / g : 0
 
     const peers = byOppRole.get(`${opp}|${role}`) ?? []
-    let sumOtherGames = 0
-    let sumOtherWins = 0
-    for (const p of peers) {
-      const cid = Number(p.champion_id)
-      if (cid === championId) continue
-      sumOtherGames += Number(p.games ?? 0)
-      sumOtherWins += Number(p.wins ?? 0)
-    }
-    const avgOthersWrPct = sumOtherGames > 0 ? (100 * sumOtherWins) / sumOtherGames : wrPct
     const myOverallWrPct = overallWrByChampionRole.get(`${championId}|${role}`) ?? 50
     const oppOverallWrPct = overallWrByChampionRole.get(`${opp}|${role}`) ?? 50
     const delta1 = wrPct - (100 - oppOverallWrPct)
     const normalizedWinrateExpected = (myOverallWrPct + (100 - oppOverallWrPct)) / 2
     const delta2 = wrPct - normalizedWinrateExpected
-    const delta = computeDelta(wrPct, avgOthersWrPct)
+    const delta = computeMatchupWrDelta(wrPct, peers, championId)
     const totalRoleGames = gamesInRole.get(role) ?? g
     const cohort = peers.filter((p) => Number(p.champion_id) !== championId && Number(p.games ?? 0) >= 3)
     const z = laneZscoresFromRow(mr, g, cohort, championId)

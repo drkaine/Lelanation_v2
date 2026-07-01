@@ -2,16 +2,20 @@
  * Tier list service: one row per champion (all ranks or GM+Challenger slice).
  * Aggregates from `agg_champion_core_stats` (live + `archive_agg_*` via matchVersionedAggFrom); stats = rôle le plus joué par défaut.
  * Avec option `role`, stats = ce rôle pour tout champion ayant assez de games dessus (même si ce n’est pas son main).
- * Tier score: matchup deltas (centrées) puis percentiles.
+ * Tier score: somme des scores matchup (WR delta + signaux lane), alignée sur l’onglet matchups champion.
  */
 import { queryRawUnsafe } from '../db/query.js'
 import { bansPerChampionFromMvRows } from '../utils/statsMvBanAggregate.js'
 import { isDatabaseConfigured } from '../db/query.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor, sqlAggUnionAllLiveAndArchives } from './statsAggArchive.js'
+import { buildChampionMatchupLaneSumSelect, type LaneSumRow } from './championMatchupLaneProfile.js'
+import {
+  computeChampionMatchupNotesBatch,
+  type MatchupPeerRow,
+} from './championMatchupScoreCompute.js'
 
 const MIN_GAMES = 1
 const MIN_PICKRATE = 0.0001
-const MATCHUP_MIN_GAMES_ELIGIBLE = 100
 
 const TIER_PERCENTILES: Array<{ tier: Tier; maxPct: number }> = [
   { tier: 'S+', maxPct: 5 },
@@ -126,113 +130,25 @@ function ensureTierCoverage(tiers: Tier[], n: number): Tier[] {
   return out
 }
 
-function deltaToMatchupBaseScore(delta: number): number {
-  if (delta < -5) return -10
-  if (delta < -2) return -6
-  if (delta < -0.5) return -3
-  if (delta <= 0.5) return 0
-  if (delta <= 2) return 3
-  if (delta <= 5) return 6
-  return 10
-}
-
 export const __testables = {
   assignTier,
-  deltaToMatchupBaseScore,
   tierScoreFromWinrateAndGames: (winrate: number, games: number) => (winrate - 0.5) * Math.sqrt(games),
-}
-
-type MatchupRoleRow = {
-  championId: number
-  opponentChampionId: number
-  role: string
-  games: number
-  wins: number
 }
 
 function computeChampionMatchupScores(
   rows: Array<{
     championId: number
     mainRole: string
-    games: number
+    roleGames: number
   }>,
-  matchupRows: MatchupRoleRow[]
+  vsRows: MatchupPeerRow[],
 ): Map<number, number> {
-  const byChampion = new Map<number, { mainRole: string; games: number }>()
-  for (const row of rows) byChampion.set(row.championId, { mainRole: row.mainRole, games: row.games })
-
-  type Duel = {
-    championId: number
-    role: string
-    opponentChampionId: number
-    games: number
-    winratePct: number
-  }
-  const duels: Duel[] = []
-  const byOpponentRole = new Map<string, Duel[]>()
-  for (const m of matchupRows) {
-    const champ = byChampion.get(m.championId)
-    if (
-      !champ ||
-      normalizeTierListRole(champ.mainRole) !== normalizeTierListRole(m.role) ||
-      m.games <= 0
-    )
-      continue
-    const winratePct = (m.wins / m.games) * 100
-    const duel: Duel = {
-      championId: m.championId,
-      role: m.role,
-      opponentChampionId: m.opponentChampionId,
-      games: m.games,
-      winratePct,
-    }
-    duels.push(duel)
-    const key = `${m.role}::${m.opponentChampionId}`
-    const list = byOpponentRole.get(key) ?? []
-    list.push(duel)
-    byOpponentRole.set(key, list)
-  }
-
-  const rawDeltas: Array<{ duel: Duel; delta: number }> = []
-  for (const duel of duels) {
-    const key = `${duel.role}::${duel.opponentChampionId}`
-    const peers = byOpponentRole.get(key) ?? []
-    let sum = 0
-    let count = 0
-    for (const p of peers) {
-      if (p.championId === duel.championId) continue
-      if (p.games < MATCHUP_MIN_GAMES_ELIGIBLE) continue
-      sum += p.winratePct
-      count += 1
-    }
-    if (count === 0) continue
-    rawDeltas.push({ duel, delta: duel.winratePct - sum / count })
-  }
-
-  if (rawDeltas.length === 0) return new Map()
-  let weightSum = 0
-  let weightedDeltaSum = 0
-  for (const d of rawDeltas) {
-    weightSum += d.duel.games
-    weightedDeltaSum += d.delta * d.duel.games
-  }
-  const recenter = weightSum > 0 ? weightedDeltaSum / weightSum : 0
-
-  const noteByChampion = new Map<number, number>()
-  for (const d of rawDeltas) {
-    const champion = byChampion.get(d.duel.championId)
-    if (!champion || champion.games <= 0) continue
-    const centeredDelta = d.delta - recenter
-    const baseScore = deltaToMatchupBaseScore(centeredDelta)
-    const weighted = baseScore * (d.duel.games / champion.games)
-    noteByChampion.set(d.duel.championId, (noteByChampion.get(d.duel.championId) ?? 0) + weighted)
-  }
-  return noteByChampion
+  return computeChampionMatchupNotesBatch(rows, vsRows, normalizeTierListRole)
 }
 
 function buildTierListRows(
   roleRows: RoleRow[],
-  matchupRows: MatchupRoleRow[],
+  vsRows: MatchupPeerRow[],
   focusRole?: string | null
 ): TierListRow[] {
   const byChampion = new Map<
@@ -307,14 +223,18 @@ function buildTierListRows(
 
   const filtered = rows.filter(r => r.games >= MIN_GAMES && r.pickrate >= MIN_PICKRATE)
   const notes = computeChampionMatchupScores(
-    filtered.map(r => ({ championId: r.championId, mainRole: r.mainRole, games: r.games })),
-    matchupRows
+    filtered.map(r => ({
+      championId: r.championId,
+      mainRole: r.mainRole,
+      roleGames: r.mainRoleGames,
+    })),
+    vsRows
   )
   const hasMatchupNotes = notes.size > 0
   for (const row of filtered) {
-    // Sparse cohorts (e.g. one selected division) can yield no matchup signal at all.
-    // Keep a meaningful chart score by falling back to the precomputed tier score.
-    row.pbi = hasMatchupNotes ? (notes.get(row.championId) ?? 0) : row.tierScore
+    row.pbi = hasMatchupNotes
+      ? (notes.get(row.championId) ?? row.tierScore)
+      : row.tierScore
   }
   const sorted = [...filtered].sort((a, b) => b.tierScore - a.tierScore)
   sorted.forEach(r => {
@@ -456,10 +376,10 @@ async function fetchRoleRows(
   return roleRows
 }
 
-async function fetchMatchupRoleRows(
+async function fetchMatchupVsRows(
   patch: string,
   rankFilter: 'all' | 'high_elo' | string | string[] | null
-): Promise<MatchupRoleRow[]> {
+): Promise<MatchupPeerRow[]> {
   const highEloOnly = rankFilter === 'high_elo'
   const HIGH_ELO_TIERS = ['CHALLENGER', 'GRANDMASTER', 'MASTER']
   const filters: string[] = []
@@ -476,45 +396,57 @@ async function fetchMatchupRoleRows(
     const rf = String(rankFilter).toUpperCase().replace(/'/g, "''")
     filters.push(`rank_tier = '${rf}'`)
   }
-  if (patch) filters.push(`game_version LIKE '${normalizePatchMajorMinor(patch).replace(/'/g, "''")}%'`)
   const whereSql = filters.length > 0 ? filters.join(' AND ') : '1=1'
 
   const vsFrom = await matchVersionedAggFrom('agg_champion_vs_stats', patch, 'vs')
+  const laneSumSelect = buildChampionMatchupLaneSumSelect('vs')
 
-  const vsRows = await queryRawUnsafe<Array<{
-    championId: number
-    opponentChampionId: number
-    role: string
-    countGame: number
-    countWin: number
-  }>>(`
+  const vsRows = await queryRawUnsafe<Array<
+    LaneSumRow & {
+      championId: number
+      opponentChampionId: number
+      role: string
+      countGame: number
+      countWin: number
+    }
+  >>(`
     SELECT
-      champion_id AS "championId",
-      opponent_champion_id AS "opponentChampionId",
-      role,
-      count_game AS "countGame",
-      count_win AS "countWin"
+      vs.champion_id AS "championId",
+      vs.opponent_champion_id AS "opponentChampionId",
+      vs.role,
+      SUM(vs.count_game)::bigint AS "countGame",
+      SUM(vs.count_win)::bigint AS "countWin",
+      ${laneSumSelect}
     FROM ${vsFrom}
     WHERE ${whereSql}
+    GROUP BY vs.champion_id, vs.opponent_champion_id, vs.role
+    HAVING SUM(vs.count_game) >= 3
   `)
-  const agg = new Map<string, MatchupRoleRow>()
-  for (const row of vsRows) {
-    const key = `${row.championId}::${row.opponentChampionId}::${row.role}`
-    const ex = agg.get(key)
-    if (!ex) {
-      agg.set(key, {
-        championId: row.championId,
-        opponentChampionId: row.opponentChampionId,
-        role: row.role,
-        games: row.countGame,
-        wins: row.countWin,
-      })
-    } else {
-      ex.games += row.countGame
-      ex.wins += row.countWin
+
+  return vsRows.map((row) => {
+    const games = toNum(row.countGame)
+    const wins = toNum(row.countWin)
+    const out: MatchupPeerRow = {
+      champion_id: toNum(row.championId),
+      opponent_champion_id: toNum(row.opponentChampionId),
+      role: String(row.role ?? ''),
+      games,
+      wins,
     }
-  }
-  return [...agg.values()]
+    for (const [key, value] of Object.entries(row)) {
+      if (
+        key === 'championId' ||
+        key === 'opponentChampionId' ||
+        key === 'role' ||
+        key === 'countGame' ||
+        key === 'countWin'
+      ) {
+        continue
+      }
+      out[key] = value
+    }
+    return out
+  })
 }
 
 async function getLatestPatch(): Promise<string | null> {
@@ -587,15 +519,15 @@ export async function getTierList(options: GetTierListOptions): Promise<GetTierL
 
   const focusRole = options.role?.trim() ? options.role : null
 
-  const matchupRows = await fetchMatchupRoleRows(patch, rankFilter)
-  const rows = buildTierListRows(roleRows, matchupRows, focusRole)
+  const matchupVsRows = await fetchMatchupVsRows(patch, rankFilter)
+  const rows = buildTierListRows(roleRows, matchupVsRows, focusRole)
 
   let highEloRows: TierListRow[] | undefined
   try {
     const highEloRoleRows = await fetchRoleRows(patch, platformId, 'high_elo')
     if (highEloRoleRows.length > 0) {
-      const highEloMatchupRows = await fetchMatchupRoleRows(patch, 'high_elo')
-      highEloRows = buildTierListRows(highEloRoleRows, highEloMatchupRows, focusRole)
+      const highEloMatchupVsRows = await fetchMatchupVsRows(patch, 'high_elo')
+      highEloRows = buildTierListRows(highEloRoleRows, highEloMatchupVsRows, focusRole)
     }
   } catch {
     // optional: skip high-elo block on error

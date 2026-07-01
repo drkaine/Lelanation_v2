@@ -68,7 +68,7 @@ export async function loadIngestionPayloadFromNormalizedTables(
     gameDurationSec: Math.max(0, Math.trunc(Number(match.game_duration) || 0)),
     earlySurrender: match.early_surrender === true,
     surrender: match.surrender === true,
-  });
+  }, teamRows);
   if (participants.length === 0) return null;
 
   const closestSnapshots = closestSnapshotsFromParticipants(participants);
