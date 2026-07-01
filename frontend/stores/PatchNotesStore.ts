@@ -19,6 +19,8 @@ export interface StatChange {
   after: string
   type: ChangeType
   subCategory?: string
+  linkUrl?: string
+  linkLabel?: string
 }
 
 export interface PatchEntity {
@@ -27,6 +29,7 @@ export interface PatchEntity {
   id?: string
   imageUrl?: string
   patchSlug?: string
+  isNewRelease?: boolean
   subCategory?: string
   changes: StatChange[]
 }

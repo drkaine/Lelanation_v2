@@ -172,7 +172,7 @@ function patchNotesMessage(message: string | undefined): string {
         <article
           v-for="row in p.paginatedPatchNotesRows"
           :key="'pn-mobile-' + row.targetType + '-' + row.targetId"
-          class="statistics-patch-notes-mobile-card rounded-lg border border-primary/30 bg-surface/40 p-3"
+          class="statistics-patch-notes-mobile-card statistics-panel-surface p-3"
         >
           <div class="flex items-center gap-3">
             <img
@@ -241,11 +241,13 @@ function patchNotesMessage(message: string | undefined): string {
         </article>
       </div>
 
-      <div class="hidden overflow-x-auto md:block">
+      <div
+        class="tier-list-mobile-rotate statistics-overview-surface hidden w-full overflow-x-auto rounded-lg border border-primary/30 md:block"
+      >
         <table class="statistics-table w-full min-w-[56rem] border-collapse text-sm">
           <thead>
             <tr
-              class="border-b border-primary/30 text-left text-xs uppercase tracking-wide text-text/60"
+              class="sticky top-0 z-10 border-b border-black bg-[var(--color-grey-300)] text-left text-xs uppercase tracking-wide text-text-primary/85"
             >
               <th class="px-2 py-2">
                 <button
@@ -317,7 +319,7 @@ function patchNotesMessage(message: string | undefined): string {
             <tr
               v-for="row in p.paginatedPatchNotesRows"
               :key="'pn-' + row.targetType + '-' + row.targetId"
-              class="border-b border-primary/15 hover:bg-primary/5"
+              class="border-b border-primary/15 odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
             >
               <td class="px-2 py-2">
                 <div class="flex min-w-0 items-center gap-2">

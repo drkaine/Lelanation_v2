@@ -31,9 +31,7 @@ function onHeaderClick() {
 </script>
 
 <template>
-  <article
-    class="statistics-objectives-mobile-card rounded-lg border border-primary/30 bg-surface/40 p-3"
-  >
+  <article class="statistics-objectives-mobile-card statistics-panel-surface p-3">
     <component
       :is="expandable ? 'button' : 'div'"
       :type="expandable ? 'button' : undefined"

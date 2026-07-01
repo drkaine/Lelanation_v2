@@ -3,10 +3,7 @@
     <div v-if="pending" class="text-sm text-text/70">
       {{ t('statisticsPage.loading') }}
     </div>
-    <div
-      v-else-if="!hasData"
-      class="rounded-lg border border-primary/30 bg-surface/50 p-4 text-sm text-text/70"
-    >
+    <div v-else-if="!hasData" class="statistics-empty-panel p-4">
       {{ t('statisticsPage.championMiscEmpty') }}
     </div>
     <template v-else>
@@ -113,7 +110,7 @@ const hasData = computed(() => gamesCount.value > 0 && visibleGroups.value.lengt
 
 const GROUP_CARD_CLASS: Record<string, string> = {
   healing: 'border-info/45 bg-info/[0.06]',
-  damageTypes: 'border-primary/30 bg-surface/30',
+  damageTypes: 'border-accent/35',
   multikills: 'border-violet-500/45 bg-violet-500/[0.06]',
 }
 
@@ -138,7 +135,7 @@ const DAMAGE_SWATCH: Record<string, string> = {
 const MULTIKILL_KEYS = new Set(['double', 'triple', 'quadra', 'penta', 'unreal'])
 
 function groupCardClass(key: string): string {
-  return GROUP_CARD_CLASS[key] ?? 'border-primary/30 bg-surface/30'
+  return GROUP_CARD_CLASS[key] ?? 'border-primary/20'
 }
 
 function groupIconWrapClass(key: string): string {

@@ -1470,14 +1470,14 @@ function drakeDropdownCountLabel(count: number): string {
         !(p.overviewTeamsData && p.overviewTeamsData.matchCount > 0) &&
         !(p.overviewSidesData && p.overviewSidesData.matchCount > 0)
       "
-      class="rounded border border-primary/30 bg-surface/50 p-4 text-sm text-text/70"
+      class="statistics-empty-panel p-4"
     >
       {{ p.t('statisticsPage.objectivesCombinedEmpty') }}
     </div>
 
     <div
       v-else
-      class="fast-stat-card fast-stat-card-objectives w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-3"
+      class="fast-stat-card fast-stat-card-objectives ui-build-card-surface w-full max-w-full rounded-xl p-3"
     >
       <div class="mb-3 flex min-w-0 flex-wrap items-center gap-2">
         <button
@@ -2551,7 +2551,7 @@ function drakeDropdownCountLabel(count: number): string {
 
     <div v-if="showDistributionCards" class="grid grid-cols-1 gap-4 md:grid-cols-2">
       <div
-        class="fast-stat-card fast-stat-card-distribution mx-auto w-full max-w-[420px] rounded-lg border border-primary/30 bg-surface/30 p-3 md:mx-0"
+        class="fast-stat-card fast-stat-card-distribution ui-build-card-surface mx-auto w-full max-w-[420px] rounded-xl p-3 md:mx-0"
       >
         <h4 class="mb-2 text-sm font-semibold text-text/90">
           {{ p.t('statisticsPage.objectivesDrakeDistributionCardTitle') }}
@@ -2607,7 +2607,7 @@ function drakeDropdownCountLabel(count: number): string {
       </div>
 
       <div
-        class="fast-stat-card fast-stat-card-distribution mx-auto w-full max-w-[420px] rounded-lg border border-primary/30 bg-surface/30 p-3 md:mx-0"
+        class="fast-stat-card fast-stat-card-distribution ui-build-card-surface mx-auto w-full max-w-[420px] rounded-xl p-3 md:mx-0"
       >
         <h4 class="mb-2 text-sm font-semibold text-text/90">
           {{ p.t('statisticsPage.objectivesSoulDistributionCardTitle') }}

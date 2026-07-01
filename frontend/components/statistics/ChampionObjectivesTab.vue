@@ -4,16 +4,13 @@
       {{ t('statisticsPage.loading') }}
     </div>
 
-    <div
-      v-else-if="!hasData"
-      class="rounded border border-primary/30 bg-surface/50 p-4 text-sm text-text/70"
-    >
+    <div v-else-if="!hasData" class="statistics-empty-panel p-4">
       {{ t('statisticsPage.objectivesCombinedEmpty') }}
     </div>
 
     <template v-else>
       <div
-        class="fast-stat-card fast-stat-card-objectives w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-3"
+        class="fast-stat-card fast-stat-card-objectives ui-build-card-surface w-full max-w-full rounded-xl p-3"
       >
         <div class="mb-3 flex min-w-0 flex-wrap items-center gap-2">
           <button
@@ -459,7 +456,7 @@
 
       <div
         v-if="panelTab === 'objectives' && participationMetrics.length > 0"
-        class="fast-stat-card w-full rounded-lg border border-primary/30 bg-surface/30 p-3"
+        class="fast-stat-card ui-build-card-surface w-full rounded-xl p-3"
       >
         <h4 class="mb-3 text-sm font-semibold text-text/90">
           {{ t('statisticsPage.championObjectivesParticipationTitle') }}
@@ -480,7 +477,7 @@
 
       <div
         v-if="panelTab === 'objectives' && structureMetrics.length > 0"
-        class="fast-stat-card w-full rounded-lg border border-primary/30 bg-surface/30 p-3"
+        class="fast-stat-card ui-build-card-surface w-full rounded-xl p-3"
       >
         <h4 class="mb-3 text-sm font-semibold text-text/90">
           {{ t('statisticsPage.championObjectivesStructureTitle') }}
@@ -504,7 +501,7 @@
         class="grid w-full min-w-0 max-w-full grid-cols-1 gap-4 md:grid-cols-2"
       >
         <div
-          class="fast-stat-card fast-stat-card-distribution mx-auto w-full min-w-0 max-w-[420px] rounded-lg border border-primary/30 bg-surface/30 p-3 max-lg:max-w-full"
+          class="fast-stat-card fast-stat-card-distribution ui-build-card-surface mx-auto w-full min-w-0 max-w-[420px] rounded-xl p-3 max-lg:max-w-full"
         >
           <h4 class="mb-2 text-sm font-semibold text-text/90">
             {{ t('statisticsPage.objectivesDrakeDistributionCardTitle') }}
@@ -516,7 +513,7 @@
           />
         </div>
         <div
-          class="fast-stat-card fast-stat-card-distribution mx-auto w-full min-w-0 max-w-[420px] rounded-lg border border-primary/30 bg-surface/30 p-3 max-lg:max-w-full"
+          class="fast-stat-card fast-stat-card-distribution ui-build-card-surface mx-auto w-full min-w-0 max-w-[420px] rounded-xl p-3 max-lg:max-w-full"
         >
           <h4 class="mb-2 text-sm font-semibold text-text/90">
             {{ t('statisticsPage.objectivesSoulDistributionCardTitle') }}

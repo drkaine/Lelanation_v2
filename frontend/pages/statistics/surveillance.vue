@@ -3,22 +3,19 @@
     class="statistics-surveillance flex min-h-screen min-w-0 flex-col overflow-x-hidden bg-background text-text"
   >
     <div class="w-full flex-shrink-0 px-3 py-4 sm:px-5 lg:px-6">
-      <div
-        v-if="!pageReady"
-        class="rounded-lg border border-primary/25 bg-surface/30 p-6 text-sm text-text/70"
-      >
+      <div v-if="!pageReady" class="ui-build-card-surface rounded-xl p-6 text-sm text-text/70">
         {{ t('statisticsPage.loading') }}
       </div>
 
       <template v-else>
         <div
           v-if="watchedChampionIds.length === 0"
-          class="rounded-lg border border-primary/25 bg-surface/30 p-6 text-sm text-text/75"
+          class="ui-build-card-surface rounded-xl p-6 text-sm text-text/75"
         >
           <p>{{ t('statisticsPage.surveillanceEmpty') }}</p>
           <NuxtLink
             :to="localePath('/settings')"
-            class="mt-3 inline-flex rounded border border-primary/35 bg-surface/50 px-3 py-1.5 text-xs hover:bg-primary/10"
+            class="ui-build-card-button mt-3 inline-flex px-3 py-1.5 text-xs"
           >
             {{ t('statisticsPage.surveillanceSettingsLink') }}
           </NuxtLink>
@@ -26,26 +23,22 @@
 
         <div
           v-else-if="watchedChampions.length === 0"
-          class="rounded-lg border border-primary/25 bg-surface/30 p-6 text-sm text-text/75"
+          class="ui-build-card-surface rounded-xl p-6 text-sm text-text/75"
         >
           <p>{{ t('statisticsPage.surveillanceResolveError') }}</p>
         </div>
 
         <div v-else class="space-y-4">
           <div
-            class="inline-flex rounded-lg border border-primary/30 bg-surface/30 p-0.5"
+            class="ui-build-card-surface inline-flex rounded-xl p-0.5"
             role="tablist"
             :aria-label="t('statisticsPage.surveillancePageTabsAria')"
           >
             <button
               type="button"
               role="tab"
-              class="rounded-md px-3 py-1.5 text-xs font-medium transition"
-              :class="
-                activePageTab === 'champions'
-                  ? 'bg-primary/20 text-text-accent'
-                  : 'text-text/70 hover:bg-primary/10'
-              "
+              class="statistics-surveillance-tab-btn"
+              :class="activePageTab === 'champions' ? 'is-active' : ''"
               :aria-selected="activePageTab === 'champions'"
               @click="activePageTab = 'champions'"
             >
@@ -54,12 +47,8 @@
             <button
               type="button"
               role="tab"
-              class="rounded-md px-3 py-1.5 text-xs font-medium transition"
-              :class="
-                activePageTab === 'summary'
-                  ? 'bg-primary/20 text-text-accent'
-                  : 'text-text/70 hover:bg-primary/10'
-              "
+              class="statistics-surveillance-tab-btn"
+              :class="activePageTab === 'summary' ? 'is-active' : ''"
               :aria-selected="activePageTab === 'summary'"
               @click="activePageTab = 'summary'"
             >

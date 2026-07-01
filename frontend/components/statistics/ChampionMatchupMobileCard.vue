@@ -220,7 +220,7 @@ function laneProfileChipTitle(
 
 <template>
   <article
-    class="statistics-champion-stats-mobile-card statistics-champion-matchup-mobile-card w-full overflow-hidden rounded-lg border bg-surface/40"
+    class="statistics-champion-stats-mobile-card statistics-champion-matchup-mobile-card w-full overflow-hidden"
     :class="selected ? 'border-primary/60 ring-1 ring-primary/35' : 'border-primary/30'"
   >
     <div

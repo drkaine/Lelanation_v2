@@ -2727,6 +2727,12 @@
       "arena": "Arena",
       "bugfix": "Corrections de bugs"
     },
+    "bugfixCardTitle": "Correction de bug",
+    "tagFilters": {
+      "label": "Filtrer par type de changement",
+      "all": "Tous"
+    },
+    "noTagResults": "Aucun changement de type « {tag} » dans cette catégorie",
     "changeTypes": {
       "buff": "Buff",
       "nerf": "Nerf",

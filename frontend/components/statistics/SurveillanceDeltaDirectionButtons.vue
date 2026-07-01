@@ -1,6 +1,6 @@
 <template>
   <div
-    class="inline-flex shrink-0 gap-0.5 rounded border border-primary/25 bg-surface/30 p-0.5"
+    class="statistics-surveillance-delta-toggle"
     role="group"
     :aria-label="t('statisticsPage.settingsAlertsDeltaDirection')"
   >

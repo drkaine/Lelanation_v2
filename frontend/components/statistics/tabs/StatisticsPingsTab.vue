@@ -107,7 +107,7 @@ const pingsPageSize = computed({
         <article
           v-for="row in p.paginatedPingsRows"
           :key="'ping-mobile-' + row.championId"
-          class="statistics-champion-stats-mobile-card statistics-pings-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
+          class="statistics-champion-stats-mobile-card statistics-pings-mobile-card w-full overflow-hidden"
         >
           <div
             class="statistics-champion-stats-mobile-card-header flex w-full items-center gap-3 p-3"
@@ -316,7 +316,7 @@ const pingsPageSize = computed({
               <div class="flex gap-1">
                 <button
                   type="button"
-                  class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                  class="statistics-pagination-btn text-text"
                   :disabled="p.pingsPage <= 1"
                   @click="p.onPingsPageUpdated(Math.max(1, p.pingsPage - 1))"
                 >
@@ -324,7 +324,7 @@ const pingsPageSize = computed({
                 </button>
                 <button
                   type="button"
-                  class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                  class="statistics-pagination-btn text-text"
                   :disabled="p.pingsPage >= p.totalPingsPages"
                   @click="p.onPingsPageUpdated(Math.min(p.totalPingsPages, p.pingsPage + 1))"
                 >

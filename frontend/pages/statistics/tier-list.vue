@@ -1,7 +1,7 @@
 <template>
   <div class="statistics flex min-h-screen min-w-0 flex-col overflow-x-hidden text-text">
     <div
-      class="statistics-tabs-bar flex w-full min-w-0 flex-shrink-0 items-start gap-2 overflow-x-hidden bg-surface/30 px-4 pb-2 pt-4"
+      class="statistics-tabs-bar flex w-full min-w-0 flex-shrink-0 items-start gap-2 overflow-x-hidden px-4 pb-2 pt-4"
     >
       <div class="statistics-tabs-scroll-wrap relative min-w-0 flex-1 overflow-hidden">
         <div
@@ -10,24 +10,14 @@
         >
           <button
             type="button"
-            :class="[
-              'statistics-tab-btn shrink-0 snap-start whitespace-nowrap rounded px-3 py-1.5 text-sm font-medium transition-colors',
-              tierListViewModel === 'table'
-                ? 'border border-accent/50 bg-accent/20 text-accent'
-                : 'border border-transparent text-text/80 hover:bg-primary/10 hover:text-text',
-            ]"
+            :class="['statistics-tab-btn', tierListViewModel === 'table' ? 'is-active' : '']"
             @click="setTierListMainView('table')"
           >
             {{ t('statisticsPage.tierListViewTable') }}
           </button>
           <button
             type="button"
-            :class="[
-              'statistics-tab-btn shrink-0 snap-start whitespace-nowrap rounded px-3 py-1.5 text-sm font-medium transition-colors',
-              tierListViewModel === 'chart'
-                ? 'border border-accent/50 bg-accent/20 text-accent'
-                : 'border border-transparent text-text/80 hover:bg-primary/10 hover:text-text',
-            ]"
+            :class="['statistics-tab-btn', tierListViewModel === 'chart' ? 'is-active' : '']"
             @click="setTierListMainView('chart')"
           >
             {{ t('statisticsPage.tierListViewChart') }}
@@ -35,10 +25,8 @@
           <button
             type="button"
             :class="[
-              'statistics-tab-btn shrink-0 snap-start whitespace-nowrap rounded px-3 py-1.5 text-sm font-medium transition-colors',
-              tierListViewModel === 'botlaneMatchups'
-                ? 'border border-accent/50 bg-accent/20 text-accent'
-                : 'border border-transparent text-text/80 hover:bg-primary/10 hover:text-text',
+              'statistics-tab-btn',
+              tierListViewModel === 'botlaneMatchups' ? 'is-active' : '',
             ]"
             @click="setTierListMainView('botlaneMatchups')"
           >
@@ -47,10 +35,8 @@
           <button
             type="button"
             :class="[
-              'statistics-tab-btn shrink-0 snap-start whitespace-nowrap rounded px-3 py-1.5 text-sm font-medium transition-colors',
-              tierListViewModel === 'botlaneDuoRank'
-                ? 'border border-accent/50 bg-accent/20 text-accent'
-                : 'border border-transparent text-text/80 hover:bg-primary/10 hover:text-text',
+              'statistics-tab-btn',
+              tierListViewModel === 'botlaneDuoRank' ? 'is-active' : '',
             ]"
             @click="setTierListMainView('botlaneDuoRank')"
           >
@@ -118,12 +104,12 @@
       <aside
         v-show="filtersOpen || !effectiveFiltersSheetMode"
         :class="[
-          'statistics-filters-panel flex shrink-0 flex-col overflow-hidden bg-surface',
+          'statistics-filters-panel flex shrink-0 flex-col overflow-hidden',
           effectiveFiltersSheetMode
-            ? 'fixed inset-x-0 bottom-0 top-auto z-[10051] max-h-[85vh] w-full rounded-t-2xl shadow-lg'
+            ? 'fixed inset-x-0 bottom-0 top-auto z-[10051] max-h-[85vh] w-full rounded-t-2xl bg-surface shadow-lg'
             : [
                 'hidden w-0 opacity-0 transition-[width,opacity] duration-200',
-                'lg:sticky lg:top-4 lg:z-0 lg:flex lg:h-auto lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:overflow-x-hidden lg:rounded-lg lg:shadow-none',
+                'lg:sticky lg:top-4 lg:z-0 lg:flex lg:h-auto lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:overflow-x-hidden',
                 filtersOpen ? 'lg:w-64 lg:opacity-100' : 'lg:w-0 lg:opacity-0',
               ],
         ]"
@@ -151,7 +137,7 @@
           </h2>
           <button
             type="button"
-            class="statistics-filters-reset inline-flex shrink-0 touch-manipulation items-center gap-1.5 rounded px-2 py-1.5 text-xs font-semibold text-primary-light transition-colors hover:bg-info/15 hover:text-primary-light"
+            class="statistics-filters-reset ui-build-card-button inline-flex shrink-0 touch-manipulation items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold"
             @click="resetStatsFilters"
           >
             <span class="iconify i-mdi:refresh" aria-hidden="true" />
@@ -378,7 +364,7 @@
         <div class="shrink-0 border-t border-primary/25 p-3 lg:hidden">
           <button
             type="button"
-            class="w-full touch-manipulation rounded-lg border border-primary/40 bg-primary/10 px-4 py-3 text-sm font-semibold text-text hover:bg-primary/20"
+            class="statistics-filters-mobile-close lg:hidden"
             @click="closeFilters"
           >
             {{ t('statisticsPage.closeFilters') }}
@@ -390,7 +376,7 @@
         <div class="w-full space-y-4">
           <section
             v-if="tierListSeoRows.length > 0"
-            class="tier-list-seo-summary rounded-lg border border-primary/20 bg-surface/20 p-3 text-sm text-text/85"
+            class="tier-list-seo-summary statistics-panel-surface p-3 text-sm text-text/85"
             aria-label="Résumé tier list"
           >
             <h1 class="text-lg font-bold text-accent">{{ tierListSeoTitle }}</h1>
@@ -430,7 +416,7 @@
       v-if="!filtersOpen"
       type="button"
       :class="[
-        'statistics-filters-fab fixed bottom-4 left-1/2 z-[58] -translate-x-1/2 items-center gap-2 rounded-full border border-primary/40 bg-surface/95 px-4 py-2.5 text-sm font-semibold text-text shadow-lg backdrop-blur-sm',
+        'statistics-filters-fab fixed bottom-4 left-1/2 z-[58] flex -translate-x-1/2 items-center gap-2',
         filtersFabClass,
       ]"
       :aria-label="t('statisticsPage.openFilters')"

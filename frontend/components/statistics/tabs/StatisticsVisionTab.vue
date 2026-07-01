@@ -104,7 +104,7 @@ const visionPageSize = computed({
         <article
           v-for="row in p.paginatedVisionRows"
           :key="'vision-mobile-' + row.championId"
-          class="statistics-champion-stats-mobile-card statistics-vision-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
+          class="statistics-champion-stats-mobile-card statistics-vision-mobile-card w-full overflow-hidden"
         >
           <div
             class="statistics-champion-stats-mobile-card-header flex w-full items-center gap-3 p-3"
@@ -275,7 +275,7 @@ const visionPageSize = computed({
               <div class="flex gap-1">
                 <button
                   type="button"
-                  class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                  class="statistics-pagination-btn text-text"
                   :disabled="p.visionPage <= 1"
                   @click="p.onVisionPageUpdated(Math.max(1, p.visionPage - 1))"
                 >
@@ -283,7 +283,7 @@ const visionPageSize = computed({
                 </button>
                 <button
                   type="button"
-                  class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                  class="statistics-pagination-btn text-text"
                   :disabled="p.visionPage >= p.totalVisionPages"
                   @click="p.onVisionPageUpdated(Math.min(p.totalVisionPages, p.visionPage + 1))"
                 >

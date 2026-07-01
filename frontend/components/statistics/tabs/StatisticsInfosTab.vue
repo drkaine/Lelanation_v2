@@ -116,7 +116,7 @@ watch(
           <article
             v-for="row in paginatedRows"
             :key="'infos-mobile-' + row.version"
-            class="statistics-infos-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
+            class="statistics-infos-mobile-card w-full overflow-hidden"
           >
             <div
               class="flex items-center justify-between gap-3 border-b border-primary/15 px-3.5 py-3"
@@ -166,9 +166,7 @@ watch(
           </article>
         </div>
 
-        <div
-          class="hidden overflow-x-auto rounded-lg border border-primary/30 bg-surface/30 p-1 md:block"
-        >
+        <div class="ui-build-card-surface hidden overflow-x-auto rounded-xl p-1 md:block">
           <table class="w-full min-w-[760px] text-left text-sm">
             <thead class="border-b border-primary/30 bg-surface/50">
               <tr>
@@ -229,7 +227,7 @@ watch(
 
         <div
           v-if="totalRowsCount > 0"
-          class="statistics-infos-pagination flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-surface/20 px-3 py-2 text-sm text-text/80 md:rounded-lg md:border md:border-primary/30 md:bg-surface/30"
+          class="statistics-tab-pagination statistics-infos-pagination flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
         >
           <span>{{ totalRowsCount }} {{ p.t('statisticsPage.infosMatrixPatchHeader') }}</span>
           <div class="flex items-center gap-3">
@@ -249,7 +247,7 @@ watch(
             <div class="flex gap-1">
               <button
                 type="button"
-                class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                class="statistics-pagination-btn text-text"
                 :disabled="page <= 1"
                 @click="page = Math.max(1, page - 1)"
               >
@@ -257,7 +255,7 @@ watch(
               </button>
               <button
                 type="button"
-                class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                class="statistics-pagination-btn text-text"
                 :disabled="page >= totalPages"
                 @click="page = Math.min(totalPages, page + 1)"
               >
@@ -267,11 +265,11 @@ watch(
           </div>
         </div>
       </div>
-      <div v-else class="rounded-lg border border-primary/30 bg-surface/20 p-4 text-text/70">
+      <div v-else class="statistics-empty-panel p-4">
         {{ p.t('statisticsPage.noData') }}
       </div>
 
-      <div class="rounded-lg border border-primary/30 bg-surface/20 p-2">
+      <div class="statistics-panel-surface p-2">
         <img
           src="/images/champion-balance-framework.png"
           alt="Champion Balance Framework"

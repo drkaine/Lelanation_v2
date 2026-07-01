@@ -136,7 +136,7 @@ const charts = useChampionDurationByTierCharts({
         v-if="
           charts.durationTooltip.value && charts.durationTooltip.value.metricId === card.metricId
         "
-        class="pointer-events-none fixed z-[90] rounded border border-primary/30 bg-surface/90 px-2 py-1 text-[11px] text-text/85 shadow-lg"
+        class="statistics-chart-tooltip pointer-events-none fixed z-[90]"
         :style="{
           left: `${charts.durationTooltip.value.mouseX}px`,
           top: `${charts.durationTooltip.value.mouseY}px`,

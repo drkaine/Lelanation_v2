@@ -381,6 +381,7 @@ if (import.meta.client) {
 @import './assets/css/tokens.css';
 @import './assets/css/tier-badges.css';
 @import './assets/css/ui-build-card.css';
+@import './assets/css/ui-statistics.css';
 
 @tailwind base;
 @tailwind components;

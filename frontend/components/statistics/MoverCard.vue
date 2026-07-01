@@ -1,17 +1,17 @@
 <template>
   <div
-    class="flex items-center gap-3 rounded-lg border border-zinc-600/80 bg-zinc-950/90 px-3 py-2 shadow-[0_0_20px_rgba(0,0,0,0.35)]"
+    class="ui-build-card-surface flex items-center gap-3 rounded-xl px-3 py-2"
     :class="up ? 'shadow-[0_0_18px_rgba(34,197,94,0.25)]' : 'shadow-[0_0_18px_rgba(239,68,68,0.2)]'"
   >
     <div
       v-if="imageSrc"
-      class="h-12 w-12 shrink-0 overflow-hidden rounded-md border border-zinc-600 ring-1 ring-zinc-700/50"
+      class="h-12 w-12 shrink-0 overflow-hidden rounded-md border border-primary/30"
     >
       <img :src="imageSrc" :alt="title" class="h-full w-full object-cover" loading="lazy" />
     </div>
     <div class="min-w-0 flex-1">
-      <div class="truncate font-semibold text-zinc-100">{{ title }}</div>
-      <div class="truncate text-xs text-zinc-400">{{ subtitle }}</div>
+      <div class="truncate font-semibold text-text-accent">{{ title }}</div>
+      <div class="truncate text-xs text-text/60">{{ subtitle }}</div>
     </div>
     <div class="shrink-0 text-right font-mono">
       <div class="flex items-center justify-end gap-1 text-sm">
@@ -21,7 +21,7 @@
           {{ formattedDelta }}
         </span>
       </div>
-      <div class="text-[10px] uppercase tracking-wider text-zinc-500">{{ metricLabel }}</div>
+      <div class="text-[10px] uppercase tracking-wider text-text/50">{{ metricLabel }}</div>
     </div>
   </div>
 </template>

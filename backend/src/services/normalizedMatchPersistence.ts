@@ -300,6 +300,7 @@ function buildParticipantRow(
     turret_takedowns: ti(participant.turretTakedowns),
     turrets_lost: ti(participant.turretsLost),
     vision_cleared_pings: ti(participant.visionClearedPings),
+    vision_score: ti(participant.visionScore),
     vision_wards_bought_in_game: ti(participant.visionWardsBoughtInGame),
     wards_killed: ti(participant.wardsKilled),
     wards_placed: ti(participant.wardsPlaced),

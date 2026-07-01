@@ -15,7 +15,7 @@ const p = inject('statisticsPageCtx') as any
           class="statistics-fast-stat-grid flex flex-wrap items-start justify-center gap-x-[5px] gap-y-[10px] pb-[10px]"
         >
           <div
-            class="fast-stat-card flex w-full max-w-full flex-col items-center rounded-lg border border-primary/30 bg-surface/30 p-2"
+            class="fast-stat-card flex w-full max-w-full flex-col items-center rounded-xl border border-primary/30 p-2"
           >
             <h3
               class="fast-stat-title mb-2 flex w-full items-center gap-2 text-sm font-semibold lg:text-left"
@@ -461,7 +461,7 @@ const p = inject('statisticsPageCtx') as any
           </template>
         </div>
       </div>
-      <div v-else class="rounded border border-primary/30 bg-surface/50 p-4 text-text/70">
+      <div v-else class="statistics-empty-panel p-4">
         {{ p.t('statisticsPage.overviewNoData') }}
       </div>
     </div>

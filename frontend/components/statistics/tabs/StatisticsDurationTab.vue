@@ -20,7 +20,7 @@ const p = inject('statisticsPageCtx') as any
     </div>
     <div
       v-else-if="p.durationWinrateChartBuckets.length"
-      class="relative w-full rounded-lg border border-primary/30 bg-surface/30 p-4"
+      class="ui-build-card-surface relative w-full rounded-xl p-4"
     >
       <div class="relative min-h-[280px] w-full">
         <svg

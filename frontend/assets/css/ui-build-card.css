@@ -38,6 +38,7 @@
     color: var(--color-gold-300);
   }
 
+  .ui-build-card-active,
   .ui-build-card-button.is-active,
   .ui-build-card-button.is-active:hover {
     color: var(--color-gold-300);

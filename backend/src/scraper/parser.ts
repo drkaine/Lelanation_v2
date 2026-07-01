@@ -6,7 +6,7 @@
 import * as cheerio from 'cheerio';
 import type { Element } from 'domhandler';
 import { logger } from '../utils/logger.js';
-import { extractEntityIdFromHtml, patchHeaderIdToSlug } from './entityIds.js';
+import { extractEntityIdFromHtml, patchHeaderIdToSlug, championSlugToId } from './entityIds.js';
 import { inferNumericChangeType } from './changeType.js';
 import type { EntityChanges, StatChange, EntityCategory, Locale } from './types.js';
 
@@ -189,6 +189,8 @@ const SKIPPED_SECTION_IDS = [
   'patch-pride',
   'patch-ranked',
   'patch-upcoming-skins',
+  'patch-skins',
+  'patch-upcoming-skins-and-chromas',
   'title',
 ];
 
@@ -224,6 +226,8 @@ function detectCategoryFromId(sectionId: string, headingText: string): EntityCat
     return 'skip';
   }
 
+  if (id.includes('skin') || id.includes('chroma')) return 'skip';
+
   if (id.includes('support-adjust')) return 'item';
   if (id.includes('role-quest')) return 'system';
   if (id.includes('champion')) return 'champion';
@@ -240,7 +244,111 @@ function detectCategoryFromId(sectionId: string, headingText: string): EntityCat
   // Bug fixes (check heading text too for "correction" in FR)
   if (id.includes('bug') || id.includes('correct') || headingText.toLowerCase().includes('correction')) return 'bugfix';
 
+  if (id.includes('last-hit') || id.includes('indicator')) return 'system';
+
+  if (isChampionReleaseSectionId(id)) return 'champion';
+
   return detectCategory(headingText);
+}
+
+/** Single-slug sections like patch-locke (new champion kit reveal). */
+function isChampionReleaseSectionId(sectionId: string): boolean {
+  if (!sectionId.startsWith('patch-')) return false;
+  const slug = sectionId.slice('patch-'.length);
+  if (!slug || slug.includes('-')) return false;
+  const reserved = new Set(['top', 'ranked', 'pride', 'highlights', 'skins']);
+  if (reserved.has(slug)) return false;
+  return /^[a-z0-9]+$/.test(slug);
+}
+
+function inferChampionNameFromBlockquote(context: string): string | null {
+  const match = context.match(/^([A-ZÀ-ÖØ-Þ][\w'’\-éèêëàâùûôîç]+),\s/);
+  return match?.[1] ?? null;
+}
+
+function parseDescriptiveListItemChange(text: string): StatChange | null {
+  const normalized = text
+    .replace(/\u00A0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (normalized.length < 8) return null;
+  return {
+    stat: '',
+    before: '',
+    after: normalized,
+    type: 'text',
+  };
+}
+
+function normalizeListItemLinkUrl(href: string | undefined): string | undefined {
+  if (!href) return undefined;
+  const trimmed = href.trim().split(/\s+/)[0]?.replace(/target=$/i, '');
+  return trimmed || undefined;
+}
+
+function extractListItemContent(
+  $li: cheerio.Cheerio<any>
+): { text: string; linkUrl?: string; linkLabel?: string } {
+  const $link = $li.find('a[href]').first();
+  const linkUrl = normalizeListItemLinkUrl($link.attr('href'));
+  const linkLabel = $link.text().replace(/\s+/g, ' ').trim() || undefined;
+  const text = $li.text().replace(/\s+/g, ' ').trim();
+  return { text, linkUrl, linkLabel };
+}
+
+function attachListItemLink(
+  change: StatChange,
+  linkUrl?: string,
+  linkLabel?: string
+): StatChange {
+  if (!linkUrl) return change;
+  return {
+    ...change,
+    linkUrl,
+    ...(linkLabel ? { linkLabel } : {}),
+  };
+}
+
+function parseListItemChange(
+  $li: cheerio.Cheerio<any>,
+  locale: Locale,
+  options?: { allowDescriptive?: boolean }
+): StatChange | null {
+  const { text, linkUrl, linkLabel } = extractListItemContent($li);
+  if (!text) return null;
+
+  const statChange =
+    (containsChangeSeparator(text)
+      ? parseStatChange(text, locale)
+      : parseTextOnlyChange(text, locale)) ??
+    parsePlainListItemChange(text) ??
+    (options?.allowDescriptive ? parseDescriptiveListItemChange(text) : null);
+
+  return statChange ? attachListItemLink(statChange, linkUrl, linkLabel) : null;
+}
+
+function createChampionKitEntity(
+  name: string,
+  intro: string | null,
+  sectionId: string
+): EntityChanges {
+  const changes: StatChange[] = [];
+  if (intro) {
+    changes.push({ stat: '', before: '', after: intro, type: 'text' });
+  }
+
+  const patchSlug = patchHeaderIdToSlug(sectionId);
+  const slug = patchSlug ?? name.toLowerCase();
+  const id = championSlugToId(slug) ?? name;
+
+  return {
+    name,
+    category: 'champion',
+    id,
+    isNewRelease: true,
+    ...(patchSlug ? { patchSlug } : {}),
+    changes,
+  };
 }
 
 /**
@@ -455,19 +563,13 @@ function parseInlineEntityName(_$: cheerio.CheerioAPI, $p: cheerio.Cheerio<any>)
 function parseListItems(
   $: cheerio.CheerioAPI,
   $ul: cheerio.Cheerio<any>,
-  locale: Locale
+  locale: Locale,
+  options?: { allowDescriptive?: boolean }
 ): StatChange[] {
   const changes: StatChange[] = [];
 
   $ul.children('li').each((_, li) => {
-    const itemText = $(li).text().replace(/\s+/g, ' ').trim();
-    if (!itemText) return;
-
-    const statChange =
-      (containsChangeSeparator(itemText)
-        ? parseStatChange(itemText, locale)
-        : parseTextOnlyChange(itemText, locale)) ?? parsePlainListItemChange(itemText);
-
+    const statChange = parseListItemChange($(li), locale, options);
     if (statChange) {
       changes.push(statChange);
     }
@@ -478,19 +580,25 @@ function parseListItems(
 
 function createBugfixEntity(
   text: string,
-  scope: EntityCategory
+  scope: EntityCategory,
+  linkUrl?: string,
+  linkLabel?: string
 ): EntityChanges {
   return {
     name: '',
     category: scope === 'bugfix' ? 'bugfix' : scope,
     ...(scope !== 'bugfix' ? { subCategory: 'Corrections de bugs' } : {}),
     changes: [
-      {
-        stat: '',
-        before: '',
-        after: text,
-        type: 'text',
-      },
+      attachListItemLink(
+        {
+          stat: '',
+          before: '',
+          after: text,
+          type: 'text',
+        },
+        linkUrl,
+        linkLabel
+      ),
     ],
   };
 }
@@ -558,6 +666,8 @@ interface SectionParseState {
   inBugfixSubsection: boolean;
   pendingContext: string | null;
   pendingName: string | null;
+  sectionHeading: string | null;
+  sectionId: string;
 }
 
 function parseSectionContent(
@@ -565,7 +675,9 @@ function parseSectionContent(
   elements: Element[],
   sectionCategory: EntityCategory,
   locale: Locale,
-  entities: EntityChanges[]
+  entities: EntityChanges[],
+  sectionHeading: string,
+  sectionId: string
 ): void {
   const state: SectionParseState = {
     currentEntity: null,
@@ -573,6 +685,8 @@ function parseSectionContent(
     inBugfixSubsection: sectionCategory === 'bugfix',
     pendingContext: null,
     pendingName: null,
+    sectionHeading,
+    sectionId,
   };
 
   const flushCurrentEntity = () => {
@@ -584,19 +698,77 @@ function parseSectionContent(
     state.pendingName = null;
   };
 
-  const pushBugfix = (text: string) => {
-    entities.push(createBugfixEntity(text, sectionCategory));
+  const pushBugfix = (text: string, linkUrl?: string, linkLabel?: string) => {
+    entities.push(createBugfixEntity(text, sectionCategory, linkUrl, linkLabel));
+  };
+
+  const flushPendingContextEntity = () => {
+    if (!state.pendingContext) return;
+
+    const name =
+      state.pendingName ??
+      state.sectionHeading ??
+      inferContextEntityName(state.pendingContext);
+
+    entities.push({
+      name,
+      category: sectionCategory === 'champion' ? 'champion' : 'system',
+      changes: [
+        {
+          stat: '',
+          before: '',
+          after: state.pendingContext,
+          type: 'text',
+        },
+      ],
+    });
+    clearPending();
+  };
+
+  const ensureChampionKitEntity = () => {
+    if (state.currentEntity || sectionCategory !== 'champion') return;
+
+    const name =
+      state.pendingName ??
+      inferChampionNameFromBlockquote(state.pendingContext ?? '') ??
+      state.sectionHeading ??
+      championSlugToId(patchHeaderIdToSlug(state.sectionId) ?? '') ??
+      'Unknown';
+
+    state.currentEntity = createChampionKitEntity(
+      name,
+      state.pendingContext,
+      state.sectionId
+    );
+    state.pendingContext = null;
+    state.pendingName = null;
   };
 
   const pushListAsBugfixes = ($ul: cheerio.Cheerio<any>) => {
+    if (sectionCategory !== 'bugfix') {
+      const changes: StatChange[] = [];
+      $ul.children('li').each((_, li) => {
+        const change = parseListItemChange($(li), locale, { allowDescriptive: true });
+        if (change) changes.push(change);
+      });
+      if (changes.length > 0) {
+        entities.push(
+          createModeEntity('', sectionCategory, state.currentSubSection, changes)
+        );
+      }
+      return;
+    }
+
     $ul.children('li').each((_, li) => {
-      const itemText = $(li).text().replace(/\s+/g, ' ').trim();
-      if (itemText) pushBugfix(itemText);
+      const change = parseListItemChange($(li), locale, { allowDescriptive: true });
+      if (change) pushBugfix(change.after, change.linkUrl, change.linkLabel);
     });
   };
 
   const pushListToEntity = ($ul: cheerio.Cheerio<any>, entity: EntityChanges) => {
-    const changes = parseListItems($, $ul, locale);
+    const allowDescriptive =
+      sectionCategory === 'champion' && isChampionReleaseSectionId(state.sectionId);
+    const changes = parseListItems($, $ul, locale, { allowDescriptive });
     for (const change of changes) {
       const tagged = tagChangeWithSubSection(change, state.currentSubSection);
       entity.changes.push(tagged);
@@ -668,7 +840,7 @@ function parseSectionContent(
     const text = $elem.text().replace(/\s+/g, ' ').trim();
 
     if (tagName === 'hr') {
-      if (!state.pendingName) {
+      if (!state.pendingName && sectionCategory !== 'champion') {
         clearPending();
       }
       continue;
@@ -697,6 +869,7 @@ function parseSectionContent(
         } else if (!state.currentEntity && sectionCategory === 'system') {
           state.pendingName = text;
         } else if (isChampionChangeSubSection(sectionCategory, $elem, text)) {
+          ensureChampionKitEntity();
           state.currentSubSection = text;
         } else {
           state.currentSubSection = text;
@@ -741,6 +914,10 @@ function parseSectionContent(
       const context = $elem.find('p').text().replace(/\s+/g, ' ').trim() || text;
       if (context.length > 10) {
         state.pendingContext = context;
+        if (sectionCategory === 'champion') {
+          const inferred = inferChampionNameFromBlockquote(context);
+          if (inferred) state.pendingName = inferred;
+        }
       }
       continue;
     }
@@ -789,6 +966,7 @@ function parseSectionContent(
     }
   }
 
+  flushPendingContextEntity();
   flushCurrentEntity();
 }
 
@@ -802,16 +980,20 @@ function parseSection(
   const elements = getSectionBodyElements($, $header);
   if (elements.length === 0) return;
 
+  const $h2 = $header.find('h2').first();
+  const sectionHeading = $h2.text().replace(/\s+/g, ' ').trim();
+  const sectionId = $h2.attr('id') ?? '';
+
   logger.debug(
     {
       category: sectionCategory,
-      sectionId: $header.find('h2').attr('id'),
+      sectionId,
       elementCount: elements.length,
     },
     'Parsing section'
   );
 
-  parseSectionContent($, elements, sectionCategory, locale, entities);
+  parseSectionContent($, elements, sectionCategory, locale, entities, sectionHeading, sectionId);
 }
 
 /**

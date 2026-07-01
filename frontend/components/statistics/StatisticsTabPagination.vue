@@ -29,7 +29,7 @@ function goNext() {
 
 <template>
   <div
-    class="statistics-tab-pagination flex w-full flex-wrap items-center justify-between gap-2 border-y border-primary/20 bg-surface/30 px-3 py-2 text-xs text-text/80"
+    class="statistics-tab-pagination flex w-full flex-wrap items-center justify-between gap-2 px-3 py-2"
   >
     <div class="inline-flex flex-wrap items-center gap-2">
       <label class="inline-flex items-center gap-1.5">

@@ -300,7 +300,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
         <article
           v-for="row in p.paginatedChampionGlobalRows"
           :key="'mobile-' + p.championGlobalRowKey(row)"
-          class="statistics-champion-stats-mobile-card statistics-champion-mobile-card w-full cursor-pointer overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
+          class="statistics-champion-stats-mobile-card statistics-champion-mobile-card w-full cursor-pointer overflow-hidden"
           role="button"
           tabindex="0"
           :aria-expanded="isChampionCardExpanded(row)"
@@ -739,7 +739,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
           <div class="flex items-center gap-2">
             <button
               type="button"
-              class="rounded border border-primary/40 bg-surface/50 px-2 py-1 disabled:opacity-50"
+              class="statistics-pagination-btn"
               :disabled="p.championGlobalPage <= 1"
               @click="p.onChampionGlobalPageUpdated(Math.max(1, p.championGlobalPage - 1))"
             >
@@ -752,7 +752,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             </span>
             <button
               type="button"
-              class="rounded border border-primary/40 bg-surface/50 px-2 py-1 disabled:opacity-50"
+              class="statistics-pagination-btn"
               :disabled="p.championGlobalPage >= p.totalChampionGlobalPages"
               @click="
                 p.onChampionGlobalPageUpdated(
@@ -1681,7 +1681,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
               <div class="flex gap-1">
                 <button
                   type="button"
-                  class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                  class="statistics-pagination-btn text-text"
                   :disabled="p.championGlobalPage <= 1"
                   @click="p.onChampionGlobalPageUpdated(Math.max(1, p.championGlobalPage - 1))"
                 >
@@ -1689,7 +1689,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
                 </button>
                 <button
                   type="button"
-                  class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                  class="statistics-pagination-btn text-text"
                   :disabled="p.championGlobalPage >= p.totalChampionGlobalPages"
                   @click="
                     p.onChampionGlobalPageUpdated(

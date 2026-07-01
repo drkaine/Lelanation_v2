@@ -2,6 +2,14 @@ import type { ChangeType, StatChange } from '~/stores/PatchNotesStore'
 
 export type PatchEntitySummaryType = 'buff' | 'nerf' | 'adjustment' | 'new' | 'removed'
 
+export const PATCH_ENTITY_TAG_FILTER_ORDER: PatchEntitySummaryType[] = [
+  'buff',
+  'nerf',
+  'adjustment',
+  'new',
+  'removed',
+]
+
 const AVERAGE_TYPES = ['buff', 'nerf', 'adjustment'] as const
 type AverageType = (typeof AVERAGE_TYPES)[number]
 
@@ -48,4 +56,20 @@ export function resolvePatchEntitySummaryType(
 
   if (winners.length > 1) return 'adjustment'
   return winners[0]
+}
+
+export function resolvePatchEntitySummaryTag(entity: {
+  changes: StatChange[]
+  isNewRelease?: boolean
+}): PatchEntitySummaryType | null {
+  if (entity.isNewRelease) return 'new'
+  return resolvePatchEntitySummaryType(entity.changes)
+}
+
+export function entityMatchesSummaryTag(
+  entity: { changes: StatChange[]; isNewRelease?: boolean },
+  tag: PatchEntitySummaryType | 'all'
+): boolean {
+  if (tag === 'all') return true
+  return resolvePatchEntitySummaryTag(entity) === tag
 }

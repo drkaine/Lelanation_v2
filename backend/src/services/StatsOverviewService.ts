@@ -544,23 +544,33 @@ type TeamCoreFallback = {
 }
 
 async function ingestTeamLeanTablesExist(): Promise<boolean> {
-  return false
+  try {
+    const rows = await queryRawUnsafe<Array<{ x: boolean }>>(
+      `SELECT to_regclass('public.teams') IS NOT NULL AS x`
+    )
+    return Boolean(rows[0]?.x)
+  } catch {
+    return false
+  }
 }
 
 async function loadTeamCoreFallbackFromIngest(
   version: string | string[] | null | undefined,
-  rankTier: string | string[] | null | undefined
+  _rankTier: string | string[] | null | undefined
 ): Promise<Map<number, TeamCoreFallback>> {
   if (!(await ingestTeamLeanTablesExist())) return new Map()
   const versions = toQueryStringArrayParam(version)
   const cond: string[] = ['1=1']
   if (versions.length === 1) {
     const patch = normalizePatchMajorMinor(versions[0]!).replace(/'/g, "''")
-    cond.push(`im.game_version LIKE '${patch}%'`)
+    cond.push(`(m.patch = '${patch}' OR m.patch LIKE '${patch}.%')`)
   } else if (versions.length > 1) {
-    cond.push(`im.game_version IN (${versions.map((v) => `'${v.replace(/'/g, "''")}'`).join(',')})`)
+    const parts = versions.map((v) => {
+      const patch = normalizePatchMajorMinor(v).replace(/'/g, "''")
+      return `(m.patch = '${patch}' OR m.patch LIKE '${patch}.%')`
+    })
+    cond.push(`(${parts.join(' OR ')})`)
   }
-  cond.push(...buildRankTierSqlConditions('im', rankTier))
   const rows = await queryRawUnsafe<
     Array<{
       team_num: number
@@ -582,46 +592,46 @@ async function loadTeamCoreFallbackFromIngest(
   >(`
     WITH first_inhibitor_by_match AS (
       SELECT
-        it.match_id,
+        t.riot_match_id,
         CASE
-          WHEN SUM(CASE WHEN it.inhibitor_first THEN 1 ELSE 0 END) = 1
-          THEN MAX(CASE WHEN it.inhibitor_first THEN it.team END)
-          WHEN SUM(CASE WHEN it.inhibitor_kills > 0 THEN 1 ELSE 0 END) = 1
-          THEN MAX(CASE WHEN it.inhibitor_kills > 0 THEN it.team END)
+          WHEN SUM(CASE WHEN t.inhibitor_first THEN 1 ELSE 0 END) = 1
+          THEN MAX(CASE WHEN t.inhibitor_first THEN t.team_id END)
+          WHEN SUM(CASE WHEN t.inhibitor_kills > 0 THEN 1 ELSE 0 END) = 1
+          THEN MAX(CASE WHEN t.inhibitor_kills > 0 THEN t.team_id END)
           ELSE NULL
         END AS first_inhibitor_team
-      FROM ingest_teams it
-      GROUP BY it.match_id
+      FROM teams t
+      GROUP BY t.riot_match_id
     )
     SELECT
-      it.team AS team_num,
-      COALESCE(SUM(CASE WHEN it.first_blood THEN 1 ELSE 0 END), 0)::bigint AS count_first_blood,
-      COALESCE(SUM(it.baron_kills), 0)::bigint AS sum_baron_kills,
-      COALESCE(SUM(CASE WHEN it.baron_first THEN 1 ELSE 0 END), 0)::bigint AS count_baron_first,
-      COALESCE(SUM(it.dragon_kills), 0)::bigint AS sum_dragon_kills,
-      COALESCE(SUM(CASE WHEN it.dragon_first THEN 1 ELSE 0 END), 0)::bigint AS count_dragon_first,
-      COALESCE(SUM(it.tower_kills), 0)::bigint AS sum_tower_kills,
-      COALESCE(SUM(CASE WHEN it.tower_first THEN 1 ELSE 0 END), 0)::bigint AS count_tower_first,
-      COALESCE(SUM(it.horde_kills), 0)::bigint AS sum_horde_kills,
-      COALESCE(SUM(CASE WHEN it.horde_first THEN 1 ELSE 0 END), 0)::bigint AS count_horde_first,
-      COALESCE(SUM(it.rift_herald_kills), 0)::bigint AS sum_rift_herald_kills,
-      COALESCE(SUM(CASE WHEN it.rift_herald_first THEN 1 ELSE 0 END), 0)::bigint AS count_rift_herald_first,
-      COALESCE(SUM(it.inhibitor_kills), 0)::bigint AS sum_inhibitor_kills,
+      t.team_id AS team_num,
+      COALESCE(SUM(CASE WHEN t.first_blood THEN 1 ELSE 0 END), 0)::bigint AS count_first_blood,
+      COALESCE(SUM(t.baron_kills), 0)::bigint AS sum_baron_kills,
+      COALESCE(SUM(CASE WHEN t.baron_first THEN 1 ELSE 0 END), 0)::bigint AS count_baron_first,
+      COALESCE(SUM(t.dragon_kills), 0)::bigint AS sum_dragon_kills,
+      COALESCE(SUM(CASE WHEN t.dragon_first THEN 1 ELSE 0 END), 0)::bigint AS count_dragon_first,
+      COALESCE(SUM(t.tower_kills), 0)::bigint AS sum_tower_kills,
+      COALESCE(SUM(CASE WHEN t.tower_first THEN 1 ELSE 0 END), 0)::bigint AS count_tower_first,
+      COALESCE(SUM(t.horde_kills), 0)::bigint AS sum_horde_kills,
+      COALESCE(SUM(CASE WHEN t.horde_first THEN 1 ELSE 0 END), 0)::bigint AS count_horde_first,
+      COALESCE(SUM(t.rift_herald_kills), 0)::bigint AS sum_rift_herald_kills,
+      COALESCE(SUM(CASE WHEN t.rift_herald_first THEN 1 ELSE 0 END), 0)::bigint AS count_rift_herald_first,
+      COALESCE(SUM(t.inhibitor_kills), 0)::bigint AS sum_inhibitor_kills,
       COALESCE(
         SUM(
           CASE
-            WHEN it.inhibitor_first OR fibm.first_inhibitor_team = it.team THEN 1
+            WHEN t.inhibitor_first OR fibm.first_inhibitor_team = t.team_id THEN 1
             ELSE 0
           END
         ),
         0
       )::bigint AS count_inhibitor_first,
-      COALESCE(SUM(it.elder_kills), 0)::bigint AS sum_elder_kills
-    FROM ingest_teams it
-    INNER JOIN ingest_matchs im ON im.id = it.match_id
-    LEFT JOIN first_inhibitor_by_match fibm ON fibm.match_id = im.id
+      COALESCE(SUM(t.elder_drake_kills), 0)::bigint AS sum_elder_kills
+    FROM teams t
+    INNER JOIN matchs m ON m.riot_match_id = t.riot_match_id
+    LEFT JOIN first_inhibitor_by_match fibm ON fibm.riot_match_id = t.riot_match_id
     WHERE ${cond.join(' AND ')}
-    GROUP BY it.team
+    GROUP BY t.team_id
   `)
   const out = new Map<number, TeamCoreFallback>()
   for (const row of rows) {
@@ -678,36 +688,37 @@ async function loadSurrenderBySideCounts(
     if (await ingestTeamLeanTablesExist()) {
       try {
         const versions = toQueryStringArrayParam(version)
-        const condIngest: string[] = ['1=1']
+        const condMatch: string[] = ['1=1']
         if (versions.length === 1) {
           const patch = normalizePatchMajorMinor(versions[0]!).replace(/'/g, "''")
-          condIngest.push(`im.game_version LIKE '${patch}%'`)
+          condMatch.push(`(m.patch = '${patch}' OR m.patch LIKE '${patch}.%')`)
         } else if (versions.length > 1) {
-          condIngest.push(
-            `im.game_version IN (${versions.map((v) => `'${v.replace(/'/g, "''")}'`).join(',')})`
-          )
+          const parts = versions.map((v) => {
+            const patch = normalizePatchMajorMinor(v).replace(/'/g, "''")
+            return `(m.patch = '${patch}' OR m.patch LIKE '${patch}.%')`
+          })
+          condMatch.push(`(${parts.join(' OR ')})`)
         }
-        condIngest.push(...buildRankTierSqlConditions('im', rankTier))
-        const ingestRows = await queryRawUnsafe<
+        const normalizedRows = await queryRawUnsafe<
           Array<{ team_num: number; early_cnt: bigint; surrender_cnt: bigint }>
         >(`
           SELECT
-            it.team AS team_num,
-            COALESCE(SUM(CASE WHEN it.team_early_surrendered THEN 1 ELSE 0 END), 0)::bigint AS early_cnt,
-            COALESCE(SUM(CASE WHEN it.win = false AND im.game_ended_in_surrender THEN 1 ELSE 0 END), 0)::bigint AS surrender_cnt
-          FROM ingest_teams it
-          INNER JOIN ingest_matchs im ON im.id = it.match_id
-          WHERE ${condIngest.join(' AND ')}
-          GROUP BY it.team
+            t.team_id AS team_num,
+            COALESCE(SUM(CASE WHEN m.early_surrender AND t.win = false THEN 1 ELSE 0 END), 0)::bigint AS early_cnt,
+            COALESCE(SUM(CASE WHEN m.surrender AND t.win = false THEN 1 ELSE 0 END), 0)::bigint AS surrender_cnt
+          FROM teams t
+          INNER JOIN matchs m ON m.riot_match_id = t.riot_match_id
+          WHERE ${condMatch.join(' AND ')}
+          GROUP BY t.team_id
         `)
-        for (const row of ingestRows) {
+        for (const row of normalizedRows) {
           byTeam.set(Number(row.team_num), {
             early: Number(row.early_cnt ?? 0),
             surrender: Number(row.surrender_cnt ?? 0),
           })
         }
       } catch (err) {
-        console.warn('[loadSurrenderBySideCounts] ingest fallback', err instanceof Error ? err.message : err)
+        console.warn('[loadSurrenderBySideCounts] normalized fallback', err instanceof Error ? err.message : err)
       }
     }
   }

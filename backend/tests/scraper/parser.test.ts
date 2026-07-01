@@ -202,6 +202,48 @@ describe('parser', () => {
       expect(quinn!.changes.find(c => c.subCategory?.includes('Assaut'))?.after).toBe('200%');
     });
 
+    it('should parse new champion release sections without h3', () => {
+      const html = loadFixture('new-champion-release.html');
+      const entities = parsePatchHtml(html, 'fr-FR');
+
+      const locke = entities.find(e => e.name === 'Locke');
+      expect(locke).toBeDefined();
+      expect(locke!.category).toBe('champion');
+      expect(locke!.id).toBe('Locke');
+      expect(locke!.patchSlug).toBe('locke');
+      expect(locke!.isNewRelease).toBe(true);
+      expect(locke!.changes.length).toBeGreaterThanOrEqual(6);
+      expect(locke!.changes[0].type).toBe('text');
+      expect(locke!.changes[0].after).toContain('Exorciste cendré');
+      expect(locke!.changes.some(c => c.subCategory?.includes('Pieu argenté'))).toBe(true);
+      expect(locke!.changes.some(c => c.subCategory?.includes('Purgatoire'))).toBe(true);
+      const spotlight = locke!.changes.find(c => c.after.includes('Focus sur Locke'));
+      expect(spotlight?.linkUrl).toBe('https://youtu.be/YFgeOkndw_8');
+      expect(spotlight?.linkLabel).toBe('ici');
+    });
+
+    it('should skip skins promo sections', () => {
+      const html = loadFixture('skins-section.html');
+      const entities = parsePatchHtml(html, 'fr-FR');
+
+      expect(entities.find(e => e.name === 'Skins')).toBeUndefined();
+      expect(entities.some(e => e.changes.some(c => c.after.includes('skins spéciaux')))).toBe(
+        false
+      );
+    });
+
+    it('should parse system sections with blockquote-only content', () => {
+      const html = loadFixture('system-blockquote-only.html');
+      const entities = parsePatchHtml(html, 'fr-FR');
+
+      const lastHit = entities.find(e => e.name === 'Indicateurs de coup de grâce');
+      expect(lastHit).toBeDefined();
+      expect(lastHit!.category).toBe('system');
+      expect(lastHit!.changes).toHaveLength(1);
+      expect(lastHit!.changes[0].type).toBe('text');
+      expect(lastHit!.changes[0].after).toContain('Normal Draft');
+    });
+
     it('should parse structured mode sections (larves, ARAM chaos, bugfixes)', () => {
       const structuredHtml = loadFixture('structured-modes.html');
       const entities = parsePatchHtml(structuredHtml, 'fr-FR');
@@ -229,6 +271,7 @@ describe('parser', () => {
       );
       expect(chaosBugfixes).toHaveLength(1);
       expect(chaosBugfixes[0].name).toBe('');
+      expect(chaosBugfixes[0].changes).toHaveLength(1);
       expect(chaosBugfixes[0].changes[0].after).toContain('Graves');
 
       const srBugfixes = entities.filter(e => e.category === 'bugfix');

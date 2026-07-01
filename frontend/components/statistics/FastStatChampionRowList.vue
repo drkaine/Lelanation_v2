@@ -50,15 +50,11 @@ withDefaults(
     <tbody>
       <tr v-for="(row, idx) in entries" :key="row.championId" class="fast-stat-row">
         <td class="py-0.5 align-middle">
-          <div
-            class="flex w-full min-w-0 gap-0.5"
-            :class="variant === 'bans' ? 'items-start' : 'items-center'"
-          >
+          <div class="flex w-full min-w-0 items-center gap-0.5">
             <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
             <StatisticsChampionDetailLink
               :champion-id="row.championId"
               class="flex min-w-0 flex-1 items-center gap-0.5"
-              :class="variant === 'bans' ? 'flex-col items-start' : 'items-center'"
             >
               <img
                 v-if="gameVersion && championByKey(row.championId)"
@@ -82,20 +78,13 @@ withDefaults(
                   </div>
                 </div>
               </template>
-              <div v-else-if="variant === 'bans'" class="min-w-0 flex-1 flex-col gap-0.5">
-                <span
-                  class="block truncate font-medium leading-tight text-accent underline decoration-accent/40 underline-offset-2"
-                >
-                  {{ championName(row.championId) || row.championId }}
-                </span>
-              </div>
-              <template v-else>
-                <span
-                  class="min-w-0 flex-1 truncate font-medium text-accent underline decoration-accent/40 underline-offset-2"
-                >
-                  {{ championName(row.championId) || row.championId }}
-                </span>
-              </template>
+              <span
+                v-else
+                class="min-w-0 flex-1 truncate font-medium leading-tight text-accent underline decoration-accent/40 underline-offset-2"
+                :class="variant === 'bans' ? 'min-w-[5.5rem] shrink-0' : ''"
+              >
+                {{ championName(row.championId) || row.championId }}
+              </span>
             </StatisticsChampionDetailLink>
             <template v-if="variant === 'progression'">
               <span
@@ -107,17 +96,19 @@ withDefaults(
             </template>
             <div
               v-else-if="variant === 'bans'"
-              class="flex min-w-0 shrink-0 justify-end gap-2 tabular-nums"
+              class="ml-auto flex shrink-0 items-center justify-end gap-2 tabular-nums"
             >
-              <span class="shrink-0 text-xs font-medium text-text">{{ row.value }}</span>
+              <span class="w-9 shrink-0 text-right text-xs font-medium text-text">{{
+                row.value
+              }}</span>
               <span
                 v-if="row.delta != null && row.delta !== ''"
-                class="shrink-0 text-[10px] font-medium"
+                class="w-10 shrink-0 text-right text-[10px] font-medium"
                 :class="row.deltaClass"
               >
                 {{ row.delta }}
               </span>
-              <span v-else class="shrink-0 text-[10px] text-text/40">—</span>
+              <span v-else class="w-10 shrink-0 text-right text-[10px] text-text/40">—</span>
             </div>
             <span v-else class="ml-auto w-9 shrink-0 text-right font-medium tabular-nums text-text">
               {{ row.value }}

@@ -1,19 +1,44 @@
 /**
- * Vide `match_aggregated` puis ré-agrège tous les matchs normalisés.
- * Utile après migration enum ou perte de données dans les tables stats.
+ * Vide les tables d'agrégats puis ré-agrège tous les matchs depuis matchs / teams / participants.
+ * Utile après changement du pipeline normalisé (2026-06-22) ou correction du mapping objectives.
  *
  * Usage: DATABASE_URL=... tsx src/scripts/reaggregateAllMatches.ts
  */
 import { sql } from "../db/client.js";
 import { runMatchBatchAggregationOnce, getMatchAggregationBatchLimit } from "../services/matchBatchAggregation.js";
 
+const AGGREGATE_TABLES = [
+  "champion_stats",
+  "champion_vs_stats",
+  "champion_duo_role_stats",
+  "champion_spell_stats",
+  "champion_item_set_stats",
+  "champion_item_solo_stats",
+  "champion_bucket",
+  "champion_pick_order",
+  "champion_runes_solo_stats",
+  "champion_runes_stats",
+  "champion_shard_solo_stats",
+  "champion_summoner_spell_pair_stats",
+  "champion_summoner_spells",
+  "champion_bans_by_banner",
+  "botlane_duo_vs_duo_stats",
+  "champion_tier_daily_snapshots",
+  "item_tier_daily_snapshots",
+  "objective_outcome_histogram",
+  "match_outcome_stats",
+  "team_core_stat",
+  "match_aggregated",
+] as const;
+
+async function truncateAggregateTables(): Promise<void> {
+  const list = AGGREGATE_TABLES.join(", ");
+  await sql.unsafe(`TRUNCATE ${list} RESTART IDENTITY CASCADE`);
+  console.log(`[reaggregate] truncated ${AGGREGATE_TABLES.length} aggregate tables`);
+}
+
 async function main(): Promise<void> {
-  const deleted = await sql<{ count: string }[]>`
-    WITH d AS (DELETE FROM match_aggregated RETURNING 1)
-    SELECT COUNT(*)::text AS count FROM d
-  `;
-  const cleared = Number(deleted[0]?.count ?? 0);
-  console.log(`[reaggregate] cleared match_aggregated rows=${cleared}`);
+  await truncateAggregateTables();
 
   let totalAggregated = 0;
   let pass = 0;

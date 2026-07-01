@@ -1,6 +1,6 @@
 <template>
   <section
-    class="champion-stats-seo-summary mb-4 rounded-lg border border-primary/30 bg-surface/40 p-4"
+    class="champion-stats-seo-summary statistics-panel-surface mb-4 p-4"
     aria-label="Résumé statistiques"
   >
     <h1 class="text-xl font-bold text-accent">

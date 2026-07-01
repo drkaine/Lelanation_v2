@@ -1,10 +1,8 @@
 <template>
-  <div
-    class="overflow-hidden rounded-xl border border-primary/20 bg-surface shadow-sm transition-shadow hover:shadow-md"
-  >
+  <div class="ui-build-card-surface overflow-hidden rounded-xl">
     <div
       v-if="showCardHeader"
-      class="flex items-center gap-2 border-b border-primary/10 bg-primary/5 p-[5px]"
+      class="flex items-center gap-2 border-b border-primary/15 bg-panel-elevated/30 p-[5px]"
     >
       <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-background text-lg">
         <img
@@ -13,6 +11,12 @@
           :alt="cardTitle"
           class="h-full w-full rounded object-cover"
           @error="onImageError"
+        />
+        <Icon
+          v-else-if="isBugfixCard"
+          name="mdi:bug"
+          class="h-5 w-5 text-warning"
+          aria-hidden="true"
         />
         <span v-else>{{ categoryIcon }}</span>
       </div>
@@ -95,7 +99,7 @@
                   change.stat ? 'mt-0.5' : '',
                 ]"
               >
-                <span v-if="shouldShowBefore(change)" class="line-through decoration-red-500/50">{{
+                <span v-if="shouldShowBefore(change)" class="text-error/70 line-through">{{
                   change.before
                 }}</span>
                 <span
@@ -103,14 +107,32 @@
                   class="text-text/40"
                   >→</span
                 >
-                <span
-                  v-if="shouldShowAfter(change)"
-                  :class="{
-                    'font-medium text-green-400': change.type === 'buff',
-                    'font-medium text-red-400': change.type === 'nerf',
-                  }"
-                  >{{ change.after }}</span
-                >
+                <template v-if="shouldShowAfter(change)">
+                  <span
+                    v-if="!change.linkUrl"
+                    :class="{
+                      'font-medium text-info': change.type === 'buff',
+                      'font-medium text-error': change.type === 'nerf',
+                    }"
+                    >{{ change.after }}</span
+                  >
+                  <span
+                    v-else
+                    :class="{
+                      'font-medium text-info': change.type === 'buff',
+                      'font-medium text-error': change.type === 'nerf',
+                    }"
+                  >
+                    {{ splitLinkText(change).before
+                    }}<a
+                      :href="change.linkUrl"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="font-medium text-accent underline hover:text-accent/80"
+                      >{{ change.linkLabel || change.linkUrl }}</a
+                    >{{ splitLinkText(change).after }}
+                  </span>
+                </template>
               </div>
             </div>
           </li>
@@ -132,7 +154,7 @@ import { usePatchEntityImage } from '~/composables/usePatchEntityImage'
 import ChampionSpellIconBadge, {
   type ChampionSpellBadgeKey,
 } from '~/components/statistics/ChampionSpellIconBadge.vue'
-import { resolvePatchEntitySummaryType } from '~/utils/patchEntitySummary'
+import { resolvePatchEntitySummaryTag } from '~/utils/patchEntitySummary'
 
 const props = defineProps<{
   entity: PatchEntity
@@ -150,7 +172,21 @@ const { entityImageUrl, resolvedEntityId, onImageError } = usePatchEntityImage((
 
 const isArenaCard = computed(() => props.entity.category === 'arena')
 
+function isBugfixSubCategory(value?: string | null): boolean {
+  if (!value) return false
+  const normalized = value.toLowerCase()
+  return normalized.includes('bug') || normalized.includes('correction')
+}
+
+const isBugfixCard = computed(
+  () =>
+    props.entity.category === 'bugfix' ||
+    (['aram', 'aram-chaos', 'arena'].includes(props.entity.category) &&
+      isBugfixSubCategory(props.entity.subCategory))
+)
+
 const showCardHeader = computed(() => {
+  if (isBugfixCard.value) return true
   if (isArenaCard.value) {
     return Boolean(props.entity.subCategory?.trim() || props.entity.name?.trim())
   }
@@ -158,6 +194,9 @@ const showCardHeader = computed(() => {
 })
 
 const cardTitle = computed(() => {
+  if (isBugfixCard.value) {
+    return props.entity.name?.trim() || t('patchNotesPage.bugfixCardTitle')
+  }
   if (isArenaCard.value) {
     return props.entity.subCategory?.trim() || props.entity.name || ''
   }
@@ -174,7 +213,7 @@ const cardSubtitle = computed(() => {
   return ''
 })
 
-const summaryTag = computed(() => resolvePatchEntitySummaryType(props.entity.changes))
+const summaryTag = computed(() => resolvePatchEntitySummaryTag(props.entity))
 
 onMounted(() => {
   if (!gameVersion.value) {
@@ -281,7 +320,12 @@ const changeSections = computed<ChangeSection[]>(() => {
 
   return groups.map((group, index) => ({
     key: group.title || `__section__${index}`,
-    title: isArenaCard.value ? '' : group.title,
+    title:
+      isBugfixCard.value && isBugfixSubCategory(group.title)
+        ? ''
+        : isArenaCard.value
+          ? ''
+          : group.title,
     changes: group.changes,
     spellImageUrl: resolveSectionSpellUrl(group.title),
     spellSkillKey: resolveSectionSpellKey(group.title),
@@ -307,12 +351,12 @@ function toggleSection(key: string) {
 }
 
 const typeClasses: Record<ChangeType, string> = {
-  buff: 'bg-green-500/20 text-green-400',
-  nerf: 'bg-red-500/20 text-red-400',
-  adjustment: 'bg-yellow-500/20 text-yellow-400',
-  new: 'bg-blue-500/20 text-blue-400',
-  removed: 'bg-gray-500/20 text-gray-400',
-  text: 'bg-purple-500/20 text-purple-400',
+  buff: 'bg-info/20 text-info',
+  nerf: 'bg-error/20 text-error',
+  adjustment: 'bg-warning/20 text-warning',
+  new: 'bg-info/20 text-info',
+  removed: 'bg-muted/20 text-text/60',
+  text: 'bg-primary/15 text-primary-light',
 }
 
 const typeLabels: Record<ChangeType, string> = {
@@ -356,5 +400,22 @@ function shouldShowBefore(change: { before: string; type: ChangeType }): boolean
 function shouldShowAfter(change: { after: string; type: ChangeType }): boolean {
   if (change.type === 'removed') return false
   return Boolean(change.after)
+}
+
+function splitLinkText(change: StatChange): { before: string; after: string } {
+  const label = change.linkLabel?.trim()
+  if (!label) {
+    return { before: change.after, after: '' }
+  }
+
+  const index = change.after.toLowerCase().indexOf(label.toLowerCase())
+  if (index === -1) {
+    return { before: change.after, after: '' }
+  }
+
+  return {
+    before: change.after.slice(0, index),
+    after: change.after.slice(index + label.length),
+  }
 }
 </script>

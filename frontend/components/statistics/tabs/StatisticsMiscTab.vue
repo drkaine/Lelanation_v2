@@ -183,7 +183,7 @@ function rowKey(row: ChampionMiscStatRow): string {
         <article
           v-for="row in p.paginatedMiscRows"
           :key="'misc-mobile-' + rowKey(row)"
-          class="statistics-champion-stats-mobile-card statistics-misc-mobile-card w-full cursor-pointer overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
+          class="statistics-champion-stats-mobile-card statistics-misc-mobile-card w-full cursor-pointer overflow-hidden"
           role="button"
           tabindex="0"
           :aria-expanded="isMiscCardExpanded(row)"

@@ -83,9 +83,9 @@ const displayValue = (row: Record<string, unknown>): string => {
   }
 }
 
-const cardBorderClass = computed(() => {
-  if (props.side === 'blue') return 'border-[1.5px] border-info/50'
-  if (props.side === 'red') return 'border-[1.5px] border-red-500/50'
+const sideCardClass = computed(() => {
+  if (props.side === 'blue') return 'border border-info/55 bg-info/5'
+  if (props.side === 'red') return 'border border-error/55 bg-error/5'
   return 'border border-primary/30'
 })
 
@@ -157,7 +157,10 @@ function progressionBeforeAfterLine(row: Record<string, unknown>): string {
 </script>
 
 <template>
-  <div class="team-side-fast-stat rounded-lg p-2" :class="cardBorderClass">
+  <div
+    class="team-side-fast-stat fast-stat-card w-full max-w-full rounded-xl p-2"
+    :class="sideCardClass"
+  >
     <h3 :class="headingClass">
       <button
         v-if="favoriteCardId"
@@ -262,7 +265,6 @@ function progressionBeforeAfterLine(row: Record<string, unknown>): string {
   margin-left: auto;
   margin-right: auto;
   flex: 0 0 313px;
-  background: rgb(var(--rgb-chrome) / 1) !important;
   justify-self: center;
   overflow: visible;
 }

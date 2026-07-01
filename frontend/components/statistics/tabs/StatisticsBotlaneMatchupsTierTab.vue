@@ -548,7 +548,7 @@ const botlaneMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
               <div class="flex gap-1">
                 <button
                   type="button"
-                  class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                  class="statistics-pagination-btn text-text"
                   :disabled="page <= 1"
                   @click="page = Math.max(1, page - 1)"
                 >
@@ -556,7 +556,7 @@ const botlaneMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
                 </button>
                 <button
                   type="button"
-                  class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                  class="statistics-pagination-btn text-text"
                   :disabled="page >= totalPages"
                   @click="page = Math.min(totalPages, page + 1)"
                 >

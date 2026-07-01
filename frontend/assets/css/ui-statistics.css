@@ -1,0 +1,115 @@
+/* Statistics pages — align with build-card design system */
+@layer components {
+  .statistics-tab-btn {
+    @apply ui-build-card-button shrink-0 snap-start whitespace-nowrap px-2.5 py-1 text-sm font-medium lg:px-3 lg:py-1.5;
+  }
+
+  .statistics-tab-btn[aria-selected='true'],
+  .statistics-tab-btn.is-active {
+    @apply ui-build-card-active;
+  }
+
+  .statistics-tabs-bar {
+    @apply border-b border-primary/20 bg-chrome/95 backdrop-blur;
+  }
+
+  @media (min-width: 1024px) {
+    .statistics-filters-panel:not(.fixed) {
+      @apply ui-build-card-surface rounded-xl;
+    }
+  }
+
+  .statistics-filters-reset,
+  .statistics-filters-fab {
+    @apply ui-build-card-button text-sm font-semibold;
+  }
+
+  .statistics-filters-fab {
+    @apply rounded-full px-4 py-2.5 shadow-lg backdrop-blur-sm;
+  }
+
+  .statistics-filters-mobile-close {
+    @apply ui-build-card-button w-full touch-manipulation px-4 py-3 text-sm font-semibold;
+  }
+
+  .champion-content-stack,
+  .item-content-stack,
+  .lelariva-content-stack {
+    @apply ui-build-card-surface overflow-hidden rounded-xl;
+  }
+
+  /* fast-stat-card sizing lives in index.vue — surface/border set per card in templates */
+  .statistics-champion-stats-mobile-card,
+  .statistics-ban-mobile-card,
+  .statistics-patch-notes-mobile-card,
+  .statistics-panel-surface,
+  .statistics-infos-mobile-card,
+  .statistics-pings-mobile-card,
+  .statistics-vision-mobile-card,
+  .statistics-surrender-mobile-card,
+  .statistics-surrender-mobile-side-card,
+  .statistics-item-mobile-card,
+  .statistics-balance-mobile-card,
+  .statistics-misc-mobile-card,
+  .statistics-spell-mobile-card,
+  .statistics-champion-mobile-card,
+  .statistics-botlane-duo-mobile-card,
+  .statistics-tier-list-mobile-card,
+  .statistics-objectives-mobile-card,
+  .champion-stats-seo-summary,
+  .champion-spell-order-recap,
+  .statistics-recap-card,
+  .statistics-surveillance-summary-card {
+    @apply ui-build-card-surface rounded-xl;
+  }
+
+  .statistics-empty-panel,
+  .statistics-tab-empty {
+    @apply ui-build-card-surface rounded-xl text-sm text-text/70;
+  }
+
+  .statistics-tab-pagination {
+    @apply border-y border-primary/20 bg-chrome/40 text-xs text-text/80;
+  }
+
+  .statistics-chart-tooltip {
+    @apply ui-build-card-surface rounded-md px-2 py-1 text-[11px] text-text/85 shadow-lg;
+  }
+
+  .champion-header-role-badge {
+    @apply ui-build-card-button rounded-md px-1.5 py-0.5 text-xs;
+  }
+
+  .statistics-custom .mode-btn {
+    @apply ui-build-card-button px-3 py-2 text-sm no-underline;
+  }
+
+  .statistics-custom .mode-btn-active {
+    @apply ui-build-card-active;
+  }
+
+  .statistics-surveillance-tab-btn {
+    @apply ui-build-card-button px-3 py-1.5 text-xs font-medium;
+  }
+
+  .statistics-surveillance-tab-btn.is-active,
+  .statistics-surveillance-tab-btn[aria-selected='true'] {
+    @apply ui-build-card-active;
+  }
+
+  .statistics-surveillance-delta-toggle {
+    @apply ui-build-card-surface inline-flex shrink-0 gap-0.5 rounded-lg p-0.5;
+  }
+
+  .statistics-pagination-btn {
+    @apply ui-build-card-button px-2 py-1 disabled:opacity-50;
+  }
+
+  .statistics-mobile-sort-bar {
+    @apply ui-build-card-surface rounded-xl;
+  }
+
+  .statistics-surveillance-entry {
+    @apply ui-build-card-surface rounded-xl p-4;
+  }
+}

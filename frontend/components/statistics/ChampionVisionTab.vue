@@ -53,14 +53,11 @@ function metricLabel(key: VisionMetricKey): string {
     <div v-if="pending" class="text-sm text-text/70">
       {{ t('statisticsPage.loading') }}
     </div>
-    <div
-      v-else-if="!hasData"
-      class="rounded-lg border border-primary/30 bg-surface/50 p-4 text-sm text-text/70"
-    >
+    <div v-else-if="!hasData" class="statistics-empty-panel p-4">
       {{ t('statisticsPage.noData') }}
     </div>
     <template v-else>
-      <div class="fast-stat-card rounded-lg border border-primary/30 bg-surface/30 p-3">
+      <div class="fast-stat-card ui-build-card-surface rounded-xl p-3">
         <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3">
           <div
             v-for="key in VISION_METRIC_KEYS"

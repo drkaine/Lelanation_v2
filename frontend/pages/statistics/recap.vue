@@ -1,24 +1,24 @@
 <template>
-  <div class="min-h-screen bg-zinc-950 pb-12 pt-6 text-zinc-100">
-    <div class="mx-auto max-w-3xl px-4">
-      <div class="mb-6">
+  <div class="min-h-screen bg-background px-[10px] py-4 text-text sm:px-3 lg:px-6">
+    <div class="mx-auto max-w-3xl space-y-6">
+      <section class="ui-build-card-surface rounded-xl p-4">
         <NuxtLink :to="localePath('/statistics')" class="text-sm text-info/90 hover:text-info">
           ← {{ t('statisticsPage.recapBack') }}
         </NuxtLink>
-        <h1 class="mt-3 text-2xl font-bold tracking-tight text-zinc-50">
+        <h1 class="mt-3 text-2xl font-bold tracking-tight text-text-accent">
           {{ t('statisticsPage.recapTitle') }}
         </h1>
-        <p class="mt-2 text-sm text-zinc-400">
+        <p class="mt-2 text-sm text-text/70">
           {{ t('statisticsPage.recapDescription') }}
         </p>
-      </div>
+      </section>
 
-      <section class="mb-10">
-        <h2 class="mb-3 text-lg font-semibold text-info/95">
+      <section class="statistics-recap-card p-4">
+        <h2 class="mb-3 text-lg font-semibold text-text-accent">
           {{ t('statisticsPage.recapGlobalMovers') }}
         </h2>
-        <p v-if="moversMeta" class="mb-3 text-xs text-zinc-500">{{ moversMeta }}</p>
-        <div v-if="globalPending" class="text-sm text-zinc-500">
+        <p v-if="moversMeta" class="mb-3 text-xs text-text/55">{{ moversMeta }}</p>
+        <div v-if="globalPending" class="text-sm text-text/60">
           {{ t('statisticsPage.recapLoading') }}
         </div>
         <div v-else-if="globalError" class="text-sm text-error">{{ globalError }}</div>
@@ -32,17 +32,17 @@
             metric-label="Δ WR"
             :image-src="championImage(m.championId)"
           />
-          <p v-if="globalMovers.length === 0" class="text-sm text-zinc-500">
+          <p v-if="globalMovers.length === 0" class="text-sm text-text/60">
             {{ t('statisticsPage.recapEmptyGlobal') }}
           </p>
         </div>
       </section>
 
-      <section class="mb-10">
-        <h2 class="mb-3 text-lg font-semibold text-text-accent/95">
+      <section class="statistics-recap-card p-4">
+        <h2 class="mb-3 text-lg font-semibold text-text-accent">
           {{ t('statisticsPage.recapWatchlist') }}
         </h2>
-        <div v-if="alertsPending" class="text-sm text-zinc-500">
+        <div v-if="alertsPending" class="text-sm text-text/60">
           {{ t('statisticsPage.recapLoading') }}
         </div>
         <template v-else>
@@ -50,34 +50,34 @@
             <div
               v-for="a in triggeredAlerts"
               :key="a.rule.id"
-              class="rounded-md border border-info/50 bg-info/10 px-3 py-2 text-sm"
+              class="ui-build-card-surface rounded-lg border border-info/40 px-3 py-2 text-sm"
             >
               <span class="font-medium text-info">{{ formatRuleSummary(a.rule) }}</span>
-              <span v-if="a.delta.ok" class="ml-2 text-zinc-400">
+              <span v-if="a.delta.ok" class="ml-2 text-text/60">
                 {{ formatDeltaSnippet(a.rule, a.delta) }}
               </span>
             </div>
             <p
               v-if="triggeredAlerts.length === 0 && watchlist.rules.length > 0"
-              class="text-sm text-zinc-500"
+              class="text-sm text-text/60"
             >
               {{ t('statisticsPage.recapNoTriggers') }}
             </p>
-            <p v-if="watchlist.rules.length === 0" class="text-sm text-zinc-500">
+            <p v-if="watchlist.rules.length === 0" class="text-sm text-text/60">
               {{ t('statisticsPage.recapNoRules') }}
             </p>
           </div>
 
-          <ul class="space-y-2 border-t border-zinc-800 pt-4">
+          <ul class="space-y-2 border-t border-primary/20 pt-4">
             <li
               v-for="r in watchlist.rules"
               :key="r.id"
-              class="flex flex-wrap items-center justify-between gap-2 text-sm text-zinc-300"
+              class="flex flex-wrap items-center justify-between gap-2 text-sm text-text/80"
             >
               <span>{{ formatRuleSummary(r) }}</span>
               <button
                 type="button"
-                class="rounded border border-zinc-600 px-2 py-0.5 text-xs text-zinc-400 hover:border-rose-500 hover:text-error"
+                class="ui-build-card-button px-2 py-0.5 text-xs"
                 @click="watchlist.removeRule(r.id)"
               >
                 {{ t('statisticsPage.recapRemove') }}
@@ -87,61 +87,61 @@
         </template>
       </section>
 
-      <section class="rounded-xl border border-zinc-700/80 bg-zinc-900/50 p-4">
-        <h2 class="mb-3 text-lg font-semibold text-zinc-200">
+      <section class="statistics-recap-card p-4">
+        <h2 class="mb-3 text-lg font-semibold text-text-accent">
           {{ t('statisticsPage.recapBuilderTitle') }}
         </h2>
         <div class="grid gap-3 sm:grid-cols-2">
-          <label class="block text-xs text-zinc-400">
+          <label class="block text-xs text-text/60">
             {{ t('statisticsPage.recapTargetType') }}
             <select
               v-model="form.targetType"
-              class="mt-1 w-full rounded border border-zinc-600 bg-zinc-950 px-2 py-1.5 text-sm"
+              class="mt-1 w-full rounded-lg border border-primary/35 bg-background px-2 py-1.5 text-sm text-text focus:border-accent focus:outline-none"
             >
               <option value="ROLE">{{ t('statisticsPage.recapTargetRole') }}</option>
               <option value="CHAMPION">{{ t('statisticsPage.recapTargetChampion') }}</option>
               <option value="GLOBAL">{{ t('statisticsPage.recapTargetGlobal') }}</option>
             </select>
           </label>
-          <label v-if="form.targetType === 'ROLE'" class="block text-xs text-zinc-400">
+          <label v-if="form.targetType === 'ROLE'" class="block text-xs text-text/60">
             {{ t('statisticsPage.recapLane') }}
             <select
               v-model="form.lane"
-              class="mt-1 w-full rounded border border-zinc-600 bg-zinc-950 px-2 py-1.5 text-sm"
+              class="mt-1 w-full rounded-lg border border-primary/35 bg-background px-2 py-1.5 text-sm text-text focus:border-accent focus:outline-none"
             >
               <option v-for="lane in lanes" :key="lane" :value="lane">{{ laneLabel(lane) }}</option>
             </select>
           </label>
           <template v-if="form.targetType === 'CHAMPION'">
-            <label class="block text-xs text-zinc-400 sm:col-span-2">
+            <label class="block text-xs text-text/60 sm:col-span-2">
               {{ t('statisticsPage.recapChampion') }}
               <input
                 v-model="form.championQuery"
                 type="text"
-                class="mt-1 w-full rounded border border-zinc-600 bg-zinc-950 px-2 py-1.5 text-sm"
+                class="mt-1 w-full rounded-lg border border-primary/35 bg-background px-2 py-1.5 text-sm text-text focus:border-accent focus:outline-none"
                 :placeholder="t('statisticsPage.recapChampionPlaceholder')"
                 autocomplete="off"
                 @input="onChampionSearch"
               />
               <ul
                 v-if="championSuggestions.length > 0"
-                class="mt-1 max-h-40 overflow-auto rounded border border-zinc-700 bg-zinc-950 text-sm"
+                class="mt-1 max-h-40 overflow-auto rounded-lg border border-primary/35 bg-background text-sm"
               >
                 <li
                   v-for="c in championSuggestions"
                   :key="c.key"
-                  class="cursor-pointer px-2 py-1 hover:bg-zinc-800"
+                  class="cursor-pointer px-2 py-1 hover:bg-primary/10"
                   @click="pickChampion(c)"
                 >
                   {{ c.name }}
                 </li>
               </ul>
             </label>
-            <label class="block text-xs text-zinc-400">
+            <label class="block text-xs text-text/60">
               {{ t('statisticsPage.recapRoleFilter') }}
               <select
                 v-model="form.roleFilter"
-                class="mt-1 w-full rounded border border-zinc-600 bg-zinc-950 px-2 py-1.5 text-sm"
+                class="mt-1 w-full rounded-lg border border-primary/35 bg-background px-2 py-1.5 text-sm text-text focus:border-accent focus:outline-none"
               >
                 <option value="">{{ t('statisticsPage.recapAllLanes') }}</option>
                 <option v-for="lane in lanes" :key="lane" :value="lane">
@@ -151,33 +151,33 @@
             </label>
           </template>
 
-          <label class="block text-xs text-zinc-400 sm:col-span-2">
+          <label class="block text-xs text-text/60 sm:col-span-2">
             {{ t('statisticsPage.recapRankTier') }}
             <select
               v-model="form.rankTier"
-              class="mt-1 w-full rounded border border-zinc-600 bg-zinc-950 px-2 py-1.5 text-sm"
+              class="mt-1 w-full rounded-lg border border-primary/35 bg-background px-2 py-1.5 text-sm text-text focus:border-accent focus:outline-none"
             >
               <option value="">{{ t('statisticsPage.recapAllRanks') }}</option>
               <option v-for="tier in RANK_TIERS" :key="tier" :value="tier">{{ tier }}</option>
             </select>
           </label>
 
-          <label class="block text-xs text-zinc-400">
+          <label class="block text-xs text-text/60">
             {{ t('statisticsPage.recapMetric') }}
             <select
               v-model="form.metric"
-              class="mt-1 w-full rounded border border-zinc-600 bg-zinc-950 px-2 py-1.5 text-sm"
+              class="mt-1 w-full rounded-lg border border-primary/35 bg-background px-2 py-1.5 text-sm text-text focus:border-accent focus:outline-none"
             >
               <option value="winRate">{{ t('statisticsPage.recapMetricWr') }}</option>
               <option value="pickRate">{{ t('statisticsPage.recapMetricPr') }}</option>
               <option value="banRate">{{ t('statisticsPage.recapMetricBr') }}</option>
             </select>
           </label>
-          <label class="block text-xs text-zinc-400">
+          <label class="block text-xs text-text/60">
             {{ t('statisticsPage.recapOperator') }}
             <select
               v-model="form.operator"
-              class="mt-1 w-full rounded border border-zinc-600 bg-zinc-950 px-2 py-1.5 text-sm"
+              class="mt-1 w-full rounded-lg border border-primary/35 bg-background px-2 py-1.5 text-sm text-text focus:border-accent focus:outline-none"
             >
               <option value=">">{{ t('statisticsPage.recapOpGt') }}</option>
               <option value="<">{{ t('statisticsPage.recapOpLt') }}</option>
@@ -185,7 +185,7 @@
               <option value="decrease_plus">{{ t('statisticsPage.recapOpDec') }}</option>
             </select>
           </label>
-          <label class="block text-xs text-zinc-400">
+          <label class="block text-xs text-text/60">
             {{ t('statisticsPage.recapThreshold') }}
             <input
               v-model.number="form.threshold"
@@ -193,14 +193,14 @@
               min="0"
               max="100"
               step="0.1"
-              class="mt-1 w-full rounded border border-zinc-600 bg-zinc-950 px-2 py-1.5 text-sm"
+              class="mt-1 w-full rounded-lg border border-primary/35 bg-background px-2 py-1.5 text-sm text-text focus:border-accent focus:outline-none"
             />
           </label>
-          <label class="block text-xs text-zinc-400">
+          <label class="block text-xs text-text/60">
             {{ t('statisticsPage.recapTimeframe') }}
             <select
               v-model.number="form.timeframe"
-              class="mt-1 w-full rounded border border-zinc-600 bg-zinc-950 px-2 py-1.5 text-sm"
+              class="mt-1 w-full rounded-lg border border-primary/35 bg-background px-2 py-1.5 text-sm text-text focus:border-accent focus:outline-none"
             >
               <option :value="1">1j</option>
               <option :value="3">3j</option>
@@ -212,14 +212,14 @@
         <div class="mt-4 flex flex-wrap gap-2">
           <button
             type="button"
-            class="rounded-lg bg-info px-4 py-2 text-sm font-medium text-background hover:bg-info/90"
+            class="ui-build-card-button px-4 py-2 text-sm font-semibold"
             @click="submitRule"
           >
             {{ t('statisticsPage.recapAddRule') }}
           </button>
           <button
             type="button"
-            class="rounded-lg border border-zinc-600 px-4 py-2 text-sm text-zinc-300 hover:border-amber-500/60 hover:text-accent-light"
+            class="ui-build-card-button px-4 py-2 text-sm font-semibold"
             @click="applyExampleRule"
           >
             {{ t('statisticsPage.recapExample') }}

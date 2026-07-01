@@ -6,14 +6,14 @@
       </p>
       <button
         type="button"
-        class="rounded border border-primary/35 bg-surface/40 px-2.5 py-1 text-xs text-text/80 hover:bg-primary/10"
+        class="ui-build-card-button px-2.5 py-1 text-xs text-text/80"
         @click="resetThresholds"
       >
         {{ t('statisticsPage.settingsAlertsResetShort') }}
       </button>
     </div>
 
-    <div class="overflow-x-auto rounded-lg border border-primary/25 bg-surface/30">
+    <div class="ui-build-card-surface overflow-x-auto rounded-xl">
       <table class="w-full min-w-[28rem] text-left text-xs">
         <thead>
           <tr class="border-b border-primary/20 text-text/60">

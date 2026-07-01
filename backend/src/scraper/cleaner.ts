@@ -19,6 +19,11 @@ export function cleanChanges(raw: EntityChanges[]): EntityChanges[] {
       continue;
     }
 
+    if (isSkinPromoEntity(entity)) {
+      logger.debug({ entity: entity.name }, 'Skipping skin promo entity');
+      continue;
+    }
+
     // Clean entity name and category
     const cleanEntity: EntityChanges = {
       name: cleanString(entity.name),
@@ -38,6 +43,9 @@ export function cleanChanges(raw: EntityChanges[]): EntityChanges[] {
     if (entity.subCategory) {
       cleanEntity.subCategory = cleanString(entity.subCategory);
     }
+    if (entity.isNewRelease) {
+      cleanEntity.isNewRelease = true;
+    }
 
     // Deduplicate changes by stat name
     const seenStats = new Set<string>();
@@ -49,6 +57,8 @@ export function cleanChanges(raw: EntityChanges[]): EntityChanges[] {
         after: cleanString(change.after),
         type: change.type,
         ...(change.subCategory ? { subCategory: cleanString(change.subCategory) } : {}),
+        ...(change.linkUrl ? { linkUrl: change.linkUrl.trim().split(/\s+/)[0]?.replace(/target=$/i, '') } : {}),
+        ...(change.linkLabel ? { linkLabel: cleanString(change.linkLabel) } : {}),
       };
 
       // Skip empty changes (allow text-only bugfix lines with empty stat)
@@ -96,6 +106,13 @@ export function cleanChanges(raw: EntityChanges[]): EntityChanges[] {
   );
 
   return cleaned;
+}
+
+function isSkinPromoEntity(entity: EntityChanges): boolean {
+  const name = entity.name.toLowerCase().trim();
+  if (name === 'skins' || name.startsWith('skins et chromas')) return true;
+  const slug = entity.patchSlug?.toLowerCase();
+  return slug === 'skins' || slug === 'upcoming-skins-and-chromas';
 }
 
 /**
@@ -171,6 +188,7 @@ export function mergeEntityVariants(entities: EntityChanges[]): EntityChanges[] 
     if (!existing.id && entity.id) existing.id = entity.id;
     if (!existing.patchSlug && entity.patchSlug) existing.patchSlug = entity.patchSlug;
     if (!existing.imageUrl && entity.imageUrl) existing.imageUrl = entity.imageUrl;
+    if (!existing.isNewRelease && entity.isNewRelease) existing.isNewRelease = entity.isNewRelease;
   }
 
   return Array.from(merged.values());

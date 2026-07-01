@@ -50,12 +50,7 @@ watch(column, (col, prev) => {
 </script>
 
 <template>
-  <div
-    :class="[
-      'statistics-mobile-sort-bar flex-wrap items-end gap-2 rounded-lg border border-primary/25 bg-surface/50 p-2.5',
-      barVisibilityClass,
-    ]"
-  >
+  <div :class="['statistics-mobile-sort-bar flex-wrap items-end gap-2 p-2.5', barVisibilityClass]">
     <div class="min-w-0 flex-1">
       <div class="mb-1 flex min-w-0 items-center gap-2">
         <label

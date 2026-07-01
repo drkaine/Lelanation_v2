@@ -241,7 +241,7 @@ function scrollToItemsFullTable(): void {
   <!-- 8 cartes par tranche ; racines multiples pour s’intégrer au flex parent -->
   <!-- Plus pickés -->
   <div
-    class="fast-stat-card fast-stat-card-items w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+    class="fast-stat-card fast-stat-card-items ui-build-card-surface w-full max-w-full rounded-xl p-2"
   >
     <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
       <button
@@ -318,7 +318,7 @@ function scrollToItemsFullTable(): void {
 
   <!-- Moins pickés -->
   <div
-    class="fast-stat-card fast-stat-card-items w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+    class="fast-stat-card fast-stat-card-items ui-build-card-surface w-full max-w-full rounded-xl p-2"
   >
     <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
       <button
@@ -399,7 +399,7 @@ function scrollToItemsFullTable(): void {
 
   <!-- Meilleur winrate -->
   <div
-    class="fast-stat-card fast-stat-card-items w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+    class="fast-stat-card fast-stat-card-items ui-build-card-surface w-full max-w-full rounded-xl p-2"
   >
     <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
       <button
@@ -474,7 +474,7 @@ function scrollToItemsFullTable(): void {
 
   <!-- Pire winrate -->
   <div
-    class="fast-stat-card fast-stat-card-items w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+    class="fast-stat-card fast-stat-card-items ui-build-card-surface w-full max-w-full rounded-xl p-2"
   >
     <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
       <button
@@ -553,7 +553,7 @@ function scrollToItemsFullTable(): void {
 
   <!-- Δ pickrate + -->
   <div
-    class="fast-stat-card fast-stat-card-items w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+    class="fast-stat-card fast-stat-card-items ui-build-card-surface w-full max-w-full rounded-xl p-2"
   >
     <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
       <button
@@ -648,7 +648,7 @@ function scrollToItemsFullTable(): void {
 
   <!-- Δ pickrate − -->
   <div
-    class="fast-stat-card fast-stat-card-items w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+    class="fast-stat-card fast-stat-card-items ui-build-card-surface w-full max-w-full rounded-xl p-2"
   >
     <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
       <button
@@ -743,7 +743,7 @@ function scrollToItemsFullTable(): void {
 
   <!-- Δ winrate + -->
   <div
-    class="fast-stat-card fast-stat-card-items w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+    class="fast-stat-card fast-stat-card-items ui-build-card-surface w-full max-w-full rounded-xl p-2"
   >
     <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
       <button
@@ -838,7 +838,7 @@ function scrollToItemsFullTable(): void {
 
   <!-- Δ winrate − -->
   <div
-    class="fast-stat-card fast-stat-card-items w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+    class="fast-stat-card fast-stat-card-items ui-build-card-surface w-full max-w-full rounded-xl p-2"
   >
     <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
       <button

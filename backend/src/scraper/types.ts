@@ -13,6 +13,8 @@ export interface StatChange {
   type: ChangeType;
   /** Ability block or "Stats de base" within a champion card. */
   subCategory?: string;
+  linkUrl?: string;
+  linkLabel?: string;
 }
 
 export interface EntityChanges {
@@ -24,6 +26,8 @@ export interface EntityChanges {
   imageUrl?: string;
   /** English patch header slug from h3 id (e.g. Imperial-Mandate). Locale-independent. */
   patchSlug?: string;
+  /** New champion kit reveal section (e.g. patch-locke). */
+  isNewRelease?: boolean;
   subCategory?: string;
   changes: StatChange[];
 }

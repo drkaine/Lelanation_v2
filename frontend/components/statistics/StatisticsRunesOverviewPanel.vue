@@ -669,7 +669,7 @@ function runeSetLayout(
                 ly: runeSetLayout(s.runes, s),
               }))"
               :key="'unified-set-' + idx"
-              class="build-set-card rune-set-card relative h-full w-full min-w-0 rounded-lg border border-primary/30 bg-black/20 px-4 pb-3 pt-5"
+              class="build-set-card rune-set-card relative h-full w-full min-w-0 rounded-xl border border-primary/30 px-4 pb-3 pt-5"
             >
               <span
                 class="absolute left-0 top-0 z-10 flex h-5 min-w-5 items-center justify-center rounded-md bg-primary/30 px-1 text-[10px] font-bold tabular-nums text-text/90"
@@ -772,7 +772,7 @@ function runeSetLayout(
                 </div>
                 <div
                   v-if="row.ly.shards.length"
-                  class="rune-set-shards-row -mx-4 mt-2 flex w-[calc(100%+2rem)] max-w-none items-center justify-center gap-4 self-stretch px-3 sm:justify-between sm:gap-2 sm:px-[3px]"
+                  class="rune-set-shards-row mt-2 flex w-full min-w-0 items-center justify-center gap-3 self-stretch sm:justify-between sm:gap-2"
                 >
                   <img
                     v-for="sid in row.ly.shards"
@@ -836,7 +836,7 @@ function runeSetLayout(
     <!-- Sets : plus / moins pick, meilleur / pire WR (stats globales) -->
     <div
       v-show="runeTreeReady && !unifiedLayout"
-      class="grid gap-4 lg:grid-cols-2 2xl:grid-cols-4 2xl:gap-3"
+      class="stats-runes-set-sections grid gap-4 lg:grid-cols-2"
     >
       <div
         v-for="block in [
@@ -862,7 +862,7 @@ function runeSetLayout(
           },
         ]"
         :key="block.key"
-        class="min-w-0"
+        class="stats-runes-set-section min-w-0 overflow-hidden"
       >
         <h4 class="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-accent/90">
           {{ block.title }}
@@ -874,7 +874,7 @@ function runeSetLayout(
               ly: runeSetLayout(s.runes, s),
             }))"
             :key="block.key + '-' + idx"
-            class="build-set-card rune-set-card statistics-overview-surface relative h-full w-full min-w-0 rounded-lg border border-primary/30 px-4 pb-3 pt-5"
+            class="build-set-card rune-set-card relative h-full w-full min-w-0 rounded-xl border border-primary/30 px-4 pb-3 pt-5"
           >
             <span
               class="absolute left-0 top-0 z-10 flex h-5 min-w-5 items-center justify-center rounded-md bg-primary/30 px-1 text-[10px] font-bold tabular-nums text-text/90"
@@ -978,7 +978,7 @@ function runeSetLayout(
               </div>
               <div
                 v-if="row.ly.shards.length"
-                class="rune-set-shards-row -mx-4 mt-2 flex w-[calc(100%+2rem)] max-w-none items-center justify-center gap-4 self-stretch px-3 sm:justify-between sm:gap-2 sm:px-[3px]"
+                class="rune-set-shards-row mt-2 flex w-full min-w-0 items-center justify-center gap-3 self-stretch sm:justify-between sm:gap-2"
               >
                 <img
                   v-for="sid in row.ly.shards"
@@ -1059,11 +1059,13 @@ function runeSetLayout(
   flex-shrink: 0;
 }
 .rune-set-cards-grid {
-  /* hérite de .build-set-cards-grid */
+  width: 100%;
+  min-width: 0;
 }
 
 .rune-set-card {
-  /* hérite de .build-set-card */
+  overflow: hidden;
+  isolation: isolate;
 }
 
 .rune-set-keystone-img {

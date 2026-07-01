@@ -94,10 +94,7 @@ function rolePanelTitle(role: string): string {
 
     <div v-if="pending" class="py-4 text-text/70">{{ t('statisticsPage.loading') }}</div>
     <p v-else-if="error" class="py-2 text-sm text-error">{{ error }}</p>
-    <p
-      v-else-if="!hasAnyData"
-      class="rounded-lg border border-primary/30 bg-surface/40 p-4 text-sm text-text/70"
-    >
+    <p v-else-if="!hasAnyData" class="statistics-empty-panel p-4">
       {{ t('statisticsPage.itemStatsBreakdownEmpty') }}
     </p>
     <div v-else class="flex w-full min-w-0 flex-col gap-6">

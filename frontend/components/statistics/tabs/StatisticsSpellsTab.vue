@@ -454,7 +454,7 @@ function deltaLabelClass(v: number | null | undefined): string {
         <article
           v-for="row in paginatedDisplayRows"
           :key="'spell-mobile-' + row.key"
-          class="statistics-champion-stats-mobile-card statistics-spell-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
+          class="statistics-champion-stats-mobile-card statistics-spell-mobile-card w-full overflow-hidden"
         >
           <button
             type="button"
@@ -745,7 +745,7 @@ function deltaLabelClass(v: number | null | undefined): string {
           <div class="flex gap-1">
             <button
               type="button"
-              class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+              class="statistics-pagination-btn text-text"
               :disabled="page <= 1"
               @click="page = Math.max(1, page - 1)"
             >
@@ -753,7 +753,7 @@ function deltaLabelClass(v: number | null | undefined): string {
             </button>
             <button
               type="button"
-              class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+              class="statistics-pagination-btn text-text"
               :disabled="page >= totalPages"
               @click="page = Math.min(totalPages, page + 1)"
             >

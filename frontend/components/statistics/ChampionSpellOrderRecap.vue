@@ -1,7 +1,5 @@
 <template>
-  <section
-    class="champion-spell-order-recap rounded-lg border border-primary/30 bg-surface/40 p-3 sm:p-4"
-  >
+  <section class="champion-spell-order-recap statistics-panel-surface p-3 sm:p-4">
     <h3 class="mb-3 text-sm font-semibold text-text">
       {{ t('statisticsPage.championSpellOrderRecapTitle') }}
     </h3>

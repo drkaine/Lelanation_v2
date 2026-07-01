@@ -80,7 +80,17 @@ const ROW_TO_SUM_METRIC: Record<string, string> = {
   wards_placed: "sum_wards_placed",
   wards_killed: "sum_wards_killed",
   detector_wards_placed: "sum_control_wards_placed",
+  control_wards_placed: "sum_control_wards_placed",
+  stealth_wards_placed: "sum_stealth_wards_placed",
+  ward_takedowns: "sum_ward_takedowns",
+  ward_takedowns_before_20m: "sum_ward_takedowns_before_20_m",
+  wards_guarded: "sum_wards_guarded",
+  two_wards_one_sweeper_count: "sum_two_wards_one_sweeper_count",
+  vision_wards_bought_in_game: "sum_vision_wards_bought_in_game",
   total_minions_killed: "sum_total_minions_killed",
+  neutral_minions_killed: "sum_neutral_minions_killed",
+  total_ally_jungle_minions_killed: "sum_total_ally_jungle_minions_killed",
+  total_enemy_jungle_minions_killed: "sum_total_enemy_jungle_minions_killed",
   baron_kills: "sum_baron_kills",
   dragon_kills: "sum_dragon_kills",
   inhibitor_kills: "sum_inhibitor_kills",
@@ -89,6 +99,21 @@ const ROW_TO_SUM_METRIC: Record<string, string> = {
   damage_dealt_to_turrets: "sum_damage_dealt_to_turrets",
   damage_dealt_to_objectives: "sum_damage_dealt_to_objectives",
   damage_dealt_to_epic_monsters: "sum_damage_dealt_to_epic_monsters",
+  all_in_pings: "sum_all_in_pings",
+  assist_me_pings: "sum_assist_me_pings",
+  basic_pings: "sum_basic_pings",
+  command_pings: "sum_command_pings",
+  danger_pings: "sum_danger_pings",
+  get_back_pings: "sum_get_back_pings",
+  enemy_missing_pings: "sum_enemy_missing_pings",
+  enemy_vision_pings: "sum_enemy_vision_pings",
+  hold_pings: "sum_hold_pings",
+  need_vision_pings: "sum_need_vision_pings",
+  on_my_way_pings: "sum_on_my_way_pings",
+  push_pings: "sum_push_pings",
+  retreat_pings: "sum_retreat_pings",
+  vision_cleared_pings: "sum_vision_cleared_pings",
+  vision_score: "sum_vision_score",
 };
 
 function applySumMetrics(dto: Record<string, unknown>, row: ParticipantRow): void {
@@ -206,6 +231,21 @@ export function participantRowsToParsedDtos(
     };
 
     applySumMetrics(dto, row);
+
+    const pinkWards = Math.max(n(row.detector_wards_placed), n(row.control_wards_placed));
+    if (CHAMPION_STATS_METRIC_COLUMN_SET.has("sum_detector_wards_placed")) {
+      dto.sum_detector_wards_placed = pinkWards;
+    }
+
+    const visionScore = n(row.vision_score);
+    if (CHAMPION_STATS_METRIC_COLUMN_SET.has("sum_vision_score")) {
+      dto.sum_vision_score = visionScore;
+    }
+    const durationMin = Math.max(1, match.gameDurationSec / 60);
+    if (CHAMPION_STATS_METRIC_COLUMN_SET.has("sum_vision_score_per_minute")) {
+      dto.sum_vision_score_per_minute = visionScore / durationMin;
+    }
+
     out.push(dto as ParsedParticipantDto);
   }
 

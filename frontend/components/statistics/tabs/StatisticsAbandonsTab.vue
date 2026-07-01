@@ -14,7 +14,7 @@ const p = inject('statisticsPageCtx') as any
       {{ p.t('statisticsPage.loading') }}
     </div>
     <div v-else-if="p.overviewAbandonsData" class="grid gap-4 sm:grid-cols-3">
-      <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+      <div class="ui-build-card-surface rounded-xl p-4">
         <div class="text-sm text-text/70">{{ p.t('statisticsPage.abandonsRemakeRate') }}</div>
         <div class="text-2xl font-semibold text-text">
           {{ p.overviewAbandonsData.remakeRate?.toFixed(2) ?? 0 }}%
@@ -23,7 +23,7 @@ const p = inject('statisticsPageCtx') as any
           {{ p.overviewAbandonsData.remakeCount }} / {{ p.overviewAbandonsData.totalMatches }}
         </div>
       </div>
-      <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+      <div class="ui-build-card-surface rounded-xl p-4">
         <div class="text-sm text-text/70">
           {{ p.t('statisticsPage.abandonsEarlySurrenderRate') }}
         </div>
@@ -35,7 +35,7 @@ const p = inject('statisticsPageCtx') as any
           {{ p.overviewAbandonsData.totalMatches }}
         </div>
       </div>
-      <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+      <div class="ui-build-card-surface rounded-xl p-4">
         <div class="text-sm text-text/70">
           {{ p.t('statisticsPage.abandonsSurrenderRate') }}
         </div>

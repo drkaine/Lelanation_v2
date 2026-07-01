@@ -370,7 +370,7 @@ function deltaClass(value: number | null | undefined): string {
           <article
             v-for="row in paginatedRows"
             :key="'item-mobile-' + row.type + '-' + row.itemId"
-            class="statistics-champion-stats-mobile-card statistics-item-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
+            class="statistics-champion-stats-mobile-card statistics-item-mobile-card w-full overflow-hidden"
           >
             <div
               class="statistics-champion-stats-mobile-card-header flex w-full min-w-0 items-center gap-3 p-3"
@@ -632,7 +632,7 @@ function deltaClass(value: number | null | undefined): string {
             <div class="flex gap-1">
               <button
                 type="button"
-                class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                class="statistics-pagination-btn text-text"
                 :disabled="page <= 1"
                 @click="page = Math.max(1, page - 1)"
               >
@@ -640,7 +640,7 @@ function deltaClass(value: number | null | undefined): string {
               </button>
               <button
                 type="button"
-                class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                class="statistics-pagination-btn text-text"
                 :disabled="page >= totalPages"
                 @click="page = Math.min(totalPages, page + 1)"
               >

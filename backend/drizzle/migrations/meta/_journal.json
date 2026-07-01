@@ -281,6 +281,13 @@
       "when": 1750684800000,
       "tag": "0039_lol_enum_helper_functions",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1750771200000,
+      "tag": "0040_participants_vision_score",
+      "breakpoints": true
     }
   ]
 }

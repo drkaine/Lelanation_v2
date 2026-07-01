@@ -2,7 +2,7 @@
   <div class="statistics-custom min-h-screen p-4 text-text">
     <div class="mx-auto max-w-7xl space-y-4">
       <div class="flex flex-wrap items-center justify-between gap-3">
-        <div class="inline-flex rounded-lg border border-primary/30 bg-surface/40 p-1">
+        <div class="ui-build-card-surface inline-flex gap-1 rounded-xl p-1">
           <NuxtLink :to="localePath('/statistics')" class="mode-btn">
             {{ t('statisticsPage.modeClassic') }}
           </NuxtLink>
@@ -24,7 +24,7 @@
         <button
           v-if="customTab === 'custom'"
           type="button"
-          class="inline-flex items-center gap-1.5 rounded border border-primary/40 bg-surface px-3 py-2 text-sm hover:bg-primary/15"
+          class="ui-build-card-button inline-flex items-center gap-1.5 px-3 py-2 text-sm"
           :title="t('statisticsPage.customModeBuildTooltip')"
           @click="store.setConstructionMode(!store.constructionMode)"
         >
@@ -50,23 +50,17 @@
         </button>
       </div>
 
-      <div
-        v-if="customTab === 'recap'"
-        class="rounded-lg border border-primary/30 bg-surface/30 p-6 text-text/80"
-      >
+      <div v-if="customTab === 'recap'" class="ui-build-card-surface rounded-xl p-6 text-text/80">
         <p class="mb-3">{{ t('statisticsPage.recapDescription') }}</p>
         <NuxtLink
           :to="localePath('/statistics/recap')"
-          class="inline-flex rounded border border-primary/40 bg-surface px-3 py-2 text-sm hover:bg-primary/15"
+          class="ui-build-card-button inline-flex px-3 py-2 text-sm"
         >
           {{ t('statisticsPage.recapTitle') }}
         </NuxtLink>
       </div>
 
-      <div
-        v-else-if="!widgets.length"
-        class="rounded-lg border border-primary/30 bg-surface/30 p-6 text-text/80"
-      >
+      <div v-else-if="!widgets.length" class="ui-build-card-surface rounded-xl p-6 text-text/80">
         {{ t('statisticsPage.customEmpty') }}
       </div>
 
@@ -74,7 +68,7 @@
         <article
           v-for="(widget, idx) in widgets"
           :key="widget.id"
-          class="rounded-lg border border-primary/30 bg-surface/30 p-4"
+          class="ui-build-card-surface rounded-xl p-4"
         >
           <div class="mb-2 flex items-center justify-between gap-2">
             <template v-if="store.constructionMode">
@@ -138,21 +132,7 @@ onMounted(() => {
 
 <style scoped>
 .mode-btn {
-  border-radius: 0.375rem;
-  padding: 0.45rem 0.75rem;
-  font-size: 0.875rem;
   text-decoration: none;
-  color: rgb(var(--rgb-text) / 0.8);
-}
-.mode-btn-active {
-  background: rgb(var(--rgb-accent) / 0.2);
-  color: var(--color-accent);
-}
-.ctrl-btn {
-  border-radius: 0.35rem;
-  border: 1px solid rgb(var(--rgb-primary) / 0.45);
-  background: rgb(var(--rgb-surface));
-  padding: 0.2rem 0.5rem;
-  font-size: 0.75rem;
+  color: rgb(var(--rgb-text) / 0.85);
 }
 </style>

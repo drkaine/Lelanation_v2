@@ -130,7 +130,7 @@ function rankIcon(rank: string): string {
           <article
             v-for="group in groupedRows"
             :key="`surrender-mobile-${group.rank}`"
-            class="statistics-surrender-mobile-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/40 py-2"
+            class="statistics-champion-stats-mobile-card statistics-surrender-mobile-card w-full max-w-full overflow-hidden py-2"
           >
             <button
               type="button"
@@ -346,112 +346,138 @@ function rankIcon(rank: string): string {
           </article>
         </div>
 
-        <!-- Desktop : tableau -->
-        <div class="hidden w-full min-w-0 overflow-x-auto md:block">
-          <table class="objectives-zebra-cols w-full min-w-[640px] text-left text-base">
-            <thead>
-              <tr class="border-b border-primary/30 text-text/70">
-                <th class="py-1.5 pr-2 font-medium">
-                  {{ p.t('statisticsPage.overviewMatchesByDivision') }}
-                </th>
-                <th class="px-1 py-1.5 text-center font-medium">
-                  {{ p.t('statisticsPage.abandonsSurrenderRate') }}
-                </th>
-                <th class="px-1 py-1.5 text-center font-medium">
-                  {{ p.t('statisticsPage.abandonsEarlySurrenderRate') }}
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-primary/20 text-text/85">
-              <template v-for="group in groupedRows" :key="`rank-${group.rank}`">
+        <!-- Desktop : tableau (même gabarit que pings / bans / champions) -->
+        <div
+          class="tier-list-mobile-rotate statistics-overview-surface hidden w-full overflow-x-auto rounded-lg border border-primary/30 md:block"
+        >
+          <div class="tier-list-lolalytics w-full min-w-0 text-[13px]">
+            <table class="w-full min-w-[480px] text-left text-[13px]">
+              <thead
+                class="sticky top-0 z-10 border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
+              >
                 <tr>
-                  <td class="py-1.5 pr-2">
-                    <button
-                      type="button"
-                      class="flex items-center gap-2 font-medium text-text/90 hover:text-text"
-                      @click="toggleRank(group.rank)"
-                    >
-                      <span
-                        class="inline-block transition-transform duration-200"
-                        :class="openRanks.has(group.rank) ? 'rotate-180' : ''"
-                        aria-hidden
-                        >▼</span
-                      >
-                      <img
-                        :src="rankIcon(group.rank)"
-                        :alt="rankLabel(group.rank)"
-                        class="h-4 w-4 object-contain"
-                        loading="lazy"
-                      />
-                      <span>{{ rankLabel(group.rank) }}</span>
-                    </button>
-                  </td>
-                  <td class="px-1 py-1.5 text-center tabular-nums">
-                    {{ pct(group.all?.surrenderRate) }}
-                    <span
-                      v-if="delta(group.all?.surrenderDelta)"
-                      :class="deltaClass(group.all?.surrenderDelta)"
-                    >
-                      {{ delta(group.all?.surrenderDelta) }}
-                    </span>
-                  </td>
-                  <td class="px-1 py-1.5 text-center tabular-nums">
-                    {{ pct(group.all?.earlySurrenderRate) }}
-                    <span
-                      v-if="delta(group.all?.earlySurrenderDelta)"
-                      :class="deltaClass(group.all?.earlySurrenderDelta)"
-                    >
-                      {{ delta(group.all?.earlySurrenderDelta) }}
-                    </span>
-                  </td>
+                  <th class="min-w-[220px] px-2 py-1.5 text-left font-semibold text-text">
+                    {{ p.t('statisticsPage.overviewMatchesByDivision') }}
+                  </th>
+                  <th class="px-3 py-1.5 text-center font-semibold text-text">
+                    {{ p.t('statisticsPage.abandonsSurrenderRate') }}
+                  </th>
+                  <th class="px-3 py-1.5 text-center font-semibold text-text">
+                    {{ p.t('statisticsPage.abandonsEarlySurrenderRate') }}
+                  </th>
                 </tr>
-                <template v-if="openRanks.has(group.rank)">
-                  <tr v-if="group.blue" class="bg-surface/30">
-                    <td class="py-1 pl-8 pr-2 text-text/75">{{ teamLabel(100) }}</td>
-                    <td class="px-1 py-1 text-center tabular-nums text-text/80">
-                      {{ pct(group.blue.surrenderRate) }}
-                      <span
-                        v-if="delta(group.blue.surrenderDelta)"
-                        :class="deltaClass(group.blue.surrenderDelta)"
+              </thead>
+              <tbody class="divide-y divide-primary/20">
+                <template v-for="group in groupedRows" :key="`rank-${group.rank}`">
+                  <tr
+                    class="text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
+                  >
+                    <td class="min-w-[220px] py-0.5 pl-2 pr-0">
+                      <button
+                        type="button"
+                        class="flex items-center gap-2 font-medium text-text hover:text-text-accent"
+                        @click="toggleRank(group.rank)"
                       >
-                        {{ delta(group.blue.surrenderDelta) }}
+                        <span
+                          class="inline-block text-xs text-text/60 transition-transform duration-200"
+                          :class="openRanks.has(group.rank) ? 'rotate-180' : ''"
+                          aria-hidden
+                          >▼</span
+                        >
+                        <img
+                          :src="rankIcon(group.rank)"
+                          :alt="rankLabel(group.rank)"
+                          class="h-5 w-5 shrink-0 object-contain"
+                          loading="lazy"
+                        />
+                        <span class="truncate">{{ rankLabel(group.rank) }}</span>
+                        <span
+                          v-if="group.all?.matchCount"
+                          class="ml-auto shrink-0 text-[11px] tabular-nums text-text/55"
+                        >
+                          {{ Number(group.all.matchCount).toLocaleString() }}
+                        </span>
+                      </button>
+                    </td>
+                    <td class="px-1 py-0.5 text-center align-middle tabular-nums">
+                      {{ pct(group.all?.surrenderRate) }}
+                      <span
+                        v-if="delta(group.all?.surrenderDelta)"
+                        class="ml-1 text-[10px]"
+                        :class="deltaClass(group.all?.surrenderDelta)"
+                      >
+                        {{ delta(group.all?.surrenderDelta) }}
                       </span>
                     </td>
-                    <td class="px-1 py-1 text-center tabular-nums text-text/80">
-                      {{ pct(group.blue.earlySurrenderRate) }}
+                    <td class="px-1 py-0.5 text-center align-middle tabular-nums">
+                      {{ pct(group.all?.earlySurrenderRate) }}
                       <span
-                        v-if="delta(group.blue.earlySurrenderDelta)"
-                        :class="deltaClass(group.blue.earlySurrenderDelta)"
+                        v-if="delta(group.all?.earlySurrenderDelta)"
+                        class="ml-1 text-[10px]"
+                        :class="deltaClass(group.all?.earlySurrenderDelta)"
                       >
-                        {{ delta(group.blue.earlySurrenderDelta) }}
+                        {{ delta(group.all?.earlySurrenderDelta) }}
                       </span>
                     </td>
                   </tr>
-                  <tr v-if="group.red" class="bg-surface/30">
-                    <td class="py-1 pl-8 pr-2 text-text/75">{{ teamLabel(200) }}</td>
-                    <td class="px-1 py-1 text-center tabular-nums text-text/80">
-                      {{ pct(group.red.surrenderRate) }}
-                      <span
-                        v-if="delta(group.red.surrenderDelta)"
-                        :class="deltaClass(group.red.surrenderDelta)"
-                      >
-                        {{ delta(group.red.surrenderDelta) }}
-                      </span>
-                    </td>
-                    <td class="px-1 py-1 text-center tabular-nums text-text/80">
-                      {{ pct(group.red.earlySurrenderRate) }}
-                      <span
-                        v-if="delta(group.red.earlySurrenderDelta)"
-                        :class="deltaClass(group.red.earlySurrenderDelta)"
-                      >
-                        {{ delta(group.red.earlySurrenderDelta) }}
-                      </span>
-                    </td>
-                  </tr>
+                  <template v-if="openRanks.has(group.rank)">
+                    <tr
+                      v-if="group.blue"
+                      class="text-text-primary/85 odd:bg-white/[0.02] even:bg-black/15"
+                    >
+                      <td class="py-0.5 pl-10 pr-2 text-info">{{ teamLabel(100) }}</td>
+                      <td class="px-1 py-0.5 text-center align-middle tabular-nums">
+                        {{ pct(group.blue.surrenderRate) }}
+                        <span
+                          v-if="delta(group.blue.surrenderDelta)"
+                          class="ml-1 text-[10px]"
+                          :class="deltaClass(group.blue.surrenderDelta)"
+                        >
+                          {{ delta(group.blue.surrenderDelta) }}
+                        </span>
+                      </td>
+                      <td class="px-1 py-0.5 text-center align-middle tabular-nums">
+                        {{ pct(group.blue.earlySurrenderRate) }}
+                        <span
+                          v-if="delta(group.blue.earlySurrenderDelta)"
+                          class="ml-1 text-[10px]"
+                          :class="deltaClass(group.blue.earlySurrenderDelta)"
+                        >
+                          {{ delta(group.blue.earlySurrenderDelta) }}
+                        </span>
+                      </td>
+                    </tr>
+                    <tr
+                      v-if="group.red"
+                      class="text-text-primary/85 odd:bg-white/[0.02] even:bg-black/15"
+                    >
+                      <td class="py-0.5 pl-10 pr-2 text-error/70">{{ teamLabel(200) }}</td>
+                      <td class="px-1 py-0.5 text-center align-middle tabular-nums">
+                        {{ pct(group.red.surrenderRate) }}
+                        <span
+                          v-if="delta(group.red.surrenderDelta)"
+                          class="ml-1 text-[10px]"
+                          :class="deltaClass(group.red.surrenderDelta)"
+                        >
+                          {{ delta(group.red.surrenderDelta) }}
+                        </span>
+                      </td>
+                      <td class="px-1 py-0.5 text-center align-middle tabular-nums">
+                        {{ pct(group.red.earlySurrenderRate) }}
+                        <span
+                          v-if="delta(group.red.earlySurrenderDelta)"
+                          class="ml-1 text-[10px]"
+                          :class="deltaClass(group.red.earlySurrenderDelta)"
+                        >
+                          {{ delta(group.red.earlySurrenderDelta) }}
+                        </span>
+                      </td>
+                    </tr>
+                  </template>
                 </template>
-              </template>
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
@@ -459,11 +485,6 @@ function rankIcon(rank: string): string {
 </template>
 
 <style scoped>
-.objectives-zebra-cols th:nth-child(even),
-.objectives-zebra-cols td:nth-child(even) {
-  background-color: rgba(255, 255, 255, 0.04);
-}
-
 .statistics-surrender-panel,
 .statistics-surrender-mobile-list {
   width: 100%;

@@ -87,24 +87,14 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
       <div class="flex gap-2">
         <button
           type="button"
-          :class="[
-            'rounded px-3 py-1.5 text-sm font-medium',
-            p.tierListViewModel === 'table'
-              ? 'bg-accent text-background'
-              : 'bg-surface/50 text-text/80 hover:bg-primary/20',
-          ]"
+          :class="['statistics-tab-btn', p.tierListViewModel === 'table' ? 'is-active' : '']"
           @click="p.setTierListViewModel('table')"
         >
           {{ p.t('statisticsPage.tierListViewTable') }}
         </button>
         <button
           type="button"
-          :class="[
-            'rounded px-3 py-1.5 text-sm font-medium',
-            p.tierListViewModel === 'chart'
-              ? 'bg-accent text-background'
-              : 'bg-surface/50 text-text/80 hover:bg-primary/20',
-          ]"
+          :class="['statistics-tab-btn', p.tierListViewModel === 'chart' ? 'is-active' : '']"
           @click="p.setTierListViewModel('chart')"
         >
           {{ p.t('statisticsPage.tierListViewChart') }}
@@ -597,7 +587,7 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             <div class="flex gap-1">
               <button
                 type="button"
-                class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                class="statistics-pagination-btn text-text"
                 :disabled="p.tierListPage <= 1"
                 @click="p.tierListPage = Math.max(1, p.tierListPage - 1)"
               >
@@ -605,7 +595,7 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
               </button>
               <button
                 type="button"
-                class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                class="statistics-pagination-btn text-text"
                 :disabled="p.tierListPage >= p.totalTierListPages"
                 @click="p.tierListPage = Math.min(p.totalTierListPages, p.tierListPage + 1)"
               >

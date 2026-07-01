@@ -4,7 +4,7 @@
   >
     <div class="w-full flex-shrink-0 px-4 pb-2 pt-4 max-lg:px-3">
       <div
-        class="statistics-tabs-bar champion-tabs-bar flex w-full min-w-0 items-start gap-2 overflow-x-hidden bg-surface/30"
+        class="statistics-tabs-bar champion-tabs-bar flex w-full min-w-0 items-start gap-2 overflow-x-hidden"
       >
         <div
           class="statistics-tabs-scroll-wrap champion-tabs-scroll-wrap relative min-w-0 flex-1 overflow-hidden"
@@ -25,10 +25,8 @@
               :aria-selected="activeChampionTab === tab.id"
               :tabindex="activeChampionTab === tab.id ? 0 : -1"
               :class="[
-                'statistics-tab-btn champion-tab-btn shrink-0 snap-start whitespace-nowrap rounded px-3 py-1.5 text-sm font-medium transition-colors',
-                activeChampionTab === tab.id
-                  ? 'border border-accent/50 bg-accent/20 text-accent'
-                  : 'border border-transparent text-text/80 hover:bg-primary/10 hover:text-text',
+                'statistics-tab-btn champion-tab-btn',
+                activeChampionTab === tab.id ? 'is-active' : '',
               ]"
               @click="activeChampionTab = tab.id"
               @keydown="onChampionTabsKeydown($event, tab.id)"
@@ -92,12 +90,12 @@
       <aside
         v-show="filtersOpen || !effectiveFiltersSheetMode"
         :class="[
-          'statistics-filters-panel flex shrink-0 flex-col overflow-hidden bg-surface',
+          'statistics-filters-panel flex shrink-0 flex-col overflow-hidden',
           effectiveFiltersSheetMode
-            ? 'fixed inset-x-0 bottom-0 top-auto z-[10051] max-h-[85vh] w-full rounded-t-2xl shadow-lg'
+            ? 'fixed inset-x-0 bottom-0 top-auto z-[10051] max-h-[85vh] w-full rounded-t-2xl bg-surface shadow-lg'
             : [
                 'hidden w-0 opacity-0 transition-[width,opacity] duration-200',
-                'lg:sticky lg:top-4 lg:z-0 lg:flex lg:h-auto lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:overflow-x-hidden lg:rounded-lg lg:shadow-none',
+                'lg:sticky lg:top-4 lg:z-0 lg:flex lg:h-auto lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:overflow-x-hidden',
                 filtersOpen ? 'lg:w-64 lg:opacity-100' : 'lg:w-0 lg:opacity-0',
               ],
         ]"
@@ -125,7 +123,7 @@
           </h2>
           <button
             type="button"
-            class="statistics-filters-reset inline-flex shrink-0 touch-manipulation items-center gap-1.5 rounded px-2 py-1.5 text-xs font-semibold text-primary-light transition-colors hover:bg-info/15 hover:text-primary-light"
+            class="statistics-filters-reset ui-build-card-button inline-flex shrink-0 touch-manipulation items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold"
             @click="resetChampionFilters"
           >
             <span class="iconify i-mdi:refresh" aria-hidden="true" />
@@ -506,7 +504,7 @@
         <div class="shrink-0 border-t border-primary/25 p-3 lg:hidden">
           <button
             type="button"
-            class="w-full touch-manipulation rounded-lg border border-primary/40 bg-primary/10 px-4 py-3 text-sm font-semibold text-text hover:bg-primary/20"
+            class="statistics-filters-mobile-close lg:hidden"
             @click="closeFilters"
           >
             {{ t('statisticsPage.closeFilters') }}
@@ -528,7 +526,7 @@
           <!-- Loading / error -->
           <div
             v-if="pending && !championStats"
-            class="rounded-lg border border-primary/30 bg-surface/30 p-8 text-center"
+            class="ui-build-card-surface rounded-xl p-8 text-center"
           >
             <p class="text-text/70">{{ t('statisticsPage.loading') }}</p>
           </div>
@@ -537,7 +535,7 @@
           </div>
           <template v-else-if="championStats">
             <div
-              class="champion-content-stack w-full min-w-0 overflow-hidden rounded-lg border border-primary/30 bg-surface/30 max-lg:rounded-none max-lg:border-x-0"
+              class="champion-content-stack ui-build-card-surface w-full min-w-0 overflow-hidden rounded-xl max-lg:rounded-none max-lg:border-x-0"
             >
               <!-- Header: image + nom + KPI principaux (repliable sur mobile) -->
               <div
@@ -608,7 +606,7 @@
                     <span
                       v-for="role in roleDistribution"
                       :key="role.role"
-                      class="champion-header-role-badge inline-flex items-center justify-between gap-1.5 rounded border border-primary/30 bg-surface/40 px-1.5 py-0.5"
+                      class="champion-header-role-badge inline-flex items-center justify-between gap-1.5"
                       :title="roleLabel(role.role)"
                     >
                       <img
@@ -1004,7 +1002,7 @@
                       </div>
                       <div
                         v-if="trendTooltip && trendTooltip.metricId === card.metricId"
-                        class="pointer-events-none fixed z-[90] rounded border border-primary/30 bg-surface/90 px-2 py-1 text-[11px] text-text/85 shadow-lg"
+                        class="statistics-chart-tooltip pointer-events-none fixed z-[90]"
                         :style="{
                           left: `${trendTooltip.mouseX}px`,
                           top: `${trendTooltip.mouseY}px`,
@@ -1195,7 +1193,7 @@
                             durationExtraTooltip.metricId ===
                               (card.metricId === 'games' ? 'games' : 'winrate')
                           "
-                          class="pointer-events-none fixed z-[90] rounded border border-primary/30 bg-surface/90 px-2 py-1 text-[11px] text-text/85 shadow-lg"
+                          class="statistics-chart-tooltip pointer-events-none fixed z-[90]"
                           :style="{
                             left: `${durationExtraTooltip.mouseX}px`,
                             top: `${durationExtraTooltip.mouseY}px`,
@@ -1795,7 +1793,7 @@
       v-if="!filtersOpen"
       type="button"
       :class="[
-        'statistics-filters-fab fixed bottom-4 left-1/2 z-[58] -translate-x-1/2 items-center gap-2 rounded-full border border-primary/40 bg-surface/95 px-4 py-2.5 text-sm font-semibold text-text shadow-lg backdrop-blur-sm',
+        'statistics-filters-fab fixed bottom-4 left-1/2 z-[58] flex -translate-x-1/2 items-center gap-2',
         filtersFabClass,
       ]"
       :aria-label="t('statisticsPage.openFilters')"

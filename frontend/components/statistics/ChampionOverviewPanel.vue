@@ -6,11 +6,7 @@
       panelExpanded ? 'space-y-4' : '',
     ]"
   >
-    <div
-      v-if="hasAnyAlerts"
-      class="rounded-md border border-primary/30 bg-surface/30 px-3 py-2 text-xs"
-      role="status"
-    >
+    <div v-if="hasAnyAlerts" class="statistics-panel-surface px-3 py-2 text-xs" role="status">
       <p v-if="hasStatsAlerts" class="font-semibold text-text/90">
         {{ t('statisticsPage.surveillanceAlertTitle') }}
       </p>
@@ -61,7 +57,7 @@
         <span
           v-for="role in roleDistribution"
           :key="role.role"
-          class="champion-header-role-badge inline-flex items-center justify-between gap-1 rounded border border-primary/30 bg-surface/40 px-1.5 py-0.5"
+          class="champion-header-role-badge inline-flex items-center justify-between gap-1"
           :title="statsRoleLabel(role.role)"
         >
           <img

@@ -25,7 +25,7 @@ const p = inject('statisticsPageCtx') as any
       </div>
       <div v-else-if="p.progressionFullData" class="space-y-8">
         <!-- Progression du winrate -->
-        <div class="rounded-lg border border-primary/30 bg-surface/50 p-4">
+        <div class="statistics-panel-surface p-4">
           <h3 class="mb-3 text-lg font-medium text-text">
             {{ p.t('statisticsPage.progressionsWinrateTable') }}
           </h3>
@@ -84,7 +84,7 @@ const p = inject('statisticsPageCtx') as any
           </div>
         </div>
         <!-- Progression de la popularité -->
-        <div class="rounded-lg border border-primary/30 bg-surface/50 p-4">
+        <div class="statistics-panel-surface p-4">
           <h3 class="mb-3 text-lg font-medium text-text">
             {{ p.t('statisticsPage.progressionsPopularityTable') }}
           </h3>
@@ -166,7 +166,7 @@ const p = inject('statisticsPageCtx') as any
             <div class="flex gap-1">
               <button
                 type="button"
-                class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                class="statistics-pagination-btn text-text"
                 :disabled="p.progressionsPage <= 1"
                 @click="p.progressionsPage = Math.max(1, p.progressionsPage - 1)"
               >
@@ -174,7 +174,7 @@ const p = inject('statisticsPageCtx') as any
               </button>
               <button
                 type="button"
-                class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                class="statistics-pagination-btn text-text"
                 :disabled="p.progressionsPage >= p.totalProgressionsPages"
                 @click="
                   p.progressionsPage = Math.min(p.totalProgressionsPages, p.progressionsPage + 1)

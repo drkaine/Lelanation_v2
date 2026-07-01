@@ -4,11 +4,7 @@
       {{ t('statisticsPage.surveillanceSummaryEmpty') }}
     </p>
 
-    <article
-      v-for="entry in entries"
-      :key="entry.id"
-      class="rounded-xl border border-primary/25 bg-surface/20 p-4"
-    >
+    <article v-for="entry in entries" :key="entry.id" class="statistics-surveillance-entry">
       <header class="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 class="text-sm font-semibold text-text-accent">
           {{ t('statisticsPage.surveillanceSummaryTitle') }}
@@ -22,7 +18,7 @@
         <section
           v-for="block in entryBlocks(entry)"
           :key="block.championKey"
-          class="rounded-md border border-primary/20 bg-surface/30 px-3 py-2"
+          class="statistics-surveillance-summary-card px-3 py-2"
         >
           <h3 class="text-sm font-medium text-text/90">{{ block.championName }}</h3>
           <div v-if="block.statsLines.length > 0" class="mt-2">

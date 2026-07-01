@@ -223,7 +223,7 @@ if (!resolvedSharedTrendUi) {
         </div>
         <div
           v-if="trendTooltip && trendTooltip.metricId === card.metricId"
-          class="pointer-events-none fixed z-[90] rounded border border-primary/30 bg-surface/90 px-2 py-1 text-[11px] text-text/85 shadow-lg"
+          class="statistics-chart-tooltip pointer-events-none fixed z-[90]"
           :style="{
             left: `${trendTooltip.mouseX}px`,
             top: `${trendTooltip.mouseY}px`,

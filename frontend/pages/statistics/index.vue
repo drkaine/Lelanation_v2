@@ -2,7 +2,7 @@
   <div class="statistics flex min-h-screen min-w-0 flex-col overflow-x-hidden text-text">
     <!-- Onglets : scroll horizontal + snap (mobile) -->
     <div
-      class="statistics-tabs-bar flex w-full min-w-0 flex-shrink-0 items-start gap-2 overflow-x-hidden bg-surface/30 px-4 pb-2 pt-4"
+      class="statistics-tabs-bar flex w-full min-w-0 flex-shrink-0 items-start gap-2 overflow-x-hidden px-4 pb-2 pt-4"
     >
       <div class="statistics-tabs-scroll-wrap statistics-tabs-wrap-mode relative min-w-0 flex-1">
         <div
@@ -20,12 +20,7 @@
             :data-tab-id="tab.id"
             :aria-selected="displayedActiveTab === tab.id"
             :tabindex="displayedActiveTab === tab.id ? 0 : -1"
-            :class="[
-              'statistics-tab-btn shrink-0 snap-start whitespace-nowrap rounded px-2.5 py-1 text-sm font-medium transition-colors lg:px-3 lg:py-1.5',
-              displayedActiveTab === tab.id
-                ? 'border border-accent/50 bg-accent/20 text-accent'
-                : 'border border-transparent text-text/80 hover:bg-primary/10 hover:text-text',
-            ]"
+            :class="['statistics-tab-btn', displayedActiveTab === tab.id ? 'is-active' : '']"
             @click="activeTab = tab.id"
             @keydown="onStatisticsTabsKeydown($event, tab.id)"
           >
@@ -87,12 +82,12 @@
       <aside
         v-show="showFiltersPanel && (filtersOpen || !effectiveFiltersSheetMode)"
         :class="[
-          'statistics-filters-panel flex shrink-0 flex-col overflow-hidden bg-surface',
+          'statistics-filters-panel flex shrink-0 flex-col overflow-hidden',
           effectiveFiltersSheetMode
-            ? 'fixed inset-x-0 bottom-0 top-auto z-[10051] max-h-[85vh] w-full rounded-t-2xl shadow-lg'
+            ? 'fixed inset-x-0 bottom-0 top-auto z-[10051] max-h-[85vh] w-full rounded-t-2xl bg-surface shadow-lg'
             : [
                 'hidden w-0 opacity-0 transition-[width,opacity] duration-200',
-                'lg:sticky lg:top-4 lg:z-0 lg:flex lg:h-auto lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:overflow-x-hidden lg:rounded-lg lg:shadow-none',
+                'lg:sticky lg:top-4 lg:z-0 lg:flex lg:h-auto lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:overflow-x-hidden',
                 filtersOpen ? 'lg:w-64 lg:opacity-100' : 'lg:w-0 lg:opacity-0',
               ],
         ]"
@@ -120,7 +115,7 @@
           </h2>
           <button
             type="button"
-            class="statistics-filters-reset inline-flex shrink-0 touch-manipulation items-center gap-1.5 rounded px-2 py-1.5 text-xs font-semibold text-primary-light transition-colors hover:bg-info/15 hover:text-primary-light"
+            class="statistics-filters-reset ui-build-card-button inline-flex shrink-0 touch-manipulation items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold"
             @click="resetStatsFilters"
           >
             <span class="iconify i-mdi:refresh" aria-hidden="true" />
@@ -738,7 +733,7 @@
         <div class="shrink-0 border-t border-primary/25 p-3 lg:hidden">
           <button
             type="button"
-            class="w-full touch-manipulation rounded-lg border border-primary/40 bg-primary/10 px-4 py-3 text-sm font-semibold text-text hover:bg-primary/20"
+            class="statistics-filters-mobile-close lg:hidden"
             @click="closeFilters"
           >
             {{ t('statisticsPage.closeFilters') }}
@@ -840,7 +835,7 @@
       v-if="showFiltersPanel && !filtersOpen"
       type="button"
       :class="[
-        'statistics-filters-fab fixed bottom-4 left-1/2 z-[58] -translate-x-1/2 items-center gap-2 rounded-full border border-primary/40 bg-surface/95 px-4 py-2.5 text-sm font-semibold text-text shadow-lg backdrop-blur-sm',
+        'statistics-filters-fab fixed bottom-4 left-1/2 z-[58] flex -translate-x-1/2 items-center gap-2',
         filtersFabClass,
       ]"
       :aria-label="t('statisticsPage.openFilters')"
@@ -5678,19 +5673,6 @@ if (__statisticsVm?.proxy) {
   opacity: 0;
 }
 
-.stats-mode-btn {
-  border-radius: 0.375rem;
-  padding: 0.45rem 0.75rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  text-decoration: none;
-  color: rgb(var(--rgb-text) / 0.8);
-}
-.stats-mode-btn-active {
-  background: rgb(var(--rgb-accent) / 0.2);
-  color: var(--color-accent);
-}
-
 /* Overview runes (shyv.net style): grid per path, pickrate bar + winrate % */
 .overview-runes-fieldset .blocks {
   display: flex;
@@ -5919,11 +5901,12 @@ if (__statisticsVm?.proxy) {
 .statistics aside {
   background: rgb(var(--rgb-chrome) / 1) !important;
 }
-.statistics .statistics-overview-surface {
+.statistics .statistics-overview-surface:not(.ui-build-card-surface) {
   background-color: rgb(var(--rgb-chrome) / 1) !important;
 }
 
-.statistics .fast-stat-card {
+.statistics .fast-stat-card,
+.statistics .team-side-fast-stat {
   margin-bottom: 10px;
   width: 313px !important;
   min-width: 313px;
@@ -5933,10 +5916,14 @@ if (__statisticsVm?.proxy) {
   margin-left: auto;
   margin-right: auto;
   flex: 0 0 313px;
-  background: rgb(var(--rgb-chrome) / 1) !important;
   justify-self: center;
   overflow-x: hidden;
   overflow-y: visible;
+}
+
+.statistics .fast-stat-card.border-primary\/30,
+.statistics .team-side-fast-stat.border-primary\/30 {
+  background: rgb(var(--rgb-chrome) / 1) !important;
 }
 .statistics .fast-stat-card .fast-stat-table,
 .statistics .team-side-fast-stat .fast-stat-table {
@@ -5965,7 +5952,6 @@ if (__statisticsVm?.proxy) {
   margin-left: auto;
   margin-right: auto;
   flex: 0 0 313px;
-  background: rgb(var(--rgb-chrome) / 1) !important;
   justify-self: center;
   overflow: visible;
 }

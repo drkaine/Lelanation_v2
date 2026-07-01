@@ -24,7 +24,7 @@
         <article
           v-for="row in p.paginatedBans"
           :key="'ban-mobile-' + row.championId"
-          class="statistics-champion-stats-mobile-card statistics-ban-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
+          class="statistics-champion-stats-mobile-card statistics-ban-mobile-card w-full overflow-hidden"
         >
           <div
             class="statistics-champion-stats-mobile-card-header flex w-full items-center gap-3 p-3"
@@ -547,7 +547,7 @@
               <div class="flex gap-1">
                 <button
                   type="button"
-                  class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                  class="statistics-pagination-btn text-text"
                   :disabled="p.bansPage <= 1"
                   @click="p.onBansPageUpdated(Math.max(1, p.bansPage - 1))"
                 >
@@ -555,7 +555,7 @@
                 </button>
                 <button
                   type="button"
-                  class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                  class="statistics-pagination-btn text-text"
                   :disabled="p.bansPage >= p.totalBansPages"
                   @click="p.onBansPageUpdated(Math.min(p.totalBansPages, p.bansPage + 1))"
                 >

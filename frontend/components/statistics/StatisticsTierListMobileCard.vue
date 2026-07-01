@@ -120,7 +120,7 @@ function rankDeltaClass(v: number): string {
 
 <template>
   <article
-    class="statistics-champion-stats-mobile-card statistics-tier-list-mobile-card w-full overflow-hidden rounded-lg border border-primary/30 bg-surface/40"
+    class="statistics-champion-stats-mobile-card statistics-tier-list-mobile-card w-full overflow-hidden"
   >
     <div
       class="statistics-champion-stats-mobile-card-header flex w-full min-w-0 items-center gap-3 p-3"
