@@ -81,6 +81,7 @@
     "@oxc-minify/binding-win32-x64-msvc": "0.112.0",
     "@esbuild/win32-x64": "0.25.12",
     "@rollup/rollup-win32-x64-msvc": "4.60.3",
+    "@tauri-apps/cli-win32-x64-msvc": "2.10.1",
     "magicast": "0.5.2"
   },
   "scripts": {

@@ -89,6 +89,14 @@ jobs:
         working-directory: .
         run: npm ci --ignore-scripts
 
+      - name: Ensure Windows native optional dependencies
+        working-directory: .
+        run: |
+          npm install --no-save `
+            @tauri-apps/cli-win32-x64-msvc@2.10.1 `
+            @rollup/rollup-win32-x64-msvc@4.60.3 `
+            @esbuild/win32-x64@0.25.12
+
       - name: Assert updater signing secrets present
         run: |
           if ("${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" -eq "") {
