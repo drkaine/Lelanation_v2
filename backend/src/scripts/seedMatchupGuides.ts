@@ -4,6 +4,7 @@
  */
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { syncPublicBuildFromMatchupGuide } from '../services/matchupGuideBuildSync.js'
 import type {
   ChampionRef,
   MatchupEntry,
@@ -1184,6 +1185,10 @@ for (const guide of guides) {
   const filePath = join(guidesDir, fileName)
   await writeFile(filePath, JSON.stringify({ ...guide, fileName, savedAt: now }, null, 2), 'utf8')
   console.log(`Wrote ${fileName}`)
+  const sync = await syncPublicBuildFromMatchupGuide(guide)
+  if (sync.synced) {
+    console.log(`Synced build ${sync.buildId}`)
+  }
 }
 
 console.log(`Seeded ${guides.length} matchup guides → ${guidesDir}`)

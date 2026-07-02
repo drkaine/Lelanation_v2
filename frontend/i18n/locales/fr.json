@@ -8,6 +8,8 @@
     "videos": "Vidéos",
     "map": "Map",
     "statistics": "Statistiques",
+    "statisticsGeneral": "Général",
+    "statisticsChampions": "Champions",
     "statisticsCustom": "Personnalisé",
     "statisticsSurveillance": "Surveillance",
     "statisticsSurveillanceAlerts": "{count} alerte(s) surveillance",
@@ -209,7 +211,8 @@
     "rune": "Rune",
     "item": "Item",
     "skillOrder": "Skill order",
-    "info": "Infos"
+    "info": "Infos",
+    "theorycraft": "Theorycraft"
   },
   "common": {
     "search": "Rechercher"
@@ -1346,6 +1349,8 @@
     "itemStatsPurchaseTimingDailyTitle": "Moment d'achat par division",
     "itemStatsPurchaseTimingDailyHint": "Temps moyen d'achat (mm:ss depuis le début de partie), jour par jour.",
     "championStatsTitle": "Stats du champion",
+    "championPickerTitle": "Statistiques par champion",
+    "championPickerHint": "Choisissez un champion pour ouvrir sa fiche statistiques.",
     "championStatsMetaTitle": "Statistiques {champion} LoL — Winrate, Builds",
     "championStatsMetaTitleFallback": "Statistiques champion LoL",
     "championStatsMetaDescription": "Statistiques {champion} saison {season} patch {patch} : winrate, pickrate, builds, matchups et runes sur Lelanation.",
@@ -2172,6 +2177,10 @@
     "cancel": "Annuler",
     "confirm": "Confirmer",
     "titleChampion": "Créer un guide — Champion",
+    "importFromBuild": "Importer un de mes builds",
+    "pickBuildModalTitle": "Choisir un build",
+    "pickBuildModalHint": "Sélectionnez un build enregistré pour préremplir la build card du guide.",
+    "noSavedBuilds": "Aucun build enregistré pour l’instant.",
     "titleRune": "Créer un guide — Runes",
     "titleItem": "Créer un guide — Objets",
     "titleInfo": "Créer un guide — Infos",
@@ -2292,6 +2301,8 @@
     "editBuild": "Modifier le build",
     "matchupGuide": "Créer un guide matchup avec ce build",
     "matchupGuideShort": "Guide",
+    "viewLinkedGuide": "Voir le guide matchup lié à ce build",
+    "viewLinkedGuideShort": "Guide",
     "viewBuild": "Voir le build",
     "adminStatsInfo": "Statistiques admin",
     "adminStatsTitle": "Stats du build",

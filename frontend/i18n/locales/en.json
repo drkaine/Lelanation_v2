@@ -8,6 +8,8 @@
     "videos": "Videos",
     "map": "Map",
     "statistics": "Statistics",
+    "statisticsGeneral": "General",
+    "statisticsChampions": "Champions",
     "statisticsCustom": "Custom",
     "statisticsSurveillance": "Watchlist",
     "statisticsSurveillanceAlerts": "{count} watchlist alert(s)",
@@ -209,7 +211,8 @@
     "rune": "Rune",
     "item": "Item",
     "skillOrder": "Skill order",
-    "info": "Info"
+    "info": "Info",
+    "theorycraft": "Theorycraft"
   },
   "common": {
     "search": "Search"
@@ -1344,6 +1347,8 @@
     "itemStatsPurchaseTimingDailyTitle": "Purchase timing by division",
     "itemStatsPurchaseTimingDailyHint": "Average purchase time (mm:ss from game start), day by day.",
     "championStatsTitle": "Champion stats",
+    "championPickerTitle": "Champion statistics",
+    "championPickerHint": "Pick a champion to open its statistics page.",
     "championStatsMetaTitle": "{champion} LoL stats — Win rate, Builds",
     "championStatsMetaTitleFallback": "LoL champion statistics",
     "championStatsMetaDescription": "{champion} stats season {season} patch {patch}: win rate, pick rate, builds, matchups and runes on Lelanation.",
@@ -2170,6 +2175,10 @@
     "cancel": "Cancel",
     "confirm": "Confirm",
     "titleChampion": "Create guide — Champion",
+    "importFromBuild": "Import one of my builds",
+    "pickBuildModalTitle": "Choose a build",
+    "pickBuildModalHint": "Pick a saved build to prefill the guide build card.",
+    "noSavedBuilds": "No saved builds yet.",
     "titleRune": "Create guide — Runes",
     "titleItem": "Create guide — Items",
     "titleInfo": "Create guide — Info",
@@ -2289,6 +2298,8 @@
     "editBuild": "Edit build",
     "matchupGuide": "Create a matchup guide from this build",
     "matchupGuideShort": "Guide",
+    "viewLinkedGuide": "View the matchup guide linked to this build",
+    "viewLinkedGuideShort": "Guide",
     "viewBuild": "View build",
     "adminStatsInfo": "Admin stats",
     "adminStatsTitle": "Build stats",

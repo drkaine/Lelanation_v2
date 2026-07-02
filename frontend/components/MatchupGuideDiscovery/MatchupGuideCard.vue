@@ -35,7 +35,7 @@ const { themeVars } = useBuildCardBorderTheme(() => props.guide.champion?.id)
 }
 
 .matchup-guide-card-link:hover .matchup-guide-card {
-  box-shadow: 0 4px 18px var(--card-border-color-soft);
+  box-shadow: var(--card-border-hover-shadow, 0 4px 18px var(--card-border-color-soft));
 }
 
 .matchup-guide-card :deep(.matchup-sheet) {

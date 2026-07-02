@@ -1,6 +1,5 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { useAdminAuth } from '~/composables/useAdminAuth'
 import { useClientHydrated } from '~/composables/useClientHydrated'
 import { useFavoritesStore } from '~/stores/FavoritesStore'
 import { useBuildStore } from '~/stores/BuildStore'
@@ -45,7 +44,6 @@ function pickStatisticsSharedQuery(
 export function useAppMobileTabBar() {
   const route = useRoute()
   const localePath = useLocalePath()
-  const { isLoggedIn: isAdminLoggedIn } = useAdminAuth()
   const favoritesStore = useFavoritesStore()
   const buildStore = useBuildStore()
   const matchupGuideStore = useMatchupGuideStore()
@@ -65,9 +63,11 @@ export function useAppMobileTabBar() {
     () =>
       clientHydrated.value && filterStandaloneLibraryBuilds(buildStore.getSavedBuilds()).length > 0
   )
-  const hasMyGuides = computed(
-    () => clientHydrated.value && matchupGuideStore.getSavedGuides().length > 0
-  )
+  const hasMyGuides = computed(() => {
+    if (!clientHydrated.value) return false
+    const version = matchupGuideStore.savedGuidesVersion
+    return version >= 0 && matchupGuideStore.getSavedGuides().length > 0
+  })
   const hasFavoriteGuides = computed(() => matchupGuideFavoritesStore.favoriteGuideIds.length > 0)
   const hasWatchedChampions = computed(
     () => clientHydrated.value && statisticsUiStore.watchedChampionIds.length > 0
@@ -79,6 +79,16 @@ export function useAppMobileTabBar() {
       query: pickStatisticsSharedQuery(
         route.query as Record<string, string | string[] | undefined>,
         ['version', 'role', 'otp', 'rankTier', 'tab']
+      ),
+    })
+  )
+
+  const statisticsChampionsLink = computed(() =>
+    localePath({
+      path: '/statistics/champion',
+      query: pickStatisticsSharedQuery(
+        route.query as Record<string, string | string[] | undefined>,
+        ['version', 'role', 'otp', 'rankTier']
       ),
     })
   )
@@ -132,17 +142,14 @@ export function useAppMobileTabBar() {
         icon: 'mdi:hammer-wrench',
         hasSubmenu: true,
       },
-    ]
-
-    if (isAdminLoggedIn.value) {
-      items.push({
+      {
         id: 'guides',
         path: localePath('/matchups/sheets/discover'),
         labelKey: 'mobileTabBar.guidesShort',
         icon: 'mdi:sword-cross',
         hasSubmenu: true,
-      })
-    }
+      },
+    ]
 
     items.push(
       {
@@ -200,12 +207,6 @@ export function useAppMobileTabBar() {
       })
     }
 
-    items.push({
-      id: 'theorycraft',
-      path: localePath('/builds/theorycraft'),
-      labelKey: 'nav.theorycraft',
-    })
-
     return items
   })
 
@@ -245,14 +246,19 @@ export function useAppMobileTabBar() {
   const statisticsSubmenuItems = computed((): AppMobileTabSubmenuItem[] => {
     const items: AppMobileTabSubmenuItem[] = [
       {
-        id: 'overview',
-        path: statisticsIndexLink.value,
-        labelKey: 'nav.statistics',
-      },
-      {
         id: 'tier-list',
         path: statisticsTierListLink.value,
         labelKey: 'nav.tierList',
+      },
+      {
+        id: 'overview',
+        path: statisticsIndexLink.value,
+        labelKey: 'nav.statisticsGeneral',
+      },
+      {
+        id: 'champions',
+        path: statisticsChampionsLink.value,
+        labelKey: 'nav.statisticsChampions',
       },
     ]
 
@@ -304,8 +310,6 @@ export function useAppMobileTabBar() {
           return currentBuildsTab.value === 'favoris'
         case 'create':
           return route.path.includes('/builds/create')
-        case 'theorycraft':
-          return route.path.includes('/builds/theorycraft')
         default:
           return false
       }
@@ -334,8 +338,11 @@ export function useAppMobileTabBar() {
             route.path === base ||
             (route.path.startsWith(`${base}/`) &&
               !route.path.includes('/tier-list') &&
-              !route.path.includes('/surveillance'))
+              !route.path.includes('/surveillance') &&
+              !route.path.includes('/champion'))
           )
+        case 'champions':
+          return route.path.includes('/statistics/champion')
         case 'tier-list':
           return route.path === localePath('/statistics/tier-list')
         case 'surveillance':

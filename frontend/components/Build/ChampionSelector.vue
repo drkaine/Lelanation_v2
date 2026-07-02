@@ -75,10 +75,22 @@ import type { Champion } from '~/types/build'
 
 import { getChampionImageUrl } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
+import { championStatsDetailPath } from '~/utils/championStatsRoutes'
+
+const props = withDefaults(
+  defineProps<{
+    /** Navigate to champion stats instead of updating the build draft. */
+    navigateToStatistics?: boolean
+  }>(),
+  { navigateToStatistics: false }
+)
 
 const championsStore = useChampionsStore()
 const buildStore = useBuildStore()
 const { locale, t } = useI18n()
+const localePath = useLocalePath()
+const router = useRouter()
+const route = useRoute()
 
 const searchQuery = ref('')
 const selectedRoles = ref<string[]>([])
@@ -134,12 +146,40 @@ const isFiltered = (champion: Champion): boolean => {
 }
 
 const isSelected = (champion: Champion): boolean => {
+  if (props.navigateToStatistics) return false
   return buildStore.currentBuild?.champion?.id === champion.id
 }
 
-const hasSelectedChampion = computed(() => Boolean(buildStore.currentBuild?.champion?.id))
+const hasSelectedChampion = computed(() =>
+  props.navigateToStatistics ? false : Boolean(buildStore.currentBuild?.champion?.id)
+)
+
+function statisticsSharedQuery(): Record<string, string> {
+  const keys = ['version', 'role', 'otp', 'rankTier', 'tab'] as const
+  const out: Record<string, string> = {}
+  for (const key of keys) {
+    const value = route.query[key]
+    if (typeof value === 'string' && value.length > 0) out[key] = value
+  }
+  return out
+}
 
 const selectChampion = async (champion: Champion) => {
+  if (props.navigateToStatistics) {
+    const key = parseInt(String(champion.key), 10)
+    if (!Number.isFinite(key) || key <= 0) return
+    const path = championStatsDetailPath(
+      key,
+      localePath,
+      championsStore.champions.map(c => ({ id: c.id, key: c.key }))
+    )
+    await router.push({
+      path,
+      query: statisticsSharedQuery(),
+    })
+    return
+  }
+
   if (isSelected(champion)) {
     buildStore.clearChampion()
     return

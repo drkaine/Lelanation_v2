@@ -1771,7 +1771,11 @@ import {
   isAdcRole,
 } from '~/utils/theorycraftItems'
 import { atlasUpgradeMissing } from '~/utils/buildItemRules'
-import { loadBuildCardRegionsPayload } from '~/utils/buildCardBorderTheme'
+import {
+  buildCardBorderCssVars,
+  loadBuildCardRegionsPayload,
+  resolveRegionColorsForChampion,
+} from '~/utils/buildCardBorderTheme'
 import {
   isTheorycraftStackableItem,
   resolveTheorycraftItemImageFull,
@@ -1829,8 +1833,6 @@ interface RegionsPayload {
   regionsData: Record<string, [string, string]>
   championMapping: Record<string, string>
 }
-
-const DEFAULT_REGION_COLORS: [string, string] = ['#BBA077', '#1E2328']
 
 interface Props {
   build?: Build | null // Build optionnel - si non fourni, utilise currentBuild du store
@@ -2653,72 +2655,11 @@ watch(
   { immediate: true }
 )
 
-const hexToRgba = (hexColor: string, alpha: number): string => {
-  const normalized = hexColor.trim().replace('#', '')
-  const isShortHex = normalized.length === 3
-  const isLongHex = normalized.length === 6
-  if (!isShortHex && !isLongHex) return `rgb(31 79 122 / ${alpha})`
-  const fullHex = isShortHex
-    ? normalized
-        .split('')
-        .map(char => `${char}${char}`)
-        .join('')
-    : normalized
-  const r = parseInt(fullHex.slice(0, 2), 16)
-  const g = parseInt(fullHex.slice(2, 4), 16)
-  const b = parseInt(fullHex.slice(4, 6), 16)
-  return `rgb(${r} ${g} ${b} / ${alpha})`
-}
-
-const hexToRgb = (hexColor: string): [number, number, number] => {
-  const normalized = hexColor.trim().replace('#', '')
-  const isShortHex = normalized.length === 3
-  const isLongHex = normalized.length === 6
-  if (!isShortHex && !isLongHex) return [31, 79, 122]
-  const fullHex = isShortHex
-    ? normalized
-        .split('')
-        .map(char => `${char}${char}`)
-        .join('')
-    : normalized
-  return [
-    parseInt(fullHex.slice(0, 2), 16),
-    parseInt(fullHex.slice(2, 4), 16),
-    parseInt(fullHex.slice(4, 6), 16),
-  ]
-}
-
-const mixHexColors = (a: string, b: string, weightA = 0.5): string => {
-  const [ar, ag, ab] = hexToRgb(a)
-  const [br, bg, bb] = hexToRgb(b)
-  const wa = Math.max(0, Math.min(1, weightA))
-  const wb = 1 - wa
-  const r = Math.round(ar * wa + br * wb)
-  const g = Math.round(ag * wa + bg * wb)
-  const bCh = Math.round(ab * wa + bb * wb)
-  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${bCh.toString(16).padStart(2, '0')}`
-}
-
-const selectedRegionColors = computed<[string, string]>(() => {
-  const championId = selectedChampion.value?.id
-  if (!championId) return DEFAULT_REGION_COLORS
-  const payload = regionsPayload.value
-  if (!payload) return DEFAULT_REGION_COLORS
-  const regionKey = payload.championMapping[championId]
-  const palette = regionKey ? payload.regionsData[regionKey] : undefined
-  return palette ?? DEFAULT_REGION_COLORS
-})
-
-const buildCardThemeVars = computed<CSSProperties>(() => {
-  const [primaryColor, secondaryColor] = selectedRegionColors.value
-  const midColor = mixHexColors(primaryColor, secondaryColor, 0.4)
-  return {
-    '--card-border-color': primaryColor,
-    '--card-border-color-soft': hexToRgba(primaryColor, 0.45),
-    '--card-border-gradient-strong': `linear-gradient(130deg, ${primaryColor} 0%, ${midColor} 45%, ${secondaryColor} 100%)`,
-    '--card-border-gradient-soft': `linear-gradient(130deg, ${hexToRgba(primaryColor, 0.7)} 0%, ${hexToRgba(midColor, 0.72)} 45%, ${hexToRgba(secondaryColor, 0.82)} 100%)`,
-  }
-})
+const buildCardThemeVars = computed<CSSProperties>(() =>
+  buildCardBorderCssVars(
+    resolveRegionColorsForChampion(selectedChampion.value?.id, regionsPayload.value)
+  )
+)
 
 const showKaynFormSelector = computed(
   () =>
@@ -4802,12 +4743,12 @@ defineExpose({
 }
 
 .build-card-region--selectable:hover {
-  box-shadow: 0 0 0 1px rgba(200, 155, 60, 0.45);
+  box-shadow: var(--card-region-hover-ring, 0 0 0 2px rgba(200, 155, 60, 0.85));
 }
 
 .build-card-region--active {
-  box-shadow: 0 0 0 2px rgba(200, 155, 60, 0.85);
-  outline: 1px solid rgba(200, 155, 60, 0.35);
+  box-shadow: var(--card-region-hover-ring, 0 0 0 2px rgba(200, 155, 60, 0.85));
+  outline: 1px solid var(--card-border-color-soft, rgba(200, 155, 60, 0.35));
 }
 
 /* Champion Section */

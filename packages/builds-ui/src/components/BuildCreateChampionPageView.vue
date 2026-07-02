@@ -14,6 +14,7 @@
         :class="{ 'build-layout--streamer': isStreamerMode }"
       >
         <div class="builder-selector-col w-full flex-1 md:order-2">
+          <slot name="selector-extra" />
           <component :is="championSelectorComponent" />
         </div>
 

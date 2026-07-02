@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
 import { FileManager } from '../utils/fileManager.js'
+import { syncPublicBuildFromMatchupGuide } from '../services/matchupGuideBuildSync.js'
 
 type MatchupGuidePayload = unknown
 
@@ -52,7 +53,7 @@ router.post('/', async (req, res) => {
     const guideWithMetadata = {
       ...guideWithoutPatchStale,
       id: guideId,
-      visibility: 'public',
+      visibility: 'public' as const,
       fileName,
       savedAt: new Date().toISOString(),
     }
@@ -64,6 +65,12 @@ router.post('/', async (req, res) => {
         error: 'Failed to save matchup guide file',
         details: err.message,
       })
+    }
+
+    try {
+      await syncPublicBuildFromMatchupGuide(guideWithMetadata)
+    } catch (syncError) {
+      console.error('[Matchup Guides API] Failed to sync embedded build:', syncError)
     }
 
     return res.json({

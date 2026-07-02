@@ -325,6 +325,7 @@ body {
   /* Default build-card border (region palette fallback) */
   --card-border-color-default: #bba077;
   --card-border-color-soft-default: rgb(187 160 119 / 0.45);
+  --card-border-hover-shadow-default: 0 4px 18px rgb(187 160 119 / 0.45);
   --card-border-gradient-default-strong: linear-gradient(
     130deg,
     #bba077 0%,

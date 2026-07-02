@@ -78,7 +78,6 @@ import type { TheorycraftSpellCalculation } from '~/composables/useTheorycraftTo
 
 const CURRENT_BUILD_STORAGE_KEY = 'lelanation_current_build'
 const EDIT_BUILD_STORAGE_KEY = 'lelanation_current_build_edit'
-const THEORYCRAFT_BUILD_STORAGE_KEY = 'lelanation_theorycraft_draft'
 const THEORYCRAFT_STACKS_STORAGE_KEY = 'lelanation_theorycraft_stacks'
 const THEORYCRAFT_DISABLED_ITEMS_STORAGE_KEY = 'lelanation_theorycraft_disabled_items'
 const THEORYCRAFT_ITEM_STACKS_STORAGE_KEY = 'lelanation_theorycraft_item_stacks'
@@ -143,6 +142,8 @@ interface BuildState {
   pendingChampionChange: Champion | null
   /** Build en cours d’édition (même id que `currentBuild` ; sert aux URLs `?editId=` et au brouillon dédié). */
   editSourceBuildId: string | null
+  /** Theorycraft intégré au parcours création (même brouillon que create/edit). */
+  theorycraftLinkedToBuilder: boolean
 }
 
 type BuildLikeForValidation = Pick<
@@ -215,6 +216,7 @@ export const useBuildStore = defineStore('build', {
     displayedVariant: 'main',
     pendingChampionChange: null,
     editSourceBuildId: null,
+    theorycraftLinkedToBuilder: false,
   }),
 
   getters: {
@@ -374,7 +376,6 @@ export const useBuildStore = defineStore('build', {
       }
       this.displayedVariant = 'main'
       this.pendingChampionChange = null
-      this.editSourceBuildId = null
       this.status = 'success'
       this.error = null
       this.recalculateStats()
@@ -555,70 +556,72 @@ export const useBuildStore = defineStore('build', {
       }
     },
 
-    enterTheorycraftSession() {
-      const keepInMemory = this.builderSession === 'theorycraft' && this.currentBuild !== null
-
+    /** Active theorycraft modifiers on the current builder draft (no separate build storage). */
+    activateTheorycraftMode() {
+      this.theorycraftLinkedToBuilder = true
       this.builderSession = 'theorycraft'
       this.displayedVariant = 'main'
       this.pendingChampionChange = null
-      this.editSourceBuildId = null
       this.status = 'idle'
       this.error = null
       this.loadTheorycraftDisabledItems()
       this.loadTheorycraftItemStacks()
       this.loadTheorycraftActiveItemPassives()
       this.loadTheorycraftRuneStacks()
+      this.clampTheorycraftActiveItemsForRole()
+      this.clampStatsLevelForRole()
+      this.recalculateStats()
+    },
 
-      if (keepInMemory) {
-        this.recalculateStats()
-        return
-      }
+    deactivateTheorycraftMode() {
+      if (!this.theorycraftLinkedToBuilder) return
+      this.persistCurrentBuildDraft()
+      this.builderSession = 'create'
+      this.theorycraftLinkedToBuilder = false
+    },
 
-      this.clearTheorycraftStackContext()
-      this.currentBuild = null
-      if (!this.loadCurrentBuildDraft()) {
-        this.statsLevel = 18
-        this.createNewBuild()
-      } else {
-        this.clampTheorycraftActiveItemsForRole()
-        this.clampStatsLevelForRole()
-        this.recalculateStats()
+    /** @deprecated Standalone theorycraft removed — use activateTheorycraftMode() in the builder. */
+    enterTheorycraftSession(options?: { fromBuilder?: boolean }) {
+      if (options?.fromBuilder ?? true) {
+        this.activateTheorycraftMode()
       }
+    },
+
+    /** @deprecated Use deactivateTheorycraftMode() when leaving the theorycraft builder step. */
+    exitBuilderTheorycraftStep() {
+      this.deactivateTheorycraftMode()
     },
 
     leaveTheorycraftSession() {
       if (this.builderSession !== 'theorycraft') return
       if (this.currentBuild) {
-        try {
-          localStorage.setItem(
-            THEORYCRAFT_BUILD_STORAGE_KEY,
-            JSON.stringify(serializeBuild(this.currentBuild))
-          )
-        } catch {
-          // ignore persistence errors
-        }
+        this.persistCurrentBuildDraft()
       }
+      const linkedToBuilder = this.theorycraftLinkedToBuilder
       this.builderSession = 'create'
-      this.currentBuild = null
-      this.calculatedStats = null
-      this.displayedVariant = 'main'
-      this.pendingChampionChange = null
-      this.editSourceBuildId = null
-      this.clearTheorycraftStackContext()
-      this.theorycraftDisabledItemIndices = []
-      this.theorycraftItemStacks = {}
-      this.theorycraftItemTransformed = {}
-      this.theorycraftItemModifierLines = []
-      this.theorycraftChampionSpells = []
-      this.theorycraftActiveSpells = {}
-      this.theorycraftSpellRanks = {}
-      this.theorycraftSpellBuffLines = []
-      this.theorycraftItemProcLines = []
-      this.theorycraftActiveItemPassives = {}
-      this.theorycraftItemPassiveLines = []
-      this.theorycraftRuneStacks = {}
-      this.theorycraftGameDurationMinutes = 30
-      this.theorycraftRuneModifierLines = []
+      this.theorycraftLinkedToBuilder = false
+      if (!linkedToBuilder) {
+        this.currentBuild = null
+        this.calculatedStats = null
+        this.displayedVariant = 'main'
+        this.pendingChampionChange = null
+        this.editSourceBuildId = null
+        this.clearTheorycraftStackContext()
+        this.theorycraftDisabledItemIndices = []
+        this.theorycraftItemStacks = {}
+        this.theorycraftItemTransformed = {}
+        this.theorycraftItemModifierLines = []
+        this.theorycraftChampionSpells = []
+        this.theorycraftActiveSpells = {}
+        this.theorycraftSpellRanks = {}
+        this.theorycraftSpellBuffLines = []
+        this.theorycraftItemProcLines = []
+        this.theorycraftActiveItemPassives = {}
+        this.theorycraftItemPassiveLines = []
+        this.theorycraftRuneStacks = {}
+        this.theorycraftGameDurationMinutes = 30
+        this.theorycraftRuneModifierLines = []
+      }
     },
 
     loadTheorycraftActiveItemPassives() {
@@ -1024,7 +1027,6 @@ export const useBuildStore = defineStore('build', {
     },
 
     getCurrentDraftStorageKey(): string {
-      if (this.builderSession === 'theorycraft') return THEORYCRAFT_BUILD_STORAGE_KEY
       return this.editSourceBuildId ? EDIT_BUILD_STORAGE_KEY : CURRENT_BUILD_STORAGE_KEY
     },
 
@@ -1046,7 +1048,7 @@ export const useBuildStore = defineStore('build', {
       }
     },
 
-    setLastBuilderStep(step: 'champion' | 'rune' | 'item' | 'info') {
+    setLastBuilderStep(step: 'champion' | 'rune' | 'item' | 'info' | 'theorycraft') {
       if (import.meta.server) return
       try {
         localStorage.setItem(BUILDER_STEP_STORAGE_KEY, step)
@@ -1055,7 +1057,7 @@ export const useBuildStore = defineStore('build', {
       }
     },
 
-    getLastBuilderStep(): 'champion' | 'rune' | 'item' | 'info' {
+    getLastBuilderStep(): 'champion' | 'rune' | 'item' | 'info' | 'theorycraft' {
       const build = this.currentBuild
       if (!build?.champion) return 'champion'
       if (
@@ -1077,7 +1079,13 @@ export const useBuildStore = defineStore('build', {
       if (import.meta.client) {
         try {
           const saved = localStorage.getItem(BUILDER_STEP_STORAGE_KEY)
-          if (saved === 'champion' || saved === 'rune' || saved === 'item' || saved === 'info') {
+          if (
+            saved === 'champion' ||
+            saved === 'rune' ||
+            saved === 'item' ||
+            saved === 'info' ||
+            saved === 'theorycraft'
+          ) {
             return saved
           }
           if (saved === 'skill-order') {
@@ -1795,8 +1803,13 @@ export const useBuildStore = defineStore('build', {
       })
     },
 
-    async saveBuild(options?: { publishToLibrary?: boolean }): Promise<boolean> {
+    async saveBuild(options?: {
+      publishToLibrary?: boolean
+      /** When false, only syncs to the API (e.g. embedded build of a public guide). */
+      saveToLocalLibrary?: boolean
+    }): Promise<boolean> {
       const publishToLibrary = options?.publishToLibrary !== false
+      const saveToLocalLibrary = options?.saveToLocalLibrary !== false
       if (!this.currentBuild) {
         this.error = 'No build to save'
         this.status = 'error'
@@ -1821,14 +1834,16 @@ export const useBuildStore = defineStore('build', {
         const now = new Date().toISOString()
         this.currentBuild.updatedAt = now
 
-        // 1) Sauvegarde locale (localStorage) — sauf builds embarqués dans un guide matchup
-        if (publishToLibrary) {
-          const savedBuilds = this.getSavedBuilds()
-          const existingIndex = savedBuilds.findIndex(b => b.id === this.currentBuild!.id)
-          const previousBuild = existingIndex >= 0 ? savedBuilds[existingIndex] : null
-          const previousVisibility = previousBuild?.visibility ?? null
-          const newVisibility = this.currentBuild!.visibility ?? 'public'
+        const savedBuilds = saveToLocalLibrary ? this.getSavedBuilds() : []
+        const existingIndex = saveToLocalLibrary
+          ? savedBuilds.findIndex(b => b.id === this.currentBuild!.id)
+          : -1
+        const previousBuild = existingIndex >= 0 ? savedBuilds[existingIndex] : null
+        const previousVisibility = previousBuild?.visibility ?? null
+        const newVisibility = this.currentBuild!.visibility ?? 'public'
 
+        // 1) Sauvegarde locale (localStorage)
+        if (saveToLocalLibrary && publishToLibrary) {
           if (existingIndex >= 0) {
             savedBuilds[existingIndex] = this.currentBuild
           } else {
@@ -1838,8 +1853,10 @@ export const useBuildStore = defineStore('build', {
           const toStore = savedBuilds.map(b => serializeBuild(b))
           localStorage.setItem('lelanation_builds', JSON.stringify(toStore))
           this.savedBuildsVersion++
+        }
 
-          // 2) Sync serveur selon visibilité
+        // 2) Sync serveur selon visibilité
+        if (publishToLibrary) {
           try {
             if (newVisibility === 'private') {
               if (previousVisibility === 'public' && this.currentBuild!.id) {
@@ -1855,7 +1872,9 @@ export const useBuildStore = defineStore('build', {
               const response = await fetch(apiUrl('/api/builds'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(serializeBuild(this.currentBuild!)),
+                body: JSON.stringify(
+                  serializeBuild({ ...this.currentBuild!, matchupGuideEmbed: undefined })
+                ),
               })
 
               if (response.ok) {
@@ -2005,8 +2024,12 @@ export const useBuildStore = defineStore('build', {
       }
     },
 
-    /** Retire un build de la bibliothèque locale et du serveur (ex. build embarqué dans un guide). */
-    async detachBuildFromLibrary(buildId: string): Promise<void> {
+    /** Retire un build de la bibliothèque locale et optionnellement du serveur (ex. build embarqué dans un guide). */
+    async detachBuildFromLibrary(
+      buildId: string,
+      options?: { removeFromServer?: boolean }
+    ): Promise<void> {
+      const removeFromServer = options?.removeFromServer !== false
       if (import.meta.server || !buildId) return
       try {
         const savedBuilds = this.getSavedBuilds()
@@ -2021,6 +2044,7 @@ export const useBuildStore = defineStore('build', {
       } catch {
         // ignore
       }
+      if (!removeFromServer) return
       try {
         await fetch(apiUrl(`/api/builds/${encodeURIComponent(buildId)}`), { method: 'DELETE' })
       } catch {

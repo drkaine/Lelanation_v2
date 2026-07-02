@@ -6,5 +6,10 @@ export function stripLocalePrefix(path: string): string {
 }
 
 export function isTheorycraftRoutePath(path: string): boolean {
-  return stripLocalePrefix(path) === '/builds/theorycraft'
+  const normalized = stripLocalePrefix(path)
+  return normalized === '/builds/theorycraft' || normalized === '/builds/create/theorycraft'
+}
+
+export function isBuilderCreateRoutePath(path: string): boolean {
+  return stripLocalePrefix(path).startsWith('/builds/create/')
 }

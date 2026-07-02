@@ -95,8 +95,11 @@ async function handleSave() {
     if (!buildStore.isBuildValid) return
 
     const buildId = buildStore.currentBuild?.id
+    const visibility = (buildStore.currentBuild?.visibility ?? 'public') as 'public' | 'private'
     if (buildId) {
-      await buildStore.detachBuildFromLibrary(buildId)
+      await buildStore.detachBuildFromLibrary(buildId, {
+        removeFromServer: visibility !== 'public',
+      })
     }
 
     const guide = draftStore.buildGuideFromCurrentBuild(buildStore.currentBuild)
@@ -104,6 +107,10 @@ async function handleSave() {
 
     const ok = await guideStore.saveGuide(guide)
     if (!ok) return
+
+    if (visibility === 'public') {
+      await buildStore.saveBuild({ saveToLocalLibrary: false, publishToLibrary: true })
+    }
     draftStore.reset()
     buildStore.createNewBuild()
     await router.push(localePath('/matchups/sheets/my-guides'))

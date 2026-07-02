@@ -254,7 +254,7 @@
                 ✎
               </NuxtLink>
               <button
-                v-if="props.showUserActions && isAdmin"
+                v-if="props.showUserActions"
                 type="button"
                 class="build-grid-action-button build-grid-action-button--icon build-grid-action-button--guide"
                 :title="t('buildDiscovery.matchupGuide')"
@@ -263,6 +263,16 @@
               >
                 {{ t('buildDiscovery.matchupGuideShort') }}
               </button>
+              <NuxtLink
+                v-if="!props.showUserActions && getLinkedGuide(build.id)"
+                :to="matchupGuideDetailPath(getLinkedGuide(build.id)!, localePath)"
+                class="build-grid-action-button build-grid-action-button--icon build-grid-action-button--guide"
+                :title="t('buildDiscovery.viewLinkedGuide')"
+                :aria-label="t('buildDiscovery.viewLinkedGuide')"
+                @click.stop
+              >
+                {{ t('buildDiscovery.viewLinkedGuideShort') }}
+              </NuxtLink>
               <button
                 :ref="el => setShareButtonRef(build.id, el)"
                 class="build-grid-action-button build-grid-action-button--icon flex-1"
@@ -475,6 +485,7 @@
 import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import type { MatchupGuide } from '@lelanation/shared-types'
 import BuildCard from '~/components/Build/BuildCard.vue'
 import NotificationToast from '~/components/NotificationToast.vue'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
@@ -493,6 +504,10 @@ import {
 } from '~/utils/buildCardShareImage'
 import { useChampionSplashPreference } from '~/composables/useChampionSplashPreference'
 import { startMatchupGuideFromBuild } from '~/utils/matchupGuideFromBuildSession'
+import { buildMatchupGuideByBuildIdMap } from '~/utils/matchupGuideByBuild'
+import { matchupGuideDetailPath } from '~/utils/matchupGuideSlug'
+import { useMatchupGuideStore } from '~/stores/MatchupGuideStore'
+import { useMatchupGuideDiscoveryStore } from '~/stores/MatchupGuideDiscoveryStore'
 import { matchesChampionSearch, matchesLocalizedTextSearch } from '~/utils/multilingualEntitySearch'
 import {
   uiDownvoteActionClass,
@@ -615,6 +630,8 @@ defineEmits<{
 const discoveryStore = useBuildDiscoveryStore()
 const voteStore = useVoteStore()
 const favoritesStore = useFavoritesStore()
+const matchupGuideStore = useMatchupGuideStore()
+const matchupGuideDiscoveryStore = useMatchupGuideDiscoveryStore()
 const router = useRouter()
 const route = useRoute()
 const isCompanionAppEmbed = computed(
@@ -754,6 +771,17 @@ async function openMatchupGuideFromBuild(buildId: string) {
       query: { fromBuildId: buildId },
     })
   )
+}
+
+const guideByBuildId = computed(() => {
+  const guides = props.showUserActions
+    ? matchupGuideStore.getSavedGuides()
+    : matchupGuideDiscoveryStore.guides
+  return buildMatchupGuideByBuildIdMap(guides)
+})
+
+function getLinkedGuide(buildId: string): MatchupGuide | null {
+  return guideByBuildId.value.get(buildId) ?? null
 }
 
 const COMPANION_IMPORT_BRIDGE = 'http://127.0.0.1:17321/import'
@@ -1094,6 +1122,9 @@ const handleClickOutside = (event: MouseEvent) => {
 }
 
 onMounted(() => {
+  if (!props.showUserActions && matchupGuideDiscoveryStore.guides.length === 0) {
+    matchupGuideDiscoveryStore.loadGuides().catch(() => undefined)
+  }
   if (checkLoggedIn()) {
     fetchWithAuth(apiUrl('/api/admin/me'))
       .then(r => {
