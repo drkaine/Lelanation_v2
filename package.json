@@ -14,7 +14,9 @@
   "overrides": {
     "serialize-javascript": "7.0.4",
     "minimatch": "9.0.7",
-    "drizzle-kit": "0.31.10"
+    "drizzle-kit": "0.31.10",
+    "c12": "3.3.4",
+    "magicast": "0.5.2"
   },
   "optionalDependencies": {
     "@oxc-parser/binding-android-arm-eabi": "0.112.0",
@@ -76,7 +78,8 @@
     "@oxc-minify/binding-wasm32-wasi": "0.112.0",
     "@oxc-minify/binding-win32-arm64-msvc": "0.112.0",
     "@oxc-minify/binding-win32-ia32-msvc": "0.112.0",
-    "@oxc-minify/binding-win32-x64-msvc": "0.112.0"
+    "@oxc-minify/binding-win32-x64-msvc": "0.112.0",
+    "magicast": "0.5.2"
   },
   "scripts": {
     "prepare": "husky",
