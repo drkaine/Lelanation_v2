@@ -79,6 +79,8 @@
     "@oxc-minify/binding-win32-arm64-msvc": "0.112.0",
     "@oxc-minify/binding-win32-ia32-msvc": "0.112.0",
     "@oxc-minify/binding-win32-x64-msvc": "0.112.0",
+    "@esbuild/win32-x64": "0.25.12",
+    "@rollup/rollup-win32-x64-msvc": "4.60.3",
     "magicast": "0.5.2"
   },
   "scripts": {

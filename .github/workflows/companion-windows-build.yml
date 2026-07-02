@@ -80,13 +80,14 @@ jobs:
         with:
           node-version: "22"
           cache: "npm"
+          cache-dependency-path: package-lock.json
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install workspace dependencies
         working-directory: .
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Assert updater signing secrets present
         run: |
