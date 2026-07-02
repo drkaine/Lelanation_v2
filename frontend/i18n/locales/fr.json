@@ -2325,6 +2325,16 @@
     "anonymous": "Anonyme",
     "importInCompanion": "Importer dans le client (Companion)"
   },
+  "buildDetailPage": {
+    "tabGuide": "Guide",
+    "viewDescription": "Voir la description",
+    "viewBuild": "Voir le build",
+    "linkedGuideIntro": "Ce build est lié à un guide matchup.",
+    "openLinkedGuide": "Ouvrir le guide",
+    "pickOpponent": "Choisir un adversaire",
+    "changeOpponent": "Adversaire : {name}",
+    "theorycraftHint": "Activez ou désactivez les items sur la carte. Le build n’est pas modifiable ici."
+  },
   "createBuild": {
     "form": "Formulaire",
     "stats": "Statistiques",

@@ -1,6 +1,7 @@
 import type { MatchupGuide } from '@lelanation/shared-types'
 import { apiUrl } from '~/utils/apiUrl'
 import { useMatchupGuideStore } from '~/stores/MatchupGuideStore'
+import { ensureMatchupGuideBuildHydrated } from '~/utils/matchupGuideBuildResolve'
 
 export async function fetchMatchupGuideById(
   id: string,
@@ -9,12 +10,13 @@ export async function fetchMatchupGuideById(
   if (import.meta.client) {
     const guideStore = useMatchupGuideStore()
     const local = guideStore.getSavedGuides().find(g => g.id === id)
-    if (local) return local
+    if (local) return ensureMatchupGuideBuildHydrated(local)
   }
 
   try {
     const doFetch = fetcher ?? ((path: string) => $fetch<MatchupGuide>(apiUrl(path)))
-    return await doFetch(`/api/matchup-guides/${encodeURIComponent(id)}`)
+    const guide = await doFetch(`/api/matchup-guides/${encodeURIComponent(id)}`)
+    return guide ? ensureMatchupGuideBuildHydrated(guide) : null
   } catch {
     return null
   }

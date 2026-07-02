@@ -63,6 +63,7 @@
                 :to="localePath('/builds/create')"
                 :title="t('buildsPage.createBuild')"
                 class="builds-submenu-link"
+                :prefetch="false"
                 @click="closeBuildsMenu"
               >
                 {{ t('buildsPage.createBuild') }}
@@ -72,6 +73,7 @@
                 :title="t('buildsPage.discover')"
                 class="builds-submenu-link"
                 :class="{ 'is-active': isDiscoverBuildsActive }"
+                :prefetch="false"
                 @click="closeBuildsMenu"
               >
                 {{ t('buildsPage.discover') }}
@@ -82,6 +84,7 @@
                 :title="t('buildsPage.myBuilds')"
                 class="builds-submenu-link"
                 :class="{ 'is-active': isMyBuildsActive }"
+                :prefetch="false"
                 @click="closeBuildsMenu"
               >
                 {{ t('buildsPage.myBuilds') }}
@@ -92,6 +95,7 @@
                 :title="t('buildsPage.myFavorites')"
                 class="builds-submenu-link"
                 :class="{ 'is-active': isFavoriteBuildsActive }"
+                :prefetch="false"
                 @click="closeBuildsMenu"
               >
                 {{ t('buildsPage.myFavorites') }}

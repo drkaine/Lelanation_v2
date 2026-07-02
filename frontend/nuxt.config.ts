@@ -39,9 +39,13 @@ export default defineNuxtConfig({
   // File-based routing via pages/ directory automatically creates routes
   ssr: true,
   experimental: {
+    // Désactivé globalement ; ne pas combiner avec swr sur /builds/[id] (réactive les _payload.json).
+    payloadExtraction: false,
+    prefetchPreloadTags: false,
     defaults: {
       nuxtLink: {
-        prefetchOn: { visibility: false, interaction: true },
+        prefetch: false,
+        prefetchOn: false,
       },
     },
   },
@@ -140,13 +144,17 @@ export default defineNuxtConfig({
   },
   routeRules: {
     '/': { swr: 3600 },
-    // SSR + SWR (pas prerender) : prerender:true sans fichiers générés déclenchait
-    // des prefetch _payload.json → 404 en navigation client.
-    '/builds/discover': { swr: 3600, prerender: false },
-    '/builds/my-builds': { swr: 3600, prerender: false },
-    '/builds/favoris': { swr: 3600, prerender: false },
-    '/builds/create': { swr: 3600, prerender: false },
-    '/builds/**': { swr: 3600, prerender: false },
+    // Pas de SWR sur /builds/* : avec payloadExtraction désactivé, Nuxt active quand même
+    // NUXT_RUNTIME_PAYLOAD_EXTRACTION sur les routes en cache → <link rel="preload" href="…/_payload.json">
+    // qui reste inutilisé après navigation vers /builds/:uuid (warning console + requêtes inutiles).
+    '/builds/discover': { prerender: false },
+    '/builds/my-builds': { prerender: false },
+    '/builds/favoris': { prerender: false },
+    '/builds/create': { prerender: false },
+    '/builds/create/**': { prerender: false },
+    '/builds/compare': { prerender: false },
+    '/builds/theorycraft': { prerender: false },
+    '/builds/champion/**': { prerender: false },
     '/champion/**': { swr: 3600, prerender: false },
     '/champions/**': { swr: 3600, prerender: false },
     '/statistics': { swr: 3600, prerender: false },

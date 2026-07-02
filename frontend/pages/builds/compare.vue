@@ -151,6 +151,7 @@
             <!-- View Details Link -->
             <NuxtLink
               :to="localePath(`/builds/${build.id}`)"
+              :prefetch="false"
               class="block rounded-lg bg-primary px-3 py-2 text-center text-sm text-white transition-colors hover:bg-primary-dark"
             >
               Voir les détails

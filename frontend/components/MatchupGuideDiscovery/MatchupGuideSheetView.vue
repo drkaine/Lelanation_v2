@@ -247,7 +247,8 @@
         mode="readonly"
         :entries="fullMatchups"
         :build="guideBuild"
-        :show-filters="false"
+        :show-filters="true"
+        filter-layout="quick"
       />
     </section>
 

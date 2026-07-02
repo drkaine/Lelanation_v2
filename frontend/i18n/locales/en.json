@@ -2322,6 +2322,16 @@
     "anonymous": "Anonymous",
     "importInCompanion": "Import into client (Companion)"
   },
+  "buildDetailPage": {
+    "tabGuide": "Guide",
+    "viewDescription": "View description",
+    "viewBuild": "View build",
+    "linkedGuideIntro": "This build is linked to a matchup guide.",
+    "openLinkedGuide": "Open guide",
+    "pickOpponent": "Pick an opponent",
+    "changeOpponent": "Opponent: {name}",
+    "theorycraftHint": "Toggle items on the card. The build cannot be edited here."
+  },
   "createBuild": {
     "form": "Form",
     "stats": "Statistics",

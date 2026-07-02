@@ -89,6 +89,8 @@ export interface MatchupGuide {
   createdAt: string
   updatedAt: string
   patchStale?: PatchStaleInfo | null
+  /** Public guides on disk: reference `data/builds/{buildId}.json` instead of embedding. */
+  buildId?: string
   build?: StoredBuild
   matchups?: MatchupEntry[]
   meta?: MatchupGuideMeta

@@ -1,9 +1,15 @@
 <template>
   <div
-    class="matchup-guide-detail min-h-screen overflow-x-clip px-3 pb-8 text-text sm:px-5 lg:px-6"
+    class="matchup-guide-detail text-text"
+    :class="
+      embedded
+        ? 'matchup-guide-detail--embedded'
+        : 'min-h-screen overflow-x-clip px-3 pb-8 sm:px-5 lg:px-6'
+    "
   >
     <div class="w-full">
       <NuxtLink
+        v-if="!embedded"
         :to="localePath('/matchups/sheets/discover')"
         class="mb-4 inline-flex items-center gap-1 text-sm text-text-secondary transition-colors hover:text-text"
       >
@@ -22,9 +28,13 @@ import type { MatchupGuide } from '@lelanation/shared-types'
 import MatchupGuideSheetView from '~/components/MatchupGuideDiscovery/MatchupGuideSheetView.vue'
 import { useBuildCardBorderTheme } from '~/composables/useBuildCardBorderTheme'
 
-const props = defineProps<{
-  guide: MatchupGuide
-}>()
+const props = withDefaults(
+  defineProps<{
+    guide: MatchupGuide
+    embedded?: boolean
+  }>(),
+  { embedded: false }
+)
 
 const { t } = useI18n()
 const localePath = useLocalePath()
@@ -32,6 +42,11 @@ const { themeVars } = useBuildCardBorderTheme(() => props.guide.champion?.id)
 </script>
 
 <style scoped>
+.matchup-guide-detail--embedded {
+  width: 100%;
+  overflow-x: clip;
+}
+
 .matchup-guide-detail__panel {
   border-radius: 6px;
   border: 2px solid transparent;

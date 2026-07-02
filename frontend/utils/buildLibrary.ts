@@ -2,7 +2,7 @@ import type { Build, StoredBuild } from '@lelanation/shared-types'
 
 const MATCHUP_GUIDES_STORAGE_KEY = 'lelanation_matchup_guides'
 
-type GuideBuildRef = { build?: { id?: string; matchupGuideEmbed?: boolean } }
+type GuideBuildRef = { buildId?: string; build?: { id?: string; matchupGuideEmbed?: boolean } }
 
 export function isStandaloneLibraryBuild(
   build: Pick<Build | StoredBuild, 'id' | 'matchupGuideEmbed'>
@@ -20,7 +20,7 @@ export function getMatchupGuideEmbeddedBuildIds(): Set<string> {
     if (!Array.isArray(guides)) return new Set()
     const ids = new Set<string>()
     for (const guide of guides) {
-      const id = guide.build?.id
+      const id = guide.buildId ?? guide.build?.id
       if (typeof id === 'string' && id.length > 0) ids.add(id)
     }
     return ids

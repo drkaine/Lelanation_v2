@@ -1,11 +1,16 @@
 import { join } from 'path'
 import { FileManager } from '../utils/fileManager.js'
+import {
+  extractMatchupGuideBuildId,
+  readPublicBuildById,
+} from './matchupGuideBuildResolve.js'
 
 const buildsDir = join(process.cwd(), 'data', 'builds')
 
 type GuideWithBuild = {
   id?: string
   visibility?: 'public' | 'private'
+  buildId?: string
   build?: object & {
     id?: string
     visibility?: 'public' | 'private'
@@ -21,18 +26,21 @@ export async function syncPublicBuildFromMatchupGuide(
     return { synced: false, reason: 'private guide' }
   }
 
-  const embedded = guide.build
-  if (!embedded || typeof embedded !== 'object') {
-    return { synced: false, reason: 'no embedded build' }
-  }
-
-  const buildRecord = embedded as GuideWithBuild['build'] & Record<string, unknown>
-  const buildId =
-    (typeof buildRecord.id === 'string' && buildRecord.id.length > 0 ? buildRecord.id : null) ??
-    (typeof guide.id === 'string' && guide.id.length > 0 ? guide.id : null)
-
+  const buildId = extractMatchupGuideBuildId(guide)
   if (!buildId) {
     return { synced: false, reason: 'missing build id' }
+  }
+
+  const existing = await readPublicBuildById(buildId)
+  if (existing && !guide.build) {
+    return { synced: true, buildId, reason: 'build file already exists' }
+  }
+
+  const embedded = guide.build
+  if (!embedded || typeof embedded !== 'object') {
+    return existing
+      ? { synced: true, buildId, reason: 'linked build only' }
+      : { synced: false, reason: 'no embedded build and no build file' }
   }
 
   const dirResult = await FileManager.ensureDir(buildsDir)
@@ -40,6 +48,7 @@ export async function syncPublicBuildFromMatchupGuide(
     throw new Error(dirResult.unwrapErr().message)
   }
 
+  const buildRecord = embedded as GuideWithBuild['build'] & Record<string, unknown>
   const { matchupGuideEmbed: _embed, patchStale: _patchStale, ...buildRest } = buildRecord
   const fileName = `${buildId}.json`
   const filePath = join(buildsDir, fileName)

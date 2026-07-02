@@ -3,6 +3,10 @@ import { join } from 'path'
 import { randomUUID } from 'crypto'
 import { FileManager } from '../utils/fileManager.js'
 import { syncPublicBuildFromMatchupGuide } from '../services/matchupGuideBuildSync.js'
+import {
+  compactMatchupGuideForStorage,
+  resolveMatchupGuideBuild,
+} from '../services/matchupGuideBuildResolve.js'
 
 type MatchupGuidePayload = unknown
 
@@ -58,19 +62,26 @@ router.post('/', async (req, res) => {
       savedAt: new Date().toISOString(),
     }
 
-    const writeResult = await FileManager.writeJson(filePath, guideWithMetadata)
+    try {
+      await syncPublicBuildFromMatchupGuide(guideWithMetadata)
+    } catch (syncError) {
+      console.error('[Matchup Guides API] Failed to sync embedded build:', syncError)
+    }
+
+    const compactGuide = await compactMatchupGuideForStorage(guideWithMetadata)
+    const writeResult = await FileManager.writeJson(filePath, {
+      ...compactGuide,
+      id: guideId,
+      visibility: 'public' as const,
+      fileName,
+      savedAt: new Date().toISOString(),
+    })
     if (writeResult.isErr()) {
       const err = writeResult.unwrapErr()
       return res.status(500).json({
         error: 'Failed to save matchup guide file',
         details: err.message,
       })
-    }
-
-    try {
-      await syncPublicBuildFromMatchupGuide(guideWithMetadata)
-    } catch (syncError) {
-      console.error('[Matchup Guides API] Failed to sync embedded build:', syncError)
     }
 
     return res.json({
@@ -102,7 +113,8 @@ router.get('/', async (_req, res) => {
         const filePath = join(guidesDir, file)
         const readResult = await FileManager.readJson(filePath)
         if (readResult.isOk()) {
-          return readResult.unwrap()
+          const raw = readResult.unwrap() as Record<string, unknown>
+          return resolveMatchupGuideBuild(raw)
         }
         return null
       })
@@ -127,7 +139,8 @@ router.get('/:id', async (req, res) => {
   if (readResult.isErr()) {
     return res.status(404).json({ error: 'Matchup guide not found' })
   }
-  return res.json(readResult.unwrap())
+  const resolved = await resolveMatchupGuideBuild(readResult.unwrap() as Record<string, unknown>)
+  return res.json(resolved)
 })
 
 /**

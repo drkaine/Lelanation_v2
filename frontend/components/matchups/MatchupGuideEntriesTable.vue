@@ -1,7 +1,43 @@
 <template>
   <div class="matchup-entries-table">
     <section
-      v-if="showFilters"
+      v-if="showFilters && filterLayout === 'quick'"
+      class="matchup-entries-table__quick-filters"
+    >
+      <label class="matchup-entries-table__quick-filter">
+        <span class="sr-only">{{ t('matchupGuideCreate.entriesTable.colChampion') }}</span>
+        <input
+          v-model="filters.champion"
+          type="search"
+          class="matchup-entries-table__quick-input"
+          :placeholder="t('matchupGuideCreate.entriesTable.searchChampion')"
+        />
+      </label>
+      <label
+        class="matchup-entries-table__quick-filter matchup-entries-table__quick-filter--outcome"
+      >
+        <span class="matchup-entries-table__quick-label">{{
+          t('matchupGuideCreate.entriesTable.colOutcome')
+        }}</span>
+        <select v-model="filters.outcome" class="matchup-entries-table__quick-select">
+          <option value="">{{ t('matchupGuideCreate.entriesTable.allOutcomes') }}</option>
+          <option v-for="kind in OUTCOME_KINDS" :key="kind" :value="kind">
+            {{ t(`matchupGuideCreate.outcomeKind.${kind}`) }}
+          </option>
+        </select>
+      </label>
+      <button
+        v-if="activeFiltersCount > 0"
+        type="button"
+        class="matchup-entries-table__quick-reset"
+        @click="resetFilters"
+      >
+        {{ t('matchupGuideDiscovery.clearFilters') }}
+      </button>
+    </section>
+
+    <section
+      v-else-if="showFilters && filterLayout === 'full'"
       class="matchup-entries-table__filters rounded-lg border border-primary/25 bg-surface/30"
       :class="{ 'matchup-entries-table__filters--collapsed': !filtersOpen }"
     >
@@ -334,12 +370,15 @@ const props = withDefaults(
     build?: Build | null
     mode?: 'edit' | 'readonly'
     showFilters?: boolean
+    /** `quick` = champion + outcome only (detail/read). `full` = panel in editor. */
+    filterLayout?: 'full' | 'quick'
   }>(),
   {
     entries: undefined,
     build: undefined,
     mode: 'edit',
     showFilters: undefined,
+    filterLayout: 'full',
   }
 )
 
@@ -523,6 +562,62 @@ function cancelHideBuildPopover(): void {
   flex-direction: column;
   gap: 0.75rem;
   width: 100%;
+}
+
+.matchup-entries-table__quick-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.matchup-entries-table__quick-filter {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 12rem;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.matchup-entries-table__quick-filter--outcome {
+  flex: 0 1 auto;
+  min-width: 10rem;
+}
+
+.matchup-entries-table__quick-label {
+  flex-shrink: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: rgb(var(--rgb-text) / 0.85);
+  white-space: nowrap;
+}
+
+.matchup-entries-table__quick-input,
+.matchup-entries-table__quick-select {
+  width: 100%;
+  min-width: 0;
+  border-radius: 0.5rem;
+  border: 1px solid rgb(var(--rgb-primary) / 0.8);
+  background: rgb(var(--rgb-background) / 0.25);
+  padding: 0.45rem 0.75rem;
+  font-size: 0.875rem;
+  color: rgb(var(--rgb-text));
+}
+
+.matchup-entries-table__quick-reset {
+  flex-shrink: 0;
+  border-radius: 0.5rem;
+  border: 1px solid rgb(var(--rgb-primary) / 0.8);
+  background: rgb(var(--rgb-background) / 0.25);
+  padding: 0.45rem 0.75rem;
+  font-size: 0.8125rem;
+  color: rgb(var(--rgb-text));
+  transition: background-color 0.2s ease;
+}
+
+.matchup-entries-table__quick-reset:hover {
+  background: rgb(var(--rgb-primary) / 0.2);
 }
 
 .matchup-entries-table__filters {
