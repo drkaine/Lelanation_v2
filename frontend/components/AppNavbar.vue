@@ -1,5 +1,5 @@
 <template>
-  <header role="banner">
+  <header role="banner" class="header-shell">
     <nav class="header">
       <div class="left-header">
         <LanguageSwitcher />
@@ -17,7 +17,7 @@
         </NuxtLink>
       </div>
 
-      <div class="center-header">
+      <div v-if="!isMobileViewport" class="center-header">
         <NuxtLink
           :to="localePath('/download')"
           class="companion-app-link version"
@@ -29,28 +29,14 @@
       </div>
 
       <div class="right-header-slot">
-        <button
+        <NuxtLink
           v-if="isMobileViewport && isAdminLoggedIn"
-          class="menu-mobile"
-          :aria-label="t('nav.mobileMenu')"
-          :aria-expanded="isMenuOpen"
-          @click="toggleMenu"
+          :to="localePath('/admin')"
+          :title="t('nav.admin')"
+          class="version mobile-admin-link"
         >
-          <svg
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            stroke-width="2"
-            stroke="currentColor"
-            fill="none"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M4 6l16 0"></path>
-            <path d="M4 12l16 0"></path>
-            <path d="M4 18l16 0"></path>
-          </svg>
-        </button>
+          {{ t('nav.admin') }}
+        </NuxtLink>
 
         <div v-if="!isMobileViewport" class="right-header">
           <div
@@ -58,15 +44,25 @@
             @mouseenter="isBuildsMenuOpen = true"
             @mouseleave="isBuildsMenuOpen = false"
           >
-            <NuxtLink
-              :to="discoverBuildsLink"
+            <button
+              type="button"
               class="version builds-menu-trigger"
               :class="{ 'is-active': isBuildsSectionActive }"
+              :aria-expanded="isBuildsMenuOpen"
+              aria-haspopup="true"
             >
               <span>{{ t('nav.builds') }}</span>
               <span class="builds-menu-chevron" :class="{ 'is-open': isBuildsMenuOpen }">▾</span>
-            </NuxtLink>
+            </button>
             <div v-show="isBuildsMenuOpen" class="builds-menu-dropdown">
+              <NuxtLink
+                :to="localePath('/builds/create')"
+                :title="t('buildsPage.createBuild')"
+                class="builds-submenu-link"
+                @click="closeBuildsMenu"
+              >
+                {{ t('buildsPage.createBuild') }}
+              </NuxtLink>
               <NuxtLink
                 :to="discoverBuildsLink"
                 :title="t('buildsPage.discover')"
@@ -77,6 +73,7 @@
                 {{ t('buildsPage.discover') }}
               </NuxtLink>
               <NuxtLink
+                v-if="hasUserBuilds"
                 :to="myBuildsLink"
                 :title="t('buildsPage.myBuilds')"
                 class="builds-submenu-link"
@@ -96,14 +93,6 @@
                 {{ t('buildsPage.myFavorites') }}
               </NuxtLink>
               <NuxtLink
-                :to="localePath('/builds/create')"
-                :title="t('buildsPage.createBuild')"
-                class="builds-submenu-link"
-                @click="closeBuildsMenu"
-              >
-                {{ t('buildsPage.createBuild') }}
-              </NuxtLink>
-              <NuxtLink
                 :to="theorycraftLink"
                 :title="t('nav.theorycraft')"
                 class="builds-submenu-link"
@@ -112,19 +101,66 @@
               >
                 {{ t('nav.theorycraft') }}
               </NuxtLink>
-              <ShowIf :show-if="isAdminLoggedIn">
-                <NuxtLink
-                  :to="matchupGuidesLink"
-                  :title="t('nav.matchupGuides')"
-                  class="builds-submenu-link"
-                  :class="{ 'is-active': isMatchupGuidesActive }"
-                  @click="closeBuildsMenu"
-                >
-                  {{ t('nav.matchupGuides') }}
-                </NuxtLink>
-              </ShowIf>
             </div>
           </div>
+          <ShowIf :show-if="isAdminLoggedIn">
+            <div
+              class="builds-menu"
+              @mouseenter="isGuidesMenuOpen = true"
+              @mouseleave="isGuidesMenuOpen = false"
+            >
+              <button
+                type="button"
+                class="version builds-menu-trigger"
+                :class="{ 'is-active': isGuidesSectionActive }"
+                :aria-expanded="isGuidesMenuOpen"
+                aria-haspopup="true"
+              >
+                <span>{{ t('nav.guides') }}</span>
+                <span class="builds-menu-chevron" :class="{ 'is-open': isGuidesMenuOpen }">▾</span>
+              </button>
+              <div v-show="isGuidesMenuOpen" class="builds-menu-dropdown">
+                <NuxtLink
+                  :to="createGuideLink"
+                  :title="t('matchupGuidePage.createGuide')"
+                  class="builds-submenu-link"
+                  :class="{ 'is-active': isCreateGuideActive }"
+                  @click="closeGuidesMenu"
+                >
+                  {{ t('matchupGuidePage.createGuide') }}
+                </NuxtLink>
+                <NuxtLink
+                  :to="discoverGuidesLink"
+                  :title="t('buildsPage.discover')"
+                  class="builds-submenu-link"
+                  :class="{ 'is-active': isDiscoverGuidesActive }"
+                  @click="closeGuidesMenu"
+                >
+                  {{ t('buildsPage.discover') }}
+                </NuxtLink>
+                <NuxtLink
+                  v-if="hasMyGuides"
+                  :to="myGuidesLink"
+                  :title="t('matchupGuidePage.myGuides')"
+                  class="builds-submenu-link"
+                  :class="{ 'is-active': isMyGuidesActive }"
+                  @click="closeGuidesMenu"
+                >
+                  {{ t('matchupGuidePage.myGuides') }}
+                </NuxtLink>
+                <NuxtLink
+                  v-if="hasFavoriteGuides"
+                  :to="favoriteGuidesLink"
+                  :title="t('buildsPage.myFavorites')"
+                  class="builds-submenu-link"
+                  :class="{ 'is-active': isFavoriteGuidesActive }"
+                  @click="closeGuidesMenu"
+                >
+                  {{ t('buildsPage.myFavorites') }}
+                </NuxtLink>
+              </div>
+            </div>
+          </ShowIf>
           <div
             class="builds-menu"
             @mouseenter="isStatisticsMenuOpen = true"
@@ -196,22 +232,6 @@
           </NuxtLink>
         </div>
       </div>
-
-      <div
-        v-if="isMobileViewport && isAdminLoggedIn"
-        class="mobile-nav"
-        :class="{ 'is-open': isMenuOpen }"
-      >
-        <NuxtLink
-          v-if="isAdminLoggedIn"
-          :to="localePath('/admin')"
-          :title="t('nav.admin')"
-          class="version"
-          @click="toggleMenu"
-        >
-          {{ t('nav.admin') }}
-        </NuxtLink>
-      </div>
     </nav>
   </header>
 </template>
@@ -226,13 +246,17 @@ import { useAdminAuth } from '~/composables/useAdminAuth'
 import { useClientHydrated } from '~/composables/useClientHydrated'
 import { useMobileViewport } from '~/composables/useMobileViewport'
 import { useFavoritesStore } from '~/stores/FavoritesStore'
+import { useBuildStore } from '~/stores/BuildStore'
+import { useMatchupGuideStore } from '~/stores/MatchupGuideStore'
+import { useMatchupGuideFavoritesStore } from '~/stores/MatchupGuideFavoritesStore'
+import { filterStandaloneLibraryBuilds } from '~/utils/buildLibrary'
 import { useStatisticsUiStore } from '~/stores/StatisticsUiStore'
 import { useVersionStore } from '~/stores/VersionStore'
 import { normalizePatchNotesVersion, usePatchNotesStore } from '~/stores/PatchNotesStore'
 import { pickLatestPatchVersion } from '~/utils/patchVersion'
 
-const isMenuOpen = ref(false)
 const isBuildsMenuOpen = ref(false)
+const isGuidesMenuOpen = ref(false)
 const isStatisticsMenuOpen = ref(false)
 const { isMobileViewport } = useMobileViewport()
 const { t } = useI18n()
@@ -247,8 +271,25 @@ const myBuildsLink = computed(() => localePath('/builds/my-builds'))
 const favoriteBuildsLink = computed(() => localePath('/builds/favoris'))
 const theorycraftLink = computed(() => localePath('/builds/theorycraft'))
 const isTheorycraftActive = computed(() => route.path.includes('/builds/theorycraft'))
-const matchupGuidesLink = computed(() => localePath('/matchups/sheets'))
-const isMatchupGuidesActive = computed(() => route.path.includes('/matchups/sheets'))
+const discoverGuidesLink = computed(() => localePath('/matchups/sheets/discover'))
+const myGuidesLink = computed(() => localePath('/matchups/sheets/my-guides'))
+const favoriteGuidesLink = computed(() => localePath('/matchups/sheets/favoris'))
+const createGuideLink = computed(() => localePath('/matchups/sheets/create'))
+const isGuidesSectionActive = computed(() => route.path.includes('/matchups/sheets'))
+const currentGuidesTab = computed(() => {
+  const path = route.path
+  if (!path.includes('/matchups/sheets')) return null
+  if (path.includes('/matchups/sheets/create')) return 'create'
+  if (path.endsWith('/matchups/sheets/my-guides')) return 'my-guides'
+  if (path.endsWith('/matchups/sheets/favoris')) return 'favoris'
+  if (path.endsWith('/matchups/sheets/discover') || path.endsWith('/matchups/sheets'))
+    return 'discover'
+  return null
+})
+const isDiscoverGuidesActive = computed(() => currentGuidesTab.value === 'discover')
+const isMyGuidesActive = computed(() => currentGuidesTab.value === 'my-guides')
+const isFavoriteGuidesActive = computed(() => currentGuidesTab.value === 'favoris')
+const isCreateGuideActive = computed(() => currentGuidesTab.value === 'create')
 const isBuildsSectionActive = computed(() => route.path.includes('/builds'))
 const isCompanionAppActive = computed(() => {
   const appPath = localePath('/download')
@@ -265,11 +306,22 @@ const isDiscoverBuildsActive = computed(() => currentBuildsTab.value === 'discov
 const isMyBuildsActive = computed(() => currentBuildsTab.value === 'my-builds')
 const isFavoriteBuildsActive = computed(() => currentBuildsTab.value === 'favoris')
 const favoritesStore = useFavoritesStore()
+const buildStore = useBuildStore()
+const matchupGuideStore = useMatchupGuideStore()
+const matchupGuideFavoritesStore = useMatchupGuideFavoritesStore()
 const statisticsUiStore = useStatisticsUiStore()
 const surveillanceAlertStore = useStatisticsSurveillanceAlertStore()
 const buildSurveillanceStore = useStatisticsBuildSurveillanceStore()
 const { hydrated: clientHydrated } = useClientHydrated()
 const hasFavorites = computed(() => favoritesStore.favoriteBuildIds.length > 0)
+const hasUserBuilds = computed(
+  () =>
+    clientHydrated.value && filterStandaloneLibraryBuilds(buildStore.getSavedBuilds()).length > 0
+)
+const hasMyGuides = computed(
+  () => clientHydrated.value && matchupGuideStore.getSavedGuides().length > 0
+)
+const hasFavoriteGuides = computed(() => matchupGuideFavoritesStore.favoriteGuideIds.length > 0)
 const hasWatchedChampions = computed(
   () => clientHydrated.value && statisticsUiStore.watchedChampionIds.length > 0
 )
@@ -349,28 +401,25 @@ onMounted(() => {
   }
   patchNotesStore.loadIndex().catch(() => undefined)
   favoritesStore.init()
-})
-
-watch(isMobileViewport, mobile => {
-  if (!mobile) {
-    isMenuOpen.value = false
-  }
+  matchupGuideFavoritesStore.init()
 })
 
 watch(
   () => route.path,
   () => {
     if (import.meta.client) checkLoggedIn()
-    isMenuOpen.value = false
+    closeBuildsMenu()
+    closeGuidesMenu()
+    closeStatisticsMenu()
   }
 )
 
-const toggleMenu = () => {
-  isMenuOpen.value = !isMenuOpen.value
-}
-
 const closeBuildsMenu = () => {
   isBuildsMenuOpen.value = false
+}
+
+const closeGuidesMenu = () => {
+  isGuidesMenuOpen.value = false
 }
 
 const closeStatisticsMenu = () => {
@@ -379,10 +428,14 @@ const closeStatisticsMenu = () => {
 </script>
 
 <style scoped>
-.header {
+.header-shell {
   position: sticky;
   top: 0;
   z-index: 58;
+}
+
+.header {
+  position: relative;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
@@ -511,6 +564,7 @@ const closeStatisticsMenu = () => {
   font: inherit;
   font-weight: 600;
   cursor: pointer;
+  color: var(--color-blue-50);
 }
 
 .builds-menu-trigger.is-active,
@@ -569,54 +623,8 @@ const closeStatisticsMenu = () => {
   color: var(--color-blue-50);
 }
 
-.menu-mobile {
-  display: none;
-  cursor: pointer;
-  border: none;
-  background: none;
-  color: var(--color-blue-50);
-}
-
-.mobile-nav {
-  display: none;
-  position: absolute;
-  top: 64px;
-  left: 0;
-  right: 0;
-  background: rgb(var(--rgb-chrome) / 1);
-  padding: 14px 15px;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.mobile-nav.is-open {
-  display: flex !important;
-  z-index: 1000;
-}
-
-.mobile-nav a {
-  color: var(--color-blue-50);
-  padding: 6px 8px;
-  display: block;
-}
-
-.mobile-builds-menu {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.mobile-builds-trigger {
-  justify-content: space-between;
-  width: 100%;
-  padding: 6px 8px;
-}
-
-.mobile-builds-dropdown {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-left: 12px;
+.mobile-admin-link {
+  white-space: nowrap;
 }
 
 @media (hover: hover) {
@@ -630,16 +638,22 @@ const closeStatisticsMenu = () => {
 }
 
 @media (max-width: 768px) {
-  .menu-mobile {
-    display: block;
+  .header {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .left-header {
+    min-width: 0;
+  }
+
+  .left-header .link span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .right-header {
     display: none;
-  }
-
-  .center-header {
-    font-size: 0.875rem;
   }
 }
 </style>

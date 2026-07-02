@@ -3,8 +3,8 @@ import { buildChampionScopedWhere, sumChampionCoreGames } from './ChampionGlobal
 import { matchVersionedAggFrom } from './statsAggArchive.js'
 import {
   CHAMPION_SPELL_ORDER_MIN_GAME_DURATION_MS,
+  shouldIncludeSpellOrderAggregateRow,
   spellOrderLevelCount,
-  spellOrderMeetsMinDuration,
 } from './championSpellOrderDuration.js'
 
 export { CHAMPION_SPELL_ORDER_MIN_GAME_DURATION_MS } from './championSpellOrderDuration.js'
@@ -61,7 +61,12 @@ export async function getChampionSpellOrders(options: {
 
     const durationHaving =
       minGameDurationMs > 0
-        ? ` AND (2 * SUM(cs.sum_timestamp_ms)::float8) >= ${minGameDurationMs}::float8 * (LENGTH(cs.spell_order) - LENGTH(REPLACE(cs.spell_order, '-', '')) + 1) * SUM(cs.count_game)::float8`
+        ? ` AND (
+            SUM(cs.sum_timestamp_ms) = 0
+            OR (2 * SUM(cs.sum_timestamp_ms)::float8) >= ${minGameDurationMs}::float8
+              * (LENGTH(cs.spell_order) - LENGTH(REPLACE(cs.spell_order, '-', '')) + 1)
+              * SUM(cs.count_game)::float8
+          )`
         : ''
 
     const rows = await queryRawUnsafe<
@@ -93,10 +98,7 @@ export async function getChampionSpellOrders(options: {
       const key = String(r.key ?? '').trim()
       if (!key) continue
       const sumTs = Number(r.sumTimestampMs ?? 0)
-      if (
-        minGameDurationMs > 0 &&
-        !spellOrderMeetsMinDuration(sumTs, games, key, minGameDurationMs)
-      ) {
+      if (!shouldIncludeSpellOrderAggregateRow(sumTs, games, key, minGameDurationMs)) {
         continue
       }
       const levelCount = spellOrderLevelCount(key)

@@ -12,27 +12,27 @@
         <div class="w-full flex-1 md:order-2">
           <div class="info-toolbar mb-6">
             <div class="scrollable-tabs-scroll-wrap min-w-0 max-w-full flex-1">
-              <div class="stats-tabs info-toolbar-category-tabs scrollable-tabs-nav">
+              <div class="ui-build-card-surface info-toolbar-category-tabs scrollable-tabs-nav rounded-xl p-0.5">
               <button
                 type="button"
-                class="stats-tab"
-                :class="{ 'stats-tab--active': statsCategory === 'basic' }"
+                class="info-stats-tab ui-build-card-button"
+                :class="{ 'is-active': statsCategory === 'basic' }"
                 @click="emit('update:stats-category', 'basic')"
               >
                 {{ basicLabel }}
               </button>
               <button
                 type="button"
-                class="stats-tab"
-                :class="{ 'stats-tab--active': statsCategory === 'advanced' }"
+                class="info-stats-tab ui-build-card-button"
+                :class="{ 'is-active': statsCategory === 'advanced' }"
                 @click="emit('update:stats-category', 'advanced')"
               >
                 {{ advancedLabel }}
               </button>
               <button
                 type="button"
-                class="stats-tab"
-                :class="{ 'stats-tab--active': statsCategory === 'economic' }"
+                class="info-stats-tab ui-build-card-button"
+                :class="{ 'is-active': statsCategory === 'economic' }"
                 @click="emit('update:stats-category', 'economic')"
               >
                 {{ economicLabel }}
@@ -144,54 +144,33 @@ const emit = defineEmits<{
 .info-toolbar-category-tabs {
   flex: 1;
   min-width: 0;
-}
-
-.info-toolbar-category-tabs.stats-tabs {
   display: inline-flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 0.2rem;
-  min-height: 36px;
+  gap: 0.25rem;
   max-width: 100%;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
-  border: 1px solid rgb(var(--rgb-primary) / 0.8);
-  border-radius: 0.5rem;
-  background: rgb(var(--rgb-background) / 0.25);
-  padding: 0.2rem;
 }
 
-.info-toolbar-category-tabs.stats-tabs::-webkit-scrollbar {
+.info-toolbar-category-tabs::-webkit-scrollbar {
   display: none;
 }
 
-.info-toolbar-category-tabs .stats-tab {
+.info-stats-tab {
   flex-shrink: 0;
   scroll-snap-align: start;
   white-space: nowrap;
-  border: none;
-  border-radius: 0.375rem;
-  background: transparent;
-  color: rgb(var(--rgb-text) / 0.75);
   min-height: 30px;
   padding: 0.45rem 0.75rem;
   font-size: 0.875rem;
   font-weight: 600;
   line-height: 1.1;
-  transition: all 0.2s ease;
+  border: none;
+  background: transparent;
   cursor: pointer;
-}
-
-.info-toolbar-category-tabs .stats-tab:hover {
-  background: rgb(var(--rgb-primary) / 0.16);
-  color: rgb(var(--rgb-text));
-}
-
-.info-toolbar-category-tabs .stats-tab--active {
-  background: rgb(var(--rgb-primary) / 0.3);
-  color: rgb(var(--rgb-text));
 }
 
 .champion-confirm-overlay {

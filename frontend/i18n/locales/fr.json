@@ -1,7 +1,7 @@
 {
   "nav": {
     "home": "Accueil",
-    "builds": "Les Builds",
+    "builds": "Builds",
     "build": "build",
     "communityBuilds": "Builds de la communauté",
     "createBuild": "Créer un Build",
@@ -17,6 +17,7 @@
     "officialPatchNotes": "Notes de patch officielles Riot",
     "admin": "Admin",
     "theorycraft": "Theorycraft",
+    "guides": "Guides",
     "matchupGuides": "Guides matchup",
     "appAdmin": "Lelanation App",
     "download": "Télécharger",
@@ -31,6 +32,7 @@
     "statisticsShort": "Stats",
     "tierListShort": "Tier list",
     "patchNotesShort": "Patch",
+    "guidesShort": "Guides",
     "matchupsShort": "Matchups"
   },
   "mapPlanner": {

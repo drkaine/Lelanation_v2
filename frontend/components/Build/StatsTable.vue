@@ -5,13 +5,13 @@
     </div>
 
     <div v-else class="space-y-4">
-      <div class="stats-infobox rounded-lg border border-primary/40 p-3">
+      <div class="stats-infobox rounded-lg p-3">
         <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div class="flex items-center gap-2">
             <label class="stats-gold-text text-sm font-semibold">Level:</label>
             <select
               v-model.number="selectedLevel"
-              class="rounded-lg border border-primary/60 bg-background/40 px-2 py-1 text-sm text-text focus:border-accent focus:outline-none"
+              class="stats-level-select ui-build-card-button px-2 py-1 text-sm"
             >
               <option v-for="level in 20" :key="level" :value="level">
                 {{ level }}
@@ -20,27 +20,27 @@
           </div>
           <div class="text-sm font-semibold text-text/90">Base statistics</div>
           <div v-if="!hideCategoryTabs" class="scrollable-tabs-scroll-wrap min-w-0 max-w-full">
-            <div class="stats-tabs scrollable-tabs-nav">
+            <div class="ui-build-card-surface stats-tabs scrollable-tabs-nav rounded-xl p-0.5">
               <button
                 type="button"
-                class="stats-tab"
-                :class="{ 'stats-tab--active': activeCategory === 'basic' }"
+                class="stats-tab ui-build-card-button"
+                :class="{ 'is-active': activeCategory === 'basic' }"
                 @click="setStatsCategory('basic')"
               >
                 {{ t('stats.categories.basic') }}
               </button>
               <button
                 type="button"
-                class="stats-tab"
-                :class="{ 'stats-tab--active': activeCategory === 'advanced' }"
+                class="stats-tab ui-build-card-button"
+                :class="{ 'is-active': activeCategory === 'advanced' }"
                 @click="setStatsCategory('advanced')"
               >
                 {{ t('stats.categories.advanced') }}
               </button>
               <button
                 type="button"
-                class="stats-tab"
-                :class="{ 'stats-tab--active': activeCategory === 'economic' }"
+                class="stats-tab ui-build-card-button"
+                :class="{ 'is-active': activeCategory === 'economic' }"
                 @click="setStatsCategory('economic')"
               >
                 {{ t('stats.categories.economic') }}
@@ -1191,13 +1191,9 @@ const formatValue = (
   display: inline-flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 0.2rem;
+  gap: 0.25rem;
   min-height: 36px;
   max-width: 100%;
-  border: 1px solid rgb(var(--rgb-primary) / 0.8);
-  border-radius: 0.5rem;
-  background: rgb(var(--rgb-background) / 0.25);
-  padding: 0.2rem;
 }
 
 .stats-tab {
@@ -1205,25 +1201,18 @@ const formatValue = (
   scroll-snap-align: start;
   white-space: nowrap;
   border: none;
-  border-radius: 0.375rem;
   background: transparent;
-  color: rgb(var(--rgb-text) / 0.75);
   min-height: 30px;
   padding: 0.45rem 0.75rem;
   font-size: 0.875rem;
   font-weight: 600;
   line-height: 1.1;
-  transition: all 0.2s ease;
+  cursor: pointer;
 }
 
-.stats-tab:hover {
-  background: rgb(var(--rgb-primary) / 0.16);
-  color: rgb(var(--rgb-text));
-}
-
-.stats-tab--active {
-  background: rgb(var(--rgb-primary) / 0.3);
-  color: rgb(var(--rgb-text));
+.stats-level-select {
+  appearance: auto;
+  cursor: pointer;
 }
 
 .stat-inline-icon {

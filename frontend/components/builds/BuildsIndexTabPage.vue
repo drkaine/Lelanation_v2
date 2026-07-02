@@ -8,6 +8,7 @@
     :build-grid-component="BuildGrid"
     :active-tab="activeTab"
     :favorite-builds="favoriteBuilds"
+    :user-builds="userBuilds"
     :comparison-builds="comparisonBuilds"
     :my-builds-visibility-filter="myBuildsVisibilityFilter"
     :visibility-filter-options="visibilityFilterOptions"
@@ -43,6 +44,7 @@ const {
   activeTab,
   goToCreateBuild,
   favoriteBuilds,
+  userBuilds,
   comparisonBuilds,
   myBuildsVisibilityFilter,
   visibilityFilterOptions,

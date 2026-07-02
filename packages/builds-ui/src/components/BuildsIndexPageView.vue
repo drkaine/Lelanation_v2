@@ -4,38 +4,39 @@
       <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
         <div class="scrollable-tabs-scroll-wrap min-w-0 max-w-full">
           <div class="streamer-tabs scrollable-tabs-nav">
-          <button
-            type="button"
-            class="streamer-tab-button"
-            :class="{ 'is-active': activeTab === 'discover' }"
-            @click="emit('update:activeTab', 'discover')"
-          >
-            {{ t('buildsPage.discover') }}
-          </button>
-          <button
-            type="button"
-            class="streamer-tab-button"
-            :class="{ 'is-active': activeTab === 'my-builds' }"
-            @click="emit('update:activeTab', 'my-builds')"
-          >
-            {{ t('buildsPage.myBuilds') }}
-          </button>
-          <button
-            v-if="favoriteBuilds.length > 0"
-            type="button"
-            class="streamer-tab-button"
-            :class="{ 'is-active': activeTab === 'favoris' }"
-            @click="emit('update:activeTab', 'favoris')"
-          >
-            {{ t('buildsPage.myFavorites') }}
-          </button>
-          <button
-            type="button"
-            class="streamer-tab-button"
-            @click="emit('create-build')"
-          >
-            {{ t('buildsPage.createBuild') }}
-          </button>
+            <button
+              type="button"
+              class="streamer-tab-button"
+              @click="emit('create-build')"
+            >
+              {{ t('buildsPage.createBuild') }}
+            </button>
+            <button
+              type="button"
+              class="streamer-tab-button"
+              :class="{ 'is-active': activeTab === 'discover' }"
+              @click="emit('update:activeTab', 'discover')"
+            >
+              {{ t('buildsPage.discover') }}
+            </button>
+            <button
+              v-if="userBuilds.length > 0"
+              type="button"
+              class="streamer-tab-button"
+              :class="{ 'is-active': activeTab === 'my-builds' }"
+              @click="emit('update:activeTab', 'my-builds')"
+            >
+              {{ t('buildsPage.myBuilds') }}
+            </button>
+            <button
+              v-if="favoriteBuilds.length > 0"
+              type="button"
+              class="streamer-tab-button"
+              :class="{ 'is-active': activeTab === 'favoris' }"
+              @click="emit('update:activeTab', 'favoris')"
+            >
+              {{ t('buildsPage.myFavorites') }}
+            </button>
           </div>
         </div>
       </div>
@@ -72,6 +73,7 @@
                 {{ t('buildsPage.compare') }}
               </component>
               <button
+                type="button"
                 class="rounded-lg border border-accent/70 bg-surface px-4 py-2 text-text transition-colors hover:bg-accent/10"
                 @click="emit('clear-comparison')"
               >
@@ -170,12 +172,14 @@
         </p>
         <div class="flex gap-4">
           <button
+            type="button"
             class="rounded-lg bg-error px-4 py-2 text-text transition-colors hover:bg-error/80"
             @click="emit('delete-build')"
           >
             {{ t('buildsPage.delete') }}
           </button>
           <button
+            type="button"
             class="rounded-lg border border-accent/70 bg-surface px-4 py-2 text-text transition-colors hover:bg-accent/10"
             @click="emit('close-delete-modal')"
           >
@@ -202,6 +206,7 @@ defineProps<{
   buildGridComponent: Component | string
   activeTab: string
   favoriteBuilds: Build[]
+  userBuilds: Build[]
   comparisonBuilds: unknown[]
   myBuildsVisibilityFilter: VisibilityFilterValue
   visibilityFilterOptions: { value: VisibilityFilterValue; label: string }[]

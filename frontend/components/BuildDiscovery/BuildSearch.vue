@@ -7,7 +7,7 @@
     <button
       v-show="!expanded"
       type="button"
-      class="search-toggle inline-flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-lg border border-primary/80 bg-background/25 text-text transition-colors hover:bg-primary/20"
+      class="ui-build-card-button search-toggle inline-flex h-[38px] w-[38px] shrink-0 items-center justify-center"
       :aria-label="t('buildDiscovery.searchPlaceholder')"
       :aria-expanded="false"
       @click="expand"
@@ -34,7 +34,7 @@
         v-model="localSearchQuery"
         type="text"
         :placeholder="t('buildDiscovery.searchPlaceholder')"
-        class="w-full rounded-lg border border-primary bg-surface px-3 py-2 pl-9 text-sm text-text"
+        class="w-full rounded-lg border border-primary/50 bg-background/25 px-3 py-2 pl-9 text-sm text-text placeholder:text-text/50 focus:border-accent focus:outline-none"
         :aria-label="t('buildDiscovery.searchPlaceholder')"
         :aria-expanded="true"
         @input="handleSearch"

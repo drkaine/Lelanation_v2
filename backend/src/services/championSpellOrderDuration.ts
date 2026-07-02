@@ -34,3 +34,28 @@ export function spellOrderMeetsMinDuration(
   const avgSum = Number(sumTimestampMs ?? 0) / g
   return estimatedLastSpellLevelUpMs(avgSum, levels) >= minDurationMs
 }
+
+/** Legacy rows (first slot timestamp only) have ≤4 levels and no sum_timestamp_ms. */
+export function isLegacyPseudoSpellOrder(spellOrder: string, sumTimestampMs: number): boolean {
+  if (sumTimestampMs > 0) return false
+  return spellOrderLevelCount(spellOrder) <= 4
+}
+
+export function shouldIncludeSpellOrderAggregateRow(
+  sumTimestampMs: number,
+  games: number,
+  spellOrder: string,
+  minGameDurationMs: number
+): boolean {
+  const key = String(spellOrder ?? '').trim()
+  if (!key || games <= 0) return false
+  if (isLegacyPseudoSpellOrder(key, sumTimestampMs)) return false
+  if (
+    minGameDurationMs > 0 &&
+    sumTimestampMs > 0 &&
+    !spellOrderMeetsMinDuration(sumTimestampMs, games, key, minGameDurationMs)
+  ) {
+    return false
+  }
+  return spellOrderLevelCount(key) > 0
+}

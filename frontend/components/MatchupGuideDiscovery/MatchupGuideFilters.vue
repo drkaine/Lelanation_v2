@@ -1,6 +1,9 @@
 <template>
   <div class="matchup-guide-filters flex min-w-0 flex-1 items-center gap-2">
-    <div class="filters-one-line flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
+    <div
+      ref="filtersOneLineEl"
+      class="filters-one-line flex min-w-0 flex-1 items-center gap-2 overflow-x-auto"
+    >
       <div class="role-filter-row flex shrink-0 items-center gap-0 whitespace-nowrap">
         <button
           type="button"
@@ -94,6 +97,9 @@ import { useVersionStore } from '~/stores/VersionStore'
 const { t } = useI18n()
 const discoveryStore = useMatchupGuideDiscoveryStore()
 const versionStore = useVersionStore()
+
+const filtersOneLineEl = ref<HTMLElement | null>(null)
+useHorizontalScrollContainer(filtersOneLineEl)
 
 const selectedVersion = ref(discoveryStore.selectedVersion ?? '')
 const selectedRole = ref<MatchupGuideFilterRole>(discoveryStore.selectedRole)
@@ -194,14 +200,6 @@ onMounted(() => {
 .role-filter-row {
   margin: 0;
   padding: 0;
-}
-
-.filters-one-line {
-  scrollbar-width: none;
-}
-
-.filters-one-line::-webkit-scrollbar {
-  display: none;
 }
 
 .filters-sep {

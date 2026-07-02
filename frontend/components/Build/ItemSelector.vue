@@ -10,18 +10,17 @@
         v-model="searchQuery"
         type="text"
         :placeholder="t('common.search')"
-        class="item-search-input rounded border border-primary/50 bg-transparent px-2 py-1 text-sm text-text placeholder:text-text/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50"
+        class="item-search-input ui-build-card-surface rounded-lg px-2 py-1 text-sm text-text placeholder:text-text/50 focus:outline-none"
         @input="handleSearch"
       />
       <div class="item-filter-bar flex flex-wrap">
         <button
           v-for="tag in availableTags"
           :key="tag"
+          type="button"
           :class="[
-            'item-filter-btn rounded-lg border text-sm font-semibold transition-all',
-            selectedTags.includes(tag)
-              ? 'border-surface bg-accent text-background'
-              : 'border-accent bg-surface text-text',
+            'item-filter-btn ui-build-card-button text-sm font-semibold',
+            selectedTags.includes(tag) ? 'is-active' : '',
           ]"
           @click="toggleTag(tag)"
         >
@@ -30,10 +29,8 @@
         <button
           type="button"
           :class="[
-            'item-filter-btn rounded-lg border text-sm font-semibold transition-all',
-            showGoldValue
-              ? 'border-surface bg-primary text-primary-light'
-              : 'border-primary bg-surface text-text',
+            'item-filter-btn ui-build-card-button text-sm font-semibold',
+            showGoldValue ? 'is-active' : '',
           ]"
           @click="showGoldValue = !showGoldValue"
         >
@@ -42,10 +39,8 @@
         <button
           type="button"
           :class="[
-            'item-filter-btn rounded-lg border text-sm font-semibold transition-all',
-            showGoldEfficiency
-              ? 'border-surface bg-primary text-primary-light'
-              : 'border-primary bg-surface text-text',
+            'item-filter-btn ui-build-card-button text-sm font-semibold',
+            showGoldEfficiency ? 'is-active' : '',
           ]"
           @click="showGoldEfficiency = !showGoldEfficiency"
         >
@@ -1005,7 +1000,7 @@ watch(locale, () => {
 }
 
 .item-filter-btn {
-  padding: 5px;
+  padding: 0.35rem 0.6rem;
   margin: 0;
 }
 

@@ -10,18 +10,17 @@
         v-model="searchQuery"
         type="text"
         :placeholder="t('common.search')"
-        class="champion-search-input rounded border border-primary/50 bg-transparent px-2 py-1 text-sm text-text placeholder:text-text/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50"
+        class="champion-search-input ui-build-card-surface rounded-lg px-2 py-1 text-sm text-text placeholder:text-text/50 focus:outline-none"
         @input="handleSearch"
       />
       <div class="champion-filter-bar flex flex-wrap">
         <button
           v-for="role in availableRoles"
           :key="role"
+          type="button"
           :class="[
-            'champion-filter-btn rounded-lg border text-sm font-semibold transition-all',
-            selectedRoles.includes(role)
-              ? 'border-surface bg-accent text-background'
-              : 'border-accent bg-surface text-text',
+            'champion-filter-btn ui-build-card-button text-sm font-semibold',
+            selectedRoles.includes(role) ? 'is-active' : '',
           ]"
           @click="toggleRole(role)"
         >
@@ -211,7 +210,7 @@ watch(locale, () => {
 }
 
 .champion-filter-btn {
-  padding: 5px;
+  padding: 0.35rem 0.6rem;
   margin: 0;
 }
 

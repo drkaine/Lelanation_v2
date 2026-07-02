@@ -396,7 +396,7 @@ async function upsertChampionDuoRoleStats(tx: any, participants: ParsedParticipa
 
 const SPELL_ORDER_MIN_GAME_DURATION_SEC = 15 * 60;
 
-async function upsertSpellOrderStats(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
+export async function upsertSpellOrderStats(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
   for (const participant of participants) {
     const gameDurationSec = Math.max(0, Math.trunc(Number(participant.gameDurationSec ?? 0)));
     if (gameDurationSec < SPELL_ORDER_MIN_GAME_DURATION_SEC) continue;

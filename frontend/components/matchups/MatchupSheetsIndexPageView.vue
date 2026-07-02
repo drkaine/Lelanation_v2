@@ -4,6 +4,9 @@
       <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
         <div class="scrollable-tabs-scroll-wrap min-w-0 max-w-full">
           <div class="matchup-sheets-tabs scrollable-tabs-nav">
+            <button type="button" class="matchup-sheets-tab-button" @click="goToCreateGuide">
+              {{ t('matchupGuidePage.createGuide') }}
+            </button>
             <button
               type="button"
               class="matchup-sheets-tab-button"
@@ -29,9 +32,6 @@
               @click="setTab('favoris')"
             >
               {{ t('buildsPage.myFavorites') }}
-            </button>
-            <button type="button" class="matchup-sheets-tab-button" @click="goToCreateGuide">
-              {{ t('matchupGuidePage.createGuide') }}
             </button>
           </div>
         </div>

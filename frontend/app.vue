@@ -381,6 +381,7 @@ if (import.meta.client) {
 @import './assets/css/tokens.css';
 @import './assets/css/tier-badges.css';
 @import './assets/css/ui-build-card.css';
+@import './assets/css/build-tags.css';
 @import './assets/css/ui-statistics.css';
 
 @tailwind base;
@@ -862,6 +863,45 @@ html[data-stats-cards='1'] .champion-stats .hidden.md\:block {
 .statistics-tabs-nav:not(.has-horizontal-scroll)::-webkit-scrollbar,
 .patch-notes-tabs-nav:not(.has-horizontal-scroll)::-webkit-scrollbar {
   display: none;
+}
+
+/* Discovery filter bars — scrollbar on mobile when content overflows */
+.filters-one-line {
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
+  scrollbar-width: none;
+}
+
+.filters-one-line::-webkit-scrollbar {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .filters-one-line.has-horizontal-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--rgb-accent) / 0.7) rgb(var(--rgb-primary) / 0.22);
+    padding-bottom: 6px;
+  }
+
+  .filters-one-line.has-horizontal-scroll::-webkit-scrollbar {
+    display: block;
+    height: 5px;
+  }
+
+  .filters-one-line.has-horizontal-scroll::-webkit-scrollbar-track {
+    margin-top: 4px;
+    border-radius: 9999px;
+    background: rgb(var(--rgb-primary) / 0.22);
+  }
+
+  .filters-one-line.has-horizontal-scroll::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background: rgb(var(--rgb-accent) / 0.72);
+  }
+
+  .filters-one-line.has-horizontal-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--rgb-accent) / 0.9);
+  }
 }
 
 .scrollable-tabs-scroll-wrap::before,

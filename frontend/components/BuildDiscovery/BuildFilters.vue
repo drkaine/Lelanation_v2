@@ -1,6 +1,9 @@
 <template>
   <div class="build-filters flex min-w-0 flex-1 items-center gap-2">
-    <div class="filters-one-line flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
+    <div
+      ref="filtersOneLineEl"
+      class="filters-one-line flex min-w-0 flex-1 items-center gap-2 overflow-x-auto"
+    >
       <div class="role-filter-row flex shrink-0 items-center gap-0 whitespace-nowrap">
         <button
           type="button"
@@ -28,26 +31,32 @@
 
       <span class="filters-sep shrink-0" aria-hidden="true" />
 
-      <div class="role-filter-row flex shrink-0 items-center gap-0 whitespace-nowrap">
+      <div class="tag-filter-row flex shrink-0 items-center gap-1 whitespace-nowrap">
         <button
           v-for="opt in tagFilterOptions"
           :key="opt.value"
           type="button"
-          :class="tagChipClass(selectedTag === opt.value, opt.value)"
-          :style="tagChipStyle(selectedTag === opt.value, opt.value)"
+          class="build-tag-chip"
+          :class="[
+            selectedTag === opt.value ? 'build-tag-chip--selected' : 'build-tag-chip--unselected',
+            selectedTag === opt.value && opt.value === 'troll'
+              ? 'build-tag-chip--troll-selected'
+              : '',
+          ]"
+          :style="selectedTag === opt.value ? opt.chipStyle : undefined"
           :title="t(opt.labelKey)"
           :aria-label="t(opt.labelKey)"
           :aria-pressed="selectedTag === opt.value"
           @click="toggleTag(opt.value)"
         >
-          <span class="tag-filter-chip-label">{{ opt.short }}</span>
+          {{ opt.label }}
         </button>
       </div>
 
       <select
         id="build-discovery-version"
         v-model="selectedVersion"
-        class="filter-select shrink-0"
+        class="filter-select ui-build-card-button shrink-0"
         :aria-label="t('buildDiscovery.version')"
         @change="handleVersionChange"
       >
@@ -60,7 +69,7 @@
       <select
         id="build-discovery-sort"
         v-model="sortBy"
-        class="filter-select shrink-0"
+        class="filter-select ui-build-card-button shrink-0"
         :aria-label="t('buildDiscovery.sort')"
         @change="handleSortChange"
       >
@@ -74,7 +83,7 @@
         <select
           id="build-discovery-per-page"
           v-model="pageSize"
-          class="filter-select"
+          class="filter-select ui-build-card-button"
           :aria-label="t('buildDiscovery.buildsPerPage')"
         >
           <option :value="20">20</option>
@@ -91,7 +100,12 @@
       </label>
     </div>
 
-    <button v-if="hasActiveFilters" class="filter-clear shrink-0" @click="clearFilters">
+    <button
+      v-if="hasActiveFilters"
+      type="button"
+      class="filter-clear ui-build-card-button shrink-0"
+      @click="clearFilters"
+    >
       {{ t('buildDiscovery.clearFilters') }}
     </button>
   </div>
@@ -114,6 +128,9 @@ const { locale, t } = useI18n()
 const discoveryStore = useBuildDiscoveryStore()
 const championsStore = useChampionsStore()
 const versionStore = useVersionStore()
+
+const filtersOneLineEl = ref<HTMLElement | null>(null)
+useHorizontalScrollContainer(filtersOneLineEl)
 
 const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
 const riotLocale = computed(() => getRiotLanguage(locale.value))
@@ -176,26 +193,39 @@ const roleOptions: Array<{ value: Exclude<FilterRole, null>; label: string; icon
 
 const tagFilterOptions: Array<{
   value: Exclude<FilterBuildTag, null>
-  short: string
+  label: string
   labelKey:
     | 'buildDiscovery.tagPro'
     | 'buildDiscovery.tagOtp'
     | 'buildDiscovery.tagExotique'
     | 'buildDiscovery.tagTroll'
+  chipStyle: Record<string, string>
 }> = [
-  { value: 'pro', short: 'Pro', labelKey: 'buildDiscovery.tagPro' },
-  { value: 'otp', short: 'OTP', labelKey: 'buildDiscovery.tagOtp' },
-  { value: 'exotique', short: 'Exo', labelKey: 'buildDiscovery.tagExotique' },
-  { value: 'troll', short: 'Troll', labelKey: 'buildDiscovery.tagTroll' },
+  {
+    value: 'pro',
+    label: 'Pro',
+    labelKey: 'buildDiscovery.tagPro',
+    chipStyle: { '--tag-g1': '#bd9700', '--tag-g2': '#704b00' },
+  },
+  {
+    value: 'otp',
+    label: 'OTP',
+    labelKey: 'buildDiscovery.tagOtp',
+    chipStyle: { '--tag-g1': '#00b4dd', '--tag-g2': '#003366' },
+  },
+  {
+    value: 'exotique',
+    label: 'Exotique',
+    labelKey: 'buildDiscovery.tagExotique',
+    chipStyle: { '--tag-g1': '#6e008a', '--tag-g2': '#420042' },
+  },
+  {
+    value: 'troll',
+    label: 'Troll',
+    labelKey: 'buildDiscovery.tagTroll',
+    chipStyle: { '--tag-g1': '#e4b5e4', '--tag-g2': '#36bfb1' },
+  },
 ]
-
-/** Aligné sur `public/data/regions.json` (shurima, freljord, void, ionia). */
-const tagFilterGradients: Record<Exclude<FilterBuildTag, null>, [string, string]> = {
-  pro: ['#bd9700', '#704b00'],
-  otp: ['#00b4dd', '#003366'],
-  exotique: ['#6e008a', '#420042'],
-  troll: ['#e4b5e4', '#36bfb1'],
-}
 
 const setRole = (role: FilterRole) => {
   selectedRole.value = role
@@ -229,22 +259,6 @@ const roleChipClass = (active: boolean) =>
     'inline-flex h-7 w-7 items-center justify-center rounded-full p-0 transition-all',
     active ? 'bg-accent/15' : 'opacity-60 grayscale hover:opacity-100 hover:grayscale-0',
   ].join(' ')
-
-const tagChipClass = (active: boolean, value: Exclude<FilterBuildTag, null>) =>
-  [
-    'tag-filter-chip inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-transparent p-0 text-[11px] font-bold leading-none tracking-tight transition-all',
-    active
-      ? ['tag-filter-chip--on', value === 'troll' ? 'tag-filter-chip--troll' : '']
-          .filter(Boolean)
-          .join(' ')
-      : 'opacity-60 grayscale hover:opacity-100 hover:grayscale-0',
-  ].join(' ')
-
-function tagChipStyle(active: boolean, value: Exclude<FilterBuildTag, null>) {
-  if (!active) return undefined
-  const [g1, g2] = tagFilterGradients[value]
-  return { '--tag-g1': g1, '--tag-g2': g2 } as Record<string, string>
-}
 
 const handleVersionChange = () => {
   discoveryStore.setSelectedVersion(selectedVersion.value || null)
@@ -293,14 +307,6 @@ watch(locale, () => {
   padding: 0;
 }
 
-.filters-one-line {
-  scrollbar-width: none;
-}
-
-.filters-one-line::-webkit-scrollbar {
-  display: none;
-}
-
 .filters-sep {
   display: inline-block;
   width: 1px;
@@ -308,52 +314,23 @@ watch(locale, () => {
   background: rgb(var(--rgb-primary) / 0.35);
 }
 
-.tag-filter-chip--on {
-  border-color: rgb(255 255 255 / 0.38) !important;
-  background: linear-gradient(130deg, var(--tag-g1) 0%, var(--tag-g2) 100%) !important;
-  color: rgba(255, 255, 255, 0.95) !important;
-  opacity: 1 !important;
-  filter: none !important;
+.role-filter-row .build-tag-chip {
+  flex-shrink: 0;
 }
 
-.tag-filter-chip--on.tag-filter-chip--troll {
-  border-color: rgb(12 12 14 / 0.35) !important;
-  color: rgba(12, 12, 14, 0.94) !important;
-}
-
-.tag-filter-chip-label {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
-  padding: 0 0.125rem;
-  text-align: center;
+.tag-filter-row .build-tag-chip {
+  flex-shrink: 0;
 }
 
 .filter-select {
   min-width: 7.5rem;
   max-width: 10rem;
-  border-radius: 0.5rem;
-  border: 1px solid rgb(var(--rgb-primary) / 0.8);
-  background: rgb(var(--rgb-background) / 0.25);
-  padding: 0.45rem 0.75rem;
-  font-size: 0.875rem;
-  color: rgb(var(--rgb-text));
+  appearance: auto;
+  cursor: pointer;
 }
 
 .filter-clear {
-  border-radius: 0.5rem;
-  border: 1px solid rgb(var(--rgb-primary) / 0.8);
-  background: rgb(var(--rgb-background) / 0.25);
-  padding: 0.45rem 0.75rem;
-  font-size: 0.875rem;
-  color: rgb(var(--rgb-text));
-  transition: background-color 0.2s ease;
-}
-
-.filter-clear:hover {
-  background: rgb(var(--rgb-primary) / 0.2);
+  cursor: pointer;
 }
 
 .filter-inline-label {

@@ -95,6 +95,12 @@ export function useBuildsIndexController(options: UseBuildsIndexControllerOption
     return list.filter(b => (b.visibility ?? 'public') === filter && version >= 0)
   })
 
+  const userBuilds = computed<Build[]>(() => {
+    if (!hydrated.value) return []
+    const version = buildStore.savedBuildsVersion
+    return version >= 0 ? buildStore.getSavedBuilds() : []
+  })
+
   const comparisonBuilds = computed(() => discoveryStore.comparisonBuilds)
 
   const favoriteBuilds = computed<Build[]>(() => {
@@ -179,6 +185,7 @@ export function useBuildsIndexController(options: UseBuildsIndexControllerOption
     myBuildsVisibilityFilter,
     visibilityFilterOptions,
     buildsFilteredByVisibility,
+    userBuilds,
     comparisonBuilds,
     favoriteBuilds,
     buildToDelete,
