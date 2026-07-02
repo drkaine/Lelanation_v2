@@ -163,8 +163,6 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
   function persistVsState() {
     const key = vsStateStorageKey()
     if (import.meta.server || !key || isHydratingVsState.value) return
-    persistActiveSideBuild()
-    persistActiveSideStats()
     try {
       const payload: TheorycraftVsStoredState = {
         ally: cloneBuild(sideBuilds.value.ally),
@@ -388,14 +386,10 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
     loadChampionDataForPanel().catch(() => undefined)
   })
 
-  watch(
-    () => sourceBuild.value,
-    build => {
-      if (!isActive.value || !build || activeSide.value !== 'ally') return
-      syncAllyFromSource(build)
-    },
-    { deep: true }
-  )
+  watch(sourceBuild, build => {
+    if (!isActive.value || !build || activeSide.value !== 'ally') return
+    syncAllyFromSource(build)
+  })
 
   watch(
     () => buildStore.currentBuild,

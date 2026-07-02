@@ -4,6 +4,7 @@ import { translate } from "../i18n";
 
 const props = defineProps<{
   language: "fr" | "en";
+  embedded?: boolean;
 }>();
 
 function t(key: string): string {
@@ -25,8 +26,8 @@ const shortcutRows = computed(() => [
 </script>
 
 <template>
-  <section class="shortcuts-page">
-    <div class="shortcuts-modal">
+  <section class="shortcuts-page" :class="{ 'shortcuts-page--embedded': embedded }">
+    <div class="shortcuts-modal" :class="{ 'shortcuts-modal--embedded': embedded }">
       <header class="shortcuts-header">
         <h2 class="shortcuts-title">{{ t("shortcuts.title") }}</h2>
         <p class="shortcuts-hint">{{ t("shortcuts.hint") }}</p>
@@ -81,6 +82,12 @@ const shortcutRows = computed(() => [
   overflow: auto;
 }
 
+.shortcuts-page--embedded {
+  flex: none;
+  margin: 0;
+  overflow: visible;
+}
+
 .shortcuts-modal {
   width: min(960px, 100%);
   border: 1px solid rgba(200, 155, 60, 0.35);
@@ -88,6 +95,11 @@ const shortcutRows = computed(() => [
   background: rgba(10, 20, 40, 0.92);
   box-shadow: 0 14px 35px rgba(0, 0, 0, 0.25);
   padding: 1.25rem 1.5rem 1.5rem;
+}
+
+.shortcuts-modal--embedded {
+  width: 100%;
+  box-shadow: none;
 }
 
 .shortcuts-header {

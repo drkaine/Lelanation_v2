@@ -403,6 +403,9 @@ import {
 } from '~/utils/buildCardShareImage'
 import { migrateBuildToCurrent } from '~/utils/migrateBuildToCurrent'
 import { findMatchupGuideForBuildId } from '~/utils/matchupGuideByBuild'
+import { championWithStatsForBuild, resolveChampionStatsForBuild } from '~/utils/theorycraftStats'
+import { useChampionsStore } from '~/stores/ChampionsStore'
+import { useItemsStore } from '~/stores/ItemsStore'
 import type { Build, SubBuild } from '~/types/build'
 import { useClientHydrated } from '~/composables/useClientHydrated'
 import { useChampionSplashPreference } from '~/composables/useChampionSplashPreference'
@@ -415,8 +418,11 @@ const discoveryStore = useBuildDiscoveryStore()
 const favoritesStore = useFavoritesStore()
 const matchupGuideDiscoveryStore = useMatchupGuideDiscoveryStore()
 const matchupGuideStore = useMatchupGuideStore()
+const championsStore = useChampionsStore()
+const itemsStore = useItemsStore()
 const localePath = useLocalePath()
 const { t, locale } = useI18n()
+const riotLocale = computed(() => (locale.value === 'en' ? 'en_US' : 'fr_FR'))
 const route = useRoute()
 const { hydrated } = useClientHydrated()
 const { championSplashEnabled } = useChampionSplashPreference()
@@ -434,6 +440,9 @@ const shareToggleButtonRef = ref<HTMLButtonElement | null>(null)
 const buildToDelete = ref<string | null>(null)
 const shareToastMessage = ref('')
 const shareToastType = ref<'success' | 'error'>('success')
+
+type DetailTab = 'statistics' | 'guide' | 'theorycraft'
+const activeDetailTab = ref<DetailTab>('statistics')
 
 type ShareTrackType = 'link' | 'image' | 'image_with_meta'
 
@@ -719,6 +728,52 @@ const updateToCurrentVersion = async () => {
   }
 }
 
+async function enrichDetailBuildChampion(target: Build): Promise<Build> {
+  const championId = target.champion?.id
+  if (!championId || resolveChampionStatsForBuild(target.champion)) return target
+
+  if (championsStore.champions.length === 0) {
+    await championsStore.loadChampions(riotLocale.value).catch(() => undefined)
+  }
+
+  let enriched = championsStore.champions.find(champion => champion.id === championId) ?? null
+  if (!resolveChampionStatsForBuild(enriched)) {
+    enriched =
+      (await championsStore.loadChampionDetails(championId, riotLocale.value).catch(() => null)) ??
+      enriched
+  }
+
+  if (!enriched || !resolveChampionStatsForBuild(enriched)) return target
+
+  return {
+    ...target,
+    champion: championWithStatsForBuild({ ...target.champion!, ...enriched }),
+  }
+}
+
+let enrichDetailBuildRequest = 0
+
+watch(
+  () => detailRootBuild.value,
+  async target => {
+    if (!target?.champion?.id) return
+    const requestId = ++enrichDetailBuildRequest
+    const enriched = await enrichDetailBuildChampion(target)
+    if (requestId !== enrichDetailBuildRequest || enriched === target) return
+    detailRootBuild.value = enriched
+  },
+  { immediate: true }
+)
+
+watch(
+  () => detailRootBuild.value?.id,
+  buildId => {
+    if (!buildId) return
+    itemsStore.loadItems(riotLocale.value).catch(() => undefined)
+  },
+  { immediate: true }
+)
+
 watch(
   () => [props.buildId, props.initialBuild] as const,
   async ([id, seededBuild]) => {
@@ -727,6 +782,10 @@ watch(
       detailRootBuild.value = seededBuild
       loading.value = false
       error.value = null
+      return
+    }
+    if (detailRootBuild.value?.id === id) {
+      loading.value = false
       return
     }
     loading.value = true

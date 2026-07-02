@@ -17,6 +17,14 @@ import { importBuildToLcu, describeApplyResult } from "../lcuBuildImport";
 import { useLcuExport } from "../composables/useLcuExport";
 import KeyboardShortcutsView from "./KeyboardShortcutsView.vue";
 import ChecklistView from "./ChecklistView.vue";
+import {
+  buildCompanionNav,
+  isCompanionLinkActive,
+  isCompanionMenuActive,
+  isCompanionSubItemActive,
+  localePrefix,
+  type CompanionNavEntry,
+} from "../companionNav";
 
 const settings = ref(getSettings());
 const { lcuStatus, refreshStatus } = useLcuExport();
@@ -68,54 +76,21 @@ type QueuedImportMessage = {
   data?: { type?: string; payload?: { build?: Build } };
 };
 
-type AppPage =
-  | "builds"
-  | "videos"
-  | "statistics"
-  | "tier-list"
-  | "patch-notes"
-  | "checklist"
-  | "shortcuts"
-  | "settings";
-const currentPage = ref<AppPage>("builds");
+type ViewMode = "iframe" | "checklist" | "settings";
+type SettingsTab = "app" | "site";
 
-const navEntries = computed(() =>
-  settings.value.language === "en"
-    ? [
-        { id: "builds" as const, label: "My Builds" },
-        { id: "videos" as const, label: "Videos" },
-        { id: "statistics" as const, label: "Statistics" },
-        { id: "tier-list" as const, label: "Tier List" },
-        { id: "patch-notes" as const, label: "Patch Notes" },
-        { id: "shortcuts" as const, label: t("nav.shortcuts") },
-      ]
-    : [
-        { id: "builds" as const, label: "Les Builds" },
-        { id: "videos" as const, label: "Videos" },
-        { id: "statistics" as const, label: "Statistiques" },
-        { id: "tier-list" as const, label: "Tier list" },
-        { id: "patch-notes" as const, label: "Notes de patch" },
-        { id: "shortcuts" as const, label: t("nav.shortcuts") },
-      ]
+const viewMode = ref<ViewMode>("iframe");
+const iframePath = ref(`${localePrefix(getSettings().language)}/builds/discover`);
+const settingsTab = ref<SettingsTab>("app");
+const openNavMenuId = ref<string | null>(null);
+
+const navEntries = computed((): CompanionNavEntry[] =>
+  buildCompanionNav(settings.value.language)
 );
 
 const embeddedPageUrl = computed(() => {
-  if (
-    currentPage.value === "settings" ||
-    currentPage.value === "shortcuts" ||
-    currentPage.value === "checklist"
-  ) {
-    return "";
-  }
-  const locale = settings.value.language === "en" ? "/en" : "";
-  const pathMap: Record<Exclude<AppPage, "settings" | "shortcuts" | "checklist">, string> = {
-    builds: `${locale}/builds/discover`,
-    videos: `${locale}/videos`,
-    statistics: `${locale}/statistics`,
-    "tier-list": `${locale}/statistics/tier-list`,
-    "patch-notes": `${locale}/patch-notes`,
-  };
-  const url = new URL(pathMap[currentPage.value], apiBase);
+  if (viewMode.value !== "iframe") return "";
+  const url = new URL(iframePath.value, apiBase);
   url.searchParams.set("app", "on");
   const target = url.toString();
   const wrapped = wrapWithEmbedProxy(target);
@@ -124,16 +99,56 @@ const embeddedPageUrl = computed(() => {
   }
   return target;
 });
-const isEmbeddedPage = computed(
-  () =>
-    currentPage.value !== "settings" &&
-    currentPage.value !== "shortcuts" &&
-    currentPage.value !== "checklist"
-);
 
-watch(currentPage, () => {
-  iframeError.value = false;
+const siteSettingsUrl = computed(() => {
+  const prefix = localePrefix(settings.value.language);
+  const url = new URL(`${prefix}/settings`, apiBase);
+  url.searchParams.set("app", "on");
+  const target = url.toString();
+  const wrapped = wrapWithEmbedProxy(target);
+  return wrapped !== target ? wrapped : target;
 });
+
+const isEmbeddedPage = computed(() => viewMode.value === "iframe");
+
+function navigateToPath(path: string) {
+  iframePath.value = path;
+  viewMode.value = "iframe";
+  openNavMenuId.value = null;
+}
+
+function openSettings(tab: SettingsTab = "app") {
+  settingsTab.value = tab;
+  viewMode.value = "settings";
+  openNavMenuId.value = null;
+}
+
+function toggleNavMenu(menuId: string) {
+  openNavMenuId.value = openNavMenuId.value === menuId ? null : menuId;
+}
+
+function closeNavMenus() {
+  openNavMenuId.value = null;
+}
+
+function isNavMenuOpen(menuId: string): boolean {
+  return openNavMenuId.value === menuId;
+}
+
+watch([viewMode, iframePath], () => {
+  if (viewMode.value === "iframe") {
+    iframeError.value = false;
+  }
+});
+
+watch(
+  () => settings.value.language,
+  (language) => {
+    const prefix = localePrefix(language);
+    const stripped = iframePath.value.replace(/^\/en(?=\/|$)/, "") || "/builds/discover";
+    iframePath.value = `${prefix}${stripped}`;
+  }
+);
 
 function t(key: string, params?: Record<string, string | number>): string {
   return translate(settings.value.language, key, params);
@@ -479,7 +494,7 @@ onMounted(async () => {
 
   try {
     postgameUnlisten = await listen("lcu:checklist-saved", () => {
-      currentPage.value = "checklist";
+      viewMode.value = "checklist";
       showImportNotification(t("checklist.notifySaved"), true);
     });
   } catch {
@@ -510,13 +525,19 @@ onUnmounted(() => {
           <button
             type="button"
             class="checklist-header-btn"
-            :class="{ active: currentPage === 'checklist' }"
+            :class="{ active: viewMode === 'checklist' }"
             :title="t('nav.checklist')"
-            @click="currentPage = 'checklist'"
+            @click="viewMode = 'checklist'"
           >
             {{ t("nav.checklist") }}
           </button>
-          <button type="button" class="icon-btn" :title="t('settings.more')" @click="currentPage = 'settings'">
+          <button
+            type="button"
+            class="icon-btn"
+            :class="{ active: viewMode === 'settings' }"
+            :title="t('settings.more')"
+            @click="openSettings('app')"
+          >
             ⚙
           </button>
           <span
@@ -530,17 +551,56 @@ onUnmounted(() => {
           </span>
         </div>
       </div>
-      <nav class="app-nav" aria-label="Navigation">
-        <button
-          v-for="entry in navEntries"
-          :key="entry.id"
-          type="button"
-          class="nav-btn"
-          :class="{ active: currentPage === entry.id }"
-          @click="currentPage = entry.id"
-        >
-          {{ entry.label }}
-        </button>
+      <nav class="app-nav" aria-label="Navigation" @mouseleave="closeNavMenus">
+        <template v-for="entry in navEntries" :key="entry.id">
+          <div
+            v-if="entry.type === 'menu'"
+            class="nav-menu"
+            @mouseenter="openNavMenuId = entry.id"
+          >
+            <button
+              type="button"
+              class="nav-btn nav-menu-trigger"
+              :class="{
+                active: isCompanionMenuActive(entry.id, iframePath) && viewMode === 'iframe',
+                open: isNavMenuOpen(entry.id),
+              }"
+              :aria-expanded="isNavMenuOpen(entry.id)"
+              aria-haspopup="true"
+              @click="toggleNavMenu(entry.id)"
+            >
+              <span>{{ t(entry.labelKey) }}</span>
+              <span class="nav-menu-chevron" :class="{ open: isNavMenuOpen(entry.id) }">▾</span>
+            </button>
+            <div v-show="isNavMenuOpen(entry.id)" class="nav-menu-dropdown">
+              <button
+                v-for="item in entry.items"
+                :key="item.id"
+                type="button"
+                class="nav-submenu-link"
+                :class="{
+                  active:
+                    viewMode === 'iframe' &&
+                    isCompanionSubItemActive(item.path, iframePath),
+                }"
+                @click="navigateToPath(item.path)"
+              >
+                {{ t(item.labelKey) }}
+              </button>
+            </div>
+          </div>
+          <button
+            v-else
+            type="button"
+            class="nav-btn"
+            :class="{
+              active: viewMode === 'iframe' && isCompanionLinkActive(entry.id, iframePath),
+            }"
+            @click="navigateToPath(entry.path)"
+          >
+            {{ t(entry.labelKey) }}
+          </button>
+        </template>
       </nav>
     </header>
 
@@ -561,12 +621,7 @@ onUnmounted(() => {
     </div>
 
     <ChecklistView
-      v-if="currentPage === 'checklist'"
-      :language="settings.language"
-    />
-
-    <KeyboardShortcutsView
-      v-if="currentPage === 'shortcuts'"
+      v-if="viewMode === 'checklist'"
       :language="settings.language"
     />
 
@@ -587,8 +642,32 @@ onUnmounted(() => {
         <button type="button" class="btn-sm" @click="openUrl(embeddedPageUrl)">Ouvrir dans le navigateur</button>
       </div>
     </section>
-    <section v-else-if="currentPage === 'settings'" class="settings-page">
-      <div class="settings-card">
+    <section v-else-if="viewMode === 'settings'" class="settings-page">
+      <div class="settings-shell">
+        <div class="settings-tabs" role="tablist" :aria-label="t('settings.more')">
+          <button
+            type="button"
+            role="tab"
+            class="settings-tab"
+            :class="{ active: settingsTab === 'app' }"
+            :aria-selected="settingsTab === 'app'"
+            @click="settingsTab = 'app'"
+          >
+            {{ t("settings.tabApp") }}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="settings-tab"
+            :class="{ active: settingsTab === 'site' }"
+            :aria-selected="settingsTab === 'site'"
+            @click="settingsTab = 'site'"
+          >
+            {{ t("settings.tabSite") }}
+          </button>
+        </div>
+
+        <div v-if="settingsTab === 'app'" class="settings-card">
         <h2 class="settings-title">{{ t("settings.more") }}</h2>
         <p class="settings-subtitle">
           {{
@@ -709,6 +788,21 @@ onUnmounted(() => {
           {{ settings.language === "en" ? "Settings saved." : "Parametres enregistres." }}
         </p>
         <p v-if="configError" class="settings-error">{{ configError }}</p>
+        </div>
+
+        <div v-else class="settings-site-panel">
+          <p class="settings-site-hint">{{ t("settings.siteHint") }}</p>
+          <div class="settings-site-iframe-shell">
+            <iframe
+              :key="siteSettingsUrl"
+              class="settings-site-iframe"
+              :src="siteSettingsUrl"
+              title="Lelanation site settings"
+              loading="eager"
+            />
+          </div>
+          <KeyboardShortcutsView :language="settings.language" embedded />
+        </div>
       </div>
     </section>
     <div v-if="updateNoticeOpen" class="overlay" @click.self="updateNoticeOpen = false">
@@ -825,6 +919,59 @@ onUnmounted(() => {
   background: rgba(3, 151, 171, 0.2);
   color: #cdfafa;
 }
+.nav-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+.nav-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.nav-menu-chevron {
+  font-size: 0.72rem;
+  opacity: 0.85;
+  transition: transform 0.15s ease;
+}
+.nav-menu-chevron.open {
+  transform: rotate(180deg);
+}
+.nav-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  z-index: 40;
+  min-width: 11.5rem;
+  padding: 0.35rem;
+  border-radius: 10px;
+  border: 1px solid rgba(200, 155, 60, 0.45);
+  background: rgba(8, 18, 36, 0.98);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+.nav-submenu-link {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.45rem 0.6rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #f0e6d2;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.nav-submenu-link:hover {
+  background: rgba(200, 155, 60, 0.14);
+}
+.nav-submenu-link.active {
+  background: rgba(3, 151, 171, 0.2);
+  color: #cdfafa;
+}
+.icon-btn.active {
+  border-color: rgba(3, 151, 171, 0.85);
+  background: rgba(3, 151, 171, 0.2);
+}
 .top-actions {
   display: flex;
   align-items: center;
@@ -877,7 +1024,62 @@ onUnmounted(() => {
   overflow: auto;
   display: flex;
   justify-content: center;
-  align-items: flex-start;
+  align-items: stretch;
+}
+.settings-shell {
+  width: min(960px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+}
+.settings-tabs {
+  display: flex;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+.settings-tab {
+  padding: 0.42rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid rgba(200, 155, 60, 0.4);
+  background: rgba(10, 20, 40, 0.55);
+  color: #f0e6d2;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.settings-tab.active {
+  border-color: rgba(3, 151, 171, 0.85);
+  background: rgba(3, 151, 171, 0.2);
+  color: #cdfafa;
+}
+.settings-site-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+  flex: 1;
+}
+.settings-site-hint {
+  margin: 0;
+  font-size: 0.84rem;
+  opacity: 0.88;
+  color: #f0e6d2;
+}
+.settings-site-iframe-shell {
+  flex: 1;
+  min-height: 420px;
+  border: 1px solid rgba(200, 155, 60, 0.35);
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(10, 20, 40, 0.72);
+}
+.settings-site-iframe {
+  width: 100%;
+  height: 100%;
+  min-height: 420px;
+  border: none;
+  display: block;
 }
 .settings-card {
   width: min(720px, 100%);
