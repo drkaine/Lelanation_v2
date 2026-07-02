@@ -24,6 +24,7 @@ import {
   isCompanionSubItemActive,
   localePrefix,
   type CompanionNavEntry,
+  type CompanionNavSubItem,
 } from "../companionNav";
 
 const settings = ref(getSettings());
@@ -87,6 +88,14 @@ const openNavMenuId = ref<string | null>(null);
 const navEntries = computed((): CompanionNavEntry[] =>
   buildCompanionNav(settings.value.language)
 );
+
+const activeSubmenuItems = computed((): CompanionNavSubItem[] => {
+  const menuId = openNavMenuId.value;
+  if (!menuId) return [];
+  const entry = navEntries.value.find((item) => item.type === "menu" && item.id === menuId);
+  if (!entry || entry.type !== "menu") return [];
+  return entry.items;
+});
 
 const embeddedPageUrl = computed(() => {
   if (viewMode.value !== "iframe") return "";
@@ -527,7 +536,7 @@ onUnmounted(() => {
             class="checklist-header-btn"
             :class="{ active: viewMode === 'checklist' }"
             :title="t('nav.checklist')"
-            @click="viewMode = 'checklist'"
+            @click="viewMode = 'checklist'; closeNavMenus()"
           >
             {{ t("nav.checklist") }}
           </button>
@@ -551,14 +560,11 @@ onUnmounted(() => {
           </span>
         </div>
       </div>
-      <nav class="app-nav" aria-label="Navigation" @mouseleave="closeNavMenus">
-        <template v-for="entry in navEntries" :key="entry.id">
-          <div
-            v-if="entry.type === 'menu'"
-            class="nav-menu"
-            @mouseenter="openNavMenuId = entry.id"
-          >
+      <nav class="app-nav" aria-label="Navigation">
+        <div class="app-nav-scroll">
+          <template v-for="entry in navEntries" :key="entry.id">
             <button
+              v-if="entry.type === 'menu'"
               type="button"
               class="nav-btn nav-menu-trigger"
               :class="{
@@ -572,36 +578,41 @@ onUnmounted(() => {
               <span>{{ t(entry.labelKey) }}</span>
               <span class="nav-menu-chevron" :class="{ open: isNavMenuOpen(entry.id) }">▾</span>
             </button>
-            <div v-show="isNavMenuOpen(entry.id)" class="nav-menu-dropdown">
-              <button
-                v-for="item in entry.items"
-                :key="item.id"
-                type="button"
-                class="nav-submenu-link"
-                :class="{
-                  active:
-                    viewMode === 'iframe' &&
-                    isCompanionSubItemActive(item.path, iframePath),
-                }"
-                @click="navigateToPath(item.path)"
-              >
-                {{ t(item.labelKey) }}
-              </button>
-            </div>
-          </div>
-          <button
-            v-else
-            type="button"
-            class="nav-btn"
-            :class="{
-              active: viewMode === 'iframe' && isCompanionLinkActive(entry.id, iframePath),
-            }"
-            @click="navigateToPath(entry.path)"
-          >
-            {{ t(entry.labelKey) }}
-          </button>
-        </template>
+            <button
+              v-else
+              type="button"
+              class="nav-btn"
+              :class="{
+                active: viewMode === 'iframe' && isCompanionLinkActive(entry.id, iframePath),
+              }"
+              @click="navigateToPath(entry.path)"
+            >
+              {{ t(entry.labelKey) }}
+            </button>
+          </template>
+        </div>
       </nav>
+
+      <div
+        v-if="openNavMenuId && activeSubmenuItems.length > 0"
+        class="app-nav-submenu"
+        role="menu"
+      >
+        <button
+          v-for="item in activeSubmenuItems"
+          :key="`${openNavMenuId}-${item.id}`"
+          type="button"
+          class="app-nav-submenu__link"
+          role="menuitem"
+          :class="{
+            active:
+              viewMode === 'iframe' && isCompanionSubItemActive(item.path, iframePath),
+          }"
+          @click="navigateToPath(item.path)"
+        >
+          {{ t(item.labelKey) }}
+        </button>
+      </div>
     </header>
 
     <div
@@ -840,7 +851,7 @@ onUnmounted(() => {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  min-height: 0;
   background:
     radial-gradient(circle at 20% 0%, rgba(3, 151, 171, 0.18), transparent 38%),
     radial-gradient(circle at 80% 0%, rgba(200, 155, 60, 0.1), transparent 40%);
@@ -856,6 +867,9 @@ onUnmounted(() => {
   border: 1px solid rgba(200, 155, 60, 0.35);
   border-radius: 12px;
   background: linear-gradient(145deg, rgba(10, 20, 40, 0.92), rgba(10, 20, 40, 0.72));
+  position: relative;
+  z-index: 40;
+  overflow: visible;
 }
 .top-bar-row {
   display: flex;
@@ -874,13 +888,49 @@ onUnmounted(() => {
   opacity: 0.88;
 }
 .app-nav {
+  position: relative;
+  z-index: 50;
+  overflow: visible;
+}
+.app-nav-scroll {
   display: flex;
   gap: 0.45rem;
   min-width: 0;
   overflow-x: auto;
-  overflow-y: hidden;
   scrollbar-width: thin;
   padding-bottom: 0.1rem;
+}
+.app-nav-submenu {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 0.35rem;
+  margin-top: 0.15rem;
+  padding: 0.55rem;
+  border-radius: 10px;
+  border: 1px solid rgba(200, 155, 60, 0.35);
+  background: rgba(5, 14, 30, 0.96);
+}
+.app-nav-submenu__link {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid rgba(200, 155, 60, 0.2);
+  border-radius: 8px;
+  background: rgba(10, 20, 40, 0.72);
+  color: #f0e6d2;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.app-nav-submenu__link:hover {
+  border-color: rgba(200, 155, 60, 0.55);
+  background: rgba(200, 155, 60, 0.12);
+}
+.app-nav-submenu__link.active {
+  border-color: rgba(3, 151, 171, 0.75);
+  background: rgba(3, 151, 171, 0.18);
+  color: #cdfafa;
 }
 .checklist-header-btn {
   padding: 0.38rem 0.75rem;
@@ -919,14 +969,11 @@ onUnmounted(() => {
   background: rgba(3, 151, 171, 0.2);
   color: #cdfafa;
 }
-.nav-menu {
-  position: relative;
-  flex-shrink: 0;
-}
 .nav-menu-trigger {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
+  flex-shrink: 0;
 }
 .nav-menu-chevron {
   font-size: 0.72rem;
@@ -935,38 +982,6 @@ onUnmounted(() => {
 }
 .nav-menu-chevron.open {
   transform: rotate(180deg);
-}
-.nav-menu-dropdown {
-  position: absolute;
-  top: calc(100% + 0.35rem);
-  left: 0;
-  z-index: 40;
-  min-width: 11.5rem;
-  padding: 0.35rem;
-  border-radius: 10px;
-  border: 1px solid rgba(200, 155, 60, 0.45);
-  background: rgba(8, 18, 36, 0.98);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
-}
-.nav-submenu-link {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 0.45rem 0.6rem;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: #f0e6d2;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-.nav-submenu-link:hover {
-  background: rgba(200, 155, 60, 0.14);
-}
-.nav-submenu-link.active {
-  background: rgba(3, 151, 171, 0.2);
-  color: #cdfafa;
 }
 .icon-btn.active {
   border-color: rgba(3, 151, 171, 0.85);
