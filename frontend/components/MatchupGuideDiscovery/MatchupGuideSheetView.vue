@@ -4,6 +4,7 @@
     :class="{
       'matchup-sheet--detail': variant === 'detail',
       'matchup-sheet--card': variant === 'card',
+      'matchup-sheet--layout-scaled': isLayoutScaled,
     }"
   >
     <header class="matchup-sheet__header">
@@ -320,6 +321,7 @@ import BuildCard from '~/components/Build/BuildCard.vue'
 import { useVersionStore } from '~/stores/VersionStore'
 import { useChampionSplashPreference } from '~/composables/useChampionSplashPreference'
 import { useClientHydrated } from '~/composables/useClientHydrated'
+import { useLayoutScaled } from '~/composables/useLayoutScaled'
 import { guideDisplayDate } from '~/composables/useMatchupGuideDetail'
 import { hydrateBuild } from '~/utils/buildSerialize'
 import { getChampionImageUrl, getChampionSplashImageUrl } from '~/utils/imageUrl'
@@ -345,6 +347,7 @@ const detailExtrasExpanded = ref(true)
 const versionStore = useVersionStore()
 const { championSplashEnabled } = useChampionSplashPreference()
 const { hydrated } = useClientHydrated()
+const { isLayoutScaled } = useLayoutScaled()
 const gameVersion = computed(() => versionStore.currentVersion ?? 'latest')
 
 const tagDefs: Array<{ id: MatchupGuideTag; label: string }> = [
@@ -892,8 +895,9 @@ function roleLabel(role: Role) {
 }
 
 .matchup-sheet__detail-layout {
+  --build-card-width: 300px;
   display: grid;
-  grid-template-columns: minmax(280px, 300px) minmax(0, 1fr);
+  grid-template-columns: var(--build-card-width) minmax(0, 1fr);
   gap: 1rem;
   align-items: start;
   border-top: 1px solid var(--card-border-color-soft, rgb(var(--rgb-primary) / 0.35));
@@ -902,19 +906,24 @@ function roleLabel(role: Role) {
   max-width: 100%;
 }
 
+.matchup-sheet--layout-scaled .matchup-sheet__detail-layout {
+  --build-card-width: 390px;
+}
+
 .matchup-sheet__detail-build {
   position: sticky;
   top: 0.75rem;
+  width: var(--build-card-width);
   max-width: 100%;
 }
 
 .matchup-sheet__detail-build :deep(.build-card-wrapper) {
-  --build-card-width: 300px;
+  width: var(--build-card-width);
   max-width: 100%;
 }
 
 @media (max-width: 640px) {
-  .matchup-sheet__detail-build :deep(.build-card-wrapper) {
+  .matchup-sheet__detail-layout {
     --build-card-width: 100%;
   }
 }

@@ -118,6 +118,7 @@ export default defineNuxtConfig({
     baseUrl: defaultSiteUrl,
     defaultLocale: 'fr',
     strategy: 'prefix_except_default',
+    // Files live in frontend/i18n/locales/ (restructureDir defaults to "i18n").
     langDir: 'locales',
     // Allow HTML in locale messages (legal/privacy pages use <strong> etc. with v-html).
     compilation: {
@@ -317,7 +318,7 @@ export default defineNuxtConfig({
               id.includes('node_modules/@nuxtjs/i18n') ||
               id.includes('node_modules/vue-i18n') ||
               id.includes('/frontend/i18n/') ||
-              id.includes('/frontend/locales/')
+              id.includes('/frontend/i18n/locales/')
             ) {
               return 'i18n'
             }

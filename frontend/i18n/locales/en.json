@@ -210,7 +210,6 @@
     "champion": "Champion",
     "rune": "Rune",
     "item": "Item",
-    "skillOrder": "Skill order",
     "info": "Info",
     "theorycraft": "Theorycraft"
   },
@@ -294,41 +293,41 @@
     "secondary-rune-selection": "Select a rune",
     "stat-selection": "Select a stat",
     "shards": {
-      "5008": {
-        "name": "Adaptive Force",
-        "desc": "+5.4 Attack Damage or +9 Ability Power"
-      },
-      "5005": {
-        "name": "Attack Speed",
-        "desc": "+10% Attack Speed"
-      },
-      "5007": {
-        "name": "Ability Haste",
-        "desc": "+8 Ability Haste"
-      },
-      "5006": {
-        "name": "Move Speed",
-        "desc": "+2.5% Move Speed"
-      },
-      "5010": {
-        "name": "Move Speed",
-        "desc": "+2.5% Move Speed"
+      "5001": {
+        "name": "Scaling Health",
+        "desc": "+10-200 Health (based on level)"
       },
       "5002": {
         "name": "Health per level",
         "desc": "+10-200 Health (based on level)"
       },
-      "5001": {
-        "name": "Scaling Health",
-        "desc": "+10-200 Health (based on level)"
+      "5003": {
+        "name": "Tenacity",
+        "desc": "+15% Tenacity and Slow Resist"
+      },
+      "5005": {
+        "name": "Attack Speed",
+        "desc": "+10% Attack Speed"
+      },
+      "5006": {
+        "name": "Move Speed",
+        "desc": "+2.5% Move Speed"
+      },
+      "5007": {
+        "name": "Ability Haste",
+        "desc": "+8 Ability Haste"
+      },
+      "5008": {
+        "name": "Adaptive Force",
+        "desc": "+5.4 Attack Damage or +9 Ability Power"
+      },
+      "5010": {
+        "name": "Move Speed",
+        "desc": "+2.5% Move Speed"
       },
       "5011": {
         "name": "Health",
         "desc": "+65 Health"
-      },
-      "5003": {
-        "name": "Tenacity",
-        "desc": "+15% Tenacity and Slow Resist"
       },
       "5013": {
         "name": "Tenacity",
@@ -337,8 +336,6 @@
     }
   },
   "theorycraft": {
-    "pageTitle": "Theorycraft Lab",
-    "backToBuilds": "← Back to Builds",
     "panel": {
       "workspace": "Workspace",
       "champion": "Champion",
@@ -514,7 +511,8 @@
     "editorEdit": "Edit",
     "editorEditShort": "Edit",
     "itemsStatsNote": "Stats from enabled items (starters included when enabled; not counted toward the 6-item limit; one pair of boots).",
-    "itemsStatsEmpty": "No item stats detected"
+    "itemsStatsEmpty": "No item stats detected",
+    "copyAll": "Copy all"
   },
   "statisticsPage": {
     "surveillanceTitle": "Watchlist",
@@ -1822,7 +1820,8 @@
     "championObjective_inhibitor": "Inhibitor",
     "spellsCasts": "Casts",
     "spellsTooltipCasts": "Total number of spell casts (or Cast1/Cast2 for pairs).",
-    "spellsTooltipDeltaCasts": "Cast difference vs reference patch (or ΔCast1/ΔCast2 for pairs)."
+    "spellsTooltipDeltaCasts": "Cast difference vs reference patch (or ΔCast1/ΔCast2 for pairs).",
+    "tierListPatchDeltaRankTitle": "Rank change vs patch {ref} (positive = improvement)"
   },
   "stats": {
     "title": "Statistics",
@@ -2613,6 +2612,10 @@
     "contact": {
       "title": "Contact",
       "text": "For any questions regarding this legal notice or to report content, you can contact us via social networks or the contact form."
+    },
+    "analytics": {
+      "title": "Audience measurement (Matomo)",
+      "p1": "This site uses <strong>Matomo</strong>, an open-source audience analytics tool, to measure traffic (page views, navigation). Tracking is only enabled with your consent (cookie banner). Data is used solely to improve the site and is not sold to third parties."
     }
   },
   "privacy": {
@@ -2741,8 +2744,8 @@
     "error": "Failed to load patch notes",
     "retry": "Retry",
     "noChanges": "No changes in this category",
-"noSummaryImage": "No summary image available",
-"clickToZoom": "Click to enlarge — scroll to zoom, drag to pan",
+    "noSummaryImage": "No summary image available",
+    "clickToZoom": "Click to enlarge — scroll to zoom, drag to pan",
     "sections": {
       "champions": "Champions",
       "items": "Items",
@@ -3128,32 +3131,6 @@
       "rebuildError": "Failed to rebuild matchup scores.",
       "tierTable": "Tier list (aggregated by champion)",
       "championTable": "Champion opponent details"
-    }
-  },
-  "adminApp": {
-    "title": "Lelanation App",
-    "backToAdmin": "Back to admin",
-    "downloadTitle": "Download",
-    "description": "This Windows companion app connects the LoL client with the Lelanation project. It imports builds (runes, items, summoner spells based on your settings), keeps favorites locally, and sends matchId + region after each game.",
-    "downloadButton": "Download Windows app",
-    "downloadCount": "Download count: {count}",
-    "downloadCountError": "Unable to load download stats.",
-    "unavailable": "Installer not available. Configure COMPANION_APP_INSTALLER_PATH or COMPANION_APP_DOWNLOAD_URL on backend.",
-    "error": "Download error.",
-    "featuresTitle": "Key features",
-    "features": {
-      "importBuilds": "Build import into LoL client through LCU.",
-      "localFavorites": "Favorites and preferences are stored locally, not on server.",
-      "matchSync": "Sends matchId + region to backend for stats ingestion.",
-      "settings": "Import settings: runes, items, summoner spells."
-    },
-    "gdprTitle": "GDPR",
-    "gdprIntro": "The app follows data minimization principles:",
-    "gdpr": {
-      "consent": "Explicit consent is required before sync.",
-      "minData": "Only matchId + region are sent.",
-      "localOnly": "Favorites/settings remain on user device.",
-      "privacyPolicy": "Privacy policy is available on the website."
     }
   }
 }

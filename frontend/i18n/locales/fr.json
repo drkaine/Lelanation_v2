@@ -210,7 +210,6 @@
     "champion": "Champion",
     "rune": "Rune",
     "item": "Item",
-    "skillOrder": "Skill order",
     "info": "Infos",
     "theorycraft": "Theorycraft"
   },
@@ -294,41 +293,41 @@
     "secondary-rune-selection": "Sélectionnez une rune",
     "stat-selection": "Sélectionnez une stat",
     "shards": {
-      "5008": {
-        "name": "Force adaptative",
-        "desc": "+5.4 Dégâts d'attaque ou +9 Puissance magique"
-      },
-      "5005": {
-        "name": "Vitesse d'attaque",
-        "desc": "+10% Vitesse d'attaque"
-      },
-      "5007": {
-        "name": "Hâte de compétence",
-        "desc": "+8 Hâte de compétence"
-      },
-      "5006": {
-        "name": "Vitesse de déplacement",
-        "desc": "+2.5% Vitesse de déplacement"
-      },
-      "5010": {
-        "name": "Vitesse de déplacement",
-        "desc": "+2.5% Vitesse de déplacement"
+      "5001": {
+        "name": "PV (croissance)",
+        "desc": "+10-200 PV (selon niveau)"
       },
       "5002": {
         "name": "PV par niveau",
         "desc": "+10-200 PV (selon niveau)"
       },
-      "5001": {
-        "name": "PV (croissance)",
-        "desc": "+10-200 PV (selon niveau)"
+      "5003": {
+        "name": "Ténacité",
+        "desc": "+15% Ténacité et résistance aux ralentissements"
+      },
+      "5005": {
+        "name": "Vitesse d'attaque",
+        "desc": "+10% Vitesse d'attaque"
+      },
+      "5006": {
+        "name": "Vitesse de déplacement",
+        "desc": "+2.5% Vitesse de déplacement"
+      },
+      "5007": {
+        "name": "Hâte de compétence",
+        "desc": "+8 Hâte de compétence"
+      },
+      "5008": {
+        "name": "Force adaptative",
+        "desc": "+5.4 Dégâts d'attaque ou +9 Puissance magique"
+      },
+      "5010": {
+        "name": "Vitesse de déplacement",
+        "desc": "+2.5% Vitesse de déplacement"
       },
       "5011": {
         "name": "PV",
         "desc": "+65 PV"
-      },
-      "5003": {
-        "name": "Ténacité",
-        "desc": "+15% Ténacité et résistance aux ralentissements"
       },
       "5013": {
         "name": "Ténacité",
@@ -337,8 +336,6 @@
     }
   },
   "theorycraft": {
-    "pageTitle": "Theorycraft Lab",
-    "backToBuilds": "← Retour Builds",
     "panel": {
       "workspace": "Espace de travail",
       "champion": "Champion",
@@ -514,7 +511,8 @@
     "editorEdit": "Éditer",
     "editorEditShort": "Éditer",
     "itemsStatsNote": "Stats des objets activés (starters inclus s'ils sont activés ; hors limite des 6 ; 1 seule botte).",
-    "itemsStatsEmpty": "Aucune stat item détectée"
+    "itemsStatsEmpty": "Aucune stat item détectée",
+    "cancel": "Annuler"
   },
   "statisticsPage": {
     "surveillanceTitle": "Surveillance",
@@ -1197,7 +1195,6 @@
     "sidesDonutTitleSoloDuo": "% victoire (Solo/duo)",
     "sidesBlue": "Blue",
     "sidesRed": "Red",
-    "sidesMostPlayedBySide": "Champions les plus joués par côté",
     "sidesChampionsBySide": "Winrate des champions par côté (min. 10 parties)",
     "sidesObjectivesBySide": "Objectifs par côté",
     "sidesWinrateCardTitle": "Winrate par côté (bleu / rouge)",
@@ -2233,7 +2230,6 @@
     "dateUpdated": "Mis à jour",
     "dateCreated": "Créé le",
     "fullMatchupTable": "Tous les matchups",
-    "colRank": "Rang",
     "permabanNotes": "Permaban / bans",
     "builds": "Builds",
     "generalBuildNotes": "Builds généraux",
@@ -2748,8 +2744,8 @@
     "error": "Échec du chargement des notes de patch",
     "retry": "Réessayer",
     "noChanges": "Aucun changement dans cette catégorie",
-"noSummaryImage": "Aucune image récapitulative disponible",
-"clickToZoom": "Cliquez pour agrandir — molette pour zoomer, glisser pour déplacer",
+    "noSummaryImage": "Aucune image récapitulative disponible",
+    "clickToZoom": "Cliquez pour agrandir — molette pour zoomer, glisser pour déplacer",
     "sections": {
       "champions": "Champions",
       "items": "Objets",
@@ -3135,32 +3131,6 @@
       "rebuildError": "Impossible de recalculer les scores matchup.",
       "tierTable": "Tier list (agrégée par champion)",
       "championTable": "Détail des adversaires du champion"
-    }
-  },
-  "adminApp": {
-    "title": "Lelanation App",
-    "backToAdmin": "Retour admin",
-    "downloadTitle": "Téléchargement",
-    "description": "Cette application compagnon Windows connecte le client LoL au projet Lelanation. Elle permet d'importer vos builds (runes, items, sorts selon vos réglages), de conserver les favoris en local et de remonter le matchId + région après la partie.",
-    "downloadButton": "Télécharger l'app Windows",
-    "downloadCount": "Nombre de téléchargements : {count}",
-    "downloadCountError": "Impossible de charger les stats de téléchargement.",
-    "unavailable": "Installer non disponible. Configurez COMPANION_APP_INSTALLER_PATH ou COMPANION_APP_DOWNLOAD_URL côté backend.",
-    "error": "Erreur lors du téléchargement.",
-    "featuresTitle": "Fonctionnalités clés",
-    "features": {
-      "importBuilds": "Import des builds dans le client LoL via LCU.",
-      "localFavorites": "Favoris et préférences stockés localement, pas sur le serveur.",
-      "matchSync": "Envoi du matchId + région au backend pour ingestion stats.",
-      "settings": "Réglages d'import : runes, items, sorts d'invocateur."
-    },
-    "gdprTitle": "RGPD",
-    "gdprIntro": "L'application applique une logique de minimisation des données :",
-    "gdpr": {
-      "consent": "Consentement explicite requis avant la synchro.",
-      "minData": "Données envoyées : matchId + région uniquement.",
-      "localOnly": "Favoris/settings restent sur la machine de l'utilisateur.",
-      "privacyPolicy": "Politique de confidentialité accessible depuis le site."
     }
   }
 }
