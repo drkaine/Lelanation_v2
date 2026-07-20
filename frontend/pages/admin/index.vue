@@ -1991,12 +1991,7 @@ type CronJobRowUi = {
   lastFailureMessage: string | null
 }
 
-const DATA_TAB_CRON_KEYS = [
-  'dataDragonSync',
-  'youtubeSync',
-  'communityDragonSync',
-  'liveAggArchiveCheckpoint',
-] as const
+const DATA_TAB_CRON_KEYS = ['dataDragonSync', 'youtubeSync', 'communityDragonSync'] as const
 
 const dataTabCronRows = computed((): CronJobRowUi[] => {
   const jobs = cron.value?.cronJobs as

@@ -139,7 +139,7 @@ async function releasePollerLeaderLock(): Promise<void> {
 }
 
 async function startIngestionWorker(): Promise<Worker> {
-  const mod = await import('./workers/ingestion.worker.js');
+  const mod = await import('./workers/ingestion.worker.bootstrap.js');
   return mod.ingestionWorker;
 }
 
@@ -392,6 +392,14 @@ async function gracefulShutdown(signal: string): Promise<void> {
   if (summary1hInterval) clearInterval(summary1hInterval);
   if (matchAggregationInterval) clearInterval(matchAggregationInterval);
 
+  // Release the leader lock FIRST, before the (up to 60s) session-pool drain.
+  // The incoming instance can then acquire it within seconds instead of timing
+  // out and exiting, which previously caused a ~2 min ingestion stall on every
+  // PM2 restart. This instance no longer starts new poll sessions once
+  // `shuttingDown` is set, and all DB writes are idempotent, so a brief overlap
+  // with the new leader is safe.
+  await releasePollerLeaderLock();
+
   try {
     await sessionPool?.shutdown(60_000);
     sessionPool = null;
@@ -401,7 +409,6 @@ async function gracefulShutdown(signal: string): Promise<void> {
     observability?.stop();
     ObservabilityOrchestrator.resetInstance();
     observability = null;
-    await releasePollerLeaderLock();
     await PollerEngine.resetInstance();
 
     if (ingestionWorker) {

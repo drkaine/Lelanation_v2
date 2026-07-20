@@ -134,8 +134,9 @@
         <!-- BuildCard Sheet -->
         <div class="relative w-full">
           <div :ref="el => setBuildCardRef(build.id, el)" :data-build-id="build.id">
-            <BuildCard
+            <LazyBuildCard
               :ref="instance => setBuildCardComponentRef(build.id, instance)"
+              hydrate-on-visible
               :build="build"
               :readonly="true"
               :sheet-tooltips="tooltipsEnabled"
@@ -486,7 +487,6 @@ import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import type { MatchupGuide } from '@lelanation/shared-types'
-import BuildCard from '~/components/Build/BuildCard.vue'
 import NotificationToast from '~/components/NotificationToast.vue'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import { useBuildStore } from '~/stores/BuildStore'

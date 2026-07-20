@@ -7,14 +7,6 @@ import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
 
 type Logger = ReturnType<typeof createRiotPollerLogger>
-let lastActiveRefreshAtMs = 0
-const SNAPSHOT_ALLOWED_ROLES = ['TOP', 'JUNGLE', 'MIDDLE', 'UTILITY', 'BOTTOM'] as const
-
-function parseUtcSchedule(): { hour: number; minute: number } {
-  const hour = Math.min(23, Math.max(0, parseInt(process.env.CHAMPION_TIER_SNAPSHOT_UTC_HOUR ?? '0', 10) || 0))
-  const minute = Math.min(59, Math.max(0, parseInt(process.env.CHAMPION_TIER_SNAPSHOT_UTC_MINUTE ?? '0', 10) || 0))
-  return { hour, minute }
-}
 
 export function getPreviousUtcCalendarDayWindow(now: Date = new Date()): {
   windowStart: Date
@@ -40,35 +32,6 @@ export async function runChampionTierSnapshotForWindow(_params: {
   return { insertedEstimate: 0 }
 }
 
-async function cleanupInvalidSnapshotRoles(logger?: Logger): Promise<void> {
-  const deletedActive = await queryRawUnsafe<number>(`
-    WITH d AS (
-      DELETE FROM champion_tier_daily_snapshots
-      WHERE role::text NOT IN ('TOP', 'JUNGLE', 'MIDDLE', 'UTILITY', 'BOTTOM')
-         OR (games = 0 AND count_ban = 0)
-      RETURNING 1
-    ) SELECT COUNT(*)::int FROM d
-  `)
-  if (logger && deletedActive > 0) {
-    void logger.step('Champion tier snapshot role cleanup', {
-      deletedActiveRows: deletedActive,
-      allowedRoles: SNAPSHOT_ALLOWED_ROLES.join(','),
-    })
-  }
-}
-
-async function getActiveSnapshotDates(): Promise<Date[]> {
-  const limit = Math.max(1, Number.parseInt(process.env.CHAMPION_TIER_SNAPSHOT_ACTIVE_DAYS_LIMIT ?? '60', 10) || 60)
-  const dates = await queryRawUnsafe<Array<{ d: Date }>>(`
-    SELECT DISTINCT date_of_game::date AS d
-    FROM champion_tier_daily_snapshots
-    WHERE date_of_game IS NOT NULL
-    ORDER BY d DESC
-    LIMIT ${limit}
-  `)
-  return dates.map((r) => new Date(`${r.d.toISOString().slice(0, 10)}T00:00:00.000Z`))
-}
-
 export async function archiveChampionTierDailySnapshotsInDateRange(
   startInclusive: string,
   endExclusive: string,
@@ -80,10 +43,6 @@ export async function archiveChampionTierDailySnapshotsInDateRange(
   }
   if (endExclusive <= startInclusive) return { archivedRowCount: 0 }
   return { archivedRowCount: 0 }
-}
-
-async function archiveSnapshotsForCompletedPatches(_logger?: Logger): Promise<number> {
-  return 0
 }
 
 export interface ChampionTierSnapshotRow {
@@ -266,16 +225,3 @@ export async function getChampionTierDailySnapshotDateBounds(): Promise<{
   }
 }
 
-export async function refreshActiveChampionTierSnapshotsIfDue(logger?: Logger): Promise<void> {
-  if (process.env.CHAMPION_TIER_SNAPSHOT_DISABLED === '1') return
-  const { hour, minute } = parseUtcSchedule()
-  const now = new Date()
-  if (now.getUTCHours() !== hour || now.getUTCMinutes() !== minute) return
-  const throttleMs = 60 * 60 * 1000
-  if (Date.now() - lastActiveRefreshAtMs < throttleMs) return
-  lastActiveRefreshAtMs = Date.now()
-  await cleanupInvalidSnapshotRoles(logger)
-  const dates = await getActiveSnapshotDates()
-  void dates
-  await archiveSnapshotsForCompletedPatches(logger)
-}

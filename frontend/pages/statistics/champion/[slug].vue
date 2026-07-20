@@ -1829,24 +1829,12 @@ import ChampionMatchupMobileCard, {
   type MatchupsExtRow,
   type MatchupsExtSignalLevel,
 } from '~/components/statistics/ChampionMatchupMobileCard.vue'
-import ChampionMatchupDetailPanel, {
-  type MatchupDetailTabId,
-} from '~/components/statistics/ChampionMatchupDetailPanel.vue'
-import ChampionSynergyTab, {
-  type SynergyExtRow,
-} from '~/components/statistics/ChampionSynergyTab.vue'
-import ChampionObjectivesTab, {
-  type ChampionObjectivesSummary,
-} from '~/components/statistics/ChampionObjectivesTab.vue'
-import ChampionMiscTab, {
-  type ChampionMiscSummary,
-} from '~/components/statistics/ChampionMiscTab.vue'
-import ChampionPingsTab, {
-  type ChampionPingsSummary,
-} from '~/components/statistics/ChampionPingsTab.vue'
-import ChampionVisionTab, {
-  type ChampionVisionSummary,
-} from '~/components/statistics/ChampionVisionTab.vue'
+import type { MatchupDetailTabId } from '~/components/statistics/ChampionMatchupDetailPanel.vue'
+import type { SynergyExtRow } from '~/components/statistics/ChampionSynergyTab.vue'
+import type { ChampionObjectivesSummary } from '~/components/statistics/ChampionObjectivesTab.vue'
+import type { ChampionMiscSummary } from '~/components/statistics/ChampionMiscTab.vue'
+import type { ChampionPingsSummary } from '~/components/statistics/ChampionPingsTab.vue'
+import type { ChampionVisionSummary } from '~/components/statistics/ChampionVisionTab.vue'
 import ChampionSpellOrderCard from '~/components/statistics/ChampionSpellOrderCard.vue'
 import { mergeChampionSpellOrderRows } from '~/utils/championSpellOrderMerge'
 import {
@@ -1881,6 +1869,25 @@ const StatisticsRunesTab = defineAsyncComponent(
 )
 const StatisticsSpellsTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsSpellsTab.vue')
+)
+// Onglets lourds rendus derrière v-if : chargés à la demande (chunk par onglet).
+const ChampionMatchupDetailPanel = defineAsyncComponent(
+  () => import('~/components/statistics/ChampionMatchupDetailPanel.vue')
+)
+const ChampionSynergyTab = defineAsyncComponent(
+  () => import('~/components/statistics/ChampionSynergyTab.vue')
+)
+const ChampionObjectivesTab = defineAsyncComponent(
+  () => import('~/components/statistics/ChampionObjectivesTab.vue')
+)
+const ChampionMiscTab = defineAsyncComponent(
+  () => import('~/components/statistics/ChampionMiscTab.vue')
+)
+const ChampionPingsTab = defineAsyncComponent(
+  () => import('~/components/statistics/ChampionPingsTab.vue')
+)
+const ChampionVisionTab = defineAsyncComponent(
+  () => import('~/components/statistics/ChampionVisionTab.vue')
 )
 
 definePageMeta({
@@ -2540,6 +2547,11 @@ watch(championPageSsr, value => {
     pending.value = false
   }
 })
+
+// Au premier montage, les stats de base viennent de l'amorce SSR (mêmes
+// paramètres que le premier fetch client : filtres au défaut, `?otp=oui`).
+// Ce flag one-shot évite un `loadChampion()` initial strictement redondant.
+let championBaseStatsFromSsr = Boolean(championPageSsr.value?.stats)
 const championDamageSplit = ref<{
   phys: number
   magic: number
@@ -3900,7 +3912,13 @@ async function loadChampionDataForTab(tab: ChampionTabId, force = false): Promis
 async function reloadChampionBaseAndActiveTabData(): Promise<void> {
   if (!championPageBootstrapped.value) return
   if (!championId.value || Number.isNaN(championId.value)) return
-  await loadChampion()
+  if (championBaseStatsFromSsr && championStats.value) {
+    // Stats de base déjà fournies par le SSR pour ces paramètres : on saute le
+    // refetch identique une seule fois, puis on charge le reste (damage split, onglet).
+    championBaseStatsFromSsr = false
+  } else {
+    await loadChampion()
+  }
   loadChampionDamageSplit().catch(() => undefined)
   resetChampionTabLoadState()
   await loadChampionDataForTab(activeChampionTab.value, true)

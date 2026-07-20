@@ -41,7 +41,12 @@ function sortVideosByDate(videos: YouTubeVideo[]): YouTubeVideo[] {
   )
 }
 
-export default defineEventHandler(async () => {
+export default defineEventHandler(async event => {
+  // Aligne le cache HTTP sur le TTL mémoire (60s) : le navigateur / CDN peut
+  // réutiliser la réponse sans repayer l'agrégat backend, et SWR sert du stale
+  // pendant le rafraîchissement en arrière-plan.
+  setHeader(event, 'Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=300')
+
   const now = Date.now()
   if (homeDataCache && homeDataCache.expiresAt > now) {
     return homeDataCache.payload

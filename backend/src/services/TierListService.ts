@@ -56,6 +56,30 @@ export interface GetTierListResult {
   highEloRows?: TierListRow[]
 }
 
+// ── Cache mémoire (même approche que StatsOverviewService) ────────────────────
+// `getTierList` enchaîne ~5 requêtes d'agrégat lourdes + calcul matchup, deux fois
+// (all + high-elo) : ~4-5 s par appel non caché. La tier list évolue lentement
+// (agrégats rafraîchis par batch), donc un cache TTL court élimine la quasi-totalité
+// du coût sur l'endpoint le plus chaud (home + page tier list) sans perte de fraîcheur.
+const TIER_LIST_CACHE_TTL_MS = (() => {
+  const raw = Number(process.env.TIER_LIST_CACHE_TTL_MS)
+  return Number.isFinite(raw) && raw > 0 ? raw : 5 * 60 * 1000
+})()
+
+const tierListCache = new Map<string, { data: GetTierListResult; expiresAt: number }>()
+
+export function tierListCacheKey(options: GetTierListOptions): string {
+  const rt = Array.isArray(options.rankTier)
+    ? [...options.rankTier].map((t) => String(t).trim().toUpperCase()).sort().join(',')
+    : String(options.rankTier ?? '').trim().toUpperCase()
+  return [
+    options.patch?.trim() ?? '',
+    options.platformId?.trim() ?? '',
+    rt,
+    options.role?.trim().toUpperCase() ?? '',
+  ].join('|')
+}
+
 interface RoleRow {
   patch: string
   platform_id: string
@@ -475,6 +499,12 @@ async function getLatestPatch(): Promise<string | null> {
 
 export async function getTierList(options: GetTierListOptions): Promise<GetTierListResult | null> {
   if (!isDatabaseConfigured()) return null
+
+  const cacheKey = tierListCacheKey(options)
+  const now = Date.now()
+  const cached = tierListCache.get(cacheKey)
+  if (cached && cached.expiresAt > now) return cached.data
+
   let patch = options.patch?.trim() || null
   if (!patch) {
     patch = await getLatestPatch()
@@ -533,10 +563,23 @@ export async function getTierList(options: GetTierListOptions): Promise<GetTierL
     // optional: skip high-elo block on error
   }
 
-  return {
+  const result: GetTierListResult = {
     patch,
     rankTier: rankTier === 'all' ? 'all' : Array.isArray(rankTier) ? rankTier.join(',') : rankTier,
     rows,
     highEloRows,
   }
+
+  // Purge opportuniste des entrées expirées avant d'insérer (borne la taille).
+  for (const [key, entry] of tierListCache) {
+    if (entry.expiresAt <= now) tierListCache.delete(key)
+  }
+  tierListCache.set(cacheKey, { data: result, expiresAt: now + TIER_LIST_CACHE_TTL_MS })
+
+  return result
+}
+
+/** Vide le cache tier list (utilisé après un recompute d'agrégats / en test). */
+export function clearTierListCache(): void {
+  tierListCache.clear()
 }

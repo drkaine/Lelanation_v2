@@ -124,9 +124,9 @@ function computeU15(
   };
 }
 
-function getEvents(timeline: MatchTimelineDto): MatchTimelineEventDto[] {
+function getEvents(timeline: MatchTimelineDto | null | undefined): MatchTimelineEventDto[] {
   const events: MatchTimelineEventDto[] = [];
-  for (const frame of timeline.info.frames ?? []) {
+  for (const frame of timeline?.info?.frames ?? []) {
     for (const event of frame.events ?? []) {
       events.push(event);
     }
@@ -384,6 +384,26 @@ function getTeamBanChampionIdsSorted(match: MatchDto, teamId: 100 | 200): number
     .map((b) => Number(b.championId));
 }
 
+/**
+ * Ban champion assigné à chaque `participantId`, selon la même logique de slot
+ * que `parseMatch` (participant trié par id ↔ ban trié par pickTurn), mais SANS
+ * parser la timeline. Permet à la persistance normalisée de récupérer les bans
+ * sans payer un `parseMatch` complet (parsing timeline lourd).
+ */
+export function extractBanByParticipantId(match: MatchDto): Map<number, number> {
+  const banByParticipant = new Map<number, number>();
+  for (const teamId of [100, 200] as const) {
+    const sortedTeam = getTeamParticipantsSortedById(match, teamId);
+    const teamBans = getTeamBanChampionIdsSorted(match, teamId);
+    sortedTeam.forEach((participant, slotIdx) => {
+      const bannedChampionId =
+        slotIdx >= 0 && slotIdx < teamBans.length ? teamBans[slotIdx]! : 0;
+      banByParticipant.set(participant.participantId, bannedChampionId);
+    });
+  }
+  return banByParticipant;
+}
+
 function validateParticipantRequired(participant: ParticipantDto, matchId: string): boolean {
   if (!participant.puuid) return false;
   if (!participant.participantId) return false;
@@ -401,7 +421,7 @@ export function parseMatch(
 ): Array<ParsedParticipantDto | null> {
   const participants = match.info.participants ?? [];
   const events = getEvents(timeline);
-  const frames = timeline.info.frames ?? [];
+  const frames = timeline?.info?.frames ?? [];
   const resolvedPatch = extractPatchFromVersion(match.info.gameVersion) || patch;
   const matchId = match.metadata.matchId ?? "";
   const gameEndTimestamp =

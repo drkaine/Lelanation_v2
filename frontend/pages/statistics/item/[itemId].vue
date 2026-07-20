@@ -329,6 +329,69 @@ async function loadVersionsCatalog(): Promise<void> {
   }
 }
 
+// ── SSR : amorce la vue initiale (onglet par défaut) côté serveur, transférée
+// via le payload useAsyncData → contenu rendu au premier paint + bénéfice SWR,
+// sans refetch client à l'hydratation. Les watchers ci-dessous gèrent les
+// changements de filtres/onglet ensuite (client uniquement).
+const requestFetch = useRequestFetch()
+
+function normalizeBreakdown(data: unknown): ItemTierBreakdown {
+  const d = (data ?? {}) as Partial<ItemTierBreakdown>
+  return {
+    roles: Array.isArray(d.roles) ? d.roles : [],
+    roleTrendPoints: Array.isArray(d.roleTrendPoints) ? d.roleTrendPoints : [],
+    purchaseTiming: Array.isArray(d.purchaseTiming) ? d.purchaseTiming : [],
+    overallAvgPurchaseMs: d.overallAvgPurchaseMs ?? null,
+  }
+}
+
+function normalizePurchase(data: unknown): ItemPurchaseOrderStats {
+  const d = (data ?? {}) as Partial<ItemPurchaseOrderStats>
+  return {
+    byOrder: Array.isArray(d.byOrder) ? d.byOrder : [],
+    orderTrendPoints: Array.isArray(d.orderTrendPoints) ? d.orderTrendPoints : [],
+    orderDivisionTrendPoints: Array.isArray(d.orderDivisionTrendPoints)
+      ? d.orderDivisionTrendPoints
+      : [],
+    timingTrendPoints: Array.isArray(d.timingTrendPoints) ? d.timingTrendPoints : [],
+    purchaseTiming: Array.isArray(d.purchaseTiming) ? d.purchaseTiming : [],
+    overallAvgPurchaseMs: d.overallAvgPurchaseMs ?? null,
+  }
+}
+
+const { data: itemStatsInitial } = await useAsyncData(
+  () => `item-stats-init-${itemId.value}`,
+  async () => {
+    if (!Number.isFinite(itemId.value)) return null
+    const tab = normalizeItemTab(route.query.tab)
+    const trendParams = buildItemStatsQueryParams()
+    trendParams.set('limit', '1200')
+    const primaryUrl =
+      tab === 'purchase'
+        ? `/api/stats/items/${itemId.value}/purchase-order?${buildItemPurchaseQueryParams().toString()}`
+        : `/api/stats/items/${itemId.value}/breakdown?${buildItemStatsQueryParams().toString()}`
+    const [trendRes, primaryRes] = await Promise.all([
+      requestFetch<{ points?: DailyTrendSnapshotPoint[] }>(
+        `/api/stats/items/${itemId.value}/tier-trend-snapshots?${trendParams.toString()}`
+      ).catch(() => ({ points: [] as DailyTrendSnapshotPoint[] })),
+      requestFetch<unknown>(primaryUrl).catch(() => null),
+    ])
+    return {
+      tab,
+      trend: Array.isArray(trendRes?.points) ? trendRes.points : [],
+      breakdown: tab === 'overview' ? normalizeBreakdown(primaryRes) : null,
+      purchase: tab === 'purchase' ? normalizePurchase(primaryRes) : null,
+    }
+  },
+  { watch: [itemId] }
+)
+
+if (itemStatsInitial.value) {
+  trendPoints.value = itemStatsInitial.value.trend
+  if (itemStatsInitial.value.breakdown) breakdown.value = itemStatsInitial.value.breakdown
+  if (itemStatsInitial.value.purchase) purchaseOrderStats.value = itemStatsInitial.value.purchase
+}
+
 watch([itemId, filterRank, filterRole, trendChartFromDate], () => {
   loadTrendSnapshots()
   if (activeItemTab.value === 'overview') loadBreakdown()
@@ -372,9 +435,13 @@ onMounted(async () => {
   const riotLocale = locale.value === 'fr' ? 'fr_FR' : 'en_US'
   await itemsStore.loadItems(riotLocale)
   await loadVersionsCatalog()
-  await loadTrendSnapshots()
-  if (activeItemTab.value === 'purchase') await loadPurchaseOrder()
-  else await loadBreakdown()
+  // Filet de sécurité : si l'amorce SSR n'a pas fourni de données (ex. échec
+  // réseau serveur), on charge la vue initiale côté client.
+  if (!itemStatsInitial.value) {
+    await loadTrendSnapshots()
+    if (activeItemTab.value === 'purchase') await loadPurchaseOrder()
+    else await loadBreakdown()
+  }
   nextTick(() => scrollActiveItemTabIntoView('auto'))
 })
 

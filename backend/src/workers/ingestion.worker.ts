@@ -1,4 +1,4 @@
-import { Worker, type Job } from "bullmq";
+import type { Job } from "bullmq";
 import { config } from "../config/index.js";
 import { normalizePlatformRegion } from "../riot/platform-region.js";
 import { normalizeLolRankTier, normalizeLolRole } from "../constants/lolEnums.js";
@@ -9,20 +9,20 @@ import { championVsMetricValue } from "../parsers/champion-vs-metric-value.js";
 import type { IngestionJobData, ParsedParticipantDto, TeamObjectiveDto } from "../dto/match.dto.js";
 import { championStatsMetricValue } from "../parsers/champion-stats-metric-value.js";
 import { recordIngestionWorker } from "../observability/poller-metrics/instrumentation.js";
-import { INGESTION_QUEUE } from "../queues/definitions.js";
-import { enqueueRankFetchJobsForParticipants } from "../queues/rank-jobs.js";
-import { getRankBacklogCount } from "../queues/index.js";
+// Effets de bord Redis/queues chargés paresseusement dans processIngestionJob
+// (queues/index, queues/rank-jobs, redis/ingestion-metrics) afin que l'import de
+// ce module reste sans connexion. `shouldPauseMatchPipelines` est pur (config only).
 import { shouldPauseMatchPipelines } from "../queues/rank-backlog-policy.js";
-import { redis } from "../redis/client.js";
-import { recordAggregatedMatch } from "../redis/ingestion-metrics.js";
 import {
   normalizeParticipantRankTier,
 } from "./match-rank-readiness.js";
 import { buildStarterLegendaryOrderByItemId } from "../parsers/itemOrderSnapshot.js";
 import {
   buildGameOrderItemsJson,
-  buildOrderItemsMergeSqlExpr,
+  buildOrderItemsGenericMergeSqlExpr,
+  mergeOrderItemsJson,
   orderedEligibleItemIds,
+  type PurchaseOrderItemsJson,
 } from "../parsers/purchaseOrderItemsJson.js";
 import { itemTierRoleGameWinCounts } from "../parsers/itemTierDailySnapshotRole.js";
 import { rehydrateParticipantRanksForIngestion } from "../services/matchIngestionPayload.js";
@@ -30,8 +30,13 @@ import { insertMatchAggregated,
   isMatchAlreadyAggregated,
 } from "../services/normalizedMatchPersistence.js";
 import { loadIngestionPayloadFromNormalizedTables } from "../services/normalizedMatchLoader.js";
-import { riotConfig } from "../riot-gateway/config/riotConfig.js";
-import { normalizeChampionTransform } from "../parsers/championTransform.js";
+import {
+  buildDuoRoleAggregationRows,
+  championTransformFields,
+  laneEconomyNumber,
+  participantWinCount,
+} from "./duoRoleAggregation.js";
+import { runAdditiveUpsert } from "./aggregationUpsert.js";
 
 export class AlreadyProcessedMatchError extends Error {
   constructor(matchId: string) {
@@ -40,32 +45,10 @@ export class AlreadyProcessedMatchError extends Error {
   }
 }
 
-function participantWinCount(participant: ParsedParticipantDto): number {
-  return participant.win ? 1 : 0;
-}
-
-function championTransformFields(participant: ParsedParticipantDto): {
-  championTransform: number;
-  transformTimestampMs: number;
-} {
-  return {
-    championTransform: normalizeChampionTransform(participant.championTransform),
-    transformTimestampMs: Math.max(0, Math.trunc(Number(participant.transformTimestampMs ?? 0))),
-  };
-}
-
 function numericMetric(participant: ParsedParticipantDto, key: string): number {
   const raw = (participant as Record<string, unknown>)[key];
   if (typeof raw !== "number" || !Number.isFinite(raw)) return 0;
   return Math.trunc(raw);
-}
-
-/** Métriques lane / challenges : colonnes SQL passées en double precision (0008) — pas de troncature. */
-function laneEconomyNumber(participant: ParsedParticipantDto, sumKey: string): number {
-  const raw = (participant as Record<string, unknown>)[sumKey];
-  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : 0;
 }
 
 /** Clé `rank_tier` pour botlane (même logique que les autres upserts : libellé participant). */
@@ -89,21 +72,6 @@ function botlaneEconomyFromParticipant(p: ParsedParticipantDto) {
     goldSpent: Math.trunc(Number(p.goldSpent) || 0),
     maxLevelLeadLaneOpponent: laneEconomyNumber(p, "sum_max_level_lead_lane_opponent"),
     maxKillDeficit: laneEconomyNumber(p, "sum_max_kill_deficit"),
-    maxCsAdvantageOnLaneOpponent: laneEconomyNumber(p, "sum_max_cs_advantage_on_lane_opponent"),
-    visionScoreAdvantageLaneOpponent: laneEconomyNumber(p, "sum_vision_score_advantage_lane_opponent"),
-    laningPhaseGoldExpAdvantage: laneEconomyNumber(p, "sum_laning_phase_gold_exp_advantage"),
-    earlyLaningPhaseGoldExpAdvantage: laneEconomyNumber(p, "sum_early_laning_phase_gold_exp_advantage"),
-  };
-}
-
-/** Métriques agrégées côté champion principal (aligné agg_champion_duo_role_stats / vs). */
-function championDuoRoleEconomyFromParticipant(p: ParsedParticipantDto) {
-  return {
-    goldEarned: Math.trunc(Number(p.goldEarned) || 0),
-    goldSpent: Math.trunc(Number(p.goldSpent) || 0),
-    maxLevelLeadLaneOpponent: laneEconomyNumber(p, "sum_max_level_lead_lane_opponent"),
-    maxKillDeficit: laneEconomyNumber(p, "sum_max_kill_deficit"),
-    moreEnemyJungleThanOpponent: laneEconomyNumber(p, "sum_more_enemy_jungle_than_opponent"),
     maxCsAdvantageOnLaneOpponent: laneEconomyNumber(p, "sum_max_cs_advantage_on_lane_opponent"),
     visionScoreAdvantageLaneOpponent: laneEconomyNumber(p, "sum_vision_score_advantage_lane_opponent"),
     laningPhaseGoldExpAdvantage: laneEconomyNumber(p, "sum_laning_phase_gold_exp_advantage"),
@@ -265,12 +233,17 @@ async function upsertChampionStats(tx: any, participants: ParsedParticipantDto[]
     ...metricCols.map((c) => `${c} = champion_stats.${c} + EXCLUDED.${c}`),
     "updated_at = NOW()",
   ];
-  const insertHeader = `INSERT INTO champion_stats (${allCols.join(", ")})`;
-  const conflict = `ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, team) DO UPDATE SET ${updateParts.join(", ")}`;
+  if (participants.length === 0) return;
 
+  // Pré-agrégation en mémoire par clé de conflit : plusieurs participants du même
+  // match peuvent partager (champion, role, transform, team) → on somme comptages
+  // et métriques en amont pour un unique INSERT multi-lignes (au lieu de 10 upserts
+  // séquentiels). Équivalent aux upserts additifs successifs (`+ EXCLUDED`).
+  type ChampionStatsRow = { base: unknown[]; countGame: number; countWin: number; metrics: number[] };
+  const rows = new Map<string, ChampionStatsRow>();
   for (const participant of participants) {
     const { championTransform } = championTransformFields(participant);
-    const values: unknown[] = [
+    const key = [
       participant.patch,
       participant.role,
       participant.rankTier,
@@ -278,31 +251,68 @@ async function upsertChampionStats(tx: any, participants: ParsedParticipantDto[]
       participant.championId,
       championTransform,
       participant.teamId,
-      1,
-      participantWinCount(participant),
-      ...metricCols.map((c) => championStatsMetricValue(participant, c)),
-    ];
-    const placeholders = values.map((_, i) => `$${i + 1}`).join(", ");
-    const q = `${insertHeader} VALUES (${placeholders}) ${conflict}`;
-    await (tx as { unsafe: (query: string, params?: unknown[]) => Promise<unknown> }).unsafe(q, values);
+    ].join("\u0001");
+    const metrics = metricCols.map((c) => championStatsMetricValue(participant, c));
+    const win = participantWinCount(participant);
+    const existing = rows.get(key);
+    if (existing) {
+      existing.countGame += 1;
+      existing.countWin += win;
+      for (let i = 0; i < metrics.length; i++) existing.metrics[i] += metrics[i]!;
+    } else {
+      rows.set(key, {
+        base: [
+          participant.patch,
+          participant.role,
+          participant.rankTier,
+          participant.region,
+          participant.championId,
+          championTransform,
+          participant.teamId,
+        ],
+        countGame: 1,
+        countWin: win,
+        metrics,
+      });
+    }
   }
+
+  const params: unknown[] = [];
+  const valueTuples = [...rows.values()].map((r) => {
+    const tuple = [...r.base, r.countGame, r.countWin, ...r.metrics];
+    const start = params.length;
+    for (const value of tuple) params.push(value);
+    return `(${tuple.map((_, i) => `$${start + i + 1}`).join(", ")})`;
+  });
+
+  const q = `INSERT INTO champion_stats (${allCols.join(", ")}) VALUES ${valueTuples.join(", ")} ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, team) DO UPDATE SET ${updateParts.join(", ")}`;
+  await (tx as { unsafe: (query: string, params?: unknown[]) => Promise<unknown> }).unsafe(q, params);
 }
 
 async function upsertChampionVsStats(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
   const metricCols = CHAMPION_VS_STATS_ALL_METRIC_COLUMNS;
+
+  // Pré-agrégation en mémoire par clé de conflit : nécessaire pour l'INSERT
+  // multi-lignes `ON CONFLICT` (Postgres interdit d'affecter deux fois la même
+  // ligne). On somme comptages + métriques et on fusionne order_items (games/wins
+  // par itemId). La fusion avec l'existant en base se fait via une expression SQL
+  // générique unique, valable pour toutes les lignes du statement.
+  type VsRow = {
+    keys: unknown[];
+    countWin: number;
+    countGame: number;
+    orderItems: PurchaseOrderItemsJson;
+    metrics: number[];
+  };
+  const rows = new Map<string, VsRow>();
   for (const participant of participants.filter((p) => p.opponentChampionId > 0)) {
     const { championTransform } = championTransformFields(participant);
     const winCount = participantWinCount(participant);
     const setItem = participant.finalKey ?? "";
-    const orderByItemId = buildStarterLegendaryOrderByItemId(participant.items);
-    const orderItemIds = orderedEligibleItemIds(orderByItemId);
-    const orderItemsJson = JSON.stringify(buildGameOrderItemsJson(orderItemIds, winCount));
-    const orderItemsMergeSql =
-      orderItemIds.length > 0
-        ? buildOrderItemsMergeSqlExpr("champion_vs_stats.order_items", orderItemIds, winCount)
-        : "champion_vs_stats.order_items";
-
-    const values: unknown[] = [
+    const orderItemIds = orderedEligibleItemIds(buildStarterLegendaryOrderByItemId(participant.items));
+    const orderItems = buildGameOrderItemsJson(orderItemIds, winCount);
+    const metrics = metricCols.map((col) => championVsMetricValue(participant, col));
+    const keys = [
       participant.patch,
       participant.role,
       participant.rankTier,
@@ -311,87 +321,128 @@ async function upsertChampionVsStats(tx: any, participants: ParsedParticipantDto
       championTransform,
       participant.opponentChampionId,
       setItem,
-      winCount,
-      1,
-      orderItemsJson,
-      ...metricCols.map((col) => championVsMetricValue(participant, col)),
     ];
-
-    const orderItemsParamIndex = 11;
-    const placeholders = values
-      .map((_, i) => (i + 1 === orderItemsParamIndex ? `$${i + 1}::jsonb` : `$${i + 1}`))
-      .join(", ");
-    const metricUpdateParts = metricCols.map(
-      (col) => `${col} = champion_vs_stats.${col} + EXCLUDED.${col}`,
-    );
-    const q = `
-      INSERT INTO champion_vs_stats (
-        patch, role, rank_tier, region, champion_id, champion_transform, opponent_champion_id, set_item,
-        count_win, count_game, order_items,
-        ${metricCols.join(", ")}
-      )
-      VALUES (${placeholders})
-      ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, opponent_champion_id, set_item)
-      DO UPDATE SET
-        count_game = champion_vs_stats.count_game + 1,
-        count_win = champion_vs_stats.count_win + EXCLUDED.count_win,
-        order_items = ${orderItemsMergeSql},
-        ${metricUpdateParts.join(", ")},
-        updated_at = NOW()
-    `;
-    await (tx as { unsafe: (query: string, params?: unknown[]) => Promise<unknown> }).unsafe(q, values);
+    const key = keys.map((v) => String(v)).join("\u0001");
+    const existing = rows.get(key);
+    if (existing) {
+      existing.countWin += winCount;
+      existing.countGame += 1;
+      existing.orderItems = mergeOrderItemsJson(existing.orderItems, orderItems);
+      for (let i = 0; i < metrics.length; i++) existing.metrics[i]! += metrics[i]!;
+    } else {
+      rows.set(key, { keys, countWin: winCount, countGame: 1, orderItems, metrics });
+    }
   }
+
+  if (rows.size === 0) return;
+
+  const params: unknown[] = [];
+  const valueTuples = [...rows.values()].map((r) => {
+    // order_items : on passe l'OBJET (sérialisé une seule fois par postgres.js).
+    // Passer JSON.stringify(...) double-encode en string JSON (bug historique visible
+    // en prod sur ~95 % des lignes vs). `sql.json(...)` force le type jsonb correct.
+    const tuple = [...r.keys, r.countWin, r.countGame, sql.json(r.orderItems), ...r.metrics];
+    const start = params.length;
+    for (const value of tuple) params.push(value);
+    return `(${tuple.map((_, i) => `$${start + i + 1}`).join(", ")})`;
+  });
+
+  const metricUpdateParts = metricCols.map(
+    (col) => `${col} = champion_vs_stats.${col} + EXCLUDED.${col}`,
+  );
+  const orderItemsMergeSql = buildOrderItemsGenericMergeSqlExpr(
+    "champion_vs_stats.order_items",
+    "EXCLUDED.order_items",
+  );
+
+  const q = `
+    INSERT INTO champion_vs_stats (
+      patch, role, rank_tier, region, champion_id, champion_transform, opponent_champion_id, set_item,
+      count_win, count_game, order_items,
+      ${metricCols.join(", ")}
+    )
+    VALUES ${valueTuples.join(", ")}
+    ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, opponent_champion_id, set_item)
+    DO UPDATE SET
+      count_game = champion_vs_stats.count_game + EXCLUDED.count_game,
+      count_win = champion_vs_stats.count_win + EXCLUDED.count_win,
+      order_items = ${orderItemsMergeSql},
+      ${metricUpdateParts.join(", ")},
+      updated_at = NOW()
+  `;
+  await (tx as { unsafe: (query: string, params?: unknown[]) => Promise<unknown> }).unsafe(q, params);
 }
 
 async function upsertChampionDuoRoleStats(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
-  for (const participant of participants) {
-    const allies = participants.filter(
-      (ally) => ally.matchId === participant.matchId && ally.teamId === participant.teamId && ally.puuid !== participant.puuid,
-    );
-    const m = championDuoRoleEconomyFromParticipant(participant);
-    for (const ally of allies) {
-      const { championTransform } = championTransformFields(participant);
-      await tx`
-        INSERT INTO champion_duo_role_stats (
-          patch, rank_tier, region, champion_id, champion_transform, role, ally_champion_id, ally_role,
-          count_game, count_win,
-          sum_gold_earned, sum_gold_spent,
-          sum_max_level_lead_lane_opponent, sum_max_kill_deficit, sum_more_enemy_jungle_than_opponent,
-          sum_max_cs_advantage_on_lane_opponent, sum_vision_score_advantage_lane_opponent,
-          sum_laning_phase_gold_exp_advantage, sum_early_laning_phase_gold_exp_advantage
-        )
-        VALUES (
-          ${participant.patch}, ${participant.rankTier}, ${participant.region},
-          ${participant.championId}, ${championTransform}, ${participant.role}, ${ally.championId}, ${ally.role},
-          1, ${participantWinCount(participant)},
-          ${m.goldEarned}, ${m.goldSpent},
-          ${m.maxLevelLeadLaneOpponent}, ${m.maxKillDeficit}, ${m.moreEnemyJungleThanOpponent},
-          ${m.maxCsAdvantageOnLaneOpponent}, ${m.visionScoreAdvantageLaneOpponent},
-          ${m.laningPhaseGoldExpAdvantage}, ${m.earlyLaningPhaseGoldExpAdvantage}
-        )
-        ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, ally_champion_id, ally_role)
-        DO UPDATE SET
-          count_game = champion_duo_role_stats.count_game + 1,
-          count_win = champion_duo_role_stats.count_win + EXCLUDED.count_win,
-          sum_gold_earned = champion_duo_role_stats.sum_gold_earned + EXCLUDED.sum_gold_earned,
-          sum_gold_spent = champion_duo_role_stats.sum_gold_spent + EXCLUDED.sum_gold_spent,
-          sum_max_level_lead_lane_opponent =
-            champion_duo_role_stats.sum_max_level_lead_lane_opponent + EXCLUDED.sum_max_level_lead_lane_opponent,
-          sum_max_kill_deficit = champion_duo_role_stats.sum_max_kill_deficit + EXCLUDED.sum_max_kill_deficit,
-          sum_more_enemy_jungle_than_opponent =
-            champion_duo_role_stats.sum_more_enemy_jungle_than_opponent + EXCLUDED.sum_more_enemy_jungle_than_opponent,
-          sum_max_cs_advantage_on_lane_opponent =
-            champion_duo_role_stats.sum_max_cs_advantage_on_lane_opponent + EXCLUDED.sum_max_cs_advantage_on_lane_opponent,
-          sum_vision_score_advantage_lane_opponent =
-            champion_duo_role_stats.sum_vision_score_advantage_lane_opponent + EXCLUDED.sum_vision_score_advantage_lane_opponent,
-          sum_laning_phase_gold_exp_advantage =
-            champion_duo_role_stats.sum_laning_phase_gold_exp_advantage + EXCLUDED.sum_laning_phase_gold_exp_advantage,
-          sum_early_laning_phase_gold_exp_advantage =
-            champion_duo_role_stats.sum_early_laning_phase_gold_exp_advantage + EXCLUDED.sum_early_laning_phase_gold_exp_advantage,
-          updated_at = NOW()
-      `;
-    }
-  }
+  const rows = buildDuoRoleAggregationRows(participants);
+  if (rows.length === 0) return;
+
+  const cols = [
+    "patch",
+    "rank_tier",
+    "region",
+    "champion_id",
+    "champion_transform",
+    "role",
+    "ally_champion_id",
+    "ally_role",
+    "count_game",
+    "count_win",
+    "sum_gold_earned",
+    "sum_gold_spent",
+    "sum_max_level_lead_lane_opponent",
+    "sum_max_kill_deficit",
+    "sum_more_enemy_jungle_than_opponent",
+    "sum_max_cs_advantage_on_lane_opponent",
+    "sum_vision_score_advantage_lane_opponent",
+    "sum_laning_phase_gold_exp_advantage",
+    "sum_early_laning_phase_gold_exp_advantage",
+  ];
+  const sumCols = cols.slice(cols.indexOf("sum_gold_earned"));
+
+  const params: unknown[] = [];
+  const valueTuples = rows.map((r) => {
+    const tuple = [
+      r.patch,
+      r.rankTier,
+      r.region,
+      r.championId,
+      r.championTransform,
+      r.role,
+      r.allyChampionId,
+      r.allyRole,
+      r.countGame,
+      r.countWin,
+      r.sumGoldEarned,
+      r.sumGoldSpent,
+      r.sumMaxLevelLeadLaneOpponent,
+      r.sumMaxKillDeficit,
+      r.sumMoreEnemyJungleThanOpponent,
+      r.sumMaxCsAdvantageOnLaneOpponent,
+      r.sumVisionScoreAdvantageLaneOpponent,
+      r.sumLaningPhaseGoldExpAdvantage,
+      r.sumEarlyLaningPhaseGoldExpAdvantage,
+    ];
+    const base = params.length;
+    for (const value of tuple) params.push(value);
+    return `(${tuple.map((_, i) => `$${base + i + 1}`).join(", ")})`;
+  });
+
+  const updateParts = [
+    "count_game = champion_duo_role_stats.count_game + EXCLUDED.count_game",
+    "count_win = champion_duo_role_stats.count_win + EXCLUDED.count_win",
+    ...sumCols.map((c) => `${c} = champion_duo_role_stats.${c} + EXCLUDED.${c}`),
+    "updated_at = NOW()",
+  ];
+
+  const q = `
+    INSERT INTO champion_duo_role_stats (${cols.join(", ")})
+    VALUES ${valueTuples.join(", ")}
+    ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, ally_champion_id, ally_role)
+    DO UPDATE SET
+      ${updateParts.join(",\n      ")}
+  `;
+  await (tx as { unsafe: (query: string, params?: unknown[]) => Promise<unknown> }).unsafe(q, params);
 }
 
 const SPELL_ORDER_MIN_GAME_DURATION_SEC = 15 * 60;
@@ -433,36 +484,52 @@ export async function upsertSpellOrderStats(tx: any, participants: ParsedPartici
 }
 
 async function upsertItemSetStats(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
+  const rows: Array<{ keys: unknown[]; sums: number[] }> = [];
   for (const participant of participants) {
     const { championTransform } = championTransformFields(participant);
-    const rows: Array<{ type: string; key: string }> = [
+    const win = participantWinCount(participant);
+    for (const { type, key } of [
       { type: "starter", key: participant.starterKey },
       { type: "core", key: participant.coreKey },
       { type: "final", key: participant.finalKey },
-    ];
-    for (const row of rows) {
-      await tx`
-        INSERT INTO champion_item_set_stats (
-          patch, role, rank_tier, region, champion_id, champion_transform, phase, item_set_key,
-          count_game, count_win
-        )
-        VALUES (
-          ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
-          ${participant.championId}, ${championTransform}, ${row.type}, ${row.key},
-          1, ${participantWinCount(participant)}
-        )
-        ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, phase, item_set_key)
-        DO UPDATE SET
-          count_game = champion_item_set_stats.count_game + 1,
-          count_win = champion_item_set_stats.count_win + EXCLUDED.count_win
-      `;
+    ]) {
+      rows.push({
+        keys: [
+          participant.patch,
+          participant.role,
+          participant.rankTier,
+          participant.region,
+          participant.championId,
+          championTransform,
+          type,
+          key,
+        ],
+        sums: [1, win],
+      });
     }
   }
+  await runAdditiveUpsert(tx, {
+    table: "champion_item_set_stats",
+    keyColumns: [
+      "patch",
+      "role",
+      "rank_tier",
+      "region",
+      "champion_id",
+      "champion_transform",
+      "phase",
+      "item_set_key",
+    ],
+    sumColumns: ["count_game", "count_win"],
+    rows,
+  });
 }
 
 async function upsertItemSoloStats(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
+  const rows: Array<{ keys: unknown[]; sums: number[] }> = [];
   for (const participant of participants) {
     const { championTransform } = championTransformFields(participant);
+    const win = participantWinCount(participant);
     const distinctItems = Array.from(new Set(participant.items.map((item) => item.itemId).filter((itemId) => itemId > 0)));
     for (const itemId of distinctItems) {
       const starterCount = participant.items.filter((item) => item.itemId === itemId && item.phase === "starter").length;
@@ -471,73 +538,81 @@ async function upsertItemSoloStats(tx: any, participants: ParsedParticipantDto[]
       const countWinStarter = participant.win ? starterCount : 0;
       const countWinCore = participant.win ? coreCount : 0;
       const countWinFinal = participant.win ? finalCount : 0;
-      const avgTimestamp = participant.items
+      const sumTimestamp = participant.items
         .filter((item) => item.itemId === itemId)
         .reduce((acc, item) => acc + item.timestampMs, 0);
 
-      await tx`
-        INSERT INTO champion_item_solo_stats (
-          patch, role, rank_tier, region, champion_id, champion_transform, item_id,
-          count_starter, count_win_starter, count_core, count_win_core, count_final, count_win_final,
-          count_game, count_win, sum_timestamp_ms
-        )
-        VALUES (
-          ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
-          ${participant.championId}, ${championTransform}, ${itemId},
-          ${starterCount}, ${countWinStarter}, ${coreCount}, ${countWinCore}, ${finalCount}, ${countWinFinal},
-          1, ${participantWinCount(participant)}, ${avgTimestamp}
-        )
-        ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, item_id)
-        DO UPDATE SET
-          count_starter = champion_item_solo_stats.count_starter + EXCLUDED.count_starter,
-          count_win_starter = champion_item_solo_stats.count_win_starter + EXCLUDED.count_win_starter,
-          count_core = champion_item_solo_stats.count_core + EXCLUDED.count_core,
-          count_win_core = champion_item_solo_stats.count_win_core + EXCLUDED.count_win_core,
-          count_final = champion_item_solo_stats.count_final + EXCLUDED.count_final,
-          count_win_final = champion_item_solo_stats.count_win_final + EXCLUDED.count_win_final,
-          count_game = champion_item_solo_stats.count_game + EXCLUDED.count_game,
-          count_win = champion_item_solo_stats.count_win + EXCLUDED.count_win,
-          sum_timestamp_ms = champion_item_solo_stats.sum_timestamp_ms + EXCLUDED.sum_timestamp_ms
-      `;
+      rows.push({
+        keys: [
+          participant.patch,
+          participant.role,
+          participant.rankTier,
+          participant.region,
+          participant.championId,
+          championTransform,
+          itemId,
+        ],
+        sums: [
+          starterCount,
+          countWinStarter,
+          coreCount,
+          countWinCore,
+          finalCount,
+          countWinFinal,
+          1,
+          win,
+          sumTimestamp,
+        ],
+      });
     }
   }
+  await runAdditiveUpsert(tx, {
+    table: "champion_item_solo_stats",
+    keyColumns: [
+      "patch",
+      "role",
+      "rank_tier",
+      "region",
+      "champion_id",
+      "champion_transform",
+      "item_id",
+    ],
+    sumColumns: [
+      "count_starter",
+      "count_win_starter",
+      "count_core",
+      "count_win_core",
+      "count_final",
+      "count_win_final",
+      "count_game",
+      "count_win",
+      "sum_timestamp_ms",
+    ],
+    rows,
+  });
 }
 
 async function upsertRuneStats(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
+  const runeRows: Array<{ keys: unknown[]; sums: number[] }> = [];
+  const runeSoloRows: Array<{ keys: unknown[]; sums: number[] }> = [];
+  const shardRows: Array<{ keys: unknown[]; sums: number[] }> = [];
+
   for (const participant of participants) {
     const { championTransform } = championTransformFields(participant);
-    await tx`
-      INSERT INTO champion_runes_stats (
-        patch, role, rank_tier, region, champion_id, champion_transform, rune_list, shard_list,
-        count_game, count_win
-      )
-      VALUES (
-        ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
-        ${participant.championId}, ${championTransform}, ${participant.runeList}, ${participant.shardList},
-        1, ${participantWinCount(participant)}
-      )
-      ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, rune_list, shard_list)
-      DO UPDATE SET
-        count_game = champion_runes_stats.count_game + 1,
-        count_win = champion_runes_stats.count_win + EXCLUDED.count_win
-    `;
+    const win = participantWinCount(participant);
+    const base = [
+      participant.patch,
+      participant.role,
+      participant.rankTier,
+      participant.region,
+      participant.championId,
+      championTransform,
+    ];
+
+    runeRows.push({ keys: [...base, participant.runeList, participant.shardList], sums: [1, win] });
 
     for (const runeId of participant.perks) {
-      await tx`
-        INSERT INTO champion_runes_solo_stats (
-          patch, role, rank_tier, region, champion_id, champion_transform, perk_id,
-          count_game, count_win
-        )
-        VALUES (
-          ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
-          ${participant.championId}, ${championTransform}, ${runeId},
-          1, ${participantWinCount(participant)}
-        )
-        ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, perk_id)
-        DO UPDATE SET
-          count_game = champion_runes_solo_stats.count_game + 1,
-          count_win = champion_runes_solo_stats.count_win + EXCLUDED.count_win
-      `;
+      runeSoloRows.push({ keys: [...base, runeId], sums: [1, win] });
     }
 
     for (const [slot, shardId] of participant.shardList
@@ -545,47 +620,52 @@ async function upsertRuneStats(tx: any, participants: ParsedParticipantDto[]): P
       .map((value) => Number(value))
       .filter((value) => Number.isFinite(value) && value > 0)
       .entries()) {
-      await tx`
-        INSERT INTO champion_shard_solo_stats (
-          patch, role, rank_tier, region, champion_id, champion_transform, shard_id, slot,
-          count_game, count_win
-        )
-        VALUES (
-          ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
-          ${participant.championId}, ${championTransform}, ${shardId}, ${slot},
-          1, ${participantWinCount(participant)}
-        )
-        ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, shard_id, slot)
-        DO UPDATE SET
-          count_game = champion_shard_solo_stats.count_game + 1,
-          count_win = champion_shard_solo_stats.count_win + EXCLUDED.count_win
-      `;
+      shardRows.push({ keys: [...base, shardId, slot], sums: [1, win] });
     }
   }
+
+  const base = ["patch", "role", "rank_tier", "region", "champion_id", "champion_transform"];
+  await runAdditiveUpsert(tx, {
+    table: "champion_runes_stats",
+    keyColumns: [...base, "rune_list", "shard_list"],
+    sumColumns: ["count_game", "count_win"],
+    rows: runeRows,
+  });
+  await runAdditiveUpsert(tx, {
+    table: "champion_runes_solo_stats",
+    keyColumns: [...base, "perk_id"],
+    sumColumns: ["count_game", "count_win"],
+    rows: runeSoloRows,
+  });
+  await runAdditiveUpsert(tx, {
+    table: "champion_shard_solo_stats",
+    keyColumns: [...base, "shard_id", "slot"],
+    sumColumns: ["count_game", "count_win"],
+    rows: shardRows,
+  });
 }
 
 async function upsertSummonerSpellStats(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
+  const base = ["patch", "role", "rank_tier", "region", "champion_id", "champion_transform"];
+  const pairRows: Array<{ keys: unknown[]; sums: number[] }> = [];
+  const soloRows: Array<{ keys: unknown[]; sums: number[] }> = [];
+
   for (const participant of participants) {
     const { championTransform } = championTransformFields(participant);
+    const win = participantWinCount(participant);
+    const baseVals = [
+      participant.patch,
+      participant.role,
+      participant.rankTier,
+      participant.region,
+      participant.championId,
+      championTransform,
+    ];
     const [spellD, spellF] = [participant.spellD, participant.spellF].sort((a, b) => a - b);
     const spellDCasts = spellD === participant.spellD ? participant.spellDCasts : participant.spellFCasts;
     const spellFCasts = spellF === participant.spellF ? participant.spellFCasts : participant.spellDCasts;
-    await tx`
-      INSERT INTO champion_summoner_spell_pair_stats (
-        patch, role, rank_tier, region, champion_id, champion_transform, spell_d, spell_f, spell_d_casts, spell_f_casts, count_game, count_win
-      )
-      VALUES (
-        ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
-        ${participant.championId}, ${championTransform}, ${spellD}, ${spellF}, ${spellDCasts}, ${spellFCasts},
-        1, ${participantWinCount(participant)}
-      )
-      ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, spell_d, spell_f)
-      DO UPDATE SET
-        count_game = champion_summoner_spell_pair_stats.count_game + 1,
-        count_win = champion_summoner_spell_pair_stats.count_win + EXCLUDED.count_win,
-        spell_d_casts = champion_summoner_spell_pair_stats.spell_d_casts + EXCLUDED.spell_d_casts,
-        spell_f_casts = champion_summoner_spell_pair_stats.spell_f_casts + EXCLUDED.spell_f_casts
-    `;
+
+    pairRows.push({ keys: [...baseVals, spellD, spellF], sums: [1, win, spellDCasts, spellFCasts] });
 
     for (const [slot, spellId] of [
       ["d", participant.spellD] as const,
@@ -597,30 +677,36 @@ async function upsertSummonerSpellStats(tx: any, participants: ParsedParticipant
       const countWinF = slot === "f" && participant.win ? 1 : 0;
       const countSlotD = slot === "d" ? 1 : 0;
       const countSlotF = slot === "f" ? 1 : 0;
-      await tx`
-        INSERT INTO champion_summoner_spells (
-          patch, role, rank_tier, region, champion_id, champion_transform, spell_id,
-          count_win_d, count_win_f, count_game_d, count_game_f, count_slotd, count_slotf
-        )
-        VALUES (
-          ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
-          ${participant.championId}, ${championTransform}, ${spellId},
-          ${countWinD}, ${countWinF}, ${countGameD}, ${countGameF}, ${countSlotD}, ${countSlotF}
-        )
-        ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, spell_id)
-        DO UPDATE SET
-          count_win_d = champion_summoner_spells.count_win_d + EXCLUDED.count_win_d,
-          count_win_f = champion_summoner_spells.count_win_f + EXCLUDED.count_win_f,
-          count_game_d = champion_summoner_spells.count_game_d + EXCLUDED.count_game_d,
-          count_game_f = champion_summoner_spells.count_game_f + EXCLUDED.count_game_f,
-          count_slotd = champion_summoner_spells.count_slotd + EXCLUDED.count_slotd,
-          count_slotf = champion_summoner_spells.count_slotf + EXCLUDED.count_slotf
-      `;
+      soloRows.push({
+        keys: [...baseVals, spellId],
+        sums: [countWinD, countWinF, countGameD, countGameF, countSlotD, countSlotF],
+      });
     }
   }
+
+  await runAdditiveUpsert(tx, {
+    table: "champion_summoner_spell_pair_stats",
+    keyColumns: [...base, "spell_d", "spell_f"],
+    sumColumns: ["count_game", "count_win", "spell_d_casts", "spell_f_casts"],
+    rows: pairRows,
+  });
+  await runAdditiveUpsert(tx, {
+    table: "champion_summoner_spells",
+    keyColumns: [...base, "spell_id"],
+    sumColumns: [
+      "count_win_d",
+      "count_win_f",
+      "count_game_d",
+      "count_game_f",
+      "count_slotd",
+      "count_slotf",
+    ],
+    rows: soloRows,
+  });
 }
 
 async function upsertBansByBanner(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
+  const rows: Array<{ keys: unknown[]; sums: number[] }> = [];
   for (const participant of participants.filter((row) => row.bannedChampionId > 0)) {
     const isTeam100 = participant.teamId === 100;
     const roleKey = participant.role.toLowerCase();
@@ -637,151 +723,174 @@ async function upsertBansByBanner(tx: any, participants: ParsedParticipantDto[])
                 ? "count_banner_support"
                 : null;
 
-    await tx`
-      INSERT INTO champion_bans_by_banner (
-        patch, rank_tier, region, banned_champion_id,
-        count_banner_team_100, count_banner_team_200, count_banner_top, count_banner_jungle, count_banner_mid, count_banner_adc, count_banner_support,
-        count_ban_when_team_won, count_ban_when_team_lost
-      )
-      VALUES (
-        ${participant.patch}, ${participant.rankTier}, ${participant.region},
-        ${participant.bannedChampionId},
-        ${isTeam100 ? 1 : 0},
-        ${isTeam100 ? 0 : 1},
-        ${roleColumn === "count_banner_top" ? 1 : 0},
-        ${roleColumn === "count_banner_jungle" ? 1 : 0},
-        ${roleColumn === "count_banner_mid" ? 1 : 0},
-        ${roleColumn === "count_banner_adc" ? 1 : 0},
-        ${roleColumn === "count_banner_support" ? 1 : 0},
-        ${participant.win ? 1 : 0},
-        ${participant.win ? 0 : 1}
-      )
-      ON CONFLICT (patch, rank_tier, region, banned_champion_id)
-      DO UPDATE SET
-        count_banner_team_100 = champion_bans_by_banner.count_banner_team_100 + EXCLUDED.count_banner_team_100,
-        count_banner_team_200 = champion_bans_by_banner.count_banner_team_200 + EXCLUDED.count_banner_team_200,
-        count_banner_top = champion_bans_by_banner.count_banner_top + EXCLUDED.count_banner_top,
-        count_banner_jungle = champion_bans_by_banner.count_banner_jungle + EXCLUDED.count_banner_jungle,
-        count_banner_mid = champion_bans_by_banner.count_banner_mid + EXCLUDED.count_banner_mid,
-        count_banner_adc = champion_bans_by_banner.count_banner_adc + EXCLUDED.count_banner_adc,
-        count_banner_support = champion_bans_by_banner.count_banner_support + EXCLUDED.count_banner_support,
-        count_ban_when_team_won = champion_bans_by_banner.count_ban_when_team_won + EXCLUDED.count_ban_when_team_won,
-        count_ban_when_team_lost = champion_bans_by_banner.count_ban_when_team_lost + EXCLUDED.count_ban_when_team_lost
-    `;
+    rows.push({
+      keys: [participant.patch, participant.rankTier, participant.region, participant.bannedChampionId],
+      sums: [
+        isTeam100 ? 1 : 0,
+        isTeam100 ? 0 : 1,
+        roleColumn === "count_banner_top" ? 1 : 0,
+        roleColumn === "count_banner_jungle" ? 1 : 0,
+        roleColumn === "count_banner_mid" ? 1 : 0,
+        roleColumn === "count_banner_adc" ? 1 : 0,
+        roleColumn === "count_banner_support" ? 1 : 0,
+        participant.win ? 1 : 0,
+        participant.win ? 0 : 1,
+      ],
+    });
   }
+  await runAdditiveUpsert(tx, {
+    table: "champion_bans_by_banner",
+    keyColumns: ["patch", "rank_tier", "region", "banned_champion_id"],
+    sumColumns: [
+      "count_banner_team_100",
+      "count_banner_team_200",
+      "count_banner_top",
+      "count_banner_jungle",
+      "count_banner_mid",
+      "count_banner_adc",
+      "count_banner_support",
+      "count_ban_when_team_won",
+      "count_ban_when_team_lost",
+    ],
+    rows,
+  });
 }
 
 async function upsertChampionPickOrder(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
+  const rows: Array<{ keys: unknown[]; sums: number[] }> = [];
   for (const participant of participants) {
     const { championTransform } = championTransformFields(participant);
-    await tx`
-      INSERT INTO champion_pick_order (
-        patch, role, rank_tier, region, champion_id, champion_transform, team, pick_order, count_win, count_game
-      )
-      VALUES (
-        ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
-        ${participant.championId}, ${championTransform}, ${participant.teamId}, ${participant.pickOrder},
-        ${participantWinCount(participant)}, 1
-      )
-      ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, team, pick_order)
-      DO UPDATE SET
-        count_game = champion_pick_order.count_game + 1,
-        count_win = champion_pick_order.count_win + EXCLUDED.count_win
-    `;
+    rows.push({
+      keys: [
+        participant.patch,
+        participant.role,
+        participant.rankTier,
+        participant.region,
+        participant.championId,
+        championTransform,
+        participant.teamId,
+        participant.pickOrder,
+      ],
+      sums: [1, participantWinCount(participant)],
+    });
   }
+  await runAdditiveUpsert(tx, {
+    table: "champion_pick_order",
+    keyColumns: [
+      "patch",
+      "role",
+      "rank_tier",
+      "region",
+      "champion_id",
+      "champion_transform",
+      "team",
+      "pick_order",
+    ],
+    sumColumns: ["count_game", "count_win"],
+    rows,
+  });
 }
 
 async function upsertChampionBucket(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
+  const rows: Array<{ keys: unknown[]; sums: number[] }> = [];
   for (const participant of participants) {
     const { championTransform, transformTimestampMs } = championTransformFields(participant);
     const durationSeconds =
       Math.max(0, Math.trunc(numericMetric(participant, "sum_game_length"))) ||
       Math.max(0, Math.trunc((participant.gameEndTimestamp > 0 ? participant.gameEndTimestamp : 0) / 1000));
     const durationBucket = durationSeconds > 0 ? Math.max(0, Math.trunc(durationSeconds / 60)) : 0;
-    const sumCurrentGold = numericMetric(participant, "sum_current_gold");
-    const sumMagicDamageDone = numericMetric(participant, "sum_magic_damage_done");
-    const sumMagicDamageDoneToChampion = numericMetric(participant, "sum_magic_damage_done_to_champion");
-    const sumMagicDamageTaken = numericMetric(participant, "sum_magic_damage_taken");
-    const sumPhysicalDamageDone = numericMetric(participant, "sum_physical_damage_done");
-    const sumPhysicalDamageDoneToChampion = numericMetric(participant, "sum_physical_damage_done_to_champion");
-    const sumPhysicalDamageTaken = numericMetric(participant, "sum_physical_damage_taken");
-    const sumTrueDamageDone = numericMetric(participant, "sum_true_damage_done");
-    const sumTrueDamageDoneToChampion = numericMetric(participant, "sum_true_damage_done_to_champion");
-    const sumTrueDamageTaken = numericMetric(participant, "sum_true_damage_taken");
-    const sumJungleMinionsKilled = numericMetric(participant, "sum_jungle_minions_killed");
-    const sumLevel = numericMetric(participant, "sum_level");
-    const sumMinionsKilled = numericMetric(participant, "sum_minions_killed");
-    const sumTotalGold = participant.goldEarned;
-    const sumTimePlayed = durationSeconds;
-    const sumKills = participant.kills;
-    const sumAssists = participant.assists;
-    const sumDeaths = participant.deaths;
-    const sumKillsAssists = participant.kills + participant.assists;
     const sumKdDiff10 = numericMetric(participant, "sum_kd_diff_10");
     const sumKdDiff20 = numericMetric(participant, "sum_kd_diff_20");
-    const countKdDiff10PositiveGame = sumKdDiff10 > 0 ? 1 : 0;
-    const countKdDiff10PositiveWin = sumKdDiff10 > 0 && participant.win ? 1 : 0;
-    const countKdDiff20PositiveGame = sumKdDiff20 > 0 ? 1 : 0;
-    const countKdDiff20PositiveWin = sumKdDiff20 > 0 && participant.win ? 1 : 0;
-    const countTimeEnemySpentControlled = numericMetric(participant, "sum_time_enemy_spent_controlled") > 0 ? 1 : 0;
 
-    await tx`
-      INSERT INTO champion_bucket (
-        patch, role, rank_tier, region, champion_id, champion_transform, transform_timestamp_ms, duration_bucket,
-        count_win, count_game,
-        sum_current_gold, sum_magic_damage_done, sum_magic_damage_done_to_champion, sum_magic_damage_taken,
-        sum_physical_damage_done, sum_physical_damage_done_to_champion, sum_physical_damage_taken,
-        sum_true_damage_done, sum_true_damage_done_to_champion, sum_true_damage_taken,
-        sum_jungle_minions_killed, sum_level, sum_minions_killed, sum_total_gold, sum_time_played,
-        sum_kills, sum_assists, sum_deaths, sum_kills_assists, sum_kd_diff_10, sum_kd_diff_20,
-        count_kd_diff_10_positive_game, count_kd_diff_10_positive_win,
-        count_kd_diff_20_positive_game, count_kd_diff_20_positive_win, count_game_end, count_time_enemy_spent_controlled
-      )
-      VALUES (
-        ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
-        ${participant.championId}, ${championTransform}, ${transformTimestampMs}, ${durationBucket},
-        ${participantWinCount(participant)}, 1,
-        ${sumCurrentGold}, ${sumMagicDamageDone}, ${sumMagicDamageDoneToChampion}, ${sumMagicDamageTaken},
-        ${sumPhysicalDamageDone}, ${sumPhysicalDamageDoneToChampion}, ${sumPhysicalDamageTaken},
-        ${sumTrueDamageDone}, ${sumTrueDamageDoneToChampion}, ${sumTrueDamageTaken},
-        ${sumJungleMinionsKilled}, ${sumLevel}, ${sumMinionsKilled}, ${sumTotalGold}, ${sumTimePlayed},
-        ${sumKills}, ${sumAssists}, ${sumDeaths}, ${sumKillsAssists}, ${sumKdDiff10}, ${sumKdDiff20},
-        ${countKdDiff10PositiveGame}, ${countKdDiff10PositiveWin},
-        ${countKdDiff20PositiveGame}, ${countKdDiff20PositiveWin}, 1, ${countTimeEnemySpentControlled}
-      )
-      ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, transform_timestamp_ms, duration_bucket)
-      DO UPDATE SET
-        count_win = champion_bucket.count_win + EXCLUDED.count_win,
-        count_game = champion_bucket.count_game + EXCLUDED.count_game,
-        sum_current_gold = champion_bucket.sum_current_gold + EXCLUDED.sum_current_gold,
-        sum_magic_damage_done = champion_bucket.sum_magic_damage_done + EXCLUDED.sum_magic_damage_done,
-        sum_magic_damage_done_to_champion = champion_bucket.sum_magic_damage_done_to_champion + EXCLUDED.sum_magic_damage_done_to_champion,
-        sum_magic_damage_taken = champion_bucket.sum_magic_damage_taken + EXCLUDED.sum_magic_damage_taken,
-        sum_physical_damage_done = champion_bucket.sum_physical_damage_done + EXCLUDED.sum_physical_damage_done,
-        sum_physical_damage_done_to_champion = champion_bucket.sum_physical_damage_done_to_champion + EXCLUDED.sum_physical_damage_done_to_champion,
-        sum_physical_damage_taken = champion_bucket.sum_physical_damage_taken + EXCLUDED.sum_physical_damage_taken,
-        sum_true_damage_done = champion_bucket.sum_true_damage_done + EXCLUDED.sum_true_damage_done,
-        sum_true_damage_done_to_champion = champion_bucket.sum_true_damage_done_to_champion + EXCLUDED.sum_true_damage_done_to_champion,
-        sum_true_damage_taken = champion_bucket.sum_true_damage_taken + EXCLUDED.sum_true_damage_taken,
-        sum_jungle_minions_killed = champion_bucket.sum_jungle_minions_killed + EXCLUDED.sum_jungle_minions_killed,
-        sum_level = champion_bucket.sum_level + EXCLUDED.sum_level,
-        sum_minions_killed = champion_bucket.sum_minions_killed + EXCLUDED.sum_minions_killed,
-        sum_total_gold = champion_bucket.sum_total_gold + EXCLUDED.sum_total_gold,
-        sum_time_played = champion_bucket.sum_time_played + EXCLUDED.sum_time_played,
-        sum_kills = champion_bucket.sum_kills + EXCLUDED.sum_kills,
-        sum_assists = champion_bucket.sum_assists + EXCLUDED.sum_assists,
-        sum_deaths = champion_bucket.sum_deaths + EXCLUDED.sum_deaths,
-        sum_kills_assists = champion_bucket.sum_kills_assists + EXCLUDED.sum_kills_assists,
-        sum_kd_diff_10 = champion_bucket.sum_kd_diff_10 + EXCLUDED.sum_kd_diff_10,
-        sum_kd_diff_20 = champion_bucket.sum_kd_diff_20 + EXCLUDED.sum_kd_diff_20,
-        count_kd_diff_10_positive_game = champion_bucket.count_kd_diff_10_positive_game + EXCLUDED.count_kd_diff_10_positive_game,
-        count_kd_diff_10_positive_win = champion_bucket.count_kd_diff_10_positive_win + EXCLUDED.count_kd_diff_10_positive_win,
-        count_kd_diff_20_positive_game = champion_bucket.count_kd_diff_20_positive_game + EXCLUDED.count_kd_diff_20_positive_game,
-        count_kd_diff_20_positive_win = champion_bucket.count_kd_diff_20_positive_win + EXCLUDED.count_kd_diff_20_positive_win,
-        count_game_end = champion_bucket.count_game_end + EXCLUDED.count_game_end,
-        count_time_enemy_spent_controlled = champion_bucket.count_time_enemy_spent_controlled + EXCLUDED.count_time_enemy_spent_controlled
-    `;
+    rows.push({
+      keys: [
+        participant.patch,
+        participant.role,
+        participant.rankTier,
+        participant.region,
+        participant.championId,
+        championTransform,
+        transformTimestampMs,
+        durationBucket,
+      ],
+      sums: [
+        participantWinCount(participant),
+        1,
+        numericMetric(participant, "sum_current_gold"),
+        numericMetric(participant, "sum_magic_damage_done"),
+        numericMetric(participant, "sum_magic_damage_done_to_champion"),
+        numericMetric(participant, "sum_magic_damage_taken"),
+        numericMetric(participant, "sum_physical_damage_done"),
+        numericMetric(participant, "sum_physical_damage_done_to_champion"),
+        numericMetric(participant, "sum_physical_damage_taken"),
+        numericMetric(participant, "sum_true_damage_done"),
+        numericMetric(participant, "sum_true_damage_done_to_champion"),
+        numericMetric(participant, "sum_true_damage_taken"),
+        numericMetric(participant, "sum_jungle_minions_killed"),
+        numericMetric(participant, "sum_level"),
+        numericMetric(participant, "sum_minions_killed"),
+        participant.goldEarned,
+        durationSeconds,
+        participant.kills,
+        participant.assists,
+        participant.deaths,
+        participant.kills + participant.assists,
+        sumKdDiff10,
+        sumKdDiff20,
+        sumKdDiff10 > 0 ? 1 : 0,
+        sumKdDiff10 > 0 && participant.win ? 1 : 0,
+        sumKdDiff20 > 0 ? 1 : 0,
+        sumKdDiff20 > 0 && participant.win ? 1 : 0,
+        1,
+        numericMetric(participant, "sum_time_enemy_spent_controlled") > 0 ? 1 : 0,
+      ],
+    });
   }
+  await runAdditiveUpsert(tx, {
+    table: "champion_bucket",
+    keyColumns: [
+      "patch",
+      "role",
+      "rank_tier",
+      "region",
+      "champion_id",
+      "champion_transform",
+      "transform_timestamp_ms",
+      "duration_bucket",
+    ],
+    sumColumns: [
+      "count_win",
+      "count_game",
+      "sum_current_gold",
+      "sum_magic_damage_done",
+      "sum_magic_damage_done_to_champion",
+      "sum_magic_damage_taken",
+      "sum_physical_damage_done",
+      "sum_physical_damage_done_to_champion",
+      "sum_physical_damage_taken",
+      "sum_true_damage_done",
+      "sum_true_damage_done_to_champion",
+      "sum_true_damage_taken",
+      "sum_jungle_minions_killed",
+      "sum_level",
+      "sum_minions_killed",
+      "sum_total_gold",
+      "sum_time_played",
+      "sum_kills",
+      "sum_assists",
+      "sum_deaths",
+      "sum_kills_assists",
+      "sum_kd_diff_10",
+      "sum_kd_diff_20",
+      "count_kd_diff_10_positive_game",
+      "count_kd_diff_10_positive_win",
+      "count_kd_diff_20_positive_game",
+      "count_kd_diff_20_positive_win",
+      "count_game_end",
+      "count_time_enemy_spent_controlled",
+    ],
+    rows,
+  });
 }
 
 async function upsertBotlaneDuoVsDuoStats(tx: any, payload: IngestionJobData): Promise<void> {
@@ -986,7 +1095,9 @@ async function upsertItemTierDailySnapshots(tx: any, participants: ParsedPartici
     const roleCounts = itemTierRoleGameWinCounts(participant.role, winCount);
     for (const [itemId, orderPos] of orderByItemId) {
       const orderKey = String(orderPos);
-      const orderJson = JSON.stringify({ [orderKey]: { games: 1, wins: winCount } });
+      // Passer l'OBJET (via sql.json) et non JSON.stringify(...) : ce dernier
+      // double-encode la valeur en string JSON (même bug historique que order_items).
+      const orderJson = sql.json({ [orderKey]: { games: 1, wins: winCount } });
       const ts = firstTsByItem.get(itemId) ?? 0;
       await tx`
         INSERT INTO item_tier_daily_snapshots (
@@ -997,7 +1108,7 @@ async function upsertItemTierDailySnapshots(tx: any, participants: ParsedPartici
         )
         VALUES (
           ${participant.patch}, ${participant.rankTier}, ${participant.region}, ${itemId}, ${dateOfGame}::date,
-          1, ${winCount}, ${orderJson}::jsonb, ${ts},
+          1, ${winCount}, ${orderJson}, ${ts},
           ${roleCounts.top_game}, ${roleCounts.top_win},
           ${roleCounts.jungle_game}, ${roleCounts.jungle_win},
           ${roleCounts.mid_game}, ${roleCounts.mid_win},
@@ -1286,6 +1397,10 @@ export async function processIngestionJob(
         participants: insertedPlayers,
       },
     });
+    const [{ getRankBacklogCount }, { enqueueRankFetchJobsForParticipants }] = await Promise.all([
+      import("../queues/index.js"),
+      import("../queues/rank-jobs.js"),
+    ]);
     const rankBacklog = await getRankBacklogCount();
     if (!shouldPauseMatchPipelines(rankBacklog)) {
       await enqueueRankFetchJobsForParticipants(job.data.participants);
@@ -1293,6 +1408,7 @@ export async function processIngestionJob(
     if (aggregated) {
       const aggregatedMatchId = String(job.data.participants[0]?.matchId ?? "").trim();
       if (aggregatedMatchId) {
+        const { recordAggregatedMatch } = await import("../redis/ingestion-metrics.js");
         await recordAggregatedMatch(aggregatedMatchId);
       }
     }
@@ -1319,12 +1435,3 @@ export async function processIngestionJob(
     throw error;
   }
 }
-
-export const ingestionWorker = new Worker<IngestionJobData>(
-  INGESTION_QUEUE,
-  (job) => processIngestionJob(job),
-  {
-    connection: redis,
-    concurrency: riotConfig.ingestionWorkerConcurrency,
-  },
-);

@@ -8,6 +8,7 @@ import {
   getEngagementViewCounts,
   type BuildShareType,
 } from '../services/BuildEngagementService.js'
+import { buildsDir, getBuildIndex, invalidateBuildIndex } from '../services/BuildIndexService.js'
 
 type BuildPayload = unknown
 
@@ -21,9 +22,8 @@ const router = Router()
 // les problèmes de droits / chemins vers le dossier frontend
 // sur le serveur de prod. Si besoin, un script pourra plus tard
 // recopier ces fichiers vers le front pour un mode 100% statique.
-const buildsDir = join(process.cwd(), 'data', 'builds')
+// `buildsDir` est centralisé dans BuildIndexService (source unique + testable).
 const VALID_SHARE_TYPES: BuildShareType[] = ['link', 'image', 'image_with_meta']
-const BUILD_FILE_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.json$/i
 
 /**
  * Save a build
@@ -88,6 +88,8 @@ router.post('/', async (req, res) => {
       })
     }
 
+    invalidateBuildIndex()
+
     return res.json({ 
       id: buildId,
       fileName,
@@ -109,38 +111,18 @@ router.post('/', async (req, res) => {
 router.get('/recent', async (req, res) => {
   try {
     const limit = Math.min(12, Math.max(1, parseInt(String(req.query.limit ?? '6'), 10) || 6))
-    const { promises: fs } = await import('fs')
-    const files = await fs.readdir(buildsDir)
-    const buildFiles = files.filter(file => BUILD_FILE_REGEX.test(file))
+    const { entries, fileCount } = await getBuildIndex()
 
-    const builds = (
-      await Promise.all(
-        buildFiles.map(async file => {
-          const filePath = join(buildsDir, file)
-          const readResult = await FileManager.readJson<
-            BuildPayload & { id?: string; createdAt?: string; visibility?: string }
-          >(filePath)
-          if (readResult.isErr()) return null
-          const build = readResult.unwrap()
-          if (build.visibility === 'private') return null
-          const id = String(build.id ?? file.replace(/\.json$/i, ''))
-          return {
-            build,
-            id,
-            createdAt: build.createdAt ?? '',
-          }
-        })
+    const builds = entries
+      .filter(entry => entry.visibility !== 'private')
+      .sort(
+        (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
       )
-    ).filter((row): row is NonNullable<typeof row> => row !== null)
-
-    builds.sort(
-      (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-    )
 
     res.set('Cache-Control', 'public, max-age=300')
     return res.json({
-      totalBuilds: buildFiles.length,
-      builds: builds.slice(0, limit).map(row => row.build),
+      totalBuilds: fileCount,
+      builds: builds.slice(0, limit).map(entry => entry.build),
     })
   } catch (error) {
     return res.status(500).json({ error: 'Failed to load recent builds' })
@@ -154,40 +136,22 @@ router.get('/recent', async (req, res) => {
 router.get('/popular', async (req, res) => {
   try {
     const limit = Math.min(12, Math.max(1, parseInt(String(req.query.limit ?? '6'), 10) || 6))
-    const { promises: fs } = await import('fs')
-    const files = await fs.readdir(buildsDir)
-    const buildFiles = files.filter(file => BUILD_FILE_REGEX.test(file))
-    const viewCounts = await getEngagementViewCounts()
+    const [{ entries, fileCount }, viewCounts] = await Promise.all([
+      getBuildIndex(),
+      getEngagementViewCounts(),
+    ])
 
-    const builds = (
-      await Promise.all(
-        buildFiles.map(async file => {
-          const filePath = join(buildsDir, file)
-          const readResult = await FileManager.readJson<
-            BuildPayload & { id?: string; createdAt?: string; visibility?: string }
-          >(filePath)
-          if (readResult.isErr()) return null
-          const build = readResult.unwrap()
-          if (build.visibility === 'private') return null
-          const id = String(build.id ?? file.replace(/\.json$/i, ''))
-          return {
-            build,
-            id,
-            views: viewCounts.get(id) ?? 0,
-            createdAt: build.createdAt ?? '',
-          }
-        })
-      )
-    ).filter((row): row is NonNullable<typeof row> => row !== null)
-
-    builds.sort((a, b) => {
-      if (b.views !== a.views) return b.views - a.views
-      return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-    })
+    const builds = entries
+      .filter(entry => entry.visibility !== 'private')
+      .map(entry => ({ ...entry, views: viewCounts.get(entry.id) ?? 0 }))
+      .sort((a, b) => {
+        if (b.views !== a.views) return b.views - a.views
+        return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+      })
 
     res.set('Cache-Control', 'public, max-age=300')
     return res.json({
-      totalBuilds: buildFiles.length,
+      totalBuilds: fileCount,
       builds: builds.slice(0, limit).map(row => row.build),
     })
   } catch (error) {
@@ -278,22 +242,8 @@ router.post('/:id/track-share', async (req, res) => {
  */
 router.get('/', async (_req, res) => {
   try {
-    const { promises: fs } = await import('fs')
-    const files = await fs.readdir(buildsDir)
-    const buildFiles = files.filter(file => BUILD_FILE_REGEX.test(file))
-    
-    const builds = await Promise.all(
-      buildFiles.map(async (file) => {
-        const filePath = join(buildsDir, file)
-        const readResult = await FileManager.readJson(filePath)
-        if (readResult.isOk()) {
-          return readResult.unwrap()
-        }
-        return null
-      })
-    )
-
-    return res.json(builds.filter(build => build !== null))
+    const { entries } = await getBuildIndex()
+    return res.json(entries.map(entry => entry.build))
   } catch (error) {
     return res.status(500).json({ error: 'Failed to read builds directory' })
   }
@@ -324,6 +274,7 @@ router.delete('/:id', async (req, res) => {
     // Delete the file
     try {
       await fs.unlink(filePath)
+      invalidateBuildIndex()
       return res.json({ 
         id: buildId,
         message: 'Build deleted successfully'

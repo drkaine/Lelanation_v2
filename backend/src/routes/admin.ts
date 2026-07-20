@@ -12,11 +12,9 @@ import {
   getMatchupDetailsByChampion,
   rebuildMatchupTierScores,
 } from '../services/MatchupTierService.js'
-import { runStatsPrecomputedRefreshOnce } from '../cron/statsPrecomputedRefresh.js'
 import { runDataDragonSyncOnce } from '../cron/dataDragonSync.js'
 import { runYouTubeSyncOnce } from '../cron/youtubeSync.js'
 import { runCommunityDragonSyncOnce } from '../cron/communityDragonSync.js'
-import { runLiveAggArchiveCheckpointCronOnce } from '../cron/liveAggArchiveCheckpoint.js'
 import { FileManager } from '../utils/fileManager.js'
 import {
   readUnifiedLogEntries,
@@ -229,20 +227,6 @@ router.post('/sync-data', (_req, res) => {
     env: process.env,
   })
   child.unref()
-})
-
-// --- Rafraîchir les tables stats pré-calculées (job horaire; déclenchement manuel possible) ---
-router.post('/refresh-precomputed-stats', (_req, res) => {
-  res.status(202).json({
-    success: true,
-    message: 'Rafraîchissement des stats pré-calculées lancé en arrière-plan. Comptez quelques minutes.',
-  })
-  runStatsPrecomputedRefreshOnce()
-    .then((r) => {
-      if (r.ok) console.log('[admin] refresh-precomputed-stats ok, entries:', r.refreshed?.length ?? 0)
-      else console.warn('[admin] refresh-precomputed-stats failed:', r.error)
-    })
-    .catch((e) => console.error('[admin] refresh-precomputed-stats error:', e))
 })
 
 /** GET /api/admin/data-stats — collecte : DB stats (`tracked_matches`, `players`) ou snapshot `statistiques` (sans lecture du log poller). */
@@ -609,12 +593,11 @@ router.post('/client-log', async (req, res) => {
   }
 })
 
-/** Trigger a cron job manually (dataDragonSync, youtubeSync, communityDragonSync, liveAggArchiveCheckpoint). */
+/** Trigger a cron job manually (dataDragonSync, youtubeSync, communityDragonSync). */
 const CRON_TRIGGER_JOBS = new Set([
   'dataDragonSync',
   'youtubeSync',
   'communityDragonSync',
-  'liveAggArchiveCheckpoint',
 ])
 router.post('/cron/trigger/:job', async (req, res) => {
   const job = typeof req.params?.job === 'string' ? req.params.job.trim() : ''
@@ -642,10 +625,6 @@ router.post('/cron/trigger/:job', async (req, res) => {
         return res.json({ success: true, synced: result.synced, failed: result.failed, skipped: result.skipped })
       }
       return res.status(500).json({ success: false, error: result.error })
-    }
-    if (job === 'liveAggArchiveCheckpoint') {
-      const result = await runLiveAggArchiveCheckpointCronOnce()
-      return res.json({ success: result.ok, skipped: result.skipped ?? true })
     }
     return res.status(400).json({ error: `Invalid cron job: ${job}` })
   } catch (err) {

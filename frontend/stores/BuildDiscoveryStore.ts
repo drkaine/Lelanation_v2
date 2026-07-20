@@ -18,6 +18,19 @@ export type PageSizeOption = 20 | 30 | 40 | 50 | 'all'
 
 const PAGINATION_STORAGE_KEY = 'lelanation_builds_pagination'
 
+// Cache mémoire (client uniquement) de la réponse publique `/api/builds`.
+// `loadBuilds` est rappelé à chaque changement d'onglet (discover/my-builds/
+// favoris) ; seuls les builds locaux (localStorage) doivent être refusionnés à
+// chaque fois. On évite donc de retélécharger tout le catalogue public à chaque
+// bascule d'onglet, tout en gardant une fraîcheur bornée par le TTL.
+const PUBLIC_BUILDS_CACHE_TTL_MS = 30_000
+let publicBuildsCache: { at: number; data: (Build | StoredBuild)[] } | null = null
+
+/** Invalide le cache catalogue public (à appeler après création/suppression de build). */
+export function invalidatePublicBuildsCache(): void {
+  publicBuildsCache = null
+}
+
 function readPaginationFromStorage(): { pageSize: PageSizeOption; currentPage: number } | null {
   if (typeof document === 'undefined') return null
   try {
@@ -236,10 +249,22 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
 
       const localBuilds = buildStore.getSavedBuilds()
 
-      // Charger les builds publics depuis l'API
+      // Charger les builds publics depuis l'API (avec cache client court : évite
+      // un refetch complet à chaque bascule d'onglet).
       let publicBuilds: Build[] = []
       try {
-        const allBuilds = (await fetchJson('/api/builds')) as (Build | StoredBuild)[]
+        const now = Date.now()
+        let allBuilds: (Build | StoredBuild)[]
+        if (
+          import.meta.client &&
+          publicBuildsCache &&
+          now - publicBuildsCache.at < PUBLIC_BUILDS_CACHE_TTL_MS
+        ) {
+          allBuilds = publicBuildsCache.data
+        } else {
+          allBuilds = (await fetchJson('/api/builds')) as (Build | StoredBuild)[]
+          if (import.meta.client) publicBuildsCache = { at: now, data: allBuilds }
+        }
         const patchStaleById = extractPatchStaleMap(allBuilds)
         const localBuildIds = new Set(localBuilds.map(b => b.id))
         const filtered = allBuilds.filter(

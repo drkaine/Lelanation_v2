@@ -20,11 +20,7 @@ import { setupYouTubeSync } from './cron/youtubeSync.js'
 import { setupCommunityDragonSync } from './cron/communityDragonSync.js'
 import { setupSocialLinksHealthCheck } from './cron/socialLinksHealthCheck.js'
 import { setupDiskSpaceAlert } from './cron/diskSpaceAlert.js'
-import { setupLiveAggArchiveCheckpoint } from './cron/liveAggArchiveCheckpoint.js'
-// import { runStatsPrecomputedRefreshOnce } from './cron/statsPrecomputedRefresh.js'
 import { MetricsService } from './services/MetricsService.js'
-// import { getOverviewDetailStats } from './services/StatsOverviewService.js'
-// import { scheduleStatsPrewarm } from './services/StatsPrewarmService.js'
 import { requestStop, isAnyScriptRunning } from './worker/scriptOrchestrator.js'
 
 const app = express()
@@ -70,7 +66,6 @@ try {
   setupCommunityDragonSync()
   setupSocialLinksHealthCheck()
   setupDiskSpaceAlert()
-  setupLiveAggArchiveCheckpoint()
 } catch (error) {
   console.error('[Server] ❌ Failed to initialize cron jobs:', error)
   // Don't exit - server can still run without cron
@@ -102,23 +97,6 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'))
 // ─────────────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
-  // Précharger le cache overview-detail (sans filtre) pour limiter les 504
-  // setTimeout(() => {
-  //   Promise.all([
-  //     getOverviewDetailStats(null, null, false),
-  //     getOverviewDetailStats(null, null, true),
-  //   ]).then(
-  //     ([a, b]) => console.log('[Server] Overview-detail cache warmed (includeSmite=false:', !!a, ', includeSmite=true:', !!b, ')'),
-  //     (e) => console.warn('[Server] Overview-detail cache warm failed:', e)
-  //   )
-  // }, 15_000)
-  // Préchargement étendu en arrière-plan (rankTiers, champions par rank, duration/abandons/sides) pour éviter 504 et premières requêtes lentes
-  // scheduleStatsPrewarm()
-  // Remplir les tables pré-calculées tout de suite (champions par rôle en premier dans le refresh)
-  // runStatsPrecomputedRefreshOnce().then(
-  //   (r) => r.ok && r.refreshed?.length && console.log('[Server] Precomputed stats initial fill:', r.refreshed.length, 'entries'),
-  //   (e) => console.warn('[Server] Precomputed stats initial fill failed:', e instanceof Error ? e.message : e)
-  // )
   console.log('[Server] Match ingestion runs in PM2 as lelanation-poller-v2 (not in this API process).')
 })
 

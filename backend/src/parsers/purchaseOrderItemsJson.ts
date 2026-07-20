@@ -18,6 +18,53 @@ export function buildGameOrderItemsJson(
   return out
 }
 
+/** Fusion en mémoire de deux JSON d'ordre d'achat : additionne games/wins par itemId. */
+export function mergeOrderItemsJson(
+  base: PurchaseOrderItemsJson,
+  add: PurchaseOrderItemsJson,
+): PurchaseOrderItemsJson {
+  const out: PurchaseOrderItemsJson = {}
+  for (const src of [base, add]) {
+    for (const [itemId, slot] of Object.entries(src)) {
+      const existing = out[itemId] ?? { games: 0, wins: 0 }
+      out[itemId] = {
+        games: existing.games + (Number(slot?.games) || 0),
+        wins: existing.wins + (Number(slot?.wins) || 0),
+      }
+    }
+  }
+  return out
+}
+
+/**
+ * Expression SQL générique pour fusionner order_items lors d'un upsert multi-lignes :
+ * additionne games/wins par itemId entre la ligne existante (`targetRef`) et la ligne
+ * entrante (`excludedRef`, ex. `EXCLUDED.order_items`). Contrairement à
+ * `buildOrderItemsMergeSqlExpr`, elle ne dépend pas d'une liste d'items en dur, donc
+ * une seule clause DO UPDATE convient à toutes les lignes d'un même statement.
+ */
+export function buildOrderItemsGenericMergeSqlExpr(targetRef: string, excludedRef: string): string {
+  const target = `CASE WHEN jsonb_typeof(${targetRef}) = 'object' THEN ${targetRef} ELSE '{}'::jsonb END`
+  const excluded = `CASE WHEN jsonb_typeof(${excludedRef}) = 'object' THEN ${excludedRef} ELSE '{}'::jsonb END`
+  return `(
+    SELECT COALESCE(
+      jsonb_object_agg(
+        merge_key,
+        jsonb_build_object(
+          'games',
+          COALESCE(((${target}) -> merge_key ->> 'games')::bigint, 0)
+            + COALESCE(((${excluded}) -> merge_key ->> 'games')::bigint, 0),
+          'wins',
+          COALESCE(((${target}) -> merge_key ->> 'wins')::bigint, 0)
+            + COALESCE(((${excluded}) -> merge_key ->> 'wins')::bigint, 0)
+        )
+      ),
+      '{}'::jsonb
+    )
+    FROM jsonb_object_keys((${target}) || (${excluded})) AS merge_key
+  )`
+}
+
 /** Item IDs éligibles triés par ordre d'achat (starters + légendaires). */
 export function orderedEligibleItemIds(orderByItemId: Map<number, number>): number[] {
   return Array.from(orderByItemId.entries())

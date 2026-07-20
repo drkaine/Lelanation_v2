@@ -9,7 +9,6 @@ export type CronJobKey =
   | 'communityDragonSync'
   | 'socialLinksHealthCheck'
   | 'diskSpaceAlert'
-  | 'liveAggArchiveCheckpoint'
 
 export type CronJobStatus = {
   job: CronJobKey
@@ -63,13 +62,6 @@ export class CronStatusService {
         },
         diskSpaceAlert: {
           job: 'diskSpaceAlert',
-          lastStartAt: null,
-          lastSuccessAt: null,
-          lastFailureAt: null,
-          lastFailureMessage: null
-        },
-        liveAggArchiveCheckpoint: {
-          job: 'liveAggArchiveCheckpoint',
           lastStartAt: null,
           lastSuccessAt: null,
           lastFailureAt: null,

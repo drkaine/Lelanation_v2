@@ -27,6 +27,30 @@ function backpressureThreshold(): number {
   return Number.parseInt(process.env.BACKPRESSURE_THRESHOLD ?? '500', 10);
 }
 
+type PlayerPoolDbRow = {
+  total: number;
+  never_seen: number;
+  avg_age_hours: number | string | null;
+  oldest_age_hours: number | string | null;
+};
+
+/**
+ * Cache court pour l'agrégat full-table `obs_player_pool_stats` (~2.1M lignes,
+ * p95 ~1.3s). Ces statistiques (total, âge moyen/max) évoluent très lentement,
+ * donc un TTL de quelques minutes évite de relancer le scan complet à chaque
+ * snapshot (fenêtres 10m + 1h) sans impact perceptible sur la fraîcheur.
+ */
+let playerPoolDbCache: { at: number; row: PlayerPoolDbRow | undefined } | null = null;
+
+function playerPoolCacheTtlMs(): number {
+  const raw = process.env.OBS_PLAYER_POOL_CACHE_MS?.trim();
+  if (raw) {
+    const n = Number(raw);
+    if (Number.isFinite(n) && n >= 0) return Math.trunc(n);
+  }
+  return 5 * 60_000;
+}
+
 export class ExtendedSnapshotBuilder {
   constructor(
     private readonly store: MetricsStore,
@@ -209,29 +233,7 @@ export class ExtendedSnapshotBuilder {
       .inWindow(WINDOW_MS['24h'])
       .filter((e) => e.type === 'new_added').length;
 
-    const rows = await timedDbOp('obs_player_pool_stats', () =>
-      sql<
-        Array<{
-          total: number;
-          never_seen: number;
-          avg_age_hours: number | string | null;
-          oldest_age_hours: number | string | null;
-        }>
-      >`
-        SELECT
-          COUNT(*)::int AS total,
-          COUNT(*) FILTER (WHERE last_seen IS NULL)::int AS never_seen,
-          AVG(EXTRACT(EPOCH FROM (NOW() - last_seen)) / 3600)
-            FILTER (WHERE last_seen IS NOT NULL) AS avg_age_hours,
-          MAX(EXTRACT(EPOCH FROM (NOW() - last_seen)) / 3600)
-            FILTER (WHERE last_seen IS NOT NULL) AS oldest_age_hours
-        FROM players
-        WHERE region IS NOT NULL
-          AND LENGTH(TRIM(puuid)) > 0
-      `,
-    );
-
-    const row = rows[0];
+    const row = await this.fetchPlayerPoolDbRow();
     const totalPlayersInDb = Number(row?.total ?? 0);
     const playersPolledLast24h = players24h;
     const playersPerHour = playersPolledLast24h / 24;
@@ -249,6 +251,33 @@ export class ExtendedSnapshotBuilder {
       oldestLastSeenAgeHours: Number(row?.oldest_age_hours ?? 0),
       neverSeenCount: Number(row?.never_seen ?? 0),
     };
+  }
+
+  private async fetchPlayerPoolDbRow(): Promise<PlayerPoolDbRow | undefined> {
+    const ttl = playerPoolCacheTtlMs();
+    const now = Date.now();
+    if (playerPoolDbCache && now - playerPoolDbCache.at < ttl) {
+      return playerPoolDbCache.row;
+    }
+
+    const rows = await timedDbOp('obs_player_pool_stats', () =>
+      sql<PlayerPoolDbRow[]>`
+        SELECT
+          COUNT(*)::int AS total,
+          COUNT(*) FILTER (WHERE last_seen IS NULL)::int AS never_seen,
+          AVG(EXTRACT(EPOCH FROM (NOW() - last_seen)) / 3600)
+            FILTER (WHERE last_seen IS NOT NULL) AS avg_age_hours,
+          MAX(EXTRACT(EPOCH FROM (NOW() - last_seen)) / 3600)
+            FILTER (WHERE last_seen IS NOT NULL) AS oldest_age_hours
+        FROM players
+        WHERE region IS NOT NULL
+          AND LENGTH(TRIM(puuid)) > 0
+      `,
+    );
+
+    const row = rows[0];
+    playerPoolDbCache = { at: now, row };
+    return row;
   }
 
   private async buildByPatch(): Promise<Record<string, PatchObservability>> {

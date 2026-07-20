@@ -3,8 +3,8 @@
  * `match_aggregated` est créé uniquement après agrégation réussie (`insertMatchAggregated`).
  */
 import type { Sql, TransactionSql } from "postgres";
-import type { ParsedParticipantDto } from "../dto/match.dto.js";
-import { parseMatch } from "../parsers/match.parser.js";
+import { extractBanByParticipantId } from "../parsers/match.parser.js";
+import { extractChampionTransformInfo } from "../parsers/championTransform.js";
 import { countTeamDrakeAndSoulMetrics } from "../parsers/team-objective-histogram.js";
 import {
   extractParticipantTimelineData,
@@ -13,7 +13,7 @@ import {
 import { toJungleCampHistoryDoc } from "../parsers/junglePathExtract.js";
 import { normalizePlatformRegion } from "../riot/platform-region.js";
 import { classifyParticipantLaneEvents, toParticipantMeta } from "../analysis/timelineAdapter.js";
-import type { ChallengesDto, MatchDto, MatchTimelineDto, ParticipantDto, TeamDto } from "../riot/types.js";
+import type { ChallengesDto, MatchDto, MatchTimelineDto, MatchTimelineEventDto, ParticipantDto, TeamDto } from "../riot/types.js";
 
 function ti(v: unknown): number {
   const x = typeof v === "number" ? v : Number(v);
@@ -441,15 +441,16 @@ export async function persistNormalizedMatch(
   );
 
   const drakeMetrics = countTeamDrakeAndSoulMetrics(timeline, participantsInMatch);
-  const parsedForBans = parseMatch(match, timeline, patch, region).filter(
-    (p): p is ParsedParticipantDto => p !== null,
-  );
-  const banByParticipant = new Map<number, number>();
-  for (const p of parsedForBans) {
-    banByParticipant.set(
-      participantsInMatch.find((x) => x.puuid === p.puuid)?.participantId ?? 0,
-      p.bannedChampionId,
-    );
+  const banByParticipant = extractBanByParticipantId(match);
+  // Flatten timeline events once (was previously derived via a full parseMatch,
+  // which parsed phased purchases/items per participant just to read bans + the
+  // champion-transform timestamp — all discarded here). Both are now computed
+  // cheaply without the heavy per-participant parse.
+  const timelineEvents: MatchTimelineEventDto[] = [];
+  for (const frame of timeline?.info?.frames ?? []) {
+    for (const event of frame.events ?? []) {
+      timelineEvents.push(event);
+    }
   }
 
   for (const team of match.info?.teams ?? []) {
@@ -471,7 +472,6 @@ export async function persistNormalizedMatch(
   }
 
   for (const participant of participantsInMatch) {
-    const parsed = parsedForBans.find((p) => p.puuid === participant.puuid);
     const jsonCols = new Set([
       "item_history",
       "spell_history",
@@ -521,12 +521,17 @@ export async function persistNormalizedMatch(
         const idx = sorted.findIndex((p) => p.participantId === participant.participantId);
         return idx >= 0 && idx < bans.length ? bans[idx]! : 0;
       })();
+    const transformTimestampMs = extractChampionTransformInfo(
+      timelineEvents,
+      participant.participantId,
+      participant.championTransform,
+    ).transformTimestampMs;
     const row = buildParticipantRow(
       matchId,
       participant,
       timeline,
       bannedId,
-      parsed?.transformTimestampMs ?? 0,
+      transformTimestampMs,
     );
     const cols = Object.keys(row).filter(isValidParticipantColumn);
     const vals = cols.map((c) => {
