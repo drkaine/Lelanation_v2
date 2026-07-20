@@ -5271,7 +5271,7 @@ const statisticsBootstrapKey = computed(
 await useAsyncData(
   () => `statistics-bootstrap-${statisticsBootstrapKey.value}`,
   bootstrapStatisticsPage,
-  { watch: [statisticsBootstrapKey] }
+  { watch: [statisticsBootstrapKey], lazy: true }
 )
 
 onMounted(() => {

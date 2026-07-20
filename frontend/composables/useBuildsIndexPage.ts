@@ -84,7 +84,7 @@ export function useBuildsIndexPage(fixedTab?: MaybeRefOrGetter<BuildsIndexTab | 
       await discoveryStore.loadBuilds({ fetcher: requestFetch })
       return discoveryStore.builds.length
     },
-    { watch: [routeTab] }
+    { watch: [routeTab], lazy: true }
   )
 
   const libraryBuildStore = {

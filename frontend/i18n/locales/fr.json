@@ -689,7 +689,7 @@
     "settingsPageTabAlerts": "Alertes surveillance",
     "settingsPageTabHowItWorks": "Comment ça marche",
     "settingsPageTabDataTransfer": "Partage données",
-    "settingsPageTabHomeSections": "Page d'accueil",
+    "settingsPageTabHomeSections": "Paramétrage d'accueil",
     "settingsHomeSectionsHint": "Choisissez les sections affichées sur l'accueil et leur ordre (↑ ↓). Le bandeau d'en-tête reste toujours visible.",
     "settingsHomeSectionMoveUp": "Monter {section}",
     "settingsHomeSectionMoveDown": "Descendre {section}",

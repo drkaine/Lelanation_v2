@@ -13,20 +13,12 @@ import {
   computeChampionMatchupNotesBatch,
   type MatchupPeerRow,
 } from './championMatchupScoreCompute.js'
+import { assignTiersFromNotes, type LolalyticsTier } from './tierListAssign.js'
 
 const MIN_GAMES = 1
 const MIN_PICKRATE = 0.0001
 
-const TIER_PERCENTILES: Array<{ tier: Tier; maxPct: number }> = [
-  { tier: 'S+', maxPct: 5 },
-  { tier: 'S', maxPct: 10 },
-  { tier: 'A', maxPct: 25 },
-  { tier: 'B', maxPct: 50 },
-  { tier: 'C', maxPct: 75 },
-  { tier: 'D', maxPct: 100 },
-]
-
-export type Tier = 'S+' | 'S' | 'A' | 'B' | 'C' | 'D'
+export type Tier = LolalyticsTier
 
 export interface TierListRow {
   rank: number
@@ -109,53 +101,8 @@ function normalizeTierListRole(role: string | null | undefined): string {
   return u
 }
 
-function assignTier(sortedByTierScore: Array<{ tierScore: number }>): Tier[] {
-  const n = sortedByTierScore.length
-  if (n === 0) return []
-  const tiers: Tier[] = []
-  const sameScore = (a: number, b: number): boolean => Math.abs(a - b) < 1e-9
-  for (let i = 0; i < n; i++) {
-    if (
-      i > 0 &&
-      sameScore(sortedByTierScore[i]!.tierScore, sortedByTierScore[i - 1]!.tierScore)
-    ) {
-      tiers.push(tiers[i - 1]!)
-      continue
-    }
-    const pct = ((i + 1) / n) * 100
-    let t: Tier = 'D'
-    for (const { tier, maxPct } of TIER_PERCENTILES) {
-      if (pct <= maxPct) {
-        t = tier
-        break
-      }
-    }
-    tiers.push(t)
-  }
-  return tiers
-}
-
-function ensureTierCoverage(tiers: Tier[], n: number): Tier[] {
-  if (n < 6) return tiers
-  const out = [...tiers]
-  const desired: Tier[] = ['S+', 'S', 'A', 'B', 'C', 'D']
-  const targetIndexForTier = (tier: Tier): number => {
-    if (tier === 'S+') return 0
-    if (tier === 'S') return Math.min(n - 1, Math.max(1, Math.ceil(n * 0.1) - 1))
-    if (tier === 'A') return Math.min(n - 1, Math.max(2, Math.ceil(n * 0.25) - 1))
-    if (tier === 'B') return Math.min(n - 1, Math.max(3, Math.ceil(n * 0.5) - 1))
-    if (tier === 'C') return Math.min(n - 1, Math.max(4, Math.ceil(n * 0.75) - 1))
-    return n - 1
-  }
-  for (const tier of desired) {
-    if (out.includes(tier)) continue
-    out[targetIndexForTier(tier)] = tier
-  }
-  return out
-}
-
 export const __testables = {
-  assignTier,
+  assignTiersFromNotes,
   tierScoreFromWinrateAndGames: (winrate: number, games: number) => (winrate - 0.5) * Math.sqrt(games),
 }
 
@@ -265,13 +212,9 @@ function buildTierListRows(
     r.tierScore = Number(r.pbi.toFixed(4))
   })
   sorted.sort((a, b) => b.tierScore - a.tierScore)
-  const focusNorm = focus ? normalizeTierListRole(focus) : null
-  const shouldEnsureAllTiers = focusNorm == null || focusNorm !== 'BOTTOM'
-  const tiers = shouldEnsureAllTiers
-    ? ensureTierCoverage(assignTier(sorted), sorted.length)
-    : assignTier(sorted)
+  const tiers = assignTiersFromNotes(sorted.map((r) => r.tierScore))
   sorted.forEach((r, i) => {
-    r.tier = tiers[i] ?? 'D'
+    r.tier = tiers[i] ?? 'B'
   })
 
   return sorted.map((r, i) => ({

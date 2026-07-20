@@ -6,62 +6,12 @@ import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
 import { deltaToMatchupBaseScore } from './MatchupTierService.js'
+import { assignTiersFromNotes, type LolalyticsTier } from './tierListAssign.js'
 
-export type BotlaneVsTier = 'S+' | 'S' | 'A' | 'B' | 'C' | 'D'
+export type BotlaneVsTier = LolalyticsTier
 
 /** Minimum games per row (duo overall or duo-vs-duo matchup) for tier-list tables. */
 export const MIN_BOTLANE_TIERLIST_GAMES = 10
-
-const TIER_PERCENTILES: Array<{ tier: BotlaneVsTier; maxPct: number }> = [
-  { tier: 'S+', maxPct: 5 },
-  { tier: 'S', maxPct: 10 },
-  { tier: 'A', maxPct: 25 },
-  { tier: 'B', maxPct: 50 },
-  { tier: 'C', maxPct: 75 },
-  { tier: 'D', maxPct: 100 },
-]
-
-function assignTier(sortedByTierScore: Array<{ tierScore: number }>): BotlaneVsTier[] {
-  const n = sortedByTierScore.length
-  if (n === 0) return []
-  const tiers: BotlaneVsTier[] = []
-  const sameScore = (a: number, b: number): boolean => Math.abs(a - b) < 1e-9
-  for (let i = 0; i < n; i++) {
-    if (i > 0 && sameScore(sortedByTierScore[i]!.tierScore, sortedByTierScore[i - 1]!.tierScore)) {
-      tiers.push(tiers[i - 1]!)
-      continue
-    }
-    const pct = ((i + 1) / n) * 100
-    let t: BotlaneVsTier = 'D'
-    for (const { tier, maxPct } of TIER_PERCENTILES) {
-      if (pct <= maxPct) {
-        t = tier
-        break
-      }
-    }
-    tiers.push(t)
-  }
-  return tiers
-}
-
-function ensureTierCoverage(tiers: BotlaneVsTier[], n: number): BotlaneVsTier[] {
-  if (n < 6) return tiers
-  const out = [...tiers]
-  const desired: BotlaneVsTier[] = ['S+', 'S', 'A', 'B', 'C', 'D']
-  const targetIndexForTier = (tier: BotlaneVsTier): number => {
-    if (tier === 'S+') return 0
-    if (tier === 'S') return Math.min(n - 1, Math.max(1, Math.ceil(n * 0.1) - 1))
-    if (tier === 'A') return Math.min(n - 1, Math.max(2, Math.ceil(n * 0.25) - 1))
-    if (tier === 'B') return Math.min(n - 1, Math.max(3, Math.ceil(n * 0.5) - 1))
-    if (tier === 'C') return Math.min(n - 1, Math.max(4, Math.ceil(n * 0.75) - 1))
-    return n - 1
-  }
-  for (const tier of desired) {
-    if (out.includes(tier)) continue
-    out[targetIndexForTier(tier)] = tier
-  }
-  return out
-}
 
 function buildBdMatchCond(version?: string | string[] | null, rankTier?: string | string[] | null): string {
   const parts: string[] = []
@@ -236,9 +186,7 @@ export async function getBotlaneDuoVsDuoTierTable(
   )
 
   scored.sort((a, b) => b.tierScore - a.tierScore)
-  const n = scored.length
-  const tiers =
-    n >= 6 ? ensureTierCoverage(assignTier(scored.map((r) => ({ tierScore: r.tierScore }))), n) : assignTier(scored.map((r) => ({ tierScore: r.tierScore })))
+  const tiers = assignTiersFromNotes(scored.map((r) => r.tierScore))
 
   const rows: BotlaneVsDuoRow[] = scored.map((r, i) => ({
     rank: i + 1,
@@ -362,11 +310,7 @@ export async function getBotlaneDuoOverallTierTable(
   })
 
   scored.sort((a, b) => b.tierScore - a.tierScore)
-  const n = scored.length
-  const tiers =
-    n >= 6
-      ? ensureTierCoverage(assignTier(scored.map((r) => ({ tierScore: r.tierScore }))), n)
-      : assignTier(scored.map((r) => ({ tierScore: r.tierScore })))
+  const tiers = assignTiersFromNotes(scored.map((r) => r.tierScore))
 
   const rows: BotlaneVsDuoRow[] = scored.map((r, i) => ({
     rank: i + 1,

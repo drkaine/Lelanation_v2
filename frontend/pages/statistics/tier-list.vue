@@ -1069,6 +1069,9 @@ watch(
 )
 
 async function bootstrapTierListPage(): Promise<number> {
+  if (!isBotlaneTierListView(tierListViewModel.value)) {
+    tierList.tierListPending.value = true
+  }
   if (import.meta.server) {
     applyTierListStateFromQuery()
   }
@@ -1102,7 +1105,7 @@ const tierListBootstrapKey = computed(() =>
 await useAsyncData(
   () => `tier-list-bootstrap-${tierListBootstrapKey.value}`,
   bootstrapTierListPage,
-  { watch: [tierListBootstrapKey] }
+  { watch: [tierListBootstrapKey], lazy: true }
 )
 
 onMounted(() => {

@@ -72,7 +72,7 @@ export function useMatchupSheetsIndexPage(
       await discoveryStore.loadGuides({ fetcher: requestFetch })
       return discoveryStore.guides.length
     },
-    { watch: [routeTab] }
+    { watch: [routeTab], lazy: true }
   )
 
   const myGuides = computed<MatchupGuide[]>(() => {

@@ -80,29 +80,6 @@
         </ul>
       </div>
 
-      <section v-show="activeSettingsPageTab === 'watchlist'" class="space-y-3" role="tabpanel">
-        <p class="text-sm text-text/70">
-          {{ t('statisticsPage.settingsWatchlistDescription') }}
-        </p>
-
-        <StatisticsWatchedChampionPicker
-          :model-value="statisticsUiStore.watchedChampionIds"
-          @update:model-value="setWatchedChampions"
-        />
-      </section>
-
-      <div v-show="activeSettingsPageTab === 'alerts'" role="tabpanel">
-        <StatisticsSurveillanceAlertSettings />
-      </div>
-
-      <div v-show="activeSettingsPageTab === 'howItWorks'" role="tabpanel">
-        <SettingsHowItWorksPanel />
-      </div>
-
-      <div v-show="activeSettingsPageTab === 'dataTransfer'" role="tabpanel">
-        <SettingsDataTransferPanel />
-      </div>
-
       <div v-show="activeSettingsPageTab === 'homeSections'" class="space-y-4" role="tabpanel">
         <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
           <p class="text-xs text-text/55">
@@ -171,6 +148,29 @@
           </li>
         </ul>
       </div>
+
+      <section v-show="activeSettingsPageTab === 'watchlist'" class="space-y-3" role="tabpanel">
+        <p class="text-sm text-text/70">
+          {{ t('statisticsPage.settingsWatchlistDescription') }}
+        </p>
+
+        <StatisticsWatchedChampionPicker
+          :model-value="statisticsUiStore.watchedChampionIds"
+          @update:model-value="setWatchedChampions"
+        />
+      </section>
+
+      <div v-show="activeSettingsPageTab === 'alerts'" role="tabpanel">
+        <StatisticsSurveillanceAlertSettings />
+      </div>
+
+      <div v-show="activeSettingsPageTab === 'howItWorks'" role="tabpanel">
+        <SettingsHowItWorksPanel />
+      </div>
+
+      <div v-show="activeSettingsPageTab === 'dataTransfer'" role="tabpanel">
+        <SettingsDataTransferPanel />
+      </div>
     </div>
   </div>
 </template>
@@ -192,11 +192,11 @@ import { useHomeUiStore, type HomeSectionId } from '~/stores/HomeUiStore'
 
 const VALID_SETTINGS_PAGE_TABS = [
   'tabs',
+  'homeSections',
   'watchlist',
   'alerts',
   'howItWorks',
   'dataTransfer',
-  'homeSections',
 ] as const
 type SettingsPageTab = (typeof VALID_SETTINGS_PAGE_TABS)[number]
 
@@ -241,11 +241,11 @@ onMounted(() => {
 })
 const settingsPageTabs = computed(() => [
   { id: 'tabs' as const, label: t('statisticsPage.settingsPageTabTabs') },
+  { id: 'homeSections' as const, label: t('statisticsPage.settingsPageTabHomeSections') },
   { id: 'watchlist' as const, label: t('statisticsPage.settingsPageTabWatchlist') },
   { id: 'alerts' as const, label: t('statisticsPage.settingsPageTabAlerts') },
   { id: 'howItWorks' as const, label: t('statisticsPage.settingsPageTabHowItWorks') },
   { id: 'dataTransfer' as const, label: t('statisticsPage.settingsPageTabDataTransfer') },
-  { id: 'homeSections' as const, label: t('statisticsPage.settingsPageTabHomeSections') },
 ])
 
 const tabRows = computed(() =>
