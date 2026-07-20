@@ -246,12 +246,12 @@ export const useYouTubeStore = defineStore('youtube', {
       }
     },
 
-    async loadAllChannelsData() {
+    async loadAllChannelsData(options?: { force?: boolean }) {
       // Ensure we have a status list first.
       if (!this.status.length) {
         await this.loadStatus()
       }
-      await Promise.all(this.status.map(s => this.loadChannelData(s.channelId)))
+      await Promise.all(this.status.map(s => this.loadChannelData(s.channelId, options)))
     },
 
     async loadConfig() {
@@ -270,9 +270,13 @@ export const useYouTubeStore = defineStore('youtube', {
       }
     },
 
-    async loadChannelData(channelId: string) {
+    async loadChannelData(channelId: string, options?: { force?: boolean }) {
       if (!channelId) return
-      if (this.channelDataById[channelId]) return
+      if (options?.force) {
+        delete this.channelDataById[channelId]
+      } else if (this.channelDataById[channelId]) {
+        return
+      }
 
       this.loadingChannelIds.add(channelId)
       this.error = null

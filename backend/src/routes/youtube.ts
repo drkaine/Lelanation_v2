@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { join } from 'path'
 import { FileManager } from '../utils/fileManager.js'
 import { YouTubeService } from '../services/YouTubeService.js'
+import { fetchYouTubeCommunityPosts } from '../services/youtubeCommunityPosts.js'
 import { retryWithBackoff } from '../utils/retry.js'
 import { DiscordService } from '../services/DiscordService.js'
 
@@ -235,6 +236,70 @@ router.get('/channels/:channelId', async (req, res) => {
   }
 
   return res.json(readResult.unwrap())
+})
+
+/**
+ * Get a single community post with all images (cached file first, then live fetch).
+ */
+router.get('/channels/:channelId/posts/:postId', async (req, res) => {
+  const channelId = req.params.channelId
+  const postId = req.params.postId
+  if (!channelId || !postId) {
+    return res.status(400).json({ error: 'Missing channelId or postId' })
+  }
+
+  const backendPath = join(youtubeDataDir, `${channelId}.json`)
+  const frontendPath = join(frontendYouTubeDir, `${channelId}.json`)
+
+  let readResult = await FileManager.readJson<StoredChannelData>(backendPath)
+  if (readResult.isErr() && readResult.unwrapErr().code === 'FILE_NOT_FOUND') {
+    readResult = await FileManager.readJson<StoredChannelData>(frontendPath)
+  }
+
+  if (readResult.isOk()) {
+    const data = readResult.unwrap()
+    const cachedPost = (data.videos ?? []).find(
+      (item): item is Record<string, unknown> =>
+        typeof item === 'object' &&
+        item !== null &&
+        'id' in item &&
+        String((item as { id?: unknown }).id) === postId
+    )
+    const imageUrls = Array.isArray(cachedPost?.imageUrls)
+      ? cachedPost.imageUrls.filter((url): url is string => typeof url === 'string' && url.length > 0)
+      : []
+    if (imageUrls.length > 1) {
+      return res.json(cachedPost)
+    }
+  }
+
+  const configResult = await readChannelsConfig()
+  if (!configResult.ok) {
+    return res.status(configResult.status).json({ error: configResult.error })
+  }
+
+  const entry = (configResult.value.channels ?? []).find(item =>
+    typeof item === 'string' ? item === channelId : item.channelId === channelId
+  )
+  const channelName =
+    typeof entry === 'string' ? entry : entry?.channelName || entry?.channelId || channelId
+
+  const postsResult = await fetchYouTubeCommunityPosts({
+    channelId,
+    channelTitle: channelName,
+    maxPosts: 100,
+  })
+
+  if (postsResult.isErr()) {
+    return res.status(502).json({ error: postsResult.unwrapErr().message })
+  }
+
+  const post = postsResult.unwrap().find(item => item.id === postId)
+  if (!post) {
+    return res.status(404).json({ error: 'Community post not found' })
+  }
+
+  return res.json(post)
 })
 
 /**

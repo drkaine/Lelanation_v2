@@ -1,3 +1,5 @@
+export type YouTubeFeedItemKind = 'video' | 'communityPost'
+
 export interface YouTubeVideo {
   id: string
   title: string
@@ -7,6 +9,8 @@ export interface YouTubeVideo {
   channelId: string
   channelTitle: string
   url: string
+  kind?: YouTubeFeedItemKind
+  imageUrls?: string[]
   duration?: string
   isShort?: boolean
 }

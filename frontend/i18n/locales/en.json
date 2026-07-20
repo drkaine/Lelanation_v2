@@ -2786,6 +2786,14 @@
     "noCreatorsTitle": "No creator configured",
     "noCreatorsText": "Ask an admin to add channels."
   },
+  "communityPostModal": {
+    "close": "Close",
+    "loadingImages": "Loading images…",
+    "previousImage": "Previous image",
+    "nextImage": "Next image",
+    "goToImage": "Go to image {index}",
+    "imageAlt": "{title} — image {index} of {total}"
+  },
   "contactModal": {
     "title": "Contact us",
     "type": "Request type",

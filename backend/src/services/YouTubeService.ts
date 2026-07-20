@@ -3,6 +3,12 @@ import { Result } from '../utils/Result.js'
 import { ExternalApiError, AppError } from '../utils/errors.js'
 import { FileManager } from '../utils/fileManager.js'
 import { fetchJson, HttpRequestError } from '../utils/httpFetch.js'
+import {
+  fetchYouTubeCommunityPosts,
+  isYouTubeCommunityPostId,
+} from './youtubeCommunityPosts.js'
+
+export type YouTubeFeedItemKind = 'video' | 'communityPost'
 
 export interface YouTubeVideo {
   id: string
@@ -13,6 +19,8 @@ export interface YouTubeVideo {
   channelId: string
   channelTitle: string
   url: string
+  kind?: YouTubeFeedItemKind
+  imageUrls?: string[]
   /**
    * ISO 8601 duration returned by YouTube API (e.g. "PT59S", "PT2M10S")
    */
@@ -288,6 +296,7 @@ export class YouTubeService {
               channelId: item.snippet?.channelId || '',
               channelTitle: item.snippet?.channelTitle || 'Unknown',
               url: `https://www.youtube.com/watch?v=${item.id}`,
+              kind: 'video' as const,
               duration: item.contentDetails?.duration || undefined,
               isShort: this.isShortDuration(item.contentDetails?.duration)
             })
@@ -511,16 +520,24 @@ export class YouTubeService {
         }
       }
 
+      const withCommunityPosts = await this.mergeCommunityPosts({
+        channelId: channel.channelId,
+        channelName: channel.channelName,
+        items: merged,
+      })
+      if (withCommunityPosts.isErr()) return Result.err(withCommunityPosts.unwrapErr())
+      const finalItems = withCommunityPosts.unwrap()
+
       const save = await this.saveChannelData({
         channelId: channel.channelId,
         channelName: channel.channelName,
-        videos: merged,
+        videos: finalItems,
         lastSync: new Date().toISOString()
       })
       if (save.isErr()) return Result.err(save.unwrapErr())
 
       syncedChannels++
-      totalVideos += merged.length
+      totalVideos += finalItems.length
       perChannel.push({
         channelId: channel.channelId,
         channelName: channel.channelName,
@@ -529,5 +546,39 @@ export class YouTubeService {
     }
 
     return Result.ok({ syncedChannels, totalVideos, perChannel })
+  }
+
+  private async mergeCommunityPosts(params: {
+    channelId: string
+    channelName: string
+    items: YouTubeVideo[]
+  }): Promise<Result<YouTubeVideo[], AppError>> {
+    if (process.env.YOUTUBE_COMMUNITY_POSTS === '0') {
+      return Result.ok(params.items.filter(item => !isYouTubeCommunityPostId(item.id)))
+    }
+
+    const maxPosts = Number(process.env.YOUTUBE_COMMUNITY_MAX_POSTS || '40')
+    const postsResult = await fetchYouTubeCommunityPosts({
+      channelId: params.channelId,
+      channelTitle: params.channelName,
+      maxPosts,
+    })
+
+    const videoItems = params.items.filter(
+      item => item.kind !== 'communityPost' && !isYouTubeCommunityPostId(item.id)
+    )
+
+    if (postsResult.isErr()) {
+      return Result.ok(videoItems)
+    }
+
+    const posts = postsResult.unwrap() as YouTubeVideo[]
+    const merged = [...posts, ...videoItems].sort((a, b) => {
+      const da = Date.parse(a.publishedAt || '') || 0
+      const db = Date.parse(b.publishedAt || '') || 0
+      return db - da
+    })
+
+    return Result.ok(merged)
   }
 }

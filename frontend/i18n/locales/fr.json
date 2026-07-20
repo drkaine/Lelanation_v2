@@ -2786,6 +2786,14 @@
     "noCreatorsTitle": "Aucun créateur configuré",
     "noCreatorsText": "Demande à un admin d’ajouter des chaînes."
   },
+  "communityPostModal": {
+    "close": "Fermer",
+    "loadingImages": "Chargement des images…",
+    "previousImage": "Image précédente",
+    "nextImage": "Image suivante",
+    "goToImage": "Aller à l’image {index}",
+    "imageAlt": "{title} — image {index} sur {total}"
+  },
   "contactModal": {
     "title": "Nous contacter",
     "type": "Type de demande",

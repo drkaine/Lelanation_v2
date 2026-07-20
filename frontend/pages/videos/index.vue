@@ -204,8 +204,8 @@ const router = useRouter()
 
 const creators = computed(() => youtube.creators)
 
-type VideoCategory = 'all' | 'builds' | 'lobby' | 'cast' | 'comment' | 'other'
-type VideoFormat = 'all' | 'videos' | 'shorts'
+type VideoCategory = 'all' | 'builds' | 'lobby' | 'cast' | 'guide' | 'other'
+type VideoFormat = 'all' | 'videos' | 'shorts' | 'posts'
 type ChannelFilter = 'all' | string
 
 const query = ref('')
@@ -218,14 +218,18 @@ const typeOptions = [
   { id: 'builds' as const, label: 'Build' },
   { id: 'lobby' as const, label: 'Lobby' },
   { id: 'cast' as const, label: 'Cast' },
-  { id: 'comment' as const, label: 'Comment' },
+  { id: 'guide' as const, label: 'Guide' },
 ]
 
 const formatOptions = [
   { id: 'all' as const, label: 'Tous formats' },
   { id: 'videos' as const, label: 'Vidéos' },
   { id: 'shorts' as const, label: 'Shorts' },
+  { id: 'posts' as const, label: 'Posts' },
 ]
+
+const isCommunityPost = (video: YouTubeVideo) =>
+  video.kind === 'communityPost' || video.id.startsWith('Ug')
 
 const chipClass = (active: boolean) =>
   [
@@ -240,10 +244,19 @@ const normalize = (s: string) =>
 
     .replace(/[\u0300-\u036F]/g, '')
 
+const isGuideTitle = (title: string): boolean => {
+  const t = normalize(title)
+  if (/\bguide\b/.test(t)) return true
+  if (/comment\s+jouer/.test(t)) return true
+  if (/voici\s+comment/.test(t)) return true
+  if (/\bcomment\b/.test(t) && (/\bbuilds?\b/.test(t) || /\bcarry\b/.test(t))) return true
+  return false
+}
+
 const detectType = (title: string): Exclude<VideoCategory, 'all'> => {
   const t = normalize(title)
   if (/\bcast\b/.test(t)) return 'cast'
-  if (/\bcomment\b|\bcommentaire\b/.test(t)) return 'comment'
+  if (isGuideTitle(title)) return 'guide'
   if (/lobby/.test(t)) return 'lobby'
   if (/\bbuilds?\b/.test(t)) return 'builds'
   return 'other'
@@ -327,8 +340,10 @@ const filteredVideos = computed<YouTubeVideo[]>(() => {
     list = list.filter(v => detectType(v.title) === type)
   }
 
-  if (fmt !== 'all') {
-    list = list.filter(v => detectFormat(v) === fmt)
+  if (fmt === 'posts') {
+    list = list.filter(isCommunityPost)
+  } else if (fmt !== 'all') {
+    list = list.filter(v => !isCommunityPost(v) && detectFormat(v) === fmt)
   }
 
   if (q) {
@@ -424,19 +439,26 @@ const refresh = async () => {
   isLoadingAll.value = true
   try {
     await youtube.loadStatus()
-    await youtube.loadAllChannelsData()
+    await youtube.loadAllChannelsData({ force: true })
   } finally {
     isLoadingAll.value = false
   }
 }
 
-await useAsyncData('youtube-status', async () => {
-  await youtube.loadStatus()
+const loadVideos = async (force = false) => {
+  if (force) youtube.clearChannelCache()
   isLoadingAll.value = true
   try {
-    await youtube.loadAllChannelsData()
+    await youtube.loadStatus()
+    await youtube.loadAllChannelsData({ force })
   } finally {
     isLoadingAll.value = false
+  }
+}
+
+await useAsyncData('youtube-videos-page', async () => {
+  if (import.meta.server) {
+    await loadVideos(false)
   }
   return youtube.status
 })
@@ -444,15 +466,7 @@ await useAsyncData('youtube-status', async () => {
 onMounted(async () => {
   youtube.initializeVideoPreferences()
   perPage.value = youtube.videosPerPage
-  isLoadingAll.value = true
-  try {
-    await youtube.loadStatus()
-    await youtube.loadAllChannelsData()
-  } catch {
-    // Error is handled by the store
-  } finally {
-    isLoadingAll.value = false
-  }
+  await loadVideos(true)
 })
 </script>
 

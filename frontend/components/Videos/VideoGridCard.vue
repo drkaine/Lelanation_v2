@@ -1,14 +1,18 @@
 <template>
-  <a
-    :href="video.url"
-    target="_blank"
-    rel="noopener noreferrer"
-    class="ui-build-card-surface group overflow-hidden rounded-2xl transition hover:shadow-[0_4px_18px_var(--card-border-color-soft)]"
+  <component
+    :is="isCommunityPost ? 'button' : 'a'"
+    :href="isCommunityPost ? undefined : video.url"
+    :type="isCommunityPost ? 'button' : undefined"
+    :target="isCommunityPost ? undefined : '_blank'"
+    :rel="isCommunityPost ? undefined : 'noopener noreferrer'"
+    class="ui-build-card-surface group w-full overflow-hidden rounded-2xl text-left transition hover:shadow-[0_4px_18px_var(--card-border-color-soft)]"
     :class="{ 'video-grid-card--compact': compact }"
+    @click="onCardClick"
   >
     <div class="relative aspect-video w-full overflow-hidden bg-black/40">
       <img
-        :src="video.thumbnailUrl"
+        v-if="previewImageUrl"
+        :src="previewImageUrl"
         :alt="video.title"
         width="640"
         height="360"
@@ -17,6 +21,18 @@
         :fetchpriority="fetchPriority"
         decoding="async"
       />
+      <div
+        v-else
+        class="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/30 to-background px-4 text-center text-sm font-semibold text-text/80"
+      >
+        {{ video.title }}
+      </div>
+      <span
+        v-if="isCommunityPost"
+        class="absolute left-2 top-2 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent"
+      >
+        Post
+      </span>
       <div class="pointer-events-none absolute inset-0 ring-1 ring-inset ring-primary/15" />
     </div>
 
@@ -29,13 +45,23 @@
       </p>
       <p class="mt-1 text-xs text-text/65">{{ formatDate(video.publishedAt) }}</p>
     </div>
-  </a>
+  </component>
+
+  <CommunityPostModal
+    v-if="isCommunityPost"
+    :open="modalOpen"
+    :post="video"
+    @close="modalOpen = false"
+  />
 </template>
 
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import type { YouTubeVideo } from '~/types/youtube'
+import CommunityPostModal from '~/components/Videos/CommunityPostModal.vue'
+import { normalizeCommunityPostImageUrl } from '~/utils/communityPostImages'
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     video: YouTubeVideo
     /** Set 'high' for the first card (LCP) to improve Lighthouse. */
@@ -45,6 +71,23 @@ withDefaults(
   }>(),
   { fetchPriority: undefined, compact: false }
 )
+
+const modalOpen = ref(false)
+
+const isCommunityPost = computed(
+  () => props.video.kind === 'communityPost' || props.video.id.startsWith('Ug')
+)
+
+const previewImageUrl = computed(() => {
+  if (!props.video.thumbnailUrl) return ''
+  return normalizeCommunityPostImageUrl(props.video.thumbnailUrl)
+})
+
+const onCardClick = (event: MouseEvent) => {
+  if (!isCommunityPost.value) return
+  event.preventDefault()
+  modalOpen.value = true
+}
 
 const formatDate = (iso: string) => {
   const d = new Date(iso)
