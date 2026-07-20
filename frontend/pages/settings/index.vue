@@ -38,35 +38,62 @@
           </button>
         </div>
 
-        <ul class="grid w-full gap-2 [grid-template-columns:repeat(auto-fill,minmax(9.5rem,1fr))]">
+        <ul class="settings-order-grid">
           <li
-            v-for="row in tabRows"
+            v-for="(row, index) in tabRows"
             :key="row.id"
-            class="ui-build-card-surface flex min-w-0 flex-col gap-2 rounded-lg px-2.5 py-2"
+            class="settings-order-card ui-build-card-surface"
             :class="row.visible ? 'opacity-100' : 'opacity-55'"
+            draggable="true"
+            @dragstart="onTabDragStart(index)"
+            @dragover.prevent
+            @drop="onTabDrop(index)"
           >
-            <div class="min-h-[2.25rem] text-xs font-medium leading-snug text-text/90">
+            <div class="settings-order-card__label">
               {{ row.label }}
             </div>
-            <div class="flex items-center justify-between gap-1">
+            <div class="settings-order-card__row">
+              <div class="settings-order-card__moves">
+                <button
+                  type="button"
+                  class="settings-order-card__move ui-build-card-button"
+                  :disabled="index === 0"
+                  :aria-label="t('statisticsPage.settingsTabMoveUp', { tab: row.label })"
+                  @click="moveTab(row.id, 'up')"
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  class="settings-order-card__move ui-build-card-button"
+                  :disabled="index === tabRows.length - 1"
+                  :aria-label="t('statisticsPage.settingsTabMoveDown', { tab: row.label })"
+                  @click="moveTab(row.id, 'down')"
+                >
+                  ↓
+                </button>
+              </div>
               <label
-                class="inline-flex cursor-pointer items-center gap-1.5 text-[10px] text-text/60"
-                :class="{ 'cursor-not-allowed opacity-40': !row.visible }"
+                class="settings-order-card__default"
+                :class="{ 'is-disabled': !row.visible }"
+                @mousedown.stop
+                @click.stop
               >
                 <input
                   type="radio"
                   name="statistics-default-tab"
-                  class="h-3.5 w-3.5 shrink-0 accent-accent"
+                  class="settings-order-card__default-input"
                   :checked="row.isDefault"
                   :disabled="!row.visible"
                   :aria-label="t('statisticsPage.settingsDefaultTabAria', { tab: row.label })"
                   @change="setDefaultTab(row.id)"
+                  @dragstart.stop
                 />
                 <span>{{ t('statisticsPage.settingsDefaultTab') }}</span>
               </label>
               <button
                 type="button"
-                class="command-toggle command-toggle-button shrink-0 scale-90"
+                class="command-toggle command-toggle-button settings-order-card__toggle"
                 :aria-pressed="row.visible"
                 :aria-label="row.label"
                 @click="toggleTab(row.id)"
@@ -102,49 +129,57 @@
           </button>
         </div>
 
-        <ul class="grid w-full gap-2">
+        <ul class="settings-order-grid">
           <li
             v-for="(row, index) in homeSectionRows"
             :key="row.id"
-            class="ui-build-card-surface flex min-w-0 items-center gap-2 rounded-lg px-2.5 py-2"
+            class="settings-order-card ui-build-card-surface"
             :class="row.visible ? 'opacity-100' : 'opacity-55'"
+            draggable="true"
+            @dragstart="onHomeSectionDragStart(index)"
+            @dragover.prevent
+            @drop="onHomeSectionDrop(index)"
           >
-            <div class="flex shrink-0 flex-col gap-0.5">
-              <button
-                type="button"
-                class="ui-build-card-button px-1.5 py-0.5 text-[10px] disabled:opacity-30"
-                :disabled="index === 0"
-                :aria-label="t('statisticsPage.settingsHomeSectionMoveUp', { section: row.label })"
-                @click="moveHomeSection(row.id, 'up')"
-              >
-                ↑
-              </button>
-              <button
-                type="button"
-                class="ui-build-card-button px-1.5 py-0.5 text-[10px] disabled:opacity-30"
-                :disabled="index === homeSectionRows.length - 1"
-                :aria-label="
-                  t('statisticsPage.settingsHomeSectionMoveDown', { section: row.label })
-                "
-                @click="moveHomeSection(row.id, 'down')"
-              >
-                ↓
-              </button>
-            </div>
-            <div class="min-w-0 flex-1 text-xs font-medium leading-snug text-text/90">
+            <div class="settings-order-card__label">
               {{ row.label }}
             </div>
-            <button
-              type="button"
-              class="command-toggle command-toggle-button shrink-0 scale-90"
-              :aria-pressed="row.visible"
-              :aria-label="row.label"
-              @click="toggleHomeSection(row.id)"
-            >
-              <span class="command-toggle-track" :class="{ active: row.visible }">
-                <span class="command-toggle-thumb" />
-              </span>
-            </button>
+            <div class="settings-order-card__row settings-order-card__row--home">
+              <div class="settings-order-card__moves">
+                <button
+                  type="button"
+                  class="settings-order-card__move ui-build-card-button"
+                  :disabled="index === 0"
+                  :aria-label="
+                    t('statisticsPage.settingsHomeSectionMoveUp', { section: row.label })
+                  "
+                  @click="moveHomeSection(row.id, 'up')"
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  class="settings-order-card__move ui-build-card-button"
+                  :disabled="index === homeSectionRows.length - 1"
+                  :aria-label="
+                    t('statisticsPage.settingsHomeSectionMoveDown', { section: row.label })
+                  "
+                  @click="moveHomeSection(row.id, 'down')"
+                >
+                  ↓
+                </button>
+              </div>
+              <button
+                type="button"
+                class="command-toggle command-toggle-button settings-order-card__toggle"
+                :aria-pressed="row.visible"
+                :aria-label="row.label"
+                @click="toggleHomeSection(row.id)"
+              >
+                <span class="command-toggle-track" :class="{ active: row.visible }">
+                  <span class="command-toggle-thumb" />
+                </span>
+              </button>
+            </div>
           </li>
         </ul>
       </div>
@@ -179,10 +214,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import {
-  STATISTICS_MAIN_TAB_LABEL_KEYS,
-  STATISTICS_MAIN_TAB_ORDER,
-} from '~/constants/statisticsMainTabs'
+import { STATISTICS_MAIN_TAB_LABEL_KEYS } from '~/constants/statisticsMainTabs'
 import { HOME_SECTION_LABEL_KEYS } from '~/constants/homeSections'
 import StatisticsSurveillanceAlertSettings from '~/components/statistics/StatisticsSurveillanceAlertSettings.vue'
 import SettingsHowItWorksPanel from '~/components/settings/SettingsHowItWorksPanel.vue'
@@ -208,6 +240,8 @@ const statisticsUiStore = useStatisticsUiStore()
 const homeUiStore = useHomeUiStore()
 
 const activeSettingsPageTab = ref<SettingsPageTab>('tabs')
+const tabDragIndex = ref<number | null>(null)
+const homeSectionDragIndex = ref<number | null>(null)
 
 function readTabFromRoute(): SettingsPageTab | null {
   const tabFromQuery = route.query.tab
@@ -249,7 +283,7 @@ const settingsPageTabs = computed(() => [
 ])
 
 const tabRows = computed(() =>
-  STATISTICS_MAIN_TAB_ORDER.map(id => ({
+  statisticsUiStore.tabOrder.map(id => ({
     id,
     label: t(STATISTICS_MAIN_TAB_LABEL_KEYS[id]),
     visible: statisticsUiStore.isTabVisible(id),
@@ -265,6 +299,20 @@ function toggleTab(tab: StatisticsMainTab): void {
 
 function setDefaultTab(tab: StatisticsMainTab): void {
   statisticsUiStore.setDefaultTab(tab)
+}
+
+function moveTab(tab: StatisticsMainTab, direction: 'up' | 'down'): void {
+  statisticsUiStore.moveTab(tab, direction)
+}
+
+function onTabDragStart(index: number): void {
+  tabDragIndex.value = index
+}
+
+function onTabDrop(targetIndex: number): void {
+  if (tabDragIndex.value === null) return
+  statisticsUiStore.reorderTab(tabDragIndex.value, targetIndex)
+  tabDragIndex.value = null
 }
 
 function resetTabs(): void {
@@ -295,6 +343,16 @@ function moveHomeSection(section: HomeSectionId, direction: 'up' | 'down'): void
   homeUiStore.moveSection(section, direction)
 }
 
+function onHomeSectionDragStart(index: number): void {
+  homeSectionDragIndex.value = index
+}
+
+function onHomeSectionDrop(targetIndex: number): void {
+  if (homeSectionDragIndex.value === null) return
+  homeUiStore.reorderSection(homeSectionDragIndex.value, targetIndex)
+  homeSectionDragIndex.value = null
+}
+
 function resetHomeSections(): void {
   homeUiStore.resetSections()
 }
@@ -303,3 +361,99 @@ useHead({
   title: () => t('statisticsPage.settingsTitle'),
 })
 </script>
+
+<style scoped>
+.settings-order-grid {
+  display: grid;
+  width: 100%;
+  gap: 0.375rem;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+}
+
+.settings-order-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: 0.5rem;
+  cursor: grab;
+}
+
+.settings-order-card:active {
+  cursor: grabbing;
+}
+
+.settings-order-card__label {
+  min-height: 2.25rem;
+  overflow: hidden;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1.25;
+  color: rgb(var(--rgb-text) / 0.9);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.settings-order-card__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem;
+}
+
+.settings-order-card__row--home {
+  justify-content: flex-start;
+}
+
+.settings-order-card__row--home .settings-order-card__toggle {
+  margin-left: auto;
+}
+
+.settings-order-card__moves {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.125rem;
+}
+
+.settings-order-card__move {
+  padding: 0.125rem 0.375rem;
+  font-size: 0.5625rem;
+  line-height: 1;
+}
+
+.settings-order-card__move:disabled {
+  opacity: 0.3;
+}
+
+.settings-order-card__default {
+  display: inline-flex;
+  min-width: 0;
+  flex: 1;
+  cursor: pointer;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.5625rem;
+  color: rgb(var(--rgb-text) / 0.6);
+}
+
+.settings-order-card__default.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.settings-order-card__default-input {
+  height: 0.75rem;
+  width: 0.75rem;
+  flex-shrink: 0;
+  accent-color: rgb(var(--rgb-accent) / 1);
+}
+
+.settings-order-card__toggle {
+  flex-shrink: 0;
+  transform: scale(0.78);
+  transform-origin: center right;
+}
+</style>

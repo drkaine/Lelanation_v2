@@ -77,7 +77,7 @@ import { useMobileViewport } from '~/composables/useMobileViewport'
 import { useGlobalSeo } from '~/composables/useGlobalSeo'
 import { absoluteSitePath } from '~/utils/siteUrl'
 import { useSiteUrl } from '~/composables/useSiteUrl'
-import { useBuildStore } from '~/stores/BuildStore'
+import { useStatisticsUiStore } from '~/stores/StatisticsUiStore'
 import {
   useMatchupGuideDraftStore,
   type MatchupGuideDraftStep,
@@ -107,6 +107,7 @@ const { simplifiedStatsEnabled, toggleSimplifiedStatsEnabled } = useSimplifiedSt
 const { statsSplitTransformEnabled, toggleStatsSplitTransformEnabled } =
   useStatisticsSplitTransformPreference()
 const buildStore = useBuildStore()
+const statisticsUiStore = useStatisticsUiStore()
 const matchupGuideDraftStore = useMatchupGuideDraftStore()
 const streamerNavOpen = useState<boolean>('streamer-nav-open', () => false)
 const streamerFooterOpen = useState<boolean>('streamer-footer-open', () => false)
@@ -273,23 +274,9 @@ const onKeyDown = (event: KeyboardEvent) => {
   }
 
   if (path.match(/^\/(?:fr\/|en\/)?statistics\/?$/)) {
-    const tabOrder = [
-      'overview',
-      'team',
-      'objectives',
-      'surrender',
-      'bans',
-      'championTable',
-      'balance',
-      'runes',
-      'spells',
-      'items',
-      'pings',
-      'vision',
-      'misc',
-      'patchNotes',
-      'infos',
-    ] as const
+    statisticsUiStore.init()
+    const tabOrder = statisticsUiStore.visibleMainTabs
+    if (tabOrder.length === 0) return
     const currentTabRaw = route.query.tab
     const currentTab = typeof currentTabRaw === 'string' ? currentTabRaw : 'overview'
     if (navigateTabOrder(tabOrder, currentTab, { omitOverviewTab: true })) return
@@ -369,6 +356,7 @@ const onKeyDown = (event: KeyboardEvent) => {
 
 if (import.meta.client) {
   onMounted(() => {
+    statisticsUiStore.init()
     window.addEventListener('keydown', onKeyDown)
   })
   onUnmounted(() => {

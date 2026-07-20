@@ -122,6 +122,18 @@ export const useHomeUiStore = defineStore('homeUi', {
       this.sectionOrder = order
       persistState(this.$state)
     },
+    reorderSection(fromIndex: number, toIndex: number) {
+      if (fromIndex === toIndex) return
+      const order = [...this.sectionOrder]
+      if (fromIndex < 0 || toIndex < 0 || fromIndex >= order.length || toIndex >= order.length) {
+        return
+      }
+      const [item] = order.splice(fromIndex, 1)
+      if (!item) return
+      order.splice(toIndex, 0, item)
+      this.sectionOrder = order
+      persistState(this.$state)
+    },
     resetSections() {
       this.hiddenSections = []
       this.sectionOrder = [...HOME_SECTION_ORDER]

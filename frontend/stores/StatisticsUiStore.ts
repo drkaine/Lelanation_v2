@@ -25,6 +25,7 @@ interface StatisticsUiState {
   filtersOpen: boolean
   activeTab: StatisticsMainTab
   hiddenTabs: StatisticsMainTab[]
+  tabOrder: StatisticsMainTab[]
   defaultTab: StatisticsMainTab
   watchedChampionIds: string[]
 }
@@ -51,6 +52,28 @@ function normalizeWatchedChampionIds(value: unknown): string[] {
   return value.filter((id): id is string => typeof id === 'string' && id.length > 0)
 }
 
+function normalizeTabOrder(value: unknown): StatisticsMainTab[] {
+  const ordered: StatisticsMainTab[] = []
+  const seen = new Set<StatisticsMainTab>()
+  if (Array.isArray(value)) {
+    for (const id of value) {
+      if (
+        typeof id !== 'string' ||
+        !STATISTICS_MAIN_TAB_ORDER.includes(id as StatisticsMainTab) ||
+        seen.has(id as StatisticsMainTab)
+      ) {
+        continue
+      }
+      ordered.push(id as StatisticsMainTab)
+      seen.add(id as StatisticsMainTab)
+    }
+  }
+  for (const id of STATISTICS_MAIN_TAB_ORDER) {
+    if (!seen.has(id)) ordered.push(id)
+  }
+  return ordered
+}
+
 function defaultFiltersOpen(): boolean {
   if (import.meta.server) return true
   // Bottom sheet sur mobile : fermé par défaut pour ne pas bloquer le contenu.
@@ -60,9 +83,10 @@ function defaultFiltersOpen(): boolean {
 
 function resolveDefaultTab(
   hiddenTabs: StatisticsMainTab[],
+  tabOrder: StatisticsMainTab[],
   preferred?: StatisticsMainTab | null
 ): StatisticsMainTab {
-  const visible = visibleTabsFromHidden(hiddenTabs)
+  const visible = visibleTabsFromState(hiddenTabs, tabOrder)
   if (visible.length === 0) return STATISTICS_MAIN_TAB_ORDER[0] ?? 'overview'
   if (preferred && visible.includes(preferred)) return preferred
   return visible[0] ?? 'overview'
@@ -75,12 +99,14 @@ function loadUiState(): StatisticsUiState {
       filtersOpen: false,
       activeTab: 'overview',
       hiddenTabs: [],
+      tabOrder: [...STATISTICS_MAIN_TAB_ORDER],
       defaultTab: 'overview',
       watchedChampionIds: [],
     }
   }
   const filtersDefault = defaultFiltersOpen()
   const fallbackDefault = STATISTICS_MAIN_TAB_ORDER[0] ?? 'overview'
+  const defaultTabOrder = [...STATISTICS_MAIN_TAB_ORDER]
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) {
@@ -88,6 +114,7 @@ function loadUiState(): StatisticsUiState {
         filtersOpen: filtersDefault,
         activeTab: 'overview',
         hiddenTabs: [],
+        tabOrder: defaultTabOrder,
         defaultTab: fallbackDefault,
         watchedChampionIds: [],
       }
@@ -95,12 +122,14 @@ function loadUiState(): StatisticsUiState {
     const parsed = JSON.parse(raw) as Partial<StatisticsUiState>
     const isMobile = window.matchMedia('(max-width: 1023px)').matches
     const hiddenTabs = normalizeHiddenTabs(parsed.hiddenTabs)
+    const tabOrder = normalizeTabOrder(parsed.tabOrder)
     const preferredDefault = isValidTab(parsed.defaultTab) ? parsed.defaultTab : fallbackDefault
     return {
       filtersOpen: isMobile ? false : (parsed.filtersOpen ?? filtersDefault),
       activeTab: isValidTab(parsed.activeTab) ? parsed.activeTab : 'overview',
       hiddenTabs,
-      defaultTab: resolveDefaultTab(hiddenTabs, preferredDefault),
+      tabOrder,
+      defaultTab: resolveDefaultTab(hiddenTabs, tabOrder, preferredDefault),
       watchedChampionIds: normalizeWatchedChampionIds(parsed.watchedChampionIds),
     }
   } catch {
@@ -108,6 +137,7 @@ function loadUiState(): StatisticsUiState {
       filtersOpen: filtersDefault,
       activeTab: 'overview',
       hiddenTabs: [],
+      tabOrder: defaultTabOrder,
       defaultTab: fallbackDefault,
       watchedChampionIds: [],
     }
@@ -123,9 +153,12 @@ function saveUiState(state: StatisticsUiState): void {
   }
 }
 
-function visibleTabsFromHidden(hiddenTabs: StatisticsMainTab[]): StatisticsMainTab[] {
+function visibleTabsFromState(
+  hiddenTabs: StatisticsMainTab[],
+  tabOrder: StatisticsMainTab[]
+): StatisticsMainTab[] {
   const hidden = new Set(hiddenTabs)
-  return STATISTICS_MAIN_TAB_ORDER.filter(tab => !hidden.has(tab))
+  return tabOrder.filter(tab => !hidden.has(tab))
 }
 
 function persistState(state: StatisticsUiState): void {
@@ -137,6 +170,7 @@ export const useStatisticsUiStore = defineStore('statisticsUi', {
     filtersOpen: false,
     activeTab: 'overview',
     hiddenTabs: [],
+    tabOrder: [...STATISTICS_MAIN_TAB_ORDER],
     defaultTab: STATISTICS_MAIN_TAB_ORDER[0] ?? 'overview',
     watchedChampionIds: [],
   }),
@@ -146,10 +180,10 @@ export const useStatisticsUiStore = defineStore('statisticsUi', {
       (tab: StatisticsMainTab): boolean =>
         !state.hiddenTabs.includes(tab),
     visibleMainTabs(state): StatisticsMainTab[] {
-      return visibleTabsFromHidden(state.hiddenTabs)
+      return visibleTabsFromState(state.hiddenTabs, state.tabOrder)
     },
     resolveDefaultMainTab(state): StatisticsMainTab {
-      return resolveDefaultTab(state.hiddenTabs, state.defaultTab)
+      return resolveDefaultTab(state.hiddenTabs, state.tabOrder, state.defaultTab)
     },
   },
   actions: {
@@ -159,6 +193,7 @@ export const useStatisticsUiStore = defineStore('statisticsUi', {
       this.filtersOpen = data.filtersOpen
       this.activeTab = data.activeTab
       this.hiddenTabs = data.hiddenTabs
+      this.tabOrder = data.tabOrder
       this.defaultTab = data.defaultTab
       this.watchedChampionIds = data.watchedChampionIds
     },
@@ -175,11 +210,33 @@ export const useStatisticsUiStore = defineStore('statisticsUi', {
       if (visible) hidden.delete(tab)
       else hidden.add(tab)
       const nextHidden = [...hidden]
-      if (visibleTabsFromHidden(nextHidden).length === 0) return
+      if (visibleTabsFromState(nextHidden, this.tabOrder).length === 0) return
       this.hiddenTabs = nextHidden
       if (!visible && this.defaultTab === tab) {
-        this.defaultTab = resolveDefaultTab(this.hiddenTabs, null)
+        this.defaultTab = resolveDefaultTab(this.hiddenTabs, this.tabOrder, null)
       }
+      persistState(this.$state)
+    },
+    moveTab(tab: StatisticsMainTab, direction: 'up' | 'down') {
+      const order = [...this.tabOrder]
+      const index = order.indexOf(tab)
+      if (index < 0) return
+      const targetIndex = direction === 'up' ? index - 1 : index + 1
+      if (targetIndex < 0 || targetIndex >= order.length) return
+      ;[order[index], order[targetIndex]] = [order[targetIndex], order[index]]
+      this.tabOrder = order
+      persistState(this.$state)
+    },
+    reorderTab(fromIndex: number, toIndex: number) {
+      if (fromIndex === toIndex) return
+      const order = [...this.tabOrder]
+      if (fromIndex < 0 || toIndex < 0 || fromIndex >= order.length || toIndex >= order.length) {
+        return
+      }
+      const [item] = order.splice(fromIndex, 1)
+      if (!item) return
+      order.splice(toIndex, 0, item)
+      this.tabOrder = order
       persistState(this.$state)
     },
     setDefaultTab(tab: StatisticsMainTab) {
@@ -189,6 +246,7 @@ export const useStatisticsUiStore = defineStore('statisticsUi', {
     },
     resetTabVisibility() {
       this.hiddenTabs = []
+      this.tabOrder = [...STATISTICS_MAIN_TAB_ORDER]
       this.defaultTab = STATISTICS_MAIN_TAB_ORDER[0] ?? 'overview'
       persistState(this.$state)
     },
@@ -209,7 +267,7 @@ export const useStatisticsUiStore = defineStore('statisticsUi', {
       persistState(this.$state)
     },
     ensureActiveTabVisible(preferred?: StatisticsMainTab): StatisticsMainTab {
-      const visible = visibleTabsFromHidden(this.hiddenTabs)
+      const visible = visibleTabsFromState(this.hiddenTabs, this.tabOrder)
       if (visible.length === 0) return 'overview'
       if (preferred && visible.includes(preferred)) return preferred
       if (visible.includes(this.activeTab)) return this.activeTab

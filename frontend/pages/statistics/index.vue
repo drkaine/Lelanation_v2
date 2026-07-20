@@ -1002,7 +1002,7 @@ const statisticsUiStore = useStatisticsUiStore()
 if (import.meta.client) {
   statisticsUiStore.init()
 }
-const { filtersOpen, hiddenTabs } = storeToRefs(statisticsUiStore)
+const { filtersOpen, hiddenTabs, tabOrder } = storeToRefs(statisticsUiStore)
 const { effectiveFiltersSheetMode, showDesktopFiltersTrigger, filtersFabClass } =
   useStatisticsFiltersSheetMode()
 const statisticsCustomStore = useStatisticsCustomStore()
@@ -1119,8 +1119,8 @@ const activeTab = ref<
   | 'patchNotes'
 >(initialActiveTabFromRoute())
 
-/** Ordre unique barre d’onglets + navigation clavier (←/→/↑/↓, Home, End). */
-const STATISTICS_TAB_NAV_ORDER: readonly StatisticsMainTab[] = STATISTICS_MAIN_TAB_ORDER
+/** Ordre barre d’onglets + navigation clavier (←/→/↑/↓, Home, End) — persistant via paramètres. */
+const statisticsTabNavOrder = computed(() => tabOrder.value)
 
 const allTabs = computed(() => [
   { id: 'overview' as const, label: t('statisticsPage.tabOverview'), widgetId: 'overview' },
@@ -1155,18 +1155,20 @@ const tabs = computed(() => {
   const byId = new Map(allTabs.value.map(tab => [tab.id, tab]))
   const allowedIds = section
     ? new Set(STATISTICS_SECTION_TABS[section])
-    : new Set(STATISTICS_TAB_NAV_ORDER)
-  return STATISTICS_TAB_NAV_ORDER.map(id => byId.get(id)).filter(
-    (tab): tab is (typeof allTabs.value)[number] =>
-      tab != null && allowedIds.has(tab.id) && !hidden.has(tab.id)
-  )
+    : new Set(statisticsTabNavOrder.value)
+  return statisticsTabNavOrder.value
+    .map(id => byId.get(id))
+    .filter(
+      (tab): tab is (typeof allTabs.value)[number] =>
+        tab != null && allowedIds.has(tab.id) && !hidden.has(tab.id)
+    )
 })
 
 /** Onglet affiché : toujours parmi ceux activés dans les paramètres. */
 const displayedActiveTab = computed<StatisticsMainTab>(() => {
   const current = normalizeLegacyTab(String(activeTab.value))
   if (!hiddenTabs.value.includes(current)) return current
-  const fallback = STATISTICS_TAB_NAV_ORDER.find(id => !hiddenTabs.value.includes(id))
+  const fallback = statisticsTabNavOrder.value.find(id => !hiddenTabs.value.includes(id))
   return fallback ?? 'overview'
 })
 
