@@ -203,6 +203,10 @@
         <SettingsHowItWorksPanel />
       </div>
 
+      <div v-show="activeSettingsPageTab === 'balanceFramework'" role="tabpanel">
+        <SettingsBalanceFrameworkPanel />
+      </div>
+
       <div v-show="activeSettingsPageTab === 'dataTransfer'" role="tabpanel">
         <SettingsDataTransferPanel />
       </div>
@@ -218,6 +222,7 @@ import { STATISTICS_MAIN_TAB_LABEL_KEYS } from '~/constants/statisticsMainTabs'
 import { HOME_SECTION_LABEL_KEYS } from '~/constants/homeSections'
 import StatisticsSurveillanceAlertSettings from '~/components/statistics/StatisticsSurveillanceAlertSettings.vue'
 import SettingsHowItWorksPanel from '~/components/settings/SettingsHowItWorksPanel.vue'
+import SettingsBalanceFrameworkPanel from '~/components/settings/SettingsBalanceFrameworkPanel.vue'
 import SettingsDataTransferPanel from '~/components/settings/SettingsDataTransferPanel.vue'
 import { useStatisticsUiStore, type StatisticsMainTab } from '~/stores/StatisticsUiStore'
 import { useHomeUiStore, type HomeSectionId } from '~/stores/HomeUiStore'
@@ -228,6 +233,7 @@ const VALID_SETTINGS_PAGE_TABS = [
   'watchlist',
   'alerts',
   'howItWorks',
+  'balanceFramework',
   'dataTransfer',
 ] as const
 type SettingsPageTab = (typeof VALID_SETTINGS_PAGE_TABS)[number]
@@ -279,6 +285,7 @@ const settingsPageTabs = computed(() => [
   { id: 'watchlist' as const, label: t('statisticsPage.settingsPageTabWatchlist') },
   { id: 'alerts' as const, label: t('statisticsPage.settingsPageTabAlerts') },
   { id: 'howItWorks' as const, label: t('statisticsPage.settingsPageTabHowItWorks') },
+  { id: 'balanceFramework' as const, label: t('statisticsPage.settingsPageTabBalanceFramework') },
   { id: 'dataTransfer' as const, label: t('statisticsPage.settingsPageTabDataTransfer') },
 ])
 

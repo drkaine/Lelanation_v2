@@ -1,5 +1,6 @@
 # PostgreSQL 16 + Redis — dépendances locales (ports hôte 5434 / 6379).
-# Usage : docker compose up -d   ou   make docker-db-up
+# Usage : cp .env.example .env  puis  docker compose up -d   ou   make docker-db-up
+# Identifiants Postgres : variables POSTGRES_* dans .env (racine, gitignoré).
 # Migrations : make migrate-db (Drizzle)
 # Si redis-server systemd occupe déjà 6379 : systemctl stop redis-server avant docker-db-up
 services:
@@ -19,16 +20,18 @@ services:
     image: postgres:16-alpine
     container_name: lelanation-postgres-statistiques
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      POSTGRES_USER: lelanation
-      POSTGRES_PASSWORD: lelanation
-      POSTGRES_DB: lelanation_statistiques
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
     ports:
       - "5434:5432"
     volumes:
       - lelanation_statistiques_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U lelanation -d lelanation_statistiques"]
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 5s
       timeout: 5s
       retries: 5

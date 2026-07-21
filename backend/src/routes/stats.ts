@@ -70,6 +70,7 @@ import {
 import { getChampionSpellOrders } from '../services/StatsChampionSpellOrdersService.js'
 import { getChampionTierSnapshotsForCharts, getChampionTierDailySnapshotDateBounds } from '../services/ChampionTierDailySnapshotService.js'
 import { getChampionObjectivesSummary } from '../services/StatsChampionObjectivesService.js'
+import { readBalanceRules } from '../services/BalanceRulesService.js'
 import {
   collapseBalanceRowsToMainRole,
   getBalanceFramework,
@@ -2038,6 +2039,16 @@ router.get('/botlane-duo-tierlist', async (req: Request, res: Response) => {
     payload.rows = filterBotlaneDuoRowsByOtp(payload.rows, otpMode, pickMap)
   }
   return res.json(payload)
+})
+
+router.get('/balance-rules', async (_req: Request, res: Response) => {
+  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
+  try {
+    const rules = await readBalanceRules()
+    return res.json({ rules })
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
 })
 
 router.get('/balance-framework', async (req: Request, res: Response) => {

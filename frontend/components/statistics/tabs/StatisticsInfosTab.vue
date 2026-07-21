@@ -268,15 +268,6 @@ watch(
       <div v-else class="statistics-empty-panel p-4">
         {{ p.t('statisticsPage.noData') }}
       </div>
-
-      <div class="statistics-panel-surface p-2">
-        <img
-          src="/images/champion-balance-framework.png"
-          alt="Champion Balance Framework"
-          class="mx-auto w-full max-w-3xl rounded object-contain"
-          loading="lazy"
-        />
-      </div>
     </div>
   </div>
 </template>

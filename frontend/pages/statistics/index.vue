@@ -2070,7 +2070,6 @@ function onStatsFilterChange() {
   }
   if (activeTab.value === 'infos') loadOverview()
   if (activeTab.value === 'infos') loadInfosMeta()
-  if (activeTab.value === 'infos') loadBalanceFramework()
   if (activeTab.value === 'bans') {
     bansTab.loadBansTable()
     loadOverviewTeams()
@@ -5120,7 +5119,6 @@ async function loadStatisticsTabData(tab: typeof activeTab.value): Promise<void>
   if (tab === 'team') loadOverviewSides()
   if (tab === 'infos') loadInfosPatchDivisionMatrix()
   if (tab === 'infos') loadInfosMeta()
-  if (tab === 'infos') loadBalanceFramework()
   if (tab === 'championTable') loadChampionGlobalTable()
   if (tab === 'balance') loadBalanceFramework()
   if (tab === 'bans') {
@@ -5172,7 +5170,6 @@ watch([statsVersionFilter, statsRoleFilter, statsOtpFilter], () => {
   if (activeTab.value === 'balance') loadBalanceFramework()
   if (activeTab.value === 'infos') {
     loadInfosPatchDivisionMatrix().catch(() => undefined)
-    loadBalanceFramework()
   }
   if (activeTab.value === 'bans') {
     bansTab.loadBansTable()
@@ -5217,7 +5214,6 @@ watch(progressionFromVersion, () => {
   // if (activeTab.value === 'trends') loadProgressionsFull()
   if (activeTab.value === 'championTable') loadChampionGlobalTable()
   if (activeTab.value === 'balance') loadBalanceFramework()
-  if (activeTab.value === 'infos') loadBalanceFramework()
   if (activeTab.value === 'team') loadOverviewSides()
   if (activeTab.value === 'objectives') loadOverviewSides()
   if (activeTab.value === 'objectives') loadObjectivesBaseline()
