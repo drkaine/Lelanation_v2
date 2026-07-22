@@ -1252,50 +1252,99 @@ async function upsertTeamCoreStat(tx: any, payload: IngestionJobData): Promise<v
   const team200Surrendered = surrenderCountForTeam(200, payload.teamStats)
   const team100EarlySurrendered = earlySurrenderCountForTeam(100, payload.teamStats)
   const team200EarlySurrendered = earlySurrenderCountForTeam(200, payload.teamStats)
+  const stats = payload.teamStats
 
   await tx`
     INSERT INTO team_core_stat (
-      patch, rank_tier, region, team, count_win, count_game, count_team_early_surrendered, count_team_surrendered
+      patch, rank_tier, region, team, count_win, count_game,
+      count_team_early_surrendered, count_team_surrendered,
+      sum_champion_kills, count_elder_drake_first
     )
     VALUES (
-      ${payload.teamStats.patch},
-      ${payload.teamStats.rankTier},
-      ${payload.teamStats.region},
+      ${stats.patch},
+      ${stats.rankTier},
+      ${stats.region},
       100,
-      ${payload.teamStats.team100Win ? 1 : 0},
+      ${stats.team100Win ? 1 : 0},
       1,
       ${team100EarlySurrendered},
-      ${team100Surrendered}
+      ${team100Surrendered},
+      ${Math.max(0, Math.trunc(Number(stats.team100ChampionKills) || 0))},
+      ${stats.team100ElderDrakeFirst ? 1 : 0}
     )
     ON CONFLICT (patch, rank_tier, region, team)
     DO UPDATE SET
       count_game = team_core_stat.count_game + 1,
       count_win = team_core_stat.count_win + EXCLUDED.count_win,
       count_team_early_surrendered = team_core_stat.count_team_early_surrendered + EXCLUDED.count_team_early_surrendered,
-      count_team_surrendered = team_core_stat.count_team_surrendered + EXCLUDED.count_team_surrendered
+      count_team_surrendered = team_core_stat.count_team_surrendered + EXCLUDED.count_team_surrendered,
+      sum_champion_kills = team_core_stat.sum_champion_kills + EXCLUDED.sum_champion_kills,
+      count_elder_drake_first = team_core_stat.count_elder_drake_first + EXCLUDED.count_elder_drake_first
   `;
 
   await tx`
     INSERT INTO team_core_stat (
-      patch, rank_tier, region, team, count_win, count_game, count_team_early_surrendered, count_team_surrendered
+      patch, rank_tier, region, team, count_win, count_game,
+      count_team_early_surrendered, count_team_surrendered,
+      sum_champion_kills, count_elder_drake_first
     )
     VALUES (
-      ${payload.teamStats.patch},
-      ${payload.teamStats.rankTier},
-      ${payload.teamStats.region},
+      ${stats.patch},
+      ${stats.rankTier},
+      ${stats.region},
       200,
-      ${payload.teamStats.team100Win ? 0 : 1},
+      ${stats.team100Win ? 0 : 1},
       1,
       ${team200EarlySurrendered},
-      ${team200Surrendered}
+      ${team200Surrendered},
+      ${Math.max(0, Math.trunc(Number(stats.team200ChampionKills) || 0))},
+      ${stats.team200ElderDrakeFirst ? 1 : 0}
     )
     ON CONFLICT (patch, rank_tier, region, team)
     DO UPDATE SET
       count_game = team_core_stat.count_game + 1,
       count_win = team_core_stat.count_win + EXCLUDED.count_win,
       count_team_early_surrendered = team_core_stat.count_team_early_surrendered + EXCLUDED.count_team_early_surrendered,
-      count_team_surrendered = team_core_stat.count_team_surrendered + EXCLUDED.count_team_surrendered
+      count_team_surrendered = team_core_stat.count_team_surrendered + EXCLUDED.count_team_surrendered,
+      sum_champion_kills = team_core_stat.sum_champion_kills + EXCLUDED.sum_champion_kills,
+      count_elder_drake_first = team_core_stat.count_elder_drake_first + EXCLUDED.count_elder_drake_first
   `;
+}
+
+async function upsertChampionJunglePath(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
+  for (const participant of participants) {
+    if (participant.role !== "JUNGLE") continue;
+    if (participant.opponentChampionId <= 0) continue;
+    const doc = participant.jungleCampHistory;
+    const earlyPath = doc?.early_path as { path_hash?: unknown } | undefined;
+    const pathHash = String(earlyPath?.path_hash ?? "").trim();
+    if (!pathHash) continue;
+
+    const winCount = participantWinCount(participant);
+    const historyJson = JSON.stringify(doc ?? {});
+
+    await tx.unsafe(
+      `INSERT INTO champion_jungle_path (
+         patch, rank_tier, region, champion_id, opponent_champion_id, path_hash,
+         count_win, count_game, jungle_camp_history
+       ) VALUES ($1, $2, $3::lol_region, $4, $5, $6, $7, 1, $8::jsonb)
+       ON CONFLICT (patch, rank_tier, region, champion_id, opponent_champion_id, path_hash)
+       DO UPDATE SET
+         count_game = champion_jungle_path.count_game + 1,
+         count_win = champion_jungle_path.count_win + EXCLUDED.count_win,
+         jungle_camp_history = EXCLUDED.jungle_camp_history`,
+      [
+        participant.patch,
+        participant.rankTier,
+        participant.region,
+        participant.championId,
+        participant.opponentChampionId,
+        pathHash,
+        winCount,
+        historyJson,
+      ],
+    );
+  }
 }
 
 export async function runAggregationTransaction(payload: IngestionJobData): Promise<void> {
@@ -1338,6 +1387,7 @@ export async function runAggregationTransaction(payload: IngestionJobData): Prom
     await upsertObjectiveOutcomeHistogram(tx, payload);
     await upsertMatchOutcomeStats(tx, payload);
     await upsertTeamCoreStat(tx, payload);
+    await upsertChampionJunglePath(tx, payload.participants);
     if (matchId) {
       await insertMatchAggregated(tx, matchId);
     }

@@ -156,6 +156,10 @@ export function buildTeamStatsBase(
     surrenderedTeam200,
     earlySurrenderedTeam100,
     earlySurrenderedTeam200,
+    team100ChampionKills: Number(team100?.objectives?.champion?.kills ?? 0),
+    team200ChampionKills: Number(team200?.objectives?.champion?.kills ?? 0),
+    team100ElderDrakeFirst: false,
+    team200ElderDrakeFirst: false,
   };
 }
 

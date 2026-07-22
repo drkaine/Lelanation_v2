@@ -28,6 +28,7 @@ const AGGREGATE_TABLES = [
   "objective_outcome_histogram",
   "match_outcome_stats",
   "team_core_stat",
+  "champion_jungle_path",
   "match_aggregated",
 ] as const;
 

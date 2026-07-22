@@ -52,6 +52,7 @@ export function buildTeamStatsFromNormalized(
   rankTier: string,
 ): TeamStatsDto {
   const team100 = teams.find((t) => Number(t.team_id) === 100);
+  const team200 = teams.find((t) => Number(t.team_id) === 200);
   const team100Win = team100?.win === true;
   const objectives: TeamStatsDto["objectives"] = [];
 
@@ -108,5 +109,9 @@ export function buildTeamStatsFromNormalized(
     surrenderedTeam200: surrendered && team100Win,
     earlySurrenderedTeam100: earlySurrendered && !team100Win,
     earlySurrenderedTeam200: earlySurrendered && team100Win,
+    team100ChampionKills: n(team100?.champion_kills),
+    team200ChampionKills: n(team200?.champion_kills),
+    team100ElderDrakeFirst: tb(team100?.elder_drake_first),
+    team200ElderDrakeFirst: tb(team200?.elder_drake_first),
   };
 }

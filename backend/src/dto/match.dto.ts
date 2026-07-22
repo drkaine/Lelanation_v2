@@ -127,6 +127,7 @@ export interface ParsedParticipantDto {
   // Bans
   bannedChampionId: number;
   pickOrder: number;
+  jungleCampHistory?: Record<string, unknown> | null;
 
   // Donnees timeline
   u15: ParsedUnder15Dto;
@@ -160,6 +161,11 @@ export interface TeamStatsDto {
   earlySurrenderedTeam100: boolean;
   /** Early surrender imputé au côté red (team 200). */
   earlySurrenderedTeam200: boolean;
+  /** Total champion kills équipe 100 (objectifs.team champion kills). */
+  team100ChampionKills: number;
+  team200ChampionKills: number;
+  team100ElderDrakeFirst: boolean;
+  team200ElderDrakeFirst: boolean;
 }
 
 export interface IngestionJobData {

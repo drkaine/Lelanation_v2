@@ -5,6 +5,14 @@ import type { ParsedItemDto, ParsedParticipantDto } from "../dto/match.dto.js";
 import { CHAMPION_STATS_METRIC_COLUMN_SET } from "../constants/championStatsMetricColumns.js";
 import { normalizeLolRole } from "../constants/lolEnums.js";
 import { CHALLENGE_COLUMN_MAP } from "./normalizedMatchPersistence.js";
+import {
+  applyNormalizedBooleanChallenges,
+  applyNormalizedBucketMetrics,
+  applyNormalizedLaneMetrics,
+  applyNormalizedRiotRootMetrics,
+  buildU15FromNormalizedRow,
+  junglePathDocForAggregation,
+} from "./normalizedParticipantRehydration.js";
 
 type ParticipantRow = Record<string, unknown>;
 
@@ -167,6 +175,10 @@ export function participantRowsToParsedDtos(
     teamById.set(n(team.team_id), team)
   }
   const sorted = [...rows].sort((a, b) => n(a.participant_id) - n(b.participant_id));
+  const rowByParticipantId = new Map<number, ParticipantRow>();
+  for (const row of sorted) {
+    rowByParticipantId.set(n(row.participant_id), row);
+  }
   const out: ParsedParticipantDto[] = [];
 
   for (const row of sorted) {
@@ -174,6 +186,7 @@ export function participantRowsToParsedDtos(
     const items = itemsFromItemHistory(row.item_history, win);
     const finalIds = items.map((i) => i.itemId);
     const opponent = findOpponent(row, sorted);
+    const opponentRow = rowByParticipantId.get(opponent.participantId);
     const perks = perksFromRow(row);
     const gameDateIso = match.gameDate.includes("T") ? match.gameDate : `${match.gameDate}T00:00:00.000Z`;
     const teamFirst = teamFirstFlagsFromRow(teamById.get(n(row.team_id)));
@@ -239,21 +252,15 @@ export function participantRowsToParsedDtos(
       lp: 0,
       bannedChampionId: n(row.id_champion_ban),
       pickOrder: 0,
-      u15: {
-        goldEarned: 0,
-        cs: 0,
-        kills: 0,
-        deaths: 0,
-        assists: 0,
-        visionScore: 0,
-        physDmgToChampion: 0,
-        magicDmgToChampion: 0,
-        trueDmgToChampion: 0,
-        shieldAndHeal: 0,
-      },
+      jungleCampHistory: junglePathDocForAggregation(row.jungle_camp_history),
+      u15: buildU15FromNormalizedRow(row, opponent.participantId),
     };
 
     applySumMetrics(dto, row);
+    applyNormalizedBooleanChallenges(dto, row);
+    applyNormalizedRiotRootMetrics(dto, row);
+    applyNormalizedBucketMetrics(dto, row, match.gameDurationSec);
+    applyNormalizedLaneMetrics(dto, row, opponentRow, opponent.participantId);
 
     const pinkWards = Math.max(n(row.detector_wards_placed), n(row.control_wards_placed));
     if (CHAMPION_STATS_METRIC_COLUMN_SET.has("sum_detector_wards_placed")) {

@@ -1,5 +1,5 @@
 import type { MatchTimelineEventDto, MatchTimelineFrameDto } from "../riot/types.js";
-import { nearestNeutralCamp } from "../constants/mapSpatial.js";
+import { nearestNeutralCamp, nearestNeutralCampKey } from "../constants/mapSpatial.js";
 import type { JungleCampEntry } from "./junglePathExtract.js";
 
 function ti(v: unknown): number {
@@ -36,7 +36,7 @@ export function inferNeutralJungleCampClears(
 ): JungleCampEntry[] {
   const pid = String(ti(participantId));
   const out: JungleCampEntry[] = [];
-  const lastByType = new Map<string, number>();
+  const lastByKey = new Map<string, number>();
   let prevJungle = 0;
 
   for (const frame of frames) {
@@ -51,16 +51,17 @@ export function inferNeutralJungleCampClears(
     }
 
     const pos = pf.position;
-    const campType =
+    const campKey =
       pos && typeof pos.x === "number" && typeof pos.y === "number"
-        ? nearestNeutralCamp(pos.x, pos.y)
+        ? nearestNeutralCampKey(pos.x, pos.y)
         : null;
+    const campType = campKey ? nearestNeutralCamp(pos!.x, pos!.y) : null;
 
-    if (campType) {
-      const last = lastByType.get(campType) ?? -Infinity;
+    if (campType && campKey) {
+      const last = lastByKey.get(campKey) ?? -Infinity;
       if (ts - last >= SAME_CAMP_COOLDOWN_MS) {
-        out.push({ camp_type: campType, timestamp_ms: ts });
-        lastByType.set(campType, ts);
+        out.push({ camp_type: campType, timestamp_ms: ts, camp_key: campKey });
+        lastByKey.set(campKey, ts);
       }
     }
 

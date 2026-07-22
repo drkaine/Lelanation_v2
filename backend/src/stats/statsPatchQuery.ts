@@ -376,6 +376,8 @@ function sqlPatchFragmentForLogical(logicalTable: string, patchKey: string | nul
     case 'agg_champion_bucket':
     case 'agg_team_bucket':
       return sqlGenericPatchTableFragment('champion_bucket', patchKey)
+    case 'agg_champion_jungle_path':
+      return sqlGenericPatchTableFragment('champion_jungle_path', patchKey)
     default: {
       const physical = physicalTableName(normalized)
       if (!isSafeIdentSegment(physical)) {

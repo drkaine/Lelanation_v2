@@ -22,6 +22,8 @@ export const CAMP_POSITIONS: Record<string, { x: number; y: number }> = {
 };
 
 export const EARLY_JUNGLE_PATH_MS = 360_000;
+/** Fenêtre max pour le premier cycle complet (jusqu'au scuttler ou 10 min). */
+export const FIRST_JUNGLE_CLEAR_MAX_MS = 600_000;
 export const MAX_JUNGLE_PATH_CAMPS = 8;
 
 /** Camps inclus dans une séquence de path jungle (hors dragon/baron/herald). */
@@ -58,6 +60,14 @@ const CAMP_ALIAS: Record<string, string> = {
   baron: "baron",
 };
 
+/** Nom de séquence incluant le côté (`blue_buff_blue` vs `blue_buff_red`). */
+export function campKeyToSequenceName(campKey: string): string {
+  const key = String(campKey ?? "").trim().toLowerCase();
+  if (!key) return "unknown";
+  if (key.endsWith("_blue") || key.endsWith("_red")) return key;
+  return campTypeToSequenceName(key);
+}
+
 export function campTypeToSequenceName(raw: string): string {
   const key = String(raw ?? "").trim().toLowerCase();
   if (CAMP_ALIAS[key]) return CAMP_ALIAS[key]!;
@@ -79,7 +89,7 @@ export function campPositionKeyToCampType(key: string): string {
   return base;
 }
 
-export function nearestNeutralCamp(x: number, y: number): string | null {
+export function nearestNeutralCampKey(x: number, y: number): string | null {
   if (!Number.isFinite(x) || !Number.isFinite(y) || (x <= 0 && y <= 0)) return null;
   let bestKey: string | null = null;
   let bestDist = Infinity;
@@ -91,5 +101,10 @@ export function nearestNeutralCamp(x: number, y: number): string | null {
       bestKey = key;
     }
   }
-  return bestKey ? campPositionKeyToCampType(bestKey) : null;
+  return bestKey;
+}
+
+export function nearestNeutralCamp(x: number, y: number): string | null {
+  const key = nearestNeutralCampKey(x, y);
+  return key ? campPositionKeyToCampType(key) : null;
 }

@@ -134,6 +134,10 @@ function buildMatch(matchId: string, championOffset = 0): IngestionJobData {
     surrenderedTeam200: false,
     earlySurrenderedTeam100: false,
     earlySurrenderedTeam200: false,
+    team100ChampionKills: 0,
+    team200ChampionKills: 0,
+    team100ElderDrakeFirst: false,
+    team200ElderDrakeFirst: false,
   };
   return { participants, teamStats };
 }
@@ -153,6 +157,7 @@ describe('runAggregationTransaction (integration, isolated test DB)', () => {
         champion_bans_by_banner, champion_pick_order, champion_bucket,
         botlane_duo_vs_duo_stats, champion_tier_daily_snapshots,
         item_tier_daily_snapshots, match_outcome_stats, team_core_stat,
+        champion_jungle_path,
         objective_outcome_histogram,
         match_aggregated, players, player_rank_history
       RESTART IDENTITY

@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import {
+  campKeyToSequenceName,
   campTypeToSequenceName,
-  EARLY_JUNGLE_PATH_MS,
+  FIRST_JUNGLE_CLEAR_MAX_MS,
   isNeutralJunglePathCamp,
   MAX_JUNGLE_PATH_CAMPS,
 } from "../constants/mapSpatial.js";
@@ -9,6 +10,8 @@ import {
 export type JungleCampEntry = {
   camp_type: string;
   timestamp_ms: number;
+  /** Clé carte complète (`gromp_blue`, `blue_buff_red`, …) pour distinguer les côtés. */
+  camp_key?: string;
 };
 
 export type JungleEarlyPath = {
@@ -79,14 +82,21 @@ export function readEarlyPath(raw: unknown): JunglePathResult | null {
 }
 
 export function extractJunglePathFromCamps(camps: JungleCampEntry[]): JunglePathResult | null {
-  const early = camps
-    .filter((c) => c.timestamp_ms < EARLY_JUNGLE_PATH_MS)
-    .filter((c) => isNeutralJunglePathCamp(c.camp_type))
-    .slice(0, MAX_JUNGLE_PATH_CAMPS);
+  const neutral = camps.filter((c) => isNeutralJunglePathCamp(c.camp_type));
+  const early: JungleCampEntry[] = [];
+
+  for (const camp of neutral) {
+    if (camp.timestamp_ms > FIRST_JUNGLE_CLEAR_MAX_MS) break;
+    early.push(camp);
+    if (camp.camp_type === "scuttler" && early.length >= 2) break;
+    if (early.length >= MAX_JUNGLE_PATH_CAMPS) break;
+  }
 
   if (early.length === 0) return null;
 
-  const pathSequence = early.map((c) => campTypeToSequenceName(c.camp_type));
+  const pathSequence = early.map((c) =>
+    c.camp_key ? campKeyToSequenceName(c.camp_key) : campTypeToSequenceName(c.camp_type),
+  );
   const pathHash = createHash("md5").update(pathSequence.join(",")).digest("hex");
   const clearTimeMs = early[early.length - 1]?.timestamp_ms ?? null;
 
