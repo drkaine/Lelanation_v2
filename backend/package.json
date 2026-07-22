@@ -15,6 +15,7 @@
     "build:theorycraft-data": "tsx src/scripts/buildTheorycraftData.ts",
     "copy:assets": "tsx src/scripts/copyStaticAssets.ts",
     "generate:excluded-items": "tsx src/scripts/generateExcludedItems.ts",
+    "generate:riot-field-registry": "tsx src/scripts/generateRiotApiFieldRegistry.ts",
     "typecheck": "tsc --noEmit",
     "test:matchups": "tsx --test src/services/MatchupTierService.test.ts",
     "test:stats": "DATABASE_URL=postgresql://lelanation:lelanation@localhost:5434/lelanation_statistiques tsx --test src/utils/statsFormulas.test.ts src/utils/statsMvBanAggregate.test.ts src/utils/statShardLegacyMerge.test.ts src/services/TierListService.test.ts src/services/StatsAbandonsService.test.ts src/services/MatchupTierService.test.ts src/services/BalanceRulesService.test.ts src/services/StatsBalanceService.test.ts",

@@ -92,7 +92,7 @@ async function main(): Promise<void> {
       const fixtureResult = await refreshApiRiotFixturesOnPatchChange(patchLabel)
       if (fixtureResult.refreshed) {
         console.log(
-          `[sync:data] API Riot fixtures refreshed patch=${fixtureResult.patch} matchId=${fixtureResult.matchId}`,
+          `[sync:data] API Riot fixtures refreshed patch=${fixtureResult.patch} matchId=${fixtureResult.matchId} fieldDiff=+${fixtureResult.fieldDiff?.added ?? 0}/-${fixtureResult.fieldDiff?.removed ?? 0}`,
         )
       } else {
         console.log(

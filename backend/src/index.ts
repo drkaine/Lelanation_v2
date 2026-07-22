@@ -14,6 +14,7 @@ import statsRoutes from './routes/stats.js'
 import appRoutes from './routes/app.js'
 import shareBuildsRoutes from './routes/shareBuilds.js'
 import matchupGuidesRoutes from './routes/matchupGuides.js'
+import lelarivaRoutes from './routes/lelariva.js'
 // import patchNotesRoutes from './routes/patchNotes.js'
 import { setupDataDragonSync } from './cron/dataDragonSync.js'
 import { setupYouTubeSync } from './cron/youtubeSync.js'
@@ -57,6 +58,7 @@ app.use('/api/stats', statsRoutes)
 app.use('/api/app', appRoutes)
 app.use('/api/share-builds', shareBuildsRoutes)
 app.use('/api/matchup-guides', matchupGuidesRoutes)
+app.use('/api/lelariva', lelarivaRoutes)
 // app.use('/api/patch-notes', patchNotesRoutes)
 
 // Initialize cron jobs

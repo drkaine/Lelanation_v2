@@ -15,4 +15,6 @@ export interface ParticipantEventCounts {
   deathByGank: number;
   killByRoam: number;
   deathByRoam: number;
+  killOnObjective: number;
+  deathOnObjective: number;
 }

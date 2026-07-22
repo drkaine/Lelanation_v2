@@ -1,10 +1,12 @@
 /**
  * Colonnes ping `champion_stats` (alignées sur championStatsMetricColumns + match-v5 participant).
  *
- * Champs API obsolètes (toujours 0 chez Riot depuis ~2024) :
- * - basicPings → commandPings (ping générique bleu)
- * - dangerPings → getBackPings (ping prudent jaune)
- * - holdPings, visionClearedPings → plus alimentés en pratique
+ * Champs API retirés de la persistance (obsolètes côté Riot depuis ~2024) :
+ * - basicPings → utiliser commandPings
+ * - dangerPings → utiliser getBackPings
+ * - holdPings, visionClearedPings → plus alimentés
+ *
+ * Les clés `basic` / `danger` ci-dessous restent des alias d’affichage vers command/get_back.
  *
  * @see https://github.com/RiotGames/developer-relations/issues/870
  * @see https://github.com/RiotGames/developer-relations/issues/871

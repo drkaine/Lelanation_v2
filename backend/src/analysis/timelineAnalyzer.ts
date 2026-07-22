@@ -8,6 +8,8 @@ import type {
   TimelineEvent,
 } from "../types/timeline.js";
 
+const U15_MS = 900_000;
+
 function emptyCounts(participantId: number): ParticipantEventCounts {
   return {
     participantId,
@@ -17,6 +19,8 @@ function emptyCounts(participantId: number): ParticipantEventCounts {
     deathByGank: 0,
     killByRoam: 0,
     deathByRoam: 0,
+    killOnObjective: 0,
+    deathOnObjective: 0,
   };
 }
 
@@ -130,6 +134,26 @@ export function processTimeline(
     } else if (roam) {
       counts.get(killer.participantId)!.killByRoam++;
       counts.get(victim.participantId)!.deathByRoam++;
+    }
+
+    if (kill.timestamp < U15_MS && (event as { afterObjective?: unknown }).afterObjective === true) {
+      counts.get(victim.participantId)!.deathOnObjective++;
+      counts.get(kill.killerId)!.killOnObjective++;
+    }
+  }
+
+  for (const event of allEvents) {
+    if (event.type !== "ELITE_MONSTER_KILL") continue;
+    const killerId = Number((event as { killerId?: unknown }).killerId ?? 0);
+    if (killerId <= 0 || !counts.has(killerId)) continue;
+    const rawAssist = (event as { assistingParticipantIds?: unknown }).assistingParticipantIds;
+    const assistingIds = Array.isArray(rawAssist)
+      ? rawAssist.map((id) => Number(id)).filter((id) => id > 0)
+      : [];
+    for (const participantId of counts.keys()) {
+      if (participantId === killerId || assistingIds.includes(participantId)) {
+        counts.get(participantId)!.killOnObjective++;
+      }
     }
   }
 

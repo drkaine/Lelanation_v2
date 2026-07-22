@@ -8,6 +8,7 @@ import { riotConfig } from '../riot-gateway/config/riotConfig.js';
 import { riotFetch } from '../riot-gateway/http/undiciClient.js';
 import type { LeagueEntryDto, MatchDto, TimelineDto } from '../riot-gateway/routes/dto.js';
 import { PatchResolver } from '../poll-orchestration/PatchResolver.js';
+import { updateFieldRegistryFromFixtures } from './RiotApiFieldRegistryUpdateService.js';
 import { normalizeGamePatchKey } from './VersionService.js';
 
 const FIXTURES_DIR = join(process.cwd(), 'data', 'api-riot');
@@ -28,6 +29,7 @@ export type RefreshApiRiotFixturesResult = {
   reason?: string;
   patch?: string;
   matchId?: string;
+  fieldDiff?: { added: number; removed: number };
 };
 
 function sleep(ms: number): Promise<void> {
@@ -230,11 +232,30 @@ export async function refreshApiRiotFixturesOnPatchChange(
     info: timeline.info ?? {},
   });
 
+  const refreshedAt = new Date().toISOString();
+
   await writeRefreshState({
     lastRefreshedPatch: patch,
-    refreshedAt: new Date().toISOString(),
+    refreshedAt,
     matchId,
   });
 
-  return { refreshed: true, patch, matchId };
+  let fieldDiff: { added: number; removed: number } | undefined;
+  try {
+    const registryResult = await updateFieldRegistryFromFixtures({
+      patch,
+      matchId,
+      refreshedAt,
+      notifyDiscord: true,
+    });
+    fieldDiff = {
+      added: registryResult.diff.added.length,
+      removed: registryResult.diff.removed.length,
+    };
+  } catch (registryError) {
+    const message = registryError instanceof Error ? registryError.message : String(registryError);
+    console.warn('[ApiRiotFixtures] field registry update failed (non-blocking):', message);
+  }
+
+  return { refreshed: true, patch, matchId, fieldDiff };
 }

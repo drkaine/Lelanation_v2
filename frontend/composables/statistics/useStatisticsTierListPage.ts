@@ -610,6 +610,52 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     return t('statisticsPage.tierListChartHeading', { role: role.toUpperCase() })
   })
 
+  /** Résumé textuel des filtres actifs pour l’export PNG du graphique tier list. */
+  const tierListChartFilterSummary = computed(() => {
+    const parts: string[] = []
+    parts.push(
+      `${t('statisticsPage.overviewFilterByVersion')}: ${
+        statsVersionFilter.value.trim() || t('statisticsPage.overviewVersionAll')
+      }`
+    )
+    parts.push(
+      `${t('statisticsPage.overviewMatchesByDivision')}: ${
+        statsDivisionFilter.value.length === 0
+          ? t('statisticsPage.allRanks')
+          : statsDivisionFilter.value.join(', ')
+      }`
+    )
+    parts.push(
+      `${t('statisticsPage.filterRole')}: ${
+        statsRoleFilter.value ? mainRoleLabel(statsRoleFilter.value) : t('statisticsPage.allRoles')
+      }`
+    )
+    const otpLabel =
+      statsOtpFilter.value === 'oui'
+        ? t('statisticsPage.filterOtpYes')
+        : statsOtpFilter.value === 'solo'
+          ? t('statisticsPage.filterOtpSolo')
+          : t('statisticsPage.filterOtpNo')
+    parts.push(`${t('statisticsPage.filterOtp')}: ${otpLabel}`)
+    if (tierListPatchDeltaRefLabel.value) {
+      parts.push(
+        `${t('statisticsPage.progressionsReferenceVersion')}: ${tierListPatchDeltaRefLabel.value}`
+      )
+    }
+    const activeTiers = tierListChartActiveTiers.value
+    if (activeTiers.length > 0) {
+      const labels = activeTiers.map(tier =>
+        tier === 'D' ? t('statisticsPage.tierF') : tier === 'S+' ? 'S+' : tier
+      )
+      parts.push(`${t('statisticsPage.tierListLegend')}: ${labels.join(', ')}`)
+    }
+    const search = championSearchQuery.value.trim()
+    if (search) {
+      parts.push(`${t('statisticsPage.searchChampion')}: ${search}`)
+    }
+    return parts.join(' · ')
+  })
+
   const tierListChartZeroBottomPct = computed(() =>
     Math.min(100, Math.max(0, tierListChartYTickBottomPct(0)))
   )
@@ -939,6 +985,7 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     CHART_PAD,
     PLOT_H,
     tierListChartHeading,
+    tierListChartFilterSummary,
     tierListChartZeroBottomPct,
     tierListChartYScale,
     tierListChartYBandSegments,

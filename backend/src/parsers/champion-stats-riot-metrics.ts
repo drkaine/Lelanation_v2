@@ -104,18 +104,14 @@ export function mapChampionStatsRiotMetrics(participant: ParticipantDto): Record
     /** Compteurs de ping au niveau racine du participant match-v5 (hors `challenges`). */
     sum_all_in_pings: n(participant.allInPings),
     sum_assist_me_pings: n(participant.assistMePings),
-    sum_basic_pings: n(participant.basicPings),
     sum_command_pings: n(participant.commandPings),
-    sum_danger_pings: n(participant.dangerPings),
     sum_enemy_missing_pings: n(participant.enemyMissingPings),
     sum_enemy_vision_pings: n(participant.enemyVisionPings),
     sum_get_back_pings: n(participant.getBackPings),
-    sum_hold_pings: n(participant.holdPings),
     sum_need_vision_pings: n(participant.needVisionPings),
     sum_on_my_way_pings: n(participant.onMyWayPings),
     sum_push_pings: n(participant.pushPings),
     sum_retreat_pings: n(participant.retreatPings),
-    sum_vision_cleared_pings: n(participant.visionClearedPings),
   };
 }
  

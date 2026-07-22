@@ -1,11 +1,83 @@
 <script setup lang="ts">
-import { computed, inject, ref } from 'vue'
+import { computed, inject, nextTick, ref } from 'vue'
 import StatisticsTierListMobileChart from '~/components/statistics/StatisticsTierListMobileChart.vue'
+import NotificationToast from '~/components/NotificationToast.vue'
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
+import { copyPngBlobToClipboard } from '~/utils/buildCardShareImage'
+import {
+  captureElementToPngBlob,
+  downloadPngBlob,
+  sanitizeFilenameSegment,
+} from '~/utils/chartShareImage'
 
 const p = inject('statisticsPageCtx') as any
 
 const expandedTierListIds = ref<Set<number>>(new Set())
+const tierListChartExportRoot = ref<HTMLElement | null>(null)
+const tierListChartExportPending = ref(false)
+const chartExportToastMessage = ref('')
+const chartExportToastType = ref<'success' | 'error'>('success')
+const chartExportToastVisible = ref(false)
+let chartExportToastTimer: ReturnType<typeof setTimeout> | null = null
+
+function showChartExportToast(message: string, type: 'success' | 'error' = 'success') {
+  chartExportToastMessage.value = message
+  chartExportToastType.value = type
+  chartExportToastVisible.value = true
+  if (chartExportToastTimer) clearTimeout(chartExportToastTimer)
+  chartExportToastTimer = setTimeout(() => {
+    chartExportToastVisible.value = false
+  }, 3200)
+}
+
+async function captureTierListChartBlob(): Promise<Blob | null> {
+  p.onTierListChartBarLeave?.()
+  await nextTick()
+  const root = tierListChartExportRoot.value
+  if (!root) return null
+  return captureElementToPngBlob(root)
+}
+
+function tierListChartExportFilename(): string {
+  const heading = String(p.tierListChartHeading ?? 'tierlist')
+  const patch = String(p.effectiveTierListPatch ?? p.gameVersion ?? 'patch')
+  return `lelanation-tierlist-${sanitizeFilenameSegment(heading)}-${sanitizeFilenameSegment(patch)}.png`
+}
+
+async function downloadTierListChartImage() {
+  if (tierListChartExportPending.value) return
+  tierListChartExportPending.value = true
+  try {
+    const blob = await captureTierListChartBlob()
+    if (!blob) {
+      showChartExportToast(p.t('statisticsPage.tierListChartExportError'), 'error')
+      return
+    }
+    downloadPngBlob(blob, tierListChartExportFilename())
+  } finally {
+    tierListChartExportPending.value = false
+  }
+}
+
+async function copyTierListChartImage() {
+  if (tierListChartExportPending.value) return
+  tierListChartExportPending.value = true
+  try {
+    const blob = await captureTierListChartBlob()
+    if (!blob) {
+      showChartExportToast(p.t('statisticsPage.tierListChartExportError'), 'error')
+      return
+    }
+    const copied = await copyPngBlobToClipboard(blob)
+    if (!copied) {
+      showChartExportToast(p.t('buildDiscovery.imageCopyError'), 'error')
+      return
+    }
+    showChartExportToast(p.t('buildDiscovery.imageCopied'), 'success')
+  } finally {
+    tierListChartExportPending.value = false
+  }
+}
 
 function toggleTierListCard(championId: number): void {
   const next = new Set(expandedTierListIds.value)
@@ -605,219 +677,298 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
           </div>
         </div>
       </div>
-      <!-- Vue graphique mobile : barres horizontales (pick rate), lecture portrait -->
-      <div
-        v-show="p.tierListViewModel === 'chart' && p.totalTierListCount > 0"
-        class="statistics-overview-surface rounded-xl border border-primary/30 p-3 lg:hidden"
-      >
-        <p class="mb-2 text-[11px] text-text/60">
-          {{ p.t('statisticsPage.tierListMobileChartHint') }}
-        </p>
-        <StatisticsTierListMobileChart />
-      </div>
-      <!-- Vue graphique desktop : barres divergentes (PBI) -->
-      <div
-        v-show="p.tierListViewModel === 'chart' && p.totalTierListCount > 0"
-        class="tier-list-diverging-wrap statistics-overview-surface hidden overflow-x-auto rounded-xl border border-primary/30 py-4 pl-2 pr-4 shadow-inner lg:block"
-      >
-        <div class="flex min-w-[640px] flex-col gap-3 lg:min-w-0">
-          <div class="min-w-0 flex-1">
-            <div class="flex gap-0.5">
-              <div
-                class="relative z-[4] w-7 shrink-0 overflow-visible text-[10px] leading-none text-accent-light/80 md:w-8"
-              >
-                <div class="tier-list-chart-plot relative overflow-visible">
-                  <div class="absolute inset-0 overflow-visible">
-                    <span
-                      v-for="tick in p.tierListChartYScale.ticks"
-                      :key="'ytick-' + tick"
-                      class="absolute right-0.5 whitespace-nowrap tabular-nums leading-none"
-                      :style="p.tierListChartYTickLabelStyle(tick)"
-                    >
-                      {{
-                        Math.abs(tick - Math.round(tick)) < 1e-6
-                          ? Math.round(tick)
-                          : Number(tick.toFixed(1))
-                      }}
-                    </span>
+      <!-- Vue graphique : export PNG + capture DOM (filtres inclus dans l’image) -->
+      <div v-show="p.tierListViewModel === 'chart' && p.totalTierListCount > 0" class="space-y-2">
+        <div
+          ref="tierListChartExportRoot"
+          data-tier-list-chart-export-root
+          class="tier-list-chart-export-root space-y-2"
+        >
+          <div
+            class="statistics-overview-surface rounded-xl border border-primary/30 px-3 py-2.5 shadow-inner"
+          >
+            <div class="text-sm font-bold uppercase tracking-tight text-text-accent">
+              {{ p.tierListChartHeading }}
+            </div>
+            <div class="mt-1 text-[11px] leading-snug text-text/75">
+              {{ p.tierListChartFilterSummary }}
+            </div>
+          </div>
+
+          <!-- Vue graphique mobile : barres horizontales (pick rate), lecture portrait -->
+          <div
+            class="statistics-overview-surface rounded-xl border border-primary/30 p-3 lg:hidden"
+          >
+            <p class="mb-2 text-[11px] text-text/60">
+              {{ p.t('statisticsPage.tierListMobileChartHint') }}
+            </p>
+            <StatisticsTierListMobileChart />
+          </div>
+          <!-- Vue graphique desktop : barres divergentes (PBI) -->
+          <div
+            class="tier-list-diverging-wrap statistics-overview-surface hidden overflow-x-auto rounded-xl border border-primary/30 py-4 pl-2 pr-4 shadow-inner lg:block"
+          >
+            <div class="flex min-w-[640px] flex-col gap-3 lg:min-w-0">
+              <div class="min-w-0 flex-1">
+                <div class="flex gap-0.5">
+                  <div
+                    class="relative z-[4] w-7 shrink-0 overflow-visible text-[10px] leading-none text-accent-light/80 md:w-8"
+                  >
+                    <div class="tier-list-chart-plot relative overflow-visible">
+                      <div class="absolute inset-0 overflow-visible">
+                        <span
+                          v-for="tick in p.tierListChartYScale.ticks"
+                          :key="'ytick-' + tick"
+                          class="absolute right-0.5 whitespace-nowrap tabular-nums leading-none"
+                          :style="p.tierListChartYTickLabelStyle(tick)"
+                        >
+                          {{
+                            Math.abs(tick - Math.round(tick)) < 1e-6
+                              ? Math.round(tick)
+                              : Number(tick.toFixed(1))
+                          }}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-              <div class="relative min-w-0 flex-1">
-                <div class="tier-list-chart-plot relative w-full overflow-hidden">
-                  <div class="absolute inset-0">
-                    <div
-                      v-for="(seg, idx) in p.tierListChartYBandSegments"
-                      :key="'yband-' + idx"
-                      class="pointer-events-none absolute left-0 right-0 z-0"
-                      :class="seg.shaded ? 'bg-accent/[0.09]' : 'bg-accent-dark/[0.12]'"
-                      :style="{
-                        bottom: seg.bottomPct + '%',
-                        height: seg.heightPct + '%',
-                      }"
-                    />
-                    <div
-                      v-for="score in p.tierListChartYScale.gridScores"
-                      :key="'hgrid-' + score"
-                      class="pointer-events-none absolute left-0 right-0 z-[1] h-px"
-                      :class="
-                        score === 0
-                          ? 'bg-accent/45'
-                          : Math.abs(score) === 500
-                            ? 'bg-accent/35'
-                            : 'bg-accent/12'
-                      "
-                      :style="{
-                        bottom:
-                          score === p.tierListChartYScale.yMax
-                            ? 'calc(100% - 1px)'
-                            : score === p.tierListChartYScale.yMin
-                              ? '0px'
-                              : 'calc(' + p.tierListChartYTickBottomPct(score) + '% - 0.5px)',
-                      }"
-                    />
-                    <div
-                      class="pointer-events-none absolute bottom-0 right-0 top-0 z-[2] w-[12%] bg-slate-950/35"
-                      aria-hidden="true"
-                    />
-                    <div
-                      class="absolute bottom-0 left-0 right-0 top-0 z-[3] flex items-stretch gap-px px-0.5"
-                    >
-                      <div
-                        v-for="c in p.tierListChartVisibleRows"
-                        :key="c.championId"
-                        class="group pointer-events-none relative min-w-0 flex-1"
-                      >
-                        <div class="pointer-events-none relative h-full w-full">
-                          <div class="pointer-events-none flex h-full w-full justify-center">
-                            <div class="pointer-events-none relative h-full w-[85%] max-w-[12px]">
-                              <div
-                                v-if="p.scaleMatchupScore(c.pbi) >= 0"
-                                class="pointer-events-auto absolute left-0 right-0 rounded-t-[2px] transition-all group-hover:brightness-110"
-                                :style="{
-                                  bottom: p.tierListChartZeroBottomPct + '%',
-                                  height: p.tierListChartBarHeightPct(c.pbi) + '%',
-                                  minHeight: '2px',
-                                  backgroundColor: p.tierListChartBarColor(c.tier),
-                                }"
-                                @mouseenter="p.onTierListChartBarEnter(c, $event)"
-                                @mousemove="p.onTierListChartBarMove"
-                                @mouseleave="p.onTierListChartBarLeave"
-                              />
-                              <div
-                                v-else
-                                class="pointer-events-auto absolute left-0 right-0 rounded-b-[2px] transition-all group-hover:brightness-110"
-                                :style="{
-                                  bottom: p.tierListChartScoreBottomPct(c.pbi) + '%',
-                                  height: p.tierListChartBarHeightPct(c.pbi) + '%',
-                                  minHeight: '2px',
-                                  backgroundColor: p.tierListChartBarColor(c.tier),
-                                }"
-                                @mouseenter="p.onTierListChartBarEnter(c, $event)"
-                                @mousemove="p.onTierListChartBarMove"
-                                @mouseleave="p.onTierListChartBarLeave"
-                              />
+                  <div class="relative min-w-0 flex-1">
+                    <div class="tier-list-chart-plot relative w-full overflow-hidden">
+                      <div class="absolute inset-0">
+                        <div
+                          v-for="(seg, idx) in p.tierListChartYBandSegments"
+                          :key="'yband-' + idx"
+                          class="pointer-events-none absolute left-0 right-0 z-0"
+                          :class="seg.shaded ? 'bg-accent/[0.09]' : 'bg-accent-dark/[0.12]'"
+                          :style="{
+                            bottom: seg.bottomPct + '%',
+                            height: seg.heightPct + '%',
+                          }"
+                        />
+                        <div
+                          v-for="score in p.tierListChartYScale.gridScores"
+                          :key="'hgrid-' + score"
+                          class="pointer-events-none absolute left-0 right-0 z-[1] h-px"
+                          :class="
+                            score === 0
+                              ? 'bg-accent/45'
+                              : Math.abs(score) === 500
+                                ? 'bg-accent/35'
+                                : 'bg-accent/12'
+                          "
+                          :style="{
+                            bottom:
+                              score === p.tierListChartYScale.yMax
+                                ? 'calc(100% - 1px)'
+                                : score === p.tierListChartYScale.yMin
+                                  ? '0px'
+                                  : 'calc(' + p.tierListChartYTickBottomPct(score) + '% - 0.5px)',
+                          }"
+                        />
+                        <div
+                          class="pointer-events-none absolute bottom-0 right-0 top-0 z-[2] w-[12%] bg-slate-950/35"
+                          aria-hidden="true"
+                        />
+                        <div
+                          class="absolute bottom-0 left-0 right-0 top-0 z-[3] flex items-stretch gap-px px-0.5"
+                        >
+                          <div
+                            v-for="c in p.tierListChartVisibleRows"
+                            :key="c.championId"
+                            class="group pointer-events-none relative min-w-0 flex-1"
+                          >
+                            <div class="pointer-events-none relative h-full w-full">
+                              <div class="pointer-events-none flex h-full w-full justify-center">
+                                <div
+                                  class="pointer-events-none relative h-full w-[85%] max-w-[12px]"
+                                >
+                                  <div
+                                    v-if="p.scaleMatchupScore(c.pbi) >= 0"
+                                    class="pointer-events-auto absolute left-0 right-0 rounded-t-[2px] transition-all group-hover:brightness-110"
+                                    :style="{
+                                      bottom: p.tierListChartZeroBottomPct + '%',
+                                      height: p.tierListChartBarHeightPct(c.pbi) + '%',
+                                      minHeight: '2px',
+                                      backgroundColor: p.tierListChartBarColor(c.tier),
+                                    }"
+                                    @mouseenter="p.onTierListChartBarEnter(c, $event)"
+                                    @mousemove="p.onTierListChartBarMove"
+                                    @mouseleave="p.onTierListChartBarLeave"
+                                  />
+                                  <div
+                                    v-else
+                                    class="pointer-events-auto absolute left-0 right-0 rounded-b-[2px] transition-all group-hover:brightness-110"
+                                    :style="{
+                                      bottom: p.tierListChartScoreBottomPct(c.pbi) + '%',
+                                      height: p.tierListChartBarHeightPct(c.pbi) + '%',
+                                      minHeight: '2px',
+                                      backgroundColor: p.tierListChartBarColor(c.tier),
+                                    }"
+                                    @mouseenter="p.onTierListChartBarEnter(c, $event)"
+                                    @mousemove="p.onTierListChartBarMove"
+                                    @mouseleave="p.onTierListChartBarLeave"
+                                  />
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                </div>
-                <Teleport to="body">
-                  <div
-                    v-if="p.tierListChartTooltip && p.tierListChartTooltipRow"
-                    class="pointer-events-none fixed z-[300] w-max max-w-[17rem] rounded border border-accent/45 bg-panel p-2 text-left text-xs text-accent-light shadow-xl"
-                    :style="{
-                      left: p.tierListChartTooltip.x + 'px',
-                      top: p.tierListChartTooltip.y + 'px',
-                      transform: 'translate(-50%, calc(-100% - 12px))',
-                    }"
-                  >
-                    <div class="flex items-center gap-2">
-                      <img
-                        v-if="p.tierListChartChampionImage(p.tierListChartTooltipRow.championId)"
-                        :src="
-                          p.tierListChartChampionImage(p.tierListChartTooltipRow.championId) || ''
-                        "
-                        :alt="
-                          p.championName(p.tierListChartTooltipRow.championId) ||
-                          String(p.tierListChartTooltipRow.championId)
-                        "
-                        class="h-8 w-8 shrink-0 rounded object-cover"
-                      />
-                      <div class="min-w-0">
-                        <div class="truncate font-semibold text-accent-light">
-                          {{
-                            p.championName(p.tierListChartTooltipRow.championId) ||
-                            p.tierListChartTooltipRow.championId
-                          }}
-                        </div>
-                        <div class="text-[11px] text-accent-light/75">
-                          Score {{ p.formatMatchupScore(p.tierListChartTooltipRow.pbi, 2) }}
-                        </div>
-                        <div
-                          v-if="
-                            p.tierListPatchDeltaRefLabel &&
-                            p.tierListChartTooltipRow.patchRefMatchupScorePp != null
-                          "
-                          class="text-[11px]"
-                          :class="
-                            p.tierListPatchDeltaClass(
-                              p.tierListChartTooltipRow.patchRefMatchupScorePp
-                            )
-                          "
-                        >
-                          {{
-                            p.t('statisticsPage.tierListChartDeltaMatchupVsRef', {
-                              ref: p.tierListPatchDeltaRefLabel,
-                            })
-                          }}:
-                          {{
-                            p.formatTierListPatchDeltaPp(
-                              p.tierListChartTooltipRow.patchRefMatchupScorePp
-                            )
-                          }}
+                    <Teleport to="body">
+                      <div
+                        v-if="p.tierListChartTooltip && p.tierListChartTooltipRow"
+                        class="pointer-events-none fixed z-[300] w-max max-w-[17rem] rounded border border-accent/45 bg-panel p-2 text-left text-xs text-accent-light shadow-xl"
+                        :style="{
+                          left: p.tierListChartTooltip.x + 'px',
+                          top: p.tierListChartTooltip.y + 'px',
+                          transform: 'translate(-50%, calc(-100% - 12px))',
+                        }"
+                      >
+                        <div class="flex items-center gap-2">
+                          <img
+                            v-if="
+                              p.tierListChartChampionImage(p.tierListChartTooltipRow.championId)
+                            "
+                            :src="
+                              p.tierListChartChampionImage(p.tierListChartTooltipRow.championId) ||
+                              ''
+                            "
+                            :alt="
+                              p.championName(p.tierListChartTooltipRow.championId) ||
+                              String(p.tierListChartTooltipRow.championId)
+                            "
+                            class="h-8 w-8 shrink-0 rounded object-cover"
+                          />
+                          <div class="min-w-0">
+                            <div class="truncate font-semibold text-accent-light">
+                              {{
+                                p.championName(p.tierListChartTooltipRow.championId) ||
+                                p.tierListChartTooltipRow.championId
+                              }}
+                            </div>
+                            <div class="text-[11px] text-accent-light/75">
+                              Score {{ p.formatMatchupScore(p.tierListChartTooltipRow.pbi, 2) }}
+                            </div>
+                            <div
+                              v-if="
+                                p.tierListPatchDeltaRefLabel &&
+                                p.tierListChartTooltipRow.patchRefMatchupScorePp != null
+                              "
+                              class="text-[11px]"
+                              :class="
+                                p.tierListPatchDeltaClass(
+                                  p.tierListChartTooltipRow.patchRefMatchupScorePp
+                                )
+                              "
+                            >
+                              {{
+                                p.t('statisticsPage.tierListChartDeltaMatchupVsRef', {
+                                  ref: p.tierListPatchDeltaRefLabel,
+                                })
+                              }}:
+                              {{
+                                p.formatTierListPatchDeltaPp(
+                                  p.tierListChartTooltipRow.patchRefMatchupScorePp
+                                )
+                              }}
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </div>
-                </Teleport>
-                <div
-                  class="relative z-10 flex h-[52px] items-center justify-stretch gap-px border-t border-accent/25 bg-chrome px-0.5 pt-1"
-                >
-                  <div
-                    v-for="c in p.tierListChartVisibleRows"
-                    :key="'lbl-' + c.championId"
-                    class="flex min-w-0 flex-1 items-center justify-center overflow-visible"
-                  >
-                    <img
-                      v-if="p.gameVersion && p.championByKey(c.championId)"
-                      :src="
-                        p.getChampionImageUrl(
-                          p.gameVersion,
-                          p.championByKey(c.championId)!.image.full
-                        )
-                      "
-                      :alt="p.championName(c.championId) || String(c.championId)"
-                      class="h-9 w-9 shrink-0 rounded-full border border-accent/30 object-cover"
-                      width="36"
-                      height="36"
-                    />
-                    <span
-                      v-else
-                      class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-accent/25 bg-black/40 text-[10px] font-semibold text-white/80"
+                    </Teleport>
+                    <div
+                      class="relative z-10 flex h-[52px] items-center justify-stretch gap-px border-t border-accent/25 bg-chrome px-0.5 pt-1"
                     >
-                      {{ (p.championName(c.championId) || String(c.championId)).slice(0, 2) }}
-                    </span>
+                      <div
+                        v-for="c in p.tierListChartVisibleRows"
+                        :key="'lbl-' + c.championId"
+                        class="flex min-w-0 flex-1 items-center justify-center overflow-visible"
+                      >
+                        <img
+                          v-if="p.gameVersion && p.championByKey(c.championId)"
+                          :src="
+                            p.getChampionImageUrl(
+                              p.gameVersion,
+                              p.championByKey(c.championId)!.image.full
+                            )
+                          "
+                          :alt="p.championName(c.championId) || String(c.championId)"
+                          class="h-9 w-9 shrink-0 rounded-full border border-accent/30 object-cover"
+                          width="36"
+                          height="36"
+                        />
+                        <span
+                          v-else
+                          class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-accent/25 bg-black/40 text-[10px] font-semibold text-white/80"
+                        >
+                          {{ (p.championName(c.championId) || String(c.championId)).slice(0, 2) }}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
+
+        <div class="mt-[5px] flex w-full max-w-md items-stretch gap-1.5">
+          <button
+            type="button"
+            class="ui-build-card-action-button ui-build-card-action-button--icon"
+            :disabled="tierListChartExportPending"
+            :title="p.t('statisticsPage.tierListChartDownload')"
+            :aria-label="p.t('statisticsPage.tierListChartDownload')"
+            @click="downloadTierListChartImage"
+          >
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 4v10" />
+              <path d="m8 10 4 4 4-4" />
+              <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="ui-build-card-action-button ui-build-card-action-button--icon"
+            :disabled="tierListChartExportPending"
+            :title="p.t('statisticsPage.tierListChartCopyImage')"
+            :aria-label="p.t('statisticsPage.tierListChartCopyImage')"
+            @click="copyTierListChartImage"
+          >
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+          </button>
+        </div>
       </div>
     </template>
+    <NotificationToast
+      v-if="chartExportToastVisible"
+      :message="chartExportToastMessage"
+      :type="chartExportToastType"
+      @close="chartExportToastVisible = false"
+    />
   </div>
 </template>
 

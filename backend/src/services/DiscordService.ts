@@ -153,6 +153,42 @@ export class DiscordService {
   }
 
   /**
+   * Send embed with custom color (e.g. gold for new fields).
+   */
+  async sendCustomEmbed(payload: {
+    title: string
+    description: string
+    color: number
+    fields?: Array<{ name: string; value: string; inline?: boolean }>
+  }): Promise<Result<void, AppError>> {
+    if (!this.webhookUrl) {
+      console.warn('[DiscordService] No DISCORD_WEBHOOK_URL — notification skipped:', payload.title)
+      return Result.ok(undefined)
+    }
+
+    try {
+      const embed: DiscordWebhookPayload['embeds'] = [
+        {
+          title: payload.title,
+          description: payload.description.substring(0, 4096),
+          color: payload.color,
+          timestamp: new Date().toISOString(),
+          fields: payload.fields ?? [],
+          footer: { text: 'Lelanation Backend' },
+        },
+      ]
+
+      await postJson(this.webhookUrl, { embeds: embed }, { timeoutMs: 10_000 })
+      return Result.ok(undefined)
+    } catch (error) {
+      console.error('[DiscordService] Failed to send custom embed:', error)
+      return Result.err(
+        new AppError('Failed to send Discord notification', 'DISCORD_ERROR', error),
+      )
+    }
+  }
+
+  /**
    * Send success notification (optional, for important operations)
    */
   async sendSuccess(

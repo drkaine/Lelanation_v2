@@ -102,18 +102,14 @@ const ROW_TO_SUM_METRIC: Record<string, string> = {
   damage_dealt_to_epic_monsters: "sum_damage_dealt_to_epic_monsters",
   all_in_pings: "sum_all_in_pings",
   assist_me_pings: "sum_assist_me_pings",
-  basic_pings: "sum_basic_pings",
   command_pings: "sum_command_pings",
-  danger_pings: "sum_danger_pings",
   get_back_pings: "sum_get_back_pings",
   enemy_missing_pings: "sum_enemy_missing_pings",
   enemy_vision_pings: "sum_enemy_vision_pings",
-  hold_pings: "sum_hold_pings",
   need_vision_pings: "sum_need_vision_pings",
   on_my_way_pings: "sum_on_my_way_pings",
   push_pings: "sum_push_pings",
   retreat_pings: "sum_retreat_pings",
-  vision_cleared_pings: "sum_vision_cleared_pings",
   vision_score: "sum_vision_score",
 };
 
