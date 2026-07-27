@@ -387,8 +387,9 @@ export const useYouTubeStore = defineStore('youtube', {
           syncedChannels: Number(data.syncedChannels) || 0,
           totalVideos: Number(data.totalVideos) || 0,
         }
+        this.clearChannelCache()
         await this.loadStatus()
-        // Keep existing channelData cache; user can refresh by hard reload / expand again
+        await this.loadAllChannelsData({ force: true })
       } catch (e) {
         this.error = e instanceof Error ? e.message : 'Failed to trigger YouTube sync'
       }

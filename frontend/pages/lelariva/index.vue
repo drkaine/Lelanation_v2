@@ -79,6 +79,21 @@
               Ajouter
             </button>
           </form>
+          <label
+            v-if="hiddenRowsCount > 0"
+            class="flex items-center gap-2 self-end pb-1.5 text-xs text-text/80"
+          >
+            <input v-model="showHiddenRows" type="checkbox" class="rounded border-primary/40" />
+            <span>Afficher les lignes cachées ({{ hiddenRowsCount }})</span>
+          </label>
+          <button
+            v-if="hiddenRowsCount > 0"
+            type="button"
+            class="self-end pb-1 text-xs text-text/70 underline hover:text-text"
+            @click="unhideAllRows"
+          >
+            Tout réafficher
+          </button>
         </div>
 
         <div class="ui-build-card-surface w-full min-w-0 overflow-x-auto rounded-xl">
@@ -95,6 +110,12 @@
                 <th class="px-2 py-2 font-semibold">Min</th>
                 <th class="px-2 py-2 font-semibold">Max</th>
                 <th
+                  class="w-10 px-1 py-2 font-semibold"
+                  title="Masquer la ligne (sauvegardé dans le navigateur)"
+                >
+                  <span class="sr-only">Masquer</span>
+                </th>
+                <th
                   v-for="col in registry.reviewColumns"
                   :key="'head-' + col"
                   class="px-2 py-2 font-semibold capitalize"
@@ -108,7 +129,7 @@
                 v-for="row in filteredRows"
                 :key="row.id"
                 class="registry-row border-b border-primary/15 hover:bg-primary/5"
-                :class="rowClass(row)"
+                :class="[rowClass(row), isRowHidden(row.id) ? 'registry-row--hidden' : '']"
               >
                 <td
                   class="sticky left-0 z-[1] px-2 py-1.5 font-medium capitalize"
@@ -144,6 +165,26 @@
                 </td>
                 <td class="px-2 py-1.5 tabular-nums">{{ formatNum(row.dbMin) }}</td>
                 <td class="px-2 py-1.5 tabular-nums">{{ formatNum(row.dbMax) }}</td>
+                <td class="px-1 py-1 text-center">
+                  <button
+                    v-if="!isRowHidden(row.id)"
+                    type="button"
+                    class="row-hide-btn"
+                    title="Masquer cette ligne"
+                    @click="hideRow(row.id)"
+                  >
+                    ×
+                  </button>
+                  <button
+                    v-else
+                    type="button"
+                    class="row-unhide-btn"
+                    title="Réafficher cette ligne"
+                    @click="unhideRow(row.id)"
+                  >
+                    ↩
+                  </button>
+                </td>
                 <td
                   v-for="col in registry.reviewColumns"
                   :key="row.id + '-' + col"
@@ -164,7 +205,12 @@
             </tbody>
           </table>
         </div>
-        <p class="text-xs text-text/50">{{ filteredRows.length }} lignes affichées</p>
+        <p class="text-xs text-text/50">
+          {{ filteredRows.length }} lignes affichées
+          <template v-if="hiddenRowsCount > 0 && !showHiddenRows">
+            · {{ hiddenRowsCount }} masquée(s) localement
+          </template>
+        </p>
       </template>
     </div>
   </div>
@@ -173,6 +219,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { apiUrl } from '~/utils/apiUrl'
+
+const HIDDEN_ROWS_STORAGE_KEY = 'lelariva.registry.hiddenRowIds'
 
 type ReviewValue = 'oui' | 'non' | 'unknown'
 type FieldChangeStatus = 'new' | 'obsoleted'
@@ -218,11 +266,17 @@ const changeFilter = ref<'new' | 'obsoleted' | ''>('')
 const newColumnName = ref('')
 const addingColumn = ref(false)
 const savingKey = ref('')
+const hiddenRowIds = ref<Set<string>>(new Set())
+const showHiddenRows = ref(false)
+
+const hiddenRowsCount = computed(() => hiddenRowIds.value.size)
 
 const filteredRows = computed(() => {
   const rows = registry.value?.rows ?? []
   const q = searchQuery.value.trim().toLowerCase()
   return rows.filter(row => {
+    const hidden = hiddenRowIds.value.has(row.id)
+    if (hidden && !showHiddenRows.value) return false
     if (sourceFilter.value && row.source !== sourceFilter.value) return false
     if (changeFilter.value && row.changeStatus !== changeFilter.value) return false
     if (!q) return true
@@ -233,6 +287,52 @@ const filteredRows = computed(() => {
     )
   })
 })
+
+function loadHiddenRows(): void {
+  if (!import.meta.client) return
+  try {
+    const raw = localStorage.getItem(HIDDEN_ROWS_STORAGE_KEY)
+    if (!raw) return
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) return
+    hiddenRowIds.value = new Set(
+      parsed.filter((id): id is string => typeof id === 'string' && id.length > 0)
+    )
+  } catch {
+    // ignore malformed localStorage
+  }
+}
+
+function saveHiddenRows(): void {
+  if (!import.meta.client) return
+  try {
+    localStorage.setItem(HIDDEN_ROWS_STORAGE_KEY, JSON.stringify([...hiddenRowIds.value]))
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+function isRowHidden(rowId: string): boolean {
+  return hiddenRowIds.value.has(rowId)
+}
+
+function hideRow(rowId: string): void {
+  hiddenRowIds.value = new Set([...hiddenRowIds.value, rowId])
+  saveHiddenRows()
+}
+
+function unhideRow(rowId: string): void {
+  const next = new Set(hiddenRowIds.value)
+  next.delete(rowId)
+  hiddenRowIds.value = next
+  saveHiddenRows()
+}
+
+function unhideAllRows(): void {
+  hiddenRowIds.value = new Set()
+  showHiddenRows.value = false
+  saveHiddenRows()
+}
 
 function rowClass(row: RegistryRow): string {
   if (row.changeStatus === 'obsoleted') return 'registry-row--obsoleted'
@@ -341,6 +441,7 @@ async function addColumn(): Promise<void> {
 }
 
 onMounted(() => {
+  loadHiddenRows()
   loadRegistry()
 })
 
@@ -447,5 +548,41 @@ useHead({
   border: 1px solid rgb(250 204 21 / 0.9);
   background: rgb(250 204 21 / 0.95);
   color: rgb(66 32 6 / 1);
+}
+
+.registry-row--hidden {
+  opacity: 0.55;
+}
+
+.row-hide-btn,
+.row-unhide-btn {
+  display: inline-flex;
+  height: 1.5rem;
+  width: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.25rem;
+  border: 1px solid rgb(var(--rgb-accent) / 0.35);
+  background: rgb(var(--rgb-background) / 0.35);
+  color: rgb(var(--rgb-text) / 0.65);
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.row-hide-btn:hover {
+  border-color: rgb(var(--rgb-error) / 0.6);
+  background: rgb(var(--rgb-error) / 0.15);
+  color: rgb(var(--rgb-text) / 1);
+}
+
+.row-unhide-btn:hover {
+  border-color: rgb(var(--rgb-info) / 0.6);
+  background: rgb(var(--rgb-info) / 0.15);
+  color: rgb(var(--rgb-text) / 1);
 }
 </style>

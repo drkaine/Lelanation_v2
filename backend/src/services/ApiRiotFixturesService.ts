@@ -9,6 +9,10 @@ import { riotFetch } from '../riot-gateway/http/undiciClient.js';
 import type { LeagueEntryDto, MatchDto, TimelineDto } from '../riot-gateway/routes/dto.js';
 import { PatchResolver } from '../poll-orchestration/PatchResolver.js';
 import { updateFieldRegistryFromFixtures } from './RiotApiFieldRegistryUpdateService.js';
+import {
+  checkRiotMatchIdsTypeParamOptions,
+  type CheckMatchIdsTypeParamResult,
+} from './RiotMatchIdsTypeParamMonitor.js';
 import { normalizeGamePatchKey } from './VersionService.js';
 
 const FIXTURES_DIR = join(process.cwd(), 'data', 'api-riot');
@@ -17,6 +21,7 @@ const PLATFORM = 'euw1';
 const REGIONAL_URL = 'https://europe.api.riotgames.com';
 const PLATFORM_URL = `https://${PLATFORM}.api.riotgames.com`;
 const RANKED_SOLO_QUEUE = 420;
+const MATCH_IDS_TYPE_RANKED = 'ranked';
 
 type FixturesRefreshState = {
   lastRefreshedPatch: string;
@@ -30,6 +35,7 @@ export type RefreshApiRiotFixturesResult = {
   patch?: string;
   matchId?: string;
   fieldDiff?: { added: number; removed: number };
+  typeParamCheck?: CheckMatchIdsTypeParamResult;
 };
 
 function sleep(ms: number): Promise<void> {
@@ -86,7 +92,7 @@ async function fetchMatchIdsForPuuid(
     `/lol/match/v5/matches/by-puuid/${encodeURIComponent(puuid)}/ids`,
     {
       queue: RANKED_SOLO_QUEUE,
-      type: 'ranked',
+      type: MATCH_IDS_TYPE_RANKED,
       start: 0,
       count: 20,
       startTime,
@@ -150,21 +156,33 @@ function resolvePatchStartTimestamp(patchLabel: string): number {
 /**
  * Télécharge et remplace les 4 fixtures si le patch (major.minor) n'a pas encore été traité.
  */
+async function runMatchIdsTypeParamCheck(): Promise<CheckMatchIdsTypeParamResult | undefined> {
+  try {
+    return await checkRiotMatchIdsTypeParamOptions({ notifyDiscord: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn('[ApiRiotFixtures] match ids type param check failed (non-blocking):', message);
+    return undefined;
+  }
+}
+
 export async function refreshApiRiotFixturesOnPatchChange(
   patchLabel: string,
 ): Promise<RefreshApiRiotFixturesResult> {
+  const typeParamCheck = await runMatchIdsTypeParamCheck();
+
   const patch = normalizeGamePatchKey(patchLabel);
   if (!patch) {
-    return { refreshed: false, reason: 'invalid_patch' };
+    return { refreshed: false, reason: 'invalid_patch', typeParamCheck };
   }
 
   if (!riotConfig.apiKey?.startsWith('RGAPI-')) {
-    return { refreshed: false, reason: 'missing_api_key', patch };
+    return { refreshed: false, reason: 'missing_api_key', patch, typeParamCheck };
   }
 
   const previous = await readRefreshState();
   if (previous?.lastRefreshedPatch === patch) {
-    return { refreshed: false, reason: 'already_refreshed_for_patch', patch };
+    return { refreshed: false, reason: 'already_refreshed_for_patch', patch, typeParamCheck };
   }
 
   const leagueEntries = await fetchLeagueExpPage();
@@ -206,7 +224,7 @@ export async function refreshApiRiotFixturesOnPatchChange(
       start: '0',
       startTime: String(startTime),
       endTime: String(endTime),
-      type: String(RANKED_SOLO_QUEUE),
+      type: MATCH_IDS_TYPE_RANKED,
       riotRegion: PLATFORM,
     },
     response: matchIds,
@@ -257,5 +275,5 @@ export async function refreshApiRiotFixturesOnPatchChange(
     console.warn('[ApiRiotFixtures] field registry update failed (non-blocking):', message);
   }
 
-  return { refreshed: true, patch, matchId, fieldDiff };
+  return { refreshed: true, patch, matchId, fieldDiff, typeParamCheck };
 }

@@ -46,6 +46,35 @@ export class StaticAssetsService {
     this.frontendPublicDir = frontendPublicDir
   }
 
+  private get frontendOutputPublicDir(): string {
+    return join(this.frontendPublicDir, '..', '.output', 'public')
+  }
+
+  /** Nitro sert les statiques depuis `.output/public` en prod — garder YouTube en sync sans rebuild. */
+  private async mirrorYouTubeJsonToNuxtOutput(sourceYouTubeDir: string): Promise<number> {
+    const outputRoot = this.frontendOutputPublicDir
+    if (!(await FileManager.exists(outputRoot))) {
+      return 0
+    }
+
+    const outputYouTubeDir = join(outputRoot, 'data', 'youtube')
+    const dirResult = await FileManager.ensureDir(outputYouTubeDir)
+    if (dirResult.isErr()) {
+      console.warn('[StaticAssets] Failed to ensure Nuxt output YouTube dir:', dirResult.unwrapErr())
+      return 0
+    }
+
+    let mirrored = 0
+    const entries = await fs.readdir(sourceYouTubeDir, { withFileTypes: true })
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith('.json')) continue
+      const content = await fs.readFile(join(sourceYouTubeDir, entry.name), 'utf-8')
+      await fs.writeFile(join(outputYouTubeDir, entry.name), content, 'utf-8')
+      mirrored++
+    }
+    return mirrored
+  }
+
   /**
    * Delete old version game data from frontend public directory
    * Keeps only the specified version to save disk space
@@ -815,6 +844,11 @@ export class StaticAssetsService {
         const content = await fs.readFile(configSource, 'utf-8')
         await fs.writeFile(configTarget, content, 'utf-8')
         copied++
+      }
+
+      const mirrored = await this.mirrorYouTubeJsonToNuxtOutput(targetYouTubeDir)
+      if (mirrored > 0) {
+        console.log(`[StaticAssets] Mirrored ${mirrored} YouTube JSON file(s) to Nuxt .output/public`)
       }
 
       return Result.ok({ copied })

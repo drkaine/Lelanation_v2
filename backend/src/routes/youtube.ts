@@ -5,6 +5,7 @@ import { YouTubeService } from '../services/YouTubeService.js'
 import { fetchYouTubeCommunityPosts } from '../services/youtubeCommunityPosts.js'
 import { retryWithBackoff } from '../utils/retry.js'
 import { DiscordService } from '../services/DiscordService.js'
+import { StaticAssetsService } from '../services/StaticAssetsService.js'
 
 type YouTubeChannelsConfig = {
   channels: Array<
@@ -336,7 +337,18 @@ router.post('/trigger', async (_req, res) => {
   }
 
   const data = syncResult.unwrap()
-  return res.json({ success: true, ...data })
+
+  const staticAssets = new StaticAssetsService()
+  const copyResult = await staticAssets.copyYouTubeAssetsToFrontend(false, false)
+  if (copyResult.isErr()) {
+    console.warn('[YouTube API] Sync OK but frontend copy failed:', copyResult.unwrapErr())
+  }
+
+  return res.json({
+    success: true,
+    ...data,
+    frontendCopied: copyResult.isOk() ? copyResult.unwrap().copied : 0,
+  })
 })
 
 export default router

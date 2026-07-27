@@ -92,11 +92,11 @@ async function main(): Promise<void> {
       const fixtureResult = await refreshApiRiotFixturesOnPatchChange(patchLabel)
       if (fixtureResult.refreshed) {
         console.log(
-          `[sync:data] API Riot fixtures refreshed patch=${fixtureResult.patch} matchId=${fixtureResult.matchId} fieldDiff=+${fixtureResult.fieldDiff?.added ?? 0}/-${fixtureResult.fieldDiff?.removed ?? 0}`,
+          `[sync:data] API Riot fixtures refreshed patch=${fixtureResult.patch} matchId=${fixtureResult.matchId} fieldDiff=+${fixtureResult.fieldDiff?.added ?? 0}/-${fixtureResult.fieldDiff?.removed ?? 0} typeOptions=${fixtureResult.typeParamCheck?.values.join(',') ?? 'n/a'}`,
         )
       } else {
         console.log(
-          `[sync:data] API Riot fixtures skipped patch=${fixtureResult.patch ?? patchLabel} reason=${fixtureResult.reason ?? 'unknown'}`,
+          `[sync:data] API Riot fixtures skipped patch=${fixtureResult.patch ?? patchLabel} reason=${fixtureResult.reason ?? 'unknown'} typeOptions=${fixtureResult.typeParamCheck?.values.join(',') ?? 'n/a'}`,
         )
       }
     } catch (fixtureError) {

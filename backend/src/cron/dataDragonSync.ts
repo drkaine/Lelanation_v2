@@ -164,11 +164,13 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
             patch: fixtureResult.patch,
             matchId: fixtureResult.matchId,
             fieldDiff: fixtureResult.fieldDiff,
+            typeParamAdded: fixtureResult.typeParamCheck?.added ?? [],
           })
         } else {
           await log.info('API Riot fixtures refresh skipped', {
             patch: fixtureResult.patch,
             reason: fixtureResult.reason,
+            typeParamValues: fixtureResult.typeParamCheck?.values ?? [],
           })
         }
       } catch (fixtureError) {

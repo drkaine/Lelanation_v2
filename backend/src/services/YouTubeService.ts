@@ -48,10 +48,15 @@ interface StoredYouTubeChannelData {
 export class YouTubeService {
   private readonly apiKey: string | null
   private readonly dataDir: string
+  private readonly frontendYouTubeDir: string
   private readonly baseUrl = 'https://www.googleapis.com/youtube/v3'
 
-  constructor(dataDir: string = join(process.cwd(), 'data', 'youtube')) {
+  constructor(
+    dataDir: string = join(process.cwd(), 'data', 'youtube'),
+    frontendYouTubeDir: string = join(process.cwd(), '..', 'frontend', 'public', 'data', 'youtube'),
+  ) {
     this.dataDir = dataDir
+    this.frontendYouTubeDir = frontendYouTubeDir
     this.apiKey = process.env.YOUTUBE_API_KEY || null
   }
 
@@ -396,13 +401,21 @@ export class YouTubeService {
   private async loadExistingChannelData(
     channelId: string
   ): Promise<Result<StoredYouTubeChannelData | null, AppError>> {
-    const filePath = join(this.dataDir, `${channelId}.json`)
-    const exists = await FileManager.exists(filePath)
-    if (!exists) return Result.ok(null)
+    const backendPath = join(this.dataDir, `${channelId}.json`)
+    const frontendPath = join(this.frontendYouTubeDir, `${channelId}.json`)
 
-    const result = await FileManager.readJson<StoredYouTubeChannelData>(filePath)
-    if (result.isErr()) return Result.err(result.unwrapErr())
-    return Result.ok(result.unwrap())
+    for (const filePath of [backendPath, frontendPath]) {
+      const exists = await FileManager.exists(filePath)
+      if (!exists) continue
+
+      const result = await FileManager.readJson<StoredYouTubeChannelData>(filePath)
+      if (result.isOk()) return Result.ok(result.unwrap())
+      if (result.unwrapErr().code !== 'FILE_NOT_FOUND') {
+        return Result.err(result.unwrapErr())
+      }
+    }
+
+    return Result.ok(null)
   }
 
   async saveChannelData(params: {
