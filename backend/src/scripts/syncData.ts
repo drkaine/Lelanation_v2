@@ -215,6 +215,10 @@ async function main(): Promise<void> {
   const theorycraftBuild = await theorycraftBuilder.build(ddSyncData.version)
   if (theorycraftBuild.isErr()) {
     console.warn('[sync:data] Theorycraft data build failed:', theorycraftBuild.unwrapErr())
+  } else if (theorycraftBuild.unwrap().validationIssues.length > 0) {
+    console.warn(
+      `[sync:data] Theorycraft data validation: ${theorycraftBuild.unwrap().validationIssues.length} problème(s) — voir logs [theorycraft]`
+    )
   }
   
   // Check if we should restart frontend (default: false, set RESTART_FRONTEND=true to enable)

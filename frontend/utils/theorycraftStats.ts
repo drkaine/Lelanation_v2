@@ -1,4 +1,5 @@
 import type { CalculatedStats, Champion, ChampionStats } from '@lelanation/shared-types'
+import { championGrowthMultiplier } from '@lelanation/builds-stats/championGrowth'
 import type { TheorycraftBuildStats } from '~/types/theorycraft'
 
 type TheorycraftChampionExport = Champion & {
@@ -98,7 +99,7 @@ function baseAdAtLevel(champion: Champion, level: number): number {
   const stats = resolveChampionStatsForBuild(champion)
   if (!stats) return 0
   const safe = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0)
-  const levelMultiplier = Math.max(0, level - 1)
+  const levelMultiplier = championGrowthMultiplier(level)
   return safe(stats.attackdamage) + safe(stats.attackdamageperlevel) * levelMultiplier
 }
 
@@ -106,7 +107,7 @@ export function baseHpAtLevel(champion: Champion, level: number): number {
   const stats = resolveChampionStatsForBuild(champion)
   if (!stats) return 0
   const safe = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0)
-  const levelMultiplier = Math.max(0, level - 1)
+  const levelMultiplier = championGrowthMultiplier(level)
   return safe(stats.hp) + safe(stats.hpperlevel) * levelMultiplier
 }
 

@@ -34,7 +34,11 @@ const baseStats: CalculatedStats = {
   goldPer10: 0,
 }
 
-const championsDir = join(process.cwd(), 'public/data/game/16.10.1/fr_FR/champions')
+const dataGameDir = join(process.cwd(), 'public/data/game')
+const { currentVersion } = JSON.parse(readFileSync(join(dataGameDir, 'version.json'), 'utf-8')) as {
+  currentVersion: string
+}
+const championsDir = join(dataGameDir, currentVersion, 'fr_FR/champions')
 
 describe('theorycraftSpellBuffs champion audit', () => {
   it('every activatable spell produces at least one stat bonus', () => {

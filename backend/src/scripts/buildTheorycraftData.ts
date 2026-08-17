@@ -24,8 +24,12 @@ async function main(): Promise<void> {
   }
   const out = buildRes.unwrap()
   console.log(
-    `[build-theorycraft-data] ok version=${currentVersion} champions=${out.champions}`
+    `[build-theorycraft-data] ok version=${currentVersion} champions=${out.champions}` +
+      ` validationIssues=${out.validationIssues.length} textWarnings=${out.textWarnings.length}`
   )
+  if (out.validationIssues.length > 0) {
+    process.exitCode = 1
+  }
 }
 
 main().catch((error) => {

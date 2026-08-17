@@ -6,6 +6,7 @@ export {
   getGoldPer10FromItem,
   type CalculateStatsOptions,
 } from "./statsCalculator";
+export { championGrowthMultiplier } from "./championGrowth";
 export {
   calculateGoldValue,
   calculateGoldEfficiency,

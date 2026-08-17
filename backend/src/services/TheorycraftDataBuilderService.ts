@@ -125,6 +125,21 @@ function resolveBinStat(rawStat: unknown, fallback: string = 'AP'): string {
   return BIN_STAT_MAP[statId] ?? fallback
 }
 
+/**
+ * Bin mStatFormula : 0/absent = total, 1 = base, 2 = bonus.
+ * Ex. Aatrox Q/W : mStat 2 sans mStatFormula → AD total (confirmé wiki).
+ */
+function applyBinStatFormula(stat: string, part: Record<string, unknown>): string {
+  const formula = Number(part.mStatFormula ?? 0)
+  if (formula === 2) {
+    if (stat === 'totalAD') return 'bonusAD'
+    if (stat === 'armor') return 'bonusArmor'
+    if (stat === 'magicResist') return 'bonusMagicResist'
+    if (stat === 'totalHP') return 'bonusHP'
+  }
+  return stat
+}
+
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
 }
@@ -280,6 +295,238 @@ function inferSpellSlotIndex(ddSpell: ChampionSpell): number {
   return 0
 }
 
+/** Stats du CharacterRecord bin CDragon, normalisées à la convention DDragon. */
+interface BinCharacterStats {
+  hp?: number
+  hpPerLevel?: number
+  hpRegen?: number
+  hpRegenPerLevel?: number
+  armor?: number
+  armorPerLevel?: number
+  magicResist?: number
+  magicResistPerLevel?: number
+  attackDamage?: number
+  attackDamagePerLevel?: number
+  attackSpeed?: number
+  attackSpeedPerLevel?: number
+  movespeed?: number
+  attackRange?: number
+}
+
+function binModifiableNumber(record: Record<string, unknown>, key: string): number | undefined {
+  const raw = record[key]
+  const value =
+    raw != null && typeof raw === 'object' ? Number(asObject(raw).baseValue ?? NaN) : Number(raw ?? NaN)
+  return Number.isFinite(value) ? value : undefined
+}
+
+/**
+ * Source de vérité croisée : DDragon publie parfois des stats cassées (ex.
+ * attackdamageperlevel=0 pour tous les champions depuis que Riot a déplacé la
+ * croissance d'AD dans les fichiers du jeu). Le CharacterRecord du bin CDragon
+ * contient les valeurs réelles du jeu.
+ */
+function binCharacterStats(championBin: ChampionBinJson | null): BinCharacterStats {
+  if (!championBin) return {}
+  const records: Array<{ key: string; record: Record<string, unknown> }> = []
+  for (const [key, raw] of Object.entries(championBin)) {
+    const record = asObject(raw)
+    if (String(record.__type ?? '') !== 'CharacterRecord') continue
+    records.push({ key: key.toLowerCase(), record })
+  }
+  if (records.length === 0) return {}
+  // Un bin peut contenir plusieurs CharacterRecords (pets…) : préférer Root.
+  const root = records.find((r) => r.key.endsWith('/characterrecords/root')) ?? records[0]!
+  const rec = root.record
+  const perFiveSeconds = (value: number | undefined) => (value == null ? undefined : value * 5)
+  return {
+    hp: binModifiableNumber(rec, 'baseHPModifiable'),
+    hpPerLevel: binModifiableNumber(rec, 'hpPerLevelModifiable'),
+    // Régén bin en PV/s, DDragon en PV/5 s.
+    hpRegen: perFiveSeconds(binModifiableNumber(rec, 'baseStaticHPRegenModifiable')),
+    hpRegenPerLevel: perFiveSeconds(binModifiableNumber(rec, 'hpRegenPerLevelModifiable')),
+    armor: binModifiableNumber(rec, 'baseArmorModifiable'),
+    armorPerLevel: binModifiableNumber(rec, 'armorPerLevelModifiable'),
+    magicResist: binModifiableNumber(rec, 'baseMR') ?? binModifiableNumber(rec, 'baseSpellBlockModifiable'),
+    magicResistPerLevel: binModifiableNumber(rec, 'mrPerLevel'),
+    attackDamage: binModifiableNumber(rec, 'baseDamageModifiable'),
+    attackDamagePerLevel:
+      binModifiableNumber(rec, 'damagePerLevelModifiable') ?? binModifiableNumber(rec, 'damagePerLevel'),
+    attackSpeed: binModifiableNumber(rec, 'attackSpeedModifiable'),
+    attackSpeedPerLevel: binModifiableNumber(rec, 'attackSpeedPerLevelModifiable'),
+    movespeed: binModifiableNumber(rec, 'baseMoveSpeedModifiable'),
+    attackRange: binModifiableNumber(rec, 'attackRangeModifiable'),
+  }
+}
+
+const STAT_CROSSCHECK_TOLERANCE = 0.011
+
+/** Champions sans croissance d'AD par design (l'AD vient de leur passif). */
+const ZERO_AD_GROWTH_WHITELIST = new Set(['Senna'])
+
+const VALID_RATIO_STATS = new Set([
+  ...Object.values(BIN_STAT_MAP),
+  'AP',
+  'maxMana',
+  'maxHealth',
+])
+
+const NUMBER_SERIES_RE = /(?:\d+(?:\.\d+)?\s*\/\s*){2,}\d+(?:\.\d+)?/g
+
+/**
+ * Détecte les anomalies de rendu dans un texte de description : « %% » et
+ * séries fractionnaires affichées brutes (0.1 / 0.18 / …) sans « % » — le
+ * symptôme d'un mDisplayAsPercent non appliqué (ex. bug Kalista E corrigé).
+ * Les durées en secondes et les séries suivies de % sont légitimes.
+ */
+function auditDescriptionText(text: string): string[] {
+  const issues: string[] = []
+  if (text.includes('%%')) issues.push('double %')
+  for (const match of text.matchAll(NUMBER_SERIES_RE)) {
+    const values = (match[0].match(/\d+(?:\.\d+)?/g) ?? []).map(Number)
+    const fractionCount = values.filter((v) => v < 1).length
+    if (fractionCount < 2 || values.some((v) => v >= 3)) continue
+    const tail = text.slice((match.index ?? 0) + match[0].length, (match.index ?? 0) + match[0].length + 8)
+    if (/^\s*%/.test(tail) || /^\s*(?:sec|s\b)/.test(tail)) continue
+    issues.push(`fraction sans %: ${match[0].slice(0, 30)}`)
+  }
+  return issues
+}
+
+/**
+ * Séries fractionnaires légitimes vérifiées contre le wiki (valeurs plates,
+ * pas des pourcentages) : Sett P régénère 0.15–2 PV par 5 % de PV manquants,
+ * Tryndamere Q rend 0.5–2.3 PV par point de Fureur.
+ */
+const LEGITIMATE_FRACTION_SERIES = new Set([
+  'Sett|P|descriptionText',
+  'Tryndamere|Q|detailedText',
+])
+
+/** Anomalies de rendu des descriptions (warnings, ne bloquent pas le build). */
+function auditChampionDescriptions(champion: Record<string, unknown>): string[] {
+  const warnings: string[] = []
+  const championId = String(champion.id ?? '?')
+  const scopes: Array<{ label: string; scope: Record<string, unknown> }> = [
+    { label: 'P', scope: asObject(champion.passive) },
+    ...(Array.isArray(champion.spells)
+      ? (champion.spells as Array<Record<string, unknown>>).map((spell) => ({
+          label: String(spell.slot ?? '?'),
+          scope: spell,
+        }))
+      : []),
+  ]
+  for (const { label, scope } of scopes) {
+    for (const field of ['descriptionText', 'detailedText'] as const) {
+      const legitimateFractions = LEGITIMATE_FRACTION_SERIES.has(`${championId}|${label}|${field}`)
+      const seen = new Set<string>()
+      for (const issue of auditDescriptionText(String(scope[field] ?? ''))) {
+        if (legitimateFractions && issue.startsWith('fraction sans %')) continue
+        if (seen.has(issue)) continue
+        seen.add(issue)
+        warnings.push(`${label} ${field}: ${issue}`)
+      }
+    }
+  }
+  return warnings
+}
+
+/**
+ * Invariants de santé des exports (bornes du jeu avec marge, tokens résolus,
+ * ratios valides). Exécutés à chaque génération — donc à chaque nouvelle
+ * version — pour détecter une corruption de source (ex. le bug DDragon
+ * attackdamageperlevel=0) avant qu'elle n'atteigne le theorycraft.
+ */
+function validateExportedChampion(champion: Record<string, unknown>): string[] {
+  const issues: string[] = []
+  const id = String(champion.id ?? '?')
+  const base = asObject(champion.baseStats)
+  const growth = asObject(champion.growthStats)
+  const inRange = (value: unknown, min: number, max: number) => {
+    const n = Number(value)
+    return Number.isFinite(n) && n >= min && n <= max
+  }
+
+  const baseChecks: Array<[string, number, number]> = [
+    ['hp', 300, 900],
+    ['armor', 10, 60],
+    ['magicResist', 15, 50],
+    ['attackDamage', 35, 90],
+    ['attackSpeed', 0.4, 1.0],
+    ['attackRange', 100, 700],
+    ['movespeed', 300, 400],
+  ]
+  for (const [field, min, max] of baseChecks) {
+    if (!inRange(base[field], min, max)) issues.push(`baseStats.${field}=${base[field]}`)
+  }
+
+  const adGrowthMin = ZERO_AD_GROWTH_WHITELIST.has(id) ? 0 : 0.5
+  const growthChecks: Array<[string, number, number]> = [
+    ['hp', 50, 160],
+    ['armor', 0, 8],
+    ['magicResist', 0, 4],
+    ['attackDamage', adGrowthMin, 8],
+    ['attackSpeed', 0, 10],
+  ]
+  for (const [field, min, max] of growthChecks) {
+    if (!inRange(growth[field], min, max)) issues.push(`growthStats.${field}=${growth[field]}`)
+  }
+
+  const spells = Array.isArray(champion.spells) ? (champion.spells as Array<Record<string, unknown>>) : []
+  const slots = spells.map((s) => String(s.slot ?? ''))
+  if (slots.join(',') !== 'Q,W,E,R') issues.push(`spells slots=${slots.join(',')}`)
+  for (const spell of spells) {
+    const slot = String(spell.slot ?? '?')
+    const text = String(spell.descriptionText ?? '')
+    if (!text.trim()) issues.push(`${slot}: description vide`)
+    if (text.includes('{{')) issues.push(`${slot}: token non résolu`)
+    const calculations = Array.isArray(spell.calculations)
+      ? (spell.calculations as Array<Record<string, unknown>>)
+      : []
+    for (const calc of calculations) {
+      const key = String(calc.key ?? '?')
+      const baseValues = Array.isArray(calc.baseValues) ? (calc.baseValues as unknown[]) : []
+      if (baseValues.some((v) => !Number.isFinite(Number(v)))) {
+        issues.push(`${slot} ${key}: baseValue non fini`)
+      }
+      const ratios = Array.isArray(calc.ratios) ? (calc.ratios as Array<Record<string, unknown>>) : []
+      for (const ratio of ratios) {
+        const stat = String(ratio.stat ?? '')
+        if (!VALID_RATIO_STATS.has(stat)) issues.push(`${slot} ${key}: stat inconnue "${stat}"`)
+        const coefficient = Array.isArray(ratio.coefficient) ? (ratio.coefficient as unknown[]) : []
+        if (coefficient.length === 0 || coefficient.some((c) => !Number.isFinite(Number(c)))) {
+          issues.push(`${slot} ${key}: coefficient invalide`)
+        }
+      }
+    }
+  }
+  const passiveText = String(asObject(champion.passive).descriptionText ?? '')
+  if (passiveText.includes('{{')) issues.push(`P: token non résolu`)
+  return issues
+}
+
+/**
+ * DDragon fait foi (versionné), sauf 0 manifestement cassé alors que le jeu
+ * (bin) a une valeur non nulle → on prend le bin. Tout autre écart est signalé
+ * (dérive de patch bin "latest" vs DDragon versionné, ou bug de source).
+ */
+function crossCheckedStat(
+  ddValue: number,
+  binValue: number | undefined,
+  field: string,
+  mismatches: string[]
+): number {
+  if (binValue == null) return ddValue
+  if (ddValue === 0 && binValue !== 0) {
+    mismatches.push(`${field}: ddragon=0 corrigé via bin=${binValue}`)
+    return binValue
+  }
+  if (Math.abs(ddValue - binValue) > STAT_CROSSCHECK_TOLERANCE) {
+    mismatches.push(`${field}: ddragon=${ddValue} ≠ bin=${binValue} (ddragon conservé)`)
+  }
+  return ddValue
+}
+
 function championLevelForAbilityRank(slotIndex: number, rank: number): number {
   const levels = ABILITY_RANK_CHAMPION_LEVELS[slotIndex] ?? ABILITY_RANK_CHAMPION_LEVELS[0]
   return levels[Math.min(Math.max(rank - 1, 0), levels.length - 1)] ?? rank
@@ -393,18 +640,33 @@ function renderByCharLevelBreakpointsSeries(
   options: BinCalculationBuildOptions
 ): { values: number[]; text: string } {
   const maxRank = Math.max(1, Number(options.maxRank ?? 5))
-  const precision = Number(options.precision ?? 2)
-  const displayAsPercent = Boolean(options.displayAsPercent)
-  const values: number[] = []
+  const raw: number[] = []
   for (let rank = 1; rank <= maxRank; rank += 1) {
     const level = championLevelForCalculationRank(options, rank)
-    let value = valueAtCharLevelFromBreakpoints(part, level)
-    if (displayAsPercent) value *= 100
-    if (Number.isFinite(precision) && precision >= 0) {
-      value = Number(value.toFixed(precision))
-    }
-    values.push(value)
+    raw.push(valueAtCharLevelFromBreakpoints(part, level))
   }
+  return finalizePercentSeries(raw, options)
+}
+
+/**
+ * Ne multiplie par 100 que si toutes les valeurs sont fractionnaires (< 1) :
+ * certains calculs marqués « percent » stockent déjà la valeur en pourcentage
+ * (ex. Vladimir Q : 10 → « 10 % », pas « 1000 % »).
+ */
+function finalizePercentSeries(
+  raw: number[],
+  options: BinCalculationBuildOptions
+): { values: number[]; text: string } {
+  const precision = Number(options.precision ?? 2)
+  const displayAsPercent = Boolean(options.displayAsPercent)
+  const needsScale = displayAsPercent && raw.length > 0 && raw.every((v) => Math.abs(v) < 1)
+  const values = raw.map((value) => {
+    let out = needsScale ? value * 100 : value
+    if (Number.isFinite(precision) && precision >= 0) {
+      out = Number(out.toFixed(precision))
+    }
+    return out
+  })
   const series = formatValueSeries(values, ' / ')
   return { values, text: displayAsPercent && series ? `${series}%` : series }
 }
@@ -414,21 +676,13 @@ function renderByCharLevelFormulaSeries(
   options: BinCalculationBuildOptions
 ): { values: number[]; text: string } {
   const maxRank = Math.max(1, Number(options.maxRank ?? 5))
-  const precision = Number(options.precision ?? 2)
-  const displayAsPercent = Boolean(options.displayAsPercent)
   const allValues = trimByMaxRank(parseNumberArray(part.values), MAX_CHAMPION_LEVEL)
-  const values: number[] = []
+  const raw: number[] = []
   for (let rank = 1; rank <= maxRank; rank += 1) {
     const level = championLevelForCalculationRank(options, rank)
-    let value = allValues[Math.min(Math.max(level - 1, 0), allValues.length - 1)] ?? 0
-    if (displayAsPercent) value *= 100
-    if (Number.isFinite(precision) && precision >= 0) {
-      value = Number(value.toFixed(precision))
-    }
-    values.push(value)
+    raw.push(allValues[Math.min(Math.max(level - 1, 0), allValues.length - 1)] ?? 0)
   }
-  const series = formatValueSeries(values, ' / ')
-  return { values, text: displayAsPercent && series ? `${series}%` : series }
+  return finalizePercentSeries(raw, options)
 }
 
 function formatCalculationValuesAsText(
@@ -507,20 +761,12 @@ function renderByCharLevelInterpolationSeries(
   const maxRank = Math.max(1, Number(options.maxRank ?? 5))
   const start = Number(part.mStartValue ?? 0)
   const end = Number(part.mEndValue ?? 0)
-  const precision = Number(options.precision ?? 2)
-  const displayAsPercent = Boolean(options.displayAsPercent)
-  const values: number[] = []
+  const raw: number[] = []
   for (let rank = 1; rank <= maxRank; rank += 1) {
     const level = championLevelForCalculationRank(options, rank)
-    let value = interpolateByCharLevel(start, end, level)
-    if (displayAsPercent) value *= 100
-    if (Number.isFinite(precision) && precision >= 0) {
-      value = Number(value.toFixed(precision))
-    }
-    values.push(value)
+    raw.push(interpolateByCharLevel(start, end, level))
   }
-  const series = formatValueSeries(values, ' / ')
-  return { values, text: displayAsPercent && series ? `${series}%` : series }
+  return finalizePercentSeries(raw, options)
 }
 
 function multiplyValueSeries(series: number[][]): number[] {
@@ -727,14 +973,14 @@ function extractRatioFromCalculationPart(
     const subpart = asObject(part.mSubpart)
     const values = evaluateCalculationPartValues(subpart, dataValues, options ?? {})
     if (values.length === 0) return null
-    const stat = resolveBinStat(part.mStat, 'totalAD')
+    const stat = applyBinStatFormula(resolveBinStat(part.mStat, 'totalAD'), part)
     return { stat, coefficient: values, type: ratioTypeForStat(stat) }
   }
   if (partType === 'StatByCoefficientCalculationPart') {
     const coeffRaw = Number(part.mCoefficient ?? 0)
     if (!Number.isFinite(coeffRaw) || coeffRaw === 0) return null
     const coeff = Number(formatResolvedNumber(coeffRaw))
-    const stat = resolveBinStat(part.mStat, 'AP')
+    const stat = applyBinStatFormula(resolveBinStat(part.mStat, 'AP'), part)
     return { stat, coefficient: [coeff], type: ratioTypeForStat(stat) }
   }
   if (partType === 'StatByNamedDataValueCalculationPart') {
@@ -751,12 +997,16 @@ function extractRatioFromCalculationPart(
     ) {
       return null
     }
-    let stat = resolveBinStat(part.mStat, 'AP')
+    let stat = applyBinStatFormula(resolveBinStat(part.mStat, 'AP'), part)
     if (dataValueName.includes('armor')) stat = 'bonusArmor'
     else if (dataValueName.includes('mr') || dataValueName.includes('magicresist')) stat = 'bonusMagicResist'
     else if (dataValueName.includes('health') || dataValueName.includes('hp')) stat = 'bonusHP'
-    else if (dataValueName.includes('ad') || dataValueName.includes('attackdamage')) stat = 'bonusAD'
-    else if (dataValueName.includes('ap') || dataValueName.includes('spelldamage')) stat = 'AP'
+    else if (dataValueName.includes('ad') || dataValueName.includes('attackdamage')) {
+      // total vs bonus : priorité au nom explicite, sinon à mStatFormula (2 = bonus).
+      if (dataValueName.includes('bonusad')) stat = 'bonusAD'
+      else if (dataValueName.includes('totalad')) stat = 'totalAD'
+      else if (stat !== 'totalAD' && stat !== 'bonusAD') stat = 'bonusAD'
+    } else if (dataValueName.includes('ap') || dataValueName.includes('spelldamage')) stat = 'AP'
     const type: 'physical' | 'magic' | 'true' = dataValueName.includes('ad') ? 'physical' : 'magic'
     return { stat, coefficient: values, type }
   }
@@ -792,7 +1042,10 @@ function buildBinCalculationExpression(
       const values = firstValuesFromDataValues(dataValues, String(part.mDataValue ?? ''))
       if (values && values.length > 0) {
         baseValues = values
-        baseParts.push(formatValueSeries(values, ' / '))
+        // Respecter mDisplayAsPercent (ex. Kalista E : slow 0.1→10 %).
+        baseParts.push(
+          formatCalculationValuesAsText(values, options ?? {}) || formatValueSeries(values, ' / ')
+        )
         numericBaseSeries.push(values)
       }
       continue
@@ -891,9 +1144,21 @@ function buildBinCalculationExpression(
           lower.includes('manaincrease') ||
           (lower.includes('percent') && !lower.includes('ad') && !lower.includes('ap')))
       ) {
-        baseValues = values
-        baseParts.push(formatValueSeries(values, ' / '))
-        numericBaseSeries.push(values)
+        if (values.every((v) => Math.abs(v) <= 1)) {
+          // Coefficient fractionnaire d'une stat (ex. Taric W : 0.06 × armure,
+          // Briar W : 0.6…1 × AD) : Riot l'affiche en pourcentage.
+          const scaled = values.map((v) => Number((v * 100).toFixed(2)))
+          const stat = resolveBinStat(part.mStat, 'AP')
+          const suffix =
+            isAdStatKey(stat) || isApStatKey(stat) ? ` ${ratioStatDisplayLabel(stat)}` : ''
+          baseValues = scaled
+          baseParts.push(`${formatValueSeries(scaled, ' / ')}%${suffix}`)
+          numericBaseSeries.push(scaled)
+        } else {
+          baseValues = values
+          baseParts.push(formatValueSeries(values, ' / '))
+          numericBaseSeries.push(values)
+        }
         continue
       }
     }
@@ -957,6 +1222,22 @@ function calculationUsesPercentDisplay(key: string, calculation: Record<string, 
   return /attackspeed|attack speed|msbuff|movementspeed|percentms|slowpercent|percenthp|percentmax|percent/.test(
     normalized
   )
+}
+
+/**
+ * GameCalculationModified n'a souvent pas son propre mDisplayAsPercent :
+ * il hérite du calcul référencé (ex. Yunara E Calc_Move_Speed_Enhanced).
+ */
+function calculationDisplaysAsPercent(
+  key: string,
+  calculation: Record<string, unknown>,
+  allCalculations: Record<string, unknown>
+): boolean {
+  if (calculationUsesPercentDisplay(key, calculation)) return true
+  const refKey = String(calculation.mModifiedGameCalculation ?? '')
+  if (!refKey) return false
+  const ref = findRawBinCalculation(allCalculations, refKey)
+  return calculationUsesPercentDisplay(refKey, ref)
 }
 
 function findRawBinCalculation(
@@ -1113,7 +1394,7 @@ function extractBinCalculations(
       maxRank: context?.maxRank,
       slotIndex: context?.slotIndex,
       isPassive: context?.isPassive,
-      displayAsPercent: calculationUsesPercentDisplay(key, calculation),
+      displayAsPercent: calculationDisplaysAsPercent(key, calculation, calculations),
       precision: Number(calculation.mPrecision ?? 2),
       binSpell: spellBin,
       ddSpell: context?.ddSpell,
@@ -1140,7 +1421,7 @@ function extractBinCalculations(
     out.push({
       key,
       ...built,
-      displayAsPercent: calculationUsesPercentDisplay(key, rawCalculation),
+      displayAsPercent: calculationDisplaysAsPercent(key, rawCalculation, calculations),
     })
   }
   return out
@@ -1478,6 +1759,21 @@ function buildSpellVariableMap(
     }
     if (rendered) {
       setVar(calculation.key, rendered)
+    } else if (calculation.displayAsPercent) {
+      // Calcul non rendu (part hashée, ex. K'Sante P PercentHealthDamage) mais
+      // une data value homonyme (locale ou partagée) fournit la série brute :
+      // reformater en %.
+      const compactKey = calcKeyLower.replace(/[^a-z0-9]/g, '')
+      const existing =
+        map.get(calcKeyLower) ??
+        map.get(compactKey) ??
+        sharedVars?.get(calcKeyLower) ??
+        sharedVars?.get(compactKey)
+      const numbers = existing ? parseNumberSeries(existing) : []
+      if (numbers.length > 0 && numbers.every((v) => Math.abs(v) < 1)) {
+        const scaled = numbers.map((v) => Number((v * 100).toFixed(2)))
+        setVar(calculation.key, `${formatValueSeries(scaled, ' / ')}%`)
+      }
     }
   })
   applySplitDamageComponentAliases(setVar, calculations, binDataValues)
@@ -1723,6 +2019,8 @@ function cleanupTooltipArtifacts(html: string): string {
   )
   out = out.replace(/<span class="[^"]*">\s*-\s*<\/span>/g, '')
   out = out.replace(/\}\}(?=\s*(?:<|$))/g, '')
+  // « %% » n'est jamais légitime : valeur résolue avec % + % littéral du template.
+  out = out.replace(/%{2,}/g, '%')
   out = out.replace(/\s{2,}/g, ' ')
   return out.trim()
 }
@@ -2603,23 +2901,31 @@ function parseTooltip(
 
   let parsed = normalizedRaw.replace(/<\s*br\s*\/?>/gi, '___TOOLTIP_BR___')
 
-  parsed = parsed.replace(/\{\{\s*([^}]+)\s*\}\}/g, (_match, expression: string) => {
-    const resolved = resolveExpression(String(expression))
-    if (resolved == null) {
-      const exp = expression.trim()
-      unresolved.add(exp)
-      if (exp.toLowerCase().includes('spellmodifier') || exp.toLowerCase().includes('append')) {
+  parsed = parsed.replace(
+    /\{\{\s*([^}]+)\s*\}\}/g,
+    (_match, expression: string, offset: number, full: string) => {
+      const resolved = resolveExpression(String(expression))
+      if (resolved == null) {
+        const exp = expression.trim()
+        unresolved.add(exp)
+        if (exp.toLowerCase().includes('spellmodifier') || exp.toLowerCase().includes('append')) {
+          return ''
+        }
+        if (exp.toLowerCase().includes('displayname')) {
+          const display = lookupVar(exp)
+          if (display != null) return display
+        }
+        if (exp.includes('{{') || exp.includes('}}')) return ''
         return ''
       }
-      if (exp.toLowerCase().includes('displayname')) {
-        const display = lookupVar(exp)
-        if (display != null) return display
+      // Le template Riot contient souvent déjà un % littéral après le token
+      // (ex. « {{ movementspeedonq2 }}% ») : éviter le double %.
+      if (resolved.endsWith('%') && full.charAt(offset + _match.length) === '%') {
+        return resolved.slice(0, -1)
       }
-      if (exp.includes('{{') || exp.includes('}}')) return ''
-      return ''
+      return resolved
     }
-    return resolved
-  })
+  )
 
   parsed = parsed.replace(/<\s*([a-zA-Z0-9_]+)\s*>/g, (_match, rawTag: string) => {
     const tag = rawTag.toLowerCase()
@@ -4025,6 +4331,37 @@ export class TheorycraftDataBuilderService {
       }),
     ].filter((entry): entry is ExportedStackDefinition => entry != null)
 
+    // Vérification croisée DDragon ↔ bin CDragon (jeu réel) à chaque génération.
+    const binStats = binCharacterStats(championBin)
+    const statMismatches: string[] = []
+    const checked = (dd: unknown, bin: number | undefined, field: string) =>
+      crossCheckedStat(Number(dd ?? 0), bin, field, statMismatches)
+    const baseStatsChecked = {
+      hp: checked(stats.hp, binStats.hp, 'hp'),
+      hpRegen: checked(stats.hpregen, binStats.hpRegen, 'hpRegen'),
+      mp: Number(stats.mp ?? 0),
+      mpRegen: Number(stats.mpregen ?? 0),
+      armor: checked(stats.armor, binStats.armor, 'armor'),
+      magicResist: checked(stats.spellblock, binStats.magicResist, 'magicResist'),
+      attackDamage: checked(stats.attackdamage, binStats.attackDamage, 'attackDamage'),
+      attackSpeed: checked(stats.attackspeed, binStats.attackSpeed, 'attackSpeed'),
+      attackRange: checked(stats.attackrange, binStats.attackRange, 'attackRange'),
+      movespeed: checked(stats.movespeed, binStats.movespeed, 'movespeed'),
+    }
+    const growthStatsChecked = {
+      hp: checked(stats.hpperlevel, binStats.hpPerLevel, 'hp/lvl'),
+      hpRegen: checked(stats.hpregenperlevel, binStats.hpRegenPerLevel, 'hpRegen/lvl'),
+      mp: Number(stats.mpperlevel ?? 0),
+      mpRegen: Number(stats.mpregenperlevel ?? 0),
+      armor: checked(stats.armorperlevel, binStats.armorPerLevel, 'armor/lvl'),
+      magicResist: checked(stats.spellblockperlevel, binStats.magicResistPerLevel, 'magicResist/lvl'),
+      attackDamage: checked(stats.attackdamageperlevel, binStats.attackDamagePerLevel, 'attackDamage/lvl'),
+      attackSpeed: checked(stats.attackspeedperlevel, binStats.attackSpeedPerLevel, 'attackSpeed/lvl'),
+    }
+    if (statMismatches.length > 0) {
+      console.warn(`[theorycraft] stats ${championId} (${lang}): ${statMismatches.join(' | ')}`)
+    }
+
     return {
       id: String(champion.id ?? ''),
       key: Number(champion.key ?? 0),
@@ -4034,35 +4371,19 @@ export class TheorycraftDataBuilderService {
       image: {
         full: String(championImage.full ?? `${championId}.png`),
       },
-      baseStats: {
-        hp: Number(stats.hp ?? 0),
-        hpRegen: Number(stats.hpregen ?? 0),
-        mp: Number(stats.mp ?? 0),
-        mpRegen: Number(stats.mpregen ?? 0),
-        armor: Number(stats.armor ?? 0),
-        magicResist: Number(stats.spellblock ?? 0),
-        attackDamage: Number(stats.attackdamage ?? 0),
-        attackSpeed: Number(stats.attackspeed ?? 0),
-        attackRange: Number(stats.attackrange ?? 0),
-        movespeed: Number(stats.movespeed ?? 0),
-      },
-      growthStats: {
-        hp: Number(stats.hpperlevel ?? 0),
-        hpRegen: Number(stats.hpregenperlevel ?? 0),
-        mp: Number(stats.mpperlevel ?? 0),
-        mpRegen: Number(stats.mpregenperlevel ?? 0),
-        armor: Number(stats.armorperlevel ?? 0),
-        magicResist: Number(stats.spellblockperlevel ?? 0),
-        attackDamage: Number(stats.attackdamageperlevel ?? 0),
-        attackSpeed: Number(stats.attackspeedperlevel ?? 0),
-      },
+      baseStats: baseStatsChecked,
+      growthStats: growthStatsChecked,
       passive,
       spells,
       stackDefinitions,
     }
   }
 
-  async build(version: string): Promise<Result<{ champions: number }, AppError>> {
+  async build(
+    version: string
+  ): Promise<
+    Result<{ champions: number; validationIssues: string[]; textWarnings: string[] }, AppError>
+  > {
     try {
       const generatedAt = new Date().toISOString()
       await FileManager.ensureDir(this.cdragonCacheDir)
@@ -4071,6 +4392,8 @@ export class TheorycraftDataBuilderService {
 
       const manifestEntries: Array<{ path: string; sha256: string; bytes: number }> = []
       let championsCount = 0
+      const validationIssues: string[] = []
+      const textWarnings: string[] = []
 
       for (const lang of SUPPORTED_LANGS) {
         const championFullRes = await this.readChampionFull(version, lang)
@@ -4103,17 +4426,26 @@ export class TheorycraftDataBuilderService {
           const champKey = Number(champion.key ?? 0)
           const cdChampion = cdragon.championsByKey.get(champKey) ?? null
           const championBin = cdragon.championBinsById.get(normalizeChampionBinId(String(champion.id ?? ''))) ?? null
+          const championDetail = this.buildChampionDetail({
+            champion,
+            cdChampion,
+            championBin,
+            stringTable: cdragon.stringTable,
+            lang,
+          })
+          validationIssues.push(
+            ...validateExportedChampion(championDetail).map((issue) => `${lang}/${id}: ${issue}`)
+          )
+          if (lang === 'fr_FR') {
+            textWarnings.push(
+              ...auditChampionDescriptions(championDetail).map((warning) => `${id}: ${warning}`)
+            )
+          }
           const championPayload = {
             schemaVersion: SCHEMA_VERSION,
             dataVersion: version,
             generatedAt,
-            champion: this.buildChampionDetail({
-              champion,
-              cdChampion,
-              championBin,
-              stringTable: cdragon.stringTable,
-              lang,
-            }),
+            champion: championDetail,
           }
           const target = join(langChampionsDir, `${id}.json`)
           liveChampionFiles.add(`${id}.json`)
@@ -4168,7 +4500,20 @@ export class TheorycraftDataBuilderService {
 
       await this.removeLegacyFrontendChampionExports(version)
 
-      return Result.ok({ champions: championsCount })
+      if (validationIssues.length > 0) {
+        console.warn(
+          `[theorycraft] validation: ${validationIssues.length} problème(s) détecté(s) sur ${version}:\n` +
+            validationIssues.map((issue) => `  - ${issue}`).join('\n')
+        )
+      }
+      if (textWarnings.length > 0) {
+        console.warn(
+          `[theorycraft] descriptions: ${textWarnings.length} anomalie(s) de rendu (non bloquant):\n` +
+            textWarnings.map((warning) => `  - ${warning}`).join('\n')
+        )
+      }
+
+      return Result.ok({ champions: championsCount, validationIssues, textWarnings })
     } catch (error) {
       return Result.err(new AppError('Failed to build theorycraft data', 'FILE_ERROR', error))
     }
@@ -4196,4 +4541,8 @@ export const theorycraftTooltipTestUtils = {
   championLevelForAbilityRank,
   buildExportedSpell,
   extractStackDefinition,
+  validateExportedChampion,
+  binCharacterStats,
+  crossCheckedStat,
+  auditDescriptionText,
 }

@@ -3,6 +3,7 @@
  * Shared by frontend and companion-app.
  */
 import { isBootsItem, isStarterItem } from "@lelanation/builds-ui";
+import { championGrowthMultiplier } from "./championGrowth";
 import type {
   Champion,
   ChampionStats,
@@ -181,7 +182,7 @@ function calculateChampionStatsAtLevel(
     return Number.isFinite(n) ? n : 0;
   };
   const stats = (baseStats ?? {}) as Partial<ChampionStats>;
-  const levelMultiplier = level - 1;
+  const levelMultiplier = championGrowthMultiplier(level);
   return {
     hp: safe(stats.hp) + safe(stats.hpperlevel) * levelMultiplier,
     hpperlevel: safe(stats.hpperlevel),

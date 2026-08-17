@@ -198,6 +198,12 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
     } else {
       const tc = theorycraftBuild.unwrap()
       await log.info('Theorycraft datasets built', { champions: tc.champions })
+      if (tc.validationIssues.length > 0) {
+        await log.warn('Theorycraft data validation issues detected', {
+          count: tc.validationIssues.length,
+          issues: tc.validationIssues.slice(0, 50),
+        })
+      }
     }
 
     // Step 5: Copy static assets to frontend

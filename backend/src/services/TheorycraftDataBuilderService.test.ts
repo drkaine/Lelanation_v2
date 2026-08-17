@@ -724,3 +724,232 @@ test('Darius passive bin spell is discovered from DariusHemoMarker script name',
   assert.ok(calculations.some((entry) => entry.key.toLowerCase() === 'bleeddamageperstack'))
   assert.ok(calculations.some((entry) => entry.key.toLowerCase() === 'noxianmightbonusad'))
 })
+
+function validChampionFixture(): Record<string, unknown> {
+  const spell = (slot: string) => ({
+    slot,
+    descriptionText: 'Inflige 10 / 25 / 40 pts de dégâts.',
+    calculations: [
+      {
+        key: 'damage',
+        baseValues: [10, 25, 40],
+        ratios: [{ stat: 'totalAD', coefficient: [0.6, 0.7, 0.8], type: 'physical' }],
+      },
+    ],
+  })
+  return {
+    id: 'Aatrox',
+    baseStats: {
+      hp: 650,
+      hpRegen: 3,
+      armor: 38,
+      magicResist: 32,
+      attackDamage: 60,
+      attackSpeed: 0.651,
+      attackRange: 175,
+      movespeed: 345,
+    },
+    growthStats: {
+      hp: 114,
+      hpRegen: 0.5,
+      armor: 4.8,
+      magicResist: 2.05,
+      attackDamage: 5,
+      attackSpeed: 2.5,
+    },
+    passive: { descriptionText: 'Passif résolu.' },
+    spells: [spell('Q'), spell('W'), spell('E'), spell('R')],
+  }
+}
+
+test('validateExportedChampion accepte un champion sain', () => {
+  const { validateExportedChampion } = theorycraftTooltipTestUtils
+  assert.deepEqual(validateExportedChampion(validChampionFixture()), [])
+})
+
+test('validateExportedChampion détecte les corruptions de données', () => {
+  const { validateExportedChampion } = theorycraftTooltipTestUtils
+
+  const zeroAd = validChampionFixture()
+  ;(zeroAd.growthStats as Record<string, number>).attackDamage = 0
+  assert.ok(validateExportedChampion(zeroAd).some((i) => i.includes('growthStats.attackDamage')))
+
+  // Senna est whitelistée : AD/lvl = 0 par design.
+  const senna = validChampionFixture()
+  senna.id = 'Senna'
+  ;(senna.growthStats as Record<string, number>).attackDamage = 0
+  assert.deepEqual(validateExportedChampion(senna), [])
+
+  const unresolvedToken = validChampionFixture()
+  ;(unresolvedToken.spells as Array<{ descriptionText: string }>)[0]!.descriptionText =
+    'Inflige {{ qdamage }} pts de dégâts.'
+  assert.ok(validateExportedChampion(unresolvedToken).some((i) => i.includes('token non résolu')))
+
+  const badRatio = validChampionFixture()
+  ;(badRatio.spells as Array<{ calculations: Array<{ ratios: Array<{ stat: string }> }> }>)[1]!
+    .calculations[0]!.ratios[0]!.stat = 'notAStat'
+  assert.ok(validateExportedChampion(badRatio).some((i) => i.includes('stat inconnue')))
+
+  const missingSlot = validChampionFixture()
+  ;(missingSlot.spells as unknown[]).pop()
+  assert.ok(validateExportedChampion(missingSlot).some((i) => i.includes('slots')))
+})
+
+test('binCharacterStats extrait les stats réelles du jeu depuis le bin Aatrox', () => {
+  const { binCharacterStats } = theorycraftTooltipTestUtils
+  const bin = JSON.parse(readFileSync('/tmp/aatrox.bin.json', 'utf-8')) as Record<
+    string,
+    Record<string, unknown>
+  >
+  const stats = binCharacterStats(bin)
+  assert.equal(stats.attackDamage, 60)
+  assert.equal(stats.attackDamagePerLevel, 5)
+  assert.equal(stats.hp, 650)
+  assert.equal(stats.hpPerLevel, 114)
+  // Régén convertie de PV/s (bin) vers PV/5 s (convention DDragon).
+  assert.ok(Math.abs((stats.hpRegen ?? 0) - 3) < 0.01)
+  assert.ok(Math.abs((stats.hpRegenPerLevel ?? 0) - 0.5) < 0.01)
+})
+
+test('auditDescriptionText détecte %% et fractions sans %, ignore durées et pourcentages', () => {
+  const { auditDescriptionText } = theorycraftTooltipTestUtils
+
+  // Cas Kalista E avant correctif : slow affiché en fraction brute.
+  assert.ok(
+    auditDescriptionText('les ralentissant de 0.1 / 0.18 / 0.26 / 0.34 / 0.42 pendant 2 sec').length > 0
+  )
+  assert.ok(auditDescriptionText('gagne 1000 / 2000%% de vitesse').length > 0)
+
+  // Légitimes : durées en secondes, séries suivies de %, valeurs entières.
+  assert.deepEqual(auditDescriptionText('étourdissant pendant 0.4/0.55/0.7 sec'), [])
+  assert.deepEqual(auditDescriptionText('régénère 0.4 / 0.6 / 0.95 / 1.4 / 2.1% de ses PV max'), [])
+  assert.deepEqual(auditDescriptionText('inflige 10 / 25 / 40 / 55 / 70 pts de dégâts'), [])
+})
+
+test('token suivi de % littéral : pas de %% ni de ×100 abusif (Vladimir Q)', () => {
+  const binSpell = {
+    mSpellCalculations: {
+      MovementSpeedOnQ2: {
+        __type: 'GameCalculation',
+        mFormulaParts: [
+          {
+            __type: 'ByCharLevelBreakpointsCalculationPart',
+            mLevel1Value: 10,
+            mBreakpoints: [
+              { mLevel: 6, mAdditionalBonusAtThisLevel: 10, __type: 'Breakpoint' },
+              { mLevel: 11, mAdditionalBonusAtThisLevel: 10, __type: 'Breakpoint' },
+              { mLevel: 16, mAdditionalBonusAtThisLevel: 10, __type: 'Breakpoint' },
+            ],
+          },
+        ],
+      },
+    },
+  }
+  const ddSpell = {
+    maxrank: 5,
+    id: 'VladimirQ',
+    tooltip:
+      'Vladimir gagne <speed>{{ movementspeedonq2 }}% de vitesse de déplacement</speed> pendant 0.5 sec.',
+    effect: [null],
+    vars: [],
+  }
+  const tooltip = parseTooltip(String(ddSpell.tooltip), ddSpell, { maxLevel: 5 }, binSpell)
+  // Valeurs déjà en pourcentage (10/20) : ni « %% », ni « 1000 % ».
+  assert.ok(!tooltip.descriptionText.includes('%%'))
+  assert.ok(!tooltip.descriptionText.includes('1000'))
+  assert.ok(/10[^%]*% de vitesse/.test(tooltip.descriptionText))
+})
+
+test('StatByNamedDataValue fractionnaire rendu en pourcentage (Taric W, Briar W)', () => {
+  const binSpell = {
+    DataValues: [
+      { name: 'ArmorBonusPercentage', values: [0.06, 0.07, 0.08, 0.09, 0.1] },
+      { name: 'AoEAttackDamagePercent', values: [0.6, 0.7, 0.8, 0.9, 1] },
+    ],
+    mSpellCalculations: {
+      BonusArmor: {
+        __type: 'GameCalculation',
+        mFormulaParts: [
+          {
+            __type: 'StatByNamedDataValueCalculationPart',
+            mStat: 1,
+            mDataValue: 'ArmorBonusPercentage',
+          },
+        ],
+      },
+      TotalAoEDamage: {
+        __type: 'GameCalculation',
+        mFormulaParts: [
+          {
+            __type: 'StatByNamedDataValueCalculationPart',
+            mStat: 2,
+            mDataValue: 'AoEAttackDamagePercent',
+          },
+        ],
+      },
+    },
+  }
+  const dataValues = extractBinDataValues(binSpell, 5)
+  const calculations = extractBinCalculations(binSpell, dataValues, { maxRank: 5, slotIndex: 1 })
+  const armor = calculations.find((c) => c.key === 'bonusarmor')
+  assert.ok(armor)
+  assert.equal(armor!.expression, '6 / 7 / 8 / 9 / 10%')
+  // Coefficient d'AD : le label de stat est conservé (style wiki « 60% AD »).
+  const aoe = calculations.find((c) => c.key === 'totalaoedamage')
+  assert.ok(aoe)
+  assert.equal(aoe!.expression, '60 / 70 / 80 / 90 / 100% AD')
+})
+
+test("calcul displayAsPercent non rendu : la data value homonyme est reformatée en % (K'Sante P)", () => {
+  const binSpell = {
+    DataValues: [
+      { name: 'FlatDamage', values: [12, 12, 12, 12, 12] },
+      { name: 'PercentHealthDamage', values: [0.02, 0.03, 0.04, 0.05, 0.06] },
+    ],
+    mSpellCalculations: {
+      PercentHealthDamage: {
+        __type: 'GameCalculation',
+        mDisplayAsPercent: true,
+        mPrecision: -1,
+        mFormulaParts: [
+          {
+            '{0589a59c}': 'MarkDamagePercentMin',
+            '{0b65bc23}': 'MarkDamagePercentMax',
+            __type: '{ee18a47b}',
+          },
+        ],
+      },
+    },
+  }
+  const ddSpell = {
+    maxrank: 5,
+    id: 'KSantePMark',
+    tooltip:
+      'Attaquer un ennemi marqué lui inflige <physicalDamage>{{ FlatDamage }} plus {{ PercentHealthDamage }} des PV max</physicalDamage>.',
+    effect: [null],
+    vars: [],
+  }
+  const tooltip = parseTooltip(String(ddSpell.tooltip), ddSpell, { maxLevel: 5 }, binSpell)
+  assert.ok(tooltip.descriptionText.includes('2 / 3 / 4 / 5 / 6%'))
+  assert.ok(!tooltip.descriptionText.includes('0.02'))
+})
+
+test('crossCheckedStat corrige les 0 cassés de DDragon via le bin et signale les écarts', () => {
+  const { crossCheckedStat } = theorycraftTooltipTestUtils
+
+  const fixed: string[] = []
+  assert.equal(crossCheckedStat(0, 5, 'attackDamage/lvl', fixed), 5)
+  assert.equal(fixed.length, 1)
+
+  const clean: string[] = []
+  assert.equal(crossCheckedStat(4.8, 4.800000190734863, 'armor/lvl', clean), 4.8)
+  assert.deepEqual(clean, [])
+
+  const drift: string[] = []
+  assert.equal(crossCheckedStat(58, 60, 'attackDamage', drift), 58)
+  assert.equal(drift.length, 1)
+
+  const noBin: string[] = []
+  assert.equal(crossCheckedStat(0, undefined, 'mp', noBin), 0)
+  assert.deepEqual(noBin, [])
+})
