@@ -33,9 +33,11 @@ import { redis } from './redis/client.js';
 import { orchestrationLogger } from './poll-orchestration/logger.js';
 import { ObservabilityOrchestrator } from './observability/poller-metrics/index.js';
 import { PollerTuner, TUNER_MAX_DISCOVERY_FETCH } from './tuner/index.js';
-
-const POLLER_LEADER_LOCK_KEY = 'poller:leader';
-const POLLER_LEADER_LOCK_TTL_SEC = 120;
+import {
+  isLeaderProcessAlive,
+  POLLER_LEADER_LOCK_KEY,
+  POLLER_LEADER_LOCK_TTL_SEC,
+} from './poll-orchestration/pollerLeaderLock.js';
 
 const orchEnv = loadPollOrchestrationEnv();
 
@@ -87,17 +89,23 @@ async function acquirePollerLeaderLock(maxWaitMs = 60_000): Promise<void> {
       return;
     }
 
-    // Lock held - check TTL
-    const ttl = await redis.ttl(POLLER_LEADER_LOCK_KEY);
     const owner = await redis.get(POLLER_LEADER_LOCK_KEY);
 
-    // If lock has no TTL or is stale (> 2x TTL old), steal it
-    if (ttl < 0 || ttl > POLLER_LEADER_LOCK_TTL_SEC * 2) {
+    if (owner && !isLeaderProcessAlive(owner)) {
+      console.warn(`[poller-main] stealing leader lock from dead pid=${owner}`);
+      await redis.del(POLLER_LEADER_LOCK_KEY);
+      continue;
+    }
+
+    const ttl = await redis.ttl(POLLER_LEADER_LOCK_KEY);
+
+    // Key exists but has no expiry — should not happen with EX; reclaim defensively.
+    if (ttl < 0) {
       console.warn(
-        `[poller-main] stealing stale leader lock (ttl=${ttl}, owner=${owner ?? 'unknown'})`,
+        `[poller-main] stealing leader lock without TTL (owner=${owner ?? 'unknown'})`,
       );
       await redis.del(POLLER_LEADER_LOCK_KEY);
-      continue; // Retry immediately
+      continue;
     }
 
     // If TTL is short (< 5s), wait for it to expire
@@ -435,6 +443,20 @@ async function gracefulShutdown(signal: string): Promise<void> {
 
 process.on('SIGTERM', () => void gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => void gracefulShutdown('SIGINT'));
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[poller-main] unhandledRejection', reason);
+  void releasePollerLeaderLock()
+    .catch(() => undefined)
+    .finally(() => process.exit(1));
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('[poller-main] uncaughtException', error);
+  void releasePollerLeaderLock()
+    .catch(() => undefined)
+    .finally(() => process.exit(1));
+});
 
 void bootstrap().catch(async (error) => {
   console.error('[poller-main] bootstrap failed', error);

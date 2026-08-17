@@ -21,7 +21,7 @@
     </div>
 
     <template v-else>
-      <div class="matchup-guide-grid-list">
+      <div class="matchup-guide-grid-list ui-card-grid" style="--ui-card-grid-max: 420px">
         <div v-for="guide in guides" :key="guide.id" class="matchup-guide-grid-item">
           <div class="matchup-guide-grid-author-row">
             <span class="truncate font-semibold">
@@ -368,18 +368,11 @@ onMounted(() => {
 
 <style scoped>
 .matchup-guide-grid-list {
-  display: flex;
-  flex-wrap: wrap;
   align-items: flex-start;
-  justify-content: space-evenly;
-  gap: 15px;
-  padding-inline: 5px;
-  box-sizing: border-box;
 }
 
 .matchup-guide-grid-item {
   display: flex;
-  width: min(100%, 420px);
   flex-direction: column;
   align-items: stretch;
   gap: 0;
@@ -541,8 +534,7 @@ onMounted(() => {
 
 @media (max-width: 639px) {
   .matchup-guide-grid-list {
-    justify-content: center;
-    padding-inline: 0;
+    --ui-card-grid-padding-inline: 0;
   }
 }
 </style>

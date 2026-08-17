@@ -364,17 +364,25 @@ export class PollerDbConsumer {
   }
 
   private async onPlayerComplete(event: PollerEvents['player:complete']): Promise<void> {
-    await this.playerDiscovery.updateLastSeen(event.player.puuid);
+    try {
+      await this.playerDiscovery.updateLastSeen(event.player.puuid);
 
-    orchestrationLogger.info(
-      {
-        component: 'PollerDbConsumer',
-        puuid: event.player.puuid,
-        matchesFetched: event.stats.matchesFetched,
-        errors: event.stats.errors.length,
-      },
-      'player last_seen updated',
-    );
+      orchestrationLogger.info(
+        {
+          component: 'PollerDbConsumer',
+          puuid: event.player.puuid,
+          matchesFetched: event.stats.matchesFetched,
+          errors: event.stats.errors.length,
+        },
+        'player last_seen updated',
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      orchestrationLogger.warn(
+        { component: 'PollerDbConsumer', puuid: event.player.puuid, error: message },
+        'player last_seen update failed',
+      );
+    }
 
     const pendingForPlayer = [...this.pendingMatches.values()].filter(
       (pending) => pending.event.player.puuid === event.player.puuid,

@@ -16,6 +16,13 @@ import {
 } from "../workers/match-rank-readiness.js";
 import { runAggregationTransaction } from "../workers/ingestion.worker.js";
 import { recordAggregatedMatch } from "../redis/ingestion-metrics.js";
+import {
+  getMatchAggregationPendingOrder,
+  type MatchAggregationPendingOrder,
+} from "./matchAggregationPendingOrder.js";
+
+export type { MatchAggregationPendingOrder };
+export { getMatchAggregationPendingOrder };
 
 const DEFAULT_AGGREGATION_INTERVAL_MS = 30 * 60_000;
 const DEFAULT_BATCH_LIMIT = 500;
@@ -67,15 +74,27 @@ export function getMatchAggregationPrepareConcurrency(): number {
 }
 
 export async function listPendingAggregationMatchIds(limit: number): Promise<string[]> {
-  const rows = await sql<{ riot_match_id: string }[]>`
-    SELECT m.riot_match_id
-    FROM matchs m
-    WHERE NOT EXISTS (
-      SELECT 1 FROM match_aggregated ma WHERE ma.riot_match_id = m.riot_match_id
-    )
-    ORDER BY m.created_at, m.riot_match_id
-    LIMIT ${limit}
-  `;
+  const order = getMatchAggregationPendingOrder();
+  const rows =
+    order === "newest_first"
+      ? await sql<{ riot_match_id: string }[]>`
+          SELECT m.riot_match_id
+          FROM matchs m
+          WHERE NOT EXISTS (
+            SELECT 1 FROM match_aggregated ma WHERE ma.riot_match_id = m.riot_match_id
+          )
+          ORDER BY m.created_at DESC, m.riot_match_id DESC
+          LIMIT ${limit}
+        `
+      : await sql<{ riot_match_id: string }[]>`
+          SELECT m.riot_match_id
+          FROM matchs m
+          WHERE NOT EXISTS (
+            SELECT 1 FROM match_aggregated ma WHERE ma.riot_match_id = m.riot_match_id
+          )
+          ORDER BY m.created_at ASC, m.riot_match_id ASC
+          LIMIT ${limit}
+        `;
   return rows.map((row) => String(row.riot_match_id ?? "").trim()).filter(Boolean);
 }
 

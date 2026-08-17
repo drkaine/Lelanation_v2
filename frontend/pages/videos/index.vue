@@ -129,7 +129,7 @@
             Aucun résultat.
           </div>
 
-          <div v-else class="videos-grid-list">
+          <div v-else class="videos-grid-list ui-card-grid" style="--ui-card-grid-max: 360px">
             <VideoGridCard
               v-for="(v, idx) in paginatedVideos"
               :key="v.id"
@@ -495,20 +495,9 @@ onMounted(async () => {
   width: 100%;
 }
 
-.videos-grid-list {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-start;
-  gap: 15px;
-}
-
-.videos-grid-list > * {
-  width: min(100%, 360px);
-}
-
 @media (max-width: 640px) {
-  .videos-grid-list > * {
-    width: 100%;
+  .videos-grid-list {
+    --ui-card-grid-padding-inline: 0;
   }
 }
 </style>

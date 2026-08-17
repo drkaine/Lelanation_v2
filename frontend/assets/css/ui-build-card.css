@@ -83,4 +83,26 @@
     flex: 1;
     min-width: 36px;
   }
+
+  /**
+   * Grilles de cartes (builds, guides, vidéos) : gap fixe entre cartes, rangées incomplètes
+   * centrées (évite tout collé à gauche + grand vide à droite).
+   */
+  .ui-card-grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-content: flex-start;
+    align-items: flex-start;
+    width: 100%;
+    box-sizing: border-box;
+    gap: var(--ui-card-grid-gap, 15px);
+    padding-inline: var(--ui-card-grid-padding-inline, 5px);
+  }
+
+  .ui-card-grid > * {
+    flex: 0 0 auto;
+    width: min(100%, var(--ui-card-grid-max, 420px));
+    max-width: var(--ui-card-grid-max, 420px);
+  }
 }

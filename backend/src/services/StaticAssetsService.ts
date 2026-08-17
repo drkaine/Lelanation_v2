@@ -590,6 +590,13 @@ export class StaticAssetsService {
         )
       }
     }
+    const deployLock = join(this.frontendPublicDir, '.deploy-frontend.lock')
+    if (await FileManager.exists(deployLock)) {
+      console.warn(
+        '[StaticAssets] Frontend deploy in progress (.deploy-frontend.lock), skipping PM2 restart',
+      )
+      return Result.ok(undefined)
+    }
     try {
       // Try to restart the frontend PM2 process
       // Use 'pm2 restart lelanation-frontend' or gracefully handle if PM2 is not available

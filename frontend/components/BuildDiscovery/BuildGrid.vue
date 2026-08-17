@@ -18,7 +18,7 @@
       </NuxtLink>
     </div>
 
-    <div v-else class="build-grid-list">
+    <div v-else class="build-grid-list ui-card-grid">
       <div
         v-for="build in builds"
         :key="build.id"
@@ -569,6 +569,8 @@ const buildGridVars = computed(() => {
   return {
     '--build-grid-gap': props.gridGap,
     '--build-grid-card-width': scaledWidth,
+    '--ui-card-grid-gap': props.gridGap,
+    '--ui-card-grid-max': scaledWidth,
   }
 })
 
@@ -1146,19 +1148,12 @@ onUnmounted(() => {
 
 <style scoped>
 .build-grid-list {
-  display: flex;
-  flex-wrap: wrap;
   align-items: flex-start;
-  justify-content: flex-start;
-  gap: var(--build-grid-gap, 15px);
-  padding-inline: 5px;
-  box-sizing: border-box;
 }
 
 .build-grid-item {
   padding-bottom: 15px;
   display: flex;
-  width: min(100%, var(--build-grid-card-width));
   flex-direction: column;
   align-items: flex-start;
   gap: 0;
@@ -1317,8 +1312,7 @@ onUnmounted(() => {
 
 @media (max-width: 639px) {
   .build-grid-list {
-    justify-content: flex-start;
-    padding-inline: 0;
+    --ui-card-grid-padding-inline: 0;
   }
 }
 </style>
