@@ -3,6 +3,9 @@
 # bloque encore :3000 après un restart raté (EADDRINUSE en boucle).
 set -euo pipefail
 
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # NITRO_PORT (ecosystem) prime ; ne pas utiliser PORT du shell (souvent 3500 = backend).
 FRONTEND_PORT="${NITRO_PORT:-3000}"

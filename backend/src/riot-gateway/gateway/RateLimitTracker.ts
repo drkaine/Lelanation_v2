@@ -183,7 +183,8 @@ export class RateLimitTracker {
       const bucket = previous ?? new TokenBucket(bucketId, limit, windowMs, used);
       const { slidOver, previousUsed } = bucket.update(used, limit);
       if (slidOver) {
-        gatewayLogger.info(
+        // debug : émis à chaque glissement de fenêtre, trop verbeux en info.
+        gatewayLogger.debug(
           {
             component: 'RateLimitTracker',
             event: 'window_reset_detected',

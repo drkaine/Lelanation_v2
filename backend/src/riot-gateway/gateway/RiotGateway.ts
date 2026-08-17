@@ -488,7 +488,8 @@ export class RiotGateway {
         rateLimitSnapshot: this.tracker.getAllBucketStates(),
       };
 
-      gatewayLogger.info(
+      // debug : un bloc par requête réussie saturait le log en LOG_LEVEL=info.
+      gatewayLogger.debug(
         {
           component: 'RiotGateway',
           event: 'request_success',
