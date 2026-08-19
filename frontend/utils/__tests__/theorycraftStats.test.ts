@@ -30,8 +30,9 @@ describe('theorycraftStats', () => {
       label: 'Cost',
       valueText: '30 / 35 / 40 / 45 / 50 Mana',
     }
-    const resolved = resolveHeaderStatAtRank(stat, 2, { cooldownReduction: 0.5 })
-    expect(resolved.valueText).toBe('35')
+    expect(resolveHeaderStatAtRank(stat, 1).valueText).toBe('30 Mana')
+    expect(resolveHeaderStatAtRank(stat, 2, { cooldownReduction: 0.5 }).valueText).toBe('35 Mana')
+    expect(resolveHeaderStatAtRank(stat, 5).valueText).toBe('50 Mana')
   })
 
   it('converts theorycraft baseStats/growthStats to DDragon stats', () => {

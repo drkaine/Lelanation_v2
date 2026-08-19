@@ -209,11 +209,32 @@ export function resolveResourceStatLabel(
 }
 
 function parseNumericStatValue(text: string): number | null {
-  const normalized = String(text ?? '')
+  const leadingNumber = String(text ?? '')
     .trim()
-    .replace(',', '.')
-  const value = Number(normalized)
+    .match(/^[\d.,+-]+/)
+  if (!leadingNumber) return null
+  const value = Number(leadingNumber[0].replace(',', '.'))
   return Number.isFinite(value) ? value : null
+}
+
+/**
+ * Découpe une série « 55 / 65 / 75 Mana » en valeurs + suffixe ressource.
+ * Le libellé (Mana, Énergie…) n'est présent qu'une fois en fin de chaîne côté export.
+ */
+function splitHeaderStatSeries(text: string): { values: string[]; suffix: string } {
+  const parts = String(text ?? '')
+    .split('/')
+    .map(part => part.trim())
+    .filter(Boolean)
+  if (parts.length <= 1) return { values: parts, suffix: '' }
+
+  const last = parts[parts.length - 1] ?? ''
+  const lastMatch = last.match(/^([\d.,+-]+)\s*(.*)$/)
+  if (!lastMatch) return { values: parts, suffix: '' }
+
+  const suffix = lastMatch[2]?.trim() ? ` ${lastMatch[2].trim()}` : ''
+  parts[parts.length - 1] = lastMatch[1]!
+  return { values: parts, suffix }
 }
 
 export function formatCooldownSeconds(value: number): string {
@@ -232,13 +253,10 @@ export function resolveHeaderStatAtRank(
   let valueHtml = stat.valueHtml
 
   if (text.includes('/')) {
-    const parts = text
-      .split('/')
-      .map(part => part.trim())
-      .filter(Boolean)
-    if (parts.length > 1) {
-      const idx = Math.min(Math.max(rank - 1, 0), parts.length - 1)
-      valueText = parts[idx] ?? text
+    const { values, suffix } = splitHeaderStatSeries(text)
+    if (values.length > 1) {
+      const idx = Math.min(Math.max(rank - 1, 0), values.length - 1)
+      valueText = `${values[idx] ?? text}${suffix}`.trim()
       valueHtml = undefined
     }
   }

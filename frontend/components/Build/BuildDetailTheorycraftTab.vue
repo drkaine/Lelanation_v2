@@ -1,27 +1,12 @@
 <template>
   <div class="build-detail-theorycraft w-full">
     <div class="theorycraft-page-header mb-4">
-      <button
-        type="button"
-        class="theorycraft-vs-toggle"
-        :class="{ 'theorycraft-vs-toggle--active': showVersus }"
-        :title="showVersus ? t('theorycraft.panel.vsDisable') : t('theorycraft.panel.vsEnable')"
-        :aria-label="
-          showVersus ? t('theorycraft.panel.vsDisable') : t('theorycraft.panel.vsEnable')
-        "
-        @click="toggleVersus"
-      >
-        {{ t('theorycraft.panel.vsButton') }}
-      </button>
       <TheorycraftRuneStackPanel variant="header" />
     </div>
 
     <div
-      class="build-layout flex flex-col items-start gap-4 md:flex-row"
-      :class="{
-        'build-layout--streamer': isLayoutScaled,
-        'build-layout--versus': showVersus,
-      }"
+      class="build-layout build-layout--versus flex flex-col items-start gap-4 md:flex-row"
+      :class="{ 'build-layout--streamer': isLayoutScaled }"
     >
       <div class="build-card-wrapper w-full flex-shrink-0 md:order-1" @click="activateSide('ally')">
         <div class="build-card-toolbar">
@@ -83,10 +68,8 @@
           v-model:flipped="allyCardFlipped"
           :sheet-tooltips="true"
           :readonly="false"
-          :build="showVersus && activeSide !== 'ally' ? sideBuilds.ally : null"
-          :calculated-stats="
-            showVersus && activeSide !== 'ally' ? (sideCalculatedStats.ally ?? null) : null
-          "
+          :build="activeSide !== 'ally' ? sideBuilds.ally : null"
+          :calculated-stats="activeSide !== 'ally' ? (sideCalculatedStats.ally ?? null) : null"
           :stats-level="theorycraftLevel"
           selection-mode="theorycraft"
           :flip-back-face="sideBackFace.ally"
@@ -109,7 +92,6 @@
       </div>
 
       <div
-        v-if="showVersus"
         class="build-card-wrapper w-full flex-shrink-0 md:order-3"
         @click="activateSide('enemy')"
       >
@@ -216,7 +198,6 @@ const theorycraftPanelTitle = computed(() => t('theorycraft.panel.theorycraftBut
 const {
   activeSide,
   activePanel,
-  showVersus,
   sideBuilds,
   sideCalculatedStats,
   sideFlipped,
@@ -232,7 +213,6 @@ const {
   enter,
   leave,
   activateSide,
-  toggleVersus,
   statsFlipActive,
   statsFlipTitle,
   theorycraftPanelActive,
@@ -296,37 +276,6 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.75rem 1rem;
   padding-top: 5px;
-}
-
-.theorycraft-vs-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 44px;
-  height: 38px;
-  padding: 0 0.7rem;
-  border-radius: 0.5rem;
-  border: 1px solid rgb(200 155 60 / 0.5);
-  background: var(--color-background, #0a1428);
-  color: rgb(255 255 255 / 0.9);
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  transition:
-    border-color 0.15s ease,
-    background 0.15s ease,
-    color 0.15s ease;
-}
-
-.theorycraft-vs-toggle:hover {
-  border-color: var(--color-accent, #c89b3c);
-  color: var(--color-accent, #c89b3c);
-}
-
-.theorycraft-vs-toggle--active {
-  border-color: var(--color-accent, #c89b3c);
-  background: rgb(200 155 60 / 0.15);
-  color: var(--color-accent, #c89b3c);
 }
 
 .build-card-toolbar {

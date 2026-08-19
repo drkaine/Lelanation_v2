@@ -28,7 +28,6 @@ async function readGameDataFile(
   // If backend file doesn't exist, try frontend public directory
   const frontendResult = await FileManager.readJson(frontendPath)
   if (frontendResult.isOk()) {
-    console.debug(`[GameData API] Reading from frontend public: ${frontendPath}`)
     return frontendResult
   }
 
@@ -59,7 +58,6 @@ router.get('/version', async (_req, res) => {
   if (frontendResult.isOk()) {
     const versionInfo = frontendResult.unwrap()
     if (versionInfo?.currentVersion) {
-      console.debug(`[GameData API] Reading version from frontend public: ${frontendVersionPath}`)
       return res.json({ version: versionInfo.currentVersion })
     }
   }

@@ -121,6 +121,28 @@ export function resolveChampionSpellImageUrl(
   return getChampionSpellImageUrl(version, folder, imageName)
 }
 
+export function resolveChampionSpellImageFull(
+  spell: { image?: { full?: string } | string } | null | undefined
+): string {
+  if (!spell?.image) return ''
+  if (typeof spell.image === 'string') return spell.image.trim()
+  return String(spell.image.full ?? '').trim()
+}
+
+export function resolveChampionSpellImageUrlFromSpell(
+  version: string,
+  champion: { id?: string | null; key?: string | number | null } | null | undefined,
+  spell: { image?: { full?: string } | string } | null | undefined
+): string {
+  const imageFull = resolveChampionSpellImageFull(spell)
+  if (!champion || !imageFull) return ''
+  return resolveChampionSpellImageUrl(
+    version,
+    { slug: champion.id, numericId: champion.key },
+    imageFull
+  )
+}
+
 /**
  * Get champion passive image URL (local)
  * Stored as: /images/game/latest/champion-spell/passive/{PassiveImage}.png

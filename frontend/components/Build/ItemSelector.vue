@@ -149,14 +149,19 @@
             <div class="item-tooltip-text">
               <div class="item-tooltip-name">{{ hoveredItem.name }}</div>
               <div class="item-tooltip-price">
-                {{ hoveredItem.gold?.total || 0 }}
+                <span class="item-tooltip-gold-total">{{ hoveredItem.gold?.total || 0 }}</span>
               </div>
               <div class="item-tooltip-gold-value">
-                {{ t('stats.labels.goldValue') }}: {{ getItemGoldValue(hoveredItem) }}
+                <span class="item-tooltip-meta-key">{{ t('stats.labels.goldValue') }}:</span>
+                <span class="item-tooltip-meta-value item-tooltip-gold-value-num">{{
+                  getItemGoldValue(hoveredItem)
+                }}</span>
               </div>
               <div class="item-tooltip-gold-efficiency">
-                {{ t('stats.labels.goldEfficiency') }}:
-                {{ formatItemGoldEfficiency(hoveredItem) }}
+                <span class="item-tooltip-meta-key">{{ t('stats.labels.goldEfficiency') }}:</span>
+                <span class="item-tooltip-meta-value item-tooltip-gold-efficiency-num">{{
+                  formatItemGoldEfficiency(hoveredItem)
+                }}</span>
               </div>
             </div>
           </div>
@@ -197,7 +202,7 @@ import type { Item } from '~/types/build'
 import { getItemImageUrl } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
-import { formatTooltipMarkupHtml } from '~/utils/formatTooltipMarkupHtml'
+import { formatItemTooltipHtml } from '~/utils/formatTooltipMarkupHtml'
 import { resolveItemDescription, resolveItemPlaintext } from '~/utils/itemDescriptionFallbacks'
 import {
   atlasUpgradeMissing,
@@ -899,7 +904,7 @@ const resolvedHoveredItemPlaintext = computed(() =>
 )
 
 const formattedHoveredItemDescription = computed(() =>
-  formatTooltipMarkupHtml(resolveItemDescription(hoveredItem.value, riotLocale.value))
+  formatItemTooltipHtml(resolveItemDescription(hoveredItem.value, riotLocale.value))
 )
 
 // Handle mouse move to update tooltip position
@@ -1245,15 +1250,11 @@ watch(locale, () => {
 
 .item-tooltip-price {
   font-size: 0.875rem;
-  color: rgb(var(--rgb-text) / 0.8);
   line-height: 1.3;
 }
 
 .item-tooltip-gold-value,
 .item-tooltip-gold-efficiency {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: rgb(var(--rgb-primary-light));
   line-height: 1.3;
 }
 

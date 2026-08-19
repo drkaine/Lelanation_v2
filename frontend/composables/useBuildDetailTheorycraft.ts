@@ -24,7 +24,6 @@ interface StoreSnapshot {
 interface TheorycraftVsStoredState {
   ally: Build | null
   enemy: Build | null
-  showVersus: boolean
   activeSide: TheorycraftSide
 }
 
@@ -81,7 +80,6 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
   const savedSnapshot = ref<StoreSnapshot | null>(null)
   const activeSide = ref<TheorycraftSide>('ally')
   const activePanel = ref<TheorycraftPanel>('theorycraft')
-  const showVersus = ref(false)
   const theorycraftLevel = ref(18)
   const championData = ref<Record<string, unknown> | null>(null)
   const isHydratingVsState = ref(false)
@@ -118,7 +116,6 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
   })
 
   const opponentTheorycraftStats = computed((): TheorycraftBuildStats | null => {
-    if (!showVersus.value) return null
     const opponentSide: TheorycraftSide = activeSide.value === 'ally' ? 'enemy' : 'ally'
     const opponentBuild = sideBuilds.value[opponentSide]
     const opponentRaw = sideCalculatedStats.value[opponentSide]
@@ -131,7 +128,6 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
   })
 
   const opponentRawStats = computed(() => {
-    if (!showVersus.value) return null
     const opponentSide: TheorycraftSide = activeSide.value === 'ally' ? 'enemy' : 'ally'
     return sideCalculatedStats.value[opponentSide]
   })
@@ -167,7 +163,6 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
       const payload: TheorycraftVsStoredState = {
         ally: cloneBuild(sideBuilds.value.ally),
         enemy: cloneBuild(sideBuilds.value.enemy),
-        showVersus: showVersus.value,
         activeSide: activeSide.value,
       }
       localStorage.setItem(key, JSON.stringify(payload))
@@ -186,7 +181,6 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
       return {
         ally: cloneBuild((parsed.ally as Build | null) ?? null),
         enemy: cloneBuild((parsed.enemy as Build | null) ?? null),
-        showVersus: Boolean(parsed.showVersus),
         activeSide: parsed.activeSide === 'enemy' ? 'enemy' : 'ally',
       }
     } catch {
@@ -243,24 +237,19 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
     syncAllyFromSource(build)
 
     const stored = loadVsState()
-    const canRestore =
-      Boolean(stored?.showVersus) &&
-      Boolean(stored?.enemy) &&
-      stored?.ally?.champion?.id === build.champion?.id
+    const canRestoreEnemy =
+      Boolean(stored?.enemy) && stored?.ally?.champion?.id === build.champion?.id
 
-    if (canRestore && stored) {
-      sideBuilds.value.enemy = stored.enemy
-      sideCalculatedStats.value.enemy = null
-      showVersus.value = true
-      if (stored.activeSide === 'enemy') {
-        activeSide.value = 'enemy'
-        activePanel.value = sidePanels.value.enemy ?? 'theorycraft'
-        loadSideBuild('enemy')
-      }
-    } else {
-      sideBuilds.value.enemy = null
-      sideCalculatedStats.value.enemy = null
-      showVersus.value = false
+    sideBuilds.value.enemy =
+      canRestoreEnemy && stored
+        ? stored.enemy
+        : createEmptyTheorycraftBuild(t('theorycraft.panel.enemyCard'))
+    sideCalculatedStats.value.enemy = null
+
+    if (stored?.activeSide === 'enemy') {
+      activeSide.value = 'enemy'
+      activePanel.value = sidePanels.value.enemy ?? 'theorycraft'
+      loadSideBuild('enemy')
     }
 
     isHydratingVsState.value = false
@@ -297,21 +286,6 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
       )
     }
     loadSideBuild(side)
-  }
-
-  function toggleVersus() {
-    if (showVersus.value) {
-      if (activeSide.value === 'enemy') activateSide('ally')
-      showVersus.value = false
-      persistVsState()
-      return
-    }
-    persistActiveSideBuild()
-    if (!sideBuilds.value.enemy) {
-      sideBuilds.value.enemy = createEmptyTheorycraftBuild(t('theorycraft.panel.enemyCard'))
-    }
-    showVersus.value = true
-    persistVsState()
   }
 
   function statsFlipActive(side: TheorycraftSide): boolean {
@@ -410,7 +384,7 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
   )
 
   watch(
-    [sideBuilds, showVersus, activeSide],
+    [sideBuilds, activeSide],
     () => {
       if (isHydratingVsState.value || !isActive.value) return
       persistVsState()
@@ -446,7 +420,6 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
   return {
     activeSide,
     activePanel,
-    showVersus,
     sideBuilds,
     sideCalculatedStats,
     sideFlipped,
@@ -462,7 +435,6 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
     enter,
     leave,
     activateSide,
-    toggleVersus,
     statsFlipActive,
     statsFlipTitle,
     theorycraftPanelActive,

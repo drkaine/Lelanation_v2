@@ -111,6 +111,24 @@ function shouldShowHeaderStat(stat: SpellHeaderStat, options?: { summoner?: bool
   return true
 }
 
+function headerStatValueClass(key: string): string {
+  switch (key) {
+    case 'cooldown':
+      return 'tooltip-meta-cooldown'
+    case 'range':
+    case 'targetRange':
+      return 'tooltip-meta-range'
+    case 'cost':
+      return 'tooltip-meta-cost'
+    case 'castTime':
+      return 'tooltip-meta-cast'
+    case 'damage':
+      return 'tooltip-meta-damage'
+    default:
+      return ''
+  }
+}
+
 export function formatSpellHeaderStatsHtml(
   headerStats: SpellHeaderStat[],
   options?: { summoner?: boolean }
@@ -119,7 +137,9 @@ export function formatSpellHeaderStatsHtml(
     .filter(stat => shouldShowHeaderStat(stat, options))
     .map(stat => {
       const value = formatHeaderStatDisplayValue(stat)
-      return `<div class="tooltip-spell-meta-line"><span class="tooltip-spell-meta-key">${escapeTooltipText(stat.label)}:</span> <span class="tooltip-spell-meta-value">${value}</span></div>`
+      const valueClass = headerStatValueClass(stat.key)
+      const valueClasses = ['tooltip-spell-meta-value', valueClass].filter(Boolean).join(' ')
+      return `<div class="tooltip-spell-meta-line"><span class="tooltip-spell-meta-key">${escapeTooltipText(stat.label)}:</span> <span class="${valueClasses}">${value}</span></div>`
     })
 
   if (lines.length === 0) return ''

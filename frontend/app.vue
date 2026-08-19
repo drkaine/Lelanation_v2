@@ -371,6 +371,7 @@ if (import.meta.client) {
 @import './assets/css/ui-build-card.css';
 @import './assets/css/build-tags.css';
 @import './assets/css/ui-statistics.css';
+@import './assets/css/tooltip-semantic.css';
 
 @tailwind base;
 @tailwind components;

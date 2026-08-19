@@ -853,10 +853,7 @@ export class StaticAssetsService {
         copied++
       }
 
-      const mirrored = await this.mirrorYouTubeJsonToNuxtOutput(targetYouTubeDir)
-      if (mirrored > 0) {
-        console.log(`[StaticAssets] Mirrored ${mirrored} YouTube JSON file(s) to Nuxt .output/public`)
-      }
+      await this.mirrorYouTubeJsonToNuxtOutput(targetYouTubeDir)
 
       return Result.ok({ copied })
     } catch (error) {

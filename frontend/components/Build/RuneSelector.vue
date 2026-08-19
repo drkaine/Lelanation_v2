@@ -298,7 +298,7 @@ import {
 import { useGameVersion } from '~/composables/useGameVersion'
 import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 import { formatSummonerSpellTooltipHtml } from '~/utils/gameTooltipFormatter'
-import { formatRuneTooltipHtml } from '~/utils/formatTooltipMarkupHtml'
+import { formatRuneTooltipHtml, formatShardTooltipHtml } from '~/utils/formatTooltipMarkupHtml'
 import { isSmiteSpell } from '~/utils/buildItemRules'
 const { version } = useGameVersion()
 const { locale, t } = useI18n()
@@ -777,6 +777,9 @@ const formattedHoveredDescription = computed(() => {
   if (!item) return ''
   // Summoner spell hovers store pre-rendered HTML in description (with CD/cost/range).
   if (item.description && item.icon && !item.longDesc && !item.shortDesc) {
+    if (!item.description.includes('<')) {
+      return formatShardTooltipHtml(item.description)
+    }
     return item.description
   }
   return formatRuneTooltipHtml(item)
@@ -1222,6 +1225,16 @@ watch(locale, () => {
 .rune-tooltip-description :deep(.tooltip-spell-meta-key) {
   color: rgb(252 211 77 / 1) !important;
   font-weight: 700 !important;
+}
+
+.rune-tooltip-description :deep(.tooltip-spell-meta-value.tooltip-meta-cooldown) {
+  color: rgb(56 189 248 / 1) !important;
+  font-weight: 600;
+}
+
+.rune-tooltip-description :deep(.tooltip-spell-meta-value.tooltip-meta-range) {
+  color: rgb(134 239 172 / 1) !important;
+  font-weight: 600;
 }
 
 .rune-tooltip-description :deep(.tooltip-spell-meta-line) {

@@ -1,237 +1,31 @@
-@import './tokens.css';
-@import './ui-build-card.css';
-@import './tier-badges.css';
+/* Semantic colors inside tooltip HTML (items / runes / shards / summoners / spells).
+   Container chrome (background, border) is owned by each Vue component. */
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-/* Global graphic rules:
-   - No pure white in UI (replace with the lightest blue).
-*/
-@layer utilities {
-  .text-white {
-    color: rgb(var(--rgb-primary-light) / 1) !important;
-  }
-
-  .bg-white {
-    background-color: rgb(var(--rgb-primary-light) / 1) !important;
-  }
+/* Semantic colors inside tooltip HTML (items / runes / shards / summoners / spells).
+   Palette aligned with champion spell tooltips (.tooltip-box). */
+:root {
+  --tt-dmg-physical: 248 113 113;
+  --tt-dmg-magic: 196 181 253;
+  --tt-dmg-true: 226 232 240;
+  --tt-heal: 134 239 172;
+  --tt-cc: 56 189 248;
+  --tt-ad: 253 224 71;
+  --tt-ap: 196 181 253;
+  --tt-hp: 134 239 172;
+  --tt-mana: 96 165 250;
+  --tt-armor: 251 191 36;
+  --tt-mr: 129 140 248;
+  --tt-level: 250 204 21;
+  --tt-gold: 252 211 77;
+  --tt-keyword: 191 219 254;
+  --tt-keyword-major: 251 191 36;
+  --tt-active: 147 197 253;
+  --tt-adaptive: 72 196 183;
+  --tt-haste: 56 189 248;
+  --tt-attention: 250 204 21;
 }
 
-@layer components {
-  .ui-chrome-bg {
-    background-color: rgb(var(--rgb-chrome) / 1);
-  }
-
-  .ui-action-favorite {
-    border: 1px solid rgb(var(--rgb-accent) / 0.7);
-    background-color: rgb(var(--rgb-surface) / 1);
-    color: rgb(var(--rgb-accent) / 0.7);
-  }
-
-  .ui-action-favorite:hover {
-    border-color: rgb(var(--rgb-accent) / 1);
-    background-color: rgb(var(--rgb-accent) / 0.15);
-    color: rgb(var(--rgb-accent) / 1);
-  }
-
-  .ui-action-favorite.is-active {
-    border-color: rgb(var(--rgb-accent) / 1);
-    background-color: rgb(var(--rgb-accent) / 0.15);
-    color: rgb(var(--rgb-accent) / 1);
-  }
-
-  .ui-action-favorite.is-active:hover {
-    background-color: rgb(var(--rgb-accent) / 0.25);
-  }
-
-  .ui-action-upvote {
-    border: 1px solid rgb(var(--rgb-info) / 0.85);
-    background-color: rgb(var(--rgb-surface) / 1);
-    color: rgb(var(--rgb-info) / 1);
-  }
-
-  .ui-action-upvote:hover {
-    background-color: rgb(var(--rgb-info) / 0.12);
-  }
-
-  .ui-action-upvote.is-active {
-    border-color: rgb(var(--rgb-info) / 1);
-    background-color: rgb(var(--rgb-info) / 0.85);
-    color: rgb(var(--rgb-background) / 1);
-  }
-
-  .ui-action-upvote.is-active:hover {
-    background-color: rgb(var(--rgb-info) / 1);
-  }
-
-  .ui-action-downvote {
-    border: 1px solid rgb(var(--rgb-error) / 0.85);
-    background-color: rgb(var(--rgb-surface) / 1);
-    color: rgb(var(--rgb-error) / 1);
-  }
-
-  .ui-action-downvote:hover {
-    background-color: rgb(var(--rgb-error) / 0.12);
-  }
-
-  .ui-action-downvote.is-active {
-    border-color: rgb(var(--rgb-error) / 1);
-    background-color: rgb(var(--rgb-error) / 0.85);
-    color: rgb(var(--rgb-text) / 1);
-  }
-
-  .ui-action-downvote.is-active:hover {
-    background-color: rgb(var(--rgb-error) / 1);
-  }
-
-  .ui-tier-badge {
-    display: inline-flex;
-    align-items: center;
-    border-radius: 0.25rem;
-    padding: 0.125rem 0.375rem;
-    font-size: 0.625rem;
-    font-weight: 700;
-    line-height: 1;
-  }
-
-  .ui-tier-badge--s {
-    background-color: rgb(var(--rgb-tier-s) / 0.2);
-    color: rgb(var(--rgb-tier-s) / 1);
-  }
-
-  .ui-tier-badge--a {
-    background-color: rgb(var(--rgb-tier-a) / 0.18);
-    color: rgb(var(--rgb-primary-light) / 1);
-  }
-
-  .ui-tier-badge--b {
-    background-color: rgb(var(--rgb-tier-b) / 0.18);
-    color: rgb(var(--rgb-primary-light) / 0.92);
-  }
-
-  .ui-tier-badge--default {
-    background-color: rgb(var(--rgb-surface) / 1);
-    color: rgb(var(--rgb-text) / 0.7);
-  }
-
-  /* Solid tier note badges (statistics tier list palette) */
-  .ui-statistics-tier-badge {
-    display: inline-flex;
-    min-height: 1.25rem;
-    min-width: 1.25rem;
-    align-items: center;
-    justify-content: center;
-    border-radius: 0.25rem;
-    padding: 0 0.125rem;
-    font-size: 0.625rem;
-    font-weight: 700;
-    line-height: 1;
-    color: var(--color-blue-500);
-  }
-
-  .ui-statistics-tier-badge--s-plus {
-    background-color: var(--color-tier-badge-s-plus);
-  }
-
-  .ui-statistics-tier-badge--s {
-    background-color: var(--color-tier-badge-s);
-  }
-
-  .ui-statistics-tier-badge--a {
-    background-color: var(--color-tier-badge-a);
-  }
-
-  .ui-statistics-tier-badge--b {
-    background-color: var(--color-tier-badge-b);
-  }
-
-  .ui-statistics-tier-badge--c {
-    background-color: var(--color-tier-badge-c);
-  }
-
-  .ui-statistics-tier-badge--d {
-    background-color: var(--color-tier-badge-d);
-  }
-
-  .ui-tag {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 1.75rem;
-    height: 1.35rem;
-    padding: 0 0.4rem;
-    border-radius: 9999px;
-    border: 1px solid rgb(var(--rgb-text) / 0.28);
-    font-size: 0.62rem;
-    font-weight: 800;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
-    color: rgb(var(--rgb-text) / 0.95);
-  }
-
-  .ui-tag--pro {
-    background: var(--gradient-tag-pro);
-  }
-
-  .ui-tag--otp {
-    background: var(--gradient-tag-otp);
-  }
-
-  .ui-tag--exotique {
-    background: var(--gradient-tag-exotique);
-  }
-
-  .ui-tag--troll {
-    background: var(--gradient-tag-troll);
-  }
-
-  .ui-action-companion {
-    border-color: rgb(var(--rgb-info) / 0.85);
-    background-color: rgb(var(--rgb-info) / 0.16);
-    color: rgb(var(--rgb-primary-light) / 1);
-    font-weight: 700;
-  }
-
-  .ui-action-companion:hover {
-    border-color: rgb(var(--rgb-info) / 1);
-    background-color: rgb(var(--rgb-info) / 0.3);
-  }
-
-  .ui-action-edit {
-    border-color: rgb(var(--rgb-info) / 0.85);
-    background-color: rgb(var(--rgb-info) / 0.24);
-    color: rgb(var(--rgb-primary-light) / 1);
-    font-weight: 700;
-  }
-
-  .ui-action-edit:hover {
-    border-color: rgb(var(--rgb-info) / 1);
-    background-color: rgb(var(--rgb-info) / 0.42);
-  }
-
-  .ui-action-delete {
-    border-color: rgb(var(--rgb-error) / 0.85);
-    background-color: rgb(var(--rgb-error) / 0.28);
-    color: rgb(var(--rgb-text) / 1);
-    font-weight: 700;
-  }
-
-  .ui-action-delete:hover {
-    border-color: rgb(var(--rgb-error) / 1);
-    background-color: rgb(var(--rgb-error) / 0.5);
-  }
-
-  .ui-chrome-bg-important {
-    background: rgb(var(--rgb-chrome) / 1) !important;
-    background-color: rgb(var(--rgb-chrome) / 1) !important;
-  }
-}
-
-/* Semantic tooltip colors only — container chrome stays in each component. */
-
-/* Riot-style semantic tags in tooltip HTML (items/runes/spells/summoners). */
+/* Riot-style semantic tags — same colors as champion tooltips (elements + classes). */
 :is(
     [role='tooltip'],
     .tooltip,
@@ -246,18 +40,58 @@
   )
   :is(
     physicalDamage,
+    .dmg-physical,
     magicDamage,
+    .dmg-magic,
     trueDamage,
+    .dmg-true,
     healing,
+    .healing,
     shield,
+    .shield,
+    speed,
+    .speed,
     status,
+    .status-cc,
     onHit,
+    .on-hit,
     scaleAD,
-    scaleLevel,
+    .scale-ad,
+    .tooltip-tag.scale-ad,
+    scaleAP,
+    .scale-ap,
+    .tooltip-tag.scale-ap,
     scaleHealth,
+    .scale-hp,
+    .tooltip-tag.scale-hp,
     scaleMana,
+    .scale-mana,
+    .tooltip-tag.scale-mana,
     scaleMR,
-    attention
+    .scale-mr,
+    .tooltip-tag.scale-mr,
+    scaleLevel,
+    .scale-level,
+    .tooltip-tag.scale-level,
+    .stat-adaptive,
+    .stat-haste,
+    gold,
+    .gold,
+    keywordMajor,
+    .keyword-major,
+    keyword,
+    .keyword,
+    keywordStealth,
+    .keyword-stealth,
+    active,
+    .active,
+    recast,
+    .recast,
+    passive,
+    .passive,
+    .rarity-generic,
+    .rarity-legendary,
+    .rarity-mythic
   ) {
   font-weight: 600;
 }
@@ -274,8 +108,8 @@
     .tippy-box,
     .v-popper__inner
   )
-  physicalDamage {
-  color: rgb(255 132 0 / 0.98) !important;
+  :is(physicalDamage, .dmg-physical) {
+  color: rgb(var(--tt-dmg-physical) / 1) !important;
 }
 
 :is(
@@ -290,8 +124,8 @@
     .tippy-box,
     .v-popper__inner
   )
-  magicDamage {
-  color: rgb(182 77 255 / 0.98) !important;
+  :is(magicDamage, .dmg-magic) {
+  color: rgb(var(--tt-dmg-magic) / 1) !important;
 }
 
 :is(
@@ -306,8 +140,8 @@
     .tippy-box,
     .v-popper__inner
   )
-  trueDamage {
-  color: rgb(232 224 255 / 0.98) !important;
+  :is(trueDamage, .dmg-true) {
+  color: rgb(var(--tt-dmg-true) / 1) !important;
 }
 
 :is(
@@ -322,8 +156,8 @@
     .tippy-box,
     .v-popper__inner
   )
-  healing {
-  color: rgb(22 255 117 / 0.98) !important;
+  :is(healing, .healing, shield, .shield, speed, .speed) {
+  color: rgb(var(--tt-heal) / 1) !important;
 }
 
 :is(
@@ -338,8 +172,8 @@
     .tippy-box,
     .v-popper__inner
   )
-  shield {
-  color: rgb(220 252 231 / 0.98) !important;
+  :is(status, .status-cc) {
+  color: rgb(var(--tt-cc) / 1) !important;
 }
 
 :is(
@@ -354,8 +188,9 @@
     .tippy-box,
     .v-popper__inner
   )
-  status {
-  color: rgb(66 220 255 / 0.98) !important;
+  :is(onHit, .on-hit, scaleAD, .scale-ad, .tooltip-tag.scale-ad) {
+  color: rgb(var(--tt-ad) / 1) !important;
+  font-weight: 700;
 }
 
 :is(
@@ -370,12 +205,230 @@
     .tippy-box,
     .v-popper__inner
   )
-  :is(onHit, scaleAD, scaleLevel, scaleHealth, scaleMana, scaleMR, attention) {
-  color: rgb(255 231 43 / 0.98) !important;
+  :is(scaleAP, .scale-ap, .tooltip-tag.scale-ap) {
+  color: rgb(var(--tt-ap) / 1) !important;
+  font-weight: 700;
+}
+
+:is(
+    [role='tooltip'],
+    .tooltip,
+    .tooltip-box,
+    .sheet-element-tooltip-wrapper,
+    .item-tooltip,
+    .rune-tooltip,
+    .sheet-tooltip-simple,
+    .info-tooltip,
+    .tippy-box,
+    .v-popper__inner
+  )
+  :is(scaleHealth, .scale-hp, .tooltip-tag.scale-hp) {
+  color: rgb(var(--tt-hp) / 1) !important;
+  font-weight: 700;
+}
+
+:is(
+    [role='tooltip'],
+    .tooltip,
+    .tooltip-box,
+    .sheet-element-tooltip-wrapper,
+    .item-tooltip,
+    .rune-tooltip,
+    .sheet-tooltip-simple,
+    .info-tooltip,
+    .tippy-box,
+    .v-popper__inner
+  )
+  :is(scaleMana, .scale-mana, .tooltip-tag.scale-mana) {
+  color: rgb(var(--tt-mana) / 1) !important;
+  font-weight: 700;
+}
+
+:is(
+    [role='tooltip'],
+    .tooltip,
+    .tooltip-box,
+    .sheet-element-tooltip-wrapper,
+    .item-tooltip,
+    .rune-tooltip,
+    .sheet-tooltip-simple,
+    .info-tooltip,
+    .tippy-box,
+    .v-popper__inner
+  )
+  :is(
+    scaleMR,
+    .scale-mr,
+    .tooltip-tag.scale-mr,
+    .tooltip-tag-scalemr,
+    .tooltip-tag.tooltip-tag-scalemr
+  ) {
+  color: rgb(var(--tt-mr) / 1) !important;
+  font-weight: 700;
+}
+
+:is(
+    [role='tooltip'],
+    .tooltip,
+    .tooltip-box,
+    .sheet-element-tooltip-wrapper,
+    .item-tooltip,
+    .rune-tooltip,
+    .sheet-tooltip-simple,
+    .info-tooltip,
+    .tippy-box,
+    .v-popper__inner
+  )
+  :is(
+    scaleLevel,
+    .scale-level,
+    .tooltip-tag.scale-level,
+    .scale-armor,
+    .tooltip-tag.scale-armor,
+    .tooltip-tag-scalearmor,
+    .tooltip-tag.tooltip-tag-scalearmor
+  ) {
+  color: rgb(var(--tt-armor) / 1) !important;
+  font-weight: 700;
+}
+
+:is(
+    [role='tooltip'],
+    .tooltip,
+    .tooltip-box,
+    .sheet-element-tooltip-wrapper,
+    .item-tooltip,
+    .rune-tooltip,
+    .sheet-tooltip-simple,
+    .info-tooltip,
+    .tippy-box,
+    .v-popper__inner
+  )
+  .stat-adaptive {
+  color: rgb(var(--tt-adaptive) / 1) !important;
+}
+
+:is(
+    [role='tooltip'],
+    .tooltip,
+    .tooltip-box,
+    .sheet-element-tooltip-wrapper,
+    .item-tooltip,
+    .rune-tooltip,
+    .sheet-tooltip-simple,
+    .info-tooltip,
+    .tippy-box,
+    .v-popper__inner
+  )
+  .stat-haste {
+  color: rgb(var(--tt-haste) / 1) !important;
+}
+
+:is(
+    [role='tooltip'],
+    .tooltip,
+    .tooltip-box,
+    .sheet-element-tooltip-wrapper,
+    .item-tooltip,
+    .rune-tooltip,
+    .sheet-tooltip-simple,
+    .info-tooltip,
+    .tippy-box,
+    .v-popper__inner
+  )
+  :is(gold, .gold, keywordMajor, .keyword-major) {
+  color: rgb(var(--tt-gold) / 1) !important;
+  font-weight: 700;
+}
+
+:is(
+    [role='tooltip'],
+    .tooltip,
+    .tooltip-box,
+    .sheet-element-tooltip-wrapper,
+    .item-tooltip,
+    .rune-tooltip,
+    .sheet-tooltip-simple,
+    .info-tooltip,
+    .tippy-box,
+    .v-popper__inner
+  )
+  :is(keyword, .keyword, keywordStealth, .keyword-stealth, spellName, .spell-name) {
+  color: rgb(var(--tt-keyword) / 1) !important;
+}
+
+:is(
+    [role='tooltip'],
+    .tooltip,
+    .tooltip-box,
+    .sheet-element-tooltip-wrapper,
+    .item-tooltip,
+    .rune-tooltip,
+    .sheet-tooltip-simple,
+    .info-tooltip,
+    .tippy-box,
+    .v-popper__inner
+  )
+  :is(active, .active, recast, .recast, passive, .passive) {
+  color: rgb(var(--tt-active) / 1) !important;
+}
+
+:is(
+    [role='tooltip'],
+    .tooltip,
+    .tooltip-box,
+    .sheet-element-tooltip-wrapper,
+    .item-tooltip,
+    .rune-tooltip,
+    .sheet-tooltip-simple,
+    .info-tooltip,
+    .tippy-box,
+    .v-popper__inner
+  )
+  :is(.rarity-generic, .rarity-legendary, .rarity-mythic) {
+  color: rgb(var(--tt-ap) / 1) !important;
+}
+
+/* Item stat values: .attention alone = generic highlight; .attention.scale-* uses stat color above. */
+:is(
+    [role='tooltip'],
+    .tooltip,
+    .tooltip-box,
+    .sheet-element-tooltip-wrapper,
+    .item-tooltip,
+    .rune-tooltip,
+    .sheet-tooltip-simple,
+    .info-tooltip,
+    .tippy-box,
+    .v-popper__inner
+  )
+  :is(attention, .attention):not(.scale-ad):not(.scale-ap):not(.scale-hp):not(.scale-mana):not(
+      .scale-armor
+    ):not(.scale-mr):not(.gold):not(.stat-haste):not(.speed):not(.status-cc):not(.dmg-physical):not(
+      .keyword-major
+    ) {
+  color: rgb(var(--tt-attention) / 1) !important;
+  font-weight: 700;
+}
+
+:is(
+    [role='tooltip'],
+    .tooltip,
+    .tooltip-box,
+    .sheet-element-tooltip-wrapper,
+    .item-tooltip,
+    .rune-tooltip,
+    .sheet-tooltip-simple,
+    .info-tooltip,
+    .tippy-box,
+    .v-popper__inner
+  )
+  .attention:is(.scale-ad, .scale-ap, .scale-hp, .scale-mana, .scale-armor, .scale-mr, .gold, .stat-haste, .speed, .status-cc, .dmg-physical, .keyword-major) {
+  font-weight: 700;
 }
 
 /* Spell tooltip inline metadata block (CD / cost / range by rank). */
-:is(.tooltip-box, .sheet-element-tooltip-wrapper) .tooltip-spell-meta {
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .item-tooltip, .rune-tooltip) .tooltip-spell-meta {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
@@ -393,21 +446,21 @@
 }
 
 /* Line breaks in passive / multi-paragraph tooltips (theorycraft descriptionHtml). */
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   .tooltip-tag-br {
   display: block;
   margin-top: 0.35em;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   .tooltip-tag-br:first-child {
   margin-top: 0;
 }
 
 /* Extra spell sections (Kayn forms, R passive body, etc.). */
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   .tooltip-spell-detail {
   margin-top: 0.65rem;
@@ -415,7 +468,7 @@
   border-top: 1px solid rgb(125 211 252 / 0.25);
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   .tooltip-spell-detail:first-of-type {
   margin-top: 0;
@@ -451,7 +504,7 @@
     .v-popper__inner
   )
   .tooltip-spell-meta-key {
-  color: rgb(252 211 77 / 1) !important; /* gold-300 */
+  color: rgb(var(--tt-gold) / 1) !important; /* gold-300 */
   font-size: inherit;
   font-weight: 600;
 }
@@ -485,7 +538,7 @@
     .v-popper__inner
   )
   .tooltip-spell-meta-value.tooltip-meta-cooldown {
-  color: rgb(56 189 248 / 1) !important;
+  color: rgb(var(--tt-haste) / 1) !important;
   font-weight: 600;
 }
 
@@ -502,7 +555,7 @@
     .v-popper__inner
   )
   .tooltip-spell-meta-value.tooltip-meta-range {
-  color: rgb(134 239 172 / 1) !important;
+  color: rgb(var(--tt-heal) / 1) !important;
   font-weight: 600;
 }
 
@@ -519,7 +572,7 @@
     .v-popper__inner
   )
   .tooltip-spell-meta-value.tooltip-meta-cost {
-  color: rgb(96 165 250 / 1) !important;
+  color: rgb(var(--tt-mana) / 1) !important;
   font-weight: 600;
 }
 
@@ -536,7 +589,7 @@
     .v-popper__inner
   )
   .tooltip-spell-meta-value.tooltip-meta-cast {
-  color: rgb(250 204 21 / 1) !important;
+  color: rgb(var(--tt-level) / 1) !important;
   font-weight: 600;
 }
 
@@ -553,7 +606,7 @@
     .v-popper__inner
   )
   .tooltip-spell-meta-value.tooltip-meta-damage {
-  color: rgb(248 113 113 / 1) !important;
+  color: rgb(var(--tt-dmg-physical) / 1) !important;
   font-weight: 600;
 }
 
@@ -624,14 +677,14 @@
 }
 
 /* Kayn transformation forms — Shadow Assassin (blue) / Darkin Slayer (red), all locales. */
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description)
   :is(.kayn-form-shadow, font[color='#8484fb'], font[color='#8484FB']) {
   color: #8484fb !important;
   font-weight: 700;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description)
   :is(.kayn-form-darkin, font[color='#fe5c50'], font[color='#FE5C50']) {
   color: #fe5c50 !important;
@@ -653,13 +706,18 @@
   font-weight: 600;
 }
 
-.tooltip-game-description :is(attention, .attention, statGood, .stat-good, scaleLevel, .scale-level) {
-  color: rgb(250 204 21 / 1) !important;
+.tooltip-game-description :is(attention, .attention):not(.scale-ad):not(.scale-ap):not(.scale-hp):not(
+    .scale-mana
+  ):not(.scale-armor):not(.scale-mr):not(.gold):not(.stat-haste):not(.speed):not(.status-cc):not(
+    .dmg-physical
+  ):not(.keyword-major),
+.tooltip-game-description :is(statGood, .stat-good, scaleLevel, .scale-level) {
+  color: rgb(var(--tt-attention) / 1) !important;
   font-weight: 700;
 }
 
 .tooltip-game-description :is(gold, .gold) {
-  color: rgb(252 211 77 / 1) !important;
+  color: rgb(var(--tt-gold) / 1) !important;
   font-weight: 700;
 }
 
@@ -730,6 +788,31 @@
 
 .tooltip-game-description .stat-haste {
   color: rgb(56 189 248 / 1) !important;
+  font-weight: 600;
+}
+
+.tooltip-game-description :is(.dmg-physical) {
+  color: rgb(248 113 113 / 1) !important;
+  font-weight: 600;
+}
+
+.tooltip-game-description :is(.dmg-magic) {
+  color: rgb(196 181 253 / 1) !important;
+  font-weight: 600;
+}
+
+.tooltip-game-description :is(.dmg-true) {
+  color: rgb(226 232 240 / 1) !important;
+  font-weight: 600;
+}
+
+.tooltip-game-description :is(.healing, .shield, .speed) {
+  color: rgb(134 239 172 / 1) !important;
+  font-weight: 600;
+}
+
+.tooltip-game-description :is(.on-hit, .onhit) {
+  color: rgb(251 191 36 / 1) !important;
   font-weight: 600;
 }
 
@@ -879,7 +962,7 @@
 }
 
 /* Teleported tooltips (champion portrait + sheet + rune selector); scoped Vue CSS must not override these. */
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   .tooltip-icon {
   display: inline-flex !important;
@@ -894,25 +977,25 @@
   flex-shrink: 0;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   .tooltip-icon.tooltip-icon-physical {
   background-image: url('/icons/statsicon/AD.png') !important;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   .tooltip-icon.tooltip-icon-magic {
   background-image: url('/icons/statsicon/ap.png') !important;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   .tooltip-icon.tooltip-icon-true {
   background-image: none !important;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   .tooltip-icon.tooltip-icon-true::before {
   content: '◆' !important;
@@ -920,85 +1003,85 @@
   background-image: none !important;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   .tooltip-icon.tooltip-icon-heal {
   background-image: url('/icons/statsicon/Health_regeneration.svg') !important;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   .tooltip-icon.tooltip-icon-speed {
   background-image: url('/icons/statsicon/Movement_speed.png') !important;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   .tooltip-icon::before {
   content: '' !important;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   .dmg-physical {
   color: rgb(248 113 113 / 1) !important;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   .dmg-magic {
   color: rgb(196 181 253 / 1) !important;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   .dmg-true {
   color: rgb(226 232 240 / 1) !important;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   .keyword-major {
   color: rgb(251 191 36 / 1) !important;
   font-weight: 700;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   .status-cc {
   color: rgb(56 189 248 / 1) !important;
   font-weight: 600;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   :is(.scale-ad, .tooltip-tag.scale-ad, scaleAD) {
   color: rgb(253 224 71 / 1) !important;
   font-weight: 700;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   :is(.scale-ap, .tooltip-tag.scale-ap, scaleAP) {
   color: rgb(196 181 253 / 1) !important;
   font-weight: 700;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   :is(.scale-hp, .tooltip-tag.scale-hp, scaleHealth) {
   color: rgb(134 239 172 / 1) !important;
   font-weight: 700;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   :is(.scale-mana, .tooltip-tag.scale-mana, scaleMana) {
   color: rgb(96 165 250 / 1) !important;
   font-weight: 700;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   :is(
     .scale-armor,
@@ -1010,62 +1093,66 @@
   font-weight: 700;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   :is(.scale-mr, .tooltip-tag.scale-mr, .tooltip-tag-scalemr, .tooltip-tag.tooltip-tag-scalemr) {
   color: rgb(129 140 248 / 1) !important;
   font-weight: 700;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   :is(.scale-level, .tooltip-tag.scale-level, scaleLevel) {
   color: rgb(250 204 21 / 1) !important;
   font-weight: 700;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   :is(.healing, .shield, .speed) {
   color: rgb(134 239 172 / 1) !important;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   .stat-adaptive {
   color: rgb(72 196 183 / 1) !important;
   font-weight: 600;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   .stat-haste {
   color: rgb(56 189 248 / 1) !important;
   font-weight: 600;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
-  :is(.attention, .stat-good) {
-  color: rgb(250 204 21 / 1) !important;
+  :is(.attention, .stat-good):not(.scale-ad):not(.scale-ap):not(.scale-hp):not(.scale-mana):not(
+    .scale-armor
+  ):not(.scale-mr):not(.gold):not(.stat-haste):not(.speed):not(.status-cc):not(.dmg-physical):not(
+    .keyword-major
+  ) {
+  color: rgb(var(--tt-attention) / 1) !important;
   font-weight: 700;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   .gold {
   color: rgb(252 211 77 / 1) !important;
   font-weight: 700;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   :is(.rarity-generic, .rarity-legendary, .rarity-mythic) {
   color: rgb(196 181 253 / 1) !important;
   font-weight: 600;
 }
 
-:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip, .item-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   :is(.passive, .active, .recast) {
   color: rgb(147 197 253 / 1) !important;

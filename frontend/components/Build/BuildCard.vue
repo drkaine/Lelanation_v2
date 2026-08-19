@@ -836,12 +836,17 @@
                   :alt="slot.spell.name"
                   class="skill-icon"
                   :title="
-                    tooltipsEnabled
-                      ? slot.spell.name
-                      : canEditSkillOrder
-                        ? t('skills.selectSkill')
-                        : undefined
+                    tooltipsEnabled && hasSkillOrderUps
+                      ? undefined
+                      : tooltipsEnabled
+                        ? slot.spell.name
+                        : canEditSkillOrder
+                          ? t('skills.selectSkill')
+                          : undefined
                   "
+                  @mouseenter="onSkillSlotMouseEnter($event, slot)"
+                  @mousemove="onSkillSlotMouseMove"
+                  @mouseleave="onSkillSlotMouseLeave"
                 />
                 <div v-else class="skill-placeholder"></div>
                 <span v-if="slot.key" class="skill-key">
@@ -881,12 +886,17 @@
                   :alt="slot.spell.name"
                   class="skill-icon"
                   :title="
-                    tooltipsEnabled
-                      ? slot.spell.name
-                      : canEditSkillOrder
-                        ? t('skills.selectSkill')
-                        : undefined
+                    tooltipsEnabled && hasSkillOrderUps
+                      ? undefined
+                      : tooltipsEnabled
+                        ? slot.spell.name
+                        : canEditSkillOrder
+                          ? t('skills.selectSkill')
+                          : undefined
                   "
+                  @mouseenter="onSkillSlotMouseEnter($event, slot)"
+                  @mousemove="onSkillSlotMouseMove"
+                  @mouseleave="onSkillSlotMouseLeave"
                 />
                 <div v-else class="skill-placeholder"></div>
                 <span v-if="slot.key" class="skill-key">
@@ -994,9 +1004,9 @@
               </div>
             </div>
 
-            <hr class="tooltip-separator" />
+            <hr v-if="showChampionTooltipSpellSection" class="tooltip-separator" />
 
-            <div class="tooltip-body">
+            <div v-if="showChampionTooltipSpellSection" class="tooltip-body">
               <div class="tooltip-spells">
                 <div
                   v-if="
@@ -1037,44 +1047,82 @@
                 </div>
 
                 <div
-                  v-for="(spell, index) in formattedSpells"
-                  :key="spell.id || index"
+                  v-for="entry in championTooltipSpellEntries"
+                  :key="entry.key"
                   class="tooltip-spell"
                 >
-                  <div v-if="spell && spell.image" class="tooltip-spell-wrapper">
-                    <div
-                      class="tooltip-spell-img-container"
-                      :data-spell-key="['Q', 'W', 'E', 'R'][index]"
-                    >
+                  <div
+                    v-if="entry.spell && resolveChampionSpellImageFull(entry.spell)"
+                    class="tooltip-spell-wrapper"
+                  >
+                    <div class="tooltip-spell-img-container" :data-spell-key="entry.key">
                       <img
-                        :src="
-                          getChampionSpellImageUrl(
-                            versionForImages,
-                            selectedChampion.id,
-                            spell.image.full
-                          )
-                        "
-                        :alt="spell.name"
+                        :src="championSpellImageSrc(selectedChampion, entry.spell)"
+                        :alt="entry.spell.name"
                         class="tooltip-spell-img"
                       />
                     </div>
                     <div class="tooltip-spell-content">
-                      <div class="tooltip-spell-name">
-                        {{ ['Q', 'W', 'E', 'R'][index] }}: {{ spell.name }}
-                      </div>
+                      <div class="tooltip-spell-name">{{ entry.key }}: {{ entry.spell.name }}</div>
                       <div
-                        v-if="spellTooltipMeta(spell)"
+                        v-if="spellTooltipMeta(entry.spell)"
                         class="tooltip-spell-meta tooltip-game-description"
-                        v-html="spellTooltipMeta(spell)"
+                        v-html="spellTooltipMeta(entry.spell)"
                       />
                       <div
-                        v-if="spellTooltipBody(spell)"
+                        v-if="spellTooltipBody(entry.spell)"
                         class="tooltip-spell-description tooltip-game-description"
-                        v-html="spellTooltipBody(spell)"
+                        v-html="spellTooltipBody(entry.spell)"
                       />
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        </Teleport>
+
+        <!-- Tooltip d'un sort du skill order (quand des ups sont renseignés) -->
+        <Teleport to="body">
+          <div
+            v-if="skillAbilityTooltip.show && skillAbilityTooltip.spell"
+            ref="skillAbilityTooltipRef"
+            class="tooltip-box tooltip-box-fixed z-[9999] rounded-lg border border-accent bg-background shadow-lg"
+            :style="skillAbilityTooltipFixedStyle"
+            @mouseenter="onSkillAbilityTooltipMouseEnter"
+            @mouseleave="onSkillAbilityTooltipMouseLeave"
+          >
+            <div class="tooltip-spell tooltip-spell--single">
+              <div
+                v-if="skillAbilityTooltip.spellImageFull"
+                class="tooltip-spell-img-container"
+                :data-spell-key="skillAbilityTooltip.abilityKey ?? undefined"
+              >
+                <img
+                  :src="
+                    championSpellImageSrc(selectedChampion, {
+                      image: { full: skillAbilityTooltip.spellImageFull },
+                    })
+                  "
+                  :alt="String(skillAbilityTooltip.spell?.name ?? '')"
+                  class="tooltip-spell-img"
+                />
+              </div>
+              <div class="tooltip-spell-content">
+                <div class="tooltip-spell-name">
+                  {{ skillAbilityTooltip.abilityKey }}:
+                  {{ skillAbilityTooltip.spell?.name }}
+                </div>
+                <div
+                  v-if="spellTooltipMeta(skillAbilityTooltip.spell)"
+                  class="tooltip-spell-meta tooltip-game-description"
+                  v-html="spellTooltipMeta(skillAbilityTooltip.spell)"
+                />
+                <div
+                  v-if="spellTooltipBody(skillAbilityTooltip.spell)"
+                  class="tooltip-spell-description tooltip-game-description"
+                  v-html="spellTooltipBody(skillAbilityTooltip.spell)"
+                />
               </div>
             </div>
           </div>
@@ -1115,7 +1163,25 @@
                         {{ sheetElementTooltipResolved.item.name }}
                       </div>
                       <div class="item-tooltip-price">
-                        {{ sheetElementTooltipResolved.item.gold?.total ?? 0 }}
+                        <span class="item-tooltip-gold-total">{{
+                          sheetElementTooltipResolved.item.gold?.total ?? 0
+                        }}</span>
+                      </div>
+                      <div class="item-tooltip-gold-value">
+                        <span class="item-tooltip-meta-key"
+                          >{{ t('stats.labels.goldValue') }}:</span
+                        >
+                        <span class="item-tooltip-meta-value item-tooltip-gold-value-num">{{
+                          getItemGoldValue(sheetElementTooltipResolved.item)
+                        }}</span>
+                      </div>
+                      <div class="item-tooltip-gold-efficiency">
+                        <span class="item-tooltip-meta-key"
+                          >{{ t('stats.labels.goldEfficiency') }}:</span
+                        >
+                        <span class="item-tooltip-meta-value item-tooltip-gold-efficiency-num">{{
+                          formatItemGoldEfficiency(sheetElementTooltipResolved.item)
+                        }}</span>
                       </div>
                     </div>
                   </div>
@@ -1198,12 +1264,13 @@
                       </div>
                     </div>
                   </div>
+                  <!-- eslint-disable vue/no-v-html -->
                   <div
-                    v-if="sheetElementTooltipResolved.description"
-                    class="item-tooltip-description"
-                  >
-                    {{ sheetElementTooltipResolved.description }}
-                  </div>
+                    v-if="sheetElementTooltipResolved.descriptionHtml"
+                    class="item-tooltip-description tooltip-game-description"
+                    v-html="sheetElementTooltipResolved.descriptionHtml"
+                  />
+                  <!-- eslint-enable vue/no-v-html -->
                 </div>
               </div>
             </template>
@@ -1790,6 +1857,8 @@ import {
   getKaynHudImageUrl,
   getChampionSplashImageUrl,
   getChampionSpellImageUrl,
+  resolveChampionSpellImageUrlFromSpell,
+  resolveChampionSpellImageFull,
   getChampionPassiveImageUrl,
   getSpellImageUrl,
   getRunePathColor,
@@ -1803,7 +1872,12 @@ import { useGameVersion } from '~/composables/useGameVersion'
 import { useLayoutScaled } from '~/composables/useLayoutScaled'
 import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 import { useChampionSplashPreference } from '~/composables/useChampionSplashPreference'
-import { formatLethality, formatPenetrationPercentFlat } from '~/utils/formatItemStats'
+import {
+  formatLethality,
+  formatPenetrationPercentFlat,
+  formatItemGoldEfficiency,
+  getItemGoldValue,
+} from '~/utils/formatItemStats'
 import { linkifyDescription } from '~/utils/linkifyDescription'
 import { sanitizeDescriptionHtml } from '~/utils/sanitizeDescriptionHtml'
 import {
@@ -1814,7 +1888,11 @@ import {
 } from '~/utils/gameTooltipFormatter'
 import { resolveSummonerSpellFromRef } from '~/utils/summonerSpellResolver'
 import { fixedTooltipStyleFromPointer, type TooltipPointer } from '~/utils/tooltipPosition'
-import { formatRuneTooltipHtml, formatTooltipMarkupHtml } from '~/utils/formatTooltipMarkupHtml'
+import {
+  formatItemTooltipHtml,
+  formatRuneTooltipHtml,
+  formatShardTooltipHtml,
+} from '~/utils/formatTooltipMarkupHtml'
 import { resolveItemDescription, resolveItemPlaintext } from '~/utils/itemDescriptionFallbacks'
 import DescriptionEditor from '~/components/Build/DescriptionEditor.vue'
 import PatchStaleBuildBadge from '~/components/Build/PatchStaleBuildBadge.vue'
@@ -2337,9 +2415,27 @@ function sheetTooltip(label?: string | null, fallback = ''): string {
 const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
 const riotLocale = computed(() => getRiotLanguage(locale.value))
 
+type AbilityKey = 'Q' | 'W' | 'E' | 'R'
+type SkillSlotSpell = { key: AbilityKey; image: { full: string }; name: string }
+type SkillSlotState = { key: AbilityKey | null; spell: SkillSlotSpell | null }
+
 const showTooltip = ref(false)
 const tooltipRef = ref<HTMLElement | null>(null)
 const championPortraitRef = ref<HTMLElement | null>(null)
+
+const skillAbilityTooltip = ref<{
+  show: boolean
+  spell: Record<string, unknown> | null
+  abilityKey: AbilityKey | null
+  spellImageFull: string
+}>({
+  show: false,
+  spell: null,
+  abilityKey: null,
+  spellImageFull: '',
+})
+const skillAbilityTooltipRef = ref<HTMLElement | null>(null)
+const skillAbilityTooltipFixedStyle = ref<Record<string, string>>({})
 
 // Fixed positioning for the teleported tooltip (follows cursor)
 const tooltipFixedStyle = ref<Record<string, string>>({})
@@ -2389,6 +2485,74 @@ const onChampionTooltipMouseLeave = () => {
     championTooltipHideTimer = null
   }
   showTooltip.value = false
+}
+
+function applySkillAbilityTooltipPosition() {
+  if (!skillAbilityTooltipRef.value || !skillAbilityTooltip.value.show) return
+  skillAbilityTooltipFixedStyle.value = fixedTooltipStyleFromPointer(
+    skillAbilityTooltipRef.value,
+    tooltipPointer.value
+  )
+}
+
+let skillAbilityTooltipHideTimer: ReturnType<typeof setTimeout> | null = null
+
+function championSpellImageSrc(
+  champion: { id?: string; key?: string | number } | null | undefined,
+  spell: { image?: { full?: string } | string } | null | undefined
+): string {
+  return resolveChampionSpellImageUrlFromSpell(versionForImages.value, champion, spell)
+}
+
+function onSkillSlotMouseEnter(event: MouseEvent, slot: SkillSlotState) {
+  if (
+    !tooltipsEnabled.value ||
+    !hasSkillOrderUps.value ||
+    !slot.key ||
+    !slot.spell ||
+    !selectedChampion.value
+  ) {
+    return
+  }
+  const spell = getChampionSpellBySlot(selectedChampion.value, slot.key)
+  const spellImageFull =
+    slot.spell.image.full || resolveChampionSpellImageFull(spell as { image?: { full?: string } })
+  if (!spell || !spellImageFull) return
+  if (skillAbilityTooltipHideTimer) {
+    clearTimeout(skillAbilityTooltipHideTimer)
+    skillAbilityTooltipHideTimer = null
+  }
+  setTooltipPointer(event)
+  skillAbilityTooltip.value = {
+    show: true,
+    spell,
+    abilityKey: slot.key,
+    spellImageFull,
+  }
+  nextTick(() => applySkillAbilityTooltipPosition())
+}
+
+function onSkillSlotMouseMove(event: MouseEvent) {
+  if (!skillAbilityTooltip.value.show) return
+  setTooltipPointer(event)
+  applySkillAbilityTooltipPosition()
+}
+
+function onSkillSlotMouseLeave() {
+  skillAbilityTooltipHideTimer = setTimeout(() => {
+    skillAbilityTooltip.value = { show: false, spell: null, abilityKey: null, spellImageFull: '' }
+  }, 120)
+}
+
+function onSkillAbilityTooltipMouseEnter() {
+  if (skillAbilityTooltipHideTimer) {
+    clearTimeout(skillAbilityTooltipHideTimer)
+    skillAbilityTooltipHideTimer = null
+  }
+}
+
+function onSkillAbilityTooltipMouseLeave() {
+  skillAbilityTooltip.value = { show: false, spell: null, abilityKey: null, spellImageFull: '' }
 }
 
 // ── Sheet element tooltip (items, runes, spells, shards) — contenu résolu de façon réactive ───
@@ -2445,9 +2609,7 @@ const sheetElementTooltipResolved = computed(() => {
       const p = tt.payload as { id: string; name?: string }
       const item = itemsStore.items.find(i => i.id === p?.id)
       if (!item) return null
-      const descriptionHtml = formatTooltipMarkupHtml(
-        resolveItemDescription(item, riotLocale.value)
-      )
+      const descriptionHtml = formatItemTooltipHtml(resolveItemDescription(item, riotLocale.value))
       const plaintext = resolveItemPlaintext(item, riotLocale.value)
       return {
         type: 'item' as const,
@@ -2492,8 +2654,8 @@ const sheetElementTooltipResolved = computed(() => {
     case 'shard': {
       const id = tt.payload as number
       const name = getShardNameById(id) || tt.fallback
-      const description = getShardDescriptionById(id)
-      return { type: 'shard' as const, name, description }
+      const descriptionHtml = formatShardTooltipHtml(getShardDescriptionById(id))
+      return { type: 'shard' as const, name, descriptionHtml }
     }
     case 'path': {
       const id = tt.payload as number
@@ -3163,10 +3325,6 @@ const coreItemsPath2 = computed(() => {
 })
 
 // First Three Ups - Les 3 premiers "up" (niveaux 1, 2, 3)
-type AbilityKey = 'Q' | 'W' | 'E' | 'R'
-type SkillSlotSpell = { key: AbilityKey; image: { full: string }; name: string }
-type SkillSlotState = { key: AbilityKey | null; spell: SkillSlotSpell | null }
-
 const createEmptySkillOrder = (): SkillOrder => ({
   firstThreeUps: [null as any, null as any, null as any],
   skillUpOrder: [null as any, null as any, null as any],
@@ -3235,6 +3393,53 @@ const skillOrderSlots = computed<SkillSlotState[]>(() => {
       spell: getSkillSlotSpell(key),
     }
   })
+})
+
+const hasSkillOrderUps = computed(() => {
+  const skillOrder = displayBuild.value?.skillOrder
+  if (!skillOrder) return false
+  const slots = [
+    ...(Array.isArray(skillOrder.firstThreeUps) ? skillOrder.firstThreeUps : []),
+    ...(Array.isArray(skillOrder.skillUpOrder) ? skillOrder.skillUpOrder : []),
+  ]
+  return slots.some(entry => entry != null && entry !== '')
+})
+
+const selectedSkillOrderAbilityKeys = computed(() => {
+  const skillOrder = displayBuild.value?.skillOrder
+  const keys = new Set<AbilityKey>()
+  if (!skillOrder) return keys
+  const slots = [
+    ...(Array.isArray(skillOrder.firstThreeUps) ? skillOrder.firstThreeUps : []),
+    ...(Array.isArray(skillOrder.skillUpOrder) ? skillOrder.skillUpOrder : []),
+  ]
+  for (const entry of slots) {
+    if (entry === 'Q' || entry === 'W' || entry === 'E' || entry === 'R') {
+      keys.add(entry)
+    }
+  }
+  return keys
+})
+
+const championTooltipSpellEntries = computed(() => {
+  const champion = selectedChampion.value
+  if (!champion) return []
+  const excluded = selectedSkillOrderAbilityKeys.value
+  return (['Q', 'W', 'E', 'R'] as AbilityKey[])
+    .map(key => ({ key, spell: getChampionSpellBySlot(champion, key) }))
+    .filter(entry => {
+      if (!entry.spell || !resolveChampionSpellImageFull(entry.spell)) return false
+      return !hasSkillOrderUps.value || !excluded.has(entry.key)
+    })
+})
+
+const showChampionTooltipSpellSection = computed(() => {
+  const champion = selectedChampion.value
+  if (!champion) return false
+  const hasPassive = Boolean(
+    champion.passive?.image?.full && champion.passive.image.full !== champion.image?.full
+  )
+  return hasPassive || championTooltipSpellEntries.value.length > 0
 })
 
 const activeSkillDropdown = computed(() => {
@@ -3508,12 +3713,6 @@ const passiveTooltipBody = computed(() => {
   return spellTooltipBody(passive)
 })
 
-const formattedSpells = computed(() => {
-  if (!Array.isArray(selectedChampion.value?.spells) || selectedChampion.value.spells.length === 0)
-    return []
-  return selectedChampion.value.spells
-})
-
 watch(showTooltip, async newValue => {
   if (newValue) {
     await nextTick()
@@ -3524,9 +3723,24 @@ watch(showTooltip, async newValue => {
   }
 })
 
+watch(
+  () => skillAbilityTooltip.value.show,
+  async newValue => {
+    if (newValue) {
+      await nextTick()
+      applySkillAbilityTooltipPosition()
+      window.addEventListener('resize', applySkillAbilityTooltipPosition)
+    } else {
+      window.removeEventListener('resize', applySkillAbilityTooltipPosition)
+    }
+  }
+)
+
 onUnmounted(() => {
   if (championTooltipHideTimer) clearTimeout(championTooltipHideTimer)
+  if (skillAbilityTooltipHideTimer) clearTimeout(skillAbilityTooltipHideTimer)
   window.removeEventListener('resize', applyChampionTooltipPosition)
+  window.removeEventListener('resize', applySkillAbilityTooltipPosition)
   document.removeEventListener('mousedown', onDocumentPointerDown)
   championTitleResizeObserver?.disconnect()
   championTitleResizeObserver = null
@@ -5929,6 +6143,10 @@ defineExpose({
   gap: 0.75em;
 }
 
+.tooltip-spell--single {
+  padding: 0.75rem;
+}
+
 .tooltip-spell-wrapper {
   display: flex;
   gap: 0.75em;
@@ -6243,7 +6461,12 @@ defineExpose({
 
 .sheet-element-tooltip-wrapper :deep(.item-tooltip-price) {
   font-size: 0.875rem;
-  color: rgb(var(--rgb-text) / 0.8);
+  line-height: 1.3;
+}
+
+.sheet-element-tooltip-wrapper :deep(.item-tooltip-gold-value),
+.sheet-element-tooltip-wrapper :deep(.item-tooltip-gold-efficiency) {
+  font-size: 0.8125rem;
   line-height: 1.3;
 }
 
@@ -6256,7 +6479,8 @@ defineExpose({
   border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.sheet-element-tooltip-wrapper :deep(.item-tooltip-description) {
+.sheet-element-tooltip-wrapper :deep(.item-tooltip-description),
+.sheet-element-tooltip-wrapper :deep(.rune-tooltip-description) {
   font-size: 0.8rem;
   color: rgb(var(--rgb-text) / 0.7);
   line-height: 1.4;

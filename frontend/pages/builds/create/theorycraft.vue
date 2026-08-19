@@ -6,27 +6,12 @@
       </div>
 
       <div class="theorycraft-page-header mb-4 pr-4">
-        <button
-          type="button"
-          class="theorycraft-vs-toggle"
-          :class="{ 'theorycraft-vs-toggle--active': showVersus }"
-          :title="showVersus ? t('theorycraft.panel.vsDisable') : t('theorycraft.panel.vsEnable')"
-          :aria-label="
-            showVersus ? t('theorycraft.panel.vsDisable') : t('theorycraft.panel.vsEnable')
-          "
-          @click="toggleVersus"
-        >
-          {{ t('theorycraft.panel.vsButton') }}
-        </button>
         <TheorycraftRuneStackPanel variant="header" />
       </div>
 
       <div
-        class="build-layout mb-6 flex flex-col items-start gap-4 md:flex-row"
-        :class="{
-          'build-layout--streamer': isLayoutScaled,
-          'build-layout--versus': showVersus,
-        }"
+        class="build-layout build-layout--versus mb-6 flex flex-col items-start gap-4 md:flex-row"
+        :class="{ 'build-layout--streamer': isLayoutScaled }"
       >
         <div
           class="build-card-wrapper w-full flex-shrink-0 md:order-1"
@@ -96,19 +81,13 @@
             :sheet-tooltips="true"
             :highlight-missing-fields="highlightMissingFields"
             :readonly="false"
-            :build="showVersus && activeSide !== 'ally' ? sideBuilds.ally : null"
-            :calculated-stats="
-              showVersus && activeSide !== 'ally' ? (sideCalculatedStats.ally ?? null) : null
-            "
+            :build="activeSide !== 'ally' ? sideBuilds.ally : null"
+            :calculated-stats="activeSide !== 'ally' ? (sideCalculatedStats.ally ?? null) : null"
             :stats-level="theorycraftLevel"
             selection-mode="theorycraft"
             :flip-back-face="allyCardBackFace"
             :active-selection-region="
-              showVersus && activeSide !== 'ally'
-                ? null
-                : activePanel === 'theorycraft'
-                  ? null
-                  : activePanel
+              activeSide !== 'ally' ? null : activePanel === 'theorycraft' ? null : activePanel
             "
             @select-region="onSelectRegion('ally', $event)"
             @toggle-description-flip="toggleDescriptionFlip('ally')"
@@ -130,7 +109,6 @@
         </div>
 
         <div
-          v-if="showVersus"
           class="build-card-wrapper w-full flex-shrink-0 md:order-3"
           @click="activateSide('enemy')"
         >
@@ -270,14 +248,12 @@ const THEORYCRAFT_VS_STATE_STORAGE_PREFIX = 'lelanation_theorycraft_vs_state_v1_
 interface TheorycraftVsStoredState {
   ally: Build | null
   enemy: Build | null
-  showVersus: boolean
   activeSide: TheorycraftSide
 }
 
 const activePanel = ref<TheorycraftPanel>('theorycraft')
 const theorycraftLevel = ref(18)
 const activeSide = ref<TheorycraftSide>('ally')
-const showVersus = ref(false)
 const sideBuilds = ref<Record<TheorycraftSide, Build | null>>({
   ally: null,
   enemy: null,
@@ -407,7 +383,6 @@ function persistVsState() {
     const payload: TheorycraftVsStoredState = {
       ally: cloneBuild(sideBuilds.value.ally),
       enemy: cloneBuild(sideBuilds.value.enemy),
-      showVersus: showVersus.value,
       activeSide: activeSide.value,
     }
     localStorage.setItem(key, JSON.stringify(payload))
@@ -427,7 +402,6 @@ function loadVsState(): TheorycraftVsStoredState | null {
     return {
       ally: cloneBuild((parsed.ally as Build | null) ?? null),
       enemy: cloneBuild((parsed.enemy as Build | null) ?? null),
-      showVersus: Boolean(parsed.showVersus),
       activeSide: active,
     }
   } catch {
@@ -448,19 +422,6 @@ function activateSide(side: TheorycraftSide) {
     )
   }
   loadSideBuild(side)
-}
-
-function toggleVersus() {
-  if (showVersus.value) {
-    if (activeSide.value === 'enemy') activateSide('ally')
-    showVersus.value = false
-    return
-  }
-  persistActiveSideBuild()
-  if (!sideBuilds.value.enemy) {
-    sideBuilds.value.enemy = createEmptyTheorycraftBuild(t('theorycraft.panel.enemyCard'))
-  }
-  showVersus.value = true
 }
 
 function statsFlipActive(side: TheorycraftSide): boolean {
@@ -513,7 +474,6 @@ const theorycraftStats = computed(() => {
 })
 
 const opponentTheorycraftStats = computed(() => {
-  if (!showVersus.value) return null
   const opponentSide: TheorycraftSide = activeSide.value === 'ally' ? 'enemy' : 'ally'
   const opponentBuild = sideBuilds.value[opponentSide]
   const opponentRaw = sideCalculatedStats.value[opponentSide]
@@ -526,7 +486,6 @@ const opponentTheorycraftStats = computed(() => {
 })
 
 const opponentRawStats = computed(() => {
-  if (!showVersus.value) return null
   const opponentSide: TheorycraftSide = activeSide.value === 'ally' ? 'enemy' : 'ally'
   return sideCalculatedStats.value[opponentSide]
 })
@@ -582,7 +541,7 @@ watch(
 )
 
 watch(
-  [sideBuilds, showVersus, activeSide],
+  [sideBuilds, activeSide],
   () => {
     if (isHydratingVsState.value) return
     persistVsState()
@@ -647,25 +606,18 @@ onMounted(async () => {
   const storedVs = loadVsState()
   const currentChampionId = buildStore.currentBuild.champion?.id
   const storedAllyChampionId = storedVs?.ally?.champion?.id
-  const canRestoreVersus =
-    Boolean(storedVs?.showVersus) &&
-    Boolean(storedVs?.enemy) &&
-    storedAllyChampionId === currentChampionId
+  const canRestoreEnemy = Boolean(storedVs?.enemy) && storedAllyChampionId === currentChampionId
 
-  if (canRestoreVersus && storedVs) {
-    sideBuilds.value.enemy = storedVs.enemy
-    showVersus.value = true
-    if (storedVs.activeSide === 'enemy') {
-      activeSide.value = 'enemy'
-      activePanel.value = sidePanels.value.enemy ?? 'theorycraft'
-      loadSideBuild('enemy')
-    } else {
-      activeSide.value = 'ally'
-      activePanel.value = sidePanels.value.ally ?? 'theorycraft'
-    }
+  sideBuilds.value.enemy =
+    canRestoreEnemy && storedVs
+      ? storedVs.enemy
+      : createEmptyTheorycraftBuild(t('theorycraft.panel.enemyCard'))
+
+  if (storedVs?.activeSide === 'enemy') {
+    activeSide.value = 'enemy'
+    activePanel.value = sidePanels.value.enemy ?? 'theorycraft'
+    loadSideBuild('enemy')
   } else {
-    sideBuilds.value.enemy = null
-    showVersus.value = false
     activeSide.value = 'ally'
     activePanel.value = sidePanels.value.ally ?? 'theorycraft'
   }
@@ -720,37 +672,6 @@ onBeforeRouteLeave(to => {
   align-items: center;
   gap: 0.75rem 1rem;
   padding-top: 5px;
-}
-
-.theorycraft-vs-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 44px;
-  height: 38px;
-  padding: 0 0.7rem;
-  border-radius: 0.5rem;
-  border: 1px solid rgb(200 155 60 / 0.5);
-  background: var(--color-background, #0a1428);
-  color: rgb(255 255 255 / 0.9);
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  transition:
-    border-color 0.15s ease,
-    background 0.15s ease,
-    color 0.15s ease;
-}
-
-.theorycraft-vs-toggle:hover {
-  border-color: var(--color-accent, #c89b3c);
-  color: var(--color-accent, #c89b3c);
-}
-
-.theorycraft-vs-toggle--active {
-  border-color: var(--color-accent, #c89b3c);
-  background: rgb(200 155 60 / 0.15);
-  color: var(--color-accent, #c89b3c);
 }
 
 .build-card-toolbar {
