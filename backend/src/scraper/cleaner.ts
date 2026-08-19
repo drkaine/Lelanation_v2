@@ -20,7 +20,13 @@ export function cleanChanges(raw: EntityChanges[]): EntityChanges[] {
     }
 
     if (isSkinPromoEntity(entity)) {
-      logger.debug({ entity: entity.name }, 'Skipping skin promo entity');
+      logger.debug({ entity: entity.name, subCategory: entity.subCategory }, 'Skipping skin promo entity');
+      continue;
+    }
+
+    const filteredChanges = filterEntityChanges(entity);
+    if (filteredChanges.length === 0) {
+      logger.debug({ entity: entity.name, category: entity.category }, 'Skipping entity with no balance changes');
       continue;
     }
 
@@ -50,7 +56,7 @@ export function cleanChanges(raw: EntityChanges[]): EntityChanges[] {
     // Deduplicate changes by stat name
     const seenStats = new Set<string>();
 
-    for (const change of entity.changes) {
+    for (const change of filteredChanges) {
       const cleanChange: StatChange = {
         stat: cleanString(change.stat),
         before: cleanString(change.before),
@@ -109,10 +115,40 @@ export function cleanChanges(raw: EntityChanges[]): EntityChanges[] {
 }
 
 function isSkinPromoEntity(entity: EntityChanges): boolean {
+  const sub = (entity.subCategory ?? '').toLowerCase();
+  if (sub.includes('skin') || sub.includes('cosmét') || sub.includes('cosmet') || sub.includes('chroma')) {
+    return true;
+  }
+
   const name = entity.name.toLowerCase().trim();
   if (name === 'skins' || name.startsWith('skins et chromas')) return true;
   const slug = entity.patchSlug?.toLowerCase();
   return slug === 'skins' || slug === 'upcoming-skins-and-chromas';
+}
+
+function isClassicBugfixEntity(entity: EntityChanges): boolean {
+  if (entity.category !== 'classic') return false;
+  const sub = (entity.subCategory ?? '').toLowerCase();
+  return sub.includes('bug') || sub.includes('correction');
+}
+
+function isClassicBalanceChange(change: StatChange): boolean {
+  if (change.stat?.trim()) return true;
+  if (change.type === 'text') {
+    const sub = change.subCategory?.trim() ?? '';
+    if (/^(marques?|sceaux|glyphes|quintessences?)$/i.test(sub)) {
+      return true;
+    }
+    return false;
+  }
+  return Boolean(change.before?.trim() || change.after?.trim());
+}
+
+function filterEntityChanges(entity: EntityChanges): StatChange[] {
+  if (entity.category !== 'classic' || isClassicBugfixEntity(entity)) {
+    return entity.changes;
+  }
+  return entity.changes.filter(isClassicBalanceChange);
 }
 
 /**
@@ -143,7 +179,10 @@ function normalizeCategory(category: EntityCategory | string): EntityCategory {
   // ARAM modes
   if (normalized.includes('aram-chaos') || normalized.includes('chaos')) return 'aram-chaos';
   if (normalized.includes('aram')) return 'aram';
-  
+
+  // Classic (Summoner's Rift legacy mode)
+  if (normalized.includes('classic')) return 'classic';
+
   // Arena
   if (normalized.includes('arena')) return 'arena';
   
@@ -240,10 +279,11 @@ export function sortEntities(entities: EntityChanges[]): EntityChanges[] {
     item: 2,
     rune: 3,
     system: 4,
-    aram: 5,
-    'aram-chaos': 6,
-    arena: 7,
-    bugfix: 8,
+    classic: 5,
+    aram: 6,
+    'aram-chaos': 7,
+    arena: 8,
+    bugfix: 9,
   };
 
   return [...entities].sort((a, b) => {

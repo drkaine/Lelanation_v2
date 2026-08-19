@@ -2,6 +2,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import type { PatchEntity } from '~/stores/PatchNotesStore'
+import { resolvePatchNotesAssetPath } from '~/stores/PatchNotesStore'
 import { useVersionStore } from '~/stores/VersionStore'
 import { useItemsStore } from '~/stores/ItemsStore'
 import { useChampionsStore } from '~/stores/ChampionsStore'
@@ -41,7 +42,10 @@ function resolveRuneGameKey(keyOrAlias: string): string {
 
 export type PatchEntityImageKind = 'champion' | 'item' | 'rune' | 'summoner' | null
 
-/** Patch slugs Riot pour les sorts d'invocateur (section Système). */
+/** Riot patch slugs that no longer match the current in-game item name. */
+const ITEM_PATCH_SLUG_TO_ID: Record<string, string> = {
+  'sunfire-cape': '3068',
+}
 const SUMMONER_SPELL_PATCH_SLUGS = new Set([
   'teleport',
   'flash',
@@ -92,7 +96,7 @@ export function isSummonerSpellPatchEntity(entity: PatchEntity): boolean {
   return SUMMONER_SPELL_PATCH_SLUGS.has(slug.toLowerCase())
 }
 
-export function resolveArenaImageKind(subCategory?: string): PatchEntityImageKind {
+export function resolveModeSubCategoryImageKind(subCategory?: string): PatchEntityImageKind {
   const sub = normalizeLookupKey(subCategory ?? '')
   if (!sub) return null
   if (sub.includes('objet') || sub.includes('item')) return 'item'
@@ -108,19 +112,36 @@ export function resolveArenaImageKind(subCategory?: string): PatchEntityImageKin
   return null
 }
 
+/** @deprecated Use resolveModeSubCategoryImageKind */
+export function resolveArenaImageKind(subCategory?: string): PatchEntityImageKind {
+  return resolveModeSubCategoryImageKind(subCategory)
+}
+
+const STRUCTURED_MODE_CATEGORIES = new Set<PatchEntity['category']>([
+  'classic',
+  'aram',
+  'aram-chaos',
+  'arena',
+])
+
 export function resolvePatchEntityImageKind(entity: PatchEntity): PatchEntityImageKind {
-  if (
-    entity.category === 'champion' ||
-    entity.category === 'aram' ||
-    entity.category === 'aram-chaos'
-  ) {
-    return 'champion'
-  }
+  if (entity.category === 'champion') return 'champion'
   if (entity.category === 'item') return 'item'
   if (entity.category === 'rune') return 'rune'
-  if (entity.category === 'arena') return resolveArenaImageKind(entity.subCategory)
+
+  if (STRUCTURED_MODE_CATEGORIES.has(entity.category)) {
+    const fromSubCategory = resolveModeSubCategoryImageKind(entity.subCategory)
+    if (fromSubCategory) return fromSubCategory
+    if (entity.category === 'arena' && !entity.subCategory?.trim()) return 'champion'
+    return null
+  }
+
   if (isSummonerSpellPatchEntity(entity)) return 'summoner'
   return null
+}
+
+function championLookupKey(value: string): string {
+  return normalizeLookupKey(value).replace(/'/g, '')
 }
 
 export function usePatchEntityImage(entity: () => PatchEntity) {
@@ -151,11 +172,43 @@ export function usePatchEntityImage(entity: () => PatchEntity) {
   watch(locale, ensureGameDataLoaded)
 
   watch(
-    () => [entity().id, entity().name, entity().category, entity().subCategory] as const,
+    () =>
+      [
+        entity().id,
+        entity().name,
+        entity().category,
+        entity().subCategory,
+        entity().imageUrl,
+      ] as const,
     () => {
       imageError.value = false
     }
   )
+
+  function resolveCachedPatchImageUrl(current: PatchEntity): string | null {
+    const raw = current.imageUrl?.trim()
+    if (!raw) return null
+    if (raw.startsWith('http://') || raw.startsWith('https://')) return raw
+    if (raw.startsWith('/data/patch-notes/')) return raw
+    return resolvePatchNotesAssetPath(raw, '')
+  }
+
+  function findItemIdByPatchSlug(patchSlug?: string | null): string | null {
+    const slug = patchSlug?.trim().toLowerCase()
+    if (!slug) return null
+
+    const override = ITEM_PATCH_SLUG_TO_ID[slug]
+    if (override) return override
+
+    const slugAsName = normalizeLookupKey(slug.replace(/-/g, ' '))
+    return (
+      itemsStore.items.find(item => {
+        const itemSlug = normalizeLookupKey(item.name.replace(/\s+/g, '-'))
+        const itemName = normalizeLookupKey(item.name)
+        return itemSlug === normalizeLookupKey(slug) || itemName === slugAsName
+      })?.id ?? null
+    )
+  }
 
   function findItemIdByName(name: string): string | null {
     const key = normalizeLookupKey(name)
@@ -163,9 +216,9 @@ export function usePatchEntityImage(entity: () => PatchEntity) {
   }
 
   function findChampionIdByName(name: string): string | null {
-    const key = normalizeLookupKey(name)
+    const key = championLookupKey(name)
     const champion = championsStore.champions.find(
-      c => normalizeLookupKey(c.name) === key || normalizeLookupKey(c.id) === key
+      c => championLookupKey(c.name) === key || championLookupKey(c.id) === key
     )
     return champion?.id ?? null
   }
@@ -214,15 +267,61 @@ export function usePatchEntityImage(entity: () => PatchEntity) {
     return fromName?.id ?? null
   }
 
+  function parseEntityDisplayName(name: string): string {
+    const honoredGuest = parseHonoredGuestChampionName(name)
+    const improvementMatch = honoredGuest.match(/^am[eé]lioration\s*-\s*(.+)$/i)
+    if (improvementMatch) return improvementMatch[1].trim()
+    return honoredGuest
+  }
+
+  function resolveImageKind(current: PatchEntity): PatchEntityImageKind {
+    const fromCategory = resolvePatchEntityImageKind(current)
+    if (fromCategory) return fromCategory
+
+    if (!STRUCTURED_MODE_CATEGORIES.has(current.category)) return null
+
+    const name = parseEntityDisplayName(current.name?.trim() ?? '')
+    if (!name) return null
+
+    if (findChampionIdByName(name)) return 'champion'
+    if (findItemIdByName(name)) return 'item'
+    return null
+  }
+
+  function resolveChampionLookupName(current: PatchEntity): string {
+    const rawName = current.name?.trim() ?? ''
+    if (!rawName) return ''
+
+    if (
+      isStructuredModeCategory(current.category) &&
+      (resolveModeSubCategoryImageKind(current.subCategory) === 'champion' ||
+        !current.subCategory?.trim())
+    ) {
+      return parseEntityDisplayName(rawName)
+    }
+
+    return rawName
+  }
+
+  function isStructuredModeCategory(category: PatchEntity['category']): boolean {
+    return STRUCTURED_MODE_CATEGORIES.has(category)
+  }
+
   const resolvedEntityId = computed(() => {
     const current = entity()
-    const kind = resolvePatchEntityImageKind(current)
+    let kind = resolveImageKind(current)
 
     if (kind === 'summoner') {
       return findSummonerSpellId(current)
     }
 
     if (current.id) {
+      if (kind === 'champion' && /^\d+$/.test(current.id)) {
+        kind = 'item'
+      } else if (kind === 'item' && !/^\d+$/.test(current.id)) {
+        kind = 'champion'
+      }
+
       if (kind === 'rune' && !/^\d+$/.test(current.id)) {
         return (
           findRuneIdByKey(current.id) ?? findRuneIdByName(current.name?.trim() ?? '') ?? current.id
@@ -234,13 +333,13 @@ export function usePatchEntityImage(entity: () => PatchEntity) {
     const name = current.name?.trim()
     if (!name) return null
 
-    if (kind === 'item') return findItemIdByName(name)
+    if (kind === 'item') {
+      return (
+        findItemIdByPatchSlug(current.patchSlug) ?? findItemIdByName(parseEntityDisplayName(name))
+      )
+    }
     if (kind === 'champion') {
-      const championName =
-        current.category === 'arena' && resolveArenaImageKind(current.subCategory) === 'champion'
-          ? parseHonoredGuestChampionName(name)
-          : name
-      return findChampionIdByName(championName)
+      return findChampionIdByName(resolveChampionLookupName(current))
     }
     if (kind === 'rune') return findRuneIdByName(name)
 
@@ -248,14 +347,21 @@ export function usePatchEntityImage(entity: () => PatchEntity) {
   })
 
   const entityImageUrl = computed(() => {
-    if (imageError.value || !gameVersion.value) return null
+    if (imageError.value) return null
 
     const current = entity()
-    const kind = resolvePatchEntityImageKind(current)
+    const cachedPatchImage = resolveCachedPatchImageUrl(current)
+    if (cachedPatchImage) return cachedPatchImage
+
+    if (!gameVersion.value) return null
+    let kind = resolveImageKind(current)
     if (!kind) return null
 
     const id = resolvedEntityId.value ?? current.id
     if (!id) return null
+
+    if (kind === 'champion' && /^\d+$/.test(String(id))) kind = 'item'
+    if (kind === 'item' && !/^\d+$/.test(String(id))) kind = 'champion'
 
     if (kind === 'champion') {
       return getChampionImageUrl(gameVersion.value, `${id}.png`)

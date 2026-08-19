@@ -7,6 +7,7 @@ import { join } from 'path';
 import { existsSync } from 'fs';
 import { logger } from '../utils/logger.js';
 import { buildGameDataIndexes, type GameDataIndexes } from './entityIds.js';
+import type { Locale } from './types.js';
 
 export type { GameDataIndexes };
 
@@ -121,5 +122,27 @@ export async function loadGameDataIndexes(gameVersion?: string): Promise<GameDat
   }
 
   logger.debug({ version }, 'Game data indexes not available for entity id enrichment');
+  return null;
+}
+
+/** Resolve on-disk game data language directory for spell icon lookup. */
+export async function resolveGameLangDir(locale: Locale = 'en-GB'): Promise<string | null> {
+  const version = await resolveGameVersion();
+  if (!version) return null;
+
+  const lang = locale === 'fr-FR' ? 'fr_FR' : 'en_US';
+  for (const root of resolveGameDataRoots()) {
+    const langDir = join(root, version, lang);
+    const championsDir = join(langDir, 'champions');
+    if (!existsSync(championsDir)) continue;
+
+    const hasChampionDetails =
+      existsSync(join(championsDir, 'amumu.json')) ||
+      existsSync(join(championsDir, 'aatrox.json'));
+    if (hasChampionDetails) {
+      return langDir;
+    }
+  }
+
   return null;
 }

@@ -12,7 +12,9 @@ import {
 } from './parser.js';
 import { cleanChanges, deduplicateEntities, mergeEntityVariants, sortEntities } from './cleaner.js';
 import { enrichEntityIds } from './entityIds.js';
-import { loadGameDataIndexes } from './gameDataLoader.js';
+import { loadGameDataIndexes, resolveGameLangDir } from './gameDataLoader.js';
+import { cacheEntityImages } from './patchEntityImages.js';
+import { cacheSpellImages } from './patchSpellImages.js';
 import {
   writePatchJson,
   writePatchImage,
@@ -88,7 +90,24 @@ async function scrapeLocale(
 
     let cleanedEntities = cleanChanges(rawEntities);
     cleanedEntities = mergeEntityVariants(cleanedEntities);
-    cleanedEntities = await enrichEntitiesWithGameData(cleanedEntities);
+    const { entities: enrichedEntities, indexes } = await enrichEntitiesWithGameData(cleanedEntities);
+    cleanedEntities = enrichedEntities;
+    const versionDir = getPatchVersionDir(outputDir, patchVersion);
+    cleanedEntities = await cacheEntityImages(
+      cleanedEntities,
+      html,
+      patchVersion,
+      versionDir,
+      indexes ?? undefined
+    );
+    const gameLangDir = await resolveGameLangDir(locale);
+    cleanedEntities = await cacheSpellImages(
+      cleanedEntities,
+      html,
+      patchVersion,
+      versionDir,
+      gameLangDir
+    );
     cleanedEntities = deduplicateEntities(cleanedEntities);
     cleanedEntities = sortEntities(cleanedEntities);
 
@@ -107,7 +126,6 @@ async function scrapeLocale(
       entities: cleanedEntities,
     };
 
-    const versionDir = getPatchVersionDir(outputDir, patchVersion);
     const filename = `patch-${patchVersion}-${locale}.json`;
     await writePatchJson(versionDir, filename, patchJson);
 
@@ -196,7 +214,24 @@ async function scrapeLocaleWithResult(
   const rawEntities = parsePatchHtml(html, locale);
   let cleanedEntities = cleanChanges(rawEntities);
   cleanedEntities = mergeEntityVariants(cleanedEntities);
-  cleanedEntities = await enrichEntitiesWithGameData(cleanedEntities);
+  const { entities: enrichedEntities, indexes } = await enrichEntitiesWithGameData(cleanedEntities);
+  cleanedEntities = enrichedEntities;
+  const versionDir = getPatchVersionDir(outputDir, patchVersion);
+  cleanedEntities = await cacheEntityImages(
+    cleanedEntities,
+    html,
+    patchVersion,
+    versionDir,
+    indexes ?? undefined
+  );
+  const gameLangDir = await resolveGameLangDir(locale);
+  cleanedEntities = await cacheSpellImages(
+    cleanedEntities,
+    html,
+    patchVersion,
+    versionDir,
+    gameLangDir
+  );
   cleanedEntities = deduplicateEntities(cleanedEntities);
   cleanedEntities = sortEntities(cleanedEntities);
   const summaryImage = await downloadSummaryImage(html, patchVersion, locale, outputDir);
@@ -211,12 +246,14 @@ async function scrapeLocaleWithResult(
   };
 }
 
-async function enrichEntitiesWithGameData(entities: EntityChanges[]): Promise<EntityChanges[]> {
+async function enrichEntitiesWithGameData(
+  entities: EntityChanges[]
+): Promise<{ entities: EntityChanges[]; indexes: Awaited<ReturnType<typeof loadGameDataIndexes>> }> {
   const indexes = await loadGameDataIndexes();
   if (!indexes) {
-    return entities;
+    return { entities, indexes: null };
   }
-  return enrichEntityIds(entities, indexes);
+  return { entities: enrichEntityIds(entities, indexes), indexes };
 }
 
 /**

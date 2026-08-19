@@ -4,7 +4,16 @@
 
 export type ChangeType = 'buff' | 'nerf' | 'adjustment' | 'new' | 'removed' | 'text';
 export type Locale = 'en-GB' | 'fr-FR';
-export type EntityCategory = 'champion' | 'item' | 'rune' | 'system' | 'aram' | 'aram-chaos' | 'arena' | 'bugfix';
+export type EntityCategory =
+  | 'champion'
+  | 'item'
+  | 'rune'
+  | 'system'
+  | 'classic'
+  | 'aram'
+  | 'aram-chaos'
+  | 'arena'
+  | 'bugfix';
 
 export interface StatChange {
   stat: string;
@@ -13,6 +22,8 @@ export interface StatChange {
   type: ChangeType;
   /** Ability block or "Stats de base" within a champion card. */
   subCategory?: string;
+  /** Cached spell/passive icon from patch markup or ddragon. */
+  iconUrl?: string;
   linkUrl?: string;
   linkLabel?: string;
 }

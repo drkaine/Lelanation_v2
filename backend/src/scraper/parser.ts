@@ -6,7 +6,7 @@
 import * as cheerio from 'cheerio';
 import type { Element } from 'domhandler';
 import { logger } from '../utils/logger.js';
-import { extractEntityIdFromHtml, patchHeaderIdToSlug, championSlugToId } from './entityIds.js';
+import { extractEntityIdFromHtml, patchHeaderIdToSlug, championSlugToId, extractPatchImageSrc } from './entityIds.js';
 import { inferNumericChangeType } from './changeType.js';
 import type { EntityChanges, StatChange, EntityCategory, Locale } from './types.js';
 
@@ -212,6 +212,9 @@ function detectCategory(headingText: string): EntityCategory | null {
   if (text.includes('system') || text.includes('système') || text.includes('gameplay')) {
     return 'system';
   }
+  if (text.includes('classic')) {
+    return 'classic';
+  }
 
   return null;
 }
@@ -233,7 +236,8 @@ function detectCategoryFromId(sectionId: string, headingText: string): EntityCat
   if (id.includes('champion')) return 'champion';
   if (id.includes('item') || id.includes('objet')) return 'item';
   if (id.includes('rune')) return 'rune';
-  
+  if (id.includes('classic')) return 'classic';
+
   // ARAM modes (check chaos first, then regular ARAM)
   if (id.includes('aram') && (id.includes('chaos') || id.includes('mayhem'))) return 'aram-chaos';
   if (id.includes('aram')) return 'aram';
@@ -245,6 +249,7 @@ function detectCategoryFromId(sectionId: string, headingText: string): EntityCat
   if (id.includes('bug') || id.includes('correct') || headingText.toLowerCase().includes('correction')) return 'bugfix';
 
   if (id.includes('last-hit') || id.includes('indicator')) return 'system';
+  if (id.includes('systems') || id.endsWith('-system')) return 'system';
 
   if (isChampionReleaseSectionId(id)) return 'champion';
 
@@ -256,7 +261,7 @@ function isChampionReleaseSectionId(sectionId: string): boolean {
   if (!sectionId.startsWith('patch-')) return false;
   const slug = sectionId.slice('patch-'.length);
   if (!slug || slug.includes('-')) return false;
-  const reserved = new Set(['top', 'ranked', 'pride', 'highlights', 'skins']);
+  const reserved = new Set(['top', 'ranked', 'pride', 'highlights', 'skins', 'classic', 'systems']);
   if (reserved.has(slug)) return false;
   return /^[a-z0-9]+$/.test(slug);
 }
@@ -389,6 +394,7 @@ function isAbilityOrBaseStatsHeading($elem: cheerio.Cheerio<any>, text: string):
   if (/^compétence passive\s*[-–—]/i.test(text) || /^passive ability\s*[-–—]/i.test(text)) {
     return true;
   }
+  if (/^passif\s*[-–—]/i.test(text)) return true;
   return /^([QWERAZ]|Passive)\s*[-–—]/i.test(text);
 }
 
@@ -402,10 +408,15 @@ function isChampionChangeSubSection(
 
 function tagChangeWithSubSection(
   change: StatChange,
-  subSection: string | null
+  subSection: string | null,
+  iconUrl?: string | null
 ): StatChange {
   if (!subSection) return change;
-  return { ...change, subCategory: subSection };
+  return {
+    ...change,
+    subCategory: subSection,
+    ...(iconUrl ? { iconUrl } : {}),
+  };
 }
 
 function findContentRoot($: cheerio.CheerioAPI): cheerio.Cheerio<any> {
@@ -450,11 +461,75 @@ function isEmptyHeading(text: string): boolean {
 
 function isStructuredSectionCategory(category: EntityCategory): boolean {
   return (
+    category === 'classic' ||
     category === 'aram' ||
     category === 'aram-chaos' ||
     category === 'arena' ||
     category === 'bugfix'
   );
+}
+
+const STRUCTURED_SUBSECTION_RE =
+  /^(champions?|items?|objets?|runes?|syst[eè]mes?|systems?|gameplay|corrections?|bug|honored guests|invit[eé]s d'honneur|skins?)/i;
+
+function isSkinSubSectionHeading(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return (
+    normalized.includes('skin') ||
+    normalized.includes('cosmét') ||
+    normalized.includes('cosmet') ||
+    normalized.includes('chroma')
+  );
+}
+
+function isStructuredSubSectionHeading(text: string): boolean {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!normalized) return false;
+  if (STRUCTURED_SUBSECTION_RE.test(normalized)) return true;
+  if (/^[A-ZÀ-ÖØ-Þ0-9\s'’\-]{3,40}$/.test(normalized) && normalized === normalized.toUpperCase()) {
+    return true;
+  }
+  return false;
+}
+
+function normalizeStructuredEntityHeading(text: string): string {
+  return text
+    .replace(/\s+/g, ' ')
+    .replace(/^\s*(nouveau|new)\s*/i, '')
+    .trim();
+}
+
+const RUNE_SHARD_CATEGORY_RE =
+  /^(marques?|sceaux|glyphes|quintessences?|marks?|seals?|glyphs?)$/i;
+
+function isRuneShardCategoryHeading(text: string): boolean {
+  return RUNE_SHARD_CATEGORY_RE.test(text.replace(/\s+/g, ' ').trim());
+}
+
+function ensureClassicRuneGroupEntity(
+  state: SectionParseState,
+  sectionCategory: EntityCategory
+): void {
+  if (state.currentEntity || !state.pendingName) return;
+
+  const introChanges: StatChange[] = [];
+  if (state.pendingContext) {
+    introChanges.push({
+      stat: '',
+      before: '',
+      after: state.pendingContext,
+      type: 'text',
+    });
+  }
+
+  state.currentEntity = createModeEntity(
+    state.pendingName,
+    sectionCategory,
+    modeEntitySubCategory(state),
+    introChanges
+  );
+  state.pendingContext = null;
+  state.pendingName = null;
 }
 
 function inferContextEntityName(context: string): string {
@@ -629,12 +704,14 @@ function createModeEntity(
   name: string,
   sectionCategory: EntityCategory,
   subCategory: string | null,
-  changes: StatChange[]
+  changes: StatChange[],
+  imageUrl?: string
 ): EntityChanges {
   return {
     name,
     category: sectionCategory,
     ...(subCategory ? { subCategory } : {}),
+    ...(imageUrl ? { imageUrl } : {}),
     changes,
   };
 }
@@ -662,12 +739,55 @@ function createContextSystemEntity(
 
 interface SectionParseState {
   currentEntity: EntityChanges | null;
+  /** Mode section heading (CHAMPIONS, OBJETS…) — preserved across entities. */
+  structuredSubSection: string | null;
+  /** Spell / ability label for tagging individual changes. */
   currentSubSection: string | null;
   inBugfixSubsection: boolean;
+  inSkinSubsection: boolean;
   pendingContext: string | null;
   pendingName: string | null;
+  /** Image src from a standalone <p><img> immediately before the next entity heading. */
+  pendingEntityImageUrl: string | null;
+  /** Spell/passive icon from the current ability heading. */
+  currentSubSectionIconUrl: string | null;
   sectionHeading: string | null;
   sectionId: string;
+}
+
+function extractParagraphImageSrc($elem: cheerio.Cheerio<any>): string | undefined {
+  const $img = $elem.find('img').first();
+  const rawSrc = $img.attr('src') ?? $img.attr('data-src');
+  if (!rawSrc?.trim()) return undefined;
+  return extractPatchImageSrc(rawSrc) ?? rawSrc.trim();
+}
+
+function attachPendingEntityImage(
+  entity: EntityChanges,
+  state: SectionParseState
+): EntityChanges {
+  if (state.pendingEntityImageUrl && !entity.imageUrl) {
+    entity.imageUrl = state.pendingEntityImageUrl;
+  }
+  state.pendingEntityImageUrl = null;
+  return entity;
+}
+
+function setCurrentSubSection(
+  state: SectionParseState,
+  text: string,
+  $elem?: cheerio.Cheerio<any>
+): void {
+  state.currentSubSection = text;
+  const imageSrc = $elem ? extractParagraphImageSrc($elem) : undefined;
+  state.currentSubSectionIconUrl = imageSrc ?? null;
+}
+
+function modeEntitySubCategory(state: SectionParseState): string | null {
+  if (state.inBugfixSubsection) {
+    return state.currentSubSection;
+  }
+  return state.structuredSubSection;
 }
 
 function parseSectionContent(
@@ -681,10 +801,14 @@ function parseSectionContent(
 ): void {
   const state: SectionParseState = {
     currentEntity: null,
+    structuredSubSection: null,
     currentSubSection: null,
     inBugfixSubsection: sectionCategory === 'bugfix',
+    inSkinSubsection: false,
     pendingContext: null,
     pendingName: null,
+    pendingEntityImageUrl: null,
+    currentSubSectionIconUrl: null,
     sectionHeading,
     sectionId,
   };
@@ -753,7 +877,7 @@ function parseSectionContent(
       });
       if (changes.length > 0) {
         entities.push(
-          createModeEntity('', sectionCategory, state.currentSubSection, changes)
+          createModeEntity('', sectionCategory, modeEntitySubCategory(state), changes)
         );
       }
       return;
@@ -767,10 +891,15 @@ function parseSectionContent(
 
   const pushListToEntity = ($ul: cheerio.Cheerio<any>, entity: EntityChanges) => {
     const allowDescriptive =
-      sectionCategory === 'champion' && isChampionReleaseSectionId(state.sectionId);
+      sectionCategory === 'classic' ||
+      (sectionCategory === 'champion' && isChampionReleaseSectionId(state.sectionId));
     const changes = parseListItems($, $ul, locale, { allowDescriptive });
     for (const change of changes) {
-      const tagged = tagChangeWithSubSection(change, state.currentSubSection);
+      const tagged = tagChangeWithSubSection(
+        change,
+        state.currentSubSection,
+        state.currentSubSectionIconUrl
+      );
       entity.changes.push(tagged);
       logger.debug(
         { entity: entity.name, stat: change.stat, type: change.type, subCategory: tagged.subCategory },
@@ -780,6 +909,11 @@ function parseSectionContent(
   };
 
   const consumePendingList = ($ul: cheerio.Cheerio<any>) => {
+    if (state.inSkinSubsection) {
+      clearPending();
+      return;
+    }
+
     if (state.inBugfixSubsection || sectionCategory === 'bugfix') {
       pushListAsBugfixes($ul);
       clearPending();
@@ -788,7 +922,11 @@ function parseSectionContent(
 
     if (state.pendingName) {
       flushCurrentEntity();
-      const changes = parseListItems($, $ul, locale);
+      const changes = parseListItems($, $ul, locale, {
+        allowDescriptive: sectionCategory === 'classic',
+      }).map(change =>
+        tagChangeWithSubSection(change, state.currentSubSection, state.currentSubSectionIconUrl)
+      );
       if (state.pendingContext) {
         changes.unshift({
           stat: '',
@@ -797,11 +935,14 @@ function parseSectionContent(
           type: 'text',
         });
       }
-      const entity = createModeEntity(
-        state.pendingName,
-        sectionCategory,
-        state.currentSubSection,
-        changes
+      const entity = attachPendingEntityImage(
+        createModeEntity(
+          state.pendingName,
+          sectionCategory,
+          modeEntitySubCategory(state),
+          changes
+        ),
+        state
       );
       if (entity.changes.length > 0) {
         entities.push(entity);
@@ -811,9 +952,35 @@ function parseSectionContent(
     }
 
     if (state.pendingContext) {
-      const changes = parseListItems($, $ul, locale);
+      const changes = parseListItems($, $ul, locale, {
+        allowDescriptive: isStructuredSectionCategory(sectionCategory),
+      });
       if (changes.length > 0) {
-        entities.push(createContextSystemEntity(state.pendingContext, changes));
+        if (isStructuredSectionCategory(sectionCategory)) {
+          const name =
+            state.pendingName ??
+            (state.currentSubSection && !isStructuredSubSectionHeading(state.currentSubSection)
+              ? normalizeStructuredEntityHeading(state.currentSubSection)
+              : '');
+          entities.push(
+            createModeEntity(
+              name,
+              sectionCategory,
+              modeEntitySubCategory(state),
+              [
+                {
+                  stat: '',
+                  before: '',
+                  after: state.pendingContext,
+                  type: 'text',
+                },
+                ...changes,
+              ]
+            )
+          );
+        } else {
+          entities.push(createContextSystemEntity(state.pendingContext, changes));
+        }
       }
       clearPending();
       return;
@@ -828,7 +995,7 @@ function parseSectionContent(
       const changes = parseListItems($, $ul, locale);
       if (changes.length > 0) {
         entities.push(
-          createModeEntity('', sectionCategory, state.currentSubSection, changes)
+          createModeEntity('', sectionCategory, modeEntitySubCategory(state), changes)
         );
       }
     }
@@ -849,9 +1016,13 @@ function parseSectionContent(
     if (tagName === 'h3') {
       flushCurrentEntity();
       clearPending();
+      state.structuredSubSection = null;
       state.currentSubSection = null;
       state.inBugfixSubsection = sectionCategory === 'bugfix';
-      state.currentEntity = createEntityFromH3($, $elem, sectionCategory);
+      state.currentEntity = attachPendingEntityImage(
+        createEntityFromH3($, $elem, sectionCategory),
+        state
+      );
       continue;
     }
 
@@ -865,12 +1036,34 @@ function parseSectionContent(
         if (isBugfix) {
           flushCurrentEntity();
           clearPending();
+          state.structuredSubSection = null;
           state.currentSubSection = text;
+          state.inSkinSubsection = false;
+        } else if (isStructuredSectionCategory(sectionCategory)) {
+          flushCurrentEntity();
+          clearPending();
+          if (isStructuredSubSectionHeading(text)) {
+            state.structuredSubSection = text;
+            state.currentSubSection = null;
+            state.inSkinSubsection = isSkinSubSectionHeading(text);
+            state.pendingName = null;
+          } else {
+            state.inSkinSubsection = false;
+            state.currentEntity = attachPendingEntityImage(
+              createModeEntity(
+                normalizeStructuredEntityHeading(text),
+                sectionCategory,
+                modeEntitySubCategory(state),
+                []
+              ),
+              state
+            );
+          }
         } else if (!state.currentEntity && sectionCategory === 'system') {
           state.pendingName = text;
         } else if (isChampionChangeSubSection(sectionCategory, $elem, text)) {
           ensureChampionKitEntity();
-          state.currentSubSection = text;
+          setCurrentSubSection(state, text, $elem);
         } else {
           state.currentSubSection = text;
           if (state.currentEntity && sectionCategory !== 'champion') {
@@ -882,7 +1075,7 @@ function parseSectionContent(
 
       if (state.currentEntity) {
         if (isChampionChangeSubSection(sectionCategory, $elem, text)) {
-          state.currentSubSection = text;
+          setCurrentSubSection(state, text, $elem);
         } else if (sectionCategory !== 'champion') {
           state.currentEntity.subCategory = text;
         } else {
@@ -901,7 +1094,7 @@ function parseSectionContent(
     if (tagName === 'h5' || tagName === 'h6') {
       if (state.currentEntity) {
         if (state.currentEntity.category === 'champion') {
-          state.currentSubSection = text;
+          setCurrentSubSection(state, text, $elem);
         } else {
           state.currentEntity.subCategory = text;
         }
@@ -910,8 +1103,20 @@ function parseSectionContent(
     }
 
     if (tagName === 'blockquote') {
-      if (state.currentEntity) continue;
+      if (state.inSkinSubsection) continue;
       const context = $elem.find('p').text().replace(/\s+/g, ' ').trim() || text;
+      if (state.currentEntity && isStructuredSectionCategory(sectionCategory)) {
+        if (context.length > 10) {
+          state.currentEntity.changes.push({
+            stat: '',
+            before: '',
+            after: context,
+            type: 'text',
+          });
+        }
+        continue;
+      }
+      if (state.currentEntity) continue;
       if (context.length > 10) {
         state.pendingContext = context;
         if (sectionCategory === 'champion') {
@@ -923,14 +1128,59 @@ function parseSectionContent(
     }
 
     if (tagName === 'p') {
+      if (state.inSkinSubsection) continue;
       if ($elem.find('ul').length > 0) continue;
-      if ($elem.find('img').length > 0 && !$elem.find('strong, b').length) continue;
+      if ($elem.find('img').length > 0 && !$elem.find('strong, b').length) {
+        const imageSrc = extractParagraphImageSrc($elem);
+        if (imageSrc) {
+          state.pendingEntityImageUrl = imageSrc;
+        }
+        continue;
+      }
 
       const inlineName = parseInlineEntityName($, $elem);
       if (inlineName) {
+        if (
+          state.currentEntity &&
+          isStructuredSectionCategory(sectionCategory) &&
+          isAbilityOrBaseStatsHeading($elem, inlineName)
+        ) {
+          setCurrentSubSection(state, inlineName, $elem);
+          continue;
+        }
+        if (
+          state.pendingName &&
+          isStructuredSectionCategory(sectionCategory) &&
+          isRuneShardCategoryHeading(inlineName)
+        ) {
+          ensureClassicRuneGroupEntity(state, sectionCategory);
+          state.currentSubSection = inlineName;
+          continue;
+        }
+        if (
+          state.currentEntity &&
+          isStructuredSectionCategory(sectionCategory) &&
+          isRuneShardCategoryHeading(inlineName)
+        ) {
+          state.currentSubSection = inlineName;
+          continue;
+        }
         flushCurrentEntity();
         state.pendingName = inlineName;
         continue;
+      }
+
+      if (state.currentEntity && isStructuredSectionCategory(sectionCategory)) {
+        const $strong = $elem.find('strong, b');
+        if (
+          $strong.length === 1 &&
+          $strong.text().trim().length > 0 &&
+          $strong.text().trim().length < 80 &&
+          !containsChangeSeparator(text)
+        ) {
+          state.currentSubSection = $strong.text().trim();
+          continue;
+        }
       }
 
       if (state.currentEntity) {
@@ -953,7 +1203,11 @@ function parseSectionContent(
           const statChange = parseStatChange(text, locale);
           if (statChange) {
             state.currentEntity.changes.push(
-              tagChangeWithSubSection(statChange, state.currentSubSection)
+              tagChangeWithSubSection(
+                statChange,
+                state.currentSubSection,
+                state.currentSubSectionIconUrl
+              )
             );
           }
         }

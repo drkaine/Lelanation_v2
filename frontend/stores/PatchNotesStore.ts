@@ -8,6 +8,7 @@ export type EntityCategory =
   | 'item'
   | 'rune'
   | 'system'
+  | 'classic'
   | 'aram'
   | 'aram-chaos'
   | 'arena'
@@ -19,6 +20,7 @@ export interface StatChange {
   after: string
   type: ChangeType
   subCategory?: string
+  iconUrl?: string
   linkUrl?: string
   linkLabel?: string
 }
@@ -172,6 +174,9 @@ export const usePatchNotesStore = defineStore('patchNotes', () => {
   const systems = computed(
     () => currentPatch.value?.entities?.filter(e => e.category === 'system') ?? []
   )
+  const classic = computed(
+    () => currentPatch.value?.entities?.filter(e => e.category === 'classic') ?? []
+  )
   const aram = computed(
     () => currentPatch.value?.entities?.filter(e => e.category === 'aram') ?? []
   )
@@ -318,6 +323,7 @@ export const usePatchNotesStore = defineStore('patchNotes', () => {
     items,
     runes,
     systems,
+    classic,
     aram,
     aramChaos,
     arena,

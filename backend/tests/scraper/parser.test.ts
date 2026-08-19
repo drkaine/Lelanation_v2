@@ -244,6 +244,22 @@ describe('parser', () => {
       expect(lastHit!.changes[0].after).toContain('Normal Draft');
     });
 
+    it('should parse patch-systems as system (not champion release)', () => {
+      const html = loadFixture('system-adc-mr.html');
+      const entities = parsePatchHtml(html, 'fr-FR');
+
+      expect(entities.find(e => e.name === 'Enfin')).toBeUndefined();
+
+      const adcMr = entities.find(e => e.name === 'RÉSISTANCE MAGIQUE DES ADC');
+      expect(adcMr).toBeDefined();
+      expect(adcMr!.category).toBe('system');
+      expect(adcMr!.changes[0].type).toBe('text');
+      expect(adcMr!.changes[0].after).toContain('Enfin, en plus');
+      expect(adcMr!.changes[1].stat).toBe('Résistance magique');
+      expect(adcMr!.changes[1].before).toBe('30 + 1,3/niveau');
+      expect(adcMr!.changes[1].after).toBe('33 + 1,1/niveau');
+    });
+
     it('should parse structured mode sections (larves, ARAM chaos, bugfixes)', () => {
       const structuredHtml = loadFixture('structured-modes.html');
       const entities = parsePatchHtml(structuredHtml, 'fr-FR');
@@ -266,6 +282,40 @@ describe('parser', () => {
       expect(gwen).toBeDefined();
       expect(gwen!.changes[0].stat).toBe('Dégâts infligés');
 
+      const missFortune = entities.find(e => e.name === 'Miss Fortune' && e.category === 'classic');
+      expect(missFortune).toBeDefined();
+      expect(missFortune!.subCategory).toBe('CHAMPIONS');
+      expect(missFortune!.changes[0].type).toBe('text');
+      expect(missFortune!.changes[0].after).toContain('voie du bas');
+      expect(missFortune!.changes[1].subCategory).toBe('Z - Tir vicié');
+      expect(missFortune!.changes[1].stat).toBe("Dégâts d'attaque");
+      expect(missFortune!.changes[1].before).toBe('46');
+      expect(missFortune!.changes[1].after).toBe('50');
+
+      expect(
+        entities.some(
+          e =>
+            e.category === 'classic' &&
+            (e.subCategory ?? '').toLowerCase().includes('skin')
+        )
+      ).toBe(false);
+
+      const newRunes = entities.find(
+        e => e.category === 'classic' && e.name === 'Nouvelles runes'
+      );
+      expect(newRunes).toBeDefined();
+      expect(
+        newRunes!.changes.some(
+          c => c.subCategory === 'Marques' && c.after.includes('Marque mineure de puissance')
+        )
+      ).toBe(true);
+      expect(
+        newRunes!.changes.some(
+          c => c.subCategory === 'Sceaux' && c.after.includes("Sceau de régénération")
+        )
+      ).toBe(true);
+      expect(entities.find(e => e.category === 'classic' && e.name === 'Marques')).toBeUndefined();
+
       const chaosBugfixes = entities.filter(
         e => e.category === 'aram-chaos' && e.subCategory === 'Corrections de bugs'
       );
@@ -277,6 +327,38 @@ describe('parser', () => {
       const srBugfixes = entities.filter(e => e.category === 'bugfix');
       expect(srBugfixes).toHaveLength(2);
       expect(srBugfixes.every(e => e.name === '')).toBe(true);
+    });
+
+    it('should keep arena CHAMPIONS subCategory across separate content blocks', () => {
+      const html = `
+        <div id="patch-notes-container">
+          <header class="header-primary"><h2 id="patch-arena">Arena</h2></header>
+          <div class="content-border">
+            <div class="white-stone accent-before">
+              <div>
+                <h4 class="change-detail-title">CHAMPIONS</h4>
+                <h4 class="change-detail-title">Aurelion Sol</h4>
+                <p><strong>A - Souffle de lumière</strong></p>
+                <ul><li><strong>Dégâts</strong> : 4% ⇒ <strong>3%</strong></li></ul>
+              </div>
+            </div>
+          </div>
+          <div class="content-border">
+            <div class="white-stone accent-before">
+              <div>
+                <h4 class="change-detail-title">Bel'Veth</h4>
+                <p><strong>R - Banquet infini</strong></p>
+                <ul><li><strong>PV bonus</strong> : 250 ⇒ <strong>100</strong></li></ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const entities = parsePatchHtml(html, 'fr-FR');
+      const belveth = entities.find(e => e.category === 'arena' && e.name === "Bel'Veth");
+      expect(belveth).toBeDefined();
+      expect(belveth!.subCategory).toBe('CHAMPIONS');
     });
   });
 

@@ -147,6 +147,26 @@ describe('entityIds', () => {
     expect(enriched[1].id).toBe('8214');
   });
 
+  it('should enrich renamed items from legacy patch slugs', () => {
+    const indexes = buildGameDataIndexes(
+      [{ id: 'Brand', name: 'Brand' }],
+      { '3068': { name: 'Sunfire Aegis' } },
+      [{ slots: [{ runes: [] }] }]
+    );
+
+    const entities: EntityChanges[] = [
+      {
+        name: 'Cape solaire',
+        category: 'item',
+        patchSlug: 'Sunfire-Cape',
+        changes: [{ stat: 'Dégâts', before: '20', after: '25', type: 'buff' }],
+      },
+    ];
+
+    const enriched = enrichEntityIds(entities, indexes);
+    expect(enriched[0].id).toBe('3068');
+  });
+
   it('should enrich arena items, champions and honored guests from localized names', () => {
     const indexes = buildGameDataIndexes(
       [
@@ -184,5 +204,26 @@ describe('entityIds', () => {
     expect(enriched[0].id).toBe('3031');
     expect(enriched[1].id).toBe('MasterYi');
     expect(enriched[2].id).toBe('Kayle');
+  });
+
+  it('should enrich arena champions missing subCategory when name matches', () => {
+    const indexes = buildGameDataIndexes(
+      [{ id: 'Belveth', name: "Bel'Veth" }],
+      {},
+      [{ slots: [{ runes: [] }] }]
+    );
+
+    const enriched = enrichEntityIds(
+      [
+        {
+          name: "Bel'Veth",
+          category: 'arena',
+          changes: [{ stat: 'PV', before: '250', after: '100', type: 'nerf' }],
+        },
+      ],
+      indexes
+    );
+
+    expect(enriched[0].id).toBe('Belveth');
   });
 });

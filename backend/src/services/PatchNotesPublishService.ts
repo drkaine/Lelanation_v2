@@ -80,6 +80,33 @@ async function listPatchFilesInDir(dir: string): Promise<string[]> {
   }
 }
 
+async function copyVersionDirRecursive(sourceDir: string, targetDir: string): Promise<number> {
+  await fs.mkdir(targetDir, { recursive: true });
+  let copied = 0;
+  const entries = await fs.readdir(sourceDir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const source = join(sourceDir, entry.name);
+    const target = join(targetDir, entry.name);
+
+    if (entry.isDirectory()) {
+      copied += await copyVersionDirRecursive(source, target);
+      continue;
+    }
+
+    if (entry.isFile()) {
+      await fs.copyFile(source, target);
+      copied++;
+    }
+  }
+
+  return copied;
+}
+
+async function removeDirRecursive(dir: string): Promise<void> {
+  await fs.rm(dir, { recursive: true, force: true });
+}
+
 /** List all patch asset files across version subfolders (and legacy flat layout). */
 async function listAllPatchAssetFiles(rootDir: string): Promise<Array<{ version: string; filename: string }>> {
   const results: Array<{ version: string; filename: string }> = [];
@@ -181,18 +208,22 @@ export async function movePatchVersionToFrontend(
 
   await fs.mkdir(frontendVersionDir, { recursive: true });
 
-  const backendFiles = await listPatchFilesInDir(backendVersionDir);
   let moved = 0;
   let deleted = 0;
 
-  for (const filename of backendFiles) {
-    const source = join(backendVersionDir, filename);
-    const target = join(frontendVersionDir, filename);
-    await fs.copyFile(source, target);
-    moved++;
-    await fs.unlink(source);
-    deleted++;
+  try {
+    await fs.access(backendVersionDir);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      await log.info('No backend patch files to move', { patchVersion, frontendDir: frontendVersionDir });
+      return { moved: 0, deleted: 0, frontendDir: frontendVersionDir };
+    }
+    throw error;
   }
+
+  moved = await copyVersionDirRecursive(backendVersionDir, frontendVersionDir);
+  await removeDirRecursive(backendVersionDir);
+  deleted = moved;
 
   await log.info('Patch notes moved to frontend', {
     patchVersion,

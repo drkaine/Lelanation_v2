@@ -72,6 +72,74 @@ describe('cleaner', () => {
       expect(cleaned[0].changes[1].stat).toBe('Healing');
     });
 
+    it('should drop classic skin promos and kit text-only champions', () => {
+      const raw: EntityChanges[] = [
+        {
+          name: '',
+          category: 'classic',
+          subCategory: 'SKINS ET COSMÉTIQUES CLASSIC',
+          changes: [
+            {
+              stat: '',
+              before: '',
+              after: 'Akali Classic (aiguillon)',
+              type: 'text',
+            },
+          ],
+        },
+        {
+          name: 'Akali',
+          category: 'classic',
+          subCategory: 'CHAMPIONS',
+          changes: [
+            {
+              stat: '',
+              before: '',
+              after: 'Akali débarque avec son invisibilité.',
+              type: 'text',
+            },
+          ],
+        },
+        {
+          name: 'Miss Fortune',
+          category: 'classic',
+          changes: [
+            {
+              stat: '',
+              before: '',
+              after: 'Miss Fortune affiche les pires performances.',
+              type: 'text',
+            },
+            {
+              stat: 'Dégâts',
+              before: '46',
+              after: '50',
+              type: 'buff',
+            },
+          ],
+        },
+        {
+          name: '',
+          category: 'classic',
+          subCategory: 'Corrections de bugs',
+          changes: [
+            {
+              stat: '',
+              before: '',
+              after: 'Correction d\'un bug sur Sivir.',
+              type: 'text',
+            },
+          ],
+        },
+      ];
+
+      const cleaned = cleanChanges(raw);
+      expect(cleaned.map(e => e.name)).toEqual(['Miss Fortune', '']);
+      expect(cleaned[0].changes).toHaveLength(1);
+      expect(cleaned[0].changes[0].stat).toBe('Dégâts');
+      expect(cleaned[1].changes[0].after).toContain('Sivir');
+    });
+
     it('should keep duplicate stat names on one entity when before/after differ', () => {
       const raw: EntityChanges[] = [
         {

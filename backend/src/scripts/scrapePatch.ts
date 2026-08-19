@@ -5,6 +5,8 @@
  * Example: tsx src/scripts/scrapePatch.ts https://www.leagueoflegends.com/en-gb/news/game-updates/league-of-legends-patch-26-11-notes/
  */
 
+import 'dotenv/config';
+
 import { scrapePatch } from '../scraper/patchScraper.js';
 import { publishPatchNotesToFrontend } from '../services/PatchNotesPublishService.js';
 import { extractPatchVersion, notesUrlVersionToPatchLabel } from '../utils/helpers.js';

@@ -1,8 +1,13 @@
 <template>
   <div class="ui-build-card-surface overflow-hidden rounded-xl">
-    <div
+    <button
       v-if="showCardHeader"
-      class="flex items-center gap-2 border-b border-primary/15 bg-panel-elevated/30 p-[5px]"
+      type="button"
+      class="flex w-full items-center gap-2 p-[5px] text-left transition-colors hover:bg-primary/5"
+      :class="isCardCollapsed ? '' : 'border-b border-primary/15 bg-panel-elevated/30'"
+      :aria-expanded="!isCardCollapsed"
+      :aria-label="cardCollapseLabel"
+      @click="toggleCardCollapsed"
     >
       <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-background text-lg">
         <img
@@ -25,7 +30,7 @@
         <h3 class="truncate text-sm font-semibold text-accent">
           {{ cardTitle }}
         </h3>
-        <p v-if="cardSubtitle" class="truncate text-xs text-primary-light">
+        <p v-if="cardSubtitle && !isCardCollapsed" class="truncate text-xs text-primary-light">
           {{ cardSubtitle }}
         </p>
       </div>
@@ -39,105 +44,119 @@
       >
         {{ typeLabels[summaryTag] }}
       </span>
-    </div>
 
-    <div class="p-[5px]">
-      <div
-        v-for="section in changeSections"
-        :key="section.key"
-        :class="section.title ? 'border-b border-primary/10 last:border-b-0' : ''"
-      >
-        <button
-          v-if="section.title"
-          type="button"
-          class="flex w-full items-center gap-2 rounded px-1 py-1.5 text-left transition-colors hover:bg-primary/5"
-          :aria-expanded="!isSectionCollapsed(section.key)"
-          @click="toggleSection(section.key)"
-        >
-          <ChampionSpellIconBadge
-            v-if="section.spellImageUrl && section.spellSkillKey"
-            :skill-key="section.spellSkillKey"
-            :image-url="section.spellImageUrl"
-            :label="section.title"
-            size="sm"
-          />
-          <span class="min-w-0 flex-1 truncate text-xs font-semibold text-primary-light">
-            {{ section.title }}
-          </span>
-          <span class="shrink-0 text-[10px] text-text/40">
-            {{ isSectionCollapsed(section.key) ? '▸' : '▾' }}
-          </span>
-        </button>
+      <Icon
+        :name="isCardCollapsed ? 'mdi:chevron-down' : 'mdi:chevron-up'"
+        class="h-5 w-5 shrink-0 text-text/45"
+        aria-hidden="true"
+      />
+    </button>
 
-        <ul
-          v-show="!section.title || !isSectionCollapsed(section.key)"
-          class="space-y-2"
-          :class="section.title ? 'px-1 pb-2 pt-0.5' : ''"
+    <div v-show="!isCardCollapsed" class="p-[5px]">
+      <PatchBugfixColumns
+        v-if="isBugfixCard"
+        :items="bugfixItems"
+        columns-class="columns-1 gap-x-6 sm:columns-2 lg:columns-3 2xl:columns-4 px-1 pb-1 pt-0.5"
+      />
+
+      <template v-else>
+        <div
+          v-for="section in changeSections"
+          :key="section.key"
+          :class="section.title ? 'border-b border-primary/10 last:border-b-0' : ''"
         >
-          <li
-            v-for="(change, index) in section.changes"
-            :key="`${section.key}-${index}`"
-            class="flex items-start gap-2 text-sm"
+          <button
+            v-if="section.title"
+            type="button"
+            class="flex w-full items-center gap-2 rounded px-1 py-1.5 text-left transition-colors hover:bg-primary/5"
+            :aria-expanded="!isSectionCollapsed(section.key)"
+            @click="toggleSection(section.key)"
           >
-            <span
-              v-if="change.stat || change.type !== 'text'"
-              :class="[
-                'shrink-0 rounded px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide',
-                typeClasses[change.type],
-              ]"
-            >
-              {{ typeLabels[change.type] }}
+            <ChampionSpellIconBadge
+              v-if="section.spellImageUrl && section.spellSkillKey"
+              :skill-key="section.spellSkillKey"
+              :image-url="section.spellImageUrl"
+              :label="section.title"
+              size="sm"
+            />
+            <span class="min-w-0 flex-1 truncate text-xs font-semibold text-primary-light">
+              {{ section.title }}
             </span>
+            <span class="shrink-0 text-[10px] text-text/40">
+              {{ isSectionCollapsed(section.key) ? '▸' : '▾' }}
+            </span>
+          </button>
 
-            <div class="flex-1">
-              <span v-if="change.stat" class="font-medium text-primary-light">{{
-                change.stat
-              }}</span>
-              <div
+          <ul
+            v-show="!section.title || !isSectionCollapsed(section.key)"
+            class="space-y-2"
+            :class="section.title ? 'px-1 pb-2 pt-0.5' : ''"
+          >
+            <li
+              v-for="(change, index) in section.changes"
+              :key="`${section.key}-${index}`"
+              class="flex items-start gap-2 text-sm"
+            >
+              <span
+                v-if="change.stat || change.type !== 'text'"
                 :class="[
-                  'flex flex-wrap items-center gap-1 text-xs text-text/70',
-                  change.stat ? 'mt-0.5' : '',
+                  'shrink-0 rounded px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide',
+                  typeClasses[change.type],
                 ]"
               >
-                <span v-if="shouldShowBefore(change)" class="text-error/70 line-through">{{
-                  change.before
+                {{ typeLabels[change.type] }}
+              </span>
+
+              <div class="flex-1">
+                <span v-if="change.stat" class="font-medium text-primary-light">{{
+                  change.stat
                 }}</span>
-                <span
-                  v-if="shouldShowBefore(change) && shouldShowAfter(change)"
-                  class="text-text/40"
-                  >→</span
+                <div
+                  :class="[
+                    'flex flex-wrap items-center gap-1 text-xs text-text/70',
+                    change.stat ? 'mt-0.5' : '',
+                  ]"
                 >
-                <template v-if="shouldShowAfter(change)">
+                  <span v-if="shouldShowBefore(change)" class="text-error/70 line-through">{{
+                    change.before
+                  }}</span>
                   <span
-                    v-if="!change.linkUrl"
-                    :class="{
-                      'font-medium text-info': change.type === 'buff',
-                      'font-medium text-error': change.type === 'nerf',
-                    }"
-                    >{{ change.after }}</span
+                    v-if="shouldShowBefore(change) && shouldShowAfter(change)"
+                    class="text-text/40"
+                    >→</span
                   >
-                  <span
-                    v-else
-                    :class="{
-                      'font-medium text-info': change.type === 'buff',
-                      'font-medium text-error': change.type === 'nerf',
-                    }"
-                  >
-                    {{ splitLinkText(change).before
-                    }}<a
-                      :href="change.linkUrl"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="font-medium text-accent underline hover:text-accent/80"
-                      >{{ change.linkLabel || change.linkUrl }}</a
-                    >{{ splitLinkText(change).after }}
-                  </span>
-                </template>
+                  <template v-if="shouldShowAfter(change)">
+                    <span
+                      v-if="!change.linkUrl"
+                      :class="{
+                        'font-medium text-info': change.type === 'buff',
+                        'font-medium text-error': change.type === 'nerf',
+                      }"
+                      >{{ change.after }}</span
+                    >
+                    <span
+                      v-else
+                      :class="{
+                        'font-medium text-info': change.type === 'buff',
+                        'font-medium text-error': change.type === 'nerf',
+                      }"
+                    >
+                      {{ splitLinkText(change).before
+                      }}<a
+                        :href="change.linkUrl"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="font-medium text-accent underline hover:text-accent/80"
+                        >{{ change.linkLabel || change.linkUrl }}</a
+                      >{{ splitLinkText(change).after }}
+                    </span>
+                  </template>
+                </div>
               </div>
-            </div>
-          </li>
-        </ul>
-      </div>
+            </li>
+          </ul>
+        </div>
+      </template>
     </div>
   </div>
 </template>
@@ -147,6 +166,7 @@ import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import type { Champion } from '@lelanation/shared-types'
 import type { PatchEntity, StatChange, ChangeType } from '~/stores/PatchNotesStore'
+import { resolvePatchNotesAssetPath } from '~/stores/PatchNotesStore'
 import { useVersionStore } from '~/stores/VersionStore'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { getChampionSpellImageUrl, getChampionPassiveImageUrl } from '~/utils/imageUrl'
@@ -155,6 +175,8 @@ import ChampionSpellIconBadge, {
   type ChampionSpellBadgeKey,
 } from '~/components/statistics/ChampionSpellIconBadge.vue'
 import { resolvePatchEntitySummaryTag } from '~/utils/patchEntitySummary'
+import { flattenBugfixItems, isBugfixPatchEntity } from '~/utils/patchBugfixItems'
+import PatchBugfixColumns from '~/components/PatchBugfixColumns.vue'
 
 const props = defineProps<{
   entity: PatchEntity
@@ -164,13 +186,36 @@ const { t, locale } = useI18n()
 const championsStore = useChampionsStore()
 const championDetail = ref<Champion | null>(null)
 const collapsedSections = ref<Set<string>>(new Set())
+const isCardCollapsed = ref(false)
 
 const versionStore = useVersionStore()
 const { currentVersion: gameVersion } = storeToRefs(versionStore)
 
 const { entityImageUrl, resolvedEntityId, onImageError } = usePatchEntityImage(() => props.entity)
 
+const STRUCTURED_MODE_CATEGORIES = new Set<PatchEntity['category']>([
+  'classic',
+  'aram',
+  'aram-chaos',
+  'arena',
+])
+
+const isStructuredModeCard = computed(() => STRUCTURED_MODE_CATEGORIES.has(props.entity.category))
+
 const isArenaCard = computed(() => props.entity.category === 'arena')
+
+function isStructuredModeSectionHeading(value?: string | null): boolean {
+  if (!value) return false
+  const normalized = value.trim()
+  if (
+    /^(champions?|items?|objets?|runes?|syst[eè]mes?|systems?|optimisations?|optimizations?|honor|honneur|invites?)$/i.test(
+      normalized
+    )
+  ) {
+    return true
+  }
+  return normalized === normalized.toUpperCase() && normalized.length <= 40
+}
 
 function isBugfixSubCategory(value?: string | null): boolean {
   if (!value) return false
@@ -178,42 +223,57 @@ function isBugfixSubCategory(value?: string | null): boolean {
   return normalized.includes('bug') || normalized.includes('correction')
 }
 
-const isBugfixCard = computed(
-  () =>
-    props.entity.category === 'bugfix' ||
-    (['aram', 'aram-chaos', 'arena'].includes(props.entity.category) &&
-      isBugfixSubCategory(props.entity.subCategory))
-)
+const isBugfixCard = computed(() => isBugfixPatchEntity(props.entity))
+
+const bugfixItems = computed(() => (isBugfixCard.value ? flattenBugfixItems([props.entity]) : []))
 
 const showCardHeader = computed(() => {
   if (isBugfixCard.value) return true
-  if (isArenaCard.value) {
-    return Boolean(props.entity.subCategory?.trim() || props.entity.name?.trim())
+  if (isStructuredModeCard.value) {
+    return Boolean(props.entity.name?.trim())
   }
   return Boolean(props.entity.name)
 })
 
 const cardTitle = computed(() => {
   if (isBugfixCard.value) {
-    return props.entity.name?.trim() || t('patchNotesPage.bugfixCardTitle')
+    return (
+      props.entity.subCategory?.trim() ||
+      props.entity.name?.trim() ||
+      t('patchNotesPage.bugfixCardTitle')
+    )
   }
-  if (isArenaCard.value) {
-    return props.entity.subCategory?.trim() || props.entity.name || ''
+  if (isStructuredModeCard.value) {
+    return props.entity.name?.trim() || ''
   }
   return props.entity.name
 })
 
 const cardSubtitle = computed(() => {
-  if (isArenaCard.value && props.entity.subCategory?.trim() && props.entity.name?.trim()) {
-    return props.entity.name
+  if (isStructuredModeCard.value || isBugfixCard.value) {
+    return ''
   }
-  if (!isArenaCard.value && props.entity.subCategory?.trim() && !hasGroupedSections.value) {
+  if (
+    props.entity.subCategory?.trim() &&
+    !hasGroupedSections.value &&
+    !isStructuredModeSectionHeading(props.entity.subCategory)
+  ) {
     return props.entity.subCategory
   }
   return ''
 })
 
 const summaryTag = computed(() => resolvePatchEntitySummaryTag(props.entity))
+
+const cardCollapseLabel = computed(() =>
+  isCardCollapsed.value
+    ? t('patchNotesPage.expandCard', { name: cardTitle.value })
+    : t('patchNotesPage.collapseCard', { name: cardTitle.value })
+)
+
+function toggleCardCollapsed() {
+  isCardCollapsed.value = !isCardCollapsed.value
+}
 
 onMounted(() => {
   if (!gameVersion.value) {
@@ -229,17 +289,37 @@ watch(
   }
 )
 
+watch(
+  () => props.entity.patchSlug ?? props.entity.name ?? props.entity.id,
+  () => {
+    isCardCollapsed.value = false
+  }
+)
+
 const riotLocale = computed(() => (locale.value === 'fr' ? 'fr_FR' : 'en_US'))
 
 async function loadChampionDetail() {
-  if (props.entity.category !== 'champion' || !resolvedEntityId.value) {
+  if (!['champion', 'classic'].includes(props.entity.category) || !resolvedEntityId.value) {
     championDetail.value = null
     return
   }
+  await championsStore.loadChampions(riotLocale.value).catch(() => undefined)
   championDetail.value = await championsStore.loadChampionDetails(
     resolvedEntityId.value,
     riotLocale.value
   )
+}
+
+function resolveCachedSpellIconUrl(changes: StatChange[]): string | null {
+  for (const change of changes) {
+    const raw = change.iconUrl?.trim()
+    if (!raw) continue
+    if (raw.startsWith('http://') || raw.startsWith('https://')) return raw
+    if (raw.startsWith('/data/patch-notes/')) return raw
+    const resolved = resolvePatchNotesAssetPath(raw, '')
+    if (resolved) return resolved
+  }
+  return null
 }
 
 const FR_KEY_TO_SLOT: Record<string, 'Q' | 'W' | 'E' | 'R'> = {
@@ -325,9 +405,11 @@ const changeSections = computed<ChangeSection[]>(() => {
         ? ''
         : isArenaCard.value
           ? ''
-          : group.title,
+          : isStructuredModeSectionHeading(group.title)
+            ? ''
+            : group.title,
     changes: group.changes,
-    spellImageUrl: resolveSectionSpellUrl(group.title),
+    spellImageUrl: resolveCachedSpellIconUrl(group.changes) ?? resolveSectionSpellUrl(group.title),
     spellSkillKey: resolveSectionSpellKey(group.title),
   }))
 })
@@ -378,6 +460,8 @@ const categoryIcon = computed(() => {
       return '✨'
     case 'system':
       return '⚙️'
+    case 'classic':
+      return '🎮'
     case 'aram':
       return '🎲'
     case 'aram-chaos':

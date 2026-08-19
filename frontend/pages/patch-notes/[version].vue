@@ -73,10 +73,25 @@
                   class="rounded-lg border border-primary/35 bg-background px-3 py-1.5 text-sm text-text focus:border-accent focus:outline-none"
                 >
                   <option value="all">
-                    {{ t('patchNotesPage.tagFilters.all') }} ({{ allPatchEntities.length }})
+                    {{ t('patchNotesPage.tagFilters.all') }} ({{ modeEntitiesForTagFilter.length }})
                   </option>
                   <option v-for="filter in availableTagFilters" :key="filter.id" :value="filter.id">
                     {{ filter.label }} ({{ filter.count }})
+                  </option>
+                </select>
+              </div>
+
+              <div v-if="showModeSelect">
+                <label class="sr-only" for="patch-mode-select">{{
+                  t('patchNotesPage.modes.label')
+                }}</label>
+                <select
+                  id="patch-mode-select"
+                  v-model="activeMode"
+                  class="rounded-lg border border-primary/35 bg-background px-3 py-1.5 text-sm text-text focus:border-accent focus:outline-none"
+                >
+                  <option v-for="mode in visibleModes" :key="mode.id" :value="mode.id">
+                    {{ mode.label }} ({{ mode.count }})
                   </option>
                 </select>
               </div>
@@ -86,8 +101,9 @@
       </div>
     </div>
 
-    <!-- Category Tabs — horizontal scroll (comme stats) -->
+    <!-- Content tabs for the active game mode -->
     <div
+      v-if="showContentTabs"
       class="patch-notes-tabs-bar sticky top-0 z-30 flex w-full min-w-0 flex-shrink-0 items-start gap-2 overflow-x-hidden border-b border-primary/20 bg-chrome/95 px-[10px] pb-2 pt-2 backdrop-blur sm:px-3 lg:px-6"
     >
       <div
@@ -100,26 +116,26 @@
           class="patch-notes-tabs-nav flex flex-nowrap gap-2 overflow-x-auto pb-1"
         >
           <button
-            v-for="tab in visibleTabs"
+            v-for="tab in visibleContentTabs"
             :id="`patch-notes-tab-${tab.id}`"
             :key="tab.id"
             type="button"
             role="tab"
             :data-tab-id="tab.id"
-            :aria-selected="activeTab === tab.id"
-            :tabindex="activeTab === tab.id ? 0 : -1"
+            :aria-selected="activeContentTab === tab.id"
+            :tabindex="activeContentTab === tab.id ? 0 : -1"
             :class="[
               'patch-notes-tab-btn ui-build-card-button flex shrink-0 snap-start items-center gap-1.5 whitespace-nowrap px-3 py-1.5 text-sm font-medium',
-              activeTab === tab.id ? 'is-active' : '',
+              activeContentTab === tab.id ? 'is-active' : '',
             ]"
-            @click="selectTab(tab.id)"
+            @click="selectContentTab(tab.id)"
           >
             <span>{{ tab.label }}</span>
             <span
-              v-if="tab.count > 0"
+              v-if="tab.id !== 'summary' && tab.count > 0"
               :class="[
                 'rounded-full px-1.5 py-0.5 text-[10px]',
-                activeTab === tab.id
+                activeContentTab === tab.id
                   ? 'bg-accent/25 text-accent'
                   : 'bg-panel-elevated/60 text-text/60',
               ]"
@@ -131,12 +147,12 @@
       </div>
     </div>
 
-    <!-- Content - reduced padding for more cards per row -->
+    <!-- Content -->
     <div
       :class="[
-        'mx-auto max-w-[1600px] px-[10px] sm:px-3 lg:px-6',
+        contentWrapperClass,
         summaryLayoutLocked ? 'flex min-h-0 flex-1 flex-col' : '',
-        activeTab === 'summary' && !isSearchActive ? 'py-1' : 'py-4',
+        activeContentTab === 'summary' && !isSearchActive ? 'py-1' : 'py-4',
       ]"
     >
       <!-- Loading State -->
@@ -167,7 +183,7 @@
 
       <!-- Summary Tab Content - fit viewport without scroll -->
       <div
-        v-else-if="activeTab === 'summary' && !isSearchActive"
+        v-else-if="activeContentTab === 'summary' && !isSearchActive"
         class="flex min-h-0 flex-1 flex-col items-center"
       >
         <div
@@ -189,10 +205,17 @@
         </div>
       </div>
 
-      <!-- Entity Cards Grid - tighter spacing, more cards per row -->
+      <!-- Bugfix tab — full width, multi-column list -->
+      <PatchBugfixPanel
+        v-else-if="activeContentTab === 'bugfix' && filteredEntities.length > 0"
+        :entities="filteredEntities"
+        :group-by-mode="false"
+      />
+
+      <!-- Entity Cards Grid -->
       <div
         v-else-if="filteredEntities.length > 0"
-        class="grid gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+        class="grid gap-3 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3"
       >
         <PatchEntityCard
           v-for="(entity, idx) in filteredEntities"
@@ -216,7 +239,7 @@
             })
           }}
         </p>
-        <p v-else>{{ t('patchNotesPage.noChanges', { category: activeTabLabel }) }}</p>
+        <p v-else>{{ t('patchNotesPage.noChanges', { category: activeContentTabLabel }) }}</p>
       </div>
 
       <!-- Image Lightbox (teleports to body, can be placed anywhere) -->
@@ -242,6 +265,21 @@ import {
   type PatchIndexEntry,
 } from '~/stores/PatchNotesStore'
 import PatchEntityCard from '~/components/PatchEntityCard.vue'
+import PatchBugfixPanel from '~/components/PatchBugfixPanel.vue'
+import { isBugfixPatchEntity, excludeBugfixEntities } from '~/utils/patchBugfixItems'
+import {
+  type PatchNotesModeId,
+  type PatchNotesContentTabId,
+  PATCH_MODE_I18N_KEYS,
+  PATCH_CONTENT_TAB_I18N_KEYS,
+  entitiesForPatchMode,
+  entitiesForPatchModeTab,
+  countPatchMode,
+  countPatchModeTab,
+  visiblePatchContentTabs,
+  visiblePatchModes,
+  defaultPatchContentTab,
+} from '~/utils/patchNotesModes'
 import PatchImageLightbox from '~/components/PatchImageLightbox.vue'
 import { articleJsonLd } from '~/utils/jsonLd'
 import { useJsonLdHead } from '~/composables/useJsonLdHead'
@@ -296,17 +334,6 @@ async function fetchPatchJsonForPage(version: string, loc: string): Promise<Patc
   }
 }
 
-type PatchNotesTabId =
-  | 'summary'
-  | 'champions'
-  | 'items'
-  | 'runes'
-  | 'systems'
-  | 'aram'
-  | 'aram-chaos'
-  | 'arena'
-  | 'bugfix'
-
 const routeVersion = computed(() =>
   normalizePatchNotesVersion(String(route.params.version ?? '').trim())
 )
@@ -347,22 +374,10 @@ const status = computed<'loading' | 'success' | 'error'>(() => {
 
 const error = computed(() => patchFetchError.value?.message ?? null)
 
-function entitiesForCategory(category: PatchEntity['category']): PatchEntity[] {
-  return patchData.value?.entities?.filter(entity => entity.category === category) ?? []
-}
-
-const champions = computed(() => entitiesForCategory('champion'))
-const items = computed(() => entitiesForCategory('item'))
-const runes = computed(() => entitiesForCategory('rune'))
-const systems = computed(() => entitiesForCategory('system'))
-const aram = computed(() => entitiesForCategory('aram'))
-const aramChaos = computed(() => entitiesForCategory('aram-chaos'))
-const arena = computed(() => entitiesForCategory('arena'))
-const bugfix = computed(() => entitiesForCategory('bugfix'))
-
 const allPatchEntities = computed(() => patchData.value?.entities ?? [])
 
-const activeTab = ref<PatchNotesTabId>('summary')
+const activeMode = ref<PatchNotesModeId>('rift')
+const activeContentTab = ref<PatchNotesContentTabId>('summary')
 const isLightboxOpen = ref(false)
 const searchQuery = ref('')
 const activeTagFilter = ref<PatchEntitySummaryType | 'all'>('all')
@@ -373,7 +388,7 @@ const isSearchActive = computed(() => searchQuery.value.trim().length > 0)
 
 const summaryLayoutLocked = computed(
   () =>
-    activeTab.value === 'summary' &&
+    activeContentTab.value === 'summary' &&
     !isSearchActive.value &&
     status.value !== 'loading' &&
     status.value !== 'error'
@@ -402,73 +417,54 @@ function applyTagFilter(entities: PatchEntity[]): PatchEntity[] {
   return entities.filter(entity => entityMatchesSummaryTag(entity, activeTagFilter.value))
 }
 
-const tabs = computed(() => [
-  {
-    id: 'summary' as const,
-    label: t('patchNotesPage.categories.summary'),
-    icon: '📋',
-    count: 0,
-  },
-  {
-    id: 'champions' as const,
-    label: t('patchNotesPage.categories.champions'),
-    icon: '🏆',
-    count: applyTagFilter(champions.value).length,
-  },
-  {
-    id: 'items' as const,
-    label: t('patchNotesPage.categories.items'),
-    icon: '🛡️',
-    count: applyTagFilter(items.value).length,
-  },
-  {
-    id: 'runes' as const,
-    label: t('patchNotesPage.categories.runes'),
-    icon: '✨',
-    count: applyTagFilter(runes.value).length,
-  },
-  {
-    id: 'systems' as const,
-    label: t('patchNotesPage.categories.systems'),
-    icon: '⚙️',
-    count: applyTagFilter(systems.value).length,
-  },
-  {
-    id: 'aram' as const,
-    label: t('patchNotesPage.categories.aram'),
-    icon: '🎲',
-    count: applyTagFilter(aram.value).length,
-  },
-  {
-    id: 'aram-chaos' as const,
-    label: t('patchNotesPage.categories.aramChaos'),
-    icon: '🌀',
-    count: applyTagFilter(aramChaos.value).length,
-  },
-  {
-    id: 'arena' as const,
-    label: t('patchNotesPage.categories.arena'),
-    icon: '🏟️',
-    count: applyTagFilter(arena.value).length,
-  },
-  {
-    id: 'bugfix' as const,
-    label: t('patchNotesPage.categories.bugfix'),
-    icon: '🐛',
-    count: applyTagFilter(bugfix.value).length,
-  },
-])
+function entityMatchesSearch(entity: PatchEntity, query: string): boolean {
+  const changeLabels = entity.changes.map(c => [c.after, c.subCategory].join(' ')).join(' ')
+  const haystack = [entity.name, entity.subCategory ?? '', changeLabels]
+    .map(normalizeSearch)
+    .join(' ')
+  return haystack.includes(query)
+}
 
-const visibleTabs = computed(() =>
-  tabs.value.filter(tab => {
-    if (tab.id === 'summary') return Boolean(summaryImageUrl.value)
-    return tab.count > 0
-  })
+const visibleModes = computed(() => {
+  const entities = allPatchEntities.value
+  return visiblePatchModes(entities).map(modeId => ({
+    id: modeId,
+    label: t(PATCH_MODE_I18N_KEYS[modeId]),
+    count: countPatchMode(entities, modeId),
+  }))
+})
+
+const showModeSelect = computed(() => status.value === 'success' && visibleModes.value.length > 1)
+
+const modeEntitiesForTagFilter = computed(() =>
+  entitiesForPatchMode(allPatchEntities.value, activeMode.value)
 )
 
-const activeTabLabel = computed(() => {
-  return visibleTabs.value.find(t => t.id === activeTab.value)?.label ?? ''
-})
+const visibleContentTabs = computed(() =>
+  visiblePatchContentTabs(
+    allPatchEntities.value,
+    activeMode.value,
+    Boolean(summaryImageUrl.value)
+  ).map(tabId => ({
+    id: tabId,
+    label: t(PATCH_CONTENT_TAB_I18N_KEYS[tabId]),
+    count: countPatchModeTab(allPatchEntities.value, activeMode.value, tabId),
+  }))
+)
+
+const showContentTabs = computed(
+  () => status.value === 'success' && visibleContentTabs.value.length > 0
+)
+
+const activeContentTabLabel = computed(
+  () => visibleContentTabs.value.find(tab => tab.id === activeContentTab.value)?.label ?? ''
+)
+
+const contentWrapperClass = computed(() =>
+  activeContentTab.value === 'bugfix'
+    ? 'w-full max-w-none px-[10px] sm:px-4 lg:px-8'
+    : 'mx-auto w-full max-w-[1600px] px-[10px] sm:px-3 lg:px-6'
+)
 
 function normalizeSearch(value: string): string {
   return value
@@ -479,32 +475,14 @@ function normalizeSearch(value: string): string {
 }
 
 const tabEntities = computed<PatchEntity[]>(() => {
-  switch (activeTab.value) {
-    case 'champions':
-      return champions.value
-    case 'items':
-      return items.value
-    case 'runes':
-      return runes.value
-    case 'systems':
-      return systems.value
-    case 'aram':
-      return aram.value
-    case 'aram-chaos':
-      return aramChaos.value
-    case 'arena':
-      return arena.value
-    case 'bugfix':
-      return bugfix.value
-    case 'summary':
-    default:
-      return []
-  }
+  if (activeContentTab.value === 'summary') return []
+  return entitiesForPatchModeTab(allPatchEntities.value, activeMode.value, activeContentTab.value)
 })
 
 const availableTagFilters = computed(() => {
   const counts = new Map<PatchEntitySummaryType, number>()
-  for (const entity of allPatchEntities.value) {
+  for (const entity of modeEntitiesForTagFilter.value) {
+    if (isBugfixPatchEntity(entity)) continue
     const tag = resolvePatchEntitySummaryTag(entity)
     if (!tag) continue
     counts.set(tag, (counts.get(tag) ?? 0) + 1)
@@ -518,24 +496,30 @@ const availableTagFilters = computed(() => {
 })
 
 const showTagFilterSelect = computed(
-  () => status.value === 'success' && Boolean(patchData.value?.entities?.length)
+  () =>
+    status.value === 'success' &&
+    activeContentTab.value !== 'summary' &&
+    Boolean(modeEntitiesForTagFilter.value.length)
 )
 
 const filteredEntities = computed<PatchEntity[]>(() => {
+  if (activeContentTab.value === 'summary') return []
+
   const query = normalizeSearch(searchQuery.value)
+  const basePool = isSearchActive.value
+    ? entitiesForPatchMode(allPatchEntities.value, activeMode.value)
+    : tabEntities.value
 
   if (!query) {
-    return applyTagFilter(tabEntities.value)
+    return applyTagFilter(basePool)
   }
 
-  const entities = patchData.value?.entities ?? []
-  const searched = entities.filter(entity => {
-    const name = entity.name?.trim()
-    if (!name) return false
-    const changeLabels = entity.changes.map(c => c.subCategory ?? '').join(' ')
-    const haystack = [name, entity.subCategory ?? '', changeLabels].map(normalizeSearch).join(' ')
-    return haystack.includes(query)
-  })
+  const searchPool =
+    activeContentTab.value === 'bugfix'
+      ? entitiesForPatchModeTab(allPatchEntities.value, activeMode.value, 'bugfix')
+      : excludeBugfixEntities(entitiesForPatchMode(allPatchEntities.value, activeMode.value))
+
+  const searched = searchPool.filter(entity => entityMatchesSearch(entity, query))
 
   return applyTagFilter(searched)
 })
@@ -578,34 +562,59 @@ async function onPatchChange(event: Event) {
   if (!version || version === routeVersion.value) return
   searchQuery.value = ''
   activeTagFilter.value = 'all'
-  activeTab.value = 'summary'
+  activeMode.value = 'rift'
+  activeContentTab.value = 'summary'
   await navigateTo(localePath(`/patch-notes/${version}`))
 }
 
 function scrollActiveTabIntoView(behavior: ScrollBehavior = 'smooth'): void {
   if (!import.meta.client || !tabsNavEl.value) return
   const el = tabsNavEl.value.querySelector<HTMLButtonElement>(
-    `button[data-tab-id="${activeTab.value}"]`
+    `button[data-tab-id="${activeContentTab.value}"]`
   )
   el?.scrollIntoView({ inline: 'start', block: 'nearest', behavior })
 }
 
-function selectTab(tabId: PatchNotesTabId): void {
-  activeTab.value = tabId
+function selectContentTab(tabId: PatchNotesContentTabId): void {
+  activeContentTab.value = tabId
   if (!import.meta.client) return
   requestAnimationFrame(() => scrollActiveTabIntoView())
 }
 
 const patchOptions = computed<PatchIndexEntry[]>(() => availablePatches.value)
 
-watch(visibleTabs, tabs => {
-  if (tabs.length === 0) return
-  if (!tabs.some(tab => tab.id === activeTab.value)) {
-    activeTab.value = tabs[0].id
+watch(visibleModes, modes => {
+  if (modes.length === 0) return
+  if (!modes.some(mode => mode.id === activeMode.value)) {
+    activeMode.value = modes.find(mode => mode.id === 'rift')?.id ?? modes[0].id
   }
 })
 
-watch(activeTab, () => {
+watch(
+  [visibleContentTabs, summaryImageUrl],
+  () => {
+    const tabs = visibleContentTabs.value
+    if (tabs.length === 0) return
+    if (!tabs.some(tab => tab.id === activeContentTab.value)) {
+      activeContentTab.value = defaultPatchContentTab(
+        allPatchEntities.value,
+        activeMode.value,
+        Boolean(summaryImageUrl.value)
+      )
+    }
+  },
+  { immediate: true }
+)
+
+watch(activeMode, mode => {
+  const tabs = visiblePatchContentTabs(allPatchEntities.value, mode, Boolean(summaryImageUrl.value))
+  if (tabs.length > 0 && !tabs.includes(activeContentTab.value)) {
+    activeContentTab.value = tabs[0]
+  }
+  activeTagFilter.value = 'all'
+})
+
+watch(activeContentTab, () => {
   if (!import.meta.client) return
   requestAnimationFrame(() => scrollActiveTabIntoView('auto'))
 })
@@ -628,7 +637,7 @@ const patchNotesSeoDescription = computed(() => {
   if (!version) {
     return t('patchNotesPage.metaDescription', { version: fallbackGameVersion })
   }
-  const list = champions.value
+  const list = entitiesForPatchModeTab(allPatchEntities.value, 'rift', 'champions')
   if (list.length === 0) {
     return t('patchNotesPage.metaDescription', { version })
   }

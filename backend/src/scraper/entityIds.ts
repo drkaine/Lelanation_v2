@@ -45,6 +45,7 @@ const ITEM_SLUG_OVERRIDES: Record<string, string> = {
   'echoes-of-helia': '6620',
   'hexplaque-experimentale': '3073',
   'experimental-hexplate': '3073',
+  'sunfire-cape': '3068',
 };
 
 export interface EntityIdExtraction {
@@ -64,22 +65,33 @@ function decodeProxyUrl(href: string): string {
 
 function extractDdragonFromHref(href: string): EntityIdExtraction | null {
   const decoded = decodeProxyUrl(href);
+  const cleanUrl = decoded.split('?')[0];
 
   const itemMatch = decoded.match(D_DRAGON_ITEM_RE);
   if (itemMatch) {
-    // Only return the ID, not the full Data Dragon URL
-    // Frontend will use local images
-    return { id: itemMatch[1] };
+    return { id: itemMatch[1], imageUrl: cleanUrl };
   }
 
   const championMatch = decoded.match(D_DRAGON_CHAMPION_RE);
   if (championMatch) {
-    // Only return the ID, not the full Data Dragon URL
-    // Frontend will use local images
-    return { id: championMatch[1] };
+    return { id: championMatch[1], imageUrl: cleanUrl };
   }
 
   return null;
+}
+
+/** Resolve a patch-notes image src/href to a stable remote URL (ddragon or CMS). */
+export function extractPatchImageSrc(raw?: string | null): string | undefined {
+  if (!raw?.trim()) return undefined;
+
+  const trimmed = raw.trim();
+  const decoded = decodeProxyUrl(trimmed);
+  const ddragon =
+    extractDdragonFromHref(trimmed) ??
+    (decoded !== trimmed ? extractDdragonFromHref(decoded) : null);
+  if (ddragon?.imageUrl) return ddragon.imageUrl;
+
+  return normalizeImageUrl(trimmed) ?? normalizeImageUrl(decoded);
 }
 
 export function championSlugToId(slug: string): string | undefined {
@@ -233,30 +245,48 @@ function isArenaChampionSubCategory(subCategory?: string): boolean {
   );
 }
 
-function resolveArenaEntityId(entity: EntityChanges, indexes: GameDataIndexes): string | undefined {
+function parseImprovementEntityName(name: string): string {
+  const honoredGuest = parseHonoredGuestChampionName(name);
+  const improvementMatch = honoredGuest.match(/^am[eé]lioration\s*-\s*(.+)$/i);
+  return improvementMatch ? improvementMatch[1].trim() : honoredGuest;
+}
+
+export function resolveStructuredModeEntityId(
+  entity: EntityChanges,
+  indexes: GameDataIndexes
+): string | undefined {
   if (entity.id) {
     if (indexes.championIds.has(entity.id) || /^\d+$/.test(entity.id)) {
       return entity.id;
     }
   }
 
-  const name = entity.name?.trim();
-  if (!name) return undefined;
+  const rawName = entity.name?.trim();
+  if (!rawName) return undefined;
+
+  const name = parseImprovementEntityName(rawName);
 
   if (isArenaItemSubCategory(entity.subCategory)) {
     return indexes.itemNameToId.get(normalizeLookupKey(name));
   }
 
   if (isArenaChampionSubCategory(entity.subCategory)) {
-    const championName = parseHonoredGuestChampionName(name);
-    return indexes.championSlugToId.get(normalizeLookupKey(championName));
+    return indexes.championSlugToId.get(normalizeLookupKey(name));
   }
 
   if (normalizeLookupKey(entity.subCategory ?? '') === 'champions') {
     return indexes.championSlugToId.get(normalizeLookupKey(name));
   }
 
-  return undefined;
+  if (!entity.subCategory?.trim()) {
+    const fromName = indexes.championSlugToId.get(normalizeLookupKey(name));
+    if (fromName) return fromName;
+  }
+
+  return (
+    indexes.itemNameToId.get(normalizeLookupKey(name)) ??
+    indexes.championSlugToId.get(normalizeLookupKey(name))
+  );
 }
 
 export function buildGameDataIndexes(
@@ -350,20 +380,20 @@ export function enrichEntityIds(
       return entity;
     }
 
-    if (entity.category === 'aram' || entity.category === 'aram-chaos') {
-      if (entity.id && indexes.championIds.has(entity.id)) {
-        return entity;
-      }
-
-      const fromName = indexes.championSlugToId.get(normalizeLookupKey(entity.name));
-      if (fromName) {
-        return { ...entity, id: fromName };
+    if (
+      entity.category === 'aram' ||
+      entity.category === 'aram-chaos' ||
+      entity.category === 'classic'
+    ) {
+      const resolved = resolveStructuredModeEntityId(entity, indexes);
+      if (resolved) {
+        return { ...entity, id: resolved };
       }
       return entity;
     }
 
     if (entity.category === 'arena') {
-      const resolved = resolveArenaEntityId(entity, indexes);
+      const resolved = resolveStructuredModeEntityId(entity, indexes);
       if (resolved) {
         return { ...entity, id: resolved };
       }

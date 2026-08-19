@@ -2782,17 +2782,27 @@
       "items": "Items",
       "runes": "Runes",
       "systems": "Systems",
+      "classic": "Classic",
       "aram": "ARAM",
       "aramChaos": "ARAM Chaos",
       "arena": "Arena",
-      "bugfix": "Bug Fixes"
+      "bugfix": "Bug Fixes",
+      "optimizations": "Optimizations"
+    },
+    "modes": {
+      "label": "Game mode",
+      "summary": "Summary",
+      "rift": "Summoner's Rift"
     },
     "bugfixCardTitle": "Bug fix",
+    "bugfixCount": "{count} fix(es)",
     "tagFilters": {
       "label": "Filter by change type",
       "all": "All"
     },
     "noTagResults": "No « {tag} » changes in this category",
+    "collapseCard": "Collapse {name} card",
+    "expandCard": "Expand {name} card",
     "changeTypes": {
       "buff": "Buff",
       "nerf": "Nerf",

@@ -2782,17 +2782,27 @@
       "items": "Objets",
       "runes": "Runes",
       "systems": "Systèmes",
+      "classic": "Classic",
       "aram": "ARAM",
       "aramChaos": "ARAM du Chaos",
       "arena": "Arena",
-      "bugfix": "Corrections de bugs"
+      "bugfix": "Corrections de bugs",
+      "optimizations": "Optimisations"
+    },
+    "modes": {
+      "label": "Mode de jeu",
+      "summary": "Résumé",
+      "rift": "Faille de l'invocateur"
     },
     "bugfixCardTitle": "Correction de bug",
+    "bugfixCount": "{count} correction(s)",
     "tagFilters": {
       "label": "Filtrer par type de changement",
       "all": "Tous"
     },
     "noTagResults": "Aucun changement de type « {tag} » dans cette catégorie",
+    "collapseCard": "Replier la carte {name}",
+    "expandCard": "Déplier la carte {name}",
     "changeTypes": {
       "buff": "Buff",
       "nerf": "Nerf",
