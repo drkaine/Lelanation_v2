@@ -19,6 +19,7 @@ function serializeSubBuild(sub: SubBuild): StoredSubBuild {
   return {
     title: sub.title,
     description: sub.description,
+    notes: sub.notes,
     champion: sub.champion
       ? { id: sub.champion.id, name: sub.champion.name, image: sub.champion.image }
       : null,
@@ -45,6 +46,7 @@ export function serializeBuild(build: Build): StoredBuild {
     name: build.name,
     author: build.author,
     description: build.description,
+    notes: build.notes,
     visibility: build.visibility,
     matchupGuideEmbed: build.matchupGuideEmbed,
     champion: build.champion
@@ -68,6 +70,7 @@ export function serializeBuild(build: Build): StoredBuild {
     updatedAt: build.updatedAt,
     subBuilds: build.subBuilds ? build.subBuilds.map(serializeSubBuild) : undefined,
     descriptionMode: build.descriptionMode,
+    notesMode: build.notesMode,
     patchStale: build.patchStale ?? null,
     kaynForm: build.kaynForm,
   }
@@ -178,6 +181,7 @@ function hydrateSubBuild(stored: StoredSubBuild, catalogs: HydrationCatalogs): S
   return {
     title: stored.title,
     description: stored.description,
+    notes: stored.notes,
     champion: resolveChampion(stored.champion, catalogs),
     items: resolveItems(stored.items, catalogs),
     runes: stored.runes,
@@ -199,6 +203,7 @@ export function hydrateBuild(stored: StoredBuild, catalogs: HydrationCatalogs): 
 
   return {
     id: stored.id, name: stored.name, author: stored.author, description: stored.description,
+    notes: stored.notes,
     visibility: stored.visibility, champion, items, runes: stored.runes, shards: stored.shards,
     matchupGuideEmbed: stored.matchupGuideEmbed,
     summonerSpells, skillOrder: normalizeSkillOrder(stored.skillOrder),
@@ -206,6 +211,7 @@ export function hydrateBuild(stored: StoredBuild, catalogs: HydrationCatalogs): 
     gameVersion: stored.gameVersion, createdAt: stored.createdAt, updatedAt: stored.updatedAt,
     subBuilds: stored.subBuilds ? stored.subBuilds.map(s => hydrateSubBuild(s, catalogs)) : undefined,
     descriptionMode: stored.descriptionMode,
+    notesMode: stored.notesMode,
     patchStale: stored.patchStale ?? null,
     kaynForm: stored.kaynForm,
   }

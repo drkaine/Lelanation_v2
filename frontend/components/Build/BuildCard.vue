@@ -480,31 +480,51 @@
           </div>
 
           <!-- Sorts d'invocateur (juste sous le nom) - Toujours visible -->
-          <div
-            class="summoner-spells-row"
-            :class="{
-              'validation-blink-frame':
-                props.highlightMissingFields && missingFieldChecks.summonerSpells,
-            }"
-            @click.stop="onSelectRegion('runes', $event)"
-          >
-            <template v-for="(spell, index) in filteredSummonerSpells" :key="index">
-              <img
-                v-if="spell"
-                :src="getSpellImageUrl(versionForImages, spell.image.full)"
-                :alt="spell.name"
-                class="summoner-spell-icon"
-                :title="sheetTooltip(getSummonerSpellDisplayName(spell), 'Summoner Spell')"
-                @mouseenter="onSheetElementEnter($event, 'spell', spell, 'Summoner Spell')"
-                @mousemove="onSheetElementMove"
-                @mouseleave="onSheetElementLeave"
-              />
-            </template>
+          <div class="summoner-spells-strip">
+            <button
+              v-if="showNotesTag && !forScreenshot"
+              type="button"
+              class="build-tag-chip build-tag-chip--selected build-card-notes-tag build-card-notes-tag--summoner-row"
+              :style="{ '--tag-g1': '#2f855a', '--tag-g2': '#1a4731' }"
+              :title="t('buildDiscovery.viewBuildNotes')"
+              :aria-label="t('buildDiscovery.viewBuildNotes')"
+              @click.stop="emit('notes-click')"
+            >
+              {{ t('buildDiscovery.tagNotes') }}
+            </button>
+            <span
+              v-else-if="showNotesTag"
+              class="build-tag-chip build-tag-chip--selected build-card-notes-tag build-card-notes-tag--summoner-row"
+              :style="{ '--tag-g1': '#2f855a', '--tag-g2': '#1a4731' }"
+            >
+              {{ t('buildDiscovery.tagNotes') }}
+            </span>
             <div
-              v-for="n in 2 - filteredSummonerSpells.length"
-              :key="`empty-${n}`"
-              class="summoner-spell-placeholder"
-            ></div>
+              class="summoner-spells-row"
+              :class="{
+                'validation-blink-frame':
+                  props.highlightMissingFields && missingFieldChecks.summonerSpells,
+              }"
+              @click.stop="onSelectRegion('runes', $event)"
+            >
+              <template v-for="(spell, index) in filteredSummonerSpells" :key="index">
+                <img
+                  v-if="spell"
+                  :src="getSpellImageUrl(versionForImages, spell.image.full)"
+                  :alt="spell.name"
+                  class="summoner-spell-icon"
+                  :title="sheetTooltip(getSummonerSpellDisplayName(spell), 'Summoner Spell')"
+                  @mouseenter="onSheetElementEnter($event, 'spell', spell, 'Summoner Spell')"
+                  @mousemove="onSheetElementMove"
+                  @mouseleave="onSheetElementLeave"
+                />
+              </template>
+              <div
+                v-for="n in 2 - filteredSummonerSpells.length"
+                :key="`empty-${n}`"
+                class="summoner-spell-placeholder"
+              ></div>
+            </div>
           </div>
 
           <!-- Ligne de séparation -->
@@ -1900,6 +1920,7 @@ import TheorycraftCardStatsBack from '~/components/Build/TheorycraftCardStatsBac
 import TheorycraftItemManagerSlot from '~/components/Build/TheorycraftItemManagerSlot.vue'
 import KaynFormSelector from '~/components/Build/KaynFormSelector.vue'
 import { isTheorycraftActivatableItemPassive } from '~/utils/theorycraftItemPassives'
+import { buildHasAnyNotes } from '~/utils/buildNotes'
 import DescriptionVideoPreviews from '~/components/Build/DescriptionVideoPreviews.vue'
 import {
   getKaynDisplayName,
@@ -1964,6 +1985,8 @@ const emit = defineEmits<{
   'select-region': ['champion' | 'items' | 'runes']
   'update:flipped': [value: boolean]
   'toggle-description-flip': []
+  /** Discover / readonly grid : ouvrir l’onglet notes du build. */
+  'notes-click': []
 }>()
 
 const buildStore = useBuildStore()
@@ -1979,6 +2002,13 @@ const route = useRoute()
 const { locale, t } = useI18n()
 const { isLayoutScaled } = useLayoutScaled()
 const hideTopActions = computed(() => props.hideTopActions)
+
+const cardRootBuild = computed(() => props.build ?? buildStore.currentBuild)
+const showNotesTag = computed(() => {
+  if (!cardRootBuild.value || !buildHasAnyNotes(cardRootBuild.value)) return false
+  if (props.forScreenshot) return true
+  return props.readonly && hideTopActions.value
+})
 
 function regionSelectionClass(region: 'champion' | 'items' | 'runes'): Record<string, boolean> {
   const selectable = isStepBuilderFlow.value || props.selectionMode === 'theorycraft'
@@ -2083,16 +2113,21 @@ watch(localFlipped, value => {
 /** Index de la variante affichée localement (null = build principal). Utilisé en mode readonly. */
 const localDisplayedSubIndex = ref<number | null>(null)
 
-// En readonly, initialiser la variante affichée depuis la prop (ex. recherche qui ne matche qu'une variante)
+// En readonly, synchroniser la variante affichée avec la prop parente (?sub=, page détail).
 watch(
   () => [props.build?.id, props.initialDisplayedVariantIndex] as const,
-  ([_buildId, initialIdx]) => {
+  ([buildId, initialIdx], prev) => {
     if (!props.readonly || !props.build) return
     const idx = initialIdx ?? null
     const subs = (props.build.subBuilds ?? []) as SubBuild[]
-    if (idx === null || (typeof idx === 'number' && idx >= 0 && idx < subs.length)) {
-      localDisplayedSubIndex.value = idx
+    const validIdx =
+      idx === null || (typeof idx === 'number' && idx >= 0 && idx < subs.length) ? idx : null
+
+    if (prev && prev[0] === buildId && validIdx === localDisplayedSubIndex.value) {
+      return
     }
+
+    localDisplayedSubIndex.value = validIdx
   },
   { immediate: true }
 )
@@ -3043,6 +3078,7 @@ const showFrontVariantsTagsStack = computed(() => {
 /** Même décalage vertical des tags que lorsque le bouton variantes est présent. */
 const showVariantsTagColumnSpacer = computed(
   () =>
+    !props.forScreenshot &&
     showFrontVariantsTagsStack.value &&
     !showVariantTriggerButton.value &&
     (!props.readonly || selectedBuildTags.value.length > 0 || hasPatchStaleBadge.value)
@@ -5096,14 +5132,38 @@ defineExpose({
   z-index: 1;
 }
 
+.summoner-spells-strip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 32px;
+  margin-top: 6px;
+  margin-bottom: 6px;
+}
+
+.build-card-notes-tag {
+  flex-shrink: 0;
+}
+
+.build-card-notes-tag--summoner-row {
+  position: absolute;
+  left: calc(-1 * var(--build-card-edge-inset, 10px) + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: max-content;
+  margin-top: 0;
+}
+
 .summoner-spells-row {
   display: flex;
   gap: 6px;
   justify-content: center;
-  margin-top: 6px;
-  margin-bottom: 6px;
   align-items: center;
   flex-wrap: wrap;
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
 .summoner-spell-icon {

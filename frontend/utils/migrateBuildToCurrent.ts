@@ -57,6 +57,7 @@ export async function migrateBuildToCurrent(
     // Initialiser les champs sous-builds pour les builds anciens
     subBuilds: build.subBuilds ?? [],
     descriptionMode: build.descriptionMode ?? 'single',
+    notesMode: build.notesMode ?? 'single',
   }
 
   // Champion: replace with current champion if available

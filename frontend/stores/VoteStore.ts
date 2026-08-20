@@ -1,9 +1,29 @@
 import { defineStore } from 'pinia'
+import { apiUrl } from '~/utils/apiUrl'
+import { getOrCreateVoterId, voterRequestHeaders } from '~/utils/voterId'
+
+type UserVote = 'up' | 'down' | null
+
+const LEGACY_USER_VOTES_KEY = 'lelanation_user_votes'
+const LEGACY_UPVOTES_KEY = 'lelanation_upvotes'
+const LEGACY_DOWNVOTES_KEY = 'lelanation_downvotes'
+const VOTES_SERVER_SYNCED_KEY = 'lelanation_votes_server_synced_v1'
+
+type ServerVoteStats = {
+  upvotes?: number
+  downvotes?: number
+  userVote?: UserVote
+}
 
 interface VoteState {
-  upvotes: Record<string, number> // buildId -> upvote count
-  downvotes: Record<string, number> // buildId -> downvote count
-  userVotes: Record<string, 'up' | 'down' | null> // buildId -> user vote type
+  upvotes: Record<string, number>
+  downvotes: Record<string, number>
+  userVotes: Record<string, UserVote>
+}
+
+export type VoteActionResult = {
+  ok: boolean
+  autoPrivatized?: boolean
 }
 
 export const useVoteStore = defineStore('vote', {
@@ -15,156 +35,214 @@ export const useVoteStore = defineStore('vote', {
 
   getters: {
     getUpvoteCount: state => {
-      return (buildId: string): number => {
-        return state.upvotes[buildId] || 0
-      }
+      return (buildId: string): number => state.upvotes[buildId] || 0
     },
 
     getDownvoteCount: state => {
-      return (buildId: string): number => {
-        return state.downvotes[buildId] || 0
-      }
+      return (buildId: string): number => state.downvotes[buildId] || 0
     },
 
     getUserVote: state => {
-      return (buildId: string): 'up' | 'down' | null => {
-        return state.userVotes[buildId] || null
-      }
+      return (buildId: string): UserVote => state.userVotes[buildId] ?? null
     },
 
     hasUserVoted: state => {
-      return (buildId: string): boolean => {
-        return state.userVotes[buildId] !== null && state.userVotes[buildId] !== undefined
-      }
+      return (buildId: string): boolean => state.userVotes[buildId] != null
     },
   },
 
   actions: {
     init() {
       if (import.meta.server) return
-      // Load votes from localStorage
+      getOrCreateVoterId()
+      this.migrateLegacyVotesToServer().catch(() => undefined)
+    },
+
+    readLegacyUserVotes(): Record<string, 'up' | 'down'> {
+      if (import.meta.server) return {}
       try {
-        const storedUpvotes = localStorage.getItem('lelanation_upvotes')
-        if (storedUpvotes) {
-          this.upvotes = JSON.parse(storedUpvotes)
+        const raw = localStorage.getItem(LEGACY_USER_VOTES_KEY)
+        if (!raw) return {}
+        const parsed = JSON.parse(raw) as Record<string, unknown>
+        const out: Record<string, 'up' | 'down'> = {}
+        for (const [buildId, vote] of Object.entries(parsed)) {
+          const id = buildId.trim()
+          if (!id) continue
+          if (vote === 'up' || vote === 'down') out[id] = vote
         }
-
-        const storedDownvotes = localStorage.getItem('lelanation_downvotes')
-        if (storedDownvotes) {
-          this.downvotes = JSON.parse(storedDownvotes)
-        }
-
-        const storedUserVotes = localStorage.getItem('lelanation_user_votes')
-        if (storedUserVotes) {
-          this.userVotes = JSON.parse(storedUserVotes)
-        }
+        return out
       } catch {
-        // Ignore malformed localStorage values
+        return {}
       }
     },
 
-    upvote(buildId: string): boolean {
-      const currentVote = this.userVotes[buildId]
+    clearLegacyVoteStorage(): void {
+      if (import.meta.server) return
+      try {
+        localStorage.removeItem(LEGACY_USER_VOTES_KEY)
+        localStorage.removeItem(LEGACY_UPVOTES_KEY)
+        localStorage.removeItem(LEGACY_DOWNVOTES_KEY)
+      } catch {
+        // ignore
+      }
+    },
 
-      // Si l'utilisateur avait déjà downvoté, on retire le downvote
-      if (currentVote === 'down') {
-        if (this.downvotes[buildId] && this.downvotes[buildId] > 0) {
-          this.downvotes[buildId] = this.downvotes[buildId] - 1
-        }
+    /** Push votes stored locally before server-side voting existed. */
+    async migrateLegacyVotesToServer(): Promise<void> {
+      if (import.meta.server) return
+      try {
+        if (localStorage.getItem(VOTES_SERVER_SYNCED_KEY) === '1') return
+      } catch {
+        return
       }
 
-      // Si l'utilisateur avait déjà upvoté, on retire l'upvote
+      const legacyVotes = this.readLegacyUserVotes()
+      if (!Object.keys(legacyVotes).length) {
+        try {
+          localStorage.setItem(VOTES_SERVER_SYNCED_KEY, '1')
+        } catch {
+          // ignore
+        }
+        return
+      }
+
+      try {
+        const response = await fetch(apiUrl('/api/builds/votes/sync'), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...voterRequestHeaders(),
+          },
+          body: JSON.stringify({ votes: legacyVotes }),
+        })
+        if (!response.ok) return
+
+        const data = (await response.json()) as {
+          votes?: Record<string, ServerVoteStats>
+        }
+        for (const [buildId, stats] of Object.entries(data.votes ?? {})) {
+          this.applyServerStats(buildId, stats)
+        }
+
+        localStorage.setItem(VOTES_SERVER_SYNCED_KEY, '1')
+        this.clearLegacyVoteStorage()
+      } catch {
+        // Retry on next visit if API was unreachable
+      }
+    },
+
+    applyServerStats(buildId: string, stats: ServerVoteStats | undefined): void {
+      if (!stats) return
+      if (typeof stats.upvotes === 'number') this.upvotes[buildId] = stats.upvotes
+      if (typeof stats.downvotes === 'number') this.downvotes[buildId] = stats.downvotes
+      if (stats.userVote === 'up' || stats.userVote === 'down' || stats.userVote === null) {
+        this.userVotes[buildId] = stats.userVote
+      }
+    },
+
+    async loadVotesForBuilds(buildIds: string[]): Promise<void> {
+      if (import.meta.server) return
+      const ids = [...new Set(buildIds.map(id => id.trim()).filter(Boolean))].slice(0, 200)
+      if (!ids.length) return
+
+      try {
+        const response = await fetch(
+          apiUrl(`/api/builds/votes?ids=${encodeURIComponent(ids.join(','))}`),
+          { headers: voterRequestHeaders() }
+        )
+        if (!response.ok) return
+        const data = (await response.json()) as { votes?: Record<string, ServerVoteStats> }
+        for (const [buildId, stats] of Object.entries(data.votes ?? {})) {
+          this.applyServerStats(buildId, stats)
+        }
+      } catch {
+        // API unavailable — counts stay at 0 until next load
+      }
+    },
+
+    async loadVoteForBuild(buildId: string): Promise<void> {
+      await this.loadVotesForBuilds([buildId])
+    },
+
+    applyUpvoteLocal(buildId: string): void {
+      const currentVote = this.userVotes[buildId] ?? null
+      if (currentVote === 'down' && (this.downvotes[buildId] ?? 0) > 0) {
+        this.downvotes[buildId] = (this.downvotes[buildId] ?? 0) - 1
+      }
       if (currentVote === 'up') {
-        if (this.upvotes[buildId] && this.upvotes[buildId] > 0) {
-          this.upvotes[buildId] = this.upvotes[buildId] - 1
+        if ((this.upvotes[buildId] ?? 0) > 0) {
+          this.upvotes[buildId] = (this.upvotes[buildId] ?? 0) - 1
         }
         this.userVotes[buildId] = null
-      } else {
-        // Ajouter l'upvote
-        this.upvotes[buildId] = (this.upvotes[buildId] || 0) + 1
-        this.userVotes[buildId] = 'up'
+        return
       }
-
-      // Save to localStorage
-      try {
-        localStorage.setItem('lelanation_upvotes', JSON.stringify(this.upvotes))
-        localStorage.setItem('lelanation_downvotes', JSON.stringify(this.downvotes))
-        localStorage.setItem('lelanation_user_votes', JSON.stringify(this.userVotes))
-      } catch {
-        return false
-      }
-
-      return true
+      this.upvotes[buildId] = (this.upvotes[buildId] ?? 0) + 1
+      this.userVotes[buildId] = 'up'
     },
 
-    downvote(buildId: string): boolean {
-      const currentVote = this.userVotes[buildId]
-
-      // Si l'utilisateur avait déjà upvoté, on retire l'upvote
-      if (currentVote === 'up') {
-        if (this.upvotes[buildId] && this.upvotes[buildId] > 0) {
-          this.upvotes[buildId] = this.upvotes[buildId] - 1
-        }
+    applyDownvoteLocal(buildId: string): void {
+      const currentVote = this.userVotes[buildId] ?? null
+      if (currentVote === 'up' && (this.upvotes[buildId] ?? 0) > 0) {
+        this.upvotes[buildId] = (this.upvotes[buildId] ?? 0) - 1
       }
-
-      // Si l'utilisateur avait déjà downvoté, on retire le downvote
       if (currentVote === 'down') {
-        if (this.downvotes[buildId] && this.downvotes[buildId] > 0) {
-          this.downvotes[buildId] = this.downvotes[buildId] - 1
+        if ((this.downvotes[buildId] ?? 0) > 0) {
+          this.downvotes[buildId] = (this.downvotes[buildId] ?? 0) - 1
         }
         this.userVotes[buildId] = null
-      } else {
-        // Ajouter le downvote
-        this.downvotes[buildId] = (this.downvotes[buildId] || 0) + 1
-        this.userVotes[buildId] = 'down'
+        return
       }
-
-      // Save to localStorage
-      try {
-        localStorage.setItem('lelanation_upvotes', JSON.stringify(this.upvotes))
-        localStorage.setItem('lelanation_downvotes', JSON.stringify(this.downvotes))
-        localStorage.setItem('lelanation_user_votes', JSON.stringify(this.userVotes))
-      } catch {
-        return false
-      }
-
-      return true
+      this.downvotes[buildId] = (this.downvotes[buildId] ?? 0) + 1
+      this.userVotes[buildId] = 'down'
     },
 
-    // Méthodes de compatibilité (pour migration)
-    vote(buildId: string): boolean {
+    async castVote(buildId: string, direction: 'up' | 'down'): Promise<VoteActionResult> {
+      if (import.meta.server) return { ok: false }
+
+      if (direction === 'up') this.applyUpvoteLocal(buildId)
+      else this.applyDownvoteLocal(buildId)
+
+      try {
+        const response = await fetch(apiUrl(`/api/builds/${encodeURIComponent(buildId)}/vote`), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...voterRequestHeaders(),
+          },
+          body: JSON.stringify({ direction }),
+        })
+        if (!response.ok) return { ok: false }
+        const data = (await response.json()) as {
+          stats?: ServerVoteStats
+          autoPrivatized?: boolean
+        }
+        this.applyServerStats(buildId, data.stats)
+        return { ok: true, autoPrivatized: data.autoPrivatized === true }
+      } catch {
+        return { ok: false }
+      }
+    },
+
+    upvote(buildId: string): Promise<VoteActionResult> {
+      return this.castVote(buildId, 'up')
+    },
+
+    downvote(buildId: string): Promise<VoteActionResult> {
+      return this.castVote(buildId, 'down')
+    },
+
+    vote(buildId: string): Promise<VoteActionResult> {
       return this.upvote(buildId)
     },
 
-    unvote(buildId: string): boolean {
+    unvote(buildId: string): Promise<VoteActionResult> {
       const currentVote = this.userVotes[buildId]
-      if (!currentVote) return false
-
-      if (currentVote === 'up') {
-        if (this.upvotes[buildId] && this.upvotes[buildId] > 0) {
-          this.upvotes[buildId] = this.upvotes[buildId] - 1
-        }
-      } else if (currentVote === 'down') {
-        if (this.downvotes[buildId] && this.downvotes[buildId] > 0) {
-          this.downvotes[buildId] = this.downvotes[buildId] - 1
-        }
-      }
-
-      this.userVotes[buildId] = null
-
-      try {
-        localStorage.setItem('lelanation_upvotes', JSON.stringify(this.upvotes))
-        localStorage.setItem('lelanation_downvotes', JSON.stringify(this.downvotes))
-        localStorage.setItem('lelanation_user_votes', JSON.stringify(this.userVotes))
-      } catch {
-        return false
-      }
-
-      return true
+      if (currentVote === 'up') return this.upvote(buildId)
+      if (currentVote === 'down') return this.downvote(buildId)
+      return Promise.resolve({ ok: true })
     },
 
     getVoteCount(buildId: string): number {
-      // Pour compatibilité avec l'ancien système
       return (this.upvotes[buildId] || 0) - (this.downvotes[buildId] || 0)
     },
   },

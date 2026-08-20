@@ -9,11 +9,12 @@ import { filterStandaloneLibraryBuilds } from '~/utils/buildLibrary'
 import { extractPatchStaleMap, mergePatchStaleIntoBuilds } from '~/utils/mergePatchStale'
 import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import { matchesChampionSearch, matchesLocalizedTextSearch } from '~/utils/multilingualEntitySearch'
+import { buildHasAnyNotes } from '~/utils/buildNotes'
 
 export type SortOption = 'recent' | 'popular' | 'name'
 export type FilterRole = 'top' | 'jungle' | 'mid' | 'adc' | 'support' | null
-/** Filtre découverte : un tag build (Pro / OTP / …), même logique que `Build.tags`. */
-export type FilterBuildTag = 'pro' | 'otp' | 'exotique' | 'troll' | null
+/** Filtre découverte : tag build (Pro / OTP / …) ou filtre « notes ». */
+export type FilterBuildTag = 'pro' | 'otp' | 'exotique' | 'troll' | 'notes' | null
 export type PageSizeOption = 20 | 30 | 40 | 50 | 'all'
 
 const PAGINATION_STORAGE_KEY = 'lelanation_builds_pagination'
@@ -144,10 +145,11 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
         })
       }
 
-      // Filter by build tag (Pro, OTP, …)
+      // Filter by build tag (Pro, OTP, …) or notes presence
       if (this.selectedTag) {
         const tag = this.selectedTag
         results = results.filter(build => {
+          if (tag === 'notes') return buildHasAnyNotes(build)
           if (build.tags?.includes(tag)) return true
           return (build.subBuilds ?? []).some(sub => sub.tags?.includes(tag))
         })
@@ -276,6 +278,12 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
           patchStaleById
         )
         this.builds = [...localPublicBuilds, ...publicBuilds]
+
+        if (import.meta.client) {
+          await useVoteStore()
+            .loadVotesForBuilds(this.builds.map(b => b.id))
+            .catch(() => undefined)
+        }
 
         const versionStore = useVersionStore()
         if (!versionStore.currentVersion) {

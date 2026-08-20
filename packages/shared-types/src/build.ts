@@ -2,6 +2,21 @@
  * Build-related types — framework-agnostic, shared by frontend + companion-app.
  */
 
+import type { BuildNotesContent, BuildNotesMode } from './buildNotes.js'
+
+export type {
+  BuildNotesLayout,
+  BuildNotesMode,
+  BuildNotesEntityType,
+  BuildNotesSimpleCard,
+  BuildNotesDetailed,
+  BuildNotesContent,
+} from './buildNotes.js'
+export {
+  BUILD_NOTES_SIMPLE_CARD_MAX_CHARS,
+  BUILD_NOTES_DETAILED_SECTION_MAX_CHARS,
+} from './buildNotes.js'
+
 export interface ChampionStats {
   hp: number
   hpperlevel: number
@@ -286,6 +301,7 @@ export interface PatchStaleInfo {
 export interface SubBuild {
   title: string
   description?: string
+  notes?: BuildNotesContent
   champion: Champion | null
   items: Item[]
   runes: RuneSelection | null
@@ -303,6 +319,7 @@ export interface SubBuild {
 export interface StoredSubBuild {
   title: string
   description?: string
+  notes?: BuildNotesContent
   champion: ChampionRef | null
   items: ItemRef[]
   runes: RuneSelection | null
@@ -320,6 +337,7 @@ export interface Build {
   name: string
   author?: string
   description?: string
+  notes?: BuildNotesContent
   visibility?: 'public' | 'private'
   /** Build embarqué dans un guide matchup — hors bibliothèque Découvrir / Mes builds. */
   matchupGuideEmbed?: boolean
@@ -338,6 +356,7 @@ export interface Build {
   updatedAt: string
   subBuilds?: SubBuild[]
   descriptionMode?: 'single' | 'multiple'
+  notesMode?: BuildNotesMode
   patchStale?: PatchStaleInfo | null
   /** Kayn only: portrait + tooltip form for the main variant. */
   kaynForm?: KaynForm
@@ -365,6 +384,7 @@ export interface StoredBuild {
   name: string
   author?: string
   description?: string
+  notes?: BuildNotesContent
   visibility?: 'public' | 'private'
   /** Build embarqué dans un guide matchup — hors bibliothèque Découvrir / Mes builds. */
   matchupGuideEmbed?: boolean
@@ -383,6 +403,7 @@ export interface StoredBuild {
   updatedAt: string
   subBuilds?: StoredSubBuild[]
   descriptionMode?: 'single' | 'multiple'
+  notesMode?: BuildNotesMode
   patchStale?: PatchStaleInfo | null
   kaynForm?: KaynForm
 }

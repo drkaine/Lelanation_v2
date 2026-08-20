@@ -13,6 +13,8 @@ import type {
   Role,
   PatchStaleInfo,
   StoredBuild,
+  BuildNotesContent,
+  BuildNotesMode,
 } from '@lelanation/shared-types'
 import { isStarterItem } from '@lelanation/builds-ui'
 import { getFallbackGameVersion } from '~/config/version'
@@ -27,6 +29,7 @@ import { useVersionStore } from '~/stores/VersionStore'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useVoteStore } from '~/stores/VoteStore'
 import { shouldAutoPrivatizeFromCommunityVotes } from '~/utils/communityVoteVisibility'
+import { createEmptyNotesContent, cloneNotesContent } from '~/utils/buildNotes'
 import {
   passiveRankForChampionLevel,
   clampChampionLevel,
@@ -367,14 +370,17 @@ export const useBuildStore = defineStore('build', {
   },
 
   actions: {
-    setCurrentBuild(build: Build) {
+    setCurrentBuild(build: Build, options?: { keepDisplayedVariant?: boolean }) {
       // Normaliser les champs ajoutés par la feature sous-builds pour les builds anciens
       this.currentBuild = {
         ...build,
         subBuilds: build.subBuilds ?? [],
         descriptionMode: build.descriptionMode ?? 'single',
+        notesMode: build.notesMode ?? 'single',
       }
-      this.displayedVariant = 'main'
+      if (!options?.keepDisplayedVariant) {
+        this.displayedVariant = 'main'
+      }
       this.pendingChampionChange = null
       this.status = 'success'
       this.error = null
@@ -465,6 +471,7 @@ export const useBuildStore = defineStore('build', {
         updatedAt: new Date().toISOString(),
         subBuilds: [],
         descriptionMode: 'single',
+        notesMode: 'single',
       }
       this.displayedVariant = 'main'
       this.pendingChampionChange = null
@@ -504,6 +511,7 @@ export const useBuildStore = defineStore('build', {
             ...build,
             subBuilds: build.subBuilds ?? [],
             descriptionMode: build.descriptionMode ?? 'single',
+            notesMode: build.notesMode ?? 'single',
           }
           this.displayedVariant = 'main'
           return resolveChampionStatsForBuild(this.currentBuild.champion) != null
@@ -560,7 +568,6 @@ export const useBuildStore = defineStore('build', {
     activateTheorycraftMode() {
       this.theorycraftLinkedToBuilder = true
       this.builderSession = 'theorycraft'
-      this.displayedVariant = 'main'
       this.pendingChampionChange = null
       this.status = 'idle'
       this.error = null
@@ -1048,7 +1055,7 @@ export const useBuildStore = defineStore('build', {
       }
     },
 
-    setLastBuilderStep(step: 'champion' | 'rune' | 'item' | 'info' | 'theorycraft') {
+    setLastBuilderStep(step: 'champion' | 'rune' | 'item' | 'info' | 'notes' | 'theorycraft') {
       if (import.meta.server) return
       try {
         localStorage.setItem(BUILDER_STEP_STORAGE_KEY, step)
@@ -1057,7 +1064,7 @@ export const useBuildStore = defineStore('build', {
       }
     },
 
-    getLastBuilderStep(): 'champion' | 'rune' | 'item' | 'info' | 'theorycraft' {
+    getLastBuilderStep(): 'champion' | 'rune' | 'item' | 'info' | 'notes' | 'theorycraft' {
       const build = this.currentBuild
       if (!build?.champion) return 'champion'
       if (
@@ -1084,6 +1091,7 @@ export const useBuildStore = defineStore('build', {
             saved === 'rune' ||
             saved === 'item' ||
             saved === 'info' ||
+            saved === 'notes' ||
             saved === 'theorycraft'
           ) {
             return saved
@@ -1176,6 +1184,57 @@ export const useBuildStore = defineStore('build', {
         this.currentBuild.descriptionMode = mode
         this.currentBuild.updatedAt = new Date().toISOString()
       }
+    },
+
+    /** Change le mode de notes (single/multiple). */
+    setNotesMode(mode: BuildNotesMode) {
+      if (this.currentBuild) {
+        this.currentBuild.notesMode = mode
+        this.currentBuild.updatedAt = new Date().toISOString()
+      }
+    },
+
+    /** Met à jour les notes du build principal. */
+    setNotes(notes: BuildNotesContent) {
+      if (!this.currentBuild) return
+      this.currentBuild.notes = notes
+      this.currentBuild.updatedAt = new Date().toISOString()
+    },
+
+    /** Met à jour les notes d'une variante. */
+    setSubBuildNotes(index: number, notes: BuildNotesContent) {
+      const sub = this.currentBuild?.subBuilds?.[index]
+      if (sub) {
+        sub.notes = notes
+        this.currentBuild!.updatedAt = new Date().toISOString()
+      }
+    },
+
+    /** Met à jour les notes de la cible affichée (main ou variante). */
+    setActiveNotes(notes: BuildNotesContent) {
+      if (!this.currentBuild) return
+      const mode = this.currentBuild.notesMode ?? 'single'
+      if (mode === 'single' || this.displayedVariant === 'main') {
+        this.setNotes(notes)
+        return
+      }
+      if (typeof this.displayedVariant === 'number') {
+        this.setSubBuildNotes(this.displayedVariant, notes)
+      }
+    },
+
+    /** Retourne une copie des notes actives (main ou variante). */
+    getActiveNotes(): BuildNotesContent {
+      if (!this.currentBuild) return createEmptyNotesContent()
+      const mode = this.currentBuild.notesMode ?? 'single'
+      if (mode === 'single' || this.displayedVariant === 'main') {
+        return cloneNotesContent(this.currentBuild.notes)
+      }
+      if (typeof this.displayedVariant === 'number') {
+        const sub = this.currentBuild.subBuilds?.[this.displayedVariant]
+        return cloneNotesContent(sub?.notes)
+      }
+      return createEmptyNotesContent()
     },
 
     /**
@@ -1421,6 +1480,7 @@ export const useBuildStore = defineStore('build', {
       summonerSpells: [SummonerSpell | null, SummonerSpell | null]
       skillOrder: SkillOrder | null
       description: string
+      notes: BuildNotesContent | undefined
       tags: BuildTag[]
       kaynForm: KaynForm
     } | null {
@@ -1434,6 +1494,7 @@ export const useBuildStore = defineStore('build', {
           summonerSpells: b.summonerSpells ?? [null, null],
           skillOrder: b.skillOrder ?? null,
           description: b.description ?? '',
+          notes: b.notes ? cloneNotesContent(b.notes) : undefined,
           tags: [...(b.tags ?? [])],
           kaynForm: b.kaynForm ?? 0,
         }
@@ -1448,6 +1509,7 @@ export const useBuildStore = defineStore('build', {
         summonerSpells: sub.summonerSpells ?? [null, null],
         skillOrder: sub.skillOrder ?? null,
         description: sub.description ?? '',
+        notes: sub.notes ? cloneNotesContent(sub.notes) : undefined,
         tags: sub.tags !== undefined ? [...sub.tags] : [...(b.tags ?? [])],
         kaynForm: sub.kaynForm ?? 0,
       }
@@ -1469,6 +1531,7 @@ export const useBuildStore = defineStore('build', {
         firstThreeUps?: boolean
         skillUpOrder?: boolean
         description?: boolean
+        notes?: boolean
         tags?: boolean
         kaynForm?: boolean
       }
@@ -1486,6 +1549,13 @@ export const useBuildStore = defineStore('build', {
       if (fields.summonerSpells)
         destBuild.summonerSpells = [data.summonerSpells[0], data.summonerSpells[1]]
       if (fields.description) destBuild.description = data.description
+      if (fields.notes && data.notes) {
+        if (destination === 'main') {
+          b.notes = cloneNotesContent(data.notes)
+        } else {
+          destBuild.notes = cloneNotesContent(data.notes)
+        }
+      }
       if (fields.tags) destBuild.tags = [...data.tags]
       if (fields.kaynForm) {
         if (destination === 'main') {
@@ -2006,6 +2076,7 @@ export const useBuildStore = defineStore('build', {
             ...build,
             subBuilds: build.subBuilds ?? [],
             descriptionMode: build.descriptionMode ?? 'single',
+            notesMode: build.notesMode ?? 'single',
           }
           this.displayedVariant = 'main'
           this.pendingChampionChange = null

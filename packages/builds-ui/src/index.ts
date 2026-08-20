@@ -49,5 +49,6 @@ export { default as BuildCreateChampionPageView } from './components/BuildCreate
 export { default as BuildCreateRunePageView } from './components/BuildCreateRunePageView.vue'
 export { default as BuildCreateItemPageView } from './components/BuildCreateItemPageView.vue'
 export { default as BuildCreateInfoPageView } from './components/BuildCreateInfoPageView.vue'
+export { default as BuildCreateNotesPageView } from './components/BuildCreateNotesPageView.vue'
 export { default as CompanionBuildsPanelView } from './components/CompanionBuildsPanelView.vue'
 export type { FilterRoleValue, FilterSortValue } from './components/BuildsFilterBar.vue'

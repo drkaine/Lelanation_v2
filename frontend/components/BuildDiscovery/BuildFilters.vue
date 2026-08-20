@@ -199,6 +199,7 @@ const tagFilterOptions: Array<{
     | 'buildDiscovery.tagOtp'
     | 'buildDiscovery.tagExotique'
     | 'buildDiscovery.tagTroll'
+    | 'buildDiscovery.tagNotes'
   chipStyle: Record<string, string>
 }> = [
   {
@@ -224,6 +225,12 @@ const tagFilterOptions: Array<{
     label: 'Troll',
     labelKey: 'buildDiscovery.tagTroll',
     chipStyle: { '--tag-g1': '#e4b5e4', '--tag-g2': '#36bfb1' },
+  },
+  {
+    value: 'notes',
+    label: 'Notes',
+    labelKey: 'buildDiscovery.tagNotes',
+    chipStyle: { '--tag-g1': '#2f855a', '--tag-g2': '#1a4731' },
   },
 ]
 

@@ -13,7 +13,7 @@
         <div>
           <p class="text-sm font-semibold text-text-accent">{{ t('cookies.title') }}</p>
           <p class="mt-1 text-sm text-text/80">
-            {{ t('cookies.text') }}
+            <span v-html="t('cookies.text')" />
             <NuxtLink
               :to="localePath('/privacy')"
               class="ml-2 font-semibold text-accent hover:text-accent-dark"

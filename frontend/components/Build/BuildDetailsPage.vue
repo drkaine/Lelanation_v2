@@ -45,7 +45,7 @@
                 type="button"
                 class="streamer-tab-button"
                 :class="{ 'is-active': activeDetailTab === 'statistics' }"
-                @click="activeDetailTab = 'statistics'"
+                @click="setDetailTab('statistics')"
               >
                 {{ t('createBuild.stats') }}
               </button>
@@ -54,15 +54,24 @@
                 type="button"
                 class="streamer-tab-button"
                 :class="{ 'is-active': activeDetailTab === 'guide' }"
-                @click="activeDetailTab = 'guide'"
+                @click="setDetailTab('guide')"
               >
                 {{ t('buildDetailPage.tabGuide') }}
+              </button>
+              <button
+                v-if="hasBuildNotes"
+                type="button"
+                class="streamer-tab-button"
+                :class="{ 'is-active': activeDetailTab === 'notes' }"
+                @click="setDetailTab('notes')"
+              >
+                {{ t('buildDetailPage.tabNotes') }}
               </button>
               <button
                 type="button"
                 class="streamer-tab-button"
                 :class="{ 'is-active': activeDetailTab === 'theorycraft' }"
-                @click="activeDetailTab = 'theorycraft'"
+                @click="setDetailTab('theorycraft')"
               >
                 {{ t('nav.theorycraft') }}
               </button>
@@ -73,8 +82,8 @@
         <div v-if="activeDetailTab === 'statistics'" class="flex flex-col gap-6 lg:flex-row">
           <div class="w-full flex-shrink-0 lg:w-auto">
             <div class="build-detail-card-column w-full max-w-full md:max-w-[380px]">
-              <div class="build-detail-card-bar mb-[3px] flex w-full items-center gap-2">
-                <div class="build-detail-card-bar__icon-slot">
+              <BuildDetailCardBar :author="build.author">
+                <template #icon>
                   <button
                     v-if="hasDisplayedDescription"
                     type="button"
@@ -108,20 +117,16 @@
                       <path d="M8 16H3v5" />
                     </svg>
                   </button>
-                  <div v-else class="build-detail-card-bar__icon-spacer" />
-                </div>
-                <div class="build-detail-card-bar__author-row">
-                  <span class="truncate font-semibold">
-                    {{ build.author || t('buildDiscovery.anonymous') }}
-                  </span>
-                </div>
-              </div>
+                  <div v-else class="build-detail-card-bar__icon-spacer" aria-hidden="true" />
+                </template>
+              </BuildDetailCardBar>
 
               <div ref="buildCardRef" :data-build-id="build.id">
                 <BuildCard
                   ref="buildCardComponentRef"
                   v-model:flipped="cardFlipped"
-                  :build="detailDisplayedBuild || build"
+                  :build="build"
+                  :initial-displayed-variant-index="detailDisplayedSubIndex"
                   :readonly="true"
                   :sheet-tooltips="true"
                   :hide-top-actions="true"
@@ -327,6 +332,13 @@
           </div>
         </div>
 
+        <BuildDetailNotesTab
+          v-if="activeDetailTab === 'notes' && build"
+          :build="build"
+          :displayed-sub-index="detailDisplayedSubIndex"
+          @variant-change="idx => (detailDisplayedSubIndex = idx)"
+        />
+
         <BuildDetailGuideTab
           v-if="linkedGuide && activeDetailTab === 'guide'"
           :guide="linkedGuide"
@@ -390,8 +402,10 @@ import { useFavoritesStore } from '~/stores/FavoritesStore'
 import { useMatchupGuideDiscoveryStore } from '~/stores/MatchupGuideDiscoveryStore'
 import { useMatchupGuideStore } from '~/stores/MatchupGuideStore'
 import BuildCard from '~/components/Build/BuildCard.vue'
+import BuildDetailCardBar from '~/components/Build/BuildDetailCardBar.vue'
 import BuildDetailGuideTab from '~/components/Build/BuildDetailGuideTab.vue'
 import BuildDetailTheorycraftTab from '~/components/Build/BuildDetailTheorycraftTab.vue'
+import BuildDetailNotesTab from '~/components/Build/BuildDetailNotesTab.vue'
 import NotificationToast from '~/components/NotificationToast.vue'
 import OutdatedBuildBanner from '~/components/Build/OutdatedBuildBanner.vue'
 import PatchStaleBuildBanner from '~/components/Build/PatchStaleBuildBanner.vue'
@@ -406,9 +420,11 @@ import { findMatchupGuideForBuildId } from '~/utils/matchupGuideByBuild'
 import { championWithStatsForBuild, resolveChampionStatsForBuild } from '~/utils/theorycraftStats'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useItemsStore } from '~/stores/ItemsStore'
+import { useRunesStore } from '~/stores/RunesStore'
+import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import type { Build, SubBuild } from '~/types/build'
 import { useClientHydrated } from '~/composables/useClientHydrated'
-import { useChampionSplashPreference } from '~/composables/useChampionSplashPreference'
+import { buildHasAnyNotes } from '~/utils/buildNotes'
 
 const props = defineProps<{ buildId: string; initialBuild?: Build | null }>()
 
@@ -420,10 +436,13 @@ const matchupGuideDiscoveryStore = useMatchupGuideDiscoveryStore()
 const matchupGuideStore = useMatchupGuideStore()
 const championsStore = useChampionsStore()
 const itemsStore = useItemsStore()
+const runesStore = useRunesStore()
+const summonerSpellsStore = useSummonerSpellsStore()
 const localePath = useLocalePath()
 const { t, locale } = useI18n()
 const riotLocale = computed(() => (locale.value === 'en' ? 'en_US' : 'fr_FR'))
 const route = useRoute()
+const router = useRouter()
 const { hydrated } = useClientHydrated()
 const { championSplashEnabled } = useChampionSplashPreference()
 
@@ -441,8 +460,30 @@ const buildToDelete = ref<string | null>(null)
 const shareToastMessage = ref('')
 const shareToastType = ref<'success' | 'error'>('success')
 
-type DetailTab = 'statistics' | 'guide' | 'theorycraft'
+type DetailTab = 'statistics' | 'guide' | 'theorycraft' | 'notes'
 const activeDetailTab = ref<DetailTab>('statistics')
+
+const hasBuildNotes = computed(() => (build.value ? buildHasAnyNotes(build.value) : false))
+
+function normalizeDetailTab(raw: unknown): DetailTab {
+  if (raw === 'notes' && hasBuildNotes.value) return 'notes'
+  if (raw === 'guide' && linkedGuide.value) return 'guide'
+  if (raw === 'theorycraft') return 'theorycraft'
+  return 'statistics'
+}
+
+function setDetailTab(tab: DetailTab) {
+  if (tab === 'notes' && !hasBuildNotes.value) return
+  if (tab === 'guide' && !linkedGuide.value) return
+  activeDetailTab.value = tab
+  const query = { ...route.query }
+  if (tab === 'statistics') {
+    delete query.tab
+  } else {
+    query.tab = tab
+  }
+  router.replace({ path: route.path, query })
+}
 
 type ShareTrackType = 'link' | 'image' | 'image_with_meta'
 
@@ -494,16 +535,31 @@ function toggleCardDescription() {
 
 watch(linkedGuide, guide => {
   if (!guide && activeDetailTab.value === 'guide') {
-    activeDetailTab.value = 'statistics'
+    setDetailTab('statistics')
+  }
+})
+
+watch(hasBuildNotes, hasNotes => {
+  if (!hasNotes && activeDetailTab.value === 'notes') {
+    setDetailTab('statistics')
   }
 })
 
 watch(
-  () => [build.value?.id, route.query.sub] as const,
+  () => [route.query.tab, hasBuildNotes.value, linkedGuide.value?.id] as const,
+  ([tab]) => {
+    activeDetailTab.value = normalizeDetailTab(tab)
+  },
+  { immediate: true }
+)
+
+watch(
+  () => [build.value?.id, route.query.sub, route.query.tab] as const,
   () => {
     const subQ = route.query.sub
-    if (subQ !== undefined && subQ !== null && String(subQ).trim() !== '') {
-      activeDetailTab.value = 'statistics'
+    const tab = route.query.tab
+    if (subQ !== undefined && subQ !== null && String(subQ).trim() !== '' && tab !== 'notes') {
+      setDetailTab('statistics')
     }
   },
   { immediate: true }
@@ -522,13 +578,13 @@ const VIEWPORT_SAFE_MARGIN_PX = 12
 
 const handleUpvote = async () => {
   if (!build.value) return
-  voteStore.upvote(build.value.id)
+  await voteStore.upvote(build.value.id)
   await buildStore.checkAndUpdateVisibility(build.value.id)
 }
 
 const handleDownvote = async () => {
   if (!build.value) return
-  voteStore.downvote(build.value.id)
+  await voteStore.downvote(build.value.id)
   await buildStore.checkAndUpdateVisibility(build.value.id)
 }
 
@@ -770,6 +826,8 @@ watch(
   buildId => {
     if (!buildId) return
     itemsStore.loadItems(riotLocale.value).catch(() => undefined)
+    runesStore.loadRunes().catch(() => undefined)
+    summonerSpellsStore.loadSummonerSpells().catch(() => undefined)
   },
   { immediate: true }
 )
@@ -855,7 +913,17 @@ onMounted(() => {
   voteStore.init()
   favoritesStore.init()
   matchupGuideDiscoveryStore.loadGuides().catch(() => undefined)
+  if (build.value?.id) {
+    voteStore.loadVoteForBuild(build.value.id).catch(() => undefined)
+  }
 })
+
+watch(
+  () => build.value?.id,
+  id => {
+    if (id) voteStore.loadVoteForBuild(id).catch(() => undefined)
+  }
+)
 </script>
 
 <style scoped>
@@ -988,16 +1056,6 @@ onMounted(() => {
   color: var(--color-accent);
 }
 
-.build-detail-card-bar__icon-slot {
-  width: 28px;
-  flex-shrink: 0;
-}
-
-.build-detail-card-bar__icon-spacer {
-  width: 28px;
-  height: 28px;
-}
-
 .build-detail-card-bar__icon-button {
   display: inline-flex;
   width: 28px;
@@ -1018,19 +1076,8 @@ onMounted(() => {
   color: var(--color-gold-300);
 }
 
-.build-detail-card-bar__author-row {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  min-height: 28px;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 0 6px;
-  font-size: 0.875rem;
-  font-weight: 700;
-  color: var(--color-gold-300);
-  text-align: center;
-  text-transform: uppercase;
+.build-detail-card-bar__icon-spacer {
+  width: 28px;
+  height: 28px;
 }
 </style>

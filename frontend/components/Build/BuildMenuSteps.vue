@@ -20,6 +20,13 @@
     </NuxtLink>
     <span class="arrow" aria-hidden="true"></span>
     <NuxtLink
+      :to="hasChampion ? localePath(stepHref('notes')) : '#'"
+      :class="[linkClass('notes'), !hasChampion ? 'disabled' : '']"
+    >
+      {{ t('menu-build.notes') }}
+    </NuxtLink>
+    <span class="arrow" aria-hidden="true"></span>
+    <NuxtLink
       :to="hasChampion ? localePath(stepHref('theorycraft')) : '#'"
       :class="[linkClass('theorycraft'), !hasChampion ? 'disabled' : '']"
     >
@@ -42,7 +49,7 @@ const localePath = useLocalePath()
 const buildStore = useBuildStore()
 
 /** Garde ?editId= sur toutes les étapes tant qu'on édite un build existant */
-function stepHref(step: 'champion' | 'rune' | 'item' | 'info' | 'theorycraft'): string {
+function stepHref(step: 'champion' | 'rune' | 'item' | 'info' | 'notes' | 'theorycraft'): string {
   const id = buildStore.editSourceBuildId
   const base = `/builds/create/${step}`
   return id ? `${base}?editId=${encodeURIComponent(id)}` : base
@@ -53,6 +60,7 @@ const stepMap = {
   rune: 'rune',
   item: 'item',
   info: 'info',
+  notes: 'notes',
   theorycraft: 'theorycraft',
 } as const
 
@@ -63,6 +71,7 @@ const currentRouteStep = computed(() => {
   if (path.includes('/rune')) return 'rune'
   if (path.includes('/item')) return 'item'
   if (path.includes('/info')) return 'info'
+  if (path.includes('/notes')) return 'notes'
   if (path.includes('/theorycraft')) return 'theorycraft'
   return props.currentStep || 'champion'
 })

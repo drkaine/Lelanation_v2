@@ -8,7 +8,21 @@ import {
   getEngagementViewCounts,
   type BuildShareType,
 } from '../services/BuildEngagementService.js'
+import {
+  castBuildVote,
+  getBuildVoteStatsBatch,
+  syncBuildVotesForVoter,
+  type BuildVoteDirection,
+} from '../services/BuildVoteService.js'
 import { buildsDir, getBuildIndex, invalidateBuildIndex } from '../services/BuildIndexService.js'
+
+const VOTER_ID_HEADER = 'x-voter-id'
+
+function readVoterId(req: { header: (name: string) => string | undefined }): string | null {
+  const raw = req.header(VOTER_ID_HEADER)?.trim()
+  if (!raw || raw.length > 128) return null
+  return raw
+}
 
 type BuildPayload = unknown
 
@@ -160,6 +174,65 @@ router.get('/popular', async (req, res) => {
 })
 
 /**
+ * Batch vote stats for public builds.
+ * GET /api/builds/votes?ids=uuid1,uuid2
+ */
+router.get('/votes', async (req, res) => {
+  try {
+    const raw = typeof req.query.ids === 'string' ? req.query.ids : ''
+    const buildIds = raw
+      .split(',')
+      .map(id => id.trim())
+      .filter(Boolean)
+      .slice(0, 200)
+    const voterId = readVoterId(req)
+    const stats = await getBuildVoteStatsBatch(buildIds, voterId)
+    res.set('Cache-Control', 'public, max-age=30')
+    return res.json({ votes: stats })
+  } catch (error) {
+    return res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to load build votes',
+    })
+  }
+})
+
+/**
+ * Idempotent sync of legacy browser votes (one voter, many builds).
+ * POST /api/builds/votes/sync
+ * Body: { votes: { [buildId]: "up" | "down" } }
+ */
+router.post('/votes/sync', async (req, res) => {
+  const voterId = readVoterId(req)
+  if (!voterId) return res.status(400).json({ error: 'Missing X-Voter-Id header' })
+
+  const rawVotes = req.body?.votes
+  if (!rawVotes || typeof rawVotes !== 'object' || Array.isArray(rawVotes)) {
+    return res.status(400).json({ error: 'Invalid votes payload' })
+  }
+
+  const votes: Record<string, BuildVoteDirection> = {}
+  for (const [buildId, direction] of Object.entries(rawVotes as Record<string, unknown>)) {
+    const id = buildId.trim()
+    if (!id) continue
+    if (direction === 'up' || direction === 'down') votes[id] = direction
+  }
+
+  if (Object.keys(votes).length === 0) {
+    return res.json({ ok: true, votes: {}, autoPrivatizedBuildIds: [] })
+  }
+
+  try {
+    const result = await syncBuildVotesForVoter(voterId, votes)
+    return res.json({ ok: true, ...result })
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Failed to sync build votes',
+    })
+  }
+})
+
+/**
  * Get a build by ID
  * GET /api/builds/:id
  */
@@ -191,6 +264,35 @@ router.get('/:id', async (req, res) => {
     return res.json(readResult.unwrap())
   } catch (error) {
     return res.status(500).json({ error: 'Failed to read builds directory' })
+  }
+})
+
+/**
+ * Toggle up/down vote on a build (shared across users).
+ * POST /api/builds/:id/vote
+ * Body: { direction: 'up' | 'down' }
+ * Header: X-Voter-Id (anonymous voter id from browser localStorage)
+ */
+router.post('/:id/vote', async (req, res) => {
+  const buildId = typeof req.params.id === 'string' ? req.params.id.trim() : ''
+  const directionRaw = typeof req.body?.direction === 'string' ? req.body.direction.trim() : ''
+  const voterId = readVoterId(req)
+
+  if (!buildId) return res.status(400).json({ error: 'Invalid build id' })
+  if (!voterId) return res.status(400).json({ error: 'Missing X-Voter-Id header' })
+  if (directionRaw !== 'up' && directionRaw !== 'down') {
+    return res.status(400).json({ error: 'Invalid direction (expected up or down)' })
+  }
+
+  const direction = directionRaw as BuildVoteDirection
+  try {
+    const { stats, autoPrivatized } = await castBuildVote(buildId, voterId, direction)
+    return res.json({ ok: true, stats, autoPrivatized })
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Failed to cast build vote',
+    })
   }
 })
 

@@ -176,15 +176,16 @@ const formatDate = (dateString: string): string => {
 const voteCount = computed(() => voteStore.getVoteCount(props.build.id))
 const hasVoted = computed(() => voteStore.hasUserVoted(props.build.id))
 
-const toggleVote = () => {
+const toggleVote = async () => {
   if (hasVoted.value) {
-    voteStore.unvote(props.build.id)
+    await voteStore.unvote(props.build.id)
   } else {
-    voteStore.vote(props.build.id)
+    await voteStore.vote(props.build.id)
   }
 }
 
 onMounted(() => {
   voteStore.init()
+  voteStore.loadVoteForBuild(props.build.id).catch(() => undefined)
 })
 </script>

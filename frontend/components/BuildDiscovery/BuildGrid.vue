@@ -149,6 +149,7 @@
                   displayedSubMap[build.id] = idx
                 }
               "
+              @notes-click="openBuildNotes(build)"
             />
           </div>
         </div>
@@ -514,6 +515,7 @@ import {
   uiFavoriteActionClass,
   uiUpvoteActionClass,
 } from '~/utils/uiColorClasses'
+import { buildHasAnyNotes } from '~/utils/buildNotes'
 
 function buildMatchesSearchQuery(build: Build, query: string): boolean {
   if (matchesLocalizedTextSearch(query, [build.name, build.author])) return true
@@ -666,6 +668,7 @@ const filteredCustomBuilds = computed(() => {
   if (discoveryStore.selectedTag) {
     const tag = discoveryStore.selectedTag
     results = results.filter(build => {
+      if (tag === 'notes') return buildHasAnyNotes(build)
       if (build.tags?.includes(tag)) return true
       return (build.subBuilds ?? []).some(sub => sub.tags?.includes(tag))
     })
@@ -765,6 +768,15 @@ const navigateToBuild = (buildId: string) => {
   router.push(localePath(`/builds/${buildId}`))
 }
 
+function openBuildNotes(build: Build) {
+  router.push(
+    localePath({
+      path: `/builds/${build.id}`,
+      query: { tab: 'notes' },
+    })
+  )
+}
+
 async function openMatchupGuideFromBuild(buildId: string) {
   if (!startMatchupGuideFromBuild(buildId)) return
   await router.push(
@@ -856,13 +868,19 @@ const getUserVote = (buildId: string): 'up' | 'down' | null => {
 }
 
 const handleUpvote = async (buildId: string) => {
-  voteStore.upvote(buildId)
+  const result = await voteStore.upvote(buildId)
   await buildStore.checkAndUpdateVisibility(buildId)
+  if (result.autoPrivatized) {
+    await discoveryStore.loadBuilds().catch(() => undefined)
+  }
 }
 
 const handleDownvote = async (buildId: string) => {
-  voteStore.downvote(buildId)
+  const result = await voteStore.downvote(buildId)
   await buildStore.checkAndUpdateVisibility(buildId)
+  if (result.autoPrivatized) {
+    await discoveryStore.loadBuilds().catch(() => undefined)
+  }
 }
 
 const isUserBuild = (buildId: string): boolean => {

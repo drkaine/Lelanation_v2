@@ -6,6 +6,18 @@ export type { SkillOrder, Role, BuildTag, KaynForm, Build, SubBuild } from './bu
 export type { ChampionRef, ItemRef, SummonerSpellRef, StoredBuild, StoredSubBuild, PatchStaleInfo } from './build'
 export type { CalculatedStats } from './build'
 export type {
+  BuildNotesLayout,
+  BuildNotesMode,
+  BuildNotesEntityType,
+  BuildNotesSimpleCard,
+  BuildNotesDetailed,
+  BuildNotesContent,
+} from './buildNotes.js'
+export {
+  BUILD_NOTES_SIMPLE_CARD_MAX_CHARS,
+  BUILD_NOTES_DETAILED_SECTION_MAX_CHARS,
+} from './buildNotes.js'
+export type {
   MatchupGuide,
   MatchupGuideTag,
   MatchupEntry,

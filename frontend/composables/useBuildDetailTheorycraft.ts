@@ -25,17 +25,13 @@ interface TheorycraftVsStoredState {
   ally: Build | null
   enemy: Build | null
   activeSide: TheorycraftSide
+  allyDisplayedVariant?: 'main' | number
 }
 
 function cloneBuild(build: Build | null): Build | null {
   if (!build) return null
   try {
-    const cloned = JSON.parse(JSON.stringify(toRaw(build))) as Build
-    return {
-      ...cloned,
-      subBuilds: [],
-      descriptionMode: 'single',
-    } as Build
+    return JSON.parse(JSON.stringify(toRaw(build))) as Build
   } catch {
     return null
   }
@@ -104,6 +100,7 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
     ally: 'stats',
     enemy: 'stats',
   })
+  const allyDisplayedVariant = ref<'main' | number>('main')
 
   const championId = computed(() => buildStore.currentBuild?.champion?.id ?? null)
   const maxChampionLevel = computed(() => buildStore.maxStatsLevel)
@@ -140,6 +137,9 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
   }
 
   function persistActiveSideBuild() {
+    if (activeSide.value === 'ally') {
+      allyDisplayedVariant.value = buildStore.displayedVariant
+    }
     sideBuilds.value[activeSide.value] = cloneBuild(buildStore.currentBuild)
   }
 
@@ -152,7 +152,12 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
   function loadSideBuild(side: TheorycraftSide) {
     const target = cloneBuild(sideBuilds.value[side])
     if (!target) return
-    buildStore.setCurrentBuild(target)
+    if (side === 'ally') {
+      buildStore.setCurrentBuild(target, { keepDisplayedVariant: true })
+      buildStore.displayedVariant = allyDisplayedVariant.value
+    } else {
+      buildStore.setCurrentBuild(target)
+    }
     buildStore.activateTheorycraftMode()
   }
 
@@ -164,6 +169,7 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
         ally: cloneBuild(sideBuilds.value.ally),
         enemy: cloneBuild(sideBuilds.value.enemy),
         activeSide: activeSide.value,
+        allyDisplayedVariant: allyDisplayedVariant.value,
       }
       localStorage.setItem(key, JSON.stringify(payload))
     } catch {
@@ -182,6 +188,10 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
         ally: cloneBuild((parsed.ally as Build | null) ?? null),
         enemy: cloneBuild((parsed.enemy as Build | null) ?? null),
         activeSide: parsed.activeSide === 'enemy' ? 'enemy' : 'ally',
+        allyDisplayedVariant:
+          parsed.allyDisplayedVariant === 'main' || typeof parsed.allyDisplayedVariant === 'number'
+            ? parsed.allyDisplayedVariant
+            : undefined,
       }
     } catch {
       return null
@@ -219,7 +229,9 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
     const cloned = cloneBuild(build)
     if (!cloned) return
     sideBuilds.value.ally = cloned
-    buildStore.setCurrentBuild(cloned)
+    allyDisplayedVariant.value = buildStore.displayedVariant
+    buildStore.setCurrentBuild(cloned, { keepDisplayedVariant: true })
+    buildStore.displayedVariant = allyDisplayedVariant.value
     buildStore.activateTheorycraftMode()
     sideCalculatedStats.value.ally = buildStore.calculatedStats
       ? ({ ...buildStore.calculatedStats } as CalculatedStats)
@@ -265,7 +277,10 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
     activeSide.value = 'ally'
     if (sideBuilds.value.ally) {
       const ally = cloneBuild(sideBuilds.value.ally)
-      if (ally) buildStore.setCurrentBuild(ally)
+      if (ally) {
+        buildStore.setCurrentBuild(ally, { keepDisplayedVariant: true })
+        buildStore.displayedVariant = allyDisplayedVariant.value
+      }
     }
     persistVsState()
     buildStore.deactivateTheorycraftMode()
@@ -364,6 +379,14 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
     if (!isActive.value || !build || activeSide.value !== 'ally') return
     syncAllyFromSource(build)
   })
+
+  watch(
+    () => buildStore.displayedVariant,
+    variant => {
+      if (isHydratingVsState.value || !isActive.value || activeSide.value !== 'ally') return
+      allyDisplayedVariant.value = variant
+    }
+  )
 
   watch(
     () => buildStore.currentBuild,

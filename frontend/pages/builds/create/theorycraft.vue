@@ -249,6 +249,7 @@ interface TheorycraftVsStoredState {
   ally: Build | null
   enemy: Build | null
   activeSide: TheorycraftSide
+  allyDisplayedVariant?: 'main' | number
 }
 
 const activePanel = ref<TheorycraftPanel>('theorycraft')
@@ -277,6 +278,7 @@ const sideBackFace = ref<Record<TheorycraftSide, 'stats' | 'description'>>({
 const highlightMissingFields = ref(false)
 const championData = ref<Record<string, unknown> | null>(null)
 const isHydratingVsState = ref(true)
+const allyDisplayedVariant = ref<'main' | number>('main')
 
 const allyCardFlipped = computed({
   get: () => sideFlipped.value.ally,
@@ -300,12 +302,7 @@ const theorycraftPanelTitle = computed(() => t('theorycraft.panel.theorycraftBut
 function cloneBuild(build: Build | null): Build | null {
   if (!build) return null
   try {
-    const cloned = JSON.parse(JSON.stringify(toRaw(build))) as Build
-    return {
-      ...cloned,
-      subBuilds: [],
-      descriptionMode: 'single',
-    } as Build
+    return JSON.parse(JSON.stringify(toRaw(build))) as Build
   } catch {
     return null
   }
@@ -345,6 +342,9 @@ function createEmptyTheorycraftBuild(name: string): Build {
 }
 
 function persistActiveSideBuild() {
+  if (activeSide.value === 'ally') {
+    allyDisplayedVariant.value = buildStore.displayedVariant
+  }
   sideBuilds.value[activeSide.value] = cloneBuild(buildStore.currentBuild)
 }
 
@@ -357,7 +357,12 @@ function persistActiveSideStats() {
 function loadSideBuild(side: TheorycraftSide) {
   const target = cloneBuild(sideBuilds.value[side])
   if (!target) return
-  buildStore.setCurrentBuild(target)
+  if (side === 'ally') {
+    buildStore.setCurrentBuild(target, { keepDisplayedVariant: true })
+    buildStore.displayedVariant = allyDisplayedVariant.value
+  } else {
+    buildStore.setCurrentBuild(target)
+  }
 }
 
 function vsStateStorageKey(): string | null {
@@ -371,7 +376,10 @@ function restoreBuilderBuildBeforeLeave(): void {
   activeSide.value = 'ally'
   if (sideBuilds.value.ally) {
     const ally = cloneBuild(sideBuilds.value.ally)
-    if (ally) buildStore.setCurrentBuild(ally)
+    if (ally) {
+      buildStore.setCurrentBuild(ally, { keepDisplayedVariant: true })
+      buildStore.displayedVariant = allyDisplayedVariant.value
+    }
   }
   persistVsState()
 }
@@ -384,6 +392,7 @@ function persistVsState() {
       ally: cloneBuild(sideBuilds.value.ally),
       enemy: cloneBuild(sideBuilds.value.enemy),
       activeSide: activeSide.value,
+      allyDisplayedVariant: allyDisplayedVariant.value,
     }
     localStorage.setItem(key, JSON.stringify(payload))
   } catch {
@@ -403,6 +412,10 @@ function loadVsState(): TheorycraftVsStoredState | null {
       ally: cloneBuild((parsed.ally as Build | null) ?? null),
       enemy: cloneBuild((parsed.enemy as Build | null) ?? null),
       activeSide: active,
+      allyDisplayedVariant:
+        parsed.allyDisplayedVariant === 'main' || typeof parsed.allyDisplayedVariant === 'number'
+          ? parsed.allyDisplayedVariant
+          : undefined,
     }
   } catch {
     return null
@@ -525,6 +538,14 @@ watch(championId, () => {
 })
 
 watch(
+  () => buildStore.displayedVariant,
+  variant => {
+    if (isHydratingVsState.value || activeSide.value !== 'ally') return
+    allyDisplayedVariant.value = variant
+  }
+)
+
+watch(
   () => buildStore.currentBuild,
   build => {
     sideBuilds.value[activeSide.value] = cloneBuild(build)
@@ -596,6 +617,7 @@ onMounted(async () => {
   buildStore.activateTheorycraftMode()
   buildStore.setLastBuilderStep('theorycraft')
   theorycraftLevel.value = buildStore.statsLevel
+  allyDisplayedVariant.value = buildStore.displayedVariant
 
   const currentBuildSnapshot = cloneBuild(buildStore.currentBuild)
   sideBuilds.value.ally = currentBuildSnapshot
@@ -620,6 +642,16 @@ onMounted(async () => {
   } else {
     activeSide.value = 'ally'
     activePanel.value = sidePanels.value.ally ?? 'theorycraft'
+  }
+
+  if (
+    storedVs?.allyDisplayedVariant === 'main' ||
+    typeof storedVs?.allyDisplayedVariant === 'number'
+  ) {
+    allyDisplayedVariant.value = storedVs.allyDisplayedVariant
+    if (activeSide.value === 'ally') {
+      buildStore.displayedVariant = allyDisplayedVariant.value
+    }
   }
 
   isHydratingVsState.value = false
