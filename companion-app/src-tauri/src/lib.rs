@@ -8,6 +8,7 @@ mod image_cache;
 mod import_bridge;
 mod live_client;
 mod lcu;
+mod match_journal;
 mod postgame;
 mod state;
 
@@ -17,6 +18,7 @@ use commands::{
     get_checklist_draft, get_checklist_history, get_lcu_status, get_pending_build, get_progression,
     load_progression, resolve_champion_id, save_checklist, save_progression,
     confirm_internet_for_progression, test_internet_for_progression,
+    get_match_journal, delete_match_journal_entry,
     update_checklist,
 };
 use image_cache::ImageCacheState;
@@ -369,7 +371,9 @@ pub fn run() {
             test_internet_for_progression,
             confirm_internet_for_progression,
             save_progression,
-            check_internet_connection
+            check_internet_connection,
+            get_match_journal,
+            delete_match_journal_entry
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

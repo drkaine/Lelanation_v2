@@ -2,9 +2,17 @@
 
 use crate::lcu::LcuClient;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Map, Value};
 use std::thread;
 use std::time::Duration;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PostGameFetch {
+    pub stats: PostGameStats,
+    /// Full raw LCU endpoint payloads (dev / debugging).
+    pub lcu_raw: Value,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -49,6 +57,24 @@ pub struct PostGameStats {
     pub enemy_team_avg_elo: Option<i32>,
     #[serde(default)]
     pub game_avg_elo: Option<i32>,
+    #[serde(default)]
+    pub region: String,
+    #[serde(default)]
+    pub game_creation_ms: Option<i64>,
+    #[serde(default)]
+    pub role: String,
+    #[serde(default)]
+    pub opponent_champion_id: Option<u32>,
+    #[serde(default)]
+    pub patch: String,
+    #[serde(default)]
+    pub gold_spent: u32,
+    #[serde(default)]
+    pub set_item: String,
+    #[serde(default)]
+    pub vision_score: u32,
+    #[serde(default)]
+    pub damage_to_champions: u32,
 }
 
 fn local_summoner_id(client: &LcuClient) -> Option<u64> {
@@ -142,6 +168,7 @@ fn parse_player_stats(player: &Value, team_won: bool) -> PostGameStats {
         ),
         cs_total: cs_minions.saturating_add(cs_jungle),
         gold_earned: stat_u32(stats, &["GOLD_EARNED", "goldEarned"]),
+        gold_spent: stat_u32(stats, &["GOLD_SPENT", "goldSpent"]),
         kills: stat_u32(stats, &["CHAMPIONS_KILLED", "kills"]),
         deaths: stat_u32(stats, &["NUM_DEATHS", "deaths"]),
         assists: stat_u32(stats, &["ASSISTS", "assists"]),
@@ -155,6 +182,14 @@ fn parse_player_stats(player: &Value, team_won: bool) -> PostGameStats {
             ],
         ),
         wards_killed: stat_u32(stats, &["WARD_KILLED", "wardsKilled", "wardKilled"]),
+        vision_score: stat_u32(stats, &["VISION_SCORE", "visionScore"]),
+        damage_to_champions: stat_u32(
+            stats,
+            &[
+                "TOTAL_DAMAGE_DEALT_TO_CHAMPIONS",
+                "totalDamageDealtToChampions",
+            ],
+        ),
         champion_id: stat_u32(stats, &["SKIN", "championId"]).max(
             player
                 .get("championId")
@@ -386,6 +421,278 @@ fn str_field(v: &Value, keys: &[&str]) -> String {
     String::new()
 }
 
+fn fetch_region(client: &LcuClient) -> String {
+    let raw = match client.get("/riotclient/region-locale") {
+        Ok(r) => r,
+        Err(_) => return String::new(),
+    };
+    let v: Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(_) => return String::new(),
+    };
+    v.get("region")
+        .and_then(|x| x.as_str())
+        .unwrap_or("")
+        .to_string()
+}
+
+fn fetch_patch(client: &LcuClient) -> String {
+    let raw = match client.get("/lol-patch/v1/game-version") {
+        Ok(r) => r,
+        Err(_) => return String::new(),
+    };
+    if let Ok(arr) = serde_json::from_str::<Vec<String>>(&raw) {
+        return arr.first().cloned().unwrap_or_default();
+    }
+    if let Ok(s) = serde_json::from_str::<String>(&raw) {
+        return s;
+    }
+    String::new()
+}
+
+fn normalize_role(raw: &str) -> String {
+    match raw.to_ascii_uppercase().as_str() {
+        "TOP" => "top".into(),
+        "JUNGLE" | "JGL" => "jungle".into(),
+        "MIDDLE" | "MID" | "MIDLANE" => "middle".into(),
+        "BOTTOM" | "BOT" | "ADC" => "bottom".into(),
+        "UTILITY" | "SUPPORT" | "SUP" => "utility".into(),
+        other if !other.is_empty() => other.to_ascii_lowercase(),
+        _ => String::new(),
+    }
+}
+
+fn participant_team_id(participant: &Value) -> Option<u32> {
+    participant
+        .get("teamId")
+        .or_else(|| participant.get("team"))
+        .and_then(|x| x.as_u64())
+        .map(|n| n as u32)
+}
+
+fn participant_id(participant: &Value) -> Option<u32> {
+    participant
+        .get("participantId")
+        .and_then(|x| x.as_u64())
+        .map(|n| n as u32)
+}
+
+fn lane_role_from_timeline(participant: &Value) -> String {
+    let timeline = participant.get("timeline");
+    let lane = timeline
+        .and_then(|t| t.get("lane"))
+        .and_then(|x| x.as_str())
+        .unwrap_or("");
+    let role = timeline
+        .and_then(|t| t.get("role"))
+        .and_then(|x| x.as_str())
+        .unwrap_or("");
+
+    let lane_upper = lane.to_ascii_uppercase();
+    let role_upper = role.to_ascii_uppercase();
+
+    match lane_upper.as_str() {
+        "TOP" => normalize_role("TOP"),
+        "JUNGLE" => normalize_role("JUNGLE"),
+        "MIDDLE" | "MID" => normalize_role("MIDDLE"),
+        "BOTTOM" | "BOT" => {
+            if role_upper == "SUPPORT" {
+                normalize_role("UTILITY")
+            } else {
+                normalize_role("BOTTOM")
+            }
+        }
+        "NONE" | "" => {
+            if role_upper == "SUPPORT" {
+                normalize_role("UTILITY")
+            } else if role_upper == "DUO" || role_upper == "CARRY" {
+                normalize_role("BOTTOM")
+            } else {
+                String::new()
+            }
+        }
+        _ => normalize_role(&lane_upper),
+    }
+}
+
+fn participant_lane_role(participant: &Value) -> String {
+    for key in ["teamPosition", "individualPosition", "selectedPosition", "lane", "role"] {
+        if let Some(raw) = participant.get(key).and_then(|x| x.as_str()) {
+            let normalized = normalize_role(raw);
+            if !normalized.is_empty() {
+                return normalized;
+            }
+        }
+    }
+    lane_role_from_timeline(participant)
+}
+
+fn find_local_participant_id(game: &Value, summoner_id: u64) -> Option<u32> {
+    if let Some(identities) = game.get("participantIdentities").and_then(|x| x.as_array()) {
+        for identity in identities {
+            let sid = identity
+                .get("player")
+                .and_then(|p| p.get("summonerId"))
+                .and_then(|x| x.as_u64());
+            if sid == Some(summoner_id) {
+                return identity
+                    .get("participantId")
+                    .and_then(|x| x.as_u64())
+                    .map(|n| n as u32);
+            }
+        }
+    }
+    None
+}
+
+fn find_local_participant<'a>(
+    participants: &'a [Value],
+    game: &Value,
+    summoner_id: u64,
+) -> Option<&'a Value> {
+    if let Some(pid) = find_local_participant_id(game, summoner_id) {
+        if let Some(p) = participants
+            .iter()
+            .find(|p| participant_id(p) == Some(pid))
+        {
+            return Some(p);
+        }
+    }
+
+    participants.iter().find(|p| {
+        p.get("summonerId")
+            .and_then(|x| x.as_u64())
+            .map(|sid| sid == summoner_id)
+            .unwrap_or(false)
+    })
+}
+
+fn opponent_champion_by_role(
+    participants: &[Value],
+    local_team: u32,
+    local_role: &str,
+) -> Option<u32> {
+    if local_role.is_empty() {
+        return None;
+    }
+    for p in participants {
+        let Some(team) = participant_team_id(p) else {
+            continue;
+        };
+        if team == local_team {
+            continue;
+        }
+        let role = participant_lane_role(p);
+        if !role.is_empty() && role == local_role {
+            return p
+                .get("championId")
+                .and_then(|x| x.as_u64())
+                .map(|n| n as u32);
+        }
+    }
+    None
+}
+
+fn opponent_champion_by_index(
+    participants: &[Value],
+    local: &Value,
+    local_team: u32,
+) -> Option<u32> {
+    let local_pid = participant_id(local)?;
+    let mut team100: Vec<&Value> = participants
+        .iter()
+        .filter(|p| participant_team_id(p) == Some(100))
+        .collect();
+    let mut team200: Vec<&Value> = participants
+        .iter()
+        .filter(|p| participant_team_id(p) == Some(200))
+        .collect();
+    team100.sort_by_key(|p| participant_id(p).unwrap_or(0));
+    team200.sort_by_key(|p| participant_id(p).unwrap_or(0));
+
+    let (my_team, enemy_team) = if local_team == 100 {
+        (&team100, &team200)
+    } else {
+        (&team200, &team100)
+    };
+
+    let idx = my_team
+        .iter()
+        .position(|p| participant_id(p) == Some(local_pid))?;
+
+    enemy_team.get(idx).and_then(|p| {
+        p.get("championId")
+            .and_then(|x| x.as_u64())
+            .map(|n| n as u32)
+    })
+}
+
+fn item_ids_from_participant(participant: &Value) -> Vec<u32> {
+    let mut ids = Vec::new();
+    let stats = participant.get("stats").unwrap_or(participant);
+    for source in [participant, stats] {
+        for i in 0..=6 {
+            let key = format!("item{i}");
+            if let Some(id) = source.get(&key).and_then(|x| x.as_u64()) {
+                if id > 0 {
+                    ids.push(id as u32);
+                }
+            }
+        }
+    }
+    ids.sort_unstable();
+    ids.dedup();
+    ids
+}
+
+fn build_set_item_key(item_ids: &[u32]) -> String {
+    item_ids
+        .iter()
+        .map(|id| id.to_string())
+        .collect::<Vec<_>>()
+        .join("_")
+}
+
+fn enrich_from_participants(stats: &mut PostGameStats, game: &Value, summoner_id: u64) {
+    let Some(participants) = game.get("participants").and_then(|x| x.as_array()) else {
+        return;
+    };
+
+    let Some(local) = find_local_participant(participants, game, summoner_id) else {
+        return;
+    };
+
+    let local_team = participant_team_id(local);
+    let local_role = participant_lane_role(local);
+    let local_items = item_ids_from_participant(local);
+
+    if stats.champion_id == 0 {
+        stats.champion_id = local
+            .get("championId")
+            .and_then(|x| x.as_u64())
+            .unwrap_or(0) as u32;
+    }
+
+    if let Some(ps) = local.get("stats") {
+        if stats.gold_spent == 0 {
+            stats.gold_spent = stat_u32(ps, &["GOLD_SPENT", "goldSpent"]);
+        }
+    }
+
+    if !local_role.is_empty() {
+        stats.role = local_role.clone();
+    }
+
+    if let Some(team) = local_team {
+        stats.opponent_champion_id = opponent_champion_by_role(participants, team, &local_role)
+            .or_else(|| opponent_champion_by_index(participants, local, team));
+    }
+
+    if !local_items.is_empty() {
+        stats.set_item = build_set_item_key(&local_items);
+    }
+}
+
 fn apply_game_detail(stats: &mut PostGameStats, game: &Value) {
     if stats.queue_id.is_none() {
         stats.queue_id = game
@@ -406,6 +713,13 @@ fn apply_game_detail(stats: &mut PostGameStats, game: &Value) {
     if let Some(ranked) = game.get("ranked").and_then(|x| x.as_bool()) {
         stats.ranked = ranked;
     }
+    if let Some(ms) = game
+        .get("gameCreationDate")
+        .or_else(|| game.get("gameCreation"))
+        .and_then(|x| x.as_i64())
+    {
+        stats.game_creation_ms = Some(ms);
+    }
 }
 
 fn fetch_game_detail(client: &LcuClient, game_id: u64) -> Option<Value> {
@@ -415,6 +729,10 @@ fn fetch_game_detail(client: &LcuClient, game_id: u64) -> Option<Value> {
 }
 
 fn enrich_from_lcu(client: &LcuClient, summoner_id: u64, stats: &mut PostGameStats) {
+    stats.region = fetch_region(client);
+    if stats.patch.is_empty() {
+        stats.patch = fetch_patch(client);
+    }
     let (rank, lp) = fetch_player_rank(client, summoner_id);
     if !rank.is_empty() {
         stats.player_rank = rank;
@@ -423,6 +741,7 @@ fn enrich_from_lcu(client: &LcuClient, summoner_id: u64, stats: &mut PostGameSta
     if let Some(gid) = stats.game_id {
         if let Some(game) = fetch_game_detail(client, gid) {
             apply_game_detail(stats, &game);
+            enrich_from_participants(stats, &game, summoner_id);
         }
     }
 }
@@ -470,8 +789,62 @@ fn fetch_latest_game_summary(client: &LcuClient) -> Option<(Value, u64)> {
     Some((game.clone(), id))
 }
 
+fn parse_lcu_body(raw: &str) -> Value {
+    serde_json::from_str(raw).unwrap_or_else(|_| json!({ "rawText": raw }))
+}
+
+fn capture_get(client: &LcuClient, endpoints: &mut Map<String, Value>, key: &str, path: &str) {
+    endpoints.insert(
+        key.to_string(),
+        match client.get(path) {
+            Ok(raw) => parse_lcu_body(&raw),
+            Err(e) => json!({ "error": e }),
+        },
+    );
+}
+
+fn build_lcu_raw_capture(
+    client: &LcuClient,
+    summoner_id: u64,
+    game_id: Option<u64>,
+    eog_raw: &str,
+) -> Value {
+    let mut endpoints = Map::new();
+    endpoints.insert("eogStatsBlock".into(), parse_lcu_body(eog_raw));
+    capture_get(client, &mut endpoints, "loginSession", "/lol-login/v1/session");
+    capture_get(
+        client,
+        &mut endpoints,
+        "matchHistoryLatest",
+        "/lol-match-history/v1/games?begIndex=0&endIndex=1",
+    );
+    if let Some(gid) = game_id {
+        capture_get(
+            client,
+            &mut endpoints,
+            "matchHistoryGameDetail",
+            &format!("/lol-match-history/v1/games/{gid}"),
+        );
+    }
+    capture_get(client, &mut endpoints, "regionLocale", "/riotclient/region-locale");
+    capture_get(client, &mut endpoints, "gameVersion", "/lol-patch/v1/game-version");
+    capture_get(
+        client,
+        &mut endpoints,
+        "rankedOverview",
+        &format!("/lol-ranked/v1/ranked-overview/{summoner_id}"),
+    );
+
+    json!({
+        "capturedAtMs": crate::checklist::evaluator::now_millis(),
+        "summonerId": summoner_id,
+        "gameId": game_id,
+        "endpoints": endpoints,
+    })
+}
+
 /// Fetch post-game stats with retries (EOG screen may load slowly).
-pub fn fetch_postgame_stats(client: &LcuClient) -> Result<PostGameStats, String> {
+pub fn fetch_postgame_stats(client: &LcuClient) -> Result<PostGameFetch, String> {
     let summoner_id =
         local_summoner_id(client).ok_or_else(|| "Cannot resolve summoner id".to_string())?;
 
@@ -482,14 +855,17 @@ pub fn fetch_postgame_stats(client: &LcuClient) -> Result<PostGameStats, String>
         }
         match client.get("/lol-end-of-game/v1/eog-stats-block") {
             Ok(raw) if !raw.trim().is_empty() && raw.trim() != "{}" => {
-                match parse_eog_stats_block(&raw, summoner_id) {
+                let eog_raw = raw;
+                match parse_eog_stats_block(&eog_raw, summoner_id) {
                     Ok(mut stats) => {
                         if let Some((summary, game_id)) = fetch_latest_game_summary(client) {
                             stats.game_id = Some(game_id);
                             apply_game_detail(&mut stats, &summary);
                         }
                         enrich_from_lcu(client, summoner_id, &mut stats);
-                        return Ok(stats);
+                        let lcu_raw =
+                            build_lcu_raw_capture(client, summoner_id, stats.game_id, &eog_raw);
+                        return Ok(PostGameFetch { stats, lcu_raw });
                     }
                     Err(e) => last_err = e,
                 }
@@ -573,5 +949,100 @@ mod tests {
         assert_eq!(stats.ally_team_avg_elo, Some(1190));
         assert_eq!(stats.enemy_team_avg_elo, Some(1260));
         assert_eq!(stats.game_avg_elo, Some(1225));
+    }
+
+    #[test]
+    fn resolves_lane_opponent_from_lcu_timeline() {
+        let game = json!({
+            "participantIdentities": [
+                { "participantId": 1, "player": { "summonerId": 111 } },
+                { "participantId": 6, "player": { "summonerId": 666 } }
+            ],
+            "participants": [
+                {
+                    "participantId": 1,
+                    "teamId": 100,
+                    "championId": 86,
+                    "timeline": { "lane": "TOP", "role": "SOLO" }
+                },
+                {
+                    "participantId": 2,
+                    "teamId": 100,
+                    "championId": 64,
+                    "timeline": { "lane": "JUNGLE", "role": "NONE" }
+                },
+                {
+                    "participantId": 6,
+                    "teamId": 200,
+                    "championId": 238,
+                    "timeline": { "lane": "TOP", "role": "SOLO" }
+                },
+                {
+                    "participantId": 7,
+                    "teamId": 200,
+                    "championId": 121,
+                    "timeline": { "lane": "JUNGLE", "role": "NONE" }
+                }
+            ]
+        });
+
+        let mut stats = PostGameStats::default();
+        enrich_from_participants(&mut stats, &game, 111);
+        assert_eq!(stats.role, "top");
+        assert_eq!(stats.opponent_champion_id, Some(238));
+
+        let mut stats_mid = PostGameStats::default();
+        let mid_game = json!({
+            "participantIdentities": [
+                { "participantId": 3, "player": { "summonerId": 333 } },
+                { "participantId": 8, "player": { "summonerId": 888 } }
+            ],
+            "participants": [
+                {
+                    "participantId": 3,
+                    "teamId": 100,
+                    "championId": 7,
+                    "timeline": { "lane": "MIDDLE", "role": "SOLO" }
+                },
+                {
+                    "participantId": 8,
+                    "teamId": 200,
+                    "championId": 61,
+                    "timeline": { "lane": "MIDDLE", "role": "SOLO" }
+                }
+            ]
+        });
+        enrich_from_participants(&mut stats_mid, &mid_game, 333);
+        assert_eq!(stats_mid.role, "middle");
+        assert_eq!(stats_mid.opponent_champion_id, Some(61));
+    }
+
+    #[test]
+    fn resolves_bot_lane_adc_vs_support_roles() {
+        let game = json!({
+            "participantIdentities": [
+                { "participantId": 5, "player": { "summonerId": 555 } },
+                { "participantId": 10, "player": { "summonerId": 1010 } }
+            ],
+            "participants": [
+                {
+                    "participantId": 5,
+                    "teamId": 100,
+                    "championId": 22,
+                    "timeline": { "lane": "BOTTOM", "role": "CARRY" }
+                },
+                {
+                    "participantId": 10,
+                    "teamId": 200,
+                    "championId": 51,
+                    "timeline": { "lane": "BOTTOM", "role": "CARRY" }
+                }
+            ]
+        });
+
+        let mut stats = PostGameStats::default();
+        enrich_from_participants(&mut stats, &game, 555);
+        assert_eq!(stats.role, "bottom");
+        assert_eq!(stats.opponent_champion_id, Some(51));
     }
 }

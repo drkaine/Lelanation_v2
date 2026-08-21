@@ -5,6 +5,8 @@ import { Router, type Request, type Response } from 'express'
 import { isAbsolute, join } from 'path'
 import { promises as fs } from 'fs'
 import { tryReserveTrackedMatch } from '../worker/matchTrackingReserve.js'
+import { getCompanionChampionBenchmark } from '../services/CompanionBenchmarkService.js'
+import { normalizePatchMajorMinor } from '../services/statsAggArchive.js'
 
 const router = Router()
 
@@ -119,6 +121,67 @@ router.post('/submit-tracked-match', async (req: Request, res: Response) => {
   } catch (e) {
     console.warn('[app/submit-tracked-match]', e)
     return res.status(500).json({ error: 'Server error' })
+  }
+})
+
+function queryString(value: unknown): string | null {
+  if (typeof value !== 'string' || !value.trim()) return null
+  return value.trim()
+}
+
+function normalizeRankTierParam(raw: string | null): string | null {
+  if (!raw) return null
+  const tier = raw.trim().split(/\s+/)[0]?.toUpperCase()
+  if (!tier || tier === 'UNRANKED') return null
+  return tier
+}
+
+function normalizeRoleParam(raw: string | null): string | null {
+  if (!raw) return null
+  const r = raw.trim().toUpperCase()
+  if (r === 'MID' || r === 'MIDLANE') return 'MIDDLE'
+  if (r === 'BOT' || r === 'ADC') return 'BOTTOM'
+  if (r === 'SUP' || r === 'SUPPORT') return 'UTILITY'
+  if (r === 'JGL') return 'JUNGLE'
+  return r
+}
+
+/**
+ * GET /api/app/companion/champion-benchmark
+ * Average stats for a champion at a given patch / rank / role (companion ranked recap).
+ * Query: ?championId=83&patch=16.13&rankTier=GOLD&role=TOP
+ */
+router.get('/companion/champion-benchmark', async (req: Request, res: Response) => {
+  const championId = parseInt(String(req.query.championId ?? ''), 10)
+  if (!Number.isFinite(championId) || championId <= 0) {
+    return res.status(400).json({ error: 'Invalid championId' })
+  }
+  const patchRaw = queryString(req.query.patch) ?? queryString(req.query.version)
+  const patch = patchRaw ? normalizePatchMajorMinor(patchRaw) : null
+  const rankTier = normalizeRankTierParam(queryString(req.query.rankTier))
+  const role = normalizeRoleParam(queryString(req.query.role))
+
+  try {
+    const data = await getCompanionChampionBenchmark({
+      championId,
+      version: patch,
+      rankTier,
+      role,
+    })
+    if (!data) {
+      return res.status(200).json({
+        championId,
+        games: 0,
+        metrics: {},
+        avgDamageToChampions: null,
+        winrate: null,
+      })
+    }
+    res.set('Cache-Control', 'public, max-age=120')
+    return res.json(data)
+  } catch (e) {
+    console.warn('[app/companion/champion-benchmark]', e)
+    return res.status(500).json({ error: 'Benchmark query failed' })
   }
 })
 
