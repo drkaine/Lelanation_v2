@@ -17,6 +17,7 @@ import { importBuildToLcu, describeApplyResult } from "../lcuBuildImport";
 import { useLcuExport } from "../composables/useLcuExport";
 import KeyboardShortcutsView from "./KeyboardShortcutsView.vue";
 import ChecklistView from "./ChecklistView.vue";
+import RankedRecapView from "./RankedRecapView.vue";
 import {
   buildCompanionNav,
   isCompanionLinkActive,
@@ -77,7 +78,7 @@ type QueuedImportMessage = {
   data?: { type?: string; payload?: { build?: Build } };
 };
 
-type ViewMode = "iframe" | "checklist" | "settings";
+type ViewMode = "iframe" | "checklist" | "progression" | "settings";
 type SettingsTab = "app" | "site";
 
 const viewMode = ref<ViewMode>("iframe");
@@ -123,6 +124,11 @@ const isEmbeddedPage = computed(() => viewMode.value === "iframe");
 function navigateToPath(path: string) {
   iframePath.value = path;
   viewMode.value = "iframe";
+  openNavMenuId.value = null;
+}
+
+function openProgression() {
+  viewMode.value = "progression";
   openNavMenuId.value = null;
 }
 
@@ -503,8 +509,8 @@ onMounted(async () => {
 
   try {
     postgameUnlisten = await listen("lcu:checklist-saved", () => {
-      viewMode.value = "checklist";
-      showImportNotification(t("checklist.notifySaved"), true);
+      viewMode.value = "progression";
+      showImportNotification(t("progression.recap.title"), true);
     });
   } catch {
     /* browser preview */
@@ -579,13 +585,22 @@ onUnmounted(() => {
               <span class="nav-menu-chevron" :class="{ open: isNavMenuOpen(entry.id) }">▾</span>
             </button>
             <button
-              v-else
+              v-else-if="entry.type === 'link'"
               type="button"
               class="nav-btn"
               :class="{
                 active: viewMode === 'iframe' && isCompanionLinkActive(entry.id, iframePath),
               }"
               @click="navigateToPath(entry.path)"
+            >
+              {{ t(entry.labelKey) }}
+            </button>
+            <button
+              v-else
+              type="button"
+              class="nav-btn"
+              :class="{ active: viewMode === 'progression' }"
+              @click="openProgression"
             >
               {{ t(entry.labelKey) }}
             </button>
@@ -633,6 +648,11 @@ onUnmounted(() => {
 
     <ChecklistView
       v-if="viewMode === 'checklist'"
+      :language="settings.language"
+    />
+
+    <RankedRecapView
+      v-else-if="viewMode === 'progression'"
       :language="settings.language"
     />
 

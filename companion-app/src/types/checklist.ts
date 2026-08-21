@@ -37,6 +37,15 @@ export interface PostGameStats {
   allyTeamAvgElo?: number | null;
   enemyTeamAvgElo?: number | null;
   gameAvgElo?: number | null;
+  region?: string;
+  gameCreationMs?: number | null;
+  role?: string;
+  opponentChampionId?: number | null;
+  patch?: string;
+  goldSpent?: number;
+  setItem?: string;
+  visionScore?: number;
+  damageToChampions?: number;
 }
 
 export interface SavedChecklist {

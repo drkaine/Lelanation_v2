@@ -29,4 +29,6 @@ commands.allow = [
   "test_internet_for_progression",
   "confirm_internet_for_progression",
   "check_internet_connection",
+  "get_match_journal",
+  "delete_match_journal_entry",
 ]

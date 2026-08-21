@@ -4,6 +4,7 @@ use crate::app_config::load_companion_config;
 use crate::checklist::{
     delete_entry, load_all, recalculate_score, save_entry, to_saved_checklist, SavedChecklist,
 };
+use crate::match_journal::{self, MatchJournalEntry};
 use crate::progression::{self, ProgressionSave};
 use crate::live_client;
 use crate::lcu::{
@@ -254,6 +255,16 @@ pub fn save_progression(mut data: ProgressionSave) -> Result<ProgressionSave, St
 #[tauri::command]
 pub fn check_internet_connection() -> bool {
     progression::check_internet()
+}
+
+#[tauri::command]
+pub fn get_match_journal() -> Vec<MatchJournalEntry> {
+    match_journal::store::load_all()
+}
+
+#[tauri::command]
+pub fn delete_match_journal_entry(id: String) -> Vec<MatchJournalEntry> {
+    match_journal::store::delete_entry(&id)
 }
 
 #[cfg(test)]

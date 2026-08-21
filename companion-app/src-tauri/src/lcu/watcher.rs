@@ -3,6 +3,7 @@
 use super::{fetch_gameflow_phase, fetch_local_champion_id, try_auto_apply, LcuClient};
 use crate::checklist::{merge_user_edits, save_entry, to_saved_checklist};
 use crate::live_client::{self, LiveCsSnapshot};
+use crate::match_journal;
 use crate::postgame;
 use crate::state::AppState;
 use std::sync::Arc;
@@ -62,7 +63,8 @@ fn handle_postgame(app: &AppHandle, state: &Arc<AppState>) {
             return;
         }
         match postgame::fetch_postgame_stats(&client) {
-            Ok(mut stats) => {
+            Ok(fetch) => {
+                let mut stats = fetch.stats;
                 merge_live_cs(&state, &mut stats);
                 let _ = app.emit("lcu:postgame-stats", &stats);
 
@@ -76,6 +78,12 @@ fn handle_postgame(app: &AppHandle, state: &Arc<AppState>) {
                     *draft = Some(saved.clone());
                 }
                 let history = save_entry(saved.clone());
+                if is_ranked_solo_duo(&saved.stats) {
+                    let journal_entry =
+                        match_journal::from_postgame(saved.stats.clone(), Some(fetch.lcu_raw));
+                    let journal = match_journal::store::save_entry(journal_entry);
+                    let _ = app.emit("lcu:match-journal-updated", &journal);
+                }
                 let _ = app.emit("lcu:checklist-saved", &saved);
                 let _ = app.emit("lcu:checklist-history", &history);
             }
@@ -88,6 +96,15 @@ fn handle_postgame(app: &AppHandle, state: &Arc<AppState>) {
         }
         reset_live_snapshot(&state);
     });
+}
+
+const RANKED_SOLO_DUO_QUEUE: u32 = 420;
+
+fn is_ranked_solo_duo(stats: &crate::postgame::PostGameStats) -> bool {
+    stats.queue_id == Some(RANKED_SOLO_DUO_QUEUE)
+        || stats
+            .queue_type
+            .eq_ignore_ascii_case("RANKED_SOLO_5x5")
 }
 
 fn sample_live_cs(state: &AppState) {

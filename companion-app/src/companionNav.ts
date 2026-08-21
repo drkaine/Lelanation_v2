@@ -18,7 +18,13 @@ export type CompanionNavLink = {
   path: string
 }
 
-export type CompanionNavEntry = CompanionNavMenu | CompanionNavLink
+export type CompanionNavNativeLink = {
+  type: "native"
+  id: "progression"
+  labelKey: string
+}
+
+export type CompanionNavEntry = CompanionNavMenu | CompanionNavLink | CompanionNavNativeLink
 
 export function localePrefix(language: "fr" | "en"): string {
   return language === "en" ? "/en" : ""
@@ -104,6 +110,11 @@ export function buildCompanionNav(language: "fr" | "en"): CompanionNavEntry[] {
       id: "patch-notes",
       labelKey: "nav.patchNotes",
       path: `${prefix}/patch-notes`,
+    },
+    {
+      type: "native",
+      id: "progression",
+      labelKey: "progression.recap.title",
     },
   ]
 }
