@@ -2,6 +2,7 @@ import { computed, ref, toRaw, watch, type Ref } from 'vue'
 import type { Build, CalculatedStats } from '@lelanation/shared-types'
 import { useChampionData } from '~/composables/useChampionData'
 import { useBuildStore } from '~/stores/BuildStore'
+import { theorycraftDetailScope } from '~/utils/theorycraftStorageScope'
 import { useItemsStore } from '~/stores/ItemsStore'
 import type { TheorycraftPanel } from '~/components/Build/TheorycraftWorkspacePanel.vue'
 import type { TheorycraftBuildStats } from '~/types/theorycraft'
@@ -150,6 +151,10 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
   }
 
   function loadSideBuild(side: TheorycraftSide) {
+    const buildId = sourceBuild.value?.id
+    if (buildId) {
+      buildStore.setTheorycraftStorageScope(theorycraftDetailScope(buildId, side))
+    }
     const target = cloneBuild(sideBuilds.value[side])
     if (!target) return
     if (side === 'ally') {
@@ -158,7 +163,7 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
     } else {
       buildStore.setCurrentBuild(target)
     }
-    buildStore.activateTheorycraftMode()
+    buildStore.reloadTheorycraftModifiers()
   }
 
   function persistVsState() {
@@ -247,9 +252,25 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
     isHydratingVsState.value = true
     activeSide.value = 'ally'
     activePanel.value = 'theorycraft'
-    syncAllyFromSource(build)
 
     const stored = loadVsState()
+    const canRestoreAlly =
+      Boolean(stored?.ally) && stored?.ally?.champion?.id === build.champion?.id
+
+    if (canRestoreAlly && stored?.ally) {
+      sideBuilds.value.ally = stored.ally
+      allyDisplayedVariant.value = stored.allyDisplayedVariant ?? 'main'
+      buildStore.setTheorycraftStorageScope(theorycraftDetailScope(build.id, 'ally'))
+      buildStore.setCurrentBuild(cloneBuild(stored.ally)!, { keepDisplayedVariant: true })
+      buildStore.displayedVariant = allyDisplayedVariant.value
+      buildStore.activateTheorycraftMode()
+      sideCalculatedStats.value.ally = buildStore.calculatedStats
+        ? ({ ...buildStore.calculatedStats } as CalculatedStats)
+        : null
+    } else {
+      syncAllyFromSource(build)
+    }
+
     const canRestoreEnemy =
       Boolean(stored?.enemy) && stored?.ally?.champion?.id === build.champion?.id
 

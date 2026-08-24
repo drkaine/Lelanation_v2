@@ -173,8 +173,8 @@ const updateBuildName = () => {
 }
 
 const saveBuild = async () => {
-  const success = await buildStore.saveBuild()
-  if (success) {
+  const result = await buildStore.saveBuild()
+  if (result.ok) {
     setTimeout(() => {
       buildStore.status = 'idle'
     }, 3000)

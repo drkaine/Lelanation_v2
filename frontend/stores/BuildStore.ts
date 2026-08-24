@@ -29,6 +29,15 @@ import { useVersionStore } from '~/stores/VersionStore'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useVoteStore } from '~/stores/VoteStore'
 import { shouldAutoPrivatizeFromCommunityVotes } from '~/utils/communityVoteVisibility'
+import {
+  applyEditSecretFromResponse,
+  buildEditHeaders,
+  serializeBuildForApi,
+} from '~/utils/buildApi'
+import {
+  scopedTheorycraftStorageKey,
+  setTheorycraftStorageScope,
+} from '~/utils/theorycraftStorageScope'
 import { createEmptyNotesContent, cloneNotesContent } from '~/utils/buildNotes'
 import {
   passiveRankForChampionLevel,
@@ -89,6 +98,19 @@ const THEORYCRAFT_RUNE_STACKS_STORAGE_KEY = 'lelanation_theorycraft_rune_stacks'
 const THEORYCRAFT_GAME_DURATION_STORAGE_KEY = 'lelanation_theorycraft_game_duration'
 const THEORYCRAFT_ACTIVE_ITEM_PASSIVES_STORAGE_KEY = 'lelanation_theorycraft_active_item_passives'
 const BUILDER_STEP_STORAGE_KEY = 'lelanation_builder_step'
+
+let statsRecalcToken = 0
+
+function tcStorageKey(baseKey: string): string {
+  return scopedTheorycraftStorageKey(baseKey)
+}
+
+export type SaveBuildResult = {
+  ok: boolean
+  localOk: boolean
+  serverOk: boolean
+  serverAttempted: boolean
+}
 
 export type BuildStoreSession = 'create' | 'theorycraft' | 'edit'
 
@@ -574,6 +596,10 @@ export const useBuildStore = defineStore('build', {
       this.pendingChampionChange = null
       this.status = 'idle'
       this.error = null
+      this.reloadTheorycraftModifiers()
+    },
+
+    reloadTheorycraftModifiers() {
       this.loadTheorycraftDisabledItems()
       this.loadTheorycraftItemStacks()
       this.loadTheorycraftActiveItemPassives()
@@ -581,6 +607,10 @@ export const useBuildStore = defineStore('build', {
       this.clampTheorycraftActiveItemsForRole()
       this.clampStatsLevelForRole()
       this.recalculateStats()
+    },
+
+    setTheorycraftStorageScope(scope: string) {
+      setTheorycraftStorageScope(scope)
     },
 
     deactivateTheorycraftMode(options?: { skipPersist?: boolean }) {
@@ -647,7 +677,7 @@ export const useBuildStore = defineStore('build', {
     loadTheorycraftActiveItemPassives() {
       if (import.meta.server) return
       try {
-        const raw = localStorage.getItem(THEORYCRAFT_ACTIVE_ITEM_PASSIVES_STORAGE_KEY)
+        const raw = localStorage.getItem(tcStorageKey(THEORYCRAFT_ACTIVE_ITEM_PASSIVES_STORAGE_KEY))
         this.theorycraftActiveItemPassives = raw ? (JSON.parse(raw) as Record<number, boolean>) : {}
       } catch {
         this.theorycraftActiveItemPassives = {}
@@ -658,7 +688,7 @@ export const useBuildStore = defineStore('build', {
       if (import.meta.server || this.builderSession !== 'theorycraft') return
       try {
         localStorage.setItem(
-          THEORYCRAFT_ACTIVE_ITEM_PASSIVES_STORAGE_KEY,
+          tcStorageKey(THEORYCRAFT_ACTIVE_ITEM_PASSIVES_STORAGE_KEY),
           JSON.stringify(this.theorycraftActiveItemPassives)
         )
       } catch {
@@ -679,8 +709,10 @@ export const useBuildStore = defineStore('build', {
     loadTheorycraftRuneStacks() {
       if (import.meta.server) return
       try {
-        const rawStacks = localStorage.getItem(THEORYCRAFT_RUNE_STACKS_STORAGE_KEY)
-        const rawDuration = localStorage.getItem(THEORYCRAFT_GAME_DURATION_STORAGE_KEY)
+        const rawStacks = localStorage.getItem(tcStorageKey(THEORYCRAFT_RUNE_STACKS_STORAGE_KEY))
+        const rawDuration = localStorage.getItem(
+          tcStorageKey(THEORYCRAFT_GAME_DURATION_STORAGE_KEY)
+        )
         this.theorycraftRuneStacks = rawStacks
           ? (JSON.parse(rawStacks) as Record<number, number>)
           : {}
@@ -698,11 +730,11 @@ export const useBuildStore = defineStore('build', {
       if (import.meta.server || this.builderSession !== 'theorycraft') return
       try {
         localStorage.setItem(
-          THEORYCRAFT_RUNE_STACKS_STORAGE_KEY,
+          tcStorageKey(THEORYCRAFT_RUNE_STACKS_STORAGE_KEY),
           JSON.stringify(this.theorycraftRuneStacks)
         )
         localStorage.setItem(
-          THEORYCRAFT_GAME_DURATION_STORAGE_KEY,
+          tcStorageKey(THEORYCRAFT_GAME_DURATION_STORAGE_KEY),
           JSON.stringify(this.theorycraftGameDurationMinutes)
         )
       } catch {
@@ -731,8 +763,10 @@ export const useBuildStore = defineStore('build', {
     loadTheorycraftItemStacks() {
       if (import.meta.server) return
       try {
-        const rawStacks = localStorage.getItem(THEORYCRAFT_ITEM_STACKS_STORAGE_KEY)
-        const rawTransformed = localStorage.getItem(THEORYCRAFT_ITEM_TRANSFORMED_STORAGE_KEY)
+        const rawStacks = localStorage.getItem(tcStorageKey(THEORYCRAFT_ITEM_STACKS_STORAGE_KEY))
+        const rawTransformed = localStorage.getItem(
+          tcStorageKey(THEORYCRAFT_ITEM_TRANSFORMED_STORAGE_KEY)
+        )
         this.theorycraftItemStacks = rawStacks
           ? (JSON.parse(rawStacks) as Record<number, number>)
           : {}
@@ -749,11 +783,11 @@ export const useBuildStore = defineStore('build', {
       if (import.meta.server || this.builderSession !== 'theorycraft') return
       try {
         localStorage.setItem(
-          THEORYCRAFT_ITEM_STACKS_STORAGE_KEY,
+          tcStorageKey(THEORYCRAFT_ITEM_STACKS_STORAGE_KEY),
           JSON.stringify(this.theorycraftItemStacks)
         )
         localStorage.setItem(
-          THEORYCRAFT_ITEM_TRANSFORMED_STORAGE_KEY,
+          tcStorageKey(THEORYCRAFT_ITEM_TRANSFORMED_STORAGE_KEY),
           JSON.stringify(this.theorycraftItemTransformed)
         )
       } catch {
@@ -784,7 +818,7 @@ export const useBuildStore = defineStore('build', {
     loadTheorycraftDisabledItems() {
       if (import.meta.server) return
       try {
-        const raw = localStorage.getItem(THEORYCRAFT_DISABLED_ITEMS_STORAGE_KEY)
+        const raw = localStorage.getItem(tcStorageKey(THEORYCRAFT_DISABLED_ITEMS_STORAGE_KEY))
         if (!raw) {
           this.theorycraftDisabledItemIndices = []
           return
@@ -802,7 +836,7 @@ export const useBuildStore = defineStore('build', {
       if (import.meta.server || this.builderSession !== 'theorycraft') return
       try {
         localStorage.setItem(
-          THEORYCRAFT_DISABLED_ITEMS_STORAGE_KEY,
+          tcStorageKey(THEORYCRAFT_DISABLED_ITEMS_STORAGE_KEY),
           JSON.stringify(this.theorycraftDisabledItemIndices)
         )
       } catch {
@@ -936,7 +970,7 @@ export const useBuildStore = defineStore('build', {
 
     loadTheorycraftStacksForChampion(championId: string) {
       try {
-        const raw = localStorage.getItem(THEORYCRAFT_STACKS_STORAGE_KEY)
+        const raw = localStorage.getItem(tcStorageKey(THEORYCRAFT_STACKS_STORAGE_KEY))
         if (!raw) {
           this.theorycraftStackCounts = {}
           return
@@ -951,10 +985,10 @@ export const useBuildStore = defineStore('build', {
     persistTheorycraftStacks() {
       if (this.builderSession !== 'theorycraft' || !this.theorycraftStackChampionId) return
       try {
-        const raw = localStorage.getItem(THEORYCRAFT_STACKS_STORAGE_KEY)
+        const raw = localStorage.getItem(tcStorageKey(THEORYCRAFT_STACKS_STORAGE_KEY))
         const parsed = raw ? (JSON.parse(raw) as Record<string, Record<string, number>>) : {}
         parsed[this.theorycraftStackChampionId] = { ...this.theorycraftStackCounts }
-        localStorage.setItem(THEORYCRAFT_STACKS_STORAGE_KEY, JSON.stringify(parsed))
+        localStorage.setItem(tcStorageKey(THEORYCRAFT_STACKS_STORAGE_KEY), JSON.stringify(parsed))
       } catch {
         // ignore persistence errors
       }
@@ -1748,11 +1782,14 @@ export const useBuildStore = defineStore('build', {
         return
       }
 
+      const recalcToken = ++statsRecalcToken
+
       // Import and use stats calculator
       import('@lelanation/builds-stats').then(async ({ calculateStats }) => {
+        if (recalcToken !== statsRecalcToken) return
         const b = this.displayedBuild ?? this.currentBuild
         if (!b || !b.champion || !hasChampionStats(b.champion)) {
-          this.calculatedStats = null
+          if (recalcToken === statsRecalcToken) this.calculatedStats = null
           return
         }
 
@@ -1869,6 +1906,8 @@ export const useBuildStore = defineStore('build', {
             labels: {},
           })
 
+          if (recalcToken !== statsRecalcToken) return
+
           this.calculatedStats = passiveResult.stats
           this.theorycraftItemModifierLines = modifierResult.lines
           this.theorycraftRuneModifierLines = runeModifierResult.lines
@@ -1876,6 +1915,8 @@ export const useBuildStore = defineStore('build', {
           this.theorycraftItemPassiveLines = passiveResult.lines
           return
         }
+
+        if (recalcToken !== statsRecalcToken) return
 
         this.theorycraftItemModifierLines = []
         this.theorycraftRuneModifierLines = []
@@ -1886,24 +1927,48 @@ export const useBuildStore = defineStore('build', {
       })
     },
 
+    persistBuildEditSecret(buildId: string, editSecret: string) {
+      if (!buildId || !editSecret) return
+      if (this.currentBuild?.id === buildId) {
+        this.currentBuild.editSecret = editSecret
+      }
+      try {
+        const savedBuilds = this.getSavedBuilds()
+        const index = savedBuilds.findIndex(b => b.id === buildId)
+        if (index < 0) return
+        savedBuilds[index] = { ...savedBuilds[index]!, editSecret }
+        localStorage.setItem(
+          'lelanation_builds',
+          JSON.stringify(savedBuilds.map(b => serializeBuild(b)))
+        )
+        this.savedBuildsVersion++
+      } catch {
+        // ignore localStorage errors
+      }
+    },
+
     async saveBuild(options?: {
       publishToLibrary?: boolean
       /** When false, only syncs to the API (e.g. embedded build of a public guide). */
       saveToLocalLibrary?: boolean
-    }): Promise<boolean> {
+    }): Promise<SaveBuildResult> {
       const publishToLibrary = options?.publishToLibrary !== false
       const saveToLocalLibrary = options?.saveToLocalLibrary !== false
       if (!this.currentBuild) {
         this.error = 'No build to save'
         this.status = 'error'
-        return false
+        return { ok: false, localOk: false, serverOk: false, serverAttempted: false }
       }
 
       if (!this.isBuildValid) {
         this.error = 'Build is not valid. Please check all required fields.'
         this.status = 'error'
-        return false
+        return { ok: false, localOk: false, serverOk: false, serverAttempted: false }
       }
+
+      let localOk = false
+      let serverOk = true
+      let serverAttempted = false
 
       try {
         this.status = 'loading'
@@ -1936,16 +2001,21 @@ export const useBuildStore = defineStore('build', {
           const toStore = savedBuilds.map(b => serializeBuild(b))
           localStorage.setItem('lelanation_builds', JSON.stringify(toStore))
           this.savedBuildsVersion++
+          localOk = true
         }
 
         // 2) Sync serveur selon visibilité
         if (publishToLibrary) {
+          serverAttempted = newVisibility === 'public' || previousVisibility === 'public'
           try {
             if (newVisibility === 'private') {
               if (previousVisibility === 'public' && this.currentBuild!.id) {
                 const delResponse = await fetch(
                   apiUrl(`/api/builds/${encodeURIComponent(this.currentBuild!.id)}`),
-                  { method: 'DELETE' }
+                  {
+                    method: 'DELETE',
+                    headers: buildEditHeaders(this.currentBuild!.editSecret),
+                  }
                 )
                 if (!delResponse.ok && delResponse.status !== 404) {
                   // Build saved locally but failed to remove from server (public→private)
@@ -1954,34 +2024,65 @@ export const useBuildStore = defineStore('build', {
             } else {
               const response = await fetch(apiUrl('/api/builds'), {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: buildEditHeaders(this.currentBuild!.editSecret),
                 body: JSON.stringify(
-                  serializeBuild({ ...this.currentBuild!, matchupGuideEmbed: undefined })
+                  serializeBuildForApi({
+                    ...this.currentBuild!,
+                    matchupGuideEmbed: undefined,
+                  })
                 ),
               })
 
               if (response.ok) {
-                const result = await response.json()
+                serverOk = true
+                const result = (await response.json()) as { id?: string; editSecret?: string }
                 if (result.id && !this.currentBuild!.id) {
                   this.currentBuild!.id = result.id
                 }
+                const withSecret = applyEditSecretFromResponse(this.currentBuild!, result)
+                if (
+                  withSecret.editSecret &&
+                  withSecret.editSecret !== this.currentBuild!.editSecret
+                ) {
+                  this.persistBuildEditSecret(withSecret.id, withSecret.editSecret)
+                }
+              } else {
+                serverOk = false
               }
             }
           } catch {
+            serverOk = false
             // Build saved locally but API /api/builds is unreachable
           }
+        } else {
+          localOk = saveToLocalLibrary || localOk
+        }
+
+        if (saveToLocalLibrary && publishToLibrary && !localOk) {
+          localOk = true
         }
 
         // 3) Vérifier si le build doit passer en privé automatiquement (votes)
         await this.checkAndUpdateVisibility()
 
-        this.status = 'success'
-        this.error = null
-        return true
+        const needsServer =
+          publishToLibrary && (this.currentBuild.visibility ?? 'public') === 'public'
+        const ok = localOk && (!needsServer || serverOk)
+
+        if (localOk && needsServer && !serverOk) {
+          this.error =
+            'Build saved locally but could not be published to the server. Try again later.'
+          this.status = 'error'
+        } else {
+          this.status = 'success'
+          this.error = null
+        }
+
+        return { ok, localOk, serverOk, serverAttempted }
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to save build'
         this.status = 'error'
-        return false
+        return { ok: false, localOk: false, serverOk: false, serverAttempted }
       }
     },
 
@@ -2014,8 +2115,11 @@ export const useBuildStore = defineStore('build', {
         }
 
         try {
+          const savedBuilds = this.getSavedBuilds()
+          const existing = savedBuilds.find(b => b.id === targetId)
           await fetch(apiUrl(`/api/builds/${encodeURIComponent(targetId)}`), {
             method: 'DELETE',
+            headers: buildEditHeaders(existing?.editSecret),
           })
         } catch {
           // Ignore errors
@@ -2130,7 +2234,12 @@ export const useBuildStore = defineStore('build', {
       }
       if (!removeFromServer) return
       try {
-        await fetch(apiUrl(`/api/builds/${encodeURIComponent(buildId)}`), { method: 'DELETE' })
+        const savedBuilds = this.getSavedBuilds()
+        const existing = savedBuilds.find(b => b.id === buildId)
+        await fetch(apiUrl(`/api/builds/${encodeURIComponent(buildId)}`), {
+          method: 'DELETE',
+          headers: buildEditHeaders(existing?.editSecret),
+        })
       } catch {
         // best effort
       }
@@ -2151,8 +2260,10 @@ export const useBuildStore = defineStore('build', {
 
         // Try to delete from server (don't fail if it doesn't exist on server)
         try {
+          const existing = savedBuilds.find(b => b.id === buildId)
           const response = await fetch(apiUrl(`/api/builds/${encodeURIComponent(buildId)}`), {
             method: 'DELETE',
+            headers: buildEditHeaders(existing?.editSecret),
           })
 
           if (!response.ok && response.status !== 404) {
@@ -2203,16 +2314,24 @@ export const useBuildStore = defineStore('build', {
           if (visibility === 'private') {
             const delResponse = await fetch(apiUrl(`/api/builds/${encodeURIComponent(buildId)}`), {
               method: 'DELETE',
+              headers: buildEditHeaders(existing.editSecret),
             })
             if (!delResponse.ok && delResponse.status !== 404) {
               // keep local update even if server delete fails
             }
           } else {
-            await fetch(apiUrl('/api/builds'), {
+            const response = await fetch(apiUrl('/api/builds'), {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(serializeBuild(updated)),
+              headers: buildEditHeaders(updated.editSecret),
+              body: JSON.stringify(serializeBuildForApi(updated)),
             })
+            if (response.ok) {
+              const result = (await response.json()) as { editSecret?: string }
+              const withSecret = applyEditSecretFromResponse(updated, result)
+              if (withSecret.editSecret && withSecret.editSecret !== updated.editSecret) {
+                this.persistBuildEditSecret(buildId, withSecret.editSecret)
+              }
+            }
           }
         } catch {
           // keep local update even if API is unreachable
@@ -2244,13 +2363,16 @@ export const useBuildStore = defineStore('build', {
           try {
             const saveResponse = await fetch(apiUrl('/api/builds'), {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify(serializeBuild(build)),
+              headers: buildEditHeaders(build.editSecret),
+              body: JSON.stringify(serializeBuildForApi(build)),
             })
 
             if (saveResponse.ok) {
+              const result = (await saveResponse.json()) as { editSecret?: string }
+              const withSecret = applyEditSecretFromResponse(build, result)
+              if (withSecret.editSecret && withSecret.editSecret !== build.editSecret) {
+                this.persistBuildEditSecret(build.id, withSecret.editSecret)
+              }
               return true
             }
             return false

@@ -199,8 +199,20 @@ export const useVoteStore = defineStore('vote', {
     async castVote(buildId: string, direction: 'up' | 'down'): Promise<VoteActionResult> {
       if (import.meta.server) return { ok: false }
 
+      const snapshot = {
+        upvotes: this.upvotes[buildId] ?? 0,
+        downvotes: this.downvotes[buildId] ?? 0,
+        userVote: this.userVotes[buildId] ?? null,
+      }
+
       if (direction === 'up') this.applyUpvoteLocal(buildId)
       else this.applyDownvoteLocal(buildId)
+
+      const revert = () => {
+        this.upvotes[buildId] = snapshot.upvotes
+        this.downvotes[buildId] = snapshot.downvotes
+        this.userVotes[buildId] = snapshot.userVote
+      }
 
       try {
         const response = await fetch(apiUrl(`/api/builds/${encodeURIComponent(buildId)}/vote`), {
@@ -211,7 +223,10 @@ export const useVoteStore = defineStore('vote', {
           },
           body: JSON.stringify({ direction }),
         })
-        if (!response.ok) return { ok: false }
+        if (!response.ok) {
+          revert()
+          return { ok: false }
+        }
         const data = (await response.json()) as {
           stats?: ServerVoteStats
           autoPrivatized?: boolean
@@ -219,6 +234,7 @@ export const useVoteStore = defineStore('vote', {
         this.applyServerStats(buildId, data.stats)
         return { ok: true, autoPrivatized: data.autoPrivatized === true }
       } catch {
+        revert()
         return { ok: false }
       }
     },

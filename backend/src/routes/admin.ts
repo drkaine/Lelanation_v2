@@ -39,6 +39,7 @@ import {
 } from '../services/PollerMetricsAdminService.js'
 import { resolveRiotApiKey } from '../services/RiotGateway.js'
 import { riotGateway } from '../services/RiotGateway.js'
+import { isDevelopmentEnv } from '../utils/env.js'
 export type { AdminDataCollectStats } from '../services/AdminDataCollectService.js'
 
 type YouTubeChannelsConfig = { channels: Array<{ channelId: string; channelName: string } | string> }
@@ -90,7 +91,10 @@ function parseBasicAuth(authHeader: string): { username: string; password: strin
 router.use((req, res, next) => {
   const user = process.env.ADMIN_USER_NAME ?? process.env.ADMIN_USERNAME
   const pass = process.env.ADMIN_PASSWORD
-  if (!user || !pass) return next() // dev convenience
+  if (!user || !pass) {
+    if (isDevelopmentEnv()) return next()
+    return res.status(503).json({ error: 'Admin API disabled: credentials not configured' })
+  }
 
   const header = req.header('authorization')
   if (!header) {
@@ -232,7 +236,11 @@ router.post('/sync-data', (_req, res) => {
 
 /** GET /api/admin/data-stats — collecte : DB stats (`tracked_matches`, `players`) ou snapshot `statistiques` (sans lecture du log poller). */
 router.get('/data-stats', async (_req, res) => {
-  return res.json(await getAdminDataCollectStats())
+  const result = await getAdminDataCollectStats()
+  if (!result.ok) {
+    return res.status(503).json({ error: result.error })
+  }
+  return res.json(result.stats)
 })
 
 /** GET /api/admin/collect-timeseries — séries temporelles DB (joueurs, matchs ingérés). */
@@ -584,9 +592,16 @@ router.delete('/unified-logs', async (req, res) => {
 /** POST body: { type?, script?, message, json? } — frontend / client events into unified log. */
 router.post('/client-log', async (req, res) => {
   try {
+    const bodySize = JSON.stringify(req.body ?? {}).length
+    if (bodySize > 16_384) {
+      return res.status(413).json({ error: 'Payload too large' })
+    }
     const message = typeof req.body?.message === 'string' ? req.body.message : ''
     if (!message.trim()) {
       return res.status(400).json({ error: 'message is required' })
+    }
+    if (message.length > 2_000) {
+      return res.status(400).json({ error: 'message too long' })
     }
     const type = typeof req.body?.type === 'string' && req.body.type.trim() ? req.body.type.trim() : 'info'
     const script = typeof req.body?.script === 'string' && req.body.script.trim() ? req.body.script.trim() : 'frontend'

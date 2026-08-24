@@ -73,6 +73,7 @@ export function serializeBuild(build: Build): StoredBuild {
     notesMode: build.notesMode,
     patchStale: build.patchStale ?? null,
     kaynForm: build.kaynForm,
+    editSecret: build.editSecret,
   }
 }
 
@@ -214,6 +215,7 @@ export function hydrateBuild(stored: StoredBuild, catalogs: HydrationCatalogs): 
     notesMode: stored.notesMode,
     patchStale: stored.patchStale ?? null,
     kaynForm: stored.kaynForm,
+    editSecret: stored.editSecret,
   }
 }
 

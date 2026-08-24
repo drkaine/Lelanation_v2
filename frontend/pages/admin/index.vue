@@ -139,6 +139,7 @@
             </template>
           </p>
           <p v-if="dataStatsLoading" class="text-text/70">Chargement…</p>
+          <p v-else-if="dataStatsError" class="mb-3 text-sm text-error">{{ dataStatsError }}</p>
           <template v-else>
             <p class="mb-2 text-xs font-medium uppercase tracking-wide text-text/60">Base (DB)</p>
             <div class="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
@@ -1732,6 +1733,7 @@ type AdminDataCollectStatsClient = {
 }
 const dataStats = ref<AdminDataCollectStatsClient | null>(null)
 const dataStatsLoading = ref(false)
+const dataStatsError = ref<string | null>(null)
 
 const balanceRulesLoading = ref(false)
 const balanceRulesSaving = ref(false)
@@ -1854,6 +1856,7 @@ function closeRiotPollerLogModals() {
 
 async function loadDataStats() {
   dataStatsLoading.value = true
+  dataStatsError.value = null
   try {
     const res = await fetchWithAuth(apiUrl('/api/admin/data-stats'))
     if (res.status === 401) {
@@ -1861,9 +1864,17 @@ async function loadDataStats() {
       await navigateTo(localePath('/admin/login'))
       return
     }
-    dataStats.value = await res.json()
+    const body = await res.json()
+    if (!res.ok) {
+      dataStats.value = null
+      dataStatsError.value =
+        typeof body?.error === 'string' ? body.error : 'Failed to load data stats'
+      return
+    }
+    dataStats.value = body
   } catch {
     dataStats.value = null
+    dataStatsError.value = 'Network error while loading data stats'
   } finally {
     dataStatsLoading.value = false
   }

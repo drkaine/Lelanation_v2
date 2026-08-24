@@ -109,9 +109,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useYouTubeStore } from '~/stores/YouTubeStore'
+import { apiUrl } from '~/utils/apiUrl'
 
 const youtube = useYouTubeStore()
+const { fetchWithAuth } = useAdminAuth()
 const newCreator = ref('')
+const syncBusy = ref(false)
 
 const reload = async () => {
   await youtube.loadConfig()
@@ -129,7 +132,25 @@ const remove = async (channelId: string) => {
 }
 
 const triggerSync = async () => {
-  await youtube.triggerSync()
+  syncBusy.value = true
+  youtube.error = null
+  youtube.lastSyncTriggerResult = null
+  try {
+    const res = await fetchWithAuth(apiUrl('/api/admin/youtube/trigger'), { method: 'POST' })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data?.error || 'Failed to trigger YouTube sync')
+    youtube.lastSyncTriggerResult = {
+      syncedChannels: Number(data.syncedChannels) || 0,
+      totalVideos: Number(data.totalVideos) || 0,
+    }
+    youtube.clearChannelCache()
+    await youtube.loadStatus()
+    await youtube.loadAllChannelsData({ force: true })
+  } catch (e) {
+    youtube.error = e instanceof Error ? e.message : 'Failed to trigger YouTube sync'
+  } finally {
+    syncBusy.value = false
+  }
 }
 
 const formatDateTime = (iso: string) => {

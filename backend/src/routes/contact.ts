@@ -2,6 +2,9 @@ import { Router, Request, Response } from 'express'
 import { join } from 'path'
 import { FileManager } from '../utils/fileManager.js'
 import { DiscordService } from '../services/DiscordService.js'
+import { createRateLimit } from '../utils/httpRateLimit.js'
+
+const contactRateLimit = createRateLimit({ windowMs: 60_000, max: 10, keyPrefix: 'contact' })
 
 const router = Router()
 const contactFilePath = join(process.cwd(), 'data', 'contact.json')
@@ -28,7 +31,7 @@ function emptyContactData(): ContactData {
   }
 }
 
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', contactRateLimit, async (req: Request, res: Response) => {
   const body =
     req.body != null && typeof req.body === 'object' && !Array.isArray(req.body)
       ? req.body

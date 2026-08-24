@@ -38,31 +38,14 @@ export type AdminDataCollectStats = {
   trackedMatchesDeferredRankPending: number
 }
 
-function emptyStats(): AdminDataCollectStats {
-  return {
-    adminDataSource: 'statistiques_db',
-    totalPlayers: 0,
-    playersWrongKeyVersion: 0,
-    lastNewPlayerAt: null,
-    lastPlayerLastSeenAt: null,
-    lastPlayerUpdatedAt: null,
-    totalTrackedMatches: 0,
-    trackedMatchesCreatedLast1h: 0,
-    trackedMatchesPendingNow: 0,
-    trackedMatchesPendingOver1h: 0,
-    trackedOldestPendingCreatedAt: null,
-    trackedAggregateStatus: {},
-    trackedLastAggregatedAt: null,
-    playersCreatedLast1h: 0,
-    playersLastSeenLast1h: 0,
-    playersUpdatedLast1h: 0,
-    matchIngestRaw: null,
-    trackedMatchesDeferredRankPending: 0,
-  }
-}
+export type AdminDataCollectResult =
+  | { ok: true; stats: AdminDataCollectStats }
+  | { ok: false; error: string }
 
-export async function getAdminDataCollectStats(): Promise<AdminDataCollectStats> {
-  if (!isStatistiquesDatabaseConfigured()) return emptyStats()
+export async function getAdminDataCollectStats(): Promise<AdminDataCollectResult> {
+  if (!isStatistiquesDatabaseConfigured()) {
+    return { ok: false, error: 'Statistiques database is not configured' }
+  }
 
   const since1h = new Date(Date.now() - 60 * 60 * 1000)
   const pool = getStatistiquesPool()
@@ -136,32 +119,33 @@ export async function getAdminDataCollectStats(): Promise<AdminDataCollectStats>
     ])
     const lp = lastPlayer.rows[0]
     return {
-      adminDataSource: 'statistiques_db',
-      totalPlayers: parseInt(totalPlayers.rows[0]?.c ?? '0', 10),
-      playersWrongKeyVersion: parseInt(playersWrongKeyVersion.rows[0]?.c ?? '0', 10),
-      lastNewPlayerAt: lp?.created_at?.toISOString() ?? null,
-      lastPlayerLastSeenAt: maxLastSeen.rows[0]?.d?.toISOString() ?? null,
-      lastPlayerUpdatedAt: maxUpdated.rows[0]?.d?.toISOString() ?? null,
-      totalTrackedMatches: parseInt(matchTotal.rows[0]?.c ?? '0', 10),
-      trackedMatchesCreatedLast1h: parseInt(match1h.rows[0]?.c ?? '0', 10),
-      trackedMatchesPendingNow: parseInt(matchPendingNow.rows[0]?.c ?? '0', 10),
-      trackedMatchesPendingOver1h: parseInt(matchPendingOver1h.rows[0]?.c ?? '0', 10),
-      trackedOldestPendingCreatedAt: matchOldestPending.rows[0]?.d?.toISOString() ?? null,
-      trackedAggregateStatus: Object.fromEntries(
-        matchAggStatus.rows.map((r) => [r.status, parseInt(r.c ?? '0', 10)]),
-      ),
-      trackedLastAggregatedAt: matchLastAggregated.rows[0]?.d?.toISOString() ?? null,
-      playersCreatedLast1h: parseInt(playersCreated1h.rows[0]?.c ?? '0', 10),
-      playersLastSeenLast1h: parseInt(playersLastSeen1h.rows[0]?.c ?? '0', 10),
-      playersUpdatedLast1h: parseInt(playersUpdated1h.rows[0]?.c ?? '0', 10),
-      matchIngestRaw: null,
-      trackedMatchesDeferredRankPending: 0,
+      ok: true,
+      stats: {
+        adminDataSource: 'statistiques_db',
+        totalPlayers: parseInt(totalPlayers.rows[0]?.c ?? '0', 10),
+        playersWrongKeyVersion: parseInt(playersWrongKeyVersion.rows[0]?.c ?? '0', 10),
+        lastNewPlayerAt: lp?.created_at?.toISOString() ?? null,
+        lastPlayerLastSeenAt: maxLastSeen.rows[0]?.d?.toISOString() ?? null,
+        lastPlayerUpdatedAt: maxUpdated.rows[0]?.d?.toISOString() ?? null,
+        totalTrackedMatches: parseInt(matchTotal.rows[0]?.c ?? '0', 10),
+        trackedMatchesCreatedLast1h: parseInt(match1h.rows[0]?.c ?? '0', 10),
+        trackedMatchesPendingNow: parseInt(matchPendingNow.rows[0]?.c ?? '0', 10),
+        trackedMatchesPendingOver1h: parseInt(matchPendingOver1h.rows[0]?.c ?? '0', 10),
+        trackedOldestPendingCreatedAt: matchOldestPending.rows[0]?.d?.toISOString() ?? null,
+        trackedAggregateStatus: Object.fromEntries(
+          matchAggStatus.rows.map((r) => [r.status, parseInt(r.c ?? '0', 10)]),
+        ),
+        trackedLastAggregatedAt: matchLastAggregated.rows[0]?.d?.toISOString() ?? null,
+        playersCreatedLast1h: parseInt(playersCreated1h.rows[0]?.c ?? '0', 10),
+        playersLastSeenLast1h: parseInt(playersLastSeen1h.rows[0]?.c ?? '0', 10),
+        playersUpdatedLast1h: parseInt(playersUpdated1h.rows[0]?.c ?? '0', 10),
+        matchIngestRaw: null,
+        trackedMatchesDeferredRankPending: 0,
+      },
     }
   } catch (error) {
-    console.error(
-      '[AdminDataCollectService] query failed:',
-      error instanceof Error ? error.message : String(error),
-    )
-    return emptyStats()
+    const message = error instanceof Error ? error.message : String(error)
+    console.error('[AdminDataCollectService] query failed:', message)
+    return { ok: false, error: message }
   }
 }

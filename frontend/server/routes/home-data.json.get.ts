@@ -42,9 +42,6 @@ function sortVideosByDate(videos: YouTubeVideo[]): YouTubeVideo[] {
 }
 
 export default defineEventHandler(async event => {
-  // Aligne le cache HTTP sur le TTL mémoire (60s) : le navigateur / CDN peut
-  // réutiliser la réponse sans repayer l'agrégat backend, et SWR sert du stale
-  // pendant le rafraîchissement en arrière-plan.
   setHeader(event, 'Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=300')
 
   const now = Date.now()
@@ -55,20 +52,30 @@ export default defineEventHandler(async event => {
   const frontendRoot = resolveFrontendRoot()
   const fallbackPatch = readCurrentGameVersion(frontendRoot)
   const apiBase = resolveBackendBase()
+  const degradedReasons: string[] = []
 
-  const [recentPayload, tierPayload] = await Promise.all([
-    $fetch<{ totalBuilds?: number; builds?: unknown[] }>(
-      `${apiBase}/api/builds/recent?limit=6`
-    ).catch(() => ({ totalBuilds: 0, builds: [] as unknown[] })),
-    $fetch<{ patch?: string; rows?: TierRow[] }>(
-      `${apiBase}/api/stats/tier-list?rankTier=all`
-    ).catch(() => ({ rows: [] as TierRow[] })),
-  ])
+  const recentPayload = await $fetch<{ totalBuilds?: number; builds?: unknown[] }>(
+    `${apiBase}/api/builds/recent?limit=6`
+  ).catch(() => {
+    degradedReasons.push('recentBuilds')
+    return { totalBuilds: 0, builds: [] as unknown[] }
+  })
+
+  const tierPayload = await $fetch<{ patch?: string; rows?: TierRow[] }>(
+    `${apiBase}/api/stats/tier-list?rankTier=all`
+  ).catch(() => {
+    degradedReasons.push('tierList')
+    return { rows: [] as TierRow[] }
+  })
 
   const patch = tierPayload.patch ?? fallbackPatch
   const overviewPayload = await $fetch<{ totalMatches?: number }>(
     `${apiBase}/api/stats/overview?version=${encodeURIComponent(patch)}`
-  ).catch(() => ({ totalMatches: 0 }))
+  ).catch(() => {
+    degradedReasons.push('overview')
+    return { totalMatches: 0 }
+  })
+
   const tierRows = tierPayload.rows ?? []
   const championIndex = listChampionsFromIndex(frontendRoot, fallbackPatch)
   const championByKey = new Map(
@@ -107,8 +114,13 @@ export default defineEventHandler(async event => {
     patchMatchCount: overviewPayload.totalMatches ?? 0,
     videoCount: sortedVideos.length,
     latestVideos: sortedVideos.slice(0, 6),
+    degraded: degradedReasons.length > 0,
+    degradedReasons,
   }
 
-  homeDataCache = { expiresAt: now + HOME_DATA_CACHE_TTL_MS, payload }
+  if (degradedReasons.length === 0) {
+    homeDataCache = { expiresAt: now + HOME_DATA_CACHE_TTL_MS, payload }
+  }
+
   return payload
 })

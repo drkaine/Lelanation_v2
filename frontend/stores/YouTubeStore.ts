@@ -376,23 +376,9 @@ export const useYouTubeStore = defineStore('youtube', {
       }
     },
 
-    async triggerSync() {
-      this.error = null
+    triggerSync() {
+      this.error = 'YouTube sync must be triggered from the admin API'
       this.lastSyncTriggerResult = null
-      try {
-        const res = await fetch(apiUrl('/api/youtube/trigger'), { method: 'POST' })
-        const data = await res.json()
-        if (!res.ok) throw new Error(data?.error || 'Failed to trigger YouTube sync')
-        this.lastSyncTriggerResult = {
-          syncedChannels: Number(data.syncedChannels) || 0,
-          totalVideos: Number(data.totalVideos) || 0,
-        }
-        this.clearChannelCache()
-        await this.loadStatus()
-        await this.loadAllChannelsData({ force: true })
-      } catch (e) {
-        this.error = e instanceof Error ? e.message : 'Failed to trigger YouTube sync'
-      }
     },
   },
 })

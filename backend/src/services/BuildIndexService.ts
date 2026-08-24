@@ -10,6 +10,7 @@
  */
 import { join } from 'path'
 import { FileManager } from '../utils/fileManager.js'
+import { stripEditSecret } from '../utils/buildEditAuth.js'
 
 export const buildsDir = process.env.BUILDS_DIR?.trim() || join(process.cwd(), 'data', 'builds')
 
@@ -90,7 +91,7 @@ export async function getBuildIndex(): Promise<BuildIndex> {
         const id = String(build.id ?? file.replace(/\.json$/i, ''))
         return {
           id,
-          build,
+          build: stripEditSecret(build),
           createdAt: build.createdAt ?? '',
           visibility: build.visibility,
         }

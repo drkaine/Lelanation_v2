@@ -1,11 +1,8 @@
 import { Router } from 'express'
-import { DataDragonService } from '../services/DataDragonService.js'
 import { CommunityDragonService } from '../services/CommunityDragonService.js'
 import { VersionService } from '../services/VersionService.js'
-import { retryWithBackoff } from '../utils/retry.js'
 
 const router = Router()
-const dataDragonService = new DataDragonService()
 const communityDragonService = new CommunityDragonService()
 const versionService = new VersionService()
 
@@ -35,67 +32,10 @@ router.get('/status', async (_req, res) => {
 })
 
 /**
- * Trigger manual sync
+ * Manual sync trigger — disabled on public API (use admin or cron).
  */
-router.post('/trigger', async (_req, res) => {
-
-  try {
-    // Check for new version first
-    const versionCheckResult = await versionService.checkForNewVersion()
-    if (versionCheckResult.isErr()) {
-      const error = versionCheckResult.unwrapErr()
-      console.error('[Manual Sync] Failed to check version:', error)
-      return res.status(500).json({
-        error: 'Failed to check version',
-        details: error.message
-      })
-    }
-
-    const versionInfo = versionCheckResult.unwrap()
-    const versionToSync = versionInfo.latest
-
-
-    // Sync with retry logic
-    const syncResult = await retryWithBackoff(
-      () => dataDragonService.syncGameData(versionToSync),
-      {
-        maxRetries: 10,
-        initialDelay: 1000,
-        maxDelay: 30000,
-        multiplier: 2
-      }
-    )
-
-    if (syncResult.isErr()) {
-      const error = syncResult.unwrapErr()
-      console.error('[Manual Sync] Data Dragon sync failed after retries:', error)
-      return res.status(500).json({
-        error: 'Sync failed after retries',
-        details: error.message
-      })
-    }
-
-    const syncData = syncResult.unwrap()
-
-    // Update version info
-    const updateResult = await versionService.updateVersion(syncData.version)
-    if (updateResult.isErr()) {
-      console.error('[Manual Sync] Failed to update version info:', updateResult.unwrapErr())
-      // Don't fail the sync if version update fails
-    }
-
-    return res.json({
-      success: true,
-      version: syncData.version,
-      syncedAt: syncData.syncedAt.toISOString()
-    })
-  } catch (error) {
-    console.error('[Manual Sync] Unexpected error:', error)
-    return res.status(500).json({
-      error: 'Unexpected error during sync',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    })
-  }
+router.post('/trigger', (_req, res) => {
+  return res.status(404).json({ error: 'Not found' })
 })
 
 /**

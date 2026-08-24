@@ -1,7 +1,14 @@
 import { Router } from 'express'
-import { join } from 'path'
 import { randomUUID } from 'crypto'
+import { promises as fs } from 'fs'
 import { FileManager } from '../utils/fileManager.js'
+import {
+  BUILD_EDIT_SECRET_HEADER,
+  isValidBuildUuid,
+  resolveBuildFilePath,
+  stripEditSecret,
+  verifyEditSecret,
+} from '../utils/buildEditAuth.js'
 import {
   trackBuildView,
   trackBuildShare,
@@ -15,6 +22,14 @@ import {
   type BuildVoteDirection,
 } from '../services/BuildVoteService.js'
 import { buildsDir, getBuildIndex, invalidateBuildIndex, getBuildActivityTime } from '../services/BuildIndexService.js'
+import { createRateLimit } from '../utils/httpRateLimit.js'
+
+const buildWriteRateLimit = createRateLimit({ windowMs: 60_000, max: 30, keyPrefix: 'builds-write' })
+const buildEngagementRateLimit = createRateLimit({
+  windowMs: 60_000,
+  max: 120,
+  keyPrefix: 'builds-engage',
+})
 
 const VOTER_ID_HEADER = 'x-voter-id'
 
@@ -39,6 +54,20 @@ const router = Router()
 // `buildsDir` est centralisé dans BuildIndexService (source unique + testable).
 const VALID_SHARE_TYPES: BuildShareType[] = ['link', 'image', 'image_with_meta']
 
+async function loadExistingBuild(
+  buildId: string
+): Promise<{ filePath: string; data: Record<string, unknown> } | null> {
+  for (const isPrivate of [false, true]) {
+    const filePath = resolveBuildFilePath(buildId, isPrivate)
+    if (!filePath) continue
+    const readResult = await FileManager.readJson<Record<string, unknown>>(filePath)
+    if (readResult.isOk()) {
+      return { filePath, data: readResult.unwrap() }
+    }
+  }
+  return null
+}
+
 /**
  * Save a build
  * POST /api/builds
@@ -47,12 +76,13 @@ const VALID_SHARE_TYPES: BuildShareType[] = ['link', 'image', 'image_with_meta']
  * - Les builds publics utilisent un fichier: {uuid}.json
  * - Les builds privés utilisent un fichier: {uuid}_priv.json
  */
-router.post('/', async (req, res) => {
+router.post('/', buildWriteRateLimit, async (req, res) => {
   try {
     const build = req.body as BuildPayload & {
       id?: string
       name?: string
       visibility?: 'public' | 'private'
+      editSecret?: unknown
     }
     
     if (!build || typeof build !== 'object') {
@@ -60,12 +90,23 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Invalid build payload' })
     }
 
-    // Use existing ID or generate new one
-    const buildId = build.id || randomUUID()
-    const isPrivate = build.visibility === 'private'
-    const fileName = `${buildId}${isPrivate ? '_priv' : ''}.json`
-    const filePath = join(buildsDir, fileName)
+    const requestedId = typeof build.id === 'string' ? build.id.trim() : ''
+    const buildId = requestedId || randomUUID()
+    if (!isValidBuildUuid(buildId)) {
+      return res.status(400).json({ error: 'Invalid build id (expected UUID)' })
+    }
 
+    const isPrivate = build.visibility === 'private'
+    const filePath = resolveBuildFilePath(buildId, isPrivate)
+    if (!filePath) {
+      return res.status(400).json({ error: 'Invalid build path' })
+    }
+
+    const existing = await loadExistingBuild(buildId)
+    const auth = verifyEditSecret(existing?.data ?? null, req.header(BUILD_EDIT_SECRET_HEADER))
+    if (!auth.ok) {
+      return res.status(auth.status).json({ error: auth.error })
+    }
 
     // Ensure builds directory exists
     const dirResult = await FileManager.ensureDir(buildsDir)
@@ -79,16 +120,20 @@ router.post('/', async (req, res) => {
     }
 
     // Saving a build clears patch stale flag (author reviewed / updated the build).
-    const { patchStale: _patchStale, ...buildWithoutPatchStale } = build as BuildPayload & {
+    const { patchStale: _patchStale, editSecret: _editSecret, ...buildWithoutSensitive } = build as BuildPayload & {
       patchStale?: unknown
+      editSecret?: unknown
     }
+
+    const fileName = `${buildId}${isPrivate ? '_priv' : ''}.json`
 
     // Add metadata (ensure id and basic info are present)
     const buildWithMetadata = {
-      ...buildWithoutPatchStale,
+      ...buildWithoutSensitive,
       id: buildId,
       fileName,
       savedAt: new Date().toISOString(),
+      editSecret: auth.editSecret,
     }
 
     const writeResult = await FileManager.writeJson(filePath, buildWithMetadata)
@@ -102,11 +147,16 @@ router.post('/', async (req, res) => {
       })
     }
 
+    if (existing && existing.filePath !== filePath) {
+      await fs.unlink(existing.filePath).catch(() => undefined)
+    }
+
     invalidateBuildIndex()
 
     return res.json({ 
       id: buildId,
       fileName,
+      editSecret: auth.editSecret,
       message: 'Build saved successfully'
     })
   } catch (error) {
@@ -199,7 +249,7 @@ router.get('/votes', async (req, res) => {
  * POST /api/builds/votes/sync
  * Body: { votes: { [buildId]: "up" | "down" } }
  */
-router.post('/votes/sync', async (req, res) => {
+router.post('/votes/sync', buildEngagementRateLimit, async (req, res) => {
   const voterId = readVoterId(req)
   if (!voterId) return res.status(400).json({ error: 'Missing X-Voter-Id header' })
 
@@ -235,22 +285,18 @@ router.post('/votes/sync', async (req, res) => {
  * GET /api/builds/:id
  */
 router.get('/:id', async (req, res) => {
-  const buildId = req.params.id
+  const buildId = req.params.id.trim()
+  if (!isValidBuildUuid(buildId)) {
+    return res.status(400).json({ error: 'Invalid build id (expected UUID)' })
+  }
 
-  // Try to find the build file (public ou privé) dans data/builds
   try {
-    const { promises: fs } = await import('fs')
-    const files = await fs.readdir(buildsDir)
-    const buildFile =
-      files.find(file => file === `${buildId}.json`) ||
-      files.find(file => file === `${buildId}_priv.json`)
-    
-    if (!buildFile) {
+    const existing = await loadExistingBuild(buildId)
+    if (!existing) {
       return res.status(404).json({ error: 'Build not found' })
     }
 
-    const filePath = join(buildsDir, buildFile)
-    const readResult = await FileManager.readJson(filePath)
+    const readResult = await FileManager.readJson(existing.filePath)
     
     if (readResult.isErr()) {
       if (readResult.unwrapErr().code === 'FILE_NOT_FOUND') {
@@ -259,7 +305,7 @@ router.get('/:id', async (req, res) => {
       return res.status(500).json({ error: readResult.unwrapErr().message })
     }
 
-    return res.json(readResult.unwrap())
+    return res.json(stripEditSecret(readResult.unwrap() as Record<string, unknown>))
   } catch (error) {
     return res.status(500).json({ error: 'Failed to read builds directory' })
   }
@@ -271,7 +317,7 @@ router.get('/:id', async (req, res) => {
  * Body: { direction: 'up' | 'down' }
  * Header: X-Voter-Id (anonymous voter id from browser localStorage)
  */
-router.post('/:id/vote', async (req, res) => {
+router.post('/:id/vote', buildEngagementRateLimit, async (req, res) => {
   const buildId = typeof req.params.id === 'string' ? req.params.id.trim() : ''
   const directionRaw = typeof req.body?.direction === 'string' ? req.body.direction.trim() : ''
   const voterId = readVoterId(req)
@@ -298,7 +344,7 @@ router.post('/:id/vote', async (req, res) => {
  * Track one view on build details page.
  * POST /api/builds/:id/track-view
  */
-router.post('/:id/track-view', async (req, res) => {
+router.post('/:id/track-view', buildEngagementRateLimit, async (req, res) => {
   const buildId = typeof req.params.id === 'string' ? req.params.id.trim() : ''
   if (!buildId) return res.status(400).json({ error: 'Invalid build id' })
   try {
@@ -317,7 +363,7 @@ router.post('/:id/track-view', async (req, res) => {
  * POST /api/builds/:id/track-share
  * Body: { shareType: 'link' | 'image' | 'image_with_meta' }
  */
-router.post('/:id/track-share', async (req, res) => {
+router.post('/:id/track-share', buildEngagementRateLimit, async (req, res) => {
   const buildId = typeof req.params.id === 'string' ? req.params.id.trim() : ''
   const shareTypeRaw = typeof req.body?.shareType === 'string' ? req.body.shareType.trim() : ''
   if (!buildId) return res.status(400).json({ error: 'Invalid build id' })
@@ -353,27 +399,25 @@ router.get('/', async (_req, res) => {
  * Delete a build by ID
  * DELETE /api/builds/:id
  */
-router.delete('/:id', async (req, res) => {
-  const buildId = req.params.id
+router.delete('/:id', buildWriteRateLimit, async (req, res) => {
+  const buildId = typeof req.params.id === 'string' ? req.params.id.trim() : ''
+  if (!isValidBuildUuid(buildId)) {
+    return res.status(400).json({ error: 'Invalid build id (expected UUID)' })
+  }
 
   try {
-    const { promises: fs } = await import('fs')
-    const files = await fs.readdir(buildsDir)
-    
-    // Try to find the build file (public ou privé)
-    const buildFile =
-      files.find(file => file === `${buildId}.json`) ||
-      files.find(file => file === `${buildId}_priv.json`)
-    
-    if (!buildFile) {
+    const existing = await loadExistingBuild(buildId)
+    if (!existing) {
       return res.status(404).json({ error: 'Build not found' })
     }
 
-    const filePath = join(buildsDir, buildFile)
-    
-    // Delete the file
+    const auth = verifyEditSecret(existing.data, req.header(BUILD_EDIT_SECRET_HEADER))
+    if (!auth.ok) {
+      return res.status(auth.status).json({ error: auth.error })
+    }
+
     try {
-      await fs.unlink(filePath)
+      await fs.unlink(existing.filePath)
       invalidateBuildIndex()
       return res.json({ 
         id: buildId,

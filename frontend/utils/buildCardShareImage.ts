@@ -1,5 +1,6 @@
 import type { Build } from '~/types/build'
 import { descriptionTextForMetaShare, resolveDisplayedBuild } from '~/utils/buildDisplayVariant'
+import { buildEditHeaders } from '~/utils/buildApi'
 
 /** URL relative (same-origin) vers la capture PNG serveur (Playwright). */
 export function buildCardShareImageUrl(
@@ -47,6 +48,7 @@ export async function fetchBuildCardSharePngEphemeral(
 ): Promise<Blob | null> {
   const tempId = crypto.randomUUID()
   const body = { ...build, id: tempId, visibility: 'private' as const }
+  let editSecret: string | undefined
   try {
     const postRes = await fetch('/api/builds', {
       method: 'POST',
@@ -54,10 +56,15 @@ export async function fetchBuildCardSharePngEphemeral(
       body: JSON.stringify(body),
     })
     if (!postRes.ok) return null
+    const postData = (await postRes.json()) as { editSecret?: string }
+    editSecret = typeof postData.editSecret === 'string' ? postData.editSecret : undefined
     const urlPath = buildCardShareImageUrl(tempId, localeCode, options)
     return await fetchBuildCardSharePng(urlPath)
   } finally {
-    await fetch(`/api/builds/${encodeURIComponent(tempId)}`, { method: 'DELETE' }).catch(() => {})
+    await fetch(`/api/builds/${encodeURIComponent(tempId)}`, {
+      method: 'DELETE',
+      headers: buildEditHeaders(editSecret),
+    }).catch(() => {})
   }
 }
 

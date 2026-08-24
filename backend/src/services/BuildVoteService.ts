@@ -31,6 +31,16 @@ const BUILD_VOTES_FILE = join(process.cwd(), 'data', 'builds', 'votes.json')
 
 let writeChain: Promise<void> = Promise.resolve()
 
+/** Serialized vote writes — recover after I/O errors instead of blocking forever. */
+async function runVoteWrite<T>(fn: () => Promise<T>): Promise<T> {
+  const run = writeChain.catch(() => undefined).then(fn)
+  writeChain = run.then(
+    () => undefined,
+    () => undefined
+  )
+  return run
+}
+
 function createEmptyEntry(buildId: string): BuildVoteEntry {
   return {
     buildId,
@@ -164,10 +174,7 @@ export async function castBuildVote(
   if (!id) throw new Error('buildId is required')
   if (!voter || voter.length > 128) throw new Error('voterId is required')
 
-  let stats: BuildVoteStats = toStats(createEmptyEntry(id), voter)
-  let autoPrivatized = false
-
-  writeChain = writeChain.then(async () => {
+  return runVoteWrite(async () => {
     const store = await readStore()
     const entry = store.builds[id] ?? createEmptyEntry(id)
     if (direction === 'up') applyToggleUp(entry, voter)
@@ -175,15 +182,14 @@ export async function castBuildVote(
     entry.updatedAt = new Date().toISOString()
     store.builds[id] = entry
     await saveStore(store)
-    stats = toStats(entry, voter)
 
+    let autoPrivatized = false
     if (shouldAutoPrivatizeFromCommunityVotes(entry.upvotes, entry.downvotes)) {
       autoPrivatized = await deletePublicBuildIfExists(id)
     }
-  })
 
-  await writeChain
-  return { stats, autoPrivatized }
+    return { stats: toStats(entry, voter), autoPrivatized }
+  })
 }
 
 /** Idempotent: set a voter's vote on each build (legacy localStorage migration). */
@@ -202,7 +208,7 @@ export async function syncBuildVotesForVoter(
   const out: Record<string, BuildVoteStats> = {}
   const autoPrivatizedBuildIds: string[] = []
 
-  writeChain = writeChain.then(async () => {
+  return runVoteWrite(async () => {
     const store = await readStore()
     const nowIso = new Date().toISOString()
 
@@ -220,8 +226,6 @@ export async function syncBuildVotesForVoter(
     }
 
     if (entries.length > 0) await saveStore(store)
+    return { votes: out, autoPrivatizedBuildIds }
   })
-
-  await writeChain
-  return { votes: out, autoPrivatizedBuildIds }
 }

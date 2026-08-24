@@ -2181,21 +2181,9 @@ router.get('/patch-notes', async (req: Request, res: Response) => {
   }
 })
 
-/** POST /api/stats/aggregate - recalculer les agrégats (admin / cron) */
-router.post('/aggregate', async (_req: Request, res: Response) => {
-  try {
-    const data = await aggregator.computeAndSave()
-    return res.json({
-      ok: true,
-      totalGames: data.totalGames,
-      championsCount: data.champions.length,
-      generatedAt: data.generatedAt
-    })
-  } catch (err) {
-    return res.status(500).json({
-      error: err instanceof Error ? err.message : 'Aggregation failed'
-    })
-  }
+/** POST /api/stats/aggregate — disabled on public API (use cron). */
+router.post('/aggregate', (_req: Request, res: Response) => {
+  return res.status(404).json({ error: 'Not found' })
 })
 
 /** POST /api/stats/refresh-players - no-op: total_games/total_wins via get_players_with_stats() */

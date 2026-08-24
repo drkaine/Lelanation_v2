@@ -212,6 +212,7 @@ import TheorycraftWorkspacePanel, {
 import { useChampionData } from '~/composables/useChampionData'
 import { useLayoutScaled } from '~/composables/useLayoutScaled'
 import { useBuildStore } from '~/stores/BuildStore'
+import { theorycraftVsScope } from '~/utils/theorycraftStorageScope'
 import { useItemsStore } from '~/stores/ItemsStore'
 import { isBuilderCreateRoutePath, isTheorycraftRoutePath } from '~/utils/theorycraftRoute'
 import { toTheorycraftBuildStats } from '~/utils/theorycraftStats'
@@ -278,6 +279,7 @@ const sideBackFace = ref<Record<TheorycraftSide, 'stats' | 'description'>>({
 const highlightMissingFields = ref(false)
 const championData = ref<Record<string, unknown> | null>(null)
 const isHydratingVsState = ref(true)
+const vsSessionId = ref('')
 const allyDisplayedVariant = ref<'main' | number>('main')
 
 const allyCardFlipped = computed({
@@ -355,6 +357,9 @@ function persistActiveSideStats() {
 }
 
 function loadSideBuild(side: TheorycraftSide) {
+  if (vsSessionId.value) {
+    buildStore.setTheorycraftStorageScope(theorycraftVsScope(vsSessionId.value, side))
+  }
   const target = cloneBuild(sideBuilds.value[side])
   if (!target) return
   if (side === 'ally') {
@@ -363,11 +368,11 @@ function loadSideBuild(side: TheorycraftSide) {
   } else {
     buildStore.setCurrentBuild(target)
   }
+  buildStore.reloadTheorycraftModifiers()
 }
 
 function vsStateStorageKey(): string | null {
-  const buildId = buildStore.currentBuild?.id
-  return buildId ? `${THEORYCRAFT_VS_STATE_STORAGE_PREFIX}${buildId}` : null
+  return vsSessionId.value ? `${THEORYCRAFT_VS_STATE_STORAGE_PREFIX}${vsSessionId.value}` : null
 }
 
 function restoreBuilderBuildBeforeLeave(): void {
@@ -614,20 +619,40 @@ onMounted(async () => {
     return
   }
 
+  vsSessionId.value = buildStore.currentBuild.id ?? crypto.randomUUID()
+  buildStore.setTheorycraftStorageScope(theorycraftVsScope(vsSessionId.value, 'ally'))
   buildStore.activateTheorycraftMode()
   buildStore.setLastBuilderStep('theorycraft')
   theorycraftLevel.value = buildStore.statsLevel
   allyDisplayedVariant.value = buildStore.displayedVariant
 
-  const currentBuildSnapshot = cloneBuild(buildStore.currentBuild)
-  sideBuilds.value.ally = currentBuildSnapshot
-  sideCalculatedStats.value.ally = buildStore.calculatedStats
-    ? ({ ...buildStore.calculatedStats } as CalculatedStats)
-    : null
-
   const storedVs = loadVsState()
   const currentChampionId = buildStore.currentBuild.champion?.id
-  const storedAllyChampionId = storedVs?.ally?.champion?.id
+  const canRestoreAlly =
+    Boolean(storedVs?.ally) && storedVs?.ally?.champion?.id === currentChampionId
+
+  if (canRestoreAlly && storedVs?.ally) {
+    sideBuilds.value.ally = storedVs.ally
+    if (
+      storedVs.allyDisplayedVariant === 'main' ||
+      typeof storedVs.allyDisplayedVariant === 'number'
+    ) {
+      allyDisplayedVariant.value = storedVs.allyDisplayedVariant
+    }
+    buildStore.setCurrentBuild(cloneBuild(storedVs.ally)!, { keepDisplayedVariant: true })
+    buildStore.displayedVariant = allyDisplayedVariant.value
+    buildStore.reloadTheorycraftModifiers()
+    sideCalculatedStats.value.ally = buildStore.calculatedStats
+      ? ({ ...buildStore.calculatedStats } as CalculatedStats)
+      : null
+  } else {
+    sideBuilds.value.ally = cloneBuild(buildStore.currentBuild)
+    sideCalculatedStats.value.ally = buildStore.calculatedStats
+      ? ({ ...buildStore.calculatedStats } as CalculatedStats)
+      : null
+  }
+
+  const storedAllyChampionId = sideBuilds.value.ally?.champion?.id
   const canRestoreEnemy = Boolean(storedVs?.enemy) && storedAllyChampionId === currentChampionId
 
   sideBuilds.value.enemy =
@@ -642,16 +667,6 @@ onMounted(async () => {
   } else {
     activeSide.value = 'ally'
     activePanel.value = sidePanels.value.ally ?? 'theorycraft'
-  }
-
-  if (
-    storedVs?.allyDisplayedVariant === 'main' ||
-    typeof storedVs?.allyDisplayedVariant === 'number'
-  ) {
-    allyDisplayedVariant.value = storedVs.allyDisplayedVariant
-    if (activeSide.value === 'ally') {
-      buildStore.displayedVariant = allyDisplayedVariant.value
-    }
   }
 
   isHydratingVsState.value = false

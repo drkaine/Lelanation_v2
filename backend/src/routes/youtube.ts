@@ -3,9 +3,6 @@ import { join } from 'path'
 import { FileManager } from '../utils/fileManager.js'
 import { YouTubeService } from '../services/YouTubeService.js'
 import { fetchYouTubeCommunityPosts } from '../services/youtubeCommunityPosts.js'
-import { retryWithBackoff } from '../utils/retry.js'
-import { DiscordService } from '../services/DiscordService.js'
-import { StaticAssetsService } from '../services/StaticAssetsService.js'
 
 type YouTubeChannelsConfig = {
   channels: Array<
@@ -26,7 +23,6 @@ type StoredChannelData = {
 
 const router = Router()
 const youtubeService = new YouTubeService()
-const discordService = new DiscordService()
 
 const channelsConfigFile = join(process.cwd(), 'data', 'youtube', 'channels.json')
 const youtubeDataDir = join(process.cwd(), 'data', 'youtube')
@@ -304,51 +300,10 @@ router.get('/channels/:channelId/posts/:postId', async (req, res) => {
 })
 
 /**
- * Trigger manual YouTube sync
+ * Manual YouTube sync — disabled on public API (use admin or cron).
  */
-router.post('/trigger', async (_req, res) => {
-  const configResult = await readChannelsConfig()
-  if (!configResult.ok) return res.status(configResult.status).json({ error: configResult.error })
-
-  const channels = configResult.value.channels ?? []
-  if (channels.length === 0) {
-    return res.status(400).json({ error: 'No YouTube channels configured' })
-  }
-
-  const syncResult = await retryWithBackoff(
-    () => youtubeService.syncChannels(channels),
-    {
-      maxRetries: 10,
-      initialDelay: 1000,
-      maxDelay: 30000,
-      multiplier: 2
-    }
-  )
-
-  if (syncResult.isErr()) {
-    const error = syncResult.unwrapErr()
-    await discordService.sendAlert(
-      'YouTube Sync Failed',
-      `Failed to synchronize YouTube videos after retries`,
-      error,
-      { channelsCount: channels.length, timestamp: new Date().toISOString() }
-    )
-    return res.status(500).json({ error: error.message })
-  }
-
-  const data = syncResult.unwrap()
-
-  const staticAssets = new StaticAssetsService()
-  const copyResult = await staticAssets.copyYouTubeAssetsToFrontend(false, false)
-  if (copyResult.isErr()) {
-    console.warn('[YouTube API] Sync OK but frontend copy failed:', copyResult.unwrapErr())
-  }
-
-  return res.json({
-    success: true,
-    ...data,
-    frontendCopied: copyResult.isOk() ? copyResult.unwrap().copied : 0,
-  })
+router.post('/trigger', (_req, res) => {
+  return res.status(404).json({ error: 'Not found' })
 })
 
 export default router

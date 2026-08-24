@@ -1,8 +1,9 @@
 import 'dotenv/config'
 import './redis/ensure-ready.js'
 import express from 'express'
-import cors from 'cors'
 import compression from 'compression'
+import { createCorsMiddleware } from './utils/cors.js'
+import { createRateLimit } from './utils/httpRateLimit.js'
 import syncRoutes from './routes/sync.js'
 import gameDataRoutes from './routes/gameData.js'
 import youtubeRoutes from './routes/youtube.js'
@@ -28,9 +29,16 @@ const app = express()
 const PORT = process.env.PORT || 3001
 
 // Middleware
-app.use(cors())
+app.use(createCorsMiddleware())
 app.use(compression())
 app.use(express.json({ limit: '12mb' }))
+app.use(
+  createRateLimit({
+    windowMs: 60_000,
+    max: 300,
+    keyPrefix: 'api',
+  })
+)
 
 // Request metrics (very lightweight)
 const metrics = MetricsService.getInstance()

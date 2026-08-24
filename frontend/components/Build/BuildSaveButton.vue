@@ -65,7 +65,7 @@ const handleSave = async () => {
   }
   emit('highlight-missing', false)
   const success = await buildStore.saveBuild()
-  if (!success) return
+  if (!success.ok) return
   buildStore.createNewBuild()
   const query: Record<string, string> = { tab: 'my-builds' }
   if (route.query.app === 'on') query.app = 'on'

@@ -360,6 +360,8 @@ export interface Build {
   patchStale?: PatchStaleInfo | null
   /** Kayn only: portrait + tooltip form for the main variant. */
   kaynForm?: KaynForm
+  /** Server-issued token for mutating this build via API (stored locally only). */
+  editSecret?: string
 }
 
 export interface ChampionRef {
@@ -406,6 +408,8 @@ export interface StoredBuild {
   notesMode?: BuildNotesMode
   patchStale?: PatchStaleInfo | null
   kaynForm?: KaynForm
+  /** Server-issued token for mutating this build via API (stored locally only). */
+  editSecret?: string
 }
 
 export interface CalculatedStats {
