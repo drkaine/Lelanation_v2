@@ -243,6 +243,7 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
     const build = sourceBuild.value
     if (!build || isActive.value) return
     captureStoreSnapshot()
+    buildStore.suspendDraftPersistence()
     isHydratingVsState.value = true
     activeSide.value = 'ally'
     activePanel.value = 'theorycraft'
@@ -274,17 +275,10 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
     if (!isActive.value) return
     persistActiveSideBuild()
     persistActiveSideStats()
-    activeSide.value = 'ally'
-    if (sideBuilds.value.ally) {
-      const ally = cloneBuild(sideBuilds.value.ally)
-      if (ally) {
-        buildStore.setCurrentBuild(ally, { keepDisplayedVariant: true })
-        buildStore.displayedVariant = allyDisplayedVariant.value
-      }
-    }
     persistVsState()
-    buildStore.deactivateTheorycraftMode()
+    buildStore.deactivateTheorycraftMode({ skipPersist: true })
     restoreStoreSnapshot()
+    buildStore.resumeDraftPersistence()
     isActive.value = false
   }
 

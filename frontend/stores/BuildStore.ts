@@ -147,6 +147,8 @@ interface BuildState {
   editSourceBuildId: string | null
   /** Theorycraft intégré au parcours création (même brouillon que create/edit). */
   theorycraftLinkedToBuilder: boolean
+  /** Détails build / theorycraft lecture — ne pas écraser le brouillon localStorage. */
+  draftPersistenceSuspended: boolean
 }
 
 type BuildLikeForValidation = Pick<
@@ -220,6 +222,7 @@ export const useBuildStore = defineStore('build', {
     pendingChampionChange: null,
     editSourceBuildId: null,
     theorycraftLinkedToBuilder: false,
+    draftPersistenceSuspended: false,
   }),
 
   getters: {
@@ -553,7 +556,7 @@ export const useBuildStore = defineStore('build', {
     },
 
     persistCurrentBuildDraft() {
-      if (import.meta.server || !this.currentBuild) return
+      if (import.meta.server || !this.currentBuild || this.draftPersistenceSuspended) return
       try {
         localStorage.setItem(
           this.getCurrentDraftStorageKey(),
@@ -580,11 +583,21 @@ export const useBuildStore = defineStore('build', {
       this.recalculateStats()
     },
 
-    deactivateTheorycraftMode() {
+    deactivateTheorycraftMode(options?: { skipPersist?: boolean }) {
       if (!this.theorycraftLinkedToBuilder) return
-      this.persistCurrentBuildDraft()
+      if (!options?.skipPersist && !this.draftPersistenceSuspended) {
+        this.persistCurrentBuildDraft()
+      }
       this.builderSession = 'create'
       this.theorycraftLinkedToBuilder = false
+    },
+
+    suspendDraftPersistence() {
+      this.draftPersistenceSuspended = true
+    },
+
+    resumeDraftPersistence() {
+      this.draftPersistenceSuspended = false
     },
 
     /** @deprecated Standalone theorycraft removed — use activateTheorycraftMode() in the builder. */

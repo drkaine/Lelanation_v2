@@ -179,6 +179,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, toRef } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import BuildCard from '~/components/Build/BuildCard.vue'
 import TheorycraftRuneStackPanel from '~/components/Build/TheorycraftRuneStackPanel.vue'
 import TheorycraftWorkspacePanel from '~/components/Build/TheorycraftWorkspacePanel.vue'
@@ -239,6 +240,10 @@ const enemyCardFlipped = computed({
 
 onMounted(() => {
   enter()
+})
+
+onBeforeRouteLeave(() => {
+  leave()
 })
 
 onUnmounted(() => {
