@@ -34,6 +34,22 @@ export interface BuildIndexEntry {
   visibility?: string
 }
 
+/** Latest public activity timestamp for home / discovery sorting. */
+export function getBuildActivityIso(build: BuildRecord): string {
+  for (const key of ['updatedAt', 'savedAt', 'createdAt'] as const) {
+    const value = build[key]
+    if (typeof value === 'string' && value.trim()) return value
+  }
+  return ''
+}
+
+export function getBuildActivityTime(build: BuildRecord): number {
+  const iso = getBuildActivityIso(build)
+  if (!iso) return 0
+  const time = new Date(iso).getTime()
+  return Number.isFinite(time) ? time : 0
+}
+
 export interface BuildIndex {
   /** Toutes les entrées dont le nom de fichier correspond au pattern (fichiers publics). */
   entries: BuildIndexEntry[]

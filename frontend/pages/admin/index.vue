@@ -6,7 +6,7 @@
           <h1 class="text-3xl font-bold text-text-accent">Admin</h1>
           <p class="mt-1 hidden text-sm text-text/70 sm:block">
             {{ t('admin.tabs.contact') }} · {{ t('admin.tabs.videos') }} ·
-            {{ t('admin.tabs.data') }} · {{ t('admin.tabs.logs') }}
+            {{ t('admin.tabs.data') }} · {{ t('admin.tabs.stats') }} · {{ t('admin.tabs.logs') }}
           </p>
         </div>
         <div class="flex items-center gap-2">
@@ -105,6 +105,9 @@
           </template>
         </div>
       </div>
+
+      <!-- Tab: Stats (DB collecte) -->
+      <AdminCollectStatsTab v-show="activeTab === 'stats'" ref="collectStatsTabRef" />
 
       <!-- Tab: Data (Crons + stats) -->
       <div v-show="activeTab === 'data'" class="space-y-6">
@@ -1624,7 +1627,7 @@ const localePath = useLocalePath()
 const route = useRoute()
 const { fetchWithAuth, clearAuth, checkLoggedIn } = useAdminAuth()
 
-const VALID_TABS = ['contact', 'videos', 'data', 'logs'] as const
+const VALID_TABS = ['contact', 'videos', 'data', 'stats', 'logs'] as const
 type AdminTab = (typeof VALID_TABS)[number]
 
 const authError = ref<string | null>(null)
@@ -1638,8 +1641,11 @@ const adminTabs = computed(() => [
   { id: 'contact' as const, label: t('admin.tabs.contact') },
   { id: 'videos' as const, label: t('admin.tabs.videos') },
   { id: 'data' as const, label: t('admin.tabs.data') },
+  { id: 'stats' as const, label: t('admin.tabs.stats') },
   { id: 'logs' as const, label: t('admin.tabs.logs') },
 ])
+
+const collectStatsTabRef = ref<{ loadStats: () => Promise<void> } | null>(null)
 
 // Contact
 const CONTACT_TYPES = ['suggestion', 'bug', 'reclamation', 'autre'] as const
@@ -3014,6 +3020,9 @@ watch(activeTab, (tab, prevTab) => {
   }
   if (tab === 'contact' && !contactByCategory.value && !contactLoading.value) loadContact()
   if ((tab === 'videos' || tab === 'data') && !cron.value && !cronLoading.value) loadCron()
+  if (tab === 'stats') {
+    collectStatsTabRef.value?.loadStats()
+  }
   if (tab === 'data') {
     refreshDataTabPoller()
     loadDataStats()

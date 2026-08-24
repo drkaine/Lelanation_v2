@@ -81,3 +81,19 @@ describe('getBuildIndex', () => {
     expect(after.entries.map(e => e.id)).toContain(UUID_C)
   })
 })
+
+describe('getBuildActivityTime', () => {
+  it('prefers updatedAt over createdAt for recent sorting', async () => {
+    const { getBuildActivityTime } = await import('../../../src/services/BuildIndexService.js')
+    expect(
+      getBuildActivityTime({
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-03-01T00:00:00.000Z',
+      }),
+    ).toBeGreaterThan(
+      getBuildActivityTime({
+        createdAt: '2026-02-01T00:00:00.000Z',
+      }),
+    )
+  })
+})

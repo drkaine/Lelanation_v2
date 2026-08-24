@@ -27,6 +27,7 @@ import {
 import { getBuildEngagement } from '../services/BuildEngagementService.js'
 import { readBalanceRules, writeBalanceRules } from '../services/BalanceRulesService.js'
 import { getAdminDataCollectStats } from '../services/AdminDataCollectService.js'
+import { getAdminCollectTimeseries } from '../services/AdminCollectTimeseriesService.js'
 import { buildRiotPollerAdminPayload } from '../services/PollerAdminView.js'
 import {
   aggregatePollerMetricsFromUnifiedLog,
@@ -232,6 +233,13 @@ router.post('/sync-data', (_req, res) => {
 /** GET /api/admin/data-stats — collecte : DB stats (`tracked_matches`, `players`) ou snapshot `statistiques` (sans lecture du log poller). */
 router.get('/data-stats', async (_req, res) => {
   return res.json(await getAdminDataCollectStats())
+})
+
+/** GET /api/admin/collect-timeseries — séries temporelles DB (joueurs, matchs ingérés). */
+router.get('/collect-timeseries', async (req, res) => {
+  const days = req.query.days != null ? Number(req.query.days) : undefined
+  const hourDays = req.query.hourDays != null ? Number(req.query.hourDays) : undefined
+  return res.json(await getAdminCollectTimeseries({ days, hourDays }))
 })
 
 router.get('/balance-rules', async (_req, res) => {

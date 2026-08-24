@@ -14,7 +14,7 @@ import {
   syncBuildVotesForVoter,
   type BuildVoteDirection,
 } from '../services/BuildVoteService.js'
-import { buildsDir, getBuildIndex, invalidateBuildIndex } from '../services/BuildIndexService.js'
+import { buildsDir, getBuildIndex, invalidateBuildIndex, getBuildActivityTime } from '../services/BuildIndexService.js'
 
 const VOTER_ID_HEADER = 'x-voter-id'
 
@@ -119,7 +119,7 @@ router.post('/', async (req, res) => {
 })
 
 /**
- * Latest public builds by creation date.
+ * Latest public builds by creation or update date.
  * GET /api/builds/recent?limit=6
  */
 router.get('/recent', async (req, res) => {
@@ -129,9 +129,7 @@ router.get('/recent', async (req, res) => {
 
     const builds = entries
       .filter(entry => entry.visibility !== 'private')
-      .sort(
-        (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-      )
+      .sort((a, b) => getBuildActivityTime(b.build) - getBuildActivityTime(a.build))
 
     res.set('Cache-Control', 'public, max-age=300')
     return res.json({
