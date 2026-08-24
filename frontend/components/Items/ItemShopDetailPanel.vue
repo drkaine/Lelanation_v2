@@ -51,7 +51,7 @@
           <img
             v-if="item"
             class="item-shop-detail__image"
-            :src="getItemImageUrl(version, item.image.full)"
+            :src="getItemShopImageUrl(version, item)"
             :alt="item.name"
             width="56"
             height="56"
@@ -119,7 +119,7 @@
         >
           <span class="item-shop-detail__recipe-icon">
             <img
-              :src="getItemImageUrl(version, upgrade.image.full)"
+              :src="getItemShopImageUrl(version, upgrade)"
               :alt="upgrade.name"
               width="40"
               height="40"
@@ -136,7 +136,7 @@
 import { computed, inject, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Item } from '~/types/build'
-import { getItemImageUrl } from '~/utils/imageUrl'
+import { getItemShopImageUrl } from '~/utils/imageUrl'
 import { formatItemGoldEfficiency } from '~/utils/formatItemStats'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { formatItemTooltipHtml } from '~/utils/formatTooltipMarkupHtml'

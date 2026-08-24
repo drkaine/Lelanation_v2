@@ -1,4 +1,5 @@
 import { getStaticImageUrl } from './staticDataUrl.js'
+import { isItemShopSyntheticItem } from './itemShopEvolutions'
 import { getFallbackGameVersion } from '~/config/version'
 
 /**
@@ -61,6 +62,18 @@ export function getItemImageUrl(_version: string, imageName: string): string {
   if (!imageName) return ''
   // Use local images instead of Data Dragon
   return `/images/game/latest/item/${imageName}`
+}
+
+/** Synthetic shop evolutions are absent from local sync — use Data Dragon icons. */
+export function getItemShopImageUrl(
+  version: string,
+  item: { id?: string; image?: { full?: string } } | null | undefined
+): string {
+  if (!item?.image?.full) return ''
+  if (isItemShopSyntheticItem(item.id)) {
+    return getDdragonItemImageUrl(version, item.image.full)
+  }
+  return getItemImageUrl(version, item.image.full)
 }
 
 /** Swap to Data Dragon when the local static asset 404s. */

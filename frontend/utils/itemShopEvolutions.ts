@@ -15,7 +15,13 @@ export const ITEM_SHOP_EVOLUTION_INTO: Record<string, readonly string[]> = {
 
 export const ITEM_SHOP_SYNTHETIC_ITEMS: Record<
   string,
-  { baseItemId: string; goldTotal: number; names: Record<ItemLocale, string> }
+  {
+    baseItemId: string
+    /** Recipe parent for category grid + tree (defaults to baseItemId). */
+    fromItemId?: string
+    goldTotal: number
+    names: Record<ItemLocale, string>
+  }
 > = {
   '2530': {
     baseItemId: '2526',
@@ -44,9 +50,17 @@ export const ITEM_SHOP_SYNTHETIC_ITEMS: Record<
   },
   '3867': {
     baseItemId: '3865',
+    fromItemId: '3866',
     goldTotal: 400,
     names: { fr_FR: 'Trésor des mondes', en_US: 'Bounty of Worlds' },
   },
+}
+
+export const ITEM_SHOP_SYNTHETIC_ITEM_IDS = new Set(Object.keys(ITEM_SHOP_SYNTHETIC_ITEMS))
+
+export function isItemShopSyntheticItem(itemId: string | undefined | null): boolean {
+  if (!itemId) return false
+  return ITEM_SHOP_SYNTHETIC_ITEM_IDS.has(itemId)
 }
 
 function normalizeItemLocale(language: string): ItemLocale {
@@ -76,7 +90,7 @@ function synthesizeShopEvolutionItem(base: Item, evolutionId: string, locale: It
       ...base.image,
       full: `${evolutionId}.png`,
     },
-    from: undefined,
+    from: [template.fromItemId ?? template.baseItemId],
     into: ITEM_SHOP_EVOLUTION_INTO[evolutionId]
       ? [...ITEM_SHOP_EVOLUTION_INTO[evolutionId]]
       : undefined,

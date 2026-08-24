@@ -294,7 +294,7 @@
     "patchLabel": "Patch {version}",
     "selectItem": "Sélectionnez un objet",
     "selectItemHint": "Cliquez sur un objet pour voir sa recette et ses évolutions.",
-    "navLabel": "Objets",
+    "navLabel": "Items",
     "sortLegendaryFirst": "Légendaires en premier",
     "sortClassic": "Ordre classique",
     "sortLegendaryFirstHint": "Afficher les légendaires en premier",

@@ -108,8 +108,6 @@ export function getItemShopCategory(item: Item): ItemShopCategory {
     '1086',
     '1087',
     '3865',
-    '3866',
-    '3867',
     '1101',
     '1102',
     '1103',
@@ -192,8 +190,9 @@ export function getItemShopCategory(item: Item): ItemShopCategory {
   const forcedLegendaryIds = new Set(['2526'])
   if (forcedLegendaryIds.has(item.id)) return 'legendary'
 
-  if (item.from.length > 0 && item.into?.length) return 'epic'
-  if (item.from.length > 0 && !item.into?.length) return 'legendary'
+  const intoIds = getItemShopIntoIds(item)
+  if (item.from.length > 0 && intoIds.length) return 'epic'
+  if (item.from.length > 0 && !intoIds.length) return 'legendary'
 
   return 'other'
 }

@@ -3,8 +3,10 @@ import type { Item } from '@lelanation/shared-types'
 import {
   enrichItemShopCatalog,
   getItemShopIntoIds,
+  isItemShopSyntheticItem,
   ITEM_SHOP_EVOLUTION_INTO,
 } from '../itemShopEvolutions'
+import { getItemShopImageUrl } from '../imageUrl'
 
 const makeItem = (overrides: Partial<Item> & Pick<Item, 'id'>): Item =>
   ({
@@ -49,6 +51,18 @@ describe('itemShopEvolutions', () => {
     expect(byId.get('3867')?.name).toBe('Trésor des mondes')
     expect(byId.get('3003')?.into).toEqual(['3040'])
     expect(byId.get('3865')?.into).toEqual(['3866'])
+  })
+
+  it('uses ddragon icons for synthetic evolution items', () => {
+    expect(isItemShopSyntheticItem('3040')).toBe(true)
+    expect(isItemShopSyntheticItem('3003')).toBe(false)
+
+    const url = getItemShopImageUrl('16.16.1', makeItem({ id: '3040' }))
+    expect(url).toContain('ddragon.leagueoflegends.com')
+    expect(url).toContain('3040.png')
+
+    const localUrl = getItemShopImageUrl('16.16.1', makeItem({ id: '3003' }))
+    expect(localUrl).toContain('/images/game/latest/item/3003.png')
   })
 
   it('resolves build-into upgrades from enriched links', () => {

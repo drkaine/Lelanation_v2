@@ -8,7 +8,7 @@
     <div class="item-hover-tooltip__content">
       <div class="item-hover-tooltip__header">
         <img
-          :src="getItemImageUrl(version, item.image.full)"
+          :src="getItemShopImageUrl(version, item)"
           :alt="item.name"
           class="item-hover-tooltip__image"
         />
@@ -44,7 +44,7 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Item } from '~/types/build'
-import { getItemImageUrl } from '~/utils/imageUrl'
+import { getItemShopImageUrl } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { formatItemTooltipHtml } from '~/utils/formatTooltipMarkupHtml'
 import { resolveItemDescription, resolveItemPlaintext } from '~/utils/itemDescriptionFallbacks'

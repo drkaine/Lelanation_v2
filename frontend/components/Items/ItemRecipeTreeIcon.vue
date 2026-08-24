@@ -9,7 +9,7 @@
     @mousemove="onMouseMove"
   >
     <img
-      :src="getItemImageUrl(version, item.image.full)"
+      :src="getItemShopImageUrl(version, item)"
       :alt="item.name"
       :width="iconSize"
       :height="iconSize"
@@ -22,7 +22,7 @@
 <script setup lang="ts">
 import { computed, inject } from 'vue'
 import type { Item } from '~/types/build'
-import { getItemImageUrl } from '~/utils/imageUrl'
+import { getItemShopImageUrl } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { ITEM_HOVER_TOOLTIP_KEY } from '~/composables/itemHoverTooltipKey'
 import { ITEM_RECIPE_TREE_ICON_SIZE, type ItemRecipeTreeSize } from '~/utils/itemRecipeTree'

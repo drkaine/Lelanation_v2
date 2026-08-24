@@ -114,7 +114,7 @@
                   @click="selectItem(item)"
                 >
                   <img
-                    :src="getItemImageUrl(version, item.image.full)"
+                    :src="getItemShopImageUrl(version, item)"
                     :alt="item.name"
                     loading="lazy"
                     width="40"
@@ -158,7 +158,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import type { Item } from '~/types/build'
 import { useItemsStore } from '~/stores/ItemsStore'
-import { getItemImageUrl } from '~/utils/imageUrl'
+import { getItemShopImageUrl } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { useLayoutScaled } from '~/composables/useLayoutScaled'
 import { formatItemGoldEfficiency, getItemGoldValue } from '~/utils/formatItemStats'
