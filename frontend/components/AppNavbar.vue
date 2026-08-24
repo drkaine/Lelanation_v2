@@ -236,6 +236,14 @@
               </NuxtLink>
             </div>
           </div>
+          <NuxtLink
+            :to="itemShopLink"
+            :title="t('itemShopPage.title')"
+            class="version"
+            :class="{ 'is-active': isItemShopActive }"
+          >
+            {{ t('itemShopPage.navLabel') }}
+          </NuxtLink>
           <NuxtLink :to="localePath('/videos')" :title="t('nav.videos')" class="version">
             {{ t('nav.videos') }}
           </NuxtLink>
@@ -291,6 +299,7 @@ const versionStore = useVersionStore()
 const patchNotesStore = usePatchNotesStore()
 const gameVersion = computed(() => versionStore.currentVersion || getFallbackGameVersion())
 const discoverBuildsLink = computed(() => localePath('/builds/discover'))
+const itemShopLink = computed(() => localePath('/items'))
 const myBuildsLink = computed(() => localePath('/builds/my-builds'))
 const favoriteBuildsLink = computed(() => localePath('/builds/favoris'))
 const discoverGuidesLink = computed(() => localePath('/matchups/sheets/discover'))
@@ -325,6 +334,9 @@ const currentBuildsTab = computed(() => {
   return typeof route.query.tab === 'string' ? route.query.tab : 'discover'
 })
 const isDiscoverBuildsActive = computed(() => currentBuildsTab.value === 'discover')
+const isItemShopActive = computed(
+  () => route.path === itemShopLink.value || route.path.endsWith('/items')
+)
 const isMyBuildsActive = computed(() => currentBuildsTab.value === 'my-builds')
 const isFavoriteBuildsActive = computed(() => currentBuildsTab.value === 'favoris')
 const favoritesStore = useFavoritesStore()

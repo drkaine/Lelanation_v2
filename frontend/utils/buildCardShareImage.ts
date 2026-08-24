@@ -26,7 +26,11 @@ export async function fetchBuildCardSharePng(urlPath: string): Promise<Blob | nu
   try {
     const res = await fetch(urlPath)
     if (!res.ok) return null
-    return await res.blob()
+    const contentType = (res.headers.get('content-type') || '').toLowerCase()
+    if (!contentType.includes('image/png')) return null
+    const blob = await res.blob()
+    if (blob.size < 2048) return null
+    return blob
   } catch {
     return null
   }
@@ -159,10 +163,12 @@ export async function captureBuildCardHostToPngBlob(
   document.body.appendChild(shell)
 
   try {
-    return await toBlob(shell, {
+    const blob = await toBlob(shell, {
       pixelRatio: 2,
       cacheBust: true,
     })
+    if (!blob || blob.size < 2048) return null
+    return blob
   } catch {
     return null
   } finally {

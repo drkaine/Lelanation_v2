@@ -1,9 +1,39 @@
 import { createRequire } from 'node:module'
+import { existsSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { Browser } from 'playwright'
 
 let browserPromise: Promise<Browser> | null = null
 const runtimeRequire = createRequire(import.meta.url)
+
+const MIN_SCREENSHOT_BYTES = 2048
+
+function resolvePlaywrightBrowsersPath(): string | undefined {
+  const candidates = [
+    (process.env.PLAYWRIGHT_BROWSERS_PATH || '').trim(),
+    join(homedir(), '.cache/ms-playwright'),
+  ].filter(Boolean)
+
+  for (const candidate of candidates) {
+    const headlessShell = join(
+      candidate,
+      'chromium_headless_shell-1228',
+      'chrome-headless-shell-linux64',
+      'chrome-headless-shell'
+    )
+    const chromium = join(candidate, 'chromium-1228', 'chrome-linux64', 'chrome')
+    if (existsSync(headlessShell) || existsSync(chromium)) {
+      return candidate
+    }
+  }
+  return undefined
+}
+
+function ensurePlaywrightBrowsersPath(): void {
+  const resolved = resolvePlaywrightBrowsersPath()
+  if (resolved) process.env.PLAYWRIGHT_BROWSERS_PATH = resolved
+}
 
 async function loadChromium() {
   try {
@@ -27,6 +57,7 @@ async function loadChromium() {
 
 function createBrowserPromise(): Promise<Browser> {
   return (async () => {
+    ensurePlaywrightBrowsersPath()
     const chromium = await loadChromium()
     const browser = await chromium.launch({
       headless: true,
@@ -105,6 +136,9 @@ export async function screenshotBuildCardPng(opts: ScreenshotBuildCardOptions): 
         await new Promise(resolve => setTimeout(resolve, 500))
         const el = page.locator('[data-build-card-screenshot-root]').first()
         const buf = await el.screenshot({ type: 'png' })
+        if (!buf || buf.length < MIN_SCREENSHOT_BYTES) {
+          throw new Error(`Screenshot produced empty PNG (${buf?.length ?? 0} bytes)`)
+        }
         return buf as Buffer
       } finally {
         await context.close()

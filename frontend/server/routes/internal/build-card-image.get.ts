@@ -80,7 +80,7 @@ async function fetchBuildForCacheRevision(
 }
 
 /** Incrémenter après changement de rendu capture (splash, flèches, etc.) pour invalider le cache disque. */
-const SCREENSHOT_CACHE_SALT = 'v6'
+const SCREENSHOT_CACHE_SALT = 'v7'
 
 function cacheFileName(
   buildId: string,

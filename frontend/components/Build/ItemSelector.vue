@@ -14,38 +14,35 @@
         @input="handleSearch"
       />
       <div class="item-filter-bar flex flex-wrap">
-        <button
+        <ItemCategorySortButton
+          :active="categorySortMode === 'legendary-first'"
+          :title="categorySortToggleTitle"
+          @click="toggleCategorySortMode"
+        />
+        <ItemFilterTagButton
           v-for="tag in availableTags"
           :key="tag"
-          type="button"
-          :class="[
-            'item-filter-btn ui-build-card-button text-sm font-semibold',
-            selectedTags.includes(tag) ? 'is-active' : '',
-          ]"
+          :label="translateTag(tag)"
+          :icon-src="getItemTagIconSrc(tag)"
+          :icon-tone-class="getItemTagIconToneClass(tag)"
+          :icon-image-class="getItemTagIconImageClass(tag)"
+          :active="selectedTags.includes(tag)"
           @click="toggleTag(tag)"
-        >
-          {{ translateTag(tag) }}
-        </button>
-        <button
-          type="button"
-          :class="[
-            'item-filter-btn ui-build-card-button text-sm font-semibold',
-            showGoldValue ? 'is-active' : '',
-          ]"
+        />
+        <ItemFilterTagButton
+          :label="t('item.selector.showGoldValue')"
+          :icon-src="goldStatIconSrc"
+          icon-tone-class="stat-inline-icon--gold"
+          :active="showGoldValue"
           @click="showGoldValue = !showGoldValue"
-        >
-          {{ t('item.selector.showGoldValue') }}
-        </button>
-        <button
-          type="button"
-          :class="[
-            'item-filter-btn ui-build-card-button text-sm font-semibold',
-            showGoldEfficiency ? 'is-active' : '',
-          ]"
+        />
+        <ItemFilterTagButton
+          :label="t('item.selector.showGoldEfficiency')"
+          :icon-src="goldStatIconSrc"
+          icon-tone-class="stat-inline-icon--gold"
+          :active="showGoldEfficiency"
           @click="showGoldEfficiency = !showGoldEfficiency"
-        >
-          {{ t('item.selector.showGoldEfficiency') }}
-        </button>
+        />
       </div>
     </div>
 
@@ -212,6 +209,18 @@ import {
 } from '~/utils/buildItemRules'
 import { formatItemGoldEfficiency, getItemGoldValue } from '~/utils/formatItemStats'
 import { matchesItemSearch } from '~/utils/multilingualEntitySearch'
+import ItemFilterTagButton from '~/components/Items/ItemFilterTagButton.vue'
+import ItemCategorySortButton from '~/components/Items/ItemCategorySortButton.vue'
+import { getChampionStatIconSrc } from '~/utils/championStatIcons'
+import {
+  getItemTagIconImageClass,
+  getItemTagIconSrc,
+  getItemTagIconToneClass,
+} from '~/utils/itemTagStatIcons'
+import { getCategoryDisplayOrder, type ItemShopCategorySortMode } from '~/utils/itemShopUtils'
+
+const goldStatIconSrc = getChampionStatIconSrc('goldValue')
+const categorySortMode = ref<ItemShopCategorySortMode>('legendary-first')
 
 const props = withDefaults(defineProps<{ includeMasterwork?: boolean }>(), {
   includeMasterwork: false,
@@ -553,12 +562,18 @@ const itemsByCategory = computed(() => {
 })
 
 // Category order keys for template iteration
-const categoryOrderKeys = computed(() => {
-  const ordered = Object.keys(categoryOrder).sort(
-    (a, b) => categoryOrder[a as ItemCategory] - categoryOrder[b as ItemCategory]
-  ) as ItemCategory[]
-  return ordered
-})
+const categoryOrderKeys = computed(() => getCategoryDisplayOrder(categorySortMode.value))
+
+const categorySortToggleTitle = computed(() =>
+  categorySortMode.value === 'legendary-first'
+    ? t('itemShopPage.sortClassicHint')
+    : t('itemShopPage.sortLegendaryFirstHint')
+)
+
+function toggleCategorySortMode() {
+  categorySortMode.value =
+    categorySortMode.value === 'legendary-first' ? 'classic' : 'legendary-first'
+}
 
 // Get category label for display
 const getCategoryLabel = (category: ItemCategory): string => {
@@ -993,19 +1008,18 @@ watch(locale, () => {
 }
 
 .item-search-input {
-  flex: 1 1 5rem;
-  min-width: 5rem;
-  max-width: 100%;
-  width: auto;
+  flex: 0 0 auto;
+  width: 10.5rem;
+  min-width: 8rem;
+  max-width: 10.5rem;
 }
 
 .item-filter-bar {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   gap: 5px;
 }
 
 .item-filter-btn {
-  padding: 0.35rem 0.6rem;
   margin: 0;
 }
 

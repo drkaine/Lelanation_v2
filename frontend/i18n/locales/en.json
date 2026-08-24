@@ -286,6 +286,24 @@
       }
     }
   },
+  "itemShopPage": {
+    "metaTitle": "League of Legends Items — Lelanation",
+    "metaDescription": "Browse all season items, components, and upgrades with role and stat filters.",
+    "title": "League of Legends Items",
+    "subtitle": "Browse the season shop, filter by role and stats, and inspect each item's components and upgrades.",
+    "patchLabel": "Patch {version}",
+    "selectItem": "Select an item",
+    "selectItemHint": "Click an item to view its recipe and upgrades.",
+    "navLabel": "Items",
+    "sortLegendaryFirst": "Legendaries first",
+    "sortClassic": "Classic order",
+    "sortLegendaryFirstHint": "Show legendaries first",
+    "sortClassicHint": "Show starters first",
+    "showDescription": "View description",
+    "showRecipe": "View recipe",
+    "noDescription": "No description available.",
+    "resetSelection": "Clear item selection"
+  },
   "runes": {
     "fundamental": "FUNDAMENTAL RUNES",
     "fundamental-selection": "Select a fundamental rune",

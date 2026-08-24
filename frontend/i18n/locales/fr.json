@@ -286,6 +286,24 @@
       }
     }
   },
+  "itemShopPage": {
+    "metaTitle": "Objets League of Legends — Lelanation",
+    "metaDescription": "Explorez tous les objets de la saison, leurs composants et leurs évolutions, avec filtres par rôle et stats.",
+    "title": "Objets League of Legends",
+    "subtitle": "Parcourez le shop de la saison, filtrez par rôle et stats, et consultez les composants et évolutions de chaque objet.",
+    "patchLabel": "Patch {version}",
+    "selectItem": "Sélectionnez un objet",
+    "selectItemHint": "Cliquez sur un objet pour voir sa recette et ses évolutions.",
+    "navLabel": "Objets",
+    "sortLegendaryFirst": "Légendaires en premier",
+    "sortClassic": "Ordre classique",
+    "sortLegendaryFirstHint": "Afficher les légendaires en premier",
+    "sortClassicHint": "Afficher les starters en premier",
+    "showDescription": "Voir la description",
+    "showRecipe": "Voir la recette",
+    "noDescription": "Aucune description disponible.",
+    "resetSelection": "Désélectionner l'objet"
+  },
   "runes": {
     "fundamental": "RUNES FONDAMENTALES",
     "fundamental-selection": "Sélectionnez une rune fondamentale",
