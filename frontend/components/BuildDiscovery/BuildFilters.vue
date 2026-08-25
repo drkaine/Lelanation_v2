@@ -123,6 +123,7 @@ import type {
   SortOption,
   PageSizeOption,
 } from '~/stores/BuildDiscoveryStore'
+import { comparePatchMajorMinor, patchFromGameVersion } from '~/utils/patchVersion'
 
 const { locale, t } = useI18n()
 const discoveryStore = useBuildDiscoveryStore()
@@ -159,28 +160,17 @@ const availableChampions = computed(() => {
   return championsStore.champions.filter(champion => championIds.has(champion.id))
 })
 
-const compareVersions = (a: string, b: string) => {
-  const aParts = a.split('.').map(part => Number(part))
-  const bParts = b.split('.').map(part => Number(part))
-  const maxLength = Math.max(aParts.length, bParts.length)
-  for (let index = 0; index < maxLength; index += 1) {
-    const aValue = aParts[index] ?? 0
-    const bValue = bParts[index] ?? 0
-    if (aValue !== bValue) return bValue - aValue
-  }
-  return 0
-}
-
 const availableVersions = computed(() => {
-  const versions = new Set(
-    discoveryStore.builds
-      .map(build => build.gameVersion)
-      .filter((version): version is string => Boolean(version))
-  )
-  if (versionStore.currentVersion) {
-    versions.add(versionStore.currentVersion)
+  const versions = new Set<string>()
+  for (const build of discoveryStore.builds) {
+    const patch = patchFromGameVersion(build.gameVersion)
+    if (patch) versions.add(patch)
   }
-  return [...versions].sort(compareVersions)
+  if (versionStore.currentVersion) {
+    const patch = patchFromGameVersion(versionStore.currentVersion)
+    if (patch) versions.add(patch)
+  }
+  return [...versions].sort((a, b) => comparePatchMajorMinor(b, a))
 })
 
 const roleOptions: Array<{ value: Exclude<FilterRole, null>; label: string; icon: string }> = [

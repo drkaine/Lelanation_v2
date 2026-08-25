@@ -1,5 +1,6 @@
 import { join } from 'path'
 import { FileManager } from '../utils/fileManager.js'
+import { buildsDir } from './BuildIndexService.js'
 
 export type BuildShareType = 'link' | 'image' | 'image_with_meta'
 
@@ -9,8 +10,10 @@ export type BuildEngagementEntry = {
   buildId: string
   views: number
   shares: BuildShareStats
+  imports: number
   lastViewedAt: string | null
   lastSharedAt: string | null
+  lastImportedAt: string | null
   updatedAt: string
 }
 
@@ -18,7 +21,7 @@ type BuildEngagementStore = {
   builds: Record<string, BuildEngagementEntry>
 }
 
-const BUILD_ENGAGEMENT_FILE = join(process.cwd(), 'data', 'builds', 'engagement.json')
+const BUILD_ENGAGEMENT_FILE = join(buildsDir, 'engagement.json')
 
 let writeChain: Promise<void> = Promise.resolve()
 
@@ -31,8 +34,10 @@ function createEmptyEntry(buildId: string): BuildEngagementEntry {
     buildId,
     views: 0,
     shares: defaultShares(),
+    imports: 0,
     lastViewedAt: null,
     lastSharedAt: null,
+    lastImportedAt: null,
     updatedAt: new Date().toISOString(),
   }
 }
@@ -91,6 +96,13 @@ export async function trackBuildShare(
   })
 }
 
+export async function trackBuildAppImport(buildId: string): Promise<BuildEngagementEntry> {
+  return mutateBuildEntry(buildId, (entry, nowIso) => {
+    entry.imports = (entry.imports ?? 0) + 1
+    entry.lastImportedAt = nowIso
+  })
+}
+
 export async function getBuildEngagement(buildId: string): Promise<BuildEngagementEntry> {
   const id = buildId.trim()
   const store = await readStore()
@@ -104,5 +116,43 @@ export async function getEngagementViewCounts(): Promise<Map<string, number>> {
     if (entry.views > 0) out.set(id, entry.views)
   }
   return out
+}
+
+export async function removeBuildEngagement(buildId: string): Promise<boolean> {
+  const id = buildId.trim()
+  if (!id) return false
+  let removed = false
+
+  writeChain = writeChain.then(async () => {
+    const store = await readStore()
+    if (!store.builds[id]) return
+    delete store.builds[id]
+    await saveStore(store)
+    removed = true
+  })
+
+  await writeChain
+  return removed
+}
+
+/** Supprime les stats dont le build public n'existe plus. */
+export async function purgeOrphanBuildEngagement(validBuildIds: Set<string>): Promise<number> {
+  let removedCount = 0
+
+  writeChain = writeChain.then(async () => {
+    const store = await readStore()
+    let changed = false
+    for (const id of Object.keys(store.builds)) {
+      if (!validBuildIds.has(id)) {
+        delete store.builds[id]
+        removedCount += 1
+        changed = true
+      }
+    }
+    if (changed) await saveStore(store)
+  })
+
+  await writeChain
+  return removedCount
 }
 

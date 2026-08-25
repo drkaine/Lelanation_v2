@@ -14,7 +14,9 @@
         <h3 class="font-bold text-text">{{ build.champion.name }}</h3>
         <p class="text-xs text-text/70">{{ build.champion.title }}</p>
       </div>
-      <div v-if="build.gameVersion" class="text-xs text-text/50">v{{ build.gameVersion }}</div>
+      <div v-if="build.gameVersion" class="text-xs text-text/50">
+        v{{ formatBuildPatchVersion(build.gameVersion) }}
+      </div>
     </div>
 
     <!-- Items Grid -->
@@ -122,6 +124,7 @@ import {
 } from '~/utils/imageUrl'
 import { useClientHydrated } from '~/composables/useClientHydrated'
 import { useChampionSplashPreference } from '~/composables/useChampionSplashPreference'
+import { formatBuildPatchVersion } from '~/utils/patchVersion'
 
 interface Props {
   build: Build

@@ -27,3 +27,8 @@ export function patchFromGameVersion(version: string | null | undefined): string
   const normalized = normalizePatchNotesVersion(version)
   return normalized || null
 }
+
+/** Affichage utilisateur : 16.16.1 → 16.16 */
+export function formatBuildPatchVersion(version: string | null | undefined): string {
+  return patchFromGameVersion(version) ?? String(version ?? '').trim()
+}

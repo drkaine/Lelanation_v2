@@ -12,7 +12,9 @@ import {
 import {
   trackBuildView,
   trackBuildShare,
+  trackBuildAppImport,
   getEngagementViewCounts,
+  removeBuildEngagement,
   type BuildShareType,
 } from '../services/BuildEngagementService.js'
 import {
@@ -383,6 +385,24 @@ router.post('/:id/track-share', buildEngagementRateLimit, async (req, res) => {
 })
 
 /**
+ * Track one companion app import into the LoL client.
+ * POST /api/builds/:id/track-import
+ */
+router.post('/:id/track-import', buildEngagementRateLimit, async (req, res) => {
+  const buildId = typeof req.params.id === 'string' ? req.params.id.trim() : ''
+  if (!buildId) return res.status(400).json({ error: 'Invalid build id' })
+  try {
+    const stats = await trackBuildAppImport(buildId)
+    return res.json({ ok: true, stats })
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Failed to track build import',
+    })
+  }
+})
+
+/**
  * Get all builds (public only — private builds are never exposed here)
  * GET /api/builds
  */
@@ -419,7 +439,8 @@ router.delete('/:id', buildWriteRateLimit, async (req, res) => {
     try {
       await fs.unlink(existing.filePath)
       invalidateBuildIndex()
-      return res.json({ 
+      await removeBuildEngagement(buildId).catch(() => undefined)
+      return res.json({
         id: buildId,
         message: 'Build deleted successfully'
       })

@@ -2,6 +2,7 @@
 import { computed, toRef } from 'vue'
 import type { Build, Role } from '@lelanation/shared-types'
 import { useBuildsCore } from '../composables/useBuildsCore'
+import { formatGameVersionPatch } from '../utils/patchVersion'
 
 export interface ImageResolvers {
   champion: (imageFull: string) => string
@@ -44,6 +45,10 @@ const filteredSummonerSpells = computed(() =>
   (props.build.summonerSpells ?? []).filter((s): s is NonNullable<typeof s> => s !== null && s !== undefined)
 )
 
+const displayPatchVersion = computed(() =>
+  formatGameVersionPatch(props.version || props.build.gameVersion)
+)
+
 const getBootBg = (item: { image: { full: string } }) =>
   `background-image: url('${props.images.item(item.image.full)}')`
 </script>
@@ -51,7 +56,7 @@ const getBootBg = (item: { image: { full: string } }) =>
 <template>
   <div class="bs-wrapper">
     <div class="bs-card">
-      <div class="bs-version">{{ version || build.gameVersion }}</div>
+      <div class="bs-version">{{ displayPatchVersion }}</div>
 
       <div class="bs-roles">
         <div class="bs-roles-col">

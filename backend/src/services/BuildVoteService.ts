@@ -2,6 +2,7 @@ import { join } from 'path'
 import { promises as fs } from 'fs'
 import { FileManager } from '../utils/fileManager.js'
 import { buildsDir, invalidateBuildIndex } from './BuildIndexService.js'
+import { removeBuildEngagement } from './BuildEngagementService.js'
 import { shouldAutoPrivatizeFromCommunityVotes } from './buildVoteVisibility.js'
 
 export type BuildVoteDirection = 'up' | 'down'
@@ -27,7 +28,7 @@ type BuildVoteStore = {
   builds: Record<string, BuildVoteEntry>
 }
 
-const BUILD_VOTES_FILE = join(process.cwd(), 'data', 'builds', 'votes.json')
+const BUILD_VOTES_FILE = join(buildsDir, 'votes.json')
 
 let writeChain: Promise<void> = Promise.resolve()
 
@@ -133,6 +134,7 @@ export async function deletePublicBuildIfExists(buildId: string): Promise<boolea
   try {
     await fs.unlink(publicPath)
     invalidateBuildIndex()
+    await removeBuildEngagement(id).catch(() => undefined)
     return true
   } catch {
     return false

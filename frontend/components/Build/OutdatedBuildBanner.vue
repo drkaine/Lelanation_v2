@@ -7,9 +7,11 @@
     <div class="flex flex-col justify-between gap-3 md:flex-row md:items-center">
       <div>
         <p class="font-semibold text-warning">Build obsolète</p>
-        <p class="text-text/80 mt-1 text-sm">
-          Version du build: <span class="font-semibold">{{ buildVersion || 'inconnue' }}</span> ·
-          Version actuelle: <span class="font-semibold">{{ currentVersion || 'inconnue' }}</span>
+        <p class="mt-1 text-sm text-text/80">
+          Version du build:
+          <span class="font-semibold">{{ displayBuildVersion || 'inconnue' }}</span> · Version
+          actuelle:
+          <span class="font-semibold">{{ displayCurrentVersion || 'inconnue' }}</span>
         </p>
       </div>
 
@@ -35,6 +37,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useVersionStore } from '~/stores/VersionStore'
+import { formatBuildPatchVersion, patchFromGameVersion } from '~/utils/patchVersion'
 
 const props = defineProps<{
   buildVersion: string
@@ -46,11 +49,13 @@ const versionStore = useVersionStore()
 const dismissed = ref(false)
 
 const currentVersion = computed(() => versionStore.currentVersion || '')
+const displayBuildVersion = computed(() => formatBuildPatchVersion(props.buildVersion))
+const displayCurrentVersion = computed(() => formatBuildPatchVersion(currentVersion.value))
 
 const show = computed(() => {
   if (dismissed.value) return false
   if (!props.buildVersion || !currentVersion.value) return false
-  return props.buildVersion !== currentVersion.value
+  return patchFromGameVersion(props.buildVersion) !== patchFromGameVersion(currentVersion.value)
 })
 
 const dismiss = () => {

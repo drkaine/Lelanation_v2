@@ -516,6 +516,7 @@ import {
   uiUpvoteActionClass,
 } from '~/utils/uiColorClasses'
 import { buildHasAnyNotes } from '~/utils/buildNotes'
+import { patchFromGameVersion } from '~/utils/patchVersion'
 
 function buildMatchesSearchQuery(build: Build, query: string): boolean {
   if (matchesLocalizedTextSearch(query, [build.name, build.author])) return true
@@ -676,7 +677,9 @@ const filteredCustomBuilds = computed(() => {
 
   // Filter by version
   if (discoveryStore.selectedVersion) {
-    results = results.filter(build => build.gameVersion === discoveryStore.selectedVersion)
+    results = results.filter(
+      build => patchFromGameVersion(build.gameVersion) === discoveryStore.selectedVersion
+    )
   }
 
   if (discoveryStore.onlyUpToDate) {

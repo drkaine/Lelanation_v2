@@ -14,6 +14,7 @@ import { getSettings, setSettings } from "../settings";
 import { translate, translateLcuPhase } from "../i18n";
 import type { CompanionConfig } from "../companionConfig";
 import { importBuildToLcu, describeApplyResult } from "../lcuBuildImport";
+import { trackBuildAppImport } from "../trackBuildImport";
 import { useLcuExport } from "../composables/useLcuExport";
 import KeyboardShortcutsView from "./KeyboardShortcutsView.vue";
 import ChecklistView from "./ChecklistView.vue";
@@ -405,6 +406,7 @@ async function runImportFromIframe(build: Build) {
     const result = await importBuildToLcu(build);
     const summary = describeApplyResult(result, settings.value.language) || t("importSuccess");
     showImportNotification(summary, true);
+    trackBuildAppImport(build.id);
     await refreshStatus();
   } catch (e) {
     const msg = importErrorMessage(e);

@@ -10,6 +10,7 @@ import { extractPatchStaleMap, mergePatchStaleIntoBuilds } from '~/utils/mergePa
 import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import { matchesChampionSearch, matchesLocalizedTextSearch } from '~/utils/multilingualEntitySearch'
 import { buildHasAnyNotes } from '~/utils/buildNotes'
+import { patchFromGameVersion } from '~/utils/patchVersion'
 
 export type SortOption = 'recent' | 'popular' | 'name'
 export type FilterRole = 'top' | 'jungle' | 'mid' | 'adc' | 'support' | null
@@ -157,7 +158,9 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
 
       // Filter by version
       if (this.selectedVersion) {
-        results = results.filter(build => build.gameVersion === this.selectedVersion)
+        results = results.filter(
+          build => patchFromGameVersion(build.gameVersion) === this.selectedVersion
+        )
       }
 
       if (this.onlyUpToDate) {

@@ -25,6 +25,7 @@ import {
   parseUnifiedLogLine,
 } from '../logging/unifiedAppLog.js'
 import { getBuildEngagement } from '../services/BuildEngagementService.js'
+import { getAdminBuildEngagementRecap } from '../services/AdminBuildEngagementService.js'
 import { readBalanceRules, writeBalanceRules } from '../services/BalanceRulesService.js'
 import { getAdminDataCollectStats } from '../services/AdminDataCollectService.js'
 import { getAdminCollectTimeseries } from '../services/AdminCollectTimeseriesService.js'
@@ -675,6 +676,16 @@ router.get('/builds/stats', async (_req, res) => {
 })
 
 // --- Build engagement stats (admin only) ---
+router.get('/build-engagement-recap', async (_req, res) => {
+  try {
+    return res.json(await getAdminBuildEngagementRecap())
+  } catch (err) {
+    return res.status(500).json({
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
+})
+
 router.get('/builds/:id/engagement', async (req, res) => {
   const buildId = typeof req.params.id === 'string' ? req.params.id.trim() : ''
   if (!buildId) return res.status(400).json({ error: 'Invalid build id' })
@@ -685,8 +696,10 @@ router.get('/builds/:id/engagement', async (req, res) => {
       views: stats.views,
       sharesTotal: stats.shares.link + stats.shares.image + stats.shares.image_with_meta,
       shares: stats.shares,
+      imports: stats.imports ?? 0,
       lastViewedAt: stats.lastViewedAt,
       lastSharedAt: stats.lastSharedAt,
+      lastImportedAt: stats.lastImportedAt ?? null,
       updatedAt: stats.updatedAt,
     })
   } catch (err) {

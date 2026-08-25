@@ -302,7 +302,7 @@
         :class="{ 'build-card--skill-picker-open': Boolean(openSkillDropdown) }"
       >
         <!-- Version (top right) -->
-        <div class="build-version">{{ version }}</div>
+        <div class="build-version">{{ displayPatchVersion }}</div>
 
         <KaynFormSelector
           v-if="showKaynFormSelector && selectedChampion?.passive?.image?.full"
@@ -1892,6 +1892,7 @@ import { useGameVersion } from '~/composables/useGameVersion'
 import { useLayoutScaled } from '~/composables/useLayoutScaled'
 import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 import { useChampionSplashPreference } from '~/composables/useChampionSplashPreference'
+import { formatBuildPatchVersion } from '~/utils/patchVersion'
 import {
   formatLethality,
   formatPenetrationPercentFlat,
@@ -3038,6 +3039,7 @@ watch(showChampionSplashArt, () => nextTick(() => scheduleFitChampionTitle()))
 const { version: defaultVersion } = useGameVersion()
 // Version affichée (build ou courante)
 const version = computed(() => displayBuild.value?.gameVersion || defaultVersion.value)
+const displayPatchVersion = computed(() => formatBuildPatchVersion(version.value))
 // Version pour les URLs d'images : toujours la version courante (assets disponibles côté serveur)
 const versionForImages = defaultVersion
 
