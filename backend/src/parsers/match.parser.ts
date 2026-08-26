@@ -17,8 +17,15 @@ import { isBootsTier2Or3ItemId } from "./bootItemClassification.js";
 import { isLegendaryCompleteItem } from "./itemLegendaryClassification.js";
 import { isStarterPurchase } from "./starterItemClassification.js";
 import { computeChampionVsLaneMetrics } from "./championVsLaneMetrics.js";
+import { DEPRECATED_CHALLENGE_KEYS } from "../constants/participantChallengeFields.js";
 import { readTeamFirstObjectiveFlags } from "./teamFirstObjectives.js";
-import { normalizeLolRole, type LolRole } from "../constants/lolEnums.js";
+import { type LolRole } from "../constants/lolEnums.js";
+import {
+  laneSlotFromParticipantId,
+  lolOpponentParticipantId,
+  pickOrderFromParticipantId,
+  resolveParticipantRole,
+} from "../constants/participantRole.js";
 const U15_WINDOW_MS = 900_000;
 
 function extractPatchFromVersion(gameVersion: string): string {
@@ -29,8 +36,27 @@ function extractPatchFromVersion(gameVersion: string): string {
   return `${major}.${minor}`;
 }
 
-function mapRole(teamPosition: string | undefined): LolRole {
-  return normalizeLolRole(teamPosition);
+function mapRole(participantId: number, teamPosition: string | undefined): LolRole {
+  return resolveParticipantRole(participantId, teamPosition);
+}
+
+function findLaneOpponent(
+  participants: ParticipantDto[],
+  participant: ParticipantDto,
+): ParticipantDto | null {
+  const opponentId = lolOpponentParticipantId(participant.participantId);
+  if (opponentId != null) {
+    const byId = participants.find((candidate) => candidate.participantId === opponentId);
+    if (byId) return byId;
+  }
+  const role = mapRole(participant.participantId, participant.teamPosition);
+  return (
+    participants.find(
+      (candidate) =>
+        candidate.teamId !== participant.teamId &&
+        mapRole(candidate.participantId, candidate.teamPosition) === role,
+    ) ?? null
+  );
 }
 
 function serializeItemSet(items: number[]): string {
@@ -248,6 +274,7 @@ function mapChallengeSums(challenges: ChallengesDto | undefined): Record<string,
 
   const out: Record<string, number> = {};
   for (const [key, raw] of Object.entries(challenges)) {
+    if (DEPRECATED_CHALLENGE_KEYS.has(key)) continue;
     if (typeof raw !== "number" || !Number.isFinite(raw)) continue;
     const isPercentLike =
       key.toLowerCase().includes("percentage") ||
@@ -393,13 +420,13 @@ function getTeamBanChampionIdsSorted(match: MatchDto, teamId: 100 | 200): number
 export function extractBanByParticipantId(match: MatchDto): Map<number, number> {
   const banByParticipant = new Map<number, number>();
   for (const teamId of [100, 200] as const) {
-    const sortedTeam = getTeamParticipantsSortedById(match, teamId);
     const teamBans = getTeamBanChampionIdsSorted(match, teamId);
-    sortedTeam.forEach((participant, slotIdx) => {
+    for (const participant of getTeamParticipantsSortedById(match, teamId)) {
+      const slotIdx = laneSlotFromParticipantId(participant.participantId, teamId);
       const bannedChampionId =
         slotIdx >= 0 && slotIdx < teamBans.length ? teamBans[slotIdx]! : 0;
       banByParticipant.set(participant.participantId, bannedChampionId);
-    });
+    }
   }
   return banByParticipant;
 }
@@ -447,10 +474,8 @@ export function parseMatch(
       return null;
     }
 
-    const role = mapRole(participant.teamPosition);
-    const opponent =
-      participants.find((candidate) => candidate.teamId !== participant.teamId && mapRole(candidate.teamPosition) === role) ??
-      null;
+    const role = mapRole(participant.participantId, participant.teamPosition);
+    const opponent = findLaneOpponent(participants, participant);
 
     const { phasedPurchases, finalIds, finalInventorySet } = buildParticipantPhasedPurchases(
       events,
@@ -483,10 +508,16 @@ export function parseMatch(
     const materialIds = uniqueFinalIdsByFirstPurchase.filter((itemId) => !coreLegendarySet.has(itemId));
 
     const tid = participant.teamId as 100 | 200;
-    const sortedTeam = tid === 100 ? team100Sorted : team200Sorted;
     const teamBans = tid === 100 ? bans100 : bans200;
-    const slotIdx = sortedTeam.findIndex((value) => value.participantId === participant.participantId);
-    const pickOrder = Math.max(1, slotIdx + 1);
+    const slotIdx = laneSlotFromParticipantId(participant.participantId, tid);
+    const pickOrder =
+      pickOrderFromParticipantId(participant.participantId, tid) ||
+      Math.max(
+        1,
+        (tid === 100 ? team100Sorted : team200Sorted).findIndex(
+          (value) => value.participantId === participant.participantId,
+        ) + 1,
+      );
     const bannedChampionId = slotIdx >= 0 && slotIdx < teamBans.length ? teamBans[slotIdx]! : 0;
 
     const perkStyleIds = (participant.perks?.styles ?? []).flatMap((style) =>
@@ -547,7 +578,7 @@ export function parseMatch(
       goldSpent: participant.goldSpent,
       opponentChampionId: Number(opponent?.championId ?? 0),
       opponentParticipantId: Number(opponent?.participantId ?? 0),
-      opponentRole: opponent ? mapRole(opponent.teamPosition) : "UNKNOWN",
+      opponentRole: opponent ? mapRole(opponent.participantId, opponent.teamPosition) : "UNKNOWN",
       spellOrder: computeSpellOrder(events, participant.participantId),
       spellLevelUpTimestampSumMs: computeSpellLevelUpTimestampSumMs(events, participant.participantId),
       spell1Casts: Math.max(0, Math.trunc(Number(participant.spell1Casts ?? 0))),

@@ -13,6 +13,11 @@ import {
 import { toJungleCampHistoryDoc } from "../parsers/junglePathExtract.js";
 import { normalizePlatformRegion } from "../riot/platform-region.js";
 import { classifyParticipantLaneEvents, toParticipantMeta } from "../analysis/timelineAdapter.js";
+import { resolveParticipantRole } from "../constants/participantRole.js";
+import {
+  collectUnmappedChallengeFields,
+  DEPRECATED_CHALLENGE_KEYS,
+} from '../constants/participantChallengeFields.js'
 import type { ChallengesDto, MatchDto, MatchTimelineDto, MatchTimelineEventDto, ParticipantDto, TeamDto } from "../riot/types.js";
 
 function ti(v: unknown): number {
@@ -63,6 +68,7 @@ export const CHALLENGE_COLUMN_MAP: Record<string, string> = {
   abilityUses: "ability_uses",
   acesBefore15Minutes: "aces_before_15_minutes",
   baronTakedowns: "baron_takedowns",
+  baronBuffGoldAdvantageOverThreshold: "baron_buff_gold_advantage_over_threshold",
   blastConeOppositeOpponentCount: "blast_cone_opposite_opponent_count",
   bountyGold: "bounty_gold",
   buffsStolen: "buffs_stolen",
@@ -83,7 +89,6 @@ export const CHALLENGE_COLUMN_MAP: Record<string, string> = {
   epicMonsterSteals: "epic_monster_steals",
   epicMonsterStolenWithoutSmite: "epic_monster_stolen_without_smite",
   firstTurretKilled: "first_turret_killed",
-  firstTurretKilledTime: "first_turret_killed_time",
   flawlessAces: "flawless_aces",
   fullTeamTakedown: "full_team_takedown",
   getTakedownsInAllLanesEarlyJungleAsLaner: "get_takedowns_in_all_lanes_early_jungle_as_laner",
@@ -123,6 +128,7 @@ export const CHALLENGE_COLUMN_MAP: Record<string, string> = {
   scuttleCrabKills: "scuttle_crab_kills",
   skillshotsDodged: "skillshots_dodged",
   skillshotsHit: "skillshots_hit",
+  shortestTimeToAceFromFirstTakedown: "shortest_time_to_ace_from_first_takedown",
   soloBaronKills: "solo_baron_kills",
   soloKills: "solo_kills",
   soloTurretsLategame: "solo_turrets_lategame",
@@ -165,24 +171,43 @@ function isValidParticipantColumn(name: string): boolean {
   return /^[a-z][a-z0-9_]*$/.test(name);
 }
 
+const PARTICIPANT_MAPPED_CHALLENGE_KEYS = new Set(Object.keys(CHALLENGE_COLUMN_MAP))
+
+const CHALLENGE_BOOLEAN_ONLY_KEYS = new Set([
+  'lostAnInhibitor',
+  'mejaisFullStackInTime',
+  'perfectDragonSoulsTaken',
+  'perfectGame',
+  'quickFirstTurret',
+])
+
 function applyChallengesToRow(row: Record<string, unknown>, challenges: ChallengesDto | undefined): void {
-  if (!challenges) return;
+  if (!challenges) return
   for (const [key, raw] of Object.entries(challenges)) {
-    const col = CHALLENGE_COLUMN_MAP[key];
-    if (!col || !isValidParticipantColumn(col)) continue;
-    if (col in row) continue;
-    if (typeof raw !== "number" || !Number.isFinite(raw)) continue;
-    row[col] = challengeNumericForColumn(col, raw);
+    if (DEPRECATED_CHALLENGE_KEYS.has(key)) continue
+    const col = CHALLENGE_COLUMN_MAP[key]
+    if (!col || !isValidParticipantColumn(col)) continue
+    if (col in row) continue
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) continue
+    row[col] = challengeNumericForColumn(col, raw)
   }
-  if (challenges.lostAnInhibitor != null) row.lost_an_inhibitor = challengeBool(challenges.lostAnInhibitor);
+  if (challenges.lostAnInhibitor != null) row.lost_an_inhibitor = challengeBool(challenges.lostAnInhibitor)
   if (challenges.mejaisFullStackInTime != null) {
-    row.mejais_full_stack_in_time = challengeBool(challenges.mejaisFullStackInTime);
+    row.mejais_full_stack_in_time = challengeBool(challenges.mejaisFullStackInTime)
   }
   if (challenges.perfectDragonSoulsTaken != null) {
-    row.perfect_dragon_souls_taken = challengeBool(challenges.perfectDragonSoulsTaken);
+    row.perfect_dragon_souls_taken = challengeBool(challenges.perfectDragonSoulsTaken)
   }
-  if (challenges.perfectGame != null) row.perfect_game = challengeBool(challenges.perfectGame);
-  if (challenges.quickFirstTurret != null) row.quick_first_turret = challengeBool(challenges.quickFirstTurret);
+  if (challenges.perfectGame != null) row.perfect_game = challengeBool(challenges.perfectGame)
+  if (challenges.quickFirstTurret != null) row.quick_first_turret = challengeBool(challenges.quickFirstTurret)
+
+  const extra = collectUnmappedChallengeFields(challenges as Record<string, unknown>, {
+    mappedKeys: PARTICIPANT_MAPPED_CHALLENGE_KEYS,
+    skipKeys: CHALLENGE_BOOLEAN_ONLY_KEYS,
+  })
+  if (Object.keys(extra).length > 0) {
+    row.challenges_extra = extra
+  }
 }
 
 function buildParticipantRow(
@@ -201,6 +226,7 @@ function buildParticipantRow(
   const secondarySelections = perkSelections(secondaryStyle);
 
   const teamPosition = String(participant.teamPosition ?? "").trim().toUpperCase();
+  const participantRole = resolveParticipantRole(ti(participant.participantId), teamPosition);
 
   const row: Record<string, unknown> = {
     riot_match_id: matchId,
@@ -309,7 +335,7 @@ function buildParticipantRow(
     ward_killed_history: timelineData.wardKilledHistory,
     jungle_camp_history: toJungleCampHistoryDoc(
       timelineData.jungleCampHistory,
-      teamPosition === "JUNGLE",
+      participantRole === "JUNGLE",
     ),
     gold_buckets: timelineData.buckets.goldBuckets,
     cs_buckets: timelineData.buckets.csBuckets,
@@ -331,6 +357,7 @@ function buildParticipantRow(
     gold_spent_buckets: timelineData.buckets.goldSpentBuckets,
     turret_damage_buckets: timelineData.buckets.turretDamageBuckets,
     objective_damage_buckets: timelineData.buckets.objectiveDamageBuckets,
+    was_afk: tb(participant.wasAfk),
     win: tb(participant.win),
   };
 
@@ -477,6 +504,7 @@ export async function persistNormalizedMatch(
       "ward_history",
       "ward_killed_history",
       "jungle_camp_history",
+      "challenges_extra",
     ]);
     const arrayCols = new Set([
       "primary_selection_0",

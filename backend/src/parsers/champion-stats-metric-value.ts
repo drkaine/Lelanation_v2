@@ -22,7 +22,6 @@ export const CHAMPION_STATS_DOUBLE_METRIC_COLUMNS = new Set<string>([
   "sum_damage_per_minute",
   "sum_effective_heal_and_shielding",
   "sum_earliest_baron",
-  "sum_first_turret_killed_time",
   "sum_game_length",
   "sum_gold_per_minute",
   "sum_vision_score_per_minute",

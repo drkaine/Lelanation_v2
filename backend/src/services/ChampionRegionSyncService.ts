@@ -1,7 +1,8 @@
 import { join } from 'path'
-import { chromium, type Browser } from 'playwright'
+import type { Browser } from 'playwright'
 import { FileManager } from '../utils/fileManager.js'
 import { createCronLogger } from '../utils/cronLogger.js'
+import { launchChromium } from '../utils/playwrightBrowser.js'
 import {
   applyAutoChampionRegionUpdates,
   compareChampionRegions,
@@ -18,6 +19,7 @@ import {
 
 const UNIVERSE_CHAMPIONS_URL = 'https://universe.leagueoflegends.com/fr_FR/champions/'
 const UNIVERSE_BROWSE_JSON_FRAGMENT = 'champion-browse/index.json'
+const championRegionLog = createCronLogger('championRegionSync')
 
 export type RegionsFilePayload = {
   regionsData: Record<string, [string, string]>
@@ -75,7 +77,13 @@ function buildChampionIdLookup(champions: ChampionLiteEntry[]): Map<string, stri
 
 async function fetchUniverseChampions(browser?: Browser): Promise<UniverseChampionEntry[]> {
   const ownsBrowser = !browser
-  const activeBrowser = browser ?? (await chromium.launch({ headless: true }))
+  const activeBrowser =
+    browser ??
+    (await launchChromium({
+      onInstall: async reason => {
+        await championRegionLog.info('Installing Playwright Chromium', { reason })
+      },
+    }))
   const page = await activeBrowser.newPage()
 
   const browseResponsePromise = page.waitForResponse(

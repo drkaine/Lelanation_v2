@@ -3,7 +3,10 @@
  */
 import type { ParsedItemDto, ParsedParticipantDto } from "../dto/match.dto.js";
 import { CHAMPION_STATS_METRIC_COLUMN_SET } from "../constants/championStatsMetricColumns.js";
-import { normalizeLolRole } from "../constants/lolEnums.js";
+import {
+  lolOpponentParticipantId,
+  resolveParticipantRole,
+} from "../constants/participantRole.js";
 import { CHALLENGE_COLUMN_MAP } from "./normalizedMatchPersistence.js";
 import {
   applyNormalizedBooleanChallenges,
@@ -26,8 +29,8 @@ type MatchContext = {
   surrender: boolean;
 };
 
-function mapRole(teamPosition: unknown): ParsedParticipantDto["role"] {
-  return normalizeLolRole(String(teamPosition ?? ""));
+function mapRole(participantId: unknown, teamPosition: unknown): ParsedParticipantDto["role"] {
+  return resolveParticipantRole(Math.trunc(Number(participantId)), String(teamPosition ?? ""));
 }
 
 function n(v: unknown): number {
@@ -139,15 +142,20 @@ function findOpponent(
   row: ParticipantRow,
   allRows: ParticipantRow[],
 ): { championId: number; participantId: number; role: string } {
-  const role = mapRole(row.team_position);
-  const teamId = n(row.team_id);
-  const opponent = allRows.find(
-    (other) => n(other.team_id) !== teamId && mapRole(other.team_position) === role,
-  );
+  const participantId = n(row.participant_id);
+  const opponentId = lolOpponentParticipantId(participantId);
+  const opponent =
+    (opponentId != null ? allRows.find((other) => n(other.participant_id) === opponentId) : undefined) ??
+    allRows.find(
+      (other) =>
+        n(other.team_id) !== n(row.team_id) &&
+        mapRole(other.participant_id, other.team_position) ===
+          mapRole(row.participant_id, row.team_position),
+    );
   return {
     championId: n(opponent?.champion_id),
     participantId: n(opponent?.participant_id),
-    role: opponent ? mapRole(opponent.team_position) : "UNKNOWN",
+    role: opponent ? mapRole(opponent.participant_id, opponent.team_position) : "UNKNOWN",
   };
 }
 
@@ -201,7 +209,7 @@ export function participantRowsToParsedDtos(
       region: match.region,
       rankTier: "UNRANKED",
       needsRankFetch: false,
-      role: mapRole(row.team_position),
+      role: mapRole(row.participant_id, row.team_position),
       championId: n(row.champion_id),
       championTransform: n(row.champion_transform),
       transformTimestampMs: n(row.transform_timestamp_ms),

@@ -184,6 +184,7 @@ export interface ParticipantDto {
   visionWardsBoughtInGame: number;
   wardsKilled: number;
   wardsPlaced: number;
+  wasAfk?: boolean;
   win: boolean;
   challenges?: ChallengesDto;
 }
@@ -236,7 +237,6 @@ export interface ChallengesDto {
   epicMonsterSteals?: number;
   epicMonsterStolenWithoutSmite?: number;
   fistBumpParticipation?: number;
-  firstTurretKilledTime?: number;
   flawlessAces?: number;
   fullTeamTakedown?: number;
   gameLength?: number;

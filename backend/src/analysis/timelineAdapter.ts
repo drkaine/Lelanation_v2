@@ -1,6 +1,7 @@
 import type { MatchTimelineDto } from "../riot/types.js";
 import type { ParticipantMeta, TeamPosition } from "../types/eventClassifier.js";
 import type { RiotTimeline, TimelineFrame } from "../types/timeline.js";
+import { resolveParticipantRole } from "../constants/participantRole.js";
 import { processTimeline } from "./timelineAnalyzer.js";
 
 const TEAM_POSITIONS = new Set<TeamPosition>(["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"]);
@@ -18,7 +19,9 @@ export function toParticipantMeta(input: {
   teamPosition: string;
   championId: number;
 }): ParticipantMeta | null {
-  const teamPosition = normalizeTeamPosition(input.teamPosition);
+  const teamPosition = normalizeTeamPosition(
+    resolveParticipantRole(input.participantId, input.teamPosition),
+  );
   if (!teamPosition) return null;
   if (input.teamId !== 100 && input.teamId !== 200) return null;
   if (input.participantId <= 0) return null;

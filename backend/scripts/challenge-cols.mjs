@@ -9,7 +9,7 @@ const ALLOWLIST = [
   '12AssistStreakCount', 'InfernalScalePickup', 'acesBefore15Minutes',
   'deathsByEnemyChamps', 'killsUnderOwnTurret', 'riftHeraldTakedowns',
   'teamRiftHeraldKills', 'killsNearEnemyTurret', 'teamElderDragonKills',
-  'elderDragonMultikills', 'firstTurretKilledTime', 'fistBumpParticipation',
+  'elderDragonMultikills', 'fistBumpParticipation',
   'mejaisFullStackInTime', 'takedownOnFirstTurret', 'takedownsFirstXMinutes',
   'wardTakedownsBefore20M', 'jungleCsBefore10Minutes', 'killAfterHiddenWithAlly',
   'landSkillShotsEarlyGame', 'perfectDragonSoulsTaken', 'tookLargeDamageSurvived',
