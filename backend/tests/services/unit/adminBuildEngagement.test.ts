@@ -8,6 +8,7 @@ let getAdminBuildEngagementRecap: typeof import('../../../src/services/AdminBuil
 let removeBuildEngagement: typeof import('../../../src/services/BuildEngagementService.js').removeBuildEngagement
 let purgeOrphanBuildEngagement: typeof import('../../../src/services/BuildEngagementService.js').purgeOrphanBuildEngagement
 let trackBuildAppImport: typeof import('../../../src/services/BuildEngagementService.js').trackBuildAppImport
+let trackBuildFavorite: typeof import('../../../src/services/BuildEngagementService.js').trackBuildFavorite
 let invalidateBuildIndex: typeof import('../../../src/services/BuildIndexService.js').invalidateBuildIndex
 
 const UUID_A = '11111111-1111-4111-8111-111111111111'
@@ -76,6 +77,7 @@ beforeAll(async () => {
   removeBuildEngagement = engagementMod.removeBuildEngagement
   purgeOrphanBuildEngagement = engagementMod.purgeOrphanBuildEngagement
   trackBuildAppImport = engagementMod.trackBuildAppImport
+  trackBuildFavorite = engagementMod.trackBuildFavorite
 
   const mod = await import('../../../src/services/AdminBuildEngagementService.js')
   getAdminBuildEngagementRecap = mod.getAdminBuildEngagementRecap
@@ -126,7 +128,48 @@ describe('purgeOrphanBuildEngagement', () => {
   })
 })
 
+describe('trackBuildFavorite', () => {
+  it('increments favorites on add and decrements on remove', async () => {
+    await trackBuildFavorite(UUID_A, 'add')
+    await trackBuildFavorite(UUID_A, 'add')
+    await trackBuildFavorite(UUID_A, 'remove')
+
+    const raw = JSON.parse(await readFile(join(dir, 'engagement.json'), 'utf8')) as {
+      builds: Record<string, { favorites?: number; lastFavoritedAt?: string | null }>
+    }
+    expect(raw.builds[UUID_A]?.favorites).toBe(1)
+    expect(raw.builds[UUID_A]?.lastFavoritedAt).toBeTruthy()
+  })
+})
+
 describe('getAdminBuildEngagementRecap', () => {
+  it('includes builds with favorites only', async () => {
+    await writeFile(
+      join(dir, 'engagement.json'),
+      JSON.stringify({
+        builds: {
+          [UUID_A]: {
+            buildId: UUID_A,
+            views: 0,
+            shares: { link: 0, image: 0, image_with_meta: 0 },
+            imports: 0,
+            favorites: 2,
+            lastViewedAt: null,
+            lastSharedAt: null,
+            lastImportedAt: null,
+            lastFavoritedAt: '2026-01-06T00:00:00.000Z',
+            updatedAt: '2026-01-06T00:00:00.000Z',
+          },
+        },
+      })
+    )
+
+    const recap = await getAdminBuildEngagementRecap()
+    expect(recap.totals.builds).toBe(1)
+    expect(recap.totals.favorites).toBe(2)
+    expect(recap.rows[0]?.favorites).toBe(2)
+  })
+
   it('purges orphan stats and lists only builds with engagement', async () => {
     const recap = await getAdminBuildEngagementRecap()
     expect(recap.totals.builds).toBe(1)

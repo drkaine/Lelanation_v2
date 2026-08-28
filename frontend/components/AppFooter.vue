@@ -57,41 +57,20 @@
     </div>
 
     <!-- Contact modal -->
-    <Teleport to="body">
-      <div
-        v-if="contactModalOpen"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black p-4"
-        @click.self="closeContactModal"
-      >
-        <div
-          class="w-full max-w-md rounded-lg border border-primary/30 bg-surface shadow-xl"
-          role="dialog"
-          aria-labelledby="contact-modal-title"
-        >
-          <div class="flex items-center justify-between border-b border-primary/20 px-4 py-3">
-            <h2 id="contact-modal-title" class="text-lg font-semibold text-text">
-              {{ t('contactModal.title') }}
-            </h2>
-            <button
-              type="button"
-              class="rounded p-1 text-text/60 transition-colors hover:bg-primary/20 hover:text-text"
-              :aria-label="t('contactModal.close')"
-              @click="closeContactModal"
-            >
-              <Icon name="mdi:close" size="20" />
-            </button>
-          </div>
-          <div class="p-4">
-            <ContactForm
-              id-prefix="footer-contact-"
-              show-cancel
-              @cancel="closeContactModal"
-              @success="onContactSuccess"
-            />
-          </div>
-        </div>
-      </div>
-    </Teleport>
+    <AppModal
+      :open="contactModalOpen"
+      size="sm"
+      :title="t('contactModal.title')"
+      :close-label="t('contactModal.close')"
+      @close="closeContactModal"
+    >
+      <ContactForm
+        id-prefix="footer-contact-"
+        show-cancel
+        @cancel="closeContactModal"
+        @success="onContactSuccess"
+      />
+    </AppModal>
   </footer>
 </template>
 

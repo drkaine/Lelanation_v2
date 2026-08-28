@@ -6,14 +6,18 @@ export type BuildShareType = 'link' | 'image' | 'image_with_meta'
 
 type BuildShareStats = Record<BuildShareType, number>
 
+export type BuildFavoriteAction = 'add' | 'remove'
+
 export type BuildEngagementEntry = {
   buildId: string
   views: number
   shares: BuildShareStats
   imports: number
+  favorites: number
   lastViewedAt: string | null
   lastSharedAt: string | null
   lastImportedAt: string | null
+  lastFavoritedAt: string | null
   updatedAt: string
 }
 
@@ -35,9 +39,11 @@ function createEmptyEntry(buildId: string): BuildEngagementEntry {
     views: 0,
     shares: defaultShares(),
     imports: 0,
+    favorites: 0,
     lastViewedAt: null,
     lastSharedAt: null,
     lastImportedAt: null,
+    lastFavoritedAt: null,
     updatedAt: new Date().toISOString(),
   }
 }
@@ -100,6 +106,20 @@ export async function trackBuildAppImport(buildId: string): Promise<BuildEngagem
   return mutateBuildEntry(buildId, (entry, nowIso) => {
     entry.imports = (entry.imports ?? 0) + 1
     entry.lastImportedAt = nowIso
+  })
+}
+
+export async function trackBuildFavorite(
+  buildId: string,
+  action: BuildFavoriteAction
+): Promise<BuildEngagementEntry> {
+  return mutateBuildEntry(buildId, (entry, nowIso) => {
+    if (action === 'add') {
+      entry.favorites = (entry.favorites ?? 0) + 1
+      entry.lastFavoritedAt = nowIso
+      return
+    }
+    entry.favorites = Math.max(0, (entry.favorites ?? 0) - 1)
   })
 }
 

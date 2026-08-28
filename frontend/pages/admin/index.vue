@@ -1,6 +1,12 @@
 <template>
   <div class="admin-dashboard min-h-screen p-4 text-text">
-    <div :class="activeTab === 'logs' ? 'w-full max-w-none' : 'mx-auto max-w-6xl'">
+    <div
+      :class="
+        activeTab === 'logs' || activeTab === 'stats' || activeTab === 'buildEngagement'
+          ? 'w-full max-w-none'
+          : 'mx-auto max-w-6xl'
+      "
+    >
       <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 class="text-3xl font-bold text-text-accent">Admin</h1>
@@ -107,10 +113,10 @@
         </div>
       </div>
 
-      <!-- Tab: Stats (DB collecte) -->
+      <!-- Tab: Stats collecte -->
       <AdminCollectStatsTab v-show="activeTab === 'stats'" ref="collectStatsTabRef" />
 
-      <!-- Tab: Build engagement -->
+      <!-- Tab: Engagement builds -->
       <AdminBuildEngagementTab
         v-show="activeTab === 'buildEngagement'"
         ref="buildEngagementTabRef"
@@ -736,49 +742,35 @@
           </div>
         </div>
 
-        <!-- Modal: Riot Poller logs -->
-        <div
-          v-show="riotPollerLogsOpen || riotPollerPm2LogsOpen"
-          class="fixed inset-0 z-50 flex items-center justify-center bg-black p-4"
-          @click.self="closeRiotPollerLogModals"
+        <AppModal
+          :open="riotPollerLogsOpen || riotPollerPm2LogsOpen"
+          size="lg"
+          scrollable
+          body-class="max-h-[60vh] overflow-auto whitespace-pre-wrap break-all p-4 font-mono text-xs text-text/90"
+          @close="closeRiotPollerLogModals"
         >
-          <div
-            class="max-h-[80vh] w-full max-w-3xl overflow-hidden rounded-lg border border-primary/30 bg-background shadow-xl"
-          >
-            <div class="flex items-center justify-between border-b border-primary/20 px-4 py-2">
-              <div>
-                <h3 class="font-semibold text-text">
-                  {{ riotPollerPm2LogsOpen ? 'Logs PM2 poller' : 'Logs unifiés poller' }}
-                </h3>
-                <p class="text-xs text-text/60">
-                  {{
-                    riotPollerPm2LogSource ??
-                    'Répertoire: logs (lelanation-unified.log — résumés poller_v3_*)'
-                  }}
-                </p>
-              </div>
-              <button
-                type="button"
-                class="rounded border border-primary/40 px-2 py-1 text-sm text-text hover:bg-primary/20"
-                @click="closeRiotPollerLogModals"
-              >
-                Fermer
-              </button>
-            </div>
-            <div
-              class="max-h-[60vh] overflow-auto whitespace-pre-wrap break-all p-4 font-mono text-xs text-text/90"
-            >
-              <p v-if="riotPollerLogsLoading || riotPollerPm2LogsLoading" class="text-text/70">
-                Chargement…
+          <template #header>
+            <div>
+              <h2 class="text-lg font-semibold text-accent md:text-xl">
+                {{ riotPollerPm2LogsOpen ? 'Logs PM2 poller' : 'Logs unifiés poller' }}
+              </h2>
+              <p class="mt-1 text-sm text-text/70">
+                {{
+                  riotPollerPm2LogSource ??
+                  'Répertoire: logs (lelanation-unified.log — résumés poller_v3_*)'
+                }}
               </p>
-              <p v-else-if="riotPollerLogsError" class="text-error">{{ riotPollerLogsError }}</p>
-              <template v-else-if="activeRiotPollerLogLines.length === 0">Aucun log.</template>
-              <template v-else>
-                <div v-for="(line, i) in activeRiotPollerLogLines" :key="i">{{ line }}</div>
-              </template>
             </div>
-          </div>
-        </div>
+          </template>
+          <p v-if="riotPollerLogsLoading || riotPollerPm2LogsLoading" class="text-text/70">
+            Chargement…
+          </p>
+          <p v-else-if="riotPollerLogsError" class="text-error">{{ riotPollerLogsError }}</p>
+          <template v-else-if="activeRiotPollerLogLines.length === 0">Aucun log.</template>
+          <template v-else>
+            <div v-for="(line, i) in activeRiotPollerLogLines" :key="i">{{ line }}</div>
+          </template>
+        </AppModal>
       </div>
 
       <!-- Removed: matchups, cronstatus, apikey, seedplayers (merged into Data tab) -->
@@ -1507,42 +1499,27 @@
             </button>
           </div>
         </div>
-        <div
-          v-if="unifiedLogJsonModal"
-          class="fixed inset-0 z-50 flex items-center justify-center bg-black p-4"
-          role="dialog"
-          aria-modal="true"
-          @click.self="unifiedLogJsonModal = null"
+        <AppModal
+          :open="Boolean(unifiedLogJsonModal)"
+          size="lg"
+          scrollable
+          :title="t('admin.logs.jsonTitle')"
+          body-class="max-h-[70vh] overflow-auto p-4"
+          @close="unifiedLogJsonModal = null"
         >
-          <div
-            class="max-h-[85vh] w-full max-w-3xl overflow-hidden rounded-lg border border-primary/30 bg-background shadow-xl"
-          >
-            <div class="flex items-center justify-between border-b border-primary/20 px-4 py-2">
-              <span class="font-semibold text-text">{{ t('admin.logs.jsonTitle') }}</span>
-              <button
-                type="button"
-                class="rounded px-2 py-1 text-sm text-text hover:bg-primary/20"
-                @click="unifiedLogJsonModal = null"
-              >
-                ✕
-              </button>
-            </div>
-            <div class="max-h-[70vh] overflow-auto p-4">
-              <pre class="whitespace-pre-wrap break-all font-mono text-xs text-text">{{
-                prettyUnifiedJson(unifiedLogJsonModal.json)
-              }}</pre>
-            </div>
-            <div class="border-t border-primary/20 px-4 py-2">
-              <button
-                type="button"
-                class="rounded bg-accent px-3 py-1.5 text-sm text-white"
-                @click="copyUnifiedJson(unifiedLogJsonModal)"
-              >
-                {{ t('admin.logs.copyJson') }}
-              </button>
-            </div>
-          </div>
-        </div>
+          <pre class="whitespace-pre-wrap break-all font-mono text-xs text-text">{{
+            unifiedLogJsonModal ? prettyUnifiedJson(unifiedLogJsonModal.json) : ''
+          }}</pre>
+          <template #footer>
+            <button
+              type="button"
+              class="ui-build-card-button rounded-lg px-4 py-2 text-sm font-semibold"
+              @click="copyUnifiedJson(unifiedLogJsonModal!)"
+            >
+              {{ t('admin.logs.copyJson') }}
+            </button>
+          </template>
+        </AppModal>
       </div>
 
       <!-- Tab: Videos -->
@@ -1638,12 +1615,13 @@ const { fetchWithAuth, clearAuth, checkLoggedIn } = useAdminAuth()
 const VALID_TABS = ['contact', 'videos', 'data', 'stats', 'buildEngagement', 'logs'] as const
 type AdminTab = (typeof VALID_TABS)[number]
 
+function resolveAdminTab(tab: unknown): AdminTab {
+  if (typeof tab !== 'string') return 'contact'
+  return VALID_TABS.includes(tab as AdminTab) ? (tab as AdminTab) : 'contact'
+}
+
 const authError = ref<string | null>(null)
-const activeTab = ref<AdminTab>(
-  (route.query.tab as AdminTab) && VALID_TABS.includes(route.query.tab as AdminTab)
-    ? (route.query.tab as AdminTab)
-    : 'contact'
-)
+const activeTab = ref<AdminTab>(resolveAdminTab(route.query.tab))
 
 const adminTabs = computed(() => [
   { id: 'contact' as const, label: t('admin.tabs.contact') },
@@ -3073,8 +3051,9 @@ onUnmounted(() => {
 watch(
   () => route.query.tab,
   tab => {
-    if (tab && VALID_TABS.includes(tab as AdminTab) && activeTab.value !== tab) {
-      activeTab.value = tab as AdminTab
+    const resolved = resolveAdminTab(tab)
+    if (activeTab.value !== resolved) {
+      activeTab.value = resolved
     }
   }
 )

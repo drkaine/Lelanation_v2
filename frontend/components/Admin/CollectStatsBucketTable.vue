@@ -1,6 +1,6 @@
 <template>
-  <div class="overflow-x-auto rounded border border-primary/20">
-    <table class="min-w-full text-left text-sm">
+  <div class="w-full overflow-x-auto rounded border border-primary/20">
+    <table class="w-full min-w-full table-auto text-left text-sm">
       <thead class="bg-background/50 text-xs uppercase text-text/60">
         <tr>
           <th class="px-3 py-2">{{ t('admin.stats.colPeriod') }}</th>

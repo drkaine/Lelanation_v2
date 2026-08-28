@@ -25,9 +25,11 @@ export type AdminBuildEngagementRow = {
   upvotes: number
   downvotes: number
   imports: number
+  favorites: number
   lastViewedAt: string | null
   lastSharedAt: string | null
   lastImportedAt: string | null
+  lastFavoritedAt: string | null
 }
 
 export type AdminBuildEngagementRecap = {
@@ -41,6 +43,7 @@ export type AdminBuildEngagementRecap = {
     upvotes: number
     downvotes: number
     imports: number
+    favorites: number
   }
   rows: AdminBuildEngagementRow[]
 }
@@ -81,16 +84,23 @@ function rowFrom(
     upvotes,
     downvotes,
     imports: eng.imports ?? 0,
+    favorites: eng.favorites ?? 0,
     lastViewedAt: eng.lastViewedAt ?? null,
     lastSharedAt: eng.lastSharedAt ?? null,
     lastImportedAt: eng.lastImportedAt ?? null,
+    lastFavoritedAt: eng.lastFavoritedAt ?? null,
   }
 }
 
 function hasEngagementStats(eng: BuildEngagementEntry): boolean {
   const sharesTotal =
     (eng.shares?.link ?? 0) + (eng.shares?.image ?? 0) + (eng.shares?.image_with_meta ?? 0)
-  return (eng.views ?? 0) > 0 || sharesTotal > 0 || (eng.imports ?? 0) > 0
+  return (
+    (eng.views ?? 0) > 0 ||
+    sharesTotal > 0 ||
+    (eng.imports ?? 0) > 0 ||
+    (eng.favorites ?? 0) > 0
+  )
 }
 
 export async function getAdminBuildEngagementRecap(): Promise<AdminBuildEngagementRecap> {
@@ -136,6 +146,7 @@ export async function getAdminBuildEngagementRecap(): Promise<AdminBuildEngageme
       acc.upvotes += row.upvotes
       acc.downvotes += row.downvotes
       acc.imports += row.imports
+      acc.favorites += row.favorites
       return acc
     },
     {
@@ -148,6 +159,7 @@ export async function getAdminBuildEngagementRecap(): Promise<AdminBuildEngageme
       upvotes: 0,
       downvotes: 0,
       imports: 0,
+      favorites: 0,
     }
   )
 

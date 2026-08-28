@@ -75,40 +75,31 @@
     </div>
   </div>
 
-  <div
-    v-if="guideToDelete"
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black"
-    @click="guideToDelete = null"
+  <AppModal
+    :open="Boolean(guideToDelete)"
+    size="sm"
+    :title="t('matchupGuidePage.deleteGuideTitle')"
+    :show-close="false"
+    @close="guideToDelete = null"
   >
-    <div
-      class="mx-4 w-full max-w-md rounded-lg bg-surface p-6"
-      style="background-color: var(--color-surface); opacity: 1"
-      @click.stop
-    >
-      <h3 class="mb-4 text-lg font-bold text-text">
-        {{ t('matchupGuidePage.deleteGuideTitle') }}
-      </h3>
-      <p class="mb-6 text-text">
-        {{ t('matchupGuidePage.deleteGuideConfirm') }}
-      </p>
-      <div class="flex gap-4">
-        <button
-          type="button"
-          class="rounded-lg bg-error px-4 py-2 text-text transition-colors hover:bg-error/80"
-          @click="deleteGuide"
-        >
-          {{ t('buildsPage.delete') }}
-        </button>
-        <button
-          type="button"
-          class="rounded-lg border border-accent/70 bg-surface px-4 py-2 text-text transition-colors hover:bg-accent/10"
-          @click="guideToDelete = null"
-        >
-          {{ t('buildsPage.cancel') }}
-        </button>
-      </div>
-    </div>
-  </div>
+    <p class="text-text/90">{{ t('matchupGuidePage.deleteGuideConfirm') }}</p>
+    <template #footer>
+      <button
+        type="button"
+        class="rounded-lg border border-accent/70 bg-surface px-4 py-2 text-text transition-colors hover:bg-accent/10"
+        @click="guideToDelete = null"
+      >
+        {{ t('buildsPage.cancel') }}
+      </button>
+      <button
+        type="button"
+        class="rounded-lg bg-error px-4 py-2 text-text transition-colors hover:bg-error/80"
+        @click="deleteGuide"
+      >
+        {{ t('buildsPage.delete') }}
+      </button>
+    </template>
+  </AppModal>
 </template>
 
 <script setup lang="ts">

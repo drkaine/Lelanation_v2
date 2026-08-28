@@ -13,9 +13,11 @@ import {
   trackBuildView,
   trackBuildShare,
   trackBuildAppImport,
+  trackBuildFavorite,
   getEngagementViewCounts,
   removeBuildEngagement,
   type BuildShareType,
+  type BuildFavoriteAction,
 } from '../services/BuildEngagementService.js'
 import {
   castBuildVote,
@@ -398,6 +400,30 @@ router.post('/:id/track-import', buildEngagementRateLimit, async (req, res) => {
     return res.status(500).json({
       ok: false,
       error: error instanceof Error ? error.message : 'Failed to track build import',
+    })
+  }
+})
+
+/**
+ * Track favorite add/remove.
+ * POST /api/builds/:id/track-favorite
+ * Body: { action: 'add' | 'remove' }
+ */
+router.post('/:id/track-favorite', buildEngagementRateLimit, async (req, res) => {
+  const buildId = typeof req.params.id === 'string' ? req.params.id.trim() : ''
+  const actionRaw = typeof req.body?.action === 'string' ? req.body.action.trim() : ''
+  if (!buildId) return res.status(400).json({ error: 'Invalid build id' })
+  if (actionRaw !== 'add' && actionRaw !== 'remove') {
+    return res.status(400).json({ error: 'Invalid action' })
+  }
+  const action = actionRaw as BuildFavoriteAction
+  try {
+    const stats = await trackBuildFavorite(buildId, action)
+    return res.json({ ok: true, stats })
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Failed to track build favorite',
     })
   }
 })

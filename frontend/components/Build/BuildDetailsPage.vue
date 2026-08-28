@@ -351,37 +351,33 @@
       </div>
     </div>
 
-    <!-- Delete Confirmation Modal -->
-    <div
-      v-if="buildToDelete"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black"
-      @click="buildToDelete = null"
+    <AppModal
+      :open="Boolean(buildToDelete)"
+      size="sm"
+      title="Supprimer le build ?"
+      :show-close="false"
+      @close="buildToDelete = null"
     >
-      <div
-        class="mx-4 w-full max-w-md rounded-lg bg-surface p-6"
-        style="background-color: var(--color-surface); opacity: 1"
-        @click.stop
-      >
-        <h3 class="mb-4 text-lg font-bold text-text">Supprimer le build ?</h3>
-        <p class="mb-6 text-text">
-          Êtes-vous sûr de vouloir supprimer ce build ? Cette action est irréversible.
-        </p>
-        <div class="flex gap-4">
-          <button
-            class="rounded-lg bg-error px-4 py-2 text-text transition-colors hover:bg-error/80"
-            @click="deleteBuild"
-          >
-            Supprimer
-          </button>
-          <button
-            class="rounded-lg border border-accent/70 bg-surface px-4 py-2 text-text transition-colors hover:bg-accent/10"
-            @click="buildToDelete = null"
-          >
-            Annuler
-          </button>
-        </div>
-      </div>
-    </div>
+      <p class="text-text/90">
+        Êtes-vous sûr de vouloir supprimer ce build ? Cette action est irréversible.
+      </p>
+      <template #footer>
+        <button
+          type="button"
+          class="rounded-lg border border-accent/70 bg-surface px-4 py-2 text-text transition-colors hover:bg-accent/10"
+          @click="buildToDelete = null"
+        >
+          Annuler
+        </button>
+        <button
+          type="button"
+          class="rounded-lg bg-error px-4 py-2 text-text transition-colors hover:bg-error/80"
+          @click="deleteBuild"
+        >
+          Supprimer
+        </button>
+      </template>
+    </AppModal>
     <NotificationToast
       v-if="shareToastMessage"
       :message="shareToastMessage"
@@ -705,7 +701,6 @@ const copyBuildImage = async () => {
       detailShareImageOptions(false)
     )
     if (!blob) {
-      console.warn('[BuildDetailsPage] fetch build card png returned null', build.value.id)
       showShareToast(t('buildDiscovery.imageCopyError'), 'error')
       return
     }
@@ -734,7 +729,6 @@ const copyBuildImageWithAuthorAndDescription = async () => {
       detailShareImageOptions(true)
     )
     if (!blob) {
-      console.warn('[BuildDetailsPage] fetch build card png (meta) returned null', build.value.id)
       showShareToast(t('buildDiscovery.imageCopyError'), 'error')
       return
     }

@@ -3,6 +3,7 @@
  * Key: lelanation_favorite_build_ids (JSON array of strings).
  */
 import { defineStore } from 'pinia'
+import { trackBuildFavorite } from '~/utils/trackBuildFavorite'
 
 const STORAGE_KEY = 'lelanation_favorite_build_ids'
 
@@ -46,11 +47,14 @@ export const useFavoritesStore = defineStore('favorites', {
       if (!buildId || this.favoriteBuildIds.includes(buildId)) return
       this.favoriteBuildIds = [...this.favoriteBuildIds, buildId]
       saveToStorage(this.favoriteBuildIds)
+      trackBuildFavorite(buildId, 'add')
     },
 
     removeFavorite(buildId: string) {
+      if (!this.favoriteBuildIds.includes(buildId)) return
       this.favoriteBuildIds = this.favoriteBuildIds.filter(id => id !== buildId)
       saveToStorage(this.favoriteBuildIds)
+      trackBuildFavorite(buildId, 'remove')
     },
 
     toggleFavorite(buildId: string) {

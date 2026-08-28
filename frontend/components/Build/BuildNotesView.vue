@@ -90,49 +90,32 @@
       </p>
     </div>
 
-    <Teleport to="body">
-      <div
-        v-if="vodModalOpen && youtubeEmbedUrl"
-        class="build-notes-vod-overlay"
-        role="presentation"
-        @click.self="vodModalOpen = false"
-      >
-        <div
-          class="build-notes-vod-modal ui-build-card-surface"
-          role="dialog"
-          aria-modal="true"
-          :aria-label="t('buildNotesView.matchupVod')"
-        >
-          <div class="build-notes-vod-modal__head">
-            <h2 class="build-notes-vod-modal__title">{{ t('buildNotesView.matchupVod') }}</h2>
-            <button
-              type="button"
-              class="build-notes-vod-modal__close ui-build-card-button"
-              :aria-label="t('buildNotesView.closeVod')"
-              @click="vodModalOpen = false"
-            >
-              ×
-            </button>
-          </div>
-          <div class="build-notes-vod-modal__video-wrap">
-            <iframe
-              :src="youtubeEmbedUrl"
-              title="YouTube"
-              frameborder="0"
-              allow="
-                accelerometer;
-                autoplay;
-                clipboard-write;
-                encrypted-media;
-                gyroscope;
-                picture-in-picture;
-              "
-              allowfullscreen
-            />
-          </div>
-        </div>
+    <AppModal
+      :open="vodModalOpen && Boolean(youtubeEmbedUrl)"
+      size="xl"
+      :title="t('buildNotesView.matchupVod')"
+      :close-label="t('buildNotesView.closeVod')"
+      body-class="p-0"
+      @close="vodModalOpen = false"
+    >
+      <div class="build-notes-vod-modal__video-wrap">
+        <iframe
+          v-if="youtubeEmbedUrl"
+          :src="youtubeEmbedUrl"
+          title="YouTube"
+          frameborder="0"
+          allow="
+            accelerometer;
+            autoplay;
+            clipboard-write;
+            encrypted-media;
+            gyroscope;
+            picture-in-picture;
+          "
+          allowfullscreen
+        />
       </div>
-    </Teleport>
+    </AppModal>
   </div>
 </template>
 
@@ -321,45 +304,6 @@ watch(
 .build-notes-view__empty--full {
   width: 100%;
   flex: 1 1 100%;
-}
-
-.build-notes-vod-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 120;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-  background: rgba(0, 0, 0, 0.72);
-}
-
-.build-notes-vod-modal {
-  width: min(900px, calc(100vw - 2rem));
-  padding: 1rem;
-}
-
-.build-notes-vod-modal__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
-}
-
-.build-notes-vod-modal__title {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 800;
-  color: var(--color-gold-300, #c8aa6e);
-}
-
-.build-notes-vod-modal__close {
-  width: 2rem;
-  height: 2rem;
-  padding: 0;
-  font-size: 1.35rem;
-  line-height: 1;
 }
 
 .build-notes-vod-modal__video-wrap {

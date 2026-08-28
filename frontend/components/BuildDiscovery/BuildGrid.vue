@@ -380,64 +380,67 @@
       </div>
     </div>
 
-    <div
-      v-if="adminStatsModalOpen"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-      @click="closeBuildStatsModal"
+    <AppModal
+      :open="adminStatsModalOpen"
+      size="sm"
+      :title="t('buildDiscovery.adminStatsTitle')"
+      :close-label="t('contactModal.close')"
+      @close="closeBuildStatsModal"
     >
-      <div
-        class="w-full max-w-md rounded-lg border border-primary/30 bg-surface p-4 text-text"
-        @click.stop
-      >
-        <div class="mb-3 flex items-center justify-between">
-          <h3 class="text-base font-semibold">{{ t('buildDiscovery.adminStatsTitle') }}</h3>
-          <button
-            type="button"
-            class="rounded px-2 py-1 text-sm hover:bg-primary/20"
-            @click="closeBuildStatsModal"
-          >
-            ✕
-          </button>
+      <p class="mb-3 text-xs text-text/70">
+        {{ t('buildDiscovery.adminStatsBuildId') }}: {{ adminStatsBuildId }}
+      </p>
+      <p v-if="adminStatsLoading" class="text-sm text-text/70">{{ t('admin.loading') }}</p>
+      <p v-else-if="adminStatsError" class="text-sm text-error">{{ adminStatsError }}</p>
+      <div v-else-if="adminStatsData" class="space-y-2 text-sm">
+        <div class="flex items-center justify-between">
+          <span>{{ t('buildDiscovery.adminStatsViews') }}</span>
+          <strong>{{ adminStatsData.views }}</strong>
         </div>
-        <p class="mb-3 text-xs text-text/70">
-          {{ t('buildDiscovery.adminStatsBuildId') }}: {{ adminStatsBuildId }}
+        <div class="flex items-center justify-between">
+          <span>{{ t('buildDiscovery.adminStatsSharesTotal') }}</span>
+          <strong>{{ adminStatsData.sharesTotal }}</strong>
+        </div>
+        <div class="flex items-center justify-between">
+          <span>{{ t('buildDiscovery.adminStatsImports') }}</span>
+          <strong>{{ adminStatsData.imports }}</strong>
+        </div>
+        <div class="flex items-center justify-between">
+          <span>{{ t('buildDiscovery.adminStatsFavorites') }}</span>
+          <strong>{{ adminStatsData.favorites }}</strong>
+        </div>
+        <div class="mt-2 rounded-lg border border-primary/30 bg-background/50 p-3 text-xs">
+          <div class="flex items-center justify-between">
+            <span>{{ t('buildDiscovery.adminStatsSharesLink') }}</span>
+            <strong>{{ adminStatsData.shares.link }}</strong>
+          </div>
+          <div class="flex items-center justify-between">
+            <span>{{ t('buildDiscovery.adminStatsSharesImage') }}</span>
+            <strong>{{ adminStatsData.shares.image }}</strong>
+          </div>
+          <div class="flex items-center justify-between">
+            <span>{{ t('buildDiscovery.adminStatsSharesImageMeta') }}</span>
+            <strong>{{ adminStatsData.shares.image_with_meta }}</strong>
+          </div>
+        </div>
+        <p class="text-xs text-text/60">
+          {{ t('buildDiscovery.adminStatsLastView') }}:
+          {{ formatAdminStatsDate(adminStatsData.lastViewedAt) }}
         </p>
-        <p v-if="adminStatsLoading" class="text-sm text-text/70">{{ t('admin.loading') }}</p>
-        <p v-else-if="adminStatsError" class="text-sm text-error">{{ adminStatsError }}</p>
-        <div v-else-if="adminStatsData" class="space-y-2 text-sm">
-          <div class="flex items-center justify-between">
-            <span>{{ t('buildDiscovery.adminStatsViews') }}</span>
-            <strong>{{ adminStatsData.views }}</strong>
-          </div>
-          <div class="flex items-center justify-between">
-            <span>{{ t('buildDiscovery.adminStatsSharesTotal') }}</span>
-            <strong>{{ adminStatsData.sharesTotal }}</strong>
-          </div>
-          <div class="mt-2 rounded border border-primary/30 bg-background/40 p-2 text-xs">
-            <div class="flex items-center justify-between">
-              <span>{{ t('buildDiscovery.adminStatsSharesLink') }}</span>
-              <strong>{{ adminStatsData.shares.link }}</strong>
-            </div>
-            <div class="flex items-center justify-between">
-              <span>{{ t('buildDiscovery.adminStatsSharesImage') }}</span>
-              <strong>{{ adminStatsData.shares.image }}</strong>
-            </div>
-            <div class="flex items-center justify-between">
-              <span>{{ t('buildDiscovery.adminStatsSharesImageMeta') }}</span>
-              <strong>{{ adminStatsData.shares.image_with_meta }}</strong>
-            </div>
-          </div>
-          <p class="text-xs text-text/60">
-            {{ t('buildDiscovery.adminStatsLastView') }}:
-            {{ formatAdminStatsDate(adminStatsData.lastViewedAt) }}
-          </p>
-          <p class="text-xs text-text/60">
-            {{ t('buildDiscovery.adminStatsLastShare') }}:
-            {{ formatAdminStatsDate(adminStatsData.lastSharedAt) }}
-          </p>
-        </div>
+        <p class="text-xs text-text/60">
+          {{ t('buildDiscovery.adminStatsLastShare') }}:
+          {{ formatAdminStatsDate(adminStatsData.lastSharedAt) }}
+        </p>
+        <p class="text-xs text-text/60">
+          {{ t('buildDiscovery.adminStatsLastImport') }}:
+          {{ formatAdminStatsDate(adminStatsData.lastImportedAt) }}
+        </p>
+        <p class="text-xs text-text/60">
+          {{ t('buildDiscovery.adminStatsLastFavorite') }}:
+          {{ formatAdminStatsDate(adminStatsData.lastFavoritedAt) }}
+        </p>
       </div>
-    </div>
+    </AppModal>
 
     <!-- Pagination (Discover, Mes builds, Favoris) -->
     <div
@@ -558,8 +561,12 @@ const adminStatsData = ref<{
   views: number
   sharesTotal: number
   shares: { link: number; image: number; image_with_meta: number }
+  imports: number
+  favorites: number
   lastViewedAt: string | null
   lastSharedAt: string | null
+  lastImportedAt: string | null
+  lastFavoritedAt: string | null
 } | null>(null)
 /** Variante actuellement affichée par build (null = principale). */
 const displayedSubMap = ref<Record<string, number | null>>({})
@@ -1124,8 +1131,12 @@ async function openBuildStatsModal(buildId: string) {
         image: Number(data.shares?.image) || 0,
         image_with_meta: Number(data.shares?.image_with_meta) || 0,
       },
+      imports: Number(data.imports) || 0,
+      favorites: Number(data.favorites) || 0,
       lastViewedAt: typeof data.lastViewedAt === 'string' ? data.lastViewedAt : null,
       lastSharedAt: typeof data.lastSharedAt === 'string' ? data.lastSharedAt : null,
+      lastImportedAt: typeof data.lastImportedAt === 'string' ? data.lastImportedAt : null,
+      lastFavoritedAt: typeof data.lastFavoritedAt === 'string' ? data.lastFavoritedAt : null,
     }
   } catch {
     adminStatsError.value = 'Impossible de charger les stats.'

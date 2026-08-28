@@ -19,7 +19,9 @@
       <p v-if="loading" class="text-text/70">{{ t('admin.loading') }}</p>
       <p v-else-if="error" class="text-sm text-error">{{ error }}</p>
       <template v-else-if="recap">
-        <div class="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        <div
+          class="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-5 2xl:grid-cols-10"
+        >
           <div
             v-for="card in summaryCards"
             :key="card.label"
@@ -30,8 +32,8 @@
           </div>
         </div>
 
-        <div class="overflow-x-auto rounded border border-primary/20">
-          <table class="w-full min-w-[64rem] text-left text-sm">
+        <div class="w-full overflow-x-auto rounded border border-primary/20">
+          <table class="w-full min-w-full table-auto text-left text-sm">
             <thead class="border-b border-primary/20 bg-background/40 text-text/80">
               <tr>
                 <th
@@ -54,7 +56,7 @@
             </thead>
             <tbody>
               <tr v-if="sortedRows.length === 0">
-                <td colspan="14" class="px-3 py-6 text-center text-text/60">
+                <td colspan="16" class="px-3 py-6 text-center text-text/60">
                   {{ t('admin.buildEngagement.empty') }}
                 </td>
               </tr>
@@ -93,9 +95,15 @@
                 <td class="px-3 py-2 text-right tabular-nums text-accent">
                   {{ formatInt(row.imports) }}
                 </td>
+                <td class="px-3 py-2 text-right tabular-nums text-warning">
+                  {{ formatInt(row.favorites) }}
+                </td>
                 <td class="px-3 py-2 text-xs text-text/70">{{ formatDate(row.lastViewedAt) }}</td>
                 <td class="px-3 py-2 text-xs text-text/70">{{ formatDate(row.lastSharedAt) }}</td>
                 <td class="px-3 py-2 text-xs text-text/70">{{ formatDate(row.lastImportedAt) }}</td>
+                <td class="px-3 py-2 text-xs text-text/70">
+                  {{ formatDate(row.lastFavoritedAt) }}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -121,9 +129,11 @@ type BuildEngagementRow = {
   upvotes: number
   downvotes: number
   imports: number
+  favorites: number
   lastViewedAt: string | null
   lastSharedAt: string | null
   lastImportedAt: string | null
+  lastFavoritedAt: string | null
 }
 
 type BuildEngagementRecap = {
@@ -137,6 +147,7 @@ type BuildEngagementRecap = {
     upvotes: number
     downvotes: number
     imports: number
+    favorites: number
   }
   rows: BuildEngagementRow[]
 }
@@ -153,9 +164,11 @@ type SortKey =
   | 'upvotes'
   | 'downvotes'
   | 'imports'
+  | 'favorites'
   | 'lastViewedAt'
   | 'lastSharedAt'
   | 'lastImportedAt'
+  | 'lastFavoritedAt'
 
 type SortDir = 'asc' | 'desc'
 
@@ -214,6 +227,11 @@ const sortColumns = computed(() => [
     align: 'right' as const,
   },
   {
+    key: 'favorites' as const,
+    label: t('admin.buildEngagement.colFavorites'),
+    align: 'right' as const,
+  },
+  {
     key: 'lastViewedAt' as const,
     label: t('admin.buildEngagement.colLastView'),
     align: 'left' as const,
@@ -226,6 +244,11 @@ const sortColumns = computed(() => [
   {
     key: 'lastImportedAt' as const,
     label: t('admin.buildEngagement.colLastImport'),
+    align: 'left' as const,
+  },
+  {
+    key: 'lastFavoritedAt' as const,
+    label: t('admin.buildEngagement.colLastFavorite'),
     align: 'left' as const,
   },
 ])
@@ -298,13 +321,17 @@ const sortedRows = computed(() => {
     if (key === 'upvotes') return compareNumber(a.upvotes, b.upvotes, dir)
     if (key === 'downvotes') return compareNumber(a.downvotes, b.downvotes, dir)
     if (key === 'imports') return compareNumber(a.imports, b.imports, dir)
+    if (key === 'favorites') return compareNumber(a.favorites, b.favorites, dir)
     if (key === 'lastViewedAt') {
       return compareNumber(dateSortValue(a.lastViewedAt), dateSortValue(b.lastViewedAt), dir)
     }
     if (key === 'lastSharedAt') {
       return compareNumber(dateSortValue(a.lastSharedAt), dateSortValue(b.lastSharedAt), dir)
     }
-    return compareNumber(dateSortValue(a.lastImportedAt), dateSortValue(b.lastImportedAt), dir)
+    if (key === 'lastImportedAt') {
+      return compareNumber(dateSortValue(a.lastImportedAt), dateSortValue(b.lastImportedAt), dir)
+    }
+    return compareNumber(dateSortValue(a.lastFavoritedAt), dateSortValue(b.lastFavoritedAt), dir)
   })
 })
 
@@ -321,6 +348,10 @@ const summaryCards = computed(() => {
       value: formatInt(totals.sharesImageWithMeta),
     },
     { label: t('admin.buildEngagement.totalShares'), value: formatInt(totals.sharesTotal) },
+    { label: t('admin.buildEngagement.totalUpvotes'), value: formatInt(totals.upvotes) },
+    { label: t('admin.buildEngagement.totalDownvotes'), value: formatInt(totals.downvotes) },
+    { label: t('admin.buildEngagement.totalImports'), value: formatInt(totals.imports) },
+    { label: t('admin.buildEngagement.totalFavorites'), value: formatInt(totals.favorites) },
   ]
 })
 

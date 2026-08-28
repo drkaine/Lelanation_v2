@@ -1,3 +1,5 @@
+import { trackBuildFavorite } from "./trackBuildFavorite";
+
 const FAVORITES_KEY = "lelanation_favorite_build_ids";
 
 export function getFavoriteIds(): string[] {
@@ -23,10 +25,13 @@ export function toggleFavorite(id: string): void {
   const idx = ids.indexOf(id);
   if (idx >= 0) {
     ids.splice(idx, 1);
+    setFavoriteIds(ids);
+    trackBuildFavorite(id, "remove");
   } else {
     ids.push(id);
+    setFavoriteIds(ids);
+    trackBuildFavorite(id, "add");
   }
-  setFavoriteIds(ids);
 }
 
 export function isFavorite(id: string): boolean {

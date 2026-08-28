@@ -697,9 +697,11 @@ router.get('/builds/:id/engagement', async (req, res) => {
       sharesTotal: stats.shares.link + stats.shares.image + stats.shares.image_with_meta,
       shares: stats.shares,
       imports: stats.imports ?? 0,
+      favorites: stats.favorites ?? 0,
       lastViewedAt: stats.lastViewedAt,
       lastSharedAt: stats.lastSharedAt,
       lastImportedAt: stats.lastImportedAt ?? null,
+      lastFavoritedAt: stats.lastFavoritedAt ?? null,
       updatedAt: stats.updatedAt,
     })
   } catch (err) {
