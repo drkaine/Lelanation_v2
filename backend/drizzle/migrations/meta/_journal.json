@@ -309,6 +309,13 @@
       "when": 1751030400000,
       "tag": "0043_team_core_and_jungle_path",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1751116800000,
+      "tag": "0044_patch_16_17_riot_participant_fields",
+      "breakpoints": true
     }
   ]
 }

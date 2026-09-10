@@ -103,6 +103,16 @@ export function useAppMobileTabBar() {
     })
   )
 
+  const statisticsMetaChartLink = computed(() =>
+    localePath({
+      path: '/statistics/meta-chart',
+      query: pickStatisticsSharedQuery(
+        route.query as Record<string, string | string[] | undefined>,
+        ['version', 'role', 'otp', 'rankTier']
+      ),
+    })
+  )
+
   const statisticsSurveillanceLink = computed(() =>
     localePath({
       path: '/statistics/surveillance',
@@ -251,6 +261,11 @@ export function useAppMobileTabBar() {
         labelKey: 'nav.tierList',
       },
       {
+        id: 'meta-chart',
+        path: statisticsMetaChartLink.value,
+        labelKey: 'nav.metaChart',
+      },
+      {
         id: 'overview',
         path: statisticsIndexLink.value,
         labelKey: 'nav.statisticsGeneral',
@@ -338,6 +353,7 @@ export function useAppMobileTabBar() {
             route.path === base ||
             (route.path.startsWith(`${base}/`) &&
               !route.path.includes('/tier-list') &&
+              !route.path.includes('/meta-chart') &&
               !route.path.includes('/surveillance') &&
               !route.path.includes('/champion'))
           )
@@ -345,6 +361,8 @@ export function useAppMobileTabBar() {
           return route.path.includes('/statistics/champion')
         case 'tier-list':
           return route.path === localePath('/statistics/tier-list')
+        case 'meta-chart':
+          return route.path === localePath('/statistics/meta-chart')
         case 'surveillance':
           return route.path === localePath('/statistics/surveillance')
         default:

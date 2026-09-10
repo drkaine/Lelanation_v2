@@ -96,6 +96,7 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
   }
 
   const tierListViewModel = ref<'table' | 'chart' | 'botlaneMatchups' | 'botlaneDuoRank'>('table')
+  const tierListChartType = ref<'pbi' | 'bubble'>('bubble')
   function setTierListViewModel(value: 'table' | 'chart' | 'botlaneMatchups' | 'botlaneDuoRank') {
     tierListViewModel.value = value
   }
@@ -468,6 +469,9 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
       activeKeys.includes(tierListChartApiTier(row.tier))
     )
   })
+
+  /** Bubble chart axes + quadrant lines: patch / rank / role / OTP only (no tier or champion search). */
+  const tierListChartReferenceRows = computed(() => tierListRoleFilteredRows.value)
   const tierListChartTooltipRow = computed((): TierListRowWithDelta | null => {
     const tip = tierListChartTooltip.value
     if (!tip) return null
@@ -607,6 +611,10 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     const role = statsRoleFilter.value
       ? mainRoleLabel(statsRoleFilter.value)
       : t('statisticsPage.tierListChartAllRoles')
+    if (tierListChartType.value === 'bubble') {
+      const roleLabel = role.toUpperCase()
+      return t('statisticsPage.tierListBubbleChartHeading', { role: roleLabel })
+    }
     return t('statisticsPage.tierListChartHeading', { role: role.toUpperCase() })
   })
 
@@ -947,6 +955,7 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     mainRoleLabel,
     tierListViewModel,
     setTierListViewModel,
+    tierListChartType,
     tierListSortColumn,
     tierListSortDir,
     tierListPage,
@@ -994,6 +1003,7 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     tierListChartBarHeightPct,
     tierListChartScoreBottomPct,
     tierListChartVisibleRows,
+    tierListChartReferenceRows,
     tierListChartTooltip,
     tierListChartTooltipRow,
     onTierListChartBarEnter,

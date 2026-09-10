@@ -201,6 +201,15 @@
                 {{ t('nav.tierList') }}
               </NuxtLink>
               <NuxtLink
+                :to="statisticsMetaChartLink"
+                :title="t('nav.metaChart')"
+                class="builds-submenu-link"
+                :class="{ 'is-active': isStatisticsMetaChartActive }"
+                @click="closeStatisticsMenu"
+              >
+                {{ t('nav.metaChart') }}
+              </NuxtLink>
+              <NuxtLink
                 :to="statisticsIndexLink"
                 :title="t('nav.statisticsGeneral')"
                 class="builds-submenu-link"
@@ -367,6 +376,9 @@ const surveillanceAlertCount = computed(() =>
 const isStatisticsTierListActive = computed(
   () => route.path === localePath('/statistics/tier-list')
 )
+const isStatisticsMetaChartActive = computed(
+  () => route.path === localePath('/statistics/meta-chart')
+)
 const isStatisticsSurveillanceActive = computed(
   () => route.path === localePath('/statistics/surveillance')
 )
@@ -374,6 +386,7 @@ const isStatisticsChampionsActive = computed(() => route.path.includes('/statist
 const isStatisticsGeneralActive = computed(() => {
   if (!route.path.includes('/statistics')) return false
   if (isStatisticsTierListActive.value) return false
+  if (isStatisticsMetaChartActive.value) return false
   if (isStatisticsSurveillanceActive.value) return false
   if (isStatisticsChampionsActive.value) return false
   return (
@@ -435,6 +448,13 @@ const statisticsTierListLink = computed(() =>
   localePath({
     path: '/statistics/tier-list',
     query: pickStatisticsSharedQuery(['version', 'role', 'otp', 'rankTier', 'sort', 'view']),
+  })
+)
+
+const statisticsMetaChartLink = computed(() =>
+  localePath({
+    path: '/statistics/meta-chart',
+    query: pickStatisticsSharedQuery(['version', 'role', 'otp', 'rankTier']),
   })
 )
 

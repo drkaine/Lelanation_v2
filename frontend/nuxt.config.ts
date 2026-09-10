@@ -161,6 +161,7 @@ export default defineNuxtConfig({
     '/champions/**': { swr: 3600, prerender: false },
     '/statistics': { swr: 3600, prerender: false },
     '/statistics/tier-list': { swr: 3600, prerender: false },
+    '/statistics/meta-chart': { swr: 3600, prerender: false },
     '/statistics/recap': { swr: 3600, prerender: false },
     '/statistics/settings': { redirect: { to: '/settings', statusCode: 301 } },
     '/en/statistics/settings': { redirect: { to: '/en/settings', statusCode: 301 } },

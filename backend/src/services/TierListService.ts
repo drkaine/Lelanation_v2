@@ -5,9 +5,10 @@
  * Tier score: somme des scores matchup (WR delta + signaux lane), alignée sur l’onglet matchups champion.
  */
 import { queryRawUnsafe } from '../db/query.js'
-import { bansPerChampionFromMvRows } from '../utils/statsMvBanAggregate.js'
+import { bansPerChampionFromMvRows, type MvBanSliceRow } from '../utils/statsMvBanAggregate.js'
 import { isDatabaseConfigured } from '../db/query.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor, sqlAggUnionAllLiveAndArchives } from './statsAggArchive.js'
+import { normalizeStatsRoleForBanner, statsRoleSqlLiteral } from '../utils/statsFilters.js'
 import { buildChampionMatchupLaneSumSelect, type LaneSumRow } from './championMatchupLaneProfile.js'
 import {
   computeChampionMatchupNotesBatch,
@@ -237,10 +238,79 @@ function normalizePatch(gameVersion: string): string {
   return `${parts[0] ?? '0'}.${parts[1] ?? '0'}`
 }
 
+async function fetchBanTotalsByChampion(
+  patch: string,
+  rankFilter: 'all' | 'high_elo' | string | string[] | null,
+  roleFilter?: string | null,
+  fallbackRows?: MvBanSliceRow[]
+): Promise<Map<number, number>> {
+  let banTotalsByChampion = fallbackRows?.length
+    ? bansPerChampionFromMvRows(fallbackRows)
+    : new Map<number, number>()
+
+  try {
+    const bansFrom = await matchVersionedAggFrom('agg_champion_bans_by_banner', patch, 'bb')
+    const banFilters: string[] = []
+    const HIGH_ELO_TIERS = ['CHALLENGER', 'GRANDMASTER', 'MASTER']
+
+    if (rankFilter === 'high_elo') {
+      banFilters.push(`bb.rank_tier IN (${HIGH_ELO_TIERS.map((t) => `'${t}'`).join(',')})`)
+    } else if (Array.isArray(rankFilter) && rankFilter.length > 0) {
+      const tiers = rankFilter
+        .map((t) => String(t).toUpperCase().replace(/'/g, "''"))
+        .filter(Boolean)
+      if (tiers.length > 0) {
+        banFilters.push(`bb.rank_tier IN (${tiers.map((t) => `'${t}'`).join(',')})`)
+      }
+    } else if (rankFilter && rankFilter !== 'all' && rankFilter !== null) {
+      const rf = String(rankFilter).toUpperCase().replace(/'/g, "''")
+      banFilters.push(`bb.rank_tier = '${rf}'`)
+    } else {
+      banFilters.push(`bb.rank_tier <> 'UNRANKED'`)
+    }
+
+    if (patch) {
+      banFilters.push(
+        `bb.game_version LIKE '${normalizePatchMajorMinor(patch).replace(/'/g, "''")}%'`
+      )
+    }
+
+    const bannerRole = normalizeStatsRoleForBanner(roleFilter)
+    if (bannerRole) {
+      banFilters.push(`bb.banner_role_norm = '${statsRoleSqlLiteral(bannerRole)}'`)
+    }
+
+    const bansWhereSql = banFilters.length > 0 ? banFilters.join(' AND ') : '1=1'
+    const banRows = await queryRawUnsafe<Array<{ championId: number; bans: bigint }>>(`
+      SELECT
+        bb.banned_champion_id AS "championId",
+        COALESCE(SUM(bb.ban_count), 0)::bigint AS bans
+      FROM ${bansFrom}
+      WHERE ${bansWhereSql}
+      GROUP BY bb.banned_champion_id
+    `)
+
+    if (banRows.length > 0) {
+      const banMap = new Map<number, number>()
+      for (const r of banRows) {
+        const cid = Number(r.championId ?? 0)
+        if (!Number.isFinite(cid) || cid <= 0) continue
+        banMap.set(cid, Number(r.bans ?? 0))
+      }
+      banTotalsByChampion = banMap
+    }
+  } catch {
+    // Keep fallback from core rows when the bans aggregate is unavailable.
+  }
+
+  return banTotalsByChampion
+}
+
 async function fetchRoleRows(
   patch: string,
   _platformId: string | null,
-  rankFilter: 'all' | 'high_elo' | string | string[] | null
+  rankFilter: 'all' | 'high_elo' | string | string[] | null,
+  roleFilter?: string | null
 ): Promise<RoleRow[]> {
   const highEloOnly = rankFilter === 'high_elo'
 
@@ -290,7 +360,12 @@ async function fetchRoleRows(
 
   if (coreRows.length === 0) return []
 
-  const banTotalsByChampion = bansPerChampionFromMvRows(coreRows)
+  const banTotalsByChampion = await fetchBanTotalsByChampion(
+    patch,
+    rankFilter,
+    roleFilter,
+    coreRows
+  )
 
   // Aggregate by (champion_id, role) across all versions matching the patch and all regions
   const aggByChampionRole = new Map<
@@ -470,9 +545,10 @@ export async function getTierList(options: GetTierListOptions): Promise<GetTierL
       : Array.isArray(rankTier) && rankTier.length === 0
         ? null
         : rankTier
+  const focusRole = options.role?.trim() ? options.role : null
   let roleRows: RoleRow[]
   try {
-    roleRows = await fetchRoleRows(patch, platformId, rankFilter)
+    roleRows = await fetchRoleRows(patch, platformId, rankFilter, focusRole)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     throw new Error(`Tier list fetchRoleRows failed: ${msg}`)
@@ -482,7 +558,7 @@ export async function getTierList(options: GetTierListOptions): Promise<GetTierL
     const fallbackPatch = await getLatestPatch()
     if (fallbackPatch && fallbackPatch !== patch) {
       try {
-        roleRows = await fetchRoleRows(fallbackPatch, platformId, rankFilter)
+        roleRows = await fetchRoleRows(fallbackPatch, platformId, rankFilter, focusRole)
         if (roleRows.length > 0) patch = fallbackPatch
       } catch {
         // keep roleRows empty
@@ -490,14 +566,12 @@ export async function getTierList(options: GetTierListOptions): Promise<GetTierL
     }
   }
 
-  const focusRole = options.role?.trim() ? options.role : null
-
   const matchupVsRows = await fetchMatchupVsRows(patch, rankFilter)
   const rows = buildTierListRows(roleRows, matchupVsRows, focusRole)
 
   let highEloRows: TierListRow[] | undefined
   try {
-    const highEloRoleRows = await fetchRoleRows(patch, platformId, 'high_elo')
+    const highEloRoleRows = await fetchRoleRows(patch, platformId, 'high_elo', focusRole)
     if (highEloRoleRows.length > 0) {
       const highEloMatchupVsRows = await fetchMatchupVsRows(patch, 'high_elo')
       highEloRows = buildTierListRows(highEloRoleRows, highEloMatchupVsRows, focusRole)
