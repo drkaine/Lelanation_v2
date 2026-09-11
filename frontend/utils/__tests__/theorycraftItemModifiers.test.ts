@@ -18,7 +18,7 @@ const baseStats: CalculatedStats = {
   magicResist: 50,
   attackSpeed: 0.625,
   critChance: 0,
-  critDamage: 1.75,
+  critDamage: 2,
   lifeSteal: 0,
   spellVamp: 0,
   cooldownReduction: 0,

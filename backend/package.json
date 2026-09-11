@@ -13,6 +13,7 @@
     "sync:matchup-guide-builds": "tsx src/scripts/syncMatchupGuideBuilds.ts",
     "script:test-discord-sync": "tsx src/scripts/testDiscordSyncNotifications.ts",
     "build:theorycraft-data": "tsx src/scripts/buildTheorycraftData.ts",
+    "watch:wiki-global-rules": "tsx src/scripts/watchWikiGlobalRules.ts",
     "copy:assets": "tsx src/scripts/copyStaticAssets.ts",
     "generate:excluded-items": "tsx src/scripts/generateExcludedItems.ts",
     "generate:riot-field-registry": "tsx src/scripts/generateRiotApiFieldRegistry.ts",
@@ -73,6 +74,7 @@
     "vitest": "^4.1.6"
   },
   "dependencies": {
+    "@lelanation/builds-stats": "*",
     "bottleneck": "^2.19.5",
     "bullmq": "^5.76.8",
     "cheerio": "^1.2.0",

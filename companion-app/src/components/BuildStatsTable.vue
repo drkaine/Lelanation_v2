@@ -2,6 +2,7 @@
 import { ref, computed } from "vue";
 import type { Build } from "@lelanation/shared-types";
 import {
+  BASE_CRIT_DAMAGE_PERCENT,
   calculateStats,
   filterItemsForStats,
   calculateBuildGoldEfficiency,
@@ -177,6 +178,12 @@ function getShardValue(key: string): number {
   }
 }
 
+const normalizePercentStat = (value: number | undefined): number => {
+  const raw = value ?? 0;
+  if (!Number.isFinite(raw)) return 0;
+  return Math.abs(raw) <= 1 ? raw * 100 : raw;
+};
+
 const itemStats = computed(() => {
   const totals = {
     health: 0,
@@ -213,9 +220,9 @@ const itemStats = computed(() => {
     totals.abilityPower += st.FlatMagicDamageMod || 0;
     totals.armor += st.FlatArmorMod || 0;
     totals.magicResist += st.FlatSpellBlockMod || 0;
-    totals.attackSpeed += (st.PercentAttackSpeedMod || 0) / 100;
-    totals.critChance += st.FlatCritChanceMod || 0;
-    totals.critDamage += st.FlatCritDamageMod || 0;
+    totals.attackSpeed += normalizePercentStat(st.PercentAttackSpeedMod) / 100;
+    totals.critChance += normalizePercentStat(st.FlatCritChanceMod);
+    totals.critDamage += normalizePercentStat(st.FlatCritDamageMod);
     totals.lifeSteal += st.PercentLifeStealMod || 0;
     totals.spellVamp += st.PercentSpellVampMod || 0;
     totals.cooldownReduction += st.rFlatCooldownModPerLevel || 0;
@@ -338,7 +345,7 @@ const advancedStats = computed(() => {
     {
       key: "critDamage",
       label: props.t("stats.labels.critDamage"),
-      base: 175,
+      base: BASE_CRIT_DAMAGE_PERCENT,
       items: items.critDamage || 0,
       shards: 0,
       total: total.critDamage * 100,
@@ -395,7 +402,7 @@ const advancedStats = computed(() => {
 function isUntouchedStat(stat: { key: string; total: number }): boolean {
   return (
     stat.total === 0 ||
-    (stat.key === "critDamage" && stat.total === 175)
+    (stat.key === "critDamage" && stat.total === BASE_CRIT_DAMAGE_PERCENT)
   );
 }
 

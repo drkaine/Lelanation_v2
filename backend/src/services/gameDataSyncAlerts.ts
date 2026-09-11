@@ -43,6 +43,22 @@ export type PatchNotesScrapedContext = {
   triggeredBy?: string
 }
 
+export type WikiGlobalRulesCheckedContext = {
+  patch: string
+  checkedAt: string
+  driftCount: number
+  errorCount: number
+  rules: Array<{
+    id: string
+    label: string
+    status: string
+    ourValue: number
+    wikiValue?: number
+    message?: string
+  }>
+  triggeredBy?: string
+}
+
 export type ChampionRegionChange = {
   championId: string
   name: string
@@ -245,4 +261,55 @@ export async function notifyPatchNotesScraped(context: PatchNotesScrapedContext)
       }
     )
   }, 'patch notes scrape')
+}
+
+function formatWikiRuleDrifts(
+  rules: WikiGlobalRulesCheckedContext['rules'],
+  limit = 6
+): string {
+  const issues = rules.filter(rule => rule.status !== 'ok')
+  if (issues.length === 0) return '—'
+  const lines = issues.slice(0, limit).map(rule => {
+    const wiki = rule.wikiValue != null ? String(rule.wikiValue) : '?'
+    return `${rule.label}: wiki=${wiki}, nous=${rule.ourValue} (${rule.status})`
+  })
+  if (issues.length > limit) lines.push(`… +${issues.length - limit} autres`)
+  return lines.join('\n')
+}
+
+/** Wiki surveillance for global stats absent from Data Dragon. */
+export async function notifyWikiGlobalRulesChecked(
+  context: WikiGlobalRulesCheckedContext
+): Promise<void> {
+  await notify(async discord => {
+    const needsAttention = context.driftCount > 0 || context.errorCount > 0
+
+    if (needsAttention) {
+      await discord.sendAlert(
+        '⚠️ Stats globales — écart wiki / Lelanation',
+        `${context.driftCount} dérive(s), ${context.errorCount} erreur(s) de parsing sur le patch **${context.patch}**`,
+        'Certaines constantes hardcodées (hors Data Dragon) ne correspondent plus au wiki officiel.',
+        {
+          patch: context.patch,
+          checkedAt: context.checkedAt,
+          driftCount: context.driftCount,
+          errorCount: context.errorCount,
+          issues: formatWikiRuleDrifts(context.rules),
+          ...(context.triggeredBy ? { triggeredBy: context.triggeredBy } : {}),
+        }
+      )
+      return
+    }
+
+    await discord.sendSuccess(
+      '✅ Stats globales wiki vérifiées',
+      `Constantes hors Data Dragon conformes au wiki pour le patch **${context.patch}**`,
+      {
+        patch: context.patch,
+        checkedAt: context.checkedAt,
+        rulesChecked: context.rules.length,
+        ...(context.triggeredBy ? { triggeredBy: context.triggeredBy } : {}),
+      }
+    )
+  }, 'wiki global rules watch')
 }

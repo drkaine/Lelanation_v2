@@ -263,6 +263,7 @@ import {
   sumStarterDrainStats,
   getGoldPer10FromItem,
   calculateBuildGoldEfficiency,
+  BASE_CRIT_DAMAGE_PERCENT,
 } from '@lelanation/builds-stats'
 import { formatLethality, formatPenetrationPercentFlat } from '~/utils/formatItemStats'
 import { useBuildStore } from '~/stores/BuildStore'
@@ -479,8 +480,8 @@ const itemStats = computed(() => {
     totals.armor += item.stats.FlatArmorMod || 0
     totals.magicResist += item.stats.FlatSpellBlockMod || 0
     totals.attackSpeed += normalizePercentStat(item.stats.PercentAttackSpeedMod) / 100
-    totals.critChance += item.stats.FlatCritChanceMod || 0
-    totals.critDamage += item.stats.FlatCritDamageMod || 0
+    totals.critChance += normalizePercentStat(item.stats.FlatCritChanceMod)
+    totals.critDamage += normalizePercentStat(item.stats.FlatCritDamageMod)
     totals.lifeSteal += normalizePercentStat(item.stats.PercentLifeStealMod)
     totals.spellVamp += normalizePercentStat(
       item.stats.PercentSpellVampMod ??
@@ -713,7 +714,7 @@ const advancedStats = computed(() => {
     {
       key: 'critDamage',
       label: t('stats.labels.critDamage'),
-      baseValue: 175,
+      baseValue: BASE_CRIT_DAMAGE_PERCENT,
       itemValue: items.critDamage || 0,
       shardValue: 0,
       totalValue: total.critDamage * 100,

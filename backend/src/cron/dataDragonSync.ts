@@ -19,6 +19,7 @@ import {
 } from '../services/gameDataSyncAlerts.js'
 import { syncChampionRegions } from '../services/ChampionRegionSyncService.js'
 import { runCommunityDragonSyncOnce } from './communityDragonSync.js'
+import { watchWikiGlobalRules } from '../services/WikiGlobalRulesWatchService.js'
 
 /**
  * Run Data Dragon sync once (used by cron schedule and manual trigger).
@@ -180,7 +181,7 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
     }
 
     // Step 3: Scrape patch notes for new version (non-blocking, keeps previous patches)
-    await log.step('Step 3/6: Scraping patch notes', { version: syncData.version })
+    await log.step('Step 3/7: Scraping patch notes', { version: syncData.version })
     const patchScrapeResult = await scrapePatchNotesIfNeeded(syncData.version, 'dataDragonSync')
     if (!patchScrapeResult.ok) {
       await log.warn('Patch notes scrape failed (non-blocking):', patchScrapeResult.error)
@@ -191,7 +192,7 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
     }
 
     // Step 4: Build theorycraft-ready static datasets
-    await log.step('Step 4/6: Building theorycraft datasets', { version: syncData.version })
+    await log.step('Step 4/7: Building theorycraft datasets', { version: syncData.version })
     const theorycraftBuild = await theorycraftBuilder.build(syncData.version)
     if (theorycraftBuild.isErr()) {
       await log.warn('Theorycraft dataset generation failed:', theorycraftBuild.unwrapErr())
@@ -206,8 +207,30 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
       }
     }
 
-    // Step 5: Copy static assets to frontend
-    await log.step('Step 5/6: Copying static assets to frontend', { version: syncData.version })
+    // Step 5: Watch wiki for global stats not present in Data Dragon
+    await log.step('Step 5/7: Wiki global rules watch', { version: syncData.version })
+    const wikiWatchResult = await watchWikiGlobalRules({
+      patch: patch || syncData.version,
+      triggeredBy: 'dataDragonSync',
+    })
+    if (!wikiWatchResult.ok) {
+      await log.warn('Wiki global rules watch failed (non-blocking):', wikiWatchResult.error)
+    } else if (wikiWatchResult.driftCount > 0 || wikiWatchResult.errorCount > 0) {
+      await log.warn('Wiki global rules drift detected', {
+        driftCount: wikiWatchResult.driftCount,
+        errorCount: wikiWatchResult.errorCount,
+        issues: wikiWatchResult.rules
+          .filter((rule) => rule.status !== 'ok')
+          .slice(0, 10),
+      })
+    } else {
+      await log.info('Wiki global rules match hardcoded constants', {
+        rulesChecked: wikiWatchResult.rules.length,
+      })
+    }
+
+    // Step 6: Copy static assets to frontend
+    await log.step('Step 6/7: Copying static assets to frontend', { version: syncData.version })
 
     const copyResult = await staticAssets.copyAllAssetsToFrontend(
       syncData.version,
@@ -251,7 +274,7 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
     await cronStatus.markSuccess('dataDragonSync')
 
     const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
-    await log.step('Step 6/6: Done', {
+    await log.step('Step 7/7: Done', {
       version: syncData.version,
       duration: `${duration}s`,
       ...(assetsStats && { dataFiles: assetsStats.dataCopied, imagesCopied: assetsStats.imagesCopied, imagesSkipped: assetsStats.imagesSkipped })

@@ -1,3 +1,4 @@
+import { BASE_CRIT_DAMAGE_MULTIPLIER } from '@lelanation/builds-stats'
 import type { CalculatedStats } from '@lelanation/shared-types'
 import { calculateDamageFormula } from '../composables/useTheorycraftDamage'
 import type { TheorycraftBuildStats } from '~/types/theorycraft'
@@ -108,7 +109,7 @@ const REFERENCE_STATS: CalculatedStats = {
   magicResist: 60,
   attackSpeed: 1,
   critChance: 0,
-  critDamage: 1.75,
+  critDamage: BASE_CRIT_DAMAGE_MULTIPLIER,
   lifeSteal: 0,
   spellVamp: 0,
   cooldownReduction: 0,

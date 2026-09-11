@@ -26,7 +26,7 @@ const baseStats: CalculatedStats = {
   attackSpeed: 0.625,
   movementSpeed: 340,
   critChance: 0,
-  critDamage: 1.75,
+  critDamage: 2,
   abilityHaste: 0,
   lethality: 0,
   armorPen: 0,

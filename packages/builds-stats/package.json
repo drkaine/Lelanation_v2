@@ -7,6 +7,9 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./wikiGlobalRules": "./src/wikiGlobalRules.ts",
+    "./wikiStatCalculations": "./src/wikiStatCalculations.ts",
+    "./gameConstants": "./src/gameConstants.ts",
     "./*": "./src/*"
   },
   "dependencies": {

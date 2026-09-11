@@ -13,7 +13,7 @@ const stats: TheorycraftBuildStats = {
   magicResist: 60,
   maxMana: 800,
   critChance: 0.25,
-  critDamage: 1.75,
+  critDamage: 2,
 }
 
 describe('theorycraftItemProcs', () => {

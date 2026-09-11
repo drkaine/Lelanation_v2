@@ -3855,8 +3855,8 @@ const itemStatsTotals = computed(() => {
     totals.armor += item.stats.FlatArmorMod || 0
     totals.magicResist += item.stats.FlatSpellBlockMod || 0
     totals.attackSpeedPercent += normalizePercentStat(item.stats.PercentAttackSpeedMod)
-    totals.critChancePercent += item.stats.FlatCritChanceMod || 0
-    totals.critDamagePercent += item.stats.FlatCritDamageMod || 0
+    totals.critChancePercent += normalizePercentStat(item.stats.FlatCritChanceMod)
+    totals.critDamagePercent += normalizePercentStat(item.stats.FlatCritDamageMod)
     totals.lifeStealPercent += normalizePercentStat(item.stats.PercentLifeStealMod)
     totals.spellVampPercent += normalizePercentStat(
       item.stats.PercentSpellVampMod ??

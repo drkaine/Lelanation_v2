@@ -1,13 +1,5 @@
 <template>
   <div class="statistics flex min-h-screen min-w-0 flex-col overflow-x-hidden text-text">
-    <div
-      class="statistics-tabs-bar flex w-full min-w-0 flex-shrink-0 items-center gap-2 overflow-x-hidden px-4 pb-2 pt-4"
-    >
-      <h1 class="text-sm font-bold uppercase tracking-tight text-text-accent md:text-base">
-        {{ t('statisticsPage.metaChartPageTitle') }}
-      </h1>
-    </div>
-
     <div class="flex min-h-0 min-w-0 flex-1">
       <button
         v-if="showDesktopFiltersTrigger"

@@ -74,8 +74,8 @@ export function formatItemStatsForDisplay(
   add('Armure', s.FlatArmorMod ?? 0)
   add('RM', s.FlatSpellBlockMod ?? 0)
   add("Vitesse d'attaque", normalizePercentStat(s.PercentAttackSpeedMod), '%', 1)
-  add('Critique', s.FlatCritChanceMod ?? 0, '%', 1)
-  add('Dégâts critiques', s.FlatCritDamageMod ?? 0, '%', 1)
+  add('Critique', normalizePercentStat(s.FlatCritChanceMod), '%', 1)
+  add('Dégâts critiques', normalizePercentStat(s.FlatCritDamageMod), '%', 1)
   add('Vol de vie', normalizePercentStat(s.PercentLifeStealMod), '%', 1)
   add(
     'Vol de sort',

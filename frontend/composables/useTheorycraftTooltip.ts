@@ -1,3 +1,4 @@
+import { BASE_CRIT_DAMAGE_MULTIPLIER } from '@lelanation/builds-stats'
 import type { TheorycraftBuildStats, TheorycraftStackDefinition } from '../types/theorycraft'
 import {
   applyStackTooltipVariables,
@@ -968,7 +969,7 @@ export function resolveTheorycraftSpellDetailRaws(
     magicResist: 0,
     maxMana: 0,
     critChance: 0,
-    critDamage: 1.75,
+    critDamage: BASE_CRIT_DAMAGE_MULTIPLIER,
     cooldownReduction: 0,
   }
 
@@ -1006,7 +1007,7 @@ export function resolveTheorycraftSpellDescription(
     magicResist: 0,
     maxMana: 0,
     critChance: 0,
-    critDamage: 1.75,
+    critDamage: BASE_CRIT_DAMAGE_MULTIPLIER,
     cooldownReduction: 0,
   }
 

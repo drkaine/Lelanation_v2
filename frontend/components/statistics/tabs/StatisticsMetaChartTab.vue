@@ -11,7 +11,7 @@ import {
 
 const p = inject('statisticsPageCtx') as Record<string, unknown>
 
-const metaChartExportRoot = ref<HTMLElement | null>(null)
+const bubbleChartRef = ref<{ chartCaptureRoot: HTMLElement | null } | null>(null)
 const metaChartExportPending = ref(false)
 const chartExportToastMessage = ref('')
 const chartExportToastType = ref<'success' | 'error'>('success')
@@ -30,7 +30,7 @@ function showChartExportToast(message: string, type: 'success' | 'error' = 'succ
 
 async function captureMetaChartBlob(): Promise<Blob | null> {
   await nextTick()
-  const root = metaChartExportRoot.value
+  const root = bubbleChartRef.value?.chartCaptureRoot
   if (!root) return null
   return captureElementToPngBlob(root)
 }
@@ -92,24 +92,8 @@ async function copyMetaChartImage() {
       >
         {{ p.t('statisticsPage.tierListNoData') }}
       </div>
-      <div v-else class="w-full space-y-2">
-        <div
-          ref="metaChartExportRoot"
-          data-meta-chart-export-root
-          class="meta-chart-export-root space-y-2"
-        >
-          <div
-            class="statistics-overview-surface rounded-xl border border-primary/30 px-3 py-2.5 shadow-inner"
-          >
-            <p class="text-[11px] leading-snug text-text/75">
-              {{ p.t('statisticsPage.tierListBubbleZoomHint') }}
-            </p>
-          </div>
-
-          <StatisticsTierListBubbleChart hide-zoom-hint class="w-full" />
-        </div>
-
-        <div class="mt-[5px] flex w-full max-w-md items-stretch gap-1.5">
+      <StatisticsTierListBubbleChart v-else ref="bubbleChartRef" class="w-full">
+        <template #toolbar-actions>
           <button
             type="button"
             class="ui-build-card-action-button ui-build-card-action-button--icon"
@@ -157,8 +141,8 @@ async function copyMetaChartImage() {
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
             </svg>
           </button>
-        </div>
-      </div>
+        </template>
+      </StatisticsTierListBubbleChart>
     </template>
     <NotificationToast
       v-if="chartExportToastVisible"

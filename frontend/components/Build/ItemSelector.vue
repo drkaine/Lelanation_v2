@@ -73,6 +73,9 @@
               ▼
             </span>
           </button>
+          <div v-else class="category-header category-header--static">
+            {{ getCategoryLabel(category) }}
+          </div>
           <div
             class="category-items"
             :class="{ collapsed: !isCategoryVisible(category) && !isLayoutScaled }"
@@ -1042,6 +1045,8 @@ watch(locale, () => {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  position: relative;
+  clear: both;
 }
 
 .category-header {
@@ -1068,6 +1073,11 @@ watch(locale, () => {
   color: rgb(var(--rgb-accent) / 0.8);
 }
 
+.category-header--static {
+  cursor: default;
+  pointer-events: none;
+}
+
 .category-toggle-icon {
   font-size: 0.6rem;
   transition: transform 0.3s ease;
@@ -1081,16 +1091,18 @@ watch(locale, () => {
 .category-items {
   --itemSizeButton: 40px;
   display: grid;
-  grid-template-columns: repeat(auto-fit, var(--itemSizeButton));
+  grid-template-columns: repeat(auto-fill, minmax(calc(var(--itemSizeButton) + 0.25rem), 1fr));
   justify-content: flex-start;
   width: 100%;
-  gap: 0.5rem;
-  max-height: 1000px;
-  overflow: hidden;
+  gap: 0.65rem;
+  /* Must exceed tallest category (legendary + price labels) or next section overlaps. */
+  max-height: 12000px;
+  overflow: visible;
   transition:
     max-height 0.3s ease,
     opacity 0.3s ease;
   opacity: 1;
+  padding: 2px;
 }
 
 .category-items.collapsed {
@@ -1098,6 +1110,7 @@ watch(locale, () => {
   opacity: 0;
   margin: 0;
   padding: 0;
+  overflow: hidden;
 }
 
 .item-wrapper {
@@ -1106,6 +1119,7 @@ watch(locale, () => {
   align-items: center;
   gap: 0.25rem;
   position: relative;
+  isolation: isolate;
 }
 
 .item {
@@ -1189,25 +1203,24 @@ watch(locale, () => {
   inset: 0;
   border: 2px solid rgb(var(--rgb-accent) / 0.5);
   pointer-events: none;
-  overflow: visible;
 }
 
 .item-index {
   position: absolute;
-  right: -0.65rem;
-  bottom: -0.65rem;
+  top: 1px;
+  right: 1px;
   background: rgb(var(--rgb-accent));
   color: rgb(var(--rgb-background));
-  font-size: 0.75rem;
+  font-size: 0.6rem;
   font-weight: 600;
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 1rem;
+  height: 1rem;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
   border: 1px solid rgb(var(--rgb-background));
-  z-index: 2;
+  z-index: 1;
 }
 
 @media (hover: hover) {
@@ -1306,6 +1319,7 @@ watch(locale, () => {
 @media (max-width: 700px) {
   .category-items {
     --itemSizeButton: 36px;
+    gap: 0.75rem;
   }
 }
 </style>

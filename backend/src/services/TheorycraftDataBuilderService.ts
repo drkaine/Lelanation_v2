@@ -96,10 +96,13 @@ const BIN_STAT_MAP: Record<number, string> = {
   12: 'bonusHP',
 }
 
+/** Default critical strike damage multiplier (patch 26.01+). Not in Data Dragon champion stats. */
+const BASE_CRIT_DAMAGE_MULTIPLIER = 2
+
 /** Baseline stats for bin tooltip previews (0% crit → base headshot ratios only). */
 const DEFAULT_BIN_STAT_VALUES: Record<string, number> = {
   critChance: 0,
-  critDamage: 1.75,
+  critDamage: BASE_CRIT_DAMAGE_MULTIPLIER,
   totalAD: 1,
   bonusAD: 0,
   AP: 0,

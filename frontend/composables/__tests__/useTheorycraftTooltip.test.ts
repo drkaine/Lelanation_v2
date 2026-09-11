@@ -20,7 +20,7 @@ const baseStats: TheorycraftBuildStats = {
   magicResist: 50,
   maxMana: 800,
   critChance: 0,
-  critDamage: 1.75,
+  critDamage: 2,
 }
 
 describe('useTheorycraftTooltip', () => {

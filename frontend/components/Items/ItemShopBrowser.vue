@@ -463,8 +463,8 @@ watch(isLayoutScaled, enabled => {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(calc(var(--itemSizeButton) + 0.5rem), 1fr));
   gap: 0.5rem;
-  max-height: 2000px;
-  overflow: hidden;
+  max-height: 12000px;
+  overflow: visible;
   opacity: 1;
   transition:
     max-height 0.3s ease,

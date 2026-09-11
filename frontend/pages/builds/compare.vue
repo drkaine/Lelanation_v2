@@ -165,7 +165,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { calculateStats } from '@lelanation/builds-stats'
+import { BASE_CRIT_DAMAGE_MULTIPLIER, calculateStats } from '@lelanation/builds-stats'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import type { CalculatedStats } from '~/types/build'
 import StatRow from '~/components/Build/StatRow.vue'
@@ -229,7 +229,7 @@ const createEmptyStats = (): CalculatedStats => {
     magicResist: 0,
     attackSpeed: 0,
     critChance: 0,
-    critDamage: 1.75,
+    critDamage: BASE_CRIT_DAMAGE_MULTIPLIER,
     lifeSteal: 0,
     spellVamp: 0,
     cooldownReduction: 0,

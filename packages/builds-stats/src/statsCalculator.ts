@@ -4,6 +4,9 @@
  */
 import { isBootsItem, isStarterItem } from "@lelanation/builds-ui";
 import { championGrowthMultiplier } from "./championGrowth";
+import {
+  BASE_CRIT_DAMAGE_MULTIPLIER,
+} from "./gameConstants.js";
 import type {
   Champion,
   ChampionStats,
@@ -12,6 +15,11 @@ import type {
   ShardSelection,
   CalculatedStats,
 } from "@lelanation/shared-types";
+
+export {
+  BASE_CRIT_DAMAGE_MULTIPLIER,
+  BASE_CRIT_DAMAGE_PERCENT,
+} from "./gameConstants.js";
 
 export type AdaptiveStatChoice = "ad" | "ap";
 
@@ -120,7 +128,7 @@ export function calculateStats(
         (passiveStackStats.attackSpeed || 0)
     ),
     critChance: (itemStats.critChance || 0) / 100,
-    critDamage: 1.75 + (itemStats.critDamage || 0) / 100,
+    critDamage: BASE_CRIT_DAMAGE_MULTIPLIER + (itemStats.critDamage || 0) / 100,
     lifeSteal: (itemStats.lifeSteal || 0) / 100,
     spellVamp: (itemStats.spellVamp || 0) / 100,
     cooldownReduction: calculateCooldownReduction(
@@ -357,8 +365,8 @@ function calculateItemStats(
     totals.armor += s.FlatArmorMod || 0;
     totals.magicResist += s.FlatSpellBlockMod || 0;
     totals.attackSpeed += normalizePercentStat(s.PercentAttackSpeedMod) / 100;
-    totals.critChance += s.FlatCritChanceMod || 0;
-    totals.critDamage += s.FlatCritDamageMod || 0;
+    totals.critChance += normalizePercentStat(s.FlatCritChanceMod);
+    totals.critDamage += normalizePercentStat(s.FlatCritDamageMod);
     totals.lifeSteal += normalizePercentStat(s.PercentLifeStealMod);
     totals.spellVamp += spellVampPercentFromStats(s);
     totals.cooldownReduction += s.rFlatCooldownModPerLevel || 0;
