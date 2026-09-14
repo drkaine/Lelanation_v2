@@ -17,8 +17,13 @@
 
 <script setup lang="ts">
 import ChampionSelector from '~/components/Build/ChampionSelector.vue'
+import { useChampionsStore } from '~/stores/ChampionsStore'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
+const championsStore = useChampionsStore()
+const riotLocale = computed(() => (locale.value === 'fr' ? 'fr_FR' : 'en_US'))
+
+await championsStore.loadChampions(riotLocale.value).catch(() => undefined)
 
 useHead({
   title: () => t('statisticsPage.championPickerTitle'),

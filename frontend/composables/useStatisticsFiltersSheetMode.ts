@@ -21,6 +21,12 @@ export function useStatisticsFiltersSheetMode() {
     effectiveFiltersSheetMode.value ? 'flex' : 'flex lg:hidden'
   )
 
+  /** Dimmed backdrop only on mobile — desktop sheet modes must not block tabs/nav clicks. */
+  const showFiltersBackdrop = computed(() => filtersSheetMode.value)
+
+  /** Body scroll lock only for the mobile bottom sheet. */
+  const lockPageScrollForFilters = computed(() => filtersSheetMode.value)
+
   onMounted(() => {
     if (!import.meta.client) return
     filtersSheetMq = window.matchMedia('(max-width: 1023px)')
@@ -35,6 +41,8 @@ export function useStatisticsFiltersSheetMode() {
   return {
     filtersSheetMode,
     effectiveFiltersSheetMode,
+    showFiltersBackdrop,
+    lockPageScrollForFilters,
     showDesktopFiltersTrigger,
     filtersFabClass,
   }

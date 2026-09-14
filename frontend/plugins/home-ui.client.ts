@@ -9,8 +9,6 @@ export default defineNuxtPlugin({
       homeUiStore.init()
     }
 
-    hydrateHomeUi()
-
     nuxtApp.hook('app:mounted', hydrateHomeUi)
     nuxtApp.hook('page:finish', hydrateHomeUi)
   },

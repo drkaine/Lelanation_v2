@@ -94,8 +94,8 @@
       </button>
 
       <div
-        v-if="filtersOpen && effectiveFiltersSheetMode"
-        class="fixed inset-0 z-[10050] bg-black/50"
+        v-if="filtersOpen && showFiltersBackdrop"
+        class="statistics-filters-backdrop bg-black/50"
         aria-hidden="true"
         role="presentation"
         @click="closeFilters"
@@ -106,7 +106,7 @@
         :class="[
           'statistics-filters-panel flex shrink-0 flex-col overflow-hidden',
           effectiveFiltersSheetMode
-            ? 'fixed inset-x-0 bottom-0 top-auto z-[10051] max-h-[85vh] w-full rounded-t-2xl bg-surface shadow-lg'
+            ? 'statistics-filters-sheet fixed inset-x-0 bottom-0 top-auto z-[10051] max-h-[85vh] w-full rounded-t-2xl bg-surface shadow-lg'
             : [
                 'hidden w-0 opacity-0 transition-[width,opacity] duration-200',
                 'lg:sticky lg:top-4 lg:z-0 lg:flex lg:h-auto lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:overflow-x-hidden',
@@ -468,8 +468,14 @@ const championsStore = useChampionsStore()
 const versionStore = useVersionStore()
 const statisticsUiStore = useStatisticsUiStore()
 const { filtersOpen } = storeToRefs(statisticsUiStore)
-const { effectiveFiltersSheetMode, showDesktopFiltersTrigger, filtersFabClass } =
-  useStatisticsFiltersSheetMode()
+const {
+  effectiveFiltersSheetMode,
+  showFiltersBackdrop,
+  lockPageScrollForFilters,
+  filtersSheetMode,
+  showDesktopFiltersTrigger,
+  filtersFabClass,
+} = useStatisticsFiltersSheetMode()
 const { version: gameVersion } = useGameVersion()
 const tierListTabsNavEl = ref<HTMLElement | null>(null)
 useHorizontalScrollContainer(tierListTabsNavEl)
@@ -921,13 +927,13 @@ function toggleFiltersOpen() {
 
 function onFiltersEscapeKey(event: KeyboardEvent) {
   if (event.key !== 'Escape' || !filtersOpen.value) return
-  if (!import.meta.client || !effectiveFiltersSheetMode.value) return
+  if (!import.meta.client || !filtersSheetMode.value) return
   closeFilters()
 }
 
-watch([filtersOpen, effectiveFiltersSheetMode], () => {
+watch([filtersOpen, lockPageScrollForFilters], () => {
   if (!import.meta.client) return
-  const lock = effectiveFiltersSheetMode.value && filtersOpen.value
+  const lock = lockPageScrollForFilters.value && filtersOpen.value
   document.body.style.overflow = lock ? 'hidden' : ''
 })
 
@@ -1075,18 +1081,17 @@ async function bootstrapTierListPage(): Promise<number> {
   if (import.meta.server) {
     applyTierListStateFromQuery()
   }
+  const championsPromise = championsStore.loadChampions(riotLocale.value)
   if (!versionStore.currentVersion) {
     await versionStore.loadCurrentVersion()
   }
   await loadVersionsWithMatches()
-  await loadOverviewVersionsCatalog()
   applyDefaultVersionFiltersFromKnownVersions()
   if (isBotlaneTierListView(tierListViewModel.value)) {
-    await loadActiveBotlanePanel()
+    await Promise.all([loadActiveBotlanePanel(), championsPromise])
   } else {
-    await tierList.loadTierList()
+    await Promise.all([tierList.loadTierList(), championsPromise])
   }
-  await championsStore.loadChampions(riotLocale.value)
   return tierList.tierListData.value?.rows?.length ?? 0
 }
 
@@ -1102,11 +1107,10 @@ const tierListBootstrapKey = computed(() =>
   ].join('|')
 )
 
-await useAsyncData(
-  () => `tier-list-bootstrap-${tierListBootstrapKey.value}`,
-  bootstrapTierListPage,
-  { watch: [tierListBootstrapKey], lazy: true }
-)
+useAsyncData(() => `tier-list-bootstrap-${tierListBootstrapKey.value}`, bootstrapTierListPage, {
+  watch: [tierListBootstrapKey],
+  lazy: true,
+})
 
 onMounted(() => {
   if (import.meta.client) {

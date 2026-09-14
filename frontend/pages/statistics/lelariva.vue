@@ -46,8 +46,8 @@
       </button>
 
       <div
-        v-if="filtersOpen && effectiveFiltersSheetMode"
-        class="fixed inset-0 z-[10050] bg-black/50"
+        v-if="filtersOpen && showFiltersBackdrop"
+        class="statistics-filters-backdrop bg-black/50"
         aria-hidden="true"
         role="presentation"
         @click="closeFilters"
@@ -58,7 +58,7 @@
         :class="[
           'statistics-filters-panel flex shrink-0 flex-col overflow-hidden',
           effectiveFiltersSheetMode
-            ? 'fixed inset-x-0 bottom-0 top-auto z-[10051] max-h-[85vh] w-full rounded-t-2xl bg-surface shadow-lg'
+            ? 'statistics-filters-sheet fixed inset-x-0 bottom-0 top-auto z-[10051] max-h-[85vh] w-full rounded-t-2xl bg-surface shadow-lg'
             : [
                 'hidden w-0 opacity-0 transition-[width,opacity] duration-200',
                 'lg:sticky lg:top-4 lg:z-0 lg:flex lg:h-auto lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:overflow-x-hidden',
@@ -802,8 +802,13 @@ const championsStore = useChampionsStore()
 const versionStore = useVersionStore()
 const statisticsUiStore = useStatisticsUiStore()
 const { filtersOpen } = storeToRefs(statisticsUiStore)
-const { effectiveFiltersSheetMode, showDesktopFiltersTrigger, filtersFabClass } =
-  useStatisticsFiltersSheetMode()
+const {
+  effectiveFiltersSheetMode,
+  showFiltersBackdrop,
+  lockPageScrollForFilters,
+  showDesktopFiltersTrigger,
+  filtersFabClass,
+} = useStatisticsFiltersSheetMode()
 const gameVersion = computed(() => versionStore.currentVersion ?? null)
 
 const selectedChampionId = ref<number | null>(null)
@@ -1679,9 +1684,9 @@ async function loadMatchups() {
   }
 }
 
-watch([filtersOpen, effectiveFiltersSheetMode], () => {
+watch([filtersOpen, lockPageScrollForFilters], () => {
   if (!import.meta.client) return
-  const lock = effectiveFiltersSheetMode.value && filtersOpen.value
+  const lock = lockPageScrollForFilters.value && filtersOpen.value
   document.body.style.overflow = lock ? 'hidden' : ''
 })
 

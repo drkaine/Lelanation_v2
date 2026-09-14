@@ -53,7 +53,7 @@
               }"
               :aria-expanded="isBuildsMenuOpen"
               aria-haspopup="true"
-              @click="isBuildsMenuOpen = !isBuildsMenuOpen"
+              @click="openBuildsMenu"
             >
               <span>{{ t('nav.builds') }}</span>
               <span class="builds-menu-chevron" :class="{ 'is-open': isBuildsMenuOpen }">▾</span>
@@ -116,7 +116,7 @@
               }"
               :aria-expanded="isGuidesMenuOpen"
               aria-haspopup="true"
-              @click="isGuidesMenuOpen = !isGuidesMenuOpen"
+              @click="openGuidesMenu"
             >
               <span>{{ t('nav.guides') }}</span>
               <span class="builds-menu-chevron" :class="{ 'is-open': isGuidesMenuOpen }">▾</span>
@@ -176,7 +176,7 @@
               }"
               :aria-expanded="isStatisticsMenuOpen"
               aria-haspopup="true"
-              @click="isStatisticsMenuOpen = !isStatisticsMenuOpen"
+              @click="openStatisticsMenu"
             >
               <span>{{ t('nav.statistics') }}</span>
               <span
@@ -488,6 +488,24 @@ watch(
   }
 )
 
+const openBuildsMenu = () => {
+  closeGuidesMenu()
+  closeStatisticsMenu()
+  isBuildsMenuOpen.value = true
+}
+
+const openGuidesMenu = () => {
+  closeBuildsMenu()
+  closeStatisticsMenu()
+  isGuidesMenuOpen.value = true
+}
+
+const openStatisticsMenu = () => {
+  closeBuildsMenu()
+  closeGuidesMenu()
+  isStatisticsMenuOpen.value = true
+}
+
 const closeBuildsMenu = () => {
   isBuildsMenuOpen.value = false
 }
@@ -505,7 +523,7 @@ const closeStatisticsMenu = () => {
 .header-shell {
   position: sticky;
   top: 0;
-  z-index: 58;
+  z-index: 1;
 }
 
 .header {
@@ -679,7 +697,7 @@ const closeStatisticsMenu = () => {
   position: absolute;
   top: 100%;
   left: 50%;
-  z-index: 60;
+  z-index: 2;
   display: flex;
   min-width: 180px;
   flex-direction: column;

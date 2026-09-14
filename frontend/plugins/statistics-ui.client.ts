@@ -14,9 +14,6 @@ export default defineNuxtPlugin({
       alertStore.init()
     }
 
-    hydrateStatisticsUi()
-    hydrateAlertStore()
-
     nuxtApp.hook('app:mounted', () => {
       hydrateStatisticsUi()
       hydrateAlertStore()

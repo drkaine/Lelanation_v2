@@ -72,35 +72,43 @@
           <p class="item-shop-detail__empty-hint">{{ t('itemShopPage.selectItemHint') }}</p>
         </template>
 
-        <template v-else>
-          <section v-if="!isFlipped && recipeTree" class="item-shop-detail__section">
-            <h3 v-if="recipeTree.children.length" class="item-shop-detail__section-title">
-              {{ t('item.recipe') }}
-            </h3>
-            <ItemRecipeTree :root="recipeTree" @select-item="emit('select-item', $event)" />
+        <div
+          v-else
+          class="item-shop-detail-flip"
+          :class="{ 'item-shop-detail-flip--description': isFlipped }"
+        >
+          <section class="item-shop-detail-flip__face item-shop-detail-flip__face--recipe">
+            <div v-if="recipeTree" class="item-shop-detail__section">
+              <h3 v-if="recipeTree.children.length" class="item-shop-detail__section-title">
+                {{ t('item.recipe') }}
+              </h3>
+              <ItemRecipeTree :root="recipeTree" @select-item="emit('select-item', $event)" />
+            </div>
           </section>
 
-          <section v-else-if="isFlipped" class="item-shop-detail__descriptions">
-            <p v-if="plaintext" class="item-shop-detail__plaintext">{{ plaintext }}</p>
-            <hr
-              v-if="plaintext && formattedDescription"
-              class="item-shop-detail__separator item-shop-detail__separator--descriptions"
-            />
-            <!-- eslint-disable vue/no-v-html -->
-            <div
-              v-if="formattedDescription"
-              class="item-shop-detail__description tooltip-game-description"
-              v-html="formattedDescription"
-            />
-            <!-- eslint-enable vue/no-v-html -->
-            <p
-              v-if="!plaintext && !formattedDescription"
-              class="item-shop-detail__description-empty"
-            >
-              {{ t('itemShopPage.noDescription') }}
-            </p>
+          <section class="item-shop-detail-flip__face item-shop-detail-flip__face--description">
+            <div class="item-shop-detail__descriptions">
+              <p v-if="plaintext" class="item-shop-detail__plaintext">{{ plaintext }}</p>
+              <hr
+                v-if="plaintext && formattedDescription"
+                class="item-shop-detail__separator item-shop-detail__separator--descriptions"
+              />
+              <!-- eslint-disable vue/no-v-html -->
+              <div
+                v-if="formattedDescription"
+                class="item-shop-detail__description tooltip-game-description"
+                v-html="formattedDescription"
+              />
+              <!-- eslint-enable vue/no-v-html -->
+              <p
+                v-if="!plaintext && !formattedDescription"
+                class="item-shop-detail__description-empty"
+              >
+                {{ t('itemShopPage.noDescription') }}
+              </p>
+            </div>
           </section>
-        </template>
+        </div>
       </div>
     </div>
 
@@ -330,11 +338,42 @@ const formattedDescription = computed(() => {
 .item-shop-detail__body {
   flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
   padding-right: 0.15rem;
+  perspective: 900px;
+}
+
+.item-shop-detail-flip {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  transform-style: preserve-3d;
+  transition: transform 0.45s cubic-bezier(0.4, 0.2, 0.2, 1);
+  transform: rotateY(0deg);
+}
+
+.item-shop-detail-flip--description {
+  transform: rotateY(180deg);
+}
+
+.item-shop-detail-flip__face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  padding-right: 0.15rem;
+}
+
+.item-shop-detail-flip__face--description {
+  transform: rotateY(180deg);
 }
 
 .item-shop-detail__empty-hint {

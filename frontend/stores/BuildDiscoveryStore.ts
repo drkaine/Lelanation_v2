@@ -11,6 +11,7 @@ import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import { matchesChampionSearch, matchesLocalizedTextSearch } from '~/utils/multilingualEntitySearch'
 import { buildHasAnyNotes } from '~/utils/buildNotes'
 import { patchFromGameVersion } from '~/utils/patchVersion'
+import { fetchPublicBuildsProgressive } from '~/utils/fetchPublicBuilds'
 
 export type SortOption = 'recent' | 'popular' | 'name'
 export type FilterRole = 'top' | 'jungle' | 'mid' | 'adc' | 'support' | null
@@ -241,8 +242,6 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
         return response.json()
       }
 
-      await buildStore.syncPatchStaleFromServer().catch(() => undefined)
-
       // Synchroniser les builds locaux avec le serveur (en arrière-plan)
       // Cela resauvegarde automatiquement les builds qui n'existent pas sur le serveur
       buildStore.syncAllBuildsToServer().catch(() => {})
@@ -260,30 +259,47 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
       try {
         const now = Date.now()
         let allBuilds: (Build | StoredBuild)[]
+
+        const mergePublicCatalog = (catalog: (Build | StoredBuild)[]) => {
+          const patchStaleById = extractPatchStaleMap(catalog)
+          const localBuildIds = new Set(localBuilds.map(b => b.id))
+          const filtered = catalog.filter(
+            b => !localBuildIds.has(b.id) && b.visibility !== 'private'
+          )
+          publicBuilds = filtered.map(b => (isStoredBuild(b) ? hydrateBuild(b) : (b as Build)))
+          const localPublicBuilds = mergePatchStaleIntoBuilds(
+            filterStandaloneLibraryBuilds(localBuilds.filter(b => b.visibility !== 'private')),
+            patchStaleById
+          )
+          this.builds = [...localPublicBuilds, ...publicBuilds]
+          this.applyFilters()
+        }
+
         if (
           import.meta.client &&
           publicBuildsCache &&
           now - publicBuildsCache.at < PUBLIC_BUILDS_CACHE_TTL_MS
         ) {
           allBuilds = publicBuildsCache.data
+          mergePublicCatalog(allBuilds)
         } else {
-          allBuilds = (await fetchJson('/api/builds')) as (Build | StoredBuild)[]
+          allBuilds = await fetchPublicBuildsProgressive(fetchJson, {
+            onFirstPage: mergePublicCatalog,
+            onComplete: merged => {
+              if (import.meta.client) publicBuildsCache = { at: Date.now(), data: merged }
+              mergePublicCatalog(merged)
+            },
+          })
           if (import.meta.client) publicBuildsCache = { at: now, data: allBuilds }
+          mergePublicCatalog(allBuilds)
         }
-        const patchStaleById = extractPatchStaleMap(allBuilds)
-        const localBuildIds = new Set(localBuilds.map(b => b.id))
-        const filtered = allBuilds.filter(
-          b => !localBuildIds.has(b.id) && b.visibility !== 'private'
-        )
-        publicBuilds = filtered.map(b => (isStoredBuild(b) ? hydrateBuild(b) : (b as Build)))
-        const localPublicBuilds = mergePatchStaleIntoBuilds(
-          filterStandaloneLibraryBuilds(localBuilds.filter(b => b.visibility !== 'private')),
-          patchStaleById
-        )
-        this.builds = [...localPublicBuilds, ...publicBuilds]
+
+        if (import.meta.client && localBuilds.length > 0) {
+          buildStore.applyPatchStaleFromFetchedBuilds(allBuilds)
+        }
 
         if (import.meta.client) {
-          await useVoteStore()
+          useVoteStore()
             .loadVotesForBuilds(this.builds.map(b => b.id))
             .catch(() => undefined)
         }
@@ -292,7 +308,6 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
         if (!versionStore.currentVersion) {
           await versionStore.loadCurrentVersion()
         }
-        this.applyFilters()
         return
       } catch {
         // Failed to load public builds

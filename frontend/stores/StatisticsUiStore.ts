@@ -75,9 +75,16 @@ function normalizeTabOrder(value: unknown): StatisticsMainTab[] {
 }
 
 function defaultFiltersOpen(): boolean {
-  if (import.meta.server) return true
+  // Toujours fermé au premier rendu (SSR = client) ; le plugin réouvre après mount si besoin.
+  if (import.meta.server) return false
   // Bottom sheet sur mobile : fermé par défaut pour ne pas bloquer le contenu.
   if (window.matchMedia('(max-width: 1023px)').matches) return false
+  // Stats simplifiées (sheet desktop) : fermé par défaut pour ne pas recouvrir les onglets.
+  try {
+    if (localStorage.getItem('lelanation_simplified_stats_enabled') === '1') return false
+  } catch {
+    // ignore localStorage errors
+  }
   return true
 }
 

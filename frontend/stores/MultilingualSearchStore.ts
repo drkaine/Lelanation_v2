@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { getFallbackGameVersion } from '~/config/version'
-import { getChampionIndexUrl, getGameDataUrl } from '~/utils/staticDataUrl'
+import { fetchPublicJson, getChampionIndexUrl, getGameDataUrl } from '~/utils/staticDataUrl'
 import {
   collectTermsFromMaps,
   indexChampionTerms,
@@ -10,32 +10,46 @@ import {
   searchAnyIncludes,
 } from '~/utils/searchText'
 
-const SEARCH_LANGUAGES = ['fr_FR', 'en_US'] as const
+export const SEARCH_LANGUAGES = ['fr_FR', 'en_US'] as const
 
-type SearchLanguage = (typeof SEARCH_LANGUAGES)[number]
+export type SearchLanguage = (typeof SEARCH_LANGUAGES)[number]
 
 interface MultilingualSearchState {
   status: 'idle' | 'loading' | 'ready' | 'error'
   loadedVersion: string | null
+  loadedLanguages: SearchLanguage[]
   championTermsBySlug: Record<string, string[]>
   championTermsByKey: Record<string, string[]>
   itemTermsById: Record<string, string[]>
 }
 
 let loadInflight: Promise<void> | null = null
-let loadInflightVersion: string | null = null
+let loadInflightKey: string | null = null
+
+export function riotLocaleFromI18n(locale: string): SearchLanguage {
+  return locale === 'en' ? 'en_US' : 'fr_FR'
+}
 
 async function fetchChampionIndex(version: string, language: SearchLanguage) {
-  const response = await fetch(getChampionIndexUrl(version, language))
-  if (!response.ok) return []
-  const payload = await response.json()
-  return Array.isArray(payload?.champions) ? payload.champions : []
+  try {
+    const payload = await fetchPublicJson<{ champions?: unknown[] }>(
+      getChampionIndexUrl(version, language)
+    )
+    return Array.isArray(payload?.champions) ? payload.champions : []
+  } catch {
+    return []
+  }
 }
 
 async function fetchItemRecords(version: string, language: SearchLanguage) {
-  const response = await fetch(getGameDataUrl(version, 'item', language))
-  if (!response.ok) return []
-  const payload = await response.json()
+  let payload: { data?: Record<string, unknown> }
+  try {
+    payload = await fetchPublicJson<{ data?: Record<string, unknown> }>(
+      getGameDataUrl(version, 'item', language)
+    )
+  } catch {
+    return []
+  }
   const raw = payload?.data
   if (!raw || typeof raw !== 'object') return []
   return Object.entries(raw as Record<string, unknown>).map(([id, item]) => ({
@@ -48,62 +62,99 @@ export const useMultilingualSearchStore = defineStore('multilingualSearch', {
   state: (): MultilingualSearchState => ({
     status: 'idle',
     loadedVersion: null,
+    loadedLanguages: [],
     championTermsBySlug: {},
     championTermsByKey: {},
     itemTermsById: {},
   }),
 
   actions: {
-    async ensureLoaded(version?: string) {
+    resetForVersion(targetVersion: string) {
+      this.championTermsBySlug = {}
+      this.championTermsByKey = {}
+      this.itemTermsById = {}
+      this.loadedLanguages = []
+      this.loadedVersion = targetVersion
+    },
+
+    async loadLanguages(targetVersion: string, languages: SearchLanguage[]) {
+      const pending = languages.filter(lang => !this.loadedLanguages.includes(lang))
+      if (pending.length === 0) return
+
+      if (this.loadedVersion && this.loadedVersion !== targetVersion) {
+        this.resetForVersion(targetVersion)
+      } else if (!this.loadedVersion) {
+        this.loadedVersion = targetVersion
+      }
+
+      const championLists = await Promise.all(
+        pending.map(lang => fetchChampionIndex(targetVersion, lang))
+      )
+      for (const champions of championLists) {
+        for (const champion of champions) {
+          indexChampionTerms(this.championTermsBySlug, this.championTermsByKey, champion)
+        }
+      }
+
+      const itemLists = await Promise.all(
+        pending.map(lang => fetchItemRecords(targetVersion, lang))
+      )
+      for (const records of itemLists) {
+        for (const { id, item } of records) {
+          indexItemTerms(this.itemTermsById, id, item)
+        }
+      }
+
+      this.loadedLanguages.push(...pending)
+      this.loadedVersion = targetVersion
+      this.status = 'ready'
+    },
+
+    /** Charge la langue UI (2 JSON : champions + items). */
+    async ensureLoaded(version?: string, language?: SearchLanguage) {
       if (import.meta.server) return
       const targetVersion = version || getFallbackGameVersion()
-      if (this.status === 'ready' && this.loadedVersion === targetVersion) return
+      const primaryLang = language ?? 'fr_FR'
 
-      if (loadInflight && loadInflightVersion === targetVersion) {
+      if (
+        this.status === 'ready' &&
+        this.loadedVersion === targetVersion &&
+        this.loadedLanguages.includes(primaryLang)
+      ) {
+        return
+      }
+
+      const inflightKey = `${targetVersion}|${primaryLang}`
+      if (loadInflight && loadInflightKey === inflightKey) {
         await loadInflight
         return
       }
 
-      loadInflightVersion = targetVersion
+      loadInflightKey = inflightKey
       loadInflight = (async () => {
         this.status = 'loading'
         try {
-          const championBySlug: Record<string, string[]> = {}
-          const championByKey: Record<string, string[]> = {}
-          const itemById: Record<string, string[]> = {}
-
-          const championLists = await Promise.all(
-            SEARCH_LANGUAGES.map(lang => fetchChampionIndex(targetVersion, lang))
-          )
-          for (const champions of championLists) {
-            for (const champion of champions) {
-              indexChampionTerms(championBySlug, championByKey, champion)
-            }
-          }
-
-          const itemLists = await Promise.all(
-            SEARCH_LANGUAGES.map(lang => fetchItemRecords(targetVersion, lang))
-          )
-          for (const records of itemLists) {
-            for (const { id, item } of records) {
-              indexItemTerms(itemById, id, item)
-            }
-          }
-
-          this.championTermsBySlug = championBySlug
-          this.championTermsByKey = championByKey
-          this.itemTermsById = itemById
-          this.loadedVersion = targetVersion
-          this.status = 'ready'
+          await this.loadLanguages(targetVersion, [primaryLang])
         } catch {
           this.status = 'error'
         } finally {
           loadInflight = null
-          loadInflightVersion = null
+          loadInflightKey = null
         }
       })()
 
       await loadInflight
+    },
+
+    /** Langue secondaire (recherche cross-langue) — uniquement à la demande. */
+    ensureSecondaryLanguageLoaded() {
+      if (import.meta.server) return
+      if (!this.loadedVersion || this.status !== 'ready') return
+
+      const secondary = SEARCH_LANGUAGES.find(lang => !this.loadedLanguages.includes(lang))
+      if (!secondary) return
+
+      this.loadLanguages(this.loadedVersion, [secondary]).catch(() => undefined)
     },
 
     championMatches(
@@ -115,6 +166,9 @@ export const useMultilingualSearchStore = defineStore('multilingualSearch', {
         name?: string | null
       } = {}
     ): boolean {
+      if (!isEmptySearchQuery(query)) {
+        this.ensureSecondaryLanguageLoaded()
+      }
       if (isEmptySearchQuery(query)) return true
 
       const q = normalizeSearchText(query)
@@ -151,6 +205,9 @@ export const useMultilingualSearchStore = defineStore('multilingualSearch', {
         plaintext?: string | null
       } = {}
     ): boolean {
+      if (!isEmptySearchQuery(query)) {
+        this.ensureSecondaryLanguageLoaded()
+      }
       if (isEmptySearchQuery(query)) return true
 
       const q = normalizeSearchText(query)

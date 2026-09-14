@@ -20,6 +20,7 @@ import { mergeLegacyStatShardAggregates } from '../utils/statShardLegacyMerge.js
 import { parseShardList } from '../utils/parseShardList.js'
 import { isBootsTier2Or3ItemId } from '../parsers/bootItemClassification.js'
 import { loadItemMeta } from '../worker/itemBuildSelection.js'
+import { statsRedisCacheGet, statsRedisCacheSet } from './statsRedisCache.js'
 import {
   invalidateAggArchivePartitionCache,
   buildProgressionOldestOnlySql,
@@ -764,6 +765,12 @@ export async function getOverviewStats(
   const cached = overviewStatsCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
 
+  const redisCached = await statsRedisCacheGet<OverviewStats>('overview', cacheKey)
+  if (redisCached) {
+    overviewStatsCache.set(cacheKey, { data: redisCached, expiresAt: now + OVERVIEW_CACHE_TTL_MS })
+    return redisCached
+  }
+
   try {
     const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', version, 'ac')
     const moFrom = await matchVersionedAggFrom('agg_match_outcome_stats', version, 'mo')
@@ -932,6 +939,7 @@ export async function getOverviewStats(
     }
 
     overviewStatsCache.set(cacheKey, { data: result, expiresAt: now + OVERVIEW_CACHE_TTL_MS })
+    void statsRedisCacheSet('overview', cacheKey, result, OVERVIEW_CACHE_TTL_MS)
     return result
   } catch (err) {
     console.error('[getOverviewStats]', err instanceof Error ? err.message : err)

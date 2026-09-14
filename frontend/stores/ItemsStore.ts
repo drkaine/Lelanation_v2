@@ -3,7 +3,7 @@ import type { Item } from '@lelanation/shared-types'
 import { useVersionStore } from './VersionStore'
 import { getFallbackGameVersion } from '~/config/version'
 import { apiUrl } from '~/utils/apiUrl'
-import { getGameDataUrl } from '~/utils/staticDataUrl'
+import { fetchPublicJson, getGameDataUrl } from '~/utils/staticDataUrl'
 import { isExcludedGameItemId } from '~/utils/excludedGameItems'
 import { matchesItemSearch } from '~/utils/multilingualEntitySearch'
 
@@ -76,22 +76,13 @@ export const useItemsStore = defineStore('items', {
         let data: any
         let useStatic = false
 
-        // Try static file first (only in browser, not SSR)
-        if (process.client) {
-          try {
-            // Add cache-busting parameter based on version to force reload after sync
-            const staticUrl = getGameDataUrl(version, 'item', language)
-            const urlWithCacheBust = `${staticUrl}?_v=${version.replace(/\./g, '_')}`
-            const staticResponse = await fetch(urlWithCacheBust, {
-              cache: 'no-cache',
-            })
-            if (staticResponse.ok) {
-              data = await staticResponse.json()
-              useStatic = true
-            }
-          } catch (staticError) {
-            // Static file not available, will try API - silently continue
-          }
+        // Static JSON first (SSR + client) — same path as VersionStore / ChampionsStore.
+        try {
+          const staticUrl = getGameDataUrl(version, 'item', language)
+          data = await fetchPublicJson<{ data?: Record<string, Item> }>(staticUrl)
+          useStatic = true
+        } catch {
+          // fall through to API
         }
 
         // Fallback to API if static file not available

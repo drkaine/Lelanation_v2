@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import type { Champion } from '@lelanation/shared-types'
 import { useVersionStore } from './VersionStore'
 import { getFallbackGameVersion } from '~/config/version'
-import { getChampionDetailUrl, getChampionIndexUrl } from '~/utils/staticDataUrl'
+import { fetchPublicJson, getChampionDetailUrl, getChampionIndexUrl } from '~/utils/staticDataUrl'
 import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
 
 const ABILITY_ORDER = ['Q', 'W', 'E', 'R'] as const
@@ -188,11 +188,9 @@ export const useChampionsStore = defineStore('champions', {
           this.error = null
 
           const version = await this.resolveGameVersion()
-          const response = await fetch(getChampionIndexUrl(version, language))
-          if (!response.ok) {
-            throw new Error(`Static champion index returned ${response.status}`)
-          }
-          const payload = await response.json()
+          const payload = await fetchPublicJson<{ champions?: unknown[] }>(
+            getChampionIndexUrl(version, language)
+          )
           const champions = Array.isArray(payload?.champions) ? payload.champions : []
           this.loadedDetailKeys = {}
           this.champions = champions.map((champion: any) => {
@@ -243,12 +241,12 @@ export const useChampionsStore = defineStore('champions', {
       const request = (async (): Promise<Champion | null> => {
         try {
           const version = await this.resolveGameVersion()
-          const response = await fetch(getChampionDetailUrl(version, language, id))
-          if (!response.ok) {
+          const payload = await fetchPublicJson<{ champion?: unknown }>(
+            getChampionDetailUrl(version, language, id)
+          ).catch(() => null)
+          if (!payload) {
             return this.champions[championIndex] ?? null
           }
-
-          const payload = await response.json()
           const detail = payload?.champion
           if (!detail || typeof detail !== 'object') {
             return this.champions[championIndex] ?? null

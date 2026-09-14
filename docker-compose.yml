@@ -20,6 +20,7 @@ services:
     image: postgres:16-alpine
     container_name: lelanation-postgres-statistiques
     restart: unless-stopped
+    shm_size: '512mb'
     env_file:
       - .env
     environment:

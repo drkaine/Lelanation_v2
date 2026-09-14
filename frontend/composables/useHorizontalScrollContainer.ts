@@ -9,6 +9,15 @@ function isOverflowing(el: HTMLElement): boolean {
   return el.scrollWidth > el.clientWidth + 1
 }
 
+function isInteractiveScrollTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false
+  return Boolean(
+    target.closest(
+      'button, a, input, textarea, select, label, [role="tab"], [data-tab-id], [contenteditable="true"]'
+    )
+  )
+}
+
 function updateScrollableState(el: HTMLElement): void {
   el.classList.toggle('has-horizontal-scroll', isOverflowing(el))
 }
@@ -83,6 +92,7 @@ export function useHorizontalScrollContainer(
   function onPointerDown(e: PointerEvent): void {
     const el = containerRef.value
     if (!el || e.button !== 0 || !canScroll(el)) return
+    if (isInteractiveScrollTarget(e.target)) return
     isPointerDown = true
     isDragging = false
     startX = e.clientX
@@ -96,6 +106,7 @@ export function useHorizontalScrollContainer(
     if (!isDragging && Math.abs(dx) > dragThreshold) {
       isDragging = true
       el.classList.add('is-drag-scrolling')
+      el.setPointerCapture?.(e.pointerId)
     }
     if (!isDragging) return
     e.preventDefault()
@@ -121,13 +132,6 @@ export function useHorizontalScrollContainer(
     }
   }
 
-  function onPointerDownCapture(e: PointerEvent): void {
-    const el = containerRef.value
-    if (!el || e.button !== 0 || !canScroll(el)) return
-    el.setPointerCapture(e.pointerId)
-    onPointerDown(e)
-  }
-
   function onWheel(e: WheelEvent): void {
     const el = containerRef.value
     if (!el || !canScroll(el)) return
@@ -141,7 +145,7 @@ export function useHorizontalScrollContainer(
   function bind(el: HTMLElement): void {
     boundEl = el
     startOverflowWatch(el)
-    el.addEventListener('pointerdown', onPointerDownCapture)
+    el.addEventListener('pointerdown', onPointerDown)
     el.addEventListener('pointermove', onPointerMove)
     el.addEventListener('pointerup', endPointerDrag)
     el.addEventListener('pointercancel', endPointerDrag)
@@ -150,7 +154,7 @@ export function useHorizontalScrollContainer(
 
   function unbind(el: HTMLElement): void {
     stopOverflowWatch(el)
-    el.removeEventListener('pointerdown', onPointerDownCapture)
+    el.removeEventListener('pointerdown', onPointerDown)
     el.removeEventListener('pointermove', onPointerMove)
     el.removeEventListener('pointerup', endPointerDrag)
     el.removeEventListener('pointercancel', endPointerDrag)

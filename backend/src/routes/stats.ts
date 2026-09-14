@@ -22,6 +22,7 @@ import {
   patchFromGameVersion,
 } from '../services/MatchupTierService.js'
 import { getTierList } from '../services/TierListService.js'
+import { getMetaChartBootstrap } from '../services/MetaChartBootstrapService.js'
 import { getChampionGlobalTable } from '../services/ChampionGlobalTableService.js'
 import { getChampionBansTable } from '../services/ChampionBansTableService.js'
 import {
@@ -815,6 +816,32 @@ router.get('/champions/bans-table', async (req: Request, res: Response) => {
   }
 })
 
+function championByRoleKeyFromQuery(role: string | undefined): string | null {
+  if (!role?.trim()) return null
+  const u = role.trim().toUpperCase()
+  switch (u) {
+    case 'TOP':
+    case 'TOPLANE':
+      return 'TOP'
+    case 'JUNGLE':
+    case 'JGL':
+      return 'JUNGLE'
+    case 'MIDDLE':
+    case 'MID':
+    case 'MIDLANE':
+      return 'MIDDLE'
+    case 'BOTTOM':
+    case 'ADC':
+    case 'BOT':
+      return 'BOTTOM'
+    case 'SUPPORT':
+    case 'UTILITY':
+      return 'SUPPORT'
+    default:
+      return null
+  }
+}
+
 router.get('/champions/:championId', async (req: Request, res: Response) => {
   const championIdParam = req.params.championId
   if (Array.isArray(championIdParam)) {
@@ -828,46 +855,38 @@ router.get('/champions/:championId', async (req: Request, res: Response) => {
   const role = (req.query.role as string) || undefined
   const version = queryString(req.query.version)
   const loadBase = { rankTier, version: version ?? null }
-  const data = await aggregator.load({ ...loadBase, role: role ?? null })
+  const data = await aggregator.load({ ...loadBase, role: null })
   if (!data) {
     return res.status(404).json({ error: 'No stats available' })
   }
-  const row = data.champions.find((c: { championId: number }) => c.championId === championId)
-  if (!row) {
+  const rowAll = data.champions.find((c: { championId: number }) => c.championId === championId)
+  if (!rowAll) {
     return res.status(404).json({ error: 'Champion not found in stats' })
   }
+  const roleKey = championByRoleKeyFromQuery(role)
+  const roleStats = roleKey ? rowAll.byRole?.[roleKey] : undefined
+  if (roleKey && !roleStats) {
+    return res.status(404).json({ error: 'Champion not found in stats for this role' })
+  }
+  const games = roleStats?.games ?? rowAll.games
+  const wins = roleStats?.wins ?? rowAll.wins
+  const winrate = roleStats?.winrate ?? rowAll.winrate
+  const pickrate = roleStats?.pickrate ?? rowAll.pickrate
   const otpMode = otpModeFromQuery(req.query.otp)
-  if (!keepByOtpPickratePercent(parsePickrateNumber(row.pickrate), otpMode)) {
+  if (!keepByOtpPickratePercent(parsePickrateNumber(pickrate), otpMode)) {
     return res.status(404).json({
       error: 'Champion does not match the OTP (pick rate) filter for this cohort.',
     })
   }
-  let byRole = row.byRole
-  /** Taux de ban : agrégat global (tous rôles), le dénominateur ne doit pas suivre le filtre rôle. */
-  let banrate = row.banrate
-  let presence = row.presence
-  if (role) {
-    const dataAllRoles = await aggregator.load({ ...loadBase, role: null })
-    const rowAll = dataAllRoles?.champions.find(
-      (c: { championId: number }) => c.championId === championId
-    )
-    if (rowAll) {
-      if (rowAll.byRole && Object.keys(rowAll.byRole).length > 0) {
-        byRole = rowAll.byRole
-      }
-      if (rowAll.banrate != null) banrate = rowAll.banrate
-      if (rowAll.presence != null) presence = rowAll.presence
-    }
-  }
   return res.json({
-    championId: row.championId,
-    games: row.games,
-    wins: row.wins,
-    winrate: row.winrate,
-    pickrate: row.pickrate,
-    banrate,
-    presence,
-    byRole,
+    championId: rowAll.championId,
+    games,
+    wins,
+    winrate,
+    pickrate,
+    banrate: rowAll.banrate,
+    presence: rowAll.presence,
+    byRole: rowAll.byRole,
     totalGames: data.totalGames,
     generatedAt: data.generatedAt
   })
@@ -1240,6 +1259,62 @@ router.get('/matchup-tier-list', async (req: Request, res: Response) => {
     lane: lane ?? null,
     rows,
   })
+})
+
+/** GET /api/stats/meta-chart-bootstrap — versions + tier-list (+ ref patch) en un appel. */
+router.get('/meta-chart-bootstrap', async (req: Request, res: Response) => {
+  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
+  const patch = resolvePatchFromQuery(req.query.patch, req.query.version) ?? undefined
+  const refPatch = resolvePatchFromQuery(req.query.refPatch, req.query.refVersion) ?? undefined
+  const rankTierList = rankTierParam(req.query.rankTier)
+  const rankTier =
+    !rankTierList || rankTierList.includes('ALL')
+      ? 'all'
+      : rankTierList.length === 1
+        ? rankTierList[0]!
+        : rankTierList
+  const roleFocus = queryString(req.query.role)?.trim() || null
+  const otpMode = otpModeFromQuery(req.query.otp)
+  try {
+    const data = await getMetaChartBootstrap({
+      patch: patch || null,
+      refPatch: refPatch || null,
+      rankTier,
+      role: roleFocus,
+    })
+    const tierList = data.tierList
+    const refTierList = data.refTierList
+    return res.json({
+      versions: data.versions,
+      tierList: tierList
+        ? {
+            patch: tierList.patch,
+            rankTier: tierList.rankTier,
+            rows: filterTierListRowsByOtp(tierList.rows, otpMode),
+            highEloRows: filterTierListRowsByOtp(tierList.highEloRows ?? [], otpMode),
+          }
+        : null,
+      refTierList:
+        refTierList && refTierList.rows.length > 0
+          ? {
+              patch: refTierList.patch,
+              rankTier: refTierList.rankTier,
+              rows: filterTierListRowsByOtp(refTierList.rows, otpMode),
+              highEloRows: filterTierListRowsByOtp(refTierList.highEloRows ?? [], otpMode),
+            }
+          : null,
+    })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('[meta-chart-bootstrap]', message, err)
+    return res.status(200).json({
+      versions: [],
+      tierList: null,
+      refTierList: null,
+      error: 'Meta chart bootstrap failed',
+      message,
+    })
+  }
 })
 
 /** GET /api/stats/tier-list - Lolalytics-style tier list (one row per champion, all ranks + optional highElo). Query: ?patch=16.4 (optional; if omitted uses latest patch in DB)&platformId=EUW1&rankTier=all */

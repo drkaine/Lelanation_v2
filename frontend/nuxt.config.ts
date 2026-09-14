@@ -39,7 +39,8 @@ export default defineNuxtConfig({
   // File-based routing via pages/ directory automatically creates routes
   ssr: true,
   experimental: {
-    // Désactivé globalement ; ne pas combiner avec swr sur /builds/[id] (réactive les _payload.json).
+    // Désactivé : l'extraction externe ne garde que les asyncData (~108 o) et le client
+    // préfère data-src au JSON inline (Pinia 240k+ o) → hydratation cassée, 500 "26".
     payloadExtraction: false,
     prefetchPreloadTags: false,
     defaults: {
@@ -144,10 +145,9 @@ export default defineNuxtConfig({
     sitemap: [`${defaultSiteUrl}/sitemap.xml`],
   },
   routeRules: {
-    '/': { swr: 3600 },
-    // Pas de SWR sur /builds/* : avec payloadExtraction désactivé, Nuxt active quand même
-    // NUXT_RUNTIME_PAYLOAD_EXTRACTION sur les routes en cache → <link rel="preload" href="…/_payload.json">
-    // qui reste inutilisé après navigation vers /builds/:uuid (warning console + requêtes inutiles).
+    // Pas de swr/cache Nitro sur les pages HTML : évite data-src _payload.json (500 client "26").
+    '/': { prerender: false },
+    // Pas de SWR sur /builds/* : même raison (payload.json fantôme après navigation).
     '/builds/discover': { prerender: false },
     '/builds/my-builds': { prerender: false },
     '/builds/favoris': { prerender: false },
@@ -157,25 +157,25 @@ export default defineNuxtConfig({
     '/items': { prerender: false },
     '/items/**': { prerender: false },
     '/builds/champion/**': { prerender: false },
-    '/champion/**': { swr: 3600, prerender: false },
-    '/champions/**': { swr: 3600, prerender: false },
-    '/statistics': { swr: 3600, prerender: false },
-    '/statistics/tier-list': { swr: 3600, prerender: false },
-    '/statistics/meta-chart': { swr: 3600, prerender: false },
-    '/statistics/recap': { swr: 3600, prerender: false },
+    '/champion/**': { prerender: false },
+    '/champions/**': { prerender: false },
+    '/statistics': { prerender: false },
+    '/statistics/tier-list': { prerender: false },
+    '/statistics/meta-chart': { prerender: false },
+    '/statistics/recap': { prerender: false },
     '/statistics/settings': { redirect: { to: '/settings', statusCode: 301 } },
     '/en/statistics/settings': { redirect: { to: '/en/settings', statusCode: 301 } },
     '/statistics/surveillance': { ssr: false },
-    '/statistics/champion/**': { swr: 1800, prerender: false },
-    '/statistics/item/**': { swr: 1800, prerender: false },
-    '/videos': { swr: 3600, prerender: false },
-    '/patch-notes': { swr: 3600, prerender: false },
-    '/patch-notes/**': { swr: 3600, prerender: false },
+    '/statistics/champion/**': { prerender: false },
+    '/statistics/item/**': { prerender: false },
+    '/videos': { prerender: false },
+    '/patch-notes': { prerender: false },
+    '/patch-notes/**': { prerender: false },
     '/sitemap.xml': { cache: { maxAge: 3600 } },
-    '/privacy': { swr: 3600, prerender: false },
-    '/information': { swr: 3600, prerender: false },
+    '/privacy': { prerender: false },
+    '/information': { prerender: false },
     '/settings': { ssr: false },
-    '/legal': { swr: 3600, prerender: false },
+    '/legal': { prerender: false },
     '/lelanation-app': { redirect: { to: '/download', statusCode: 301 } },
     '/en/lelanation-app': { redirect: { to: '/en/download', statusCode: 301 } },
     '/app': { redirect: { to: '/download', statusCode: 301 } },
@@ -331,9 +331,15 @@ export default defineNuxtConfig({
               return 'statistics-store'
             }
             // Per-route stats pages only — do NOT lump all components/composables together.
+            if (id.includes('/frontend/components/statistics/pages/StatisticsIndexPage')) {
+              return 'page-stats-index'
+            }
+            if (id.includes('/frontend/components/statistics/pages/ChampionStatsPage')) {
+              return 'page-stats-champion'
+            }
             if (id.includes('/frontend/pages/statistics/')) {
-              if (id.includes('/champion/')) return 'page-stats-champion'
-              if (id.includes('/statistics/index.')) return 'page-stats-index'
+              if (id.includes('/champion/')) return 'page-stats-champion-shell'
+              if (id.includes('/statistics/index.')) return 'page-stats-index-shell'
               if (id.includes('/tier-list')) return 'page-stats-tier-list'
               if (id.includes('/settings')) return 'page-stats-settings'
               if (id.includes('/recap')) return 'page-stats-recap'

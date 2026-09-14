@@ -2159,6 +2159,25 @@ export const useBuildStore = defineStore('build', {
       if (savedBuilds.length === 0) return
 
       const patchStaleById = await this.fetchServerPatchStaleMap()
+      this.applyPatchStaleMap(savedBuilds, patchStaleById)
+    },
+
+    applyPatchStaleFromFetchedBuilds(
+      fetchedBuilds: Array<Pick<StoredBuild, 'id'> & { patchStale?: PatchStaleInfo | null }>
+    ): void {
+      if (import.meta.server) return
+
+      const savedBuilds = this.getSavedBuilds()
+      if (savedBuilds.length === 0) return
+
+      const patchStaleById = extractPatchStaleMap(fetchedBuilds)
+      this.applyPatchStaleMap(savedBuilds, patchStaleById)
+    },
+
+    applyPatchStaleMap(
+      savedBuilds: Build[],
+      patchStaleById: Map<string, PatchStaleInfo | null>
+    ): void {
       if (patchStaleById.size === 0) return
 
       const merged = mergePatchStaleIntoBuilds(savedBuilds, patchStaleById)

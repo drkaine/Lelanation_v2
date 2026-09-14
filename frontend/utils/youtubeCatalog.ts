@@ -18,6 +18,14 @@ function readChannelsConfig(frontendRoot: string): ChannelsConfig['channels'] {
   }
 }
 
+/** Resolve channel JSON from disk using cwd (SSR / prerender). */
+export function readYouTubeChannelDataForChannel(
+  channelId: string,
+  cwd = process.cwd()
+): YouTubeChannelData | null {
+  return readYouTubeChannelDataFromDisk(resolveFrontendRoot(cwd), channelId)
+}
+
 export function readYouTubeChannelDataFromDisk(
   frontendRoot: string,
   channelId: string

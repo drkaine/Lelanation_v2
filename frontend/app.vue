@@ -127,6 +127,7 @@ const appShellVars = computed(() => ({
   '--build-create-card-top-gap': '11px',
   '--build-create-page-lift': '0px',
   '--build-page-padding-top': !isLayoutScaled.value ? '6px' : '1rem',
+  '--app-header-height': '50px',
   '--app-mobile-tab-bar-height': showMobileTabBar.value ? '3.5rem' : '0px',
 }))
 
@@ -487,8 +488,26 @@ if (import.meta.client) {
 .app-chrome-sticky {
   position: sticky;
   top: 0;
-  z-index: 58;
+  /* Above statistics filter sheet/backdrop (10050+) so nav dropdowns stay clickable. */
+  z-index: 10060;
   background: rgb(var(--rgb-chrome) / 1);
+}
+
+/* Mobile/desktop stats filter backdrop — must not cover the app header. */
+.statistics-filters-backdrop {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  top: var(--app-header-height, 50px);
+  z-index: 10050;
+}
+
+/* Bottom sheet filters — on desktop, start below tab bars so tabs stay clickable. */
+@media (min-width: 1024px) {
+  .statistics-filters-sheet {
+    top: calc(var(--app-header-height, 50px) + 10rem);
+    max-height: none;
+  }
 }
 
 .app-chrome-sticky :deep(.header) {

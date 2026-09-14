@@ -15,6 +15,7 @@ import {
   type MatchupPeerRow,
 } from './championMatchupScoreCompute.js'
 import { assignTiersFromNotes, type LolalyticsTier } from './tierListAssign.js'
+import { statsRedisCacheGet, statsRedisCacheSet } from './statsRedisCache.js'
 
 const MIN_GAMES = 1
 const MIN_PICKRATE = 0.0001
@@ -523,6 +524,12 @@ export async function getTierList(options: GetTierListOptions): Promise<GetTierL
   const cached = tierListCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
 
+  const redisCached = await statsRedisCacheGet<GetTierListResult>('tier-list', cacheKey)
+  if (redisCached) {
+    tierListCache.set(cacheKey, { data: redisCached, expiresAt: now + TIER_LIST_CACHE_TTL_MS })
+    return redisCached
+  }
+
   let patch = options.patch?.trim() || null
   if (!patch) {
     patch = await getLatestPatch()
@@ -592,6 +599,7 @@ export async function getTierList(options: GetTierListOptions): Promise<GetTierL
     if (entry.expiresAt <= now) tierListCache.delete(key)
   }
   tierListCache.set(cacheKey, { data: result, expiresAt: now + TIER_LIST_CACHE_TTL_MS })
+  void statsRedisCacheSet('tier-list', cacheKey, result, TIER_LIST_CACHE_TTL_MS)
 
   return result
 }
@@ -599,4 +607,5 @@ export async function getTierList(options: GetTierListOptions): Promise<GetTierL
 /** Vide le cache tier list (utilisé après un recompute d'agrégats / en test). */
 export function clearTierListCache(): void {
   tierListCache.clear()
+  void import('./statsRedisCache.js').then(m => m.statsRedisCacheDelNamespace('tier-list'))
 }

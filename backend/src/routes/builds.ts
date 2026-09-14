@@ -429,13 +429,38 @@ router.post('/:id/track-favorite', buildEngagementRateLimit, async (req, res) =>
 })
 
 /**
- * Get all builds (public only — private builds are never exposed here)
- * GET /api/builds
+ * Get builds (public only — private builds are never exposed here)
+ * GET /api/builds — legacy: full array when page/limit omitted
+ * GET /api/builds?page=1&limit=50 — paginated payload
  */
-router.get('/', async (_req, res) => {
+router.get('/', async (req, res) => {
   try {
+    const pageRaw = Number.parseInt(String(req.query.page ?? ''), 10)
+    const limitRaw = Number.parseInt(String(req.query.limit ?? ''), 10)
+    const page = Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 0
+    const limit =
+      Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 200) : 0
+
     const { entries } = await getBuildIndex()
-    return res.json(entries.map(entry => entry.build))
+    const publicBuilds = entries
+      .filter(entry => entry.build.visibility !== 'private')
+      .map(entry => entry.build)
+
+    if (!page || !limit) {
+      return res.json(publicBuilds)
+    }
+
+    const total = publicBuilds.length
+    const start = (page - 1) * limit
+    const items = publicBuilds.slice(start, start + limit)
+    res.set('Cache-Control', 'public, max-age=30')
+    return res.json({
+      items,
+      total,
+      page,
+      limit,
+      hasMore: start + limit < total,
+    })
   } catch (error) {
     return res.status(500).json({ error: 'Failed to read builds directory' })
   }

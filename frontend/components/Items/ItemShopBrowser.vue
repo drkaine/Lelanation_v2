@@ -55,7 +55,13 @@
       </div>
     </div>
 
-    <div v-if="itemsStore.status === 'loading'" class="py-12 text-center text-text">
+    <div
+      v-if="
+        itemsStore.status === 'loading' ||
+        (itemsStore.status === 'idle' && itemsStore.items.length === 0)
+      "
+      class="py-12 text-center text-text"
+    >
       {{ t('item.selector.loading') }}
     </div>
 
@@ -153,7 +159,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, provide, ref, watch } from 'vue'
+import { computed, provide, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import type { Item } from '~/types/build'
@@ -324,9 +330,7 @@ watch(
   { immediate: true }
 )
 
-onMounted(() => {
-  itemsStore.loadItems(riotLocale.value).catch(() => undefined)
-})
+await itemsStore.loadItems(riotLocale.value).catch(() => undefined)
 
 watch(locale, () => {
   itemsStore.loadItems(riotLocale.value).catch(() => undefined)

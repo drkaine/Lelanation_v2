@@ -832,6 +832,70 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     message?: string
   }
 
+  function resetTierListRefMaps() {
+    tierListRefStatsById.value = new Map()
+    tierListRefHighEloById.value = new Map()
+    tierListRefHighEloRankById.value = new Map()
+    tierListRefRows.value = []
+  }
+
+  function applyRefTierListData(refData: TierListFetchPayload | null | undefined) {
+    if (!refData || refData.error || !refData.rows?.length) return
+    tierListRefRows.value = refData.rows.map(row => ({
+      rank: row.rank,
+      championId: row.championId,
+      mainRole: row.mainRole,
+    }))
+    const m = new Map<
+      number,
+      {
+        winrate: number
+        pickrate: number
+        banrate: number
+        games: number
+        mainRolePct: number
+        pbi: number
+      }
+    >()
+    for (const row of refData.rows) {
+      m.set(row.championId, {
+        winrate: row.winrate,
+        pickrate: row.pickrate,
+        banrate: row.banrate,
+        games: row.games,
+        mainRolePct: row.mainRolePct,
+        pbi: row.pbi,
+      })
+    }
+    tierListRefStatsById.value = m
+    const hm = new Map<number, { winrate: number; games: number }>()
+    const hr = new Map<number, number>()
+    if (refData.highEloRows?.length) {
+      for (const row of refData.highEloRows) {
+        hm.set(row.championId, { winrate: row.winrate, games: row.games })
+        hr.set(row.championId, row.rank)
+      }
+    }
+    tierListRefHighEloById.value = hm
+    tierListRefHighEloRankById.value = hr
+  }
+
+  function applyTierListBootstrap(
+    data: TierListFetchPayload | null | undefined,
+    refData?: TierListFetchPayload | null
+  ) {
+    resetTierListRefMaps()
+    tierListData.value = data ?? null
+    if (data?.error || data?.message) {
+      tierListError.value = [data.error, data.message].filter(Boolean).join(': ')
+    } else {
+      tierListError.value = null
+    }
+    if (!data?.error && data?.rows?.length) {
+      applyRefTierListData(refData)
+    }
+  }
+
   async function loadTierList() {
     if (tierListViewIsBotlanePanel(tierListViewModel.value)) {
       tierListPending.value = false
@@ -839,78 +903,22 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     }
     tierListPending.value = true
     tierListError.value = null
-    tierListRefStatsById.value = new Map()
-    tierListRefHighEloById.value = new Map()
-    tierListRefHighEloRankById.value = new Map()
-    tierListRefRows.value = []
+    resetTierListRefMaps()
     try {
       const patch = effectiveTierListPatch.value
-      const data = await statsFetch<TierListFetchPayload>(
-        apiUrl(`/api/stats/tier-list${tierListQueryString(patch)}`)
-      )
-      tierListData.value = data
-      if (data?.error || data?.message) {
-        tierListError.value = [data.error, data.message].filter(Boolean).join(': ')
-      } else {
-        tierListError.value = null
-      }
-
       const refPatch = patchFromVersion(progressionFromVersion.value)
-      if (
-        refPatch &&
-        patch &&
-        refPatch !== patch &&
-        !data?.error &&
-        data?.rows &&
-        data.rows.length > 0
-      ) {
-        try {
-          const refData = await statsFetch<TierListFetchPayload>(
-            apiUrl(`/api/stats/tier-list${tierListQueryString(refPatch)}`)
-          )
-          if (refData && !refData.error && refData.rows?.length) {
-            tierListRefRows.value = refData.rows.map(row => ({
-              rank: row.rank,
-              championId: row.championId,
-              mainRole: row.mainRole,
-            }))
-            const m = new Map<
-              number,
-              {
-                winrate: number
-                pickrate: number
-                banrate: number
-                games: number
-                mainRolePct: number
-                pbi: number
-              }
-            >()
-            for (const row of refData.rows) {
-              m.set(row.championId, {
-                winrate: row.winrate,
-                pickrate: row.pickrate,
-                banrate: row.banrate,
-                games: row.games,
-                mainRolePct: row.mainRolePct,
-                pbi: row.pbi,
-              })
-            }
-            tierListRefStatsById.value = m
-            const hm = new Map<number, { winrate: number; games: number }>()
-            const hr = new Map<number, number>()
-            if (refData.highEloRows?.length) {
-              for (const row of refData.highEloRows) {
-                hm.set(row.championId, { winrate: row.winrate, games: row.games })
-                hr.set(row.championId, row.rank)
-              }
-            }
-            tierListRefHighEloById.value = hm
-            tierListRefHighEloRankById.value = hr
-          }
-        } catch {
-          /* réf. patch optionnelle */
-        }
-      }
+      const shouldLoadRef = Boolean(refPatch && patch && refPatch !== patch)
+      const [data, refData] = await Promise.all([
+        statsFetch<TierListFetchPayload>(
+          apiUrl(`/api/stats/tier-list${tierListQueryString(patch)}`)
+        ),
+        shouldLoadRef
+          ? statsFetch<TierListFetchPayload>(
+              apiUrl(`/api/stats/tier-list${tierListQueryString(refPatch)}`)
+            ).catch(() => null)
+          : Promise.resolve(null),
+      ])
+      applyTierListBootstrap(data, refData)
     } catch (err) {
       tierListError.value = err instanceof Error ? err.message : String(err)
       tierListData.value = null
@@ -976,6 +984,7 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     tierListError,
     tierListData,
     loadTierList,
+    applyTierListBootstrap,
     effectiveTierListPatch,
     tierListPatchDeltaRefLabel,
     paginatedTierList,

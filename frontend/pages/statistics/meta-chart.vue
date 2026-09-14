@@ -42,8 +42,8 @@
       </button>
 
       <div
-        v-if="filtersOpen && effectiveFiltersSheetMode"
-        class="fixed inset-0 z-[10050] bg-black/50"
+        v-if="filtersOpen && showFiltersBackdrop"
+        class="statistics-filters-backdrop bg-black/50"
         aria-hidden="true"
         role="presentation"
         @click="closeFilters"
@@ -54,7 +54,7 @@
         :class="[
           'statistics-filters-panel flex shrink-0 flex-col overflow-hidden',
           effectiveFiltersSheetMode
-            ? 'fixed inset-x-0 bottom-0 top-auto z-[10051] max-h-[85vh] w-full rounded-t-2xl bg-surface shadow-lg'
+            ? 'statistics-filters-sheet fixed inset-x-0 bottom-0 top-auto z-[10051] max-h-[85vh] w-full rounded-t-2xl bg-surface shadow-lg'
             : [
                 'hidden w-0 opacity-0 transition-[width,opacity] duration-200',
                 'lg:sticky lg:top-4 lg:z-0 lg:flex lg:h-auto lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:overflow-x-hidden',
@@ -384,8 +384,14 @@ const championsStore = useChampionsStore()
 const versionStore = useVersionStore()
 const statisticsUiStore = useStatisticsUiStore()
 const { filtersOpen } = storeToRefs(statisticsUiStore)
-const { effectiveFiltersSheetMode, showDesktopFiltersTrigger, filtersFabClass } =
-  useStatisticsFiltersSheetMode()
+const {
+  effectiveFiltersSheetMode,
+  showFiltersBackdrop,
+  lockPageScrollForFilters,
+  filtersSheetMode,
+  showDesktopFiltersTrigger,
+  filtersFabClass,
+} = useStatisticsFiltersSheetMode()
 const { version: gameVersion } = useGameVersion()
 
 const { data: championNames } = await useChampionNames()
@@ -675,13 +681,13 @@ function toggleFiltersOpen() {
 
 function onFiltersEscapeKey(event: KeyboardEvent) {
   if (event.key !== 'Escape' || !filtersOpen.value) return
-  if (!import.meta.client || !effectiveFiltersSheetMode.value) return
+  if (!import.meta.client || !filtersSheetMode.value) return
   closeFilters()
 }
 
-watch([filtersOpen, effectiveFiltersSheetMode], () => {
+watch([filtersOpen, lockPageScrollForFilters], () => {
   if (!import.meta.client) return
-  const lock = effectiveFiltersSheetMode.value && filtersOpen.value
+  const lock = lockPageScrollForFilters.value && filtersOpen.value
   document.body.style.overflow = lock ? 'hidden' : ''
 })
 
@@ -760,18 +766,41 @@ watch(
   { deep: true }
 )
 
+function metaChartBootstrapQueryString(): string {
+  const params = new URLSearchParams()
+  if (statsVersionFilter.value) params.set('patch', statsVersionFilter.value)
+  if (progressionFromVersion.value) params.set('refPatch', progressionFromVersion.value)
+  if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
+  if (statsOtpFilter.value !== 'non') params.set('otp', statsOtpFilter.value)
+  for (const tier of statsDivisionFilter.value) params.append('rankTier', tier)
+  const q = params.toString()
+  return q ? `?${q}` : ''
+}
+
 async function bootstrapMetaChartPage(): Promise<number> {
   tierList.tierListPending.value = true
   if (import.meta.server) {
     applyMetaChartStateFromQuery()
   }
+  const championsPromise = championsStore.loadChampions(riotLocale.value)
   if (!versionStore.currentVersion) {
     await versionStore.loadCurrentVersion()
   }
-  await loadVersionsWithMatches()
-  applyDefaultVersionFiltersFromKnownVersions()
-  await tierList.loadTierList()
-  await championsStore.loadChampions(riotLocale.value)
+  try {
+    const data = await statsFetch<{
+      versions?: Array<{ version: string; matchCount: number }>
+      tierList?: NonNullable<typeof tierList.tierListData.value>
+      refTierList?: NonNullable<typeof tierList.tierListData.value> | null
+    }>(apiUrl(`/api/stats/meta-chart-bootstrap${metaChartBootstrapQueryString()}`))
+    if (data?.versions?.length) setVersionsWithMatches(data.versions)
+    applyDefaultVersionFiltersFromKnownVersions()
+    tierList.applyTierListBootstrap(data.tierList ?? null, data.refTierList ?? null)
+  } catch {
+    tierList.tierListError.value = 'Meta chart bootstrap failed'
+  } finally {
+    tierList.tierListPending.value = false
+  }
+  await championsPromise
   return tierList.tierListData.value?.rows?.length ?? 0
 }
 
@@ -786,11 +815,10 @@ const metaChartBootstrapKey = computed(() =>
   ].join('|')
 )
 
-await useAsyncData(
-  () => `meta-chart-bootstrap-${metaChartBootstrapKey.value}`,
-  bootstrapMetaChartPage,
-  { watch: [metaChartBootstrapKey], lazy: true }
-)
+useAsyncData(() => `meta-chart-bootstrap-${metaChartBootstrapKey.value}`, bootstrapMetaChartPage, {
+  watch: [metaChartBootstrapKey],
+  lazy: true,
+})
 
 onMounted(() => {
   if (import.meta.client) {
