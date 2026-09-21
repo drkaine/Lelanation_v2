@@ -69,3 +69,10 @@ darkaine.key
 darkaine.crt
 darkaine.pfx
 .agents/
+
+# harness-forge (installé en local, non versionné)
+harnessForge/
+.harness/
+CLAUDE.md
+CLAUDE.md.harness
+.claude/settings.json
