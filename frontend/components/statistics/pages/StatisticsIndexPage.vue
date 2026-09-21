@@ -873,6 +873,7 @@ import {
 } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
+import { statsFetch } from '~/utils/statsFetch'
 import { apiUrl } from '~/utils/apiUrl'
 import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
 import { RANK_TIERS } from '~/utils/rankTiers'
@@ -2301,18 +2302,6 @@ function statsPerfStart(_label: string): number {
 }
 function statsPerfEnd(_label: string, start: number) {
   if (!isStatsPerfEnabled() || start === 0) return // eslint-disable-line no-useless-return
-}
-
-/** Fetch stats API and log backend timing from X-Backend-Time / X-Stats-Path (tout au même endroit que les logs front). */
-function statsFetch<T = unknown>(url: string, options?: Parameters<typeof $fetch>[1]): Promise<T> {
-  const existingOnResponse = (options as { onResponse?: (ctx: { response: Response }) => void })
-    ?.onResponse
-  return $fetch(url, {
-    ...options,
-    onResponse: ctx => {
-      existingOnResponse?.(ctx)
-    },
-  }) as Promise<T>
 }
 
 /** Évite deux GET identiques si plusieurs watchers appellent la même charge en parallèle. */

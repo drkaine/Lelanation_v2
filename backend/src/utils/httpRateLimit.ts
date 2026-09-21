@@ -37,7 +37,15 @@ export type RateLimitOptions = {
   windowMs: number
   max: number
   keyPrefix?: string
+  /**
+   * Multiplier applied to `max` for loopback callers. The Nuxt server calls this API on behalf
+   * of every visitor (SSR) from 127.0.0.1 without a client IP, so all of them share one bucket:
+   * it needs far more headroom than a single real client.
+   */
+  loopbackMultiplier?: number
 }
+
+const LOOPBACK_IPS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 
 /**
  * Client identity for rate limiting.
@@ -60,13 +68,15 @@ function hit(key: string, windowMs: number, now: number): Bucket {
 }
 
 export function createRateLimit(options: RateLimitOptions) {
-  const { windowMs, max, keyPrefix = 'rl' } = options
+  const { windowMs, max, keyPrefix = 'rl', loopbackMultiplier = 1 } = options
   ensurePurgeTimer()
 
   return (req: Request, res: Response, next: NextFunction) => {
     const now = Date.now()
-    const bucket = hit(`${keyPrefix}:${clientKey(req)}`, windowMs, now)
-    if (bucket.count > max) {
+    const key = clientKey(req)
+    const bucket = hit(`${keyPrefix}:${key}`, windowMs, now)
+    const limit = LOOPBACK_IPS.has(key) ? max * loopbackMultiplier : max
+    if (bucket.count > limit) {
       res.setHeader('Retry-After', String(Math.ceil((bucket.resetAt - now) / 1000)))
       return res.status(429).json({ error: 'Too many requests' })
     }

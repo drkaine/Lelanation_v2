@@ -438,6 +438,7 @@ import {
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
+import { statsFetch } from '~/utils/statsFetch'
 import StatisticsTierListTab from '~/components/statistics/tabs/StatisticsTierListTab.vue'
 import { RANK_TIERS } from '~/utils/rankTiers'
 import { getRankedEmblemUrl } from '~/utils/rankedEmblem'
@@ -550,10 +551,6 @@ function setVersionsWithMatches(
     .sort((a, b) => compareVersionsDesc(a.version, b.version))
   statsKnownVersions.value = filtered
   tierListOverviewMatchVersions.value = filtered
-}
-
-function statsFetch<T = unknown>(url: string, options?: Parameters<typeof $fetch>[1]): Promise<T> {
-  return $fetch(url, { ...options }) as Promise<T>
 }
 
 async function loadVersionsWithMatches(): Promise<void> {

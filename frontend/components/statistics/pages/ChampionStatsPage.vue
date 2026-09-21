@@ -1825,6 +1825,7 @@ import { ref, computed, watch, onMounted, onUnmounted, provide, nextTick } from 
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { statsFetch } from '~/utils/statsFetch'
 import { apiUrl } from '~/utils/apiUrl'
 import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
 import { useChampionsStore } from '~/stores/ChampionsStore'
@@ -3332,17 +3333,6 @@ function statsPerfStart(_label: string): number {
 function statsPerfEnd(_label: string, start: number) {
   if (!isStatsPerfEnabled() || start === 0) return // eslint-disable-line no-useless-return
 }
-function statsFetch<T = unknown>(url: string, options?: Parameters<typeof $fetch>[1]): Promise<T> {
-  const existingOnResponse = (options as { onResponse?: (ctx: { response: Response }) => void })
-    ?.onResponse
-  return $fetch(url, {
-    ...options,
-    onResponse: ctx => {
-      existingOnResponse?.(ctx)
-    },
-  }) as Promise<T>
-}
-
 const championStatisticsPageCtx = new Proxy({} as Record<string, unknown>, {
   get(_target, key: string | symbol) {
     if (key === 't') return t

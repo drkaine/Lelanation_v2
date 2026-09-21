@@ -65,6 +65,7 @@ app.use(
     windowMs: 60_000,
     max: 300,
     keyPrefix: 'api',
+    loopbackMultiplier: 10,
   })
 )
 
