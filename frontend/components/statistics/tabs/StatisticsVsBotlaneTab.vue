@@ -359,6 +359,8 @@ const botlaneMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
                   class="shrink-0"
                 >
                   <img
+                    loading="lazy"
+                    decoding="async"
                     :src="
                       getChampionImageUrl(p.gameVersion, p.championByKey(row.adcId)!.image.full)
                     "

@@ -202,6 +202,8 @@ function progressionBeforeAfterLine(row: Record<string, unknown>): string {
               >
                 <img
                   v-if="gameVersion && championByKey(Number(row.championId))"
+                  loading="lazy"
+                  decoding="async"
                   :src="
                     getChampionImageUrl(
                       gameVersion,

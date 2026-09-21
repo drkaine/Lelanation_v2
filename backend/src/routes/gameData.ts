@@ -1,11 +1,29 @@
 import { Router } from 'express'
 import { join } from 'path'
+import { promises as fs } from 'fs'
+import { Result } from '../utils/Result.js'
+import type { AppError } from '../utils/errors.js'
 import { FileManager } from '../utils/fileManager.js'
 import { VersionService } from '../services/VersionService.js'
 import { NotFoundError } from '../utils/errors.js'
 
 const router = Router()
 const versionService = new VersionService()
+
+/** Riot locale codes look like "fr_FR" / "en_US": anything else must never reach a file path. */
+const LANGUAGE_REGEX = /^[a-z]{2,3}_[A-Z]{2}$/
+const DEFAULT_LANGUAGE = 'fr_FR'
+
+function readLanguage(raw: unknown): string {
+  return typeof raw === 'string' && LANGUAGE_REGEX.test(raw) ? raw : DEFAULT_LANGUAGE
+}
+
+/**
+ * Static game data only changes when a new patch is synced, but championFull.json /
+ * item.json are large: parse them once per file mtime instead of on every request.
+ */
+const GAME_DATA_CACHE_MAX_AGE = 3600
+const fileCache = new Map<string, { mtimeMs: number; data: unknown }>()
 
 // Paths for data sources (backend first, frontend as fallback)
 const backendDataDir = join(process.cwd(), 'data', 'game')
@@ -15,18 +33,35 @@ const frontendDataDir = join(process.cwd(), '..', 'frontend', 'public', 'data', 
  * Try to read JSON file from backend, fallback to frontend public directory
  * This allows the API to work even after backend data is deleted (saves disk space)
  */
+async function readCachedJson(filePath: string): Promise<ReturnType<typeof FileManager.readJson>> {
+  try {
+    const { mtimeMs } = await fs.stat(filePath)
+    const hit = fileCache.get(filePath)
+    if (hit && hit.mtimeMs === mtimeMs) return Result.ok<unknown, AppError>(hit.data)
+    const result = await FileManager.readJson(filePath)
+    if (result.isOk()) {
+      // Keep the cache small: one entry per (version, language, file) currently served.
+      if (fileCache.size >= 64) fileCache.delete(fileCache.keys().next().value as string)
+      fileCache.set(filePath, { mtimeMs, data: result.unwrap() })
+    }
+    return result
+  } catch {
+    return FileManager.readJson(filePath)
+  }
+}
+
 async function readGameDataFile(
   backendPath: string,
   frontendPath: string
 ): Promise<ReturnType<typeof FileManager.readJson>> {
   // Try backend first
-  const backendResult = await FileManager.readJson(backendPath)
+  const backendResult = await readCachedJson(backendPath)
   if (backendResult.isOk()) {
     return backendResult
   }
 
   // If backend file doesn't exist, try frontend public directory
-  const frontendResult = await FileManager.readJson(frontendPath)
+  const frontendResult = await readCachedJson(frontendPath)
   if (frontendResult.isOk()) {
     return frontendResult
   }
@@ -79,6 +114,7 @@ router.get('/versions', async (_req, res) => {
     }
     return res.status(500).json({ error: 'Failed to read versions data' })
   }
+  res.set('Cache-Control', `public, max-age=${GAME_DATA_CACHE_MAX_AGE}`)
   return res.json(readResult.unwrap())
 })
 
@@ -86,7 +122,7 @@ router.get('/versions', async (_req, res) => {
  * Get champions data
  */
 router.get('/champions', async (req, res) => {
-  const language = (req.query.lang as string) || 'fr_FR'
+  const language = readLanguage(req.query.lang)
   const full = req.query.full === 'true' // Check if full data is requested
 
   // Get current version
@@ -140,6 +176,7 @@ router.get('/champions', async (req, res) => {
     return res.status(500).json({ error: 'Failed to read champions data' })
   }
 
+  res.set('Cache-Control', `public, max-age=${GAME_DATA_CACHE_MAX_AGE}`)
   return res.json(readResult.unwrap())
 })
 
@@ -147,7 +184,7 @@ router.get('/champions', async (req, res) => {
  * Get items data
  */
 router.get('/items', async (req, res) => {
-  const language = (req.query.lang as string) || 'fr_FR'
+  const language = readLanguage(req.query.lang)
 
   const versionResult = await versionService.getCurrentVersion()
   if (versionResult.isErr()) {
@@ -180,6 +217,7 @@ router.get('/items', async (req, res) => {
     return res.status(500).json({ error: 'Failed to read items data' })
   }
 
+  res.set('Cache-Control', `public, max-age=${GAME_DATA_CACHE_MAX_AGE}`)
   return res.json(readResult.unwrap())
 })
 
@@ -187,7 +225,7 @@ router.get('/items', async (req, res) => {
  * Get runes data
  */
 router.get('/runes', async (req, res) => {
-  const language = (req.query.lang as string) || 'fr_FR'
+  const language = readLanguage(req.query.lang)
 
   const versionResult = await versionService.getCurrentVersion()
   if (versionResult.isErr()) {
@@ -220,6 +258,7 @@ router.get('/runes', async (req, res) => {
     return res.status(500).json({ error: 'Failed to read runes data' })
   }
 
+  res.set('Cache-Control', `public, max-age=${GAME_DATA_CACHE_MAX_AGE}`)
   return res.json(readResult.unwrap())
 })
 
@@ -227,7 +266,7 @@ router.get('/runes', async (req, res) => {
  * Get summoner spells data
  */
 router.get('/summoner-spells', async (req, res) => {
-  const language = (req.query.lang as string) || 'fr_FR'
+  const language = readLanguage(req.query.lang)
 
   const versionResult = await versionService.getCurrentVersion()
   if (versionResult.isErr()) {
@@ -260,6 +299,7 @@ router.get('/summoner-spells', async (req, res) => {
     return res.status(500).json({ error: 'Failed to read summoner spells data' })
   }
 
+  res.set('Cache-Control', `public, max-age=${GAME_DATA_CACHE_MAX_AGE}`)
   return res.json(readResult.unwrap())
 })
 

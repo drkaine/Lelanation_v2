@@ -236,6 +236,8 @@
                   @click.stop="selectAllDivisions()"
                 >
                   <img
+                    loading="lazy"
+                    decoding="async"
                     src="/data/community-dragon/ranked-emblem/Unranked.png"
                     :alt="t('statisticsPage.allRanks')"
                     class="h-3 w-3 object-contain"
@@ -265,6 +267,8 @@
                 >
                   <img
                     v-if="getRankedEmblemUrl(tier)"
+                    loading="lazy"
+                    decoding="async"
                     :src="getRankedEmblemUrl(tier)!"
                     :alt="tier"
                     class="h-3 w-3 object-contain"
@@ -318,6 +322,8 @@
                   @click="toggleRoleFilter(r)"
                 >
                   <img
+                    loading="lazy"
+                    decoding="async"
                     :src="r.icon"
                     :alt="r.label"
                     class="h-3 w-3 object-contain"

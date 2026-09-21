@@ -126,6 +126,8 @@
           >
             <img
               v-if="getRankedEmblemUrl(tier)"
+              loading="lazy"
+              decoding="async"
               :src="getRankedEmblemUrl(tier)!"
               :alt="tier"
               class="h-3 w-3 object-contain"
@@ -179,6 +181,8 @@
           >
             <img
               v-if="getRankedEmblemUrl(tier)"
+              loading="lazy"
+              decoding="async"
               :src="getRankedEmblemUrl(tier)!"
               :alt="tier"
               class="h-3 w-3 object-contain"
@@ -308,6 +312,8 @@
             v-for="tier in selectedProfile.rankTiers"
             v-show="getRankedEmblemUrl(tier)"
             :key="'view-' + tier"
+            loading="lazy"
+            decoding="async"
             :src="getRankedEmblemUrl(tier)!"
             :alt="formatDivisionLabel(tier)"
             class="h-3 w-3 object-contain opacity-80"

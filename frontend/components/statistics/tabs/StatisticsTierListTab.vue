@@ -927,6 +927,8 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
                       >
                         <img
                           v-if="p.gameVersion && p.championByKey(c.championId)"
+                          loading="lazy"
+                          decoding="async"
                           :src="
                             p.getChampionImageUrl(
                               p.gameVersion,

@@ -102,6 +102,8 @@ function rolePanelTitle(role: string): string {
         <div class="mb-2 flex flex-wrap items-center gap-2 text-sm text-text">
           <img
             v-if="statsRoleIconPath(panel.role)"
+            loading="lazy"
+            decoding="async"
             :src="statsRoleIconPath(panel.role)"
             :alt="statsRoleLabel(panel.role)"
             class="h-4 w-4 object-contain"

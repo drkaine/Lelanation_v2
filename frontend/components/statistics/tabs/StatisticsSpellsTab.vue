@@ -676,6 +676,8 @@ function deltaLabelClass(v: number | null | undefined): string {
                 <div class="flex items-center gap-2">
                   <img
                     v-if="row.imageSpellId != null && spellImage(row.imageSpellId) && p.gameVersion"
+                    loading="lazy"
+                    decoding="async"
                     :src="getSpellImageUrl(p.gameVersion, spellImage(row.imageSpellId)!)"
                     :alt="row.label"
                     class="h-[50px] w-[50px] rounded border border-black/30 object-cover"
@@ -686,6 +688,8 @@ function deltaLabelClass(v: number | null | undefined): string {
                     v-if="
                       row.imageSpellId2 != null && spellImage(row.imageSpellId2) && p.gameVersion
                     "
+                    loading="lazy"
+                    decoding="async"
                     :src="getSpellImageUrl(p.gameVersion, spellImage(row.imageSpellId2)!)"
                     :alt="row.label"
                     class="h-[50px] w-[50px] rounded border border-black/30 object-cover"

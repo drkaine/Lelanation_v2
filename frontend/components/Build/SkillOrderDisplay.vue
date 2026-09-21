@@ -35,6 +35,8 @@
             >
               <img
                 v-if="getSpellImage(getFirstThreeUp(index)!) && build.champion"
+                loading="lazy"
+                decoding="async"
                 :src="
                   getChampionSpellImageUrl(
                     version,
@@ -86,6 +88,8 @@
             >
               <img
                 v-if="getSpellImage(getSkillUpOrder(index)!) && build.champion"
+                loading="lazy"
+                decoding="async"
                 :src="
                   getChampionSpellImageUrl(
                     version,

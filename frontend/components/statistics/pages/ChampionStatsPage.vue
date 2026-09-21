@@ -190,6 +190,8 @@
                   @click.stop="selectAllChampionDivisions()"
                 >
                   <img
+                    loading="lazy"
+                    decoding="async"
                     src="/data/community-dragon/ranked-emblem/Unranked.png"
                     :alt="t('statisticsPage.allRanks')"
                     class="h-3 w-3 object-contain"
@@ -219,6 +221,8 @@
                 >
                   <img
                     v-if="getRankedEmblemUrl(tier)"
+                    loading="lazy"
+                    decoding="async"
                     :src="getRankedEmblemUrl(tier)!"
                     :alt="tier"
                     class="h-3 w-3 object-contain"
@@ -268,6 +272,8 @@
                   @click="toggleChampionRoleFilter(r)"
                 >
                   <img
+                    loading="lazy"
+                    decoding="async"
                     :src="r.icon"
                     :alt="r.label"
                     class="h-3 w-3 object-contain"
@@ -610,6 +616,8 @@
                       :title="roleLabel(role.role)"
                     >
                       <img
+                        loading="lazy"
+                        decoding="async"
                         :src="roleIconPath(role.role)"
                         :alt="roleLabel(role.role)"
                         class="h-3 w-3 shrink-0 object-contain"
@@ -1466,6 +1474,8 @@
                                     gameVersion &&
                                     championByKey(row.opponentChampionId)?.image?.full
                                   "
+                                  loading="lazy"
+                                  decoding="async"
                                   :src="
                                     getChampionImageUrl(
                                       gameVersion,

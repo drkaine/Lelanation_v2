@@ -116,6 +116,8 @@
                       >
                         <img
                           v-if="getStatIconSrc(stat.key)"
+                          loading="lazy"
+                          decoding="async"
                           :src="getStatIconSrc(stat.key) || undefined"
                           alt=""
                           :class="['stat-inline-icon-image', getStatIconImageClass(stat.key)]"
@@ -189,6 +191,8 @@
                         >
                           <img
                             v-if="getStatIconSrc(derivedStat.key)"
+                            loading="lazy"
+                            decoding="async"
                             :src="getStatIconSrc(derivedStat.key) || undefined"
                             alt=""
                             :class="[

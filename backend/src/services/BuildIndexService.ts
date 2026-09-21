@@ -63,27 +63,30 @@ let cache: { at: number; index: BuildIndex } | null = null
 /** Force le prochain accès à re-scanner le disque (après création / suppression). */
 export function invalidateBuildIndex(): void {
   cache = null
+  inflight = null
 }
 
-/** Retourne l'index des builds publics, servi depuis le cache si assez frais. */
-export async function getBuildIndex(): Promise<BuildIndex> {
-  const now = Date.now()
-  if (cache && now - cache.at < INDEX_TTL_MS) return cache.index
+/** Requête de scan en cours : évite qu'un cache expiré déclenche N scans disque simultanés. */
+let inflight: Promise<BuildIndex> | null = null
 
+/** Lectures de fichiers simultanées max (évite EMFILE avec des milliers de builds). */
+const READ_CONCURRENCY = 64
+
+async function scanBuildIndex(): Promise<BuildIndex> {
   const { promises: fs } = await import('fs')
   let files: string[]
   try {
     files = await fs.readdir(buildsDir)
   } catch {
-    const empty: BuildIndex = { entries: [], fileCount: 0 }
-    cache = { at: now, index: empty }
-    return empty
+    return { entries: [], fileCount: 0 }
   }
 
   const buildFiles = files.filter((file) => BUILD_FILE_REGEX.test(file))
-  const entries = (
-    await Promise.all(
-      buildFiles.map(async (file): Promise<BuildIndexEntry | null> => {
+  const entries: BuildIndexEntry[] = []
+  for (let i = 0; i < buildFiles.length; i += READ_CONCURRENCY) {
+    const chunk = buildFiles.slice(i, i + READ_CONCURRENCY)
+    const results = await Promise.all(
+      chunk.map(async (file): Promise<BuildIndexEntry | null> => {
         const filePath = join(buildsDir, file)
         const readResult = await FileManager.readJson<BuildRecord>(filePath)
         if (readResult.isErr()) return null
@@ -97,9 +100,28 @@ export async function getBuildIndex(): Promise<BuildIndex> {
         }
       })
     )
-  ).filter((entry): entry is BuildIndexEntry => entry !== null)
+    for (const entry of results) if (entry) entries.push(entry)
+  }
 
-  const index: BuildIndex = { entries, fileCount: buildFiles.length }
-  cache = { at: now, index }
-  return index
+  return { entries, fileCount: buildFiles.length }
+}
+
+/** Retourne l'index des builds publics, servi depuis le cache si assez frais. */
+export async function getBuildIndex(): Promise<BuildIndex> {
+  const now = Date.now()
+  if (cache && now - cache.at < INDEX_TTL_MS) return cache.index
+  if (inflight) return inflight
+
+  const promise = scanBuildIndex()
+    .then((index) => {
+      // Une invalidation survenue pendant le scan rend ce résultat potentiellement périmé :
+      // on ne le met en cache que si l'index n'a pas été invalidé entre-temps.
+      if (inflight === promise) cache = { at: Date.now(), index }
+      return index
+    })
+    .finally(() => {
+      if (inflight === promise) inflight = null
+    })
+  inflight = promise
+  return promise
 }

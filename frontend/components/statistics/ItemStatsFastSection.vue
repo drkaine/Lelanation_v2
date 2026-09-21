@@ -287,6 +287,8 @@ function scrollToItemsFullTable(): void {
               <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
               <img
                 v-if="gameVersion && itemImageName(row.itemId)"
+                loading="lazy"
+                decoding="async"
                 :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
                 :alt="itemName(row.itemId) || ''"
                 class="h-5 w-5 shrink-0 rounded-full object-cover"
@@ -368,6 +370,8 @@ function scrollToItemsFullTable(): void {
               <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
               <img
                 v-if="gameVersion && itemImageName(row.itemId)"
+                loading="lazy"
+                decoding="async"
                 :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
                 :alt="itemName(row.itemId) || ''"
                 class="h-5 w-5 shrink-0 rounded-full object-cover"
@@ -443,6 +447,8 @@ function scrollToItemsFullTable(): void {
               <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
               <img
                 v-if="gameVersion && itemImageName(row.itemId)"
+                loading="lazy"
+                decoding="async"
                 :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
                 :alt="itemName(row.itemId) || ''"
                 class="h-5 w-5 shrink-0 rounded-full object-cover"
@@ -520,6 +526,8 @@ function scrollToItemsFullTable(): void {
               <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
               <img
                 v-if="gameVersion && itemImageName(row.itemId)"
+                loading="lazy"
+                decoding="async"
                 :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
                 :alt="itemName(row.itemId) || ''"
                 class="h-5 w-5 shrink-0 rounded-full object-cover"
@@ -611,6 +619,8 @@ function scrollToItemsFullTable(): void {
                 <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
                 <img
                   v-if="gameVersion && itemImageName(row.itemId)"
+                  loading="lazy"
+                  decoding="async"
                   :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
                   :alt="itemName(row.itemId) || ''"
                   class="h-5 w-5 shrink-0 rounded-full object-cover"
@@ -706,6 +716,8 @@ function scrollToItemsFullTable(): void {
                 <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
                 <img
                   v-if="gameVersion && itemImageName(row.itemId)"
+                  loading="lazy"
+                  decoding="async"
                   :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
                   :alt="itemName(row.itemId) || ''"
                   class="h-5 w-5 shrink-0 rounded-full object-cover"
@@ -801,6 +813,8 @@ function scrollToItemsFullTable(): void {
                 <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
                 <img
                   v-if="gameVersion && itemImageName(row.itemId)"
+                  loading="lazy"
+                  decoding="async"
                   :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
                   :alt="itemName(row.itemId) || ''"
                   class="h-5 w-5 shrink-0 rounded-full object-cover"
@@ -896,6 +910,8 @@ function scrollToItemsFullTable(): void {
                 <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
                 <img
                   v-if="gameVersion && itemImageName(row.itemId)"
+                  loading="lazy"
+                  decoding="async"
                   :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
                   :alt="itemName(row.itemId) || ''"
                   class="h-5 w-5 shrink-0 rounded-full object-cover"

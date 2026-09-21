@@ -1,4 +1,5 @@
 import { spawn } from 'child_process'
+import { timingSafeEqual, createHash } from 'crypto'
 import { Router } from 'express'
 import { promises as fs } from 'fs'
 import { dirname, join, resolve, isAbsolute } from 'path'
@@ -41,6 +42,7 @@ import {
 import { resolveRiotApiKey } from '../services/RiotGateway.js'
 import { riotGateway } from '../services/RiotGateway.js'
 import { isDevelopmentEnv } from '../utils/env.js'
+import { createFailureLimiter } from '../utils/httpRateLimit.js'
 export type { AdminDataCollectStats } from '../services/AdminDataCollectService.js'
 
 type YouTubeChannelsConfig = { channels: Array<{ channelId: string; channelName: string } | string> }
@@ -88,6 +90,20 @@ function parseBasicAuth(authHeader: string): { username: string; password: strin
   }
 }
 
+/** Constant-time string comparison (hashing first so lengths never leak). */
+function safeEqual(a: string, b: string): boolean {
+  const ha = createHash('sha256').update(a).digest()
+  const hb = createHash('sha256').update(b).digest()
+  return timingSafeEqual(ha, hb)
+}
+
+// 10 bad credentials in 15 minutes from one IP => locked out for the rest of the window.
+const adminAuthFailures = createFailureLimiter({
+  windowMs: 15 * 60_000,
+  max: 10,
+  keyPrefix: 'admin-auth-fail',
+})
+
 // Basic auth for admin API (supports ADMIN_USER_NAME or ADMIN_USERNAME)
 router.use((req, res, next) => {
   const user = process.env.ADMIN_USER_NAME ?? process.env.ADMIN_USERNAME
@@ -97,16 +113,27 @@ router.use((req, res, next) => {
     return res.status(503).json({ error: 'Admin API disabled: credentials not configured' })
   }
 
+  const blockedFor = adminAuthFailures.blockedFor(req)
+  if (blockedFor > 0) {
+    res.setHeader('Retry-After', String(blockedFor))
+    return res.status(429).json({ error: 'Too many failed attempts' })
+  }
+
   const header = req.header('authorization')
   if (!header) {
     res.setHeader('WWW-Authenticate', 'Basic realm="Admin"')
     return res.status(401).json({ error: 'Authentication required' })
   }
   const parsed = parseBasicAuth(header)
-  if (!parsed || parsed.username !== user || parsed.password !== pass) {
+  // Evaluate both comparisons so timing does not reveal which field was wrong.
+  const userOk = parsed ? safeEqual(parsed.username, user) : false
+  const passOk = parsed ? safeEqual(parsed.password, pass) : false
+  if (!parsed || !userOk || !passOk) {
+    adminAuthFailures.recordFailure(req)
     res.setHeader('WWW-Authenticate', 'Basic realm="Admin"')
     return res.status(401).json({ error: 'Invalid credentials' })
   }
+  adminAuthFailures.reset(req)
   return next()
 })
 

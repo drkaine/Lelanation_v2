@@ -3,8 +3,12 @@ import { join } from 'path'
 import { randomBytes } from 'crypto'
 import { promises as fs } from 'fs'
 import { FileManager } from '../utils/fileManager.js'
+import { isValidBuildUuid } from '../utils/buildEditAuth.js'
+import { createRateLimit } from '../utils/httpRateLimit.js'
 
 const router = Router()
+const shareWriteRateLimit = createRateLimit({ windowMs: 60_000, max: 10, keyPrefix: 'share-write' })
+const shareReadRateLimit = createRateLimit({ windowMs: 60_000, max: 30, keyPrefix: 'share-read' })
 const sharedDir = join(process.cwd(), 'data', 'shared')
 const privateTempDir = join(process.cwd(), 'data', 'private-temp')
 const buildsDir = join(process.cwd(), 'data', 'builds')
@@ -56,7 +60,7 @@ async function cleanupExpired(): Promise<void> {
  * Body: { builds: StoredBuild[], favoriteIds?: string[] }
  * Returns: { code, expiresAt }
  */
-router.post('/', async (req, res) => {
+router.post('/', shareWriteRateLimit, async (req, res) => {
   try {
     const { builds, favoriteIds } = req.body as { builds?: unknown[]; favoriteIds?: unknown }
 
@@ -65,6 +69,15 @@ router.post('/', async (req, res) => {
     }
     if (builds.length > MAX_BUILDS) {
       return res.status(400).json({ error: `Maximum ${MAX_BUILDS} builds allowed` })
+    }
+
+    // Build ids end up in file names (private-temp/<code>/<id>.json, builds/<id>_priv.json):
+    // only UUIDs are accepted so an id can never contain path separators or "..".
+    const invalid = (builds as Array<{ id?: unknown }>).some(
+      b => !b || typeof b !== 'object' || typeof b.id !== 'string' || !isValidBuildUuid(b.id)
+    )
+    if (invalid) {
+      return res.status(400).json({ error: 'Every build must have a valid UUID "id"' })
     }
 
     const buildIds = new Set((builds as Array<{ id?: string }>).map(b => b?.id).filter(Boolean) as string[])
@@ -129,9 +142,9 @@ router.post('/', async (req, res) => {
  * GET /api/share-builds/:code
  * Returns: { builds, expiresAt }
  */
-router.get('/:code', async (req, res) => {
+router.get('/:code', shareReadRateLimit, async (req, res) => {
   try {
-    const code = req.params.code.toUpperCase().trim()
+    const code = String(req.params.code).toUpperCase().trim()
 
     if (!/^[A-Z0-9]{4,24}$/.test(code)) {
       return res.status(400).json({ error: 'Invalid code format' })
@@ -175,7 +188,7 @@ router.get('/:code', async (req, res) => {
 
     // Cleanup legacy: delete any _priv.json from builds dir (old sync may have left them)
     for (const b of builds) {
-      if (b?.id && b.visibility === 'private') {
+      if (b?.id && isValidBuildUuid(String(b.id)) && b.visibility === 'private') {
         const privFile = join(buildsDir, `${b.id}_priv.json`)
         await fs.unlink(privFile).catch(() => {})
       }

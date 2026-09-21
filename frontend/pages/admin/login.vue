@@ -68,10 +68,14 @@ async function submit() {
   error.value = null
   loading.value = true
   try {
-    const token = btoa(`${username.value}:${password.value}`)
+    const token = toBasicToken(username.value, password.value)
     const res = await fetch(apiUrl('/api/admin/me'), {
       headers: { Authorization: `Basic ${token}` },
     })
+    if (res.status === 429) {
+      error.value = t('admin.login.tooManyAttempts')
+      return
+    }
     if (!res.ok) {
       error.value = t('admin.login.invalid')
       return

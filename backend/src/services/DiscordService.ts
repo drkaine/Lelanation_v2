@@ -4,6 +4,7 @@ import { postJson } from '../utils/httpFetch.js'
 
 interface DiscordWebhookPayload {
   content?: string
+  allowed_mentions?: { parse: string[] }
   embeds?: Array<{
     title?: string
     description?: string
@@ -279,7 +280,12 @@ export class DiscordService {
         }
       ]
 
-      await postJson(this.contactWebhookUrl, { embeds: embed }, { timeoutMs: 10_000 })
+      await postJson(
+        this.contactWebhookUrl,
+        // User-submitted text: never let it ping @everyone / roles.
+        { embeds: embed, allowed_mentions: { parse: [] } },
+        { timeoutMs: 10_000 }
+      )
       return Result.ok(undefined)
     } catch (error) {
       console.error('[DiscordService] Failed to send contact notification:', error)

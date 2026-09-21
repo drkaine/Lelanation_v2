@@ -97,6 +97,8 @@
                 @mousemove="handleMouseMove"
               >
                 <img
+                  loading="lazy"
+                  decoding="async"
                   :src="getSpellImageUrl(version, spell.image.full)"
                   alt=""
                   class="summoner-icon"
@@ -197,6 +199,8 @@
                 @mousemove="handleMouseMove"
               >
                 <img
+                  loading="lazy"
+                  decoding="async"
                   :src="shardIconSrc(shard.image)"
                   alt=""
                   class="shard-icon"
@@ -216,6 +220,8 @@
                 @mousemove="handleMouseMove"
               >
                 <img
+                  loading="lazy"
+                  decoding="async"
                   :src="shardIconSrc(shard.image)"
                   alt=""
                   class="shard-icon"
@@ -235,6 +241,8 @@
                 @mousemove="handleMouseMove"
               >
                 <img
+                  loading="lazy"
+                  decoding="async"
                   :src="shardIconSrc(shard.image)"
                   alt=""
                   class="shard-icon"

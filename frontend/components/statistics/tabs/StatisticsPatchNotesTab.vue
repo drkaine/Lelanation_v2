@@ -177,6 +177,8 @@ function patchNotesMessage(message: string | undefined): string {
           <div class="flex items-center gap-3">
             <img
               v-if="entityImageUrl(row)"
+              loading="lazy"
+              decoding="async"
               :src="entityImageUrl(row)!"
               :alt="entityLabel(row)"
               class="h-11 w-11 shrink-0 rounded-full object-cover"
@@ -325,6 +327,8 @@ function patchNotesMessage(message: string | undefined): string {
                 <div class="flex min-w-0 items-center gap-2">
                   <img
                     v-if="entityImageUrl(row)"
+                    loading="lazy"
+                    decoding="async"
                     :src="entityImageUrl(row)!"
                     :alt="entityLabel(row)"
                     class="h-8 w-8 shrink-0 rounded-full object-cover"

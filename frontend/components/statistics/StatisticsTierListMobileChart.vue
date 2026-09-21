@@ -78,6 +78,8 @@ function barColor(tier: string): string {
         >
           <img
             v-if="portraitSrc(row.championId)"
+            loading="lazy"
+            decoding="async"
             :src="portraitSrc(row.championId)!"
             :alt="championName(row.championId)"
             class="h-10 w-10 shrink-0 rounded-full border object-cover"

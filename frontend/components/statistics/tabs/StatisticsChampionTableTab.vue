@@ -707,6 +707,8 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
               <div class="mb-2 flex items-center gap-2">
                 <img
                   v-if="rowPortraitSrc(subRow)"
+                  loading="lazy"
+                  decoding="async"
                   :src="rowPortraitSrc(subRow)!"
                   alt=""
                   class="h-8 w-8 border border-black object-cover"

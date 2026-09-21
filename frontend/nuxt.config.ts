@@ -294,9 +294,15 @@ export default defineNuxtConfig({
       },
       // Pages/HTML: no-store would block back/forward cache (bfcache). Use no-cache
       // so the doc can be bfcached while still revalidating on return.
+      // Baseline security headers (CSP / HSTS are left to the reverse proxy: Matomo, YouTube
+      // embeds and Riot CDN images make a blanket CSP risky to ship blind).
       '/**': {
         headers: {
           'Cache-Control': 'no-cache',
+          'X-Content-Type-Options': 'nosniff',
+          'X-Frame-Options': 'SAMEORIGIN',
+          'Referrer-Policy': 'strict-origin-when-cross-origin',
+          'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
         },
       },
     },

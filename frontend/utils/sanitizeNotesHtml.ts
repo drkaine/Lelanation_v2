@@ -27,7 +27,8 @@ function isSafeImageSrc(src: string): boolean {
   const trimmed = src.trim()
   if (!trimmed || /^\s*javascript:/i.test(trimmed)) return false
   if (/^https?:\/\//i.test(trimmed)) return true
-  if (trimmed.startsWith('/')) return true
+  // Same-origin absolute path only: `//host/x.png` is protocol-relative (external).
+  if (trimmed.startsWith('/') && !trimmed.startsWith('//')) return true
   return false
 }
 

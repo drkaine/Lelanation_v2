@@ -134,6 +134,8 @@
                   @click.stop="clearActiveDisplayRank()"
                 >
                   <img
+                    loading="lazy"
+                    decoding="async"
                     src="/data/community-dragon/ranked-emblem/Unranked.png"
                     :alt="t('statisticsPage.allRanks')"
                     class="h-3 w-3 object-contain"
@@ -161,6 +163,8 @@
                 >
                   <img
                     v-if="getLelarivaRankEmblemUrl(tier)"
+                    loading="lazy"
+                    decoding="async"
                     :src="getLelarivaRankEmblemUrl(tier)!"
                     :alt="tier"
                     class="h-3 w-3 object-contain"
@@ -225,6 +229,8 @@
                   @click="toggleActiveDisplayRole(r.value)"
                 >
                   <img
+                    loading="lazy"
+                    decoding="async"
                     :src="r.icon"
                     :alt="r.label"
                     class="h-3 w-3 object-contain"
@@ -346,6 +352,8 @@
               >
                 <img
                   v-if="gameVersion && c.image?.full"
+                  loading="lazy"
+                  decoding="async"
                   :src="getChampionImageUrl(gameVersion, c.image.full)"
                   :alt="c.name"
                   class="block h-8 w-8 rounded object-cover"
@@ -456,6 +464,8 @@
                     >
                       <span class="inline-flex items-center gap-1">
                         <img
+                          loading="lazy"
+                          decoding="async"
                           :src="roleIconPath(role.role)"
                           :alt="roleLabel(role.role)"
                           class="h-3 w-3 shrink-0 object-contain"
@@ -694,6 +704,8 @@
                                 v-if="
                                   gameVersion && championByKey(row.opponentChampionId)?.image?.full
                                 "
+                                loading="lazy"
+                                decoding="async"
                                 :src="
                                   getChampionImageUrl(
                                     gameVersion,

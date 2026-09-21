@@ -389,6 +389,8 @@ function pctF(row: SummonerSpellSoloRow): string {
             <div class="tier-list-lolalytics-td flex w-[200px] shrink-0 items-center gap-2 px-2">
               <img
                 v-if="gameVersion && spellImageName(row.spellId)"
+                loading="lazy"
+                decoding="async"
                 :src="getSpellImageUrl(gameVersion, spellImageName(row.spellId)!)"
                 :alt="spellName(row.spellId) || ''"
                 class="h-9 w-9 shrink-0 border-2 border-black object-cover"
@@ -568,6 +570,8 @@ function pctF(row: SummonerSpellSoloRow): string {
               <div class="flex shrink-0 items-center gap-0.5">
                 <img
                   v-if="gameVersion && spellImageName(row.spellIdD)"
+                  loading="lazy"
+                  decoding="async"
                   :src="getSpellImageUrl(gameVersion, spellImageName(row.spellIdD)!)"
                   :alt="spellName(row.spellIdD) || ''"
                   class="h-8 w-8 border-2 border-black object-cover"
@@ -577,6 +581,8 @@ function pctF(row: SummonerSpellSoloRow): string {
                 <span class="text-text/50">→</span>
                 <img
                   v-if="gameVersion && spellImageName(row.spellIdF)"
+                  loading="lazy"
+                  decoding="async"
                   :src="getSpellImageUrl(gameVersion, spellImageName(row.spellIdF)!)"
                   :alt="spellName(row.spellIdF) || ''"
                   class="h-8 w-8 border-2 border-black object-cover"

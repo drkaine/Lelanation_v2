@@ -84,7 +84,13 @@
                 :key="'ban-mobile-role-' + row.championId + '-' + role.key"
                 class="flex min-w-0 flex-col items-center gap-0.5 text-center"
               >
-                <img :src="role.icon" :alt="role.alt" class="h-5 w-5 object-contain" />
+                <img
+                  loading="lazy"
+                  decoding="async"
+                  :src="role.icon"
+                  :alt="role.alt"
+                  class="h-5 w-5 object-contain"
+                />
                 <span class="text-sm font-semibold tabular-nums text-text">
                   {{
                     p
@@ -294,9 +300,13 @@
                       class="inline-flex items-center"
                       @click="p.setBansSort(role.key)"
                     >
-                      <img :src="role.icon" :alt="role.alt" class="h-4 w-4" />{{
-                        p.bansSortHint(role.key)
-                      }}
+                      <img
+                        loading="lazy"
+                        decoding="async"
+                        :src="role.icon"
+                        :alt="role.alt"
+                        class="h-4 w-4"
+                      />{{ p.bansSortHint(role.key) }}
                     </button>
                     <button
                       v-if="p.bansTableRefData"

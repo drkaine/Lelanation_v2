@@ -107,6 +107,8 @@ const topItemSets = computed(() => {
               v-for="itemId in set.items"
               v-show="gameVersion && itemImageName(itemId)"
               :key="itemId"
+              loading="lazy"
+              decoding="async"
               :src="getItemImageUrl(gameVersion, itemImageName(itemId)!)"
               :alt="itemName(itemId)"
               :title="itemName(itemId)"

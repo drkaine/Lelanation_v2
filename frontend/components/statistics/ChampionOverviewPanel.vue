@@ -61,6 +61,8 @@
           :title="statsRoleLabel(role.role)"
         >
           <img
+            loading="lazy"
+            decoding="async"
             :src="statsRoleIconPath(role.role)"
             :alt="statsRoleLabel(role.role)"
             class="h-3 w-3 shrink-0 object-contain"

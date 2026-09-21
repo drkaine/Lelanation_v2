@@ -55,6 +55,8 @@ const p = inject('statisticsPageCtx') as any
                     >
                       <img
                         v-if="p.gameVersion && p.championByKey(row.championId)"
+                        loading="lazy"
+                        decoding="async"
                         :src="
                           p.getChampionImageUrl(
                             p.gameVersion,
@@ -114,6 +116,8 @@ const p = inject('statisticsPageCtx') as any
                     >
                       <img
                         v-if="p.gameVersion && p.championByKey(row.championId)"
+                        loading="lazy"
+                        decoding="async"
                         :src="
                           p.getChampionImageUrl(
                             p.gameVersion,

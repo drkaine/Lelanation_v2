@@ -76,6 +76,8 @@
         <div class="matchup-sheet__identity">
           <img
             v-if="championImageSrc"
+            loading="lazy"
+            decoding="async"
             :src="championImageSrc"
             :alt="guide.champion?.name ?? ''"
             class="matchup-sheet__champion-image"
@@ -265,6 +267,8 @@
             class="matchup-sheet__matchup-item matchup-sheet__matchup-item--best"
           >
             <img
+              loading="lazy"
+              decoding="async"
               :src="getChampionImageUrl(gameVersion, row.opponent.image.full)"
               :alt="row.opponent.name"
               class="matchup-sheet__matchup-portrait"
@@ -290,6 +294,8 @@
             class="matchup-sheet__matchup-item matchup-sheet__matchup-item--worst"
           >
             <img
+              loading="lazy"
+              decoding="async"
               :src="getChampionImageUrl(gameVersion, row.opponent.image.full)"
               :alt="row.opponent.name"
               class="matchup-sheet__matchup-portrait"

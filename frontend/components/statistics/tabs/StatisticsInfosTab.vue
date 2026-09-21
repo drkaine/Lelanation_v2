@@ -188,6 +188,8 @@ watch(
                   <div class="flex justify-center">
                     <img
                       v-if="division !== 'ALL' && p.getRankedEmblemUrl(division)"
+                      loading="lazy"
+                      decoding="async"
                       :src="p.getRankedEmblemUrl(division)!"
                       alt=""
                       class="h-5 w-5 object-contain"

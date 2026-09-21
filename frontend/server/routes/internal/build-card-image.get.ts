@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
-import { createError, getQuery, getRequestURL, setHeader, type H3Event } from 'h3'
+import { createError, getQuery, setHeader, type H3Event } from 'h3'
 import { screenshotBuildCardPng } from '../../utils/screenshotBuildCard'
 import { useRuntimeConfig } from '#imports'
 
@@ -20,25 +20,25 @@ function resolveScreenshotRenderOrigin(): string {
   return `http://${host}:${port}`
 }
 
+/**
+ * API roots used to look up a build. Never derived from the request Host header
+ * (client-controlled → SSRF and cache-key poisoning): only configured values and
+ * the local Nitro server, which proxies /api to the backend.
+ */
 function resolveApiRoots(event: H3Event): string[] {
   const cfg = useRuntimeConfig(event)
   const fromEnv = (process.env.NUXT_PUBLIC_API_BASE || '').trim()
   const fromCfg = (cfg.public.apiBase as string | undefined)?.trim() || ''
-  const req = getRequestURL(event)
-  const requestOrigin = `${req.protocol}//${req.host}`
+  const localOrigin = resolveScreenshotRenderOrigin()
   const roots: string[] = []
 
   const configuredBase = (fromEnv || fromCfg).replace(/\/$/, '')
   if (configuredBase) {
-    // Accept relative apiBase values (e.g. "/api") and resolve against current request origin.
-    if (configuredBase.startsWith('/')) {
-      roots.push(`${requestOrigin}${configuredBase}`.replace(/\/$/, ''))
-    } else {
-      roots.push(configuredBase)
-    }
+    // Relative apiBase values (e.g. "/api") resolve against the local server.
+    roots.push(configuredBase.startsWith('/') ? `${localOrigin}${configuredBase}` : configuredBase)
   }
-  roots.push(requestOrigin)
-  return Array.from(new Set(roots))
+  roots.push(localOrigin)
+  return Array.from(new Set(roots.map(root => root.replace(/\/$/, ''))))
 }
 
 async function fetchBuildForCacheRevision(
@@ -51,7 +51,7 @@ async function fetchBuildForCacheRevision(
     const prefix = apiRoot.endsWith('/api') ? '' : '/api'
     const url = `${apiRoot}${prefix}/builds/${encodeURIComponent(buildId)}`
     try {
-      const res = await fetch(url)
+      const res = await fetch(url, { signal: AbortSignal.timeout(10_000) })
       if (res.status >= 500) {
         sawUpstreamFailure = true
         continue
@@ -78,6 +78,11 @@ async function fetchBuildForCacheRevision(
   }
   return null
 }
+
+/** Chromium is heavy: cap parallel captures and share the work between identical requests. */
+const MAX_CONCURRENT_SCREENSHOTS = 2
+let activeScreenshots = 0
+const inflightScreenshots = new Map<string, Promise<Buffer>>()
 
 /** Incrémenter après changement de rendu capture (splash, flèches, etc.) pour invalider le cache disque. */
 const SCREENSHOT_CACHE_SALT = 'v7'
@@ -151,13 +156,25 @@ export default defineEventHandler(async event => {
 
   let png: Buffer
   try {
-    png = await screenshotBuildCardPng({ pageUrl })
+    let pending = inflightScreenshots.get(cacheName)
+    if (!pending) {
+      if (activeScreenshots >= MAX_CONCURRENT_SCREENSHOTS) {
+        setHeader(event, 'Retry-After', '10')
+        throw createError({ statusCode: 429, message: 'Too many screenshots in progress' })
+      }
+      activeScreenshots += 1
+      pending = screenshotBuildCardPng({ pageUrl }).finally(() => {
+        activeScreenshots -= 1
+        inflightScreenshots.delete(cacheName)
+      })
+      inflightScreenshots.set(cacheName, pending)
+    }
+    png = await pending
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    throw createError({
-      statusCode: 503,
-      message: `Screenshot failed: ${msg}`,
-    })
+    if (err && typeof err === 'object' && 'statusCode' in err) throw err
+    // eslint-disable-next-line no-console
+    console.error('[build-card-image] Screenshot failed:', err)
+    throw createError({ statusCode: 503, message: 'Screenshot failed' })
   }
 
   await writeFile(cachePath, png).catch(() => undefined)

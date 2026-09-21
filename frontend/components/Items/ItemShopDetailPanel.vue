@@ -207,11 +207,15 @@ const formattedDescription = computed(() => {
 .item-shop-detail-wrapper {
   position: sticky;
   top: 1rem;
+  z-index: 5;
+  isolation: isolate;
   width: 100%;
   flex-shrink: 0;
 }
 
 .item-shop-detail-toolbar {
+  position: relative;
+  z-index: 3;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -266,6 +270,8 @@ const formattedDescription = computed(() => {
 }
 
 .item-shop-detail {
+  position: relative;
+  z-index: 1;
   display: flex;
   width: 100%;
   height: 450px;
@@ -273,6 +279,7 @@ const formattedDescription = computed(() => {
   gap: 0.75rem;
   padding: 1rem;
   border-radius: 6px;
+  overflow: hidden;
 }
 
 .item-shop-detail__header {
@@ -374,6 +381,12 @@ const formattedDescription = computed(() => {
 
 .item-shop-detail-flip__face--description {
   transform: rotateY(180deg);
+}
+
+.item-shop-detail-flip:not(.item-shop-detail-flip--description)
+  .item-shop-detail-flip__face--description,
+.item-shop-detail-flip--description .item-shop-detail-flip__face--recipe {
+  pointer-events: none;
 }
 
 .item-shop-detail__empty-hint {

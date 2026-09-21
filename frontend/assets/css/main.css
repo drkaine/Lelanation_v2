@@ -1099,3 +1099,24 @@
   font-size: 0.8125rem;
   line-height: 1.3;
 }
+
+/* Accessibility baseline -------------------------------------------------- */
+
+/* Keyboard users always get a visible focus indicator (components that draw their own
+   ring via Tailwind utilities keep it: those rules have higher specificity). */
+:where(a, button, [role='button'], summary, select, input, textarea, [tabindex]):focus-visible {
+  outline: 2px solid rgb(var(--rgb-accent) / 0.8);
+  outline-offset: 2px;
+}
+
+/* Respect the OS "reduce motion" setting: keep state changes, drop the movement. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

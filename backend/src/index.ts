@@ -28,10 +28,38 @@ import { requestStop, isAnyScriptRunning } from './worker/scriptOrchestrator.js'
 const app = express()
 const PORT = process.env.PORT || 3001
 
+// Only trust X-Forwarded-For from the reverse proxy (nginx on the same host by default),
+// otherwise clients could spoof their IP and bypass rate limiting.
+// Override with TRUST_PROXY (e.g. "1", "loopback", "10.0.0.0/8", or "false").
+const trustProxyEnv = process.env.TRUST_PROXY?.trim()
+app.set(
+  'trust proxy',
+  trustProxyEnv === undefined || trustProxyEnv === ''
+    ? 'loopback'
+    : trustProxyEnv === 'false'
+      ? false
+      : /^\d+$/.test(trustProxyEnv)
+        ? Number(trustProxyEnv)
+        : trustProxyEnv
+)
+app.disable('x-powered-by')
+
 // Middleware
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('X-Frame-Options', 'DENY')
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
+  // This process only serves JSON/images: nothing should ever execute from it.
+  res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'")
+  next()
+})
 app.use(createCorsMiddleware())
 app.use(compression())
-app.use(express.json({ limit: '12mb' }))
+// Routes that legitimately receive large payloads (shared build bundles, admin tools).
+app.use(['/api/share-builds', '/api/admin', '/api/matchup-guides'], express.json({ limit: '12mb' }))
+// Everything else is small JSON: cap it to limit memory/CPU abuse.
+app.use(express.json({ limit: '1mb' }))
 app.use(
   createRateLimit({
     windowMs: 60_000,
@@ -68,6 +96,20 @@ app.use('/api/share-builds', shareBuildsRoutes)
 app.use('/api/matchup-guides', matchupGuidesRoutes)
 app.use('/api/lelariva', lelarivaRoutes)
 // app.use('/api/patch-notes', patchNotesRoutes)
+
+// Unknown API routes / malformed bodies: JSON errors, never stack traces or HTML.
+app.use('/api', (_req, res) => {
+  res.status(404).json({ error: 'Not found' })
+})
+app.use((err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (res.headersSent) return next(err)
+  const status =
+    typeof (err as { status?: unknown })?.status === 'number' ? (err as { status: number }).status : 500
+  if (status >= 500) console.error('[Server] Unhandled error:', err)
+  res.status(status >= 400 && status < 600 ? status : 500).json({
+    error: status === 413 ? 'Payload too large' : status < 500 ? 'Bad request' : 'Internal server error',
+  })
+})
 
 // Initialize cron jobs
 try {

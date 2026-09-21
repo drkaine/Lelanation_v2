@@ -10,7 +10,7 @@
         v-model="searchQuery"
         type="text"
         :placeholder="t('common.search')"
-        class="champion-search-input ui-build-card-surface rounded-lg px-2 py-1 text-sm text-text placeholder:text-text/50 focus:outline-none"
+        class="champion-search-input ui-build-card-surface rounded-lg px-2 py-1 text-sm text-text placeholder:text-text/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
         @input="handleSearch"
       />
       <div class="champion-filter-bar flex flex-wrap">

@@ -531,6 +531,8 @@ function runeSetLayout(
                   "
                 >
                   <img
+                    loading="lazy"
+                    decoding="async"
                     :src="getRuneImageUrl(gameVersion, cell.rune.icon)"
                     :alt="cell.rune.name"
                     width="24"
@@ -599,6 +601,8 @@ function runeSetLayout(
                 class="flex min-w-[1.75rem] flex-col items-center gap-0.5"
               >
                 <img
+                  loading="lazy"
+                  decoding="async"
                   :src="getShardIcon(sid)"
                   :alt="shardName(sid)"
                   width="16"

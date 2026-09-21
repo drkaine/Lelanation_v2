@@ -475,6 +475,8 @@ function globalTooltip(row: BalanceRow): string {
                   >
                     <img
                       v-if="p.gameVersion && p.championByKey(row.championId)"
+                      loading="lazy"
+                      decoding="async"
                       :src="
                         p.getChampionImageUrl(
                           p.gameVersion,

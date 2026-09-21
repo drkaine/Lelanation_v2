@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, sep } from 'node:path'
 import { createError } from 'h3'
 
 const EXT_TO_TYPE: Record<string, string> = {
@@ -23,7 +23,8 @@ export default defineEventHandler(async event => {
       : join(process.cwd(), 'public')
   const base = join(publicDir, 'images', 'game')
   const requestedPath = join(base, ...pathSegments)
-  if (!requestedPath.startsWith(base)) {
+  // Trailing separator: `images/game-other/…` must not pass the prefix check.
+  if (!requestedPath.startsWith(base + sep)) {
     throw createError({ statusCode: 400, statusMessage: 'Bad Request' })
   }
 

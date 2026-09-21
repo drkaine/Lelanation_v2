@@ -216,6 +216,12 @@
     "theorycraft": "Theorycraft"
   },
   "common": {
+    "lightbox": {
+      "close": "Close",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "reset": "Reset zoom"
+    },
     "search": "Search"
   },
   "champion": {
@@ -2954,6 +2960,7 @@
       "password": "Password",
       "submit": "Log in",
       "invalid": "Invalid username or password.",
+      "tooManyAttempts": "Too many failed attempts. Please try again in a few minutes.",
       "error": "Connection error. Please try again."
     },
     "loading": "Loading…",

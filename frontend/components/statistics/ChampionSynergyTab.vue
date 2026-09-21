@@ -484,6 +484,8 @@ function toggleCard(row: SynergyExtRow) {
                 <span class="inline-flex min-w-0 items-center gap-2">
                   <img
                     v-if="gameVersion && championByKey(row.allyChampionId)?.image?.full"
+                    loading="lazy"
+                    decoding="async"
                     :src="
                       getChampionImageUrl(
                         gameVersion,

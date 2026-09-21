@@ -11,6 +11,9 @@
       <div
         v-if="isOpen"
         class="patch-image-lightbox fixed inset-0 z-50 flex flex-col bg-black/90"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="alt"
         :class="{ 'patch-image-lightbox--landscape-fallback': useCssFallback }"
         @click.self="close"
       >
@@ -18,9 +21,16 @@
         <button
           type="button"
           class="absolute right-4 top-4 z-10 rounded-full bg-black/50 p-2 text-white transition-colors hover:bg-white/20"
+          :aria-label="t('common.lightbox.close')"
           @click="close"
         >
-          <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg
+            class="h-6 w-6"
+            aria-hidden="true"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -38,9 +48,16 @@
             type="button"
             class="rounded-full p-2 text-white transition-colors hover:bg-white/20"
             :disabled="scale <= minScale"
+            :aria-label="t('common.lightbox.zoomOut')"
             @click="zoomOut"
           >
-            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              class="h-5 w-5"
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
             </svg>
           </button>
@@ -49,9 +66,16 @@
             type="button"
             class="rounded-full p-2 text-white transition-colors hover:bg-white/20"
             :disabled="scale >= maxScale"
+            :aria-label="t('common.lightbox.zoomIn')"
             @click="zoomIn"
           >
-            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              class="h-5 w-5"
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path
                 stroke-linecap="round"
                 stroke-linejoin="round"
@@ -63,9 +87,16 @@
           <button
             type="button"
             class="rounded-full p-2 text-white transition-colors hover:bg-white/20"
+            :aria-label="t('common.lightbox.reset')"
             @click="resetZoom"
           >
-            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              class="h-5 w-5"
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path
                 stroke-linecap="round"
                 stroke-linejoin="round"
@@ -125,6 +156,7 @@ const emit = defineEmits<{
   close: []
 }>()
 
+const { t } = useI18n()
 const { lockLandscape, unlockLandscape, useCssFallback } = useLandscapeOrientationLock()
 const containerRef = ref<HTMLDivElement>()
 const imageRef = ref<HTMLImageElement>()

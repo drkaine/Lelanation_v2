@@ -118,8 +118,7 @@ router.post('/', buildWriteRateLimit, async (req, res) => {
       const err = dirResult.unwrapErr()
       console.error(`[Builds API] Failed to create builds directory: ${err.message}`)
       return res.status(500).json({ 
-        error: 'Failed to create builds directory',
-        details: err.message 
+        error: 'Failed to create builds directory'
       })
     }
 
@@ -146,8 +145,7 @@ router.post('/', buildWriteRateLimit, async (req, res) => {
       const err = writeResult.unwrapErr()
       console.error(`[Builds API] Failed to write build file: ${err.message}`)
       return res.status(500).json({ 
-        error: 'Failed to save build file',
-        details: err.message 
+        error: 'Failed to save build file'
       })
     }
 
@@ -166,8 +164,7 @@ router.post('/', buildWriteRateLimit, async (req, res) => {
   } catch (error) {
     console.error('[Builds API] Unexpected error:', error)
     return res.status(500).json({ 
-      error: 'Internal server error',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      error: 'Internal server error'
     })
   }
 })
@@ -235,7 +232,7 @@ router.get('/votes', async (req, res) => {
     const buildIds = raw
       .split(',')
       .map(id => id.trim())
-      .filter(Boolean)
+      .filter(isValidBuildUuid)
       .slice(0, 200)
     const voterId = readVoterId(req)
     const stats = await getBuildVoteStatsBatch(buildIds, voterId)
@@ -243,7 +240,7 @@ router.get('/votes', async (req, res) => {
     return res.json({ votes: stats })
   } catch (error) {
     return res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to load build votes',
+      error: 'Failed to load build votes',
     })
   }
 })
@@ -265,7 +262,7 @@ router.post('/votes/sync', buildEngagementRateLimit, async (req, res) => {
   const votes: Record<string, BuildVoteDirection> = {}
   for (const [buildId, direction] of Object.entries(rawVotes as Record<string, unknown>)) {
     const id = buildId.trim()
-    if (!id) continue
+    if (!isValidBuildUuid(id)) continue
     if (direction === 'up' || direction === 'down') votes[id] = direction
   }
 
@@ -279,7 +276,7 @@ router.post('/votes/sync', buildEngagementRateLimit, async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       ok: false,
-      error: error instanceof Error ? error.message : 'Failed to sync build votes',
+      error: 'Failed to sync build votes',
     })
   }
 })
@@ -326,7 +323,7 @@ router.post('/:id/vote', buildEngagementRateLimit, async (req, res) => {
   const directionRaw = typeof req.body?.direction === 'string' ? req.body.direction.trim() : ''
   const voterId = readVoterId(req)
 
-  if (!buildId) return res.status(400).json({ error: 'Invalid build id' })
+  if (!isValidBuildUuid(buildId)) return res.status(400).json({ error: 'Invalid build id' })
   if (!voterId) return res.status(400).json({ error: 'Missing X-Voter-Id header' })
   if (directionRaw !== 'up' && directionRaw !== 'down') {
     return res.status(400).json({ error: 'Invalid direction (expected up or down)' })
@@ -339,7 +336,7 @@ router.post('/:id/vote', buildEngagementRateLimit, async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       ok: false,
-      error: error instanceof Error ? error.message : 'Failed to cast build vote',
+      error: 'Failed to cast build vote',
     })
   }
 })
@@ -350,14 +347,14 @@ router.post('/:id/vote', buildEngagementRateLimit, async (req, res) => {
  */
 router.post('/:id/track-view', buildEngagementRateLimit, async (req, res) => {
   const buildId = typeof req.params.id === 'string' ? req.params.id.trim() : ''
-  if (!buildId) return res.status(400).json({ error: 'Invalid build id' })
+  if (!isValidBuildUuid(buildId)) return res.status(400).json({ error: 'Invalid build id' })
   try {
     const stats = await trackBuildView(buildId)
     return res.json({ ok: true, stats })
   } catch (error) {
     return res.status(500).json({
       ok: false,
-      error: error instanceof Error ? error.message : 'Failed to track build view',
+      error: 'Failed to track build view',
     })
   }
 })
@@ -370,7 +367,7 @@ router.post('/:id/track-view', buildEngagementRateLimit, async (req, res) => {
 router.post('/:id/track-share', buildEngagementRateLimit, async (req, res) => {
   const buildId = typeof req.params.id === 'string' ? req.params.id.trim() : ''
   const shareTypeRaw = typeof req.body?.shareType === 'string' ? req.body.shareType.trim() : ''
-  if (!buildId) return res.status(400).json({ error: 'Invalid build id' })
+  if (!isValidBuildUuid(buildId)) return res.status(400).json({ error: 'Invalid build id' })
   if (!VALID_SHARE_TYPES.includes(shareTypeRaw as BuildShareType)) {
     return res.status(400).json({ error: 'Invalid shareType' })
   }
@@ -381,7 +378,7 @@ router.post('/:id/track-share', buildEngagementRateLimit, async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       ok: false,
-      error: error instanceof Error ? error.message : 'Failed to track build share',
+      error: 'Failed to track build share',
     })
   }
 })
@@ -392,14 +389,14 @@ router.post('/:id/track-share', buildEngagementRateLimit, async (req, res) => {
  */
 router.post('/:id/track-import', buildEngagementRateLimit, async (req, res) => {
   const buildId = typeof req.params.id === 'string' ? req.params.id.trim() : ''
-  if (!buildId) return res.status(400).json({ error: 'Invalid build id' })
+  if (!isValidBuildUuid(buildId)) return res.status(400).json({ error: 'Invalid build id' })
   try {
     const stats = await trackBuildAppImport(buildId)
     return res.json({ ok: true, stats })
   } catch (error) {
     return res.status(500).json({
       ok: false,
-      error: error instanceof Error ? error.message : 'Failed to track build import',
+      error: 'Failed to track build import',
     })
   }
 })
@@ -412,7 +409,7 @@ router.post('/:id/track-import', buildEngagementRateLimit, async (req, res) => {
 router.post('/:id/track-favorite', buildEngagementRateLimit, async (req, res) => {
   const buildId = typeof req.params.id === 'string' ? req.params.id.trim() : ''
   const actionRaw = typeof req.body?.action === 'string' ? req.body.action.trim() : ''
-  if (!buildId) return res.status(400).json({ error: 'Invalid build id' })
+  if (!isValidBuildUuid(buildId)) return res.status(400).json({ error: 'Invalid build id' })
   if (actionRaw !== 'add' && actionRaw !== 'remove') {
     return res.status(400).json({ error: 'Invalid action' })
   }
@@ -423,7 +420,7 @@ router.post('/:id/track-favorite', buildEngagementRateLimit, async (req, res) =>
   } catch (error) {
     return res.status(500).json({
       ok: false,
-      error: error instanceof Error ? error.message : 'Failed to track build favorite',
+      error: 'Failed to track build favorite',
     })
   }
 })
@@ -447,6 +444,7 @@ router.get('/', async (req, res) => {
       .map(entry => entry.build)
 
     if (!page || !limit) {
+      res.set('Cache-Control', 'public, max-age=30')
       return res.json(publicBuilds)
     }
 
@@ -497,15 +495,13 @@ router.delete('/:id', buildWriteRateLimit, async (req, res) => {
       })
     } catch (unlinkError) {
       return res.status(500).json({ 
-        error: 'Failed to delete build file',
-        details: unlinkError instanceof Error ? unlinkError.message : 'Unknown error'
+        error: 'Failed to delete build file'
       })
     }
   } catch (error) {
     console.error('[Builds API] Unexpected error:', error)
     return res.status(500).json({ 
-      error: 'Failed to read builds directory',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      error: 'Failed to read builds directory'
     })
   }
 })

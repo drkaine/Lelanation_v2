@@ -22,6 +22,8 @@
               <img
                 v-for="(skill, si) in entry.skills"
                 :key="'f3s-' + entry.key + '-' + si"
+                loading="lazy"
+                decoding="async"
                 :src="skillIconUrl(skill) ?? undefined"
                 :alt="skillLabel(skill)"
                 class="h-7 w-7 rounded-sm border border-primary/30 object-cover"
@@ -56,6 +58,8 @@
               <template v-for="(skill, si) in entry.skills" :key="'maxs-' + entry.key + '-' + si">
                 <img
                   v-if="skillIconUrl(skill)"
+                  loading="lazy"
+                  decoding="async"
                   :src="skillIconUrl(skill)!"
                   :alt="skillLabel(skill)"
                   class="h-7 w-7 shrink-0 rounded-sm border border-primary/30 object-cover"

@@ -38,6 +38,8 @@
             >
               <img
                 v-if="getFirstThreeUp(index) && getSpellImage(getFirstThreeUp(index)!) && champion"
+                loading="lazy"
+                decoding="async"
                 :src="
                   getChampionSpellImageUrl(
                     version,
@@ -86,6 +88,8 @@
               >
                 <img
                   v-if="spell.image && champion"
+                  loading="lazy"
+                  decoding="async"
                   :src="getChampionSpellImageUrl(version, champion.id, spell.image?.full || '')"
                   :alt="spell.name"
                   class="h-5 w-5 rounded"
@@ -130,6 +134,8 @@
             >
               <img
                 v-if="getSkillUpOrder(index) && getSpellImage(getSkillUpOrder(index)!) && champion"
+                loading="lazy"
+                decoding="async"
                 :src="
                   getChampionSpellImageUrl(
                     version,
@@ -178,6 +184,8 @@
               >
                 <img
                   v-if="spell.image && champion"
+                  loading="lazy"
+                  decoding="async"
                   :src="getChampionSpellImageUrl(version, champion.id, spell.image?.full || '')"
                   :alt="spell.name"
                   class="h-5 w-5 rounded"

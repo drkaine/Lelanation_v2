@@ -556,6 +556,8 @@ function deltaClass(value: number | null | undefined): string {
               <div class="tier-list-lolalytics-td flex w-[320px] shrink-0 items-center gap-2 px-2">
                 <img
                   v-if="p.itemImageName(row.itemId)"
+                  loading="lazy"
+                  decoding="async"
                   :src="p.getItemImageUrl(p.gameVersion, p.itemImageName(row.itemId)!)"
                   :alt="p.itemName(row.itemId) || ''"
                   class="h-[50px] w-[50px] shrink-0 rounded border border-black/30 object-cover"

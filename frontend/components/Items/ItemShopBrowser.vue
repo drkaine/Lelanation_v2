@@ -21,7 +21,7 @@
           v-model="searchQuery"
           type="search"
           :placeholder="t('common.search')"
-          class="item-shop-browser__search ui-build-card-surface rounded-lg px-3 py-2 text-sm text-text placeholder:text-text/50 focus:outline-none"
+          class="item-shop-browser__search ui-build-card-surface rounded-lg px-3 py-2 text-sm text-text placeholder:text-text/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
         />
         <ItemCategorySortButton
           :active="categorySortMode === 'legendary-first'"

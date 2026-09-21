@@ -65,6 +65,8 @@
               <p class="mb-2 text-xs font-semibold text-text/70">Champion</p>
               <div class="flex items-center gap-2">
                 <img
+                  loading="lazy"
+                  decoding="async"
                   :src="getChampionImageUrl(version, build.champion.image.full)"
                   :alt="build.champion.name"
                   class="h-10 w-10 rounded"
@@ -84,6 +86,8 @@
                 >
                   <img
                     v-if="item"
+                    loading="lazy"
+                    decoding="async"
                     :src="getItemImageUrl(version, item.image.full)"
                     :alt="item.name"
                     class="h-full w-full rounded object-cover"

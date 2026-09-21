@@ -58,6 +58,8 @@ withDefaults(
             >
               <img
                 v-if="gameVersion && championByKey(row.championId)"
+                loading="lazy"
+                decoding="async"
                 :src="getChampionImageUrl(gameVersion, championByKey(row.championId)!.image.full)"
                 :alt="championName(row.championId) || ''"
                 class="h-5 w-5 shrink-0 rounded-full object-cover"

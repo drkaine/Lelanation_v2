@@ -46,6 +46,8 @@
         >
           <img
             v-if="getRankedEmblemUrl(tier)"
+            loading="lazy"
+            decoding="async"
             :src="getRankedEmblemUrl(tier)!"
             :alt="tier"
             class="h-3 w-3 object-contain"
@@ -71,6 +73,8 @@
           @click="selectAllRoles()"
         >
           <img
+            loading="lazy"
+            decoding="async"
             src="/icons/roles/all-role.png"
             :alt="t('statisticsPage.allRoles')"
             class="h-3 w-3 object-contain"
@@ -89,6 +93,8 @@
           @click="toggleRoleFilter(r)"
         >
           <img
+            loading="lazy"
+            decoding="async"
             :src="r.icon"
             :alt="r.label"
             class="h-3 w-3 object-contain"

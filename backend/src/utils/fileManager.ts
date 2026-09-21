@@ -64,9 +64,17 @@ export class FileManager {
         return dirResult
       }
 
-      // Write file
+      // Atomic write: readers never observe a half-written file and a crash
+      // mid-write cannot corrupt the existing one.
       const content = JSON.stringify(data, null, 2)
-      await fs.writeFile(filePath, content, 'utf-8')
+      const tmpPath = `${filePath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`
+      try {
+        await fs.writeFile(tmpPath, content, 'utf-8')
+        await fs.rename(tmpPath, filePath)
+      } catch (writeError) {
+        await fs.unlink(tmpPath).catch(() => undefined)
+        throw writeError
+      }
       return Result.ok(undefined)
     } catch (error) {
       return Result.err(

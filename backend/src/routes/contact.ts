@@ -22,6 +22,13 @@ interface ContactEntry {
 
 type ContactData = Record<ContactType, ContactEntry[]>
 
+let contactQueue: Promise<unknown> = Promise.resolve()
+function withContactLock<T>(task: () => Promise<T>): Promise<T> {
+  const run = contactQueue.then(task, task)
+  contactQueue = run.catch(() => undefined)
+  return run
+}
+
 function emptyContactData(): ContactData {
   return {
     suggestion: [],
@@ -62,21 +69,24 @@ router.post('/', contactRateLimit, async (req: Request, res: Response) => {
     contact: typeof contact === 'string' ? contact.trim().substring(0, 256) : undefined
   }
 
-  let data: ContactData = emptyContactData()
-  const readResult = await FileManager.readJson<ContactData>(contactFilePath)
-  if (readResult.isOk()) {
-    const existing = readResult.unwrap()
-    for (const key of VALID_TYPES) {
-      if (Array.isArray(existing[key])) {
-        data[key] = existing[key]
+  // Read-modify-write on a single JSON file: serialize so concurrent submissions
+  // cannot overwrite each other's entry.
+  const saved = await withContactLock(async () => {
+    const data: ContactData = emptyContactData()
+    const readResult = await FileManager.readJson<ContactData>(contactFilePath)
+    if (readResult.isOk()) {
+      const existing = readResult.unwrap()
+      for (const key of VALID_TYPES) {
+        if (Array.isArray(existing[key])) {
+          data[key] = existing[key]
+        }
       }
     }
-  }
 
-  data[type as ContactType].push(entry)
-
-  const writeResult = await FileManager.writeJson(contactFilePath, data)
-  if (writeResult.isErr()) {
+    data[type as ContactType].push(entry)
+    return FileManager.writeJson(contactFilePath, data)
+  })
+  if (saved.isErr()) {
     return res.status(500).json({ error: 'Failed to save contact' })
   }
 
