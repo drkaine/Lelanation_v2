@@ -28,6 +28,12 @@ function barStyle(pbi: number, tier: string): { leftPct: number; widthPct: numbe
   return fn?.(pbi, tier) ?? { leftPct: 0, widthPct: 0, color: tierChartColor(tier) }
 }
 
+function gamesTitle(games: number | null | undefined): string | undefined {
+  if (games == null) return undefined
+  const fn = p.t as ((k: string, params: Record<string, string>) => string) | undefined
+  return fn?.('statisticsPage.tierListChampionGamesHover', { count: games.toLocaleString() })
+}
+
 function tierLabel(tier: string): string {
   if (tier === 'D') return t('statisticsPage.tierF')
   if (tier === 'S+') return t('statisticsPage.tierS+')
@@ -74,6 +80,7 @@ function barColor(tier: string): string {
       <div class="flex min-w-0 items-start gap-2.5 px-2.5 py-2">
         <StatisticsChampionDetailLink
           :champion-id="row.championId"
+          :title="gamesTitle(row.games)"
           class="flex min-w-0 max-w-[42%] shrink-0 items-center gap-2 rounded-sm"
         >
           <img

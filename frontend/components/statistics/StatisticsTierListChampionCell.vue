@@ -16,6 +16,8 @@ const props = defineProps<{
   transformView?: 'all' | ChampionTransform
   transformRows?: Array<{ championTransform?: ChampionTransform }>
   isTransformSubRow?: boolean
+  /** Parties du champion avec les filtres en cours : affiché au survol de l'image / du nom. */
+  games?: number | null
 }>()
 
 const emit = defineEmits<{
@@ -33,6 +35,12 @@ const defaultPortraitSrc = computed(() => {
 
 const portraitSrc = computed(() => props.portraitSrcOverride ?? defaultPortraitSrc.value)
 
+const gamesTitle = computed(() =>
+  props.games == null
+    ? undefined
+    : p.t('statisticsPage.tierListChampionGamesHover', { count: props.games.toLocaleString() })
+)
+
 const displayName = computed(() => {
   const base = String(p.championName(props.championId) || props.championId)
   if (props.championTransform == null) return base
@@ -48,6 +56,7 @@ const displayName = computed(() => {
   >
     <StatisticsChampionDetailLink
       :champion-id="championId"
+      :title="gamesTitle"
       class="shrink-0 max-lg:flex max-lg:justify-center"
     >
       <img
@@ -62,7 +71,7 @@ const displayName = computed(() => {
       />
     </StatisticsChampionDetailLink>
     <div class="flex min-w-0 flex-col gap-1 max-lg:hidden">
-      <StatisticsChampionDetailLink :champion-id="championId" class="min-w-0">
+      <StatisticsChampionDetailLink :champion-id="championId" :title="gamesTitle" class="min-w-0">
         <span
           class="block min-w-0 truncate text-[12px] text-accent text-text/90 underline decoration-accent/40 underline-offset-2"
         >

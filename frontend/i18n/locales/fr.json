@@ -1049,6 +1049,7 @@
     "tierListMainRole": "Rôle principal",
     "tierListPbi": "Score matchup",
     "tierListGames": "Parties",
+    "tierListChampionGamesHover": "{count} parties avec les filtres actuels",
     "tierListHighEloRank": "Rang Apex",
     "tierListHighEloWin": "Win Apex",
     "tierListHighEloGames": "Parties Apex",

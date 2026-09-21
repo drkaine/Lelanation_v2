@@ -31,6 +31,8 @@ const to = computed(() =>
 
 const linkAriaLabel = computed(() => props.ariaLabel ?? t('statisticsPage.championStatsOpenDetail'))
 
+const linkTitle = computed(() => (typeof attrs.title === 'string' ? attrs.title : undefined))
+
 function handleClick(e: MouseEvent): void {
   const path = to.value
   if (!path) return
@@ -46,13 +48,19 @@ function handleClick(e: MouseEvent): void {
     v-if="to"
     :href="to"
     :aria-label="linkAriaLabel"
+    :title="linkTitle"
     class="statistics-champion-detail-link"
     :class="attrs.class"
     @click="handleClick"
   >
     <slot />
   </a>
-  <span v-else class="statistics-champion-detail-link-fallback" :class="attrs.class">
+  <span
+    v-else
+    class="statistics-champion-detail-link-fallback"
+    :class="attrs.class"
+    :title="linkTitle"
+  >
     <slot />
   </span>
 </template>

@@ -1049,6 +1049,7 @@
     "tierListMainRole": "Main role",
     "tierListPbi": "PBI",
     "tierListGames": "Games",
+    "tierListChampionGamesHover": "{count} games with the current filters",
     "tierListHighEloRank": "Apex rank",
     "tierListHighEloWin": "Apex win",
     "tierListHighEloGames": "Apex games",

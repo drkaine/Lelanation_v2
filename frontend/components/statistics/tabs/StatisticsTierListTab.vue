@@ -445,7 +445,7 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
                   }}</span
                 >
               </div>
-              <StatisticsTierListChampionCell :champion-id="row.championId" />
+              <StatisticsTierListChampionCell :champion-id="row.championId" :games="row.games" />
               <div
                 class="tier-list-lolalytics-td flex w-10 shrink-0 items-center justify-center max-lg:w-auto max-lg:px-1"
               >
