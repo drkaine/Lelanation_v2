@@ -15,6 +15,10 @@ describe('parseMatchId', () => {
     expect(() => parsePlatformFromMatchId('EUW1_')).toThrow(ParseMatchIdError);
   });
 
+  test('middle_east_match_id_is_parsed', () => {
+    expect(parsePlatformFromMatchId('ME1_123456')).toBe('me1');
+  });
+
   test('isValidMatchId', () => {
     expect(isValidMatchId('EUW1_123')).toBe(true);
     expect(isValidMatchId('INVALID')).toBe(false);

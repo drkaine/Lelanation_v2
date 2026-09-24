@@ -24,6 +24,7 @@ const KNOWN_PLATFORMS = new Set<Platform>([
   'th2',
   'tw2',
   'vn2',
+  'me1',
 ]);
 
 export function parsePlatformFromMatchId(matchId: string): Platform {

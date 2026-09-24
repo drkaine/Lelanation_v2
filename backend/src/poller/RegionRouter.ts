@@ -12,6 +12,8 @@ const PLATFORM_TO_CLUSTER: Record<Platform, RegionalCluster> = {
   eun1: 'europe',
   tr1: 'europe',
   ru: 'europe',
+  /** Middle East: served by the EUROPE regional cluster. */
+  me1: 'europe',
   na1: 'americas',
   br1: 'americas',
   la1: 'americas',
@@ -38,6 +40,7 @@ const PLATFORM_BASE_URL: Record<Platform, string> = {
   eun1: 'https://eun1.api.riotgames.com',
   tr1: 'https://tr1.api.riotgames.com',
   ru: 'https://ru.api.riotgames.com',
+  me1: 'https://me1.api.riotgames.com',
   na1: 'https://na1.api.riotgames.com',
   br1: 'https://br1.api.riotgames.com',
   la1: 'https://la1.api.riotgames.com',

@@ -16,7 +16,8 @@ export type Platform =
   | 'sg2'
   | 'th2'
   | 'tw2'
-  | 'vn2';
+  | 'vn2'
+  | 'me1';
 
 export type RegionalCluster = 'europe' | 'americas' | 'asia' | 'sea';
 

@@ -76,6 +76,16 @@ describe('capture wiring', () => {
     expect(c.out.map((e) => [e.message, e.source])).toEqual([['ingestion failed: x', 'pino']]);
   });
 
+  test('pino_error_details_keep_scalar_context_fields', () => {
+    const c = collector();
+    setErrorForwarder(c.forward);
+    const logger = pino({ level: 'info', hooks: errorCaptureHooks }, { write: () => undefined });
+
+    logger.error({ operation: 'insert_match', p95_ms: 2200, nested: { a: 1 } }, 'DB operation slow');
+
+    expect(c.out[0]?.details).toEqual({ operation: 'insert_match', p95_ms: 2200 });
+  });
+
   test('console_error_is_forwarded_and_still_printed_when_capture_installed', () => {
     const c = collector();
     const printed: unknown[][] = [];

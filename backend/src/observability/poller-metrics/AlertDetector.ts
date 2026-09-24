@@ -29,12 +29,18 @@ function warmupSessions(): number {
   return Number.parseInt(process.env.TUNER_WARMUP_SESSIONS ?? '5', 10);
 }
 
+const OBSERVABILITY_OP_PREFIX = 'obs_';
+
 export class AlertDetector {
   private readonly active = new Map<AlertType, Alert>();
   private prevQueueDepthAvg = 0;
   private fullHistoryAlertFired = false;
 
-  constructor(private readonly store: MetricsStore) {}
+  constructor(
+    private readonly store: MetricsStore,
+    /** Before the first session, the stall delay is measured from startup. */
+    private readonly startedAt: number = Date.now(),
+  ) {}
 
   check(snapshot: FullSnapshot): Alert[] {
     this.evaluate(snapshot);
@@ -267,7 +273,7 @@ export class AlertDetector {
 
   private checkPollStall(): void {
     const last = this.store.pollSession.latest();
-    const ago = last ? Date.now() - last.ts : Number.POSITIVE_INFINITY;
+    const ago = Date.now() - (last ? last.ts : this.startedAt);
     if (ago > pollStallThresholdMs()) {
       this.raise('poll_stall', 'error', 'no poll session completed in 5 minutes', {
         last_session_ago_ms: ago,
@@ -280,7 +286,8 @@ export class AlertDetector {
 
   private checkDbSlow(slowest: Array<{ operation: string; p95_ms: number }>): void {
     const threshold = dbSlowThresholdMs();
-    const worst = slowest[0];
+    // obs_* are this module's own cached full-table aggregates, not the ingestion path.
+    const worst = slowest.find((op) => !op.operation.startsWith(OBSERVABILITY_OP_PREFIX));
     if (worst && worst.p95_ms > threshold) {
       this.raise(
         'db_slow',

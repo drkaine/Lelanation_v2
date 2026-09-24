@@ -84,9 +84,9 @@ describe('AlertDetector', () => {
     expect(detector.getActive().some((a) => a.type === 'token_underutilized')).toBe(false);
   });
 
-  test('T6 poll_stall fires without recent session', () => {
+  test('T6 poll_stall fires when no session completed since startup threshold', () => {
     const store = MetricsStore.getInstance();
-    const detector = new AlertDetector(store);
+    const detector = new AlertDetector(store, Date.now() - 6 * 60_000);
     const snap = new AggregateComputer(store).computeFull('10m', 99, 19, []);
     detector.check(snap);
     expect(detector.getActive().some((a) => a.type === 'poll_stall')).toBe(true);

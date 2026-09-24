@@ -55,7 +55,8 @@ const PATCH_NOTES_SORT_COLS: readonly PatchNotesSortCol[] = [
 ]
 
 function isPatchNotesSortCol(value: string): value is PatchNotesSortCol {
-  return PATCH_NOTES_SORT_COLS.includes(value)
+  const cols: readonly string[] = PATCH_NOTES_SORT_COLS
+  return cols.includes(value)
 }
 
 const patchNotesMobileSortColumn = computed({
