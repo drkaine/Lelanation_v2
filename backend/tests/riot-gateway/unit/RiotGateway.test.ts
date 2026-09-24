@@ -9,9 +9,12 @@ vi.mock('../../../src/riot-gateway/http/undiciClient.js', () => ({
 process.env.RIOT_API_KEY = 'RGAPI-test-key-for-unit-tests';
 process.env.API_KEY_TYPE = 'personal';
 process.env.LOG_LEVEL = 'fatal';
+// Personal-key pacing (~1.3 s between dispatches) is covered by its own test; keep bursts fast here.
+process.env.PERSONAL_MIN_DISPATCH_INTERVAL_MS = '1';
 
 const { riotFetch } = await import('../../../src/riot-gateway/http/undiciClient.js');
 const { RiotGateway } = await import('../../../src/riot-gateway/gateway/RiotGateway.js');
+const { riotConfig } = await import('../../../src/riot-gateway/config/riotConfig.js');
 
 const BASE = 'https://europe.api.riotgames.com';
 const METHOD = '/lol/match/v5/matches/by-puuid/{puuid}/ids';
@@ -36,6 +39,16 @@ describe('RiotGateway', () => {
 
   afterEach(async () => {
     await RiotGateway.resetInstance();
+  });
+
+  test('personal_dispatch_spacing_targets_95pct_of_120s_limit_when_no_override', () => {
+    const override = process.env.PERSONAL_MIN_DISPATCH_INTERVAL_MS;
+    delete process.env.PERSONAL_MIN_DISPATCH_INTERVAL_MS;
+    try {
+      expect(riotConfig.personalDispatchSpacingMs(100)).toBe(Math.ceil(120_000 / 95));
+    } finally {
+      process.env.PERSONAL_MIN_DISPATCH_INTERVAL_MS = override;
+    }
   });
 
   test('single 200 response resolves with parsed data and metrics', async () => {
@@ -212,8 +225,9 @@ describe('RiotGateway', () => {
     const delay = timeoutSpy.mock.calls.at(-1)?.[1] as number;
     expect(delay).toBeGreaterThanOrEqual(100);
 
-    vi.useRealTimers();
+    // Restore the spy first: restoring after useRealTimers() would reinstall the fake setTimeout.
     timeoutSpy.mockRestore();
+    vi.useRealTimers();
   });
 
   test('T_bug2_b scheduleFlushTimer deduplicates rapid calls', () => {
@@ -231,8 +245,9 @@ describe('RiotGateway', () => {
     expect(timeoutSpy.mock.calls.length).toBe(1);
     expect(internal.pendingFlushTimer).not.toBeNull();
 
-    vi.useRealTimers();
+    // Restore the spy first: restoring after useRealTimers() would reinstall the fake setTimeout.
     timeoutSpy.mockRestore();
+    vi.useRealTimers();
   });
 
   test('T_bug2_c watchdog does not flush when pendingFlushTimer is set', async () => {

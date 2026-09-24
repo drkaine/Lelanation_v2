@@ -1,5 +1,7 @@
 import 'dotenv/config'
 import './redis/ensure-ready.js'
+import { installProcessErrorCapture } from './logging/errorCapture.js'
+import { recordProcessStart } from './monitoring/processFreshness.js'
 import express from 'express'
 import compression from 'compression'
 import { createCorsMiddleware } from './utils/cors.js'
@@ -22,8 +24,13 @@ import { setupYouTubeSync } from './cron/youtubeSync.js'
 import { setupCommunityDragonSync } from './cron/communityDragonSync.js'
 import { setupSocialLinksHealthCheck } from './cron/socialLinksHealthCheck.js'
 import { setupDiskSpaceAlert } from './cron/diskSpaceAlert.js'
+import { setupMonitoringWatchdog } from './cron/monitoringWatchdog.js'
+import { httpMonitoringMiddleware } from './monitoring/monitoringRuntime.js'
 import { MetricsService } from './services/MetricsService.js'
 import { requestStop, isAnyScriptRunning } from './worker/scriptOrchestrator.js'
+
+installProcessErrorCapture('backend')
+void recordProcessStart('backend').catch((e) => console.warn('[Server] recordProcessStart failed:', e))
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -78,6 +85,7 @@ app.use((_req, res, next) => {
   })
   next()
 })
+app.use(httpMonitoringMiddleware)
 
 // Routes
 app.get('/health', (_req, res) => {
@@ -106,7 +114,10 @@ app.use((err: unknown, _req: express.Request, res: express.Response, next: expre
   if (res.headersSent) return next(err)
   const status =
     typeof (err as { status?: unknown })?.status === 'number' ? (err as { status: number }).status : 500
-  if (status >= 500) console.error('[Server] Unhandled error:', err)
+  if (status >= 500) {
+    console.error('[Server] Unhandled error:', err)
+    res.locals.errorMessage = err instanceof Error ? err.message : String(err)
+  }
   res.status(status >= 400 && status < 600 ? status : 500).json({
     error: status === 413 ? 'Payload too large' : status < 500 ? 'Bad request' : 'Internal server error',
   })
@@ -119,6 +130,7 @@ try {
   setupCommunityDragonSync()
   setupSocialLinksHealthCheck()
   setupDiskSpaceAlert()
+  setupMonitoringWatchdog()
 } catch (error) {
   console.error('[Server] ❌ Failed to initialize cron jobs:', error)
   // Don't exit - server can still run without cron

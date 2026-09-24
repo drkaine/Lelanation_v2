@@ -143,7 +143,7 @@ watch(
     }
     if (!list.some(entry => entry.opponent.id === sourceOpponentId.value)) {
       const firstNonTarget = list.find(entry => !targetIds.value.includes(entry.opponent.id))
-      sourceOpponentId.value = firstNonTarget?.opponent.id ?? list[0].opponent.id
+      sourceOpponentId.value = firstNonTarget?.opponent.id ?? list[0]?.opponent.id ?? ''
     }
   },
   { immediate: true }

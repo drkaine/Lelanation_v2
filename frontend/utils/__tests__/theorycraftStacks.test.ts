@@ -226,10 +226,9 @@ describe('theorycraftStacks', () => {
       ],
     }
     const definitions = parseStackDefinitions(champion)
-    const passiveDef = definitions.find(def => def.id === 'passive')!
-    expect(passiveDef.formulaVars).toHaveLength(2)
-    expect(passiveDef.formulaVars![0].key).toBe('f3')
-    expect(passiveDef.formulaVars![1].key).toBe('f4')
+    const passiveDef = definitions.find(def => def.id === 'passive')
+    expect(passiveDef?.formulaVars?.map(v => v.key)).toEqual(['f3', 'f4'])
+    if (!passiveDef) throw new Error('passive stack definition missing')
 
     const vars = new Map<string, string>()
     applyStackTooltipVariables(

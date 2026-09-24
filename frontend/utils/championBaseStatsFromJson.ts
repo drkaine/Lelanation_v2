@@ -22,6 +22,7 @@ export const CHAMPION_MISC_GROWTH_STAT_KEYS = [
   'mpRegen',
   'armor',
   'magicResist',
+  'attackDamage',
   'attackSpeed',
 ] as const
 

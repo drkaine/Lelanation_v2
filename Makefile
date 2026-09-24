@@ -1,6 +1,6 @@
 .PHONY: help setup dev dev-backend dev-frontend build build-all build-backend build-frontend build-frontend-only build-companion build-companion-exe companion-tag exe-windows \
 	pm2-status pm2-start pm2-restart pm2-restart-no-poller pm2-restart-frontend pm2-stop pm2-delete pm2-logs pm2-logs-backend pm2-logs-poller pm2-restart-poller pm2-logs-frontend \
-	deploy deploy-frontend sync-data typecheck typecheck-frontend typecheck-companion lint lint-frontend format format-frontend \
+	deploy deploy-frontend deploy-backend sync-data typecheck typecheck-frontend typecheck-companion lint lint-frontend format format-frontend \
 	test test-packages clean \
 	docker-db-up docker-db-down docker-db-restart docker-db-wait-healthy docker-db-verify wait-redis \
 	migrate-drizzle-statistiques migrate-db merge-objective-histogram-global
@@ -156,6 +156,10 @@ docker-db-verify:
 
 build-frontend deploy-frontend:
 	bash "$(ROOT_DIR)/scripts/deploy-frontend.sh"
+
+# Typecheck + tests, then restart backend + poller and wait for /health (tsx has no watch).
+deploy-backend: wait-redis
+	bash "$(ROOT_DIR)/scripts/deploy-backend.sh"
 
 build-frontend-only:
 	bash "$(ROOT_DIR)/scripts/build-frontend.sh"

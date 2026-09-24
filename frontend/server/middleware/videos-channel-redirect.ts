@@ -3,10 +3,10 @@ export default defineEventHandler(event => {
   const path = url.split('?')[0] || '/'
 
   // Redirect legacy channel pages (/videos/:channelId, /en/videos/:channelId) to the catalog.
-  const m = path.match(/^\/(?:en\/)?videos\/([^/?#]+)\/?$/)
-  if (!m) return
+  const channelRaw = path.match(/^\/(?:en\/)?videos\/([^/?#]+)\/?$/)?.[1]
+  if (!channelRaw) return
 
-  const channelId = decodeURIComponent(m[1])
+  const channelId = decodeURIComponent(channelRaw)
   // Nuxt client payload and other internal assets (/_payload.json, /_nuxt, …).
   if (channelId.startsWith('_')) return
 

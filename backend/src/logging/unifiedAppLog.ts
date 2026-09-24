@@ -11,8 +11,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const BACKEND_ROOT = join(__dirname, '..', '..')
 export const DEFAULT_UNIFIED_LOG_PATH = join(BACKEND_ROOT, '..', 'logs', 'lelanation-unified.log')
 
-const MAX_LOG_LINES = 50_000
-const TRUNCATE_TO = 40_000
+/** ≈ 50k lines at the observed ~1.2 KB per line. */
+const MAX_LOG_BYTES = 48 * 1024 * 1024
+const KEEP_LOG_BYTES = 36 * 1024 * 1024
 
 export type LogSection = 'back' | 'front' | 'db'
 export type LogType =
@@ -179,16 +180,34 @@ export async function appendUnifiedLog(input: UnifiedLogAppendInput): Promise<vo
   return appendChain
 }
 
-async function rotateUnifiedLogIfNeeded(file: string): Promise<void> {
+/**
+ * Keep the log bounded without re-reading it on every append: a cheap stat, and only when the file
+ * exceeds `maxBytes` its last `keepBytes` (whole lines) are kept.
+ */
+export async function rotateUnifiedLogIfNeeded(
+  file: string,
+  { maxBytes, keepBytes }: { maxBytes: number; keepBytes: number } = {
+    maxBytes: MAX_LOG_BYTES,
+    keepBytes: KEEP_LOG_BYTES,
+  }
+): Promise<void> {
   try {
-    const content = await fs.readFile(file, 'utf-8').catch(() => '')
-    const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0)
-    if (lines.length > MAX_LOG_LINES) {
-      const kept = lines.slice(-TRUNCATE_TO).join('\n') + '\n'
-      await fs.writeFile(file, kept, 'utf-8')
+    const { size } = await fs.stat(file)
+    if (size <= maxBytes) return
+    const fh = await fs.open(file, 'r')
+    let tail: string
+    try {
+      const start = Math.max(0, size - keepBytes - 1)
+      const buf = Buffer.alloc(size - start)
+      await fh.read(buf, 0, buf.length, start)
+      tail = buf.toString('utf-8')
+    } finally {
+      await fh.close()
     }
+    const firstNewline = tail.indexOf('\n')
+    await fs.writeFile(file, firstNewline === -1 ? '' : tail.slice(firstNewline + 1), 'utf-8')
   } catch {
-    // ignore
+    // ignore (missing file, concurrent rotation)
   }
 }
 

@@ -2,6 +2,7 @@ import type { Ref } from 'vue'
 import { championKeyFromRouteParam } from '~/utils/championSlug'
 import { championNameFromMap, type ChampionNamesMap } from '~/composables/useChampionNames'
 import { getChampionIndexUrl, getVersionUrl, fetchPublicJson } from '~/utils/staticDataUrl'
+import type { JsonFetcher } from '~/utils/jsonFetcher'
 
 export type ChampionStatsSummary = {
   championId: number
@@ -31,7 +32,7 @@ type ChampionPageSsrPayload = {
 }
 
 async function loadChampionIndexRows(
-  requestFetch: typeof $fetch,
+  requestFetch: JsonFetcher,
   language: string
 ): Promise<ChampionIndexRow[]> {
   try {

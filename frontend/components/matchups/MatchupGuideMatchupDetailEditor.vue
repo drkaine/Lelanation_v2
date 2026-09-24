@@ -316,7 +316,7 @@ watch(missingRequiredFields, fields => {
 const selectionTitle = computed(() => {
   const entries = selectedEntries.value
   if (entries.length === 0) return ''
-  if (entries.length === 1) return entries[0].opponent.name
+  if (entries.length === 1) return entries[0]?.opponent.name ?? ''
   return t('matchupGuideCreate.groupSelectionTitle', { count: entries.length })
 })
 
@@ -325,16 +325,18 @@ function isFieldMissing(field: MatchupRequiredFieldKey): boolean {
 }
 
 function commonValue<K extends keyof MatchupEntry>(key: K): MatchupEntry[K] | undefined {
+  const [head] = selectedEntries.value
+  if (!head) return undefined
   const entries = selectedEntries.value
-  if (!entries.length) return undefined
-  const first = entries[0][key]
+  const first = head[key]
   return entries.every(entry => entry[key] === first) ? first : undefined
 }
 
 function commonObjectValue<T>(getter: (entry: MatchupEntry) => T | undefined): T | undefined {
   const entries = selectedEntries.value
-  if (!entries.length) return undefined
-  const first = getter(entries[0])
+  const [head] = entries
+  if (!head) return undefined
+  const first = getter(head)
   const key = JSON.stringify(first ?? null)
   return entries.every(entry => JSON.stringify(getter(entry) ?? null) === key) ? first : undefined
 }
@@ -374,11 +376,9 @@ function togglePhaseTag(phase: 'early' | 'mid' | 'late', tag: MatchupPhaseTag) {
   const tags = new Set(current.tags ?? [])
   if (tags.has(tag)) tags.delete(tag)
   else tags.add(tag)
-  const next: MatchupPhaseNotes = {
-    ...current,
-    tags: [...tags],
-  }
-  patch({ [phase]: next.tags.length || next.notes ? next : undefined })
+  const nextTags = [...tags]
+  const next: MatchupPhaseNotes = { ...current, tags: nextTags }
+  patch({ [phase]: nextTags.length || next.notes ? next : undefined })
 }
 
 function setPhaseNotes(phase: 'early' | 'mid' | 'late', notes: string) {

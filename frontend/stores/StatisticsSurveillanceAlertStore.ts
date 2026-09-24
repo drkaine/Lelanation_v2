@@ -289,7 +289,7 @@ export const useStatisticsSurveillanceAlertStore = defineStore('statisticsSurvei
       if (import.meta.server) return
       const storage = loadThresholdsStorage()
       this.thresholdProfiles = storage.profiles
-      this.sharedThresholds = storage.sharedThresholds
+      this.sharedThresholds = storage.sharedThresholds ?? false
       this.referenceSettings = loadReferenceSettings()
       this.activeAlerts = loadActiveAlerts()
       this.testBaselines = loadTestBaselines()

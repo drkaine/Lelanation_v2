@@ -322,7 +322,9 @@ function resolveCachedSpellIconUrl(changes: StatChange[]): string | null {
   return null
 }
 
-const FR_KEY_TO_SLOT: Record<string, 'Q' | 'W' | 'E' | 'R'> = {
+const SPELL_SLOT_ORDER = ['Q', 'W', 'E', 'R'] as const
+
+const FR_KEY_TO_SLOT: Record<string, (typeof SPELL_SLOT_ORDER)[number]> = {
   A: 'Q',
   Z: 'W',
   E: 'E',
@@ -337,17 +339,19 @@ function resolveSpellImageFile(champion: Champion, subCategory: string): string 
   }
 
   const match = subCategory.match(/^([A-Z]|Passive)\s*-\s*(.+)$/i)
-  if (!match) return null
+  const [, keyRaw, nameRaw] = match ?? []
+  if (!keyRaw || !nameRaw) return null
 
-  const slot = FR_KEY_TO_SLOT[match[1].toUpperCase()]
-  const spellName = match[2].trim()
+  const slot = FR_KEY_TO_SLOT[keyRaw.toUpperCase()]
+  const spellName = nameRaw.trim()
   if (!slot) return null
 
   const spells = champion.spells ?? []
   const byName = spells.find(s => s.name?.trim().toLowerCase() === spellName.toLowerCase())
   if (byName?.image?.full) return byName.image.full
 
-  const bySlot = spells.find(s => String(s.slot ?? '').toUpperCase() === slot)
+  // Data Dragon lists champion spells in Q, W, E, R order.
+  const bySlot = spells[SPELL_SLOT_ORDER.indexOf(slot)]
   return bySlot?.image?.full ?? null
 }
 
@@ -355,10 +359,10 @@ function resolveSectionSpellKey(title: string): ChampionSpellBadgeKey | null {
   if (!title || /^stats de base$/i.test(title) || /^base stats$/i.test(title)) return null
   if (/passive/i.test(title)) return 'P'
 
-  const match = title.match(/^([A-Z]|Passive)\s*-\s*(.+)$/i)
-  if (!match) return null
+  const keyRaw = title.match(/^([A-Z]|Passive)\s*-\s*(.+)$/i)?.[1]
+  if (!keyRaw) return null
 
-  return FR_KEY_TO_SLOT[match[1].toUpperCase()] ?? null
+  return FR_KEY_TO_SLOT[keyRaw.toUpperCase()] ?? null
 }
 
 function resolveSectionSpellUrl(title: string): string | null {
@@ -395,7 +399,7 @@ const changeSections = computed<ChangeSection[]>(() => {
       indexByTitle.set(title, idx)
       groups.push({ title, changes: [] })
     }
-    groups[idx].changes.push(change)
+    groups[idx]?.changes.push(change)
   }
 
   return groups.map((group, index) => ({

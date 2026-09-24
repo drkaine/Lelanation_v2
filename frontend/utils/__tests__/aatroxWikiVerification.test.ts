@@ -13,25 +13,27 @@ import { baseHpAtLevel, championWithStatsForBuild } from '../theorycraftStats'
 
 const dataRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'public', 'data', 'game')
 
+type AatroxJson = {
+  baseStats: Record<string, number>
+  growthStats: Record<string, number>
+  spells: Array<{
+    slot: string
+    calculations?: Array<{
+      key: string
+      baseValues?: number[]
+      ratios?: Array<{ stat: string; coefficient: number[] }>
+    }>
+  }>
+}
+
 function loadAatrox() {
   const { currentVersion } = JSON.parse(readFileSync(join(dataRoot, 'version.json'), 'utf-8')) as {
     currentVersion: string
   }
-  const raw = JSON.parse(
+  const raw: { champion: AatroxJson } = JSON.parse(
     readFileSync(join(dataRoot, currentVersion, 'fr_FR', 'champions', 'aatrox.json'), 'utf-8')
-  ) as { champion: Record<string, never> }
-  return raw.champion as {
-    baseStats: Record<string, number>
-    growthStats: Record<string, number>
-    spells: Array<{
-      slot: string
-      calculations?: Array<{
-        key: string
-        baseValues?: number[]
-        ratios?: Array<{ stat: string; coefficient: number[] }>
-      }>
-    }>
-  }
+  )
+  return raw.champion
 }
 
 describe('Aatrox — vérification wiki (base stats)', () => {

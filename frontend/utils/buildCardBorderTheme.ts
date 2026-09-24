@@ -40,11 +40,12 @@ export function hexToRgba(hex: string, alpha: number): string {
 }
 
 function relativeLuminance(hex: string): number {
-  const [r, g, b] = hexToRgb(hex).map(value => {
+  const linear = (value: number): number => {
     const channel = value / 255
     return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
-  })
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+  }
+  const [r, g, b] = hexToRgb(hex)
+  return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
 }
 
 /** Card/link hover glow — tuned per region palette for visibility on dark card surfaces. */

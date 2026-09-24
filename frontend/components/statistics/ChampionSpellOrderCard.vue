@@ -80,7 +80,7 @@
             v-if="skillAt(level) && skillIconUrl(skillAt(level)!)"
             loading="lazy"
             decoding="async"
-            :src="skillIconUrl(skillAt(level)!)"
+            :src="skillIconUrl(skillAt(level)!) ?? undefined"
             :alt="skillTitle(skillAt(level))"
             class="h-full w-full rounded-sm object-cover"
           />

@@ -42,11 +42,10 @@ export default defineNuxtConfig({
     // Désactivé : l'extraction externe ne garde que les asyncData (~108 o) et le client
     // préfère data-src au JSON inline (Pinia 240k+ o) → hydratation cassée, 500 "26".
     payloadExtraction: false,
-    prefetchPreloadTags: false,
     defaults: {
       nuxtLink: {
         prefetch: false,
-        prefetchOn: false,
+        prefetchOn: { visibility: false, interaction: false },
       },
     },
   },

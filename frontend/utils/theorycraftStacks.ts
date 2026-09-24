@@ -107,7 +107,7 @@ function resolveMaxStacksFromDataValues(
     const entry = dataValues?.find(value => String(value.name).toLowerCase() === key)
     if (!entry?.values?.length) continue
     const raw = entry.values[0]
-    if (Number.isFinite(raw) && raw > 0) return Math.floor(raw)
+    if (raw !== undefined && Number.isFinite(raw) && raw > 0) return Math.floor(raw)
   }
   return 9999
 }
@@ -149,7 +149,7 @@ function inferPassiveStackDefinition(
     const allSame = calc.baseValues.every(v => v === calc.baseValues[0])
     if (!allSame) continue
     const constVal = calc.baseValues[0]
-    if (constVal === 0) continue
+    if (constVal === undefined || constVal === 0) continue
     const matchingDv = passiveDvs.find(dv => {
       const dvFirst = dv.values?.[0]
       return dvFirst != null && Math.abs(dvFirst - constVal) < 1e-8
@@ -211,8 +211,10 @@ interface BardChimeBreakpoint {
   rechargeTime: number
 }
 
+const BARD_CHIME_BASE: BardChimeBreakpoint = { chimes: 0, slow: 0, maxMeeps: 1, rechargeTime: 8 }
+
 const BARD_CHIME_BREAKPOINTS: BardChimeBreakpoint[] = [
-  { chimes: 0, slow: 0, maxMeeps: 1, rechargeTime: 8 },
+  BARD_CHIME_BASE,
   { chimes: 5, slow: 25, maxMeeps: 1, rechargeTime: 8 },
   { chimes: 10, slow: 25, maxMeeps: 2, rechargeTime: 8 },
   { chimes: 15, slow: 25, maxMeeps: 2, rechargeTime: 8 },
@@ -240,7 +242,7 @@ function bardMeepBaseDamage(chimes: number): number {
 }
 
 function bardBreakpointAt(chimes: number): BardChimeBreakpoint {
-  let best = BARD_CHIME_BREAKPOINTS[0]
+  let best = BARD_CHIME_BASE
   for (const bp of BARD_CHIME_BREAKPOINTS) {
     if (bp.chimes <= chimes) best = bp
     else break

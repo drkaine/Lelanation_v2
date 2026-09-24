@@ -29,7 +29,8 @@ function normalizeChampionDetail(detail: any, current: Champion, fallbackId: str
 
   const spells = sortedSpells.map((spell, index) => {
     const slot = String(spell?.slot ?? ABILITY_ORDER[index] ?? '').toUpperCase()
-    const slotInOrder = ABILITY_ORDER.includes(slot)
+    const abilityKeys: readonly string[] = ABILITY_ORDER
+    const slotInOrder = abilityKeys.includes(slot)
     const fallbackSpellImage = `${championId}${slotInOrder ? slot : (ABILITY_ORDER[index] ?? 'Q')}.png`
     return {
       ...spell,

@@ -8,6 +8,7 @@ type ChartRow = {
   pickrate: number
   winrate: number
   pbi: number
+  games?: number
 }
 
 const p = inject('statisticsPageCtx') as Record<string, unknown>

@@ -196,7 +196,9 @@ const buildStats = computed(() => {
 
 // Find highest and lowest values for each stat
 const getStatComparison = (statName: keyof CalculatedStats) => {
-  const values = buildStats.value.map(bs => bs.stats[statName])
+  const values = buildStats.value
+    .map(bs => bs.stats[statName])
+    .filter((v): v is number => v !== undefined)
   const max = Math.max(...values)
   const min = Math.min(...values)
   return { max, min }

@@ -32,9 +32,9 @@ export function riotLocaleFromI18n(locale: string): SearchLanguage {
 
 async function fetchChampionIndex(version: string, language: SearchLanguage) {
   try {
-    const payload = await fetchPublicJson<{ champions?: unknown[] }>(
-      getChampionIndexUrl(version, language)
-    )
+    const payload = await fetchPublicJson<{
+      champions?: Array<{ id?: string; key?: string | number; name?: string }>
+    }>(getChampionIndexUrl(version, language))
     return Array.isArray(payload?.champions) ? payload.champions : []
   } catch {
     return []

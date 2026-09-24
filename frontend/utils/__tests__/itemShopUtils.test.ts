@@ -18,13 +18,16 @@ vi.mock('../multilingualEntitySearch', () => ({
     (item.name ?? '').toLowerCase().includes(query.toLowerCase()),
 }))
 
-const makeItem = (overrides: Partial<Item> & Pick<Item, 'id'>): Item =>
+type ItemOverrides = Omit<Partial<Item>, 'gold'> &
+  Pick<Item, 'id'> & { gold?: Partial<NonNullable<Item['gold']>> }
+
+const makeItem = ({ gold, ...overrides }: ItemOverrides): Item =>
   ({
     name: overrides.id,
     tags: [],
-    gold: { total: 1000 },
     image: { full: `${overrides.id}.png` },
     ...overrides,
+    gold: { base: 0, total: 1000, sell: 0, purchasable: true, ...gold },
   }) as Item
 
 describe('itemShopUtils', () => {

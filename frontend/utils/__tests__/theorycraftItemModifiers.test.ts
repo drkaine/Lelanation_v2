@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { CalculatedStats, Item } from '@lelanation/shared-types'
+import type { Item } from '@lelanation/shared-types'
 import {
   applyTheorycraftItemModifiers,
   getTheorycraftItemStackStats,
@@ -8,35 +8,17 @@ import {
   resolveTheorycraftItemImageFull,
   shouldShowTheorycraftTransformedImage,
 } from '../theorycraftItemModifiers'
+import { makeCalculatedStats } from './fixtures/calculatedStats'
 
-const baseStats: CalculatedStats = {
+const baseStats = makeCalculatedStats({
   health: 2000,
   mana: 800,
   attackDamage: 100,
   abilityPower: 300,
   armor: 100,
   magicResist: 50,
-  attackSpeed: 0.625,
-  critChance: 0,
-  critDamage: 2,
-  lifeSteal: 0,
-  spellVamp: 0,
-  cooldownReduction: 0,
   movementSpeed: 335,
-  healthRegen: 0,
-  manaRegen: 0,
-  armorPenetration: 0,
-  flatArmorPenetration: 0,
-  magicPenetration: 0,
-  flatMagicPenetration: 0,
-  tenacity: 0,
-  lethality: 0,
-  percentLethality: 0,
-  omnivamp: 0,
-  shield: 0,
-  healShieldPower: 0,
-  goldPer10: 0,
-}
+})
 
 const rabadon = { id: '3089', name: 'Rabadon' } as Item
 const archangel = { id: '3003', name: 'Archangel' } as Item

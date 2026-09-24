@@ -519,9 +519,8 @@ function isFinalizeReady(entry: MatchupEntry): boolean {
 }
 
 function variantIndexForEntry(entry: MatchupEntry): number | null {
-  const picks = getMatchupBuildVariants(entry)
-  if (!picks.length) return null
-  const variant = picks[0].variant
+  const variant = getMatchupBuildVariants(entry)[0]?.variant
+  if (variant === undefined) return null
   return variant === 'main' ? null : variant
 }
 

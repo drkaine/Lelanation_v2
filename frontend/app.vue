@@ -152,21 +152,21 @@ const showMobileTabBar = computed(
 provide('tooltipsEnabled', tooltipsEnabled)
 
 useHead(() => {
-  const hreflangLinks = (localeHead.value.link ?? []).filter(
-    (link: { rel?: string; hreflang?: string }) =>
-      link.rel === 'alternate' && Boolean(link.hreflang)
+  const hreflangLinks = (localeHead.value.link ?? []).flatMap(
+    (link: { rel?: string; hreflang?: string; href?: unknown }) =>
+      link.rel === 'alternate' && link.hreflang && typeof link.href === 'string'
+        ? [{ hreflang: link.hreflang, href: link.href }]
+        : []
   )
   return {
     htmlAttrs: localeHead.value.htmlAttrs,
     link: [
       { rel: 'canonical', href: canonicalUrl.value, key: 'canonical' },
-      ...hreflangLinks.map((link: Record<string, unknown>, index: number) => ({
-        ...link,
-        href:
-          typeof link.href === 'string'
-            ? absoluteSitePath(siteUrl, new URL(link.href, siteUrl).pathname)
-            : link.href,
-        key: `hreflang-${String(link.hreflang ?? index)}`,
+      ...hreflangLinks.map(link => ({
+        rel: 'alternate' as const,
+        hreflang: link.hreflang,
+        href: absoluteSitePath(siteUrl, new URL(link.href, siteUrl).pathname),
+        key: `hreflang-${link.hreflang}`,
       })),
     ],
     meta: localeHead.value.meta ?? [],

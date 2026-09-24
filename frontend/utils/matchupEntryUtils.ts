@@ -205,7 +205,7 @@ export function normalizeMatchupEntry(value: unknown): MatchupEntry | null {
       ? (raw.skillFavor as MatchupSkillFavor)
       : undefined,
     buildVariants,
-    buildVariant: buildVariants?.length === 1 ? buildVariants[0].variant : undefined,
+    buildVariant: buildVariants?.length === 1 ? buildVariants[0]?.variant : undefined,
     powerSpike: normalizePowerSpike(raw.powerSpike),
     early: normalizePhaseNotes(raw.early),
     mid: normalizePhaseNotes(raw.mid),
@@ -223,7 +223,7 @@ export function syncMatchupEntryLegacyFields(entry: MatchupEntry): MatchupEntry 
   const picks = getMatchupBuildVariants(next)
 
   if (picks.length === 1) {
-    next.buildVariant = picks[0].variant
+    next.buildVariant = picks[0]?.variant
   } else {
     next.buildVariant = undefined
   }

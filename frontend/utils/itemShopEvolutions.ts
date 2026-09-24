@@ -90,7 +90,7 @@ function synthesizeShopEvolutionItem(base: Item, evolutionId: string, locale: It
       ...base.image,
       full: `${evolutionId}.png`,
     },
-    from: [template.fromItemId ?? template.baseItemId],
+    from: [template?.fromItemId ?? template?.baseItemId ?? base.id],
     into: ITEM_SHOP_EVOLUTION_INTO[evolutionId]
       ? [...ITEM_SHOP_EVOLUTION_INTO[evolutionId]]
       : undefined,

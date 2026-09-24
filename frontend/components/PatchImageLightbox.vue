@@ -254,13 +254,15 @@ function onMouseMove(event: MouseEvent) {
 }
 
 function onTouchStart(event: TouchEvent) {
-  if (event.touches.length !== 1) return
-  startDrag(event.touches[0].clientX, event.touches[0].clientY)
+  const touch = event.touches[0]
+  if (event.touches.length !== 1 || !touch) return
+  startDrag(touch.clientX, touch.clientY)
 }
 
 function onTouchMove(event: TouchEvent) {
-  if (!isDragging.value || event.touches.length !== 1) return
-  onDragMove(event.touches[0].clientX, event.touches[0].clientY)
+  const touch = event.touches[0]
+  if (!isDragging.value || event.touches.length !== 1 || !touch) return
+  onDragMove(touch.clientX, touch.clientY)
 }
 
 function stopDrag() {

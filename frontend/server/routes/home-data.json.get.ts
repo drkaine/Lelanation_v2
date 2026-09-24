@@ -63,9 +63,9 @@ export default defineEventHandler(async event => {
 
   const tierPayload = await $fetch<{ patch?: string; rows?: TierRow[] }>(
     `${apiBase}/api/stats/tier-list?rankTier=all`
-  ).catch(() => {
+  ).catch((): { patch?: string; rows?: TierRow[] } => {
     degradedReasons.push('tierList')
-    return { rows: [] as TierRow[] }
+    return { rows: [] }
   })
 
   const patch = tierPayload.patch ?? fallbackPatch

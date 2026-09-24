@@ -159,7 +159,7 @@ export default defineEventHandler(async event => {
     let pending = inflightScreenshots.get(cacheName)
     if (!pending) {
       if (activeScreenshots >= MAX_CONCURRENT_SCREENSHOTS) {
-        setHeader(event, 'Retry-After', '10')
+        setHeader(event, 'Retry-After', 10)
         throw createError({ statusCode: 429, message: 'Too many screenshots in progress' })
       }
       activeScreenshots += 1

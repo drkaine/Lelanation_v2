@@ -49,6 +49,9 @@ const displayPatchVersion = computed(() =>
   formatGameVersionPatch(props.version || props.build.gameVersion)
 )
 
+const firstBoots = computed(() => core.bootsItems.value[0])
+const secondBoots = computed(() => core.bootsItems.value[1])
+
 const getBootBg = (item: { image: { full: string } }) =>
   `background-image: url('${props.images.item(item.image.full)}')`
 </script>
@@ -136,10 +139,10 @@ const getBootBg = (item: { image: { full: string } }) =>
           <div v-for="n in 2 - core.startingItems.value.length" :key="`esi-${n}`" class="bs-item-empty" />
 
           <div class="bs-boots-slot">
-            <img v-if="core.bootsItems.value.length === 1" :src="images.item(core.bootsItems.value[0].image.full)" class="bs-boots-single" />
-            <template v-else-if="core.bootsItems.value.length >= 2">
-              <div class="bs-boots-split bs-boots-left" :style="getBootBg(core.bootsItems.value[0])" />
-              <div class="bs-boots-split bs-boots-right" :style="getBootBg(core.bootsItems.value[1])" />
+            <img v-if="core.bootsItems.value.length === 1 && firstBoots" :src="images.item(firstBoots.image.full)" class="bs-boots-single" />
+            <template v-else-if="firstBoots && secondBoots">
+              <div class="bs-boots-split bs-boots-left" :style="getBootBg(firstBoots)" />
+              <div class="bs-boots-split bs-boots-right" :style="getBootBg(secondBoots)" />
             </template>
             <div v-if="core.bootsItems.value.length === 0" class="bs-item-empty" />
           </div>

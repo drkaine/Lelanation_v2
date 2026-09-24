@@ -4,7 +4,8 @@ import { getChampionImageUrl } from '~/utils/imageUrl'
 import type { BotlaneTierRowWithPatchDelta } from '~/composables/statistics/botlanePatchDeltas'
 
 const props = defineProps<{
-  row: BotlaneTierRowWithPatchDelta
+  /** duoRank rows carry `score` / `pickrate` computed by the ranking tab. */
+  row: BotlaneTierRowWithPatchDelta & { score?: number; pickrate?: number }
   mode: 'duoRank' | 'matchups'
   expanded: boolean
   patchRefLabel: string | null
@@ -261,7 +262,7 @@ function formatGamesDelta(v: number): string {
             {{ t('statisticsPage.tierListPickrate') }}
           </div>
           <div class="text-2xl font-bold tabular-nums leading-none text-text sm:text-3xl">
-            {{ fmtPct01(row.pickrate) }}
+            {{ fmtPct01(row.pickrate ?? 0) }}
           </div>
           <div
             v-if="patchRefLabel && row.patchRefPickratePp != null"
@@ -297,7 +298,7 @@ function formatGamesDelta(v: number): string {
       <div class="flex flex-wrap items-baseline justify-between gap-x-2">
         <span>{{ t('statisticsPage.tierListPbi') }}</span>
         <span class="tabular-nums">
-          {{ row.score.toFixed(2) }}
+          {{ (row.score ?? row.note).toFixed(2) }}
           <span
             v-if="patchRefLabel && row.patchRefScorePp != null"
             class="ml-1 text-xs"

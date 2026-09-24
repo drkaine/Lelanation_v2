@@ -412,7 +412,7 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
         }
         this.opponentCohortColors = next
         this.soloSelectedOpponentIds = []
-      } else if (validIds.length === 1) {
+      } else if (validIds.length === 1 && validIds[0] !== undefined) {
         this.soloSelectedOpponentIds = [validIds[0]]
       } else {
         this.soloSelectedOpponentIds = []
@@ -499,11 +499,9 @@ export const useMatchupGuideDraftStore = defineStore('matchupGuideDraft', {
 
     updateMatchupEntry(opponentId: string, patch: Partial<Omit<MatchupEntry, 'opponent'>>) {
       const index = this.matchupEntries.findIndex(e => e.opponent.id === opponentId)
-      if (index < 0) return
-      this.matchupEntries[index] = syncMatchupEntryLegacyFields({
-        ...this.matchupEntries[index],
-        ...patch,
-      })
+      const current = this.matchupEntries[index]
+      if (!current) return
+      this.matchupEntries[index] = syncMatchupEntryLegacyFields({ ...current, ...patch })
       this.persist()
     },
 

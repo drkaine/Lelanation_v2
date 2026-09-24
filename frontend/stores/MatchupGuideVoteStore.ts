@@ -53,14 +53,16 @@ export const useMatchupGuideVoteStore = defineStore('matchupGuideVote', {
 
     upvote(guideId: string) {
       const currentVote = this.userVotes[guideId]
-      if (currentVote === 'down' && this.downvotes[guideId] > 0) {
-        this.downvotes[guideId] -= 1
+      const downCount = this.downvotes[guideId] ?? 0
+      const upCount = this.upvotes[guideId] ?? 0
+      if (currentVote === 'down' && downCount > 0) {
+        this.downvotes[guideId] = downCount - 1
       }
       if (currentVote === 'up') {
-        if (this.upvotes[guideId] > 0) this.upvotes[guideId] -= 1
+        if (upCount > 0) this.upvotes[guideId] = upCount - 1
         this.userVotes[guideId] = null
       } else {
-        this.upvotes[guideId] = (this.upvotes[guideId] || 0) + 1
+        this.upvotes[guideId] = upCount + 1
         this.userVotes[guideId] = 'up'
       }
       this.persist()
@@ -68,14 +70,16 @@ export const useMatchupGuideVoteStore = defineStore('matchupGuideVote', {
 
     downvote(guideId: string) {
       const currentVote = this.userVotes[guideId]
-      if (currentVote === 'up' && this.upvotes[guideId] > 0) {
-        this.upvotes[guideId] -= 1
+      const upCount = this.upvotes[guideId] ?? 0
+      const downCount = this.downvotes[guideId] ?? 0
+      if (currentVote === 'up' && upCount > 0) {
+        this.upvotes[guideId] = upCount - 1
       }
       if (currentVote === 'down') {
-        if (this.downvotes[guideId] > 0) this.downvotes[guideId] -= 1
+        if (downCount > 0) this.downvotes[guideId] = downCount - 1
         this.userVotes[guideId] = null
       } else {
-        this.downvotes[guideId] = (this.downvotes[guideId] || 0) + 1
+        this.downvotes[guideId] = downCount + 1
         this.userVotes[guideId] = 'down'
       }
       this.persist()

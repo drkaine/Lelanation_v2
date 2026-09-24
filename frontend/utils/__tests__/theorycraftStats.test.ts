@@ -67,22 +67,24 @@ describe('theorycraftStats', () => {
   })
 
   it('resolves stats from theorycraft champion export', () => {
-    const champion = {
-      id: 'Veigar',
-      key: '45',
-      name: 'Veigar',
-      title: 'Tiny Master of Evil',
-      image: { full: 'Veigar.png' },
-      stats: undefined as unknown as Champion['stats'],
-      baseStats: {
-        hp: 580,
-        attackDamage: 52,
-      },
-      growthStats: {
-        hp: 108,
-        attackDamage: 2.7,
-      },
-    } as Champion
+    // Theorycraft exports carry baseStats/growthStats but no Data Dragon `stats` block.
+    const champion: Champion = JSON.parse(
+      JSON.stringify({
+        id: 'Veigar',
+        key: '45',
+        name: 'Veigar',
+        title: 'Tiny Master of Evil',
+        image: { full: 'Veigar.png' },
+        baseStats: {
+          hp: 580,
+          attackDamage: 52,
+        },
+        growthStats: {
+          hp: 108,
+          attackDamage: 2.7,
+        },
+      })
+    )
 
     const resolved = resolveChampionStatsForBuild(champion)
     expect(resolved?.hp).toBe(580)

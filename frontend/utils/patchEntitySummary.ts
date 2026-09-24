@@ -55,7 +55,7 @@ export function resolvePatchEntitySummaryType(
   const winners = AVERAGE_TYPES.filter(type => scores[type] === max)
 
   if (winners.length > 1) return 'adjustment'
-  return winners[0]
+  return winners[0] ?? null
 }
 
 export function resolvePatchEntitySummaryTag(entity: {

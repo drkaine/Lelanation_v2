@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { inject, nextTick, ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import StatisticsTierListBubbleChart from '~/components/statistics/StatisticsTierListBubbleChart.vue'
 import NotificationToast from '~/components/NotificationToast.vue'
 import { copyPngBlobToClipboard } from '~/utils/buildCardShareImage'
@@ -9,7 +9,22 @@ import {
   sanitizeFilenameSegment,
 } from '~/utils/chartShareImage'
 
-const p = inject('statisticsPageCtx') as Record<string, unknown>
+import {
+  injectStatisticsPageCtx,
+  type StatisticsT,
+} from '~/composables/statistics/statisticsPageCtx'
+
+type MetaChartTabCtx = {
+  t: StatisticsT
+  tierListChartHeading: string | null | undefined
+  effectiveTierListPatch: string | null | undefined
+  gameVersion: string | null | undefined
+  tierListError: string | null
+  tierListPending: boolean
+  totalTierListCount: number
+}
+
+const p = injectStatisticsPageCtx<MetaChartTabCtx>()
 
 const bubbleChartRef = ref<{ chartCaptureRoot: HTMLElement | null } | null>(null)
 const metaChartExportPending = ref(false)
@@ -47,7 +62,7 @@ async function downloadMetaChartImage() {
   try {
     const blob = await captureMetaChartBlob()
     if (!blob) {
-      showChartExportToast(p.t('statisticsPage.tierListChartExportError') as string, 'error')
+      showChartExportToast(p.t('statisticsPage.tierListChartExportError'), 'error')
       return
     }
     downloadPngBlob(blob, metaChartExportFilename())
@@ -62,15 +77,15 @@ async function copyMetaChartImage() {
   try {
     const blob = await captureMetaChartBlob()
     if (!blob) {
-      showChartExportToast(p.t('statisticsPage.tierListChartExportError') as string, 'error')
+      showChartExportToast(p.t('statisticsPage.tierListChartExportError'), 'error')
       return
     }
     const copied = await copyPngBlobToClipboard(blob)
     if (!copied) {
-      showChartExportToast(p.t('buildDiscovery.imageCopyError') as string, 'error')
+      showChartExportToast(p.t('buildDiscovery.imageCopyError'), 'error')
       return
     }
-    showChartExportToast(p.t('buildDiscovery.imageCopied') as string, 'success')
+    showChartExportToast(p.t('buildDiscovery.imageCopied'), 'success')
   } finally {
     metaChartExportPending.value = false
   }

@@ -4,7 +4,7 @@ type SummonerSpellLike = {
   key?: string
   id?: string
   effect?: Array<number[] | null>
-  datavalues?: Record<string, unknown>
+  datavalues?: unknown
 }
 
 function normalizeVarKey(key: string): string {
@@ -43,11 +43,11 @@ function evaluateExpression(
   const direct = lookupVariable(expr, vars)
   if (direct != null) return formatResolvedValue(direct)
 
-  const match = expr.match(/^([a-zA-Z_][\w]*)\s*([*+\-/])\s*([\d.]+)$/)
-  if (match) {
-    const leftRaw = lookupVariable(match[1], vars)
-    const operator = match[2]
-    const right = Number(match[3])
+  const [, leftKey, operator, rightRaw] =
+    expr.match(/^([a-zA-Z_][\w]*)\s*([*+\-/])\s*([\d.]+)$/) ?? []
+  if (leftKey && operator && rightRaw) {
+    const leftRaw = lookupVariable(leftKey, vars)
+    const right = Number(rightRaw)
     if (leftRaw == null || !Number.isFinite(right)) return null
     const left =
       typeof leftRaw === 'number' ? leftRaw : Number(String(leftRaw).replace(/[^\d.-]/g, ''))

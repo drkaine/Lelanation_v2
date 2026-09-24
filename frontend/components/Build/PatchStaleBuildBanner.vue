@@ -8,7 +8,7 @@
       <div>
         <p class="font-semibold text-amber-400">{{ t('buildsPage.patchStale.bannerTitle') }}</p>
         <p class="mt-1 text-sm text-text/80">
-          {{ t('buildsPage.patchStale.bannerDescription', { version: patchStale.patchVersion }) }}
+          {{ t('buildsPage.patchStale.bannerDescription', { version: patchStale?.patchVersion }) }}
         </p>
         <p v-if="categoryLabel" class="mt-1 text-xs text-text/60">
           {{ categoryLabel }}

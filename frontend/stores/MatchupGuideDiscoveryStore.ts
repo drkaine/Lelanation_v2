@@ -4,6 +4,7 @@ import { useMatchupGuideStore } from '~/stores/MatchupGuideStore'
 import { useVersionStore } from '~/stores/VersionStore'
 import { apiUrl } from '~/utils/apiUrl'
 import { matchesChampionSearch, matchesLocalizedTextSearch } from '~/utils/multilingualEntitySearch'
+import type { JsonFetcher } from '~/utils/jsonFetcher'
 
 export type MatchupGuideSortOption = 'recent' | 'name'
 export type MatchupGuideFilterRole = 'top' | 'jungle' | 'mid' | 'adc' | 'support' | null
@@ -101,6 +102,86 @@ interface MatchupGuideDiscoveryState {
   loadError: string | null
 }
 
+function filterGuidesByState(
+  state: MatchupGuideDiscoveryState,
+  source: MatchupGuide[]
+): MatchupGuide[] {
+  let results = [...source]
+
+  if (state.searchQuery) {
+    const query = state.searchQuery
+    results = results.filter(guide => {
+      if (
+        matchesLocalizedTextSearch(query, [guide.shortDescription, guide.description, guide.author])
+      ) {
+        return true
+      }
+      if (
+        guide.champion &&
+        matchesChampionSearch(query, {
+          id: guide.champion.id,
+          name: guide.champion.name,
+        })
+      ) {
+        return true
+      }
+      const inMatchups = [...(guide.bestMatchups ?? []), ...(guide.worstMatchups ?? [])]
+      if (
+        inMatchups.some(m =>
+          matchesChampionSearch(query, {
+            id: m.id,
+            name: m.name,
+          })
+        )
+      ) {
+        return true
+      }
+      return false
+    })
+  }
+
+  if (state.selectedChampion) {
+    const selected = state.selectedChampion.toLowerCase()
+    results = results.filter(guide => guide.champion?.id?.toLowerCase() === selected)
+  }
+
+  if (state.selectedOpponent) {
+    const selected = state.selectedOpponent.toLowerCase()
+    results = results.filter(guide => {
+      const matchups = [...(guide.bestMatchups ?? []), ...(guide.worstMatchups ?? [])]
+      return matchups.some(m => m.id?.toLowerCase() === selected)
+    })
+  }
+
+  if (state.selectedRole) {
+    results = results.filter(guide => guide.role === state.selectedRole)
+  }
+
+  if (state.selectedVersion) {
+    results = results.filter(guide => guide.gameVersion === state.selectedVersion)
+  }
+
+  if (state.onlyUpToDate) {
+    results = results.filter(guide => !guide.patchStale)
+  }
+
+  const sorted = [...results]
+  switch (state.sortBy) {
+    case 'recent':
+      sorted.sort((a, b) => guideRecencyTimestamp(b) - guideRecencyTimestamp(a))
+      break
+    case 'name':
+      sorted.sort((a, b) => {
+        const nameA = a.champion?.name ?? ''
+        const nameB = b.champion?.name ?? ''
+        return nameA.localeCompare(nameB)
+      })
+      break
+  }
+
+  return sorted
+}
+
 export const useMatchupGuideDiscoveryStore = defineStore('matchupGuideDiscovery', {
   state: (): MatchupGuideDiscoveryState => ({
     searchQuery: '',
@@ -120,7 +201,7 @@ export const useMatchupGuideDiscoveryStore = defineStore('matchupGuideDiscovery'
 
   getters: {
     searchResults(): MatchupGuide[] {
-      return this.filterGuides(this.guides)
+      return filterGuidesByState(this, this.guides)
     },
 
     totalPages(): number {
@@ -149,84 +230,7 @@ export const useMatchupGuideDiscoveryStore = defineStore('matchupGuideDiscovery'
 
   actions: {
     filterGuides(source: MatchupGuide[]): MatchupGuide[] {
-      let results = [...source]
-
-      if (this.searchQuery) {
-        const query = this.searchQuery
-        results = results.filter(guide => {
-          if (
-            matchesLocalizedTextSearch(query, [
-              guide.shortDescription,
-              guide.description,
-              guide.author,
-            ])
-          ) {
-            return true
-          }
-          if (
-            guide.champion &&
-            matchesChampionSearch(query, {
-              id: guide.champion.id,
-              name: guide.champion.name,
-            })
-          ) {
-            return true
-          }
-          const inMatchups = [...(guide.bestMatchups ?? []), ...(guide.worstMatchups ?? [])]
-          if (
-            inMatchups.some(m =>
-              matchesChampionSearch(query, {
-                id: m.id,
-                name: m.name,
-              })
-            )
-          ) {
-            return true
-          }
-          return false
-        })
-      }
-
-      if (this.selectedChampion) {
-        const selected = this.selectedChampion.toLowerCase()
-        results = results.filter(guide => guide.champion?.id?.toLowerCase() === selected)
-      }
-
-      if (this.selectedOpponent) {
-        const selected = this.selectedOpponent.toLowerCase()
-        results = results.filter(guide => {
-          const matchups = [...(guide.bestMatchups ?? []), ...(guide.worstMatchups ?? [])]
-          return matchups.some(m => m.id?.toLowerCase() === selected)
-        })
-      }
-
-      if (this.selectedRole) {
-        results = results.filter(guide => guide.role === this.selectedRole)
-      }
-
-      if (this.selectedVersion) {
-        results = results.filter(guide => guide.gameVersion === this.selectedVersion)
-      }
-
-      if (this.onlyUpToDate) {
-        results = results.filter(guide => !guide.patchStale)
-      }
-
-      const sorted = [...results]
-      switch (this.sortBy) {
-        case 'recent':
-          sorted.sort((a, b) => guideRecencyTimestamp(b) - guideRecencyTimestamp(a))
-          break
-        case 'name':
-          sorted.sort((a, b) => {
-            const nameA = a.champion?.name ?? ''
-            const nameB = b.champion?.name ?? ''
-            return nameA.localeCompare(nameB)
-          })
-          break
-      }
-
-      return sorted
+      return filterGuidesByState(this.$state, source)
     },
 
     clampPageToMax(maxPage: number) {
@@ -237,7 +241,7 @@ export const useMatchupGuideDiscoveryStore = defineStore('matchupGuideDiscovery'
       }
     },
 
-    async loadGuides(options?: { fetcher?: typeof $fetch }) {
+    async loadGuides(options?: { fetcher?: JsonFetcher }) {
       this.loading = true
       this.loadError = null
 

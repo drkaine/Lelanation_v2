@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject } from 'vue'
+import { computed, type ShallowUnwrapRef } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useItemsStore } from '~/stores/ItemsStore'
@@ -12,31 +12,68 @@ import {
   type PatchNotesSortCol,
   type PatchNotesStatsRow,
   type PatchNotesTargetType,
+  type useStatisticsPatchNotesTab,
 } from '~/composables/statistics/useStatisticsPatchNotesTab'
+import {
+  injectStatisticsPageCtx,
+  type StatisticsT,
+} from '~/composables/statistics/statisticsPageCtx'
 
-const p = inject('statisticsPageCtx') as Record<string, unknown>
+type PatchNotesTabState = ShallowUnwrapRef<ReturnType<typeof useStatisticsPatchNotesTab>>
+type PatchNotesTabCtx = Pick<
+  PatchNotesTabState,
+  | 'patchNotesData'
+  | 'patchNotesPending'
+  | 'patchNotesError'
+  | 'patchNotesSortColumn'
+  | 'patchNotesSortDir'
+  | 'patchNotesPage'
+  | 'patchNotesPageSize'
+  | 'paginatedPatchNotesRows'
+  | 'totalPatchNotesPages'
+  | 'setPatchNotesSort'
+> & {
+  t: StatisticsT
+  gameVersion: string | null | undefined
+}
+
+const p = injectStatisticsPageCtx<PatchNotesTabCtx>()
 
 const championsStore = useChampionsStore()
 const itemsStore = useItemsStore()
 const runesStore = useRunesStore()
 const { currentVersion: gameVersionFromStore } = storeToRefs(useVersionStore())
 
+const PATCH_NOTES_SORT_COLS: readonly PatchNotesSortCol[] = [
+  'target',
+  'countUp',
+  'countNerf',
+  'countAjust',
+  'totalChanges',
+  'lastMod',
+  'regularity',
+]
+
+function isPatchNotesSortCol(value: string): value is PatchNotesSortCol {
+  return PATCH_NOTES_SORT_COLS.includes(value)
+}
+
 const patchNotesMobileSortColumn = computed({
-  get: () => String(p.patchNotesSortColumn ?? 'totalChanges'),
+  get: () => p.patchNotesSortColumn,
   set: (v: string) => {
-    ;(p.setPatchNotesSort as (c: PatchNotesSortCol) => void)?.(v as PatchNotesSortCol)
+    if (isPatchNotesSortCol(v)) p.setPatchNotesSort(v)
   },
 })
 
 const patchNotesMobileSortDir = computed({
-  get: () => (p.patchNotesSortDir === 'asc' ? 'asc' : 'desc') as 'asc' | 'desc',
+  get: () => p.patchNotesSortDir,
   set: (v: 'asc' | 'desc') => {
     p.patchNotesSortDir = v
   },
 })
 
 const patchNotesMobileSortOptionsComputed = computed(() =>
-  patchNotesMobileSortOptions((key: string) => String(p.t?.(key) ?? key))
+  patchNotesMobileSortOptions((key: string) => p.t(key))
 )
 
 function normalizeKey(value: string): string {
@@ -104,15 +141,15 @@ function entityImageUrl(row: PatchNotesStatsRow): string | null {
 }
 
 function targetTypeLabel(type: PatchNotesTargetType): string {
-  if (type === 'champion') return String(p.t?.('statisticsPage.patchNotesTargetChampion') ?? type)
-  if (type === 'items') return String(p.t?.('statisticsPage.patchNotesTargetItems') ?? type)
-  return String(p.t?.('statisticsPage.patchNotesTargetRunes') ?? type)
+  if (type === 'champion') return String(p.t('statisticsPage.patchNotesTargetChampion') ?? type)
+  if (type === 'items') return String(p.t('statisticsPage.patchNotesTargetItems') ?? type)
+  return String(p.t('statisticsPage.patchNotesTargetRunes') ?? type)
 }
 
 function changeTypeLabel(type: PatchNotesChangeType): string {
-  if (type === 'up') return String(p.t?.('patchNotesPage.changeTypes.buff') ?? 'Buff')
-  if (type === 'nerf') return String(p.t?.('patchNotesPage.changeTypes.nerf') ?? 'Nerf')
-  return String(p.t?.('patchNotesPage.changeTypes.adjustment') ?? 'Adjust')
+  if (type === 'up') return String(p.t('patchNotesPage.changeTypes.buff') ?? 'Buff')
+  if (type === 'nerf') return String(p.t('patchNotesPage.changeTypes.nerf') ?? 'Nerf')
+  return String(p.t('patchNotesPage.changeTypes.adjustment') ?? 'Adjust')
 }
 
 function changeTypeClass(type: PatchNotesChangeType): string {
@@ -133,10 +170,10 @@ function sortIndicator(col: PatchNotesSortCol): string {
 function patchNotesMessage(message: string | undefined): string {
   if (!message) return ''
   if (message === 'No patch notes data in selected version range') {
-    return String(p.t?.('statisticsPage.patchNotesNoDataInRange') ?? message)
+    return String(p.t('statisticsPage.patchNotesNoDataInRange') ?? message)
   }
   if (message === 'Database not configured') {
-    return String(p.t?.('statisticsPage.patchNotesDbNotConfigured') ?? message)
+    return String(p.t('statisticsPage.patchNotesDbNotConfigured') ?? message)
   }
   return message
 }
@@ -370,10 +407,9 @@ function patchNotesMessage(message: string | undefined): string {
 
       <StatisticsTabPagination
         v-if="p.totalPatchNotesPages > 1"
-        :page="p.patchNotesPage"
+        v-model:page="p.patchNotesPage"
+        v-model:page-size="p.patchNotesPageSize"
         :total-pages="p.totalPatchNotesPages"
-        @prev="p.onPatchNotesPageUpdated(Math.max(1, p.patchNotesPage - 1))"
-        @next="p.onPatchNotesPageUpdated(Math.min(p.totalPatchNotesPages, p.patchNotesPage + 1))"
       />
     </template>
   </div>

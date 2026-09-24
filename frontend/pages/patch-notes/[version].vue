@@ -546,7 +546,9 @@ if (import.meta.client) {
     raw => {
       const normalized = normalizePatchNotesVersion(String(raw ?? '').trim())
       if (raw && normalized && String(raw) !== normalized) {
-        navigateTo(localePath(`/patch-notes/${normalized}`), { replace: true }).catch(() => {})
+        Promise.resolve(
+          navigateTo(localePath(`/patch-notes/${normalized}`), { replace: true })
+        ).catch(() => {})
       }
     },
     { immediate: true }
@@ -586,7 +588,8 @@ const patchOptions = computed<PatchIndexEntry[]>(() => availablePatches.value)
 watch(visibleModes, modes => {
   if (modes.length === 0) return
   if (!modes.some(mode => mode.id === activeMode.value)) {
-    activeMode.value = modes.find(mode => mode.id === 'rift')?.id ?? modes[0].id
+    activeMode.value =
+      modes.find(mode => mode.id === 'rift')?.id ?? modes[0]?.id ?? activeMode.value
   }
 })
 
@@ -608,8 +611,9 @@ watch(
 
 watch(activeMode, mode => {
   const tabs = visiblePatchContentTabs(allPatchEntities.value, mode, Boolean(summaryImageUrl.value))
-  if (tabs.length > 0 && !tabs.includes(activeContentTab.value)) {
-    activeContentTab.value = tabs[0]
+  const [firstTab] = tabs
+  if (firstTab && !tabs.includes(activeContentTab.value)) {
+    activeContentTab.value = firstTab
   }
   activeTagFilter.value = 'all'
 })

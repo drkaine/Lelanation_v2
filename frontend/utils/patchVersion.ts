@@ -1,13 +1,18 @@
 import { normalizePatchNotesVersion } from '~/stores/PatchNotesStore'
 
-/** Compare two major.minor patch labels (e.g. 16.12 vs 16.13). */
+function parseMajorMinor(version: string): { major: number; minor: number } | null {
+  const [major, minor] = version.split('.').map(Number)
+  if (major === undefined || minor === undefined) return null
+  if (!Number.isFinite(major) || !Number.isFinite(minor)) return null
+  return { major, minor }
+}
+
+/** Compare two major.minor patch labels (e.g. 16.12 vs 16.13); 0 when either is unparsable. */
 export function comparePatchMajorMinor(a: string | null, b: string | null): number {
-  if (!a || !b) return 0
-  const [aM, aMi] = a.split('.').map(Number)
-  const [bM, bMi] = b.split('.').map(Number)
-  if (!Number.isFinite(aM) || !Number.isFinite(bMi)) return 0
-  if (aM !== bM) return aM - bM
-  return aMi - bMi
+  const pa = a ? parseMajorMinor(a) : null
+  const pb = b ? parseMajorMinor(b) : null
+  if (!pa || !pb) return 0
+  return pa.major !== pb.major ? pa.major - pb.major : pa.minor - pb.minor
 }
 
 /** Highest major.minor among provided version strings. */

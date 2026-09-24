@@ -173,15 +173,17 @@ describe('surveillance cohort helpers', () => {
 })
 
 describe('aggregateTrendPoints', () => {
-  it('aggregates weighted pick and ban rates', () => {
+  // Rates are re-derived from counts: cohort = games / pickRate (1000 + 1250),
+  // pick = 150 / 2250, bans = (40 + 100) / 2250 — not a games-weighted mean of rates.
+  it('aggregates pick and ban rates over the combined cohort', () => {
     const result = aggregateTrendPoints([
-      point({ games: 100, wins: 60, pickRatePct: 10, banRatePct: 4 }),
-      point({ games: 50, wins: 20, pickRatePct: 4, banRatePct: 8 }),
+      point({ dateOfGame: '2026-06-01', games: 100, wins: 60, pickRatePct: 10, banRatePct: 4 }),
+      point({ dateOfGame: '2026-06-02', games: 50, wins: 20, pickRatePct: 4, banRatePct: 8 }),
     ])
     expect(result).toEqual({
       winrate: 53.33,
-      pickrate: 8,
-      banrate: 5.33,
+      pickrate: 6.67,
+      banrate: 6.22,
     })
   })
 })

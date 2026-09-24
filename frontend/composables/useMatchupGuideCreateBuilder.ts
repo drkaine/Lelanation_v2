@@ -18,7 +18,19 @@ import {
 
 export type MatchupGuideBuilderStep = MatchupGuideDraftStep
 
-const BUILD_STEPS: MatchupGuideDraftStep[] = ['champion', 'rune', 'item', 'info']
+type GuideBuildStep = Extract<MatchupGuideDraftStep, 'champion' | 'rune' | 'item' | 'info'>
+const BUILD_STEPS: readonly GuideBuildStep[] = ['champion', 'rune', 'item', 'info']
+
+function isGuideBuildStep(step: string): step is GuideBuildStep {
+  const buildSteps: readonly string[] = BUILD_STEPS
+  return buildSteps.includes(step)
+}
+
+/** The build flow also has notes/theorycraft steps, which the guide flow does not: resume on info. */
+function lastBuilderStepForGuide(): GuideBuildStep {
+  const step = useBuildStore().getLastBuilderStep()
+  return isGuideBuildStep(step) ? step : 'info'
+}
 
 export function bootstrapMatchupGuideCreateSession(routeQuery?: LocationQuery | null) {
   const buildStore = useBuildStore()
@@ -57,17 +69,17 @@ export function resolveMatchupGuideCreateStep(): MatchupGuideDraftStep {
   if (last === 'finalize' || last === 'write') {
     if (buildValid && hasScale) return last
     if (buildValid) return 'matchups'
-    return buildStore.getLastBuilderStep()
+    return lastBuilderStepForGuide()
   }
 
   if (last === 'matchups') {
     if (buildValid) return 'matchups'
-    return buildStore.getLastBuilderStep()
+    return lastBuilderStepForGuide()
   }
 
-  if (BUILD_STEPS.includes(last)) return last
+  if (isGuideBuildStep(last)) return last
 
-  return buildStore.getLastBuilderStep()
+  return lastBuilderStepForGuide()
 }
 
 export function canAccessMatchupGuideCreateStep(
@@ -113,7 +125,7 @@ export function useMatchupGuideCreateBuilder(step: MatchupGuideBuilderStep) {
     }
 
     draftStore.setLastStep(step)
-    if (BUILD_STEPS.includes(step)) {
+    if (isGuideBuildStep(step)) {
       buildStore.setLastBuilderStep(step)
     }
   })

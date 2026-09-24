@@ -82,7 +82,9 @@ import type { ShardSelection } from '~/types/build'
 const buildStore = useBuildStore()
 const { t } = useI18n()
 
-const selectedShards = ref<Record<number, number>>({
+type ShardSlot = 1 | 2 | 3
+
+const selectedShards = ref<Record<ShardSlot, number>>({
   1: 5008, // Default: Adaptive Force
   2: 5008, // Default: Adaptive Force
   3: 5001, // Default: Health
@@ -131,7 +133,7 @@ const slot3Options = [
   { id: 5003, name: 'Magic Resist' },
 ]
 
-const selectShard = (slot: number, shardId: number) => {
+const selectShard = (slot: ShardSlot, shardId: number) => {
   selectedShards.value[slot] = shardId
   updateShardSelection()
 }

@@ -1,9 +1,20 @@
 import { ref } from 'vue'
 import { useMobileViewport } from '~/composables/useMobileViewport'
 
+/** Screen Orientation API lock types (not in the TS DOM lib). */
+type OrientationLock =
+  | 'any'
+  | 'natural'
+  | 'landscape'
+  | 'portrait'
+  | 'portrait-primary'
+  | 'portrait-secondary'
+  | 'landscape-primary'
+  | 'landscape-secondary'
+
 type OrientableScreen = Screen & {
   orientation?: ScreenOrientation & {
-    lock?: (type: OrientationLockType) => Promise<void>
+    lock?: (type: OrientationLock) => Promise<void>
     unlock?: () => void
   }
 }

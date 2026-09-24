@@ -17,7 +17,7 @@ function ratioAtRank(coefficient: number[] | number, rankIndex: number): number 
   if (Array.isArray(coefficient)) {
     if (coefficient.length === 0) return 0
     const value = coefficient[Math.min(rankIndex, coefficient.length - 1)]
-    return Number.isFinite(value) ? value : 0
+    return value !== undefined && Number.isFinite(value) ? value : 0
   }
   return Number.isFinite(coefficient) ? coefficient : 0
 }
@@ -25,14 +25,14 @@ function ratioAtRank(coefficient: number[] | number, rankIndex: number): number 
 function statValue(stats: TheorycraftBuildStats, key: string): number {
   const typedKey = key as keyof TheorycraftBuildStats
   const value = stats[typedKey]
-  return Number.isFinite(value) ? value : 0
+  return value !== undefined && Number.isFinite(value) ? value : 0
 }
 
 function baseAtRank(baseValues: number[], rankIndex: number): number {
   if (!Array.isArray(baseValues) || baseValues.length === 0) return 0
   const safeIndex = Math.max(0, Math.min(rankIndex, baseValues.length - 1))
   const value = baseValues[safeIndex]
-  return Number.isFinite(value) ? value : 0
+  return value !== undefined && Number.isFinite(value) ? value : 0
 }
 
 export function calculateDamageFormula(

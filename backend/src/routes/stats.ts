@@ -40,6 +40,7 @@ import {
 } from '../services/ItemTierDailySnapshotService.js'
 import { getChampionDamageSplit } from '../services/ChampionDamageSplitService.js'
 import { getChampionMiscSummary } from '../services/ChampionMiscStatsService.js'
+import { getChampionDashboard } from '../services/ChampionDashboardService.js'
 import {
   getTopPlayers,
   getTopPlayersForChampion,
@@ -1668,6 +1669,28 @@ router.get('/champions/:championId/misc', async (req: Request, res: Response) =>
   })
   if (!data) {
     return res.status(200).json({ championId, games: 0, groups: [] })
+  }
+  return res.json(data)
+})
+
+/** GET /api/stats/champions/:championId/dashboard — moyennes, percentiles vs tous les champions (radar) et détail par rôle. */
+router.get('/champions/:championId/dashboard', async (req: Request, res: Response) => {
+  const raw = req.params.championId
+  const championId = parseInt(Array.isArray(raw) ? raw[0] : raw, 10)
+  if (Number.isNaN(championId)) {
+    return res.status(400).json({ error: 'Invalid champion ID' })
+  }
+  const version = queryString(req.query.version)
+  const rankTier = rankTierParam(req.query.rankTier)
+  const role = queryString(req.query.role)
+  const data = await getChampionDashboard({
+    championId,
+    version: version ?? null,
+    rankTier: rankTier ?? null,
+    role: role ?? null,
+  })
+  if (!data) {
+    return res.status(200).json({ championId, games: 0 })
   }
   return res.json(data)
 })

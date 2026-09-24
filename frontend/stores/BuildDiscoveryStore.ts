@@ -12,6 +12,7 @@ import { matchesChampionSearch, matchesLocalizedTextSearch } from '~/utils/multi
 import { buildHasAnyNotes } from '~/utils/buildNotes'
 import { patchFromGameVersion } from '~/utils/patchVersion'
 import { fetchPublicBuildsProgressive } from '~/utils/fetchPublicBuilds'
+import type { JsonFetcher } from '~/utils/jsonFetcher'
 
 export type SortOption = 'recent' | 'popular' | 'name'
 export type FilterRole = 'top' | 'jungle' | 'mid' | 'adc' | 'support' | null
@@ -229,7 +230,7 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
   },
 
   actions: {
-    async loadBuilds(options?: { fetcher?: typeof $fetch }) {
+    async loadBuilds(options?: { fetcher?: JsonFetcher }) {
       const buildStore = useBuildStore()
       const fetchJson = async (path: string): Promise<unknown> => {
         if (options?.fetcher) {

@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import type { CalculatedStats, Champion, Item } from '@lelanation/shared-types'
+import type { Champion, Item } from '@lelanation/shared-types'
 import {
   applyTheorycraftItemPassives,
   getTheorycraftActivatableItemPassiveConfig,
   isTheorycraftActivatableItemPassive,
 } from '../theorycraftItemPassives'
+import { makeCalculatedStats } from './fixtures/calculatedStats'
 
 const champion = {
   id: 'Ornn',
@@ -16,27 +17,12 @@ const champion = {
   },
 } as Champion
 
-const baseStats: CalculatedStats = {
+const baseStats = makeCalculatedStats({
   health: 2000,
-  mana: 0,
   armor: 120,
   magicResist: 80,
   attackDamage: 100,
-  abilityPower: 0,
-  attackSpeed: 0.625,
-  movementSpeed: 340,
-  critChance: 0,
-  critDamage: 2,
-  abilityHaste: 0,
-  lethality: 0,
-  armorPen: 0,
-  magicPen: 0,
-  magicPenPercent: 0,
-  lifeSteal: 0,
-  omnivamp: 0,
-  tenacity: 0,
-  healShieldPower: 0,
-}
+})
 
 describe('theorycraftItemPassives', () => {
   it('detects Jak Sho and Sheen as activatable', () => {

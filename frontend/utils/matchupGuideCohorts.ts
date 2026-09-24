@@ -3,8 +3,10 @@ export type MatchupCohortColorOption = {
   value: string
 }
 
+const SKY_COHORT_COLOR: MatchupCohortColorOption = { id: 'sky', value: '#38bdf8' }
+
 export const MATCHUP_COHORT_COLORS: MatchupCohortColorOption[] = [
-  { id: 'sky', value: '#38bdf8' },
+  SKY_COHORT_COLOR,
   { id: 'amber', value: '#fbbf24' },
   { id: 'rose', value: '#fb7185' },
   { id: 'violet', value: '#a78bfa' },
@@ -14,7 +16,7 @@ export const MATCHUP_COHORT_COLORS: MatchupCohortColorOption[] = [
   { id: 'fuchsia', value: '#e879f9' },
 ]
 
-export const DEFAULT_MATCHUP_COHORT_COLOR = MATCHUP_COHORT_COLORS[0].value
+export const DEFAULT_MATCHUP_COHORT_COLOR = SKY_COHORT_COLOR.value
 
 export const MIN_COHORT_SIZE = 2
 
@@ -62,7 +64,7 @@ export function stripSingletonCohortColors(colors: Record<string, string>): Reco
 
   const next: Record<string, string> = {}
   for (const [opponentId, color] of Object.entries(colors)) {
-    if (counts[color] >= MIN_COHORT_SIZE) {
+    if ((counts[color] ?? 0) >= MIN_COHORT_SIZE) {
       next[opponentId] = color
     }
   }

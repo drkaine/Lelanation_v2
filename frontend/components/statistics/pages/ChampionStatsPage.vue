@@ -630,6 +630,26 @@
                     </span>
                   </div>
                   <div
+                    v-if="
+                      championByKey(championId)?.title || championByKey(championId)?.tags?.length
+                    "
+                    class="champion-header-about min-w-0 text-[11px] leading-tight max-lg:w-full lg:max-w-[12rem]"
+                  >
+                    <p
+                      v-if="championByKey(championId)?.title"
+                      class="truncate italic text-text/75"
+                      :title="championByKey(championId)?.title"
+                    >
+                      {{ championByKey(championId)?.title }}
+                    </p>
+                    <p
+                      v-if="championByKey(championId)?.tags?.length"
+                      class="truncate font-semibold text-text/60"
+                    >
+                      {{ championByKey(championId)?.tags?.join(', ') }}
+                    </p>
+                  </div>
+                  <div
                     v-if="championDamageSplit && championDamageSplit.total > 0"
                     class="champion-header-damage-split flex min-w-0 shrink-0 flex-nowrap items-center gap-2 max-lg:w-full max-lg:flex-col max-lg:items-stretch"
                   >
@@ -693,6 +713,12 @@
                     <div
                       class="champion-header-kpis flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text/85"
                     >
+                      <span
+                        >{{ t('statisticsPage.championDashboardGamesShort') }}:
+                        <strong>{{
+                          Number(championStats.games ?? 0).toLocaleString('en-US')
+                        }}</strong></span
+                      >
                       <span
                         >{{ t('statisticsPage.pickrate') }}:
                         <strong
@@ -1786,6 +1812,19 @@
                 />
               </div>
               <div
+                v-if="activeChampionTab === 'dashboard'"
+                id="champion-tab-panel-dashboard"
+                role="tabpanel"
+                class="champion-tab-panel p-4 max-lg:px-3 max-lg:py-3"
+              >
+                <ChampionDashboardTab
+                  :data="championDashboardData"
+                  :pending="championDashboardPending"
+                  :items="dashboardTopItems"
+                  :spells="dashboardTopSpells"
+                />
+              </div>
+              <div
                 v-if="activeChampionTab === 'misc'"
                 id="champion-tab-panel-misc"
                 role="tabpanel"
@@ -1844,6 +1883,11 @@ import type { MatchupDetailTabId } from '~/components/statistics/ChampionMatchup
 import type { SynergyExtRow } from '~/components/statistics/ChampionSynergyTab.vue'
 import type { ChampionObjectivesSummary } from '~/components/statistics/ChampionObjectivesTab.vue'
 import type { ChampionMiscSummary } from '~/components/statistics/ChampionMiscTab.vue'
+import type {
+  ChampionDashboardSummary,
+  DashboardTile,
+} from '~/components/statistics/ChampionDashboardTab.vue'
+import { topItemsFromBuilds } from '~/utils/championDashboard'
 import type { ChampionPingsSummary } from '~/components/statistics/ChampionPingsTab.vue'
 import type { ChampionVisionSummary } from '~/components/statistics/ChampionVisionTab.vue'
 import ChampionSpellOrderCard from '~/components/statistics/ChampionSpellOrderCard.vue'
@@ -1890,6 +1934,9 @@ const ChampionSynergyTab = defineAsyncComponent(
 )
 const ChampionObjectivesTab = defineAsyncComponent(
   () => import('~/components/statistics/ChampionObjectivesTab.vue')
+)
+const ChampionDashboardTab = defineAsyncComponent(
+  () => import('~/components/statistics/ChampionDashboardTab.vue')
 )
 const ChampionMiscTab = defineAsyncComponent(
   () => import('~/components/statistics/ChampionMiscTab.vue')
@@ -2572,6 +2619,8 @@ const championDamageSplit = ref<{
   minions: number
 } | null>(null)
 const championMiscData = ref<ChampionMiscSummary | null>(null)
+const championDashboardData = ref<ChampionDashboardSummary | null>(null)
+const championDashboardPending = ref(false)
 const championMiscPending = ref(false)
 const championPingsData = ref<ChampionPingsSummary | null>(null)
 const championPingsBaselineData = ref<ChampionPingsSummary | null>(null)
@@ -2826,6 +2875,43 @@ const championSpellOrdersData = ref<{
 } | null>(null)
 const championObjectivesData = ref<ChampionObjectivesSummary | null>(null)
 const championObjectivesPending = ref(false)
+
+const DASHBOARD_TOP_TILES = 6
+
+const dashboardTopItems = computed((): DashboardTile[] =>
+  topItemsFromBuilds(buildsData.value?.builds ?? [], DASHBOARD_TOP_TILES).flatMap(row => {
+    const name = _itemName(row.itemId)
+    const image = _itemImageName(row.itemId)
+    if (!name || !image) return []
+    return [
+      {
+        id: row.itemId,
+        name,
+        imageUrl: _getItemImageUrl(gameVersion.value, image),
+        games: row.games,
+      },
+    ]
+  })
+)
+
+const dashboardTopSpells = computed((): DashboardTile[] =>
+  [...(championSpellsData.value?.spells ?? [])]
+    .sort((a, b) => b.games - a.games)
+    .flatMap(row => {
+      const name = _spellName(row.spellId)
+      const image = _spellImageName(row.spellId)
+      if (!name || !image) return []
+      return [
+        {
+          id: row.spellId,
+          name,
+          imageUrl: _getSpellImageUrl(gameVersion.value, image),
+          games: row.games,
+        },
+      ]
+    })
+    .slice(0, DASHBOARD_TOP_TILES)
+)
 const championSpellsModeFilter = ref<'solo' | 'pair'>('solo')
 const championRunesPanelData = computed(() =>
   assembleChampionRunesPanel(runesPerRuneData.value, runesData.value, runesShardsData.value)
@@ -3021,6 +3107,7 @@ const trendVersionsCatalog = ref<Array<{ patchLabel: string; releaseDate: string
 
 const activeChampionTab = ref<
   | 'overview'
+  | 'dashboard'
   | 'matchups'
   | 'synergy'
   | 'runes'
@@ -3033,6 +3120,7 @@ const activeChampionTab = ref<
 >('overview')
 type ChampionTabId =
   | 'overview'
+  | 'dashboard'
   | 'matchups'
   | 'synergy'
   | 'runes'
@@ -3045,6 +3133,7 @@ type ChampionTabId =
 const championPageBootstrapped = ref(false)
 const championTabLoaded = ref<Record<ChampionTabId, boolean>>({
   overview: false,
+  dashboard: false,
   matchups: false,
   synergy: false,
   runes: false,
@@ -3057,6 +3146,7 @@ const championTabLoaded = ref<Record<ChampionTabId, boolean>>({
 })
 const championTabs = [
   { id: 'overview' as const, label: 'statisticsPage.championStatsTabOverview' },
+  { id: 'dashboard' as const, label: 'statisticsPage.championStatsTabDashboard' },
   { id: 'matchups' as const, label: 'statisticsPage.championStatsTabMatchups' },
   { id: 'synergy' as const, label: 'statisticsPage.championStatsTabSynergy' },
   { id: 'runes' as const, label: 'statisticsPage.championStatsTabRunes' },
@@ -3141,6 +3231,7 @@ function isChampionTab(tab: ChampionTabId): boolean {
 function resetChampionTabLoadState(): void {
   championTabLoaded.value = {
     overview: false,
+    dashboard: false,
     matchups: false,
     synergy: false,
     runes: false,
@@ -3638,59 +3729,31 @@ async function _loadChampionSpells() {
   const q = queryParams()
   const bq = cmp ? queryParams(cmp) : null
   try {
-    const fetches: Promise<unknown>[] = [
-      statsFetch<{ totalGames: number; spells: ChampionSpellSoloApiRow[] }>(
-        apiUrl(`/api/stats/champions/${championId.value}/summoner-spells${q || ''}`)
+    type SpellsSolo = { totalGames: number; spells: ChampionSpellSoloApiRow[] }
+    type SpellsDuos = { totalGames: number; duos: ChampionSpellDuoApiRow[] }
+    const base = `/api/stats/champions/${championId.value}`
+    const baselineFetch =
+      cmp && bq
+        ? Promise.allSettled([
+            statsFetch<SpellsSolo>(apiUrl(`${base}/summoner-spells${bq}`)),
+            statsFetch<SpellsDuos>(apiUrl(`${base}/summoner-spells-duos${bq}`)),
+          ])
+        : null
+    const [solo, duos, orders] = await Promise.allSettled([
+      statsFetch<SpellsSolo>(apiUrl(`${base}/summoner-spells${q || ''}`)),
+      statsFetch<SpellsDuos>(apiUrl(`${base}/summoner-spells-duos${q || ''}`)),
+      statsFetch<NonNullable<typeof championSpellOrdersData.value>>(
+        apiUrl(`${base}/spell-orders${q || ''}`)
       ),
-      statsFetch<{ totalGames: number; duos: ChampionSpellDuoApiRow[] }>(
-        apiUrl(`/api/stats/champions/${championId.value}/summoner-spells-duos${q || ''}`)
-      ),
-      statsFetch<{
-        totalGames: number
-        rows: Array<{
-          key: string
-          order: number[]
-          games: number
-          wins: number
-          pickrate: number
-          winrate: number
-        }>
-      }>(apiUrl(`/api/stats/champions/${championId.value}/spell-orders${q || ''}`)),
-    ]
-    if (cmp && bq) {
-      fetches.push(
-        statsFetch<{ totalGames: number; spells: ChampionSpellSoloApiRow[] }>(
-          apiUrl(`/api/stats/champions/${championId.value}/summoner-spells${bq}`)
-        ),
-        statsFetch<{ totalGames: number; duos: ChampionSpellDuoApiRow[] }>(
-          apiUrl(`/api/stats/champions/${championId.value}/summoner-spells-duos${bq}`)
-        )
-      )
-    }
-    const results = await Promise.allSettled(fetches)
-    championSpellsData.value =
-      results[0].status === 'fulfilled'
-        ? (results[0].value as typeof championSpellsData.value)
-        : null
-    championSpellsDuosData.value =
-      results[1].status === 'fulfilled'
-        ? (results[1].value as typeof championSpellsDuosData.value)
-        : null
-    championSpellOrdersData.value =
-      results[2].status === 'fulfilled'
-        ? (results[2].value as typeof championSpellOrdersData.value)
-        : null
-    if (cmp && bq) {
-      const baseSolo = results[3]?.status === 'fulfilled' ? results[3].value : null
-      const baseDuos = results[4]?.status === 'fulfilled' ? results[4].value : null
+    ])
+    championSpellsData.value = solo.status === 'fulfilled' ? solo.value : null
+    championSpellsDuosData.value = duos.status === 'fulfilled' ? duos.value : null
+    championSpellOrdersData.value = orders.status === 'fulfilled' ? orders.value : null
+    if (baselineFetch) {
+      const [baseSolo, baseDuos] = await baselineFetch
       championSpellsBaselineSolo.value =
-        baseSolo && typeof baseSolo === 'object' && 'spells' in baseSolo
-          ? (baseSolo as { spells: ChampionSpellSoloApiRow[] }).spells
-          : []
-      championSpellsBaselineDuos.value =
-        baseDuos && typeof baseDuos === 'object' && 'duos' in baseDuos
-          ? (baseDuos as { duos: ChampionSpellDuoApiRow[] }).duos
-          : []
+        baseSolo.status === 'fulfilled' ? baseSolo.value.spells : []
+      championSpellsBaselineDuos.value = baseDuos.status === 'fulfilled' ? baseDuos.value.duos : []
     } else {
       championSpellsBaselineSolo.value = []
       championSpellsBaselineDuos.value = []
@@ -3721,6 +3784,20 @@ async function loadChampionObjectives() {
   } finally {
     championObjectivesPending.value = false
     statsPerfEnd('loadChampionObjectives', t0)
+  }
+}
+
+async function loadChampionDashboard() {
+  if (!championId.value) return
+  championDashboardPending.value = true
+  try {
+    championDashboardData.value = await statsFetch<ChampionDashboardSummary>(
+      apiUrl(`/api/stats/champions/${championId.value}/dashboard${overviewQueryParams()}`)
+    )
+  } catch {
+    championDashboardData.value = null
+  } finally {
+    championDashboardPending.value = false
   }
 }
 
@@ -3863,6 +3940,11 @@ async function loadChampionDataForTab(tab: ChampionTabId, force = false): Promis
   if (tab === 'overview') {
     await Promise.all([loadDurationByTier(), loadTrendSnapshots()])
     markChampionTabLoaded('overview')
+    return
+  }
+  if (tab === 'dashboard') {
+    await Promise.all([loadChampionDashboard(), _loadBuilds(), _loadChampionSpells()])
+    markChampionTabLoaded('dashboard')
     return
   }
   if (tab === 'matchups') {

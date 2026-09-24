@@ -216,7 +216,7 @@
                 </select>
               </div>
             </template>
-            <template v-else-if="displayedActiveTab !== 'misc'">
+            <template v-else>
               <div>
                 <label for="stats-filter-version" class="mb-1 block text-sm font-medium text-text">
                   {{ t('statisticsPage.overviewFilterByVersion') }}
@@ -780,17 +780,11 @@
               <div v-else-if="displayedActiveTab === 'balance'" class="space-y-4">
                 <StatisticsBalanceTab />
               </div>
-              <div v-else-if="displayedActiveTab === 'duration'" class="space-y-4">
-                <StatisticsDurationTab />
-              </div>
               <div v-else-if="displayedActiveTab === 'items'" class="space-y-6">
                 <StatisticsItemsTab />
               </div>
               <div v-else-if="displayedActiveTab === 'spells'" class="space-y-4">
                 <StatisticsSpellsTab />
-              </div>
-              <div v-else-if="displayedActiveTab === 'abandons'" class="space-y-4">
-                <StatisticsAbandonsTab />
               </div>
               <div v-else-if="displayedActiveTab === 'pings'" class="space-y-4">
                 <StatisticsPingsTab />
@@ -874,6 +868,7 @@ import {
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { statsFetch } from '~/utils/statsFetch'
+import { comparePatchMajorMinor } from '~/utils/patchVersion'
 import { apiUrl } from '~/utils/apiUrl'
 import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
 import { RANK_TIERS } from '~/utils/rankTiers'
@@ -956,17 +951,11 @@ const StatisticsChampionTableTab = defineAsyncComponent(
 const StatisticsBalanceTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsBalanceTab.vue')
 )
-const StatisticsDurationTab = defineAsyncComponent(
-  () => import('~/components/statistics/tabs/StatisticsDurationTab.vue')
-)
 const StatisticsItemsTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsItemsTab.vue')
 )
 const StatisticsSpellsTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsSpellsTab.vue')
-)
-const StatisticsAbandonsTab = defineAsyncComponent(
-  () => import('~/components/statistics/tabs/StatisticsAbandonsTab.vue')
 )
 const StatisticsPingsTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsPingsTab.vue')
@@ -1097,30 +1086,7 @@ function initialActiveTabFromRoute(): StatisticsMainTab {
 const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
 const riotLocale = computed(() => getRiotLanguage(locale.value))
 
-const activeTab = ref<
-  | 'overview'
-  | 'team'
-  | 'objectives'
-  | 'surrender'
-  | 'championTable'
-  | 'balance'
-  // | 'trends'
-  | 'runes'
-  | 'items'
-  | 'spells'
-  | 'infos'
-  | 'champions'
-  | 'progressions'
-  | 'sides'
-  | 'detail'
-  | 'duration'
-  | 'abandons'
-  | 'bans'
-  | 'pings'
-  | 'vision'
-  | 'misc'
-  | 'patchNotes'
->(initialActiveTabFromRoute())
+const activeTab = ref<StatisticsMainTab>(initialActiveTabFromRoute())
 
 /** Ordre barre d’onglets + navigation clavier (←/→/↑/↓, Home, End) — persistant via paramètres. */
 const statisticsTabNavOrder = computed(() => tabOrder.value)
@@ -1155,10 +1121,12 @@ const activeSection = computed<StatisticsTabSection | null>(() => sectionFromQue
 const tabs = computed(() => {
   const section = activeSection.value
   const hidden = new Set(hiddenTabs.value)
-  const byId = new Map(allTabs.value.map(tab => [tab.id, tab]))
+  const byId = new Map<StatisticsMainTab, (typeof allTabs.value)[number]>(
+    allTabs.value.map(tab => [tab.id, tab])
+  )
   const allowedIds = section
-    ? new Set(STATISTICS_SECTION_TABS[section])
-    : new Set(statisticsTabNavOrder.value)
+    ? new Set<StatisticsMainTab>(STATISTICS_SECTION_TABS[section])
+    : new Set<StatisticsMainTab>(statisticsTabNavOrder.value)
   return statisticsTabNavOrder.value
     .map(id => byId.get(id))
     .filter(
@@ -1565,10 +1533,12 @@ function tierListPatchDeltaGamesClass(n: number): string {
 
 /** Depuis l’aperçu : page tier list avec tri initial. */
 function goToTierListWithSort(sort: 'winrate' | 'pickrate') {
-  navigateTo({
-    path: localePath('/statistics/tier-list'),
-    query: { ...route.query, sort },
-  }).catch(() => undefined)
+  Promise.resolve(
+    navigateTo({
+      path: localePath('/statistics/tier-list'),
+      query: { ...route.query, sort },
+    })
+  ).catch(() => undefined)
 }
 
 function _formatGeneratedAt(value: string | null | undefined): string {
@@ -1892,17 +1862,16 @@ watch(
       const q = { ...route.query } as Record<string, string | string[]>
       delete q.tab
       q.view = 'botlane-matchups'
-      navigateTo({ path: localePath('/statistics/tier-list'), query: q }, { replace: true }).catch(
-        () => undefined
-      )
+      Promise.resolve(
+        navigateTo({ path: localePath('/statistics/tier-list'), query: q }, { replace: true })
+      ).catch(() => undefined)
       return
     }
     if (tabQ !== 'tierlist') return
     const nextQ = { ...route.query } as Record<string, string | string[]>
     delete nextQ.tab
-    navigateTo(
-      { path: localePath('/statistics/tier-list'), query: nextQ },
-      { replace: true }
+    Promise.resolve(
+      navigateTo({ path: localePath('/statistics/tier-list'), query: nextQ }, { replace: true })
     ).catch(() => undefined)
   },
   { immediate: true }
@@ -2072,8 +2041,6 @@ function onStatsFilterChange() {
     loadObjectivesBaseline()
   }
   if (activeTab.value === 'balance') loadBalanceFramework()
-  if (activeTab.value === 'sides') loadOverviewSides()
-  if (activeTab.value === 'champions') loadChampions()
   if (activeTab.value === 'championTable') loadChampionGlobalTable()
   if (['runes', 'items', 'spells'].includes(activeTab.value)) {
     loadOverviewDetail()
@@ -2091,7 +2058,6 @@ function onStatsFilterChange() {
   }
   if (activeTab.value === 'surrender') loadSurrenderMatrix()
   // if (activeTab.value === 'trends') loadProgressionsFull()
-  if (activeTab.value === 'abandons') loadOverviewAbandons()
   if (statsVersionOptions.value.length <= 1) {
     loadOverviewVersionsCatalog()
   }
@@ -3082,42 +3048,49 @@ const overviewTeamsData = ref<{
       elder: {
         byWin: number
         byLoss: number
+        securedWinrateGlobal?: number | null
         distributionByWin: Record<string, number>
         distributionByLoss: Record<string, number>
       }
       earth: {
         byWin: number
         byLoss: number
+        securedWinrateGlobal?: number | null
         distributionByWin: Record<string, number>
         distributionByLoss: Record<string, number>
       }
       water: {
         byWin: number
         byLoss: number
+        securedWinrateGlobal?: number | null
         distributionByWin: Record<string, number>
         distributionByLoss: Record<string, number>
       }
       wind: {
         byWin: number
         byLoss: number
+        securedWinrateGlobal?: number | null
         distributionByWin: Record<string, number>
         distributionByLoss: Record<string, number>
       }
       fire: {
         byWin: number
         byLoss: number
+        securedWinrateGlobal?: number | null
         distributionByWin: Record<string, number>
         distributionByLoss: Record<string, number>
       }
       hextec: {
         byWin: number
         byLoss: number
+        securedWinrateGlobal?: number | null
         distributionByWin: Record<string, number>
         distributionByLoss: Record<string, number>
       }
       chem: {
         byWin: number
         byLoss: number
+        securedWinrateGlobal?: number | null
         distributionByWin: Record<string, number>
         distributionByLoss: Record<string, number>
       }
@@ -4762,14 +4735,6 @@ function patchFromVersion(version: string | null | undefined): string | null {
   return `${major}.${minor}`
 }
 
-function comparePatchMajorMinor(a: string | null, b: string | null): number {
-  if (!a || !b) return 0
-  const [aM, aMi] = a.split('.').map(Number)
-  const [bM, bMi] = b.split('.').map(Number)
-  if (aM !== bM) return aM - bM
-  return aMi - bMi
-}
-
 /** Version de référence pour les Δ (progression ou patch précédent avec des matchs). */
 function resolveStatsBaselineVersion(): string | null {
   const mainVer = (statsVersionFilter.value || gameVersion.value || '').trim()
@@ -5117,7 +5082,6 @@ async function loadStatisticsTabData(tab: typeof activeTab.value): Promise<void>
     if (!overviewDetailData.value && !overviewDetailPending.value) loadOverviewDetail()
     loadOverviewDetailBaseline()
   }
-  if (tab === 'abandons') loadOverviewAbandons()
   if (tab === 'surrender') loadSurrenderMatrix()
   if (tab === 'pings') pingsTab.loadPingsTable()
   if (tab === 'vision') visionTab.loadVisionTable()
@@ -5163,8 +5127,6 @@ watch([statsVersionFilter, statsRoleFilter, statsOtpFilter], () => {
   if (activeTab.value === 'pings') pingsTab.loadPingsTable()
   if (activeTab.value === 'vision') visionTab.loadVisionTable()
   if (activeTab.value === 'surrender') loadSurrenderMatrix()
-  if (activeTab.value === 'duration') loadOverviewDurationWinrate()
-  if (activeTab.value === 'abandons') loadOverviewAbandons()
   if (activeTab.value === 'runes' || activeTab.value === 'items' || activeTab.value === 'spells') {
     loadOverviewDetail()
     loadOverviewDetailBaseline()
@@ -5208,8 +5170,6 @@ watch(progressionFromVersion, () => {
   if (activeTab.value === 'pings') pingsTab.loadPingsTable()
   if (activeTab.value === 'vision') visionTab.loadVisionTable()
   if (activeTab.value === 'surrender') loadSurrenderMatrix()
-  if (activeTab.value === 'duration') loadOverviewDurationWinrate()
-  if (activeTab.value === 'abandons') loadOverviewAbandons()
   if (activeTab.value === 'runes' || activeTab.value === 'items' || activeTab.value === 'spells') {
     loadOverviewDetail()
     loadOverviewDetailBaseline()

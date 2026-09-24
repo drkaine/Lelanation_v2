@@ -10,7 +10,7 @@ export function useItemHoverTooltip() {
   const tooltipRef = ref<HTMLElement | null>(null)
   const tooltipPosition = ref({ x: 0, y: 0 })
 
-  const tooltipStyle = computed(() => {
+  const tooltipStyle = computed((): Record<string, string> => {
     if (!hoveredItem.value) return {}
     return {
       left: `${tooltipPosition.value.x + TOOLTIP_OFFSET}px`,

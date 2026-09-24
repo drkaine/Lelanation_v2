@@ -114,13 +114,14 @@ const cohortUiByOpponentId = computed(() => {
       inCohort,
       inActive,
       soloSelected: soloSelected && !inCohort,
-      style: inCohort
-        ? {
-            '--cohort-color': color,
-            borderColor: color,
-            borderWidth: '2px',
-          }
-        : undefined,
+      style:
+        inCohort && color
+          ? {
+              '--cohort-color': color,
+              borderColor: color,
+              borderWidth: '2px',
+            }
+          : undefined,
     }
   }
 

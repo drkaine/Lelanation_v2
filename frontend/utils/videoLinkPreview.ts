@@ -51,9 +51,11 @@ export function extractYouTubeVideoId(rawUrl: string): string | null {
 
       const parts = url.pathname.split('/').filter(Boolean)
       const shortsIndex = parts.indexOf('shorts')
-      if (shortsIndex >= 0 && parts[shortsIndex + 1]) return parts[shortsIndex + 1]
+      const shortsId = shortsIndex === -1 ? undefined : parts[shortsIndex + 1]
+      if (shortsId) return shortsId
       const liveIndex = parts.indexOf('live')
-      if (liveIndex >= 0 && parts[liveIndex + 1]) return parts[liveIndex + 1]
+      const liveId = liveIndex === -1 ? undefined : parts[liveIndex + 1]
+      if (liveId) return liveId
     }
   } catch {
     return null

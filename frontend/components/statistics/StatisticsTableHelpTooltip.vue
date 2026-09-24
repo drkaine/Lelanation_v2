@@ -2,7 +2,7 @@
 /** Bulle ⓘ d’aide tableau (même pattern que objectifs / fast-stats). */
 withDefaults(
   defineProps<{
-    ariaLabel: string
+    label: string
     text: string
     secondaryText?: string
     align?: 'end' | 'start'
@@ -17,7 +17,7 @@ withDefaults(
 <template>
   <span
     class="group/stat-tip relative inline-flex shrink-0 cursor-help text-text/50"
-    :aria-label="ariaLabel"
+    :aria-label="label"
   >
     ⓘ
     <span

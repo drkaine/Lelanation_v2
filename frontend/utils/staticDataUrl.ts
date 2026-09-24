@@ -1,3 +1,4 @@
+import type { JsonFetcher } from '~/utils/jsonFetcher'
 /**
  * Generate URLs for static game data and images served from frontend public directory
  * These are served directly by Nuxt (no API call needed)
@@ -44,7 +45,8 @@ export async function fetchPublicJson<T>(path: string): Promise<T> {
     }
     return (await response.json()) as T
   }
-  return $fetch<T>(path)
+  const fetchJson: JsonFetcher = $fetch
+  return fetchJson<T>(path)
 }
 
 /**

@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { HOME_SECTION_ORDER } from '~/constants/homeSections'
+import { swapItems } from '~/utils/swapItems'
 
 const STORAGE_KEY = 'lelanation_home_ui'
 
@@ -113,13 +114,12 @@ export const useHomeUiStore = defineStore('homeUi', {
       persistState(this.$state)
     },
     moveSection(section: HomeSectionId, direction: 'up' | 'down') {
-      const order = [...this.sectionOrder]
+      const order = this.sectionOrder
       const index = order.indexOf(section)
       if (index < 0) return
       const targetIndex = direction === 'up' ? index - 1 : index + 1
       if (targetIndex < 0 || targetIndex >= order.length) return
-      ;[order[index], order[targetIndex]] = [order[targetIndex], order[index]]
-      this.sectionOrder = order
+      this.sectionOrder = swapItems(order, index, targetIndex)
       persistState(this.$state)
     },
     reorderSection(fromIndex: number, toIndex: number) {

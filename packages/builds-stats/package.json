@@ -10,6 +10,7 @@
     "./wikiGlobalRules": "./src/wikiGlobalRules.ts",
     "./wikiStatCalculations": "./src/wikiStatCalculations.ts",
     "./gameConstants": "./src/gameConstants.ts",
+    "./championGrowth": "./src/championGrowth.ts",
     "./*": "./src/*"
   },
   "dependencies": {

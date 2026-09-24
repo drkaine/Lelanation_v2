@@ -203,8 +203,9 @@ describe('buildItemRules', () => {
 
   it('removes role-linked items stored with numeric ids when role is removed', () => {
     const lookup = (id: string) => item(id, ['starter'])
-    const numericItem = (id: number, tags: string[] = []) =>
-      ({ id, name: String(id), tags }) as Item
+    // Legacy stored builds hold numeric ids, which the Item type cannot express.
+    const numericItem = (id: number, tags: string[] = []): Item =>
+      JSON.parse(JSON.stringify({ id, name: String(id), tags }))
     const result = normalizeBuildItemsAfterChange(
       [numericItem(1103, ['Jungle']), numericItem(3865, []), item('3089')],
       ['top'],

@@ -1,7 +1,7 @@
 import { computed, ref, toRaw, watch, type Ref } from 'vue'
 import type { Build, CalculatedStats } from '@lelanation/shared-types'
 import { useChampionData } from '~/composables/useChampionData'
-import { useBuildStore } from '~/stores/BuildStore'
+import { useBuildStore, type BuildStoreSession } from '~/stores/BuildStore'
 import { theorycraftDetailScope } from '~/utils/theorycraftStorageScope'
 import { useItemsStore } from '~/stores/ItemsStore'
 import type { TheorycraftPanel } from '~/components/Build/TheorycraftWorkspacePanel.vue'
@@ -10,13 +10,12 @@ import { toTheorycraftBuildStats } from '~/utils/theorycraftStats'
 
 const THEORYCRAFT_VS_STATE_STORAGE_PREFIX = 'lelanation_theorycraft_vs_state_v1_'
 
-type BuilderSession = 'create' | 'theorycraft'
 type TheorycraftSide = 'ally' | 'enemy'
 
 interface StoreSnapshot {
   currentBuild: Build | null
   calculatedStats: CalculatedStats | null
-  builderSession: BuilderSession
+  builderSession: BuildStoreSession
   theorycraftLinkedToBuilder: boolean
   displayedVariant: 'main' | number
   statsLevel: number
@@ -219,13 +218,14 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
   function restoreStoreSnapshot() {
     const snap = savedSnapshot.value
     if (!snap) return
-    buildStore.$patch({
-      currentBuild: snap.currentBuild,
-      calculatedStats: snap.calculatedStats,
-      builderSession: snap.builderSession,
-      theorycraftLinkedToBuilder: snap.theorycraftLinkedToBuilder,
-      displayedVariant: snap.displayedVariant,
-      statsLevel: snap.statsLevel,
+    // Function form: replaces values (the object form would deep-merge the saved build).
+    buildStore.$patch(state => {
+      state.currentBuild = snap.currentBuild
+      state.calculatedStats = snap.calculatedStats
+      state.builderSession = snap.builderSession
+      state.theorycraftLinkedToBuilder = snap.theorycraftLinkedToBuilder
+      state.displayedVariant = snap.displayedVariant
+      state.statsLevel = snap.statsLevel
     })
     savedSnapshot.value = null
   }

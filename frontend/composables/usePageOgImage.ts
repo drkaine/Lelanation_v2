@@ -1,9 +1,9 @@
-import type { MaybeRef } from 'vue'
+import type { MaybeRefOrGetter } from 'vue'
 import { absoluteSitePath } from '~/utils/siteUrl'
 
 type PageOgImageOptions = {
-  title: MaybeRef<string>
-  subtitle?: MaybeRef<string | undefined>
+  title: MaybeRefOrGetter<string>
+  subtitle?: MaybeRefOrGetter<string | undefined>
 }
 
 function buildOgImageUrl(siteUrl: string, title: string, subtitle?: string): string {

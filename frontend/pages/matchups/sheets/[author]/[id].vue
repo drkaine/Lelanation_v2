@@ -1,5 +1,5 @@
 <template>
-  <MatchupGuideDetailView :guide="guide" />
+  <MatchupGuideDetailView v-if="guide" :guide="guide" />
 </template>
 
 <script setup lang="ts">

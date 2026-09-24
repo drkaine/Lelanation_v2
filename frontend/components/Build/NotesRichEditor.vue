@@ -183,8 +183,8 @@ const isInternalUpdate = ref(false)
 const openCategory = ref<NotesEntityCategoryKey | null>(null)
 const charCount = ref(0)
 
-function setCategoryMenuRef(key: NotesEntityCategoryKey, el: Element | null) {
-  categoryMenuRefs.value[key] = el as HTMLElement | null
+function setCategoryMenuRef(key: NotesEntityCategoryKey, el: unknown) {
+  categoryMenuRefs.value[key] = el instanceof HTMLElement ? el : null
 }
 
 const versionForImages = computed(

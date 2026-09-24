@@ -1,11 +1,11 @@
-import type {
-  BuildMetricSnapshot,
-  BuildSurveillanceTrigger,
+import {
   defaultBuildSurveillanceThresholds,
   hasConfiguredBuildSurveillanceThresholds,
   normalizeBuildSurveillanceThresholds,
   stableBuildAlertsFingerprint,
+  type BuildMetricSnapshot,
   type BuildSurveillanceThresholds,
+  type BuildSurveillanceTrigger,
 } from '~/utils/buildSurveillance'
 
 const THRESHOLDS_KEY = 'lelanation_build_surveillance_thresholds'

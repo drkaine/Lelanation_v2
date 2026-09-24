@@ -7,6 +7,7 @@ import {
   scoreboardObjectiveIconByKey,
   scoreboardObjectiveIconCdByKey,
 } from '~/utils/objectiveScoreboardIcons'
+import { objectiveDistributions } from '~/utils/objectiveDistributions'
 
 type OverviewTeamsData = Record<string, unknown> | null
 type OverviewSidesData = Record<string, unknown> | null
@@ -233,10 +234,10 @@ export function useStatisticsObjectivesPanel(options: StatisticsObjectivesPanelO
     }
     const teams = overviewTeamsData.value
     const sides = overviewSidesData.value
-    const obj = (teams?.objectives as Record<string, unknown> | undefined)?.[key]
-    if (obj && typeof obj === 'object' && 'distributionByWin' in obj) {
-      addBuckets((obj as { distributionByWin: Record<string, number> }).distributionByWin)
-      addBuckets((obj as { distributionByLoss: Record<string, number> }).distributionByLoss)
+    const dists = objectiveDistributions(teams?.objectives, key)
+    if (dists) {
+      addBuckets(dists.byWin)
+      addBuckets(dists.byLoss)
     }
     const sideObj = (sides?.objectivesBySideTable as Record<string, unknown> | undefined)?.[
       key
@@ -263,11 +264,9 @@ export function useStatisticsObjectivesPanel(options: StatisticsObjectivesPanelO
     const data = overviewTeamsData.value
     const matchCount = Number(data?.matchCount ?? 0)
     if (!matchCount) return '—'
-    const obj = (data?.objectives as Record<string, unknown> | undefined)?.[key]
-    if (!obj || typeof obj !== 'object' || !('distributionByWin' in obj)) return '—'
-    const dist = byWin
-      ? (obj as { distributionByWin: Record<string, number> }).distributionByWin
-      : (obj as { distributionByLoss: Record<string, number> }).distributionByLoss
+    const dists = objectiveDistributions(data?.objectives, key)
+    if (!dists) return '—'
+    const dist = byWin ? dists.byWin : dists.byLoss
     const games = aggregateObjectiveHistogramDist(key, dist)[count] ?? 0
     return formatObjectiveObtentionPercent(games, matchCount)
   }
@@ -307,11 +306,9 @@ export function useStatisticsObjectivesPanel(options: StatisticsObjectivesPanelO
     const data = overviewTeamsData.value
     const matchCount = Number(data?.matchCount ?? 0)
     if (!matchCount) return []
-    const obj = (data?.objectives as Record<string, unknown> | undefined)?.[key]
-    if (!obj || typeof obj !== 'object' || !('distributionByWin' in obj)) return []
-    const dist = byWin
-      ? (obj as { distributionByWin: Record<string, number> }).distributionByWin
-      : (obj as { distributionByLoss: Record<string, number> }).distributionByLoss
+    const dists = objectiveDistributions(data?.objectives, key)
+    if (!dists) return []
+    const dist = byWin ? dists.byWin : dists.byLoss
     return distributionPercentRows(dist, matchCount, key)
   }
 

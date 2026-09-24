@@ -4,6 +4,8 @@ import type { Worker } from 'bullmq';
 import { config } from './config/index.js';
 import { healthCheck, sql } from './db/client.js';
 import { appendUnifiedLog } from './logging/unifiedAppLog.js';
+import { installProcessErrorCapture } from './logging/errorCapture.js';
+import { recordProcessStart } from './monitoring/processFreshness.js';
 import {
   BackpressureMonitor,
   MatchFilter,
@@ -38,6 +40,9 @@ import {
   POLLER_LEADER_LOCK_KEY,
   POLLER_LEADER_LOCK_TTL_SEC,
 } from './poll-orchestration/pollerLeaderLock.js';
+
+installProcessErrorCapture('poller');
+void recordProcessStart('poller').catch((e) => console.warn('[poller-main] recordProcessStart failed:', e));
 
 const orchEnv = loadPollOrchestrationEnv();
 

@@ -316,6 +316,13 @@
       "when": 1751116800000,
       "tag": "0044_patch_16_17_riot_participant_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1751203200000,
+      "tag": "0045_participants_damage_to_champions_and_mitigated",
+      "breakpoints": true
     }
   ]
 }

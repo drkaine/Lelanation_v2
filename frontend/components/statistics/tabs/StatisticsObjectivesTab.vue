@@ -1326,10 +1326,18 @@ const mobileDrakeTypeWinrateRows = computed(() =>
   }))
 )
 
+type ObjectivesMobileSoulRow = {
+  id: string
+  title: string
+  iconSrc?: string | null
+  color?: string
+  metrics: ObjectivesMobileMetric[]
+}
+
 const mobileSoulObtentionRows = computed(() => {
   const L = mobileColLabels.value
   const globalTitle = String(p.t('statisticsPage.objectivesSoulGlobal'))
-  const rows = [
+  const rows: ObjectivesMobileSoulRow[] = [
     {
       id: 'soul-global',
       title: globalTitle,
@@ -1399,7 +1407,7 @@ const mobileSoulObtentionRows = computed(() => {
 const mobileSoulWinrateRows = computed(() => {
   const L = mobileColLabels.value
   const globalParts = soulGlobalSecureWinrateParts()
-  const rows = [
+  const rows: ObjectivesMobileSoulRow[] = [
     {
       id: 'soul-global-wr',
       title: String(p.t('statisticsPage.objectivesSoulGlobal')),

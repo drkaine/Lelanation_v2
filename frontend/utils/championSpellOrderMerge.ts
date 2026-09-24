@@ -45,7 +45,7 @@ function lastBasicSkillToMax(counts: Record<SpellOrderSkill, number>): SpellOrde
   const below = ([1, 2, 3] as const).filter(s => counts[s] < 5)
   if (below.length === 0) return null
   below.sort((a, b) => counts[b] - counts[a] || a - b)
-  return below[0]
+  return below[0] ?? null
 }
 
 /**
@@ -228,7 +228,8 @@ export function maxOrderSkills(displayOrder: number[]): SpellOrderSkillKey[] {
 
   if (maxed.length === 2) {
     const remaining = ([1, 2, 3] as const).filter(s => !maxed.includes(s))
-    if (remaining.length === 1) maxed.push(remaining[0])
+    const [last] = remaining
+    if (remaining.length === 1 && last !== undefined) maxed.push(last)
   }
 
   return maxed.map(s => skillKeyFromValue(s)).filter((k): k is SpellOrderSkillKey => k != null)
@@ -255,13 +256,16 @@ function inferPartialMaxOrder(displayOrder: number[]): SpellOrderSkillKey[] {
   const basics = ranked.filter(s => s !== 4)
   const hasR = ranked.includes(4)
   if (!basics.length) return hasR ? ['R'] : []
-  if (hasR && counts[4] >= counts[basics[0]]) {
-    return ['R', ...basics.slice(0, 2).map(s => skillKeyFromValue(s)!)].filter(Boolean)
+  const toKeys = (skills: readonly SpellOrderSkill[]): SpellOrderSkillKey[] =>
+    skills.map(skillKeyFromValue).filter((k): k is SpellOrderSkillKey => k != null)
+  const top = basics[0]
+  if (hasR && top !== undefined && counts[4] >= counts[top]) {
+    return ['R', ...toKeys(basics.slice(0, 2))]
   }
-  const out = basics.slice(0, 2).map(s => skillKeyFromValue(s)!)
+  const out = toKeys(basics.slice(0, 2))
   if (hasR) out.push('R')
-  else if (basics[2]) out.push(skillKeyFromValue(basics[2])!)
-  return out.filter((k): k is SpellOrderSkillKey => k != null)
+  else out.push(...toKeys(basics.slice(2, 3)))
+  return out
 }
 
 /** Récap d’une ligne (carte) : 3 premiers niveaux + ordre de max. */

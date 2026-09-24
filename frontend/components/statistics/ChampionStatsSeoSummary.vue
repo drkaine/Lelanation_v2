@@ -44,7 +44,7 @@ import { buildChampionRoleDistribution } from '~/utils/championRoleDistribution'
 
 const props = defineProps<{
   championName: string
-  season: string
+  season: number
   patch: string
   stats: ChampionStatsSummary
 }>()

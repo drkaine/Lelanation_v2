@@ -16,6 +16,7 @@ export type SpellHeaderStat = {
 
 type SpellLike = {
   key?: string
+  name?: string
   description?: string
   descriptionHtml?: string
   descriptionParsed?: string
@@ -29,7 +30,7 @@ type SpellLike = {
   rangeBurn?: string
   costType?: string
   effect?: Array<number[] | null>
-  datavalues?: Record<string, unknown>
+  datavalues?: unknown
 }
 
 export type FormatSpellTooltipOptions = {

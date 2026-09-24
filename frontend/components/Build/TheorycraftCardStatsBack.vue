@@ -49,7 +49,7 @@
     </div>
 
     <p
-      v-if="stats && (activeItemCount > 0 || stackCount > 0)"
+      v-if="stats && ((activeItemCount ?? 0) > 0 || (stackCount ?? 0) > 0)"
       class="theorycraft-card-stats-back__note"
     >
       {{ noteText }}

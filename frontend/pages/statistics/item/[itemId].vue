@@ -16,6 +16,7 @@ import {
 } from '~/utils/formatItemStats'
 import type { DailyTrendSnapshotPoint } from '~/composables/statistics/useStatisticsDailyTrendCharts'
 import type { ItemPurchaseOrderStats } from '~/components/statistics/StatisticsItemPurchaseTab.vue'
+import type { ItemTierBreakdown } from '~/components/statistics/StatisticsItemBreakdownCharts.vue'
 
 definePageMeta({ layout: 'default' })
 

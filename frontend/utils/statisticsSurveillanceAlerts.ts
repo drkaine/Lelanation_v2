@@ -244,7 +244,8 @@ export function normalizeSurveillanceAlertThresholds(
       : undefined
 
   const read = (key: NumericThresholdKey): number | null => {
-    const raw = value[key as keyof typeof value]
+    // Stored thresholds may hold '' from cleared form inputs.
+    const raw: unknown = value[key]
     if (raw === null || raw === undefined || raw === '') return null
     const n = Number(raw)
     return Number.isFinite(n) ? n : null

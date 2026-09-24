@@ -1,6 +1,8 @@
 import type { CalculatedStats, Item } from '@lelanation/shared-types'
 
-export type TheorycraftItemImageLookup = (itemId: string) => Pick<Item, 'image'> | null | undefined
+export type TheorycraftItemImageLookup = (
+  itemId: string
+) => { image: { full: string } } | null | undefined
 
 export interface TheorycraftPercentModifier {
   itemIds: string[]
@@ -170,7 +172,7 @@ export function shouldShowTheorycraftTransformedImage(
   if (!config?.supportsTransform) return false
   if (transformed) return true
   const threshold = config.transformThreshold ?? config.maxStacks
-  return stacks >= threshold
+  return threshold !== undefined && stacks >= threshold
 }
 
 export function resolveTheorycraftItemImageFull(

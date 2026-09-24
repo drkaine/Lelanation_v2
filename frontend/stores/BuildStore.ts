@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import type {
   Build,
   SubBuild,
-  type KaynForm,
+  KaynForm,
   Champion,
   Item,
   RuneSelection,

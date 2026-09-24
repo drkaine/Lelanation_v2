@@ -131,7 +131,7 @@ export function useHomePage() {
       return {
         ...bootstrap,
         patch,
-        season: bootstrap.season || lolSeasonFromGameVersion(patch),
+        season: bootstrap.season || String(lolSeasonFromGameVersion(patch)),
         recentBuilds,
         totalBuilds: bootstrap.totalBuilds ?? recentBuilds.length,
       }

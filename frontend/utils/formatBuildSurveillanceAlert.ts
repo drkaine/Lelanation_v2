@@ -1,7 +1,7 @@
-import type {
-  BuildSurveillanceTrigger,
+import {
   buildSurveillanceAlertTone,
   type BuildSurveillanceMetricId,
+  type BuildSurveillanceTrigger,
 } from './buildSurveillance'
 
 type TranslateFn = (key: string, params?: Record<string, string | number>) => string

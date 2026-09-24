@@ -195,7 +195,7 @@ export function navigateMatchupGuideCreateStepPath(
   if (nextIndex < 0 || nextIndex >= MATCHUP_GUIDE_STEP_ORDER.length) return null
 
   const nextStep = MATCHUP_GUIDE_STEP_ORDER[nextIndex]
-  if (!canNavigateToMatchupGuideStep(nextStep, context)) return null
+  if (!nextStep || !canNavigateToMatchupGuideStep(nextStep, context)) return null
   return nextStep
 }
 

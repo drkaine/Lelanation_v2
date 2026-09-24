@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { STATISTICS_MAIN_TAB_ORDER } from '~/constants/statisticsMainTabs'
+import { swapItems } from '~/utils/swapItems'
 
 const STORAGE_KEY = 'lelanation_statistics_ui'
 
@@ -225,13 +226,12 @@ export const useStatisticsUiStore = defineStore('statisticsUi', {
       persistState(this.$state)
     },
     moveTab(tab: StatisticsMainTab, direction: 'up' | 'down') {
-      const order = [...this.tabOrder]
+      const order = this.tabOrder
       const index = order.indexOf(tab)
       if (index < 0) return
       const targetIndex = direction === 'up' ? index - 1 : index + 1
       if (targetIndex < 0 || targetIndex >= order.length) return
-      ;[order[index], order[targetIndex]] = [order[targetIndex], order[index]]
-      this.tabOrder = order
+      this.tabOrder = swapItems(order, index, targetIndex)
       persistState(this.$state)
     },
     reorderTab(fromIndex: number, toIndex: number) {

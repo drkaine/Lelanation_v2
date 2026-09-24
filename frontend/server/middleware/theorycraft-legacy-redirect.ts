@@ -1,6 +1,6 @@
 export default defineEventHandler(event => {
   const url = event.node.req.url || '/'
-  const [path, queryString] = url.split('?')
+  const [path = '/', queryString] = url.split('?')
 
   if (!/^\/(?:en\/)?builds\/theorycraft\/?$/.test(path)) return
 

@@ -52,7 +52,7 @@ function formatValueSeries(values: number[], separator = ' / '): string {
 function valueAtRank(values: number[], rankIndex: number): number | null {
   if (values.length === 0) return null
   const value = values[Math.min(Math.max(rankIndex, 0), values.length - 1)]
-  return Number.isFinite(value) ? value : null
+  return value !== undefined && Number.isFinite(value) ? value : null
 }
 
 function formatValueAtRank(values: number[], rankIndex: number): string {
@@ -283,7 +283,7 @@ function ratioAtRank(coefficient: number[] | number, rankIndex: number): number 
   if (Array.isArray(coefficient)) {
     if (coefficient.length === 0) return 0
     const value = coefficient[Math.min(rankIndex, coefficient.length - 1)]
-    return Number.isFinite(value) ? value : 0
+    return value !== undefined && Number.isFinite(value) ? value : 0
   }
   return Number.isFinite(coefficient) ? coefficient : 0
 }
@@ -388,7 +388,7 @@ function isPercentLikeCalculation(calculation: TheorycraftSpellCalculation): boo
     return true
   }
   const base = calculation.baseValues[0]
-  return Number.isFinite(base) && Math.abs(base) > 0 && Math.abs(base) < 1
+  return base !== undefined && Number.isFinite(base) && Math.abs(base) > 0 && Math.abs(base) < 1
 }
 
 function calculationShouldDisplayWithPercentSuffix(
@@ -844,9 +844,8 @@ function resolveExpression(vars: Map<string, string>, expressionRaw: string): st
     )
   if (!opMatch) return null
 
-  const leftRaw = opMatch[1]
-  const operator = opMatch[2]
-  const rightRaw = opMatch[3]
+  const [, leftRaw, operator, rightRaw] = opMatch
+  if (leftRaw === undefined || operator === undefined || rightRaw === undefined) return null
   const leftVar = lookupVar(vars, leftRaw)
   const rightVar = lookupVar(vars, rightRaw)
   const parseNum = (raw: string): number => {

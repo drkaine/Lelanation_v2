@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
+import { beforeEach, describe, expect, it } from 'vitest'
 import type { ChampionMiscStatRow } from '../championBaseStatsFromJson'
 import {
   championMiscRowMatchesSearch,
@@ -79,6 +80,9 @@ describe('expandKledMiscStatRows', () => {
 })
 
 describe('championMiscRowMatchesSearch', () => {
+  // Champion search goes through the multilingual Pinia store.
+  beforeEach(() => setActivePinia(createPinia()))
+
   const rows = expandKledMiscStatRows(baseKledRow, { passive: kledPassive })
 
   it('filters by variant-specific terms', () => {

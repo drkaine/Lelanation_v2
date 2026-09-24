@@ -61,7 +61,7 @@ watch(column, (col, prev) => {
         </label>
         <StatisticsTableHelpTooltip
           v-if="helpText"
-          :aria-label="helpAriaLabel || helpText"
+          :label="helpAriaLabel || helpText"
           :text="helpText"
           :secondary-text="helpSecondaryText"
           align="end"

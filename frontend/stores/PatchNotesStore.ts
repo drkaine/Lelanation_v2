@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
-import type { Locale } from '~/types/locale'
+import type { JsonFetcher } from '~/utils/jsonFetcher'
 
 export type ChangeType = 'buff' | 'nerf' | 'adjustment' | 'new' | 'removed' | 'text'
 export type EntityCategory =
@@ -45,7 +45,7 @@ export interface PatchSummaryImage {
 
 export interface PatchData {
   patchVersion: string
-  locale: Locale
+  locale: string
   scrapedAt: string
   url: string
   summaryImage?: PatchSummaryImage
@@ -133,7 +133,7 @@ function getPatchJsonUrl(version: string, patchLocale: string): string {
   return `${getPatchNotesBaseUrl()}/${version}/patch-${version}-${patchLocale}.json`
 }
 
-type PatchNotesFetcher = (input: string, init?: RequestInit) => Promise<unknown>
+type PatchNotesFetcher = JsonFetcher
 
 async function fetchPatchJson(url: string, fetcher?: PatchNotesFetcher): Promise<unknown> {
   if (fetcher) {

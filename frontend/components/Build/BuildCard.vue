@@ -717,9 +717,7 @@
                 :title="
                   sheetTooltip(bootsItems[0] ? getItemDisplayName(bootsItems[0]) : '', 'Boots')
                 "
-                @error="
-                  onBuildItemImageError($event, bootsItems[0], buildItems.indexOf(bootsItems[0]))
-                "
+                @error="onSingleBootsImageError"
                 @mouseenter="
                   onSheetElementEnter($event, 'item', bootsItems[0] ?? { id: '' }, 'Boots')
                 "
@@ -969,11 +967,7 @@
                         : t('skills.select')
                   : undefined
               "
-              @click="
-                activeSkillDropdown.kind === 'first'
-                  ? toggleFirstThreeUp(activeSkillDropdown.index, spell.key)
-                  : toggleSkillUpOrder(activeSkillDropdown.index, spell.key)
-              "
+              @click="pickActiveSkillDropdown(spell.key)"
             >
               <img
                 :src="
@@ -1170,13 +1164,7 @@
                       "
                       :alt="sheetElementTooltipResolved.item.name"
                       class="item-tooltip-image"
-                      @error="
-                        handleGameItemImageError(
-                          $event,
-                          version.value,
-                          sheetElementTooltipResolved.item.image.full
-                        )
-                      "
+                      @error="onSheetTooltipItemImageError"
                     />
                     <div class="item-tooltip-text">
                       <div class="item-tooltip-name">
@@ -2031,7 +2019,7 @@ const activeBuilderRegion = computed((): 'champion' | 'items' | 'runes' | null =
   const path = route.path
   if (path.includes('/champion')) return 'champion'
   if (path.includes('/rune')) return 'runes'
-  if (path.includes('/item')) return 'item'
+  if (path.includes('/item')) return 'items'
   return null
 })
 
@@ -3440,7 +3428,7 @@ const hasSkillOrderUps = computed(() => {
     ...(Array.isArray(skillOrder.firstThreeUps) ? skillOrder.firstThreeUps : []),
     ...(Array.isArray(skillOrder.skillUpOrder) ? skillOrder.skillUpOrder : []),
   ]
-  return slots.some(entry => entry != null && entry !== '')
+  return slots.some(entry => Boolean(entry))
 })
 
 const selectedSkillOrderAbilityKeys = computed(() => {
@@ -3486,23 +3474,36 @@ const activeSkillDropdown = computed(() => {
   if (id.startsWith('first-')) {
     const index = Number.parseInt(id.replace('first-', ''), 10)
     if (!Number.isFinite(index)) return null
-    return {
-      kind: 'first' as const,
-      index,
-      slot: firstThreeUpSlots.value[index],
-    }
+    const slot = firstThreeUpSlots.value[index]
+    return slot ? { kind: 'first' as const, index, slot } : null
   }
   if (id.startsWith('order-')) {
     const index = Number.parseInt(id.replace('order-', ''), 10)
     if (!Number.isFinite(index)) return null
-    return {
-      kind: 'order' as const,
-      index,
-      slot: skillOrderSlots.value[index],
-    }
+    const slot = skillOrderSlots.value[index]
+    return slot ? { kind: 'order' as const, index, slot } : null
   }
   return null
 })
+
+function onSheetTooltipItemImageError(event: Event) {
+  const resolved = sheetElementTooltipResolved.value
+  if (resolved?.type === 'item') {
+    handleGameItemImageError(event, version.value, resolved.item.image.full)
+  }
+}
+
+function onSingleBootsImageError(event: Event) {
+  const boots = bootsItems.value[0]
+  if (boots) onBuildItemImageError(event, boots, buildItems.value.indexOf(boots))
+}
+
+function pickActiveSkillDropdown(spellKey: AbilityKey) {
+  const active = activeSkillDropdown.value
+  if (!active) return
+  if (active.kind === 'first') toggleFirstThreeUp(active.index, spellKey)
+  else toggleSkillUpOrder(active.index, spellKey)
+}
 
 const skillDropdownFixedStyle = computed((): CSSProperties | null => {
   const rect = skillDropdownAnchorRect.value

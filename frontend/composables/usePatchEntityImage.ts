@@ -269,8 +269,8 @@ export function usePatchEntityImage(entity: () => PatchEntity) {
 
   function parseEntityDisplayName(name: string): string {
     const honoredGuest = parseHonoredGuestChampionName(name)
-    const improvementMatch = honoredGuest.match(/^am[eé]lioration\s*-\s*(.+)$/i)
-    if (improvementMatch) return improvementMatch[1].trim()
+    const improvedName = honoredGuest.match(/^am[eé]lioration\s*-\s*(.+)$/i)?.[1]
+    if (improvedName) return improvedName.trim()
     return honoredGuest
   }
 

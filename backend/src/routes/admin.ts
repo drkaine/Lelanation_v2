@@ -17,6 +17,7 @@ import { runDataDragonSyncOnce } from '../cron/dataDragonSync.js'
 import { runYouTubeSyncOnce } from '../cron/youtubeSync.js'
 import { runCommunityDragonSyncOnce } from '../cron/communityDragonSync.js'
 import { FileManager } from '../utils/fileManager.js'
+import { getMonitoringService, monitoringWebhookUrl } from '../monitoring/monitoringRuntime.js'
 import {
   readUnifiedLogEntries,
   deleteUnifiedLogsInRange,
@@ -642,6 +643,39 @@ router.post('/client-log', async (req, res) => {
   } catch (err) {
     return res.status(500).json({ ok: false, error: (err as Error).message })
   }
+})
+
+// --- Monitoring (incidents, alertes Discord, récap quotidien) ---
+router.get('/monitoring', async (_req, res) => {
+  try {
+    const snapshot = await getMonitoringService().snapshot()
+    return res.json({ ...snapshot, webhookConfigured: monitoringWebhookUrl() !== null })
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+router.post('/monitoring/check', async (_req, res) => {
+  try {
+    const notifications = await getMonitoringService().runCheck()
+    return res.json({ ok: true, notifications: notifications.length })
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+router.post('/monitoring/recap', async (_req, res) => {
+  try {
+    const recap = await getMonitoringService().runDailyRecap()
+    return res.json({ ok: true, status: recap.status })
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+router.post('/monitoring/test-alert', async (_req, res) => {
+  const sent = await getMonitoringService().sendTestAlert()
+  return res.status(sent ? 200 : 502).json({ ok: sent })
 })
 
 /** Trigger a cron job manually (dataDragonSync, youtubeSync, communityDragonSync). */

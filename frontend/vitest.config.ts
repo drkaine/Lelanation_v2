@@ -1,12 +1,13 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vitest/config'
 import tsconfigPaths from 'vite-tsconfig-paths'
 
 const frontendRoot = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
-  plugins: [tsconfigPaths()],
+  plugins: [vue(), tsconfigPaths()],
   resolve: {
     alias: {
       '~': frontendRoot,

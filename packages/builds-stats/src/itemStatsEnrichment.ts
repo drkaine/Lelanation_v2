@@ -123,6 +123,7 @@ export function parseStatsFromItemDescription(
     );
     for (const part of parts) {
       const rawValue = part[1];
+      if (rawValue === undefined) continue;
       const percentInValue = Boolean(part[2]);
       const rawLabel = part[3] || "";
       const numericValue = Number.parseFloat(rawValue.replace(",", "."));
