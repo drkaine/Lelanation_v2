@@ -193,6 +193,7 @@ import {
   type ItemShopCategorySortMode,
   type ItemShopRoleId,
 } from '~/utils/itemShopUtils'
+import { riotLanguage } from '~/utils/riotLanguage'
 
 const itemsStore = useItemsStore()
 const { locale, t } = useI18n()
@@ -209,7 +210,7 @@ const showGoldEfficiency = ref(false)
 const selectedItemId = ref<string | null>(null)
 const categorySortMode = ref<ItemShopCategorySortMode>('legendary-first')
 
-const riotLocale = computed(() => (locale.value === 'en' ? 'en_US' : 'fr_FR'))
+const riotLocale = computed(() => riotLanguage(locale.value))
 
 const {
   tooltipsEnabled,

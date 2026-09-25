@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useItemsStore } from '~/stores/ItemsStore'
 import { useVersionStore } from '~/stores/VersionStore'
-import { useStatisticsUiStore } from '~/stores/StatisticsUiStore'
 import { apiUrl } from '~/utils/apiUrl'
 import { getItemImageUrl } from '~/utils/imageUrl'
 import { getRankedEmblemUrl } from '~/utils/rankedEmblem'
@@ -17,6 +16,9 @@ import {
 import type { DailyTrendSnapshotPoint } from '~/composables/statistics/useStatisticsDailyTrendCharts'
 import type { ItemPurchaseOrderStats } from '~/components/statistics/StatisticsItemPurchaseTab.vue'
 import type { ItemTierBreakdown } from '~/components/statistics/StatisticsItemBreakdownCharts.vue'
+import { riotLanguage } from '~/utils/riotLanguage'
+import StatisticsFiltersPanel from '~/components/statistics/StatisticsFiltersPanel.vue'
+import { RANK_TIERS } from '~/utils/rankTiers'
 
 definePageMeta({ layout: 'default' })
 
@@ -25,15 +27,6 @@ const router = useRouter()
 const { t, locale } = useI18n()
 const itemsStore = useItemsStore()
 const versionStore = useVersionStore()
-const statisticsUiStore = useStatisticsUiStore()
-const { filtersOpen } = storeToRefs(statisticsUiStore)
-const {
-  effectiveFiltersSheetMode,
-  showFiltersBackdrop,
-  lockPageScrollForFilters,
-  showDesktopFiltersTrigger,
-  filtersFabClass,
-} = useStatisticsFiltersSheetMode()
 
 const { currentVersion: gameVersion } = storeToRefs(versionStore)
 
@@ -64,19 +57,6 @@ const breakdown = ref<ItemTierBreakdown | null>(null)
 const purchasePending = ref(false)
 const purchaseError = ref<string | null>(null)
 const purchaseOrderStats = ref<ItemPurchaseOrderStats | null>(null)
-
-const RANK_TIERS = [
-  'IRON',
-  'BRONZE',
-  'SILVER',
-  'GOLD',
-  'PLATINUM',
-  'EMERALD',
-  'DIAMOND',
-  'MASTER',
-  'GRANDMASTER',
-  'CHALLENGER',
-] as const
 
 const roleOptions = [
   { value: 'TOP', label: 'Top', icon: '/icons/roles/top.png' },
@@ -187,19 +167,6 @@ function resetItemFilters(): void {
   trendChartFromDate.value = ''
 }
 
-function closeFilters(): void {
-  statisticsUiStore.setFiltersOpen(false)
-}
-
-function openFilters(): void {
-  statisticsUiStore.setFiltersOpen(true)
-}
-
-function toggleFiltersOpen(): void {
-  if (filtersOpen.value) closeFilters()
-  else openFilters()
-}
-
 function initItemHeaderBandOpen(): void {
   if (!import.meta.client) return
   const stored = sessionStorage.getItem(ITEM_HEADER_BAND_STORAGE_KEY)
@@ -213,12 +180,6 @@ function initItemHeaderBandOpen(): void {
 watch(itemHeaderBandOpen, open => {
   if (!import.meta.client) return
   sessionStorage.setItem(ITEM_HEADER_BAND_STORAGE_KEY, open ? '1' : '0')
-})
-
-watch([filtersOpen, lockPageScrollForFilters], () => {
-  if (!import.meta.client) return
-  const lock = lockPageScrollForFilters.value && filtersOpen.value
-  document.body.style.overflow = lock ? 'hidden' : ''
 })
 
 function appendRankAndDateFilters(params: URLSearchParams): void {
@@ -438,7 +399,7 @@ useHead({
 onMounted(async () => {
   initItemHeaderBandOpen()
   if (!versionStore.currentVersion) await versionStore.loadCurrentVersion()
-  const riotLocale = locale.value === 'fr' ? 'fr_FR' : 'en_US'
+  const riotLocale = riotLanguage(locale.value)
   await itemsStore.loadItems(riotLocale)
   await loadVersionsCatalog()
   // Filet de sécurité : si l'amorce SSR n'a pas fourni de données (ex. échec
@@ -449,10 +410,6 @@ onMounted(async () => {
     else await loadBreakdown()
   }
   nextTick(() => scrollActiveItemTabIntoView('auto'))
-})
-
-onUnmounted(() => {
-  if (import.meta.client) document.body.style.overflow = ''
 })
 </script>
 
@@ -493,243 +450,135 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="flex min-h-0 w-full min-w-0 flex-1">
-      <button
-        v-if="showDesktopFiltersTrigger"
-        type="button"
-        class="statistics-filters-desktop-trigger hidden shrink-0 touch-manipulation lg:sticky lg:top-4 lg:z-20 lg:mr-2 lg:flex lg:flex-col lg:items-center lg:gap-1 lg:self-start"
-        :aria-label="
-          filtersOpen ? t('statisticsPage.closeFilters') : t('statisticsPage.openFilters')
-        "
-        :aria-expanded="filtersOpen"
-        @click="toggleFiltersOpen"
-      >
-        <span class="filters-collapse-floating inline-flex" aria-hidden="true">
-          <svg
-            class="h-2 w-2 transition-transform duration-200"
-            :class="filtersOpen ? 'rotate-180' : ''"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M15 19l-7-7 7-7"
-            />
-          </svg>
-        </span>
-        <span
-          class="max-w-[4.5rem] text-center text-[10px] font-semibold leading-tight text-text/85"
-        >
-          {{ t('statisticsPage.filtersTitle') }}
-        </span>
-        <span
-          v-if="activeItemFiltersCount > 0"
-          class="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-bold text-background"
-        >
-          {{ activeItemFiltersCount }}
-        </span>
-      </button>
-
-      <div
-        v-if="filtersOpen && showFiltersBackdrop"
-        class="statistics-filters-backdrop bg-black/50"
-        aria-hidden="true"
-        role="presentation"
-        @click="closeFilters"
-      />
-
-      <aside
-        v-show="filtersOpen || !effectiveFiltersSheetMode"
-        :class="[
-          'statistics-filters-panel flex shrink-0 flex-col overflow-hidden',
-          effectiveFiltersSheetMode
-            ? 'statistics-filters-sheet fixed inset-x-0 bottom-0 top-auto z-[10051] max-h-[85vh] w-full rounded-t-2xl bg-surface shadow-lg'
-            : [
-                'hidden w-0 opacity-0 transition-[width,opacity] duration-200',
-                'lg:sticky lg:top-4 lg:z-0 lg:flex lg:h-auto lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:overflow-x-hidden',
-                filtersOpen ? 'lg:w-64 lg:opacity-100' : 'lg:w-0 lg:opacity-0',
-              ],
-        ]"
-        :role="effectiveFiltersSheetMode ? 'dialog' : undefined"
-        :aria-modal="effectiveFiltersSheetMode ? true : undefined"
-        :aria-label="t('statisticsPage.filtersTitle')"
-        @click.stop
-      >
-        <div
-          class="relative z-[1] flex shrink-0 items-center gap-2 border-b border-primary/25 p-2 lg:border-transparent lg:pb-2"
-        >
-          <button
-            type="button"
-            :class="[
-              'mx-auto mb-1 flex h-6 w-14 shrink-0 touch-manipulation items-center justify-center rounded-full',
-              effectiveFiltersSheetMode ? '' : 'lg:hidden',
-            ]"
-            :aria-label="t('statisticsPage.closeFilters')"
-            @click="closeFilters"
-          >
-            <span class="h-1 w-10 rounded-full bg-primary/40" aria-hidden="true" />
-          </button>
-          <h2 class="min-w-0 flex-1 truncate text-lg font-semibold text-text-accent">
-            {{ t('statisticsPage.filtersTitle') }}
-          </h2>
-          <button
-            type="button"
-            class="statistics-filters-reset ui-build-card-button inline-flex shrink-0 touch-manipulation items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold"
-            @click="resetItemFilters"
-          >
-            <span class="iconify i-mdi:refresh" aria-hidden="true" />
-            Reset
-          </button>
-        </div>
-        <div class="flex min-h-0 flex-1 flex-col overflow-y-auto p-2 lg:flex-none">
-          <div class="statistics-filters-fields flex flex-col gap-3">
-            <div>
-              <div class="mb-1 text-sm font-medium text-text">
-                {{ t('statisticsPage.overviewMatchesByDivision') }}
-              </div>
-              <div class="flex flex-wrap gap-1">
-                <button
-                  type="button"
-                  class="stats-division-btn rounded p-0.5 transition-colors"
-                  :class="
-                    filterRank.length === 0
-                      ? 'bg-info/20 ring-1 ring-info/60'
-                      : 'bg-black/20 hover:bg-white/10'
-                  "
-                  :title="t('statisticsPage.allRanks')"
-                  :aria-pressed="filterRank.length === 0"
-                  @mousedown.prevent
-                  @click.stop="selectAllDivisions()"
-                >
-                  <img
-                    src="/data/community-dragon/ranked-emblem/Unranked.png"
-                    :alt="t('statisticsPage.allRanks')"
-                    class="h-3 w-3 object-contain"
-                    :class="
-                      filterRank.length === 0
-                        ? 'saturate-110 opacity-100'
-                        : 'brightness-125 grayscale'
-                    "
-                    width="12"
-                    height="12"
-                  />
-                </button>
-                <button
-                  v-for="tier in RANK_TIERS"
-                  :key="tier"
-                  type="button"
-                  class="stats-division-btn rounded p-0.5 transition-colors"
-                  :class="
-                    filterRank.includes(tier)
-                      ? 'bg-info/20 ring-1 ring-info/60'
-                      : 'bg-black/20 hover:bg-white/10'
-                  "
-                  :title="formatDivisionLabel(tier)"
-                  :aria-pressed="filterRank.includes(tier)"
-                  @mousedown.prevent
-                  @click.stop="toggleRankFilter(tier)"
-                >
-                  <img
-                    v-if="getRankedEmblemUrl(tier)"
-                    loading="lazy"
-                    decoding="async"
-                    :src="getRankedEmblemUrl(tier)!"
-                    :alt="tier"
-                    class="h-3 w-3 object-contain"
-                    :class="
-                      filterRank.includes(tier)
-                        ? 'saturate-110 opacity-100'
-                        : 'brightness-125 grayscale'
-                    "
-                    width="12"
-                    height="12"
-                  />
-                </button>
-              </div>
-            </div>
-            <div>
-              <div class="mb-1 text-sm font-medium text-text">
-                {{ t('statisticsPage.filterRole') }}
-              </div>
-              <div class="flex flex-wrap gap-1">
-                <button
-                  type="button"
-                  class="stats-role-btn rounded p-0.5 transition-colors"
-                  :class="!filterRole ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10'"
-                  :title="t('statisticsPage.allRoles')"
-                  @click="selectAllRoles()"
-                >
-                  <img
-                    src="/icons/roles/all-role.png"
-                    :alt="t('statisticsPage.allRoles')"
-                    class="h-3 w-3 object-contain"
-                    :class="!filterRole ? 'saturate-110 opacity-100' : 'brightness-125 grayscale'"
-                    width="12"
-                    height="12"
-                  />
-                </button>
-                <button
-                  v-for="r in roleOptions"
-                  :key="r.value"
-                  type="button"
-                  class="stats-role-btn rounded p-0.5 transition-colors"
-                  :class="filterRole === r.value ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10'"
-                  :title="r.label"
-                  @click="toggleRoleFilter(r)"
-                >
-                  <img
-                    loading="lazy"
-                    decoding="async"
-                    :src="r.icon"
-                    :alt="r.label"
-                    class="h-3 w-3 object-contain"
-                    :class="
-                      filterRole === r.value
-                        ? 'saturate-110 opacity-100'
-                        : 'brightness-125 grayscale'
-                    "
-                    width="12"
-                    height="12"
-                  />
-                </button>
-              </div>
-            </div>
-            <div>
-              <label
-                for="item-stats-chart-from-date"
-                class="mb-1 block text-sm font-medium text-text"
-              >
-                {{ t('statisticsPage.championStatsTrendFromDate') }}
-              </label>
-              <input
-                id="item-stats-chart-from-date"
-                v-model="trendChartFromDate"
-                type="date"
-                class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+    <StatisticsFiltersPanel
+      :active-filters-count="activeItemFiltersCount"
+      main-class="item-page-main min-w-0 flex-1 p-4 max-lg:px-0 max-lg:py-2 max-lg:pb-20 lg:px-3 lg:pb-4 lg:pt-0"
+      @reset="resetItemFilters"
+    >
+      <div class="statistics-filters-fields flex flex-col gap-3">
+        <div>
+          <div class="mb-1 text-sm font-medium text-text">
+            {{ t('statisticsPage.overviewMatchesByDivision') }}
+          </div>
+          <div class="flex flex-wrap gap-1">
+            <button
+              type="button"
+              class="stats-division-btn rounded p-0.5 transition-colors"
+              :class="
+                filterRank.length === 0
+                  ? 'bg-info/20 ring-1 ring-info/60'
+                  : 'bg-black/20 hover:bg-white/10'
+              "
+              :title="t('statisticsPage.allRanks')"
+              :aria-pressed="filterRank.length === 0"
+              @mousedown.prevent
+              @click.stop="selectAllDivisions()"
+            >
+              <img
+                src="/data/community-dragon/ranked-emblem/Unranked.png"
+                :alt="t('statisticsPage.allRanks')"
+                class="h-3 w-3 object-contain"
+                :class="
+                  filterRank.length === 0 ? 'saturate-110 opacity-100' : 'brightness-125 grayscale'
+                "
+                width="12"
+                height="12"
               />
-              <p class="mt-0.5 text-[10px] leading-snug text-text/55">
-                {{ t('statisticsPage.championStatsTrendFromDateHint') }}
-              </p>
-            </div>
+            </button>
+            <button
+              v-for="tier in RANK_TIERS"
+              :key="tier"
+              type="button"
+              class="stats-division-btn rounded p-0.5 transition-colors"
+              :class="
+                filterRank.includes(tier)
+                  ? 'bg-info/20 ring-1 ring-info/60'
+                  : 'bg-black/20 hover:bg-white/10'
+              "
+              :title="formatDivisionLabel(tier)"
+              :aria-pressed="filterRank.includes(tier)"
+              @mousedown.prevent
+              @click.stop="toggleRankFilter(tier)"
+            >
+              <img
+                v-if="getRankedEmblemUrl(tier)"
+                loading="lazy"
+                decoding="async"
+                :src="getRankedEmblemUrl(tier)!"
+                :alt="tier"
+                class="h-3 w-3 object-contain"
+                :class="
+                  filterRank.includes(tier)
+                    ? 'saturate-110 opacity-100'
+                    : 'brightness-125 grayscale'
+                "
+                width="12"
+                height="12"
+              />
+            </button>
           </div>
         </div>
-        <div class="shrink-0 border-t border-primary/25 p-3 lg:hidden">
-          <button
-            type="button"
-            class="statistics-filters-mobile-close lg:hidden"
-            @click="closeFilters"
-          >
-            {{ t('statisticsPage.closeFilters') }}
-          </button>
+        <div>
+          <div class="mb-1 text-sm font-medium text-text">
+            {{ t('statisticsPage.filterRole') }}
+          </div>
+          <div class="flex flex-wrap gap-1">
+            <button
+              type="button"
+              class="stats-role-btn rounded p-0.5 transition-colors"
+              :class="!filterRole ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10'"
+              :title="t('statisticsPage.allRoles')"
+              @click="selectAllRoles()"
+            >
+              <img
+                src="/icons/roles/all-role.png"
+                :alt="t('statisticsPage.allRoles')"
+                class="h-3 w-3 object-contain"
+                :class="!filterRole ? 'saturate-110 opacity-100' : 'brightness-125 grayscale'"
+                width="12"
+                height="12"
+              />
+            </button>
+            <button
+              v-for="r in roleOptions"
+              :key="r.value"
+              type="button"
+              class="stats-role-btn rounded p-0.5 transition-colors"
+              :class="filterRole === r.value ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10'"
+              :title="r.label"
+              @click="toggleRoleFilter(r)"
+            >
+              <img
+                loading="lazy"
+                decoding="async"
+                :src="r.icon"
+                :alt="r.label"
+                class="h-3 w-3 object-contain"
+                :class="
+                  filterRole === r.value ? 'saturate-110 opacity-100' : 'brightness-125 grayscale'
+                "
+                width="12"
+                height="12"
+              />
+            </button>
+          </div>
         </div>
-      </aside>
-
-      <div
-        class="item-page-main min-w-0 flex-1 p-4 max-lg:px-0 max-lg:py-2 max-lg:pb-20 lg:px-3 lg:pb-4 lg:pt-0"
-      >
+        <div>
+          <label for="item-stats-chart-from-date" class="mb-1 block text-sm font-medium text-text">
+            {{ t('statisticsPage.championStatsTrendFromDate') }}
+          </label>
+          <input
+            id="item-stats-chart-from-date"
+            v-model="trendChartFromDate"
+            type="date"
+            class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+          />
+          <p class="mt-0.5 text-[10px] leading-snug text-text/55">
+            {{ t('statisticsPage.championStatsTrendFromDateHint') }}
+          </p>
+        </div>
+      </div>
+      <template #main>
         <div class="w-full">
           <div
             v-if="!Number.isFinite(itemId)"
@@ -904,27 +753,8 @@ onUnmounted(() => {
             {{ t('statisticsPage.loading') }}
           </div>
         </div>
-      </div>
-    </div>
-
-    <button
-      v-if="!filtersOpen"
-      type="button"
-      :class="[
-        'statistics-filters-fab fixed bottom-4 left-1/2 z-[58] flex -translate-x-1/2 items-center gap-2',
-        filtersFabClass,
-      ]"
-      :aria-label="t('statisticsPage.openFilters')"
-      @click="openFilters"
-    >
-      {{ t('statisticsPage.filtersTitle') }}
-      <span
-        v-if="activeItemFiltersCount > 0"
-        class="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-bold text-background"
-      >
-        {{ activeItemFiltersCount }}
-      </span>
-    </button>
+      </template>
+    </StatisticsFiltersPanel>
   </div>
 </template>
 

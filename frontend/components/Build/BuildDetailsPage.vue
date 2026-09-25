@@ -421,6 +421,7 @@ import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import type { Build, SubBuild } from '~/types/build'
 import { useClientHydrated } from '~/composables/useClientHydrated'
 import { buildHasAnyNotes } from '~/utils/buildNotes'
+import { riotLanguage } from '~/utils/riotLanguage'
 
 const props = defineProps<{ buildId: string; initialBuild?: Build | null }>()
 
@@ -436,7 +437,7 @@ const runesStore = useRunesStore()
 const summonerSpellsStore = useSummonerSpellsStore()
 const localePath = useLocalePath()
 const { t, locale } = useI18n()
-const riotLocale = computed(() => (locale.value === 'en' ? 'en_US' : 'fr_FR'))
+const riotLocale = computed(() => riotLanguage(locale.value))
 const route = useRoute()
 const router = useRouter()
 const { hydrated } = useClientHydrated()

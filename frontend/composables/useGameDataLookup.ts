@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n'
 import { useItemsStore } from '~/stores/ItemsStore'
 import { useRunesStore } from '~/stores/RunesStore'
 import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
+import { riotLanguage } from '~/utils/riotLanguage'
 
 /**
  * Centralized game-data lookup composable.
@@ -12,7 +13,7 @@ import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
  */
 export function useGameDataLookup() {
   const { locale } = useI18n()
-  const riotLocale = computed(() => (locale.value === 'fr' ? 'fr_FR' : 'en_US'))
+  const riotLocale = computed(() => riotLanguage(locale.value))
 
   const itemsStore = useItemsStore()
   const runesStore = useRunesStore()

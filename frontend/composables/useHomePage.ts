@@ -7,6 +7,7 @@ import { useRunesStore } from '~/stores/RunesStore'
 import { useVersionStore } from '~/stores/VersionStore'
 import { lolSeasonFromGameVersion } from '~/utils/lolSeason'
 import { useSiteUrl } from '~/composables/useSiteUrl'
+import { riotLanguage } from '~/utils/riotLanguage'
 
 export type HomeTierListRow = {
   rank: number
@@ -102,7 +103,7 @@ export function useHomePage() {
   const itemsStore = useItemsStore()
   const runesStore = useRunesStore()
 
-  const riotLocale = computed(() => (locale.value === 'en' ? 'en_US' : 'fr_FR'))
+  const riotLocale = computed(() => riotLanguage(locale.value))
 
   const { data: homeData, pending } = useAsyncData(
     () => `home-page-${locale.value}`,

@@ -8,8 +8,7 @@ import { lolSeasonFromGameVersion } from '~/utils/lolSeason'
 import { getChampionImageUrl } from '~/utils/imageUrl'
 import { breadcrumbJsonLd, itemListJsonLd } from '~/utils/jsonLd'
 import { useSiteUrl } from '~/composables/useSiteUrl'
-
-const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
+import { riotLanguage } from '~/utils/riotLanguage'
 
 export function championBuildsPath(slug: string): string {
   return `/champion/${slug.toLowerCase()}/builds`
@@ -29,7 +28,7 @@ export function useChampionBuildsPage() {
     return String(raw ?? '').toLowerCase()
   })
 
-  const riotLocale = computed(() => getRiotLanguage(locale.value))
+  const riotLocale = computed(() => riotLanguage(locale.value))
   const lolSeason = computed(() => lolSeasonFromGameVersion(gameVersion.value))
   const canonicalPath = computed(() => championBuildsPath(championSlug.value))
 

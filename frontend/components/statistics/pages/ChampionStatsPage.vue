@@ -1922,6 +1922,15 @@ import { useOgMetaTags } from '~/composables/useOgMetaTags'
 import { lolSeasonFromGameVersion } from '~/utils/lolSeason'
 import { getFallbackGameVersion } from '~/config/version'
 import { compareVersionsDesc, normalizeVersionToPrefix } from '~/utils/statistics/statsVersion'
+import { riotLanguage } from '~/utils/riotLanguage'
+import { RANK_TIERS } from '~/utils/rankTiers'
+import {
+  compareRankTiers,
+  RANK_TIER_COLORS,
+  normalizeRankTier,
+  smoothSeries,
+  svgLinePath,
+} from '~/utils/statistics/trendChart'
 const StatisticsRunesTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsRunesTab.vue')
 )
@@ -1960,7 +1969,7 @@ const itemsStore = useItemsStore()
 const runesStore = useRunesStore()
 const summonerSpellsStore = useSummonerSpellsStore()
 const { version: gameVersion } = useGameVersion()
-const riotLocale = computed(() => (locale.value === 'fr' ? 'fr_FR' : 'en_US'))
+const riotLocale = computed(() => riotLanguage(locale.value))
 const championRouteParam = computed(() => {
   const raw = route.params.slug
   return Array.isArray(raw) ? String(raw[0] ?? '') : String(raw ?? '')
@@ -2458,18 +2467,6 @@ const filterRole = ref('')
 /** Versions chargées depuis l’overview pour le filtre (version + matchCount). */
 const versionsFromOverview = ref<Array<{ version: string; matchCount: number }>>([])
 const championSearchQueryPlaceholder = ref('')
-const RANK_TIERS = [
-  'IRON',
-  'BRONZE',
-  'SILVER',
-  'GOLD',
-  'PLATINUM',
-  'EMERALD',
-  'DIAMOND',
-  'MASTER',
-  'GRANDMASTER',
-  'CHALLENGER',
-]
 const rankTiers = RANK_TIERS
 
 function formatDivisionLabel(tier: string): string {
@@ -4010,29 +4007,6 @@ const durationExtraTooltip = ref<{
   mouseY: number
 } | null>(null)
 
-const RANK_COLOR_MAP: Record<string, string> = {
-  IRON: '#6b7280',
-  BRONZE: '#92400e',
-  SILVER: '#94a3b8',
-  GOLD: '#a16207',
-  PLATINUM: '#0f766e',
-  EMERALD: '#166534',
-  DIAMOND: '#1d4ed8',
-  MASTER: '#6d28d9',
-  GRANDMASTER: '#991b1b',
-  CHALLENGER: '#9a3412',
-  GLOBAL: '#c084fc',
-}
-
-function normalizeRankTier(value: string): string {
-  const normalized = String(value || '')
-    .trim()
-    .toUpperCase()
-    .split('_')[0]!
-  if (!normalized || normalized === 'UNRANKED') return ''
-  return normalized
-}
-
 function isoWeekBucket(dateIso: string): string {
   const d = new Date(`${dateIso}T00:00:00.000Z`)
   if (Number.isNaN(d.getTime())) return dateIso
@@ -4062,11 +4036,7 @@ const trendTiersFromFilterOrData = computed(() => {
   const fromData = Array.from(
     new Set(trendPoints.value.map(p => normalizeRankTier(p.rankTier)))
   ).filter(Boolean)
-  return fromData.sort(
-    (a, b) =>
-      (!RANK_TIERS.includes(a) ? 999 : RANK_TIERS.indexOf(a)) -
-      (!RANK_TIERS.includes(b) ? 999 : RANK_TIERS.indexOf(b))
-  )
+  return fromData.sort((a, b) => compareRankTiers(a, b))
 })
 
 const trendSelectedTiers = computed(() => trendTiersFromFilterOrData.value)
@@ -4078,11 +4048,7 @@ const durationDisplayTiers = computed(() => {
   const fromApi =
     durationByTierData.value?.series?.map(s => normalizeRankTier(s.rankTier)).filter(Boolean) ?? []
   const uniq = [...new Set(fromApi)]
-  return uniq.sort(
-    (a, b) =>
-      (!RANK_TIERS.includes(a) ? 999 : RANK_TIERS.indexOf(a)) -
-      (!RANK_TIERS.includes(b) ? 999 : RANK_TIERS.indexOf(b))
-  )
+  return uniq.sort((a, b) => compareRankTiers(a, b))
 })
 
 type TrendBucket = {
@@ -4166,24 +4132,6 @@ type TrendChartCard = {
   series: TrendSeries[]
   xTicks: Array<{ index: number; x: number; label: string }>
   yTicks: Array<{ value: number; y: number; label: string }>
-}
-
-function buildPath(points: Array<{ x: number; y: number }>): string {
-  if (points.length === 0) return ''
-  if (points.length === 1)
-    return `M ${points[0]!.x},${points[0]!.y} L ${points[0]!.x + 0.1},${points[0]!.y}`
-  return points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x},${p.y}`).join(' ')
-}
-
-function smoothSeries(values: number[], window = 3): number[] {
-  if (values.length <= 2) return values
-  const w = Math.max(1, window | 0)
-  return values.map((_, idx) => {
-    const from = Math.max(0, idx - (w - 1))
-    const slice = values.slice(from, idx + 1)
-    const sum = slice.reduce((acc, v) => acc + v, 0)
-    return slice.length ? sum / slice.length : values[idx]!
-  })
 }
 
 function metricValue(
@@ -4281,7 +4229,7 @@ const trendChartCards = computed<TrendChartCard[]>(() => {
       })
       return {
         tier,
-        color: RANK_COLOR_MAP[tier] ?? '#64748b',
+        color: RANK_TIER_COLORS[tier] ?? '#64748b',
         rawValues,
       }
     })
@@ -4299,7 +4247,7 @@ const trendChartCards = computed<TrendChartCard[]>(() => {
       if (rawValues.length) {
         pendingSeries.push({
           tier: 'GLOBAL',
-          color: RANK_COLOR_MAP.GLOBAL ?? '#c084fc',
+          color: RANK_TIER_COLORS.GLOBAL ?? '#c084fc',
           rawValues,
         })
       }
@@ -4346,7 +4294,7 @@ const trendChartCards = computed<TrendChartCard[]>(() => {
       return {
         tier: serie.tier,
         color: serie.color,
-        path: buildPath(points.map(p => ({ x: p.x, y: p.y }))),
+        path: svgLinePath(points.map(p => ({ x: p.x, y: p.y }))),
         points,
       }
     })
@@ -4437,11 +4385,7 @@ function buildDurationByTierChart(mode: DurationByTierChartMode): TrendChartCard
   const xAt = (index: number) =>
     TREND_CHART_PAD.left + (n <= 1 ? 0 : index / (n - 1)) * TREND_PLOT_W
 
-  const tiersOrdered = [...tiers].sort(
-    (a, b) =>
-      (!RANK_TIERS.includes(a) ? 999 : RANK_TIERS.indexOf(a)) -
-      (!RANK_TIERS.includes(b) ? 999 : RANK_TIERS.indexOf(b))
-  )
+  const tiersOrdered = [...tiers].sort((a, b) => compareRankTiers(a, b))
 
   type DurPendingSerie = {
     tier: string
@@ -4495,7 +4439,7 @@ function buildDurationByTierChart(mode: DurationByTierChartMode): TrendChartCard
       if (!hasData) return null
       return {
         tier,
-        color: RANK_COLOR_MAP[tier] ?? '#64748b',
+        color: RANK_TIER_COLORS[tier] ?? '#64748b',
         rawValues,
       }
     })
@@ -4565,7 +4509,7 @@ function buildDurationByTierChart(mode: DurationByTierChartMode): TrendChartCard
     if (hasData && rawValues.length) {
       pendingSeries.push({
         tier: 'GLOBAL',
-        color: RANK_COLOR_MAP.GLOBAL ?? '#c084fc',
+        color: RANK_TIER_COLORS.GLOBAL ?? '#c084fc',
         rawValues,
       })
     }
@@ -4605,7 +4549,7 @@ function buildDurationByTierChart(mode: DurationByTierChartMode): TrendChartCard
     return {
       tier: serie.tier,
       color: serie.color,
-      path: buildPath(points.map(p => ({ x: p.x, y: p.y }))),
+      path: svgLinePath(points.map(p => ({ x: p.x, y: p.y }))),
       points,
     }
   })

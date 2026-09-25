@@ -7,33 +7,13 @@ import {
   DAILY_TREND_PLOT_H,
   DAILY_TREND_PLOT_W,
 } from '~/composables/statistics/useStatisticsDailyTrendCharts'
-
-const RANK_TIERS = [
-  'IRON',
-  'BRONZE',
-  'SILVER',
-  'GOLD',
-  'PLATINUM',
-  'EMERALD',
-  'DIAMOND',
-  'MASTER',
-  'GRANDMASTER',
-  'CHALLENGER',
-] as const
-
-const RANK_COLOR_MAP: Record<string, string> = {
-  IRON: '#6b7280',
-  BRONZE: '#92400e',
-  SILVER: '#94a3b8',
-  GOLD: '#a16207',
-  PLATINUM: '#0f766e',
-  EMERALD: '#166534',
-  DIAMOND: '#1d4ed8',
-  MASTER: '#6d28d9',
-  GRANDMASTER: '#991b1b',
-  CHALLENGER: '#9a3412',
-  GLOBAL: '#c084fc',
-}
+import {
+  compareRankTiers,
+  RANK_TIER_COLORS,
+  normalizeRankTier,
+  smoothSeries,
+  svgLinePath,
+} from '~/utils/statistics/trendChart'
 
 export type ChampionDurationByTierData = {
   series: Array<{
@@ -64,33 +44,6 @@ export type DurationTrendChartCard = {
   }>
   xTicks: Array<{ index: number; x: number; label: string }>
   yTicks: Array<{ value: number; y: number; label: string }>
-}
-
-function normalizeRankTier(value: string): string {
-  const normalized = String(value || '')
-    .trim()
-    .toUpperCase()
-    .split('_')[0]!
-  if (!normalized || normalized === 'UNRANKED') return ''
-  return normalized
-}
-
-function buildPath(points: Array<{ x: number; y: number }>): string {
-  if (points.length === 0) return ''
-  if (points.length === 1)
-    return `M ${points[0]!.x},${points[0]!.y} L ${points[0]!.x + 0.1},${points[0]!.y}`
-  return points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x},${p.y}`).join(' ')
-}
-
-function smoothSeries(values: number[], window = 3): number[] {
-  if (values.length <= 2) return values
-  const w = Math.max(1, window | 0)
-  return values.map((_, idx) => {
-    const from = Math.max(0, idx - (w - 1))
-    const slice = values.slice(from, idx + 1)
-    const sum = slice.reduce((acc, v) => acc + v, 0)
-    return slice.length ? sum / slice.length : values[idx]!
-  })
 }
 
 export function useChampionDurationByTierCharts(options: {
@@ -126,29 +79,13 @@ export function useChampionDurationByTierCharts(options: {
       new Set(options.trendPoints.value.map(p => normalizeRankTier(p.rankTier)))
     ).filter(Boolean)
     if (fromTrend.length) {
-      return fromTrend.sort(
-        (a, b) =>
-          (!RANK_TIERS.includes(a as (typeof RANK_TIERS)[number])
-            ? 999
-            : RANK_TIERS.indexOf(a as (typeof RANK_TIERS)[number])) -
-          (!RANK_TIERS.includes(b as (typeof RANK_TIERS)[number])
-            ? 999
-            : RANK_TIERS.indexOf(b as (typeof RANK_TIERS)[number]))
-      )
+      return fromTrend.sort((a, b) => compareRankTiers(a, b))
     }
     const fromApi =
       options.durationData.value?.series?.map(s => normalizeRankTier(s.rankTier)).filter(Boolean) ??
       []
     const uniq = [...new Set(fromApi)]
-    return uniq.sort(
-      (a, b) =>
-        (!RANK_TIERS.includes(a as (typeof RANK_TIERS)[number])
-          ? 999
-          : RANK_TIERS.indexOf(a as (typeof RANK_TIERS)[number])) -
-        (!RANK_TIERS.includes(b as (typeof RANK_TIERS)[number])
-          ? 999
-          : RANK_TIERS.indexOf(b as (typeof RANK_TIERS)[number]))
-    )
+    return uniq.sort((a, b) => compareRankTiers(a, b))
   })
 
   function buildDurationByTierChart(mode: DurationChartMode): DurationTrendChartCard | null {
@@ -196,15 +133,7 @@ export function useChampionDurationByTierCharts(options: {
     const xAt = (index: number) =>
       DAILY_TREND_CHART_PAD.left + (n <= 1 ? 0 : index / (n - 1)) * DAILY_TREND_PLOT_W
 
-    const tiersOrdered = [...tiers].sort(
-      (a, b) =>
-        (!RANK_TIERS.includes(a as (typeof RANK_TIERS)[number])
-          ? 999
-          : RANK_TIERS.indexOf(a as (typeof RANK_TIERS)[number])) -
-        (!RANK_TIERS.includes(b as (typeof RANK_TIERS)[number])
-          ? 999
-          : RANK_TIERS.indexOf(b as (typeof RANK_TIERS)[number]))
-    )
+    const tiersOrdered = [...tiers].sort((a, b) => compareRankTiers(a, b))
 
     type DurPendingSerie = {
       tier: string
@@ -251,7 +180,7 @@ export function useChampionDurationByTierCharts(options: {
         if (!hasData) return null
         return {
           tier,
-          color: RANK_COLOR_MAP[tier] ?? '#64748b',
+          color: RANK_TIER_COLORS[tier] ?? '#64748b',
           rawValues,
         }
       })
@@ -321,7 +250,7 @@ export function useChampionDurationByTierCharts(options: {
       if (hasData && rawValues.length) {
         pendingSeries.push({
           tier: 'GLOBAL',
-          color: RANK_COLOR_MAP.GLOBAL ?? '#c084fc',
+          color: RANK_TIER_COLORS.GLOBAL ?? '#c084fc',
           rawValues,
         })
       }
@@ -361,7 +290,7 @@ export function useChampionDurationByTierCharts(options: {
       return {
         tier: serie.tier,
         color: serie.color,
-        path: buildPath(points.map(p => ({ x: p.x, y: p.y }))),
+        path: svgLinePath(points.map(p => ({ x: p.x, y: p.y }))),
         points,
       }
     })

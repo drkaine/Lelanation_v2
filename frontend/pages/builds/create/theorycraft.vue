@@ -199,23 +199,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, toRaw, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
-import type { Build, CalculatedStats } from '@lelanation/shared-types'
 import BuildCard from '~/components/Build/BuildCard.vue'
 import BuildMenuSteps from '~/components/Build/BuildMenuSteps.vue'
 import BuildSaveButton from '~/components/Build/BuildSaveButton.vue'
 import TheorycraftRuneStackPanel from '~/components/Build/TheorycraftRuneStackPanel.vue'
-import TheorycraftWorkspacePanel, {
-  type TheorycraftPanel,
-} from '~/components/Build/TheorycraftWorkspacePanel.vue'
-import { useChampionData } from '~/composables/useChampionData'
+import TheorycraftWorkspacePanel from '~/components/Build/TheorycraftWorkspacePanel.vue'
 import { useLayoutScaled } from '~/composables/useLayoutScaled'
+import {
+  cloneBuild,
+  theorycraftVsStorageKey,
+  useTheorycraftVs,
+} from '~/composables/useTheorycraftVs'
 import { useBuildStore } from '~/stores/BuildStore'
 import { theorycraftVsScope } from '~/utils/theorycraftStorageScope'
-import { useItemsStore } from '~/stores/ItemsStore'
 import { isBuilderCreateRoutePath, isTheorycraftRoutePath } from '~/utils/theorycraftRoute'
-import { toTheorycraftBuildStats } from '~/utils/theorycraftStats'
 
 definePageMeta({
   layout: false,
@@ -239,48 +238,45 @@ const localePath = useLocalePath()
 
 const hasChampion = computed(() => Boolean(buildStore.currentBuild?.champion))
 
-const itemsStore = useItemsStore()
-const { loadChampion } = useChampionData()
 const { isLayoutScaled } = useLayoutScaled()
 
-type TheorycraftSide = 'ally' | 'enemy'
-const THEORYCRAFT_VS_STATE_STORAGE_PREFIX = 'lelanation_theorycraft_vs_state_v1_'
-
-interface TheorycraftVsStoredState {
-  ally: Build | null
-  enemy: Build | null
-  activeSide: TheorycraftSide
-  allyDisplayedVariant?: 'main' | number
-}
-
-const activePanel = ref<TheorycraftPanel>('theorycraft')
-const theorycraftLevel = ref(18)
-const activeSide = ref<TheorycraftSide>('ally')
-const sideBuilds = ref<Record<TheorycraftSide, Build | null>>({
-  ally: null,
-  enemy: null,
-})
-const sideCalculatedStats = ref<Record<TheorycraftSide, CalculatedStats | null>>({
-  ally: null,
-  enemy: null,
-})
-const sidePanels = ref<Record<TheorycraftSide, TheorycraftPanel>>({
-  ally: 'theorycraft',
-  enemy: 'theorycraft',
-})
-const sideFlipped = ref<Record<TheorycraftSide, boolean>>({
-  ally: false,
-  enemy: false,
-})
-const sideBackFace = ref<Record<TheorycraftSide, 'stats' | 'description'>>({
-  ally: 'stats',
-  enemy: 'stats',
-})
 const highlightMissingFields = ref(false)
-const championData = ref<Record<string, unknown> | null>(null)
-const isHydratingVsState = ref(true)
 const vsSessionId = ref('')
-const allyDisplayedVariant = ref<'main' | number>('main')
+
+const vs = useTheorycraftVs({
+  storageKey: () => (vsSessionId.value ? theorycraftVsStorageKey(vsSessionId.value) : null),
+  scope: side => (vsSessionId.value ? theorycraftVsScope(vsSessionId.value, side) : null),
+  isActive: () => true,
+  t,
+})
+vs.isHydratingVsState.value = true
+
+const {
+  activePanel,
+  theorycraftLevel,
+  activeSide,
+  sideBuilds,
+  sideCalculatedStats,
+  sideFlipped,
+  sideBackFace,
+  championData,
+  allyDisplayedVariant,
+  championId,
+  maxChampionLevel,
+  theorycraftStats,
+  opponentTheorycraftStats,
+  opponentRawStats,
+  attackerRawStats,
+  activateSide,
+  statsFlipActive,
+  statsFlipTitle,
+  theorycraftPanelActive,
+  toggleDescriptionFlip,
+  toggleStatsFlip,
+  activateTheorycraft,
+  onSelectRegion,
+  onLevelSelectChange,
+} = vs
 
 const allyCardFlipped = computed({
   get: () => sideFlipped.value.ally,
@@ -301,305 +297,14 @@ const enemyCardBackFace = computed(() => sideBackFace.value.enemy)
 
 const theorycraftPanelTitle = computed(() => t('theorycraft.panel.theorycraftButton'))
 
-function cloneBuild(build: Build | null): Build | null {
-  if (!build) return null
-  try {
-    return JSON.parse(JSON.stringify(toRaw(build))) as Build
-  } catch {
-    return null
-  }
-}
-
-function createEmptyTheorycraftBuild(name: string): Build {
-  const now = new Date().toISOString()
-  return {
-    id: crypto.randomUUID(),
-    name,
-    author: '',
-    description: '',
-    visibility: 'public',
-    champion: null,
-    items: [],
-    runes: null,
-    shards: {
-      slot1: 5008,
-      slot2: 5008,
-      slot3: 5011,
-    },
-    summonerSpells: [null, null],
-    skillOrder: {
-      firstThreeUps: [null as any, null as any, null as any],
-      skillUpOrder: [null as any, null as any, null as any],
-    },
-    roles: [],
-    tags: [],
-    upvote: 0,
-    downvote: 0,
-    gameVersion: '',
-    createdAt: now,
-    updatedAt: now,
-    subBuilds: [],
-    descriptionMode: 'single',
-  } as Build
-}
-
-function persistActiveSideBuild() {
-  if (activeSide.value === 'ally') {
-    allyDisplayedVariant.value = buildStore.displayedVariant
-  }
-  sideBuilds.value[activeSide.value] = cloneBuild(buildStore.currentBuild)
-}
-
-function persistActiveSideStats() {
-  sideCalculatedStats.value[activeSide.value] = buildStore.calculatedStats
-    ? ({ ...buildStore.calculatedStats } as CalculatedStats)
-    : null
-}
-
-function loadSideBuild(side: TheorycraftSide) {
-  if (vsSessionId.value) {
-    buildStore.setTheorycraftStorageScope(theorycraftVsScope(vsSessionId.value, side))
-  }
-  const target = cloneBuild(sideBuilds.value[side])
-  if (!target) return
-  if (side === 'ally') {
-    buildStore.setCurrentBuild(target, { keepDisplayedVariant: true })
-    buildStore.displayedVariant = allyDisplayedVariant.value
-  } else {
-    buildStore.setCurrentBuild(target)
-  }
-  buildStore.reloadTheorycraftModifiers()
-}
-
-function vsStateStorageKey(): string | null {
-  return vsSessionId.value ? `${THEORYCRAFT_VS_STATE_STORAGE_PREFIX}${vsSessionId.value}` : null
-}
-
 function restoreBuilderBuildBeforeLeave(): void {
-  persistActiveSideBuild()
-  persistActiveSideStats()
+  vs.persistActiveSideBuild()
+  vs.persistActiveSideStats()
   activeSide.value = 'ally'
-  if (sideBuilds.value.ally) {
-    const ally = cloneBuild(sideBuilds.value.ally)
-    if (ally) {
-      buildStore.setCurrentBuild(ally, { keepDisplayedVariant: true })
-      buildStore.displayedVariant = allyDisplayedVariant.value
-    }
-  }
-  persistVsState()
+  const ally = cloneBuild(sideBuilds.value.ally)
+  if (ally) vs.setAllyInStore(ally)
+  vs.persistVsState()
 }
-
-function persistVsState() {
-  const key = vsStateStorageKey()
-  if (import.meta.server || !key) return
-  try {
-    const payload: TheorycraftVsStoredState = {
-      ally: cloneBuild(sideBuilds.value.ally),
-      enemy: cloneBuild(sideBuilds.value.enemy),
-      activeSide: activeSide.value,
-      allyDisplayedVariant: allyDisplayedVariant.value,
-    }
-    localStorage.setItem(key, JSON.stringify(payload))
-  } catch {
-    // ignore persistence errors
-  }
-}
-
-function loadVsState(): TheorycraftVsStoredState | null {
-  const key = vsStateStorageKey()
-  if (import.meta.server || !key) return null
-  try {
-    const raw = localStorage.getItem(key)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as Partial<TheorycraftVsStoredState>
-    const active = parsed.activeSide === 'enemy' ? 'enemy' : 'ally'
-    return {
-      ally: cloneBuild((parsed.ally as Build | null) ?? null),
-      enemy: cloneBuild((parsed.enemy as Build | null) ?? null),
-      activeSide: active,
-      allyDisplayedVariant:
-        parsed.allyDisplayedVariant === 'main' || typeof parsed.allyDisplayedVariant === 'number'
-          ? parsed.allyDisplayedVariant
-          : undefined,
-    }
-  } catch {
-    return null
-  }
-}
-
-function activateSide(side: TheorycraftSide) {
-  if (activeSide.value === side) return
-  persistActiveSideBuild()
-  persistActiveSideStats()
-  sidePanels.value[activeSide.value] = activePanel.value
-  activeSide.value = side
-  activePanel.value = sidePanels.value[side] ?? 'theorycraft'
-  if (!sideBuilds.value[side]) {
-    sideBuilds.value[side] = createEmptyTheorycraftBuild(
-      side === 'enemy' ? t('theorycraft.panel.enemyCard') : 'Build'
-    )
-  }
-  loadSideBuild(side)
-}
-
-function statsFlipActive(side: TheorycraftSide): boolean {
-  return sideFlipped.value[side] && sideBackFace.value[side] === 'stats'
-}
-
-function statsFlipTitle(side: TheorycraftSide): string {
-  return statsFlipActive(side) ? t('theorycraft.stats.showBuild') : t('theorycraft.stats.showStats')
-}
-
-function theorycraftPanelActive(side: TheorycraftSide): boolean {
-  return activeSide.value === side && activePanel.value === 'theorycraft'
-}
-
-function toggleDescriptionFlip(side: TheorycraftSide) {
-  if (activeSide.value !== side) activateSide(side)
-  if (sideFlipped.value[side] && sideBackFace.value[side] === 'description') {
-    sideFlipped.value = { ...sideFlipped.value, [side]: false }
-    return
-  }
-  sideBackFace.value = { ...sideBackFace.value, [side]: 'description' }
-  sideFlipped.value = { ...sideFlipped.value, [side]: true }
-}
-
-function toggleStatsFlip(side: TheorycraftSide) {
-  if (activeSide.value !== side) activateSide(side)
-  if (statsFlipActive(side)) {
-    sideFlipped.value = { ...sideFlipped.value, [side]: false }
-    return
-  }
-  sideBackFace.value = { ...sideBackFace.value, [side]: 'stats' }
-  sideFlipped.value = { ...sideFlipped.value, [side]: true }
-}
-
-function activateTheorycraft(side: TheorycraftSide) {
-  if (activeSide.value !== side) activateSide(side)
-  activePanel.value = 'theorycraft'
-  sidePanels.value[side] = 'theorycraft'
-}
-
-const championId = computed(() => buildStore.currentBuild?.champion?.id ?? null)
-
-const maxChampionLevel = computed(() => buildStore.maxStatsLevel)
-
-const theorycraftStats = computed(() => {
-  const build = buildStore.displayedBuild ?? buildStore.currentBuild
-  const stats = buildStore.calculatedStats
-  if (!build?.champion || !stats) return null
-  return toTheorycraftBuildStats(stats, build.champion, theorycraftLevel.value)
-})
-
-const opponentTheorycraftStats = computed(() => {
-  const opponentSide: TheorycraftSide = activeSide.value === 'ally' ? 'enemy' : 'ally'
-  const opponentBuild = sideBuilds.value[opponentSide]
-  const opponentRaw = sideCalculatedStats.value[opponentSide]
-  if (!opponentBuild?.champion || !opponentRaw) return null
-  return toTheorycraftBuildStats(
-    opponentRaw as any,
-    opponentBuild.champion as any,
-    theorycraftLevel.value
-  )
-})
-
-const opponentRawStats = computed(() => {
-  const opponentSide: TheorycraftSide = activeSide.value === 'ally' ? 'enemy' : 'ally'
-  return sideCalculatedStats.value[opponentSide]
-})
-
-const attackerRawStats = computed(() => sideCalculatedStats.value[activeSide.value] ?? null)
-
-function onSelectRegion(side: TheorycraftSide, region: 'champion' | 'items' | 'runes') {
-  if (activeSide.value !== side) activateSide(side)
-  activePanel.value = region
-  sidePanels.value[side] = region
-}
-
-function onLevelChange(level: number) {
-  theorycraftLevel.value = level
-  buildStore.setStatsLevel(level)
-}
-
-function onLevelSelectChange(event: Event) {
-  const value = Number((event.target as HTMLSelectElement).value)
-  if (Number.isFinite(value)) onLevelChange(value)
-}
-
-async function loadChampionDataForPanel() {
-  const id = championId.value
-  if (!id) {
-    championData.value = null
-    return
-  }
-  championData.value = await loadChampion(id)
-  if (championData.value) {
-    buildStore.mergeTheorycraftChampionDetail(championData.value)
-  }
-}
-
-watch(championId, () => {
-  loadChampionDataForPanel().catch(() => undefined)
-})
-
-watch(
-  () => buildStore.displayedVariant,
-  variant => {
-    if (isHydratingVsState.value || activeSide.value !== 'ally') return
-    allyDisplayedVariant.value = variant
-  }
-)
-
-watch(
-  () => buildStore.currentBuild,
-  build => {
-    sideBuilds.value[activeSide.value] = cloneBuild(build)
-  },
-  { deep: true }
-)
-
-watch(
-  () => buildStore.calculatedStats,
-  stats => {
-    sideCalculatedStats.value[activeSide.value] = stats ? ({ ...stats } as CalculatedStats) : null
-  },
-  { deep: true }
-)
-
-watch(
-  [sideBuilds, activeSide],
-  () => {
-    if (isHydratingVsState.value) return
-    persistVsState()
-  },
-  { deep: true }
-)
-
-watch(activePanel, panel => {
-  sidePanels.value[activeSide.value] = panel
-})
-
-watch(
-  () => buildStore.statsLevel,
-  level => {
-    theorycraftLevel.value = level
-  }
-)
-
-watch(maxChampionLevel, max => {
-  if (theorycraftLevel.value > max) {
-    buildStore.setStatsLevel(max)
-  }
-})
-
-watch(
-  () => itemsStore.items.length,
-  (length, previous) => {
-    if (length > 0 && (previous ?? 0) === 0) {
-      buildStore.recalculateStats()
-    }
-  }
-)
 
 onMounted(async () => {
   const editId = typeof route.query.editId === 'string' ? route.query.editId : null
@@ -626,53 +331,31 @@ onMounted(async () => {
   theorycraftLevel.value = buildStore.statsLevel
   allyDisplayedVariant.value = buildStore.displayedVariant
 
-  const storedVs = loadVsState()
+  const storedVs = vs.loadVsState()
   const currentChampionId = buildStore.currentBuild.champion?.id
-  const canRestoreAlly =
-    Boolean(storedVs?.ally) && storedVs?.ally?.champion?.id === currentChampionId
 
-  if (canRestoreAlly && storedVs?.ally) {
+  if (storedVs?.ally && storedVs.ally.champion?.id === currentChampionId) {
     sideBuilds.value.ally = storedVs.ally
-    if (
-      storedVs.allyDisplayedVariant === 'main' ||
-      typeof storedVs.allyDisplayedVariant === 'number'
-    ) {
+    if (storedVs.allyDisplayedVariant !== undefined) {
       allyDisplayedVariant.value = storedVs.allyDisplayedVariant
     }
-    buildStore.setCurrentBuild(cloneBuild(storedVs.ally)!, { keepDisplayedVariant: true })
-    buildStore.displayedVariant = allyDisplayedVariant.value
+    vs.setAllyInStore(cloneBuild(storedVs.ally)!)
     buildStore.reloadTheorycraftModifiers()
-    sideCalculatedStats.value.ally = buildStore.calculatedStats
-      ? ({ ...buildStore.calculatedStats } as CalculatedStats)
-      : null
   } else {
     sideBuilds.value.ally = cloneBuild(buildStore.currentBuild)
-    sideCalculatedStats.value.ally = buildStore.calculatedStats
-      ? ({ ...buildStore.calculatedStats } as CalculatedStats)
-      : null
   }
+  sideCalculatedStats.value.ally = vs.storeStatsSnapshot()
 
-  const storedAllyChampionId = sideBuilds.value.ally?.champion?.id
-  const canRestoreEnemy = Boolean(storedVs?.enemy) && storedAllyChampionId === currentChampionId
+  const canRestoreEnemy =
+    Boolean(storedVs?.enemy) && sideBuilds.value.ally?.champion?.id === currentChampionId
+  sideBuilds.value.enemy = canRestoreEnemy && storedVs ? storedVs.enemy : vs.emptyEnemyBuild()
 
-  sideBuilds.value.enemy =
-    canRestoreEnemy && storedVs
-      ? storedVs.enemy
-      : createEmptyTheorycraftBuild(t('theorycraft.panel.enemyCard'))
+  vs.restoreActiveSide(storedVs)
 
-  if (storedVs?.activeSide === 'enemy') {
-    activeSide.value = 'enemy'
-    activePanel.value = sidePanels.value.enemy ?? 'theorycraft'
-    loadSideBuild('enemy')
-  } else {
-    activeSide.value = 'ally'
-    activePanel.value = sidePanels.value.ally ?? 'theorycraft'
-  }
+  vs.isHydratingVsState.value = false
+  vs.persistVsState()
 
-  isHydratingVsState.value = false
-  persistVsState()
-
-  await loadChampionDataForPanel()
+  await vs.loadChampionDataForPanel()
 })
 
 onBeforeRouteLeave(to => {

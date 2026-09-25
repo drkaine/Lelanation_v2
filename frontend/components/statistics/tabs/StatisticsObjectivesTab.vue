@@ -15,11 +15,6 @@ const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
 const tooltipsEnabled = inject('tooltipsEnabled', ref(true)) as Ref<boolean>
 const objectivesDisplayMode = ref<'obtention' | 'winrate'>('obtention')
 
-function syncToggleObjective(key: string) {
-  p.toggleObjective(key)
-  p.toggleSidesObjective(key)
-}
-
 function sidesDrakeSoulByKey(key: string): { byBlue: number; byRed: number } {
   const row = p.sidesDrakeSoulRows.find((r: { key: string }) => r.key === key)
   return row ? { byBlue: row.byBlue, byRed: row.byRed } : { byBlue: 0, byRed: 0 }
@@ -1440,7 +1435,7 @@ const mobileSoulWinrateRows = computed(() => {
 
 function onMobileObjectiveToggle(id: string) {
   if (id === 'firstBlood' || !p.objectiveHasKillDropdown(id)) return
-  syncToggleObjective(id)
+  p.toggleObjective(id)
 }
 
 function drakeDropdownCountLabel(count: number): string {
@@ -1650,7 +1645,7 @@ function drakeDropdownCountLabel(count: number): string {
                       v-if="p.objectiveHasKillDropdown(key)"
                       type="button"
                       class="flex items-center gap-1 font-medium text-text/90 hover:text-text"
-                      @click="syncToggleObjective(key)"
+                      @click="p.toggleObjective(key)"
                     >
                       <span
                         class="inline-block transition-transform duration-200"
@@ -2153,7 +2148,7 @@ function drakeDropdownCountLabel(count: number): string {
                       v-if="p.objectiveHasKillDropdown(key)"
                       type="button"
                       class="flex items-center gap-1 font-medium text-text/90 hover:text-text"
-                      @click="syncToggleObjective(key)"
+                      @click="p.toggleObjective(key)"
                     >
                       <span
                         class="inline-block transition-transform duration-200"

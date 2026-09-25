@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, watch } from 'vue'
 import {
   injectStatisticsPageCtx,
   type StatisticsIndexPageCtx,
@@ -28,6 +28,7 @@ import {
   getChampionStatIconSrc,
   getChampionStatIconToneClass,
 } from '~/utils/championStatIcons'
+import { useToggleSet } from '~/composables/useToggleSet'
 
 const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
 
@@ -41,7 +42,7 @@ const MISC_MOBILE_EXPANDED_KEYS = CHAMPION_MISC_BASE_STAT_KEYS.filter(
   key => !(MISC_MOBILE_PREVIEW_KEYS as readonly string[]).includes(key)
 )
 
-const expandedMiscRowKeys = ref<Set<string>>(new Set())
+const { set: expandedMiscRowKeys, toggle: toggleExpandedMiscRowKeys } = useToggleSet<string>()
 
 watch(
   () => p.paginatedMiscRows,
@@ -51,11 +52,7 @@ watch(
 )
 
 function toggleMiscCardExpanded(row: ChampionMiscStatRow): void {
-  const key = rowKey(row)
-  const next = new Set(expandedMiscRowKeys.value)
-  if (next.has(key)) next.delete(key)
-  else next.add(key)
-  expandedMiscRowKeys.value = next
+  toggleExpandedMiscRowKeys(rowKey(row))
 }
 
 function isMiscCardExpanded(row: ChampionMiscStatRow): boolean {
@@ -373,29 +370,12 @@ function rowKey(row: ChampionMiscStatRow): string {
                 <td
                   class="sticky left-0 z-10 min-w-[200px] bg-inherit py-0.5 pl-2 pr-0 odd:bg-[rgb(255_255_255/0.04)] even:bg-[rgb(0_0_0/0.25)]"
                 >
-                  <StatisticsChampionDetailLink
+                  <StatisticsChampionTableLink
                     :champion-id="row.championId"
-                    class="flex items-center gap-2"
-                  >
-                    <img
-                      v-if="championPortraitSrc(row)"
-                      :src="championPortraitSrc(row)!"
-                      :alt="rowDisplayName(row)"
-                      class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover"
-                      width="50"
-                      height="50"
-                      loading="lazy"
-                      decoding="async"
-                    />
-                    <span
-                      class="min-w-0 truncate text-[12px] text-accent underline decoration-accent/40 underline-offset-2"
-                    >
-                      <StatisticsChampionNameHighlight
-                        :name="rowDisplayName(row)"
-                        :query="p.championSearchQuery"
-                      />
-                    </span>
-                  </StatisticsChampionDetailLink>
+                    :name="rowDisplayName(row)"
+                    :portrait-src="championPortraitSrc(row)"
+                    :query="p.championSearchQuery"
+                  />
                 </td>
                 <template v-for="key in CHAMPION_MISC_BASE_STAT_KEYS" :key="'misc-td-' + key">
                   <td class="border-l border-primary/10 px-2 py-1 text-center tabular-nums">

@@ -221,6 +221,7 @@ import {
   getItemTagIconToneClass,
 } from '~/utils/itemTagStatIcons'
 import { getCategoryDisplayOrder, type ItemShopCategorySortMode } from '~/utils/itemShopUtils'
+import { riotLanguage } from '~/utils/riotLanguage'
 
 const goldStatIconSrc = getChampionStatIconSrc('goldValue')
 const categorySortMode = ref<ItemShopCategorySortMode>('legendary-first')
@@ -235,8 +236,7 @@ const { locale, t } = useI18n()
 const { isLayoutScaled } = useLayoutScaled()
 const { tooltipsEnabled } = useTooltipsPreference()
 
-const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
-const riotLocale = computed(() => getRiotLanguage(locale.value))
+const riotLocale = computed(() => riotLanguage(locale.value))
 
 // Translate tag name - map actual item tags to translation keys
 const translateTag = (tag: string): string => {

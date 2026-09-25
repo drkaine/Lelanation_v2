@@ -1,6 +1,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useTheorycraftChampionStore } from '~/stores/TheorycraftChampionStore'
+import { riotLanguage } from '~/utils/riotLanguage'
 
 type SupportedLang = 'fr_FR' | 'en_US'
 type ChampionIndexEntry = {
@@ -14,7 +15,7 @@ type ChampionIndexEntry = {
 
 export function useChampionData() {
   const { locale } = useI18n()
-  const lang = computed<SupportedLang>(() => (locale.value === 'fr' ? 'fr_FR' : 'en_US'))
+  const lang = computed<SupportedLang>(() => riotLanguage(locale.value))
   const store = useTheorycraftChampionStore()
 
   function loadIndex(): Promise<ChampionIndexEntry[]> {

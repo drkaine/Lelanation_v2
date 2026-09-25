@@ -328,34 +328,10 @@
                 class="text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
               >
                 <td class="min-w-[220px] py-0.5 pl-2 pr-0">
-                  <StatisticsChampionDetailLink
+                  <StatisticsChampionTableLink
                     :champion-id="row.championId"
-                    class="flex items-center gap-2"
-                  >
-                    <img
-                      v-if="p.gameVersion && p.championByKey(row.championId)"
-                      :src="
-                        p.getChampionImageUrl(
-                          p.gameVersion,
-                          p.championByKey(row.championId)!.image.full
-                        )
-                      "
-                      :alt="p.championName(row.championId) || ''"
-                      class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover"
-                      width="50"
-                      height="50"
-                      loading="lazy"
-                      decoding="async"
-                    />
-                    <span
-                      class="min-w-0 truncate text-[12px] text-accent underline decoration-accent/40 underline-offset-2"
-                    >
-                      <StatisticsChampionNameHighlight
-                        :name="String(p.championName(row.championId) || row.championId)"
-                        :query="p.championSearchQuery"
-                      />
-                    </span>
-                  </StatisticsChampionDetailLink>
+                    :query="p.championSearchQuery"
+                  />
                 </td>
                 <td class="px-1 py-0.5 align-middle">
                   <div
@@ -528,52 +504,19 @@
               </tr>
             </tbody>
           </table>
-          <div
-            v-if="p.totalBansCount > 0"
-            class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
+          <StatisticsRangePagination
+            :page="p.bansPage"
+            :page-size="p.championsPageSize"
+            class="border-t border-primary/20 px-4 py-2 text-sm text-text/80"
+            :total-count="p.totalBansCount"
+            :total-pages="p.totalBansPages"
+            @update:page="p.onBansPageUpdated"
+            @update:page-size="p.onBansPageSizeUpdated"
           >
-            <span v-if="p.championSearchQuery"
-              >{{ p.t('statisticsPage.showing') }} {{ p.totalBansCount }}</span
-            >
-            <div class="flex items-center gap-3">
-              <label class="flex items-center gap-1.5">
-                <span class="text-text/70">{{ p.t('statisticsPage.perPage') }}</span>
-                <select
-                  :value="p.championsPageSize"
-                  class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
-                  @change="onPageSizeChange"
-                >
-                  <option v-for="n in p.PAGE_SIZE_OPTIONS" :key="'bans-ps-' + n" :value="n">
-                    {{ n }}
-                  </option>
-                </select>
-              </label>
-              <span class="text-text/70">
-                {{ (p.bansPage - 1) * p.championsPageSize + 1 }}-{{
-                  Math.min(p.bansPage * p.championsPageSize, p.totalBansCount)
-                }}
-                / {{ p.totalBansCount }}
-              </span>
-              <div class="flex gap-1">
-                <button
-                  type="button"
-                  class="statistics-pagination-btn text-text"
-                  :disabled="p.bansPage <= 1"
-                  @click="p.onBansPageUpdated(Math.max(1, p.bansPage - 1))"
-                >
-                  ‹
-                </button>
-                <button
-                  type="button"
-                  class="statistics-pagination-btn text-text"
-                  :disabled="p.bansPage >= p.totalBansPages"
-                  @click="p.onBansPageUpdated(Math.min(p.totalBansPages, p.bansPage + 1))"
-                >
-                  ›
-                </button>
-              </div>
-            </div>
-          </div>
+            <template v-if="p.championSearchQuery" #default>
+              {{ p.t('statisticsPage.showing') }} {{ p.totalBansCount }}
+            </template>
+          </StatisticsRangePagination>
         </div>
       </div>
     </div>
@@ -581,7 +524,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, unref } from 'vue'
+import { computed } from 'vue'
 import { isOneOf } from '~/utils/statistics/isOneOf'
 import { BANS_SORT_COLS } from '~/composables/statistics/useStatisticsBansTab'
 import {
@@ -590,22 +533,10 @@ import {
 } from '~/composables/statistics/statisticsPageCtx'
 import type { BansSortCol } from '~/composables/statistics/useStatisticsBansTab'
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
+import { useToggleSet } from '~/composables/useToggleSet'
 
 const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
-const expandedBanIds = ref<Set<number>>(new Set())
-
-function toggleBanCardExpanded(championId: number): void {
-  const next = new Set(expandedBanIds.value)
-  if (next.has(championId)) next.delete(championId)
-  else next.add(championId)
-  expandedBanIds.value = next
-}
-
-function onPageSizeChange(event: Event): void {
-  const target = event.target as HTMLSelectElement | null
-  const fallback = unref(p.championsPageSize)
-  p.onBansPageSizeUpdated(Number(target?.value ?? fallback))
-}
+const { set: expandedBanIds, toggle: toggleBanCardExpanded } = useToggleSet<number>()
 
 function formatBansPatchDeltaPct(pp: number): string {
   const sign = pp > 0 ? '+' : ''

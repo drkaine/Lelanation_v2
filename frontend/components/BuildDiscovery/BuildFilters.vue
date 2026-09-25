@@ -124,6 +124,7 @@ import type {
   PageSizeOption,
 } from '~/stores/BuildDiscoveryStore'
 import { comparePatchMajorMinor, patchFromGameVersion } from '~/utils/patchVersion'
+import { riotLanguage } from '~/utils/riotLanguage'
 
 const { locale, t } = useI18n()
 const discoveryStore = useBuildDiscoveryStore()
@@ -133,8 +134,7 @@ const versionStore = useVersionStore()
 const filtersOneLineEl = ref<HTMLElement | null>(null)
 useHorizontalScrollContainer(filtersOneLineEl)
 
-const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
-const riotLocale = computed(() => getRiotLanguage(locale.value))
+const riotLocale = computed(() => riotLanguage(locale.value))
 
 const selectedVersion = ref(discoveryStore.selectedVersion ?? '')
 const selectedChampion = ref<string | null>(discoveryStore.selectedChampion)

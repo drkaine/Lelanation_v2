@@ -11,7 +11,6 @@
         type="text"
         :placeholder="t('common.search')"
         class="champion-search-input ui-build-card-surface rounded-lg px-2 py-1 text-sm text-text placeholder:text-text/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
-        @input="handleSearch"
       />
       <div class="champion-filter-bar flex flex-wrap">
         <button
@@ -67,14 +66,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { useChampionsStore } from '~/stores/ChampionsStore'
+import { computed } from 'vue'
+import { useChampionGridFilter } from '~/composables/useChampionGridFilter'
 import { useBuildStore } from '~/stores/BuildStore'
 import type { Champion } from '~/types/build'
-
 import { getChampionImageUrl } from '~/utils/imageUrl'
-import { useGameVersion } from '~/composables/useGameVersion'
 import { championStatsDetailPath } from '~/utils/championStatsRoutes'
 
 const props = withDefaults(
@@ -85,65 +81,25 @@ const props = withDefaults(
   { navigateToStatistics: false }
 )
 
-const championsStore = useChampionsStore()
 const buildStore = useBuildStore()
-const { locale, t } = useI18n()
+const { t } = useI18n()
 const localePath = useLocalePath()
 const router = useRouter()
 const route = useRoute()
 
-const searchQuery = ref('')
-const selectedRoles = ref<string[]>([])
-
-// Translate role name
-const translateRole = (role: string): string => {
-  const roleKey = role.toLowerCase()
-  return t(`champion.${roleKey}`, role)
-}
-
-// Convert i18n locale to Riot Games locale code
-const getRiotLanguage = (locale: string): string => {
-  const localeMap: Record<string, string> = {
-    fr: 'fr_FR',
-    en: 'en_US',
-  }
-  return localeMap[locale] || 'fr_FR'
-}
-
-const currentLanguage = computed(() => getRiotLanguage(locale.value))
-
-const availableRoles = computed(() => {
-  const roles = new Set<string>()
-  for (const champion of championsStore.champions) {
-    for (const tag of champion.tags) {
-      roles.add(tag)
-    }
-  }
-  return Array.from(roles).sort()
-})
-
-const filteredChampions = computed(() => {
-  return championsStore.searchChampions(
-    searchQuery.value,
-    selectedRoles.value.length > 0 ? selectedRoles.value : undefined
-  )
-})
-
-// All champions for display (filtered ones in color, others in grayscale)
-const allChampions = computed(() => {
-  return championsStore.champions
-})
-
-// Check if champion matches current filters
-const isFiltered = (champion: Champion): boolean => {
-  // If no filters, all champions are "filtered" (visible in color)
-  if (selectedRoles.value.length === 0 && !searchQuery.value) {
-    return true
-  }
-
-  // Check if champion is in filtered results
-  return filteredChampions.value.some(c => c.id === champion.id)
-}
+const {
+  championsStore,
+  version,
+  searchQuery,
+  selectedRoles,
+  availableRoles,
+  filteredChampions,
+  allChampions,
+  isFiltered,
+  toggleRole,
+  translateRole,
+  loadChampionDetails,
+} = useChampionGridFilter()
 
 const isSelected = (champion: Champion): boolean => {
   if (props.navigateToStatistics) return false
@@ -184,44 +140,8 @@ const selectChampion = async (champion: Champion) => {
     buildStore.clearChampion()
     return
   }
-  const detailed =
-    (await championsStore
-      .loadChampionDetails(champion.id, currentLanguage.value)
-      .catch(() => null)) ?? champion
-  buildStore.setChampion(detailed as Champion)
+  buildStore.setChampion(await loadChampionDetails(champion))
 }
-
-const toggleRole = (role: string) => {
-  const index = selectedRoles.value.indexOf(role)
-  if (index > -1) {
-    // Remove role if already selected
-    selectedRoles.value.splice(index, 1)
-  } else {
-    // Add role if not selected
-    selectedRoles.value.push(role)
-  }
-}
-
-const handleSearch = () => {
-  // Search is reactive via computed property
-}
-
-const { version } = useGameVersion()
-
-// Load champions on mount and when language changes
-const loadChampionsForCurrentLanguage = async () => {
-  const language = currentLanguage.value
-  await championsStore.loadChampions(language)
-}
-
-onMounted(() => {
-  loadChampionsForCurrentLanguage()
-})
-
-// Watch for language changes and reload champions
-watch(locale, () => {
-  loadChampionsForCurrentLanguage()
-})
 </script>
 
 <style scoped>

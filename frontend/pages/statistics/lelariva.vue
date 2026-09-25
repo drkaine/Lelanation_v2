@@ -5,332 +5,229 @@
       selectedChampionId ? 'champion-stats' : '',
     ]"
   >
-    <div class="flex min-h-0 w-full min-w-0 flex-1">
-      <button
-        v-if="showDesktopFiltersTrigger"
-        type="button"
-        class="statistics-filters-desktop-trigger hidden shrink-0 touch-manipulation lg:sticky lg:top-4 lg:z-20 lg:mr-2 lg:flex lg:flex-col lg:items-center lg:gap-1 lg:self-start"
-        :aria-label="
-          filtersOpen ? t('statisticsPage.closeFilters') : t('statisticsPage.openFilters')
-        "
-        :aria-expanded="filtersOpen"
-        @click="toggleFiltersOpen"
-      >
-        <span class="filters-collapse-floating inline-flex" aria-hidden="true">
-          <svg
-            class="h-2 w-2 transition-transform duration-200"
-            :class="filtersOpen ? 'rotate-180' : ''"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+    <StatisticsFiltersPanel
+      :active-filters-count="activeFiltersCount"
+      :main-class="[
+        'min-w-0 flex-1 p-4 max-lg:px-0 max-lg:py-2 max-lg:pb-20 lg:px-3 lg:pb-4 lg:pt-0',
+        selectedChampionId ? 'champion-page-main' : 'lelariva-page-main',
+      ]"
+      @reset="resetLelarivaFilters"
+    >
+      <div class="statistics-filters-fields flex flex-col gap-3">
+        <div>
+          <label for="lelariva-filter-version" class="mb-1 block text-sm font-medium text-text">
+            {{ t('statisticsPage.overviewFilterByVersion') }}
+          </label>
+          <select
+            id="lelariva-filter-version"
+            v-model="activeVersion"
+            class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
           >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M15 19l-7-7 7-7"
-            />
-          </svg>
-        </span>
-        <span
-          class="max-w-[4.5rem] text-center text-[10px] font-semibold leading-tight text-text/85"
-        >
-          {{ t('statisticsPage.filtersTitle') }}
-        </span>
-        <span
-          v-if="activeFiltersCount > 0"
-          class="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-bold text-background"
-        >
-          {{ activeFiltersCount }}
-        </span>
-      </button>
-
-      <div
-        v-if="filtersOpen && showFiltersBackdrop"
-        class="statistics-filters-backdrop bg-black/50"
-        aria-hidden="true"
-        role="presentation"
-        @click="closeFilters"
-      />
-
-      <aside
-        v-show="filtersOpen || !effectiveFiltersSheetMode"
-        :class="[
-          'statistics-filters-panel flex shrink-0 flex-col overflow-hidden',
-          effectiveFiltersSheetMode
-            ? 'statistics-filters-sheet fixed inset-x-0 bottom-0 top-auto z-[10051] max-h-[85vh] w-full rounded-t-2xl bg-surface shadow-lg'
-            : [
-                'hidden w-0 opacity-0 transition-[width,opacity] duration-200',
-                'lg:sticky lg:top-4 lg:z-0 lg:flex lg:h-auto lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:overflow-x-hidden',
-                filtersOpen ? 'lg:w-64 lg:opacity-100' : 'lg:w-0 lg:opacity-0',
-              ],
-        ]"
-        :role="effectiveFiltersSheetMode ? 'dialog' : undefined"
-        :aria-modal="effectiveFiltersSheetMode ? true : undefined"
-        :aria-label="t('statisticsPage.filtersTitle')"
-        @click.stop
-      >
-        <div
-          class="relative z-[1] flex shrink-0 items-center gap-2 border-b border-primary/25 p-2 lg:border-transparent lg:pb-2"
-        >
-          <button
-            type="button"
-            :class="[
-              'mx-auto mb-1 flex h-6 w-14 shrink-0 touch-manipulation items-center justify-center rounded-full',
-              effectiveFiltersSheetMode ? '' : 'lg:hidden',
-            ]"
-            :aria-label="t('statisticsPage.closeFilters')"
-            @click="closeFilters"
-          >
-            <span class="h-1 w-10 rounded-full bg-primary/40" aria-hidden="true" />
-          </button>
-          <h2 class="min-w-0 flex-1 truncate text-lg font-semibold text-text-accent">
-            {{ t('statisticsPage.filtersTitle') }}
-          </h2>
-          <button
-            type="button"
-            class="statistics-filters-reset ui-build-card-button inline-flex shrink-0 touch-manipulation items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold"
-            @click="resetLelarivaFilters"
-          >
-            <span class="iconify i-mdi:refresh" aria-hidden="true" />
-            Reset
-          </button>
+            <option value="">{{ t('statisticsPage.overviewVersionAll') }}</option>
+            <option v-for="v in availableVersions" :key="v.version" :value="v.version">
+              {{ versionOptionLabel(v.version, v.matchCount) }}
+            </option>
+          </select>
         </div>
 
-        <div class="flex min-h-0 flex-1 flex-col overflow-y-auto p-2 lg:flex-none">
-          <div class="statistics-filters-fields flex flex-col gap-3">
-            <div>
-              <label for="lelariva-filter-version" class="mb-1 block text-sm font-medium text-text">
-                {{ t('statisticsPage.overviewFilterByVersion') }}
-              </label>
-              <select
-                id="lelariva-filter-version"
-                v-model="activeVersion"
-                class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-              >
-                <option value="">{{ t('statisticsPage.overviewVersionAll') }}</option>
-                <option v-for="v in availableVersions" :key="v.version" :value="v.version">
-                  {{ versionOptionLabel(v.version, v.matchCount) }}
-                </option>
-              </select>
-            </div>
+        <div>
+          <div class="mb-1 text-sm font-medium text-text">
+            {{ t('statisticsPage.overviewMatchesByDivision') }}
+          </div>
+          <div class="flex flex-wrap gap-1">
+            <button
+              type="button"
+              class="stats-division-btn rounded p-0.5 transition-colors"
+              :class="
+                !activeDisplayRank
+                  ? 'bg-info/20 ring-1 ring-info/60'
+                  : 'bg-black/20 hover:bg-white/10'
+              "
+              :title="t('statisticsPage.allRanks')"
+              :aria-pressed="!activeDisplayRank"
+              @mousedown.prevent
+              @click.stop="clearActiveDisplayRank()"
+            >
+              <img
+                loading="lazy"
+                decoding="async"
+                src="/data/community-dragon/ranked-emblem/Unranked.png"
+                :alt="t('statisticsPage.allRanks')"
+                class="h-3 w-3 object-contain"
+                :class="
+                  !activeDisplayRank ? 'saturate-110 opacity-100' : 'brightness-125 grayscale'
+                "
+                width="12"
+                height="12"
+              />
+            </button>
+            <button
+              v-for="tier in rankTiers"
+              :key="tier"
+              type="button"
+              class="stats-division-btn rounded p-0.5 transition-colors"
+              :class="
+                activeDisplayRank === tier
+                  ? 'bg-info/20 ring-1 ring-info/60'
+                  : 'bg-black/20 hover:bg-white/10'
+              "
+              :title="formatDivisionLabel(tier)"
+              :aria-pressed="activeDisplayRank === tier"
+              @mousedown.prevent
+              @click.stop="toggleActiveDisplayRank(tier)"
+            >
+              <img
+                v-if="getLelarivaRankEmblemUrl(tier)"
+                loading="lazy"
+                decoding="async"
+                :src="getLelarivaRankEmblemUrl(tier)!"
+                :alt="tier"
+                class="h-3 w-3 object-contain"
+                :class="
+                  activeDisplayRank === tier
+                    ? 'saturate-110 opacity-100'
+                    : 'brightness-125 grayscale'
+                "
+                width="12"
+                height="12"
+              />
+            </button>
+          </div>
+          <label
+            class="mt-2 flex cursor-pointer items-start gap-2 rounded border border-primary/20 bg-background/40 px-2 py-1.5 text-xs text-text/85"
+          >
+            <input
+              v-model="exportDivisionsCombined"
+              type="checkbox"
+              class="mt-0.5 rounded border-primary/40"
+            />
+            <span>{{ t('statisticsPage.lelarivaExportDivisionsCombined') }}</span>
+          </label>
+        </div>
 
-            <div>
-              <div class="mb-1 text-sm font-medium text-text">
-                {{ t('statisticsPage.overviewMatchesByDivision') }}
-              </div>
-              <div class="flex flex-wrap gap-1">
-                <button
-                  type="button"
-                  class="stats-division-btn rounded p-0.5 transition-colors"
-                  :class="
-                    !activeDisplayRank
-                      ? 'bg-info/20 ring-1 ring-info/60'
-                      : 'bg-black/20 hover:bg-white/10'
-                  "
-                  :title="t('statisticsPage.allRanks')"
-                  :aria-pressed="!activeDisplayRank"
-                  @mousedown.prevent
-                  @click.stop="clearActiveDisplayRank()"
-                >
-                  <img
-                    loading="lazy"
-                    decoding="async"
-                    src="/data/community-dragon/ranked-emblem/Unranked.png"
-                    :alt="t('statisticsPage.allRanks')"
-                    class="h-3 w-3 object-contain"
-                    :class="
-                      !activeDisplayRank ? 'saturate-110 opacity-100' : 'brightness-125 grayscale'
-                    "
-                    width="12"
-                    height="12"
-                  />
-                </button>
-                <button
-                  v-for="tier in rankTiers"
-                  :key="tier"
-                  type="button"
-                  class="stats-division-btn rounded p-0.5 transition-colors"
-                  :class="
-                    activeDisplayRank === tier
-                      ? 'bg-info/20 ring-1 ring-info/60'
-                      : 'bg-black/20 hover:bg-white/10'
-                  "
-                  :title="formatDivisionLabel(tier)"
-                  :aria-pressed="activeDisplayRank === tier"
-                  @mousedown.prevent
-                  @click.stop="toggleActiveDisplayRank(tier)"
-                >
-                  <img
-                    v-if="getLelarivaRankEmblemUrl(tier)"
-                    loading="lazy"
-                    decoding="async"
-                    :src="getLelarivaRankEmblemUrl(tier)!"
-                    :alt="tier"
-                    class="h-3 w-3 object-contain"
-                    :class="
-                      activeDisplayRank === tier
-                        ? 'saturate-110 opacity-100'
-                        : 'brightness-125 grayscale'
-                    "
-                    width="12"
-                    height="12"
-                  />
-                </button>
-              </div>
-              <label
-                class="mt-2 flex cursor-pointer items-start gap-2 rounded border border-primary/20 bg-background/40 px-2 py-1.5 text-xs text-text/85"
-              >
-                <input
-                  v-model="exportDivisionsCombined"
-                  type="checkbox"
-                  class="mt-0.5 rounded border-primary/40"
-                />
-                <span>{{ t('statisticsPage.lelarivaExportDivisionsCombined') }}</span>
-              </label>
-            </div>
-
-            <div>
-              <div class="mb-1 text-sm font-medium text-text">
-                {{ t('statisticsPage.filterRole') }}
-              </div>
-              <div class="flex flex-wrap gap-1">
-                <button
-                  type="button"
-                  class="stats-role-btn rounded p-0.5 transition-colors"
-                  :class="!activeDisplayRole ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10'"
-                  :title="t('statisticsPage.allRoles')"
-                  @click="clearActiveDisplayRole()"
-                >
-                  <img
-                    src="/icons/roles/all-role.png"
-                    :alt="t('statisticsPage.allRoles')"
-                    class="h-3 w-3 object-contain"
-                    :class="
-                      !activeDisplayRole ? 'saturate-110 opacity-100' : 'brightness-125 grayscale'
-                    "
-                    width="12"
-                    height="12"
-                  />
-                </button>
-                <button
-                  v-for="r in roleOptions"
-                  :key="r.value"
-                  type="button"
-                  class="stats-role-btn rounded p-0.5 transition-colors"
-                  :class="[
-                    activeDisplayRole === r.value ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10',
-                    selectedChampionId && !isRoleFilterEligible(r.value)
-                      ? 'champion-role-disabled'
-                      : '',
-                  ]"
-                  :title="r.label"
-                  :disabled="selectedChampionId ? !isRoleFilterEligible(r.value) : false"
-                  @click="toggleActiveDisplayRole(r.value)"
-                >
-                  <img
-                    loading="lazy"
-                    decoding="async"
-                    :src="r.icon"
-                    :alt="r.label"
-                    class="h-3 w-3 object-contain"
-                    :class="
-                      activeDisplayRole === r.value
-                        ? 'saturate-110 opacity-100'
-                        : 'brightness-125 grayscale'
-                    "
-                    width="12"
-                    height="12"
-                  />
-                </button>
-              </div>
-            </div>
-
-            <div v-if="selectedChampionId" class="border-t border-primary/20 pt-3">
-              <h3 class="mb-2 text-sm font-semibold text-text-accent">Export</h3>
-
-              <label class="mb-2 block text-sm font-medium text-text">
-                <span class="mb-1 block">{{ t('statisticsPage.exportMinPickrateLabel') }}</span>
-                <input
-                  v-model.number="activeExportMinPickrate"
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-                />
-              </label>
-              <label class="mb-3 block text-sm font-medium text-text">
-                <span class="mb-1 block">{{ t('statisticsPage.exportMinGamesLabel') }}</span>
-                <input
-                  v-model.number="activeExportMinGames"
-                  type="number"
-                  min="0"
-                  step="1"
-                  class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-                />
-              </label>
-
-              <button
-                type="button"
-                class="w-full rounded border border-info/40 bg-info/10 px-3 py-2 text-xs font-semibold text-info hover:bg-info/20 disabled:cursor-not-allowed disabled:opacity-50"
-                :disabled="exporting"
-                @click="exportMatchupsExcel"
-              >
-                {{ exporting ? 'Export…' : 'Export Excel' }}
-              </button>
-            </div>
-
-            <div v-else class="border-t border-primary/20 pt-3">
-              <label class="mb-2 block text-sm font-medium text-text">
-                <span class="mb-1 block">{{ t('statisticsPage.exportMinPickrateLabel') }}</span>
-                <input
-                  v-model.number="activeExportMinPickrate"
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-                />
-              </label>
-              <label class="mb-3 block text-sm font-medium text-text">
-                <span class="mb-1 block">{{ t('statisticsPage.exportMinGamesLabel') }}</span>
-                <input
-                  v-model.number="activeExportMinGames"
-                  type="number"
-                  min="0"
-                  step="1"
-                  class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-                />
-              </label>
-
-              <button
-                type="button"
-                class="w-full rounded border border-info/40 bg-info/10 px-3 py-2 text-xs font-semibold text-primary-light hover:bg-info/20 disabled:cursor-not-allowed disabled:opacity-50"
-                :disabled="exportingAll"
-                @click="exportAllChampionsExcel"
-              >
-                {{ exportingAll ? 'Export all…' : 'Export all champions (Excel)' }}
-              </button>
-            </div>
+        <div>
+          <div class="mb-1 text-sm font-medium text-text">
+            {{ t('statisticsPage.filterRole') }}
+          </div>
+          <div class="flex flex-wrap gap-1">
+            <button
+              type="button"
+              class="stats-role-btn rounded p-0.5 transition-colors"
+              :class="!activeDisplayRole ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10'"
+              :title="t('statisticsPage.allRoles')"
+              @click="clearActiveDisplayRole()"
+            >
+              <img
+                src="/icons/roles/all-role.png"
+                :alt="t('statisticsPage.allRoles')"
+                class="h-3 w-3 object-contain"
+                :class="
+                  !activeDisplayRole ? 'saturate-110 opacity-100' : 'brightness-125 grayscale'
+                "
+                width="12"
+                height="12"
+              />
+            </button>
+            <button
+              v-for="r in roleOptions"
+              :key="r.value"
+              type="button"
+              class="stats-role-btn rounded p-0.5 transition-colors"
+              :class="[
+                activeDisplayRole === r.value ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10',
+                selectedChampionId && !isRoleFilterEligible(r.value)
+                  ? 'champion-role-disabled'
+                  : '',
+              ]"
+              :title="r.label"
+              :disabled="selectedChampionId ? !isRoleFilterEligible(r.value) : false"
+              @click="toggleActiveDisplayRole(r.value)"
+            >
+              <img
+                loading="lazy"
+                decoding="async"
+                :src="r.icon"
+                :alt="r.label"
+                class="h-3 w-3 object-contain"
+                :class="
+                  activeDisplayRole === r.value
+                    ? 'saturate-110 opacity-100'
+                    : 'brightness-125 grayscale'
+                "
+                width="12"
+                height="12"
+              />
+            </button>
           </div>
         </div>
 
-        <div class="shrink-0 border-t border-primary/25 p-3 lg:hidden">
+        <div v-if="selectedChampionId" class="border-t border-primary/20 pt-3">
+          <h3 class="mb-2 text-sm font-semibold text-text-accent">Export</h3>
+
+          <label class="mb-2 block text-sm font-medium text-text">
+            <span class="mb-1 block">{{ t('statisticsPage.exportMinPickrateLabel') }}</span>
+            <input
+              v-model.number="activeExportMinPickrate"
+              type="number"
+              min="0"
+              step="0.1"
+              class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+            />
+          </label>
+          <label class="mb-3 block text-sm font-medium text-text">
+            <span class="mb-1 block">{{ t('statisticsPage.exportMinGamesLabel') }}</span>
+            <input
+              v-model.number="activeExportMinGames"
+              type="number"
+              min="0"
+              step="1"
+              class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+            />
+          </label>
+
           <button
             type="button"
-            class="statistics-filters-mobile-close lg:hidden"
-            @click="closeFilters"
+            class="w-full rounded border border-info/40 bg-info/10 px-3 py-2 text-xs font-semibold text-info hover:bg-info/20 disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="exporting"
+            @click="exportMatchupsExcel"
           >
-            {{ t('statisticsPage.closeFilters') }}
+            {{ exporting ? 'Export…' : 'Export Excel' }}
           </button>
         </div>
-      </aside>
 
-      <div
-        :class="[
-          'min-w-0 flex-1 p-4 max-lg:px-0 max-lg:py-2 max-lg:pb-20 lg:px-3 lg:pb-4 lg:pt-0',
-          selectedChampionId ? 'champion-page-main' : 'lelariva-page-main',
-        ]"
-      >
+        <div v-else class="border-t border-primary/20 pt-3">
+          <label class="mb-2 block text-sm font-medium text-text">
+            <span class="mb-1 block">{{ t('statisticsPage.exportMinPickrateLabel') }}</span>
+            <input
+              v-model.number="activeExportMinPickrate"
+              type="number"
+              min="0"
+              step="0.1"
+              class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+            />
+          </label>
+          <label class="mb-3 block text-sm font-medium text-text">
+            <span class="mb-1 block">{{ t('statisticsPage.exportMinGamesLabel') }}</span>
+            <input
+              v-model.number="activeExportMinGames"
+              type="number"
+              min="0"
+              step="1"
+              class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+            />
+          </label>
+
+          <button
+            type="button"
+            class="w-full rounded border border-info/40 bg-info/10 px-3 py-2 text-xs font-semibold text-primary-light hover:bg-info/20 disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="exportingAll"
+            @click="exportAllChampionsExcel"
+          >
+            {{ exportingAll ? 'Export all…' : 'Export all champions (Excel)' }}
+          </button>
+        </div>
+      </div>
+      <template #main>
         <div v-if="!selectedChampionId" class="w-full">
           <div
             class="lelariva-content-stack ui-build-card-surface w-full min-w-0 overflow-hidden rounded-xl max-lg:rounded-none max-lg:border-x-0"
@@ -754,37 +651,16 @@
             </div>
           </template>
         </div>
-      </div>
-    </div>
-
-    <button
-      v-if="!filtersOpen"
-      type="button"
-      :class="[
-        'statistics-filters-fab fixed bottom-4 left-1/2 z-[58] flex -translate-x-1/2 items-center gap-2',
-        filtersFabClass,
-      ]"
-      :aria-label="t('statisticsPage.openFilters')"
-      @click="openFilters"
-    >
-      {{ t('statisticsPage.filtersTitle') }}
-      <span
-        v-if="activeFiltersCount > 0"
-        class="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-bold text-background"
-      >
-        {{ activeFiltersCount }}
-      </span>
-    </button>
+      </template>
+    </StatisticsFiltersPanel>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { storeToRefs } from 'pinia'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useVersionStore } from '~/stores/VersionStore'
-import { useStatisticsUiStore } from '~/stores/StatisticsUiStore'
 import { getChampionImageUrl } from '~/utils/imageUrl'
 import { apiUrl } from '~/utils/apiUrl'
 import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
@@ -796,6 +672,8 @@ import {
   type ChampionRoleSummaryRow,
 } from '~/utils/championRoleDistribution'
 import { compareVersionsDesc } from '~/utils/statistics/statsVersion'
+import { riotLanguage } from '~/utils/riotLanguage'
+import StatisticsFiltersPanel from '~/components/statistics/StatisticsFiltersPanel.vue'
 
 definePageMeta({ layout: 'default' })
 
@@ -813,15 +691,6 @@ type Row = {
 const { locale, t } = useI18n()
 const championsStore = useChampionsStore()
 const versionStore = useVersionStore()
-const statisticsUiStore = useStatisticsUiStore()
-const { filtersOpen } = storeToRefs(statisticsUiStore)
-const {
-  effectiveFiltersSheetMode,
-  showFiltersBackdrop,
-  lockPageScrollForFilters,
-  showDesktopFiltersTrigger,
-  filtersFabClass,
-} = useStatisticsFiltersSheetMode()
 const gameVersion = computed(() => versionStore.currentVersion ?? null)
 
 const selectedChampionId = ref<number | null>(null)
@@ -1282,19 +1151,6 @@ function exportDivisionLabel(divisionFilter: string, split: boolean): string {
   return divisionFilter || 'ALL'
 }
 
-function closeFilters(): void {
-  statisticsUiStore.setFiltersOpen(false)
-}
-
-function openFilters(): void {
-  statisticsUiStore.setFiltersOpen(true)
-}
-
-function toggleFiltersOpen(): void {
-  if (filtersOpen.value) closeFilters()
-  else openFilters()
-}
-
 function resetLelarivaFilters(): void {
   championSearch.value = ''
   const defaultVersion = defaultVersionFromStats()
@@ -1685,17 +1541,11 @@ async function loadMatchups() {
   }
 }
 
-watch([filtersOpen, lockPageScrollForFilters], () => {
-  if (!import.meta.client) return
-  const lock = lockPageScrollForFilters.value && filtersOpen.value
-  document.body.style.overflow = lock ? 'hidden' : ''
-})
-
 onMounted(async () => {
   initChampionHeaderBandOpen()
   if (!versionStore.currentVersion) await versionStore.loadCurrentVersion()
   if (championsStore.champions.length === 0) {
-    await championsStore.loadChampions(locale.value === 'fr' ? 'fr_FR' : 'en_US')
+    await championsStore.loadChampions(riotLanguage(locale.value))
   }
   await loadAvailableVersions()
   const defaultVersion = defaultVersionFromStats()
@@ -1735,10 +1585,6 @@ watch([selectedChampionId, filterVersion, filterRole, filterRank], () => {
   loadMatchups().catch(() => {
     // handled in loadMatchups via error state
   })
-})
-
-onUnmounted(() => {
-  if (import.meta.client) document.body.style.overflow = ''
 })
 </script>
 
@@ -1787,7 +1633,7 @@ onUnmounted(() => {
     min-width: 4.75rem;
   }
 
-  .lelariva-stats .statistics-filters-panel .flex.min-h-0.flex-1 {
+  .lelariva-stats :deep(.statistics-filters-panel .flex.min-h-0.flex-1) {
     overflow: visible;
   }
 }

@@ -15,6 +15,7 @@ import {
   getSpellImageUrl,
 } from '~/utils/imageUrl'
 import { useGameDataLookup } from '~/composables/useGameDataLookup'
+import { riotLanguage } from '~/utils/riotLanguage'
 
 function normalizeLookupKey(value: string): string {
   return value
@@ -155,7 +156,7 @@ export function usePatchEntityImage(entity: () => PatchEntity) {
   const { currentVersion: gameVersion } = storeToRefs(versionStore)
   const imageError = ref(false)
 
-  const riotLocale = computed(() => (locale.value === 'fr' ? 'fr_FR' : 'en_US'))
+  const riotLocale = computed(() => riotLanguage(locale.value))
 
   function ensureGameDataLoaded() {
     if (!gameVersion.value) {

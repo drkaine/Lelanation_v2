@@ -308,6 +308,7 @@ import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 import { formatSummonerSpellTooltipHtml } from '~/utils/gameTooltipFormatter'
 import { formatRuneTooltipHtml, formatShardTooltipHtml } from '~/utils/formatTooltipMarkupHtml'
 import { isSmiteSpell } from '~/utils/buildItemRules'
+import { riotLanguage } from '~/utils/riotLanguage'
 const { version } = useGameVersion()
 const { locale, t } = useI18n()
 const { tooltipsEnabled } = useTooltipsPreference()
@@ -316,8 +317,7 @@ const runesStore = useRunesStore()
 const buildStore = useBuildStore()
 const spellsStore = useSummonerSpellsStore()
 
-const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
-const riotLocale = computed(() => getRiotLanguage(locale.value))
+const riotLocale = computed(() => riotLanguage(locale.value))
 
 const selectedPrimaryPathId = ref<number | null>(null)
 const selectedPrimaryRunes = ref<Record<number, number>>({})

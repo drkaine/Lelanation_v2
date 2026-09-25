@@ -231,29 +231,10 @@ const pingsPageSize = computed({
                 class="text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
               >
                 <td class="min-w-[220px] py-0.5 pl-2 pr-0">
-                  <StatisticsChampionDetailLink
+                  <StatisticsChampionTableLink
                     :champion-id="row.championId"
-                    class="flex items-center gap-2"
-                  >
-                    <img
-                      v-if="championPortraitSrc(row.championId)"
-                      :src="championPortraitSrc(row.championId)!"
-                      :alt="p.championName(row.championId) || ''"
-                      class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover"
-                      width="50"
-                      height="50"
-                      loading="lazy"
-                      decoding="async"
-                    />
-                    <span
-                      class="min-w-0 truncate text-[12px] text-accent underline decoration-accent/40 underline-offset-2"
-                    >
-                      <StatisticsChampionNameHighlight
-                        :name="String(p.championName(row.championId) || row.championId)"
-                        :query="p.championSearchQuery"
-                      />
-                    </span>
-                  </StatisticsChampionDetailLink>
+                    :query="p.championSearchQuery"
+                  />
                 </td>
                 <td class="px-1 py-0.5 align-middle">
                   <div
@@ -290,53 +271,19 @@ const pingsPageSize = computed({
               </tr>
             </tbody>
           </table>
-          <div
-            v-if="p.totalPingsCount > 0"
-            class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
+          <StatisticsRangePagination
+            v-model:page-size="pingsPageSize"
+            :page="p.pingsPage"
+            class="border-t border-primary/20 px-4 py-2 text-sm text-text/80"
+            :total-count="p.totalPingsCount"
+            :total-pages="p.totalPingsPages"
+            indicator="pages"
+            @update:page="p.onPingsPageUpdated"
           >
-            <span v-if="p.championSearchQuery"
-              >{{ p.t('statisticsPage.showing') }} {{ p.totalPingsCount }}</span
-            >
-            <div class="flex items-center gap-3">
-              <label class="flex items-center gap-1.5">
-                <span class="text-text/70">{{ p.t('statisticsPage.perPage') }}</span>
-                <select
-                  v-model.number="pingsPageSize"
-                  class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
-                >
-                  <option v-for="n in p.PAGE_SIZE_OPTIONS" :key="'pings-ps-' + n" :value="n">
-                    {{ n }}
-                  </option>
-                </select>
-              </label>
-              <span class="text-text/70">
-                {{
-                  p.t('statisticsPage.pageXOfY', {
-                    current: p.pingsPage,
-                    total: p.totalPingsPages,
-                  })
-                }}
-              </span>
-              <div class="flex gap-1">
-                <button
-                  type="button"
-                  class="statistics-pagination-btn text-text"
-                  :disabled="p.pingsPage <= 1"
-                  @click="p.onPingsPageUpdated(Math.max(1, p.pingsPage - 1))"
-                >
-                  ‹
-                </button>
-                <button
-                  type="button"
-                  class="statistics-pagination-btn text-text"
-                  :disabled="p.pingsPage >= p.totalPingsPages"
-                  @click="p.onPingsPageUpdated(Math.min(p.totalPingsPages, p.pingsPage + 1))"
-                >
-                  ›
-                </button>
-              </div>
-            </div>
-          </div>
+            <template v-if="p.championSearchQuery" #default>
+              {{ p.t('statisticsPage.showing') }} {{ p.totalPingsCount }}
+            </template>
+          </StatisticsRangePagination>
         </div>
       </div>
     </template>

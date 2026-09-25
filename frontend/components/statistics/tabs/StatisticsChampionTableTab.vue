@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, unref, computed, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { isOneOf } from '~/utils/statistics/isOneOf'
 import { CHAMPION_GLOBAL_SORT_COLUMNS } from '~/utils/statistics/statisticsTableFormat'
 import {
@@ -14,12 +14,14 @@ import {
   resolveTransformFromSearchQuery,
   type ChampionTransform,
 } from '~/utils/championTransformStats'
+import { useToggleSet } from '~/composables/useToggleSet'
 
 const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
 const showChampionDealtBreakdown = ref(false)
 const showChampionTakenBreakdown = ref(false)
 const showChampionHealBreakdown = ref(false)
-const expandedChampionRowKeys = ref<Set<string>>(new Set())
+const { set: expandedChampionRowKeys, toggle: toggleExpandedChampionRowKeys } =
+  useToggleSet<string>()
 const transformViewByChampionId = ref<Map<number, 'all' | ChampionTransform>>(new Map())
 
 type ChampionGlobalRow = {
@@ -152,12 +154,6 @@ const championTableDisplayEntries = computed<TableDisplayEntry[]>(() => {
   return entries
 })
 
-function onChampionPageSizeChange(event: Event): void {
-  const target = event.target as HTMLSelectElement | null
-  const fallback = unref(p.championsPageSize)
-  p.onChampionGlobalPageSizeUpdated(Number(target?.value ?? fallback))
-}
-
 function championCardRowKey(row: ChampionGlobalRow): string {
   return String(p.championGlobalRowKey(row))
 }
@@ -167,11 +163,7 @@ function isChampionCardExpanded(row: ChampionGlobalRow): boolean {
 }
 
 function toggleChampionCardExpanded(row: ChampionGlobalRow): void {
-  const key = championCardRowKey(row)
-  const next = new Set(expandedChampionRowKeys.value)
-  if (next.has(key)) next.delete(key)
-  else next.add(key)
-  expandedChampionRowKeys.value = next
+  toggleExpandedChampionRowKeys(championCardRowKey(row))
 }
 
 const activeRoleLabel = computed(() => {
@@ -1664,52 +1656,17 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
               </div>
             </template>
           </div>
-          <div
-            v-if="p.totalChampionGlobalCount > 0"
-            class="border-p.t flex flex-wrap items-center justify-between gap-2 border-primary/20 px-4 py-2 text-sm text-text/80"
+          <StatisticsRangePagination
+            :page="p.championGlobalPage"
+            :page-size="p.championsPageSize"
+            class="border-p.t border-primary/20 px-4 py-2 text-sm text-text/80"
+            :total-count="p.totalChampionGlobalCount"
+            :total-pages="p.totalChampionGlobalPages"
+            @update:page="p.onChampionGlobalPageUpdated"
+            @update:page-size="p.onChampionGlobalPageSizeUpdated"
           >
-            <span>{{ p.t('statisticsPage.showing') }} {{ p.totalChampionGlobalCount }}</span>
-            <div class="flex items-center gap-3">
-              <label class="flex items-center gap-1.5">
-                <span class="text-text/70">{{ p.t('statisticsPage.perPage') }}</span>
-                <select
-                  :value="p.championsPageSize"
-                  class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
-                  @change="onChampionPageSizeChange"
-                >
-                  <option v-for="n in p.PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
-                </select>
-              </label>
-              <span class="text-text/70">
-                {{ (p.championGlobalPage - 1) * p.championsPageSize + 1 }}-{{
-                  Math.min(p.championGlobalPage * p.championsPageSize, p.totalChampionGlobalCount)
-                }}
-                / {{ p.totalChampionGlobalCount }}
-              </span>
-              <div class="flex gap-1">
-                <button
-                  type="button"
-                  class="statistics-pagination-btn text-text"
-                  :disabled="p.championGlobalPage <= 1"
-                  @click="p.onChampionGlobalPageUpdated(Math.max(1, p.championGlobalPage - 1))"
-                >
-                  ‹
-                </button>
-                <button
-                  type="button"
-                  class="statistics-pagination-btn text-text"
-                  :disabled="p.championGlobalPage >= p.totalChampionGlobalPages"
-                  @click="
-                    p.onChampionGlobalPageUpdated(
-                      Math.min(p.totalChampionGlobalPages, p.championGlobalPage + 1)
-                    )
-                  "
-                >
-                  ›
-                </button>
-              </div>
-            </div>
-          </div>
+            {{ p.t('statisticsPage.showing') }} {{ p.totalChampionGlobalCount }}
+          </StatisticsRangePagination>
         </div>
       </div>
     </template>

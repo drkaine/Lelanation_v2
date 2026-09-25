@@ -7,6 +7,7 @@ import {
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
 import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
 import type { BalanceFrameworkRow, BalanceLevelRow } from '~/types/statisticsIndexPage'
+import { useToggleSet } from '~/composables/useToggleSet'
 
 const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
 
@@ -14,7 +15,7 @@ type BalanceSortKey = 'champion' | 'globalStatus' | 'games'
 
 const balanceSortBy = ref<BalanceSortKey>('champion')
 const balanceSortDir = ref<'asc' | 'desc'>('asc')
-const expandedBalanceKeys = ref<Set<string>>(new Set())
+const { set: expandedBalanceKeys, toggle: toggleExpandedBalanceKeys } = useToggleSet<string>()
 
 type LevelRow = BalanceLevelRow
 type BalanceRow = BalanceFrameworkRow
@@ -35,11 +36,7 @@ function balanceRowKey(row: BalanceRow): string {
 }
 
 function toggleBalanceCardExpanded(row: BalanceRow): void {
-  const key = balanceRowKey(row)
-  const next = new Set(expandedBalanceKeys.value)
-  if (next.has(key)) next.delete(key)
-  else next.add(key)
-  expandedBalanceKeys.value = next
+  toggleExpandedBalanceKeys(balanceRowKey(row))
 }
 
 const rows = computed<BalanceRow[]>(() => p.balanceFrameworkData?.rows ?? [])
@@ -244,12 +241,6 @@ const paginatedRows = computed(() => {
 watch([filteredRows, pageSize, balanceSortBy, balanceSortDir], () => {
   balancePage.value = 1
 })
-
-function onPageSizeChange(event: Event): void {
-  const target = event.target as HTMLSelectElement | null
-  const fallback = unref(p.championsPageSize)
-  p.onBansPageSizeUpdated(Number(target?.value ?? fallback))
-}
 
 function levelTooltip(row: BalanceRow, level: 'average' | 'skilled' | 'elite'): string {
   const lv = row[level]
@@ -521,50 +512,16 @@ function globalTooltip(row: BalanceRow): string {
             </tbody>
           </table>
         </div>
-        <div
-          v-if="totalRowsCount > 0"
-          class="statistics-balance-pagination flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-surface/20 px-3 py-2 text-sm text-text/80 md:rounded-none md:border-t md:bg-transparent md:px-4"
+        <StatisticsRangePagination
+          v-model:page="balancePage"
+          :page-size="pageSize"
+          class="statistics-balance-pagination rounded-lg border border-primary/20 bg-surface/20 px-3 py-2 text-sm text-text/80 md:rounded-none md:border-t md:bg-transparent md:px-4"
+          :total-count="totalRowsCount"
+          :total-pages="totalPages"
+          @update:page-size="p.onBansPageSizeUpdated"
         >
-          <span>{{ p.t('statisticsPage.showing') }} {{ totalRowsCount }}</span>
-          <div class="flex items-center gap-3">
-            <label class="flex items-center gap-1.5">
-              <span class="text-text/70">{{ p.t('statisticsPage.perPage') }}</span>
-              <select
-                :value="p.championsPageSize"
-                class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
-                @change="onPageSizeChange"
-              >
-                <option v-for="n in p.PAGE_SIZE_OPTIONS" :key="'balance-ps-' + n" :value="n">
-                  {{ n }}
-                </option>
-              </select>
-            </label>
-            <span class="text-text/70">
-              {{ (balancePage - 1) * pageSize + 1 }}-{{
-                Math.min(balancePage * pageSize, totalRowsCount)
-              }}
-              / {{ totalRowsCount }}
-            </span>
-            <div class="flex gap-1">
-              <button
-                type="button"
-                class="statistics-pagination-btn text-text"
-                :disabled="balancePage <= 1"
-                @click="balancePage = Math.max(1, balancePage - 1)"
-              >
-                ‹
-              </button>
-              <button
-                type="button"
-                class="statistics-pagination-btn text-text"
-                :disabled="balancePage >= totalPages"
-                @click="balancePage = Math.min(totalPages, balancePage + 1)"
-              >
-                ›
-              </button>
-            </div>
-          </div>
-        </div>
+          {{ p.t('statisticsPage.showing') }} {{ totalRowsCount }}
+        </StatisticsRangePagination>
       </div>
       <div v-else class="text-text/70">
         {{ p.t('statisticsPage.overviewDetailNoData') }}

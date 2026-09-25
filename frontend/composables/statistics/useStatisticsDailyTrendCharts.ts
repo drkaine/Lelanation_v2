@@ -1,4 +1,11 @@
 import { computed, ref, type ComputedRef, type InjectionKey, type Ref } from 'vue'
+import {
+  compareRankTiers,
+  RANK_TIER_COLORS,
+  normalizeRankTier,
+  smoothSeries,
+  svgLinePath,
+} from '~/utils/statistics/trendChart'
 
 export type DailyTrendSnapshotPoint = {
   dateOfGame: string
@@ -48,33 +55,6 @@ export type DailyTrendMetricId =
   | 'orderPosition'
 export type DailyTrendGranularity = 'day' | 'week' | 'month' | 'patch'
 export type DailyTrendDivisionPreset = 'selected' | 'average' | 'skilled' | 'elite'
-
-const RANK_TIERS = [
-  'IRON',
-  'BRONZE',
-  'SILVER',
-  'GOLD',
-  'PLATINUM',
-  'EMERALD',
-  'DIAMOND',
-  'MASTER',
-  'GRANDMASTER',
-  'CHALLENGER',
-] as const
-
-const RANK_COLOR_MAP: Record<string, string> = {
-  IRON: '#6b7280',
-  BRONZE: '#92400e',
-  SILVER: '#94a3b8',
-  GOLD: '#a16207',
-  PLATINUM: '#0f766e',
-  EMERALD: '#166534',
-  DIAMOND: '#1d4ed8',
-  MASTER: '#6d28d9',
-  GRANDMASTER: '#991b1b',
-  CHALLENGER: '#9a3412',
-  GLOBAL: '#c084fc',
-}
 
 const TREND_PRESET_TIERS: Record<Exclude<DailyTrendDivisionPreset, 'selected'>, string[]> = {
   average: ['IRON', 'BRONZE', 'SILVER', 'GOLD'],
@@ -135,39 +115,12 @@ export const DAILY_TREND_PLOT_W =
 export const DAILY_TREND_PLOT_H =
   DAILY_TREND_CHART_H - DAILY_TREND_CHART_PAD.top - DAILY_TREND_CHART_PAD.bottom
 
-function normalizeRankTier(value: string): string {
-  const normalized = String(value || '')
-    .trim()
-    .toUpperCase()
-    .split('_')[0]!
-  if (!normalized || normalized === 'UNRANKED') return ''
-  return normalized
-}
-
 function isoWeekBucket(dateIso: string): string {
   const d = new Date(`${dateIso}T00:00:00.000Z`)
   if (Number.isNaN(d.getTime())) return dateIso
   const day = d.getUTCDay() || 7
   d.setUTCDate(d.getUTCDate() - day + 1)
   return d.toISOString().slice(0, 10)
-}
-
-function buildPath(points: Array<{ x: number; y: number }>): string {
-  if (points.length === 0) return ''
-  if (points.length === 1)
-    return `M ${points[0]!.x},${points[0]!.y} L ${points[0]!.x + 0.1},${points[0]!.y}`
-  return points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x},${p.y}`).join(' ')
-}
-
-function smoothSeries(values: number[], window = 3): number[] {
-  if (values.length <= 2) return values
-  const w = Math.max(1, window | 0)
-  return values.map((_, idx) => {
-    const from = Math.max(0, idx - (w - 1))
-    const slice = values.slice(from, idx + 1)
-    const sum = slice.reduce((acc, v) => acc + v, 0)
-    return slice.length ? sum / slice.length : values[idx]!
-  })
 }
 
 function metricValue(
@@ -266,13 +219,7 @@ export function useStatisticsDailyTrendCharts(options: {
     const fromData = Array.from(
       new Set(options.points.value.map(p => normalizeRankTier(p.rankTier)))
     ).filter(Boolean)
-    const defaultSort = (a: string, b: string) =>
-      (!RANK_TIERS.includes(a as (typeof RANK_TIERS)[number])
-        ? 999
-        : RANK_TIERS.indexOf(a as (typeof RANK_TIERS)[number])) -
-      (!RANK_TIERS.includes(b as (typeof RANK_TIERS)[number])
-        ? 999
-        : RANK_TIERS.indexOf(b as (typeof RANK_TIERS)[number]))
+    const defaultSort = (a: string, b: string) => compareRankTiers(a, b)
     return fromData.sort(options.tierSortOrder ?? defaultSort)
   })
 
@@ -408,7 +355,7 @@ export function useStatisticsDailyTrendCharts(options: {
         return {
           tier,
           label: options.seriesLabel?.(tier) ?? tier,
-          color: options.tierColor?.(tier) ?? RANK_COLOR_MAP[tier] ?? '#64748b',
+          color: options.tierColor?.(tier) ?? RANK_TIER_COLORS[tier] ?? '#64748b',
           rawValues,
         }
       })
@@ -439,7 +386,7 @@ export function useStatisticsDailyTrendCharts(options: {
           pendingSeries.push({
             tier: 'GLOBAL',
             label: options.seriesLabel?.('GLOBAL') ?? 'GLOBAL',
-            color: options.tierColor?.('GLOBAL') ?? RANK_COLOR_MAP.GLOBAL ?? '#c084fc',
+            color: options.tierColor?.('GLOBAL') ?? RANK_TIER_COLORS.GLOBAL ?? '#c084fc',
             rawValues,
           })
         }
@@ -503,7 +450,7 @@ export function useStatisticsDailyTrendCharts(options: {
           tier: serie.tier,
           label: serie.label ?? serie.tier,
           color: serie.color,
-          path: buildPath(points.map(p => ({ x: p.x, y: p.y }))),
+          path: svgLinePath(points.map(p => ({ x: p.x, y: p.y }))),
           points,
         }
       })

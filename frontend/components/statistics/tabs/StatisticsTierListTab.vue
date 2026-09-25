@@ -16,10 +16,11 @@ import {
   downloadPngBlob,
   sanitizeFilenameSegment,
 } from '~/utils/chartShareImage'
+import { useToggleSet } from '~/composables/useToggleSet'
 
 const p = injectStatisticsPageCtx<StatisticsTierListPageCtx>()
 
-const expandedTierListIds = ref<Set<number>>(new Set())
+const { set: expandedTierListIds, toggle: toggleTierListCard } = useToggleSet<number>()
 const tierListChartExportRoot = ref<HTMLElement | null>(null)
 const tierListChartExportPending = ref(false)
 const chartExportToastMessage = ref('')
@@ -84,13 +85,6 @@ async function copyTierListChartImage() {
   } finally {
     tierListChartExportPending.value = false
   }
-}
-
-function toggleTierListCard(championId: number): void {
-  const next = new Set(expandedTierListIds.value)
-  if (next.has(championId)) next.delete(championId)
-  else next.add(championId)
-  expandedTierListIds.value = next
 }
 
 withDefaults(
@@ -640,44 +634,15 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             </div>
           </div>
         </div>
-        <div
-          v-if="p.totalTierListCount > 0"
-          class="border-p.t flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-surface/20 px-4 py-2 text-sm text-text/80 md:rounded-none md:border-x-0 md:border-b-0 md:bg-transparent"
+        <StatisticsRangePagination
+          v-model:page="p.tierListPage"
+          v-model:page-size="p.tierListPageSizeModel"
+          class="border-p.t rounded-lg border border-primary/20 bg-surface/20 px-4 py-2 text-sm text-text/80 md:rounded-none md:border-x-0 md:border-b-0 md:bg-transparent"
+          :total-count="p.totalTierListCount"
+          :total-pages="p.totalTierListPages"
         >
-          <span>{{ p.t('statisticsPage.showing') }} {{ p.totalTierListCount }}</span>
-          <div class="flex items-center gap-3">
-            <label class="flex items-center gap-1.5">
-              <span class="text-text/70">{{ p.t('statisticsPage.perPage') }}</span>
-              <select
-                v-model.number="p.tierListPageSizeModel"
-                class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
-              >
-                <option v-for="n in p.PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
-              </select>
-            </label>
-            <span class="text-text/70">
-              {{ p.tierListRangeStart }}-{{ p.tierListRangeEnd }} / {{ p.totalTierListCount }}
-            </span>
-            <div class="flex gap-1">
-              <button
-                type="button"
-                class="statistics-pagination-btn text-text"
-                :disabled="p.tierListPage <= 1"
-                @click="p.tierListPage = Math.max(1, p.tierListPage - 1)"
-              >
-                ‹
-              </button>
-              <button
-                type="button"
-                class="statistics-pagination-btn text-text"
-                :disabled="p.tierListPage >= p.totalTierListPages"
-                @click="p.tierListPage = Math.min(p.totalTierListPages, p.tierListPage + 1)"
-              >
-                ›
-              </button>
-            </div>
-          </div>
-        </div>
+          {{ p.t('statisticsPage.showing') }} {{ p.totalTierListCount }}
+        </StatisticsRangePagination>
       </div>
       <!-- Vue graphique : export PNG + capture DOM (filtres inclus dans l’image) -->
       <div v-show="p.tierListViewModel === 'chart' && p.totalTierListCount > 0" class="space-y-2">

@@ -891,7 +891,6 @@ import {
   sectionFromQuery,
   normalizeTabForSection,
   normalizeLegacyTab,
-  getRiotLanguage,
   isStatisticsMainTab,
   statisticsTabNeedsOverviewLoad,
 } from '~/utils/statistics/statisticsTabRouting'
@@ -971,6 +970,8 @@ import {
 } from '~/utils/championTransformStats'
 import { useStatisticsSplitTransformPreference } from '~/composables/useStatisticsSplitTransformPreference'
 import type {} from '~/components/statistics/ItemStatsFastSection.vue'
+import { useToggleSet } from '~/composables/useToggleSet'
+import { riotLanguage } from '~/utils/riotLanguage'
 const StatisticsOverviewTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsOverviewTab.vue')
 )
@@ -1057,7 +1058,7 @@ function initialActiveTabFromRoute(): StatisticsMainTab {
   return 'overview'
 }
 
-const riotLocale = computed(() => getRiotLanguage(locale.value))
+const riotLocale = computed(() => riotLanguage(locale.value))
 
 const activeTab = ref<StatisticsMainTab>(initialActiveTabFromRoute())
 
@@ -2631,13 +2632,6 @@ const sidesDrakeSoulGlobal = computed(() => {
     byRed: rows.reduce((s, r) => s + r.byRed, 0),
   }
 })
-const openSidesObjectiveKeys = ref<Set<string>>(new Set())
-function toggleSidesObjective(key: string) {
-  const next = new Set(openSidesObjectiveKeys.value)
-  if (next.has(key)) next.delete(key)
-  else next.add(key)
-  openSidesObjectiveKeys.value = next
-}
 function percentForCountSides(key: string, count: number, byBlue: boolean): string {
   const data = overviewSidesData.value
   if (!data?.matchCount) return '—'
@@ -2983,13 +2977,7 @@ function percentForCount(key: string, count: number, byWin: boolean): string {
   const games = aggregateObjectiveHistogramDist(key, dist)[count] ?? 0
   return formatObjectiveObtentionPercent(games, data.matchCount)
 }
-const openObjectiveKeys = ref<Set<string>>(new Set())
-function toggleObjective(key: string) {
-  const next = new Set(openObjectiveKeys.value)
-  if (next.has(key)) next.delete(key)
-  else next.add(key)
-  openObjectiveKeys.value = next
-}
+const { set: openObjectiveKeys, toggle: toggleObjective } = useToggleSet<string>()
 const drakeTypeRows = computed((): DrakeTypeRow[] => {
   const d = overviewTeamsData.value?.drakes?.types
   if (!d) return []
@@ -4217,7 +4205,6 @@ const statisticsPageCtx = reactive({
   tierListPatchDeltaClass,
   toggleFavoriteCard,
   toggleObjective,
-  toggleSidesObjective,
   totalBansCount: bansTab.totalBansCount,
   totalBansPages: bansTab.totalBansPages,
   totalChampionGlobalCount,

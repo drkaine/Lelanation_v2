@@ -151,6 +151,7 @@ import { useStatisticsUiStore } from '~/stores/StatisticsUiStore'
 import { useVersionStore } from '~/stores/VersionStore'
 import { championKeyFromRouteParam, normalizeChampionSlug } from '~/utils/championSlug'
 import { parseRankTierQuery, rankTierSelectionsEqual } from '~/utils/statisticsRankTierQuery'
+import { riotLanguage } from '~/utils/riotLanguage'
 
 definePageMeta({
   ssr: false,
@@ -385,7 +386,7 @@ async function bootstrapPage(): Promise<void> {
   buildStore.init()
   historyStore.init()
   await versionStore.loadCurrentVersion().catch(() => undefined)
-  const lang = locale.value === 'fr' ? 'fr_FR' : 'en_US'
+  const lang = riotLanguage(locale.value)
   await championsStore.loadChampions(lang).catch(() => undefined)
   await loadVersionsCatalog()
   acknowledgeAndArchiveAlerts()

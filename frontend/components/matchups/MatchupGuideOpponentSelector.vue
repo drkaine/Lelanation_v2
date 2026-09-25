@@ -60,52 +60,30 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { useChampionsStore } from '~/stores/ChampionsStore'
+import { useChampionGridFilter } from '~/composables/useChampionGridFilter'
 import { useMatchupGuideDraftStore } from '~/stores/MatchupGuideDraftStore'
 import type { Champion } from '~/types/build'
 import { championToRef } from '~/utils/matchupGuideFromBuild'
 import { getChampionImageUrl } from '~/utils/imageUrl'
-import { useGameVersion } from '~/composables/useGameVersion'
 
 const props = defineProps<{
   excludeChampionId?: string | null
 }>()
 
-const { t, locale } = useI18n()
-const championsStore = useChampionsStore()
+const { t } = useI18n()
 const draftStore = useMatchupGuideDraftStore()
-const searchQuery = ref('')
-const selectedRoles = ref<string[]>([])
-const { version } = useGameVersion()
-
-function getRiotLanguage(loc: string): string {
-  return loc === 'en' ? 'en_US' : 'fr_FR'
-}
-
-const currentLanguage = computed(() => getRiotLanguage(locale.value))
-
-const availableRoles = computed(() => {
-  const roles = new Set<string>()
-  for (const champion of championsStore.champions) {
-    for (const tag of champion.tags) roles.add(tag)
-  }
-  return Array.from(roles).sort()
-})
-
-const filteredChampions = computed(() =>
-  championsStore.searchChampions(
-    searchQuery.value,
-    selectedRoles.value.length > 0 ? selectedRoles.value : undefined
-  )
-)
-
-const allChampions = computed(() => championsStore.champions)
-
-function isFiltered(champion: Champion): boolean {
-  if (selectedRoles.value.length === 0 && !searchQuery.value) return true
-  return filteredChampions.value.some(c => c.id === champion.id)
-}
+const {
+  championsStore,
+  version,
+  searchQuery,
+  selectedRoles,
+  availableRoles,
+  allChampions,
+  isFiltered,
+  toggleRole,
+  translateRole,
+  loadChampionDetails,
+} = useChampionGridFilter()
 
 function isExcluded(champion: Champion): boolean {
   return Boolean(props.excludeChampionId && champion.id === props.excludeChampionId)
@@ -121,31 +99,10 @@ function championTitle(champion: Champion): string {
   return champion.name
 }
 
-function translateRole(role: string): string {
-  return t(`champion.${role.toLowerCase()}`, role)
-}
-
 async function selectOpponent(champion: Champion) {
   if (isExcluded(champion) || isRanked(champion)) return
-  const detailed =
-    (await championsStore
-      .loadChampionDetails(champion.id, currentLanguage.value)
-      .catch(() => null)) ?? champion
-  draftStore.addOpponent(championToRef(detailed as Champion))
+  draftStore.addOpponent(championToRef(await loadChampionDetails(champion)))
 }
-
-function toggleRole(role: string) {
-  const index = selectedRoles.value.indexOf(role)
-  if (index > -1) selectedRoles.value.splice(index, 1)
-  else selectedRoles.value.push(role)
-}
-
-async function loadChampionsForCurrentLanguage() {
-  await championsStore.loadChampions(currentLanguage.value)
-}
-
-onMounted(loadChampionsForCurrentLanguage)
-watch(locale, loadChampionsForCurrentLanguage)
 </script>
 
 <style scoped>

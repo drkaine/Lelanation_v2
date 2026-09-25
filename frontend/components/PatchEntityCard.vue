@@ -177,6 +177,7 @@ import ChampionSpellIconBadge, {
 import { resolvePatchEntitySummaryTag } from '~/utils/patchEntitySummary'
 import { flattenBugfixItems, isBugfixPatchEntity } from '~/utils/patchBugfixItems'
 import PatchBugfixColumns from '~/components/PatchBugfixColumns.vue'
+import { riotLanguage } from '~/utils/riotLanguage'
 
 const props = defineProps<{
   entity: PatchEntity
@@ -296,7 +297,7 @@ watch(
   }
 )
 
-const riotLocale = computed(() => (locale.value === 'fr' ? 'fr_FR' : 'en_US'))
+const riotLocale = computed(() => riotLanguage(locale.value))
 
 async function loadChampionDetail() {
   if (!['champion', 'classic'].includes(props.entity.category) || !resolvedEntityId.value) {

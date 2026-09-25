@@ -89,12 +89,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { useChampionsStore } from '~/stores/ChampionsStore'
+import { computed } from 'vue'
+import { useChampionGridFilter } from '~/composables/useChampionGridFilter'
 import type { Champion } from '~/types/build'
 import { getChampionImageUrl } from '~/utils/imageUrl'
-import { useGameVersion } from '~/composables/useGameVersion'
 
 const props = defineProps<{
   modelValue: string[]
@@ -104,45 +102,19 @@ const emit = defineEmits<{
   'update:modelValue': [value: string[]]
 }>()
 
-const championsStore = useChampionsStore()
-const { locale, t } = useI18n()
-
-const searchQuery = ref('')
-const selectedRoles = ref<string[]>([])
-
-const translateRole = (role: string): string => {
-  const roleKey = role.toLowerCase()
-  return t(`champion.${roleKey}`, role)
-}
-
-const getRiotLanguage = (localeCode: string): string => {
-  const localeMap: Record<string, string> = {
-    fr: 'fr_FR',
-    en: 'en_US',
-  }
-  return localeMap[localeCode] || 'fr_FR'
-}
-
-const currentLanguage = computed(() => getRiotLanguage(locale.value))
-
-const availableRoles = computed(() => {
-  const roles = new Set<string>()
-  for (const champion of championsStore.champions) {
-    for (const tag of champion.tags) {
-      roles.add(tag)
-    }
-  }
-  return Array.from(roles).sort()
-})
-
-const filteredChampions = computed(() =>
-  championsStore.searchChampions(
-    searchQuery.value,
-    selectedRoles.value.length > 0 ? selectedRoles.value : undefined
-  )
-)
-
-const allChampions = computed(() => championsStore.champions)
+const { t } = useI18n()
+const {
+  championsStore,
+  version,
+  searchQuery,
+  selectedRoles,
+  availableRoles,
+  filteredChampions,
+  allChampions,
+  isFiltered,
+  toggleRole,
+  translateRole,
+} = useChampionGridFilter()
 
 const hasSelection = computed(() => props.modelValue.length > 0)
 
@@ -152,11 +124,6 @@ const allFilteredSelected = computed(() => {
   return filtered.every(champion => props.modelValue.includes(champion.id))
 })
 
-const isFiltered = (champion: Champion): boolean => {
-  if (selectedRoles.value.length === 0 && !searchQuery.value) return true
-  return filteredChampions.value.some(c => c.id === champion.id)
-}
-
 const isSelected = (champion: Champion): boolean => props.modelValue.includes(champion.id)
 
 const toggleChampion = (champion: Champion) => {
@@ -164,12 +131,6 @@ const toggleChampion = (champion: Champion) => {
     ? props.modelValue.filter(id => id !== champion.id)
     : [...props.modelValue, champion.id]
   emit('update:modelValue', next)
-}
-
-const toggleRole = (role: string) => {
-  const index = selectedRoles.value.indexOf(role)
-  if (index > -1) selectedRoles.value.splice(index, 1)
-  else selectedRoles.value.push(role)
 }
 
 function selectAllFiltered(): void {
@@ -183,20 +144,6 @@ function selectAllFiltered(): void {
 function clearAll(): void {
   emit('update:modelValue', [])
 }
-
-const { version } = useGameVersion()
-
-const loadChampionsForCurrentLanguage = async () => {
-  await championsStore.loadChampions(currentLanguage.value)
-}
-
-onMounted(() => {
-  loadChampionsForCurrentLanguage()
-})
-
-watch(locale, () => {
-  loadChampionsForCurrentLanguage()
-})
 </script>
 
 <style scoped>

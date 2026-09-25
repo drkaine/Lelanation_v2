@@ -74,8 +74,6 @@ export function normalizeLegacyTab(tab: string): StatisticsMainTab {
   return 'overview'
 }
 
-export const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
-
 export function isStatisticsMainTab(tab: string): tab is StatisticsMainTab {
   return (STATISTICS_MAIN_TAB_ORDER as readonly string[]).includes(tab)
 }

@@ -538,6 +538,7 @@ import {
   scoreboardObjectiveIconCdByKey,
 } from '~/utils/objectiveScoreboardIcons'
 import { drakeIconSrc, objectiveIconSrc } from '~/utils/statistics/statisticsObjectives'
+import { useToggleSet } from '~/composables/useToggleSet'
 
 export type ChampionObjectivesParticipationCard = {
   stealPct: number
@@ -609,7 +610,7 @@ const { t, te } = useI18n()
 
 const panelTab = ref<'objectives' | 'drakeTypes' | 'drakeSouls'>('objectives')
 const displayMode = ref<'obtention' | 'winrate'>('obtention')
-const openObjectiveKeys = ref<Set<string>>(new Set())
+const { set: openObjectiveKeys, toggle: toggleObjective } = useToggleSet<string>()
 
 const objectiveKeysOrdered = [
   'baron',
@@ -680,13 +681,6 @@ const drakeTypeRows = computed(() => {
   ]
 })
 const soulRows = computed(() => props.data?.soulRows ?? [])
-
-function toggleObjective(key: string) {
-  const next = new Set(openObjectiveKeys.value)
-  if (next.has(key)) next.delete(key)
-  else next.add(key)
-  openObjectiveKeys.value = next
-}
 
 function objectiveHasKillDropdown(key: string): boolean {
   return OBJECTIVE_KEYS_WITH_KILL_DROPDOWN.has(key)

@@ -101,7 +101,7 @@
       </div>
     </aside>
 
-    <div class="statistics-page-main min-w-0 flex-1 max-lg:pb-20">
+    <div :class="['statistics-page-main min-w-0 flex-1', mainClass]">
       <slot name="main" />
     </div>
 
@@ -127,49 +127,34 @@
 </template>
 
 <script setup lang="ts">
-import { storeToRefs } from 'pinia'
-import { watch, onUnmounted } from 'vue'
-import { useStatisticsUiStore } from '~/stores/StatisticsUiStore'
+import { useStatisticsFiltersDrawer } from '~/composables/useStatisticsFiltersDrawer'
 
-defineProps<{
-  activeFiltersCount: number
-}>()
+/**
+ * Statistics page layout: filters drawer (desktop side panel, mobile bottom sheet, floating button)
+ * around the page content (`#main` slot). Default slot: the filter fields.
+ */
+withDefaults(
+  defineProps<{
+    activeFiltersCount: number
+    /** Classes of the content wrapper (padding differs between pages). */
+    mainClass?: string | string[]
+  }>(),
+  { mainClass: 'max-lg:pb-20' }
+)
 
 const emit = defineEmits<{
   reset: []
 }>()
 
 const { t } = useI18n()
-const statisticsUiStore = useStatisticsUiStore()
-const { filtersOpen } = storeToRefs(statisticsUiStore)
 const {
+  filtersOpen,
   effectiveFiltersSheetMode,
   showFiltersBackdrop,
-  lockPageScrollForFilters,
   showDesktopFiltersTrigger,
   filtersFabClass,
-} = useStatisticsFiltersSheetMode()
-
-function closeFilters(): void {
-  statisticsUiStore.setFiltersOpen(false)
-}
-
-function openFilters(): void {
-  statisticsUiStore.setFiltersOpen(true)
-}
-
-function toggleFiltersOpen(): void {
-  if (filtersOpen.value) closeFilters()
-  else openFilters()
-}
-
-watch([filtersOpen, lockPageScrollForFilters], () => {
-  if (!import.meta.client) return
-  const lock = lockPageScrollForFilters.value && filtersOpen.value
-  document.body.style.overflow = lock ? 'hidden' : ''
-})
-
-onUnmounted(() => {
-  if (import.meta.client) document.body.style.overflow = ''
-})
+  closeFilters,
+  openFilters,
+  toggleFiltersOpen,
+} = useStatisticsFiltersDrawer()
 </script>

@@ -26,10 +26,6 @@ interface MultilingualSearchState {
 let loadInflight: Promise<void> | null = null
 let loadInflightKey: string | null = null
 
-export function riotLocaleFromI18n(locale: string): SearchLanguage {
-  return locale === 'en' ? 'en_US' : 'fr_FR'
-}
-
 async function fetchChampionIndex(version: string, language: SearchLanguage) {
   try {
     const payload = await fetchPublicJson<{

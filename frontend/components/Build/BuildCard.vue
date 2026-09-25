@@ -1916,6 +1916,7 @@ import {
   KAYN_CHAMPION_ID,
   type KaynFormFilter,
 } from '~/utils/kaynFormTooltipMarkup'
+import { riotLanguage } from '~/utils/riotLanguage'
 
 interface RegionsPayload {
   regionsData: Record<string, [string, string]>
@@ -2436,8 +2437,7 @@ function sheetTooltip(label?: string | null, fallback = ''): string {
   return label?.trim() || fallback
 }
 
-const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
-const riotLocale = computed(() => getRiotLanguage(locale.value))
+const riotLocale = computed(() => riotLanguage(locale.value))
 
 type AbilityKey = 'Q' | 'W' | 'E' | 'R'
 type SkillSlotSpell = { key: AbilityKey; image: { full: string }; name: string }

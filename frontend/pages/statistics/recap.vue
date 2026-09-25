@@ -248,6 +248,7 @@ import {
 } from '~/composables/useWatchlist'
 import type { WatchMetric, WatchOperator, WatchRule } from '~/types/watchlist'
 import { parseRankTierFromRule, validateWatchRuleThreshold } from '~/types/watchlist'
+import { riotLanguage } from '~/utils/riotLanguage'
 
 definePageMeta({
   layout: 'default',
@@ -445,7 +446,7 @@ function submitRule(): void {
 
 onMounted(async () => {
   watchlist.init()
-  const riotLang = locale.value === 'en' ? 'en_US' : 'fr_FR'
+  const riotLang = riotLanguage(locale.value)
   if (champions.champions.length === 0) {
     await champions.loadChampions(riotLang)
   }

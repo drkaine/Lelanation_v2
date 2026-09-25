@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, unref, watch } from 'vue'
+import { computed, unref } from 'vue'
 import { spellsDetail } from '~/utils/statistics/detailPayload'
 import {
   injectStatisticsPageCtx,
@@ -8,6 +8,9 @@ import {
 import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import { getSpellImageUrl } from '~/utils/imageUrl'
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
+import { usePagination } from '~/composables/usePagination'
+import { useTableSort } from '~/composables/useTableSort'
+import { useToggleSet } from '~/composables/useToggleSet'
 
 const p = injectStatisticsPageCtx<RunesSpellsTabCtx>()
 const summonerSpellsStore = useSummonerSpellsStore()
@@ -82,29 +85,14 @@ type DisplayRow = {
   deltaF: number | null
 }
 
-const sortBy = ref<SortKey | null>(null)
-const sortDir = ref<'asc' | 'desc'>('desc')
+const { sortBy, sortDir, toggleSort, sortIcon } = useTableSort<SortKey>({ resettable: true })
 const spellsMode = computed<'solo' | 'pair'>({
   get: () => (p.spellsModeFilter === 'pair' ? 'pair' : 'solo'),
   set: (value: 'solo' | 'pair') => {
     p.spellsModeFilter = value
   },
 })
-const pageSize = ref<number>(20)
-const page = ref<number>(1)
-const expandedSpellKeys = ref<Set<string>>(new Set())
-
-function toggleSpellCardExpanded(key: string): void {
-  const next = new Set(expandedSpellKeys.value)
-  if (next.has(key)) next.delete(key)
-  else next.add(key)
-  expandedSpellKeys.value = next
-}
-const PAGE_SIZE_OPTIONS = computed<number[]>(() =>
-  Array.isArray(p.PAGE_SIZE_OPTIONS) && p.PAGE_SIZE_OPTIONS.length > 0
-    ? p.PAGE_SIZE_OPTIONS
-    : [10, 20, 50, 100]
-)
+const { set: expandedSpellKeys, toggle: toggleSpellCardExpanded } = useToggleSet<string>()
 
 const rows = computed<SoloRow[]>(() => spellsDetail(p.overviewDetailData)?.summonerSpells ?? [])
 const pairRows = computed<PairRow[]>(
@@ -230,25 +218,6 @@ function spellImage(spellId: number): string | null {
   return summonerSpellsStore.getSpellById(String(spellId))?.image?.full ?? null
 }
 
-function toggleSort(key: SortKey) {
-  if (sortBy.value !== key) {
-    sortBy.value = key
-    sortDir.value = 'desc'
-    return
-  }
-  if (sortDir.value === 'desc') {
-    sortDir.value = 'asc'
-    return
-  }
-  sortBy.value = null
-  sortDir.value = 'desc'
-}
-
-function sortIcon(key: SortKey): string {
-  if (sortBy.value !== key) return ' ↕'
-  return sortDir.value === 'asc' ? ' ▲' : ' ▼'
-}
-
 function numOrNegInf(v: number | null | undefined): number {
   return v == null ? Number.NEGATIVE_INFINITY : v
 }
@@ -368,16 +337,14 @@ const displayRows = computed<DisplayRow[]>(() => {
     deltaF: soloBySpell.get(r.spellIdF)?.deltaPick ?? null,
   }))
 })
-const totalRowsCount = computed(() => displayRows.value.length)
-const totalPages = computed(() => Math.max(1, Math.ceil(totalRowsCount.value / pageSize.value)))
-const paginatedDisplayRows = computed(() => {
-  const pnum = Math.min(page.value, totalPages.value)
-  const start = (pnum - 1) * pageSize.value
-  return displayRows.value.slice(start, start + pageSize.value)
-})
-
-watch([spellsMode, sortBy, sortDir, spellSearchQuery, pageSize], () => {
-  page.value = 1
+const {
+  page,
+  pageSize,
+  totalRowsCount,
+  totalPages,
+  paginatedRows: paginatedDisplayRows,
+} = usePagination(displayRows, {
+  resetOn: [spellsMode, sortBy, sortDir, spellSearchQuery],
 })
 
 const spellsMobileSortColumn = computed({
@@ -734,45 +701,15 @@ function deltaLabelClass(v: number | null | undefined): string {
           </tbody>
         </table>
       </div>
-      <div
-        v-if="totalRowsCount > 0"
-        class="statistics-spells-pagination flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-surface/20 px-3 py-2 text-sm text-text/80 md:rounded-none md:border-t md:bg-transparent md:px-4"
+      <StatisticsRangePagination
+        v-model:page="page"
+        v-model:page-size="pageSize"
+        class="statistics-spells-pagination rounded-lg border border-primary/20 bg-surface/20 px-3 py-2 text-sm text-text/80 md:rounded-none md:border-t md:bg-transparent md:px-4"
+        :total-count="totalRowsCount"
+        :total-pages="totalPages"
       >
-        <span>{{ totalRowsCount }} {{ p.t('statisticsPage.overviewDetailSummonerSpells') }}</span>
-        <div class="flex items-center gap-3">
-          <label class="flex items-center gap-1.5">
-            <span class="text-text/70">{{ p.t('statisticsPage.perPage') }}</span>
-            <select
-              v-model.number="pageSize"
-              class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
-            >
-              <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
-            </select>
-          </label>
-          <span class="text-text/70">
-            {{ (page - 1) * pageSize + 1 }}-{{ Math.min(page * pageSize, totalRowsCount) }} /
-            {{ totalRowsCount }}
-          </span>
-          <div class="flex gap-1">
-            <button
-              type="button"
-              class="statistics-pagination-btn text-text"
-              :disabled="page <= 1"
-              @click="page = Math.max(1, page - 1)"
-            >
-              ‹
-            </button>
-            <button
-              type="button"
-              class="statistics-pagination-btn text-text"
-              :disabled="page >= totalPages"
-              @click="page = Math.min(totalPages, page + 1)"
-            >
-              ›
-            </button>
-          </div>
-        </div>
-      </div>
+        {{ totalRowsCount }} {{ p.t('statisticsPage.overviewDetailSummonerSpells') }}
+      </StatisticsRangePagination>
     </div>
     <div v-else class="text-text/70">{{ p.t('statisticsPage.overviewDetailNoData') }}</div>
   </div>

@@ -18,10 +18,11 @@
 <script setup lang="ts">
 import ChampionSelector from '~/components/Build/ChampionSelector.vue'
 import { useChampionsStore } from '~/stores/ChampionsStore'
+import { riotLanguage } from '~/utils/riotLanguage'
 
 const { t, locale } = useI18n()
 const championsStore = useChampionsStore()
-const riotLocale = computed(() => (locale.value === 'fr' ? 'fr_FR' : 'en_US'))
+const riotLocale = computed(() => riotLanguage(locale.value))
 
 await championsStore.loadChampions(riotLocale.value).catch(() => undefined)
 

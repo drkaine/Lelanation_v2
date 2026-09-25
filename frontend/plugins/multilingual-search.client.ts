@@ -1,3 +1,5 @@
+import { riotLanguage } from '~/utils/riotLanguage'
+
 /** Preload champion/item names for search in the active UI language. */
 export default defineNuxtPlugin({
   name: 'lelanation-multilingual-search',
@@ -7,7 +9,7 @@ export default defineNuxtPlugin({
     const versionStore = useVersionStore()
     const i18n = nuxtApp.$i18n as { locale: { value: string } }
 
-    const riotLocale = computed(() => riotLocaleFromI18n(i18n.locale.value))
+    const riotLocale = computed(() => riotLanguage(i18n.locale.value))
 
     const hydrate = async (language = riotLocale.value) => {
       if (!versionStore.currentVersion) {

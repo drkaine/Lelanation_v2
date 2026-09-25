@@ -12,6 +12,7 @@ import ChampionMatchupMobileCard, {
 import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
 import StatisticsMobileSortBar from '~/components/statistics/StatisticsMobileSortBar.vue'
 import StatisticsTabPagination from '~/components/statistics/StatisticsTabPagination.vue'
+import { useToggleSet } from '~/composables/useToggleSet'
 
 export type SynergyExtRow = {
   rank: number
@@ -69,7 +70,7 @@ const sortDir = ref<'asc' | 'desc'>('desc')
 const pageSizeOptions = [10, 20, 50, 100]
 const pageSize = ref(20)
 const page = ref(1)
-const expandedKeys = ref<Set<string>>(new Set())
+const { set: expandedKeys, toggle: toggleExpandedKeys } = useToggleSet<string>()
 
 function championByKey(id: number) {
   return championsStore.champions.find(c => c.key === String(id)) ?? null
@@ -299,12 +300,8 @@ function dominanceTooltip(
   return lines.join('\n')
 }
 
-function toggleCard(row: SynergyExtRow) {
-  const key = cardKey(row)
-  const next = new Set(expandedKeys.value)
-  if (next.has(key)) next.delete(key)
-  else next.add(key)
-  expandedKeys.value = next
+function toggleCard(row: SynergyExtRow): void {
+  toggleExpandedKeys(cardKey(row))
 }
 </script>
 

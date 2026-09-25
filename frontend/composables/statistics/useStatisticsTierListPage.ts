@@ -365,18 +365,6 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     const start = (page - 1) * size
     return list.slice(start, start + size)
   })
-  const tierListRangeStart = computed(() => {
-    const total = totalTierListCount.value
-    if (total <= 0) return 0
-    const page = Math.min(tierListPage.value, totalTierListPages.value)
-    return (page - 1) * tierListPageSizeSafe.value + 1
-  })
-  const tierListRangeEnd = computed(() => {
-    const total = totalTierListCount.value
-    if (total <= 0) return 0
-    const page = Math.min(tierListPage.value, totalTierListPages.value)
-    return Math.min(page * tierListPageSizeSafe.value, total)
-  })
   const tierListDisplayRankByChampionId = computed(() => {
     return tierListFilteredRankByChampionId.value
   })
@@ -968,8 +956,6 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     totalTierListCount,
     totalTierListPages,
     tierListPageSizeSafe,
-    tierListRangeStart,
-    tierListRangeEnd,
     tierListDisplayRankByChampionId,
     TIER_DIVERGING_LEGEND,
     TIER_CHART_COLORS,

@@ -1,45 +1,18 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import {
   injectStatisticsPageCtx,
   type StatisticsIndexPageCtx,
 } from '~/composables/statistics/statisticsPageCtx'
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
+import { usePagination } from '~/composables/usePagination'
+import { compareVersionsDesc } from '~/utils/statistics/statsVersion'
 
 const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
-const pageSize = ref<number>(20)
-const page = ref<number>(1)
 type InfosSortKey = 'version' | 'total'
 
 const infosSortBy = ref<InfosSortKey>('version')
 const infosSortDir = ref<'asc' | 'desc'>('desc')
-const PAGE_SIZE_OPTIONS = computed<number[]>(() =>
-  Array.isArray(p.PAGE_SIZE_OPTIONS) && p.PAGE_SIZE_OPTIONS.length > 0
-    ? p.PAGE_SIZE_OPTIONS
-    : [10, 20, 50, 100]
-)
-const totalRowsCount = computed<number>(() => (p.infosMatrixRows ?? []).length)
-const totalPages = computed<number>(() =>
-  Math.max(1, Math.ceil(totalRowsCount.value / pageSize.value))
-)
-function compareVersions(a: string, b: string): number {
-  const cmp = p.compareVersionsDesc?.(a, b)
-  if (typeof cmp === 'number') return cmp
-  const pa = String(a)
-    .split('.')
-    .map(x => Number(x))
-  const pb = String(b)
-    .split('.')
-    .map(x => Number(x))
-  const maxLen = Math.max(pa.length, pb.length)
-  for (let i = 0; i < maxLen; i++) {
-    const da = Number.isFinite(pa[i]) ? (pa[i] as number) : 0
-    const db = Number.isFinite(pb[i]) ? (pb[i] as number) : 0
-    if (da !== db) return db - da
-  }
-  return String(b).localeCompare(String(a))
-}
-
 const sortedInfosRows = computed(() => {
   const rows = [...(p.infosMatrixRows ?? [])]
   const dir = infosSortDir.value === 'asc' ? 1 : -1
@@ -48,20 +21,18 @@ const sortedInfosRows = computed(() => {
       const av = cellValue(a, 'ALL')
       const bv = cellValue(b, 'ALL')
       if (av !== bv) return dir * (av - bv)
-      return compareVersions(String(a.version ?? ''), String(b.version ?? ''))
+      return compareVersionsDesc(String(a.version ?? ''), String(b.version ?? ''))
     }
-    const versionCmp = compareVersions(String(a.version ?? ''), String(b.version ?? ''))
+    const versionCmp = compareVersionsDesc(String(a.version ?? ''), String(b.version ?? ''))
     return infosSortDir.value === 'desc' ? versionCmp : -versionCmp
   })
   return rows
 })
 
-const paginatedRows = computed(() => {
-  const rows = sortedInfosRows.value
-  const pnum = Math.min(page.value, totalPages.value)
-  const start = (pnum - 1) * pageSize.value
-  return rows.slice(start, start + pageSize.value)
-})
+const { page, pageSize, totalRowsCount, totalPages, paginatedRows } = usePagination(
+  sortedInfosRows,
+  { resetOn: [() => p.infosMatrixRows, infosSortBy, infosSortDir] }
+)
 
 const infosMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => [
   { value: 'version', label: p.t('statisticsPage.mobileSortInfosVersion') },
@@ -85,13 +56,6 @@ function cellValue(
 ): number {
   return Number(p.infosMatrixCell(row, division))
 }
-
-watch(
-  () => [p.infosMatrixRows, pageSize.value, infosSortBy.value, infosSortDir.value],
-  () => {
-    page.value = 1
-  }
-)
 </script>
 
 <template>
@@ -231,45 +195,15 @@ watch(
           </table>
         </div>
 
-        <div
-          v-if="totalRowsCount > 0"
-          class="statistics-tab-pagination statistics-infos-pagination flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+        <StatisticsRangePagination
+          v-model:page="page"
+          v-model:page-size="pageSize"
+          class="statistics-tab-pagination statistics-infos-pagination px-3 py-2 text-sm"
+          :total-count="totalRowsCount"
+          :total-pages="totalPages"
         >
-          <span>{{ totalRowsCount }} {{ p.t('statisticsPage.infosMatrixPatchHeader') }}</span>
-          <div class="flex items-center gap-3">
-            <label class="flex items-center gap-1.5">
-              <span class="text-text/70">{{ p.t('statisticsPage.perPage') }}</span>
-              <select
-                v-model.number="pageSize"
-                class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
-              >
-                <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
-              </select>
-            </label>
-            <span class="text-text/70">
-              {{ (page - 1) * pageSize + 1 }}-{{ Math.min(page * pageSize, totalRowsCount) }} /
-              {{ totalRowsCount }}
-            </span>
-            <div class="flex gap-1">
-              <button
-                type="button"
-                class="statistics-pagination-btn text-text"
-                :disabled="page <= 1"
-                @click="page = Math.max(1, page - 1)"
-              >
-                ‹
-              </button>
-              <button
-                type="button"
-                class="statistics-pagination-btn text-text"
-                :disabled="page >= totalPages"
-                @click="page = Math.min(totalPages, page + 1)"
-              >
-                ›
-              </button>
-            </div>
-          </div>
-        </div>
+          {{ totalRowsCount }} {{ p.t('statisticsPage.infosMatrixPatchHeader') }}
+        </StatisticsRangePagination>
       </div>
       <div v-else class="statistics-empty-panel p-4">
         {{ p.t('statisticsPage.noData') }}

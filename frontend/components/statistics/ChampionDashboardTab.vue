@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { statsRoleIconPath, statsRoleLabel } from '~/utils/statsRoleDisplay'
 import {
@@ -15,6 +15,7 @@ import {
   scoreboardObjectiveIconByKey,
   scoreboardObjectiveIconCdByKey,
 } from '~/utils/objectiveScoreboardIcons'
+import { useToggleSet } from '~/composables/useToggleSet'
 
 type MetricKey =
   | 'firstBlood'
@@ -218,19 +219,13 @@ const BREAKDOWN_DIGITS: Record<BreakdownMetricKey, number> = {
   tanked: 0,
 }
 
-const openBreakdowns = ref<Set<MetricKey>>(new Set())
+const { set: openBreakdowns, toggle: toggleBreakdown } = useToggleSet<MetricKey>()
 
 function breakdownRows(key: MetricKey): Array<{ key: string; value: number }> {
   return props.data?.breakdowns?.[key as BreakdownMetricKey] ?? []
 }
 function hasBreakdown(key: MetricKey): boolean {
   return breakdownRows(key).length > 0
-}
-function toggleBreakdown(key: MetricKey): void {
-  const next = new Set(openBreakdowns.value)
-  if (next.has(key)) next.delete(key)
-  else next.add(key)
-  openBreakdowns.value = next
 }
 function breakdownLabel(metric: MetricKey, key: string): string {
   const group = BREAKDOWN_LABEL_GROUP[metric as BreakdownMetricKey]

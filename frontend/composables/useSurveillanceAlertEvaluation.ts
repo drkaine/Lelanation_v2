@@ -23,6 +23,7 @@ import {
   type SurveillanceCohortProfile,
   type SurveillanceTestBaseline,
 } from '~/utils/statisticsSurveillanceAlerts'
+import { riotLanguage } from '~/utils/riotLanguage'
 
 type ChampionStatsApiResponse = {
   winrate?: number
@@ -177,7 +178,7 @@ export function useSurveillanceAlertEvaluation() {
   async function ensureChampionsLoaded(): Promise<void> {
     if (championsStore.champions.length === 0) {
       const i18n = useNuxtApp().$i18n
-      const lang = i18n.locale.value === 'fr' ? 'fr_FR' : 'en_US'
+      const lang = riotLanguage(i18n.locale.value)
       await championsStore.loadChampions(lang).catch(() => undefined)
     }
   }
