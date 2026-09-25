@@ -1,9 +1,14 @@
 <script setup lang="ts">
-import { computed, inject, ref, unref, watch } from 'vue'
+import { computed, ref, unref, watch } from 'vue'
+import {
+  injectStatisticsPageCtx,
+  type StatisticsIndexPageCtx,
+} from '~/composables/statistics/statisticsPageCtx'
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
 import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
+import type { BalanceFrameworkRow, BalanceLevelRow } from '~/types/statisticsIndexPage'
 
-const p = inject('statisticsPageCtx') as any
+const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
 
 type BalanceSortKey = 'champion' | 'globalStatus' | 'games'
 
@@ -11,25 +16,8 @@ const balanceSortBy = ref<BalanceSortKey>('champion')
 const balanceSortDir = ref<'asc' | 'desc'>('asc')
 const expandedBalanceKeys = ref<Set<string>>(new Set())
 
-type LevelRow = {
-  status: 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'
-  delta: string | null
-  games: number
-  winrate: number
-  pickrate: number
-  banrate: number
-  presence: number
-}
-
-type BalanceRow = {
-  championId: number
-  role: string
-  average: LevelRow
-  skilled: LevelRow
-  elite: LevelRow
-  globalStatus: 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'
-  globalDelta: string | null
-}
+type LevelRow = BalanceLevelRow
+type BalanceRow = BalanceFrameworkRow
 
 type StatusFilter = 'ALL' | 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'
 
@@ -70,8 +58,8 @@ function statusMatches(
   return filter === 'ALL' || value === filter
 }
 
-function fmt(v: number): string {
-  return Number.isFinite(v) ? v.toFixed(2) : '0.00'
+function fmt(v: number | undefined): string {
+  return v !== undefined && Number.isFinite(v) ? v.toFixed(2) : '0.00'
 }
 
 function fmt3(v: number): string {
@@ -201,10 +189,10 @@ const filteredRows = computed<BalanceRow[]>(() => {
         return false
       }
     }
-    const gf = (p.balanceGlobalFilter as StatusFilter) ?? 'ALL'
-    const af = (p.balanceAverageFilter as StatusFilter) ?? 'ALL'
-    const sf = (p.balanceSkilledFilter as StatusFilter) ?? 'ALL'
-    const ef = (p.balanceEliteFilter as StatusFilter) ?? 'ALL'
+    const gf = p.balanceGlobalFilter ?? 'ALL'
+    const af = p.balanceAverageFilter ?? 'ALL'
+    const sf = p.balanceSkilledFilter ?? 'ALL'
+    const ef = p.balanceEliteFilter ?? 'ALL'
     if (!statusMatches(row.globalStatus, gf)) return false
     const needFilter = String(p.balanceNeedFilter ?? 'ALL')
     if (needFilter !== 'ALL' && frameworkNeedCode(row.globalStatus) !== needFilter) return false
@@ -483,7 +471,7 @@ function globalTooltip(row: BalanceRow): string {
                           p.championByKey(row.championId)!.image.full
                         )
                       "
-                      :alt="p.championName(row.championId)"
+                      :alt="p.championName(row.championId) ?? undefined"
                       class="h-8 w-8 rounded border border-black/30 object-cover"
                       width="32"
                       height="32"

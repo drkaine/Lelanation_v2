@@ -117,17 +117,15 @@ export async function runDiskSpaceAlertOnce(): Promise<{
         }
       )
 
-      await cronStatus.markFailure(
-        'diskSpaceAlert',
-        new Error(`Disk usage ${snapshot.usagePercent}% (threshold ${alertThreshold}%)`)
-      )
+      // Seuil franchi = alerte Discord, pas un échec du cron (sinon incident CRON_FAILED critique).
+      await cronStatus.markSuccess('diskSpaceAlert')
       await log.warn('Disk space threshold crossed', {
         usagePercent: snapshot.usagePercent,
         alertThreshold,
       })
 
       return {
-        ok: false,
+        ok: true,
         alerted: true,
         cleaned: Boolean(cleanup && !cleanup.skipped),
         usagePercent: snapshot.usagePercent,

@@ -1,6 +1,10 @@
 <script setup lang="ts">
-import { computed, inject, ref, watch, unref } from 'vue'
+import { computed, ref, watch, unref } from 'vue'
 import type { Item } from '@lelanation/shared-types'
+import {
+  injectStatisticsPageCtx,
+  type StatisticsIndexPageCtx,
+} from '~/composables/statistics/statisticsPageCtx'
 import { useItemsStore } from '~/stores/ItemsStore'
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
 import {
@@ -10,7 +14,7 @@ import {
 } from '~/utils/formatItemStats'
 import { matchesItemSearch } from '~/utils/multilingualEntitySearch'
 
-const p = inject('statisticsPageCtx') as any
+const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
 const itemsStore = useItemsStore()
 
 type ItemType = 'starter' | 'core' | 'boots' | 'final'

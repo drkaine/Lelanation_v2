@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { computed, inject } from 'vue'
+import { computed } from 'vue'
+import {
+  injectStatisticsPageCtx,
+  type StatisticsIndexPageCtx,
+} from '~/composables/statistics/statisticsPageCtx'
 import { onPingIconError, pingIconSrc } from '~/utils/pingIcons'
 import {
   PING_METRIC_KEYS,
@@ -10,7 +14,7 @@ import {
   type PingsTableRow,
 } from '~/composables/statistics/useStatisticsPingsTab'
 
-const p = inject('statisticsPageCtx') as Record<string, any>
+const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
 
 const pingsMobileSortColumn = computed({
   get: () => String(p.pingsSortColumn ?? 'totalPerGame'),

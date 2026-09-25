@@ -5,40 +5,19 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { RunePath } from '@lelanation/shared-types'
+import type { RunesDetailPayload } from '~/types/statisticsIndexPage'
 import { useRunesStore } from '~/stores/RunesStore'
 import { getRuneImageUrl } from '~/utils/imageUrl'
 import { parseShardList } from '~/utils/parseShardList'
 
 type RuneStat = { pickrate: number; winrate: number; games: number }
-type DetailPayload = {
-  totalParticipants: number
-  runes: Array<{ runeId: number; games: number; wins: number; pickrate: number; winrate: number }>
-  runeSets: Array<{
-    runes: unknown
-    shards?: number[]
-    /** Raw DB value when `shards` was not parsed server-side. */
-    shardList?: string
-    games: number
-    wins: number
-    pickrate: number
-    winrate: number
-  }>
-  shards?: Array<{
-    shardId: number
-    slot: number
-    games: number
-    wins: number
-    pickrate: number
-    winrate: number
-  }>
-}
 
 const SET_CARD_LIMIT = 6
 
 const props = defineProps<{
   gameVersion: string
-  data: DetailPayload | null
-  baseline: DetailPayload | null
+  data: RunesDetailPayload | null
+  baseline: RunesDetailPayload | null
   baselinePending: boolean
   comparisonVersion: string | null
   /** Fiche champion : une seule carte, runes + fragments puis séparateur + liste des sets. */
@@ -110,7 +89,7 @@ function shardIdsForStat(shardId: number, slot: number): number[] {
 }
 
 function mergedShardStat(
-  payload: DetailPayload | null | undefined,
+  payload: RunesDetailPayload | null | undefined,
   shardId: number,
   slot: number
 ): RuneStat | null {
@@ -190,9 +169,9 @@ function deltaClass(cur: number, old: number | undefined): string {
 
 /** Plancher de parties pour les cartes sets — adapté au volume filtré (comme ItemStatsFastSection). */
 function runeSetsValidForHighlights(
-  sets: NonNullable<DetailPayload['runeSets']>,
+  sets: NonNullable<RunesDetailPayload['runeSets']>,
   totalParticipants: number
-): NonNullable<DetailPayload['runeSets']> {
+): NonNullable<RunesDetailPayload['runeSets']> {
   const preferMin = Math.min(800, Math.max(15, Math.floor(totalParticipants * 0.0008)))
   const thresholds = [preferMin, Math.max(10, Math.floor(preferMin * 0.5)), 20, 10, 5, 1]
   for (const minG of thresholds) {
@@ -354,7 +333,7 @@ function sortShardIdsForSet(ids: number[]): number[] {
   return [...ids].sort((a, b) => (order.get(a) ?? 999) - (order.get(b) ?? 999))
 }
 
-type RuneSetRow = NonNullable<DetailPayload['runeSets']>[number]
+type RuneSetRow = NonNullable<RunesDetailPayload['runeSets']>[number]
 
 /** Clé perks+shards (ordre shards normalisé) — match exact si le baseline expose les mêmes fragments. */
 function runeSetStableKey(set: Pick<RuneSetRow, 'runes' | 'shards'>): string {

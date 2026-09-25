@@ -11,20 +11,10 @@ import {
 
 import {
   injectStatisticsPageCtx,
-  type StatisticsT,
+  type StatisticsMetaChartPageCtx,
 } from '~/composables/statistics/statisticsPageCtx'
 
-type MetaChartTabCtx = {
-  t: StatisticsT
-  tierListChartHeading: string | null | undefined
-  effectiveTierListPatch: string | null | undefined
-  gameVersion: string | null | undefined
-  tierListError: string | null
-  tierListPending: boolean
-  totalTierListCount: number
-}
-
-const p = injectStatisticsPageCtx<MetaChartTabCtx>()
+const p = injectStatisticsPageCtx<StatisticsMetaChartPageCtx>()
 
 const bubbleChartRef = ref<{ chartCaptureRoot: HTMLElement | null } | null>(null)
 const metaChartExportPending = ref(false)

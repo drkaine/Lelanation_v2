@@ -581,11 +581,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, ref, unref } from 'vue'
+import { computed, ref, unref } from 'vue'
+import { isOneOf } from '~/utils/statistics/isOneOf'
+import { BANS_SORT_COLS } from '~/composables/statistics/useStatisticsBansTab'
+import {
+  injectStatisticsPageCtx,
+  type StatisticsIndexPageCtx,
+} from '~/composables/statistics/statisticsPageCtx'
 import type { BansSortCol } from '~/composables/statistics/useStatisticsBansTab'
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
 
-const p = inject('statisticsPageCtx') as any
+const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
 const expandedBanIds = ref<Set<number>>(new Set())
 
 function toggleBanCardExpanded(championId: number): void {
@@ -607,9 +613,9 @@ function formatBansPatchDeltaPct(pp: number): string {
 }
 
 const bansMobileSortColumn = computed({
-  get: () => String(p.bansSortColumn ?? 'rate'),
+  get: () => p.bansSortColumn,
   set: (v: string) => {
-    p.setBansSort(v)
+    if (isOneOf(BANS_SORT_COLS, v)) p.setBansSort(v)
   },
 })
 
@@ -634,7 +640,7 @@ const bansMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
     { value: 'bottom', label: t('statisticsPage.bansColBottom') },
     { value: 'support', label: t('statisticsPage.bansColSupport') },
   ]
-  if (p.bansPatchDeltaRefLabel) {
+  if (p.bansTableRefData) {
     const deltaOpts: StatisticsMobileSortOption[] = [
       { value: 'rateDelta', label: `Δ ${t('statisticsPage.bansColRate')}` },
       { value: 'winDelta', label: `Δ ${t('statisticsPage.overviewTeamsByWin')}` },

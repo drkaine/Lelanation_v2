@@ -17,7 +17,7 @@ withDefaults(
     noDataText: string
     gameVersion: string | null | undefined
     championByKey: (id: number) => { image: { full: string } } | null | undefined
-    championName: (id: number) => string
+    championName: (id: number) => string | null
     getChampionImageUrl: (version: string, imageFull: string) => string
     searchQuery?: string
     /** default = pick/win/ban ; progression = delta + fourchette ; bans = ban% + delta comparaison */

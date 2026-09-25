@@ -1,8 +1,12 @@
 <script setup lang="ts">
-import { computed, inject, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+import {
+  injectStatisticsPageCtx,
+  type StatisticsIndexPageCtx,
+} from '~/composables/statistics/statisticsPageCtx'
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
 
-const p = inject('statisticsPageCtx') as any
+const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
 const pageSize = ref<number>(20)
 const page = ref<number>(1)
 type InfosSortKey = 'version' | 'total'

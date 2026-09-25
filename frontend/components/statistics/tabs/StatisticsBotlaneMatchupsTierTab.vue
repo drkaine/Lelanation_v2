@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { computed, inject, ref, unref, watch } from 'vue'
+import { computed, ref, unref, watch } from 'vue'
+import {
+  injectStatisticsPageCtx,
+  type StatisticsTierListPageCtx,
+} from '~/composables/statistics/statisticsPageCtx'
 import { getChampionImageUrl } from '~/utils/imageUrl'
 import { botlaneRowKey } from '~/composables/statistics/botlanePatchDeltas'
 import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
 
-const p = inject('statisticsPageCtx') as any
+const p = injectStatisticsPageCtx<StatisticsTierListPageCtx>()
 
 type SortKey = 'rank' | 'tier' | 'score' | 'winrate' | 'delta' | 'pickrate' | 'games'
 

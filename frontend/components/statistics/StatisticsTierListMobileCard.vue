@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { computed, inject } from 'vue'
+import { computed } from 'vue'
+import {
+  injectStatisticsPageCtx,
+  type StatisticsTierListPageCtx,
+} from '~/composables/statistics/statisticsPageCtx'
 
 export type TierListMobileRow = {
   championId: number
@@ -33,11 +37,10 @@ const emit = defineEmits<{
   toggle: []
 }>()
 
-const p = inject('statisticsPageCtx') as Record<string, unknown>
+const p = injectStatisticsPageCtx<StatisticsTierListPageCtx>()
 
 function t(key: string, params?: Record<string, string>): string {
-  const fn = p.t as ((k: string, p?: Record<string, string>) => string) | undefined
-  return fn?.(key, params) ?? key
+  return params ? p.t(key, params) : p.t(key)
 }
 
 function tierLabel(tier: string): string {
@@ -47,12 +50,12 @@ function tierLabel(tier: string): string {
 }
 
 const displayRank = computed(() => {
-  const map = p.tierListDisplayRankByChampionId as Map<number, number | string> | undefined
+  const map = p.tierListDisplayRankByChampionId
   return map?.get(props.row.championId) ?? '—'
 })
 
 const patchRankDelta = computed(() => {
-  const fn = p.tierListPatchRankDelta as ((id: number) => number | null | undefined) | undefined
+  const fn = p.tierListPatchRankDelta
   return fn?.(props.row.championId) ?? null
 })
 
@@ -64,56 +67,56 @@ const patchHighEloRankDelta = computed(() => {
 })
 
 const roleLabel = computed(() => {
-  const mainRoleLabel = p.mainRoleLabel as ((r: string) => string) | undefined
+  const mainRoleLabel = p.mainRoleLabel
   const lane = mainRoleLabel?.(props.row.mainRole) ?? props.row.mainRole
   return `${tierLabel(props.row.tier)} · ${lane} ${Number(props.row.mainRolePct).toFixed(0)}%`
 })
 
 const portraitSrc = computed(() => {
-  const gv = p.gameVersion as string | undefined
-  const byKey = p.championByKey as ((id: number) => { image: { full: string } } | null) | undefined
-  const urlFn = p.getChampionImageUrl as ((v: string, f: string) => string) | undefined
+  const gv = p.gameVersion
+  const byKey = p.championByKey
+  const urlFn = p.getChampionImageUrl
   const champ = byKey?.(props.row.championId)
   if (!gv || !champ || !urlFn) return null
   return urlFn(gv, champ.image.full)
 })
 
-const patchRefLabel = computed(() => (p.tierListPatchDeltaRefLabel as string | null) ?? null)
+const patchRefLabel = computed(() => p.tierListPatchDeltaRefLabel ?? null)
 
 function winrateClass(v: number): string {
-  const fn = p.tierListWinrateClass as ((n: number) => string) | undefined
+  const fn = p.tierListWinrateClass
   return fn?.(v) ?? 'text-text'
 }
 
 function deltaClass(v: number | null | undefined): string {
-  const fn = p.tierListPatchDeltaClass as ((n: number) => string) | undefined
+  const fn = p.tierListPatchDeltaClass
   if (!patchRefLabel.value || v == null) return 'text-text/55'
   return fn?.(v) ?? 'text-text/55'
 }
 
 function formatPp(v: number | null | undefined): string {
-  const fn = p.formatTierListPatchDeltaPp as ((n: number) => string) | undefined
+  const fn = p.formatTierListPatchDeltaPp
   if (v == null) return '—'
   return fn?.(v) ?? `${v >= 0 ? '+' : ''}${v.toFixed(2)}`
 }
 
 function formatRank(v: number): string {
-  const fn = p.formatTierListPatchDeltaRank as ((n: number) => string) | undefined
+  const fn = p.formatTierListPatchDeltaRank
   return fn?.(v) ?? `${v >= 0 ? '+' : ''}${v}`
 }
 
 function formatGames(v: number): string {
-  const fn = p.formatTierListPatchDeltaGames as ((n: number) => string) | undefined
+  const fn = p.formatTierListPatchDeltaGames
   return fn?.(v) ?? `${v >= 0 ? '+' : ''}${v}`
 }
 
 function gamesDeltaClass(v: number): string {
-  const fn = p.tierListPatchDeltaGamesClass as ((n: number) => string) | undefined
+  const fn = p.tierListPatchDeltaGamesClass
   return fn?.(v) ?? deltaClass(v)
 }
 
 function rankDeltaClass(v: number): string {
-  const fn = p.tierListPatchDeltaRankClass as ((n: number) => string) | undefined
+  const fn = p.tierListPatchDeltaRankClass
   return fn?.(v) ?? deltaClass(v)
 }
 </script>
@@ -127,23 +130,12 @@ function rankDeltaClass(v: number): string {
     >
       <StatisticsChampionStatsMobileCardHeader
         :champion-id="row.championId"
-        :champion-name="
-          String(
-            (p.championName as ((id: number) => string | null) | undefined)?.(row.championId) ||
-              row.championId
-          )
-        "
+        :champion-name="String(p.championName?.(row.championId) || row.championId)"
         :search-query="String(p.championSearchQuery ?? '')"
         :role-label="roleLabel"
-        :role-icon-src="
-          (p.mainRoleIconSrc as ((r: string) => string | null) | undefined)?.(row.mainRole) ?? null
-        "
+        :role-icon-src="p.mainRoleIconSrc?.(row.mainRole) ?? null"
         :portrait-src="portraitSrc"
-        :portrait-alt="
-          String(
-            (p.championName as ((id: number) => string | null) | undefined)?.(row.championId) || ''
-          )
-        "
+        :portrait-alt="String(p.championName?.(row.championId) || '')"
       />
       <button
         type="button"
@@ -209,12 +201,7 @@ function rankDeltaClass(v: number): string {
       <div class="flex flex-wrap items-baseline justify-between gap-x-2">
         <span>{{ t('statisticsPage.tierListPbi') }}</span>
         <span class="tabular-nums">
-          {{
-            (p.formatMatchupScore as ((n: number, d?: number) => string) | undefined)?.(
-              row.pbi,
-              2
-            ) ?? row.pbi.toFixed(2)
-          }}
+          {{ p.formatMatchupScore?.(row.pbi, 2) ?? row.pbi.toFixed(2) }}
           <span
             v-if="patchRefLabel && row.patchRefMatchupScorePp != null"
             class="ml-1 text-xs"

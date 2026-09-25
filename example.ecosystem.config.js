@@ -3,9 +3,10 @@ module.exports = {
       {
         name: 'lelanation-backend',
         cwd: 'path',
-        script: 'npx',
-        args: 'tsx watch src/index.ts',
-        interpreter: 'none',
+        // Compiled bundle: run `npm run build -w backend` first (make deploy-backend does it).
+        script: 'dist/app/index.js',
+        interpreter: 'node',
+        node_args: '--enable-source-maps',
         env: {
           NODE_ENV: 'development',
           PORT: 4001,
@@ -26,9 +27,10 @@ module.exports = {
       {
         name: 'lelanation-poller-v2',
         cwd: 'path',
-        script: 'npx',
-        args: 'tsx src/main.ts',
-        interpreter: 'none',
+        // Compiled bundle: run `npm run build -w backend` first (make deploy-backend does it).
+        script: 'dist/app/main.js',
+        interpreter: 'node',
+        node_args: '--enable-source-maps',
         env: {
           NODE_ENV: 'development',
           ENV: 'dev',

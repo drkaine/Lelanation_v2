@@ -1,24 +1,19 @@
 <script setup lang="ts">
-import { computed, inject } from 'vue'
+import { computed } from 'vue'
+import {
+  injectStatisticsPageCtx,
+  type StatisticsTierListPageCtx,
+} from '~/composables/statistics/statisticsPageCtx'
 import { tierChartColor } from '~/utils/tierChartColors'
 
-type ChartRow = {
-  championId: number
-  tier: string
-  pickrate: number
-  winrate: number
-  pbi: number
-  games?: number
-}
-
-const p = inject('statisticsPageCtx') as Record<string, unknown>
+const p = injectStatisticsPageCtx<StatisticsTierListPageCtx>()
 
 function t(key: string): string {
-  const fn = p.t as ((k: string) => string) | undefined
+  const fn = p.t
   return fn?.(key) ?? key
 }
 
-const rows = computed(() => (p.tierListChartVisibleRows as ChartRow[] | undefined) ?? [])
+const rows = computed(() => p.tierListChartVisibleRows ?? [])
 
 const zeroLinePct = computed(() => Number(p.tierListChartZeroBottomPct) || 50)
 
@@ -31,7 +26,7 @@ function barStyle(pbi: number, tier: string): { leftPct: number; widthPct: numbe
 
 function gamesTitle(games: number | null | undefined): string | undefined {
   if (games == null) return undefined
-  const fn = p.t as ((k: string, params: Record<string, string>) => string) | undefined
+  const fn = p.t
   return fn?.('statisticsPage.tierListChampionGamesHover', { count: games.toLocaleString() })
 }
 
@@ -42,26 +37,26 @@ function tierLabel(tier: string): string {
 }
 
 function championName(id: number): string {
-  const fn = p.championName as ((id: number) => string | null) | undefined
+  const fn = p.championName
   return fn?.(id) ?? String(id)
 }
 
 function portraitSrc(id: number): string | null {
-  const gv = p.gameVersion as string | undefined
-  const byKey = p.championByKey as ((id: number) => { image: { full: string } } | null) | undefined
-  const urlFn = p.getChampionImageUrl as ((v: string, f: string) => string) | undefined
+  const gv = p.gameVersion
+  const byKey = p.championByKey
+  const urlFn = p.getChampionImageUrl
   const champ = byKey?.(id)
   if (!gv || !champ || !urlFn) return null
   return urlFn(gv, champ.image.full)
 }
 
 function formatPbi(pbi: number): string {
-  const fn = p.formatMatchupScore as ((n: number, d?: number) => string) | undefined
+  const fn = p.formatMatchupScore
   return fn?.(pbi, 2) ?? pbi.toFixed(2)
 }
 
 function barColor(tier: string): string {
-  const fn = p.tierListChartBarColor as ((tier: string) => string) | undefined
+  const fn = p.tierListChartBarColor
   return fn?.(tier) ?? tierChartColor(tier)
 }
 </script>

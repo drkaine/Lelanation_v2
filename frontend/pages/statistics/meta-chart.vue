@@ -349,17 +349,7 @@
 </template>
 
 <script setup lang="ts">
-import {
-  ref,
-  computed,
-  watch,
-  onMounted,
-  onUnmounted,
-  getCurrentInstance,
-  provide,
-  unref,
-  isRef,
-} from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, provide, reactive } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
@@ -379,6 +369,7 @@ import { useSiteUrl } from '~/composables/useSiteUrl'
 import { absoluteSitePath, pageOgImageUrl } from '~/utils/siteUrl'
 import { useOgMetaTags } from '~/composables/useOgMetaTags'
 import { parseRankTierQuery, rankTierSelectionsEqual } from '~/utils/statisticsRankTierQuery'
+import { compareVersionsDesc, normalizeVersionToPrefix } from '~/utils/statistics/statsVersion'
 
 definePageMeta({
   layout: 'default',
@@ -401,7 +392,9 @@ const {
 } = useStatisticsFiltersSheetMode()
 const { version: gameVersion } = useGameVersion()
 
-const { data: championNames } = await useChampionNames()
+// Started here, awaited at the end of setup (after defineExpose): SSR still renders with the names.
+const championNamesRequest = useChampionNames()
+const { data: championNames } = championNamesRequest
 
 const metaChartSeoTitle = computed(() =>
   t('statisticsPage.metaChartMetaTitle', {
@@ -433,18 +426,6 @@ const riotLocale = computed(() => getRiotLanguage(locale.value))
 function queryFirst(value: string | string[] | null | undefined): string {
   if (Array.isArray(value)) return value[0] ?? ''
   return value ?? ''
-}
-
-function compareVersionsDesc(a: string, b: string): number {
-  const pa = a.split('.').map(x => Number(x))
-  const pb = b.split('.').map(x => Number(x))
-  const maxLen = Math.max(pa.length, pb.length)
-  for (let i = 0; i < maxLen; i++) {
-    const da = Number.isFinite(pa[i]!) ? (pa[i] as number) : 0
-    const db = Number.isFinite(pb[i]!) ? (pb[i] as number) : 0
-    if (da !== db) return db - da
-  }
-  return b.localeCompare(a)
 }
 
 const statsKnownVersions = ref<Array<{ version: string; matchCount: number }>>([])
@@ -503,13 +484,6 @@ const activeStatsFiltersCount = computed(() => {
   if (championSearchQuery.value.trim()) count++
   return count
 })
-
-function normalizeVersionToPrefix(v: string | null | undefined): string | null {
-  if (!v || typeof v !== 'string') return null
-  const parts = v.trim().split('.')
-  if (parts.length >= 2) return `${parts[0]}.${parts[1]}`
-  return parts[0] || null
-}
 
 function syncProgressionDeltaToVersionBeforeFilter(): boolean {
   const filter = statsVersionFilter.value.trim()
@@ -835,54 +809,26 @@ onUnmounted(() => {
   if (import.meta.client) document.body.style.overflow = ''
 })
 
-const __vm = getCurrentInstance()
-if (__vm) {
-  const __ctx = new Proxy(
-    {},
-    {
-      get(_target, key: string | symbol) {
-        if (key === 't') return t
-        const proxyObj = __vm.proxy as Record<string, unknown> | null | undefined
-        if (typeof key !== 'string') {
-          return undefined
-        }
-        if (key in tierList) {
-          const v = tierList[key as keyof typeof tierList]
-          return unref(v as never)
-        }
-        const inst = __vm as { setupState?: Record<string, unknown> }
-        const setupState = inst.setupState
-        if (setupState && key in setupState) {
-          return unref(setupState[key] as never)
-        }
-        return unref(proxyObj?.[key])
-      },
-      set(_target, key: string | symbol, value: unknown) {
-        if (typeof key === 'string') {
-          if (key in tierList) {
-            const v = tierList[key as keyof typeof tierList]
-            if (isRef(v)) {
-              ;(v as { value: unknown }).value = value
-              return true
-            }
-          }
-          const inst = __vm as { setupState?: Record<string, unknown> }
-          const binding = inst.setupState?.[key]
-          if (isRef(binding)) {
-            ;(binding as { value: unknown }).value = value
-            return true
-          }
-        }
-        const proxyObj = __vm.proxy as Record<string, unknown> | null | undefined
-        if (proxyObj && typeof key === 'string') {
-          proxyObj[key] = value
-        }
-        return true
-      },
-    }
-  )
-  provide('statisticsPageCtx', __ctx)
-}
+// Contexte des onglets (inject 'statisticsPageCtx') : champs explicites ; `reactive` déréférence
+// les refs à la lecture et écrit dans `.value` à l'affectation (v-model des onglets).
+const statisticsPageCtx = reactive({
+  championName: tierList.championName,
+  effectiveTierListPatch: tierList.effectiveTierListPatch,
+  gameVersion: tierList.gameVersion,
+  t,
+  tierListChartBarColor: tierList.tierListChartBarColor,
+  tierListChartChampionImage: tierList.tierListChartChampionImage,
+  tierListChartHeading: tierList.tierListChartHeading,
+  tierListChartReferenceRows: tierList.tierListChartReferenceRows,
+  tierListChartVisibleRows: tierList.tierListChartVisibleRows,
+  tierListError: tierList.tierListError,
+  tierListPending: tierList.tierListPending,
+  totalTierListCount: tierList.totalTierListCount,
+})
+provide('statisticsPageCtx', statisticsPageCtx)
+defineExpose({ statisticsPageCtx })
+
+await championNamesRequest
 </script>
 
 <style scoped>

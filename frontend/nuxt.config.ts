@@ -189,7 +189,10 @@ export default defineNuxtConfig({
     '/en/guides/matchups': { redirect: { to: '/en/matchups/sheets', statusCode: 301 } },
     '/render/**': { ssr: false },
   },
+  // NUXT_BUILD_DIR / NUXT_OUTPUT_DIR: build elsewhere than the live `.output` (verification builds).
+  ...(process.env.NUXT_BUILD_DIR ? { buildDir: process.env.NUXT_BUILD_DIR } : {}),
   nitro: {
+    ...(process.env.NUXT_OUTPUT_DIR ? { output: { dir: process.env.NUXT_OUTPUT_DIR } } : {}),
     prerender: {
       crawlLinks: false,
       // Sitemap uniquement — collectPrerenderRoutes() (~644 routes) ne produisait que 2 fichiers.

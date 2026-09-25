@@ -7,28 +7,36 @@ import { championNameFromMap, type ChampionNamesMap } from '~/composables/useCha
 import { getChampionImageUrl } from '~/utils/imageUrl'
 import { TIER_CHART_COLORS, tierChartColor, tierChartColorMuted } from '~/utils/tierChartColors'
 import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
+import {
+  mainRoleIconSrc,
+  mainRoleLabel,
+  tierListWinrateClass,
+} from '~/utils/statistics/statisticsTableFormat'
 
-type TierListSortColumn =
-  | 'rank'
-  | 'champion'
-  | 'tier'
-  | 'mainRolePct'
-  | 'patchMainRolePctPp'
-  | 'winrate'
-  | 'pickrate'
-  | 'patchWinratePp'
-  | 'patchPickratePp'
-  | 'pbi'
-  | 'patchPbiPp'
-  | 'games'
-  | 'patchGamesDelta'
-  | 'highEloRank'
-  | 'highEloWinrate'
-  | 'patchHighEloWinratePp'
-  | 'highEloGames'
-  | 'patchHighEloGamesDelta'
-  | 'patchHighEloRankDelta'
-  | 'delta'
+export const TIER_LIST_SORT_COLUMNS = [
+  'rank',
+  'champion',
+  'tier',
+  'mainRolePct',
+  'patchMainRolePctPp',
+  'winrate',
+  'pickrate',
+  'patchWinratePp',
+  'patchPickratePp',
+  'pbi',
+  'patchPbiPp',
+  'games',
+  'patchGamesDelta',
+  'highEloRank',
+  'highEloWinrate',
+  'patchHighEloWinratePp',
+  'highEloGames',
+  'patchHighEloGamesDelta',
+  'patchHighEloRankDelta',
+  'delta',
+] as const
+
+export type TierListSortColumn = (typeof TIER_LIST_SORT_COLUMNS)[number]
 
 export type UseStatisticsTierListPageArgs = {
   statsVersionFilter: Ref<string>
@@ -60,28 +68,6 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
   const { t, locale } = useI18n()
   const localePath = useLocalePath()
   const championsStore = useChampionsStore()
-
-  const ROLE_OPTIONS = [
-    { value: 'TOP', label: 'Top', icon: '/icons/roles/top.png' },
-    { value: 'JUNGLE', label: 'Jungle', icon: '/icons/roles/jungle.png' },
-    { value: 'MIDDLE', label: 'Mid', icon: '/icons/roles/mid.png' },
-    { value: 'BOTTOM', label: 'ADC', icon: '/icons/roles/bot.png' },
-    { value: 'SUPPORT', label: 'Support', icon: '/icons/roles/support.png' },
-  ] as const
-
-  function mainRoleIconSrc(mainRole: string | null | undefined): string | null {
-    const raw = (mainRole ?? '').trim().toUpperCase()
-    if (!raw) return null
-    const key = raw === 'UTILITY' ? 'SUPPORT' : raw
-    return ROLE_OPTIONS.find(r => r.value === key)?.icon ?? null
-  }
-
-  function mainRoleLabel(mainRole: string | null | undefined): string {
-    const raw = (mainRole ?? '').trim().toUpperCase()
-    if (!raw) return String(mainRole ?? '—')
-    const key = raw === 'UTILITY' ? 'SUPPORT' : raw
-    return ROLE_OPTIONS.find(r => r.value === key)?.label ?? String(mainRole)
-  }
 
   function championByKey(championId: number): (typeof championsStore.champions)[0] | null {
     const champ = championsStore.champions.find(c => c.key === String(championId))
@@ -172,15 +158,6 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     return map
   })
   const hasTierListHighElo = computed(() => (tierListData.value?.highEloRows?.length ?? 0) > 0)
-  /** Couleurs type LoLalytics pour WR % (sur 0–100). */
-  function tierListWinrateClass(pct: number): string {
-    if (!Number.isFinite(pct)) return 'text-text/80'
-    if (pct >= 52.5) return 'font-medium text-info'
-    if (pct >= 51) return 'text-info/95'
-    if (pct >= 50) return 'text-primary-light/85'
-    return 'text-error/90'
-  }
-
   /** Tier list rows with optional delta (global winrate - highElo winrate). */
   interface TierListRowWithDelta {
     rank: number

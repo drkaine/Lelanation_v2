@@ -1,10 +1,15 @@
 <script setup lang="ts">
-import { computed, inject, ref, unref, watch } from 'vue'
+import { computed, ref, unref, watch } from 'vue'
+import { spellsDetail } from '~/utils/statistics/detailPayload'
+import {
+  injectStatisticsPageCtx,
+  type RunesSpellsTabCtx,
+} from '~/composables/statistics/statisticsPageCtx'
 import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import { getSpellImageUrl } from '~/utils/imageUrl'
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
 
-const p = inject('statisticsPageCtx') as any
+const p = injectStatisticsPageCtx<RunesSpellsTabCtx>()
 const summonerSpellsStore = useSummonerSpellsStore()
 
 type SortKey =
@@ -101,17 +106,19 @@ const PAGE_SIZE_OPTIONS = computed<number[]>(() =>
     : [10, 20, 50, 100]
 )
 
-const rows = computed<SoloRow[]>(() => p.overviewDetailData?.summonerSpells ?? [])
-const pairRows = computed<PairRow[]>(() => p.overviewDetailData?.summonerSpellSets ?? [])
+const rows = computed<SoloRow[]>(() => spellsDetail(p.overviewDetailData)?.summonerSpells ?? [])
+const pairRows = computed<PairRow[]>(
+  () => spellsDetail(p.overviewDetailData)?.summonerSpellSets ?? []
+)
 const baselineBySpell = computed<Map<number, SoloRow>>(() => {
   const m = new Map<number, SoloRow>()
-  const base = p.overviewDetailBaselineData?.summonerSpells ?? []
+  const base = spellsDetail(p.overviewDetailBaselineData)?.summonerSpells ?? []
   for (const r of base) m.set(Number(r.spellId), r)
   return m
 })
 const baselineByPair = computed<Map<string, PairRow>>(() => {
   const m = new Map<string, PairRow>()
-  const base = p.overviewDetailBaselineData?.summonerSpellSets ?? []
+  const base = spellsDetail(p.overviewDetailBaselineData)?.summonerSpellSets ?? []
   for (const r of base) m.set(`${r.spellIdD}:${r.spellIdF}`, r)
   return m
 })

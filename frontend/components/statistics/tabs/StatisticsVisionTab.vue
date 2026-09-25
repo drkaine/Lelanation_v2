@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { computed, inject } from 'vue'
+import { computed } from 'vue'
+import {
+  injectStatisticsPageCtx,
+  type StatisticsIndexPageCtx,
+} from '~/composables/statistics/statisticsPageCtx'
 import {
   VISION_METRIC_KEYS,
   visionMobileSortOptions,
@@ -8,7 +12,7 @@ import {
   type VisionTableRow,
 } from '~/composables/statistics/useStatisticsVisionTab'
 
-const p = inject('statisticsPageCtx') as Record<string, any>
+const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
 
 const visionMobileSortColumn = computed({
   get: () => String(p.visionSortColumn ?? 'visionScore'),

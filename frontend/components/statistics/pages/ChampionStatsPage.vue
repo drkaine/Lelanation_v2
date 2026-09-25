@@ -1860,10 +1860,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, provide, nextTick } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted, provide, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { PAGE_SIZE_OPTIONS } from '~/utils/statistics/statisticsTableFormat'
+import type { RunesSpellsTabCtx } from '~/composables/statistics/statisticsPageCtx'
 import { statsFetch } from '~/utils/statsFetch'
 import { apiUrl } from '~/utils/apiUrl'
 import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
@@ -1919,6 +1921,7 @@ import { absoluteSitePath, pageOgImageUrl } from '~/utils/siteUrl'
 import { useOgMetaTags } from '~/composables/useOgMetaTags'
 import { lolSeasonFromGameVersion } from '~/utils/lolSeason'
 import { getFallbackGameVersion } from '~/config/version'
+import { compareVersionsDesc, normalizeVersionToPrefix } from '~/utils/statistics/statsVersion'
 const StatisticsRunesTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsRunesTab.vue')
 )
@@ -2439,13 +2442,6 @@ watch(championHeaderBandOpen, open => {
   sessionStorage.setItem(CHAMPION_HEADER_BAND_STORAGE_KEY, open ? '1' : '0')
 })
 
-function cardIsFavorite(cardId: string): boolean {
-  return statisticsCustomStore.isFavorite(cardId)
-}
-
-function toggleFavoriteCard(cardId: string, title: string): void {
-  statisticsCustomStore.toggleFavorite(cardId, title)
-}
 const {
   effectiveFiltersSheetMode,
   showFiltersBackdrop,
@@ -2522,25 +2518,6 @@ function normalizeTrendChartFromDate(raw: string): string | null {
 
 /** Référence patch pour fenêtre temporelle des graphes tendances (aligné page stats). */
 const championProgressionFromVersionOverride = ref('')
-function normalizeVersionToPrefix(v: string | null | undefined): string | null {
-  if (!v || typeof v !== 'string') return null
-  const parts = v.trim().split('.')
-  if (parts.length >= 2) return `${parts[0]}.${parts[1]}`
-  return parts[0] || null
-}
-
-/** Même tri que /statistics et tier-list : patch le plus récent en premier. */
-function compareVersionsDesc(a: string, b: string): number {
-  const pa = a.split('.').map(x => Number(x))
-  const pb = b.split('.').map(x => Number(x))
-  const maxLen = Math.max(pa.length, pb.length)
-  for (let i = 0; i < maxLen; i++) {
-    const da = Number.isFinite(pa[i]) ? (pa[i] as number) : 0
-    const db = Number.isFinite(pb[i]) ? (pb[i] as number) : 0
-    if (da !== db) return db - da
-  }
-  return b.localeCompare(a)
-}
 function syncChampionProgressionDeltaToVersionBeforeFilter(): boolean {
   const filter = filterVersion.value.trim()
   const list = versionsFromOverview.value
@@ -3424,63 +3401,46 @@ function statsPerfStart(_label: string): number {
 function statsPerfEnd(_label: string, start: number) {
   if (!isStatsPerfEnabled() || start === 0) return // eslint-disable-line no-useless-return
 }
-const championStatisticsPageCtx = new Proxy({} as Record<string, unknown>, {
-  get(_target, key: string | symbol) {
-    if (key === 't') return t
-    switch (key) {
-      case 'gameVersion':
-        return gameVersion.value || versionStore.currentVersion || ''
-      case 'versionStore':
-        return versionStore
-      case 'spellsModeFilter':
-        return championSpellsModeFilter.value
-      case 'overviewDetailData':
-        if (activeChampionTab.value === 'runes') return championRunesPanelData.value
-        return {
+// Runes / spells tabs context: same contract as the index page (RunesSpellsTabCtx), values per active tab.
+const championStatisticsPageCtx: RunesSpellsTabCtx = reactive({
+  t,
+  gameVersion: computed(() => gameVersion.value || versionStore.currentVersion || ''),
+  versionStore,
+  spellsModeFilter: championSpellsModeFilter,
+  championSearchQuery: '',
+  PAGE_SIZE_OPTIONS,
+  overviewDetailData: computed(() =>
+    activeChampionTab.value === 'runes'
+      ? championRunesPanelData.value
+      : {
           summonerSpells: championSpellsTableSolo.value,
           summonerSpellSets: championSpellsTablePairs.value,
         }
-      case 'overviewDetailBaselineData':
-        if (activeChampionTab.value === 'runes') return championRunesBaselinePanelData.value
-        return {
+  ),
+  overviewDetailBaselineData: computed(() =>
+    activeChampionTab.value === 'runes'
+      ? championRunesBaselinePanelData.value
+      : {
           summonerSpells: mapChampionSpellsTableSolo(championSpellsBaselineSolo.value),
           summonerSpellSets: mapChampionSpellsTablePairs(championSpellsBaselineDuos.value),
         }
-      case 'overviewDetailComparisonVersion':
-        return championRunesComparisonVersion.value
-      case 'overviewDetailBaselinePending':
-        if (activeChampionTab.value === 'runes') return championRunesBaselinePending.value
-        return championSpellsBaselinePending.value
-      case 'overviewDetailPending':
-        if (activeChampionTab.value === 'runes') return runesPending.value
-        return championSpellsPending.value
-      case 'overviewDetailError':
-        return false
-      case 'retryOverviewDetail':
-        return () => {
-          if (activeChampionTab.value === 'runes') {
-            _loadRunes().catch(() => undefined)
-          } else if (activeChampionTab.value === 'spells') {
-            _loadChampionSpells().catch(() => undefined)
-          }
-        }
-      case 'cardIsFavorite':
-        return cardIsFavorite
-      case 'toggleFavoriteCard':
-        return toggleFavoriteCard
-      case 'championSearchQuery':
-        return ''
-      case 'PAGE_SIZE_OPTIONS':
-        return [10, 20, 50, 100]
+  ),
+  overviewDetailComparisonVersion: championRunesComparisonVersion,
+  overviewDetailBaselinePending: computed(() =>
+    activeChampionTab.value === 'runes'
+      ? championRunesBaselinePending.value
+      : championSpellsBaselinePending.value
+  ),
+  overviewDetailPending: computed(() =>
+    activeChampionTab.value === 'runes' ? runesPending.value : championSpellsPending.value
+  ),
+  overviewDetailError: false,
+  retryOverviewDetail: () => {
+    if (activeChampionTab.value === 'runes') {
+      _loadRunes().catch(() => undefined)
+    } else if (activeChampionTab.value === 'spells') {
+      _loadChampionSpells().catch(() => undefined)
     }
-    return undefined
-  },
-  set(_target, key, value) {
-    if (key === 'spellsModeFilter') {
-      championSpellsModeFilter.value = value as 'solo' | 'pair'
-      return true
-    }
-    return false
   },
 })
 

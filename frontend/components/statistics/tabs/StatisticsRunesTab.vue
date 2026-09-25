@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import { inject } from 'vue'
+import { runesDetail } from '~/utils/statistics/detailPayload'
+import {
+  injectStatisticsPageCtx,
+  type RunesSpellsTabCtx,
+} from '~/composables/statistics/statisticsPageCtx'
 
-const p = inject('statisticsPageCtx') as any
+const p = injectStatisticsPageCtx<RunesSpellsTabCtx>()
 </script>
 
 <template>
@@ -35,8 +39,8 @@ const p = inject('statisticsPageCtx') as any
         <StatisticsRunesOverviewPanel
           v-else-if="p.overviewDetailData"
           :game-version="p.gameVersion || p.versionStore.currentVersion || ''"
-          :data="p.overviewDetailData"
-          :baseline="p.overviewDetailBaselineData"
+          :data="runesDetail(p.overviewDetailData)"
+          :baseline="runesDetail(p.overviewDetailBaselineData)"
           :baseline-pending="p.overviewDetailBaselinePending"
           :comparison-version="p.overviewDetailComparisonVersion"
         />

@@ -31,3 +31,6 @@ public/images/lelariva.webp
 # Patch notes scrapés (copiés depuis backend/data/patches)
 public/data/patch-notes/*
 !public/data/patch-notes/schema.example.json
+# Verification builds (NUXT_BUILD_DIR / NUXT_OUTPUT_DIR), never served in production
+.nuxt-verify/
+.output-verify/

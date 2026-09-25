@@ -19,7 +19,7 @@ defineProps<{
   rankOffset?: number
   gameVersion: string | null | undefined
   championByKey: (id: number) => { image: { full: string } } | null | undefined
-  championName: (id: number) => string
+  championName: (id: number) => string | null
   getChampionImageUrl: (version: string, imageFull: string) => string
   searchQuery?: string
 }>()

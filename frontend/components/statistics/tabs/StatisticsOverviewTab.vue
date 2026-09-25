@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { inject } from 'vue'
+import {
+  injectStatisticsPageCtx,
+  type StatisticsIndexPageCtx,
+} from '~/composables/statistics/statisticsPageCtx'
 import type { FastStatChampionEntry } from '~/components/statistics/FastStatChampionRowList.vue'
 
-const p = inject('statisticsPageCtx') as any
+const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
 
 function asChampionRows<T>(rows: unknown): T[] {
   return Array.isArray(rows) ? rows : []

@@ -795,6 +795,7 @@ import {
   canonicalChampionRoleKey,
   type ChampionRoleSummaryRow,
 } from '~/utils/championRoleDistribution'
+import { compareVersionsDesc } from '~/utils/statistics/statsVersion'
 
 definePageMeta({ layout: 'default' })
 
@@ -1411,18 +1412,6 @@ function csvLine(values: unknown[]): string {
 function versionOptionLabel(version: string, matchCount: number): string {
   const count = Number(matchCount ?? 0)
   return `${version} - ${Number.isFinite(count) ? count : 0} games`
-}
-
-function compareVersionsDesc(a: string, b: string): number {
-  const pa = a.split('.').map(x => Number(x))
-  const pb = b.split('.').map(x => Number(x))
-  const maxLen = Math.max(pa.length, pb.length)
-  for (let i = 0; i < maxLen; i++) {
-    const da = Number.isFinite(pa[i]) ? (pa[i] as number) : 0
-    const db = Number.isFinite(pb[i]) ? (pb[i] as number) : 0
-    if (da !== db) return db - da
-  }
-  return b.localeCompare(a)
 }
 
 async function loadAvailableVersions(): Promise<void> {

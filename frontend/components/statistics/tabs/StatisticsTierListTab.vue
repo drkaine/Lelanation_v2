@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import { computed, inject, nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
+import { isOneOf } from '~/utils/statistics/isOneOf'
+import { TIER_LIST_SORT_COLUMNS } from '~/composables/statistics/useStatisticsTierListPage'
+import {
+  injectStatisticsPageCtx,
+  type StatisticsTierListPageCtx,
+} from '~/composables/statistics/statisticsPageCtx'
 import StatisticsTierListMobileChart from '~/components/statistics/StatisticsTierListMobileChart.vue'
 import StatisticsTierListBubbleChart from '~/components/statistics/StatisticsTierListBubbleChart.vue'
 import NotificationToast from '~/components/NotificationToast.vue'
@@ -11,7 +17,7 @@ import {
   sanitizeFilenameSegment,
 } from '~/utils/chartShareImage'
 
-const p = inject('statisticsPageCtx') as any
+const p = injectStatisticsPageCtx<StatisticsTierListPageCtx>()
 
 const expandedTierListIds = ref<Set<number>>(new Set())
 const tierListChartExportRoot = ref<HTMLElement | null>(null)
@@ -96,14 +102,9 @@ withDefaults(
 )
 
 const tierListMobileSortColumn = computed({
-  get: () => String(p.tierListSortColumn ?? 'rank'),
+  get: () => p.tierListSortColumn ?? 'rank',
   set: (v: string) => {
-    if (typeof p.setTierListSort === 'function') {
-      p.setTierListSort(v)
-    } else {
-      p.tierListSortColumn = v
-      p.tierListSortDir = v === 'champion' ? 'asc' : 'desc'
-    }
+    if (isOneOf(TIER_LIST_SORT_COLUMNS, v)) p.setTierListSort(v)
   },
 })
 

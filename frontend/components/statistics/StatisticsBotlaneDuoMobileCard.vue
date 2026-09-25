@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { computed, inject } from 'vue'
+import { computed } from 'vue'
+import {
+  injectStatisticsPageCtx,
+  type StatisticsTierListPageCtx,
+} from '~/composables/statistics/statisticsPageCtx'
 import { getChampionImageUrl } from '~/utils/imageUrl'
 import type { BotlaneTierRowWithPatchDelta } from '~/composables/statistics/botlanePatchDeltas'
 
@@ -15,15 +19,14 @@ const emit = defineEmits<{
   toggle: []
 }>()
 
-const p = inject('statisticsPageCtx') as Record<string, unknown>
+const p = injectStatisticsPageCtx<StatisticsTierListPageCtx>()
 
 function t(key: string, params?: Record<string, string>): string {
-  const fn = p.t as ((k: string, p?: Record<string, string>) => string) | undefined
-  return fn?.(key, params) ?? key
+  return params ? p.t(key, params) : p.t(key)
 }
 
 function championName(id: number): string {
-  const fn = p.championName as ((id: number) => string | null) | undefined
+  const fn = p.championName
   return fn?.(id) ?? String(id)
 }
 
@@ -63,7 +66,7 @@ const subtitle = computed(() => {
 const gameVersion = computed(() => String(p.gameVersion ?? ''))
 
 function portraitSrc(championId: number): string | null {
-  const byKey = p.championByKey as ((id: number) => { image: { full: string } } | null) | undefined
+  const byKey = p.championByKey
   const champ = byKey?.(championId)
   if (!gameVersion.value || !champ) return null
   return getChampionImageUrl(gameVersion.value, champ.image.full)
@@ -75,30 +78,30 @@ function fmtPct01(v: number): string {
 
 function fmtPatchPp(v: number | null | undefined): string {
   if (v == null) return '—'
-  const fn = p.formatTierListPatchDeltaPp as ((n: number) => string) | undefined
+  const fn = p.formatTierListPatchDeltaPp
   return fn?.(v) ?? `${v >= 0 ? '+' : ''}${v.toFixed(2)}`
 }
 
 function fmtPatchRank(v: number | null | undefined): string {
   if (v == null) return '—'
-  const fn = p.formatTierListPatchDeltaRank as ((n: number) => string) | undefined
+  const fn = p.formatTierListPatchDeltaRank
   return fn?.(v) ?? `${v >= 0 ? '+' : ''}${v}`
 }
 
 function patchPpClass(v: number | null | undefined): string {
   if (!props.patchRefLabel || v == null) return 'text-text/55'
-  const fn = p.tierListPatchDeltaClass as ((n: number) => string) | undefined
+  const fn = p.tierListPatchDeltaClass
   return fn?.(v) ?? 'text-text/55'
 }
 
 function patchRankClass(v: number | null | undefined): string {
   if (!props.patchRefLabel || v == null) return 'text-text/55'
-  const fn = p.tierListPatchDeltaRankClass as ((n: number) => string) | undefined
+  const fn = p.tierListPatchDeltaRankClass
   return fn?.(v) ?? patchPpClass(v)
 }
 
 function winrateClass(v: number): string {
-  const fn = p.tierListWinrateClass as ((n: number) => string) | undefined
+  const fn = p.tierListWinrateClass
   return fn?.(v * 100) ?? 'text-text'
 }
 
@@ -115,12 +118,12 @@ function deltaVsPeersClass(v: number | null | undefined): string {
 }
 
 function gamesDeltaClass(v: number): string {
-  const fn = p.tierListPatchDeltaGamesClass as ((n: number) => string) | undefined
+  const fn = p.tierListPatchDeltaGamesClass
   return fn?.(v) ?? patchPpClass(v)
 }
 
 function formatGamesDelta(v: number): string {
-  const fn = p.formatTierListPatchDeltaGames as ((n: number) => string) | undefined
+  const fn = p.formatTierListPatchDeltaGames
   return fn?.(v) ?? `${v >= 0 ? '+' : ''}${v}`
 }
 </script>

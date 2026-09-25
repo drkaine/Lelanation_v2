@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import { inject, ref, unref, computed, watch } from 'vue'
+import { ref, unref, computed, watch } from 'vue'
+import { isOneOf } from '~/utils/statistics/isOneOf'
+import { CHAMPION_GLOBAL_SORT_COLUMNS } from '~/utils/statistics/statisticsTableFormat'
+import {
+  injectStatisticsPageCtx,
+  type StatisticsIndexPageCtx,
+} from '~/composables/statistics/statisticsPageCtx'
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
 import {
   championTransformLabelKey,
@@ -9,7 +15,7 @@ import {
   type ChampionTransform,
 } from '~/utils/championTransformStats'
 
-const p = inject('statisticsPageCtx') as any
+const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
 const showChampionDealtBreakdown = ref(false)
 const showChampionTakenBreakdown = ref(false)
 const showChampionHealBreakdown = ref(false)
@@ -61,7 +67,7 @@ function setTransformView(championId: number, value: 'all' | ChampionTransform):
 }
 
 function transformRowsForChampion(championId: number): ChampionGlobalRow[] {
-  return p.championGlobalTransformRows(championId) as ChampionGlobalRow[]
+  return p.championGlobalTransformRows(championId)
 }
 
 function rowPortraitSrc(row: ChampionGlobalRow): string | null {
@@ -119,7 +125,7 @@ watch(
 
 const championTableDisplayEntries = computed<TableDisplayEntry[]>(() => {
   const entries: TableDisplayEntry[] = []
-  for (const row of p.paginatedChampionGlobalRows as ChampionGlobalRow[]) {
+  for (const row of p.paginatedChampionGlobalRows) {
     const showTransformDropdown =
       !p.statsSplitTransformEnabled && p.championHasTransformBreakdown(row.championId)
     entries.push({
@@ -169,14 +175,14 @@ function toggleChampionCardExpanded(row: ChampionGlobalRow): void {
 }
 
 const activeRoleLabel = computed(() => {
-  const role = p.statsRoleFilter as string
+  const role = p.statsRoleFilter
   if (!role) return p.t('statisticsPage.allRoles')
-  const roles = (p.roles as Array<{ value: string; label: string }>) ?? []
+  const roles = p.roles
   return roles.find(r => r.value === role)?.label ?? role
 })
 
 const activeRoleIconSrc = computed(() => {
-  const role = p.statsRoleFilter as string
+  const role = p.statsRoleFilter
   if (!role) return '/icons/roles/all-role.png'
   return p.mainRoleIconSrc(role) ?? '/icons/roles/all-role.png'
 })
@@ -222,9 +228,9 @@ const championTableLayoutStyle = computed(() => {
 })
 
 const championMobileSortColumn = computed({
-  get: () => String(p.championGlobalSortColumn ?? 'totalGames'),
+  get: () => p.championGlobalSortColumn,
   set: (v: string) => {
-    p.championGlobalSortColumn = v
+    if (isOneOf(CHAMPION_GLOBAL_SORT_COLUMNS, v)) p.championGlobalSortColumn = v
   },
 })
 

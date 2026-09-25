@@ -534,11 +534,10 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ChampionObjectivesDonut from '~/components/statistics/ChampionObjectivesDonut.vue'
 import {
-  scoreboardDrakeIconByKey,
   scoreboardDrakeIconCdByKey,
-  scoreboardObjectiveIconByKey,
   scoreboardObjectiveIconCdByKey,
 } from '~/utils/objectiveScoreboardIcons'
+import { drakeIconSrc, objectiveIconSrc } from '~/utils/statistics/statisticsObjectives'
 
 export type ChampionObjectivesParticipationCard = {
   stealPct: number
@@ -883,14 +882,6 @@ function drakeTypeLabel(key: string, fallback: string): string {
   }
   const i18nKey = map[key]
   return i18nKey && te(i18nKey) ? t(i18nKey) : fallback
-}
-
-function objectiveIconSrc(key: string): string | undefined {
-  return scoreboardObjectiveIconByKey[key]
-}
-
-function drakeIconSrc(key: string): string | undefined {
-  return scoreboardDrakeIconByKey[key]
 }
 
 function onObjectiveIconError(e: Event, key: string): void {

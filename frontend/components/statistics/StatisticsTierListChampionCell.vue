@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { computed, inject } from 'vue'
+import { computed } from 'vue'
+import {
+  injectStatisticsPageCtx,
+  type IndexOrTierListCtx,
+} from '~/composables/statistics/statisticsPageCtx'
 import { championTransformLabelKey } from '~/utils/championTransformStats'
 import type { ChampionTransform } from '~/utils/championTransformStats'
 
@@ -24,7 +28,12 @@ const emit = defineEmits<{
   'update:transformView': [value: 'all' | ChampionTransform]
 }>()
 
-const p = inject('statisticsPageCtx') as any
+const p =
+  injectStatisticsPageCtx<
+    IndexOrTierListCtx<
+      'championByKey' | 'championName' | 'gameVersion' | 'getChampionImageUrl' | 't'
+    >
+  >()
 
 const width = props.widthClass ?? 'w-[220px] max-lg:w-[56px]'
 

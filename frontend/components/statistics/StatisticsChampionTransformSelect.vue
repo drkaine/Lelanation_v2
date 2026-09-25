@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { computed, inject } from 'vue'
+import { computed } from 'vue'
+import {
+  injectStatisticsPageCtx,
+  type IndexOrTierListCtx,
+} from '~/composables/statistics/statisticsPageCtx'
 import {
   championTransformLabelKey,
   normalizeChampionTransform,
@@ -16,7 +20,7 @@ const emit = defineEmits<{
   'update:modelValue': [value: 'all' | ChampionTransform]
 }>()
 
-const p = inject('statisticsPageCtx') as any
+const p = injectStatisticsPageCtx<IndexOrTierListCtx<'t'>>()
 
 const selectId = computed(() => `champion-transform-${props.championId}`)
 

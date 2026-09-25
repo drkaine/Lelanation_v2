@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, type ShallowUnwrapRef } from 'vue'
+import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
+import { isOneOf } from '~/utils/statistics/isOneOf'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useItemsStore } from '~/stores/ItemsStore'
 import { useRunesStore } from '~/stores/RunesStore'
@@ -12,32 +13,13 @@ import {
   type PatchNotesSortCol,
   type PatchNotesStatsRow,
   type PatchNotesTargetType,
-  type useStatisticsPatchNotesTab,
 } from '~/composables/statistics/useStatisticsPatchNotesTab'
 import {
   injectStatisticsPageCtx,
-  type StatisticsT,
+  type StatisticsIndexPageCtx,
 } from '~/composables/statistics/statisticsPageCtx'
 
-type PatchNotesTabState = ShallowUnwrapRef<ReturnType<typeof useStatisticsPatchNotesTab>>
-type PatchNotesTabCtx = Pick<
-  PatchNotesTabState,
-  | 'patchNotesData'
-  | 'patchNotesPending'
-  | 'patchNotesError'
-  | 'patchNotesSortColumn'
-  | 'patchNotesSortDir'
-  | 'patchNotesPage'
-  | 'patchNotesPageSize'
-  | 'paginatedPatchNotesRows'
-  | 'totalPatchNotesPages'
-  | 'setPatchNotesSort'
-> & {
-  t: StatisticsT
-  gameVersion: string | null | undefined
-}
-
-const p = injectStatisticsPageCtx<PatchNotesTabCtx>()
+const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
 
 const championsStore = useChampionsStore()
 const itemsStore = useItemsStore()
@@ -54,15 +36,10 @@ const PATCH_NOTES_SORT_COLS: readonly PatchNotesSortCol[] = [
   'regularity',
 ]
 
-function isPatchNotesSortCol(value: string): value is PatchNotesSortCol {
-  const cols: readonly string[] = PATCH_NOTES_SORT_COLS
-  return cols.includes(value)
-}
-
 const patchNotesMobileSortColumn = computed({
   get: () => p.patchNotesSortColumn,
   set: (v: string) => {
-    if (isPatchNotesSortCol(v)) p.setPatchNotesSort(v)
+    if (isOneOf(PATCH_NOTES_SORT_COLS, v)) p.setPatchNotesSort(v)
   },
 })
 

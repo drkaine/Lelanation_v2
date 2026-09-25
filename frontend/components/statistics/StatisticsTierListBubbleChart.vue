@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { computed, inject, ref } from 'vue'
+import { computed, ref } from 'vue'
+import {
+  injectStatisticsPageCtx,
+  type TierListOrMetaChartCtx,
+} from '~/composables/statistics/statisticsPageCtx'
 import {
   BUBBLE_CHART_H,
   BUBBLE_CHART_PAD,
@@ -18,7 +22,17 @@ const props = withDefaults(
   }
 )
 
-const p = inject('statisticsPageCtx') as Record<string, unknown>
+const p =
+  injectStatisticsPageCtx<
+    TierListOrMetaChartCtx<
+      | 'championName'
+      | 't'
+      | 'tierListChartBarColor'
+      | 'tierListChartChampionImage'
+      | 'tierListChartReferenceRows'
+      | 'tierListChartVisibleRows'
+    >
+  >()
 
 const visibleRows = computed(() => {
   const rows = p.tierListChartVisibleRows as
@@ -60,9 +74,7 @@ const { layout, tooltip, tooltipPoint, onBubbleEnter, onBubbleMove, onBubbleLeav
     rows: visibleRows,
     referenceRows,
     tierColor: (tier: string) =>
-      typeof p.tierListChartBarColor === 'function'
-        ? (p.tierListChartBarColor as (t: string) => string)(tier)
-        : '#60a5fa',
+      typeof p.tierListChartBarColor === 'function' ? p.tierListChartBarColor(tier) : '#60a5fa',
   })
 
 const {
@@ -88,24 +100,19 @@ const chartCaptureRoot = ref<HTMLElement | null>(null)
 
 function championName(id: number): string {
   if (typeof p.championName === 'function') {
-    return (p.championName as (cid: number) => string | null)(id) ?? String(id)
+    return p.championName(id) ?? String(id)
   }
   return String(id)
 }
 
 function championImage(id: number): string | null {
   if (typeof p.tierListChartChampionImage === 'function') {
-    return (p.tierListChartChampionImage as (cid: number) => string | null)(id)
+    return p.tierListChartChampionImage(id)
   }
   return null
 }
 
-const t = (key: string, params?: Record<string, unknown>) => {
-  if (typeof p.t === 'function') {
-    return (p.t as (k: string, p?: Record<string, unknown>) => string)(key, params)
-  }
-  return key
-}
+const t = (key: string, params?: Record<string, unknown>) => (params ? p.t(key, params) : p.t(key))
 
 const activeChampionId = computed(() => tooltip.value?.championId ?? null)
 

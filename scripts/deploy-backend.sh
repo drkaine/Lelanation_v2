@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Deploy backend + poller: checks first, then PM2 restart, then health verification.
-# The processes run TypeScript through tsx without watch: without a restart, new code is never loaded.
+# Deploy backend + poller: checks, compiled bundle (dist/app), PM2 restart, health verification.
+# The processes run a bundle built at deploy time: without this script, new code is never loaded.
 # Usage: scripts/deploy-backend.sh [--skip-tests] [--no-poller]
 set -euo pipefail
 
@@ -9,6 +9,7 @@ PM2="${PM2:-pm2}"
 NPM="${NPM:-npm}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:3500/health}"
 HEALTH_TIMEOUT_S="${HEALTH_TIMEOUT_S:-60}"
+ECOSYSTEM="${ECOSYSTEM:-$ROOT/ecosystem.config.js}"
 
 skip_tests=0
 apps=(lelanation-backend lelanation-poller-v2)
@@ -28,8 +29,16 @@ if [[ $skip_tests -eq 0 ]]; then
   "$NPM" --prefix "$ROOT/backend" run test:precommit
 fi
 
+echo "[deploy-backend] build…"
+"$NPM" --prefix "$ROOT/backend" run build
+
+# delete + start (not restart): PM2 only re-reads script/interpreter from the ecosystem on start.
 echo "[deploy-backend] restart: ${apps[*]}"
-"$PM2" restart "${apps[@]}" --update-env
+for app in "${apps[@]}"; do
+  "$PM2" delete "$app" >/dev/null 2>&1 || true
+  "$PM2" start "$ECOSYSTEM" --only "$app" --update-env
+done
+"$PM2" save >/dev/null
 
 for app in "${apps[@]}"; do
   status="$("$PM2" jlist | node -e "

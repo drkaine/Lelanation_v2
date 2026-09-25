@@ -1,11 +1,17 @@
 <script setup lang="ts">
 import { computed, inject, ref, type Ref } from 'vue'
+import type { DrakeSoulKey, DrakeTypeKey, TeamObjectiveKey } from '~/types/statisticsIndexPage'
+import {
+  injectStatisticsPageCtx,
+  type StatisticsIndexPageCtx,
+} from '~/composables/statistics/statisticsPageCtx'
 import StatisticsObjectivesMobileCard, {
   type ObjectivesMobileMetric,
   type ObjectivesMobileSubRow,
 } from '~/components/statistics/StatisticsObjectivesMobileCard.vue'
+import { aggregateObjectiveHistogramDist } from '~/utils/statistics/statisticsObjectives'
 
-const p = inject('statisticsPageCtx') as any
+const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
 const tooltipsEnabled = inject('tooltipsEnabled', ref(true)) as Ref<boolean>
 const objectivesDisplayMode = ref<'obtention' | 'winrate'>('obtention')
 
@@ -56,15 +62,16 @@ function deltaColorClass(delta: number | null): string {
 }
 
 function teamFirstPctParts(
-  objectiveKey: string,
+  objectiveKey: TeamObjectiveKey,
   side: 'win' | 'loss'
 ): { current: string; delta: string; deltaClass: string } {
   const curData = p.overviewTeamsData
   if (!curData || curData.matchCount <= 0)
     return { current: '—', delta: '', deltaClass: 'text-text/80' }
-  const curObj = curData.objectives?.[objectiveKey] ?? {}
+  const curObj = curData.objectives?.[objectiveKey]
   const matchCount = Number(curData.matchCount)
-  const rawCount = side === 'win' ? Number(curObj.firstByWin ?? 0) : Number(curObj.firstByLoss ?? 0)
+  const rawCount =
+    side === 'win' ? Number(curObj?.firstByWin ?? 0) : Number(curObj?.firstByLoss ?? 0)
   const curCount = cappedObtentionCount(rawCount, matchCount)
   const curPct = pct(curCount, matchCount)
   const baseData = p.overviewTeamsBaselineData
@@ -198,26 +205,6 @@ function drakeSideTypeRowBaseline(key: string): SideDistributionRow | null {
   )
 }
 
-const HORDE_HISTOGRAM_CAP = 3
-const RIFT_HERALD_HISTOGRAM_CAP = 1
-
-function aggregateObjectiveHistogramDist(
-  key: string,
-  dist: Record<string, number> | undefined
-): Record<number, number> {
-  const aggregated: Record<number, number> = {}
-  if (!dist || typeof dist !== 'object') return aggregated
-  for (const [k, n] of Object.entries(dist)) {
-    let displayCount = parseInt(k, 10) || 0
-    if (key === 'horde' && displayCount > HORDE_HISTOGRAM_CAP) displayCount = HORDE_HISTOGRAM_CAP
-    else if (key === 'riftHerald' && displayCount > RIFT_HERALD_HISTOGRAM_CAP) {
-      displayCount = RIFT_HERALD_HISTOGRAM_CAP
-    }
-    aggregated[displayCount] = (aggregated[displayCount] ?? 0) + Number(n)
-  }
-  return aggregated
-}
-
 function histogramCountPctParts(
   dist: Record<string, number> | undefined,
   baseDist: Record<string, number> | undefined,
@@ -243,7 +230,7 @@ function histogramCountPctParts(
 }
 
 function objectiveObtentionCountTeamParts(
-  key: string,
+  key: TeamObjectiveKey,
   count: number,
   byWin: boolean
 ): { current: string; delta: string; deltaClass: string } {
@@ -297,7 +284,7 @@ function objectiveObtentionCountSideParts(
 }
 
 function drakeTypeObtentionCountTeamParts(
-  key: string,
+  key: DrakeTypeKey,
   count: number,
   byWin: boolean
 ): { current: string; delta: string; deltaClass: string } {
@@ -350,7 +337,7 @@ function drakeTypeObtentionCountSideParts(
   )
 }
 
-function objectiveWinrateCountGlobalParts(key: string, count: number): WrParts {
+function objectiveWinrateCountGlobalParts(key: TeamObjectiveKey, count: number): WrParts {
   const curObj = p.overviewTeamsData?.objectives?.[key] as
     | { distributionByWin?: Record<string, number>; distributionByLoss?: Record<string, number> }
     | undefined
@@ -377,7 +364,7 @@ function objectiveWinrateCountSideParts(key: string, count: number, side: 'blue'
   return wrPartsFromValues(cur, base)
 }
 
-function drakeTypeWinrateCountGlobalParts(key: string, count: number): WrParts {
+function drakeTypeWinrateCountGlobalParts(key: DrakeTypeKey, count: number): WrParts {
   const curRow = p.drakeTypeRows.find((r: { key: string }) => r.key === key)
   const baseRow = p.overviewTeamsBaselineData?.drakes?.types?.[key] as
     | { distributionByWin?: Record<string, number>; distributionByLoss?: Record<string, number> }
@@ -472,7 +459,7 @@ function objectiveFirstWinrateSideParts(key: string, side: 'blue' | 'red'): WrPa
   return wrPartsFromValues(cur, base)
 }
 
-function drakeTypeWinrateGlobalParts(key: string): WrParts {
+function drakeTypeWinrateGlobalParts(key: DrakeTypeKey): WrParts {
   const curRow = p.drakeTypeRows.find(
     (r: { key: string; securedWinrateGlobal?: number | null }) => r.key === key
   )
@@ -529,7 +516,7 @@ function toggleDrakeType(key: string) {
 }
 
 function drakeTypePctParts(
-  key: string,
+  key: DrakeTypeKey,
   side: 'win' | 'loss'
 ): { current: string; delta: string; deltaClass: string } {
   const curData = p.overviewTeamsData
@@ -595,7 +582,7 @@ function drakeTypePctPartsSides(
 }
 
 function drakeSoulPctParts(
-  key: string,
+  key: DrakeSoulKey,
   side: 'win' | 'loss'
 ): { current: string; delta: string; deltaClass: string } {
   const curData = p.overviewTeamsData
@@ -997,7 +984,7 @@ function soulSecureWinrateSideParts(
 }
 
 const drakeSoulWinrateRows = computed(() =>
-  (p.drakeSoulRows as Array<{ key: string; label: string; byWin: number; byLoss: number }>)
+  p.drakeSoulRows
     .map(row => {
       const parts = soulSecureWinrateParts(row.key)
       return { ...row, parts, wr: parts.value ?? -1 }
@@ -1049,36 +1036,36 @@ const mobileMainObtentionRows = computed(() => {
       ],
     },
   ]
-  for (const key of p.objectiveKeysOrdered as string[]) {
+  for (const key of p.objectiveKeysOrdered) {
     const hasDrop = Boolean(p.objectiveHasKillDropdown(key))
     const expanded = p.openObjectiveKeys.has(key)
     const subRows: ObjectivesMobileSubRow[] = []
     if (hasDrop && expanded) {
-      for (const count of p.objectiveCounts(key) as number[]) {
+      for (const count of p.objectiveCounts(key)) {
         subRows.push({
           label: String(count),
           metrics: [
             mobileMetric(
               L.firstWin,
-              p.overviewTeamsData?.matchCount > 0
+              (p.overviewTeamsData?.matchCount ?? 0) > 0
                 ? objectiveObtentionCountTeamParts(key, count, true)
                 : { current: '—', delta: '', deltaClass: 'text-text/80' }
             ),
             mobileMetric(
               L.firstLoss,
-              p.overviewTeamsData?.matchCount > 0
+              (p.overviewTeamsData?.matchCount ?? 0) > 0
                 ? objectiveObtentionCountTeamParts(key, count, false)
                 : { current: '—', delta: '', deltaClass: 'text-text/80' }
             ),
             mobileMetric(
               L.blue,
-              p.overviewSidesData?.matchCount > 0
+              (p.overviewSidesData?.matchCount ?? 0) > 0
                 ? objectiveObtentionCountSideParts(key, count, true)
                 : { current: '—', delta: '', deltaClass: 'text-text/80' }
             ),
             mobileMetric(
               L.red,
-              p.overviewSidesData?.matchCount > 0
+              (p.overviewSidesData?.matchCount ?? 0) > 0
                 ? objectiveObtentionCountSideParts(key, count, false)
                 : { current: '—', delta: '', deltaClass: 'text-text/80' }
             ),
@@ -1125,30 +1112,30 @@ const mobileMainWinrateRows = computed(() => {
       ],
     },
   ]
-  for (const key of p.objectiveKeysOrdered as string[]) {
+  for (const key of p.objectiveKeysOrdered) {
     const hasDrop = Boolean(p.objectiveHasKillDropdown(key))
     const expanded = p.openObjectiveKeys.has(key)
     const subRows: ObjectivesMobileSubRow[] = []
     if (hasDrop && expanded) {
-      for (const count of p.objectiveCounts(key) as number[]) {
+      for (const count of p.objectiveCounts(key)) {
         subRows.push({
           label: String(count),
           metrics: [
             mobileMetric(
               L.globalWr,
-              p.overviewTeamsData?.matchCount > 0
+              (p.overviewTeamsData?.matchCount ?? 0) > 0
                 ? objectiveWinrateCountGlobalParts(key, count)
                 : { current: '—', delta: '', deltaClass: 'text-text/80' }
             ),
             mobileMetric(
               L.blue,
-              p.overviewSidesData?.matchCount > 0
+              (p.overviewSidesData?.matchCount ?? 0) > 0
                 ? objectiveWinrateCountSideParts(key, count, 'blue')
                 : { current: '—', delta: '', deltaClass: 'text-text/80' }
             ),
             mobileMetric(
               L.red,
-              p.overviewSidesData?.matchCount > 0
+              (p.overviewSidesData?.matchCount ?? 0) > 0
                 ? objectiveWinrateCountSideParts(key, count, 'red')
                 : { current: '—', delta: '', deltaClass: 'text-text/80' }
             ),
@@ -1165,19 +1152,19 @@ const mobileMainWinrateRows = computed(() => {
       metrics: [
         mobileMetric(
           L.globalWr,
-          p.overviewTeamsData?.matchCount > 0
+          (p.overviewTeamsData?.matchCount ?? 0) > 0
             ? objectiveFirstWinrateGlobalParts(key)
             : { current: '—', delta: '', deltaClass: 'text-text/80' }
         ),
         mobileMetric(
           L.blue,
-          p.overviewSidesData?.matchCount > 0
+          (p.overviewSidesData?.matchCount ?? 0) > 0
             ? objectiveFirstWinrateSideParts(key, 'blue')
             : { current: '—', delta: '', deltaClass: 'text-text/80' }
         ),
         mobileMetric(
           L.red,
-          p.overviewSidesData?.matchCount > 0
+          (p.overviewSidesData?.matchCount ?? 0) > 0
             ? objectiveFirstWinrateSideParts(key, 'red')
             : { current: '—', delta: '', deltaClass: 'text-text/80' }
         ),
@@ -1188,35 +1175,35 @@ const mobileMainWinrateRows = computed(() => {
   return rows
 })
 
-function drakeTypeObtentionSubRows(key: string): ObjectivesMobileSubRow[] {
+function drakeTypeObtentionSubRows(key: DrakeTypeKey): ObjectivesMobileSubRow[] {
   if (!openDrakeTypeKeys.value.has(key)) return []
   const L = mobileColLabels.value
-  const counts = p.drakeTypeCounts(key) as number[]
+  const counts = p.drakeTypeCounts(key)
   if (counts.length === 0) return [{ label: '—', metrics: [] }]
   return counts.map((count: number) => ({
     label: String(count),
     metrics: [
       mobileMetric(
         L.byWin,
-        p.overviewTeamsData?.matchCount > 0
+        (p.overviewTeamsData?.matchCount ?? 0) > 0
           ? drakeTypeObtentionCountTeamParts(key, count, true)
           : { current: '—', delta: '', deltaClass: 'text-text/80' }
       ),
       mobileMetric(
         L.byLoss,
-        p.overviewTeamsData?.matchCount > 0
+        (p.overviewTeamsData?.matchCount ?? 0) > 0
           ? drakeTypeObtentionCountTeamParts(key, count, false)
           : { current: '—', delta: '', deltaClass: 'text-text/80' }
       ),
       mobileMetric(
         L.blue,
-        p.overviewSidesData?.matchCount > 0
+        (p.overviewSidesData?.matchCount ?? 0) > 0
           ? drakeTypeObtentionCountSideParts(key, count, true)
           : { current: '—', delta: '', deltaClass: 'text-text/80' }
       ),
       mobileMetric(
         L.red,
-        p.overviewSidesData?.matchCount > 0
+        (p.overviewSidesData?.matchCount ?? 0) > 0
           ? drakeTypeObtentionCountSideParts(key, count, false)
           : { current: '—', delta: '', deltaClass: 'text-text/80' }
       ),
@@ -1225,7 +1212,7 @@ function drakeTypeObtentionSubRows(key: string): ObjectivesMobileSubRow[] {
 }
 
 const mobileDrakeTypeObtentionRows = computed(() =>
-  (p.drakeTypeRows as Array<{ key: string; label: string }>).map(row => ({
+  p.drakeTypeRows.map(row => ({
     id: `drake-${row.key}`,
     key: row.key,
     title: row.label,
@@ -1236,25 +1223,25 @@ const mobileDrakeTypeObtentionRows = computed(() =>
     metrics: [
       mobileMetric(
         mobileColLabels.value.byWin,
-        p.overviewTeamsData?.matchCount > 0
+        (p.overviewTeamsData?.matchCount ?? 0) > 0
           ? drakeTypePctParts(row.key, 'win')
           : { current: '—', delta: '', deltaClass: 'text-text/80' }
       ),
       mobileMetric(
         mobileColLabels.value.byLoss,
-        p.overviewTeamsData?.matchCount > 0
+        (p.overviewTeamsData?.matchCount ?? 0) > 0
           ? drakeTypePctParts(row.key, 'loss')
           : { current: '—', delta: '', deltaClass: 'text-text/80' }
       ),
       mobileMetric(
         mobileColLabels.value.blue,
-        p.overviewSidesData?.matchCount > 0
+        (p.overviewSidesData?.matchCount ?? 0) > 0
           ? drakeTypePctPartsSides(row.key, 'blue')
           : { current: '—', delta: '', deltaClass: 'text-text/80' }
       ),
       mobileMetric(
         mobileColLabels.value.red,
-        p.overviewSidesData?.matchCount > 0
+        (p.overviewSidesData?.matchCount ?? 0) > 0
           ? drakeTypePctPartsSides(row.key, 'red')
           : { current: '—', delta: '', deltaClass: 'text-text/80' }
       ),
@@ -1263,29 +1250,29 @@ const mobileDrakeTypeObtentionRows = computed(() =>
   }))
 )
 
-function drakeTypeWinrateSubRows(key: string): ObjectivesMobileSubRow[] {
+function drakeTypeWinrateSubRows(key: DrakeTypeKey): ObjectivesMobileSubRow[] {
   if (!openDrakeTypeKeys.value.has(key)) return []
   const L = mobileColLabels.value
-  const counts = p.drakeTypeCounts(key) as number[]
+  const counts = p.drakeTypeCounts(key)
   if (counts.length === 0) return [{ label: '—', metrics: [] }]
   return counts.map((count: number) => ({
     label: String(count),
     metrics: [
       mobileMetric(
         L.globalWr,
-        p.overviewTeamsData?.matchCount > 0
+        (p.overviewTeamsData?.matchCount ?? 0) > 0
           ? drakeTypeWinrateCountGlobalParts(key, count)
           : { current: '—', delta: '', deltaClass: 'text-text/80' }
       ),
       mobileMetric(
         L.blue,
-        p.overviewSidesData?.matchCount > 0
+        (p.overviewSidesData?.matchCount ?? 0) > 0
           ? drakeTypeWinrateCountSideParts(key, count, 'blue')
           : { current: '—', delta: '', deltaClass: 'text-text/80' }
       ),
       mobileMetric(
         L.red,
-        p.overviewSidesData?.matchCount > 0
+        (p.overviewSidesData?.matchCount ?? 0) > 0
           ? drakeTypeWinrateCountSideParts(key, count, 'red')
           : { current: '—', delta: '', deltaClass: 'text-text/80' }
       ),
@@ -1294,7 +1281,7 @@ function drakeTypeWinrateSubRows(key: string): ObjectivesMobileSubRow[] {
 }
 
 const mobileDrakeTypeWinrateRows = computed(() =>
-  (p.drakeTypeRows as Array<{ key: string; label: string }>).map(row => ({
+  p.drakeTypeRows.map(row => ({
     id: `drake-wr-${row.key}`,
     key: row.key,
     title: row.label,
@@ -1305,19 +1292,19 @@ const mobileDrakeTypeWinrateRows = computed(() =>
     metrics: [
       mobileMetric(
         mobileColLabels.value.globalWr,
-        p.overviewTeamsData?.matchCount > 0
+        (p.overviewTeamsData?.matchCount ?? 0) > 0
           ? drakeTypeWinrateGlobalParts(row.key)
           : { current: '—', delta: '', deltaClass: 'text-text/80' }
       ),
       mobileMetric(
         mobileColLabels.value.blue,
-        p.overviewSidesData?.matchCount > 0
+        (p.overviewSidesData?.matchCount ?? 0) > 0
           ? drakeTypeWinrateSideParts(row.key, 'blue')
           : { current: '—', delta: '', deltaClass: 'text-text/80' }
       ),
       mobileMetric(
         mobileColLabels.value.red,
-        p.overviewSidesData?.matchCount > 0
+        (p.overviewSidesData?.matchCount ?? 0) > 0
           ? drakeTypeWinrateSideParts(row.key, 'red')
           : { current: '—', delta: '', deltaClass: 'text-text/80' }
       ),
@@ -1344,31 +1331,31 @@ const mobileSoulObtentionRows = computed(() => {
       metrics: [
         mobileMetric(
           L.byWin,
-          p.overviewTeamsData?.matchCount > 0
+          (p.overviewTeamsData?.matchCount ?? 0) > 0
             ? soulGlobalPctParts('win')
             : { current: '—', delta: '', deltaClass: 'text-text/80' }
         ),
         mobileMetric(
           L.byLoss,
-          p.overviewTeamsData?.matchCount > 0
+          (p.overviewTeamsData?.matchCount ?? 0) > 0
             ? soulGlobalPctParts('loss')
             : { current: '—', delta: '', deltaClass: 'text-text/80' }
         ),
         mobileMetric(
           L.blue,
-          p.overviewSidesData?.matchCount > 0
+          (p.overviewSidesData?.matchCount ?? 0) > 0
             ? soulGlobalPctPartsSides('blue')
             : { current: '—', delta: '', deltaClass: 'text-text/80' }
         ),
         mobileMetric(
           L.red,
-          p.overviewSidesData?.matchCount > 0
+          (p.overviewSidesData?.matchCount ?? 0) > 0
             ? soulGlobalPctPartsSides('red')
             : { current: '—', delta: '', deltaClass: 'text-text/80' }
         ),
       ],
     },
-    ...(p.drakeSoulRows as Array<{ key: string; label: string }>).map(row => ({
+    ...p.drakeSoulRows.map(row => ({
       id: `soul-${row.key}`,
       title: row.label,
       iconSrc: p.drakeIconSrc(row.key) ?? null,
@@ -1376,25 +1363,25 @@ const mobileSoulObtentionRows = computed(() => {
       metrics: [
         mobileMetric(
           L.byWin,
-          p.overviewTeamsData?.matchCount > 0
+          (p.overviewTeamsData?.matchCount ?? 0) > 0
             ? drakeSoulPctParts(row.key, 'win')
             : { current: '—', delta: '', deltaClass: 'text-text/80' }
         ),
         mobileMetric(
           L.byLoss,
-          p.overviewTeamsData?.matchCount > 0
+          (p.overviewTeamsData?.matchCount ?? 0) > 0
             ? drakeSoulPctParts(row.key, 'loss')
             : { current: '—', delta: '', deltaClass: 'text-text/80' }
         ),
         mobileMetric(
           L.blue,
-          p.overviewSidesData?.matchCount > 0
+          (p.overviewSidesData?.matchCount ?? 0) > 0
             ? drakeSoulPctPartsSides(row.key, 'blue')
             : { current: '—', delta: '', deltaClass: 'text-text/80' }
         ),
         mobileMetric(
           L.red,
-          p.overviewSidesData?.matchCount > 0
+          (p.overviewSidesData?.matchCount ?? 0) > 0
             ? drakeSoulPctPartsSides(row.key, 'red')
             : { current: '—', delta: '', deltaClass: 'text-text/80' }
         ),
@@ -1414,19 +1401,19 @@ const mobileSoulWinrateRows = computed(() => {
       metrics: [
         mobileMetric(
           L.globalWr,
-          p.overviewTeamsData?.matchCount > 0
+          (p.overviewTeamsData?.matchCount ?? 0) > 0
             ? globalParts
             : { current: '—', delta: '', deltaClass: 'text-text/80' }
         ),
         mobileMetric(
           L.blue,
-          p.overviewSidesData?.matchCount > 0
+          (p.overviewSidesData?.matchCount ?? 0) > 0
             ? soulGlobalSecureWinrateSideParts('blue')
             : { current: '—', delta: '', deltaClass: 'text-text/80' }
         ),
         mobileMetric(
           L.red,
-          p.overviewSidesData?.matchCount > 0
+          (p.overviewSidesData?.matchCount ?? 0) > 0
             ? soulGlobalSecureWinrateSideParts('red')
             : { current: '—', delta: '', deltaClass: 'text-text/80' }
         ),

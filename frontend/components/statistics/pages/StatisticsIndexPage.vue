@@ -851,27 +851,88 @@
 </template>
 
 <script setup lang="ts">
-/* eslint-disable @typescript-eslint/no-unused-vars -- setup bindings are used by tab SFCs via provide('statisticsPageCtx'), not this file's template */
 import {
   ref,
+  reactive,
   computed,
   watch,
   nextTick,
   onMounted,
   onUnmounted,
-  getCurrentInstance,
   provide,
-  unref,
-  isRef,
   defineAsyncComponent,
 } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { statsFetch } from '~/utils/statsFetch'
+import type {
+  OverviewData,
+  InfosMatrixData,
+  InfosMetaData,
+  BalanceFrameworkData,
+  OverviewDetailData,
+  OverviewDurationWinrateData,
+  OverviewAbandonsData,
+  SurrenderMatrixData,
+  OverviewProgressionData,
+  ProgressionFullData,
+  OverviewTeamsData,
+  OverviewSidesData,
+  OverviewSidesProgressionData,
+  ChampionsData,
+  ChampionGlobalTableData,
+  DrakeSoulRow,
+  DrakeTypeRow,
+} from '~/types/statisticsIndexPage'
+import {
+  type StatisticsTabSection,
+  STATISTICS_SECTION_TABS,
+  queryFirst,
+  sectionFromQuery,
+  normalizeTabForSection,
+  normalizeLegacyTab,
+  getRiotLanguage,
+  isStatisticsMainTab,
+  statisticsTabNeedsOverviewLoad,
+} from '~/utils/statistics/statisticsTabRouting'
+import {
+  PAGE_SIZE_OPTIONS,
+  tierListPatchDeltaClass,
+  formatDivisionLabel,
+  roleToBansColumnKey,
+  COHORT_DIVISION_DEBOUNCE_MS,
+  hasMeaningfulProgressionDelta,
+  FAST_STAT_ROW_COUNT,
+  STATS_OTP_PICKRATE_THRESHOLD_PCT,
+  rankTiers,
+  roles,
+  mainRoleIconSrc,
+  mainRoleLabel,
+  type ChampionGlobalTableRow,
+  type ChampionGlobalNumericDeltaKey,
+  type ChampionGlobalSortColumn,
+  championGlobalRowKey,
+  championGlobalNumericDeltaClass,
+  formatChampionGlobalNumericDelta,
+} from '~/utils/statistics/statisticsTableFormat'
+import {
+  matchOutcomePct,
+  objectiveIconSrc,
+  drakeIconSrc,
+  onObjectiveIconError,
+  onDrakeIconError,
+  distributionPercentRows,
+  sidesDonutCircumference,
+  HORDE_DISPLAY_MAX,
+  RIFT_HERALD_DISPLAY_MAX,
+  aggregateObjectiveHistogramDist,
+  formatObjectiveObtentionPercent,
+  objectiveKeysOrdered,
+  objectiveHasKillDropdown,
+} from '~/utils/statistics/statisticsObjectives'
+import { compareVersionsDesc, normalizeVersionToPrefix } from '~/utils/statistics/statsVersion'
 import { comparePatchMajorMinor } from '~/utils/patchVersion'
 import { apiUrl } from '~/utils/apiUrl'
-import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
-import { RANK_TIERS } from '~/utils/rankTiers'
 import { getRankedEmblemUrl } from '~/utils/rankedEmblem'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useItemsStore } from '~/stores/ItemsStore'
@@ -879,7 +940,6 @@ import { useRunesStore } from '~/stores/RunesStore'
 import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import { useVersionStore } from '~/stores/VersionStore'
 import { useStatisticsUiStore, type StatisticsMainTab } from '~/stores/StatisticsUiStore'
-import { STATISTICS_MAIN_TAB_ORDER } from '~/constants/statisticsMainTabs'
 import { useStatisticsCustomStore } from '~/stores/StatisticsCustomStore'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { useStatisticsMobileViewport } from '~/composables/useStatisticsMobileViewport'
@@ -910,26 +970,13 @@ import {
   type ChampionTransform,
 } from '~/utils/championTransformStats'
 import { useStatisticsSplitTransformPreference } from '~/composables/useStatisticsSplitTransformPreference'
-import { formatItemStatsForDisplay, formatItemEconomicForDisplay } from '~/utils/formatItemStats'
-import {
-  scoreboardDrakeIconByKey,
-  scoreboardDrakeIconCdByKey,
-  scoreboardObjectiveIconByKey,
-  scoreboardObjectiveIconCdByKey,
-} from '~/utils/objectiveScoreboardIcons'
-import type {
-  ItemAggRow,
-  ItemSliceCategory,
-} from '~/components/statistics/ItemStatsFastSection.vue'
+import type {} from '~/components/statistics/ItemStatsFastSection.vue'
 const StatisticsOverviewTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsOverviewTab.vue')
 )
 const StatisticsRunesTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsRunesTab.vue')
 )
-// const StatisticsTrendsTab = defineAsyncComponent(
-//   () => import('~/components/statistics/tabs/StatisticsTrendsTab.vue')
-// )
 const StatisticsTeamTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsTeamTab.vue')
 )
@@ -1003,79 +1050,6 @@ const { version: gameVersion } = useGameVersion()
 const route = useRoute()
 const router = useRouter()
 
-function queryFirst(value: string | string[] | null | undefined): string {
-  if (Array.isArray(value)) return value[0] ?? ''
-  return value ?? ''
-}
-
-type StatisticsTabSection =
-  | 'infos-overview'
-  | 'tierlist-champion'
-  | 'items'
-  | 'runes-summoner'
-  | 'objectives'
-  | 'team-bans'
-  | 'balance-progression'
-  | 'synergy-botlane'
-
-const STATISTICS_SECTION_TABS: Record<StatisticsTabSection, StatisticsMainTab[]> = {
-  'infos-overview': ['infos', 'overview'],
-  'tierlist-champion': ['championTable'],
-  items: ['items'],
-  'runes-summoner': ['runes', 'spells'],
-  objectives: ['objectives'],
-  'team-bans': ['team', 'bans'],
-  'balance-progression': ['balance', 'trends'],
-  'synergy-botlane': ['championTable'],
-}
-
-function sectionFromQuery(): StatisticsTabSection | null {
-  // Keep all tabs visible regardless of legacy `?section=` deep-links.
-  return null
-}
-
-function normalizeTabForSection(
-  section: StatisticsTabSection | null,
-  tab: StatisticsMainTab
-): StatisticsMainTab {
-  if (!section) return tab
-  const allowedTabs = STATISTICS_SECTION_TABS[section]
-  if (allowedTabs.includes(tab)) return tab
-  return allowedTabs[0] ?? tab
-}
-
-function normalizeLegacyTab(tab: string): StatisticsMainTab {
-  if (tab === 'tierlist') return 'overview'
-  if (tab === 'champions') return 'infos'
-  // if (tab === 'progressions') return 'trends'
-  if (tab === 'sides') return 'team'
-  if (tab === 'detail') return 'runes'
-  if (tab === 'duration') return 'team'
-  if (tab === 'abandons') return 'team'
-  if (tab === 'champion-table' || tab === 'championstable') return 'championTable'
-  if (
-    tab === 'overview' ||
-    tab === 'championTable' ||
-    tab === 'balance' ||
-    // tab === 'trends' ||
-    tab === 'team' ||
-    tab === 'objectives' ||
-    tab === 'surrender' ||
-    tab === 'bans' ||
-    tab === 'runes' ||
-    tab === 'items' ||
-    tab === 'spells' ||
-    tab === 'infos' ||
-    tab === 'pings' ||
-    tab === 'vision' ||
-    tab === 'misc' ||
-    tab === 'patchNotes'
-  ) {
-    return tab
-  }
-  return 'overview'
-}
-
 /** Onglet initial aligné sur l’URL (SSR + client) pour éviter hydration mismatch et faux onglet « Vue d’ensemble ». */
 function initialActiveTabFromRoute(): StatisticsMainTab {
   const tabRaw = queryFirst(route.query.tab as string | string[] | null | undefined)
@@ -1083,7 +1057,6 @@ function initialActiveTabFromRoute(): StatisticsMainTab {
   return 'overview'
 }
 
-const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
 const riotLocale = computed(() => getRiotLanguage(locale.value))
 
 const activeTab = ref<StatisticsMainTab>(initialActiveTabFromRoute())
@@ -1143,18 +1116,10 @@ const displayedActiveTab = computed<StatisticsMainTab>(() => {
   return fallback ?? 'overview'
 })
 
-function isStatisticsMainTab(tab: string): tab is StatisticsMainTab {
-  return (STATISTICS_MAIN_TAB_ORDER as readonly string[]).includes(tab)
-}
-
 function isStatisticsTabConfiguredVisible(tab: string): boolean {
   const normalized = normalizeLegacyTab(tab)
   if (!isStatisticsMainTab(normalized)) return true
   return statisticsUiStore.isTabVisible(normalized)
-}
-
-function statisticsTabNeedsOverviewLoad(tab: StatisticsMainTab): boolean {
-  return tab === 'overview' || tab === 'objectives' || tab === 'infos'
 }
 
 function visibleTabsNeedChampionsStore(): boolean {
@@ -1255,13 +1220,8 @@ function toggleFavoriteCard(cardId: string, title: string): void {
   statisticsCustomStore.toggleFavorite(cardId, title)
 }
 
-const {
-  isMobileViewport,
-  overviewFastStatView,
-  showMobileViewToast,
-  setOverviewFastStatView,
-  dismissMobileViewToast,
-} = useStatisticsMobileViewport()
+const { isMobileViewport, showMobileViewToast, setOverviewFastStatView, dismissMobileViewToast } =
+  useStatisticsMobileViewport()
 
 const championSearchQuery = ref('')
 const miscLevel = ref(1)
@@ -1325,7 +1285,6 @@ const searchInputPlaceholder = computed(() =>
 /** Pagination: page size and current page (1-based). Shared for Champions and Tier list. */
 const championsPageSize = ref(20)
 const championsPage = ref(1)
-const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
 const championsPageSizeModel = computed({
   get: () => championsPageSize.value,
   set: (value: number) => {
@@ -1334,104 +1293,8 @@ const championsPageSizeModel = computed({
     championsPageSize.value = PAGE_SIZE_OPTIONS.includes(next) ? next : 20
   },
 })
-/** Pagination Objets (onglet items). */
-const itemsPageSize = ref(20)
-const itemsPage = ref(1)
-const itemsList = computed(() => overviewDetailData.value?.items ?? [])
-
-/** Tranches objets (starters / core / bottes / finaux / solo) → 8 cartes chacune dans la même grille. */
-const itemFastSliceConfigs = computed(() => {
-  const d = overviewDetailData.value
-  const b = overviewDetailBaselineData.value
-  if (!d) {
-    return [] as Array<{
-      slice: ItemSliceCategory
-      rows: ItemAggRow[]
-      baselineRows: ItemAggRow[] | null
-    }>
-  }
-  const slices: Array<{
-    slice: ItemSliceCategory
-    rows: ItemAggRow[] | undefined
-    baseline: ItemAggRow[] | undefined
-  }> = [
-    { slice: 'starter', rows: d.itemsStarters, baseline: b?.itemsStarters },
-    { slice: 'core', rows: d.itemsCores, baseline: b?.itemsCores },
-    { slice: 'boots', rows: d.itemsBoots, baseline: b?.itemsBoots },
-    { slice: 'final', rows: d.itemsFinals, baseline: b?.itemsFinals },
-    { slice: 'solo', rows: d.items, baseline: b?.items },
-  ]
-  return slices
-    .map(s => ({
-      slice: s.slice,
-      rows: s.rows ?? [],
-      baselineRows: s.baseline != null && s.baseline.length > 0 ? s.baseline : null,
-    }))
-    .filter(s => s.rows.length > 0)
-})
-
-const totalItemsCount = computed(() => itemsList.value.length)
-const totalItemsPages = computed(() =>
-  Math.max(1, Math.ceil(totalItemsCount.value / itemsPageSize.value))
-)
-const paginatedItems = computed(() => {
-  const list = itemsList.value
-  const size = itemsPageSize.value
-  const page = Math.min(itemsPage.value, totalItemsPages.value)
-  const start = (page - 1) * size
-  return list.slice(start, start + size)
-})
-/** Pagination Progressions (onglet progressions). */
 const progressionsPageSize = ref(20)
 const progressionsPage = ref(1)
-const progressionsPageSizeModel = computed({
-  get: () => progressionsPageSize.value,
-  set: (value: number) => {
-    const n = Number(value)
-    const next = Number.isFinite(n) && n > 0 ? Math.floor(n) : 20
-    progressionsPageSize.value = PAGE_SIZE_OPTIONS.includes(next) ? next : 20
-  },
-})
-const filteredProgressionsChampions = computed(() => {
-  const list = progressionFullData.value?.champions ?? []
-  const q = championSearchQuery.value.trim()
-  if (!q) return list
-  return list.filter(row =>
-    matchesChampionSearch(q, {
-      championId: row.championId,
-      name: championName(row.championId),
-    })
-  )
-})
-const filteredProgressionsByPickrate = computed(() => {
-  const list = progressionFullByPickrate.value
-  const q = championSearchQuery.value.trim()
-  if (!q) return list
-  return list.filter(row =>
-    matchesChampionSearch(q, {
-      championId: row.championId,
-      name: championName(row.championId),
-    })
-  )
-})
-const totalProgressionsCount = computed(() => filteredProgressionsChampions.value.length)
-const totalProgressionsPages = computed(() =>
-  Math.max(1, Math.ceil(totalProgressionsCount.value / progressionsPageSize.value))
-)
-const paginatedProgressionsChampions = computed(() => {
-  const list = filteredProgressionsChampions.value
-  const size = progressionsPageSize.value
-  const page = Math.min(progressionsPage.value, totalProgressionsPages.value)
-  const start = (page - 1) * size
-  return list.slice(start, start + size)
-})
-const paginatedProgressionsByPickrate = computed(() => {
-  const list = filteredProgressionsByPickrate.value
-  const size = progressionsPageSize.value
-  const page = Math.min(progressionsPage.value, totalProgressionsPages.value)
-  const start = (page - 1) * size
-  return list.slice(start, start + size)
-})
 watch([championSearchQuery, progressionsPageSize], () => {
   progressionsPage.value = 1
 })
@@ -1443,93 +1306,9 @@ const championsSortDir = ref<'asc' | 'desc'>('desc')
 watch(championsSortOrder, () => {
   championsSortDir.value = 'desc'
 })
-const filteredChampions = computed(() => {
-  const list = championsData.value?.champions ?? []
-  const q = championSearchQuery.value.trim()
-  const filtered = q
-    ? list.filter(row =>
-        matchesChampionSearch(q, {
-          championId: row.championId,
-          name: championName(row.championId),
-        })
-      )
-    : [...list]
-  const sort = championsSortOrder.value
-  const dir = championsSortDir.value
-  const mult = dir === 'desc' ? 1 : -1
-  return filtered.sort((a, b) => {
-    let diff = 0
-    if (sort === 'winrate') diff = (b.winrate ?? 0) - (a.winrate ?? 0)
-    else if (sort === 'pickrate') diff = (b.pickrate ?? 0) - (a.pickrate ?? 0)
-    else if (sort === 'wins') diff = (b.wins ?? 0) - (a.wins ?? 0)
-    else diff = (b.games ?? 0) - (a.games ?? 0)
-    return mult * diff
-  })
-})
-const totalChampionsCount = computed(() => filteredChampions.value.length)
-const totalChampionsPages = computed(() =>
-  Math.max(1, Math.ceil(totalChampionsCount.value / championsPageSize.value))
-)
-const paginatedChampions = computed(() => {
-  const list = filteredChampions.value
-  const size = championsPageSize.value
-  const page = Math.min(championsPage.value, Math.max(1, Math.ceil(list.length / size) || 1))
-  const start = (page - 1) * size
-  return list.slice(start, start + size)
-})
-/** Reset to page 1 when filters or page size change. */
 watch([championSearchQuery, championsSortOrder, championsSortDir, championsPageSize], () => {
   championsPage.value = 1
 })
-
-/** Click on sortable column header: same column toggles asc/desc, else set column and desc. */
-function setChampionsSort(col: 'games' | 'wins' | 'winrate' | 'pickrate') {
-  if (championsSortOrder.value === col) {
-    championsSortDir.value = championsSortDir.value === 'desc' ? 'asc' : 'desc'
-  } else {
-    championsSortOrder.value = col
-    championsSortDir.value = 'desc'
-  }
-}
-
-/** Pickrate % (0–100) : vert / neutre / rouge pour lisibilité (tableau champion global). */
-function championGlobalPickrateClass(pct: number): string {
-  if (!Number.isFinite(pct)) return 'text-text/80'
-  if (pct >= 15) return 'font-medium text-info/90'
-  if (pct >= 6) return 'text-primary-light/85'
-  if (pct >= 2) return 'text-text/85'
-  return 'text-error/90'
-}
-
-function tierListWinrateClass(pct: number): string {
-  if (!Number.isFinite(pct)) return 'text-text/80'
-  if (pct >= 52.5) return 'font-medium text-info'
-  if (pct >= 51) return 'text-info/95'
-  if (pct >= 50) return 'text-primary-light/85'
-  return 'text-error/90'
-}
-
-function formatTierListPatchDeltaPp(pp: number): string {
-  const sign = pp > 0 ? '+' : ''
-  return `${sign}${pp.toFixed(2)}`
-}
-
-function formatTierListPatchDeltaGames(n: number): string {
-  const sign = n > 0 ? '+' : ''
-  return `${sign}${Math.round(n).toLocaleString()}`
-}
-
-function tierListPatchDeltaClass(pp: number): string {
-  if (pp > 0.05) return 'text-info/90'
-  if (pp < -0.05) return 'text-error/90'
-  return 'text-text/55'
-}
-
-function tierListPatchDeltaGamesClass(n: number): string {
-  if (n > 0) return 'text-info/90'
-  if (n < 0) return 'text-error/90'
-  return 'text-text/55'
-}
 
 /** Depuis l’aperçu : page tier list avec tri initial. */
 function goToTierListWithSort(sort: 'winrate' | 'pickrate') {
@@ -1553,37 +1332,7 @@ function _formatGeneratedAt(value: string | null | undefined): string {
 
 // Overview (vue d'ensemble)
 const overviewError = ref<string | null>(null)
-const overviewData = ref<{
-  totalMatches: number
-  lastUpdate: string | null
-  message?: string
-  topWinrateChampions: Array<{
-    championId: number
-    games: number
-    wins: number
-    winrate: number
-    pickrate: number
-  }>
-  topPickrateChampions?: Array<{
-    championId: number
-    games: number
-    wins: number
-    winrate: number
-    pickrate: number
-  }>
-  topBanrateChampions?: Array<{
-    championId: number
-    banCount: number
-    banrate: number
-  }>
-  matchesByDivision: Array<{ rankTier: string; matchCount: number }>
-  matchesByVersion?: Array<{ version: string; matchCount: number }>
-  playerCount: number
-  surrenderBySide?: {
-    blue: { total: number; earlySurrenderCount: number; surrenderCount: number }
-    red: { total: number; earlySurrenderCount: number; surrenderCount: number }
-  }
-} | null>(null)
+const overviewData = ref<OverviewData | null>(null)
 const overviewPending = ref(true)
 /** Selected version filter for overview (null = all versions). */
 /** Filtres communs à tous les onglets (version, division, rôle). */
@@ -1610,11 +1359,6 @@ const balanceEliteFilter = ref<'ALL' | 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCE
 const progressionFromVersionOverride = ref('')
 const isApplyingQueryState = ref(false)
 const isSyncingQueryState = ref(false)
-
-function queryAll(value: string | string[] | null | undefined): string[] {
-  if (Array.isArray(value)) return value.filter(Boolean)
-  return value ? [value] : []
-}
 
 function applyStatisticsStateFromQuery(): void {
   const tabRaw = queryFirst(route.query.tab as string | string[] | null | undefined)
@@ -1776,20 +1520,6 @@ watch(
 
 /** Alias pour compatibilité avec l’overview (requête utilise version/rankTier). */
 const _overviewVersionFilter = computed(() => statsVersionFilter.value || null)
-const overviewDivisionFilter = computed<string[] | null>(() =>
-  statsDivisionFilter.value.length > 0 ? statsDivisionFilter.value : null
-)
-function compareVersionsDesc(a: string, b: string): number {
-  const pa = a.split('.').map(x => Number(x))
-  const pb = b.split('.').map(x => Number(x))
-  const maxLen = Math.max(pa.length, pb.length)
-  for (let i = 0; i < maxLen; i++) {
-    const da = Number.isFinite(pa[i]) ? (pa[i] as number) : 0
-    const db = Number.isFinite(pb[i]) ? (pb[i] as number) : 0
-    if (da !== db) return db - da
-  }
-  return b.localeCompare(a)
-}
 /** Uniquement les patchs avec des matchs en base (`match_outcome_stats`). */
 function setVersionsWithMatches(
   rows: Array<{ version: string; matchCount: number }> | null | undefined
@@ -1877,31 +1607,12 @@ watch(
   { immediate: true }
 )
 
-const versionMatchCountByVersion = computed(() => {
-  const map = new Map<string, number>()
-  for (const row of statsVersionOptions.value) {
-    if (!row?.version) continue
-    map.set(row.version, Number(row.matchCount) || 0)
-  }
-  return map
-})
-function versionMatchCount(version: string | null | undefined): number {
-  if (!version) return 0
-  return versionMatchCountByVersion.value.get(version) ?? 0
-}
 const infosMatrixPending = ref(false)
 const infosMatrixError = ref<string | null>(null)
-const infosMatrixData = ref<{
-  divisions: string[]
-  rows: Array<{ version: string; all: number; byDivision: Record<string, number> }>
-} | null>(null)
+const infosMatrixData = ref<InfosMatrixData | null>(null)
 const infosMetaPending = ref(false)
 const infosMetaError = ref<string | null>(null)
-const infosMetaData = ref<{
-  totalMatches: number
-  totalPlayers: number
-  playersWithIngestMatches: number
-} | null>(null)
+const infosMetaData = ref<InfosMetaData | null>(null)
 const infosMatrixColumns = computed(() => {
   const rankOrder = rankTiers
   const present = new Set(
@@ -1932,10 +1643,6 @@ const _overviewDivisionsForDescription = computed(() => {
   const list = overviewData.value?.matchesByDivision ?? []
   return list.filter(d => d.rankTier !== 'UNRANKED')
 })
-/** Pourcentage de parties pour une division (sur le total des divisions). */
-function formatDivisionLabel(tier: string): string {
-  return tier.charAt(0).toUpperCase() + tier.slice(1).toLowerCase()
-}
 function _divisionPercent(d: { matchCount: number }): string {
   const divisions = overviewData.value?.matchesByDivision ?? []
   const total = divisions.reduce((s, x) => s + (x.matchCount ?? 0), 0)
@@ -1959,14 +1666,6 @@ const showBansSideColumns = ref(true)
 const showChampionHealColumns = ref(true)
 const showChampionDealtColumns = ref(true)
 const showChampionTakenColumns = ref(true)
-const roleToBansColumnKey = Object.freeze({
-  TOP: 'top',
-  JUNGLE: 'jungle',
-  MIDDLE: 'middle',
-  BOTTOM: 'bottom',
-  SUPPORT: 'support',
-} as const)
-
 function toggleBansOutcomeColumns() {
   showBansOutcomeColumns.value = !showBansOutcomeColumns.value
 }
@@ -1993,7 +1692,6 @@ function toggleChampionColumnGroup(group: 'heal' | 'dealt' | 'taken') {
   if (showChampionTakenColumns.value && activeCount <= 1) return
   showChampionTakenColumns.value = !showChampionTakenColumns.value
 }
-const COHORT_DIVISION_DEBOUNCE_MS = 280
 let cohortDivisionEffectTimer: ReturnType<typeof setTimeout> | null = null
 
 function scheduleDivisionCohortEffects() {
@@ -2090,21 +1788,7 @@ function resetStatsFilters() {
   onStatsFilterChange()
 }
 
-const balanceFrameworkData = ref<{
-  rules: Record<string, unknown> | null
-  currentPatch: string
-  previousPatch: string | null
-  abrByLevel: { average: number; skilled: number; elite: number }
-  rows: Array<{
-    championId: number
-    role: string
-    average: { status: 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'; delta: string | null }
-    skilled: { status: 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'; delta: string | null }
-    elite: { status: 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'; delta: string | null }
-    globalStatus: 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'
-    globalDelta: string | null
-  }>
-} | null>(null)
+const balanceFrameworkData = ref<BalanceFrameworkData | null>(null)
 const balanceFrameworkPending = ref(false)
 const balanceFrameworkError = ref(false)
 
@@ -2143,98 +1827,7 @@ async function loadBalanceFramework() {
   }
 }
 /** Overview detail (runes, items, spells) from GET /api/stats/overview-detail */
-const overviewDetailData = ref<{
-  totalParticipants: number
-  runes: Array<{ runeId: number; games: number; wins: number; pickrate: number; winrate: number }>
-  runeSets: Array<{
-    runes: unknown
-    shards?: number[]
-    games: number
-    wins: number
-    pickrate: number
-    winrate: number
-  }>
-  shards?: Array<{
-    shardId: number
-    slot: number
-    games: number
-    wins: number
-    pickrate: number
-    winrate: number
-  }>
-  items: Array<{ itemId: number; games: number; wins: number; pickrate: number; winrate: number }>
-  itemsStarters?: Array<{
-    itemId: number
-    games: number
-    wins: number
-    pickrate: number
-    winrate: number
-  }>
-  itemsCores?: Array<{
-    itemId: number
-    games: number
-    wins: number
-    pickrate: number
-    winrate: number
-  }>
-  itemsFinals?: Array<{
-    itemId: number
-    games: number
-    wins: number
-    pickrate: number
-    winrate: number
-  }>
-  itemsBoots?: Array<{
-    itemId: number
-    games: number
-    wins: number
-    pickrate: number
-    winrate: number
-  }>
-  itemSets: Array<{
-    items: number[]
-    games: number
-    wins: number
-    pickrate: number
-    winrate: number
-  }>
-  itemStarterSets?: Array<{
-    items: number[]
-    games: number
-    wins: number
-    pickrate: number
-    winrate: number
-  }>
-  itemsByOrder: Record<
-    string,
-    Array<{ itemId: number; games: number; wins: number; winrate: number }>
-  >
-  summonerSpells: Array<{
-    spellId: number
-    games: number
-    wins: number
-    pickrate: number
-    winrate: number
-    countSlot0?: number
-    countSlot1?: number
-    pctSlotD?: number
-    pctSlotF?: number
-    highEloGames?: number
-    highEloWinrate?: number
-    highEloRank?: number
-  }>
-  summonerSpellSets: Array<{
-    spellIdD: number
-    spellIdF: number
-    games: number
-    wins: number
-    pickrate: number
-    winrate: number
-    highEloGames?: number
-    highEloWinrate?: number
-    highEloRank?: number
-  }>
-} | null>(null)
+const overviewDetailData = ref<OverviewDetailData | null>(null)
 const overviewDetailBaselineData = ref<typeof overviewDetailData.value>(null)
 const overviewDetailBaselinePending = ref(false)
 const overviewDetailPending = ref(false)
@@ -2407,9 +2000,7 @@ async function loadOverviewVersionsCatalog() {
   await loadVersionsWithMatches()
 }
 /** Duration vs winrate (5-min buckets, uses version + rank filters). */
-const overviewDurationWinrateData = ref<{
-  buckets: Array<{ durationMin: number; matchCount: number; wins: number; winrate: number }>
-} | null>(null)
+const overviewDurationWinrateData = ref<OverviewDurationWinrateData | null>(null)
 const overviewDurationWinratePending = ref(false)
 async function loadOverviewDurationWinrate() {
   const t = statsPerfStart('loadOverviewDurationWinrate')
@@ -2427,15 +2018,7 @@ async function loadOverviewDurationWinrate() {
 }
 
 /** Stats abandons (remake, surrender). GET /api/stats/overview-abandons */
-const overviewAbandonsData = ref<{
-  totalMatches: number
-  remakeCount: number
-  remakeRate: number
-  surrenderCount: number
-  surrenderRate: number
-  earlySurrenderCount: number
-  earlySurrenderRate: number
-} | null>(null)
+const overviewAbandonsData = ref<OverviewAbandonsData | null>(null)
 const overviewAbandonsPending = ref(false)
 async function loadOverviewAbandons() {
   const t = statsPerfStart('loadOverviewAbandons')
@@ -2452,25 +2035,8 @@ async function loadOverviewAbandons() {
   }
 }
 
-const surrenderMatrixData = ref<{
-  version: string | null
-  baselineVersion: string | null
-  rows: Array<{
-    rankTier: string
-    team: 'ALL' | 100 | 200
-    matchCount: number
-    surrenderCount: number
-    earlySurrenderCount: number
-    surrenderRate: number
-    earlySurrenderRate: number
-    surrenderDelta: number | null
-    earlySurrenderDelta: number | null
-  }>
-} | null>(null)
+const surrenderMatrixData = ref<SurrenderMatrixData | null>(null)
 const surrenderMatrixPending = ref(false)
-const surrenderMatrixBaselineLabel = computed(
-  () => surrenderMatrixData.value?.baselineVersion ?? t('statisticsPage.overviewVersionAll')
-)
 const surrenderMatrixRows = computed(() => surrenderMatrixData.value?.rows ?? [])
 function surrenderMatrixQueryParams(): string {
   const params = new URLSearchParams()
@@ -2547,16 +2113,8 @@ const overviewPlayedPct = computed(() =>
     ? (overviewPlayedCount.value / overviewMatchOutcomeTotal.value) * 100
     : 0
 )
-function matchOutcomePct(part: number, total: number): string {
-  if (!total) return '0.00'
-  return ((part / total) * 100).toFixed(2)
-}
 /** Progression: WR delta from oldest version to all since. For "Winrate depuis X" encart. */
-const overviewProgressionData = ref<{
-  oldestVersion: string | null
-  gainers: Array<{ championId: number; wrOldest: number; wrSince: number; delta: number }>
-  losers: Array<{ championId: number; wrOldest: number; wrSince: number; delta: number }>
-} | null>(null)
+const overviewProgressionData = ref<OverviewProgressionData | null>(null)
 async function loadOverviewProgression() {
   const oldest = progressionFromVersion.value
   if (!oldest) {
@@ -2581,13 +2139,6 @@ async function loadOverviewProgression() {
       statsPerfEnd('loadOverviewProgression', t)
     }
   })
-}
-/** Normalise une version (ex. "16.3.123") en préfixe pour l’API (ex. "16.3"). */
-function normalizeVersionToPrefix(v: string | null | undefined): string | null {
-  if (!v || typeof v !== 'string') return null
-  const parts = v.trim().split('.')
-  if (parts.length >= 2) return `${parts[0]}.${parts[1]}`
-  return parts[0] || null
 }
 /**
  * Filtre version = patch analysé ; delta / référence progression = patch immédiatement plus ancien
@@ -2688,21 +2239,7 @@ function applyDefaultVersionFiltersFromKnownVersions(): boolean {
 }
 
 /** Progressions complètes (tous les champions, WR + pickrate) pour onglet Progressions. */
-const progressionFullData = ref<{
-  oldestVersion: string | null
-  champions: Array<{
-    championId: number
-    wrOldest: number
-    wrSince: number
-    deltaWr: number
-    pickrateOldest: number
-    pickrateSince: number
-    deltaPick: number
-    banrateOldest: number
-    banrateSince: number
-    deltaBan: number
-  }>
-} | null>(null)
+const progressionFullData = ref<ProgressionFullData | null>(null)
 const progressionFullPending = ref(false)
 async function loadProgressionsFull() {
   const oldest = progressionFromVersion.value
@@ -2731,17 +2268,6 @@ async function loadProgressionsFull() {
     }
   })
 }
-/** Même liste que progressionFullData.champions mais triée par delta pickrate (pour table popularité). */
-const progressionFullByPickrate = computed(() => {
-  const list = progressionFullData.value?.champions ?? []
-  return [...list].sort((a, b) => b.deltaPick - a.deltaPick)
-})
-const PROGRESSION_DELTA_EPS = 0.01
-
-function hasMeaningfulProgressionDelta(value: number): boolean {
-  return Number.isFinite(value) && Math.abs(value) >= PROGRESSION_DELTA_EPS
-}
-
 const progressionSinceSlices = computed(() => {
   const list = progressionFullData.value?.champions ?? []
   const topWinrate = [...list]
@@ -2776,146 +2302,6 @@ const overviewTopBanrateSince = computed(() => progressionSinceSlices.value.topB
 const overviewBottomWinrateSince = computed(() => progressionSinceSlices.value.bottomWinrate)
 const overviewBottomPickrateSince = computed(() => progressionSinceSlices.value.bottomPickrate)
 const overviewBottomBanrateSince = computed(() => progressionSinceSlices.value.bottomBanrate)
-const CHART_W = 560
-const CHART_H = 260
-const CHART_PAD = { left: 44, right: 20, top: 20, bottom: 30 }
-const PLOT_W = CHART_W - CHART_PAD.left - CHART_PAD.right
-const PLOT_H = CHART_H - CHART_PAD.top - CHART_PAD.bottom
-const durationWinrateTooltip = ref<{
-  durationLabel: string
-  winrate: number
-  matchCount: number
-  index: number
-} | null>(null)
-/** Catmull-Rom to cubic Bezier: smooth curve through points. */
-function catmullRomToBezier(pts: Array<{ x: number; y: number }>): string {
-  if (pts.length < 2) return ''
-  const p0 = pts[0]
-  const p1 = pts[1]
-  if (!p0 || !p1) return ''
-  if (pts.length === 2) return `M ${p0.x},${p0.y} L ${p1.x},${p1.y}`
-  let d = `M ${p0.x},${p0.y}`
-  for (let i = 0; i < pts.length - 1; i++) {
-    const pi = pts[Math.max(0, i - 1)]
-    const pj = pts[i]
-    const pk = pts[i + 1]
-    const pl = pts[Math.min(pts.length - 1, i + 2)]
-    if (!pi || !pj || !pk || !pl) continue
-    const cp1x = pj.x + (pk.x - pi.x) / 6
-    const cp1y = pj.y + (pk.y - pi.y) / 6
-    const cp2x = pk.x - (pl.x - pj.x) / 6
-    const cp2y = pk.y - (pl.y - pj.y) / 6
-    d += ` C ${cp1x.toFixed(2)},${cp1y.toFixed(2)} ${cp2x.toFixed(2)},${cp2y.toFixed(2)} ${pk.x},${pk.y}`
-  }
-  return d
-}
-
-/** Points for line chart: X=duration (min), Y=nombre de parties. Courbe lissée (Catmull-Rom). */
-function durationWinrateChartScaled(
-  buckets: Array<{ durationMin: number; matchCount: number; wins: number; winrate: number }>
-) {
-  const empty = {
-    linePath: '' as string,
-    closedPath: '' as string,
-    list: [] as {
-      x: number
-      y: number
-      label: string
-      durationLabel: string
-      winrate: number
-      matchCount: number
-    }[],
-    axisX: { ticks: [] as { value: number; x: number }[] },
-    axisY: { ticks: [] as { value: number; y: number }[] },
-    minDur: 0,
-    maxDur: 0,
-  }
-  if (!buckets.length) return empty
-  const sanitized = buckets
-    .map(b => ({
-      durationMin: Number.isFinite(Number(b.durationMin)) ? Number(b.durationMin) : 0,
-      matchCount: Number.isFinite(Number(b.matchCount)) ? Math.max(0, Number(b.matchCount)) : 0,
-      winrate: Number.isFinite(Number(b.winrate)) ? Number(b.winrate) : 0,
-    }))
-    .filter(b => Number.isFinite(b.durationMin))
-  if (!sanitized.length) return empty
-  const sorted = [...sanitized].sort((a, b) => a.durationMin - b.durationMin)
-  const minDur = Math.min(...sorted.map(b => b.durationMin))
-  const maxDur = Math.max(...sorted.map(b => b.durationMin + 5))
-  const durRange = maxDur - minDur || 1
-  const maxCount = Math.max(...sorted.map(b => b.matchCount), 1)
-  const originY = CHART_PAD.top + PLOT_H
-  const pts = sorted.map(b => {
-    const midDur = b.durationMin + 2.5
-    const x = CHART_PAD.left + ((midDur - minDur) / durRange) * PLOT_W
-    const y = originY - (b.matchCount / maxCount) * PLOT_H
-    return {
-      x,
-      y,
-      label: `${b.durationMin}-${b.durationMin + 5} min: ${b.matchCount} parties`,
-      durationLabel: `${b.durationMin}-${b.durationMin + 5} min`,
-      winrate: b.winrate,
-      matchCount: b.matchCount,
-    }
-  })
-  if (!pts.every(p => Number.isFinite(p.x) && Number.isFinite(p.y))) return empty
-  const ptsForCurve = pts.map(p => ({ x: p.x, y: p.y }))
-  const linePath = catmullRomToBezier(ptsForCurve)
-  const firstX = pts[0]?.x ?? CHART_PAD.left
-  const lastX = pts[pts.length - 1]?.x ?? CHART_PAD.left + PLOT_W
-  const closedPath = `${linePath} L ${lastX},${originY} L ${firstX},${originY} Z`
-  const axisXTicks: { value: number; x: number }[] = []
-  const step = durRange <= 15 ? 5 : durRange <= 30 ? 10 : 15
-  for (let v = Math.ceil(minDur / step) * step; v <= maxDur; v += step) {
-    axisXTicks.push({
-      value: v,
-      x: CHART_PAD.left + ((v - minDur) / durRange) * PLOT_W,
-    })
-  }
-  const axisYTicks: { value: number; y: number }[] = []
-  const yStep = Math.max(1, Math.ceil(maxCount / 5))
-  for (let v = 0; v <= maxCount; v += yStep) {
-    axisYTicks.push({
-      value: v,
-      y: originY - (v / maxCount) * PLOT_H,
-    })
-  }
-  const lastTick = axisYTicks[axisYTicks.length - 1]?.value ?? 0
-  if (lastTick < maxCount) {
-    axisYTicks.push({ value: maxCount, y: CHART_PAD.top })
-  }
-  return {
-    linePath,
-    closedPath,
-    list: pts,
-    axisX: { ticks: axisXTicks },
-    axisY: { ticks: axisYTicks },
-    minDur,
-    maxDur,
-  }
-}
-const durationWinrateChartBuckets = computed(() => overviewDurationWinrateData.value?.buckets ?? [])
-const durationWinrateChartScaledData = computed(() =>
-  durationWinrateChartScaled(durationWinrateChartBuckets.value)
-)
-/* Chart SVG paths/axes for duration winrate - reserved for chart UI */
-
-const durationWinrateChartClosedPath = computed(
-  () => durationWinrateChartScaledData.value.closedPath
-)
-const durationWinrateChartLinePath = computed(() => durationWinrateChartScaledData.value.linePath)
-const durationWinrateChartPointsList = computed(() => durationWinrateChartScaledData.value.list)
-const durationWinrateAxisX = computed(() => durationWinrateChartScaledData.value.axisX)
-const durationWinrateAxisY = computed(() => durationWinrateChartScaledData.value.axisY)
-const durationChartTooltip = ref<{
-  durationLabel: string
-  winrate: number
-  matchCount: number
-  x: number
-  y: number
-} | null>(null)
-
-/** Timeout for overview-detail (runes, items, spells). Requête lourde sur 700k+ participants; retry plus long. */
 const OVERVIEW_DETAIL_TIMEOUT_MS = 60_000
 const OVERVIEW_DETAIL_RETRY_TIMEOUT_MS = 90_000
 const overviewDetailError = ref(false)
@@ -2968,143 +2354,7 @@ async function loadOverviewDetailBaseline() {
 }
 
 /** Overview teams: bans and objectives (first + distribution for %). */
-const overviewTeamsData = ref<{
-  matchCount: number
-  objectiveFirstWinrateGlobal?: {
-    firstBlood: number | null
-    baron: number | null
-    dragon: number | null
-    tower: number | null
-    inhibitor: number | null
-    riftHerald: number | null
-    horde: number | null
-  }
-  bans: {
-    byWin: Array<{ championId: number; count: number; banRatePercent: string }>
-    byLoss: Array<{ championId: number; count: number; banRatePercent: string }>
-    top20Total: Array<{ championId: number; count: number; banRatePercent: string }>
-  }
-  objectives: {
-    firstBlood: { firstByWin: number; firstByLoss: number }
-    baron: {
-      firstByWin: number
-      firstByLoss: number
-      killsByWin: number
-      killsByLoss: number
-      distributionByWin: Record<string, number>
-      distributionByLoss: Record<string, number>
-    }
-    dragon: {
-      firstByWin: number
-      firstByLoss: number
-      killsByWin: number
-      killsByLoss: number
-      distributionByWin: Record<string, number>
-      distributionByLoss: Record<string, number>
-    }
-    elder?: {
-      firstByWin: number
-      firstByLoss: number
-      killsByWin: number
-      killsByLoss: number
-      distributionByWin: Record<string, number>
-      distributionByLoss: Record<string, number>
-    }
-    tower: {
-      firstByWin: number
-      firstByLoss: number
-      killsByWin: number
-      killsByLoss: number
-      distributionByWin: Record<string, number>
-      distributionByLoss: Record<string, number>
-    }
-    inhibitor: {
-      firstByWin: number
-      firstByLoss: number
-      killsByWin: number
-      killsByLoss: number
-      distributionByWin: Record<string, number>
-      distributionByLoss: Record<string, number>
-    }
-    riftHerald: {
-      firstByWin: number
-      firstByLoss: number
-      killsByWin: number
-      killsByLoss: number
-      distributionByWin: Record<string, number>
-      distributionByLoss: Record<string, number>
-    }
-    horde: {
-      firstByWin: number
-      firstByLoss: number
-      killsByWin: number
-      killsByLoss: number
-      distributionByWin: Record<string, number>
-      distributionByLoss: Record<string, number>
-    }
-  }
-  drakes?: {
-    types: {
-      elder: {
-        byWin: number
-        byLoss: number
-        securedWinrateGlobal?: number | null
-        distributionByWin: Record<string, number>
-        distributionByLoss: Record<string, number>
-      }
-      earth: {
-        byWin: number
-        byLoss: number
-        securedWinrateGlobal?: number | null
-        distributionByWin: Record<string, number>
-        distributionByLoss: Record<string, number>
-      }
-      water: {
-        byWin: number
-        byLoss: number
-        securedWinrateGlobal?: number | null
-        distributionByWin: Record<string, number>
-        distributionByLoss: Record<string, number>
-      }
-      wind: {
-        byWin: number
-        byLoss: number
-        securedWinrateGlobal?: number | null
-        distributionByWin: Record<string, number>
-        distributionByLoss: Record<string, number>
-      }
-      fire: {
-        byWin: number
-        byLoss: number
-        securedWinrateGlobal?: number | null
-        distributionByWin: Record<string, number>
-        distributionByLoss: Record<string, number>
-      }
-      hextec: {
-        byWin: number
-        byLoss: number
-        securedWinrateGlobal?: number | null
-        distributionByWin: Record<string, number>
-        distributionByLoss: Record<string, number>
-      }
-      chem: {
-        byWin: number
-        byLoss: number
-        securedWinrateGlobal?: number | null
-        distributionByWin: Record<string, number>
-        distributionByLoss: Record<string, number>
-      }
-    }
-    souls: {
-      earth: { byWin: number; byLoss: number }
-      water: { byWin: number; byLoss: number }
-      wind: { byWin: number; byLoss: number }
-      fire: { byWin: number; byLoss: number }
-      hextec: { byWin: number; byLoss: number }
-      chem: { byWin: number; byLoss: number }
-    }
-  }
-} | null>(null)
+const overviewTeamsData = ref<OverviewTeamsData | null>(null)
 const overviewTeamsBaselineData = ref<typeof overviewTeamsData.value>(null)
 const overviewTeamsPending = ref(false)
 const bansExpandByWin = ref(false)
@@ -3113,111 +2363,11 @@ const objectivesPanelTab = ref<'objectives' | 'drakeTypes' | 'drakeSouls'>('obje
 function setObjectivesPanelTab(value: 'objectives' | 'drakeTypes' | 'drakeSouls') {
   objectivesPanelTab.value = value
 }
-function teamPercent(value: number, matchCount: number): string {
-  if (!matchCount) return '—'
-  return Number((value / matchCount) * 100).toFixed(2) + '%'
-}
-
 // Overview by side (Blue / Red)
-const overviewSidesData = ref<{
-  matchCount: number
-  objectiveFirstWinrateBySide?: {
-    firstBlood: { blue: number | null; red: number | null }
-    baron: { blue: number | null; red: number | null }
-    dragon: { blue: number | null; red: number | null }
-    tower: { blue: number | null; red: number | null }
-    inhibitor: { blue: number | null; red: number | null }
-    riftHerald: { blue: number | null; red: number | null }
-    horde: { blue: number | null; red: number | null }
-  }
-  sideWinrate: {
-    blue: { matches: number; wins: number; winrate: number }
-    red: { matches: number; wins: number; winrate: number }
-  }
-  championWinrateBySide: {
-    blue: Array<{ championId: number; games: number; wins: number; winrate: number }>
-    red: Array<{ championId: number; games: number; wins: number; winrate: number }>
-  }
-  championPickBySide?: {
-    blue: Array<{ championId: number; games: number; wins: number; winrate: number }>
-    red: Array<{ championId: number; games: number; wins: number; winrate: number }>
-  }
-  objectivesBySide: {
-    blue: Record<string, number>
-    red: Record<string, number>
-  }
-  objectivesBySideTable?: {
-    firstBlood: {
-      firstByBlue: number
-      firstByRed: number
-      distributionByBlue?: Record<string, number>
-      distributionByRed?: Record<string, number>
-    }
-    [key: string]:
-      | {
-          firstByBlue?: number
-          firstByRed?: number
-          killsByBlue?: number
-          killsByRed?: number
-          distributionByBlue?: Record<string, number>
-          distributionByRed?: Record<string, number>
-        }
-      | undefined
-  }
-  bansBySide: {
-    blue: Array<{ championId: number; count: number }>
-    red: Array<{ championId: number; count: number }>
-  }
-  drakesBySide?: {
-    types: Record<
-      string,
-      {
-        byBlue: number
-        byRed: number
-        winrateBlue?: number | null
-        winrateRed?: number | null
-        distributionByBlue?: Record<string, number>
-        distributionByRed?: Record<string, number>
-      }
-    >
-    souls: Record<
-      string,
-      { byBlue: number; byRed: number; winrateBlue?: number | null; winrateRed?: number | null }
-    >
-  }
-  surrenderBySide?: {
-    blue: {
-      total: number
-      earlySurrenderCount: number
-      surrenderCount: number
-    }
-    red: {
-      total: number
-      earlySurrenderCount: number
-      surrenderCount: number
-    }
-  }
-} | null>(null)
+const overviewSidesData = ref<OverviewSidesData | null>(null)
 const overviewSidesBaselineData = ref<typeof overviewSidesData.value>(null)
 const overviewSidesPending = ref(false)
-type OverviewSidesProgRow = {
-  championId: number
-  wrOldest: number
-  wrSince: number
-  deltaWr: number
-  pickrateOldest: number
-  pickrateSince: number
-  deltaPick: number
-  banrateOldest: number
-  banrateSince: number
-  deltaBan: number
-}
-const overviewSidesProgressionData = ref<{
-  oldestVersion: string | null
-  blue: OverviewSidesProgRow[]
-  red: OverviewSidesProgRow[]
-} | null>(null)
-const objectivesSidesPanelTab = ref<'objectives' | 'drakeTypes' | 'drakeSouls'>('objectives')
+const overviewSidesProgressionData = ref<OverviewSidesProgressionData | null>(null)
 const overviewSidesSideWinrate = computed(() => ({
   blue: overviewSidesData.value?.sideWinrate?.blue ?? { matches: 0, wins: 0, winrate: 0 },
   red: overviewSidesData.value?.sideWinrate?.red ?? { matches: 0, wins: 0, winrate: 0 },
@@ -3481,101 +2631,12 @@ const sidesDrakeSoulGlobal = computed(() => {
     byRed: rows.reduce((s, r) => s + r.byRed, 0),
   }
 })
-const sidesObjectiveKeysWithKills = [
-  'baron',
-  'dragon',
-  'elder',
-  'tower',
-  'inhibitor',
-  'riftHerald',
-  'horde',
-] as const
-function objectiveIconSrc(key: string): string | undefined {
-  return scoreboardObjectiveIconByKey[key]
-}
-function drakeIconSrc(key: string): string | undefined {
-  return scoreboardDrakeIconByKey[key]
-}
-function onObjectiveIconError(e: Event, key: string): void {
-  const el = e.target as HTMLImageElement
-  if (el.dataset.cdFallback === '1') return
-  const url = scoreboardObjectiveIconCdByKey[key]
-  if (url) {
-    el.dataset.cdFallback = '1'
-    el.src = url
-  }
-}
-function onDrakeIconError(e: Event, key: string): void {
-  const el = e.target as HTMLImageElement
-  if (el.dataset.cdFallback === '1') return
-  const url = scoreboardDrakeIconCdByKey[key]
-  if (url) {
-    el.dataset.cdFallback = '1'
-    el.src = url
-  }
-}
 const openSidesObjectiveKeys = ref<Set<string>>(new Set())
 function toggleSidesObjective(key: string) {
   const next = new Set(openSidesObjectiveKeys.value)
   if (next.has(key)) next.delete(key)
   else next.add(key)
   openSidesObjectiveKeys.value = next
-}
-/** % of matches where blue/red got first. */
-function firstPercentBySide(
-  firstByBlue: number,
-  firstByRed: number,
-  matchCount: number
-): { blue: string; red: string } {
-  if (!matchCount) return { blue: '—', red: '—' }
-  const bluePct = (firstByBlue / matchCount) * 100
-  const redPct = (firstByRed / matchCount) * 100
-  return { blue: Number(bluePct).toFixed(2) + '%', red: Number(redPct).toFixed(2) + '%' }
-}
-function objectiveRowSides(key: string): {
-  firstByBlue: number
-  firstByRed: number
-  killsByBlue: number
-  killsByRed: number
-} {
-  const t = overviewSidesData.value?.objectivesBySideTable as
-    | Record<
-        string,
-        { firstByBlue?: number; firstByRed?: number; killsByBlue?: number; killsByRed?: number }
-      >
-    | undefined
-  if (!t?.[key]) return { firstByBlue: 0, firstByRed: 0, killsByBlue: 0, killsByRed: 0 }
-  const obj = t[key]
-  return {
-    firstByBlue: obj.firstByBlue ?? 0,
-    firstByRed: obj.firstByRed ?? 0,
-    killsByBlue: obj.killsByBlue ?? 0,
-    killsByRed: obj.killsByRed ?? 0,
-  }
-}
-function sidesObjectiveDistributionPercentages(
-  key: string,
-  byBlue: boolean
-): Array<{ count: number; percent: number }> {
-  const data = overviewSidesData.value
-  if (!data?.matchCount) return []
-  const obj = data.objectivesBySideTable?.[key as keyof typeof data.objectivesBySideTable] as
-    | { distributionByBlue?: Record<string, number>; distributionByRed?: Record<string, number> }
-    | undefined
-  if (!obj) return []
-  const dist = byBlue ? obj.distributionByBlue : obj.distributionByRed
-  const total = data.matchCount
-  const aggregated = aggregateObjectiveHistogramDist(key, dist)
-  return Object.entries(aggregated)
-    .map(([countStr, n]) => ({
-      count: parseInt(countStr, 10) || 0,
-      percent: Math.round((Number(n) / total) * 10000) / 100,
-    }))
-    .filter(({ count, percent }) => count > 0 && percent > 0)
-    .sort((a, b) => a.count - b.count)
-}
-function sidesObjectiveCounts(key: string): number[] {
-  return collectObjectiveDisplayCounts(key)
 }
 function percentForCountSides(key: string, count: number, byBlue: boolean): string {
   const data = overviewSidesData.value
@@ -3587,25 +2648,6 @@ function percentForCountSides(key: string, count: number, byBlue: boolean): stri
   const dist = byBlue ? obj.distributionByBlue : obj.distributionByRed
   const games = aggregateObjectiveHistogramDist(key, dist)[count] ?? 0
   return formatObjectiveObtentionPercent(games, data.matchCount)
-}
-function distributionPercentRows(
-  dist: Record<string, number> | undefined,
-  total: number,
-  objectiveKey?: string
-): Array<{ count: number; percent: number }> {
-  if (!total) return []
-  const aggregated = objectiveKey
-    ? aggregateObjectiveHistogramDist(objectiveKey, dist)
-    : Object.fromEntries(
-        Object.entries(dist ?? {}).map(([k, n]) => [parseInt(k, 10) || 0, Number(n)])
-      )
-  return Object.entries(aggregated)
-    .map(([countStr, n]) => ({
-      count: parseInt(countStr, 10) || 0,
-      percent: Math.round((Number(n) / total) * 10000) / 100,
-    }))
-    .filter(({ count, percent }) => count > 0 && percent > 0)
-    .sort((a, b) => a.count - b.count)
 }
 function drakeTypeDistributionPercentages(
   key: string,
@@ -3676,9 +2718,6 @@ function sidesProgressionQueryParams(): string {
   const s = params.toString()
   return s ? '?' + s : ''
 }
-/** Donut: circumference for r=48 */
-const sidesDonutCircumference = 2 * Math.PI * 48
-/** Nombre réel de matchs (1 victoire par match, donc blue.wins + red.wins). matchCount côté API = blue.matches + red.matches = 2× matchs. */
 const sidesDonutTotalMatches = computed(() => {
   const side = overviewSidesSideWinrate.value
   return side.blue.wins + side.red.wins
@@ -3810,11 +2849,6 @@ async function loadOverviewTeams() {
   }
 }
 
-/** True when we have at least overview totalMatches > 0 or teams matchCount > 0 (so we don't show "No stats yet" when only teams data exists). */
-const overviewHasAnyStats = computed(
-  () =>
-    (overviewData.value?.totalMatches ?? 0) > 0 || (overviewTeamsData.value?.matchCount ?? 0) > 0
-)
 /** Total parties: use overview when > 0, else teams matchCount (when overview fails but teams has data, 0 would be wrong). */
 const _overviewEffectiveTotalMatches = computed(() => {
   const total = overviewData.value?.totalMatches ?? 0
@@ -3824,10 +2858,6 @@ const _overviewEffectiveTotalMatches = computed(() => {
 const overviewFilteredChampionIds = computed(() => {
   return new Set((championsData.value?.champions ?? []).map(c => c.championId))
 })
-const FAST_STAT_ROW_COUNT = 5
-/** Aligné sur STATS_OTP_PICKRATE_THRESHOLD backend (défaut 1 %). */
-const STATS_OTP_PICKRATE_THRESHOLD_PCT = 1
-
 function overviewRowMatchesOtpFilter(row: { pickrate?: number }): boolean {
   if (!statisticsTabUsesOtp(activeTab.value)) return true
   const pr = Number(row.pickrate ?? 0)
@@ -3907,70 +2937,6 @@ const overviewEffectiveTopBanrateChampions = computed(() => {
   return takeOverviewChampionTopN(mapped, FAST_STAT_ROW_COUNT)
 })
 
-/** % of matches where winning team got first, and % where losing team got first. */
-function firstPercentByTeam(
-  firstByWin: number,
-  firstByLoss: number,
-  matchCount: number
-): { win: string; loss: string } {
-  if (!matchCount) return { win: '—', loss: '—' }
-  const winPct = (firstByWin / matchCount) * 100
-  const lossPct = (firstByLoss / matchCount) * 100
-  return { win: Number(winPct).toFixed(2) + '%', loss: Number(lossPct).toFixed(2) + '%' }
-}
-/** Max count for horde (void grubs) in distribution: 3 (fold 4+ into 3). */
-const HORDE_DISPLAY_MAX = 3
-/** Max count for Rift Herald: 1 per team per game. */
-const RIFT_HERALD_DISPLAY_MAX = 1
-
-/** Regroupe les buckets histogramme (4+ voidgrubs → 3, etc.). */
-function aggregateObjectiveHistogramDist(
-  key: string,
-  dist: Record<string, number> | undefined
-): Record<number, number> {
-  const aggregated: Record<number, number> = {}
-  if (!dist || typeof dist !== 'object') return aggregated
-  const capHorde = key === 'horde'
-  const capRiftHerald = key === 'riftHerald'
-  for (const [k, n] of Object.entries(dist)) {
-    const raw = parseInt(k, 10) || 0
-    let displayCount = raw
-    if (capHorde && raw > HORDE_DISPLAY_MAX) displayCount = HORDE_DISPLAY_MAX
-    else if (capRiftHerald && raw > RIFT_HERALD_DISPLAY_MAX) displayCount = RIFT_HERALD_DISPLAY_MAX
-    aggregated[displayCount] = (aggregated[displayCount] ?? 0) + Number(n)
-  }
-  return aggregated
-}
-
-function formatObjectiveObtentionPercent(games: number, matchCount: number): string {
-  if (!matchCount) return '—'
-  const pct = games <= 0 ? 0 : Math.round((games / matchCount) * 10000) / 100
-  return `${pct.toFixed(2)}%`
-}
-
-/** Distribution as % of matches, sorted by count. For horde cap 3, for riftHerald cap 1. */
-function objectiveDistributionPercentages(
-  key: string,
-  byWin: boolean
-): Array<{ count: number; percent: number }> {
-  const data = overviewTeamsData.value
-  if (!data?.matchCount) return []
-  const obj = data.objectives[key as keyof typeof data.objectives]
-  if (!obj || !('distributionByWin' in obj)) return []
-  const dist = byWin
-    ? (obj as { distributionByWin: Record<string, number> }).distributionByWin
-    : (obj as { distributionByLoss: Record<string, number> }).distributionByLoss
-  const total = data.matchCount
-  const aggregated = aggregateObjectiveHistogramDist(key, dist)
-  return Object.entries(aggregated)
-    .map(([countStr, n]) => ({
-      count: parseInt(countStr, 10) || 0,
-      percent: Math.round((Number(n) / total) * 10000) / 100,
-    }))
-    .filter(({ count, percent }) => count > 0 && percent > 0)
-    .sort((a, b) => a.count - b.count)
-}
-
 function collectObjectiveDisplayCounts(key: string): number[] {
   const set = new Set<number>()
   const addBuckets = (dist: Record<string, number> | undefined) => {
@@ -4017,26 +2983,6 @@ function percentForCount(key: string, count: number, byWin: boolean): string {
   const games = aggregateObjectiveHistogramDist(key, dist)[count] ?? 0
   return formatObjectiveObtentionPercent(games, data.matchCount)
 }
-/** Ordre d’affichage dans le tableau objectifs (obtention / winrate). */
-const objectiveKeysOrdered = [
-  'baron',
-  'dragon',
-  'tower',
-  'inhibitor',
-  'riftHerald',
-  'horde',
-] as const
-/** Objectifs avec répartition par nombre de prises (dropdown). Héraut exclu : max 1 / partie. */
-const objectiveKeysWithKillDropdown = new Set<string>([
-  'baron',
-  'dragon',
-  'tower',
-  'inhibitor',
-  'horde',
-])
-function objectiveHasKillDropdown(key: string): boolean {
-  return objectiveKeysWithKillDropdown.has(key)
-}
 const openObjectiveKeys = ref<Set<string>>(new Set())
 function toggleObjective(key: string) {
   const next = new Set(openObjectiveKeys.value)
@@ -4044,28 +2990,7 @@ function toggleObjective(key: string) {
   else next.add(key)
   openObjectiveKeys.value = next
 }
-function objectiveRow(key: string): {
-  firstByWin: number
-  firstByLoss: number
-  killsByWin: number
-  killsByLoss: number
-} {
-  const o = overviewTeamsData.value?.objectives as
-    | Record<
-        string,
-        { firstByWin?: number; firstByLoss?: number; killsByWin?: number; killsByLoss?: number }
-      >
-    | undefined
-  if (!o?.[key]) return { firstByWin: 0, firstByLoss: 0, killsByWin: 0, killsByLoss: 0 }
-  const obj = o[key]
-  return {
-    firstByWin: obj.firstByWin ?? 0,
-    firstByLoss: obj.firstByLoss ?? 0,
-    killsByWin: obj.killsByWin ?? 0,
-    killsByLoss: obj.killsByLoss ?? 0,
-  }
-}
-const drakeTypeRows = computed(() => {
+const drakeTypeRows = computed((): DrakeTypeRow[] => {
   const d = overviewTeamsData.value?.drakes?.types
   if (!d) return []
   return [
@@ -4134,7 +3059,7 @@ const drakeTypeRows = computed(() => {
     },
   ]
 })
-const drakeSoulRows = computed(() => {
+const drakeSoulRows = computed((): DrakeSoulRow[] => {
   const d = overviewTeamsData.value?.drakes?.souls
   if (!d) return []
   return [
@@ -4183,180 +3108,17 @@ const drakeSoulGlobal = computed(() => {
     byLoss: rows.reduce((s, r) => s + r.byLoss, 0),
   }
 })
-const rankTiers = [...RANK_TIERS]
-const roles = [
-  { value: 'TOP', label: 'Top', icon: '/icons/roles/top.png' },
-  { value: 'JUNGLE', label: 'Jungle', icon: '/icons/roles/jungle.png' },
-  { value: 'MIDDLE', label: 'Mid', icon: '/icons/roles/mid.png' },
-  { value: 'BOTTOM', label: 'ADC', icon: '/icons/roles/bot.png' },
-  { value: 'SUPPORT', label: 'Support', icon: '/icons/roles/support.png' },
-]
-const ROLE_OPTIONS = roles
-
-function normalizeStatsRoleKey(mainRole: string | null | undefined): string {
-  const raw = (mainRole ?? '').trim().toUpperCase()
-  if (!raw) return ''
-  if (raw === 'UTILITY' || raw === 'SUPPORT') return 'SUPPORT'
-  if (raw === 'MID' || raw === 'MIDDLE') return 'MIDDLE'
-  if (raw === 'ADC' || raw === 'BOTTOM' || raw === 'BOT') return 'BOTTOM'
-  return raw
-}
-
-function mainRoleIconSrc(mainRole: string | null | undefined): string | null {
-  const key = normalizeStatsRoleKey(mainRole)
-  if (!key) return null
-  return ROLE_OPTIONS.find(r => r.value === key)?.icon ?? null
-}
-
-function mainRoleLabel(mainRole: string | null | undefined): string {
-  const key = normalizeStatsRoleKey(mainRole)
-  if (!key) return String(mainRole ?? '—')
-  return ROLE_OPTIONS.find(r => r.value === key)?.label ?? String(mainRole)
-}
-
 // Champions
-const championsData = ref<{
-  totalGames: number
-  totalMatches?: number
-  champions: Array<{
-    championId: number
-    games: number
-    wins: number
-    winrate: number
-    pickrate: number
-    banrate?: number
-  }>
-  message?: string
-} | null>(null)
+const championsData = ref<ChampionsData | null>(null)
 const championsPending = ref(true)
 const championsError = ref<string | null>(null)
 
-type ChampionGlobalTableRow = {
-  championId: number
-  championTransform?: ChampionTransform
-  blue: {
-    games: number
-    wins: number
-    winrate: number
-    pickrate: number
-    banrate: number
-  }
-  red: {
-    games: number
-    wins: number
-    winrate: number
-    pickrate: number
-    banrate: number
-  }
-  totalGames: number
-  avgDamageToChamps: number
-  avgDamageToChampsPhys: number
-  avgDamageToChampsMagic: number
-  avgDamageToChampsTrue: number
-  avgDamageTakenPhys: number
-  avgDamageTakenMagic: number
-  avgDamageTakenTrue: number
-  avgDamageTakenTotal: number
-  avgKills: number
-  avgDeaths: number
-  avgAssists: number
-  avgTotalHeal: number
-  avgHealsOnTeammates: number
-  avgEffectiveHealShield: number
-  avgDamageShieldedOnTeammates: number
-  avgDamageSelfMitigated: number
-  avgTimeCcDealt: number
-}
-
-type ChampionGlobalNumericDeltaKey =
-  | 'avgDamageToChamps'
-  | 'avgDamageToChampsPhys'
-  | 'avgDamageToChampsMagic'
-  | 'avgDamageToChampsTrue'
-  | 'avgDamageTakenTotal'
-  | 'avgDamageTakenPhys'
-  | 'avgDamageTakenMagic'
-  | 'avgDamageTakenTrue'
-  | 'avgKills'
-  | 'avgDeaths'
-  | 'avgAssists'
-  | 'avgTotalHeal'
-  | 'avgHealsOnTeammates'
-  | 'avgEffectiveHealShield'
-  | 'avgDamageShieldedOnTeammates'
-  | 'avgDamageSelfMitigated'
-  | 'avgTimeCcDealt'
-
-type ChampionGlobalSortColumn =
-  | 'champion'
-  | 'blueWinrate'
-  | 'bluePickrate'
-  | 'blueWinrateDelta'
-  | 'bluePickrateDelta'
-  | 'redWinrate'
-  | 'redPickrate'
-  | 'redWinrateDelta'
-  | 'redPickrateDelta'
-  | 'dmgTotal'
-  | 'dmgTotalDelta'
-  | 'dmgPhys'
-  | 'dmgPhysDelta'
-  | 'dmgMagic'
-  | 'dmgMagicDelta'
-  | 'dmgTrue'
-  | 'dmgTrueDelta'
-  | 'takenTotal'
-  | 'takenTotalDelta'
-  | 'takenPhys'
-  | 'takenPhysDelta'
-  | 'takenMagic'
-  | 'takenMagicDelta'
-  | 'takenTrue'
-  | 'takenTrueDelta'
-  | 'kills'
-  | 'killsDelta'
-  | 'deaths'
-  | 'deathsDelta'
-  | 'assists'
-  | 'assistsDelta'
-  | 'healTotal'
-  | 'healTotalDelta'
-  | 'healTeam'
-  | 'healTeamDelta'
-  | 'healEffective'
-  | 'healEffectiveDelta'
-  | 'shieldTeam'
-  | 'shieldTeamDelta'
-  | 'mitigated'
-  | 'mitigatedDelta'
-  | 'ccTime'
-  | 'ccTimeDelta'
-  | 'totalGames'
-
 const championGlobalTablePending = ref(false)
 const championGlobalTableError = ref<string | null>(null)
-const championGlobalTableData = ref<{
-  matchCount: number
-  rows: ChampionGlobalTableRow[]
-  transformBreakdown?: ChampionGlobalTableRow[]
-  error?: string
-  message?: string
-} | null>(null)
+const championGlobalTableData = ref<ChampionGlobalTableData | null>(null)
 /** Lignes du même endpoint pour la version de référence (progressions), pour Δ sous WR/PR/BR et stats. */
 const championGlobalTableRefByKey = ref(new Map<string, ChampionGlobalTableRow>())
 const championGlobalTableRefMatchCount = ref(0)
-
-/** Largeur minimale du tableau champion (scroll) selon les groupes de colonnes affichés. */
-const championGlobalTableMinWidthPx = computed(() => {
-  const wChamp = 220
-  const wStat = 48
-  const wKda = 160
-  let statCols = 0
-  if (showChampionHealColumns.value) statCols += 3
-  if (showChampionDealtColumns.value) statCols += 4
-  if (showChampionTakenColumns.value) statCols += 4
-  return wChamp + statCols * wStat + wKda
-})
 
 const championGlobalPage = ref(1)
 
@@ -4380,10 +3142,6 @@ function championHasTransformBreakdown(championId: number): boolean {
 
 function championGlobalTransformRows(championId: number): ChampionGlobalTableRow[] {
   return championGlobalTransformBreakdownByChampion.value.get(championId) ?? []
-}
-
-function championGlobalRowKey(row: ChampionGlobalTableRow): string {
-  return championTransformRowKey(row.championId, normalizeChampionTransform(row.championTransform))
 }
 
 function findChampionGlobalCurrentRow(
@@ -4984,19 +3742,6 @@ function championGlobalNumericDelta(
   return curRow[key] - refRow[key]
 }
 
-function championGlobalNumericDeltaClass(delta: number, invert = false): string {
-  const hi = invert ? delta < -0.05 : delta > 0.05
-  const lo = invert ? delta > 0.05 : delta < -0.05
-  if (hi) return 'text-info/90'
-  if (lo) return 'text-error/90'
-  return 'text-text/55'
-}
-
-function formatChampionGlobalNumericDelta(d: number): string {
-  const sign = d > 0 ? '+' : ''
-  return `${sign}${Number(d).toFixed(1)}`
-}
-
 watch([statsRoleFilter, statsOtpFilter], () => {
   loadVersionsWithMatches()
   const tab = activeTab.value
@@ -5034,19 +3779,9 @@ function itemName(itemId: number): string | null {
   return item?.name ?? null
 }
 
-function itemStatsForItem(itemId: number): string[] {
-  const item = itemsStore.items.find(i => i.id === String(itemId))
-  return formatItemStatsForDisplay(item?.stats, item)
-}
-
 function itemImageName(itemId: number): string | null {
   const item = itemsStore.items.find(i => i.id === String(itemId))
   return item?.image?.full ?? null
-}
-
-function itemEconomicForItem(itemId: number): string[] {
-  const item = itemsStore.items.find(i => i.id === String(itemId))
-  return formatItemEconomicForDisplay(item)
 }
 
 async function loadStatisticsTabData(tab: typeof activeTab.value): Promise<void> {
@@ -5243,71 +3978,62 @@ onUnmounted(() => {
   if (import.meta.client) document.body.style.overflow = ''
 })
 
-// Références explicites pour le build prod : bindings uniquement consommés via inject (onglets).
-const statisticsPageInjectFallback: Record<string, unknown> = {
-  CHART_H,
-  CHART_PAD,
-  CHART_W,
+// Contexte des onglets (inject 'statisticsPageCtx') : champs explicites ; `reactive` déréférence
+// les refs à la lecture et écrit dans `.value` à l'affectation (v-model des onglets).
+const statisticsPageCtx = reactive({
   PAGE_SIZE_OPTIONS,
-  PLOT_H,
-  bansExpandByLoss,
-  bansExpandByWin,
-  cardIsFavorite,
-  compareVersionsDesc,
-  championByKey,
-  championGlobalNumericDelta,
-  championGlobalNumericDeltaClass,
-  championGlobalPatchDeltaRefLabel,
-  championGlobalPickrateClass,
-  championGlobalRowKey,
-  championGlobalSideStatDeltaPp,
-  championGlobalTransformRows,
-  championHasTransformBreakdown,
-  championGlobalPage,
-  championGlobalSortIcon,
-  championGlobalSortedRows,
-  championGlobalTableError,
-  championGlobalTableMinWidthPx,
-  championGlobalTablePending,
-  paginatedChampionGlobalRows,
-  totalChampionGlobalCount,
-  totalChampionGlobalPages,
-  championsPageSizeModel,
-  championName,
-  championSearchQuery,
-  championSearchFocused,
-  isMobileViewport,
-  overviewFastStatView,
-  setOverviewFastStatView,
-  showMobileViewToast,
-  dismissMobileViewToast,
   balanceAverageFilter,
   balanceEliteFilter,
-  balanceGlobalFilter,
-  balanceNeedFilter,
-  balanceSkilledFilter,
   balanceFrameworkData,
   balanceFrameworkError,
   balanceFrameworkPending,
+  balanceGlobalFilter,
+  balanceNeedFilter,
+  balanceSkilledFilter,
+  banPctForCount: bansTab.banPctForCount,
+  banRateForBansRow: bansTab.banRateForBansRow,
+  bansDeltaPct: bansTab.bansDeltaPct,
+  bansError: bansTab.bansError,
+  bansExpandByLoss,
+  bansExpandByWin,
+  bansOutcomeDeltaPct: bansTab.bansOutcomeDeltaPct,
+  bansOutcomePct: bansTab.bansOutcomePct,
+  bansPage: bansTab.bansPage,
+  bansPending: bansTab.bansPending,
+  bansSortColumn: bansTab.bansSortColumn,
+  bansSortDir: bansTab.bansSortDir,
+  bansSortHint: bansTab.bansSortHint,
+  bansTableData: bansTab.bansTableData,
+  bansTableRefData: bansTab.bansTableRefData,
+  cardIsFavorite,
+  championByKey,
+  championGlobalNumericDelta,
+  championGlobalNumericDeltaClass,
+  championGlobalPage,
+  championGlobalPatchDeltaRefLabel,
+  championGlobalRowKey,
+  championGlobalSortColumn,
+  championGlobalSortDir,
+  championGlobalSortIcon,
+  championGlobalSortedRows,
+  championGlobalTableError,
+  championGlobalTablePending,
+  championGlobalTransformRows,
+  championHasTransformBreakdown,
+  championName,
+  championSearchQuery,
   championsPageSize,
+  compareVersionsDesc,
   drakeIconSrc,
   drakeSoulGlobal,
   drakeSoulRows,
+  drakeTypeCounts,
+  drakeTypePercentForCount,
+  drakeTypePercentForCountSides,
   drakeTypeRows,
-  durationChartTooltip,
-  durationWinrateAxisX,
-  durationWinrateAxisY,
-  durationWinrateChartBuckets,
-  durationWinrateChartClosedPath,
-  durationWinrateChartLinePath,
-  durationWinrateChartPointsList,
-  firstPercentBySide,
-  firstPercentByTeam,
   formatChampionGlobalNum,
   formatChampionGlobalNumericDelta,
   formatDivisionLabel,
-  formatTierListPatchDeltaGames,
-  formatTierListPatchDeltaPp,
   gameVersion,
   getChampionImageUrl,
   getItemImageUrl,
@@ -5318,43 +4044,68 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   infosMatrixCell,
   infosMatrixColumns,
   infosMatrixError,
-  infosMetaData,
-  infosMetaError,
-  infosMetaPending,
   infosMatrixPending,
   infosMatrixRows,
-  itemEconomicForItem,
-  itemFastSliceConfigs,
   itemImageName,
   itemName,
-  itemStatsForItem,
-  itemsPage,
-  itemsPageSize,
+  itemsLegendaryFilter,
+  itemsTypeFilter,
   loadOverview,
-  localePath,
   mainRoleIconSrc,
   mainRoleLabel,
   matchOutcomePct,
-  drakeTypeCounts,
-  drakeTypePercentForCount,
-  drakeTypePercentForCountSides,
+  miscError: miscTab.miscError,
+  miscLevel: miscTab.miscLevel,
+  miscPage: miscTab.miscPage,
+  miscPending: miscTab.miscPending,
+  miscSortColumn: miscTab.miscSortColumn,
+  miscSortDir: miscTab.miscSortDir,
+  miscSortHint: miscTab.miscSortHint,
   objectiveCounts,
+  objectiveHasKillDropdown,
   objectiveIconSrc,
   objectiveKeysOrdered,
-  objectiveHasKillDropdown,
-  objectiveRow,
-  objectiveRowSides,
   objectivesPanelTab,
-  objectivesSidesPanelTab,
+  onBansPageSizeUpdated: (v: number) => {
+    championsPageSize.value = v
+  },
+  onBansPageUpdated: (v: number) => {
+    bansTab.bansPage.value = v
+  },
+  onChampionGlobalPageSizeUpdated: (v: number) => {
+    championsPageSizeModel.value = v
+  },
+  onChampionGlobalPageUpdated: (v: number) => {
+    championGlobalPage.value = v
+  },
   onDrakeIconError,
+  onMiscPageSizeUpdated: (v: number) => {
+    const n = Number(v)
+    const next = Number.isFinite(n) && n > 0 ? Math.floor(n) : 20
+    championsPageSize.value = PAGE_SIZE_OPTIONS.includes(next) ? next : 20
+    miscTab.miscPage.value = 1
+  },
   onObjectiveIconError,
+  onPingsPageSizeUpdated: (v: number) => {
+    const n = Number(v)
+    const next = Number.isFinite(n) && n > 0 ? Math.floor(n) : 20
+    championsPageSize.value = PAGE_SIZE_OPTIONS.includes(next) ? next : 20
+    pingsTab.pingsPage.value = 1
+  },
+  onPingsPageUpdated: (v: number) => {
+    pingsTab.pingsPage.value = v
+  },
+  onVisionPageSizeUpdated: (v: number) => {
+    const n = Number(v)
+    const next = Number.isFinite(n) && n > 0 ? Math.floor(n) : 20
+    championsPageSize.value = PAGE_SIZE_OPTIONS.includes(next) ? next : 20
+    visionTab.visionPage.value = 1
+  },
+  onVisionPageUpdated: (v: number) => {
+    visionTab.visionPage.value = v
+  },
   openObjectiveKeys,
-  openSidesObjectiveKeys,
-  overviewAbandonsData,
   overviewAbandonsPending,
-  surrenderMatrixBaselineLabel,
-  surrenderMatrixPending,
-  surrenderMatrixRows,
   overviewBottomBanrateSince,
   overviewBottomPickrateSince,
   overviewBottomWinrateSince,
@@ -5365,8 +4116,6 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   overviewDetailData,
   overviewDetailError,
   overviewDetailPending,
-  overviewDurationWinrateData,
-  overviewDurationWinratePending,
   overviewEarlySurrenderCount,
   overviewEarlySurrenderPct,
   overviewEffectiveTopBanrateChampions,
@@ -5376,38 +4125,58 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   overviewPending,
   overviewPlayedCount,
   overviewPlayedPct,
-  overviewSidesData,
   overviewSidesBaselineData,
+  overviewSidesData,
   overviewSidesPending,
   overviewSurrenderOnlyCount,
   overviewSurrenderOnlyPct,
-  overviewTeamsData,
   overviewTeamsBaselineData,
+  overviewTeamsData,
+  overviewTeamsPending,
   overviewTopBanrateSince,
   overviewTopPickrateChampionsFiltered,
   overviewTopPickrateSince,
   overviewTopWinrateSince,
-  paginatedItems,
-  paginatedProgressionsByPickrate,
-  paginatedProgressionsChampions,
+  paginatedBans: bansTab.paginatedBans,
+  paginatedChampionGlobalRows,
+  paginatedMiscRows: miscTab.paginatedMiscRows,
+  paginatedPatchNotesRows: patchNotesTab.paginatedPatchNotesRows,
+  paginatedPingsRows: pingsTab.paginatedPingsRows,
+  paginatedVisionRows: visionTab.paginatedVisionRows,
+  patchNotesData: patchNotesTab.patchNotesData,
+  patchNotesError: patchNotesTab.patchNotesError,
+  patchNotesPage: patchNotesTab.patchNotesPage,
+  patchNotesPageSize: patchNotesTab.patchNotesPageSize,
+  patchNotesPending: patchNotesTab.patchNotesPending,
+  patchNotesSortColumn: patchNotesTab.patchNotesSortColumn,
+  patchNotesSortDir: patchNotesTab.patchNotesSortDir,
   percentForCount,
   percentForCountSides,
+  pingsDelta: pingsTab.pingsDelta,
+  pingsError: pingsTab.pingsError,
+  pingsPage: pingsTab.pingsPage,
+  pingsPending: pingsTab.pingsPending,
+  pingsSortColumn: pingsTab.pingsSortColumn,
+  pingsSortDir: pingsTab.pingsSortDir,
+  pingsSortHint: pingsTab.pingsSortHint,
+  pingsTableData: pingsTab.pingsTableData,
+  pingsTableRefData: pingsTab.pingsTableRefData,
   progressionFromVersion,
-  progressionFullData,
-  progressionFullPending,
-  progressionsPage,
-  progressionsPageSizeModel,
-  progressionsPageSize,
   retryOverviewDetail,
+  roles,
+  setBansSort: bansTab.setBansSort,
   setChampionGlobalSort,
+  setMiscSort: (col: Parameters<typeof miscTab.setMiscSort>[0]) => miscTab.setMiscSort(col),
   setObjectivesPanelTab,
+  setPatchNotesSort: patchNotesTab.setPatchNotesSort,
+  setPingsSort: pingsTab.setPingsSort,
+  setVisionSort: visionTab.setVisionSort,
   showBansOutcomeColumns,
+  showBansRoleColumn,
   showBansSideColumns,
   showChampionDealtColumns,
   showChampionHealColumns,
   showChampionTakenColumns,
-  showBansRoleColumn,
-  showBansRoleColumns,
   sidesBlueBanRows,
   sidesBlueBestWinrateRows,
   sidesBlueBottomBanrateSince,
@@ -5427,8 +4196,6 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   sidesDrakeSoulGlobal,
   sidesDrakeSoulRows,
   sidesDrakeTypeRows,
-  sidesObjectiveCounts,
-  sidesObjectiveKeysWithKills,
   sidesRedBanRows,
   sidesRedBestWinrateRows,
   sidesRedBottomBanrateSince,
@@ -5442,178 +4209,40 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   sidesRedTopWinrateSince,
   sidesSurrenderBySide,
   spellsModeFilter,
+  statsRoleFilter,
   statsSplitTransformEnabled,
-  itemsLegendaryFilter,
-  itemsTypeFilter,
-  teamPercent,
+  surrenderMatrixPending,
+  surrenderMatrixRows,
+  t,
   tierListPatchDeltaClass,
-  tierListPatchDeltaGamesClass,
-  tierListWinrateClass,
   toggleFavoriteCard,
   toggleObjective,
   toggleSidesObjective,
-  totalItemsCount,
-  totalItemsPages,
-  totalProgressionsCount,
-  totalProgressionsPages,
+  totalBansCount: bansTab.totalBansCount,
+  totalBansPages: bansTab.totalBansPages,
+  totalChampionGlobalCount,
+  totalChampionGlobalPages,
+  totalMiscCount: miscTab.totalMiscCount,
+  totalMiscPages: miscTab.totalMiscPages,
+  totalPatchNotesPages: patchNotesTab.totalPatchNotesPages,
+  totalPingsCount: pingsTab.totalPingsCount,
+  totalPingsPages: pingsTab.totalPingsPages,
+  totalVisionCount: visionTab.totalVisionCount,
+  totalVisionPages: visionTab.totalVisionPages,
   versionStore,
-}
-
-const __statisticsVm = getCurrentInstance()
-if (__statisticsVm?.proxy) {
-  const __statisticsPageCtx = new Proxy(
-    {},
-    {
-      get(_target, key: string | symbol) {
-        if (key === 't') return t
-        if (typeof key !== 'string') {
-          return unref((__statisticsVm.proxy as any)[key])
-        }
-        if (key === 'onBansPageUpdated') {
-          return (v: number) => {
-            bansTab.bansPage.value = v
-          }
-        }
-        if (key === 'onBansPageSizeUpdated') {
-          return (v: number) => {
-            championsPageSize.value = v
-          }
-        }
-        if (key === 'onChampionGlobalPageUpdated') {
-          return (v: number) => {
-            championGlobalPage.value = v
-          }
-        }
-        if (key === 'onChampionGlobalPageSizeUpdated') {
-          return (v: number) => {
-            championsPageSizeModel.value = v
-          }
-        }
-        if (key === 'onPatchNotesPageUpdated') {
-          return (v: number) => {
-            patchNotesTab.patchNotesPage.value = v
-          }
-        }
-        if (key === 'onPingsPageUpdated') {
-          return (v: number) => {
-            pingsTab.pingsPage.value = v
-          }
-        }
-        if (key === 'onPingsPageSizeUpdated') {
-          return (v: number) => {
-            const n = Number(v)
-            const next = Number.isFinite(n) && n > 0 ? Math.floor(n) : 20
-            championsPageSize.value = PAGE_SIZE_OPTIONS.includes(next) ? next : 20
-            pingsTab.pingsPage.value = 1
-          }
-        }
-        if (key === 'onVisionPageUpdated') {
-          return (v: number) => {
-            visionTab.visionPage.value = v
-          }
-        }
-        if (key === 'onVisionPageSizeUpdated') {
-          return (v: number) => {
-            const n = Number(v)
-            const next = Number.isFinite(n) && n > 0 ? Math.floor(n) : 20
-            championsPageSize.value = PAGE_SIZE_OPTIONS.includes(next) ? next : 20
-            visionTab.visionPage.value = 1
-          }
-        }
-        if (key === 'onMiscPageUpdated') {
-          return (v: number) => {
-            miscTab.miscPage.value = v
-          }
-        }
-        if (key === 'onMiscPageSizeUpdated') {
-          return (v: number) => {
-            const n = Number(v)
-            const next = Number.isFinite(n) && n > 0 ? Math.floor(n) : 20
-            championsPageSize.value = PAGE_SIZE_OPTIONS.includes(next) ? next : 20
-            miscTab.miscPage.value = 1
-          }
-        }
-        if (key === 'setMiscSort') {
-          return (col: Parameters<typeof miscTab.setMiscSort>[0]) => miscTab.setMiscSort(col)
-        }
-        if (Object.prototype.hasOwnProperty.call(pingsTab, key)) {
-          return unref((pingsTab as any)[key])
-        }
-        if (Object.prototype.hasOwnProperty.call(visionTab, key)) {
-          return unref((visionTab as any)[key])
-        }
-        if (Object.prototype.hasOwnProperty.call(miscTab, key)) {
-          return unref((miscTab as any)[key])
-        }
-        if (Object.prototype.hasOwnProperty.call(patchNotesTab, key)) {
-          return unref((patchNotesTab as any)[key])
-        }
-        if (Object.prototype.hasOwnProperty.call(bansTab, key)) {
-          return unref((bansTab as any)[key])
-        }
-        const inst = __statisticsVm as any
-        // <script setup> bindings live on setupState; in SSR, some keys are missing from `proxy`
-        // while tab SFCs compile to `unref(p).foo` (single unref — nested refs must be values here).
-        const setupState = inst.setupState as Record<string, unknown> | undefined
-        if (setupState && key in setupState) {
-          return unref(setupState[key] as never)
-        }
-        if (Object.prototype.hasOwnProperty.call(statisticsPageInjectFallback, key)) {
-          return unref((statisticsPageInjectFallback as any)[key])
-        }
-        return unref((__statisticsVm.proxy as any)[key])
-      },
-      set(_target, key: string | symbol, value: unknown) {
-        if (typeof key === 'string') {
-          if (Object.prototype.hasOwnProperty.call(pingsTab, key)) {
-            const binding = (pingsTab as Record<string, unknown>)[key]
-            if (isRef(binding)) {
-              ;(binding as { value: unknown }).value = value
-              return true
-            }
-          }
-          if (Object.prototype.hasOwnProperty.call(visionTab, key)) {
-            const binding = (visionTab as Record<string, unknown>)[key]
-            if (isRef(binding)) {
-              ;(binding as { value: unknown }).value = value
-              return true
-            }
-          }
-          if (Object.prototype.hasOwnProperty.call(miscTab, key)) {
-            const binding = (miscTab as Record<string, unknown>)[key]
-            if (isRef(binding)) {
-              ;(binding as { value: unknown }).value = value
-              return true
-            }
-          }
-          if (Object.prototype.hasOwnProperty.call(patchNotesTab, key)) {
-            const binding = (patchNotesTab as Record<string, unknown>)[key]
-            if (isRef(binding)) {
-              ;(binding as { value: unknown }).value = value
-              return true
-            }
-          }
-          if (Object.prototype.hasOwnProperty.call(bansTab, key)) {
-            const binding = (bansTab as Record<string, unknown>)[key]
-            if (isRef(binding)) {
-              ;(binding as { value: unknown }).value = value
-              return true
-            }
-          }
-          const inst = __statisticsVm as { setupState?: Record<string, unknown> }
-          const binding = inst.setupState?.[key]
-          if (isRef(binding)) {
-            ;(binding as { value: unknown }).value = value
-            return true
-          }
-        }
-        ;(__statisticsVm.proxy as any)[key] = value
-        return true
-      },
-    }
-  )
-  provide('statisticsPageCtx', __statisticsPageCtx)
-}
+  visionDelta: visionTab.visionDelta,
+  visionError: visionTab.visionError,
+  visionPage: visionTab.visionPage,
+  visionPending: visionTab.visionPending,
+  visionSortColumn: visionTab.visionSortColumn,
+  visionSortDir: visionTab.visionSortDir,
+  visionSortHint: visionTab.visionSortHint,
+  visionTableData: visionTab.visionTableData,
+  visionTableRefData: visionTab.visionTableRefData,
+})
+provide('statisticsPageCtx', statisticsPageCtx)
+// Typed access for the tabs: see StatisticsIndexPageCtx in composables/statistics/statisticsPageCtx.ts.
+defineExpose({ statisticsPageCtx })
 </script>
 
 <style scoped>

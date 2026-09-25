@@ -15,27 +15,30 @@ export type BansTableRow = {
   bansSupport: number
 }
 
-export type BansSortCol =
-  | 'rate'
-  | 'rateDelta'
-  | 'win'
-  | 'winDelta'
-  | 'loss'
-  | 'lossDelta'
-  | 'blue'
-  | 'blueDelta'
-  | 'red'
-  | 'redDelta'
-  | 'top'
-  | 'topDelta'
-  | 'jungle'
-  | 'jungleDelta'
-  | 'middle'
-  | 'middleDelta'
-  | 'bottom'
-  | 'bottomDelta'
-  | 'support'
-  | 'supportDelta'
+export const BANS_SORT_COLS = [
+  'rate',
+  'rateDelta',
+  'win',
+  'winDelta',
+  'loss',
+  'lossDelta',
+  'blue',
+  'blueDelta',
+  'red',
+  'redDelta',
+  'top',
+  'topDelta',
+  'jungle',
+  'jungleDelta',
+  'middle',
+  'middleDelta',
+  'bottom',
+  'bottomDelta',
+  'support',
+  'supportDelta',
+] as const
+
+export type BansSortCol = (typeof BANS_SORT_COLS)[number]
 
 type BansMetricKey =
   | 'bansTotal'
