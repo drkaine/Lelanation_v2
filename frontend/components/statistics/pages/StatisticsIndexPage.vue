@@ -969,7 +969,6 @@ import {
   type ChampionTransform,
 } from '~/utils/championTransformStats'
 import { useStatisticsSplitTransformPreference } from '~/composables/useStatisticsSplitTransformPreference'
-import type {} from '~/components/statistics/ItemStatsFastSection.vue'
 import { useToggleSet } from '~/composables/useToggleSet'
 import { riotLanguage } from '~/utils/riotLanguage'
 const StatisticsOverviewTab = defineAsyncComponent(
