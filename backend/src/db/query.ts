@@ -28,25 +28,8 @@ type RankHistoryRow = {
   date: Date;
 };
 
-/** Earliest player_rank_history row with date >= matchDate (one per puuid). */
-export async function getClosestRankSnapshotsAtOrAfter(
-  puuids: string[],
-  matchDate: Date,
-): Promise<Map<string, RankSnapshot>> {
-  if (puuids.length === 0) {
-    return new Map();
-  }
-
-  const matchDateIso = matchDate.toISOString().slice(0, 10);
-  const rows = await sql<RankHistoryRow[]>`
-    SELECT DISTINCT ON (puuid)
-      puuid, rank_tier, rank_division, rank_lp, date
-    FROM player_rank_history
-    WHERE puuid = ANY(${sql.array(puuids, 25)})
-      AND date >= ${matchDateIso}::date
-    ORDER BY puuid, date ASC
-  `;
-
+/** One normalized snapshot per puuid (missing tier → `UNRANKED`). */
+export function rankSnapshotsByPuuid(rows: RankHistoryRow[]): Map<string, RankSnapshot> {
   const out = new Map<string, RankSnapshot>();
   for (const row of rows) {
     const tier = String(row.rank_tier ?? "")
@@ -93,19 +76,7 @@ export async function getBestEffortRankSnapshotsForMatch(
       CASE WHEN date >= ${matchDateIso}::date THEN date END ASC
   `;
 
-  const out = new Map<string, RankSnapshot>();
-  for (const row of rows) {
-    const tier = String(row.rank_tier ?? "")
-      .trim()
-      .toUpperCase();
-    out.set(row.puuid, {
-      rankTier: tier.length > 0 ? tier : "UNRANKED",
-      rankDivision: String(row.rank_division ?? "").trim(),
-      rankLp: Number(row.rank_lp ?? 0),
-      date: row.date instanceof Date ? row.date : new Date(row.date),
-    });
-  }
-  return out;
+  return rankSnapshotsByPuuid(rows);
 }
 
 /**
@@ -137,17 +108,5 @@ export async function getRankSnapshotsAtOrAfterForMatch(
     ORDER BY puuid, date ASC
   `;
 
-  const out = new Map<string, RankSnapshot>();
-  for (const row of rows) {
-    const tier = String(row.rank_tier ?? "")
-      .trim()
-      .toUpperCase();
-    out.set(row.puuid, {
-      rankTier: tier.length > 0 ? tier : "UNRANKED",
-      rankDivision: String(row.rank_division ?? "").trim(),
-      rankLp: Number(row.rank_lp ?? 0),
-      date: row.date instanceof Date ? row.date : new Date(row.date),
-    });
-  }
-  return out;
+  return rankSnapshotsByPuuid(rows);
 }

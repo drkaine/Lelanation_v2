@@ -8,14 +8,14 @@ import {
   CHAMPION_PING_TOTAL_SQL_COLUMNS,
   type ChampionPingMetricKey,
 } from '../constants/championPingMetrics.js'
-import { buildChampionScopedWhere, buildRawMatchCond } from './ChampionGlobalTableService.js'
-import { toQueryStringArrayParam } from '../utils/statsFilters.js'
-import { matchVersionedAggFrom } from './statsAggArchive.js'
 import {
-  normalizeStatsRoleForChampion,
-  normalizedRankTiers,
-  statsRoleSqlLiteral,
-} from '../utils/statsFilters.js'
+  avgPerGame,
+  championScopeAgg,
+  championSumsQuery,
+  championTableAgg,
+  sumColumnsSelect,
+  type ChampionAggScope,
+} from './championAggSums.js'
 
 export { CHAMPION_PING_METRIC_KEYS, type ChampionPingMetricKey }
 
@@ -25,25 +25,16 @@ export type ChampionPingsTableRow = {
   totalPerGame: number
 } & Record<ChampionPingMetricKey, number>
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100
-}
-
-function avgPerGame(sum: number, games: number): number {
-  return games > 0 ? round2(sum / games) : 0
-}
-
-type ChampionPingsScope = {
-  championId: number
-  version?: string | string[] | null
-  rankTier?: string | string[] | null
-  role?: string | null
-}
-
-function mapPingsSqlRow(row: {
+type PingsSqlRow = {
   champion_id: number
   games: bigint
-} & Record<(typeof CHAMPION_PING_TOTAL_SQL_COLUMNS)[number], bigint>): ChampionPingsTableRow {
+} & Record<(typeof CHAMPION_PING_TOTAL_SQL_COLUMNS)[number], bigint>
+
+// Alias SQL en snake_case (nom de colonne) : PostgreSQL lower-case les identifiants non quotés
+// (`AS sum_onMyWay` → `sum_onmyway`), ce qui cassait la lecture `row.sum_onMyWay` côté Node.
+const PINGS_SUMS = sumColumnsSelect(CHAMPION_PING_TOTAL_SQL_COLUMNS, 'bigint')
+
+function mapPingsSqlRow(row: PingsSqlRow): ChampionPingsTableRow {
   const games = Number(row.games ?? 0)
   const pings = {} as Record<ChampionPingMetricKey, number>
   let totalSum = 0
@@ -63,45 +54,15 @@ function mapPingsSqlRow(row: {
 
 /** Pings moyens pour un seul champion (fiche champion). */
 export async function getChampionPingsSummary(
-  scope: ChampionPingsScope
+  scope: ChampionAggScope
 ): Promise<ChampionPingsTableRow | null> {
   if (!isDatabaseConfigured() || scope.championId <= 0) return null
 
-  const version = toQueryStringArrayParam(scope.version)
-  const rankTier = toQueryStringArrayParam(scope.rankTier)
-  const role = normalizeStatsRoleForChampion(scope.role ?? null)
+  const { from: csFrom, where } = await championScopeAgg(scope)
 
-  const csFrom = await matchVersionedAggFrom(
-    'agg_champion_team_objective_stats',
-    version.length ? version : null,
-    'cs'
+  const raw = await queryRawUnsafe<PingsSqlRow[]>(
+    championSumsQuery({ from: csFrom, where, sums: PINGS_SUMS })
   )
-  const where = buildChampionScopedWhere('cs', {
-    championId: scope.championId,
-    version: version.length ? version : null,
-    rankTier: rankTier.length ? rankTier : null,
-    role,
-  })
-
-  const sumSelect = CHAMPION_PING_TOTAL_SQL_COLUMNS.map(
-    col => `COALESCE(SUM(cs.${col}), 0)::bigint AS ${col}`,
-  ).join(',\n      ')
-
-  type SqlRow = {
-    champion_id: number
-    games: bigint
-  } & Record<(typeof CHAMPION_PING_TOTAL_SQL_COLUMNS)[number], bigint>
-
-  const raw = await queryRawUnsafe<SqlRow[]>(`
-    SELECT
-      cs.champion_id::int AS champion_id,
-      COALESCE(SUM(cs.count_game), 0)::bigint AS games,
-      ${sumSelect}
-    FROM ${csFrom}
-    WHERE ${where}
-    GROUP BY cs.champion_id
-    HAVING COALESCE(SUM(cs.count_game), 0) > 0
-  `)
 
   const row = raw[0]
   if (!row) return null
@@ -115,37 +76,11 @@ export async function getChampionPingsTable(
 ): Promise<{ rows: ChampionPingsTableRow[] } | null> {
   if (!isDatabaseConfigured()) return null
 
-  const csFrom = await matchVersionedAggFrom('agg_champion_team_objective_stats', version, 'cs')
-  const whereParts = [buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'cs.')]
-  if (normalizedRankTiers(rankTier).length === 0) {
-    whereParts.push(`cs.rank_tier <> 'UNRANKED'`)
-  }
-  const roleDb = normalizeStatsRoleForChampion(role ?? null)
-  if (roleDb) whereParts.push(`cs.role = '${statsRoleSqlLiteral(roleDb)}'`)
-  const where = whereParts.join(' AND ')
+  const { from: csFrom, where } = await championTableAgg(version, rankTier, role)
 
-  // Alias SQL en snake_case (nom de colonne) : PostgreSQL lower-case les identifiants non quotés
-  // (`AS sum_onMyWay` → `sum_onmyway`), ce qui cassait la lecture `row.sum_onMyWay` côté Node.
-  const sumSelect = CHAMPION_PING_TOTAL_SQL_COLUMNS.map(
-    col => `COALESCE(SUM(cs.${col}), 0)::bigint AS ${col}`,
-  ).join(',\n      ')
-
-  type SqlRow = {
-    champion_id: number
-    games: bigint
-  } & Record<(typeof CHAMPION_PING_TOTAL_SQL_COLUMNS)[number], bigint>
-
-  const raw = await queryRawUnsafe<SqlRow[]>(`
-    SELECT
-      cs.champion_id::int AS champion_id,
-      COALESCE(SUM(cs.count_game), 0)::bigint AS games,
-      ${sumSelect}
-    FROM ${csFrom}
-    WHERE ${where}
-    GROUP BY cs.champion_id
-    HAVING COALESCE(SUM(cs.count_game), 0) > 0
-    ORDER BY champion_id ASC
-  `)
+  const raw = await queryRawUnsafe<PingsSqlRow[]>(
+    championSumsQuery({ from: csFrom, where, sums: PINGS_SUMS, ordered: true })
+  )
 
   const rows: ChampionPingsTableRow[] = raw.map(row => mapPingsSqlRow(row))
 

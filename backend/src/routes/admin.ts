@@ -44,10 +44,8 @@ import { resolveRiotApiKey } from '../services/RiotGateway.js'
 import { riotGateway } from '../services/RiotGateway.js'
 import { isDevelopmentEnv } from '../utils/env.js'
 import { createFailureLimiter } from '../utils/httpRateLimit.js'
+import { addChannelToConfig, channelSyncStatus, type YouTubeChannelsConfig } from '../services/youtubeChannels.js'
 export type { AdminDataCollectStats } from '../services/AdminDataCollectService.js'
-
-type YouTubeChannelsConfig = { channels: Array<{ channelId: string; channelName: string } | string> }
-type StoredChannelData = { channelId: string; channelName?: string; lastSync?: string; videos?: Array<unknown> }
 
 const CONTACT_TYPES = ['suggestion', 'bug', 'reclamation', 'autre'] as const
 type ContactType = (typeof CONTACT_TYPES)[number]
@@ -158,34 +156,9 @@ router.get('/cron', async (_req, res) => {
   const ytConfig = ytConfigResult.isOk() ? ytConfigResult.unwrap() : { channels: [] }
 
   const ytStatus = await Promise.all(
-    (ytConfig.channels ?? []).map(async (entry) => {
-      const channelId = typeof entry === 'string' ? entry : entry.channelId
-      const channelName = typeof entry === 'string' ? entry : entry.channelName
-      const backendPath = join(youtubeDataDir, `${channelId}.json`)
-      const frontendPath = join(frontendYouTubeDir, `${channelId}.json`)
-      let filePath = backendPath
-      let exists = await FileManager.exists(filePath)
-      if (!exists) {
-        filePath = frontendPath
-        exists = await FileManager.exists(filePath)
-      }
-      if (!exists) {
-        return { channelId, channelName, synced: false, lastSync: null, videoCount: 0 }
-      }
-      const dataResult = await FileManager.readJson<StoredChannelData>(filePath)
-      if (dataResult.isErr()) {
-        return { channelId, channelName, synced: false, lastSync: null, videoCount: 0, error: dataResult.unwrapErr().message }
-      }
-      const data = dataResult.unwrap()
-      const videoCount = Array.isArray(data.videos) ? data.videos.length : 0
-      return {
-        channelId: data.channelId || channelId,
-        channelName: data.channelName || channelName,
-        synced: true,
-        lastSync: data.lastSync || null,
-        videoCount
-      }
-    })
+    (ytConfig.channels ?? []).map(entry =>
+      channelSyncStatus(entry, { backendDir: youtubeDataDir, frontendDir: frontendYouTubeDir })
+    )
   )
 
   return res.json({
@@ -718,7 +691,6 @@ router.post('/cron/trigger/:job', async (req, res) => {
   }
 })
 
-
 // --- Builds stats ---
 router.get('/builds/stats', async (_req, res) => {
   try {
@@ -771,20 +743,6 @@ router.get('/builds/:id/engagement', async (req, res) => {
 })
 
 // --- YouTube: trigger sync (admin-protected) ---
-async function readYoutubeChannelsConfig(): Promise<
-  { ok: true; value: YouTubeChannelsConfig } | { ok: false; status: number; error: string }
-> {
-  const configResult = await FileManager.readJson<YouTubeChannelsConfig>(youtubeConfigFile)
-  if (configResult.isErr()) {
-    if (configResult.unwrapErr().code === 'FILE_NOT_FOUND') {
-      return { ok: true, value: { channels: [] } }
-    }
-    return { ok: false, status: 500, error: configResult.unwrapErr().message }
-  }
-  const config = configResult.unwrap()
-  return { ok: true, value: { channels: Array.isArray(config.channels) ? config.channels : [] } }
-}
-
 router.post('/youtube/trigger', async (_req, res) => {
   const result = await runYouTubeSyncOnce()
   if (result.ok) {
@@ -805,24 +763,9 @@ router.post('/youtube/channels', async (req, res) => {
   }
   const channel = resolved.unwrap()
 
-  const config = await readYoutubeChannelsConfig()
-  if (!config.ok) return res.status(config.status).json({ error: config.error })
-
-  const exists = (config.value.channels ?? []).some((entry) =>
-    typeof entry === 'string' ? entry === channel.channelId : entry.channelId === channel.channelId
-  )
-  if (exists) {
-    return res.json({ success: true, channels: config.value.channels })
-  }
-
-  const next: YouTubeChannelsConfig = {
-    channels: [...(config.value.channels ?? []), { channelId: channel.channelId, channelName: channel.channelName }]
-  }
-  const writeResult = await FileManager.writeJson(youtubeConfigFile, next)
-  if (writeResult.isErr()) {
-    return res.status(500).json({ error: writeResult.unwrapErr().message })
-  }
-  return res.json({ success: true, channels: next.channels })
+  const added = await addChannelToConfig(youtubeConfigFile, channel)
+  if (!added.ok) return res.status(added.status).json({ error: added.error })
+  return res.json({ success: true, channels: added.channels })
 })
 
 router.get('/matchup-tier-list', async (req, res) => {

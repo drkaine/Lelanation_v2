@@ -3,7 +3,7 @@ import { join, resolve, isAbsolute } from 'node:path'
 import { sql } from '../db/client.js'
 import { getQueueMetrics } from '../queues/index.js'
 import type { FullSnapshot, WindowLabel } from '../observability/poller-metrics/types.js'
-import { readLogFileTail } from './readLogFileTail.js'
+import { readLogFileTail } from '../utils/readLogFileTail.js'
 
 const WINDOW_LABELS: WindowLabel[] = ['10m', '30m', '1h', '6h', '12h', '24h']
 

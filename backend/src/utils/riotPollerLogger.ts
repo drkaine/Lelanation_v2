@@ -4,26 +4,13 @@
  * Unified file log: always written for admin (see logs/lelanation-unified.log).
  */
 import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
+import { formatLogArgs, logArgsJson } from '../logging/logArgs.js'
 
 export type RiotPollerLogger = {
   info: (msg: string, ...args: unknown[]) => Promise<void>
   alerte: (msg: string, ...args: unknown[]) => Promise<void>
   error: (msg: string, ...args: unknown[]) => Promise<void>
   step: (step: string, details?: Record<string, unknown>) => Promise<void>
-}
-
-function formatMsg(msg: string, rest: unknown[]): string {
-  return rest.length > 0
-    ? `${msg} ${rest.map((r) => (typeof r === 'object' ? JSON.stringify(r) : String(r))).join(' ')}`
-    : msg
-}
-
-function restToJson(rest: unknown[]): Record<string, unknown> | null {
-  if (rest.length === 0) return null
-  if (rest.length === 1 && typeof rest[0] === 'object' && rest[0] !== null && !Array.isArray(rest[0])) {
-    return rest[0] as Record<string, unknown>
-  }
-  return { details: rest.map((r) => (typeof r === 'object' ? JSON.stringify(r) : String(r))) }
 }
 
 export function createRiotPollerLogger(script: string = 'poller'): RiotPollerLogger {
@@ -34,27 +21,27 @@ export function createRiotPollerLogger(script: string = 'poller'): RiotPollerLog
       // Unified log stays summary-oriented (30m / 1h summaries from poller processes).
       // Keep detailed info only on stdout when verbose mode is enabled.
       if (!verbose) return
-      console.log(prefix, formatMsg(msg, rest))
+      console.log(prefix, formatLogArgs(msg, rest))
     },
     async alerte(msg: string, ...rest: unknown[]) {
-      const full = formatMsg(msg, rest)
+      const full = formatLogArgs(msg, rest)
       void appendUnifiedLog({
         section: 'back',
         type: 'warning',
         script,
         message: full,
-        json: restToJson(rest),
+        json: logArgsJson(rest),
       })
       console.warn(prefix, full)
     },
     async error(msg: string, ...rest: unknown[]) {
-      const full = formatMsg(msg, rest)
+      const full = formatLogArgs(msg, rest)
       void appendUnifiedLog({
         section: 'back',
         type: 'erreur',
         script,
         message: full,
-        json: restToJson(rest),
+        json: logArgsJson(rest),
       })
       console.error(prefix, full)
     },

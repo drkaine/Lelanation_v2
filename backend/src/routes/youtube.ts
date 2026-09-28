@@ -3,23 +3,14 @@ import { join } from 'path'
 import { FileManager } from '../utils/fileManager.js'
 import { YouTubeService } from '../services/YouTubeService.js'
 import { fetchYouTubeCommunityPosts } from '../services/youtubeCommunityPosts.js'
-
-type YouTubeChannelsConfig = {
-  channels: Array<
-    | {
-        channelId: string
-        channelName: string
-      }
-    | string
-  >
-}
-
-type StoredChannelData = {
-  channelId: string
-  channelName?: string
-  lastSync?: string
-  videos?: Array<unknown>
-}
+import {
+  addChannelToConfig,
+  channelSyncStatus,
+  readChannelsConfig,
+  removeChannelFromConfig,
+  type StoredChannelData,
+  type YouTubeChannelsConfig,
+} from '../services/youtubeChannels.js'
 
 const router = Router()
 const youtubeService = new YouTubeService()
@@ -27,31 +18,7 @@ const youtubeService = new YouTubeService()
 const channelsConfigFile = join(process.cwd(), 'data', 'youtube', 'channels.json')
 const youtubeDataDir = join(process.cwd(), 'data', 'youtube')
 const frontendYouTubeDir = join(process.cwd(), '..', 'frontend', 'public', 'data', 'youtube')
-
-async function readChannelsConfig(): Promise<
-  { ok: true; value: YouTubeChannelsConfig } | { ok: false; status: number; error: string }
-> {
-  const configResult = await FileManager.readJson<YouTubeChannelsConfig>(channelsConfigFile)
-  if (configResult.isErr()) {
-    if (configResult.unwrapErr().code === 'FILE_NOT_FOUND') {
-      return { ok: true, value: { channels: [] } }
-    }
-    return { ok: false, status: 500, error: configResult.unwrapErr().message }
-  }
-
-  const config = configResult.unwrap()
-  return { ok: true, value: { channels: Array.isArray(config.channels) ? config.channels : [] } }
-}
-
-async function writeChannelsConfig(
-  config: YouTubeChannelsConfig
-): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
-  const writeResult = await FileManager.writeJson(channelsConfigFile, config)
-  if (writeResult.isErr()) {
-    return { ok: false, status: 500, error: writeResult.unwrapErr().message }
-  }
-  return { ok: true }
-}
+const youtubeDirs = { backendDir: youtubeDataDir, frontendDir: frontendYouTubeDir }
 
 /**
  * Get channels config (raw)
@@ -59,7 +26,7 @@ async function writeChannelsConfig(
  */
 router.get('/channels', async (_req, res) => {
   // Try backend first
-  const config = await readChannelsConfig()
+  const config = await readChannelsConfig(channelsConfigFile)
   if (config.ok) {
     return res.json(config.value)
   }
@@ -96,26 +63,9 @@ router.post('/channels', async (req, res) => {
   }
   const channel = resolved.unwrap()
 
-  const config = await readChannelsConfig()
-  if (!config.ok) return res.status(config.status).json({ error: config.error })
-
-  const exists = (config.value.channels ?? []).some((entry) =>
-    typeof entry === 'string' ? entry === channel.channelId : entry.channelId === channel.channelId
-  )
-  if (exists) {
-    return res.json({ success: true, channels: config.value.channels })
-  }
-
-  const next: YouTubeChannelsConfig = {
-    channels: [
-      ...(config.value.channels ?? []),
-      { channelId: channel.channelId, channelName: channel.channelName }
-    ]
-  }
-
-  const write = await writeChannelsConfig(next)
-  if (!write.ok) return res.status(write.status).json({ error: write.error })
-  return res.json({ success: true, channels: next.channels })
+  const added = await addChannelToConfig(channelsConfigFile, channel)
+  if (!added.ok) return res.status(added.status).json({ error: added.error })
+  return res.json({ success: true, channels: added.channels })
 })
 
 /**
@@ -127,17 +77,9 @@ router.delete('/channels/:channelId', async (req, res) => {
     return res.status(400).json({ error: 'Missing channelId' })
   }
 
-  const config = await readChannelsConfig()
-  if (!config.ok) return res.status(config.status).json({ error: config.error })
-
-  const filtered = (config.value.channels ?? []).filter((entry) =>
-    typeof entry === 'string' ? entry !== channelId : entry.channelId !== channelId
-  )
-
-  const next: YouTubeChannelsConfig = { channels: filtered }
-  const write = await writeChannelsConfig(next)
-  if (!write.ok) return res.status(write.status).json({ error: write.error })
-  return res.json({ success: true, channels: next.channels })
+  const removed = await removeChannelFromConfig(channelsConfigFile, channelId)
+  if (!removed.ok) return res.status(removed.status).json({ error: removed.error })
+  return res.json({ success: true, channels: removed.channels })
 })
 
 /**
@@ -145,61 +87,12 @@ router.delete('/channels/:channelId', async (req, res) => {
  * Tries backend first, then frontend public directory
  */
 router.get('/status', async (_req, res) => {
-  const configResult = await readChannelsConfig()
+  const configResult = await readChannelsConfig(channelsConfigFile)
   if (!configResult.ok) return res.status(configResult.status).json({ error: configResult.error })
 
   const config = configResult.value
   const status = await Promise.all(
-    (config.channels ?? []).map(async (entry) => {
-      const channelId = typeof entry === 'string' ? entry : entry.channelId
-      const channelName = typeof entry === 'string' ? entry : entry.channelName
-      const backendPath = join(youtubeDataDir, `${channelId}.json`)
-      const frontendPath = join(frontendYouTubeDir, `${channelId}.json`)
-
-      // Try backend first, then frontend
-      let exists = await FileManager.exists(backendPath)
-      let filePath = backendPath
-      if (!exists) {
-        exists = await FileManager.exists(frontendPath)
-        if (exists) {
-          filePath = frontendPath
-          console.debug(`[YouTube API] Reading status from frontend public: ${frontendPath}`)
-        }
-      }
-
-      if (!exists) {
-        return {
-          channelId,
-          channelName,
-          synced: false,
-          lastSync: null,
-          videoCount: 0
-        }
-      }
-
-      const dataResult = await FileManager.readJson<StoredChannelData>(filePath)
-      if (dataResult.isErr()) {
-        return {
-          channelId,
-          channelName,
-          synced: false,
-          lastSync: null,
-          videoCount: 0,
-          error: dataResult.unwrapErr().message
-        }
-      }
-
-      const data = dataResult.unwrap()
-      const videoCount = Array.isArray(data.videos) ? data.videos.length : 0
-
-      return {
-        channelId: data.channelId || channelId,
-        channelName: data.channelName || channelName,
-        synced: true,
-        lastSync: data.lastSync || null,
-        videoCount
-      }
-    })
+    (config.channels ?? []).map(entry => channelSyncStatus(entry, youtubeDirs))
   )
 
   return res.json({ channels: status })
@@ -270,7 +163,7 @@ router.get('/channels/:channelId/posts/:postId', async (req, res) => {
     }
   }
 
-  const configResult = await readChannelsConfig()
+  const configResult = await readChannelsConfig(channelsConfigFile)
   if (!configResult.ok) {
     return res.status(configResult.status).json({ error: configResult.error })
   }

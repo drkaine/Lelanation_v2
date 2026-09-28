@@ -6,6 +6,7 @@
 import { promises as fs } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
+import { readLogFileTail } from '../utils/readLogFileTail.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const BACKEND_ROOT = join(__dirname, '..', '..')
@@ -109,30 +110,7 @@ export function parseUnifiedLogLine(line: string, lineNumber: number): ParsedUni
 
 /** Read last `maxBytes` of unified log (avoids loading huge files for admin poller status). */
 export async function readUnifiedLogTail(maxBytes = 4 * 1024 * 1024): Promise<string> {
-  const file = logPath()
-  let fh: Awaited<ReturnType<typeof fs.open>> | undefined
-  try {
-    fh = await fs.open(file, 'r')
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return ''
-    throw e
-  }
-  try {
-    const st = await fh.stat()
-    if (st.size === 0) return ''
-    const readLen = Math.min(Number(st.size), maxBytes)
-    const pos = Number(st.size) - readLen
-    const buf = Buffer.alloc(readLen)
-    await fh.read(buf, 0, readLen, pos)
-    let s = buf.toString('utf-8')
-    if (pos > 0) {
-      const firstNl = s.indexOf('\n')
-      if (firstNl !== -1) s = s.slice(firstNl + 1)
-    }
-    return s
-  } finally {
-    await fh.close()
-  }
+  return readLogFileTail(logPath(), maxBytes)
 }
 
 /** Inclure `poller_30m` / `poller_hourly` (très ancien poller in-process) dans les résumés admin. */

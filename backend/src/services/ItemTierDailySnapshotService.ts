@@ -3,7 +3,7 @@
  */
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
 import { itemTierRoleBucket } from '../parsers/itemTierDailySnapshotRole.js'
-import { toQueryStringArrayParam } from '../utils/statsFilters.js'
+import { snapshotFilterSql, snapshotRankTiers } from '../stats/snapshotFilterSql.js'
 
 export interface ItemTierSnapshotRow {
   dateOfGame: string
@@ -16,6 +16,7 @@ export interface ItemTierSnapshotRow {
   pickRatePct: number
 }
 
+/** Snapshot rows of one item (the role filter goes through the role bucket columns instead). */
 function buildItemSnapshotFilterSql(options: {
   itemId?: number | null
   rankTiers?: string[] | null
@@ -24,28 +25,13 @@ function buildItemSnapshotFilterSql(options: {
   toDate?: string | null
   alias?: string
 }): string {
-  const a = options.alias ?? 's'
-  const parts: string[] = ['1=1']
-  if (options.itemId != null && Number.isFinite(options.itemId)) {
-    parts.push(`${a}.item_id = ${options.itemId}`)
-  }
-  const tiers = (options.rankTiers ?? [])
-    .map(t => t.trim().toUpperCase().split('_')[0]!)
-    .filter(Boolean)
-  if (tiers.length === 1) {
-    parts.push(
-      `split_part(upper(trim(${a}.rank_tier::text)), '_', 1) = '${tiers[0]!.replace(/'/g, "''")}'`,
-    )
-  } else if (tiers.length > 1) {
-    parts.push(
-      `split_part(upper(trim(${a}.rank_tier::text)), '_', 1) IN (${tiers.map(t => `'${t.replace(/'/g, "''")}'`).join(', ')})`,
-    )
-  } else {
-    parts.push(`split_part(upper(trim(${a}.rank_tier::text)), '_', 1) <> 'UNRANKED'`)
-  }
-  if (options.fromDate) parts.push(`${a}.date_of_game >= '${options.fromDate.replace(/'/g, "''")}'::date`)
-  if (options.toDate) parts.push(`${a}.date_of_game <= '${options.toDate.replace(/'/g, "''")}'::date`)
-  return parts.join(' AND ')
+  return snapshotFilterSql({
+    entity: { column: 'item_id', id: options.itemId },
+    rankTiers: options.rankTiers,
+    fromDate: options.fromDate,
+    toDate: options.toDate,
+    alias: options.alias,
+  })
 }
 
 function buildCohortRoleFilter(role: string | null | undefined, alias: string): string {
@@ -82,9 +68,7 @@ export async function getItemTierSnapshotsForCharts(options: {
 }): Promise<ItemTierSnapshotRow[]> {
   if (!isDatabaseConfigured()) return []
   const { itemId, fromDate, toDate, limit = 365 } = options
-  const rankTiers = toQueryStringArrayParam(options.rankTier)
-    .map(t => t.trim().toUpperCase().split('_')[0]!)
-    .filter(Boolean)
+  const rankTiers = snapshotRankTiers(options.rankTier)
   let role = options.role
   if (role && role.toUpperCase() === 'SUPPORT') role = 'UTILITY'
   if (role && role.toUpperCase() === 'MID') role = 'MIDDLE'
@@ -327,9 +311,7 @@ export async function getItemTierBreakdown(options: {
   }
 
   const { itemId, fromDate, toDate } = options
-  const rankTiers = toQueryStringArrayParam(options.rankTier)
-    .map(t => t.trim().toUpperCase().split('_')[0]!)
-    .filter(Boolean)
+  const rankTiers = snapshotRankTiers(options.rankTier)
 
   const itemWhere = buildItemSnapshotFilterSql({
     itemId,
@@ -659,9 +641,7 @@ export async function getItemPurchaseOrderStats(options: {
   }
 
   const { itemId, fromDate, toDate } = options
-  const rankTiers = toQueryStringArrayParam(options.rankTier)
-    .map(t => t.trim().toUpperCase().split('_')[0]!)
-    .filter(Boolean)
+  const rankTiers = snapshotRankTiers(options.rankTier)
 
   const itemWhere = buildItemSnapshotFilterSql({
     itemId,

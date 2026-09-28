@@ -3,8 +3,8 @@
  * Cron here only refreshes archive housekeeping (no ingest replay).
  */
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
-import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
+import { snapshotFilterSql, snapshotRankTiers } from '../stats/snapshotFilterSql.js'
 
 type Logger = ReturnType<typeof createRiotPollerLogger>
 
@@ -66,31 +66,8 @@ function buildSnapshotFilterSql(options: {
   toDate?: string | null
   alias?: string
 }): string {
-  const a = options.alias ?? 's'
-  const parts: string[] = ['1=1']
-  if (options.championId != null && Number.isFinite(options.championId)) {
-    parts.push(`${a}.champion_id = ${options.championId}`)
-  }
-  const tiers = (options.rankTiers ?? [])
-    .map((t) => t.trim().toUpperCase().split('_')[0]!)
-    .filter(Boolean)
-  if (tiers.length === 1) {
-    parts.push(
-      `split_part(upper(trim(${a}.rank_tier::text)), '_', 1) = '${tiers[0]!.replace(/'/g, "''")}'`,
-    )
-  } else if (tiers.length > 1) {
-    parts.push(
-      `split_part(upper(trim(${a}.rank_tier::text)), '_', 1) IN (${tiers.map((t) => `'${t.replace(/'/g, "''")}'`).join(', ')})`,
-    )
-  } else {
-    parts.push(`split_part(upper(trim(${a}.rank_tier::text)), '_', 1) <> 'UNRANKED'`)
-  }
-  if (options.role) {
-    parts.push(`${a}.role::text = '${options.role.toUpperCase().replace(/'/g, "''")}'`)
-  }
-  if (options.fromDate) parts.push(`${a}.date_of_game >= '${options.fromDate.replace(/'/g, "''")}'::date`)
-  if (options.toDate) parts.push(`${a}.date_of_game <= '${options.toDate.replace(/'/g, "''")}'::date`)
-  return parts.join(' AND ')
+  const { championId, ...rest } = options
+  return snapshotFilterSql({ entity: { column: 'champion_id', id: championId }, ...rest })
 }
 
 export async function getChampionTierSnapshotsForCharts(options: {
@@ -103,9 +80,7 @@ export async function getChampionTierSnapshotsForCharts(options: {
 }): Promise<ChampionTierSnapshotRow[]> {
   if (!isDatabaseConfigured()) return []
   const { championId, fromDate, toDate, limit = 365 } = options
-  const rankTiers = toQueryStringArrayParam(options.rankTier)
-    .map((t) => t.trim().toUpperCase().split('_')[0]!)
-    .filter(Boolean)
+  const rankTiers = snapshotRankTiers(options.rankTier)
   let role = options.role
   if (role && role.toUpperCase() === 'SUPPORT') role = 'UTILITY'
   if (role && role.toUpperCase() === 'MID') role = 'MIDDLE'

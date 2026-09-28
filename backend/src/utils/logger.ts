@@ -4,16 +4,9 @@
  */
 
 import { appendUnifiedLog, type LogType } from '../logging/unifiedAppLog.js';
+import { logArgsJson } from '../logging/logArgs.js';
 
 const SCRIPT_NAME = 'patch_scraper';
-
-function restToJson(rest: unknown[]): Record<string, unknown> | null {
-  if (rest.length === 0) return null;
-  if (rest.length === 1 && typeof rest[0] === 'object' && rest[0] !== null && !Array.isArray(rest[0])) {
-    return rest[0] as Record<string, unknown>;
-  }
-  return { details: rest.map((r) => (typeof r === 'object' ? JSON.stringify(r) : String(r))) };
-}
 
 function formatMessage(msg: string, rest: unknown[]): string {
   if (rest.length === 0) return msg;
@@ -26,7 +19,7 @@ function formatMessage(msg: string, rest: unknown[]): string {
 
 async function writeLog(level: LogType, message: string, rest: unknown[]): Promise<void> {
   const formattedMessage = formatMessage(message, rest);
-  const json = restToJson(rest);
+  const json = logArgsJson(rest);
 
   await appendUnifiedLog({
     section: 'back',

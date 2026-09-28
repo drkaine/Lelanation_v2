@@ -2,17 +2,15 @@
  * Champion page: synergy table from champion_duo_role_stats (ally pairings).
  */
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
-import {
-  normalizeStatsRoleForChampion,
-  statsRoleSqlLiteral,
-  toQueryStringArrayParam,
-} from '../utils/statsFilters.js'
+import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
+import { cohortSqlWhere } from '../stats/cohortSqlWhere.js'
 import { computeDelta, matchupScoreFromDeltaAndWeight } from './MatchupTierService.js'
 import type {
   ChampionMatchupCoreDominanceKey,
   ChampionMatchupSignalLevel,
 } from './StatsChampionMatchupsExtendedService.js'
+import { synergyLaneScore, synergyLaneZ } from './synergyLaneScore.js'
 
 export interface ChampionSynergyExtendedRow {
   rank: number
@@ -82,78 +80,6 @@ type RawOverallRow = {
   wins: bigint
 }
 
-function buildDuoCoreWhere(
-  version: string | null,
-  rankTier: string | string[] | null | undefined,
-  role: string | null,
-): string {
-  const parts: string[] = ['1=1']
-  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
-  if (ranks.length === 1) parts.push(`ac.rank_tier = '${ranks[0]!.replace(/'/g, "''")}'`)
-  else if (ranks.length > 1) {
-    parts.push(`ac.rank_tier IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`)
-  }
-  if (version != null && version !== '') {
-    parts.push(`ac.game_version LIKE '${normalizePatchMajorMinor(version).replace(/'/g, "''")}%'`)
-  }
-  const roleDb = normalizeStatsRoleForChampion(role)
-  if (roleDb) parts.push(`ac.role = '${statsRoleSqlLiteral(roleDb)}'`)
-  return parts.join(' AND ')
-}
-
-function buildDuoWhere(
-  championId: number,
-  version: string | null,
-  rankTier: string | string[] | null | undefined,
-  role: string | null,
-): string {
-  const parts: string[] = [`duo.champion_id = ${championId}`]
-  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
-  if (ranks.length === 1) parts.push(`duo.rank_tier = '${ranks[0]!.replace(/'/g, "''")}'`)
-  else if (ranks.length > 1) {
-    parts.push(`duo.rank_tier IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`)
-  }
-  if (version != null && version !== '') {
-    parts.push(`duo.game_version LIKE '${normalizePatchMajorMinor(version).replace(/'/g, "''")}%'`)
-  }
-  const roleDb = normalizeStatsRoleForChampion(role)
-  if (roleDb) parts.push(`duo.role = '${statsRoleSqlLiteral(roleDb)}'`)
-  return parts.join(' AND ')
-}
-
-function buildPeerDuoWhere(
-  version: string | null,
-  rankTier: string | string[] | null | undefined,
-  role: string | null,
-): string {
-  const parts: string[] = ['1=1']
-  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
-  if (ranks.length === 1) parts.push(`duo.rank_tier = '${ranks[0]!.replace(/'/g, "''")}'`)
-  else if (ranks.length > 1) {
-    parts.push(`duo.rank_tier IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`)
-  }
-  if (version != null && version !== '') {
-    parts.push(`duo.game_version LIKE '${normalizePatchMajorMinor(version).replace(/'/g, "''")}%'`)
-  }
-  const roleDb = normalizeStatsRoleForChampion(role)
-  if (roleDb) parts.push(`duo.role = '${statsRoleSqlLiteral(roleDb)}'`)
-  return parts.join(' AND ')
-}
-
-function meanStd(values: number[]): { mean: number; std: number } {
-  if (values.length === 0) return { mean: 0, std: 0 }
-  const mean = values.reduce((a, b) => a + b, 0) / values.length
-  if (values.length < 2) return { mean, std: 0 }
-  const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / (values.length - 1)
-  return { mean, std: Math.sqrt(Math.max(0, variance)) }
-}
-
-function zscore(v: number, mean: number, std: number): number {
-  if (!Number.isFinite(v) || !Number.isFinite(mean)) return 0
-  const s = std > 1e-9 ? std : 1e-9
-  return (v - mean) / s
-}
-
 function dominanceFromZscores(z: Record<ChampionMatchupCoreDominanceKey, number>): ChampionMatchupCoreDominanceKey[] {
   const entries = (Object.keys(z) as ChampionMatchupCoreDominanceKey[])
     .map((k) => ({ k, z: z[k] ?? 0 }))
@@ -203,7 +129,7 @@ export async function getChampionSynergyExtendedTable(options: {
   const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', version, 'ac')
   const duoFrom = await matchVersionedAggFrom('agg_champion_duo_role_stats', version, 'duo')
 
-  const myWhere = buildDuoWhere(championId, version, options.rankTier, roleFilter)
+  const myWhere = cohortSqlWhere('duo', { championId: championId, version: version, rankTier: options.rankTier, role: roleFilter })
   const mySql = `
     SELECT
       duo.ally_champion_id,
@@ -243,8 +169,8 @@ export async function getChampionSynergyExtendedTable(options: {
   const totalGames = myRows.reduce((s, r) => s + Number(r.games ?? 0), 0)
   const allyIds = [...new Set(myRows.map((r) => Number(r.ally_champion_id)))]
 
-  const peerDuoWhere = buildPeerDuoWhere(version, options.rankTier, roleFilter)
-  const peerCoreWhere = buildDuoCoreWhere(version, options.rankTier, roleFilter)
+  const peerDuoWhere = cohortSqlWhere('duo', { version: version, rankTier: options.rankTier, role: roleFilter })
+  const peerCoreWhere = cohortSqlWhere('ac', { version: version, rankTier: options.rankTier, role: roleFilter })
   const peerSql = `
     SELECT
       duo.ally_champion_id,
@@ -295,7 +221,7 @@ export async function getChampionSynergyExtendedTable(options: {
 
   if (referenceVersion && normalizePatchMajorMinor(referenceVersion) !== normalizePatchMajorMinor(version ?? '')) {
     const refDuoFrom = await matchVersionedAggFrom('agg_champion_duo_role_stats', referenceVersion, 'duo')
-    const refMyWhere = buildDuoWhere(championId, referenceVersion, options.rankTier, roleFilter)
+    const refMyWhere = cohortSqlWhere('duo', { championId: championId, version: referenceVersion, rankTier: options.rankTier, role: roleFilter })
     const refMyRows = await queryRawUnsafe<RawMyRow[]>(`
       SELECT
         duo.ally_champion_id,
@@ -317,7 +243,7 @@ export async function getChampionSynergyExtendedTable(options: {
     if (refMyRows.length > 0) {
       const refTotalGames = refMyRows.reduce((s, r) => s + Number(r.games ?? 0), 0)
       const refAllyIds = [...new Set(refMyRows.map((r) => Number(r.ally_champion_id)))]
-      const refPeerWhere = buildPeerDuoWhere(referenceVersion, options.rankTier, roleFilter)
+      const refPeerWhere = cohortSqlWhere('duo', { version: referenceVersion, rankTier: options.rankTier, role: roleFilter })
       const refPeerRows = await queryRawUnsafe<RawPeerRow[]>(`
         SELECT
           duo.ally_champion_id,
@@ -373,44 +299,7 @@ export async function getChampionSynergyExtendedTable(options: {
           gamesInMatchup: g,
           totalGamesChampion: Math.max(1, totalRoleGames),
         })
-        const perGame = (sum: number | bigint) => (g > 0 ? Number(sum) / g : 0)
-        const myLevel = perGame(mr.sum_level)
-        const myKill = -perGame(mr.sum_kill_def)
-        const myCs = perGame(mr.sum_cs)
-        const myVision = perGame(mr.sum_vision)
-        const myLaning = perGame(mr.sum_laning)
-        const myEarly = perGame(mr.sum_early)
-        const cohort = peers.filter((p) => Number(p.champion_id) !== championId && Number(p.games ?? 0) >= 3)
-        const peerAvg = (row: RawPeerRow, sumField: keyof RawPeerRow): number => {
-          const gg = Number(row.games ?? 0)
-          if (gg <= 0) return 0
-          const v = row[sumField]
-          return Number(v) / gg
-        }
-        const levels = cohort.map((p) => peerAvg(p, 'sum_level'))
-        const kills = cohort.map((p) => -peerAvg(p, 'sum_kill_def'))
-        const css = cohort.map((p) => peerAvg(p, 'sum_cs'))
-        const visions = cohort.map((p) => peerAvg(p, 'sum_vision'))
-        const lanings = cohort.map((p) => peerAvg(p, 'sum_laning'))
-        const earlys = cohort.map((p) => peerAvg(p, 'sum_early'))
-        const mL = meanStd(levels)
-        const mK = meanStd(kills)
-        const mC = meanStd(css)
-        const mV = meanStd(visions)
-        const mN = meanStd(lanings)
-        const mE = meanStd(earlys)
-        const laneComponents = [
-          zscore(myLevel, mL.mean, mL.std),
-          zscore(myKill, mK.mean, mK.std),
-          zscore(myCs, mC.mean, mC.std),
-          zscore(myVision, mV.mean, mV.std),
-          zscore(myLaning, mN.mean, mN.std),
-          zscore(myEarly, mE.mean, mE.std),
-        ].filter(Number.isFinite)
-        const laneScoreRaw =
-          laneComponents.length > 0
-            ? Number((laneComponents.reduce((a, b) => a + b, 0) / laneComponents.length).toFixed(2))
-            : 0
+        const laneScoreRaw = synergyLaneScore(synergyLaneZ(mr, peers, championId).z)
         const key = `${ally}|${role}|${allyRole}`
         referenceScoreByAllyKey.set(key, score * 100)
         referenceWinrateByAllyKey.set(key, Math.round(wrPct * 100) / 100)
@@ -469,55 +358,13 @@ export async function getChampionSynergyExtendedTable(options: {
       totalGamesChampion: Math.max(1, totalRoleGames),
     })
 
-    const perGame = (sum: number | bigint) => (g > 0 ? Number(sum) / g : 0)
-    const myLevel = perGame(mr.sum_level)
-    const myKill = -perGame(mr.sum_kill_def)
-    const myCs = perGame(mr.sum_cs)
-    const myVision = perGame(mr.sum_vision)
-    const myLaning = perGame(mr.sum_laning)
-    const myEarly = perGame(mr.sum_early)
+    const { z, cohortSize } = synergyLaneZ(mr, peers, championId)
+    const laneScore = synergyLaneScore(z) * 100
 
-    const cohort = peers.filter((p) => Number(p.champion_id) !== championId && Number(p.games ?? 0) >= 3)
-    const peerAvg = (row: RawPeerRow, sumField: keyof RawPeerRow): number => {
-      const gg = Number(row.games ?? 0)
-      if (gg <= 0) return 0
-      const v = row[sumField]
-      return Number(v) / gg
-    }
-    const levels = cohort.map((p) => peerAvg(p, 'sum_level'))
-    const kills = cohort.map((p) => -peerAvg(p, 'sum_kill_def'))
-    const css = cohort.map((p) => peerAvg(p, 'sum_cs'))
-    const visions = cohort.map((p) => peerAvg(p, 'sum_vision'))
-    const lanings = cohort.map((p) => peerAvg(p, 'sum_laning'))
-    const earlys = cohort.map((p) => peerAvg(p, 'sum_early'))
-
-    const mL = meanStd(levels)
-    const mK = meanStd(kills)
-    const mC = meanStd(css)
-    const mV = meanStd(visions)
-    const mN = meanStd(lanings)
-    const mE = meanStd(earlys)
-
-    const z: Record<ChampionMatchupCoreDominanceKey, number> = {
-      level: zscore(myLevel, mL.mean, mL.std),
-      kills: zscore(myKill, mK.mean, mK.std),
-      cs: zscore(myCs, mC.mean, mC.std),
-      vision: zscore(myVision, mV.mean, mV.std),
-      laneEconomy: zscore(myLaning, mN.mean, mN.std),
-      early: zscore(myEarly, mE.mean, mE.std),
-    }
-
-    const laneComponents = [z.level, z.kills, z.cs, z.vision, z.laneEconomy, z.early].filter(Number.isFinite)
-    const laneScoreRaw =
-      laneComponents.length > 0
-        ? Number((laneComponents.reduce((a, b) => a + b, 0) / laneComponents.length).toFixed(2))
-        : 0
-    const laneScore = laneScoreRaw * 100
-
-    const dominanceKeys = cohort.length >= 2 ? dominanceFromZscores(z) : []
-    const weaknessKeys = cohort.length >= 2 ? weaknessFromZscores(z) : []
+    const dominanceKeys = cohortSize >= 2 ? dominanceFromZscores(z) : []
+    const weaknessKeys = cohortSize >= 2 ? weaknessFromZscores(z) : []
     const laneProfileByKey: Partial<Record<ChampionMatchupCoreDominanceKey, ChampionMatchupSignalLevel>> =
-      cohort.length >= 2
+      cohortSize >= 2
         ? {
             level: signalLevelFromZ(z.level),
             kills: signalLevelFromZ(z.kills),

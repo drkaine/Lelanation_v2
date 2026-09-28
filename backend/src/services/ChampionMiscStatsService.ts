@@ -1,8 +1,5 @@
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
-import { buildChampionScopedWhere } from './ChampionGlobalTableService.js'
-import { matchVersionedAggFrom } from './statsAggArchive.js'
-import { toQueryStringArrayParam } from '../utils/statsFilters.js'
-import { normalizeStatsRoleForChampion } from '../utils/statsFilters.js'
+import { avgPerGame as avgPerGameRounded, championScopeAgg, type ChampionAggScope } from './championAggSums.js'
 
 export type ChampionMiscMetric = {
   key: string
@@ -20,39 +17,14 @@ export type ChampionMiscSummary = {
   groups: ChampionMiscMetricGroup[]
 }
 
-type Scope = {
-  championId: number
-  version?: string | string[] | null
-  rankTier?: string | string[] | null
-  role?: string | null
-}
-
-function round1(n: number): number {
-  return Math.round(n * 10) / 10
-}
-
 function avgPerGame(sum: number, games: number): number {
-  return games > 0 ? round1(sum / games) : 0
+  return avgPerGameRounded(sum, games, 1)
 }
 
-export async function getChampionMiscSummary(scope: Scope): Promise<ChampionMiscSummary | null> {
+export async function getChampionMiscSummary(scope: ChampionAggScope): Promise<ChampionMiscSummary | null> {
   if (!isDatabaseConfigured() || scope.championId <= 0) return null
 
-  const version = toQueryStringArrayParam(scope.version)
-  const rankTier = toQueryStringArrayParam(scope.rankTier)
-  const role = normalizeStatsRoleForChampion(scope.role ?? null)
-
-  const csFrom = await matchVersionedAggFrom(
-    'agg_champion_team_objective_stats',
-    version.length ? version : null,
-    'cs'
-  )
-  const where = buildChampionScopedWhere('cs', {
-    championId: scope.championId,
-    version: version.length ? version : null,
-    rankTier: rankTier.length ? rankTier : null,
-    role,
-  })
+  const { from: csFrom, where } = await championScopeAgg(scope)
 
   const rows = await queryRawUnsafe<
     Array<{

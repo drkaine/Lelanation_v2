@@ -17,7 +17,7 @@ export type MatchupPeerRow = LaneSumRow & {
   wins: number | bigint
 }
 
-function meanStd(values: number[]): { mean: number; std: number } {
+export function meanStd(values: number[]): { mean: number; std: number } {
   if (values.length === 0) return { mean: 0, std: 0 }
   const mean = values.reduce((a, b) => a + b, 0) / values.length
   if (values.length < 2) return { mean, std: 0 }

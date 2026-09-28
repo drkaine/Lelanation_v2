@@ -2,12 +2,9 @@
  * Champion page: rich matchup table (lane sums, peer-relative lane score, dominance hints).
  */
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
-import {
-  normalizeStatsRoleForChampion,
-  statsRoleSqlLiteral,
-  toQueryStringArrayParam,
-} from '../utils/statsFilters.js'
+import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
+import { cohortSqlWhere } from '../stats/cohortSqlWhere.js'
 import {
   buildChampionMatchupLaneSumSelect,
   CHAMPION_MATCHUP_DOMINANCE_KEYS,
@@ -167,65 +164,6 @@ async function getVsMetricColumns(): Promise<string[]> {
   return vsMetricColumnsCache
 }
 
-function buildPeerCoreWhere(
-  version: string | null,
-  rankTier: string | string[] | null | undefined,
-  role: string | null,
-): string {
-  const parts: string[] = ['1=1']
-  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
-  if (ranks.length === 1) parts.push(`ac.rank_tier = '${ranks[0]!.replace(/'/g, "''")}'`)
-  else if (ranks.length > 1) {
-    parts.push(`ac.rank_tier IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`)
-  }
-  if (version != null && version !== '') {
-    parts.push(`ac.game_version LIKE '${normalizePatchMajorMinor(version).replace(/'/g, "''")}%'`)
-  }
-  const roleDb = normalizeStatsRoleForChampion(role)
-  if (roleDb) parts.push(`ac.role = '${statsRoleSqlLiteral(roleDb)}'`)
-  return parts.join(' AND ')
-}
-
-/** Filtres sur `champion_vs_stats` (pas de `champion_stat_id` — clé patch/rôle/ligue/région/champion). */
-function buildVsWhere(
-  championId: number,
-  version: string | null,
-  rankTier: string | string[] | null | undefined,
-  role: string | null,
-): string {
-  const parts: string[] = [`vs.champion_id = ${championId}`]
-  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
-  if (ranks.length === 1) parts.push(`vs.rank_tier = '${ranks[0]!.replace(/'/g, "''")}'`)
-  else if (ranks.length > 1) {
-    parts.push(`vs.rank_tier IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`)
-  }
-  if (version != null && version !== '') {
-    parts.push(`vs.game_version LIKE '${normalizePatchMajorMinor(version).replace(/'/g, "''")}%'`)
-  }
-  const roleDb = normalizeStatsRoleForChampion(role)
-  if (roleDb) parts.push(`vs.role = '${statsRoleSqlLiteral(roleDb)}'`)
-  return parts.join(' AND ')
-}
-
-function buildPeerVsWhere(
-  version: string | null,
-  rankTier: string | string[] | null | undefined,
-  role: string | null,
-): string {
-  const parts: string[] = ['1=1']
-  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
-  if (ranks.length === 1) parts.push(`vs.rank_tier = '${ranks[0]!.replace(/'/g, "''")}'`)
-  else if (ranks.length > 1) {
-    parts.push(`vs.rank_tier IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`)
-  }
-  if (version != null && version !== '') {
-    parts.push(`vs.game_version LIKE '${normalizePatchMajorMinor(version).replace(/'/g, "''")}%'`)
-  }
-  const roleDb = normalizeStatsRoleForChampion(role)
-  if (roleDb) parts.push(`vs.role = '${statsRoleSqlLiteral(roleDb)}'`)
-  return parts.join(' AND ')
-}
-
 function dominanceFromZscores(z: Record<ChampionMatchupDominanceKey, number>): ChampionMatchupDominanceKey[] {
   const entries = (Object.keys(z) as ChampionMatchupDominanceKey[])
     .map((k) => ({ k, z: z[k] ?? 0 }))
@@ -317,7 +255,7 @@ export async function getChampionMatchupsExtendedTable(options: {
 
   const laneSumSelect = buildChampionMatchupLaneSumSelect('vs')
 
-  const myWhere = buildVsWhere(championId, version, options.rankTier, roleFilter)
+  const myWhere = cohortSqlWhere('vs', { championId: championId, version: version, rankTier: options.rankTier, role: roleFilter })
   const mySql = `
     SELECT
       vs.opponent_champion_id,
@@ -351,8 +289,8 @@ export async function getChampionMatchupsExtendedTable(options: {
   const totalGames = myRows.reduce((s, r) => s + Number(r.games ?? 0), 0)
   const oppIds = [...new Set(myRows.map((r) => Number(r.opponent_champion_id)))]
 
-  const peerVsWhere = buildPeerVsWhere(version, options.rankTier, roleFilter)
-  const peerCoreWhere = buildPeerCoreWhere(version, options.rankTier, roleFilter)
+  const peerVsWhere = cohortSqlWhere('vs', { version: version, rankTier: options.rankTier, role: roleFilter })
+  const peerCoreWhere = cohortSqlWhere('ac', { version: version, rankTier: options.rankTier, role: roleFilter })
   const peerSql = `
     SELECT
       vs.opponent_champion_id,
@@ -395,7 +333,7 @@ export async function getChampionMatchupsExtendedTable(options: {
   const referenceLaneScoreByOppRole = new Map<string, number>()
   if (referenceVersion && normalizePatchMajorMinor(referenceVersion) !== normalizePatchMajorMinor(version ?? '')) {
     const refVsFrom = await matchVersionedAggFrom('agg_champion_vs_stats', referenceVersion, 'vs')
-    const refMyWhere = buildVsWhere(championId, referenceVersion, options.rankTier, roleFilter)
+    const refMyWhere = cohortSqlWhere('vs', { championId: championId, version: referenceVersion, rankTier: options.rankTier, role: roleFilter })
     const refMyRows = await queryRawUnsafe<RawMyRow[]>(`
       SELECT
         vs.opponent_champion_id,
@@ -411,7 +349,7 @@ export async function getChampionMatchupsExtendedTable(options: {
     if (refMyRows.length > 0) {
       const refTotalGames = refMyRows.reduce((s, r) => s + Number(r.games ?? 0), 0)
       const refOppIds = [...new Set(refMyRows.map((r) => Number(r.opponent_champion_id)))]
-      const refPeerWhere = buildPeerVsWhere(referenceVersion, options.rankTier, roleFilter)
+      const refPeerWhere = cohortSqlWhere('vs', { version: referenceVersion, rankTier: options.rankTier, role: roleFilter })
       const refPeerRows = await queryRawUnsafe<RawPeerRow[]>(`
         SELECT
           vs.opponent_champion_id,
@@ -645,7 +583,7 @@ export async function getChampionMatchupsExportRows(options: {
   const minGames = options.minGames != null ? Math.max(1, options.minGames) : 10
   const metricCols = await getVsMetricColumns()
   const vsFrom = await matchVersionedAggFrom('agg_champion_vs_stats', version, 'vs')
-  const where = buildVsWhere(championId, version, options.rankTier, roleFilter)
+  const where = cohortSqlWhere('vs', { championId: championId, version: version, rankTier: options.rankTier, role: roleFilter })
   const metricSelect = metricCols.map((c) => `COALESCE(SUM(vs.${c}), 0)::bigint AS ${c}`).join(',\n      ')
   const sql = `
     SELECT
