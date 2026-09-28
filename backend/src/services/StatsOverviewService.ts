@@ -34,6 +34,7 @@ import {
 } from './statsAggArchive.js'
 import { normalizeGameVersionToMajorMinor } from '../utils/gameVersion.js'
 import { getTeamSurrenderTotalsBySide } from './StatsAbandonsService.js'
+import { sqlLiteral } from '../stats/sqlLiteral.js'
 
 /** Surrenders imputés par côté (équipe) — mêmes agrégats que overview-sides. */
 export interface OverviewSurrenderBySide {
@@ -563,11 +564,11 @@ async function loadTeamCoreFallbackFromIngest(
   const versions = toQueryStringArrayParam(version)
   const cond: string[] = ['1=1']
   if (versions.length === 1) {
-    const patch = normalizePatchMajorMinor(versions[0]!).replace(/'/g, "''")
+    const patch = sqlLiteral(normalizePatchMajorMinor(versions[0]!))
     cond.push(`(m.patch = '${patch}' OR m.patch LIKE '${patch}.%')`)
   } else if (versions.length > 1) {
     const parts = versions.map((v) => {
-      const patch = normalizePatchMajorMinor(v).replace(/'/g, "''")
+      const patch = sqlLiteral(normalizePatchMajorMinor(v))
       return `(m.patch = '${patch}' OR m.patch LIKE '${patch}.%')`
     })
     cond.push(`(${parts.join(' OR ')})`)
@@ -691,11 +692,11 @@ async function loadSurrenderBySideCounts(
         const versions = toQueryStringArrayParam(version)
         const condMatch: string[] = ['1=1']
         if (versions.length === 1) {
-          const patch = normalizePatchMajorMinor(versions[0]!).replace(/'/g, "''")
+          const patch = sqlLiteral(normalizePatchMajorMinor(versions[0]!))
           condMatch.push(`(m.patch = '${patch}' OR m.patch LIKE '${patch}.%')`)
         } else if (versions.length > 1) {
           const parts = versions.map((v) => {
-            const patch = normalizePatchMajorMinor(v).replace(/'/g, "''")
+            const patch = sqlLiteral(normalizePatchMajorMinor(v))
             return `(m.patch = '${patch}' OR m.patch LIKE '${patch}.%')`
           })
           condMatch.push(`(${parts.join(' OR ')})`)
@@ -2656,16 +2657,16 @@ function buildIngestMatchPlayerWhereSql(
   const versions = toQueryStringArrayParam(version)
   if (versions.length === 1) {
     parts.push(
-      `im.game_version LIKE '${normalizePatchMajorMinor(versions[0]!).replace(/'/g, "''")}%'`
+      `im.game_version LIKE '${sqlLiteral(normalizePatchMajorMinor(versions[0]!))}%'`
     )
   } else if (versions.length > 1) {
     parts.push(
-      `im.game_version IN (${versions.map((v) => `'${String(v).replace(/'/g, "''")}'`).join(',')})`
+      `im.game_version IN (${versions.map((v) => `'${sqlLiteral(String(v))}'`).join(',')})`
     )
   }
   parts.push(...buildRankTierSqlConditions('im', rankTier))
   const roleNorm = role != null && role !== '' ? String(role).trim().toUpperCase() : null
-  if (roleNorm) parts.push(`imp.role = '${roleNorm.replace(/'/g, "''")}'`)
+  if (roleNorm) parts.push(`imp.role = '${sqlLiteral(roleNorm)}'`)
   return parts.join(' AND ')
 }
 
@@ -2684,24 +2685,24 @@ function buildRawMirPlayerWhereSql(
   const ranks = normalizedRankTiers(rankTier)
   if (versions.length === 1) {
     parts.push(
-      `(mir.payload_json->'info'->>'gameVersion') LIKE '${normalizePatchMajorMinor(versions[0]!).replace(/'/g, "''")}%'`
+      `(mir.payload_json->'info'->>'gameVersion') LIKE '${sqlLiteral(normalizePatchMajorMinor(versions[0]!))}%'`
     )
   } else if (versions.length > 1) {
     parts.push(
-      `(mir.payload_json->'info'->>'gameVersion') IN (${versions.map((v) => `'${String(v).replace(/'/g, "''")}'`).join(',')})`
+      `(mir.payload_json->'info'->>'gameVersion') IN (${versions.map((v) => `'${sqlLiteral(String(v))}'`).join(',')})`
     )
   }
   if (ranks.length === 1) {
-    parts.push(`UPPER(COALESCE(pl.rank_tier,'')) = '${ranks[0]!.replace(/'/g, "''")}'`)
+    parts.push(`UPPER(COALESCE(pl.rank_tier,'')) = '${sqlLiteral(ranks[0]!)}'`)
   } else if (ranks.length > 1) {
     parts.push(
-      `UPPER(COALESCE(pl.rank_tier,'')) IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`
+      `UPPER(COALESCE(pl.rank_tier,'')) IN (${ranks.map((r) => `'${sqlLiteral(r)}'`).join(',')})`
     )
   }
   const roleNorm = role != null && role !== '' ? String(role).trim().toUpperCase() : null
   if (roleNorm) {
     parts.push(
-      `UPPER(TRIM(COALESCE(NULLIF(participant->>'teamPosition',''), NULLIF(participant->>'individualPosition','')))) = '${roleNorm.replace(/'/g, "''")}'`
+      `UPPER(TRIM(COALESCE(NULLIF(participant->>'teamPosition',''), NULLIF(participant->>'individualPosition','')))) = '${sqlLiteral(roleNorm)}'`
     )
   }
   return parts.join(' AND ')
@@ -2901,7 +2902,7 @@ function minGamesPerChampForProgressionSlice(totalGamesInSlice: number): number 
 }
 
 function escapeSqlLikePrefix(v: string): string {
-  return v.replace(/'/g, "''")
+  return sqlLiteral(v)
 }
 
 function progressionSinceCap(
@@ -3412,7 +3413,7 @@ function sqlObjectiveHistogramTypeClause(
   filter: ObjectiveHistogramFilter,
   alias = 'oh'
 ): string {
-  const safeType = filter.objectiveType.replace(/'/g, "''")
+  const safeType = sqlLiteral(filter.objectiveType)
   const parts = [
     `${alias}.objective_type = '${safeType}'`,
     `${alias}.is_soul = ${filter.isSoul ? 'TRUE' : 'FALSE'}`,
@@ -3420,7 +3421,7 @@ function sqlObjectiveHistogramTypeClause(
   if (filter.typeDrake == null) {
     parts.push(`${alias}.type_drake IS NULL`)
   } else {
-    const safeDrake = filter.typeDrake.replace(/'/g, "''")
+    const safeDrake = sqlLiteral(filter.typeDrake)
     parts.push(`${alias}.type_drake = '${safeDrake}'`)
   }
   return parts.join(' AND ')
@@ -4382,16 +4383,16 @@ export async function getObjectiveOutcomeAggByPatchDivision(
   const versions = toQueryStringArrayParam(version)
   const conditions: string[] = ['1=1']
   if (versions.length === 1) {
-    conditions.push(`tc.game_version LIKE '${normalizePatchMajorMinor(versions[0]).replace(/'/g, "''")}%'`)
+    conditions.push(`tc.game_version LIKE '${sqlLiteral(normalizePatchMajorMinor(versions[0]))}%'`)
   } else if (versions.length > 1) {
     conditions.push(
-      `tc.game_version IN (${versions.map((v) => `'${normalizePatchMajorMinor(v).replace(/'/g, "''")}'`).join(',')})`
+      `tc.game_version IN (${versions.map((v) => `'${sqlLiteral(normalizePatchMajorMinor(v))}'`).join(',')})`
     )
   }
   conditions.push(...buildRankTierSqlConditions('tc', rankTier))
   const objective = (objectiveKey ?? '').trim()
   if (objective) {
-    conditions.push(`tb.objective_key = '${objective.replace(/'/g, "''")}'`)
+    conditions.push(`tb.objective_key = '${sqlLiteral(objective)}'`)
   }
 
   const whereSql = conditions.join(' AND ')

@@ -16,6 +16,7 @@ import {
 } from './championMatchupScoreCompute.js'
 import { assignTiersFromNotes, type LolalyticsTier } from './tierListAssign.js'
 import { statsRedisCacheGet, statsRedisCacheSet } from './statsRedisCache.js'
+import { sqlLiteral } from '../stats/sqlLiteral.js'
 
 const MIN_GAMES = 1
 const MIN_PICKRATE = 0.0001
@@ -258,13 +259,13 @@ async function fetchBanTotalsByChampion(
       banFilters.push(`bb.rank_tier IN (${HIGH_ELO_TIERS.map((t) => `'${t}'`).join(',')})`)
     } else if (Array.isArray(rankFilter) && rankFilter.length > 0) {
       const tiers = rankFilter
-        .map((t) => String(t).toUpperCase().replace(/'/g, "''"))
+        .map((t) => sqlLiteral(String(t).toUpperCase()))
         .filter(Boolean)
       if (tiers.length > 0) {
         banFilters.push(`bb.rank_tier IN (${tiers.map((t) => `'${t}'`).join(',')})`)
       }
     } else if (rankFilter && rankFilter !== 'all' && rankFilter !== null) {
-      const rf = String(rankFilter).toUpperCase().replace(/'/g, "''")
+      const rf = sqlLiteral(String(rankFilter).toUpperCase())
       banFilters.push(`bb.rank_tier = '${rf}'`)
     } else {
       banFilters.push(`bb.rank_tier <> 'UNRANKED'`)
@@ -272,7 +273,7 @@ async function fetchBanTotalsByChampion(
 
     if (patch) {
       banFilters.push(
-        `bb.game_version LIKE '${normalizePatchMajorMinor(patch).replace(/'/g, "''")}%'`
+        `bb.game_version LIKE '${sqlLiteral(normalizePatchMajorMinor(patch))}%'`
       )
     }
 
@@ -322,16 +323,16 @@ async function fetchRoleRows(
     filters.push(`rank_tier IN (${HIGH_ELO_TIERS.map((t) => `'${t}'`).join(',')})`)
   } else if (Array.isArray(rankFilter) && rankFilter.length > 0) {
     const tiers = rankFilter
-      .map((t) => String(t).toUpperCase().replace(/'/g, "''"))
+      .map((t) => sqlLiteral(String(t).toUpperCase()))
       .filter(Boolean)
     if (tiers.length > 0) {
       filters.push(`rank_tier IN (${tiers.map((t) => `'${t}'`).join(',')})`)
     }
   } else if (rankFilter && rankFilter !== 'all' && rankFilter !== null) {
-    const rf = String(rankFilter).toUpperCase().replace(/'/g, "''")
+    const rf = sqlLiteral(String(rankFilter).toUpperCase())
     filters.push(`rank_tier = '${rf}'`)
   }
-  if (patch) filters.push(`game_version LIKE '${normalizePatchMajorMinor(patch).replace(/'/g, "''")}%'`)
+  if (patch) filters.push(`game_version LIKE '${sqlLiteral(normalizePatchMajorMinor(patch))}%'`)
   const whereSql = filters.length > 0 ? filters.join(' AND ') : '1=1'
 
   const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', patch, 'ac')
@@ -430,13 +431,13 @@ async function fetchMatchupVsRows(
     filters.push(`rank_tier IN (${HIGH_ELO_TIERS.map((t) => `'${t}'`).join(',')})`)
   } else if (Array.isArray(rankFilter) && rankFilter.length > 0) {
     const tiers = rankFilter
-      .map((t) => String(t).toUpperCase().replace(/'/g, "''"))
+      .map((t) => sqlLiteral(String(t).toUpperCase()))
       .filter(Boolean)
     if (tiers.length > 0) {
       filters.push(`rank_tier IN (${tiers.map((t) => `'${t}'`).join(',')})`)
     }
   } else if (rankFilter && rankFilter !== 'all' && rankFilter !== null) {
-    const rf = String(rankFilter).toUpperCase().replace(/'/g, "''")
+    const rf = sqlLiteral(String(rankFilter).toUpperCase())
     filters.push(`rank_tier = '${rf}'`)
   }
   const whereSql = filters.length > 0 ? filters.join(' AND ') : '1=1'

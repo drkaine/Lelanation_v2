@@ -12,6 +12,7 @@ import {
   toQueryStringArrayParam,
 } from '../utils/statsFilters.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
+import { sqlLiteral } from '../stats/sqlLiteral.js'
 
 const CHAMPIONS_CACHE_TTL_MS = 5 * 60 * 1000
 const championsCache = new Map<
@@ -99,15 +100,15 @@ export class RiotStatsAggregator {
 
       const filters: string[] = []
       const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
-      if (ranks.length === 1) filters.push(`rank_tier = '${ranks[0].replace(/'/g, "''")}'`)
+      if (ranks.length === 1) filters.push(`rank_tier = '${sqlLiteral(ranks[0])}'`)
       else if (ranks.length > 1) {
-        filters.push(`rank_tier IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`)
+        filters.push(`rank_tier IN (${ranks.map((r) => `'${sqlLiteral(r)}'`).join(',')})`)
       } else {
         filters.push(`rank_tier <> 'UNRANKED'`)
       }
       if (pRole) filters.push(`role = '${statsRoleSqlLiteral(pRole)}'`)
-      if (pVersion) filters.push(`game_version LIKE '${normalizePatchMajorMinor(pVersion).replace(/'/g, "''")}%'`)
-      if (pRegion) filters.push(`region = '${pRegion.replace(/'/g, "''")}'`)
+      if (pVersion) filters.push(`game_version LIKE '${sqlLiteral(normalizePatchMajorMinor(pVersion))}%'`)
+      if (pRegion) filters.push(`region = '${sqlLiteral(pRegion)}'`)
       const whereSql = filters.length > 0 ? filters.join(' AND ') : '1=1'
 
       const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', pVersion, 'ac')
@@ -145,15 +146,15 @@ export class RiotStatsAggregator {
       try {
         const bansFrom = await matchVersionedAggFrom('agg_champion_bans_by_banner', pVersion, 'bb')
         const banFilters: string[] = []
-        if (ranks.length === 1) banFilters.push(`bb.rank_tier = '${ranks[0]!.replace(/'/g, "''")}'`)
+        if (ranks.length === 1) banFilters.push(`bb.rank_tier = '${sqlLiteral(ranks[0]!)}'`)
         else if (ranks.length > 1) {
-          banFilters.push(`bb.rank_tier IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`)
+          banFilters.push(`bb.rank_tier IN (${ranks.map((r) => `'${sqlLiteral(r)}'`).join(',')})`)
         } else {
           banFilters.push(`bb.rank_tier <> 'UNRANKED'`)
         }
         if (pVersion) {
           banFilters.push(
-            `bb.game_version LIKE '${normalizePatchMajorMinor(pVersion).replace(/'/g, "''")}%'`
+            `bb.game_version LIKE '${sqlLiteral(normalizePatchMajorMinor(pVersion))}%'`
           )
         }
         const bannerRole = normalizeStatsRoleForBanner(role)

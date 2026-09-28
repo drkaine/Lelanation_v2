@@ -6,6 +6,7 @@ import {
   normalizeStatsRoleForChampion,
   statsRoleSqlLiteral,
 } from '../utils/statsFilters.js'
+import { sqlLiteral } from '../stats/sqlLiteral.js'
 
 type BalanceStatus = 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'
 /** Rôles exposés à l’API / UI (MIDDLE, BOTTOM, …). */
@@ -244,11 +245,11 @@ async function buildPatchSnapshot(
   const tiers = [...allTiers]
 
   const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', patch, 'cc')
-  const tiersSql = tiers.map((t) => `'${String(t).replace(/'/g, "''")}'`).join(', ')
+  const tiersSql = tiers.map((t) => `'${sqlLiteral(String(t))}'`).join(', ')
   const roleSql = roleFilter
     ? `AND role = '${statsRoleSqlLiteral(roleFilter.championSql)}'`
     : ''
-  const patchLike = `${normalizePatchMajorMinor(patch).replace(/'/g, "''")}%`
+  const patchLike = `${sqlLiteral(normalizePatchMajorMinor(patch))}%`
   const coreRowsEffective = await queryRawUnsafe<CoreRow[]>(`
       SELECT champion_id, rank_tier, role, count_game, count_win
       FROM ${coreFrom}

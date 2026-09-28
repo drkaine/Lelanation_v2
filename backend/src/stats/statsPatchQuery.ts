@@ -4,6 +4,7 @@
  */
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { isSafeIdentSegment, normalizeAggTableName, physicalTableName } from './statsTableMap.js'
+import { sqlLiteral } from './sqlLiteral.js'
 
 export function normalizePatchMajorMinor(version: string): string {
   const parts = String(version ?? '')
@@ -28,7 +29,7 @@ export function comparePatchMajorMinor(a: string, b: string): number {
 }
 
 function escapePatchSqlLiteral(patch: string): string {
-  return patch.replace(/'/g, "''")
+  return sqlLiteral(patch)
 }
 
 /** Winrate on the reference patch only (not cumulative). */
@@ -99,7 +100,7 @@ export function invalidateAggArchivePartitionCache(): void {
 }
 
 function patchVersionSqlPredicate(alias: string, p: string): string {
-  const esc = p.replace(/'/g, "''")
+  const esc = sqlLiteral(p)
   return `(${alias}.patch = '${esc}' OR ${alias}.patch LIKE '${esc}.%')`
 }
 

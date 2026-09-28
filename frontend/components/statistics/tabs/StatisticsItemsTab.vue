@@ -444,14 +444,14 @@ function deltaClass(value: number | null | undefined): string {
             >
               <button
                 type="button"
-                class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[320px] shrink-0 items-center justify-start border-b border-black px-2 hover:bg-primary/25"
+                class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[320px] shrink-0 items-center justify-start border-b border-t border-black border-t-[var(--color-grey-300)] px-2 hover:bg-primary/25"
                 :title="p.t('statisticsPage.itemsTooltipItem')"
                 @click="toggleSort('item')"
               >
                 {{ p.t('statisticsPage.overviewDetailItems') }}{{ sortIcon('item') }}
               </button>
               <div
-                class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[160px] shrink-0 flex-col justify-center border-b border-black px-2 py-1"
+                class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[160px] shrink-0 flex-col justify-center border-b border-t border-black border-t-[var(--color-grey-300)] px-2 py-1"
                 :title="p.t('statisticsPage.itemsTooltipType')"
               >
                 <button
@@ -465,21 +465,21 @@ function deltaClass(value: number | null | undefined): string {
               </div>
               <button
                 type="button"
-                class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[100px] shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
+                class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[100px] shrink-0 items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
                 @click="toggleSort('goldValue')"
               >
                 {{ p.t('statisticsPage.itemsColGoldValue') }}{{ sortIcon('goldValue') }}
               </button>
               <button
                 type="button"
-                class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[100px] shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
+                class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[100px] shrink-0 items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
                 @click="toggleSort('goldEfficiency')"
               >
                 {{ p.t('statisticsPage.itemsColGoldEfficiency') }}{{ sortIcon('goldEfficiency') }}
               </button>
               <button
                 type="button"
-                class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[120px] shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
+                class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[120px] shrink-0 items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
                 :title="p.t('statisticsPage.itemsTooltipPickrate')"
                 @click="toggleSort('pickrate')"
               >
@@ -487,7 +487,7 @@ function deltaClass(value: number | null | undefined): string {
               </button>
               <button
                 type="button"
-                class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[120px] shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
+                class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[120px] shrink-0 items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
                 :title="p.t('statisticsPage.itemsTooltipDeltaPick')"
                 @click="toggleSort('deltaPick')"
               >
@@ -495,7 +495,7 @@ function deltaClass(value: number | null | undefined): string {
               </button>
               <button
                 type="button"
-                class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[120px] shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
+                class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[120px] shrink-0 items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
                 :title="p.t('statisticsPage.itemsTooltipWinrate')"
                 @click="toggleSort('winrate')"
               >
@@ -503,7 +503,7 @@ function deltaClass(value: number | null | undefined): string {
               </button>
               <button
                 type="button"
-                class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[120px] shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
+                class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[120px] shrink-0 items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
                 :title="p.t('statisticsPage.itemsTooltipDeltaWin')"
                 @click="toggleSort('deltaWin')"
               >

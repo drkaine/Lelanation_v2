@@ -1,3 +1,4 @@
+import { sqlLiteral } from '../stats/sqlLiteral.js'
 /**
  * Normalisation des filtres stats (rankTier / version) : query répétée ou chaîne "A,B".
  */
@@ -111,7 +112,7 @@ export function normalizeStatsRoleForBanner(role: string | null | undefined): st
 }
 
 export function statsRoleSqlLiteral(role: string): string {
-  return role.replace(/'/g, "''")
+  return sqlLiteral(role)
 }
 
 /** Clé cache / query string (garde MIDDLE/BOTTOM côté front). */

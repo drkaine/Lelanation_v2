@@ -7,6 +7,7 @@ import { queryRawUnsafe } from '../db/query.js'
 import { isDatabaseConfigured } from '../db/query.js'
 import { rankTierCacheKey, toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
+import { sqlLiteral } from '../stats/sqlLiteral.js'
 
 const ABANDONS_CACHE_TTL_MS = 5 * 60 * 1000
 const abandonsCache = new Map<string, { data: OverviewAbandonsResult; expiresAt: number }>()
@@ -193,7 +194,7 @@ async function loadSurrenderMatchCountsByRank(
 ): Promise<Map<string, number>> {
   const moFrom = await matchVersionedAggFrom('agg_match_outcome_stats', version, 'mo')
   const versionWhere = version
-    ? ` AND mo.game_version LIKE '${normalizePatchMajorMinor(version).replace(/'/g, "''")}%'`
+    ? ` AND mo.game_version LIKE '${sqlLiteral(normalizePatchMajorMinor(version))}%'`
     : ''
   const rankWhere = buildRankTierWhere('mo', rankTier)
   const rows = await queryRawUnsafe<Array<{ rank_tier: string; match_count: bigint }>>(`
@@ -234,7 +235,7 @@ async function loadSurrenderTeamAgg(
 ): Promise<TeamAggRow[]> {
   const tcFrom = await matchVersionedAggFrom('agg_team_core_stats', version, 'tc')
   const versionWhere = version
-    ? ` AND tc.game_version LIKE '${normalizePatchMajorMinor(version).replace(/'/g, "''")}%'`
+    ? ` AND tc.game_version LIKE '${sqlLiteral(normalizePatchMajorMinor(version))}%'`
     : ''
   const rankWhere = buildRankTierWhere('tc', rankTier)
   return queryRawUnsafe<TeamAggRow[]>(`
@@ -359,12 +360,12 @@ export async function getOverviewAbandons(
     const condIngest: string[] = ['1=1']
     if (versions.length === 1)
       {
-        const patch = normalizePatchMajorMinor(versions[0]!).replace(/'/g, "''")
+        const patch = sqlLiteral(normalizePatchMajorMinor(versions[0]!))
         cond.push(`mo.game_version LIKE '${patch}%'`)
         condIngest.push(`im.game_version LIKE '${patch}%'`)
       }
     else if (versions.length > 1) {
-      const versionsSql = versions.map((v) => `'${v.replace(/'/g, "''")}'`).join(',')
+      const versionsSql = versions.map((v) => `'${sqlLiteral(v)}'`).join(',')
       cond.push(`mo.game_version IN (${versionsSql})`)
       condIngest.push(`im.game_version IN (${versionsSql})`)
     }

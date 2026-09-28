@@ -1,12 +1,16 @@
-import { toQueryStringArrayParam } from '../utils/statsFilters.js'
-
-const sqlLiteral = (s: string) => s.replace(/'/g, "''")
+import { normalizeStatsRoleForChampion, toQueryStringArrayParam } from '../utils/statsFilters.js'
+import { sqlLiteral } from './sqlLiteral.js'
 
 /** League part of each requested tier (`GOLD_II` → `GOLD`). */
 export function snapshotRankTiers(rankTier: string | string[] | null | undefined): string[] {
   return toQueryStringArrayParam(rankTier)
     .map((t) => t.trim().toUpperCase().split('_')[0]!)
     .filter(Boolean)
+}
+
+/** Role as stored in the snapshot tables (`SUPPORT` → `UTILITY`, `MID` → `MIDDLE`, `ADC` → `BOTTOM`). */
+export function snapshotRole(role: string | null | undefined): string | null {
+  return normalizeStatsRoleForChampion(role)
 }
 
 /** WHERE of the daily tier snapshot tables (unranked rows excluded when no tier is requested). */

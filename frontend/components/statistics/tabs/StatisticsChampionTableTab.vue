@@ -778,7 +778,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             class="tier-list-lolalytics-head sticky top-0 z-10 flex h-auto min-h-8 w-full items-stretch justify-start border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
           >
             <div
-              class="champion-global-champ-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex items-center justify-start border-b border-black px-2 max-lg:w-[56px] max-lg:flex-none max-lg:shrink-0 max-lg:justify-center max-lg:px-0.5"
+              class="champion-global-champ-col tier-list-lolalytics-th tier-list-lolalytics-th-all flex items-center justify-start border-b border-t border-black border-t-[var(--color-grey-300)] px-2 max-lg:w-[56px] max-lg:flex-none max-lg:shrink-0 max-lg:justify-center max-lg:px-0.5"
               :title="p.t('statisticsPage.championTableTooltipChampion')"
             >
               <span class="max-lg:hidden">{{ p.t('statisticsPage.tierListColChampion') }}</span>
@@ -786,7 +786,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             <!-- Soins & combat -->
             <div
               v-show="p.showChampionHealColumns"
-              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 py-1"
             >
               <button
                 type="button"
@@ -817,7 +817,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             </div>
             <div
               v-show="p.showChampionHealColumns && showChampionHealBreakdown"
-              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 py-1"
             >
               <button
                 type="button"
@@ -839,7 +839,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             </div>
             <div
               v-show="p.showChampionHealColumns && showChampionHealBreakdown"
-              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 py-1"
             >
               <button
                 type="button"
@@ -861,7 +861,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             </div>
             <div
               v-show="p.showChampionHealColumns && showChampionHealBreakdown"
-              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 py-1"
             >
               <button
                 type="button"
@@ -883,7 +883,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             </div>
             <div
               v-show="p.showChampionHealColumns"
-              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 py-1"
             >
               <button
                 type="button"
@@ -906,7 +906,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             </div>
             <div
               v-show="p.showChampionHealColumns"
-              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 py-1"
             >
               <button
                 type="button"
@@ -930,7 +930,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             <!-- Dégâts infligés -->
             <div
               v-show="p.showChampionDealtColumns"
-              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 py-1"
             >
               <button
                 type="button"
@@ -961,7 +961,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             </div>
             <div
               v-show="p.showChampionDealtColumns && showChampionDealtBreakdown"
-              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 py-1"
             >
               <button
                 type="button"
@@ -984,7 +984,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             </div>
             <div
               v-show="p.showChampionDealtColumns && showChampionDealtBreakdown"
-              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 py-1"
             >
               <button
                 type="button"
@@ -1007,7 +1007,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             </div>
             <div
               v-show="p.showChampionDealtColumns && showChampionDealtBreakdown"
-              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 py-1"
             >
               <button
                 type="button"
@@ -1031,7 +1031,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             <!-- Dégâts subis -->
             <div
               v-show="p.showChampionTakenColumns"
-              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 py-1"
             >
               <button
                 type="button"
@@ -1062,7 +1062,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             </div>
             <div
               v-show="p.showChampionTakenColumns && showChampionTakenBreakdown"
-              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 py-1"
             >
               <button
                 type="button"
@@ -1085,7 +1085,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             </div>
             <div
               v-show="p.showChampionTakenColumns && showChampionTakenBreakdown"
-              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 py-1"
             >
               <button
                 type="button"
@@ -1108,7 +1108,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             </div>
             <div
               v-show="p.showChampionTakenColumns && showChampionTakenBreakdown"
-              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="champion-global-stat-col tier-list-lolalytics-th tier-list-lolalytics-th-all flex min-h-8 flex-row items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 py-1"
             >
               <button
                 type="button"
@@ -1131,7 +1131,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             </div>
             <!-- KDA compact -->
             <div
-              class="champion-global-kda-col tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 flex-col items-stretch justify-center border-b border-black px-1 py-1"
+              class="champion-global-kda-col tier-list-lolalytics-th tier-list-lolalytics-th-all flex min-h-8 flex-col items-stretch justify-center border-b border-t border-black border-t-[var(--color-grey-300)] px-1 py-1"
             >
               <div class="text-center text-[10px] font-semibold leading-tight text-text/90">
                 K / D / A
@@ -1659,7 +1659,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
           <StatisticsRangePagination
             :page="p.championGlobalPage"
             :page-size="p.championsPageSize"
-            class="border-p.t border-primary/20 px-4 py-2 text-sm text-text/80"
+            class="border-t border-primary/20 px-4 py-2 text-sm text-text/80"
             :total-count="p.totalChampionGlobalCount"
             :total-pages="p.totalChampionGlobalPages"
             @update:page="p.onChampionGlobalPageUpdated"

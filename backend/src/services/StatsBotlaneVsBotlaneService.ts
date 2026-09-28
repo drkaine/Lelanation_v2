@@ -7,6 +7,7 @@ import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
 import { deltaToMatchupBaseScore } from './MatchupTierService.js'
 import { assignTiersFromNotes, type LolalyticsTier } from './tierListAssign.js'
+import { sqlLiteral } from '../stats/sqlLiteral.js'
 
 export type BotlaneVsTier = LolalyticsTier
 
@@ -21,10 +22,10 @@ function buildBdMatchCond(version?: string | string[] | null, rankTier?: string 
     .filter((r) => r && r !== 'ALL' && r !== '*')
   if (versions.length === 1) {
     parts.push(
-      `bd.game_version LIKE '${normalizePatchMajorMinor(versions[0]!).replace(/'/g, "''")}%'`,
+      `bd.game_version LIKE '${sqlLiteral(normalizePatchMajorMinor(versions[0]!))}%'`,
     )
   } else if (versions.length > 1) {
-    parts.push(`bd.game_version IN (${versions.map((v) => `'${v.replace(/'/g, "''")}'`).join(',')})`)
+    parts.push(`bd.game_version IN (${versions.map((v) => `'${sqlLiteral(v)}'`).join(',')})`)
   }
   if (ranks.length === 1) parts.push(`bd.rank_tier = '${ranks[0]}'`)
   else if (ranks.length > 1) parts.push(`bd.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`)

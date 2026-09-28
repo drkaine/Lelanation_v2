@@ -210,31 +210,31 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             >
               <button
                 type="button"
-                class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t hidden w-10 shrink-0 cursor-pointer items-center justify-center whitespace-nowrap border-b border-black text-center hover:bg-primary/25 md:flex"
+                class="tier-list-lolalytics-th tier-list-lolalytics-th-all hidden w-10 shrink-0 cursor-pointer items-center justify-center whitespace-nowrap border-b border-t border-black text-center hover:bg-primary/25 md:flex"
                 :class="
                   p.tierListSortColumn === 'rank'
-                    ? 'border-p.t-accent'
-                    : 'border-p.t-[var(--color-grey-300)]'
+                    ? 'border-t-accent'
+                    : 'border-t-[var(--color-grey-300)]'
                 "
                 @click="p.cycleTierListSort('rank')"
               >
                 {{ p.t('statisticsPage.tierListRank') }}{{ p.tierListSortIcon('rank') }}
               </button>
               <div
-                class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[220px] shrink-0 items-center justify-start border-b border-black px-2 max-lg:w-[56px] max-lg:justify-center max-lg:px-0.5"
+                class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[220px] shrink-0 items-center justify-start border-b border-t border-black border-t-[var(--color-grey-300)] px-2 max-lg:w-[56px] max-lg:justify-center max-lg:px-0.5"
               >
                 <span class="max-lg:hidden">{{ p.t('statisticsPage.tierListColChampion') }}</span>
               </div>
               <button
                 type="button"
-                class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-10 shrink-0 cursor-pointer items-center justify-center border-b border-black hover:bg-primary/25 max-lg:w-auto max-lg:px-1"
+                class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-10 shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25 max-lg:w-auto max-lg:px-1"
                 :title="p.t('statisticsPage.tierListTierTooltip')"
                 @click="p.cycleTierListSort('tier')"
               >
                 {{ p.t('statisticsPage.tierListTier') }}{{ p.tierListSortIcon('tier') }}
               </button>
               <div
-                class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-10 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1 max-lg:w-auto max-lg:px-1"
+                class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex min-h-8 w-10 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 py-1 max-lg:w-auto max-lg:px-1"
               >
                 <button
                   type="button"
@@ -255,7 +255,7 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
                 </button>
               </div>
               <div
-                class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1 max-lg:w-auto max-lg:px-1"
+                class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 py-1 max-lg:w-auto max-lg:px-1"
               >
                 <button
                   type="button"
@@ -276,7 +276,7 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
                 </button>
               </div>
               <div
-                class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1 max-lg:w-auto max-lg:px-1"
+                class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 py-1 max-lg:w-auto max-lg:px-1"
               >
                 <button
                   type="button"
@@ -297,7 +297,7 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
                 </button>
               </div>
               <div
-                class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] hidden min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1 md:flex"
+                class="tier-list-lolalytics-th tier-list-lolalytics-th-all hidden min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 py-1 md:flex"
               >
                 <button
                   type="button"
@@ -318,7 +318,7 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
                 </button>
               </div>
               <div
-                class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] hidden min-h-8 w-[72px] shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1 sm:flex"
+                class="tier-list-lolalytics-th tier-list-lolalytics-th-all hidden min-h-8 w-[72px] shrink-0 flex-row items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 py-1 sm:flex"
               >
                 <button
                   type="button"
@@ -339,7 +339,7 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
               </div>
               <template v-if="p.hasTierListHighElo">
                 <div
-                  class="tier-list-lolalytics-th tier-list-lolalytics-th-apex border-p.t border-p.t-[var(--color-grey-300)] hidden min-h-8 w-10 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1 text-[rgb(var(--rgb-gold-100))] sm:flex"
+                  class="tier-list-lolalytics-th tier-list-lolalytics-th-apex hidden min-h-8 w-10 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 py-1 text-[rgb(var(--rgb-gold-100))] sm:flex"
                 >
                   <button
                     type="button"
@@ -361,7 +361,7 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
                   </button>
                 </div>
                 <div
-                  class="tier-list-lolalytics-th tier-list-lolalytics-th-apex border-p.t border-p.t-[var(--color-grey-300)] hidden min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1 text-[rgb(var(--rgb-gold-100))] sm:flex"
+                  class="tier-list-lolalytics-th tier-list-lolalytics-th-apex hidden min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 py-1 text-[rgb(var(--rgb-gold-100))] sm:flex"
                 >
                   <button
                     type="button"
@@ -382,7 +382,7 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
                   </button>
                 </div>
                 <div
-                  class="tier-list-lolalytics-th tier-list-lolalytics-th-apex border-p.t border-p.t-[var(--color-grey-300)] hidden min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1 text-[rgb(var(--rgb-gold-100))] sm:flex"
+                  class="tier-list-lolalytics-th tier-list-lolalytics-th-apex hidden min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 py-1 text-[rgb(var(--rgb-gold-100))] sm:flex"
                 >
                   <button
                     type="button"
@@ -404,7 +404,7 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
                 </div>
                 <button
                   type="button"
-                  class="tier-list-lolalytics-th tier-list-lolalytics-th-apex border-p.t border-p.t-[var(--color-grey-300)] hidden w-12 shrink-0 cursor-pointer items-center justify-center border-b border-black text-[rgb(var(--rgb-gold-100))] hover:bg-primary/25 sm:flex"
+                  class="tier-list-lolalytics-th tier-list-lolalytics-th-apex hidden w-12 shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] text-[rgb(var(--rgb-gold-100))] hover:bg-primary/25 sm:flex"
                   :title="p.t('statisticsPage.tierListDeltaTooltip')"
                   @click="p.cycleTierListSort('delta')"
                 >
@@ -637,7 +637,7 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
         <StatisticsRangePagination
           v-model:page="p.tierListPage"
           v-model:page-size="p.tierListPageSizeModel"
-          class="border-p.t rounded-lg border border-primary/20 bg-surface/20 px-4 py-2 text-sm text-text/80 md:rounded-none md:border-x-0 md:border-b-0 md:bg-transparent"
+          class="rounded-lg border border-t border-primary/20 bg-surface/20 px-4 py-2 text-sm text-text/80 md:rounded-none md:border-x-0 md:border-b-0 md:bg-transparent"
           :total-count="p.totalTierListCount"
           :total-pages="p.totalTierListPages"
         >

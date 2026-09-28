@@ -11,6 +11,7 @@ import {
   toQueryStringArrayParam,
 } from '../utils/statsFilters.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor, sqlAggUnionAllLiveAndArchives } from './statsAggArchive.js'
+import { sqlLiteral } from '../stats/sqlLiteral.js'
 
 /** WHERE pour tables partitionnées champion_* (patch → game_version dans les fragments agg). */
 export function buildChampionScopedWhere(
@@ -31,7 +32,7 @@ export function buildChampionScopedWhere(
   const roleDb = normalizeStatsRoleForChampion(opts.role ?? null)
   if (roleDb) parts.push(`${alias}.role = '${statsRoleSqlLiteral(roleDb)}'`)
   const region = opts.region?.trim()
-  if (region) parts.push(`${alias}.region = '${region.replace(/'/g, "''")}'`)
+  if (region) parts.push(`${alias}.region = '${sqlLiteral(region)}'`)
   return parts.join(' AND ')
 }
 
@@ -64,9 +65,9 @@ export function buildRawMatchCond(
   const parts: string[] = []
   const versions = toQueryStringArrayParam(version)
   if (versions.length === 1)
-    parts.push(`m.game_version LIKE '${normalizePatchMajorMinor(versions[0]!).replace(/'/g, "''")}%'`)
+    parts.push(`m.game_version LIKE '${sqlLiteral(normalizePatchMajorMinor(versions[0]!))}%'`)
   else if (versions.length > 1)
-    parts.push(`m.game_version IN (${versions.map((v) => `'${v.replace(/'/g, "''")}'`).join(',')})`)
+    parts.push(`m.game_version IN (${versions.map((v) => `'${sqlLiteral(v)}'`).join(',')})`)
   parts.push(...buildRankTierSqlConditions('m', rankTier))
   return parts.length > 0 ? parts.join(' AND ') : '1=1'
 }
@@ -222,7 +223,7 @@ export async function getChampionGlobalTable(
                 ? [roleFilter]
                 : []
   const roleFilterSqlValueList =
-    roleFilterValues.length > 0 ? roleFilterValues.map((r) => `'${r.replace(/'/g, "''")}'`).join(',') : ''
+    roleFilterValues.length > 0 ? roleFilterValues.map((r) => `'${sqlLiteral(r)}'`).join(',') : ''
 
   const matchCount = await sumMatchOutcomeCountUnionLiveArchive(version, rankTier)
   if (matchCount === 0) {

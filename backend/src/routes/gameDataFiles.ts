@@ -1,8 +1,7 @@
 import { join } from 'path'
 import { promises as fs } from 'fs'
 import { Result } from '../utils/Result.js'
-import type { AppError } from '../utils/errors.js'
-import { NotFoundError } from '../utils/errors.js'
+import { NotFoundError, type AppError } from '../utils/errors.js'
 import { FileManager } from '../utils/fileManager.js'
 
 type JsonResult = ReturnType<typeof FileManager.readJson>
@@ -33,6 +32,11 @@ async function readCachedJson(filePath: string): JsonResult {
   }
 }
 
+/** Missing file (`FileManager` code) or `NotFoundError`: 404 rather than 500. */
+export function isGameDataNotFound(error: AppError): boolean {
+  return error instanceof NotFoundError || error.code === 'FILE_NOT_FOUND'
+}
+
 /**
  * Try to read JSON file from backend, fallback to frontend public directory
  * This allows the API to work even after backend data is deleted (saves disk space)
@@ -57,7 +61,7 @@ export async function readVersionedGameData(
       join(dirs.backendDir, version, language, file),
       join(dirs.frontendDir, version, language, file)
     )
-    if (result.isOk() || !(result.unwrapErr() instanceof NotFoundError)) return result
+    if (result.isOk() || !isGameDataNotFound(result.unwrapErr())) return result
   }
   return result!
 }

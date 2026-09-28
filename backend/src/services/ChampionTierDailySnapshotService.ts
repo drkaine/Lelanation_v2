@@ -4,7 +4,7 @@
  */
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
 import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
-import { snapshotFilterSql, snapshotRankTiers } from '../stats/snapshotFilterSql.js'
+import { snapshotFilterSql, snapshotRankTiers, snapshotRole } from '../stats/snapshotFilterSql.js'
 
 type Logger = ReturnType<typeof createRiotPollerLogger>
 
@@ -81,12 +81,7 @@ export async function getChampionTierSnapshotsForCharts(options: {
   if (!isDatabaseConfigured()) return []
   const { championId, fromDate, toDate, limit = 365 } = options
   const rankTiers = snapshotRankTiers(options.rankTier)
-  let role = options.role
-  if (role && role.toUpperCase() === 'SUPPORT') role = 'UTILITY'
-  if (role && role.toUpperCase() === 'MID') role = 'MIDDLE'
-  if (role && role.toUpperCase() === 'ADC') role = 'BOTTOM'
-
-  const normRole = role ? role.toUpperCase().replace(/'/g, "''") : null
+  const normRole = snapshotRole(options.role)
 
   const cohortWhere = buildSnapshotFilterSql({
     championId: null,

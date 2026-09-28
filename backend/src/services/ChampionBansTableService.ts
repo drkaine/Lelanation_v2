@@ -5,6 +5,7 @@
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
 import { buildRawMatchCond, sumMatchOutcomeCountUnionLiveArchive } from './ChampionGlobalTableService.js'
 import { matchVersionedAggFrom } from './statsAggArchive.js'
+import { sqlLiteral } from '../stats/sqlLiteral.js'
 
 export type ChampionBansTableRow = {
   championId: number
@@ -56,7 +57,7 @@ export async function getChampionBansTable(
           FROM ${csFrom}
           WHERE cs.champion_id = mv.banned_champion_id
             AND ${buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'cs.')}
-            AND upper(cs.role::text) = '${roleFilter.replace(/'/g, "''")}'
+            AND upper(cs.role::text) = '${sqlLiteral(roleFilter)}'
             AND cs.count_game > 0
         )`
       : ''

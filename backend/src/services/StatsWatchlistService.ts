@@ -2,6 +2,7 @@
  * Watchlist / recap: deltas between UTC snapshot days from `champion_tier_daily_snapshots`.
  */
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
+import { sqlLiteral } from '../stats/sqlLiteral.js'
 
 export interface WatchlistBucketStats {
   dateOfGame: string
@@ -62,9 +63,9 @@ function buildFilterSql(params: {
   if (params.championId != null && Number.isFinite(params.championId)) {
     parts.push(`${a}.champion_id = ${params.championId}`)
   }
-  if (params.role) parts.push(`${a}.role = '${params.role.replace(/'/g, "''")}'`)
+  if (params.role) parts.push(`${a}.role = '${sqlLiteral(params.role)}'`)
   if (params.rankTier) {
-    parts.push(`split_part(upper(trim(${a}.rank_tier::text)), '_', 1) = '${params.rankTier.replace(/'/g, "''")}'`)
+    parts.push(`split_part(upper(trim(${a}.rank_tier::text)), '_', 1) = '${sqlLiteral(params.rankTier)}'`)
   }
   return parts.join(' AND ')
 }
@@ -134,7 +135,7 @@ async function fetchBucketForDate(params: {
       SUM(s.wins)::int AS wins,
       SUM(s.count_ban)::int AS count_ban
     FROM champion_tier_daily_snapshots s
-    WHERE s.date_of_game = '${params.dateStr.replace(/'/g, "''")}'::date
+    WHERE s.date_of_game = '${sqlLiteral(params.dateStr)}'::date
       AND ${where}
   `)
   const agg = aggregateFromRows(rows)

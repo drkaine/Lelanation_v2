@@ -5,6 +5,7 @@ import { queryRawUnsafe } from '../db/query.js'
 import { isDatabaseConfigured } from '../db/query.js'
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
+import { sqlLiteral } from '../stats/sqlLiteral.js'
 
 export interface MatchupRow {
   opponentChampionId: number
@@ -34,13 +35,13 @@ export async function getMatchupsByChampion(
 
     const filters: string[] = [`champion_id = ${championId}`]
     const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
-    if (ranks.length === 1) filters.push(`rank_tier = '${ranks[0].replace(/'/g, "''")}'`)
+    if (ranks.length === 1) filters.push(`rank_tier = '${sqlLiteral(ranks[0])}'`)
     else if (ranks.length > 1) {
-      filters.push(`rank_tier IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`)
+      filters.push(`rank_tier IN (${ranks.map((r) => `'${sqlLiteral(r)}'`).join(',')})`)
     }
-    if (pRole) filters.push(`role = '${pRole.replace(/'/g, "''")}'`)
-    if (pVersion) filters.push(`game_version LIKE '${normalizePatchMajorMinor(pVersion).replace(/'/g, "''")}%'`)
-    if (pRegion) filters.push(`region = '${pRegion.replace(/'/g, "''")}'`)
+    if (pRole) filters.push(`role = '${sqlLiteral(pRole)}'`)
+    if (pVersion) filters.push(`game_version LIKE '${sqlLiteral(normalizePatchMajorMinor(pVersion))}%'`)
+    if (pRegion) filters.push(`region = '${sqlLiteral(pRegion)}'`)
     const whereSql = filters.join(' AND ')
 
     const vsFrom = await matchVersionedAggFrom('agg_champion_vs_stats', pVersion, 'vs')

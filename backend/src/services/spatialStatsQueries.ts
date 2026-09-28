@@ -1,4 +1,5 @@
 import { sql } from "../db/client.js";
+import { junglePathSequence } from "./junglePathSequence.js";
 
 export type JunglePathRow = {
   championId: number;
@@ -30,7 +31,7 @@ export async function queryJunglePaths(args: {
       patch: string;
       queue_id: number;
       team_id: number;
-      path_sequence: string[];
+      path_sequence: unknown;
       path_hash: string;
       games: number;
       wins: number;
@@ -42,9 +43,7 @@ export async function queryJunglePaths(args: {
       m.patch,
       m.queue_id,
       p.team_id,
-      ARRAY(
-        SELECT jsonb_array_elements_text(p.jungle_camp_history->'early_path'->'path_sequence')
-      ) AS path_sequence,
+      p.jungle_camp_history->'early_path'->'path_sequence' AS path_sequence,
       p.jungle_camp_history->'early_path'->>'path_hash' AS path_hash,
       COUNT(*)::int AS games,
       SUM(CASE WHEN p.win THEN 1 ELSE 0 END)::int AS wins,
@@ -76,7 +75,7 @@ export async function queryJunglePaths(args: {
       patch: String(row.patch),
       queueId: Number(row.queue_id),
       teamId: Number(row.team_id),
-      pathSequence: row.path_sequence ?? [],
+      pathSequence: junglePathSequence(row.path_sequence),
       pathHash: String(row.path_hash),
       games,
       wins,

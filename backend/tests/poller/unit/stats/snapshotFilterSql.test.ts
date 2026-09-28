@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { snapshotFilterSql, snapshotRankTiers } from '../../../../src/stats/snapshotFilterSql.js'
+import { snapshotFilterSql, snapshotRankTiers, snapshotRole } from '../../../../src/stats/snapshotFilterSql.js'
 
 const TIER = "split_part(upper(trim(s.rank_tier::text)), '_', 1)"
 
@@ -34,5 +34,16 @@ describe('snapshotFilterSql', () => {
     expect(snapshotFilterSql({ alias: 'item', rankTiers: ['GOLD'] })).toBe(
       `1=1 AND split_part(upper(trim(item.rank_tier::text)), '_', 1) = 'GOLD'`
     )
+  })
+})
+
+describe('snapshotRole', () => {
+  it('normalizes to the snapshot role values', () => {
+    expect(snapshotRole('support')).toBe('UTILITY')
+    expect(snapshotRole('MID')).toBe('MIDDLE')
+    expect(snapshotRole('adc')).toBe('BOTTOM')
+    expect(snapshotRole('JUNGLE')).toBe('JUNGLE')
+    expect(snapshotRole(null)).toBeNull()
+    expect(snapshotRole('')).toBeNull()
   })
 })

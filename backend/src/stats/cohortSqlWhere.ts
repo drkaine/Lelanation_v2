@@ -4,8 +4,7 @@ import {
   statsRoleSqlLiteral,
   toQueryStringArrayParam,
 } from '../utils/statsFilters.js'
-
-const sqlLiteral = (s: string) => s.replace(/'/g, "''")
+import { sqlLiteral } from './sqlLiteral.js'
 
 /**
  * WHERE of a stats cohort on `alias` (`1=1` without filters): champion, rank tiers

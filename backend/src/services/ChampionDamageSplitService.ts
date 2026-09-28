@@ -2,9 +2,10 @@ import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
 import { buildChampionScopedWhere } from './ChampionGlobalTableService.js'
 import { toQueryStringArrayParam, normalizeStatsRoleForChampion } from '../utils/statsFilters.js'
 import { matchVersionedAggFrom } from './statsAggArchive.js'
+import { sqlLiteral } from '../stats/sqlLiteral.js'
 
 function esc(v: string): string {
-  return v.replace(/'/g, "''")
+  return sqlLiteral(v)
 }
 
 export async function getChampionDamageSplit(

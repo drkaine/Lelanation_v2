@@ -2,8 +2,12 @@ import { Router, type Request, type Response } from 'express'
 import { join } from 'path'
 import { FileManager } from '../utils/fileManager.js'
 import { VersionService } from '../services/VersionService.js'
-import { NotFoundError } from '../utils/errors.js'
-import { readGameDataFile, readVersionedGameData, type GameDataDirs } from './gameDataFiles.js'
+import {
+  isGameDataNotFound,
+  readGameDataFile,
+  readVersionedGameData,
+  type GameDataDirs,
+} from './gameDataFiles.js'
 
 const router = Router()
 const versionService = new VersionService()
@@ -30,7 +34,7 @@ function sendGameData(
   messages: { notFound: string; failed: string }
 ) {
   if (readResult.isErr()) {
-    if (readResult.unwrapErr() instanceof NotFoundError) {
+    if (isGameDataNotFound(readResult.unwrapErr())) {
       return res.status(404).json({ error: messages.notFound })
     }
     return res.status(500).json({ error: messages.failed })

@@ -167,7 +167,7 @@ function deltaClass(cur: number, old: number | undefined): string {
   return 'text-text/55'
 }
 
-/** Plancher de parties pour les cartes sets — adapté au volume filtré (comme ItemStatsFastSection). */
+/** Plancher de parties pour les cartes sets — adapté au volume filtré. */
 function runeSetsValidForHighlights(
   sets: NonNullable<RunesDetailPayload['runeSets']>,
   totalParticipants: number

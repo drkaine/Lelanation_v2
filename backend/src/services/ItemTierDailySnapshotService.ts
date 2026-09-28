@@ -2,8 +2,8 @@
  * Séries quotidiennes item depuis `item_tier_daily_snapshots` (ingestion poller).
  */
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
-import { itemTierRoleBucket } from '../parsers/itemTierDailySnapshotRole.js'
-import { snapshotFilterSql, snapshotRankTiers } from '../stats/snapshotFilterSql.js'
+import { itemCohortRoleFilter, itemRoleSum } from '../stats/itemSnapshotRoleSql.js'
+import { snapshotFilterSql, snapshotRankTiers, snapshotRole } from '../stats/snapshotFilterSql.js'
 
 export interface ItemTierSnapshotRow {
   dateOfGame: string
@@ -34,30 +34,6 @@ function buildItemSnapshotFilterSql(options: {
   })
 }
 
-function buildCohortRoleFilter(role: string | null | undefined, alias: string): string {
-  const bucket = role ? itemTierRoleBucket(role) : null
-  if (!bucket) return 'TRUE'
-  const col = bucket === 'mid' ? 'MIDDLE' : bucket === 'adc' ? 'BOTTOM' : bucket.toUpperCase()
-  if (col === 'TOP') return `${alias}.role = 'TOP'`
-  if (col === 'JUNGLE') return `${alias}.role = 'JUNGLE'`
-  if (col === 'MIDDLE') return `${alias}.role = 'MIDDLE'`
-  if (col === 'BOTTOM') return `${alias}.role = 'BOTTOM'`
-  if (col === 'SUPPORT' || col === 'UTILITY') return `${alias}.role = 'UTILITY'`
-  return 'TRUE'
-}
-
-function itemGamesExpr(role: string | null | undefined, alias: string): string {
-  const bucket = role ? itemTierRoleBucket(role) : null
-  if (!bucket) return `COALESCE(SUM(${alias}.games), 0)`
-  return `COALESCE(SUM(${alias}.${bucket}_game), 0)`
-}
-
-function itemWinsExpr(role: string | null | undefined, alias: string): string {
-  const bucket = role ? itemTierRoleBucket(role) : null
-  if (!bucket) return `COALESCE(SUM(${alias}.wins), 0)`
-  return `COALESCE(SUM(${alias}.${bucket}_win), 0)`
-}
-
 export async function getItemTierSnapshotsForCharts(options: {
   itemId: number
   rankTier?: string | string[] | null
@@ -69,11 +45,7 @@ export async function getItemTierSnapshotsForCharts(options: {
   if (!isDatabaseConfigured()) return []
   const { itemId, fromDate, toDate, limit = 365 } = options
   const rankTiers = snapshotRankTiers(options.rankTier)
-  let role = options.role
-  if (role && role.toUpperCase() === 'SUPPORT') role = 'UTILITY'
-  if (role && role.toUpperCase() === 'MID') role = 'MIDDLE'
-  if (role && role.toUpperCase() === 'ADC') role = 'BOTTOM'
-  const normRole = role ? role.toUpperCase().replace(/'/g, "''") : null
+  const normRole = snapshotRole(options.role)
 
   const cohortWhere = buildItemSnapshotFilterSql({
     itemId: null,
@@ -89,9 +61,9 @@ export async function getItemTierSnapshotsForCharts(options: {
     toDate,
     alias: 'item',
   })
-  const cohortRoleFilter = buildCohortRoleFilter(normRole, 'cohort')
-  const gamesExpr = itemGamesExpr(normRole, 'item')
-  const winsExpr = itemWinsExpr(normRole, 'item')
+  const cohortRoleFilter = itemCohortRoleFilter(normRole, 'cohort')
+  const gamesExpr = itemRoleSum(normRole, 'item', 'games')
+  const winsExpr = itemRoleSum(normRole, 'item', 'wins')
 
   const rows = await queryRawUnsafe<
     Array<{
