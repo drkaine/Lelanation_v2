@@ -1992,7 +1992,10 @@
     "spellsCasts": "Casts",
     "spellsTooltipCasts": "Total number of spell casts (or Cast1/Cast2 for pairs).",
     "spellsTooltipDeltaCasts": "Cast difference vs reference patch (or ΔCast1/ΔCast2 for pairs).",
-    "tierListPatchDeltaRankTitle": "Rank change vs patch {ref} (positive = improvement)"
+    "tierListPatchDeltaRankTitle": "Rank change vs patch {ref} (positive = improvement)",
+    "championSpellOrderRecapTitle": "Skill order",
+    "itemStatsOpenDetail": "Open item details",
+    "itemsColumn": "Item"
   },
   "stats": {
     "title": "Statistics",
@@ -2497,7 +2500,8 @@
     "imageCopied": "Image copied to clipboard.",
     "imageCopyError": "Unable to copy to clipboard.",
     "anonymous": "Anonymous",
-    "importInCompanion": "Import into client (Companion)"
+    "importInCompanion": "Import into client (Companion)",
+    "shareError": "Could not copy the link. Try again."
   },
   "buildDetailPage": {
     "tabGuide": "Guide",

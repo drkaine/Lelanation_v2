@@ -62,7 +62,7 @@ export function useMatchupSheetsIndexPage(
 
   usePageOgImage({
     title: () => t('matchupGuidePage.metaTitle'),
-    subtitle: () => t('matchupGuidePage.subtitle'),
+    subtitle: () => t('matchupGuidePage.metaDescription'),
   })
 
   useAsyncData(

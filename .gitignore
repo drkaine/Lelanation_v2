@@ -76,3 +76,6 @@ harnessForge/
 CLAUDE.md
 CLAUDE.md.harness
 .claude/settings.json
+
+# Actions à faire par le développeur (clés, domaines, commandes) : locales
+/actions.md

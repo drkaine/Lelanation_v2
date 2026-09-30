@@ -1992,7 +1992,10 @@
     "championObjective_inhibitor": "Inhibiteur",
     "spellsCasts": "Casts",
     "spellsTooltipCasts": "Nombre total de casts du sort (ou Cast1/Cast2 pour les paires).",
-    "spellsTooltipDeltaCasts": "Écart de casts vs patch de référence (ou ΔCast1/ΔCast2 pour les paires)."
+    "spellsTooltipDeltaCasts": "Écart de casts vs patch de référence (ou ΔCast1/ΔCast2 pour les paires).",
+    "championSpellOrderRecapTitle": "Ordre des compétences",
+    "itemStatsOpenDetail": "Voir le détail de l'objet",
+    "itemsColumn": "Objet"
   },
   "stats": {
     "title": "Statistiques",
@@ -2497,7 +2500,8 @@
     "imageCopied": "Image copiée dans le presse-papiers.",
     "imageCopyError": "Impossible de copier dans le presse-papiers.",
     "anonymous": "Anonyme",
-    "importInCompanion": "Importer dans le client (Companion)"
+    "importInCompanion": "Importer dans le client (Companion)",
+    "shareError": "Impossible de copier le lien. Réessaie."
   },
   "buildDetailPage": {
     "tabGuide": "Guide",
