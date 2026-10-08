@@ -5,6 +5,7 @@
     class="theorycraft-item-passive-toggle"
     :class="{ 'theorycraft-item-passive-toggle--active': isActive }"
     :title="toggleTitle"
+    :disabled="readonly"
     @click.stop="toggle"
   >
     {{ t('theorycraft.items.passiveActive') }}
@@ -12,9 +13,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, inject } from 'vue'
 import { useBuildStore } from '~/stores/BuildStore'
 import { getTheorycraftActivatableItemPassiveConfig } from '~/utils/theorycraftItemPassives'
+import { THEORYCRAFT_ITEM_STATE_KEY } from '~/utils/theorycraftItemState'
 
 const props = defineProps<{
   index: number
@@ -26,7 +28,15 @@ const buildStore = useBuildStore()
 
 const config = computed(() => getTheorycraftActivatableItemPassiveConfig(props.itemId))
 
-const isActive = computed(() => Boolean(buildStore.theorycraftActiveItemPassives[props.index]))
+/** Inactive vs card: shows its own side's state, read only (the store holds the active side). */
+const sideState = inject(THEORYCRAFT_ITEM_STATE_KEY, null)
+const readonly = computed(() => Boolean(sideState?.value))
+
+const isActive = computed(() =>
+  Boolean(
+    (sideState?.value?.activePassives ?? buildStore.theorycraftActiveItemPassives)[props.index]
+  )
+)
 
 const toggleTitle = computed(() => {
   if (!config.value) return ''

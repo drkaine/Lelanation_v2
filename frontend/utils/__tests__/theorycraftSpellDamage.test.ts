@@ -101,6 +101,42 @@ describe('parseTooltipDamageParts', () => {
     expect(parseTooltipDamageParts(tooltip)[1]?.scaling).toBe('maxHp')
   })
 
+  it('counts a second hit of the same damage (Morgana R, en)', () => {
+    const tooltip =
+      'dealing <magicDamage>{{ totaldamage }} magic damage</magicDamage> and Slowing them. After {{ chainduration }} seconds, enemies unable to break the chains take an additional <magicDamage>{{ totaldamage }} magic damage</magicDamage> and are Stunned.'
+    expect(parseTooltipDamageParts(tooltip).map(part => part.key)).toEqual([
+      'totaldamage',
+      'totaldamage',
+    ])
+  })
+
+  it('counts a second hit of the same damage (Morgana R, fr)', () => {
+    const tooltip =
+      "leur infligeant <magicDamage>{{ totaldamage }} pts de dégâts magiques</magicDamage>. Au bout de {{ chainduration }} sec, les ennemis qui n'ont pas brisé leurs chaînes subissent <magicDamage>{{ totaldamage }} pts de dégâts magiques</magicDamage> supplémentaires."
+    expect(parseTooltipDamageParts(tooltip)).toHaveLength(2)
+  })
+
+  it('counts French "bonus" and "quand la zone disparaît" second hits (Poppy E, Soraka E)', () => {
+    const poppy =
+      "lui infligeant <physicalDamage>{{ tackledamage }} pts de dégâts physiques</physicalDamage>. Si Poppy le plaque contre un obstacle, l'ennemi subit <physicalDamage>{{ tackledamage }} pts de dégâts physiques</physicalDamage> bonus."
+    const soraka =
+      'qui inflige <magicDamage>{{ totaldamage }} pts de dégâts magiques</magicDamage> aux champions. Quand la zone disparaît, les champions sont immobilisés et subissent <magicDamage>{{ totaldamage }} pts de dégâts magiques</magicDamage>.'
+    expect(parseTooltipDamageParts(poppy)).toHaveLength(2)
+    expect(parseTooltipDamageParts(soraka)).toHaveLength(2)
+  })
+
+  it('counts a recast that deals the same damage again', () => {
+    const tooltip =
+      'deals <physicalDamage>{{ qdamage }} physical damage</physicalDamage>. Recast: dash back, dealing <physicalDamage>{{ qdamage }} physical damage</physicalDamage>.'
+    expect(parseTooltipDamageParts(tooltip)).toHaveLength(2)
+  })
+
+  it('does not double a damage merely restated', () => {
+    const tooltip =
+      'deals <magicDamage>{{ totaldamage }} magic damage</magicDamage>. Champions hit take <magicDamage>{{ totaldamage }} magic damage</magicDamage>.'
+    expect(parseTooltipDamageParts(tooltip)).toHaveLength(1)
+  })
+
   it('returns nothing without damage tags', () => {
     expect(parseTooltipDamageParts('Gain {{ bonusms }} Move Speed')).toEqual([])
   })
@@ -129,6 +165,26 @@ describe('resolveDamageProfile + evaluateDamageProfile', () => {
     expect(evaluateDamageProfile(profile, { maxHp: 2000, currentHp: 2000 }).true).toBeCloseTo(125)
     expect(evaluateDamageProfile(profile, { maxHp: 2000, currentHp: 1000 }).true).toBeCloseTo(
       125 + 250
+    )
+  })
+
+  it('Morgana R sums both chain hits', () => {
+    const morganaR = {
+      calculations: [
+        {
+          key: 'totaldamage',
+          baseValues: [200, 275, 350],
+          ratios: [{ stat: 'AP', coefficient: [0.8], type: 'magic' }],
+        },
+      ],
+      dataValues: [],
+    }
+    const parts = parseTooltipDamageParts(
+      'dealing <magicDamage>{{ totaldamage }} magic damage</magicDamage>. After 3 seconds, enemies take an additional <magicDamage>{{ totaldamage }} magic damage</magicDamage>.'
+    )
+    const profile = resolveDamageProfile(morganaR, parts, 0, () => 100)
+    expect(evaluateDamageProfile(profile, { maxHp: 2000, currentHp: 2000 }).magic).toBeCloseTo(
+      2 * (200 + 80)
     )
   })
 

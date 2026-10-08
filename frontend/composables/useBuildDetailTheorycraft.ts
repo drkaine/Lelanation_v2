@@ -71,6 +71,7 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
     buildStore.activateTheorycraftMode()
     sideCalculatedStats.value.ally = vs.storeStatsSnapshot()
     vs.theorycraftLevel.value = buildStore.statsLevel
+    vs.sideLevels.value.ally = buildStore.statsLevel
   }
 
   function enter() {
@@ -127,10 +128,12 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
     activeSide,
     activePanel,
     sideBuilds,
+    inactiveItemStates: vs.inactiveItemStates,
     sideCalculatedStats,
     sideFlipped: vs.sideFlipped,
     sideBackFace: vs.sideBackFace,
     theorycraftLevel: vs.theorycraftLevel,
+    sideLevels: vs.sideLevels,
     championData: vs.championData,
     championId: vs.championId,
     maxChampionLevel: vs.maxChampionLevel,

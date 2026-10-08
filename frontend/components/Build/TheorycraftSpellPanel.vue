@@ -720,6 +720,13 @@ import {
   type ItemTarget,
 } from '~/utils/theorycraftItemEffects'
 import {
+  comboProcDamage,
+  createProcState,
+  registerProcHit,
+  type ProcContext,
+} from '~/utils/theorycraftProcs'
+import { listSelectedRuneIds } from '~/utils/theorycraftRuneModifiers'
+import {
   combineControlDurations,
   consumableHeal,
   defenderMitigation,
@@ -853,6 +860,8 @@ interface PendingHitEvent {
   bypassDefense?: boolean
   /** Heals the target instead of hitting it (potion ticks). */
   heal?: number
+  /** Rune / item proc: does not trigger other procs. */
+  proc?: boolean
 }
 
 type ExtraActionKind = 'ignite' | 'barrier' | 'heal' | 'potion'
@@ -954,6 +963,8 @@ const targetGrievousUntil = ref(0)
 const targetTempShields = ref<Array<{ amount: number; until: number }>>([])
 const championHitTimes = ref<number[]>([])
 const eclipseReadyAt = ref(0)
+/** Rune / item procs (Dark Harvest, Electrocute, Stormsurge…): plain state, read only by hits. */
+let procState = createProcState()
 
 function stackDefinitionForSpell(id: string, slot: string): TheorycraftStackDefinition | null {
   return findStackDefinitionForSource(stackDefinitions.value, { scope: 'spell', id, slot })
@@ -1105,6 +1116,7 @@ function resetSimulation() {
   targetTempShields.value = []
   championHitTimes.value = []
   eclipseReadyAt.value = 0
+  procState = createProcState()
   firstHitAt.value = null
   lastHitAt.value = null
   if (!hasVersusTarget()) {
@@ -1154,6 +1166,9 @@ function applyDamageToSimulation(
     isAttack?: boolean
     periodic?: boolean
     bypassDefense?: boolean
+    ability?: boolean
+    /** Rune / item proc: does not trigger other procs. */
+    proc?: boolean
   } = {}
 ) {
   const target = ensureSimulationState()
@@ -1178,8 +1193,9 @@ function applyDamageToSimulation(
       lifeSteal: Number(attackerRaw.value?.lifeSteal ?? 0),
       omnivamp: Number(attackerRaw.value?.omnivamp ?? 0),
     })
-    registerChampionHit()
+    if (!options.proc) registerChampionHit()
   }
+  if (!options.proc) triggerProcs(damage, options)
   const executed = applyExecute(target, options.executeBelow)
   if (executed.executed) {
     target.hp = 0
@@ -1234,6 +1250,55 @@ function queueDeathsDanceBleed(amount: number, sourceLabel: string) {
       slowCc: 0,
       periodic: true,
       bypassDefense: true,
+    })
+  }
+}
+
+/** Rune and item procs of the hit that just landed: immediate ones hit now, others are queued. */
+function procContext(): ProcContext {
+  return {
+    runeIds: listSelectedRuneIds((buildStore.displayedBuild ?? buildStore.currentBuild)?.runes),
+    itemIds: attackerItemIds.value,
+    attacker: itemAttacker(),
+    souls: Number(buildStore.theorycraftRuneStacks[8128] ?? 0),
+  }
+}
+
+function triggerProcs(
+  damage: number,
+  options: { isAttack?: boolean; periodic?: boolean; ability?: boolean }
+) {
+  const target = simulatedTarget.value
+  if (!target) return
+  const now = timelineNowSeconds.value
+  const procs = registerProcHit(
+    procState,
+    {
+      at: now,
+      damage,
+      isAttack: options.isAttack ?? false,
+      ability: options.ability ?? false,
+      periodic: options.periodic ?? false,
+      targetHp: target.hp,
+      targetMaxHp: targetMaxHp(),
+    },
+    procContext()
+  )
+  for (const proc of procs) {
+    const label = t(`theorycraft.practice.procs.${proc.id}`)
+    const split = mitigateRaw(proc.split)
+    if (proc.at <= now + 1e-6) {
+      applyDamageToSimulation(split, label, false, { proc: true, periodic: proc.periodic })
+      continue
+    }
+    queueHitEvent({
+      at: proc.at,
+      label,
+      split,
+      hardCc: 0,
+      slowCc: 0,
+      proc: true,
+      periodic: proc.periodic,
     })
   }
 }
@@ -1417,6 +1482,8 @@ function processPendingHitEvents() {
       isAttack: event.isAttack,
       periodic: event.periodic,
       bypassDefense: event.bypassDefense,
+      ability: event.ability,
+      proc: event.proc,
     })
     if (event.hardCc > 0) addControlWindow('hard', event.hardCc)
     if (event.slowCc > 0) addControlWindow('slow', event.slowCc)
@@ -2627,6 +2694,22 @@ const killRows = computed((): KillRow[] => {
       split: spell.damageVsSplit ?? null,
       hits: castsToKill(Math.max(0, hp - (spell.executeBelow ?? 0)), spell.damageVsChampion),
       spell,
+    })
+  }
+  const procs = comboProcDamage(procContext(), {
+    attacks: aa != null,
+    abilities: rows.some(row => row.key !== 'aa'),
+  })
+  for (const proc of procs) {
+    const split = mitigateRaw(proc.split)
+    const damage = sumSplit(split)
+    rows.push({
+      key: `proc-${proc.id}`,
+      slot: '+',
+      name: t(`theorycraft.practice.procs.${proc.id}`),
+      damage,
+      split,
+      hits: null,
     })
   }
   return rows

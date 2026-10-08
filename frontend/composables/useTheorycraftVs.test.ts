@@ -101,4 +101,100 @@ describe('useTheorycraftVs', () => {
     await nextTick()
     expect(vs.sideBuilds.value.ally?.name).toBe('edited again')
   })
+
+  it('keeps spell ranks, active spells and active item passives across side switches', () => {
+    const { store, vs } = setup()
+    // As the pages do on mount.
+    store.setTheorycraftStorageScope('scope-ally')
+    store.activateTheorycraftMode()
+    const context = (championId: string) =>
+      store.setTheorycraftStackContext({ championId, definitions: [], calculationsBySource: {} })
+    context('Morgana')
+    store.setTheorycraftSpellRank('MorganaQ', 4)
+    store.toggleTheorycraftActiveSpell('MorganaW')
+    store.toggleTheorycraftActiveItemPassive(0)
+
+    vs.activateSide('enemy')
+    context('Garen')
+    expect(store.theorycraftSpellRanks).toEqual({})
+    store.setTheorycraftSpellRank('GarenQ', 2)
+
+    vs.activateSide('ally')
+    context('Morgana')
+    expect(store.theorycraftSpellRanks).toEqual({ MorganaQ: 4 })
+    expect(store.theorycraftActiveSpells).toEqual({ MorganaW: true })
+    expect(store.theorycraftActiveItemPassives).toEqual({ 0: true })
+
+    vs.activateSide('enemy')
+    context('Garen')
+    expect(store.theorycraftSpellRanks).toEqual({ GarenQ: 2 })
+  })
+
+  it('keeps each side its own spell ranks in a mirror matchup', () => {
+    const { store, vs } = setup()
+    // As the pages do on mount.
+    store.setTheorycraftStorageScope('scope-ally')
+    store.activateTheorycraftMode()
+    const context = () =>
+      store.setTheorycraftStackContext({
+        championId: 'Ahri',
+        definitions: [],
+        calculationsBySource: {},
+      })
+    context()
+    store.setTheorycraftSpellRank('AhriQ', 5)
+    vs.activateSide('enemy')
+    context()
+    expect(store.theorycraftSpellRanks).toEqual({})
+    vs.activateSide('ally')
+    context()
+    expect(store.theorycraftSpellRanks).toEqual({ AhriQ: 5 })
+  })
+
+  it("gives the inactive card its own side's item state", () => {
+    const { store, vs } = setup()
+    // As the pages do on mount.
+    store.setTheorycraftStorageScope('scope-ally')
+    store.activateTheorycraftMode()
+    store.toggleTheorycraftActiveItemPassive(1)
+    store.setTheorycraftItemStacks(2, 12)
+    expect(vs.inactiveItemStates.value.ally).toBeNull()
+
+    vs.activateSide('enemy')
+    expect(store.theorycraftActiveItemPassives).toEqual({})
+    expect(vs.inactiveItemStates.value.enemy).toBeNull()
+    expect(vs.inactiveItemStates.value.ally).toEqual({
+      disabled: [],
+      stacks: { 2: 12 },
+      transformed: {},
+      activePassives: { 1: true },
+    })
+  })
+
+  it('keeps a level per side', () => {
+    const { store, vs } = setup()
+    const select = (value: number, side: 'ally' | 'enemy') =>
+      vs.onLevelSelectChange({ target: { value: String(value) } } as unknown as Event, side)
+
+    select(6, 'ally')
+    expect(store.statsLevel).toBe(6)
+    vs.activateSide('enemy')
+    expect(store.statsLevel).toBe(18)
+    expect(vs.sideLevels.value).toEqual({ ally: 6, enemy: 18 })
+
+    // The inactive card's select activates that card, the other side keeps its level.
+    select(9, 'ally')
+    expect(vs.activeSide.value).toBe('ally')
+    expect(store.statsLevel).toBe(9)
+    expect(vs.theorycraftLevel.value).toBe(9)
+    vs.activateSide('enemy')
+    expect(store.statsLevel).toBe(18)
+    expect(vs.sideLevels.value).toEqual({ ally: 9, enemy: 18 })
+  })
+
+  it('opens the champion list on the first click of a side without a champion', () => {
+    const { vs } = setup()
+    vs.activateSide('enemy')
+    expect(vs.activePanel.value).toBe('champion')
+  })
 })

@@ -86,6 +86,7 @@ import {
   type TheorycraftSpellRuntime,
 } from '~/utils/theorycraftSpellBuffs'
 import type { TheorycraftStackDefinition } from '~/types/theorycraft'
+import type { TheorycraftItemState } from '~/utils/theorycraftItemState'
 import type { TheorycraftSpellCalculation } from '~/composables/useTheorycraftTooltip'
 
 const CURRENT_BUILD_STORAGE_KEY = 'lelanation_current_build'
@@ -97,6 +98,8 @@ const THEORYCRAFT_ITEM_TRANSFORMED_STORAGE_KEY = 'lelanation_theorycraft_item_tr
 const THEORYCRAFT_RUNE_STACKS_STORAGE_KEY = 'lelanation_theorycraft_rune_stacks'
 const THEORYCRAFT_GAME_DURATION_STORAGE_KEY = 'lelanation_theorycraft_game_duration'
 const THEORYCRAFT_ACTIVE_ITEM_PASSIVES_STORAGE_KEY = 'lelanation_theorycraft_active_item_passives'
+/** Spell ranks and toggled spells, per champion, in the side's storage scope. */
+const THEORYCRAFT_SPELL_STATE_STORAGE_KEY = 'lelanation_theorycraft_spell_state'
 const BUILDER_STEP_STORAGE_KEY = 'lelanation_builder_step'
 
 let statsRecalcToken = 0
@@ -601,6 +604,10 @@ export const useBuildStore = defineStore('build', {
 
     reloadTheorycraftModifiers() {
       this.loadTheorycraftDisabledItems()
+      if (this.theorycraftStackChampionId) {
+        this.loadTheorycraftStacksForChampion(this.theorycraftStackChampionId)
+        this.loadTheorycraftSpellState(this.theorycraftStackChampionId)
+      }
       this.loadTheorycraftItemStacks()
       this.loadTheorycraftActiveItemPassives()
       this.loadTheorycraftRuneStacks()
@@ -681,6 +688,28 @@ export const useBuildStore = defineStore('build', {
         this.theorycraftActiveItemPassives = raw ? (JSON.parse(raw) as Record<number, boolean>) : {}
       } catch {
         this.theorycraftActiveItemPassives = {}
+      }
+    },
+
+    /** Item toggles stored for another scope (the inactive side of a vs session). */
+    readTheorycraftItemState(scope: string): TheorycraftItemState {
+      const read = <T>(baseKey: string, fallback: T): T => {
+        if (import.meta.server) return fallback
+        try {
+          const raw = localStorage.getItem(scopedTheorycraftStorageKey(baseKey, scope))
+          return raw ? (JSON.parse(raw) as T) : fallback
+        } catch {
+          return fallback
+        }
+      }
+      return {
+        disabled: read<number[]>(THEORYCRAFT_DISABLED_ITEMS_STORAGE_KEY, []),
+        stacks: read<Record<number, number>>(THEORYCRAFT_ITEM_STACKS_STORAGE_KEY, {}),
+        transformed: read<Record<number, boolean>>(THEORYCRAFT_ITEM_TRANSFORMED_STORAGE_KEY, {}),
+        activePassives: read<Record<number, boolean>>(
+          THEORYCRAFT_ACTIVE_ITEM_PASSIVES_STORAGE_KEY,
+          {}
+        ),
       }
     },
 
@@ -982,6 +1011,43 @@ export const useBuildStore = defineStore('build', {
       }
     },
 
+    loadTheorycraftSpellState(championId: string) {
+      this.theorycraftSpellRanks = {}
+      this.theorycraftActiveSpells = {}
+      if (import.meta.server) return
+      try {
+        const raw = localStorage.getItem(tcStorageKey(THEORYCRAFT_SPELL_STATE_STORAGE_KEY))
+        const parsed = raw
+          ? (JSON.parse(raw) as Record<
+              string,
+              { ranks?: Record<string, number>; active?: Record<string, boolean> }
+            >)
+          : {}
+        this.theorycraftSpellRanks = { ...(parsed[championId]?.ranks ?? {}) }
+        this.theorycraftActiveSpells = { ...(parsed[championId]?.active ?? {}) }
+      } catch {
+        // keep the empty state
+      }
+    },
+
+    persistTheorycraftSpellState() {
+      if (import.meta.server || this.builderSession !== 'theorycraft') return
+      const championId = this.theorycraftStackChampionId
+      if (!championId) return
+      try {
+        const key = tcStorageKey(THEORYCRAFT_SPELL_STATE_STORAGE_KEY)
+        const raw = localStorage.getItem(key)
+        const parsed = raw ? (JSON.parse(raw) as Record<string, unknown>) : {}
+        parsed[championId] = {
+          ranks: this.theorycraftSpellRanks,
+          active: this.theorycraftActiveSpells,
+        }
+        localStorage.setItem(key, JSON.stringify(parsed))
+      } catch {
+        // ignore persistence errors
+      }
+    },
+
     persistTheorycraftStacks() {
       if (this.builderSession !== 'theorycraft' || !this.theorycraftStackChampionId) return
       try {
@@ -1007,8 +1073,7 @@ export const useBuildStore = defineStore('build', {
       this.theorycraftChampionSpells = args.spells ?? []
       if (championChanged) {
         this.loadTheorycraftStacksForChampion(args.championId)
-        this.theorycraftActiveSpells = {}
-        this.theorycraftSpellRanks = {}
+        this.loadTheorycraftSpellState(args.championId)
       }
       this.recalculateStats()
     },
@@ -1017,6 +1082,7 @@ export const useBuildStore = defineStore('build', {
       if (this.builderSession !== 'theorycraft') return
       const safe = Math.max(1, Math.trunc(Number.isFinite(rank) ? rank : 1))
       this.theorycraftSpellRanks = { ...this.theorycraftSpellRanks, [spellId]: safe }
+      this.persistTheorycraftSpellState()
       this.recalculateStats()
     },
 
@@ -1025,6 +1091,7 @@ export const useBuildStore = defineStore('build', {
       const next = { ...this.theorycraftActiveSpells }
       next[spellId] = !next[spellId]
       this.theorycraftActiveSpells = next
+      this.persistTheorycraftSpellState()
       this.recalculateStats()
     },
 

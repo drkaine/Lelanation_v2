@@ -9,8 +9,8 @@ export function getTheorycraftStorageScope(): string {
   return currentScope
 }
 
-export function scopedTheorycraftStorageKey(baseKey: string): string {
-  return `${baseKey}__${currentScope}`
+export function scopedTheorycraftStorageKey(baseKey: string, scope = currentScope): string {
+  return `${baseKey}__${scope}`
 }
 
 export function theorycraftVsScope(sessionId: string, side: 'ally' | 'enemy'): string {

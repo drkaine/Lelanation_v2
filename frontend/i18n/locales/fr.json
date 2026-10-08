@@ -556,6 +556,16 @@
         "deathsDance": "Danse de la mort",
         "eclipse": "Éclipse",
         "opponent": "adversaire"
+      },
+      "procs": {
+        "darkHarvest": "Moisson noire",
+        "electrocute": "Électrocution",
+        "arcaneComet": "Comète arcanique",
+        "summonAery": "Invocation d’Aery",
+        "pressTheAttack": "Attaque soutenue",
+        "scorch": "Brûlure",
+        "stormsurge": "Onde orageuse",
+        "blackfireTorch": "Torche noire"
       }
     }
   },

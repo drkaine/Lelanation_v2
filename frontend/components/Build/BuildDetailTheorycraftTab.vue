@@ -56,9 +56,9 @@
           <label class="build-card-toolbar__level">
             <span class="build-card-toolbar__level-label">{{ t('theorycraft.spells.level') }}</span>
             <select
-              :value="theorycraftLevel"
+              :value="sideLevels.ally"
               class="build-card-toolbar__level-select"
-              @change="onLevelSelectChange"
+              @change="onLevelSelectChange($event, 'ally')"
             >
               <option v-for="lvl in maxChampionLevel" :key="lvl" :value="lvl">{{ lvl }}</option>
             </select>
@@ -69,8 +69,9 @@
           :sheet-tooltips="true"
           :readonly="false"
           :build="activeSide !== 'ally' ? sideBuilds.ally : null"
+          :theorycraft-item-state="activeSide !== 'ally' ? inactiveItemStates.ally : null"
           :calculated-stats="activeSide !== 'ally' ? (sideCalculatedStats.ally ?? null) : null"
-          :stats-level="theorycraftLevel"
+          :stats-level="sideLevels.ally"
           selection-mode="theorycraft"
           :flip-back-face="sideBackFace.ally"
           :active-selection-region="null"
@@ -152,9 +153,9 @@
           <label class="build-card-toolbar__level">
             <span class="build-card-toolbar__level-label">{{ t('theorycraft.spells.level') }}</span>
             <select
-              :value="theorycraftLevel"
+              :value="sideLevels.enemy"
               class="build-card-toolbar__level-select"
-              @change="onLevelSelectChange"
+              @change="onLevelSelectChange($event, 'enemy')"
             >
               <option v-for="lvl in maxChampionLevel" :key="lvl" :value="lvl">{{ lvl }}</option>
             </select>
@@ -165,8 +166,9 @@
           :sheet-tooltips="true"
           :readonly="false"
           :build="activeSide !== 'enemy' ? sideBuilds.enemy : null"
+          :theorycraft-item-state="activeSide !== 'enemy' ? inactiveItemStates.enemy : null"
           :calculated-stats="activeSide !== 'enemy' ? (sideCalculatedStats.enemy ?? null) : null"
-          :stats-level="theorycraftLevel"
+          :stats-level="sideLevels.enemy"
           selection-mode="theorycraft"
           :flip-back-face="sideBackFace.enemy"
           :active-selection-region="
@@ -203,10 +205,12 @@ const {
   activeSide,
   activePanel,
   sideBuilds,
+  inactiveItemStates,
   sideCalculatedStats,
   sideFlipped,
   sideBackFace,
   theorycraftLevel,
+  sideLevels,
   championData,
   championId,
   maxChampionLevel,

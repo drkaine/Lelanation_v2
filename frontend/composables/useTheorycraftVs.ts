@@ -5,6 +5,7 @@ import { useChampionData } from '~/composables/useChampionData'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useItemsStore } from '~/stores/ItemsStore'
 import type { TheorycraftBuildStats } from '~/types/theorycraft'
+import type { TheorycraftItemState } from '~/utils/theorycraftItemState'
 import { toTheorycraftBuildStats } from '~/utils/theorycraftStats'
 
 export type TheorycraftSide = 'ally' | 'enemy'
@@ -86,12 +87,23 @@ export function useTheorycraftVs(opts: TheorycraftVsOptions) {
   const activeSide = ref<TheorycraftSide>('ally')
   const activePanel = ref<TheorycraftPanel>('theorycraft')
   const theorycraftLevel = ref(18)
+  /** Champion level of each card; the store's level is the active side's. */
+  const sideLevels = ref(sidePair(buildStore.statsLevel, buildStore.statsLevel))
   const championData = ref<Record<string, unknown> | null>(null)
   const isHydratingVsState = ref(false)
   const allyDisplayedVariant = ref<'main' | number>('main')
 
   const sideBuilds = ref(sidePair<Build | null>(null, null))
   const sideCalculatedStats = ref(sidePair<CalculatedStats | null>(null, null))
+  /** Item toggles of the inactive card, read from its scope (the store holds the active side). */
+  const inactiveItemStates = computed(() => {
+    const read = (side: TheorycraftSide): TheorycraftItemState | null => {
+      if (activeSide.value === side) return null
+      const scope = opts.scope(side)
+      return scope ? buildStore.readTheorycraftItemState(scope) : null
+    }
+    return sidePair(read('ally'), read('enemy'))
+  })
   const sidePanels = ref(sidePair<TheorycraftPanel>('theorycraft', 'theorycraft'))
   const sideFlipped = ref(sidePair(false, false))
   const sideBackFace = ref(sidePair<'stats' | 'description'>('stats', 'stats'))
@@ -113,7 +125,11 @@ export function useTheorycraftVs(opts: TheorycraftVsOptions) {
     const opponentBuild = sideBuilds.value[opponentSide.value]
     const opponentRaw = sideCalculatedStats.value[opponentSide.value]
     if (!opponentBuild?.champion || !opponentRaw) return null
-    return toTheorycraftBuildStats(opponentRaw, opponentBuild.champion, theorycraftLevel.value)
+    return toTheorycraftBuildStats(
+      opponentRaw,
+      opponentBuild.champion,
+      sideLevels.value[opponentSide.value]
+    )
   })
 
   const opponentRawStats = computed(() => sideCalculatedStats.value[opponentSide.value])
@@ -222,7 +238,13 @@ export function useTheorycraftVs(opts: TheorycraftVsOptions) {
       sideBuilds.value[side] =
         side === 'enemy' ? emptyEnemyBuild() : createEmptyTheorycraftBuild('Build')
     }
+    // The card's regions ignore the click that activates it: open the list right away.
+    if (!sideBuilds.value[side]?.champion) {
+      activePanel.value = 'champion'
+      sidePanels.value[side] = 'champion'
+    }
     loadSideBuild(side)
+    buildStore.setStatsLevel(sideLevels.value[side])
   }
 
   function statsFlipActive(side: TheorycraftSide): boolean {
@@ -271,13 +293,17 @@ export function useTheorycraftVs(opts: TheorycraftVsOptions) {
   }
 
   function onLevelChange(level: number) {
-    theorycraftLevel.value = level
     buildStore.setStatsLevel(level)
+    theorycraftLevel.value = buildStore.statsLevel
+    sideLevels.value[activeSide.value] = buildStore.statsLevel
   }
 
-  function onLevelSelectChange(event: Event) {
+  /** A card's level select; the inactive card is activated first (its stats come from the store). */
+  function onLevelSelectChange(event: Event, side: TheorycraftSide = activeSide.value) {
     const value = Number((event.target as HTMLSelectElement).value)
-    if (Number.isFinite(value)) onLevelChange(value)
+    if (!Number.isFinite(value)) return
+    if (activeSide.value !== side) activateSide(side)
+    onLevelChange(value)
   }
 
   async function loadChampionDataForPanel() {
@@ -339,6 +365,7 @@ export function useTheorycraftVs(opts: TheorycraftVsOptions) {
     () => buildStore.statsLevel,
     level => {
       theorycraftLevel.value = level
+      sideLevels.value[activeSide.value] = level
     }
   )
 
@@ -357,6 +384,7 @@ export function useTheorycraftVs(opts: TheorycraftVsOptions) {
     activeSide,
     activePanel,
     theorycraftLevel,
+    sideLevels,
     championData,
     isHydratingVsState,
     allyDisplayedVariant,
@@ -377,6 +405,7 @@ export function useTheorycraftVs(opts: TheorycraftVsOptions) {
     storeStatsSnapshot,
     persistActiveSideBuild,
     persistActiveSideStats,
+    inactiveItemStates,
     setAllyInStore,
     loadSideBuild,
     persistVsState,

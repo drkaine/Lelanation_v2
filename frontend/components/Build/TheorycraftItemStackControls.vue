@@ -7,6 +7,7 @@
       class="theorycraft-item-stack__input"
       :size="stackInputSize"
       :value="stacks"
+      :disabled="readonly"
       :title="t('theorycraft.items.stacksInput')"
       @input="onInput"
     />
@@ -15,6 +16,7 @@
       class="theorycraft-item-stack__full"
       :class="{ 'theorycraft-item-stack__full--active': isFullStack }"
       :title="fullStackTitle"
+      :disabled="readonly"
       @click="setFullStack"
     >
       {{ t('theorycraft.items.fullStackShort') }}
@@ -23,9 +25,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, inject } from 'vue'
 import { useBuildStore } from '~/stores/BuildStore'
 import { getTheorycraftStackableItemConfig } from '~/utils/theorycraftItemModifiers'
+import { THEORYCRAFT_ITEM_STATE_KEY } from '~/utils/theorycraftItemState'
 
 const props = defineProps<{
   index: number
@@ -37,7 +40,13 @@ const buildStore = useBuildStore()
 
 const config = computed(() => getTheorycraftStackableItemConfig(props.itemId))
 
-const stacks = computed(() => buildStore.theorycraftItemStacks[props.index] ?? 0)
+/** Inactive vs card: shows its own side's stacks, read only (the store holds the active side). */
+const sideState = inject(THEORYCRAFT_ITEM_STATE_KEY, null)
+const readonly = computed(() => Boolean(sideState?.value))
+
+const stacks = computed(
+  () => (sideState?.value?.stacks ?? buildStore.theorycraftItemStacks)[props.index] ?? 0
+)
 
 const inputMax = computed(() =>
   config.value?.unlimitedStacks ? undefined : config.value?.maxStacks
@@ -74,7 +83,7 @@ const isFullStack = computed(() => {
   if (config.value.supportsTransform) {
     return (
       stacks.value >= targetStacks.value &&
-      Boolean(buildStore.theorycraftItemTransformed[props.index])
+      Boolean((sideState?.value?.transformed ?? buildStore.theorycraftItemTransformed)[props.index])
     )
   }
   return stacks.value >= targetStacks.value

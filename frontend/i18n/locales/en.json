@@ -556,6 +556,16 @@
         "deathsDance": "Death's Dance",
         "eclipse": "Eclipse",
         "opponent": "opponent"
+      },
+      "procs": {
+        "darkHarvest": "Dark Harvest",
+        "electrocute": "Electrocute",
+        "arcaneComet": "Arcane Comet",
+        "summonAery": "Summon Aery",
+        "pressTheAttack": "Press the Attack",
+        "scorch": "Scorch",
+        "stormsurge": "Stormsurge",
+        "blackfireTorch": "Blackfire Torch"
       }
     }
   },

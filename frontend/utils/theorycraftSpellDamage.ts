@@ -39,6 +39,9 @@ const TAG_TYPES: Record<string, DamageType> = {
 }
 const NON_CHAMPION_KEY = /monster|minion|structure|turret|tower/i
 const ALTERNATIVE_BEFORE = /(increased to|up to|instead|jusqu'à|augmentés? à|à la place)\s*$/i
+/** Wording between two tags of the same damage that marks a second hit (delayed hit, recast). */
+const REPEAT_HIT =
+  /additional|again|second|recast|reactivat|bonus|supplémentaires?|de nouveau|à nouveau|relanc|réactiv|disparaît|prend fin|expire/i
 
 function scalingOf(text: string): HpScaling {
   const normalized = text.toLowerCase()
@@ -53,9 +56,11 @@ export function parseTooltipDamageParts(
 ): TooltipDamagePart[] {
   const text = String(tooltipRaw ?? '')
   const parts: TooltipDamagePart[] = []
-  const seen = new Set<string>()
+  /** End of the last tag that held each part, to read the wording up to a repeat. */
+  const lastEnd = new Map<string, number>()
   const tagPattern = /<(physicalDamage|magicDamage|trueDamage)>([\s\S]*?)<\/\1>/gi
   for (const tag of text.matchAll(tagPattern)) {
+    const tagEnd = (tag.index ?? 0) + tag[0].length
     const before = text.slice(Math.max(0, (tag.index ?? 0) - 40), tag.index ?? 0)
     if (ALTERNATIVE_BEFORE.test(before)) continue
     const type = TAG_TYPES[tag[1]!.toLowerCase()]!
@@ -68,8 +73,12 @@ export function parseTooltipDamageParts(
       const after = body.slice((placeholder.index ?? 0) + placeholder[0].length, end)
       const scaling = scalingOf(after)
       const id = `${key}|${type}|${scaling}`
-      if (seen.has(id)) return
-      seen.add(id)
+      const previousEnd = lastEnd.get(id)
+      // Same damage again: counted only when worded as a second hit, after this tag too
+      // (French puts « supplémentaires » after the damage).
+      if (previousEnd !== undefined && !REPEAT_HIT.test(text.slice(previousEnd, tagEnd + 20)))
+        return
+      lastEnd.set(id, tagEnd)
       parts.push({ key, type, scaling, fraction: Boolean(placeholder[2]) })
     })
   }

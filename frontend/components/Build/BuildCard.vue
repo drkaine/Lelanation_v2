@@ -1823,7 +1823,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onUnmounted, onMounted, type CSSProperties } from 'vue'
+import {
+  ref,
+  computed,
+  watch,
+  nextTick,
+  onUnmounted,
+  onMounted,
+  provide,
+  type CSSProperties,
+} from 'vue'
 import { useI18n } from 'vue-i18n'
 import { isBootsItem, isStarterItem } from '@lelanation/builds-ui'
 import {
@@ -1840,10 +1849,12 @@ import type {
   SkillOrder,
   CalculatedStats,
 } from '@lelanation/shared-types'
+import { THEORYCRAFT_ITEM_STATE_KEY, type TheorycraftItemState } from '~/utils/theorycraftItemState'
 import {
   activeItemLimitLabel,
   countActiveNonStarterItems,
   isAdcRole,
+  selectTheorycraftItemsForStats,
 } from '~/utils/theorycraftItems'
 import { atlasUpgradeMissing } from '~/utils/buildItemRules'
 import {
@@ -1948,9 +1959,12 @@ interface Props {
   flipBackFace?: 'description' | 'stats'
   /** Contrôle externe du flip (ex. bouton stats theorycraft). */
   flipped?: boolean
+  /** Theorycraft vs : état des objets de la card inactive (le store porte celui du côté actif). */
+  theorycraftItemState?: TheorycraftItemState | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  theorycraftItemState: null,
   build: null,
   calculatedStats: null,
   statsLevel: null,
@@ -3151,8 +3165,10 @@ function resolveBuildItemImageFull(item: Item, buildIndex?: number): string {
     imageFull = resolveTheorycraftItemImageFull(
       item,
       {
-        stacks: buildStore.theorycraftItemStacks[lookupIndex] ?? 0,
-        transformed: Boolean(buildStore.theorycraftItemTransformed[lookupIndex]),
+        stacks: (sideItemState.value?.stacks ?? buildStore.theorycraftItemStacks)[lookupIndex] ?? 0,
+        transformed: Boolean(
+          (sideItemState.value?.transformed ?? buildStore.theorycraftItemTransformed)[lookupIndex]
+        ),
         buildItemIds: theorycraftBuildItemIds.value,
       },
       id => itemsStore.items.find(candidate => candidate.id === id) ?? null
@@ -3171,7 +3187,7 @@ function onBuildItemImageError(event: Event, item: Item, buildIndex?: number) {
 
 const theorycraftActiveItemCount = computed(() => {
   if (props.selectionMode !== 'theorycraft') return 0
-  const disabled = new Set(buildStore.theorycraftDisabledItemIndices)
+  const disabled = new Set(theorycraftDisabledIndices.value)
   const roles = displayBuild.value?.roles ?? []
   const { nonBoots, total } = countActiveNonStarterItems(buildItems.value, disabled)
   return isAdcRole(roles) ? nonBoots : total
@@ -3218,8 +3234,25 @@ const itemManagerDragMoved = ref(false)
 
 const isTheorycraftItemsToggleMode = computed(() => props.selectionMode === 'theorycraft')
 
+/** Item toggles of this card: its own side's state when inactive, else the store's. */
+const sideItemState = computed(() => props.theorycraftItemState ?? null)
+provide(THEORYCRAFT_ITEM_STATE_KEY, sideItemState)
+const theorycraftDisabledIndices = computed(
+  () => sideItemState.value?.disabled ?? buildStore.theorycraftDisabledItemIndices
+)
+function isItemDisabledForStats(index: number): boolean {
+  return theorycraftDisabledIndices.value.includes(index)
+}
+
 const itemsForManagerStats = computed(() => {
   if (isTheorycraftItemsToggleMode.value) {
+    if (sideItemState.value) {
+      return selectTheorycraftItemsForStats(
+        buildItems.value,
+        new Set(sideItemState.value.disabled),
+        displayBuild.value?.roles ?? []
+      )
+    }
     return buildStore.getTheorycraftItemsForStats()
   }
   return buildItems.value
@@ -3228,11 +3261,7 @@ const itemsForManagerStats = computed(() => {
 const theorycraftActiveItemsLabel = computed(() => {
   if (!isTheorycraftItemsToggleMode.value) return ''
   const roles = displayBuild.value?.roles ?? []
-  return activeItemLimitLabel(
-    buildItems.value,
-    new Set(buildStore.theorycraftDisabledItemIndices),
-    roles
-  )
+  return activeItemLimitLabel(buildItems.value, new Set(theorycraftDisabledIndices.value), roles)
 })
 
 function itemManagerIconClass(index: number) {
@@ -3241,7 +3270,7 @@ function itemManagerIconClass(index: number) {
     'items-manager-inline-icon--drag-over':
       dragOverItemIndex.value === index && draggingItemIndex.value !== index,
     'items-manager-inline-icon--inactive':
-      isTheorycraftItemsToggleMode.value && buildStore.isTheorycraftItemDisabled(index),
+      isTheorycraftItemsToggleMode.value && isItemDisabledForStats(index),
     'items-manager-inline-icon--toggle': isTheorycraftItemsToggleMode.value,
   }
 }
@@ -3249,7 +3278,7 @@ function itemManagerIconClass(index: number) {
 function itemManagerTitle(entry: { item: Item; index: number }) {
   const name = tooltipsEnabled.value ? getItemDisplayName(entry.item) : entry.item.name
   if (!isTheorycraftItemsToggleMode.value) return name
-  const state = buildStore.isTheorycraftItemDisabled(entry.index)
+  const state = isItemDisabledForStats(entry.index)
     ? t('buildCard.itemsDisabledForStats')
     : t('buildCard.itemsEnabledForStats')
   return `${name} — ${state}`
@@ -3257,6 +3286,7 @@ function itemManagerTitle(entry: { item: Item; index: number }) {
 
 function onItemManagerClick(index: number) {
   if (!isTheorycraftItemsToggleMode.value || itemManagerDragMoved.value) return
+  if (sideItemState.value) return
   const result = buildStore.toggleTheorycraftItemForStats(index)
   if (result === 'limit_reached') {
     itemsToggleLimitMessage.value = t('buildCard.itemsActiveLimitReached')

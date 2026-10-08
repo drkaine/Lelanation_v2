@@ -68,9 +68,9 @@
                 t('theorycraft.spells.level')
               }}</span>
               <select
-                :value="theorycraftLevel"
+                :value="sideLevels.ally"
                 class="build-card-toolbar__level-select"
-                @change="onLevelSelectChange"
+                @change="onLevelSelectChange($event, 'ally')"
               >
                 <option v-for="lvl in maxChampionLevel" :key="lvl" :value="lvl">{{ lvl }}</option>
               </select>
@@ -82,8 +82,9 @@
             :highlight-missing-fields="highlightMissingFields"
             :readonly="false"
             :build="activeSide !== 'ally' ? sideBuilds.ally : null"
+            :theorycraft-item-state="activeSide !== 'ally' ? inactiveItemStates.ally : null"
             :calculated-stats="activeSide !== 'ally' ? (sideCalculatedStats.ally ?? null) : null"
-            :stats-level="theorycraftLevel"
+            :stats-level="sideLevels.ally"
             selection-mode="theorycraft"
             :flip-back-face="allyCardBackFace"
             :active-selection-region="
@@ -171,9 +172,9 @@
                 t('theorycraft.spells.level')
               }}</span>
               <select
-                :value="theorycraftLevel"
+                :value="sideLevels.enemy"
                 class="build-card-toolbar__level-select"
-                @change="onLevelSelectChange"
+                @change="onLevelSelectChange($event, 'enemy')"
               >
                 <option v-for="lvl in maxChampionLevel" :key="lvl" :value="lvl">{{ lvl }}</option>
               </select>
@@ -185,8 +186,9 @@
             :highlight-missing-fields="highlightMissingFields"
             :readonly="false"
             :build="activeSide !== 'enemy' ? sideBuilds.enemy : null"
+            :theorycraft-item-state="activeSide !== 'enemy' ? inactiveItemStates.enemy : null"
             :calculated-stats="activeSide !== 'enemy' ? (sideCalculatedStats.enemy ?? null) : null"
-            :stats-level="theorycraftLevel"
+            :stats-level="sideLevels.enemy"
             selection-mode="theorycraft"
             :flip-back-face="enemyCardBackFace"
             :active-selection-region="
@@ -257,8 +259,10 @@ vs.isHydratingVsState.value = true
 const {
   activePanel,
   theorycraftLevel,
+  sideLevels,
   activeSide,
   sideBuilds,
+  inactiveItemStates,
   sideCalculatedStats,
   sideFlipped,
   sideBackFace,
@@ -335,6 +339,7 @@ onMounted(async () => {
   buildStore.activateTheorycraftMode()
   buildStore.setLastBuilderStep('theorycraft')
   theorycraftLevel.value = buildStore.statsLevel
+  vs.sideLevels.value.ally = buildStore.statsLevel
   allyDisplayedVariant.value = buildStore.displayedVariant
 
   const storedVs = vs.loadVsState()
