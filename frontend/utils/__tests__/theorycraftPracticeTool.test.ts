@@ -10,6 +10,14 @@ import {
   mitigateSplit,
   splitShares,
   sumSplit,
+  practiceTargetTitle,
+  TRAINING_DUMMY,
+  trainingDummyStats,
+  expectedCritMultiplier,
+  autoAttackRaw,
+  rollCrit,
+  applyExecute,
+  healFromHit,
 } from '../theorycraftPracticeTool'
 
 describe('theorycraftPracticeTool', () => {
@@ -148,5 +156,84 @@ describe('theorycraftPracticeTool', () => {
       expect(bar.shield).toBeCloseTo(5)
       expect(bar.lost.true).toBeCloseTo(5)
     })
+  })
+})
+
+describe('practiceTargetTitle', () => {
+  it('uses the opponent name when present', () => {
+    expect(practiceTargetTitle('Darius', 'Mannequin')).toBe('Darius')
+  })
+  it('falls back when the name is missing or blank', () => {
+    expect(practiceTargetTitle(null, 'Mannequin')).toBe('Mannequin')
+    expect(practiceTargetTitle('  ', 'Mannequin')).toBe('Mannequin')
+  })
+})
+
+describe('training dummy', () => {
+  it('has 2000 hp, 100 armor and 100 magic resist', () => {
+    expect(TRAINING_DUMMY).toEqual({ hp: 2000, armor: 100, magicResist: 100 })
+  })
+  it('builds defender stats from the dummy', () => {
+    const { buildStats, rawStats } = trainingDummyStats(11)
+    expect(buildStats.totalHP).toBe(2000)
+    expect(buildStats.armor).toBe(100)
+    expect(buildStats.magicResist).toBe(100)
+    expect(buildStats.level).toBe(11)
+    expect(rawStats).toMatchObject({ health: 2000, armor: 100, magicResist: 100, shield: 0 })
+  })
+  it('halves physical and magic damage, lethality lowers armor', () => {
+    expect(mitigateDamage(100, 'physical', TRAINING_DUMMY)).toBeCloseTo(50)
+    expect(mitigateDamage(100, 'magic', TRAINING_DUMMY)).toBeCloseTo(50)
+    expect(mitigateDamage(100, 'physical', TRAINING_DUMMY, { lethality: 50 }, 18)).toBeCloseTo(
+      100 / 1.5
+    )
+  })
+})
+
+describe('critical strikes', () => {
+  it('expected multiplier blends crit chance and crit damage', () => {
+    expect(expectedCritMultiplier(0, 2)).toBe(1)
+    expect(expectedCritMultiplier(0.5, 2)).toBeCloseTo(1.5)
+    expect(expectedCritMultiplier(1, 1.75)).toBeCloseTo(1.75)
+    expect(expectedCritMultiplier(1.4, 2)).toBeCloseTo(2)
+  })
+  it('auto attack raw damage gives normal, crit and expected values', () => {
+    expect(autoAttackRaw(200, 0.25, 2)).toEqual({ normal: 200, crit: 400, expected: 250 })
+  })
+  it('rolls a crit when the random draw is under the chance', () => {
+    expect(rollCrit(0.3, () => 0.29)).toBe(true)
+    expect(rollCrit(0.3, () => 0.3)).toBe(false)
+    expect(rollCrit(0, () => 0)).toBe(false)
+    expect(rollCrit(1, () => 0.999)).toBe(true)
+  })
+})
+
+describe('execute', () => {
+  it('kills a target at or under the threshold', () => {
+    expect(applyExecute({ hp: 400, shield: 50 }, 500)).toEqual({ hp: 0, shield: 0, executed: true })
+  })
+
+  it('leaves a healthier target alone', () => {
+    expect(applyExecute({ hp: 600, shield: 0 }, 500)).toEqual({
+      hp: 600,
+      shield: 0,
+      executed: false,
+    })
+  })
+
+  it('does nothing without threshold or on a dead target', () => {
+    expect(applyExecute({ hp: 300, shield: 0 }, null).executed).toBe(false)
+    expect(applyExecute({ hp: 0, shield: 0 }, 500).executed).toBe(false)
+  })
+})
+
+describe('healFromHit', () => {
+  it('life steal applies to attacks only, omnivamp to everything', () => {
+    expect(healFromHit(200, { isAttack: true, lifeSteal: 0.1, omnivamp: 0.05 })).toBeCloseTo(30)
+    expect(healFromHit(200, { isAttack: false, lifeSteal: 0.1, omnivamp: 0.05 })).toBeCloseTo(10)
+  })
+
+  it('never heals for negative values', () => {
+    expect(healFromHit(-50, { isAttack: true, lifeSteal: 0.1, omnivamp: 0 })).toBe(0)
   })
 })

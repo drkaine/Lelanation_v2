@@ -13,6 +13,9 @@
       :attacker-raw-stats="attackerRawStats"
       :opponent-build-stats="opponentBuildStats"
       :opponent-raw-stats="opponentRawStats"
+      :opponent-name="opponentName"
+      :opponent-item-ids="opponentItemIds"
+      :opponent-summoner-ids="opponentSummonerIds"
     />
 
     <div v-else-if="activePanel === 'champion'">
@@ -29,7 +32,7 @@
 
     <div
       v-else
-      class="border-border/70 text-muted rounded-lg border border-dashed p-8 text-center text-sm"
+      class="rounded-lg border border-dashed border-border/70 p-8 text-center text-sm text-muted"
     >
       {{ t('theorycraft.panel.emptyHint') }}
     </div>
@@ -55,6 +58,9 @@ const props = defineProps<{
   attackerRawStats?: Record<string, number> | null
   opponentBuildStats?: TheorycraftBuildStats | null
   opponentRawStats?: Record<string, number> | null
+  opponentName?: string | null
+  opponentItemIds?: string[]
+  opponentSummonerIds?: string[]
 }>()
 
 const { t } = useI18n()

@@ -104,6 +104,9 @@
             :attacker-raw-stats="attackerRawStats"
             :opponent-build-stats="opponentTheorycraftStats"
             :opponent-raw-stats="opponentRawStats"
+            :opponent-name="opponentName"
+            :opponent-item-ids="opponentItemIds"
+            :opponent-summoner-ids="opponentSummonerIds"
             @set-panel="activePanel = $event"
           />
         </div>
@@ -266,6 +269,9 @@ const {
   theorycraftStats,
   opponentTheorycraftStats,
   opponentRawStats,
+  opponentName,
+  opponentItemIds,
+  opponentSummonerIds,
   attackerRawStats,
   activateSide,
   statsFlipActive,

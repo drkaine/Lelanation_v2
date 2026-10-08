@@ -171,3 +171,75 @@ export function buildDummyBar(input: DummyBarInput): {
   const lost = dealt > 0 ? scaleSplit(input.dealt, lostPct / dealt) : emptySplit()
   return { hp, shield, lost }
 }
+
+/** Arena title: the opponent's name when one is selected, otherwise the fallback label. */
+export function practiceTargetTitle(name: string | null | undefined, fallback: string): string {
+  const trimmed = name?.trim()
+  return trimmed || fallback
+}
+
+/** Default target when no opponent is picked (shown to the user). */
+export const TRAINING_DUMMY = { hp: 2000, armor: 100, magicResist: 100 } as const
+
+/** Defender stats shaped like an opponent build, for the training dummy. */
+export function trainingDummyStats(level: number) {
+  const { hp, armor, magicResist } = TRAINING_DUMMY
+  return {
+    buildStats: {
+      level,
+      totalAD: 0,
+      bonusAD: 0,
+      AP: 0,
+      totalHP: hp,
+      bonusHP: 0,
+      armor,
+      magicResist,
+      maxMana: 0,
+      critChance: 0,
+      critDamage: 0,
+    },
+    rawStats: { health: hp, armor, magicResist, shield: 0, tenacity: 0, damageReduction: 0 },
+  }
+}
+
+/** Average damage multiplier of a hit that can crit (crit chance capped at 100 %). */
+export function expectedCritMultiplier(critChance: number, critDamage: number): number {
+  const chance = clamp(num(critChance), 0, 1)
+  return 1 + chance * (Math.max(1, num(critDamage)) - 1)
+}
+
+/** Auto attack raw damage before mitigation: normal hit, crit hit, average. */
+export function autoAttackRaw(totalAd: number, critChance: number, critDamage: number) {
+  const normal = Math.max(0, num(totalAd))
+  return {
+    normal,
+    crit: normal * Math.max(1, num(critDamage)),
+    expected: normal * expectedCritMultiplier(critChance, critDamage),
+  }
+}
+
+/** True when the hit crits; `random` returns a number in [0, 1). */
+export function rollCrit(critChance: number, random: () => number = Math.random): boolean {
+  const chance = clamp(num(critChance), 0, 1)
+  return chance > 0 && random() < chance
+}
+
+/** Kills the target outright when its health is at or under the execute threshold. */
+export function applyExecute(
+  state: DummyState,
+  threshold: number | null | undefined
+): DummyState & { executed: boolean } {
+  const limit = num(threshold ?? 0)
+  if (limit <= 0 || state.hp <= 0 || state.hp > limit) return { ...state, executed: false }
+  return { hp: 0, shield: 0, executed: true }
+}
+
+/** Health restored by a hit: life steal on attacks, omnivamp on all damage. */
+export function healFromHit(
+  damage: number,
+  options: { isAttack: boolean; lifeSteal: number; omnivamp: number }
+): number {
+  const dealt = Math.max(0, num(damage))
+  const ratio = (options.isAttack ? num(options.lifeSteal) : 0) + num(options.omnivamp)
+  return dealt * Math.max(0, ratio)
+}

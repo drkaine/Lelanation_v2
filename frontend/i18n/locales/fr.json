@@ -494,7 +494,6 @@
     "practice": {
       "title": "Mannequin d'entraînement",
       "reset": "Réinitialiser",
-      "noTarget": "Choisissez un build adverse pour frapper le mannequin.",
       "hp": "PV",
       "shield": "bouclier",
       "dead": "Éliminé",
@@ -531,10 +530,33 @@
         "cc": "{label} : contrôle {hard}s / ralenti {slow}s",
         "locked": "{label} bloqué ({seconds}s)",
         "cooldown": "{label} en recharge ({seconds}s)",
-        "noResource": "{label} : ressource insuffisante ({cost})"
+        "noResource": "{label} : ressource insuffisante ({cost})",
+        "execute": "{label} : exécution !",
+        "deathsDance": "{label} : {amount} différés par la Danse de la mort",
+        "selfShield": "{label} : bouclier +{amount}",
+        "selfHeal": "{label} : soin +{amount}",
+        "targetHeal": "{label} : la cible récupère {amount} PV",
+        "targetShield": "{label} : la cible gagne un bouclier de {amount}",
+        "toggleOn": "{label} activé",
+        "toggleOff": "{label} désactivé"
       },
       "stunned": "Contrôlé",
-      "slowed": "Ralenti"
+      "slowed": "Ralenti",
+      "targetStats": "{hp} PV · {armor} armure · {mr} RM",
+      "healed": "Soins",
+      "shielded": "Boucliers",
+      "executeBelow": "Exécute sous {hp} PV",
+      "afterMitigation": "Dégâts affichés = dégâts reçus après armure/RM et objets défensifs de la cible.",
+      "rawToReceived": "{name} — {raw} bruts → {received} reçus après armure/RM",
+      "extras": {
+        "ignite": "Embrasement",
+        "barrier": "Barrière",
+        "heal": "Soin",
+        "potion": "Potion",
+        "deathsDance": "Danse de la mort",
+        "eclipse": "Éclipse",
+        "opponent": "adversaire"
+      }
     }
   },
   "buildCard": {

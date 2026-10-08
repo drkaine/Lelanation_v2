@@ -88,6 +88,9 @@
           :attacker-raw-stats="attackerRawStats"
           :opponent-build-stats="opponentTheorycraftStats"
           :opponent-raw-stats="opponentRawStats"
+          :opponent-name="opponentName"
+          :opponent-item-ids="opponentItemIds"
+          :opponent-summoner-ids="opponentSummonerIds"
         />
       </div>
 
@@ -210,6 +213,9 @@ const {
   theorycraftStats,
   opponentTheorycraftStats,
   opponentRawStats,
+  opponentName,
+  opponentItemIds,
+  opponentSummonerIds,
   attackerRawStats,
   enter,
   leave,

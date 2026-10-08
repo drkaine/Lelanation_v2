@@ -16,13 +16,6 @@
     </div>
 
     <template v-else>
-      <p
-        v-if="!hasVersusTarget()"
-        class="rounded-lg border border-border/60 p-3 text-center text-xs text-muted"
-      >
-        {{ t('theorycraft.practice.noTarget') }}
-      </p>
-
       <!-- Mannequin d'entraînement -->
       <div
         v-if="hasVersusTarget() && simulatedTarget"
@@ -32,7 +25,10 @@
       >
         <div class="flex flex-wrap items-center justify-between gap-2">
           <h3 class="text-sm font-bold uppercase tracking-wide text-accent">
-            {{ t('theorycraft.practice.title') }}
+            {{ practiceTitle }}
+            <span class="ml-1 text-[11px] font-normal normal-case text-muted">
+              {{ targetSummary }}
+            </span>
           </h3>
           <button type="button" class="practice-btn" @click="resetSimulation">
             ↺ {{ t('theorycraft.practice.reset') }}
@@ -60,7 +56,7 @@
               >☠ {{ t('theorycraft.practice.dead') }}</span
             >
           </div>
-          <div class="practice-hpbar" role="img" :aria-label="t('theorycraft.practice.title')">
+          <div class="practice-hpbar" role="img" :aria-label="practiceTitle">
             <template v-if="dummyBar">
               <span class="practice-hpbar__hp" :style="{ width: `${dummyBar.hp}%` }" />
               <span class="practice-hpbar__shield" :style="{ width: `${dummyBar.shield}%` }" />
@@ -77,15 +73,18 @@
               v-for="(hit, index) in hitFeed.slice(0, 4)"
               :key="hit.id"
               class="practice-float"
-              :class="[`dmg-text-${hit.type}`, { 'practice-float--lethal': hit.lethal }]"
+              :class="[
+                `dmg-text-${hit.type}`,
+                { 'practice-float--lethal': hit.lethal, 'practice-float--crit': hit.crit },
+              ]"
               :style="{ right: `${8 + index * 18}%` }"
             >
-              -{{ Math.round(hit.amount) }}
+              -{{ Math.round(hit.amount) }}{{ hit.crit ? '!' : '' }}
             </span>
           </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
+        <div class="grid grid-cols-3 gap-2 text-center sm:grid-cols-6">
           <div class="practice-stat">
             <span class="practice-stat__label">{{ t('theorycraft.practice.total') }}</span>
             <span class="practice-stat__value">{{ Math.round(totalDealt) }}</span>
@@ -106,6 +105,14 @@
                 / {{ simulatedControl.slowSeconds.toFixed(1) }}s
               </span>
             </span>
+          </div>
+          <div class="practice-stat">
+            <span class="practice-stat__label">{{ t('theorycraft.practice.healed') }}</span>
+            <span class="practice-stat__value text-emerald-400">{{ Math.round(healed) }}</span>
+          </div>
+          <div class="practice-stat">
+            <span class="practice-stat__label">{{ t('theorycraft.practice.shielded') }}</span>
+            <span class="practice-stat__value text-sky-300">{{ Math.round(shielded) }}</span>
           </div>
         </div>
 
@@ -147,7 +154,13 @@
             type="button"
             class="practice-action"
             :disabled="autoAttackSplit == null"
-            :title="t('theorycraft.practice.autoAttack')"
+            :title="
+              damageTitle(
+                t('theorycraft.practice.autoAttack'),
+                estimatedAutoAttackDamage(),
+                autoAttackRawDamage ? rawAttackSplit(autoAttackRawDamage.expected) : null
+              )
+            "
             @click.exact="useAutoAttack"
             @click.shift.exact="enqueueAutoAttack"
           >
@@ -175,7 +188,13 @@
             "
             type="button"
             class="practice-action"
-            :title="passive.name"
+            :title="
+              damageTitle(
+                passive.name,
+                passive.damageVsChampion,
+                rawEventSplit({ profile: passive.damageProfile })
+              )
+            "
             @click="usePassiveDamage(passive)"
           >
             <img
@@ -186,6 +205,9 @@
               loading="lazy"
             />
             <span class="practice-action__key">P</span>
+            <span v-if="passiveRemainingCooldown() > 0.001" class="practice-action__cd">
+              {{ passiveRemainingCooldown().toFixed(1) }}
+            </span>
             <span class="practice-action__dmg">{{
               Math.round(passive.damageVsChampion ?? 0)
             }}</span>
@@ -203,9 +225,18 @@
             :key="`action-${spell.id}`"
             type="button"
             class="practice-action"
-            :class="{ 'practice-action--nomana': spellLacksResource(spell) }"
+            :class="{
+              'practice-action--nomana': spellLacksResource(spell),
+              'practice-action--active': Boolean(sustainedFireState[spell.id]),
+            }"
             :disabled="!spellIsUsable(spell)"
-            :title="spell.name"
+            :title="
+              damageTitle(
+                spell.name,
+                spell.damageVsChampion,
+                rawEventSplit({ profile: spell.damageProfile, ability: true })
+              )
+            "
             @click.exact="useSpellDamage(spell)"
             @click.shift.exact="enqueueSpell(spell)"
           >
@@ -217,11 +248,24 @@
               loading="lazy"
             />
             <span class="practice-action__key">{{ displaySpellSlot(spell.slot) }}</span>
+            <span v-if="sustainedFireState[spell.id]" class="practice-action__on">ON</span>
             <span v-if="spellRemainingCooldown(spell.id) > 0.001" class="practice-action__cd">
               {{ spellRemainingCooldown(spell.id).toFixed(1) }}
             </span>
             <span class="practice-action__dmg">
               {{ spell.damageVsChampion != null ? Math.round(spell.damageVsChampion) : 'CC' }}
+            </span>
+            <span v-if="(spell.resourceCost ?? 0) > 0" class="practice-action__cost">
+              {{ Math.round(spell.resourceCost ?? 0) }}
+            </span>
+            <span
+              v-if="spell.executeBelow"
+              class="practice-action__exec"
+              :title="
+                t('theorycraft.practice.executeBelow', { hp: Math.round(spell.executeBelow) })
+              "
+            >
+              ☠ {{ Math.round(spell.executeBelow) }}
             </span>
             <span class="practice-splitbar">
               <span
@@ -230,6 +274,27 @@
                 :class="`dmg-bg-${seg.type}`"
                 :style="{ width: seg.width }"
               />
+            </span>
+          </button>
+        </div>
+        <p class="text-xs text-muted">{{ t('theorycraft.practice.afterMitigation') }}</p>
+
+        <!-- Summoners et consommables -->
+        <div v-if="extraActions.length > 0" class="practice-extras flex flex-wrap gap-1.5 text-xs">
+          <button
+            v-for="action in extraActions"
+            :key="action.key"
+            type="button"
+            class="practice-extra"
+            :class="{ 'practice-extra--target': action.side === 'target' }"
+            @click="useExtraAction(action)"
+          >
+            {{ action.label }}
+            <span v-if="action.side === 'target'"
+              >({{ t('theorycraft.practice.extras.opponent') }})</span
+            >
+            <span v-if="extraRemainingCooldown(action) > 0.001" class="practice-extra__cd">
+              {{ extraRemainingCooldown(action).toFixed(0) }}
             </span>
           </button>
         </div>
@@ -617,14 +682,56 @@ import {
   dominantDamageType,
   dpsOf,
   emptySplit,
-  mitigateDamage,
   mitigateSplit,
   splitShares,
   sumSplit,
   type DamageSplit,
   type DamageType,
-  type DefenderStats,
+  practiceTargetTitle,
+  autoAttackRaw,
+  rollCrit,
+  trainingDummyStats,
+  applyExecute,
+  healFromHit,
+  scaleSplit,
 } from '~/utils/theorycraftPracticeTool'
+import {
+  cooldownAfterReduction,
+  evaluateDamageProfile,
+  headerCooldownAtRank,
+  headerCostAtRank,
+  passiveTriggers,
+  resolveSustainedFire,
+  type SustainedFire,
+  parseTooltipDamageParts,
+  profileHasDamage,
+  resolveDamageProfile,
+  resolveExecuteThreshold,
+  resolveSpellSustain,
+  type DamageProfile,
+  type SpellDamageSource,
+} from '~/utils/theorycraftSpellDamage'
+import {
+  abilityItemDamage,
+  amplifyItemDamage,
+  onHitItemDamage,
+  spellbladeDamage,
+  type ItemAttacker,
+  type ItemTarget,
+} from '~/utils/theorycraftItemEffects'
+import {
+  combineControlDurations,
+  consumableHeal,
+  defenderMitigation,
+  eclipseShield,
+  eclipseTriggered,
+  healTarget,
+  regenerateHp,
+  igniteTotalDamage,
+  summonerBarrierShield,
+  summonerCooldown,
+  summonerHealAmount,
+} from '~/utils/theorycraftCombatExtras'
 
 interface SpellHeaderStat {
   key: string
@@ -658,9 +765,14 @@ interface ResolvedSpellView {
   hardControlDurationVsChampion?: number | null
   slowDurationVsChampion?: number | null
   controlVsTooltip?: string
+  damageProfile?: DamageProfile | null
+  executeBelow?: number | null
+  heal?: number
+  shield?: number
   cooldownSeconds?: number
   resourceCost?: number
   hitDelaySeconds?: number
+  sustainedFire?: SustainedFire | null
 }
 
 interface ResolvedPassiveView {
@@ -679,6 +791,10 @@ interface ResolvedPassiveView {
   hardControlDurationVsChampion?: number | null
   slowDurationVsChampion?: number | null
   controlVsTooltip?: string
+  damageProfile?: DamageProfile | null
+  cooldownSeconds?: number
+  heal?: number
+  shield?: number
 }
 
 interface SimulatedTargetState {
@@ -714,6 +830,7 @@ interface HitFeedEntry {
   amount: number
   type: DamageType
   lethal: boolean
+  crit: boolean
 }
 
 interface PendingHitEvent {
@@ -722,6 +839,31 @@ interface PendingHitEvent {
   split: DamageSplit
   hardCc: number
   slowCc: number
+  crit?: boolean
+  /** Health-dependent damage, evaluated when the hit lands. */
+  profile?: DamageProfile | null
+  ability?: boolean
+  isAttack?: boolean
+  executeBelow?: number | null
+  /** Share of on-hit item damage added to the hit (Urgot W shots). */
+  onHitRatio?: number
+  /** Damage over time (Ignite, Death's Dance): no vamp, no Eclipse proc. */
+  periodic?: boolean
+  /** Already mitigated by the target (Death's Dance bleed). */
+  bypassDefense?: boolean
+  /** Heals the target instead of hitting it (potion ticks). */
+  heal?: number
+}
+
+type ExtraActionKind = 'ignite' | 'barrier' | 'heal' | 'potion'
+
+interface ExtraAction {
+  key: string
+  side: 'self' | 'target'
+  kind: ExtraActionKind
+  label: string
+  cooldown: number
+  itemId?: string
 }
 
 const props = defineProps<{
@@ -732,11 +874,46 @@ const props = defineProps<{
   attackerRawStats?: Record<string, number> | null
   opponentBuildStats?: TheorycraftBuildStats | null
   opponentRawStats?: Record<string, number> | null
+  opponentName?: string | null
+  opponentItemIds?: string[]
+  opponentSummonerIds?: string[]
 }>()
 
 const { t, locale } = useI18n()
-const { loadChampion, error: loadError } = useChampionData()
 const buildStore = useBuildStore()
+
+/** Opponent build when one is picked, otherwise the training dummy. */
+const hasOpponent = computed(() => Boolean(props.opponentBuildStats && props.opponentRawStats))
+const dummyTarget = computed(() => trainingDummyStats(attackerLevelForMitigation()))
+const targetStats = computed(
+  (): TheorycraftBuildStats =>
+    (hasOpponent.value ? props.opponentBuildStats : null) ?? dummyTarget.value.buildStats
+)
+const targetRaw = computed(
+  (): Record<string, number> =>
+    (hasOpponent.value ? props.opponentRawStats : null) ?? dummyTarget.value.rawStats
+)
+/** Attacker stats carrying penetration, lethality and crit. */
+const attackerRaw = computed(
+  (): Record<string, number> | null =>
+    props.attackerRawStats ??
+    (buildStore.calculatedStats as unknown as Record<string, number> | null) ??
+    null
+)
+const targetSummary = computed(() =>
+  t('theorycraft.practice.targetStats', {
+    hp: Math.round(Number(targetStats.value.totalHP ?? 0)),
+    armor: Math.round(Number(targetRaw.value.armor ?? targetStats.value.armor ?? 0)),
+    mr: Math.round(Number(targetRaw.value.magicResist ?? targetStats.value.magicResist ?? 0)),
+  })
+)
+const practiceTitle = computed(() =>
+  practiceTargetTitle(
+    hasOpponent.value ? props.opponentName : null,
+    t('theorycraft.practice.title')
+  )
+)
+const { loadChampion, error: loadError } = useChampionData()
 
 const loading = ref(false)
 const error = ref<string | null>(null)
@@ -768,6 +945,15 @@ const dealtSplit = ref<DamageSplit>(emptySplit())
 const hitFeed = ref<HitFeedEntry[]>([])
 const firstHitAt = ref<number | null>(null)
 const lastHitAt = ref<number | null>(null)
+const healed = ref(0)
+const shielded = ref(0)
+const spellbladeReady = ref(false)
+const passiveReadyAt = ref(0)
+const sustainedFireState = reactive<Record<string, { until: number; nextShotAt: number }>>({})
+const targetGrievousUntil = ref(0)
+const targetTempShields = ref<Array<{ amount: number; until: number }>>([])
+const championHitTimes = ref<number[]>([])
+const eclipseReadyAt = ref(0)
 
 function stackDefinitionForSpell(id: string, slot: string): TheorycraftStackDefinition | null {
   return findStackDefinitionForSource(stackDefinitions.value, { scope: 'spell', id, slot })
@@ -880,15 +1066,15 @@ function toggleSpellActive(spellId: string) {
 }
 
 function hasVersusTarget(): boolean {
-  return Boolean(props.opponentBuildStats && props.opponentRawStats)
+  return Boolean(props.buildStats)
 }
 
 function targetMaxHp(): number {
-  return Number(props.opponentBuildStats?.totalHP ?? 0)
+  return Number(targetStats.value.totalHP ?? 0)
 }
 
 function targetInitialShield(): number {
-  return Math.max(0, Number(props.opponentRawStats?.shield ?? 0))
+  return Math.max(0, Number(targetRaw.value.shield ?? 0))
 }
 
 function resolveResourceKind(): 'mana' | 'energy' {
@@ -908,6 +1094,17 @@ function maxResourcePool(): number {
 function resetSimulation() {
   dealtSplit.value = emptySplit()
   hitFeed.value = []
+  healed.value = 0
+  shielded.value = 0
+  spellbladeReady.value = false
+  passiveReadyAt.value = 0
+  Object.keys(sustainedFireState).forEach(key => {
+    delete sustainedFireState[key]
+  })
+  targetGrievousUntil.value = 0
+  targetTempShields.value = []
+  championHitTimes.value = []
+  eclipseReadyAt.value = 0
   firstHitAt.value = null
   lastHitAt.value = null
   if (!hasVersusTarget()) {
@@ -948,14 +1145,47 @@ function ensureSimulationState(): SimulatedTargetState | null {
 
 let hitFeedSeq = 0
 
-function applyDamageToSimulation(split: DamageSplit, sourceLabel: string) {
+function applyDamageToSimulation(
+  split: DamageSplit,
+  sourceLabel: string,
+  crit = false,
+  options: {
+    executeBelow?: number | null
+    isAttack?: boolean
+    periodic?: boolean
+    bypassDefense?: boolean
+  } = {}
+) {
   const target = ensureSimulationState()
   if (!target) return
+  if (!(sumSplit(split) > 0)) return
+  if (!options.bypassDefense) {
+    const mitigation = defenderMitigation(defenderItemIds.value, split, {
+      isAttack: options.isAttack,
+      crit,
+      defenderRanged: Number(targetRaw.value?.attackRange ?? 0) >= 300,
+    })
+    split = mitigation.immediate
+    if (mitigation.deferred > 0) queueDeathsDanceBleed(mitigation.deferred, sourceLabel)
+  }
   const damage = sumSplit(split)
-  if (!(damage > 0)) return
   const next = applyHitToDummy(target, damage)
   target.hp = next.hp
   target.shield = next.shield
+  if (!options.periodic) {
+    healed.value += healFromHit(next.hpLost + next.absorbed, {
+      isAttack: options.isAttack ?? false,
+      lifeSteal: Number(attackerRaw.value?.lifeSteal ?? 0),
+      omnivamp: Number(attackerRaw.value?.omnivamp ?? 0),
+    })
+    registerChampionHit()
+  }
+  const executed = applyExecute(target, options.executeBelow)
+  if (executed.executed) {
+    target.hp = 0
+    target.shield = 0
+    recordTimelineEvent(t('theorycraft.practice.log.execute', { label: sourceLabel }))
+  }
   dealtSplit.value = addSplit(dealtSplit.value, split)
   const now = timelineNowSeconds.value
   if (firstHitAt.value == null) firstHitAt.value = now
@@ -968,6 +1198,7 @@ function applyDamageToSimulation(split: DamageSplit, sourceLabel: string) {
       amount: damage,
       type: dominantDamageType(split) ?? 'physical',
       lethal: target.hp <= 0 && target.shield <= 0,
+      crit,
     },
     ...hitFeed.value,
   ].slice(0, 6)
@@ -978,6 +1209,130 @@ function applyDamageToSimulation(split: DamageSplit, sourceLabel: string) {
       hp: formatDamageValue(target.hp),
     })
   )
+}
+
+/** Defensive items count only against a real opponent (the dummy has none). */
+const defenderItemIds = computed((): string[] =>
+  hasOpponent.value ? (props.opponentItemIds ?? []) : []
+)
+
+/** Death's Dance: the deferred part is taken as true damage over 3 s. */
+function queueDeathsDanceBleed(amount: number, sourceLabel: string) {
+  const now = timelineNowSeconds.value
+  recordTimelineEvent(
+    t('theorycraft.practice.log.deathsDance', {
+      label: sourceLabel,
+      amount: formatDamageValue(amount),
+    })
+  )
+  for (let tick = 1; tick <= 3; tick += 1) {
+    queueHitEvent({
+      at: now + tick,
+      label: t('theorycraft.practice.extras.deathsDance'),
+      split: { ...emptySplit(), true: amount / 3 },
+      hardCc: 0,
+      slowCc: 0,
+      periodic: true,
+      bypassDefense: true,
+    })
+  }
+}
+
+/** Eclipse: shield on the 2nd champion hit within 2 s, 6 s cooldown. */
+function registerChampionHit() {
+  const now = timelineNowSeconds.value
+  championHitTimes.value = [...championHitTimes.value.filter(time => now - time <= 2), now]
+  if (now + 1e-6 < eclipseReadyAt.value) return
+  if (!eclipseTriggered(championHitTimes.value, now)) return
+  const attacker = itemAttacker()
+  const amount = eclipseShield(attackerItemIds.value, attacker)
+  if (amount <= 0) return
+  shielded.value += amount
+  eclipseReadyAt.value = now + 6
+  championHitTimes.value = []
+  recordTimelineEvent(
+    t('theorycraft.practice.log.selfShield', {
+      label: t('theorycraft.practice.extras.eclipse'),
+      amount: formatDamageValue(amount),
+    })
+  )
+}
+
+function targetHasGrievousWounds(): boolean {
+  return timelineNowSeconds.value + 1e-6 < targetGrievousUntil.value
+}
+
+function healTargetNow(amount: number, label: string) {
+  const target = ensureSimulationState()
+  if (!target) return
+  const before = target.hp
+  target.hp = healTarget(target, amount, targetMaxHp(), targetHasGrievousWounds()).hp
+  recordTimelineEvent(
+    t('theorycraft.practice.log.targetHeal', {
+      label,
+      amount: formatDamageValue(target.hp - before),
+    })
+  )
+}
+
+/** Removes the target's timed shields (Barrier) once they expire. */
+function expireTargetShields() {
+  const now = timelineNowSeconds.value
+  const expired = targetTempShields.value.filter(entry => entry.until <= now + 1e-6)
+  if (expired.length === 0) return
+  targetTempShields.value = targetTempShields.value.filter(entry => entry.until > now + 1e-6)
+  const target = simulatedTarget.value
+  if (!target) return
+  const amount = expired.reduce((sum, entry) => sum + entry.amount, 0)
+  target.shield = Math.max(0, target.shield - amount)
+}
+
+const passiveTrigger = computed(() => passiveTriggers(String(props.championId ?? '')))
+
+function passiveRemainingCooldown(): number {
+  return Math.max(0, passiveReadyAt.value - timelineNowSeconds.value)
+}
+
+/** Passive fired by an attack or a spell (Urgot legs), when off cooldown. */
+function procPassive(at: number) {
+  const view = passive.value
+  if (!view?.damageVsSplit || at + 1e-6 < passiveReadyAt.value) return
+  passiveReadyAt.value = at + Math.max(0, Number(view.cooldownSeconds ?? 0))
+  queueHitEvent({
+    at,
+    label: `P ${view.name}`,
+    split: view.damageVsSplit,
+    hardCc: 0,
+    slowCc: 0,
+    profile: view.damageProfile,
+  })
+}
+
+/** Shots of active sustained-fire spells (Urgot W) up to the current time. */
+function queueSustainedShots() {
+  const now = timelineNowSeconds.value
+  for (const spell of spells.value) {
+    const fire = spell.sustainedFire
+    const state = sustainedFireState[spell.id]
+    if (!fire || !state) continue
+    const label = `${displaySpellSlot(spell.slot)} ${spell.name}`
+    const procs = passiveTrigger.value?.spellSlots.includes(spell.slot.toUpperCase()) ?? false
+    while (state.nextShotAt <= Math.min(now, state.until) + 1e-6) {
+      queueHitEvent({
+        at: state.nextShotAt,
+        label,
+        split: spell.damageVsSplit ?? emptySplit(),
+        hardCc: 0,
+        slowCc: 0,
+        profile: spell.damageProfile,
+        isAttack: true,
+        onHitRatio: fire.onHitRatio,
+      })
+      if (procs) procPassive(state.nextShotAt)
+      state.nextShotAt += 1 / fire.shotsPerSecond
+    }
+    if (state.until <= now) delete sustainedFireState[spell.id]
+  }
 }
 
 function recordTimelineEvent(message: string) {
@@ -998,7 +1353,18 @@ function advanceTimeline(seconds?: number) {
       simulatedResource.value.current + regenPerSecond * step
     )
   }
+  regenerateTarget(step)
+  queueSustainedShots()
   processPendingHitEvents()
+  expireTargetShields()
+}
+
+/** Target health regeneration over the elapsed time (reduced by grievous wounds). */
+function regenerateTarget(seconds: number) {
+  const target = simulatedTarget.value
+  if (!target) return
+  const regen = Number(targetRaw.value.healthRegen ?? 0) * (targetHasGrievousWounds() ? 0.6 : 1)
+  target.hp = regenerateHp(target, regen, seconds, targetMaxHp()).hp
 }
 
 function waitTimelineStep() {
@@ -1006,7 +1372,7 @@ function waitTimelineStep() {
 }
 
 function autoAttackIntervalSeconds(): number {
-  const asFromStats = Number(props.attackerRawStats?.attackSpeed ?? NaN)
+  const asFromStats = Number(attackerRaw.value?.attackSpeed ?? NaN)
   const attackSpeed = Number.isFinite(asFromStats) && asFromStats > 0 ? asFromStats : 0.7
   return 1 / attackSpeed
 }
@@ -1042,7 +1408,16 @@ function processPendingHitEvents() {
   if (due.length === 0) return
   pendingHitEvents.value = pendingHitEvents.value.filter(event => event.at > now + 1e-6)
   for (const event of due) {
-    applyDamageToSimulation(event.split, event.label)
+    if (event.heal != null) {
+      healTargetNow(event.heal, event.label)
+      continue
+    }
+    applyDamageToSimulation(resolveEventSplit(event), event.label, event.crit, {
+      executeBelow: event.executeBelow,
+      isAttack: event.isAttack,
+      periodic: event.periodic,
+      bypassDefense: event.bypassDefense,
+    })
     if (event.hardCc > 0) addControlWindow('hard', event.hardCc)
     if (event.slowCc > 0) addControlWindow('slow', event.slowCc)
     if (event.hardCc > 0 || event.slowCc > 0) {
@@ -1103,6 +1478,11 @@ function spellLacksResource(spell: ResolvedSpellView): boolean {
 function useSpellDamage(spell: ResolvedSpellView) {
   if (!spellIsUsable(spell)) return
   const label = `${displaySpellSlot(spell.slot)} ${spell.name}`
+  if (spell.sustainedFire?.toggle && sustainedFireState[spell.id]) {
+    delete sustainedFireState[spell.id]
+    recordTimelineEvent(t('theorycraft.practice.log.toggleOff', { label }))
+    return
+  }
   const actionLock = actionLockRemaining()
   if (actionLock > 0.001) {
     recordTimelineEvent(
@@ -1128,13 +1508,27 @@ function useSpellDamage(spell: ResolvedSpellView) {
     simulatedResource.value.current = Math.max(0, simulatedResource.value.current - cost)
   }
   const hitDelay = Math.max(0, Number(spell.hitDelaySeconds ?? 0))
-  queueHitEvent({
-    at: timelineNowSeconds.value + hitDelay,
-    label,
-    split: spell.damageVsSplit ?? emptySplit(),
-    hardCc: Math.max(0, Number(spell.hardControlDurationVsChampion ?? 0)),
-    slowCc: Math.max(0, Number(spell.slowDurationVsChampion ?? 0)),
-  })
+  if (spell.sustainedFire) {
+    const now = timelineNowSeconds.value
+    sustainedFireState[spell.id] = { until: now + spell.sustainedFire.duration, nextShotAt: now }
+    recordTimelineEvent(t('theorycraft.practice.log.toggleOn', { label }))
+  } else {
+    queueHitEvent({
+      at: timelineNowSeconds.value + hitDelay,
+      label,
+      split: spell.damageVsSplit ?? emptySplit(),
+      hardCc: Math.max(0, Number(spell.hardControlDurationVsChampion ?? 0)),
+      slowCc: Math.max(0, Number(spell.slowDurationVsChampion ?? 0)),
+      profile: spell.damageProfile,
+      ability: true,
+      executeBelow: spell.executeBelow,
+    })
+  }
+  healed.value += Math.max(0, Number(spell.heal ?? 0))
+  shielded.value += Math.max(0, Number(spell.shield ?? 0))
+  if (sumSplit(spellbladeDamage(attackerItemIds.value, itemAttacker())) > 0) {
+    spellbladeReady.value = true
+  }
   const cooldown = Math.max(0, Number(spell.cooldownSeconds ?? 0))
   if (cooldown > 0) {
     spellReadyAt[spell.id] = timelineNowSeconds.value + cooldown
@@ -1145,8 +1539,22 @@ function useSpellDamage(spell: ResolvedSpellView) {
 
 function usePassiveDamage(passiveView: ResolvedPassiveView) {
   const label = `P ${passiveView.name}`
+  const remaining = passiveRemainingCooldown()
+  if (remaining > 0.001) {
+    recordTimelineEvent(
+      t('theorycraft.practice.log.cooldown', { label, seconds: formatDamageValue(remaining) })
+    )
+    return
+  }
+  passiveReadyAt.value =
+    timelineNowSeconds.value + Math.max(0, Number(passiveView.cooldownSeconds ?? 0))
+  healed.value += Math.max(0, Number(passiveView.heal ?? 0))
+  shielded.value += Math.max(0, Number(passiveView.shield ?? 0))
   if (passiveView.damageVsSplit) {
-    applyDamageToSimulation(passiveView.damageVsSplit, label)
+    applyDamageToSimulation(
+      resolveEventSplit({ split: passiveView.damageVsSplit, profile: passiveView.damageProfile }),
+      label
+    )
   }
   const hardCc = Number(passiveView.hardControlDurationVsChampion ?? 0)
   const slowCc = Number(passiveView.slowDurationVsChampion ?? 0)
@@ -1164,20 +1572,168 @@ function usePassiveDamage(passiveView: ResolvedPassiveView) {
   advanceTimeline()
 }
 
-const autoAttackSplit = computed((): DamageSplit | null => {
-  const attacker = props.buildStats
-  const defenderRaw = props.opponentRawStats
-  if (!attacker || !defenderRaw) return null
-  return {
-    ...emptySplit(),
-    physical: reduceDamageByDefenses(
-      attacker.totalAD,
-      'physical',
-      defenderRaw,
-      props.attackerRawStats
-    ),
+const attackerSummonerIds = computed((): string[] =>
+  ((buildStore.displayedBuild ?? buildStore.currentBuild)?.summonerSpells ?? []).map(spell =>
+    String(spell?.id ?? '')
+  )
+)
+
+const SUMMONER_KINDS: Record<string, ExtraActionKind> = {
+  SummonerDot: 'ignite',
+  SummonerBarrier: 'barrier',
+  SummonerHeal: 'heal',
+}
+
+function sideExtraActions(
+  side: 'self' | 'target',
+  summonerIds: string[],
+  itemIds: string[]
+): ExtraAction[] {
+  const actions: ExtraAction[] = []
+  for (const id of summonerIds) {
+    const kind = SUMMONER_KINDS[id]
+    if (!kind || (side === 'target' && kind === 'ignite')) continue
+    actions.push({
+      key: `${side}:${id}`,
+      side,
+      kind,
+      label: t(`theorycraft.practice.extras.${kind}`),
+      cooldown: summonerCooldown(id) ?? 0,
+    })
   }
+  for (const itemId of new Set(itemIds)) {
+    const potion = consumableHeal(itemId)
+    if (!potion) continue
+    actions.push({
+      key: `${side}:${itemId}`,
+      side,
+      kind: 'potion',
+      label: t('theorycraft.practice.extras.potion'),
+      cooldown: potion.duration,
+      itemId,
+    })
+  }
+  return actions
+}
+
+/** Summoner spells and potions of the attacker (self) and of the opponent (target). */
+const extraActions = computed((): ExtraAction[] => [
+  ...sideExtraActions('self', attackerSummonerIds.value, attackerItemIds.value),
+  ...(hasOpponent.value
+    ? sideExtraActions('target', props.opponentSummonerIds ?? [], props.opponentItemIds ?? [])
+    : []),
+])
+
+function extraRemainingCooldown(action: ExtraAction): number {
+  return Math.max(0, Number(spellReadyAt[action.key] ?? 0) - timelineNowSeconds.value)
+}
+
+function useExtraAction(action: ExtraAction) {
+  const label =
+    action.side === 'target'
+      ? `${action.label} (${t('theorycraft.practice.extras.opponent')})`
+      : action.label
+  const remaining = extraRemainingCooldown(action)
+  if (remaining > 0.001) {
+    recordTimelineEvent(
+      t('theorycraft.practice.log.cooldown', { label, seconds: formatDamageValue(remaining) })
+    )
+    return
+  }
+  if (!ensureSimulationState()) return
+  const now = timelineNowSeconds.value
+  spellReadyAt[action.key] = now + action.cooldown
+  const level = attackerLevelForMitigation()
+  if (action.kind === 'ignite') {
+    const tick = igniteTotalDamage(level) / 5
+    targetGrievousUntil.value = Math.max(targetGrievousUntil.value, now + 5)
+    for (let second = 1; second <= 5; second += 1) {
+      queueHitEvent({
+        at: now + second,
+        label,
+        split: { ...emptySplit(), true: tick },
+        hardCc: 0,
+        slowCc: 0,
+        periodic: true,
+      })
+    }
+  } else if (action.kind === 'barrier') {
+    const amount = summonerBarrierShield(level)
+    if (action.side === 'self') {
+      shielded.value += amount
+      recordTimelineEvent(
+        t('theorycraft.practice.log.selfShield', { label, amount: formatDamageValue(amount) })
+      )
+    } else {
+      const target = simulatedTarget.value!
+      target.shield += amount
+      targetTempShields.value = [...targetTempShields.value, { amount, until: now + 2.5 }]
+      recordTimelineEvent(
+        t('theorycraft.practice.log.targetShield', { label, amount: formatDamageValue(amount) })
+      )
+    }
+  } else if (action.kind === 'heal') {
+    const amount = summonerHealAmount(level)
+    if (action.side === 'self') {
+      healed.value += amount
+      recordTimelineEvent(
+        t('theorycraft.practice.log.selfHeal', { label, amount: formatDamageValue(amount) })
+      )
+    } else {
+      healTargetNow(amount, label)
+    }
+  } else {
+    const potion = consumableHeal(action.itemId ?? '')
+    if (!potion) return
+    if (action.side === 'self') {
+      healed.value += potion.total
+      recordTimelineEvent(
+        t('theorycraft.practice.log.selfHeal', { label, amount: formatDamageValue(potion.total) })
+      )
+    } else {
+      const perTick = potion.total / potion.duration
+      for (let second = 1; second <= potion.duration; second += 1) {
+        queueHitEvent({
+          at: now + second,
+          label,
+          split: emptySplit(),
+          hardCc: 0,
+          slowCc: 0,
+          heal: perTick,
+        })
+      }
+    }
+  }
+}
+
+const autoAttackRawDamage = computed(() => {
+  const attacker = props.buildStats
+  if (!attacker) return null
+  return autoAttackRaw(attacker.totalAD, attacker.critChance, attacker.critDamage)
 })
+
+/** Attack damage with on-hit items (and Spellblade when charged), mitigated. */
+function attackSplit(raw: number, withSpellblade = false): DamageSplit {
+  return mitigateRaw(rawAttackSplit(raw, withSpellblade))
+}
+
+/** Attack damage with on-hit items, before the target's armor and magic resist. */
+function rawAttackSplit(raw: number, withSpellblade = false): DamageSplit {
+  const hp = currentTargetHp()
+  let rawSplit = addSplit(
+    { ...emptySplit(), physical: raw },
+    onHitItemDamage(attackerItemIds.value, itemAttacker(), hp)
+  )
+  if (withSpellblade) {
+    rawSplit = addSplit(rawSplit, spellbladeDamage(attackerItemIds.value, itemAttacker()))
+  }
+  return amplifyItemDamage(attackerItemIds.value, rawSplit, hp)
+}
+
+/** Average auto attack (crit chance included), used for previews and the damage table. */
+const autoAttackSplit = computed((): DamageSplit | null =>
+  autoAttackRawDamage.value ? attackSplit(autoAttackRawDamage.value.expected) : null
+)
 
 function estimatedAutoAttackDamage(): number | null {
   return autoAttackSplit.value ? sumSplit(autoAttackSplit.value) : null
@@ -1199,9 +1755,21 @@ function useAutoAttack() {
     )
     return
   }
-  const split = autoAttackSplit.value
-  if (!split) return
-  queueHitEvent({ at: timelineNowSeconds.value + 0.1, label, split, hardCc: 0, slowCc: 0 })
+  const rawDamage = autoAttackRawDamage.value
+  if (!rawDamage) return
+  const crit = rollCrit(props.buildStats?.critChance ?? 0)
+  const split = attackSplit(crit ? rawDamage.crit : rawDamage.normal, spellbladeReady.value)
+  spellbladeReady.value = false
+  queueHitEvent({
+    at: timelineNowSeconds.value + 0.1,
+    label,
+    split,
+    hardCc: 0,
+    slowCc: 0,
+    crit,
+    isAttack: true,
+  })
+  if (passiveTrigger.value?.attacks) procPassive(timelineNowSeconds.value + 0.1)
   autoReadyAt.value = timelineNowSeconds.value + autoAttackIntervalSeconds()
   applyActionRecovery(0.15, 0.1)
   advanceTimeline(0.15)
@@ -1383,6 +1951,20 @@ function splitParts(split: DamageSplit | null | undefined): { type: DamageType; 
 
 function resolveSpellCooldownSeconds(
   raw: TheorycraftSpellRuntimeData & Record<string, unknown>,
+  rank: number,
+  withReduction: boolean
+): number {
+  const header = headerCooldownAtRank(
+    raw.headerStats as Array<{ key?: unknown; valueText?: unknown }>,
+    rank
+  )
+  const base = header ?? baseSpellCooldownSeconds(raw, rank)
+  if (!withReduction) return base
+  return cooldownAfterReduction(base, Number(props.buildStats?.cooldownReduction ?? 0))
+}
+
+function baseSpellCooldownSeconds(
+  raw: TheorycraftSpellRuntimeData & Record<string, unknown>,
   rank: number
 ): number {
   const maxRank = Math.max(1, Number(raw.maxRank ?? 5))
@@ -1420,7 +2002,7 @@ function resolveSpellResourceCost(
     const value = Number(costCalc.baseValues?.[rankIndex] ?? costCalc.baseValues?.[0] ?? 0)
     if (Number.isFinite(value) && value > 0) return value
   }
-  return 0
+  return headerCostAtRank(raw.headerStats as Array<{ key?: unknown; valueText?: unknown }>, rank)
 }
 
 function resolveSpellHitDelaySeconds(
@@ -1484,15 +2066,6 @@ function attackerLevelForMitigation(): number {
   return Math.min(Math.max(Number(props.buildStats?.level ?? props.level ?? 1), 1), 18)
 }
 
-function reduceDamageByDefenses(
-  rawDamage: number,
-  damageType: DamageType,
-  target: DefenderStats,
-  attackerRaw?: Record<string, number> | null
-): number {
-  return mitigateDamage(rawDamage, damageType, target, attackerRaw, attackerLevelForMitigation())
-}
-
 function formatDamageValue(value: number): string {
   const rounded = Math.round(value * 10) / 10
   if (!Number.isFinite(rounded)) return '0'
@@ -1531,6 +2104,7 @@ function ratioStatValueForVsDamage(
     magicresist: attacker.magicResist,
     maxmana: attacker.maxMana,
     mana: attacker.maxMana,
+    lethality: Number(attackerRaw.value?.lethality ?? 0),
   }
 
   const fromDefender: Record<string, number> = {
@@ -1547,15 +2121,123 @@ function ratioStatValueForVsDamage(
   return 0
 }
 
+function spellStatValue(stat: string): number {
+  return props.buildStats ? ratioStatValueForVsDamage(stat, props.buildStats, targetStats.value) : 0
+}
+
+/** Items of the attacking build, minus the ones disabled in theorycraft. */
+const attackerItemIds = computed((): string[] => {
+  const build = buildStore.displayedBuild ?? buildStore.currentBuild
+  const disabled = new Set(buildStore.theorycraftDisabledItemIndices)
+  return (build?.items ?? [])
+    .filter((_, index) => !disabled.has(index))
+    .map(item => String(item?.id ?? ''))
+})
+
+function itemAttacker(): ItemAttacker {
+  const stats = props.buildStats
+  const raw = attackerRaw.value
+  const totalAD = Number(stats?.totalAD ?? 0)
+  const bonusAD = Number(stats?.bonusAD ?? 0)
+  return {
+    level: attackerLevelForMitigation(),
+    baseAD: Math.max(0, totalAD - bonusAD),
+    bonusAD,
+    AP: Number(stats?.AP ?? 0),
+    maxHp: Number(stats?.totalHP ?? 0),
+    ranged: Number(raw?.attackRange ?? 0) >= 300,
+  }
+}
+
+function currentTargetHp(): ItemTarget {
+  const maxHp = targetMaxHp()
+  return { maxHp, currentHp: simulatedTarget.value?.hp ?? maxHp }
+}
+
+function mitigateRaw(rawSplit: DamageSplit): DamageSplit {
+  return mitigateSplit(rawSplit, targetRaw.value, attackerRaw.value, attackerLevelForMitigation())
+}
+
+/** Mitigated damage of a hit; health-dependent parts use the target's health right now. */
+function resolveEventSplit(
+  event: Pick<PendingHitEvent, 'split' | 'profile' | 'ability' | 'onHitRatio'>
+): DamageSplit {
+  const rawSplit = rawEventSplit(event)
+  return rawSplit ? mitigateRaw(rawSplit) : event.split
+}
+
+/** Damage of a hit before armor and magic resist, null without a damage profile. */
+function rawEventSplit(
+  event: Pick<PendingHitEvent, 'profile' | 'ability' | 'onHitRatio'>
+): DamageSplit | null {
+  if (!event.profile) return null
+  const hp = currentTargetHp()
+  let rawSplit = evaluateDamageProfile(event.profile, hp)
+  if (event.ability) rawSplit = addSplit(rawSplit, abilityItemDamage(attackerItemIds.value, hp))
+  if (event.onHitRatio) {
+    const onHit = onHitItemDamage(attackerItemIds.value, itemAttacker(), hp)
+    rawSplit = addSplit(rawSplit, scaleSplit(onHit, event.onHitRatio))
+  }
+  return amplifyItemDamage(attackerItemIds.value, rawSplit, hp)
+}
+
+/** Button title: raw damage → damage received after armor / magic resist. */
+function damageTitle(
+  name: string,
+  received: number | null | undefined,
+  rawSplit: DamageSplit | null
+): string {
+  if (received == null || !rawSplit) return name
+  return t('theorycraft.practice.rawToReceived', {
+    name,
+    raw: Math.round(sumSplit(rawSplit)),
+    received: Math.round(received),
+  })
+}
+
 function computeDamageVsChampion(
   raw: TheorycraftSpellRuntimeData & Record<string, unknown>,
   rank: number
-): { damage: number; split: DamageSplit; lethal: boolean; tooltip: string } | null {
+): {
+  damage: number
+  split: DamageSplit
+  lethal: boolean
+  tooltip: string
+  profile: DamageProfile | null
+} | null {
   const attacker = props.buildStats
-  const defender = props.opponentBuildStats
-  const defenderRaw = props.opponentRawStats
+  const defender = targetStats.value
+  const defenderRaw = targetRaw.value
   if (!attacker || !defender || !defenderRaw) return null
   const maxRank = Math.max(1, Number(raw.maxRank ?? 5))
+
+  let parts = parseTooltipDamageParts(String(raw.tooltipRaw ?? ''))
+  if (parts.length === 0 && Array.isArray(raw.tooltipDetailRaws)) {
+    parts = parseTooltipDamageParts(raw.tooltipDetailRaws.map(String).join(' '))
+  }
+  if (parts.length > 0) {
+    const profile = resolveDamageProfile(
+      raw as SpellDamageSource,
+      parts,
+      Math.min(Math.max(rank, 1), maxRank) - 1,
+      spellStatValue
+    )
+    if (profileHasDamage(profile)) {
+      const split = resolveEventSplit({ split: emptySplit(), profile, ability: Boolean(raw.slot) })
+      const damage = sumSplit(split)
+      const lines = splitParts(split).map(
+        part => `${t(`theorycraft.practice.types.${part.type}`)}: ${formatDamageValue(part.value)}`
+      )
+      return {
+        damage,
+        split,
+        lethal: effectiveTargetHp.value > 0 && damage >= effectiveTargetHp.value,
+        tooltip: lines.join('\n'),
+        profile,
+      }
+    }
+  }
+
   const formulas = (raw.calculations ?? []).filter(entry =>
     isDamageCalculationKey(String(entry.key ?? ''))
   )
@@ -1583,7 +2265,7 @@ function computeDamageVsChampion(
     const mitigatedSplit = mitigateSplit(
       components,
       defenderRaw,
-      props.attackerRawStats,
+      attackerRaw.value,
       attackerLevelForMitigation()
     )
     totalSplit = addSplit(totalSplit, mitigatedSplit)
@@ -1609,7 +2291,13 @@ function computeDamageVsChampion(
   breakdownLines.push(
     `Total: ${formatDamageValue(totalMitigated)} | Cible: ${formatDamageValue(targetHp)} PV + ${formatDamageValue(Math.max(0, targetShield))} bouclier`
   )
-  return { damage: totalMitigated, split: totalSplit, lethal, tooltip: breakdownLines.join('\n') }
+  return {
+    damage: totalMitigated,
+    split: totalSplit,
+    lethal,
+    tooltip: breakdownLines.join('\n'),
+    profile: null,
+  }
 }
 
 type ControlKind = 'hard' | 'airborne' | 'slow'
@@ -1630,9 +2318,9 @@ function computeControlVsChampion(
   raw: TheorycraftSpellRuntimeData & Record<string, unknown>,
   rank: number
 ): { duration: number; hardDuration: number; slowDuration: number; tooltip: string } | null {
-  const defender = props.opponentBuildStats
+  const defender = targetStats.value
   if (!defender) return null
-  const defenderRaw = props.opponentRawStats
+  const defenderRaw = targetRaw.value
   const maxRank = Math.max(1, Number(raw.maxRank ?? 5))
   const rankIndex = Math.min(Math.max(rank, 1), maxRank) - 1
   const tenacity = Math.min(Math.max(Number(defenderRaw?.tenacity ?? 0), 0), 0.95)
@@ -1668,13 +2356,7 @@ function computeControlVsChampion(
   }
 
   if (entries.length === 0) return null
-  const total = entries.reduce((sum, entry) => sum + entry.duration, 0)
-  const hardDuration = entries
-    .filter(entry => entry.kind === 'hard' || entry.kind === 'airborne')
-    .reduce((sum, entry) => sum + entry.duration, 0)
-  const slowDuration = entries
-    .filter(entry => entry.kind === 'slow')
-    .reduce((sum, entry) => sum + entry.duration, 0)
+  const { duration: total, hardDuration, slowDuration } = combineControlDurations(entries)
   const lines = entries.map(
     entry => `${entry.label}: ${formatDamageValue(entry.duration)}s (${entry.kind})`
   )
@@ -1739,7 +2421,23 @@ function resolveSpellView(
   })
   const damageVs = computeDamageVsChampion(raw, rank)
   const controlVs = computeControlVsChampion(raw, rank)
-  const targetMaxHp = Number(props.opponentBuildStats?.totalHP ?? NaN)
+  const targetMaxHp = Number(targetStats.value.totalHP ?? NaN)
+  const rankIndex = Math.min(Math.max(rank, 1), Math.max(1, Number(raw.maxRank ?? 5))) - 1
+  const executeBelow = raw.slot
+    ? resolveExecuteThreshold(
+        String(loadedChampion.value?.id ?? props.championId ?? ''),
+        String(raw.slot),
+        raw as SpellDamageSource,
+        rankIndex,
+        spellStatValue,
+        targetMaxHp
+      )
+    : null
+  const sustain = resolveSpellSustain(raw as SpellDamageSource, rankIndex, spellStatValue)
+  const executesNow =
+    executeBelow != null &&
+    effectiveTargetHp.value > 0 &&
+    effectiveTargetHp.value - (damageVs?.damage ?? 0) <= executeBelow
   const summaryHtml = finalized.summaryHtml
     ? annotateExecuteThresholdWithHp(finalized.summaryHtml, targetMaxHp)
     : undefined
@@ -1766,13 +2464,18 @@ function resolveSpellView(
     hasActivatableBuff: spellHasActivatableBuff(raw),
     damageVsChampion: damageVs?.damage ?? null,
     damageVsSplit: damageVs?.split ?? null,
-    lethalVsChampion: damageVs?.lethal ?? false,
+    lethalVsChampion: (damageVs?.lethal ?? false) || executesNow,
     damageVsTooltip: damageVs?.tooltip ?? '',
+    damageProfile: damageVs?.profile ?? null,
+    executeBelow,
+    heal: sustain.heal,
+    shield: sustain.shield,
     controlDurationVsChampion: controlVs?.duration ?? null,
     hardControlDurationVsChampion: controlVs?.hardDuration ?? null,
     slowDurationVsChampion: controlVs?.slowDuration ?? null,
     controlVsTooltip: controlVs?.tooltip ?? '',
-    cooldownSeconds: resolveSpellCooldownSeconds(raw, rank),
+    // The passive (no slot) ignores ability haste.
+    cooldownSeconds: resolveSpellCooldownSeconds(raw, rank, Boolean(raw.slot)),
     resourceCost: resolveSpellResourceCost(raw, rank),
     hitDelaySeconds: resolveSpellHitDelaySeconds(raw, rank),
   }
@@ -1808,8 +2511,7 @@ watch(
 )
 
 watch(
-  () =>
-    [props.opponentBuildStats?.totalHP, props.opponentRawStats?.shield, props.championId] as const,
+  () => [targetStats.value.totalHP, targetRaw.value.shield, props.championId] as const,
   () => {
     resetSimulation()
   },
@@ -1837,10 +2539,14 @@ const passive = computed((): ResolvedPassiveView | null => {
     damageVsSplit: resolved.damageVsSplit,
     lethalVsChampion: resolved.lethalVsChampion,
     damageVsTooltip: resolved.damageVsTooltip,
+    damageProfile: resolved.damageProfile,
     controlDurationVsChampion: resolved.controlDurationVsChampion,
     hardControlDurationVsChampion: resolved.hardControlDurationVsChampion,
     slowDurationVsChampion: resolved.slowDurationVsChampion,
     controlVsTooltip: resolved.controlVsTooltip,
+    cooldownSeconds: resolved.cooldownSeconds,
+    heal: resolved.heal,
+    shield: resolved.shield,
   }
 })
 
@@ -1868,6 +2574,7 @@ const spells = computed<ResolvedSpellView[]>(() => {
       slot: String(spell.slot ?? ''),
       imageUrl: resolveAbilityImageUrl(spell),
       ...resolved,
+      sustainedFire: resolveSustainedFire(spell as SpellDamageSource, rank - 1),
     }
   })
 })
@@ -1918,7 +2625,7 @@ const killRows = computed((): KillRow[] => {
       imageUrl: spell.imageUrl,
       damage: spell.damageVsChampion,
       split: spell.damageVsSplit ?? null,
-      hits: castsToKill(hp, spell.damageVsChampion),
+      hits: castsToKill(Math.max(0, hp - (spell.executeBelow ?? 0)), spell.damageVsChampion),
       spell,
     })
   }
@@ -2045,6 +2752,11 @@ watch(loadError, value => {
 .practice-float--lethal {
   font-size: 1.3rem;
   color: #f87171;
+}
+.practice-float--crit {
+  font-size: 1.25rem;
+  font-style: italic;
+  text-shadow: 0 0 6px rgba(251, 191, 36, 0.8);
 }
 
 @keyframes practice-float-up {
@@ -2260,6 +2972,53 @@ watch(loadError, value => {
   font-size: 0.9rem;
   font-weight: 800;
   color: #fff;
+}
+
+.practice-action__cost {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: rgb(125 211 252);
+}
+
+.practice-action--active .practice-action__icon {
+  border-color: #22c55e;
+  box-shadow: 0 0 6px rgb(34 197 94 / 0.7);
+}
+
+.practice-action__on {
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  font-size: 0.6rem;
+  font-weight: 800;
+  color: #22c55e;
+}
+
+.practice-extra {
+  border: 1px solid rgb(200 155 60 / 0.5);
+  border-radius: 4px;
+  background: rgb(0 0 0 / 0.35);
+  padding: 0.2rem 0.5rem;
+  color: #f0e6d2;
+}
+
+.practice-extra--target {
+  border-color: rgb(248 113 113 / 0.6);
+}
+
+.practice-extra__cd {
+  margin-left: 0.25rem;
+  font-weight: 800;
+  color: rgb(148 163 184);
+}
+
+.practice-action__exec {
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: rgb(248 113 113);
 }
 
 .practice-action__dmg {

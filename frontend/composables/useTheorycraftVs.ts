@@ -117,6 +117,15 @@ export function useTheorycraftVs(opts: TheorycraftVsOptions) {
   })
 
   const opponentRawStats = computed(() => sideCalculatedStats.value[opponentSide.value])
+  const opponentName = computed(() => sideBuilds.value[opponentSide.value]?.champion?.name ?? null)
+  const opponentItemIds = computed((): string[] =>
+    (sideBuilds.value[opponentSide.value]?.items ?? []).map(item => String(item?.id ?? ''))
+  )
+  const opponentSummonerIds = computed((): string[] =>
+    (sideBuilds.value[opponentSide.value]?.summonerSpells ?? []).map(spell =>
+      String(spell?.id ?? '')
+    )
+  )
   const attackerRawStats = computed(() => sideCalculatedStats.value[activeSide.value] ?? null)
 
   /** Copy of the store's current stats (the store object is mutated in place). */
@@ -361,6 +370,9 @@ export function useTheorycraftVs(opts: TheorycraftVsOptions) {
     theorycraftStats,
     opponentTheorycraftStats,
     opponentRawStats,
+    opponentName,
+    opponentItemIds,
+    opponentSummonerIds,
     attackerRawStats,
     storeStatsSnapshot,
     persistActiveSideBuild,

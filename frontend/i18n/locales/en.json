@@ -494,7 +494,6 @@
     "practice": {
       "title": "Training dummy",
       "reset": "Reset",
-      "noTarget": "Pick an enemy build to hit the training dummy.",
       "hp": "HP",
       "shield": "shield",
       "dead": "Killed",
@@ -531,10 +530,33 @@
         "cc": "{label}: hard CC {hard}s / slow {slow}s",
         "locked": "{label} locked ({seconds}s)",
         "cooldown": "{label} on cooldown ({seconds}s)",
-        "noResource": "{label}: not enough resource ({cost})"
+        "noResource": "{label}: not enough resource ({cost})",
+        "execute": "{label}: executed!",
+        "deathsDance": "{label}: {amount} deferred by Death's Dance",
+        "selfShield": "{label}: shield +{amount}",
+        "selfHeal": "{label}: heal +{amount}",
+        "targetHeal": "{label}: target regains {amount} HP",
+        "targetShield": "{label}: target gains a {amount} shield",
+        "toggleOn": "{label} on",
+        "toggleOff": "{label} off"
       },
       "stunned": "Stunned",
-      "slowed": "Slowed"
+      "slowed": "Slowed",
+      "targetStats": "{hp} HP · {armor} armor · {mr} MR",
+      "healed": "Heals",
+      "shielded": "Shields",
+      "executeBelow": "Executes below {hp} HP",
+      "afterMitigation": "Damage shown = damage taken after armor/MR and the target's defensive items.",
+      "rawToReceived": "{name} — {raw} raw → {received} taken after armor/MR",
+      "extras": {
+        "ignite": "Ignite",
+        "barrier": "Barrier",
+        "heal": "Heal",
+        "potion": "Potion",
+        "deathsDance": "Death's Dance",
+        "eclipse": "Eclipse",
+        "opponent": "opponent"
+      }
     }
   },
   "buildCard": {
