@@ -360,7 +360,8 @@ async function bootstrap(): Promise<void> {
 
   const gateway = RiotGateway.getInstance();
   const tuner = PollerTuner.getInstance();
-  gateway.getObservabilityBus().on('ratelimit:429', () => {
+  gateway.getObservabilityBus().on('ratelimit:429', (event: { limitType?: string }) => {
+    if (event.limitType === 'service') return;
     tuner.onRateLimitHit();
   });
 

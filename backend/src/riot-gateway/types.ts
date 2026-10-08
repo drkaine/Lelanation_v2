@@ -3,6 +3,9 @@ export type HttpMethod = 'GET';
 export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 export type RequestPriority = 'high' | 'normal';
 export type RetryReason = '429' | '5xx' | 'network';
+
+/** Origin of a 429: our app/method quota, or Riot's service being overloaded. */
+export type RateLimitType = 'application' | 'method' | 'service';
 export type FlushReason = 'post_response' | 'timer_expired' | 'retry_ready' | 'watchdog';
 export type ShutdownReason = 'graceful' | 'timeout';
 

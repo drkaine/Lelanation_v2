@@ -490,6 +490,51 @@
       "procHextechRocket": "Lightning orb (Gunblade)",
       "procWitsEnd": "Frenzy (Wit's End)",
       "procTerminus": "Shadow (Terminus)"
+    },
+    "practice": {
+      "title": "Training dummy",
+      "reset": "Reset",
+      "noTarget": "Pick an enemy build to hit the training dummy.",
+      "hp": "HP",
+      "shield": "shield",
+      "dead": "Killed",
+      "total": "Damage dealt",
+      "dps": "DPS",
+      "time": "Time",
+      "cc": "CC (hard / slow)",
+      "types": {
+        "physical": "Physical",
+        "magic": "Magic",
+        "true": "True"
+      },
+      "autoAttack": "Basic attack",
+      "autoShort": "AA",
+      "spaceKey": "␣",
+      "combo": "Combo",
+      "comboEmpty": "Shift+click an action to add it.",
+      "removeFromCombo": "Remove from combo",
+      "runCombo": "Play combo",
+      "clearCombo": "Clear",
+      "keyboardHint": "Click = cast · Shift+click = add to combo · Keyboard (click the dummy first): {keys} and P, Space = AA, Enter = play combo, Backspace = reset",
+      "damageTable": "Damage per source on target",
+      "source": "Source",
+      "split": "Phys. / Magic / True",
+      "perCast": "Per hit",
+      "hitsToKill": "To kill",
+      "fullCombo": "Full combo (1× each)",
+      "lethal": "Lethal",
+      "hpLeft": "HP left",
+      "details": "Ability descriptions",
+      "log": {
+        "title": "Log",
+        "hit": "{label}: -{damage} ({hp} HP left)",
+        "cc": "{label}: hard CC {hard}s / slow {slow}s",
+        "locked": "{label} locked ({seconds}s)",
+        "cooldown": "{label} on cooldown ({seconds}s)",
+        "noResource": "{label}: not enough resource ({cost})"
+      },
+      "stunned": "Stunned",
+      "slowed": "Slowed"
     }
   },
   "buildCard": {

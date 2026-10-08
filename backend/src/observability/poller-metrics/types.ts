@@ -8,7 +8,10 @@ export interface GatewayRequestEvent {
   latencyMs: number;
   methodKey: string;
   statusCode: number;
+  /** 429 caused by our app/method quota. */
   is429: boolean;
+  /** 429 from Riot's service (overload), not our quota. */
+  isService429?: boolean;
   isError: boolean;
   tokensUsed_120s: number;
   tokensUsed_1s: number;
@@ -157,6 +160,7 @@ export interface GatewayAggregate {
   total_requests: number;
   times_limit_reached: number;
   total_429s: number;
+  total_429s_service: number;
   total_wait_ms_from_429: number;
   latency_p50_ms: number;
   latency_p95_ms: number;

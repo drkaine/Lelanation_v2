@@ -490,6 +490,51 @@
       "procHextechRocket": "Orbe de foudre (Pistolame)",
       "procWitsEnd": "Fureur (Au bout du rouleau)",
       "procTerminus": "Ombre (Terminus)"
+    },
+    "practice": {
+      "title": "Mannequin d'entraînement",
+      "reset": "Réinitialiser",
+      "noTarget": "Choisissez un build adverse pour frapper le mannequin.",
+      "hp": "PV",
+      "shield": "bouclier",
+      "dead": "Éliminé",
+      "total": "Dégâts infligés",
+      "dps": "DPS",
+      "time": "Temps",
+      "cc": "Contrôle (dur / ralenti)",
+      "types": {
+        "physical": "Physiques",
+        "magic": "Magiques",
+        "true": "Bruts"
+      },
+      "autoAttack": "Attaque de base",
+      "autoShort": "AA",
+      "spaceKey": "␣",
+      "combo": "Combo",
+      "comboEmpty": "Maj+clic sur une action pour l'ajouter.",
+      "removeFromCombo": "Retirer du combo",
+      "runCombo": "Jouer le combo",
+      "clearCombo": "Vider",
+      "keyboardHint": "Clic = lancer · Maj+clic = ajouter au combo · Clavier (cliquer sur le mannequin) : {keys} et P, Espace = AA, Entrée = jouer le combo, Retour arrière = réinitialiser",
+      "damageTable": "Dégâts par source sur la cible",
+      "source": "Source",
+      "split": "Phys. / Mag. / Bruts",
+      "perCast": "Par coup",
+      "hitsToKill": "Pour tuer",
+      "fullCombo": "Combo complet (1× chaque)",
+      "lethal": "Létal",
+      "hpLeft": "PV restants",
+      "details": "Description des sorts",
+      "log": {
+        "title": "Journal",
+        "hit": "{label} : -{damage} ({hp} PV restants)",
+        "cc": "{label} : contrôle {hard}s / ralenti {slow}s",
+        "locked": "{label} bloqué ({seconds}s)",
+        "cooldown": "{label} en recharge ({seconds}s)",
+        "noResource": "{label} : ressource insuffisante ({cost})"
+      },
+      "stunned": "Contrôlé",
+      "slowed": "Ralenti"
     }
   },
   "buildCard": {

@@ -132,8 +132,11 @@ function percentile(sorted: number[], p: number): number {
   return sorted[index] ?? 0;
 }
 
+/** Below this average a 5s window holds < 10 requests: a 20% drop is sampling noise. */
+export const THROUGHPUT_ANOMALY_MIN_AVG_RPS = 2;
+
 export function detectThroughputAnomaly(current: number, avg60s: number): boolean {
-  if (avg60s <= 0) return false;
+  if (avg60s < THROUGHPUT_ANOMALY_MIN_AVG_RPS) return false;
   return current < avg60s * 0.8;
 }
 

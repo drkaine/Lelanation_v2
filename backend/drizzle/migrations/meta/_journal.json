@@ -323,6 +323,13 @@
       "when": 1751203200000,
       "tag": "0045_participants_damage_to_champions_and_mitigated",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1751289600000,
+      "tag": "0046_drop_removed_riot_challenge_fields",
+      "breakpoints": true
     }
   ]
 }

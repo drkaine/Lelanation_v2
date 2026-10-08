@@ -530,6 +530,20 @@ function crossCheckedStat(
   return ddValue
 }
 
+const STAT_CORRECTION_MARKER = ': ddragon=0 corrigé via bin='
+
+/** Corrections ddragon=0 → bin attendues (champ seul) vs vraies divergences (message complet). */
+function partitionStatMismatches(mismatches: string[]): { corrections: string[]; divergences: string[] } {
+  const corrections: string[] = []
+  const divergences: string[] = []
+  for (const mismatch of mismatches) {
+    const at = mismatch.indexOf(STAT_CORRECTION_MARKER)
+    if (at >= 0) corrections.push(mismatch.slice(0, at))
+    else divergences.push(mismatch)
+  }
+  return { corrections, divergences }
+}
+
 function championLevelForAbilityRank(slotIndex: number, rank: number): number {
   const levels = ABILITY_RANK_CHAMPION_LEVELS[slotIndex] ?? ABILITY_RANK_CHAMPION_LEVELS[0]
   return levels[Math.min(Math.max(rank - 1, 0), levels.length - 1)] ?? rank
@@ -3920,6 +3934,8 @@ export class TheorycraftDataBuilderService {
   private readonly frontendDataDir: string
   private readonly frontendPublicDir: string
   private readonly cdragonCacheDir: string
+  /** Corrections ddragon=0 → bin par champ, résumées en une ligne par build. */
+  private readonly statCorrectionCounts = new Map<string, number>()
 
   constructor(
     backendGameDir: string = join(process.cwd(), 'data', 'game'),
@@ -4361,8 +4377,12 @@ export class TheorycraftDataBuilderService {
       attackDamage: checked(stats.attackdamageperlevel, binStats.attackDamagePerLevel, 'attackDamage/lvl'),
       attackSpeed: checked(stats.attackspeedperlevel, binStats.attackSpeedPerLevel, 'attackSpeed/lvl'),
     }
-    if (statMismatches.length > 0) {
-      console.warn(`[theorycraft] stats ${championId} (${lang}): ${statMismatches.join(' | ')}`)
+    const { corrections, divergences } = partitionStatMismatches(statMismatches)
+    for (const field of corrections) {
+      this.statCorrectionCounts.set(field, (this.statCorrectionCounts.get(field) ?? 0) + 1)
+    }
+    if (divergences.length > 0) {
+      console.warn(`[theorycraft] stats ${championId} (${lang}): ${divergences.join(' | ')}`)
     }
 
     return {
@@ -4397,6 +4417,7 @@ export class TheorycraftDataBuilderService {
       let championsCount = 0
       const validationIssues: string[] = []
       const textWarnings: string[] = []
+      this.statCorrectionCounts.clear()
 
       for (const lang of SUPPORTED_LANGS) {
         const championFullRes = await this.readChampionFull(version, lang)
@@ -4503,6 +4524,11 @@ export class TheorycraftDataBuilderService {
 
       await this.removeLegacyFrontendChampionExports(version)
 
+      if (this.statCorrectionCounts.size > 0) {
+        const summary = [...this.statCorrectionCounts].map(([field, count]) => `${field}×${count}`).join(', ')
+        console.log(`[theorycraft] stats ddragon=0 corrigées via bin sur ${version}: ${summary}`)
+        this.statCorrectionCounts.clear()
+      }
       if (validationIssues.length > 0) {
         console.warn(
           `[theorycraft] validation: ${validationIssues.length} problème(s) détecté(s) sur ${version}:\n` +
@@ -4547,5 +4573,6 @@ export const theorycraftTooltipTestUtils = {
   validateExportedChampion,
   binCharacterStats,
   crossCheckedStat,
+  partitionStatMismatches,
   auditDescriptionText,
 }

@@ -29,6 +29,7 @@ export class AggregateComputer {
       total_requests: events.length,
       times_limit_reached: saturations.length,
       total_429s: events.filter((e) => e.is429).length,
+      total_429s_service: events.filter((e) => e.isService429).length,
       total_wait_ms_from_429: saturations.reduce((sum, e) => sum + e.waitMs, 0),
       latency_p50_ms: percentileOf(latencies, 0.5),
       latency_p95_ms: percentileOf(latencies, 0.95),

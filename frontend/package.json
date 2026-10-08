@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build:no-restart": "node scripts/generate-og-default.mjs && node scripts/generate-champion-names.mjs && nuxt build",
-    "build": "npm run build:no-restart",
+    "build": "NUXT_OUTPUT_DIR=.output-verify NUXT_BUILD_DIR=.nuxt-verify npm run build:no-restart",
     "build:restart": "npm run build:no-restart && pm2 restart lelanation-frontend",
     "generate:webp": "node scripts/generate-lelariva-webp.mjs",
     "generate:og": "node scripts/generate-og-default.mjs",

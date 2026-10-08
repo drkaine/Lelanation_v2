@@ -124,7 +124,8 @@ export async function riotFetch(
   } catch (error) {
     if (error instanceof RiotHttpError) throw error;
     if (isNetworkError(error)) {
-      gatewayLogger.error(
+      // Transient: RiotGateway retries it and logs `request_failed_max_retries` if it never recovers.
+      gatewayLogger.warn(
         {
           component: 'undiciClient',
           event: 'network_error',

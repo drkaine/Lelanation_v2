@@ -1,7 +1,12 @@
-/** Challenge keys removed from Riot match-v5 (patch 16.17+). */
+/** Challenge keys removed from Riot match-v5 (patch 16.17+, then 2026-10 API change report). */
 export const DEPRECATED_CHALLENGE_KEYS = new Set<string>([
   'firstTurretKilledTime',
   'teleportTakedowns',
+  'baronBuffGoldAdvantageOverThreshold',
+  'controlWardTimeCoverageInRiverOrEnemyHalf',
+  'earliestBaron',
+  'earliestDragonTakedown',
+  'shortestTimeToAceFromFirstTakedown',
 ])
 
 export function challengeKeyToColumn(key: string): string {

@@ -2,12 +2,12 @@
   <section class="theorycraft-spell-panel space-y-3">
     <div
       v-if="!championId"
-      class="border-border/60 text-muted rounded-lg border p-6 text-center text-sm"
+      class="rounded-lg border border-border/60 p-6 text-center text-sm text-muted"
     >
       {{ t('theorycraft.spells.selectChampion') }}
     </div>
 
-    <div v-else-if="loading" class="text-muted py-6 text-center text-sm">
+    <div v-else-if="loading" class="py-6 text-center text-sm text-muted">
       {{ t('theorycraft.spells.loading') }}
     </div>
 
@@ -16,115 +16,404 @@
     </div>
 
     <template v-else>
+      <p
+        v-if="!hasVersusTarget()"
+        class="rounded-lg border border-border/60 p-3 text-center text-xs text-muted"
+      >
+        {{ t('theorycraft.practice.noTarget') }}
+      </p>
+
+      <!-- Mannequin d'entraînement -->
       <div
         v-if="hasVersusTarget() && simulatedTarget"
-        class="border-border/60 mb-2 flex flex-wrap items-center gap-2 rounded-lg border p-2 text-xs"
+        class="practice-arena space-y-3 rounded-lg p-3 outline-none"
+        tabindex="0"
+        @keydown="onPracticeKeydown"
       >
-        <span class="font-semibold text-text">
-          Cible: {{ Math.round(simulatedTarget.hp) }} PV
-          <span v-if="simulatedTarget.shield > 0">
-            + {{ Math.round(simulatedTarget.shield) }} bouclier</span
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h3 class="text-sm font-bold uppercase tracking-wide text-accent">
+            {{ t('theorycraft.practice.title') }}
+          </h3>
+          <button type="button" class="practice-btn" @click="resetSimulation">
+            ↺ {{ t('theorycraft.practice.reset') }}
+          </button>
+        </div>
+
+        <div class="relative">
+          <div class="mb-1 flex items-baseline justify-between gap-2 text-xs">
+            <span class="text-lg font-bold tabular-nums text-text">
+              {{ Math.round(simulatedTarget.hp) }}
+              <span class="text-xs font-normal text-muted">
+                / {{ Math.round(targetMaxHp()) }} {{ t('theorycraft.practice.hp') }}
+              </span>
+              <span v-if="simulatedTarget.shield > 0" class="text-xs font-semibold text-slate-200">
+                + {{ Math.round(simulatedTarget.shield) }} {{ t('theorycraft.practice.shield') }}
+              </span>
+            </span>
+            <span v-if="activeHardCcRemaining > 0" class="practice-status practice-status--hard">
+              {{ t('theorycraft.practice.stunned') }} {{ activeHardCcRemaining.toFixed(1) }}s
+            </span>
+            <span v-else-if="activeSlowRemaining > 0" class="practice-status practice-status--slow">
+              {{ t('theorycraft.practice.slowed') }} {{ activeSlowRemaining.toFixed(1) }}s
+            </span>
+            <span v-if="targetDead" class="practice-dead"
+              >☠ {{ t('theorycraft.practice.dead') }}</span
+            >
+          </div>
+          <div class="practice-hpbar" role="img" :aria-label="t('theorycraft.practice.title')">
+            <template v-if="dummyBar">
+              <span class="practice-hpbar__hp" :style="{ width: `${dummyBar.hp}%` }" />
+              <span class="practice-hpbar__shield" :style="{ width: `${dummyBar.shield}%` }" />
+              <span
+                v-for="type in DAMAGE_TYPES"
+                :key="`lost-${type}`"
+                :class="`practice-hpbar__lost dmg-bg-${type}`"
+                :style="{ width: `${dummyBar.lost[type]}%` }"
+              />
+            </template>
+          </div>
+          <div class="practice-floats" aria-live="polite">
+            <span
+              v-for="(hit, index) in hitFeed.slice(0, 4)"
+              :key="hit.id"
+              class="practice-float"
+              :class="[`dmg-text-${hit.type}`, { 'practice-float--lethal': hit.lethal }]"
+              :style="{ right: `${8 + index * 18}%` }"
+            >
+              -{{ Math.round(hit.amount) }}
+            </span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
+          <div class="practice-stat">
+            <span class="practice-stat__label">{{ t('theorycraft.practice.total') }}</span>
+            <span class="practice-stat__value">{{ Math.round(totalDealt) }}</span>
+          </div>
+          <div class="practice-stat">
+            <span class="practice-stat__label">{{ t('theorycraft.practice.dps') }}</span>
+            <span class="practice-stat__value">{{ Math.round(combatDps) }}</span>
+          </div>
+          <div class="practice-stat">
+            <span class="practice-stat__label">{{ t('theorycraft.practice.time') }}</span>
+            <span class="practice-stat__value">{{ timelineNowSeconds.toFixed(2) }}s</span>
+          </div>
+          <div class="practice-stat">
+            <span class="practice-stat__label">{{ t('theorycraft.practice.cc') }}</span>
+            <span class="practice-stat__value text-sm">
+              {{ simulatedControl.hardCcSeconds.toFixed(1) }}s
+              <span class="text-[10px] text-muted">
+                / {{ simulatedControl.slowSeconds.toFixed(1) }}s
+              </span>
+            </span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2 text-xs">
+          <div
+            v-for="type in DAMAGE_TYPES"
+            :key="`total-${type}`"
+            class="practice-type"
+            :class="`practice-type--${type}`"
           >
-        </span>
-        <span class="text-muted">({{ Math.round(effectiveTargetHp) }} effectifs)</span>
-        <span class="text-muted">
-          CC combo: hard {{ simulatedControl.hardCcSeconds.toFixed(2) }}s / slow
-          {{ simulatedControl.slowSeconds.toFixed(2) }}s
-        </span>
-        <span class="text-muted">
-          actif: hard {{ activeHardCcRemaining.toFixed(2) }}s / slow
-          {{ activeSlowRemaining.toFixed(2) }}s
-        </span>
-        <span class="text-muted">lock {{ actionLockRemaining().toFixed(2) }}s</span>
-        <span v-if="simulatedResource" class="text-muted">
-          {{ simulatedResource.kind }} {{ simulatedResource.current.toFixed(0) }}/{{
-            simulatedResource.max.toFixed(0)
+            <span class="practice-type__label">{{ t(`theorycraft.practice.types.${type}`) }}</span>
+            <span class="practice-type__value">{{ Math.round(dealtSplit[type]) }}</span>
+            <span class="practice-type__pct">{{ Math.round(dealtShares[type]) }}%</span>
+          </div>
+        </div>
+
+        <div v-if="simulatedResource && simulatedResource.max > 0" class="text-[10px]">
+          <div class="practice-resbar">
+            <span
+              :class="
+                simulatedResource.kind === 'energy'
+                  ? 'practice-resbar__energy'
+                  : 'practice-resbar__mana'
+              "
+              :style="{
+                width: `${(simulatedResource.current / simulatedResource.max) * 100}%`,
+              }"
+            />
+            <span class="practice-resbar__text">
+              {{ t(`theorycraft.stats.${simulatedResource.kind}`) }}
+              {{ Math.round(simulatedResource.current) }} / {{ Math.round(simulatedResource.max) }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Barre d'actions -->
+        <div class="practice-actions">
+          <button
+            type="button"
+            class="practice-action"
+            :disabled="autoAttackSplit == null"
+            :title="t('theorycraft.practice.autoAttack')"
+            @click.exact="useAutoAttack"
+            @click.shift.exact="enqueueAutoAttack"
+          >
+            <span class="practice-action__icon practice-action__icon--aa">⚔</span>
+            <span class="practice-action__key">{{ t('theorycraft.practice.spaceKey') }}</span>
+            <span v-if="autoRemainingCooldown() > 0.001" class="practice-action__cd">
+              {{ autoRemainingCooldown().toFixed(1) }}
+            </span>
+            <span class="practice-action__dmg">{{
+              Math.round(estimatedAutoAttackDamage() ?? 0)
+            }}</span>
+            <span class="practice-splitbar">
+              <span
+                v-for="seg in splitBarSegments(autoAttackSplit)"
+                :key="seg.type"
+                :class="`dmg-bg-${seg.type}`"
+                :style="{ width: seg.width }"
+              />
+            </span>
+          </button>
+          <button
+            v-if="
+              passive &&
+              (passive.damageVsChampion != null || (passive.controlDurationVsChampion ?? 0) > 0)
+            "
+            type="button"
+            class="practice-action"
+            :title="passive.name"
+            @click="usePassiveDamage(passive)"
+          >
+            <img
+              v-if="passive.imageUrl"
+              :src="passive.imageUrl"
+              :alt="passive.name"
+              class="practice-action__icon"
+              loading="lazy"
+            />
+            <span class="practice-action__key">P</span>
+            <span class="practice-action__dmg">{{
+              Math.round(passive.damageVsChampion ?? 0)
+            }}</span>
+            <span class="practice-splitbar">
+              <span
+                v-for="seg in splitBarSegments(passive.damageVsSplit)"
+                :key="seg.type"
+                :class="`dmg-bg-${seg.type}`"
+                :style="{ width: seg.width }"
+              />
+            </span>
+          </button>
+          <button
+            v-for="spell in spells"
+            :key="`action-${spell.id}`"
+            type="button"
+            class="practice-action"
+            :class="{ 'practice-action--nomana': spellLacksResource(spell) }"
+            :disabled="!spellIsUsable(spell)"
+            :title="spell.name"
+            @click.exact="useSpellDamage(spell)"
+            @click.shift.exact="enqueueSpell(spell)"
+          >
+            <img
+              v-if="spell.imageUrl"
+              :src="spell.imageUrl"
+              :alt="spell.name"
+              class="practice-action__icon"
+              loading="lazy"
+            />
+            <span class="practice-action__key">{{ displaySpellSlot(spell.slot) }}</span>
+            <span v-if="spellRemainingCooldown(spell.id) > 0.001" class="practice-action__cd">
+              {{ spellRemainingCooldown(spell.id).toFixed(1) }}
+            </span>
+            <span class="practice-action__dmg">
+              {{ spell.damageVsChampion != null ? Math.round(spell.damageVsChampion) : 'CC' }}
+            </span>
+            <span class="practice-splitbar">
+              <span
+                v-for="seg in splitBarSegments(spell.damageVsSplit)"
+                :key="seg.type"
+                :class="`dmg-bg-${seg.type}`"
+                :style="{ width: seg.width }"
+              />
+            </span>
+          </button>
+        </div>
+
+        <!-- Combo -->
+        <div class="practice-combo flex flex-wrap items-center gap-1.5 text-xs">
+          <span class="font-semibold uppercase tracking-wide text-text/70">
+            {{ t('theorycraft.practice.combo') }}
+          </span>
+          <span v-if="actionQueue.length === 0" class="text-muted">
+            {{ t('theorycraft.practice.comboEmpty') }}
+          </span>
+          <button
+            v-for="(action, index) in actionQueue"
+            :key="`queued-${index}`"
+            type="button"
+            class="practice-chip"
+            :title="t('theorycraft.practice.removeFromCombo')"
+            @click="removeQueuedAction(index)"
+          >
+            {{ action.label }}
+          </button>
+          <span class="ml-auto flex flex-wrap gap-1">
+            <button
+              type="button"
+              class="practice-btn practice-btn--primary"
+              :disabled="actionQueue.length === 0"
+              @click="runQueueFromStart"
+            >
+              ▶ {{ t('theorycraft.practice.runCombo') }}
+            </button>
+            <button
+              type="button"
+              class="practice-btn"
+              :disabled="actionQueue.length === 0"
+              @click="clearQueue"
+            >
+              {{ t('theorycraft.practice.clearCombo') }}
+            </button>
+            <button type="button" class="practice-btn" @click="waitTimelineStep">
+              ⏱ +{{ timelineStepSeconds.toFixed(1) }}s
+            </button>
+          </span>
+        </div>
+
+        <p class="text-[10px] leading-snug text-muted">
+          {{
+            t('theorycraft.practice.keyboardHint', {
+              keys: spells.map(spell => displaySpellSlot(spell.slot)).join(' '),
+            })
           }}
-        </span>
-        <label class="text-muted inline-flex items-center gap-1">
-          t={{ timelineNowSeconds.toFixed(1) }}s
-          <input
-            v-model.number="timelineStepSeconds"
-            type="number"
-            min="0.05"
-            step="0.05"
-            class="theorycraft-stack-input border-border rounded border bg-surface text-text"
-            style="width: 4.8ch"
-            title="Pas de temps auto après chaque action"
-          />
-        </label>
-        <button
-          type="button"
-          class="border-border rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text/80 hover:border-accent/60"
-          :disabled="autoRemainingCooldown() > 0.001"
-          @click="useAutoAttack"
-        >
-          AA
-          <span v-if="autoRemainingCooldown() > 0.001"
-            >({{ autoRemainingCooldown().toFixed(1) }}s)</span
-          >
-        </button>
-        <button
-          type="button"
-          class="border-border rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text/80 hover:border-accent/60"
-          @click="enqueueAutoAttack"
-        >
-          Queue AA
-        </button>
-        <button
-          type="button"
-          class="border-border rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text/80 hover:border-accent/60"
-          @click="waitTimelineStep"
-        >
-          Wait +{{ timelineStepSeconds.toFixed(2) }}s
-        </button>
-        <button
-          type="button"
-          class="border-border rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text/80 hover:border-accent/60"
-          :disabled="actionQueue.length === 0"
-          @click="runQueuedActions"
-        >
-          Run Queue ({{ actionQueue.length }})
-        </button>
-        <button
-          type="button"
-          class="border-border rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text/80 hover:border-accent/60"
-          :disabled="actionQueue.length === 0"
-          @click="clearQueue"
-        >
-          Clear Queue
-        </button>
-        <button
-          type="button"
-          class="border-border rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text/80 hover:border-accent/60"
-          @click="resetSimulation"
-        >
-          Reset PV
-        </button>
+        </p>
+
+        <details v-if="simulationLog.length > 0" class="text-[11px] text-text/80">
+          <summary class="cursor-pointer font-semibold uppercase tracking-wide text-text/60">
+            {{ t('theorycraft.practice.log.title') }} ({{ simulationLog.length }})
+          </summary>
+          <p v-for="(line, index) in simulationLog" :key="`sim-log-${index}`" class="tabular-nums">
+            {{ line }}
+          </p>
+        </details>
       </div>
 
-      <div
-        v-if="hasVersusTarget() && killHints.length > 0"
-        class="border-border/40 mb-2 rounded border px-2 py-1.5 text-[11px] text-text/85"
-      >
-        <p class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-text/65">
-          Estimations kill
-        </p>
-        <p v-for="(hint, index) in killHints" :key="`kill-hint-${index}`">{{ hint }}</p>
+      <!-- Dégâts par source -->
+      <div v-if="killRows.length > 0 || spells.length > 0" class="practice-table rounded-lg p-2">
+        <div class="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+          <h3 class="text-xs font-bold uppercase tracking-wide text-text/80">
+            {{ t('theorycraft.practice.damageTable') }}
+          </h3>
+          <span class="flex gap-2 text-[10px]">
+            <span
+              v-for="type in DAMAGE_TYPES"
+              :key="`legend-${type}`"
+              class="inline-flex items-center gap-1"
+            >
+              <span :class="`practice-dot dmg-bg-${type}`" />
+              {{ t(`theorycraft.practice.types.${type}`) }}
+            </span>
+          </span>
+        </div>
+        <table class="w-full text-xs">
+          <thead>
+            <tr class="text-[10px] uppercase text-muted">
+              <th class="text-left font-semibold">{{ t('theorycraft.practice.source') }}</th>
+              <th class="text-left font-semibold">{{ t('theorycraft.practice.split') }}</th>
+              <th class="text-right font-semibold">{{ t('theorycraft.practice.perCast') }}</th>
+              <th class="text-right font-semibold">{{ t('theorycraft.practice.hitsToKill') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in killRows" :key="`row-${row.key}`" class="practice-row">
+              <td class="py-1 pr-2">
+                <span class="flex items-center gap-1.5">
+                  <span class="practice-slot">{{ row.slot }}</span>
+                  <span class="truncate font-semibold text-text">{{ row.name }}</span>
+                  <span v-if="row.spell" class="flex items-center gap-0.5">
+                    <button
+                      v-for="rank in row.spell.maxRank"
+                      :key="`${row.key}-rank-${rank}`"
+                      type="button"
+                      class="practice-rank"
+                      :class="{ 'practice-rank--on': activeRank(row.spell.id) === rank }"
+                      :title="`${t('theorycraft.spells.rank')} ${rank}`"
+                      @click="setRank(row.spell.id, rank)"
+                    >
+                      {{ rank }}
+                    </button>
+                  </span>
+                </span>
+              </td>
+              <td class="py-1 pr-2">
+                <span class="flex flex-wrap gap-1 tabular-nums">
+                  <span
+                    v-for="part in splitParts(row.split)"
+                    :key="part.type"
+                    :class="`dmg-text-${part.type}`"
+                  >
+                    {{ Math.round(part.value) }}
+                  </span>
+                </span>
+              </td>
+              <td
+                class="py-1 text-right font-bold tabular-nums text-text"
+                :title="row.spell?.damageVsTooltip"
+              >
+                {{ Math.round(row.damage) }}
+              </td>
+              <td class="py-1 text-right tabular-nums">
+                <span v-if="row.hits === 1" class="practice-dead">☠</span>
+                <span v-else-if="row.hits != null">{{ row.hits }}×</span>
+                <span v-else class="text-muted">—</span>
+              </td>
+            </tr>
+            <tr class="practice-row practice-row--total">
+              <td class="py-1 pr-2 font-bold text-accent">
+                {{ t('theorycraft.practice.fullCombo') }}
+              </td>
+              <td class="py-1 pr-2">
+                <span class="flex flex-wrap gap-1 tabular-nums">
+                  <span
+                    v-for="part in splitParts(fullComboSplit)"
+                    :key="part.type"
+                    :class="`dmg-text-${part.type}`"
+                  >
+                    {{ Math.round(part.value) }}
+                  </span>
+                </span>
+              </td>
+              <td class="py-1 text-right font-bold tabular-nums text-accent">
+                {{ Math.round(sumSplit(fullComboSplit)) }}
+              </td>
+              <td class="py-1 text-right">
+                <span v-if="fullComboKills" class="practice-dead"
+                  >☠ {{ t('theorycraft.practice.lethal') }}</span
+                >
+                <span v-else class="tabular-nums text-muted">
+                  {{ Math.round(Math.max(0, effectiveTargetHp - sumSplit(fullComboSplit))) }}
+                  {{ t('theorycraft.practice.hpLeft') }}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <p
         v-if="!passive && spells.length === 0"
-        class="border-border/60 text-muted rounded-lg border p-3 text-sm"
+        class="rounded-lg border border-border/60 p-3 text-sm text-muted"
       >
         {{ t('theorycraft.spells.noSpells') }}
       </p>
 
-      <details v-if="passive" class="theorycraft-spell-entry group p-1.5" open>
+      <h3
+        v-if="passive || spells.length > 0"
+        class="pt-1 text-xs font-bold uppercase tracking-wide text-text/70"
+      >
+        {{ t('theorycraft.practice.details') }}
+      </h3>
+
+      <details v-if="passive" class="theorycraft-spell-entry group p-1.5">
         <summary
           class="spell-entry-row flex cursor-pointer list-none flex-wrap items-center gap-x-2 gap-y-1 marker:content-none"
         >
-          <span class="text-muted shrink-0 text-[10px] leading-none" aria-hidden="true">
+          <span class="shrink-0 text-[10px] leading-none text-muted" aria-hidden="true">
             <span class="group-open:hidden">▶</span>
             <span class="hidden group-open:inline">▼</span>
           </span>
@@ -139,49 +428,22 @@
           </div>
           <h3 class="text-sm font-semibold leading-tight text-text">{{ passive.name }}</h3>
           <span
-            v-if="passive.damageVsChampion != null"
-            class="spell-vs-damage-badge"
-            :class="{ 'spell-vs-damage-badge--lethal': passive.lethalVsChampion }"
-          >
-            {{ Math.round(passive.damageVsChampion) }} PV en moins
-            <span
-              v-if="passive.damageVsTooltip"
-              class="spell-vs-damage-info"
-              :title="passive.damageVsTooltip"
-              aria-label="Détail du calcul"
-              >i</span
-            >
-            <span v-if="passive.lethalVsChampion" aria-hidden="true">☠</span>
-          </span>
-          <span
             v-if="(passive.controlDurationVsChampion ?? 0) > 0"
             class="spell-vs-damage-badge"
             :title="passive.controlVsTooltip"
           >
             CC {{ passive.controlDurationVsChampion?.toFixed(2) }}s
-            <span class="text-[9px] opacity-80">
-              (H {{ passive.hardControlDurationVsChampion?.toFixed(2) }} / S
-              {{ passive.slowDurationVsChampion?.toFixed(2) }})
-            </span>
           </span>
-          <button
-            v-if="passive.damageVsChampion != null"
-            type="button"
-            class="border-border rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-text/80 hover:border-accent/60"
-            @click.stop="usePassiveDamage(passive)"
-          >
-            Lancer
-          </button>
         </summary>
 
         <div v-if="passiveStackDefinition" class="mt-2 flex flex-wrap items-center gap-2 text-xs">
-          <label class="text-muted flex items-center gap-1.5">
+          <label class="flex items-center gap-1.5 text-muted">
             <span>{{ t('theorycraft.spells.stacks') }}</span>
             <input
               type="number"
               min="0"
               :max="passiveStackDefinition.maxStacks ?? undefined"
-              class="theorycraft-stack-input border-border rounded border bg-surface text-text"
+              class="theorycraft-stack-input rounded border border-border bg-surface text-text"
               :size="stackInputSize(passiveStackDefinition, stackCount(passiveStackDefinition.id))"
               :value="stackCount(passiveStackDefinition.id)"
               @input="onStackInput(passiveStackDefinition.id, $event)"
@@ -192,7 +454,7 @@
         <!-- eslint-disable vue/no-v-html -->
         <div
           v-if="passive.summaryHtml && passive.showSummary"
-          class="tooltip-spell-description tooltip-game-description text-muted mb-2 mt-2 text-sm"
+          class="tooltip-spell-description tooltip-game-description mb-2 mt-2 text-sm text-muted"
           v-html="passive.summaryHtml"
         />
 
@@ -205,22 +467,17 @@
         <div
           v-for="(detail, index) in passive.detailedTexts ?? []"
           :key="`passive-detail-${index}`"
-          class="tooltip-spell-description tooltip-game-description border-border/40 mt-2 border-t pt-1.5 text-sm"
+          class="tooltip-spell-description tooltip-game-description mt-2 border-t border-border/40 pt-1.5 text-sm"
           v-html="detail"
         />
         <!-- eslint-enable vue/no-v-html -->
       </details>
 
-      <details
-        v-for="spell in spells"
-        :key="spell.id"
-        class="theorycraft-spell-entry group p-1.5"
-        open
-      >
+      <details v-for="spell in spells" :key="spell.id" class="theorycraft-spell-entry group p-1.5">
         <summary
           class="spell-entry-row flex cursor-pointer list-none flex-wrap items-center gap-x-2 gap-y-1 marker:content-none"
         >
-          <span class="text-muted shrink-0 text-[10px] leading-none" aria-hidden="true">
+          <span class="shrink-0 text-[10px] leading-none text-muted" aria-hidden="true">
             <span class="group-open:hidden">▶</span>
             <span class="hidden group-open:inline">▼</span>
           </span>
@@ -240,104 +497,40 @@
           >
             {{ t('theorycraft.spells.approximateValues') }}
           </span>
-          <div class="spell-entry-controls flex shrink-0 flex-wrap items-center gap-1" @click.stop>
-            <div class="spell-rank-buttons flex items-center gap-0.5">
-              <button
-                v-for="rank in spell.maxRank"
-                :key="`${spell.id}-rank-${rank}`"
-                type="button"
-                class="inline-flex h-3.5 min-w-[14px] items-center justify-center rounded border px-0.5 text-[9px] font-semibold leading-none transition-colors"
-                :class="
-                  activeRank(spell.id) === rank
-                    ? 'border-accent bg-accent/20 text-accent'
-                    : 'border-border text-text hover:border-accent/60'
-                "
-                @click="setRank(spell.id, rank)"
-              >
-                {{ rank }}
-              </button>
-            </div>
-            <span
-              v-if="spell.damageVsChampion != null"
-              class="spell-vs-damage-badge"
-              :class="{ 'spell-vs-damage-badge--lethal': spell.lethalVsChampion }"
-            >
-              {{ Math.round(spell.damageVsChampion) }} PV en moins
-              <span
-                v-if="spell.damageVsTooltip"
-                class="spell-vs-damage-info"
-                :title="spell.damageVsTooltip"
-                aria-label="Détail du calcul"
-                >i</span
-              >
-              <span v-if="spell.lethalVsChampion" aria-hidden="true">☠</span>
-            </span>
-            <span
-              v-if="(spell.controlDurationVsChampion ?? 0) > 0"
-              class="spell-vs-damage-badge"
-              :title="spell.controlVsTooltip"
-            >
-              CC {{ spell.controlDurationVsChampion?.toFixed(2) }}s
-              <span class="text-[9px] opacity-80">
-                (H {{ spell.hardControlDurationVsChampion?.toFixed(2) }} / S
-                {{ spell.slowDurationVsChampion?.toFixed(2) }})
-              </span>
-            </span>
-            <button
-              v-if="spell.damageVsChampion != null || (spell.controlDurationVsChampion ?? 0) > 0"
-              type="button"
-              class="border-border rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-text/80 hover:border-accent/60"
-              :disabled="
-                spellRemainingCooldown(spell.id) > 0.001 ||
-                (simulatedResource != null &&
-                  (spell.resourceCost ?? 0) > simulatedResource.current + 1e-6)
-              "
-              @click="useSpellDamage(spell)"
-            >
-              Lancer
-              <span v-if="spellRemainingCooldown(spell.id) > 0.001">
-                ({{ spellRemainingCooldown(spell.id).toFixed(1) }}s)
-              </span>
-              <span v-else-if="(spell.resourceCost ?? 0) > 0">
-                ({{ spell.resourceCost?.toFixed(0) }} {{ simulatedResource?.kind ?? 'mana' }})
-              </span>
-            </button>
-            <button
-              v-if="spell.damageVsChampion != null || (spell.controlDurationVsChampion ?? 0) > 0"
-              type="button"
-              class="border-border rounded border px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-text/80 hover:border-accent/60"
-              @click="enqueueSpell(spell)"
-            >
-              Queue
-            </button>
-            <button
-              v-if="spell.hasActivatableBuff"
-              type="button"
-              class="theorycraft-spell-active-toggle shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide transition-colors"
-              :class="
-                isSpellActive(spell.id)
-                  ? 'border-accent bg-accent/25 text-accent'
-                  : 'border-border text-text/70 hover:border-accent/50'
-              "
-              :title="t('theorycraft.spells.toggleActive')"
-              @click="toggleSpellActive(spell.id)"
-            >
-              {{ t('theorycraft.spells.active') }}
-            </button>
-          </div>
+          <span
+            v-if="(spell.controlDurationVsChampion ?? 0) > 0"
+            class="spell-vs-damage-badge"
+            :title="spell.controlVsTooltip"
+          >
+            CC {{ spell.controlDurationVsChampion?.toFixed(2) }}s
+          </span>
+          <button
+            v-if="spell.hasActivatableBuff"
+            type="button"
+            class="theorycraft-spell-active-toggle shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide transition-colors"
+            :class="
+              isSpellActive(spell.id)
+                ? 'border-accent bg-accent/25 text-accent'
+                : 'border-border text-text/70 hover:border-accent/50'
+            "
+            :title="t('theorycraft.spells.toggleActive')"
+            @click.stop.prevent="toggleSpellActive(spell.id)"
+          >
+            {{ t('theorycraft.spells.active') }}
+          </button>
         </summary>
 
         <div
           v-if="stackDefinitionForSpell(spell.id, spell.slot)"
           class="mt-2 flex flex-wrap items-center gap-2 text-xs"
         >
-          <label class="text-muted flex items-center gap-1.5">
+          <label class="flex items-center gap-1.5 text-muted">
             <span>{{ t('theorycraft.spells.stacks') }}</span>
             <input
               type="number"
               min="0"
               :max="stackDefinitionForSpell(spell.id, spell.slot)?.maxStacks ?? undefined"
-              class="theorycraft-stack-input border-border rounded border bg-surface text-text"
+              class="theorycraft-stack-input rounded border border-border bg-surface text-text"
               :size="
                 stackInputSize(
                   stackDefinitionForSpell(spell.id, spell.slot)!,
@@ -372,7 +565,7 @@
 
         <div
           v-if="spell.summaryHtml && spell.showSummary"
-          class="tooltip-spell-description tooltip-game-description text-muted mb-2 text-sm"
+          class="tooltip-spell-description tooltip-game-description mb-2 text-sm text-muted"
           v-html="spell.summaryHtml"
         />
 
@@ -385,21 +578,11 @@
         <div
           v-for="(detail, index) in spell.detailedTexts ?? []"
           :key="`${spell.id}-detail-${index}`"
-          class="tooltip-spell-description tooltip-game-description border-border/40 mt-2 border-t pt-1.5 text-sm"
+          class="tooltip-spell-description tooltip-game-description mt-2 border-t border-border/40 pt-1.5 text-sm"
           v-html="detail"
         />
         <!-- eslint-enable vue/no-v-html -->
       </details>
-
-      <div
-        v-if="simulationLog.length > 0"
-        class="border-border/40 mt-2 rounded border px-2 py-1.5 text-[11px] text-text/85"
-      >
-        <p class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-text/65">
-          Historique combo
-        </p>
-        <p v-for="(line, index) in simulationLog" :key="`sim-log-${index}`">{{ line }}</p>
-      </div>
     </template>
   </section>
 </template>
@@ -426,6 +609,22 @@ import {
 } from '~/utils/theorycraftStacks'
 import { spellHasActivatableBuff } from '~/utils/theorycraftSpellBuffs'
 import { getImageUrl } from '~/utils/imageUrl'
+import {
+  addSplit,
+  applyHitToDummy,
+  buildDummyBar,
+  DAMAGE_TYPES,
+  dominantDamageType,
+  dpsOf,
+  emptySplit,
+  mitigateDamage,
+  mitigateSplit,
+  splitShares,
+  sumSplit,
+  type DamageSplit,
+  type DamageType,
+  type DefenderStats,
+} from '~/utils/theorycraftPracticeTool'
 
 interface SpellHeaderStat {
   key: string
@@ -452,6 +651,7 @@ interface ResolvedSpellView {
   isDynamic: boolean
   hasActivatableBuff: boolean
   damageVsChampion?: number | null
+  damageVsSplit?: DamageSplit | null
   lethalVsChampion?: boolean
   damageVsTooltip?: string
   controlDurationVsChampion?: number | null
@@ -472,6 +672,7 @@ interface ResolvedPassiveView {
   detailedTexts?: string[]
   isDynamic: boolean
   damageVsChampion?: number | null
+  damageVsSplit?: DamageSplit | null
   lethalVsChampion?: boolean
   damageVsTooltip?: string
   controlDurationVsChampion?: number | null
@@ -507,10 +708,18 @@ interface QueuedAction {
   label: string
 }
 
+interface HitFeedEntry {
+  id: number
+  label: string
+  amount: number
+  type: DamageType
+  lethal: boolean
+}
+
 interface PendingHitEvent {
   at: number
   label: string
-  damage: number
+  split: DamageSplit
   hardCc: number
   slowCc: number
 }
@@ -555,6 +764,10 @@ const gcdLockUntil = ref(0)
 const actionQueue = ref<QueuedAction[]>([])
 const pendingHitEvents = ref<PendingHitEvent[]>([])
 const simulationLog = ref<string[]>([])
+const dealtSplit = ref<DamageSplit>(emptySplit())
+const hitFeed = ref<HitFeedEntry[]>([])
+const firstHitAt = ref<number | null>(null)
+const lastHitAt = ref<number | null>(null)
 
 function stackDefinitionForSpell(id: string, slot: string): TheorycraftStackDefinition | null {
   return findStackDefinitionForSource(stackDefinitions.value, { scope: 'spell', id, slot })
@@ -693,6 +906,10 @@ function maxResourcePool(): number {
 }
 
 function resetSimulation() {
+  dealtSplit.value = emptySplit()
+  hitFeed.value = []
+  firstHitAt.value = null
+  lastHitAt.value = null
   if (!hasVersusTarget()) {
     simulatedTarget.value = null
     simulationLog.value = []
@@ -729,31 +946,45 @@ function ensureSimulationState(): SimulatedTargetState | null {
   return simulatedTarget.value
 }
 
-function applyDamageToSimulation(amount: number, sourceLabel: string) {
+let hitFeedSeq = 0
+
+function applyDamageToSimulation(split: DamageSplit, sourceLabel: string) {
   const target = ensureSimulationState()
   if (!target) return
-  const damage = Math.max(0, Number(amount) || 0)
-  if (damage <= 0) return
-
-  let remaining = damage
-  if (target.shield > 0) {
-    const absorbed = Math.min(target.shield, remaining)
-    target.shield -= absorbed
-    remaining -= absorbed
-  }
-  if (remaining > 0) {
-    target.hp = Math.max(0, target.hp - remaining)
-  }
+  const damage = sumSplit(split)
+  if (!(damage > 0)) return
+  const next = applyHitToDummy(target, damage)
+  target.hp = next.hp
+  target.shield = next.shield
+  dealtSplit.value = addSplit(dealtSplit.value, split)
+  const now = timelineNowSeconds.value
+  if (firstHitAt.value == null) firstHitAt.value = now
+  lastHitAt.value = now
+  hitFeedSeq += 1
+  hitFeed.value = [
+    {
+      id: hitFeedSeq,
+      label: sourceLabel,
+      amount: damage,
+      type: dominantDamageType(split) ?? 'physical',
+      lethal: target.hp <= 0 && target.shield <= 0,
+    },
+    ...hitFeed.value,
+  ].slice(0, 6)
   recordTimelineEvent(
-    `${sourceLabel}: -${formatDamageValue(damage)} (${formatDamageValue(target.hp)} PV restants)`
+    t('theorycraft.practice.log.hit', {
+      label: sourceLabel,
+      damage: formatDamageValue(damage),
+      hp: formatDamageValue(target.hp),
+    })
   )
 }
 
 function recordTimelineEvent(message: string) {
   simulationLog.value = [
-    `t=${formatDamageValue(timelineNowSeconds.value)}s • ${message}`,
+    `${formatDamageValue(timelineNowSeconds.value)}s · ${message}`,
     ...simulationLog.value,
-  ].slice(0, 12)
+  ].slice(0, 20)
 }
 
 function advanceTimeline(seconds?: number) {
@@ -811,12 +1042,16 @@ function processPendingHitEvents() {
   if (due.length === 0) return
   pendingHitEvents.value = pendingHitEvents.value.filter(event => event.at > now + 1e-6)
   for (const event of due) {
-    if (event.damage > 0) applyDamageToSimulation(event.damage, event.label)
+    applyDamageToSimulation(event.split, event.label)
     if (event.hardCc > 0) addControlWindow('hard', event.hardCc)
     if (event.slowCc > 0) addControlWindow('slow', event.slowCc)
     if (event.hardCc > 0 || event.slowCc > 0) {
       recordTimelineEvent(
-        `${event.label}: CC impact (hard ${formatDamageValue(event.hardCc)} / slow ${formatDamageValue(event.slowCc)})`
+        t('theorycraft.practice.log.cc', {
+          label: event.label,
+          hard: formatDamageValue(event.hardCc),
+          slow: formatDamageValue(event.slowCc),
+        })
       )
     }
   }
@@ -854,44 +1089,52 @@ function totalWindowDuration(windows: TimeWindow[]): number {
   return windows.reduce((sum, window) => sum + Math.max(0, window.end - window.start), 0)
 }
 
+function spellIsUsable(spell: ResolvedSpellView): boolean {
+  return spell.damageVsChampion != null || (spell.controlDurationVsChampion ?? 0) > 0
+}
+
+function spellLacksResource(spell: ResolvedSpellView): boolean {
+  const cost = Math.max(0, Number(spell.resourceCost ?? 0))
+  return (
+    cost > 0 && simulatedResource.value != null && simulatedResource.value.current + 1e-6 < cost
+  )
+}
+
 function useSpellDamage(spell: ResolvedSpellView) {
-  if (spell.damageVsChampion == null && spell.controlDurationVsChampion == null) return
+  if (!spellIsUsable(spell)) return
+  const label = `${displaySpellSlot(spell.slot)} ${spell.name}`
   const actionLock = actionLockRemaining()
   if (actionLock > 0.001) {
     recordTimelineEvent(
-      `${displaySpellSlot(spell.slot)} ${spell.name} bloqué (${formatDamageValue(actionLock)}s)`
+      t('theorycraft.practice.log.locked', { label, seconds: formatDamageValue(actionLock) })
     )
     return
   }
   const remaining = spellRemainingCooldown(spell.id)
   if (remaining > 0.001) {
     recordTimelineEvent(
-      `${displaySpellSlot(spell.slot)} ${spell.name} indisponible (${formatDamageValue(remaining)}s CD)`
+      t('theorycraft.practice.log.cooldown', { label, seconds: formatDamageValue(remaining) })
     )
     return
   }
   const cost = Math.max(0, Number(spell.resourceCost ?? 0))
+  if (spellLacksResource(spell)) {
+    recordTimelineEvent(
+      t('theorycraft.practice.log.noResource', { label, cost: formatDamageValue(cost) })
+    )
+    return
+  }
   if (cost > 0 && simulatedResource.value) {
-    if (simulatedResource.value.current + 1e-6 < cost) {
-      recordTimelineEvent(
-        `${displaySpellSlot(spell.slot)} ${spell.name} impossible (coût ${formatDamageValue(cost)} ${simulatedResource.value.kind})`
-      )
-      return
-    }
     simulatedResource.value.current = Math.max(0, simulatedResource.value.current - cost)
   }
-  const slot = displaySpellSlot(spell.slot)
-  const hardCc = Number(spell.hardControlDurationVsChampion ?? 0)
-  const slowCc = Number(spell.slowDurationVsChampion ?? 0)
   const hitDelay = Math.max(0, Number(spell.hitDelaySeconds ?? 0))
   queueHitEvent({
     at: timelineNowSeconds.value + hitDelay,
-    label: `${slot} ${spell.name}`,
-    damage: Math.max(0, Number(spell.damageVsChampion ?? 0)),
-    hardCc: Math.max(0, hardCc),
-    slowCc: Math.max(0, slowCc),
+    label,
+    split: spell.damageVsSplit ?? emptySplit(),
+    hardCc: Math.max(0, Number(spell.hardControlDurationVsChampion ?? 0)),
+    slowCc: Math.max(0, Number(spell.slowDurationVsChampion ?? 0)),
   })
-  recordTimelineEvent(`${slot} ${spell.name} cast (impact +${formatDamageValue(hitDelay)}s)`)
   const cooldown = Math.max(0, Number(spell.cooldownSeconds ?? 0))
   if (cooldown > 0) {
     spellReadyAt[spell.id] = timelineNowSeconds.value + cooldown
@@ -901,51 +1144,64 @@ function useSpellDamage(spell: ResolvedSpellView) {
 }
 
 function usePassiveDamage(passiveView: ResolvedPassiveView) {
-  if (passiveView.damageVsChampion != null) {
-    applyDamageToSimulation(passiveView.damageVsChampion, `P ${passiveView.name}`)
+  const label = `P ${passiveView.name}`
+  if (passiveView.damageVsSplit) {
+    applyDamageToSimulation(passiveView.damageVsSplit, label)
   }
   const hardCc = Number(passiveView.hardControlDurationVsChampion ?? 0)
   const slowCc = Number(passiveView.slowDurationVsChampion ?? 0)
+  if (hardCc > 0) addControlWindow('hard', hardCc)
+  if (slowCc > 0) addControlWindow('slow', slowCc)
   if (hardCc > 0 || slowCc > 0) {
-    addControlWindow('hard', hardCc)
-    addControlWindow('slow', slowCc)
-  }
-  if ((passiveView.controlDurationVsChampion ?? 0) > 0) {
     recordTimelineEvent(
-      `P ${passiveView.name}: CC ${formatDamageValue(passiveView.controlDurationVsChampion ?? 0)}s (hard ${formatDamageValue(hardCc)} / slow ${formatDamageValue(slowCc)})`
+      t('theorycraft.practice.log.cc', {
+        label,
+        hard: formatDamageValue(hardCc),
+        slow: formatDamageValue(slowCc),
+      })
     )
   }
   advanceTimeline()
 }
 
-function estimatedAutoAttackDamage(): number | null {
+const autoAttackSplit = computed((): DamageSplit | null => {
   const attacker = props.buildStats
   const defenderRaw = props.opponentRawStats
   if (!attacker || !defenderRaw) return null
-  return reduceDamageByDefenses(attacker.totalAD, 'physical', defenderRaw, props.attackerRawStats)
+  return {
+    ...emptySplit(),
+    physical: reduceDamageByDefenses(
+      attacker.totalAD,
+      'physical',
+      defenderRaw,
+      props.attackerRawStats
+    ),
+  }
+})
+
+function estimatedAutoAttackDamage(): number | null {
+  return autoAttackSplit.value ? sumSplit(autoAttackSplit.value) : null
 }
 
 function useAutoAttack() {
+  const label = t('theorycraft.practice.autoAttack')
   const actionLock = actionLockRemaining()
   if (actionLock > 0.001) {
-    recordTimelineEvent(`AA bloquée (${formatDamageValue(actionLock)}s)`)
+    recordTimelineEvent(
+      t('theorycraft.practice.log.locked', { label, seconds: formatDamageValue(actionLock) })
+    )
     return
   }
   const remaining = autoRemainingCooldown()
   if (remaining > 0.001) {
-    recordTimelineEvent(`AA indisponible (${formatDamageValue(remaining)}s)`)
+    recordTimelineEvent(
+      t('theorycraft.practice.log.cooldown', { label, seconds: formatDamageValue(remaining) })
+    )
     return
   }
-  const damage = estimatedAutoAttackDamage()
-  if (damage == null) return
-  queueHitEvent({
-    at: timelineNowSeconds.value + 0.1,
-    label: 'AA',
-    damage,
-    hardCc: 0,
-    slowCc: 0,
-  })
-  recordTimelineEvent('AA lancé (impact +0.1s)')
+  const split = autoAttackSplit.value
+  if (!split) return
+  queueHitEvent({ at: timelineNowSeconds.value + 0.1, label, split, hardCc: 0, slowCc: 0 })
   autoReadyAt.value = timelineNowSeconds.value + autoAttackIntervalSeconds()
   applyActionRecovery(0.15, 0.1)
   advanceTimeline(0.15)
@@ -976,6 +1232,31 @@ watch([hardControlWindows, slowControlWindows], () => {
   }
 })
 
+const totalDealt = computed(() => sumSplit(dealtSplit.value))
+
+const dealtShares = computed(() => splitShares(dealtSplit.value))
+
+const combatSeconds = computed(() => {
+  if (firstHitAt.value == null || lastHitAt.value == null) return 0
+  return Math.max(0, lastHitAt.value - firstHitAt.value)
+})
+
+const combatDps = computed(() => dpsOf(totalDealt.value, combatSeconds.value))
+
+const dummyBar = computed(() => {
+  const state = simulatedTarget.value
+  if (!state) return null
+  return buildDummyBar({
+    maxHp: targetMaxHp(),
+    maxShield: targetInitialShield(),
+    hp: state.hp,
+    shield: state.shield,
+    dealt: dealtSplit.value,
+  })
+})
+
+const targetDead = computed(() => simulatedTarget.value != null && effectiveTargetHp.value <= 0)
+
 function castsToKill(targetHp: number, perCastDamage: number | null | undefined): number | null {
   const damage = Number(perCastDamage ?? 0)
   if (!Number.isFinite(targetHp) || targetHp <= 0) return 0
@@ -983,23 +1264,21 @@ function castsToKill(targetHp: number, perCastDamage: number | null | undefined)
   return Math.max(1, Math.ceil(targetHp / damage))
 }
 
-const autoAttackTiming = computed(() => {
-  const hits = castsToKill(effectiveTargetHp.value, estimatedAutoAttackDamage())
-  const secondsPerAttack = autoAttackIntervalSeconds()
-  const timeToKill = hits == null ? null : Math.max(0, (hits - 1) * secondsPerAttack)
-  return { hits, timeToKill }
-})
-
 function enqueueAutoAttack() {
-  actionQueue.value.push({ type: 'aa', label: 'AA' })
+  actionQueue.value.push({ type: 'aa', label: displayAutoKey() })
 }
 
 function enqueueSpell(spell: ResolvedSpellView) {
+  if (!spellIsUsable(spell)) return
   actionQueue.value.push({
     type: 'spell',
     spellId: spell.id,
-    label: `${displaySpellSlot(spell.slot)} ${spell.name}`,
+    label: displaySpellSlot(spell.slot),
   })
+}
+
+function removeQueuedAction(index: number) {
+  actionQueue.value.splice(index, 1)
 }
 
 function clearQueue() {
@@ -1025,14 +1304,81 @@ function runQueuedActions() {
       continue
     }
     const spell = spells.value.find(entry => entry.id === action.spellId)
-    if (!spell) {
-      recordTimelineEvent(`Action ignorée: ${action.label}`)
-      actionQueue.value.shift()
-      continue
-    }
-    useSpellDamage(spell)
+    if (spell) useSpellDamage(spell)
     actionQueue.value.shift()
   }
+  flushPendingHits()
+}
+
+/** Fait avancer le temps jusqu'au dernier impact en vol (sorts à délai). */
+function flushPendingHits() {
+  const last = pendingHitEvents.value[pendingHitEvents.value.length - 1]
+  if (!last) return
+  advanceTimeline(Math.max(0.001, last.at - timelineNowSeconds.value))
+}
+
+function runQueueFromStart() {
+  const queued = [...actionQueue.value]
+  resetSimulation()
+  actionQueue.value = queued
+  runQueuedActions()
+  actionQueue.value = queued
+}
+
+function displayAutoKey(): string {
+  return t('theorycraft.practice.autoShort')
+}
+
+function onPracticeKeydown(event: KeyboardEvent) {
+  if (event.ctrlKey || event.metaKey || event.altKey) return
+  const tag = (event.target as HTMLElement | null)?.tagName ?? ''
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+  const key = event.key.toUpperCase()
+  const queue = event.shiftKey
+  if (key === ' ' || key === 'SPACEBAR') {
+    event.preventDefault()
+    if (queue) enqueueAutoAttack()
+    else useAutoAttack()
+    return
+  }
+  if (key === 'BACKSPACE') {
+    event.preventDefault()
+    resetSimulation()
+    return
+  }
+  if (key === 'ENTER') {
+    event.preventDefault()
+    runQueueFromStart()
+    return
+  }
+  if (key === 'P' && passive.value) {
+    event.preventDefault()
+    usePassiveDamage(passive.value)
+    return
+  }
+  const spell = spells.value.find(entry => displaySpellSlot(entry.slot) === key)
+  if (!spell) return
+  event.preventDefault()
+  if (queue) enqueueSpell(spell)
+  else useSpellDamage(spell)
+}
+
+function splitBarSegments(
+  split: DamageSplit | null | undefined
+): { type: DamageType; width: string }[] {
+  const shares = splitShares(split ?? emptySplit())
+  return DAMAGE_TYPES.filter(type => shares[type] > 0).map(type => ({
+    type,
+    width: `${shares[type]}%`,
+  }))
+}
+
+function splitParts(split: DamageSplit | null | undefined): { type: DamageType; value: number }[] {
+  if (!split) return []
+  return DAMAGE_TYPES.filter(type => split[type] >= 0.5).map(type => ({
+    type,
+    value: split[type],
+  }))
 }
 
 function resolveSpellCooldownSeconds(
@@ -1105,8 +1451,6 @@ function isDamageCalculationKey(key: string): boolean {
   return /damage|dmg|execute|detonate|impact|blast|burn|bleed|onhit|proc/.test(normalized)
 }
 
-type DamageType = 'physical' | 'magic' | 'true'
-
 function normalizeDamageType(value: unknown): DamageType | null {
   const normalized = String(value ?? '')
     .trim()
@@ -1136,48 +1480,17 @@ function inferFormulaBaseDamageType(
   return 'physical'
 }
 
+function attackerLevelForMitigation(): number {
+  return Math.min(Math.max(Number(props.buildStats?.level ?? props.level ?? 1), 1), 18)
+}
+
 function reduceDamageByDefenses(
   rawDamage: number,
-  damageType: 'physical' | 'magic' | 'true',
-  target: { armor?: number; magicResist?: number; damageReduction?: number },
+  damageType: DamageType,
+  target: DefenderStats,
   attackerRaw?: Record<string, number> | null
 ): number {
-  const safeRaw = Math.max(0, rawDamage)
-  if (!Number.isFinite(safeRaw) || safeRaw <= 0) return 0
-  let mitigated = safeRaw
-  if (damageType === 'physical') {
-    const baseArmor = Number(target.armor ?? 0)
-    const armorPenPct = Math.min(Math.max(Number(attackerRaw?.armorPenetration ?? 0), 0), 1)
-    const flatArmorPen = Math.max(0, Number(attackerRaw?.flatArmorPenetration ?? 0))
-    const lethality = Math.max(0, Number(attackerRaw?.lethality ?? 0))
-    const attackerLevel = Math.min(
-      Math.max(Number(props.buildStats?.level ?? props.level ?? 1), 1),
-      18
-    )
-    const lethalityPct = Math.min(Math.max(Number(attackerRaw?.percentLethality ?? 0), 0), 1)
-    const effectiveLethality = lethality * (0.6 + 0.4 * (attackerLevel / 18)) * (1 + lethalityPct)
-    const effectiveArmor = Math.max(
-      0,
-      (1 - armorPenPct) * baseArmor - flatArmorPen - effectiveLethality
-    )
-    mitigated =
-      effectiveArmor >= 0
-        ? safeRaw * (100 / (100 + effectiveArmor))
-        : safeRaw * (2 - 100 / (100 - effectiveArmor))
-  } else if (damageType === 'magic') {
-    const baseMr = Number(target.magicResist ?? 0)
-    const magicPenPct = Math.min(Math.max(Number(attackerRaw?.magicPenetration ?? 0), 0), 1)
-    const flatMagicPen = Math.max(0, Number(attackerRaw?.flatMagicPenetration ?? 0))
-    const effectiveMr = Math.max(0, (1 - magicPenPct) * baseMr - flatMagicPen)
-    mitigated =
-      effectiveMr >= 0
-        ? safeRaw * (100 / (100 + effectiveMr))
-        : safeRaw * (2 - 100 / (100 - effectiveMr))
-  }
-  const dr = Number(target.damageReduction ?? 0)
-  const clampedDr = Math.min(Math.max(dr, 0), 0.95)
-  mitigated *= 1 - clampedDr
-  return Math.max(0, mitigated)
+  return mitigateDamage(rawDamage, damageType, target, attackerRaw, attackerLevelForMitigation())
 }
 
 function formatDamageValue(value: number): string {
@@ -1237,7 +1550,7 @@ function ratioStatValueForVsDamage(
 function computeDamageVsChampion(
   raw: TheorycraftSpellRuntimeData & Record<string, unknown>,
   rank: number
-): { damage: number; lethal: boolean; tooltip: string } | null {
+): { damage: number; split: DamageSplit; lethal: boolean; tooltip: string } | null {
   const attacker = props.buildStats
   const defender = props.opponentBuildStats
   const defenderRaw = props.opponentRawStats
@@ -1250,6 +1563,7 @@ function computeDamageVsChampion(
 
   const rankIndex = Math.min(Math.max(rank, 1), maxRank) - 1
   const breakdownLines: string[] = []
+  let totalSplit = emptySplit()
   const totalMitigated = formulas.reduce((sum, formula) => {
     const base = Math.max(0, Number(formula.baseValues?.[rankIndex] ?? 0))
     const baseType = inferFormulaBaseDamageType(formula, raw)
@@ -1266,24 +1580,16 @@ function computeDamageVsChampion(
       components[ratioType] += Math.max(0, coeff * statValue)
     }
 
-    const physicalMitigated = reduceDamageByDefenses(
-      components.physical,
-      'physical',
+    const mitigatedSplit = mitigateSplit(
+      components,
       defenderRaw,
-      props.attackerRawStats
+      props.attackerRawStats,
+      attackerLevelForMitigation()
     )
-    const magicMitigated = reduceDamageByDefenses(
-      components.magic,
-      'magic',
-      defenderRaw,
-      props.attackerRawStats
-    )
-    const trueMitigated = reduceDamageByDefenses(
-      components.true,
-      'true',
-      defenderRaw,
-      props.attackerRawStats
-    )
+    totalSplit = addSplit(totalSplit, mitigatedSplit)
+    const physicalMitigated = mitigatedSplit.physical
+    const magicMitigated = mitigatedSplit.magic
+    const trueMitigated = mitigatedSplit.true
     const exact = components.physical + components.magic + components.true
     const mitigated = physicalMitigated + magicMitigated + trueMitigated
     const ratioPart = exact - base
@@ -1303,7 +1609,7 @@ function computeDamageVsChampion(
   breakdownLines.push(
     `Total: ${formatDamageValue(totalMitigated)} | Cible: ${formatDamageValue(targetHp)} PV + ${formatDamageValue(Math.max(0, targetShield))} bouclier`
   )
-  return { damage: totalMitigated, lethal, tooltip: breakdownLines.join('\n') }
+  return { damage: totalMitigated, split: totalSplit, lethal, tooltip: breakdownLines.join('\n') }
 }
 
 type ControlKind = 'hard' | 'airborne' | 'slow'
@@ -1459,6 +1765,7 @@ function resolveSpellView(
     isDynamic: resolved.isDynamic,
     hasActivatableBuff: spellHasActivatableBuff(raw),
     damageVsChampion: damageVs?.damage ?? null,
+    damageVsSplit: damageVs?.split ?? null,
     lethalVsChampion: damageVs?.lethal ?? false,
     damageVsTooltip: damageVs?.tooltip ?? '',
     controlDurationVsChampion: controlVs?.duration ?? null,
@@ -1527,6 +1834,7 @@ const passive = computed((): ResolvedPassiveView | null => {
     detailedTexts: resolved.detailedTexts,
     isDynamic: resolved.isDynamic,
     damageVsChampion: resolved.damageVsChampion,
+    damageVsSplit: resolved.damageVsSplit,
     lethalVsChampion: resolved.lethalVsChampion,
     damageVsTooltip: resolved.damageVsTooltip,
     controlDurationVsChampion: resolved.controlDurationVsChampion,
@@ -1564,38 +1872,67 @@ const spells = computed<ResolvedSpellView[]>(() => {
   })
 })
 
-const killHints = computed(() => {
-  const hints: string[] = []
+interface KillRow {
+  key: string
+  spell?: ResolvedSpellView
+  slot: string
+  name: string
+  imageUrl?: string
+  damage: number
+  split: DamageSplit | null
+  hits: number | null
+}
+
+/** Coups nécessaires pour tuer la cible actuelle, source par source. */
+const killRows = computed((): KillRow[] => {
   const hp = effectiveTargetHp.value
-  if (!Number.isFinite(hp) || hp <= 0) {
-    hints.push('La cible est déjà éliminée.')
-    return hints
+  const rows: KillRow[] = []
+  const aa = estimatedAutoAttackDamage()
+  if (aa != null) {
+    rows.push({
+      key: 'aa',
+      slot: displayAutoKey(),
+      name: t('theorycraft.practice.autoAttack'),
+      damage: aa,
+      split: autoAttackSplit.value,
+      hits: castsToKill(hp, aa),
+    })
   }
-
-  const aaHits = autoAttackTiming.value.hits
-  if (aaHits != null) {
-    const seconds = autoAttackTiming.value.timeToKill ?? 0
-    hints.push(`AA: ${aaHits} coups pour tuer (~${formatDamageValue(seconds)}s).`)
-  } else {
-    hints.push('AA: dégâts insuffisants pour estimer le kill.')
+  if (passive.value?.damageVsChampion != null) {
+    rows.push({
+      key: 'passive',
+      slot: 'P',
+      name: passive.value.name,
+      imageUrl: passive.value.imageUrl,
+      damage: passive.value.damageVsChampion,
+      split: passive.value.damageVsSplit ?? null,
+      hits: castsToKill(hp, passive.value.damageVsChampion),
+    })
   }
-
-  const topSpells = spells.value
-    .filter(spell => (spell.damageVsChampion ?? 0) > 0)
-    .sort((a, b) => Number(b.damageVsChampion ?? 0) - Number(a.damageVsChampion ?? 0))
-    .slice(0, 4)
-  for (const spell of topSpells) {
-    const count = castsToKill(hp, spell.damageVsChampion)
-    if (count == null) continue
-    const slot = displaySpellSlot(spell.slot)
-    hints.push(`${slot} ${spell.name}: ${count} casts pour tuer la cible.`)
+  for (const spell of spells.value) {
+    if (spell.damageVsChampion == null) continue
+    rows.push({
+      key: spell.id,
+      slot: displaySpellSlot(spell.slot),
+      name: spell.name,
+      imageUrl: spell.imageUrl,
+      damage: spell.damageVsChampion,
+      split: spell.damageVsSplit ?? null,
+      hits: castsToKill(hp, spell.damageVsChampion),
+      spell,
+    })
   }
-
-  if (hints.length === 1 && topSpells.length === 0) {
-    hints.push('Aucun sort avec dégâts calculables pour cette cible.')
-  }
-  return hints
+  return rows
 })
+
+/** Dégâts d'un combo complet (AA + passif + chaque sort une fois). */
+const fullComboSplit = computed((): DamageSplit => {
+  return killRows.value.reduce((sum, row) => addSplit(sum, row.split ?? emptySplit()), emptySplit())
+})
+
+const fullComboKills = computed(
+  () => effectiveTargetHp.value > 0 && sumSplit(fullComboSplit.value) >= effectiveTargetHp.value
+)
 
 watch(
   () =>
@@ -1627,6 +1964,409 @@ watch(loadError, value => {
 </script>
 
 <style scoped>
+.practice-arena {
+  border: 1px solid rgb(200 155 60 / 0.45);
+  background:
+    radial-gradient(circle at 50% 0%, rgb(200 155 60 / 0.1), transparent 60%), rgb(1 10 19 / 0.65);
+  box-shadow: inset 0 0 24px rgb(0 0 0 / 0.5);
+}
+
+.practice-arena:focus-visible {
+  border-color: rgb(200 155 60 / 0.9);
+}
+
+.practice-hpbar {
+  position: relative;
+  display: flex;
+  height: 1.4rem;
+  overflow: hidden;
+  border: 1px solid rgb(0 0 0 / 0.8);
+  border-radius: 3px;
+  background: rgb(15 23 42 / 0.9);
+}
+
+.practice-hpbar > span {
+  height: 100%;
+  transition: width 0.25s ease-out;
+}
+
+.practice-hpbar__hp {
+  background: linear-gradient(180deg, #4ade80, #15803d);
+}
+
+.practice-hpbar__shield {
+  background: linear-gradient(180deg, #f8fafc, #94a3b8);
+}
+
+.practice-hpbar__lost {
+  opacity: 0.75;
+}
+
+.dmg-bg-physical {
+  background: #f97316;
+}
+
+.dmg-bg-magic {
+  background: #818cf8;
+}
+
+.dmg-bg-true {
+  background: #e2e8f0;
+}
+
+.dmg-text-physical {
+  color: #fb923c;
+}
+
+.dmg-text-magic {
+  color: #a5b4fc;
+}
+
+.dmg-text-true {
+  color: #f1f5f9;
+}
+
+.practice-floats {
+  pointer-events: none;
+  position: absolute;
+  inset: -0.5rem 0 auto 0;
+  height: 0;
+}
+
+.practice-float {
+  position: absolute;
+  top: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 0.9);
+  animation: practice-float-up 1.2s ease-out forwards;
+}
+
+.practice-float--lethal {
+  font-size: 1.3rem;
+  color: #f87171;
+}
+
+@keyframes practice-float-up {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1.25);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-1.6rem) scale(1);
+  }
+}
+
+.practice-status {
+  margin-left: auto;
+  border-radius: 3px;
+  padding: 0 0.35rem;
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.practice-status--hard {
+  background: rgb(250 204 21 / 0.25);
+  color: #fde047;
+}
+
+.practice-status--slow {
+  background: rgb(96 165 250 / 0.25);
+  color: #93c5fd;
+}
+
+.practice-dead {
+  font-weight: 800;
+  color: #f87171;
+}
+
+.practice-stat {
+  display: flex;
+  flex-direction: column;
+  border-radius: 4px;
+  background: rgb(255 255 255 / 0.04);
+  padding: 0.3rem;
+}
+
+.practice-stat__label {
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgb(255 255 255 / 0.55);
+}
+
+.practice-stat__value {
+  font-size: 1.1rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: rgb(255 255 255 / 0.95);
+}
+
+.practice-type {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  border-left: 3px solid;
+  border-radius: 3px;
+  background: rgb(255 255 255 / 0.04);
+  padding: 0.25rem 0.4rem;
+}
+
+.practice-type--physical {
+  border-color: #f97316;
+}
+
+.practice-type--magic {
+  border-color: #818cf8;
+}
+
+.practice-type--true {
+  border-color: #e2e8f0;
+}
+
+.practice-type__label {
+  color: rgb(255 255 255 / 0.65);
+}
+
+.practice-type__value {
+  margin-left: auto;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: rgb(255 255 255 / 0.95);
+}
+
+.practice-type__pct {
+  font-size: 0.6rem;
+  color: rgb(255 255 255 / 0.5);
+}
+
+.practice-resbar {
+  position: relative;
+  height: 0.85rem;
+  overflow: hidden;
+  border-radius: 3px;
+  background: rgb(15 23 42 / 0.9);
+}
+
+.practice-resbar > span:first-child {
+  display: block;
+  height: 100%;
+  transition: width 0.25s ease-out;
+}
+
+.practice-resbar__mana {
+  background: linear-gradient(180deg, #60a5fa, #1d4ed8);
+}
+
+.practice-resbar__energy {
+  background: linear-gradient(180deg, #fde047, #ca8a04);
+}
+
+.practice-resbar__text {
+  position: absolute;
+  inset: 0;
+  text-align: center;
+  line-height: 0.85rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.9);
+}
+
+.practice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.practice-action {
+  position: relative;
+  display: flex;
+  width: 3.4rem;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  border-radius: 6px;
+  padding: 0.25rem 0.2rem 0.3rem;
+  background: rgb(0 0 0 / 0.35);
+  transition:
+    transform 0.08s ease,
+    background 0.15s ease;
+}
+
+.practice-action:hover:not(:disabled) {
+  background: rgb(200 155 60 / 0.18);
+}
+
+.practice-action:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.practice-action:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.practice-action__icon {
+  display: flex;
+  width: 2.6rem;
+  height: 2.6rem;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #c89b3c;
+  border-radius: 4px;
+  background: #000;
+  object-fit: cover;
+}
+
+.practice-action__icon--aa {
+  font-size: 1.3rem;
+  color: #f0e6d2;
+}
+
+.practice-action--nomana .practice-action__icon {
+  filter: grayscale(0.6) brightness(0.7);
+  border-color: #3b82f6;
+}
+
+.practice-action__key {
+  position: absolute;
+  top: 2.15rem;
+  right: 0.15rem;
+  min-width: 1rem;
+  border-radius: 2px;
+  background: rgb(0 0 0 / 0.9);
+  padding: 0 0.15rem;
+  font-size: 0.6rem;
+  font-weight: 800;
+  color: #f0e6d2;
+}
+
+.practice-action__cd {
+  position: absolute;
+  top: 0.25rem;
+  left: 50%;
+  display: flex;
+  width: 2.6rem;
+  height: 2.6rem;
+  transform: translateX(-50%);
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 0.65);
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.practice-action__dmg {
+  font-size: 0.75rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: rgb(255 255 255 / 0.95);
+}
+
+.practice-splitbar {
+  display: flex;
+  width: 100%;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.08);
+}
+
+.practice-btn {
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: 4px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgb(255 255 255 / 0.85);
+}
+
+.practice-btn:hover:not(:disabled) {
+  border-color: rgb(200 155 60 / 0.8);
+}
+
+.practice-btn:disabled {
+  opacity: 0.4;
+}
+
+.practice-btn--primary {
+  border-color: #c89b3c;
+  background: rgb(200 155 60 / 0.2);
+  color: #f0e6d2;
+}
+
+.practice-chip {
+  border-radius: 3px;
+  background: rgb(200 155 60 / 0.2);
+  padding: 0.05rem 0.4rem;
+  font-weight: 700;
+  color: #f0e6d2;
+}
+
+.practice-chip:hover {
+  background: rgb(248 113 113 / 0.35);
+  text-decoration: line-through;
+}
+
+.practice-table {
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: rgb(0 0 0 / 0.25);
+}
+
+.practice-row {
+  border-top: 1px solid rgb(255 255 255 / 0.06);
+}
+
+.practice-row--total {
+  border-top: 1px solid rgb(200 155 60 / 0.5);
+}
+
+.practice-slot {
+  display: inline-flex;
+  min-width: 1.4rem;
+  justify-content: center;
+  border-radius: 3px;
+  background: rgb(0 0 0 / 0.5);
+  padding: 0 0.2rem;
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #c89b3c;
+}
+
+.practice-rank {
+  display: inline-flex;
+  height: 0.9rem;
+  min-width: 0.9rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: 2px;
+  font-size: 0.55rem;
+  font-weight: 700;
+  color: rgb(255 255 255 / 0.7);
+}
+
+.practice-rank--on {
+  border-color: #c89b3c;
+  background: rgb(200 155 60 / 0.3);
+  color: #f0e6d2;
+}
+
+.practice-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+}
+
 .theorycraft-spell-entry {
   --spell-entry-border-gradient: var(
     --card-border-gradient-strong,

@@ -1,4 +1,4 @@
-import type { RetryReason } from '../types.js';
+import type { RateLimitType, RetryReason } from '../types.js';
 
 const BACKOFF_MS: Record<number, number> = {
   1: 500,
@@ -22,4 +22,11 @@ export function classifyRetryReason(statusCode: number, isNetwork: boolean): Ret
   if (statusCode === 429) return '429';
   if (statusCode >= 500) return '5xx';
   return null;
+}
+
+/** Riot sends X-Rate-Limit-Type on its own-limit 429s; a 429 without it comes from the underlying service. */
+export function classifyRateLimitType(headers: Record<string, string>): RateLimitType {
+  const raw = (headers['x-rate-limit-type'] ?? '').trim().toLowerCase();
+  if (raw === 'application' || raw === 'method') return raw;
+  return 'service';
 }

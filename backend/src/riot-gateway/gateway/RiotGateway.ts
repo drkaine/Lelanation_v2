@@ -22,7 +22,7 @@ import { detectThroughputAnomaly, MetricsCollector } from './MetricsCollector.js
 import { observabilityBus, ObservabilityBus } from './ObservabilityBus.js';
 import { RateLimitTracker } from './RateLimitTracker.js';
 import { RequestQueue } from './RequestQueue.js';
-import { classifyRetryReason, getRetryBackoffMs, parseRetryAfterMs } from './RetryHandler.js';
+import { classifyRateLimitType, classifyRetryReason, getRetryBackoffMs, parseRetryAfterMs } from './RetryHandler.js';
 
 function interpolatePath(template: string, pathParams: Record<string, string>): string {
   return template.replace(/\{(\w+)\}/g, (_, key: string) => encodeURIComponent(pathParams[key] ?? ''));
@@ -436,6 +436,7 @@ export class RiotGateway {
           methodKey: request.methodKey,
           statusCode: 429,
           buckets: this.tracker.getAllBucketStates(),
+          rateLimitType: classifyRateLimitType(response.headers),
         });
         await this.handle429(request, response.headers, url);
         return;
@@ -544,20 +545,25 @@ export class RiotGateway {
 
   private async handle429(request: QueuedRequest, headers: Record<string, string>, url: string): Promise<void> {
     const retryAfterMs = parseRetryAfterMs(headers);
-    const includeApp = !headers['x-method-rate-limit'];
-    recordSaturation({
-      windowMs: includeApp ? 120_000 : 1_000,
-      methodKey: includeApp ? 'app' : request.methodKey,
-      waitMs: retryAfterMs,
-    });
-    this.tracker.saturate(request.methodKey, Date.now() + retryAfterMs, includeApp);
+    const limitType = classifyRateLimitType(headers);
+    // A service 429 is Riot-side overload: our quota is fine, so only this request waits.
+    if (limitType !== 'service') {
+      const includeApp = limitType === 'application';
+      recordSaturation({
+        windowMs: includeApp ? 120_000 : 1_000,
+        methodKey: includeApp ? 'app' : request.methodKey,
+        waitMs: retryAfterMs,
+      });
+      this.tracker.saturate(request.methodKey, Date.now() + retryAfterMs, includeApp);
+    }
     this.metrics.record('429');
-    observabilityBus.emitEvent('ratelimit:429', { requestId: request.id, retryAfterMs });
+    observabilityBus.emitEvent('ratelimit:429', { requestId: request.id, retryAfterMs, limitType });
 
     gatewayLogger.warn(
       {
         component: 'RiotGateway',
         event: 'rate_limit_429',
+        limitType,
         requestId: request.id,
         methodKey: request.methodKey,
         url,

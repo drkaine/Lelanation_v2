@@ -1,4 +1,4 @@
-import type { BucketState } from '../../riot-gateway/types.js';
+import type { BucketState, RateLimitType } from '../../riot-gateway/types.js';
 import { MetricsStore } from './MetricsStore.js';
 import type {
   IngestionCompletedReason,
@@ -28,14 +28,18 @@ export function recordGatewayRequest(params: {
   methodKey: string;
   statusCode: number;
   buckets: BucketState[];
+  rateLimitType?: RateLimitType;
 }): void {
+  const is429 = params.statusCode === 429;
+  const isService429 = is429 && params.rateLimitType === 'service';
   const { used120, limit120, used1, limit1 } = appLimits(params.buckets);
   MetricsStore.getInstance().pushGatewayRequest({
     ts: Date.now(),
     latencyMs: params.latencyMs,
     methodKey: params.methodKey,
     statusCode: params.statusCode,
-    is429: params.statusCode === 429,
+    is429: is429 && !isService429,
+    isService429,
     isError: params.statusCode >= 400,
     tokensUsed_120s: used120,
     tokensUsed_1s: used1,

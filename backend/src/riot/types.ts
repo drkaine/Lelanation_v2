@@ -211,7 +211,6 @@ export interface ChallengesDto {
   abilityUses?: number;
   acesBefore15Minutes?: number;
   alliedJungleMonsterKills?: number;
-  baronBuffGoldAdvantageOverThreshold?: number;
   baronKills?: number;
   blastConeOppositeOpponentCount?: number;
   bountyGold?: number;
@@ -225,7 +224,6 @@ export interface ChallengesDto {
   dodgeSkillShotsSmallWindow?: number;
   doubleAces?: number;
   dragonKills?: number;
-  earliestBaron?: number;
   earlyLaningPhaseGoldExpAdvantage?: number;
   effectiveHealAndShielding?: number;
   elderDragonKillsWithOpposingSoul?: number;
@@ -277,7 +275,6 @@ export interface ChallengesDto {
   riftHeraldTakedowns?: number;
   saveAllyFromDeath?: number;
   scuttleCrabKills?: number;
-  shortestTimeToAceFromFirstTakedown?: number;
   skillshotsDodged?: number;
   skillshotsHit?: number;
   soloBaronKills?: number;
