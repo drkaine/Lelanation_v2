@@ -918,6 +918,7 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
 
   return {
     t,
+    sortedTierListRows,
     locale,
     localePath,
     gameVersion,

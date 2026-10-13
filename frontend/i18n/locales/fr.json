@@ -2072,7 +2072,10 @@
     "spellsTooltipDeltaCasts": "Écart de casts vs patch de référence (ou ΔCast1/ΔCast2 pour les paires).",
     "championSpellOrderRecapTitle": "Ordre des compétences",
     "itemStatsOpenDetail": "Voir le détail de l'objet",
-    "itemsColumn": "Objet"
+    "itemsColumn": "Objet",
+    "tierPresentation": "Présentation",
+    "tierPresentation_grid": "Grille",
+    "tierPresentation_table": "Détaillée"
   },
   "stats": {
     "title": "Statistiques",
@@ -2967,7 +2970,6 @@
     "features": {
       "importBuilds": "Import de builds dans le client LoL (runes, items, sorts selon vos réglages).",
       "localFavorites": "Favoris stockés localement sur votre appareil (pas de stockage serveur).",
-      "matchSync": "Envoi des infos de fin de partie (matchId + région) pour enrichir les stats du site.",
       "settings": "Paramètres clairs pour contrôler ce qui est importé."
     },
     "gdprTitle": "RGPD et confidentialité",
@@ -3526,6 +3528,92 @@
       "stale": "Périmé — make deploy-backend",
       "upToDate": "À jour",
       "noProcess": "Aucun process enregistré (redémarrage requis)."
+    }
+  },
+  "homeTest": {
+    "eyebrow": "Patch {patch}",
+    "title": "Domine la Faille",
+    "subtitle": "Builds, tier list et stats du patch. Choisis ton champion, on s’occupe du reste.",
+    "ctaCreate": "Créer un build",
+    "ctaDiscover": "Voir les builds",
+    "heroPick": "Pick du moment",
+    "statMatches": "parties analysées",
+    "statBuilds": "builds",
+    "statVideos": "vidéos",
+    "quickTitle": "Accès rapide",
+    "metaTitle": "Meta du patch",
+    "metaSeeAll": "Tier list complète",
+    "buildsTitle": "Derniers builds",
+    "buildsSeeAll": "Tous les builds",
+    "videosTitle": "Nouvelles vidéos",
+    "videosSeeAll": "Toutes les vidéos",
+    "noData": "Pas encore de données",
+    "community": "Rejoins la commu",
+    "quick": {
+      "create": "Créer",
+      "createHint": "Ton build en 2 min",
+      "builds": "Builds",
+      "buildsHint": "Ceux de la commu",
+      "tierList": "Tier list",
+      "tierListHint": "Qui est fort",
+      "stats": "Stats",
+      "statsHint": "Winrate, pickrate",
+      "guides": "Guides",
+      "guidesHint": "Fiches matchup",
+      "videos": "Vidéos",
+      "videosHint": "Lelariva & co"
+    },
+    "patchTitle": "Patch {version} en bref",
+    "patchSeeAll": "Tous les patch notes",
+    "patch": {
+      "buff": "Champions buffés",
+      "nerf": "Champions nerfés",
+      "adjustment": "Ajustements"
+    },
+    "guidesTitle": "Derniers guides de matchup",
+    "guidesSeeAll": "Tous les guides"
+  },
+  "testPatch": {
+    "kicker": "Notes de patch",
+    "title": "Patch {version}",
+    "latestBadge": "Dernier patch",
+    "older": "Patch précédent",
+    "newer": "Patch suivant",
+    "scoreboard": "Le patch en bref",
+    "all": "Tout",
+    "search": "Chercher un champion, un objet…",
+    "compactView": "Vue compacte",
+    "detailedView": "Vue détaillée"
+  },
+  "legalTest": {
+    "eyebrow": "Lelanation · transparence",
+    "toc": "Sommaire",
+    "privacySubtitle": "Ce que le site et l'app collectent, pourquoi, et comment garder la main sur vos données.",
+    "legalSubtitle": "Qui édite Lelanation, ce que nous devons à Riot Games et les règles d'utilisation du site."
+  },
+  "downloadTest": {
+    "eyebrow": "Windows 10 / 11 · gratuit",
+    "statTotal": "Téléchargements",
+    "statWeek": "Cette semaine",
+    "stepsTitle": "Installer en 3 étapes",
+    "step1Title": "Télécharger",
+    "step1Text": "Récupérez l'installateur de la dernière version avec le bouton ci-dessus.",
+    "step2Title": "Autoriser",
+    "step2Text": "Si Windows affiche « Éditeur inconnu » : « Informations complémentaires » puis « Exécuter quand même ».",
+    "step3Title": "Jouer",
+    "step3Text": "Lancez le client LoL : vos builds Lelanation sont importés en un clic.",
+    "privacyCta": "Lire la politique de confidentialité"
+  },
+  "informationTest": {
+    "eyebrow": "Comment ça marche",
+    "subtitle": "Calculs, builds, données : tout ce qu'il y a derrière les chiffres du site.",
+    "toc": "Sommaire",
+    "tabIntro": {
+      "calculations": "Comment les stats, tiers et matchups sont calculés.",
+      "builds": "Visibilité, péremption au patch et régions des builds.",
+      "surveillance": "Ce que le site surveille en continu.",
+      "shortcuts": "Raccourcis clavier pour aller plus vite.",
+      "data": "D'où viennent les données."
     }
   }
 }

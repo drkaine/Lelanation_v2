@@ -1,422 +1,255 @@
 <template>
-  <div class="home-page text-center text-text">
-    <!-- Hero (pleine largeur) -->
-    <section
-      class="home-hero home-section mb-2 w-full border-y border-primary/30 bg-surface/40 px-3 pb-3 pt-3 sm:px-5 sm:pt-4"
-    >
-      <div class="mx-auto w-full max-w-[1600px]">
-        <h1 class="text-2xl font-bold leading-tight text-text-accent sm:text-3xl lg:text-4xl">
-          {{ t('home.heroTitle') }}
-        </h1>
-        <p class="mx-auto mt-2 max-w-2xl text-sm text-text/80 sm:text-base">
-          {{ t('home.heroSubtitle') }}
+  <div class="hg-page text-text">
+    <!-- Hero : splash du meilleur pick -->
+    <section class="hg-hero">
+      <div
+        class="hg-hero-bg"
+        :style="heroSplash ? { backgroundImage: `url(${heroSplash})` } : undefined"
+        aria-hidden="true"
+      />
+      <div class="hg-hero-inner">
+        <p v-if="stats.patch" class="hg-eyebrow">
+          {{ t('homeTest.eyebrow', { patch: stats.patch }) }}
         </p>
-        <div class="mt-3 flex flex-wrap items-center justify-center gap-2">
+        <h1 class="hg-title">{{ t('homeTest.title') }}</h1>
+        <p class="hg-subtitle">{{ t('homeTest.subtitle') }}</p>
+
+        <div class="mt-6 flex flex-wrap gap-3">
           <NuxtLink
             :to="localePath('/builds/create')"
-            class="inline-flex items-center rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-background transition hover:bg-accent-dark"
+            class="inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-bold text-background transition hover:bg-accent-dark"
           >
-            {{ t('home.ctaCreateBuild') }}
+            <Icon name="mdi:hammer-wrench" size="20px" />
+            {{ t('homeTest.ctaCreate') }}
           </NuxtLink>
           <NuxtLink
             :to="localePath('/builds/discover')"
-            class="ui-build-card-button inline-flex items-center px-5 py-2.5 text-sm font-semibold transition"
+            class="ui-build-card-button inline-flex items-center gap-2 px-6 py-3 text-sm font-bold transition"
           >
-            {{ t('home.ctaDiscoverBuilds') }}
+            <Icon name="mdi:sword-cross" size="20px" />
+            {{ t('homeTest.ctaDiscover') }}
           </NuxtLink>
         </div>
 
-        <p class="home-section-eyebrow mb-1.5 mt-4 text-center">
-          {{ t('home.followUs') }}
-        </p>
-        <div class="flex flex-wrap justify-center gap-2">
-          <a
-            v-for="link in socialLinks"
-            :key="link.href"
-            class="ui-build-card-button inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition"
-            :href="link.href"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Icon :name="link.icon" size="18px" />
-            <span>{{ link.text }}</span>
-          </a>
-        </div>
+        <ul class="hg-stats">
+          <li>
+            <strong>{{ formatStat(stats.matches) }}</strong>
+            <span>{{ t('homeTest.statMatches') }}</span>
+          </li>
+          <li>
+            <strong>{{ formatStat(stats.builds) }}</strong>
+            <span>{{ t('homeTest.statBuilds') }}</span>
+          </li>
+          <li>
+            <strong>{{ formatStat(stats.videos) }}</strong>
+            <span>{{ t('homeTest.statVideos') }}</span>
+          </li>
+        </ul>
       </div>
+
+      <NuxtLink v-if="heroRow && heroChampion" :to="championLink(heroRow)" class="hg-hero-pick">
+        <span class="hg-hero-pick-label">{{ t('homeTest.heroPick') }}</span>
+        <span class="hg-hero-pick-name">{{ heroChampion.name }}</span>
+        <span :class="uiStatisticsTierBadgeClass(heroRow.tier)">{{ heroRow.tier }}</span>
+      </NuxtLink>
     </section>
 
-    <template v-for="item in homeRenderItems" :key="homeRenderItemKey(item)">
-      <section
-        v-if="item.kind === 'appContact'"
-        class="home-section home-section--app-contact mb-2 w-full"
-      >
-        <div class="home-section-inner">
-          <div class="grid gap-3 lg:grid-cols-2 lg:items-stretch">
-            <div
-              v-for="sectionId in item.order"
-              :key="sectionId"
-              :class="homeAppContactCardClass(sectionId)"
-            >
-              <HomeAppContactCardContent :section="sectionId" />
+    <div class="hg-container">
+      <!-- Derniers builds -->
+      <section class="hg-section">
+        <div class="hg-section-head">
+          <h2 class="hg-h2">{{ t('homeTest.buildsTitle') }}</h2>
+          <NuxtLink :to="localePath('/builds/discover')" class="hg-more">
+            {{ t('homeTest.buildsSeeAll') }} →
+          </NuxtLink>
+        </div>
+      </section>
+    </div>
+    <div v-if="!pending && recentBuilds.length" class="hg-builds-wrap">
+      <BuildGrid
+        :custom-builds="homeBuilds"
+        :show-comparison-buttons="false"
+        :hide-bottom-actions="true"
+        :show-all-custom-builds="true"
+      />
+    </div>
+
+    <div class="hg-container">
+      <!-- Meta du patch -->
+      <section class="hg-section">
+        <div class="hg-section-head">
+          <h2 class="hg-h2">{{ t('homeTest.metaTitle') }}</h2>
+          <NuxtLink :to="localePath('/statistics/tier-list')" class="hg-more">
+            {{ t('homeTest.metaSeeAll') }} →
+          </NuxtLink>
+        </div>
+        <div class="hg-meta-grid">
+          <div v-for="block in metaPicks" :key="block.role" class="hg-role ui-build-card-surface">
+            <div class="hg-role-head">
+              <img :src="block.icon" :alt="block.label" width="22" height="22" />
+              <span>{{ block.label }}</span>
             </div>
+            <div v-if="block.champions.length" class="hg-role-picks">
+              <NuxtLink
+                v-for="row in block.champions"
+                :key="row.championId"
+                :to="championLink(row)"
+                class="hg-pick"
+                :title="championName(row)"
+              >
+                <img
+                  v-if="championImage(row)"
+                  :src="championImage(row)"
+                  :alt="championName(row)"
+                  width="64"
+                  height="64"
+                  loading="lazy"
+                />
+                <span :class="['hg-tier-corner', uiStatisticsTierBadgeClass(row.tier)]">
+                  {{ row.tier }}
+                </span>
+                <span class="hg-pick-name">{{ championName(row) }}</span>
+              </NuxtLink>
+            </div>
+            <p v-else class="text-xs text-text/50">{{ t('homeTest.noData') }}</p>
           </div>
         </div>
       </section>
 
-      <section v-else :class="homeSectionClass(item.id)">
-        <template v-if="item.id === 'recentBuilds'">
-          <div class="home-section-inner">
-            <div class="home-section-header mb-2">
-              <h2 class="home-section-title text-xl font-bold sm:text-2xl">
-                {{ t('home.recentBuildsTitle') }}
-              </h2>
-              <NuxtLink
-                :to="localePath('/builds/discover')"
-                class="mt-2 inline-block text-sm font-semibold text-accent hover:underline"
-              >
-                {{ t('home.seeAllBuilds') }}
-              </NuxtLink>
-            </div>
-            <div v-if="pending" class="py-8 text-center text-sm text-text/60">
-              {{ t('home.loading') }}
-            </div>
-            <div
-              v-else-if="recentBuilds.length === 0"
-              class="ui-build-card-surface rounded-xl px-4 py-8 text-center text-sm text-text/70"
+      <!-- Récap du patch -->
+      <section v-if="patchRecap" class="hg-section">
+        <div class="hg-section-head">
+          <h2 class="hg-h2">{{ t('homeTest.patchTitle', { version: patchRecap.version }) }}</h2>
+          <NuxtLink :to="localePath(`/patch-notes/${patchRecap.version}`)" class="hg-more">
+            {{ t('homeTest.patchSeeAll') }} →
+          </NuxtLink>
+        </div>
+        <div class="hg-patch ui-build-card-surface">
+          <div class="hg-patch-score">
+            <span
+              v-for="tag in patchRecap.counts"
+              :key="tag.id"
+              class="hg-patch-tile"
+              :class="`tone-${PATCH_TAG_TILES[tag.id].tone}`"
             >
-              {{ t('home.noBuildsYet') }}
-            </div>
+              <Icon :name="PATCH_TAG_TILES[tag.id].icon" aria-hidden="true" />
+              <strong>{{ tag.count }}</strong>
+              <span>{{ t(`patchNotesPage.changeTypes.${tag.id}`) }}</span>
+            </span>
           </div>
-          <div v-if="!pending && recentBuilds.length > 0" class="home-builds-grid-wrap">
-            <BuildGrid
-              :custom-builds="recentBuilds"
-              :show-comparison-buttons="false"
-              :hide-bottom-actions="true"
-              :show-all-custom-builds="true"
-            />
-          </div>
-        </template>
-        <div v-else class="home-section-inner">
-          <div
-            v-if="item.id === 'customize'"
-            class="home-customize-block flex w-full flex-col items-center text-center"
-          >
-            <h2 class="home-section-title text-lg font-bold sm:text-xl">
-              {{ t('home.customizeTitle') }}
-            </h2>
-
-            <div class="ui-build-card-surface mt-3 w-full rounded-lg p-4 text-center sm:p-5">
-              <div class="grid justify-items-center gap-6 sm:grid-cols-2 xl:grid-cols-3">
-                <div class="w-full max-w-xs text-center sm:max-w-none">
-                  <h3 class="text-xs font-bold uppercase tracking-wide text-accent">
-                    {{ t('home.customizeDisplayTitle') }}
-                  </h3>
-                  <p class="mt-1 text-[11px] leading-snug text-text/55 sm:text-xs">
-                    {{ t('home.customizeDisplayHint') }}
-                  </p>
-                  <ul class="mx-auto mt-2 inline-block space-y-1 text-left text-xs text-text/80">
-                    <li v-for="feature in customizeDisplayFeatures" :key="feature">
-                      • {{ feature }}
-                    </li>
-                  </ul>
-                </div>
-
-                <div class="w-full max-w-xs text-center sm:max-w-none">
-                  <h3 class="text-xs font-bold uppercase tracking-wide text-accent">
-                    {{ t('home.customizeStatsTitle') }}
-                  </h3>
-                  <p class="mt-1 text-[11px] leading-snug text-text/55 sm:text-xs">
-                    {{ t('home.customizeStatsHint') }}
-                  </p>
-                  <ul class="mx-auto mt-2 inline-block space-y-1 text-left text-xs text-text/80">
-                    <li v-for="feature in customizeStatsFeatures" :key="feature">
-                      • {{ feature }}
-                    </li>
-                  </ul>
-                </div>
-
-                <div class="w-full max-w-xs text-center sm:col-span-2 sm:max-w-none xl:col-span-1">
-                  <h3 class="text-xs font-bold uppercase tracking-wide text-accent">
-                    {{ t('home.dataTransferTitle') }}
-                  </h3>
-                  <p class="mt-1 text-[11px] leading-snug text-text/55 sm:text-xs">
-                    {{ t('home.dataTransferHint') }}
-                  </p>
-                  <p class="mx-auto mt-2 max-w-sm text-xs leading-relaxed text-text/80">
-                    {{ t('home.dataTransferDescription') }}
-                  </p>
-                  <NuxtLink
-                    :to="localePath('/settings?tab=dataTransfer')"
-                    class="mt-3 inline-flex items-center text-xs font-semibold text-accent hover:underline"
-                  >
-                    {{ t('home.dataTransferLink') }}
-                  </NuxtLink>
-                </div>
-              </div>
-
-              <div class="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
-                <button
-                  type="button"
-                  class="ui-build-card-button inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold transition"
-                  @click="openCustomizePanel()"
-                >
-                  {{ t('home.customizeOpenPanel') }}
-                  <kbd class="home-shortcut-kbd">Alt + H</kbd>
-                </button>
+          <div class="hg-patch-sides">
+            <div
+              v-for="side in patchSides"
+              :key="side.id"
+              class="hg-patch-side"
+              :class="`tone-${PATCH_TAG_TILES[side.id].tone}`"
+            >
+              <p class="hg-patch-side-title">
+                <Icon :name="PATCH_TAG_TILES[side.id].icon" aria-hidden="true" />
+                {{ t(`homeTest.patch.${side.id}`) }}
+              </p>
+              <div class="hg-patch-champs">
                 <NuxtLink
-                  :to="localePath('/settings')"
-                  class="ui-build-card-button inline-flex items-center px-3 py-1.5 text-xs font-semibold transition"
+                  v-for="entity in side.entities"
+                  :key="`${entity.category}-${entity.name}`"
+                  :to="localePath(`/patch-notes/${patchRecap.version}`)"
+                  class="hg-patch-champ"
+                  :title="entity.name"
                 >
-                  {{ t('home.customizeSettingsLink') }}
+                  <PatchEntityThumb :entity="entity" />
+                  <span>{{ entity.name }}</span>
                 </NuxtLink>
               </div>
             </div>
           </div>
-
-          <template v-if="item.id === 'tierList'">
-            <div class="home-section-header mb-2">
-              <h2 class="home-section-title text-xl font-bold sm:text-2xl">
-                {{ t('home.tierListTitle') }}
-              </h2>
-              <NuxtLink
-                :to="localePath('/statistics/tier-list')"
-                class="mt-2 inline-block text-sm font-semibold text-accent hover:underline"
-              >
-                {{ t('home.fullTierList') }}
-              </NuxtLink>
-            </div>
-            <div class="grid gap-4 text-left lg:grid-cols-5">
-              <div
-                v-for="roleBlock in tierByRole"
-                :key="roleBlock.role"
-                class="home-tier-role-card p-3"
-              >
-                <div class="mb-3 flex items-center gap-2 border-b border-primary/15 pb-2">
-                  <img
-                    :src="roleBlock.icon"
-                    :alt="roleBlock.label"
-                    width="20"
-                    height="20"
-                    class="h-5 w-5"
-                  />
-                  <h3 class="text-sm font-bold text-text">{{ roleBlock.label }}</h3>
-                </div>
-                <ul v-if="roleBlock.champions.length" class="space-y-2">
-                  <li
-                    v-for="row in roleBlock.champions"
-                    :key="`${roleBlock.role}-${row.championId}`"
-                  >
-                    <NuxtLink
-                      :to="
-                        championStatsDetailPath(
-                          row.championId,
-                          localePath,
-                          championsStore.champions
-                        )
-                      "
-                      class="flex items-center gap-2 rounded-lg px-1 py-1 transition hover:bg-black/20"
-                    >
-                      <img
-                        v-if="tierChampionImage(row)"
-                        :src="tierChampionImage(row)"
-                        :alt="tierChampionName(row)"
-                        width="28"
-                        height="28"
-                        class="h-7 w-7 shrink-0 rounded object-cover"
-                        loading="lazy"
-                      />
-                      <span class="min-w-0 flex-1 truncate text-xs font-medium text-text">
-                        {{ tierChampionName(row) }}
-                      </span>
-                      <span class="shrink-0" :class="uiStatisticsTierBadgeClass(row.tier)">
-                        {{ homeTierLabel(row.tier) }}
-                      </span>
-                    </NuxtLink>
-                  </li>
-                </ul>
-                <p v-else class="text-xs text-text/50">{{ t('home.tierNoData') }}</p>
-              </div>
-            </div>
-          </template>
-
-          <template v-if="item.id === 'latestVideos'">
-            <div class="home-section-header mb-2">
-              <h2 class="home-section-title text-xl font-bold sm:text-2xl">
-                {{ t('home.latestVideosTitle') }}
-              </h2>
-              <NuxtLink
-                :to="localePath('/videos')"
-                class="mt-2 inline-block text-sm font-semibold text-accent hover:underline"
-              >
-                {{ t('home.allVideos') }}
-              </NuxtLink>
-            </div>
-            <div
-              v-if="latestVideos.length === 0"
-              class="ui-build-card-surface rounded-xl px-4 py-8 text-center text-sm text-text/70"
-            >
-              {{ t('home.noVideosYet') }}
-            </div>
-            <div v-else class="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-              <VideoGridCard
-                v-for="(video, index) in latestVideos"
-                :key="video.id"
-                :video="video"
-                compact
-                :fetch-priority="index === 0 ? 'high' : undefined"
-              />
-            </div>
-          </template>
-
-          <template v-if="item.id === 'app' || item.id === 'contact'">
-            <HomeAppContactCardContent :section="item.id" />
-          </template>
-
-          <div v-if="item.id === 'globalStats'" class="grid gap-2 sm:grid-cols-3">
-            <div class="ui-build-card-surface rounded-lg px-3 py-2 text-center">
-              <p class="text-lg font-bold leading-tight text-accent">
-                {{ formatStat(stats.builds) }}
-              </p>
-              <p class="mt-0.5 text-xs text-text/70">{{ t('home.statBuilds') }}</p>
-            </div>
-            <div class="ui-build-card-surface rounded-lg px-3 py-2 text-center">
-              <p class="text-lg font-bold leading-tight text-accent">
-                {{ formatStat(stats.matches) }}
-              </p>
-              <p class="mt-0.5 text-xs text-text/70">
-                {{ t('home.statPatchMatches', { patch: stats.patch }) }}
-              </p>
-            </div>
-            <div class="ui-build-card-surface rounded-lg px-3 py-2 text-center">
-              <p class="text-lg font-bold leading-tight text-accent">
-                {{ formatStat(stats.videos) }}
-              </p>
-              <p class="mt-0.5 text-xs text-text/70">{{ t('home.statVideos') }}</p>
-            </div>
-          </div>
         </div>
       </section>
-    </template>
+      <!-- Guides (au-delà de 5) -->
+      <section v-if="latestGuides.length" class="hg-section">
+        <div class="hg-section-head">
+          <h2 class="hg-h2">{{ t('homeTest.guidesTitle') }}</h2>
+          <NuxtLink :to="localePath('/matchups/sheets/discover')" class="hg-more">
+            {{ t('homeTest.guidesSeeAll') }} →
+          </NuxtLink>
+        </div>
+        <div class="hg-guides">
+          <NuxtLink
+            v-for="guide in latestGuides"
+            :key="guide.id"
+            :to="matchupGuideDetailPath(guide, localePath)"
+            class="hg-guide-link"
+          >
+            <MatchupGuideCard :guide="guide" />
+          </NuxtLink>
+        </div>
+      </section>
+      <!-- Vidéos -->
+      <section v-if="latestVideos.length" class="hg-section">
+        <div class="hg-section-head">
+          <h2 class="hg-h2">{{ t('homeTest.videosTitle') }}</h2>
+          <NuxtLink :to="localePath('/videos')" class="hg-more">
+            {{ t('homeTest.videosSeeAll') }} →
+          </NuxtLink>
+        </div>
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <VideoGridCard
+            v-for="video in latestVideos.slice(0, 4)"
+            :key="video.id"
+            :video="video"
+            compact
+          />
+        </div>
+      </section>
+
+      <!-- Communauté -->
+      <section class="hg-section hg-community">
+        <h2 class="hg-h2">{{ t('homeTest.community') }}</h2>
+        <div class="mt-3 flex flex-wrap justify-center gap-2">
+          <a
+            v-for="link in socialLinks"
+            :key="link.href"
+            :href="link.href"
+            :aria-label="link.label"
+            :title="link.label"
+            class="hg-social ui-build-card-button"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Icon :name="link.icon" size="22px" />
+          </a>
+        </div>
+      </section>
+    </div>
   </div>
 </template>
-
 <script setup lang="ts">
+import type { Build, MatchupGuide } from '@lelanation/shared-types'
 import { useI18n } from 'vue-i18n'
-import { championStatsDetailPath } from '~/utils/championStatsRoutes'
-import { useChampionsStore } from '~/stores/ChampionsStore'
-import BuildGrid from '~/components/BuildDiscovery/BuildGrid.vue'
-import HomeAppContactCardContent from '~/components/home/HomeAppContactCardContent.vue'
-import VideoGridCard from '~/components/Videos/VideoGridCard.vue'
-import { getChampionImageUrl } from '~/utils/imageUrl'
 import { usePageOgImage } from '~/composables/usePageOgImage'
+import BuildGrid from '~/components/BuildDiscovery/BuildGrid.vue'
+import PatchEntityThumb from '~/components/patch/PatchEntityThumb.vue'
+import MatchupGuideCard from '~/components/MatchupGuideDiscovery/MatchupGuideCard.vue'
+import VideoGridCard from '~/components/Videos/VideoGridCard.vue'
+import type { HomeTierListRow } from '~/composables/useHomePage'
+import { useChampionsStore } from '~/stores/ChampionsStore'
+import { championStatsDetailPath } from '~/utils/championStatsRoutes'
+import { homeGuides, homePatchRecap, pickHeroRow, topPicksByRole } from '~/utils/homeGaming'
+import { apiUrl } from '~/utils/apiUrl'
+import { matchupGuideDetailPath } from '~/utils/matchupGuideSlug'
+import { PATCH_TAG_TILES } from '~/utils/patchGaming'
+import { pickLatestPatchVersion } from '~/utils/patchVersion'
+import {
+  normalizePatchNotesVersion,
+  usePatchNotesStore,
+  type PatchData,
+} from '~/stores/PatchNotesStore'
+import { getChampionImageUrl, getChampionSplashImageUrl } from '~/utils/imageUrl'
 import { uiStatisticsTierBadgeClass } from '~/utils/uiColorClasses'
-import { useHomeUiStore, type HomeSectionId } from '~/stores/HomeUiStore'
-
-const championsStore = useChampionsStore()
-const homeUiStore = useHomeUiStore()
 
 const { locale, t } = useI18n()
 const localePath = useLocalePath()
+const championsStore = useChampionsStore()
 const { pending, recentBuilds, tierByRole, latestVideos, stats, championForId } = useHomePage()
-
-const visibleHomeSections = computed(() => homeUiStore.visibleSections)
-
-type HomeRenderItem =
-  | { kind: 'section'; id: HomeSectionId }
-  | { kind: 'appContact'; order: ['app', 'contact'] | ['contact', 'app'] }
-
-const homeRenderItems = computed((): HomeRenderItem[] => {
-  const sections = visibleHomeSections.value
-  const showApp = sections.includes('app')
-  const showContact = sections.includes('contact')
-  const pairAppContact = showApp && showContact
-  const pairedHandled = { app: false, contact: false }
-  const items: HomeRenderItem[] = []
-
-  for (const id of sections) {
-    if (id === 'app' || id === 'contact') {
-      if (!pairAppContact) {
-        items.push({ kind: 'section', id })
-        continue
-      }
-      if (pairedHandled.app || pairedHandled.contact) continue
-
-      const appIndex = sections.indexOf('app')
-      const contactIndex = sections.indexOf('contact')
-      items.push({
-        kind: 'appContact',
-        order: appIndex < contactIndex ? ['app', 'contact'] : ['contact', 'app'],
-      })
-      pairedHandled.app = true
-      pairedHandled.contact = true
-      continue
-    }
-    items.push({ kind: 'section', id })
-  }
-
-  return items
-})
-
-function homeRenderItemKey(item: HomeRenderItem): string {
-  return item.kind === 'appContact' ? `app-contact-${item.order.join('-')}` : item.id
-}
-
-function homeAppContactCardClass(_sectionId: 'app' | 'contact'): string[] {
-  return [
-    'ui-build-card-surface',
-    'flex',
-    'h-full',
-    'flex-col',
-    'rounded-2xl',
-    'p-4',
-    'sm:p-5',
-    'text-center',
-  ]
-}
-
-function homeSectionClass(sectionId: HomeSectionId): string[] {
-  const base = ['home-section', 'mb-2', 'w-full']
-  switch (sectionId) {
-    case 'customize':
-      return [...base, 'home-customize-section', 'border-y', 'border-primary/30', 'bg-surface/40']
-    case 'recentBuilds':
-      return [...base, 'home-section--builds', 'border-y', 'border-primary/30', 'bg-surface/40']
-    case 'tierList':
-      return [...base, 'home-section--tier-list', 'border-y', 'border-primary/30', 'bg-surface/40']
-    case 'latestVideos':
-      return [...base, 'home-section--videos', 'border-y', 'border-primary/30', 'bg-surface/40']
-    case 'globalStats':
-      return [...base, 'home-section--stats', 'border-y', 'border-primary/30', 'bg-surface/40']
-    case 'app':
-      return [...base, 'ui-build-card-surface', 'rounded-2xl', 'p-4', 'sm:p-5']
-    case 'contact':
-      return [...base, 'ui-build-card-surface', 'rounded-2xl', 'p-4', 'sm:p-5']
-    default:
-      return base
-  }
-}
-
-const commandsModalOpen = useState<boolean>('commands-modal-open', () => false)
-
-const customizeDisplayFeatures = computed(() => [
-  t('home.customizeFeatureTooltips'),
-  t('home.customizeFeatureStreamer'),
-  t('home.customizeFeatureZoom'),
-  t('home.customizeFeatureSplash'),
-  t('home.customizeFeatureSimplified'),
-  t('home.customizeFeatureSplitTransform'),
-])
-
-const customizeStatsFeatures = computed(() => [
-  t('home.customizeFeatureTabs'),
-  t('home.customizeFeatureDefaultTab'),
-  t('home.customizeFeatureWatchlist'),
-  t('home.customizeFeatureAlerts'),
-])
-
-function openCustomizePanel(): void {
-  commandsModalOpen.value = true
-}
 
 useHead({
   title: () => t('seo.homeTitle'),
@@ -433,52 +266,75 @@ usePageOgImage({
   subtitle: () => t('seo.homeDescription'),
 })
 
-interface SocialLink {
-  href: string
-  icon: string
-  text: string
-}
+const patchNotesStore = usePatchNotesStore()
+const requestFetch = useRequestFetch()
 
-const socialLinks = computed((): SocialLink[] => [
-  { href: 'https://discord.gg/RrXCpsFGrw', icon: 'mdi:discord', text: t('home.links.discord') },
-  {
-    href: 'https://www.instagram.com/lelariva_fr/',
-    icon: 'mdi:instagram',
-    text: t('home.links.instagram'),
+/** Dernier patch : index puis JSON localisé (repli en-GB), comme la page patch test. */
+const { data: latestPatch } = useAsyncData(
+  () => `home-patch-${locale.value}`,
+  async (): Promise<PatchData | null> => {
+    await patchNotesStore.loadIndex(false, requestFetch)
+    const version = normalizePatchNotesVersion(
+      pickLatestPatchVersion(patchNotesStore.index?.latest, '') || ''
+    )
+    if (!version) return null
+    const url = (l: string) => `/data/patch-notes/${version}/patch-${version}-${l}.json`
+    const preferred = locale.value === 'fr' ? 'fr-FR' : 'en-GB'
+    for (const l of preferred === 'fr-FR' ? [preferred, 'en-GB'] : [preferred]) {
+      try {
+        return await requestFetch<PatchData>(url(l), { cache: 'no-cache' })
+      } catch {
+        // locale suivante
+      }
+    }
+    return null
   },
-  {
-    href: 'https://www.facebook.com/lelariva/',
-    icon: 'mdi:facebook',
-    text: t('home.links.facebook'),
-  },
-  {
-    href: 'https://www.patreon.com/Lelariva',
-    icon: 'mdi:patreon',
-    text: t('home.links.patreon'),
-  },
-  {
-    href: 'https://www.youtube.com/@Lelariva_LoL/featured',
-    icon: 'mdi:youtube',
-    text: t('home.links.youtube'),
-  },
-  { href: 'https://www.twitch.tv/lelariva', icon: 'mdi:twitch', text: t('home.links.twitch') },
-  { href: 'https://x.com/Lelariva_fr', icon: 'mdi:twitter', text: t('home.links.twitter') },
-  {
-    href: 'https://www.tiktok.com/@lelariva_fr',
-    icon: 'mdi:music-note',
-    text: t('home.links.tiktok'),
-  },
-  { href: 'https://www.lelariva.fr/', icon: 'mdi:web', text: t('home.links.website') },
-])
+  { watch: [locale] }
+)
 
-function tierChampionName(row: { championId: number; championName?: string }): string {
+const patchRecap = computed(() => {
+  const patch = latestPatch.value
+  if (!patch?.entities?.length) return null
+  return { version: patch.patchVersion, ...homePatchRecap(patch.entities) }
+})
+const patchSides = computed(() =>
+  patchRecap.value
+    ? [
+        { id: 'buff' as const, entities: patchRecap.value.buffs },
+        { id: 'nerf' as const, entities: patchRecap.value.nerfs },
+        { id: 'adjustment' as const, entities: patchRecap.value.adjustments },
+      ].filter(side => side.entities.length > 0)
+    : []
+)
+
+const { data: guides } = useAsyncData(
+  'home-guides',
+  () => $fetch<MatchupGuide[]>(apiUrl('/api/matchup-guides')).catch(() => []),
+  { server: false, default: () => [] }
+)
+const latestGuides = computed(() => homeGuides(guides.value ?? [], 4))
+
+const homeBuilds = computed((): Build[] => recentBuilds.value.slice(0, 6) as Build[])
+const metaPicks = computed(() => topPicksByRole(tierByRole.value, 3))
+const heroRow = computed(() => pickHeroRow(tierByRole.value))
+const heroChampion = computed(() =>
+  heroRow.value ? championForId(heroRow.value.championId) : null
+)
+const heroSplash = computed(() =>
+  heroChampion.value ? getChampionSplashImageUrl('latest', heroChampion.value.id) : ''
+)
+
+function championName(row: HomeTierListRow): string {
   return row.championName ?? championForId(row.championId)?.name ?? '—'
 }
 
-function tierChampionImage(row: { championId: number; championImage?: string }): string {
+function championImage(row: HomeTierListRow): string {
   const imageName = row.championImage ?? championForId(row.championId)?.image?.full
-  if (!imageName) return ''
-  return getChampionImageUrl('latest', imageName)
+  return imageName ? getChampionImageUrl('latest', imageName) : ''
+}
+
+function championLink(row: HomeTierListRow) {
+  return championStatsDetailPath(row.championId, localePath, championsStore.champions)
 }
 
 function formatStat(value: number): string {
@@ -486,88 +342,436 @@ function formatStat(value: number): string {
   return value.toLocaleString(locale.value === 'en' ? 'en-US' : 'fr-FR')
 }
 
-function homeTierLabel(tier: string): string {
-  if (tier === 'D' || tier === 'F') return t('statisticsPage.tierF')
-  const labels: Record<string, string> = {
-    'S+': t('statisticsPage.tierS+'),
-    S: t('statisticsPage.tierS'),
-    A: t('statisticsPage.tierA'),
-    B: t('statisticsPage.tierB'),
-    C: t('statisticsPage.tierC'),
-  }
-  return labels[tier] ?? tier
-}
+const socialLinks = [
+  { href: 'https://discord.gg/RrXCpsFGrw', icon: 'mdi:discord', label: 'Discord' },
+  { href: 'https://www.youtube.com/@Lelariva_LoL/featured', icon: 'mdi:youtube', label: 'YouTube' },
+  { href: 'https://www.twitch.tv/lelariva', icon: 'mdi:twitch', label: 'Twitch' },
+  { href: 'https://www.tiktok.com/@lelariva_fr', icon: 'mdi:music-note', label: 'TikTok' },
+  { href: 'https://www.instagram.com/lelariva_fr/', icon: 'mdi:instagram', label: 'Instagram' },
+  { href: 'https://x.com/Lelariva_fr', icon: 'mdi:twitter', label: 'X' },
+  { href: 'https://www.patreon.com/Lelariva', icon: 'mdi:patreon', label: 'Patreon' },
+]
 </script>
 
 <style scoped>
-.home-page {
+/* Couleurs : uniquement les tokens du site (accent = gold-300, text = gold-50, blue-*). */
+.hg-page {
   width: 100%;
+  padding-bottom: 3rem;
 }
 
-.home-section-inner {
+/* ---------- Hero ---------- */
+.hg-hero {
+  position: relative;
+  overflow: hidden;
+  min-height: 460px;
+  display: flex;
+  align-items: flex-end;
+  border-bottom: 1px solid rgb(var(--rgb-accent) / 0.3);
+  background: var(--color-blue-600);
+  isolation: isolate;
+}
+
+/* Splash 1215×717 : jamais affiché au-delà de sa taille native (sinon pixellisé). */
+.hg-hero-bg {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: -1;
+  width: min(1215px, 100%);
+  background-size: cover;
+  background-position: center 20%;
+  -webkit-mask-image:
+    linear-gradient(90deg, transparent 0%, #000 45%),
+    linear-gradient(0deg, transparent 0%, #000 40%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(90deg, transparent 0%, #000 45%),
+    linear-gradient(0deg, transparent 0%, #000 40%);
+  mask-composite: intersect;
+  animation: hg-fade 0.6s ease-out both;
+}
+
+.hg-hero-inner {
   width: 100%;
-  max-width: 1600px;
+  max-width: none;
   margin-inline: auto;
-  padding: 0.75rem 10px;
+  padding: 3rem 16px 2rem;
 }
 
 @media (min-width: 640px) {
-  .home-section-inner {
-    padding-inline: 1.25rem;
+  .hg-hero-inner {
+    padding-inline: 2rem;
   }
 }
 
-.home-section--builds {
-  width: 100%;
-  min-width: 0;
-  text-align: left;
-}
-
-/* Même conteneur horizontal que builds-page (px-[10px], pleine largeur) */
-.home-builds-grid-wrap {
-  width: 100%;
-  padding-inline: 10px;
-  box-sizing: border-box;
-}
-
-.home-section-title {
-  color: var(--color-gold-300);
-}
-
-.home-section-subtitle {
-  color: rgb(125 211 252 / 0.88);
-}
-
-.home-section-eyebrow {
-  font-size: 0.875rem;
-  font-weight: 600;
-  letter-spacing: 0.12em;
+.hg-eyebrow {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.25em;
   text-transform: uppercase;
   color: rgb(var(--rgb-accent) / 0.75);
 }
 
-.home-shortcut-kbd {
-  display: inline-block;
-  border: 1px solid rgb(var(--rgb-accent) / 0.35);
-  border-radius: 6px;
-  background: rgb(0 0 0 / 0.25);
-  padding: 2px 8px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--color-gold-300);
-  white-space: nowrap;
+.hg-title {
+  margin-top: 0.25rem;
+  font-size: clamp(2.25rem, 6vw, 4.5rem);
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--color-text-accent);
+  text-shadow: 0 4px 24px rgb(0 0 0 / 0.5);
 }
 
-.home-tier-role-card {
-  --card-border-gradient-strong: var(--card-border-gradient-default-strong);
-  border: 2px solid transparent;
-  border-radius: 0.75rem;
-  background-image:
-    linear-gradient(var(--color-blue-500), var(--color-blue-500)),
-    var(--card-border-gradient-strong);
-  background-origin: border-box;
-  background-clip: padding-box, border-box;
-  box-shadow: 0 4px 12px rgb(0 0 0 / 0.5);
+.hg-subtitle {
+  margin-top: 0.75rem;
+  max-width: 36rem;
+  font-size: 1.05rem;
+  color: rgb(var(--rgb-text) / 0.8);
+}
+
+.hg-stats {
+  margin-top: 2rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem 2.5rem;
+}
+
+.hg-stats li {
+  display: flex;
+  flex-direction: column;
+}
+
+.hg-stats strong {
+  font-size: 1.6rem;
+  font-weight: 900;
+  color: var(--color-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.hg-stats span {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgb(var(--rgb-text) / 0.6);
+}
+
+.hg-hero-pick {
+  position: absolute;
+  right: 2rem;
+  bottom: 2rem;
+  display: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+  text-align: right;
+}
+
+@media (min-width: 1024px) {
+  .hg-hero-pick {
+    display: flex;
+  }
+}
+
+.hg-hero-pick-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgb(var(--rgb-text) / 0.7);
+}
+
+.hg-hero-pick-name {
+  font-size: 1.75rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  color: var(--color-text);
+  text-shadow: 0 2px 12px rgb(0 0 0 / 0.8);
+}
+
+/* ---------- Sections ---------- */
+.hg-container {
+  width: 100%;
+  max-width: none;
+  margin-inline: auto;
+  padding-inline: 16px;
+}
+
+@media (min-width: 640px) {
+  .hg-container {
+    padding-inline: 2rem;
+  }
+}
+
+.hg-section {
+  margin-top: 2.5rem;
+}
+
+.hg-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.hg-h2 {
+  position: relative;
+  padding-left: 0.85rem;
+  font-size: 1.4rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-accent);
+}
+
+.hg-h2::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 15%;
+  bottom: 15%;
+  width: 4px;
+  background: var(--color-accent);
+}
+
+.hg-more {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-accent);
+}
+
+.hg-more:hover {
+  text-decoration: underline;
+}
+
+/* ---------- Meta ---------- */
+.hg-meta-grid {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .hg-meta-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .hg-meta-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+.hg-role {
+  padding: 0.75rem;
+}
+
+.hg-role-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgb(var(--rgb-primary) / 0.15);
+  font-size: 0.85rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text);
+}
+
+.hg-role-picks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.hg-pick {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.hg-pick img {
+  width: 100%;
+  max-width: 64px;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 6px;
+  transition: transform 0.15s;
+}
+
+.hg-pick:hover img {
+  transform: scale(1.06);
+}
+
+.hg-pick-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: rgb(var(--rgb-text) / 0.85);
+}
+
+.hg-pick:hover .hg-pick-name {
+  color: var(--color-accent);
+}
+
+.hg-tier-corner {
+  position: absolute;
+  top: -6px;
+  right: 0;
+}
+
+/* ---------- Récap patch ---------- */
+.hg-patch {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.hg-patch-score {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: 0.5rem;
+}
+
+.hg-patch-tile {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgb(var(--tone-rgb) / 0.5);
+  border-radius: 0.5rem;
+  background: rgb(var(--tone-rgb) / 0.12);
+  color: rgb(var(--tone-rgb));
+}
+
+.hg-patch-tile strong {
+  font-size: 1.25rem;
+}
+
+.hg-patch-tile span {
+  color: rgb(var(--rgb-text) / 0.8);
+  font-size: 0.85rem;
+}
+
+.hg-patch-sides {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1rem;
+}
+
+.hg-patch-side {
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid rgb(var(--tone-rgb) / 0.3);
+  border-radius: 0.5rem;
+  background: rgb(var(--tone-rgb) / 0.05);
+}
+
+.hg-patch-side-title {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+  color: rgb(var(--tone-rgb));
+  font-weight: 700;
+}
+
+.hg-patch-champs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.hg-patch-champ {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  width: 4.5rem;
+  color: var(--color-text);
+  font-size: 0.75rem;
+  text-align: center;
+  text-decoration: none;
+}
+
+.hg-patch-champ img {
+  border: 2px solid rgb(var(--tone-rgb) / 0.7);
+  border-radius: 0.4rem;
+}
+
+.tone-info {
+  --tone-rgb: var(--rgb-info);
+}
+
+.tone-error {
+  --tone-rgb: var(--rgb-error);
+}
+
+.tone-warning {
+  --tone-rgb: var(--rgb-warning);
+}
+
+.tone-muted {
+  --tone-rgb: var(--rgb-muted);
+}
+
+/* ---------- Guides ---------- */
+.hg-guides {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  gap: 1rem;
+}
+
+.hg-guide-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* ---------- Builds / communauté ---------- */
+.hg-builds-wrap {
+  margin-top: 1rem;
+  width: 100%;
+  padding-inline: 10px;
+}
+
+.hg-community {
+  text-align: center;
+}
+
+.hg-community .hg-h2 {
+  display: inline-block;
+}
+
+.hg-social {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+}
+
+@keyframes hg-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hg-hero-bg {
+    animation: none;
+  }
 }
 </style>

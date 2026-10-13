@@ -2072,7 +2072,10 @@
     "tierListPatchDeltaRankTitle": "Rank change vs patch {ref} (positive = improvement)",
     "championSpellOrderRecapTitle": "Skill order",
     "itemStatsOpenDetail": "Open item details",
-    "itemsColumn": "Item"
+    "itemsColumn": "Item",
+    "tierPresentation": "Display",
+    "tierPresentation_grid": "Grid",
+    "tierPresentation_table": "Detailed"
   },
   "stats": {
     "title": "Statistics",
@@ -2967,7 +2970,6 @@
     "features": {
       "importBuilds": "Import builds into the LoL client (runes, items, summoner spells based on your settings).",
       "localFavorites": "Favorites stored locally on your device (no server storage).",
-      "matchSync": "Send end-of-game info (matchId + region) to enrich site statistics.",
       "settings": "Clear settings to control what gets imported."
     },
     "gdprTitle": "GDPR and privacy",
@@ -3526,6 +3528,92 @@
       "stale": "Stale — make deploy-backend",
       "upToDate": "Up to date",
       "noProcess": "No process recorded (restart required)."
+    }
+  },
+  "homeTest": {
+    "eyebrow": "Patch {patch}",
+    "title": "Rule the Rift",
+    "subtitle": "Builds, tier list and patch stats. Pick your champion, we handle the rest.",
+    "ctaCreate": "Create a build",
+    "ctaDiscover": "Browse builds",
+    "heroPick": "Pick of the patch",
+    "statMatches": "games analyzed",
+    "statBuilds": "builds",
+    "statVideos": "videos",
+    "quickTitle": "Quick access",
+    "metaTitle": "Patch meta",
+    "metaSeeAll": "Full tier list",
+    "buildsTitle": "Latest builds",
+    "buildsSeeAll": "All builds",
+    "videosTitle": "New videos",
+    "videosSeeAll": "All videos",
+    "noData": "No data yet",
+    "community": "Join the community",
+    "quick": {
+      "create": "Create",
+      "createHint": "Your build in 2 min",
+      "builds": "Builds",
+      "buildsHint": "From the community",
+      "tierList": "Tier list",
+      "tierListHint": "Who is strong",
+      "stats": "Stats",
+      "statsHint": "Winrate, pickrate",
+      "guides": "Guides",
+      "guidesHint": "Matchup sheets",
+      "videos": "Videos",
+      "videosHint": "Lelariva & co"
+    },
+    "patchTitle": "Patch {version} at a glance",
+    "patchSeeAll": "Full patch notes",
+    "patch": {
+      "buff": "Buffed champions",
+      "nerf": "Nerfed champions",
+      "adjustment": "Adjustments"
+    },
+    "guidesTitle": "Latest matchup guides",
+    "guidesSeeAll": "All guides"
+  },
+  "testPatch": {
+    "kicker": "Patch notes",
+    "title": "Patch {version}",
+    "latestBadge": "Latest patch",
+    "older": "Previous patch",
+    "newer": "Next patch",
+    "scoreboard": "Patch at a glance",
+    "all": "All",
+    "search": "Search a champion, an item…",
+    "compactView": "Compact view",
+    "detailedView": "Detailed view"
+  },
+  "legalTest": {
+    "eyebrow": "Lelanation · transparency",
+    "toc": "Contents",
+    "privacySubtitle": "What the site and the app collect, why, and how you stay in control of your data.",
+    "legalSubtitle": "Who publishes Lelanation, what we owe Riot Games and the rules for using the site."
+  },
+  "downloadTest": {
+    "eyebrow": "Windows 10 / 11 · free",
+    "statTotal": "Downloads",
+    "statWeek": "This week",
+    "stepsTitle": "Install in 3 steps",
+    "step1Title": "Download",
+    "step1Text": "Get the latest installer with the button above.",
+    "step2Title": "Allow",
+    "step2Text": "If Windows shows \"Unknown publisher\": click \"More info\" then \"Run anyway\".",
+    "step3Title": "Play",
+    "step3Text": "Start the LoL client: your Lelanation builds are imported in one click.",
+    "privacyCta": "Read the privacy policy"
+  },
+  "informationTest": {
+    "eyebrow": "How it works",
+    "subtitle": "Calculations, builds, data: everything behind the site's numbers.",
+    "toc": "Contents",
+    "tabIntro": {
+      "calculations": "How stats, tiers and matchups are computed.",
+      "builds": "Build visibility, patch staleness and regions.",
+      "surveillance": "What the site keeps monitoring.",
+      "shortcuts": "Keyboard shortcuts to go faster.",
+      "data": "Where the data comes from."
     }
   }
 }

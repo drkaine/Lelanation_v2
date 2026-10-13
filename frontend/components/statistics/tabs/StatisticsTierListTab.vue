@@ -8,6 +8,7 @@ import {
 } from '~/composables/statistics/statisticsPageCtx'
 import StatisticsTierListMobileChart from '~/components/statistics/StatisticsTierListMobileChart.vue'
 import StatisticsTierListBubbleChart from '~/components/statistics/StatisticsTierListBubbleChart.vue'
+import StatisticsTierGrid from '~/components/statistics/StatisticsTierGrid.vue'
 import NotificationToast from '~/components/NotificationToast.vue'
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
 import { copyPngBlobToClipboard } from '~/utils/buildCardShareImage'
@@ -183,7 +184,20 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
         {{ p.t('statisticsPage.tierListNoData') }}
       </div>
       <!-- Vue tableau (grille type LoLalytics, couleurs Lelanation) -->
-      <div v-show="p.tierListViewModel === 'table' && p.totalTierListCount > 0" class="space-y-3">
+      <!-- Présentation compacte : grille par tier (switch dans les filtres) -->
+      <StatisticsTierGrid
+        v-if="p.tierPresentation === 'grid'"
+        v-show="p.tierListViewModel === 'table' && p.totalTierListCount > 0"
+        :groups="p.tierGridGroups"
+      />
+      <div
+        v-show="
+          p.tierListViewModel === 'table' &&
+          p.tierPresentation === 'table' &&
+          p.totalTierListCount > 0
+        "
+        class="space-y-3"
+      >
         <StatisticsMobileSortBar
           id="tier-list-mobile-sort"
           v-model:column="tierListMobileSortColumn"

@@ -319,11 +319,11 @@ export default defineNuxtConfig({
             if (id.includes('node_modules/pinia/') || id.includes('node_modules/vue-router/')) {
               return 'vendor-state-router'
             }
+            // Locale JSON stays out of this chunk: lazy i18n loads fr.json / en.json on demand.
             if (
               id.includes('node_modules/@nuxtjs/i18n') ||
               id.includes('node_modules/vue-i18n') ||
-              id.includes('/frontend/i18n/') ||
-              id.includes('/frontend/i18n/locales/')
+              (id.includes('/frontend/i18n/') && !id.includes('/frontend/i18n/locales/'))
             ) {
               return 'i18n'
             }

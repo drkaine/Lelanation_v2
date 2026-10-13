@@ -766,11 +766,9 @@ export class StaticAssetsService {
     patchVersion: string
   ): Promise<Result<{ moved: number; deleted: number }, AppError>> {
     try {
-      const { moved, deleted, frontendDir } = await movePatchVersionToFrontend(
-        patchVersion,
-        'staticAssets'
-      )
-      await rebuildPatchNotesIndex(frontendDir)
+      const { moved, deleted } = await movePatchVersionToFrontend(patchVersion, 'staticAssets')
+      // Index à la racine des patch notes (frontendDir renvoyé = dossier de la version).
+      await rebuildPatchNotesIndex()
       return Result.ok({ moved, deleted })
     } catch (error) {
       return Result.err(

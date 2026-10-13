@@ -271,6 +271,28 @@
             class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text placeholder:text-text/50"
           />
         </div>
+        <div v-if="tierListViewModel === 'table'">
+          <span class="mb-1 block text-sm font-medium text-text">
+            {{ t('statisticsPage.tierPresentation') }}
+          </span>
+          <div class="flex gap-1" role="group" :aria-label="t('statisticsPage.tierPresentation')">
+            <button
+              v-for="mode in ['grid', 'table'] as const"
+              :key="mode"
+              type="button"
+              :aria-pressed="tierPresentation === mode"
+              :class="[
+                'flex-1 rounded border px-1.5 py-0.5 text-[11px] font-medium',
+                tierPresentation === mode
+                  ? 'border-accent bg-accent/20 text-text'
+                  : 'border-primary/40 bg-background text-text/70 hover:text-text',
+              ]"
+              @click="tierPresentation = mode"
+            >
+              {{ t(`statisticsPage.tierPresentation_${mode}`) }}
+            </button>
+          </div>
+        </div>
       </div>
       <template #main>
         <div class="w-full space-y-4">
@@ -303,6 +325,12 @@ import { useGameVersion } from '~/composables/useGameVersion'
 import { lolSeasonFromGameVersion } from '~/utils/lolSeason'
 import { apiUrl } from '~/utils/apiUrl'
 import { useStatisticsTierListPage } from '~/composables/statistics/useStatisticsTierListPage'
+import {
+  DEFAULT_TIER_PRESENTATION,
+  groupRowsByTier,
+  isTierPresentation,
+  type TierPresentation,
+} from '~/utils/statistics/tierListGrid'
 import {
   enrichBotlaneRowsWithPatchDeltas,
   type BotlaneTierRowWithPatchDelta,
@@ -420,6 +448,8 @@ const statsVersionFilter = ref('')
 const statsDivisionFilter = ref<string[]>([])
 const statsRoleFilter = ref('')
 const statsOtpFilter = ref<'oui' | 'non' | 'solo'>('non')
+/** Présentation de la vue tableau : grille compacte par tier ou tableau détaillé. */
+const tierPresentation = ref<TierPresentation>(DEFAULT_TIER_PRESENTATION)
 const championSearchQuery = ref('')
 const championsPageSize = ref(20)
 const progressionFromVersionOverride = ref('')
@@ -756,6 +786,7 @@ function applyTierListStateFromQuery(): void {
   )
   const sortRaw = queryFirst(route.query.sort as string | string[] | null | undefined)
   const viewRaw = queryFirst(route.query.view as string | string[] | null | undefined).toLowerCase()
+  const displayRaw = queryFirst(route.query.display as string | string[] | null | undefined)
 
   isApplyingQueryState.value = true
   statsVersionFilter.value = versionRaw
@@ -764,6 +795,7 @@ function applyTierListStateFromQuery(): void {
     statsDivisionFilter.value = divisionsRaw
   }
   statsOtpFilter.value = otpRaw === 'oui' || otpRaw === 'solo' || otpRaw === 'non' ? otpRaw : 'non'
+  tierPresentation.value = isTierPresentation(displayRaw) ? displayRaw : DEFAULT_TIER_PRESENTATION
   if (sortRaw === 'winrate' || sortRaw === 'pickrate') {
     tierList.tierListSortColumn.value = sortRaw
     tierList.tierListSortDir.value = 'desc'
@@ -798,6 +830,10 @@ function syncTierListStateToQuery(): void {
 
   if (statsOtpFilter.value !== 'non') nextQuery.otp = statsOtpFilter.value
   else delete nextQuery.otp
+
+  if (tierPresentation.value !== DEFAULT_TIER_PRESENTATION) {
+    nextQuery.display = tierPresentation.value
+  } else delete nextQuery.display
 
   if (statsDivisionFilter.value.length > 0) nextQuery.rankTier = [...statsDivisionFilter.value]
   else delete nextQuery.rankTier
@@ -849,6 +885,7 @@ watch(
     statsVersionFilter,
     statsRoleFilter,
     statsOtpFilter,
+    tierPresentation,
     progressionFromVersion,
     () => tierList.tierListSortColumn.value,
     () => tierList.tierListSortDir.value,
@@ -985,6 +1022,8 @@ const statisticsPageCtx = reactive({
   tierListPatchDeltaRefLabel: tierList.tierListPatchDeltaRefLabel,
   tierListPatchHighEloRankDelta: tierList.tierListPatchHighEloRankDelta,
   tierListPatchRankDelta: tierList.tierListPatchRankDelta,
+  tierPresentation,
+  tierGridGroups: computed(() => groupRowsByTier(tierList.sortedTierListRows.value)),
   tierListPending: tierList.tierListPending,
   tierListSortColumn: tierList.tierListSortColumn,
   tierListSortDir: tierList.tierListSortDir,

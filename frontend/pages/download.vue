@@ -1,99 +1,94 @@
 <template>
-  <div class="download-page min-h-screen w-full px-3 py-4 text-text sm:px-5 lg:px-6">
-    <div class="mx-auto w-full max-w-[1600px] space-y-6">
-      <section class="ui-build-card-surface rounded-2xl p-5 sm:p-8 lg:p-10">
-        <h1 class="download-title text-2xl font-bold sm:text-3xl lg:text-4xl">
-          {{ t('lelanationApp.title') }}
-        </h1>
-        <p class="download-subtitle mt-3 max-w-3xl text-sm sm:text-base">
-          {{ t('lelanationApp.subtitle') }}
+  <div class="dl-page text-text">
+    <section class="dl-hero">
+      <div class="dl-hero-inner">
+        <p class="dl-eyebrow">
+          <Icon name="mdi:microsoft-windows" size="16px" />
+          {{ t('downloadTest.eyebrow') }}
         </p>
-
-        <div
-          v-if="downloadStats"
-          class="ui-build-card-surface mt-5 inline-flex rounded-lg px-4 py-2.5 text-sm text-text/85"
-        >
-          {{ t('lelanationApp.downloadCount', { count: downloadStats.total }) }}
-        </div>
+        <h1 class="dl-title">{{ t('lelanationApp.title') }}</h1>
+        <p class="dl-subtitle">{{ t('lelanationApp.subtitle') }}</p>
 
         <div class="mt-6 flex flex-wrap items-center gap-3">
           <button
             type="button"
-            class="inline-flex items-center rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-background transition hover:bg-accent-dark disabled:opacity-50"
+            class="inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-bold text-background transition hover:bg-accent-dark disabled:opacity-50"
             :disabled="downloading"
             @click="downloadCompanionApp"
           >
+            <Icon name="mdi:download" size="20px" />
             {{ downloading ? '…' : t('lelanationApp.downloadButton') }}
           </button>
           <NuxtLink
             :to="localePath('/privacy')"
-            class="ui-build-card-button inline-flex items-center px-5 py-2.5 text-sm font-semibold"
+            class="ui-build-card-button inline-flex items-center gap-2 px-6 py-3 text-sm font-bold transition"
           >
+            <Icon name="mdi:shield-lock-outline" size="20px" />
             {{ t('lelanationApp.privacyButton') }}
           </NuxtLink>
-          <span
-            class="download-install-tip relative inline-flex shrink-0"
-            tabindex="0"
-            :aria-label="t('lelanationApp.smartScreenTitle')"
-          >
-            <span
-              class="inline-flex h-8 w-8 cursor-help items-center justify-center rounded-full border border-warning/45 bg-warning/10 text-sm font-bold text-warning"
-              aria-hidden="true"
-            >
-              !
-            </span>
-            <span role="tooltip" class="download-install-tooltip">
-              <span class="block font-semibold text-warning">
-                {{ t('lelanationApp.smartScreenTitle') }}
-              </span>
-              <span class="mt-1.5 block text-text/85">
-                {{ t('lelanationApp.smartScreenText') }}
-              </span>
-              <span class="mt-1.5 block font-medium text-text/90">
-                {{ t('lelanationApp.smartScreenSteps') }}
-              </span>
-            </span>
-          </span>
         </div>
-
         <p v-if="message" class="mt-3 text-sm" :class="isError ? 'text-error' : 'text-info'">
           {{ message }}
         </p>
+        <p class="mt-3 text-xs text-text/55">{{ t('lelanationApp.downloadHint') }}</p>
 
-        <p class="mt-3 text-xs text-text/55">
-          {{ t('lelanationApp.downloadHint') }}
-        </p>
+        <ul class="dl-stats">
+          <li v-if="downloadStats">
+            <strong>{{ formatStat(downloadStats.total) }}</strong>
+            <span>{{ t('downloadTest.statTotal') }}</span>
+          </li>
+          <li v-if="downloadStats">
+            <strong>{{ formatStat(weekCount) }}</strong>
+            <span>{{ t('downloadTest.statWeek') }}</span>
+          </li>
+        </ul>
+      </div>
+      <Icon name="mdi:application-brackets-outline" class="dl-hero-art" aria-hidden="true" />
+    </section>
+
+    <div class="dl-container">
+      <section class="dl-section">
+        <h2 class="dl-h2">{{ t('downloadTest.stepsTitle') }}</h2>
+        <ol class="dl-steps">
+          <li v-for="(step, i) in steps" :key="step.key" class="dl-step">
+            <span class="dl-step-index">{{ i + 1 }}</span>
+            <Icon :name="step.icon" size="26px" class="dl-step-icon" />
+            <h3 class="dl-step-title">{{ t(`downloadTest.${step.key}Title`) }}</h3>
+            <p class="dl-step-text">{{ t(`downloadTest.${step.key}Text`) }}</p>
+          </li>
+        </ol>
+        <div class="dl-warning">
+          <Icon name="mdi:alert-outline" size="22px" class="shrink-0 text-warning" />
+          <div>
+            <p class="font-bold text-warning">{{ t('lelanationApp.smartScreenTitle') }}</p>
+            <p class="mt-1 text-sm text-text/80">{{ t('lelanationApp.smartScreenText') }}</p>
+          </div>
+        </div>
       </section>
 
-      <section>
-        <h2 class="download-section-title text-xl font-bold sm:text-2xl">
-          {{ t('lelanationApp.featuresTitle') }}
-        </h2>
-        <ul class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <li
-            v-for="feature in featureItems"
-            :key="feature"
-            class="ui-build-card-surface rounded-lg px-4 py-3 text-sm leading-relaxed text-text/85"
-          >
-            {{ feature }}
+      <section class="dl-section">
+        <h2 class="dl-h2">{{ t('lelanationApp.featuresTitle') }}</h2>
+        <ul class="dl-features">
+          <li v-for="feature in features" :key="feature.key" class="dl-feature">
+            <Icon :name="feature.icon" size="28px" class="dl-feature-icon" />
+            <p>{{ t(`lelanationApp.features.${feature.key}`) }}</p>
           </li>
         </ul>
       </section>
 
-      <section class="ui-build-card-surface rounded-2xl p-5 sm:p-8">
-        <h2 class="download-section-title text-xl font-bold sm:text-2xl">
-          {{ t('lelanationApp.gdprTitle') }}
-        </h2>
-        <p class="mt-3 max-w-3xl text-sm leading-relaxed text-text/80 sm:text-base">
-          {{ t('lelanationApp.gdprIntro') }}
-        </p>
-        <ul class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <li
-            v-for="item in gdprItems"
-            :key="item"
-            class="ui-build-card-surface rounded-lg px-4 py-3 text-sm text-text/85"
-          >
-            {{ item }}
+      <section class="dl-section dl-privacy">
+        <div>
+          <h2 class="dl-h2">{{ t('lelanationApp.gdprTitle') }}</h2>
+          <p class="mt-3 max-w-xl text-text/80">{{ t('lelanationApp.gdprIntro') }}</p>
+          <NuxtLink :to="localePath('/privacy')" class="dl-more">
+            {{ t('downloadTest.privacyCta') }}
+            <Icon name="mdi:arrow-right" size="16px" />
+          </NuxtLink>
+        </div>
+        <ul class="dl-gdpr">
+          <li v-for="item in gdprItems" :key="item">
+            <Icon name="mdi:check-decagram" size="20px" class="shrink-0 text-accent" />
+            {{ t(`lelanationApp.gdpr.items.${item}`) }}
           </li>
         </ul>
       </section>
@@ -104,8 +99,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { apiUrl } from '~/utils/apiUrl'
+import { recentDownloadCount } from '~/utils/legalPageGaming'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const localePath = useLocalePath()
 const config = useRuntimeConfig()
 
@@ -114,18 +110,27 @@ const message = ref('')
 const isError = ref(false)
 const downloadStats = ref<{ total: number; daily: Record<string, number> } | null>(null)
 
-const featureItems = computed(() => [
-  t('lelanationApp.features.importBuilds'),
-  t('lelanationApp.features.localFavorites'),
-  t('lelanationApp.features.matchSync'),
-  t('lelanationApp.features.settings'),
-])
+const weekCount = computed(() =>
+  downloadStats.value ? recentDownloadCount(downloadStats.value.daily, 7) : 0
+)
 
-const gdprItems = computed(() => [
-  t('lelanationApp.gdpr.items.consent'),
-  t('lelanationApp.gdpr.items.localOnly'),
-  t('lelanationApp.gdpr.items.rights'),
-])
+const steps = [
+  { key: 'step1', icon: 'mdi:download-circle-outline' },
+  { key: 'step2', icon: 'mdi:shield-check-outline' },
+  { key: 'step3', icon: 'mdi:sword-cross' },
+]
+
+const features = [
+  { key: 'importBuilds', icon: 'mdi:import' },
+  { key: 'localFavorites', icon: 'mdi:star-outline' },
+  { key: 'settings', icon: 'mdi:tune-variant' },
+]
+
+const gdprItems = ['consent', 'minData', 'localOnly', 'rights']
+
+function formatStat(value: number): string {
+  return new Intl.NumberFormat(locale.value === 'fr' ? 'fr-FR' : 'en-US').format(value)
+}
 
 const downloadUrl = computed(() => {
   const configured = config.public.companionAppDownloadUrl as string | undefined
@@ -231,37 +236,286 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.download-title,
-.download-section-title {
-  color: var(--color-gold-300);
+/* Couleurs : uniquement les tokens du site (même langage que la home). */
+.dl-page {
+  width: 100%;
+  padding-bottom: 3rem;
 }
 
-.download-subtitle {
-  color: rgb(125 211 252 / 0.88);
+.dl-hero {
+  position: relative;
+  overflow: hidden;
+  min-height: 420px;
+  display: flex;
+  align-items: flex-end;
+  border-bottom: 1px solid rgb(var(--rgb-accent) / 0.3);
+  background:
+    radial-gradient(ellipse at 80% 30%, rgb(var(--rgb-accent) / 0.16), transparent 55%),
+    var(--color-blue-600);
 }
 
-.download-install-tooltip {
-  pointer-events: none;
+.dl-hero-inner {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  padding: 3rem 16px 2rem;
+}
+
+@media (min-width: 640px) {
+  .dl-hero-inner {
+    padding-inline: 2rem;
+  }
+}
+
+.dl-hero-art {
   position: absolute;
-  top: calc(100% + 0.5rem);
-  left: 50%;
-  z-index: 50;
+  right: 4%;
+  top: 50%;
   display: none;
-  width: max-content;
-  max-width: min(28rem, calc(100vw - 2rem));
-  transform: translateX(-50%);
-  border-radius: 0.5rem;
-  border: 1px solid rgb(var(--rgb-warning) / 0.35);
-  background: rgb(var(--rgb-chrome) / 1);
-  padding: 0.75rem 0.9rem;
-  text-align: left;
-  font-size: 0.75rem;
-  line-height: 1.5;
-  box-shadow: 0 8px 28px rgb(0 0 0 / 0.45);
+  width: 18rem;
+  height: 18rem;
+  transform: translateY(-50%) rotate(-8deg);
+  color: rgb(var(--rgb-accent) / 0.18);
 }
 
-.download-install-tip:hover .download-install-tooltip,
-.download-install-tip:focus-within .download-install-tooltip {
-  display: block;
+@media (min-width: 1024px) {
+  .dl-hero-art {
+    display: block;
+  }
+}
+
+.dl-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: rgb(var(--rgb-accent) / 0.75);
+}
+
+.dl-title {
+  margin-top: 0.25rem;
+  font-size: clamp(2.25rem, 6vw, 4.5rem);
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--color-text-accent);
+  text-shadow: 0 4px 24px rgb(0 0 0 / 0.5);
+}
+
+.dl-subtitle {
+  margin-top: 0.75rem;
+  max-width: 36rem;
+  font-size: 1.05rem;
+  color: rgb(var(--rgb-text) / 0.8);
+}
+
+.dl-stats {
+  margin-top: 2rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem 2.5rem;
+}
+
+.dl-stats li {
+  display: flex;
+  flex-direction: column;
+}
+
+.dl-stats strong {
+  font-size: 1.6rem;
+  font-weight: 900;
+  color: var(--color-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.dl-stats span {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgb(var(--rgb-text) / 0.6);
+}
+
+.dl-container {
+  padding-inline: 16px;
+}
+
+@media (min-width: 640px) {
+  .dl-container {
+    padding-inline: 2rem;
+  }
+}
+
+.dl-section {
+  margin-top: 2.5rem;
+}
+
+.dl-h2 {
+  position: relative;
+  padding-left: 0.85rem;
+  font-size: 1.4rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-accent);
+}
+
+.dl-h2::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 15%;
+  bottom: 15%;
+  width: 4px;
+  background: var(--color-accent);
+}
+
+.dl-steps {
+  margin-top: 1rem;
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 768px) {
+  .dl-steps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.dl-step {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgb(var(--rgb-accent) / 0.2);
+  border-radius: 0.75rem;
+  background: rgb(var(--rgb-chrome) / 0.5);
+  padding: 1.25rem;
+}
+
+.dl-step-index {
+  position: absolute;
+  right: 0.75rem;
+  top: -0.5rem;
+  font-size: 4.5rem;
+  font-weight: 900;
+  line-height: 1;
+  color: rgb(var(--rgb-accent) / 0.12);
+}
+
+.dl-step-icon {
+  color: var(--color-accent);
+}
+
+.dl-step-title {
+  margin-top: 0.6rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text);
+}
+
+.dl-step-text {
+  margin-top: 0.35rem;
+  font-size: 0.9rem;
+  color: rgb(var(--rgb-text) / 0.78);
+}
+
+.dl-warning {
+  margin-top: 1rem;
+  display: flex;
+  gap: 0.75rem;
+  border: 1px solid rgb(var(--rgb-warning) / 0.35);
+  border-left-width: 4px;
+  border-radius: 0.5rem;
+  background: rgb(var(--rgb-warning) / 0.08);
+  padding: 0.9rem 1rem;
+}
+
+.dl-features {
+  margin-top: 1rem;
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .dl-features {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .dl-features {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.dl-feature {
+  border: 1px solid rgb(var(--rgb-accent) / 0.2);
+  border-radius: 0.75rem;
+  background: rgb(var(--rgb-chrome) / 0.5);
+  padding: 1.25rem;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: rgb(var(--rgb-text) / 0.85);
+  transition:
+    border-color 0.15s,
+    transform 0.15s;
+}
+
+.dl-feature:hover {
+  border-color: rgb(var(--rgb-accent) / 0.55);
+  transform: translateY(-2px);
+}
+
+.dl-feature-icon {
+  margin-bottom: 0.6rem;
+  color: var(--color-accent);
+}
+
+.dl-privacy {
+  display: grid;
+  gap: 1.5rem;
+  border: 1px solid rgb(var(--rgb-accent) / 0.25);
+  border-radius: 0.75rem;
+  background:
+    linear-gradient(120deg, rgb(var(--rgb-accent) / 0.08), transparent 60%),
+    rgb(var(--rgb-chrome) / 0.5);
+  padding: 1.5rem;
+}
+
+@media (min-width: 1024px) {
+  .dl-privacy {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+    align-items: center;
+  }
+}
+
+.dl-more {
+  margin-top: 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-accent);
+}
+
+.dl-more:hover {
+  text-decoration: underline;
+}
+
+.dl-gdpr {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.dl-gdpr li {
+  display: flex;
+  gap: 0.6rem;
+  font-size: 0.9rem;
+  color: rgb(var(--rgb-text) / 0.85);
 }
 </style>
