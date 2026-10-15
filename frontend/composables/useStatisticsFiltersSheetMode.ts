@@ -26,8 +26,8 @@ export function useStatisticsFiltersSheetMode() {
     () => filtersSheetMode.value || simplifiedStatsEnabled.value
   )
 
-  /** Explicit « Fermer » button: needed whenever the panel is a sheet (desktop simplified too). */
-  const showFiltersCloseFooter = computed(() => effectiveFiltersSheetMode.value)
+  /** Close button (✕) in the panel header whenever the panel is a sheet (desktop simplified too). */
+  const showFiltersHeaderClose = computed(() => effectiveFiltersSheetMode.value)
 
   const showDesktopFiltersTrigger = computed(() => !simplifiedStatsEnabled.value)
 
@@ -58,7 +58,7 @@ export function useStatisticsFiltersSheetMode() {
     showFiltersBackdrop,
     lockPageScrollForFilters,
     showDesktopFiltersTrigger,
-    showFiltersCloseFooter,
+    showFiltersHeaderClose,
     filtersFabClass,
   }
 }

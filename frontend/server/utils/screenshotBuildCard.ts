@@ -3,19 +3,22 @@ import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { Browser } from 'playwright'
+import { findInstalledChromiumExecutable } from './playwrightBrowserPath'
 
 let browserPromise: Promise<Browser> | null = null
 const runtimeRequire = createRequire(import.meta.url)
 
 const MIN_SCREENSHOT_BYTES = 2048
 
-function resolvePlaywrightBrowsersPath(): string | undefined {
-  const candidates = [
+function playwrightBrowsersRoots(): string[] {
+  return [
     (process.env.PLAYWRIGHT_BROWSERS_PATH || '').trim(),
     join(homedir(), '.cache/ms-playwright'),
   ].filter(Boolean)
+}
 
-  for (const candidate of candidates) {
+function resolvePlaywrightBrowsersPath(): string | undefined {
+  for (const candidate of playwrightBrowsersRoots()) {
     const headlessShell = join(
       candidate,
       'chromium_headless_shell-1228',
@@ -59,10 +62,19 @@ function createBrowserPromise(): Promise<Browser> {
   return (async () => {
     ensurePlaywrightBrowsersPath()
     const chromium = await loadChromium()
-    const browser = await chromium.launch({
+    const launchOptions = {
       headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-    })
+    }
+    let browser: Browser
+    try {
+      browser = await chromium.launch(launchOptions)
+    } catch (error) {
+      // Révision attendue absente (navigateurs installés par une autre version de Playwright).
+      const executablePath = findInstalledChromiumExecutable(playwrightBrowsersRoots())
+      if (!executablePath) throw error
+      browser = await chromium.launch({ ...launchOptions, executablePath })
+    }
     browser.on('disconnected', () => {
       browserPromise = null
     })

@@ -30,13 +30,13 @@ describe('statisticsFiltersSheetPanelClass', () => {
 })
 
 describe('useStatisticsFiltersSheetMode', () => {
-  it('shows the close footer in every sheet mode, desktop simplified included', () => {
+  it('shows the header close button in every sheet mode, desktop simplified included', () => {
     const sheet = useStatisticsFiltersSheetMode()
-    expect(sheet.showFiltersCloseFooter.value).toBe(false)
+    expect(sheet.showFiltersHeaderClose.value).toBe(false)
     simplified.value = true
-    expect(sheet.showFiltersCloseFooter.value).toBe(true)
+    expect(sheet.showFiltersHeaderClose.value).toBe(true)
     simplified.value = false
     sheet.filtersSheetMode.value = true
-    expect(sheet.showFiltersCloseFooter.value).toBe(true)
+    expect(sheet.showFiltersHeaderClose.value).toBe(true)
   })
 })

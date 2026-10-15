@@ -110,8 +110,7 @@
           <button
             type="button"
             :class="[
-              'mx-auto mb-1 flex h-6 w-14 shrink-0 touch-manipulation items-center justify-center rounded-full',
-              effectiveFiltersSheetMode ? '' : 'lg:hidden',
+              'mx-auto mb-1 flex h-6 w-14 shrink-0 touch-manipulation items-center justify-center rounded-full lg:hidden',
             ]"
             :aria-label="t('statisticsPage.closeFilters')"
             @click="closeFilters"
@@ -128,6 +127,28 @@
           >
             <span class="iconify i-mdi:refresh" aria-hidden="true" />
             Reset
+          </button>
+          <button
+            v-if="showFiltersHeaderClose"
+            type="button"
+            class="statistics-filters-close ui-build-card-button hidden shrink-0 touch-manipulation items-center justify-center px-2 py-1.5 lg:inline-flex"
+            :aria-label="t('statisticsPage.closeFilters')"
+            @click="closeFilters"
+          >
+            <svg
+              class="h-2 w-2"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
           </button>
         </div>
         <div class="flex min-h-0 flex-1 flex-col overflow-y-auto p-2 lg:flex-none">
@@ -507,12 +528,7 @@
             </div>
           </div>
         </div>
-        <div
-          :class="[
-            'shrink-0 border-t border-primary/25 p-3',
-            showFiltersCloseFooter ? '' : 'lg:hidden',
-          ]"
-        >
+        <div class="shrink-0 border-t border-primary/25 p-3 lg:hidden">
           <button type="button" class="statistics-filters-mobile-close" @click="closeFilters">
             {{ t('statisticsPage.closeFilters') }}
           </button>
@@ -2458,7 +2474,7 @@ const {
   showFiltersBackdrop,
   lockPageScrollForFilters,
   showDesktopFiltersTrigger,
-  showFiltersCloseFooter,
+  showFiltersHeaderClose,
   filtersFabClass,
 } = useStatisticsFiltersSheetMode()
 
