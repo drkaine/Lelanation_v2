@@ -84,7 +84,7 @@
         :class="[
           'statistics-filters-panel flex shrink-0 flex-col overflow-hidden',
           effectiveFiltersSheetMode
-            ? 'statistics-filters-sheet fixed inset-x-0 bottom-0 top-auto z-[10051] max-h-[85vh] w-full rounded-t-2xl bg-surface shadow-lg'
+            ? statisticsFiltersSheetPanelClass()
             : [
                 'hidden w-0 opacity-0 transition-[width,opacity] duration-200',
                 'lg:sticky lg:top-4 lg:z-0 lg:flex lg:h-auto lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:overflow-x-hidden',
@@ -734,12 +734,13 @@
             </div>
           </div>
         </div>
-        <div class="shrink-0 border-t border-primary/25 p-3 lg:hidden">
-          <button
-            type="button"
-            class="statistics-filters-mobile-close lg:hidden"
-            @click="closeFilters"
-          >
+        <div
+          :class="[
+            'shrink-0 border-t border-primary/25 p-3',
+            showFiltersCloseFooter ? '' : 'lg:hidden',
+          ]"
+        >
+          <button type="button" class="statistics-filters-mobile-close" @click="closeFilters">
             {{ t('statisticsPage.closeFilters') }}
           </button>
         </div>
@@ -864,6 +865,7 @@ import {
 } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
+import { statisticsFiltersSheetPanelClass } from '~/composables/useStatisticsFiltersSheetMode'
 import { statsFetch } from '~/utils/statsFetch'
 import type {
   OverviewData,
@@ -1041,8 +1043,8 @@ const {
   effectiveFiltersSheetMode,
   showFiltersBackdrop,
   lockPageScrollForFilters,
-  filtersSheetMode,
   showDesktopFiltersTrigger,
+  showFiltersCloseFooter,
   filtersFabClass,
 } = useStatisticsFiltersSheetMode()
 const statisticsCustomStore = useStatisticsCustomStore()
@@ -1477,7 +1479,7 @@ function toggleFiltersOpen() {
 
 function onFiltersEscapeKey(event: KeyboardEvent) {
   if (event.key !== 'Escape' || !filtersOpen.value || !showFiltersPanel.value) return
-  if (!import.meta.client || !filtersSheetMode.value) return
+  if (!import.meta.client || !effectiveFiltersSheetMode.value) return
   closeFilters()
 }
 
@@ -3604,6 +3606,16 @@ const patchNotesTab = useStatisticsPatchNotesTab({
   patchNotesToVersion,
   patchNotesTargetFilters,
   championSearchQuery,
+  targetLabel: row => {
+    if (row.targetType === 'champion') {
+      const id = row.targetId.toLowerCase()
+      return championsStore.champions.find(c => c.id.toLowerCase() === id)?.name ?? row.targetId
+    }
+    if (row.targetType === 'items') {
+      return itemsStore.items.find(i => String(i.id) === row.targetId)?.name ?? row.targetId
+    }
+    return row.targetId
+  },
   statsFetch,
   apiUrl,
 })

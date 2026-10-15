@@ -62,12 +62,7 @@ export function statisticsTabFilterFlags(tab: StatisticsCohortTab): StatisticsTa
       t !== 'misc' &&
       t !== 'patchNotes',
     championSearch:
-      t !== 'overview' &&
-      t !== 'team' &&
-      t !== 'objectives' &&
-      t !== 'surrender' &&
-      t !== 'infos' &&
-      t !== 'patchNotes',
+      t !== 'overview' && t !== 'team' && t !== 'objectives' && t !== 'surrender' && t !== 'infos',
   }
 }
 

@@ -5,7 +5,7 @@ import { useStatisticsUiStore } from '~/stores/StatisticsUiStore'
 
 /**
  * Open state of the statistics filters panel (shared UI store) and its drawer behaviour:
- * Escape closes the mobile bottom sheet, page scroll is locked while the sheet is open.
+ * Escape closes the sheet (mobile, or desktop stats simplifiées), page scroll is locked while the sheet is open.
  */
 export function useStatisticsFiltersDrawer() {
   const statisticsUiStore = useStatisticsUiStore()
@@ -26,7 +26,8 @@ export function useStatisticsFiltersDrawer() {
   }
 
   function onFiltersEscapeKey(event: KeyboardEvent): void {
-    if (event.key !== 'Escape' || !filtersOpen.value || !sheet.filtersSheetMode.value) return
+    if (event.key !== 'Escape' || !filtersOpen.value || !sheet.effectiveFiltersSheetMode.value)
+      return
     closeFilters()
   }
 

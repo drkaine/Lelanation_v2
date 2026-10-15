@@ -92,7 +92,7 @@
         :class="[
           'statistics-filters-panel flex shrink-0 flex-col overflow-hidden',
           effectiveFiltersSheetMode
-            ? 'statistics-filters-sheet fixed inset-x-0 bottom-0 top-auto z-[10051] max-h-[85vh] w-full rounded-t-2xl bg-surface shadow-lg'
+            ? statisticsFiltersSheetPanelClass()
             : [
                 'hidden w-0 opacity-0 transition-[width,opacity] duration-200',
                 'lg:sticky lg:top-4 lg:z-0 lg:flex lg:h-auto lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:overflow-x-hidden',
@@ -507,12 +507,13 @@
             </div>
           </div>
         </div>
-        <div class="shrink-0 border-t border-primary/25 p-3 lg:hidden">
-          <button
-            type="button"
-            class="statistics-filters-mobile-close lg:hidden"
-            @click="closeFilters"
-          >
+        <div
+          :class="[
+            'shrink-0 border-t border-primary/25 p-3',
+            showFiltersCloseFooter ? '' : 'lg:hidden',
+          ]"
+        >
+          <button type="button" class="statistics-filters-mobile-close" @click="closeFilters">
             {{ t('statisticsPage.closeFilters') }}
           </button>
         </div>
@@ -1864,6 +1865,7 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted, provide, nextTi
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { statisticsFiltersSheetPanelClass } from '~/composables/useStatisticsFiltersSheetMode'
 import { PAGE_SIZE_OPTIONS } from '~/utils/statistics/statisticsTableFormat'
 import type { RunesSpellsTabCtx } from '~/composables/statistics/statisticsPageCtx'
 import { statsFetch } from '~/utils/statsFetch'
@@ -2455,8 +2457,8 @@ const {
   effectiveFiltersSheetMode,
   showFiltersBackdrop,
   lockPageScrollForFilters,
-  filtersSheetMode,
   showDesktopFiltersTrigger,
+  showFiltersCloseFooter,
   filtersFabClass,
 } = useStatisticsFiltersSheetMode()
 
@@ -2497,7 +2499,7 @@ function toggleFiltersOpen() {
 
 function onFiltersEscapeKey(event: KeyboardEvent) {
   if (event.key !== 'Escape' || !filtersOpen.value) return
-  if (!import.meta.client || !filtersSheetMode.value) return
+  if (!import.meta.client || !effectiveFiltersSheetMode.value) return
   closeFilters()
 }
 

@@ -1,4 +1,4 @@
-import { computed, ref, type Ref } from 'vue'
+import { computed, ref, watch, type Ref } from 'vue'
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
 
 export type PatchNotesTargetType = 'champion' | 'items' | 'runes'
@@ -27,11 +27,33 @@ export type PatchNotesSortCol =
   | 'lastMod'
   | 'regularity'
 
+function normalizeSearch(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036F]/g, '')
+    .trim()
+}
+
+/** Recherche de l’onglet notes de patch : nom affiché (champion/objet/rune) ou id brut. */
+export function patchNotesRowMatchesQuery(
+  row: PatchNotesStatsRow,
+  query: string,
+  targetLabel?: (row: PatchNotesStatsRow) => string
+): boolean {
+  const q = normalizeSearch(query)
+  if (!q) return true
+  if (normalizeSearch(row.targetId).includes(q)) return true
+  return targetLabel ? normalizeSearch(targetLabel(row)).includes(q) : false
+}
+
 export function useStatisticsPatchNotesTab(params: {
   patchNotesFromVersion: Ref<string>
   patchNotesToVersion: Ref<string>
   patchNotesTargetFilters: Ref<Set<PatchNotesTargetType>>
   championSearchQuery: Ref<string>
+  /** Nom affiché d’une ligne (pour la recherche par nom). */
+  targetLabel?: (row: PatchNotesStatsRow) => string
   statsFetch: <T>(url: string) => Promise<T>
   apiUrl: (path: string) => string
 }) {
@@ -48,6 +70,10 @@ export function useStatisticsPatchNotesTab(params: {
   const patchNotesSortDir = ref<'asc' | 'desc'>('desc')
   const patchNotesPage = ref(1)
   const patchNotesPageSize = ref(50)
+
+  watch(params.championSearchQuery, () => {
+    patchNotesPage.value = 1
+  })
 
   const activeTargetTypes = computed<PatchNotesTargetType[]>(() => {
     const selected = [...params.patchNotesTargetFilters.value]
@@ -106,13 +132,9 @@ export function useStatisticsPatchNotesTab(params: {
   )
 
   const filteredPatchNotesRows = computed(() => {
-    const q = params.championSearchQuery.value.trim().toLowerCase()
+    const q = params.championSearchQuery.value
     const rows = patchNotesData.value?.rows ?? []
-    if (!q) return rows
-    return rows.filter(row => {
-      const id = row.targetId.toLowerCase()
-      return id.includes(q)
-    })
+    return rows.filter(row => patchNotesRowMatchesQuery(row, q, params.targetLabel))
   })
 
   function comparePatchNotesRows(a: PatchNotesStatsRow, b: PatchNotesStatsRow): number {
