@@ -14,6 +14,12 @@ import {
   rebuildMatchupTierScores,
 } from '../services/MatchupTierService.js'
 import { runDataDragonSyncOnce } from '../cron/dataDragonSync.js'
+import {
+  RAW_MATCH_PURGE_DEFAULT_BATCH,
+  parsePurgeCutoffDate,
+  previewRawMatchDataPurge,
+  rawMatchDataPurgeJob,
+} from '../services/rawMatchDataPurge.js'
 import { runYouTubeSyncOnce } from '../cron/youtubeSync.js'
 import { runCommunityDragonSyncOnce } from '../cron/communityDragonSync.js'
 import { FileManager } from '../utils/fileManager.js'
@@ -243,6 +249,32 @@ router.get('/data-stats', async (_req, res) => {
     return res.status(503).json({ error: result.error })
   }
   return res.json(result.stats)
+})
+
+/** GET /api/admin/raw-match-purge?date=YYYY-MM-DD — aperçu + état du job de purge des données brutes. */
+router.get('/raw-match-purge', async (req, res) => {
+  const status = rawMatchDataPurgeJob.status()
+  if (req.query.date == null) return res.json({ status })
+  const parsed = parsePurgeCutoffDate(req.query.date)
+  if (!parsed.ok) return res.status(400).json({ error: parsed.error, status })
+  try {
+    return res.json({ status, preview: await previewRawMatchDataPurge(parsed.date) })
+  } catch (err) {
+    return res.status(503).json({ error: err instanceof Error ? err.message : String(err), status })
+  }
+})
+
+/** POST /api/admin/raw-match-purge { date, compact } — garde les matchs (participants, teams) et l'historique de rang depuis `date`, supprime le reste. */
+router.post('/raw-match-purge', (req, res) => {
+  const parsed = parsePurgeCutoffDate(req.body?.date)
+  if (!parsed.ok) return res.status(400).json({ error: parsed.error })
+  const { started } = rawMatchDataPurgeJob.start({
+    cutoffDate: parsed.date,
+    batchSize: RAW_MATCH_PURGE_DEFAULT_BATCH,
+    compact: req.body?.compact === true,
+  })
+  if (!started) return res.status(409).json({ error: 'Purge déjà en cours', status: rawMatchDataPurgeJob.status() })
+  return res.status(202).json({ status: rawMatchDataPurgeJob.status() })
 })
 
 /** GET /api/admin/collect-timeseries — séries temporelles DB (joueurs, matchs ingérés). */

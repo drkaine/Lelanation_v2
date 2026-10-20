@@ -3106,6 +3106,7 @@
       "data": "Data",
       "stats": "Collecte",
       "buildEngagement": "Engagement builds",
+      "purge": "Purge données",
       "logs": "Logs",
       "monitoring": "Monitoring"
     },

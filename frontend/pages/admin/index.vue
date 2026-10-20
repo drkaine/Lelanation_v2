@@ -13,7 +13,8 @@
           <p class="mt-1 hidden text-sm text-text/70 sm:block">
             {{ t('admin.tabs.contact') }} · {{ t('admin.tabs.videos') }} ·
             {{ t('admin.tabs.data') }} · {{ t('admin.tabs.stats') }} ·
-            {{ t('admin.tabs.buildEngagement') }} · {{ t('admin.tabs.logs') }}
+            {{ t('admin.tabs.buildEngagement') }} · {{ t('admin.tabs.logs') }} ·
+            {{ t('admin.tabs.purge') }}
           </p>
         </div>
         <div class="flex items-center gap-2">
@@ -98,6 +99,9 @@
       <!-- Tab: Logs (full width container) -->
       <AdminLogsTab v-show="activeTab === 'logs'" ref="logsTabRef" />
 
+      <!-- Tab: Purge données brutes -->
+      <AdminPurgeTab v-show="activeTab === 'purge'" ref="purgeTabRef" />
+
       <!-- Tab: Videos -->
       <AdminVideosTab
         v-show="activeTab === 'videos'"
@@ -129,6 +133,7 @@ const VALID_TABS = [
   'stats',
   'buildEngagement',
   'logs',
+  'purge',
 ] as const
 type AdminTab = (typeof VALID_TABS)[number]
 
@@ -148,11 +153,13 @@ const adminTabs = computed(() => [
   { id: 'stats' as const, label: t('admin.tabs.stats') },
   { id: 'buildEngagement' as const, label: t('admin.tabs.buildEngagement') },
   { id: 'logs' as const, label: t('admin.tabs.logs') },
+  { id: 'purge' as const, label: t('admin.tabs.purge') },
 ])
 
 const collectStatsTabRef = ref<{ loadStats: () => Promise<void> } | null>(null)
 const buildEngagementTabRef = ref<{ loadRecap: () => Promise<void> } | null>(null)
 const monitoringTabRef = ref<{ load: () => Promise<void> } | null>(null)
+const purgeTabRef = ref<{ activate: () => Promise<void> } | null>(null)
 
 async function logout() {
   clearAuth()
@@ -194,6 +201,7 @@ onMounted(async () => {
   if (activeTab.value === 'logs') logsTabRef.value?.reload()
   if (activeTab.value === 'monitoring') monitoringTabRef.value?.load()
   if (activeTab.value === 'data') dataTabRef.value?.activate()
+  if (activeTab.value === 'purge') purgeTabRef.value?.activate()
 })
 
 // Sync URL when tab changes (refresh will restore the tab)
@@ -205,6 +213,7 @@ watch(activeTab, (tab, prevTab) => {
   if (tab === 'contact') contactTabRef.value?.ensureLoaded()
   if (tab === 'stats') collectStatsTabRef.value?.loadStats()
   if (tab === 'monitoring') monitoringTabRef.value?.load()
+  if (tab === 'purge') purgeTabRef.value?.activate()
   if (tab === 'buildEngagement') buildEngagementTabRef.value?.loadRecap()
   if (tab === 'data') dataTabRef.value?.activate()
   if (tab === 'videos') videosTabRef.value?.activate()
