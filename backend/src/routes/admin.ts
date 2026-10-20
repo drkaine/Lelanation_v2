@@ -15,7 +15,6 @@ import {
 } from '../services/MatchupTierService.js'
 import { runDataDragonSyncOnce } from '../cron/dataDragonSync.js'
 import {
-  RAW_MATCH_PURGE_DEFAULT_BATCH,
   parsePurgeCutoffDate,
   previewRawMatchDataPurge,
   rawMatchDataPurgeJob,
@@ -264,15 +263,11 @@ router.get('/raw-match-purge', async (req, res) => {
   }
 })
 
-/** POST /api/admin/raw-match-purge { date, compact } — garde les matchs (participants, teams) et l'historique de rang depuis `date`, supprime le reste. */
+/** POST /api/admin/raw-match-purge { date } — arrête le poller, garde les matchs (participants, teams) et l'historique de rang depuis `date`, supprime le reste. */
 router.post('/raw-match-purge', (req, res) => {
   const parsed = parsePurgeCutoffDate(req.body?.date)
   if (!parsed.ok) return res.status(400).json({ error: parsed.error })
-  const { started } = rawMatchDataPurgeJob.start({
-    cutoffDate: parsed.date,
-    batchSize: RAW_MATCH_PURGE_DEFAULT_BATCH,
-    compact: req.body?.compact === true,
-  })
+  const { started } = rawMatchDataPurgeJob.start({ cutoffDate: parsed.date })
   if (!started) return res.status(409).json({ error: 'Purge déjà en cours', status: rawMatchDataPurgeJob.status() })
   return res.status(202).json({ status: rawMatchDataPurgeJob.status() })
 })

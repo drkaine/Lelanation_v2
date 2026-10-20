@@ -4,26 +4,36 @@ import {
   parsePurgeCutoffDate,
   runRawMatchDataPurge,
   type RawMatchDataPurgeOps,
+  type RawTable,
 } from '../../../../src/services/rawMatchDataPurge.js'
 
 const NOW = Date.parse('2026-10-20T12:00:00Z')
 
-function fakeOps(matchBatches: number[], rankBatches: number[]) {
+function fakeOps(counts: Partial<Record<RawTable, { kept: number; total: number }>> = {}, deletedMatches = 0) {
   const calls: string[] = []
   const ops: RawMatchDataPurgeOps = {
-    async deleteMatchBatch(cutoff, size) {
-      calls.push(`match:${cutoff}:${size}`)
-      return matchBatches.shift() ?? 0
+    async stopPoller() {
+      calls.push('stopPoller')
     },
-    async deleteRankHistoryBatch(cutoff, size) {
-      calls.push(`rank:${cutoff}:${size}`)
-      return rankBatches.shift() ?? 0
+    async startPoller() {
+      calls.push('startPoller')
     },
-    async checkpoint() {
-      calls.push('checkpoint')
+    async exportKept(table, cutoff) {
+      calls.push(`export:${table}:${cutoff}`)
+      return counts[table] ?? { kept: 0, total: 0 }
     },
-    async vacuumFull(table) {
-      calls.push(`vacuum:${table}`)
+    async truncate(tables) {
+      calls.push(`truncate:${tables.join(',')}`)
+    },
+    async deleteOldMatches(cutoff) {
+      calls.push(`deleteMatches:${cutoff}`)
+      return deletedMatches
+    },
+    async importKept(table) {
+      calls.push(`import:${table}`)
+    },
+    async cleanup() {
+      calls.push('cleanup')
     },
   }
   return { ops, calls }
@@ -43,43 +53,52 @@ describe('parsePurgeCutoffDate', () => {
 })
 
 describe('runRawMatchDataPurge', () => {
-  it('deletes matches then rank history in batches until empty, checkpointing each batch', async () => {
-    const { ops, calls } = fakeOps([2, 1, 0], [3, 0])
-    const result = await runRawMatchDataPurge(ops, { cutoffDate: '2026-10-01', batchSize: 2, compact: false })
+  it('stops the poller, exports kept rows, truncates, reloads, then restarts the poller', async () => {
+    const { ops, calls } = fakeOps({ player_rank_history: { kept: 7, total: 10 } }, 4)
+    const result = await runRawMatchDataPurge(ops, { cutoffDate: '2026-10-01' })
 
-    expect(result).toEqual({ deletedMatches: 3, deletedRankHistory: 3, compactedTables: [] })
+    expect(result).toEqual({ deletedMatches: 4, deletedRankHistory: 3 })
     expect(calls).toEqual([
-      'match:2026-10-01:2',
-      'checkpoint',
-      'match:2026-10-01:2',
-      'checkpoint',
-      'match:2026-10-01:2',
-      'rank:2026-10-01:2',
-      'checkpoint',
-      'rank:2026-10-01:2',
+      'stopPoller',
+      'export:player_rank_history:2026-10-01',
+      'truncate:player_rank_history',
+      'import:player_rank_history',
+      'export:teams:2026-10-01',
+      'export:participants:2026-10-01',
+      'truncate:participants,teams',
+      'deleteMatches:2026-10-01',
+      'import:teams',
+      'import:participants',
+      'cleanup',
+      'startPoller',
     ])
   })
 
-  it('compacts raw tables smallest first when asked', async () => {
-    const { ops, calls } = fakeOps([], [])
-    const result = await runRawMatchDataPurge(ops, { cutoffDate: '2026-10-01', batchSize: 10, compact: true })
-
-    expect(result.compactedTables).toEqual(['matchs', 'teams', 'player_rank_history', 'participants'])
-    expect(calls.filter((c) => c.startsWith('vacuum:'))).toEqual([
-      'vacuum:matchs',
-      'vacuum:teams',
-      'vacuum:player_rank_history',
-      'vacuum:participants',
-    ])
+  it('reports each phase', async () => {
+    const { ops } = fakeOps({ player_rank_history: { kept: 1, total: 3 } }, 5)
+    const seen: string[] = []
+    await runRawMatchDataPurge(ops, { cutoffDate: '2026-10-01' }, (p) => seen.push(p.phase))
+    expect(seen).toEqual(['stop_poller', 'rank_history', 'matches', 'start_poller'])
   })
 
-  it('reports progress after each batch', async () => {
-    const { ops } = fakeOps([5, 0], [4, 0])
-    const seen: Array<{ phase: string; deletedMatches: number; deletedRankHistory: number }> = []
-    await runRawMatchDataPurge(ops, { cutoffDate: '2026-10-01', batchSize: 5, compact: false }, (p) =>
-      seen.push({ ...p }),
-    )
-    expect(seen.at(-1)).toEqual({ phase: 'rank_history', deletedMatches: 5, deletedRankHistory: 4 })
+  it('restarts the poller when it fails before any truncate', async () => {
+    const { ops, calls } = fakeOps()
+    ops.exportKept = async () => {
+      throw new Error('disk full')
+    }
+    await expect(runRawMatchDataPurge(ops, { cutoffDate: '2026-10-01' })).rejects.toThrow('disk full')
+    expect(calls).toContain('startPoller')
+    expect(calls).toContain('cleanup')
+  })
+
+  it('keeps the poller stopped and the export files after a truncate when import fails', async () => {
+    const { ops, calls } = fakeOps()
+    ops.importKept = async () => {
+      throw new Error('import failed')
+    }
+    await expect(runRawMatchDataPurge(ops, { cutoffDate: '2026-10-01' })).rejects.toThrow('import failed')
+    expect(calls).not.toContain('startPoller')
+    expect(calls).not.toContain('cleanup')
   })
 })
 
@@ -87,16 +106,15 @@ describe('createRawMatchDataPurgeJob', () => {
   it('refuses a second run while one is in progress, then exposes the result', async () => {
     let release!: () => void
     const gate = new Promise<void>((r) => (release = r))
-    const { ops } = fakeOps([1, 0], [0])
+    const { ops } = fakeOps({}, 1)
     const slowOps: RawMatchDataPurgeOps = {
       ...ops,
-      async deleteMatchBatch(cutoff, size) {
+      async stopPoller() {
         await gate
-        return ops.deleteMatchBatch(cutoff, size)
       },
     }
     const job = createRawMatchDataPurgeJob(() => slowOps)
-    const opts = { cutoffDate: '2026-10-01', batchSize: 1, compact: false }
+    const opts = { cutoffDate: '2026-10-01' }
 
     expect(job.start(opts).started).toBe(true)
     expect(job.start(opts).started).toBe(false)
@@ -112,15 +130,15 @@ describe('createRawMatchDataPurgeJob', () => {
   })
 
   it('stores the error when the purge fails', async () => {
-    const { ops } = fakeOps([], [])
+    const { ops } = fakeOps()
     const job = createRawMatchDataPurgeJob(() => ({
       ...ops,
-      async deleteMatchBatch() {
-        throw new Error('disk full')
+      async stopPoller() {
+        throw new Error('pm2 missing')
       },
     }))
-    job.start({ cutoffDate: '2026-10-01', batchSize: 1, compact: false })
+    job.start({ cutoffDate: '2026-10-01' })
     await job.wait()
-    expect(job.status()).toMatchObject({ state: 'error', error: 'disk full' })
+    expect(job.status()).toMatchObject({ state: 'error', error: 'pm2 missing' })
   })
 })

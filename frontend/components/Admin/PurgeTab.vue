@@ -8,7 +8,8 @@
           >matchs</code
         >, <code class="text-[11px]">participants</code>, <code class="text-[11px]">teams</code>,
         <code class="text-[11px]">player_rank_history</code>) et supprime tout ce qui est plus
-        vieux. Les agrégats ne sont pas touchés.
+        vieux. Les agrégats ne sont pas touchés. Le poller est arrêté pendant la purge (export des
+        lignes gardées, TRUNCATE qui rend l'espace disque, réimport) puis relancé.
       </p>
 
       <form class="flex flex-wrap items-end gap-3" @submit.prevent="runPurge">
@@ -22,10 +23,6 @@
             class="rounded border border-primary/30 bg-background px-2 py-1 text-text"
             @change="preview = null"
           />
-        </label>
-        <label class="flex items-center gap-2 text-sm text-text">
-          <input v-model="compact" type="checkbox" />
-          Compacter ensuite (VACUUM FULL, rend l'espace disque, bloque les écritures)
         </label>
         <button
           type="button"
@@ -70,7 +67,6 @@ const { fetchWithAuth } = useAdminAuth()
 
 const today = new Date().toISOString().slice(0, 10)
 const cutoffDate = ref(defaultPurgeCutoffDate())
-const compact = ref(false)
 const loading = ref(false)
 const error = ref<string | null>(null)
 const preview = ref<RawMatchPurgePreview | null>(null)
@@ -126,7 +122,7 @@ async function runPurge() {
     const res = await fetchWithAuth(apiUrl('/api/admin/raw-match-purge'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date: cutoffDate.value, compact: compact.value }),
+      body: JSON.stringify({ date: cutoffDate.value }),
     })
     const body = (await res.json()) as { status?: RawMatchPurgeStatus; error?: string }
     if (body.status) status.value = body.status

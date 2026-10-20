@@ -26,7 +26,20 @@ describe('rawMatchPurge', () => {
         state: 'running',
         progress: { phase: 'matches', deletedMatches: 1200, deletedRankHistory: 0 },
       })
-    ).toMatch(/matchs.*1/)
+    ).toMatch(/matchs/)
+    expect(
+      purgeProgressLabel({
+        state: 'running',
+        progress: { phase: 'stop_poller', deletedMatches: 0, deletedRankHistory: 0 },
+      })
+    ).toContain('poller')
+    expect(
+      purgeProgressLabel({
+        state: 'done',
+        cutoffDate: '2026-10-01',
+        result: { deletedMatches: 300, deletedRankHistory: 4000 },
+      })
+    ).toMatch(/300.*4/)
     expect(purgeProgressLabel({ state: 'error', error: 'disk full' })).toContain('disk full')
   })
 })
