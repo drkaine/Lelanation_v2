@@ -4,6 +4,7 @@ import {
   createErrorForwarder,
   errorCaptureHooks,
   installConsoleErrorCapture,
+  pinoArgsToDetails,
   pinoArgsToMessage,
   setErrorForwarder,
   type CapturedError,
@@ -64,6 +65,21 @@ describe('pinoArgsToMessage', () => {
   });
 });
 
+describe('pinoArgsToDetails', () => {
+  test('pino_details_flattens_one_level_of_nested_scalars', () => {
+    const details = pinoArgsToDetails([
+      { url: 'u', attempts: 4, finalError: { type: 'RiotMaxRetriesError', statusCode: 503, deep: { x: 1 } } },
+      'Request failed after max retries',
+    ]);
+    expect(details).toEqual({
+      url: 'u',
+      attempts: 4,
+      'finalError.type': 'RiotMaxRetriesError',
+      'finalError.statusCode': 503,
+    });
+  });
+});
+
 describe('capture wiring', () => {
   test('pino_error_is_forwarded_when_hooks_are_installed', () => {
     const c = collector();
@@ -83,7 +99,7 @@ describe('capture wiring', () => {
 
     logger.error({ operation: 'insert_match', p95_ms: 2200, nested: { a: 1 } }, 'DB operation slow');
 
-    expect(c.out[0]?.details).toEqual({ operation: 'insert_match', p95_ms: 2200 });
+    expect(c.out[0]?.details).toEqual({ operation: 'insert_match', p95_ms: 2200, 'nested.a': 1 });
   });
 
   test('console_error_is_forwarded_and_still_printed_when_capture_installed', () => {

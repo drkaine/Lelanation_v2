@@ -360,6 +360,104 @@ describe('parser', () => {
       expect(belveth).toBeDefined();
       expect(belveth!.subCategory).toBe('CHAMPIONS');
     });
+
+    it('should group arena ability headings under the preceding champion name', () => {
+      const html = `
+        <div id="patch-notes-container">
+          <header class="header-primary"><h2 id="patch-arena">Arena</h2></header>
+          <div class="content-border">
+            <div class="white-stone accent-before">
+              <div>
+                <h4 class="change-detail-title">CHAMPIONS</h4>
+                <p><strong>Milio</strong></p>
+                <h4 class="change-detail-title ability-title"><img src="https://x/MilioQ.png">Q - Ultra Mega Fire Kick</h4>
+                <ul><li><strong>Cooldown</strong>: 8s ⇒ <strong>10s</strong></li></ul>
+                <h4 class="change-detail-title ability-title"><img src="https://x/MilioR.png">R - Breath Of Life</h4>
+                <ul><li><strong>Cooldown</strong>: 160s ⇒ <strong>180s</strong></li></ul>
+                <hr class="divider">
+                <p><strong>Morgana</strong></p>
+                <h4 class="change-detail-title ability-title"><img src="https://x/MorganaE.png">E - Black Shield</h4>
+                <ul><li><strong>Cooldown</strong>: 26s ⇒ <strong>30s</strong></li></ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const arena = parsePatchHtml(html, 'en-GB').filter(e => e.category === 'arena');
+      expect(arena.map(e => e.name)).toEqual(['Milio', 'Morgana']);
+      expect(arena[0].subCategory).toBe('CHAMPIONS');
+      expect(arena[0].changes.map(c => c.subCategory)).toEqual([
+        'Q - Ultra Mega Fire Kick',
+        'R - Breath Of Life',
+      ]);
+      expect(arena[0].changes[0].iconUrl).toBe('https://x/MilioQ.png');
+      expect(arena[1].changes[0].subCategory).toBe('E - Black Shield');
+    });
+
+    it('should split arena augments from champions without leaking the last ability', () => {
+      const html = `
+        <div id="patch-notes-container">
+          <header class="header-primary"><h2 id="patch-arena">Arena</h2></header>
+          <div class="content-border">
+            <div class="white-stone accent-before">
+              <div>
+                <h4 class="change-detail-title">Champions</h4>
+                <h4 class="change-detail-title">Zeri</h4>
+                <p><strong>E - Charge ionique</strong></p>
+                <ul><li><strong>Remboursement</strong>&nbsp;: 0,75 ⇒ <strong>1</strong></li></ul>
+                <hr class="divider">
+                <h4 class="change-detail-title">Optimisations</h4>
+                <p><span style="background-color:#53ad56;"><strong>&nbsp; NOUVEAU &nbsp;</strong></span>&nbsp;<strong>Archimage</strong></p>
+                <ul><li>Chaque fois que vous lancez une compétence, le délai de récupération d'une autre compétence est réduit.</li></ul>
+                <hr class="divider">
+                <p><span><strong>NOUVEAU</strong></span> <strong>Pin pon pin pon</strong></p>
+                <blockquote class="blockquote context"><p>Vous gagnez jusqu'à 50% de vitesse de déplacement.</p></blockquote>
+                <hr class="divider">
+                <p><strong>Ange de la vengeance</strong></p>
+                <ul><li><strong>Scaling des PV&nbsp;:</strong> 350 ⇒ <strong>450</strong></li></ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const arena = parsePatchHtml(html, 'fr-FR').filter(e => e.category === 'arena');
+      expect(arena.map(e => [e.name, e.subCategory])).toEqual([
+        ['Zeri', 'Champions'],
+        ['Archimage', 'Optimisations'],
+        ['Pin pon pin pon', 'Optimisations'],
+        ['Ange de la vengeance', 'Optimisations'],
+      ]);
+      expect(arena[1].changes[0].after).toContain('Chaque fois');
+      expect(arena[3].changes.map(c => [c.stat, c.subCategory])).toEqual([['Scaling des PV', undefined]]);
+    });
+
+    it('should file ARAM chaos augments under their own subCategory', () => {
+      const html = `
+        <div id="patch-notes-container">
+          <header class="header-primary"><h2 id="patch-aram-chaos">ARAM: Mayhem</h2></header>
+          <div class="content-border">
+            <div class="white-stone accent-before">
+              <div>
+                <h4 class="change-detail-title">Champions</h4>
+                <p><strong>Bard</strong></p>
+                <ul><li><strong>Meep - Cooldown</strong>: 8s ⇒ <strong>5s</strong></li></ul>
+                <h4 class="change-detail-title">Augments</h4>
+                <p><strong>Juiced</strong></p>
+                <ul><li><strong>Damage ratio</strong>: 4.5% ⇒ <strong>7%</strong></li></ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const modes = parsePatchHtml(html, 'en-GB').filter(e => e.category === 'aram-chaos');
+      expect(modes.map(e => [e.name, e.subCategory])).toEqual([
+        ['Bard', 'Champions'],
+        ['Juiced', 'Augments'],
+      ]);
+    });
   });
 
   describe('parsePatchHtmlAlt', () => {

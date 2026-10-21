@@ -40,7 +40,7 @@ export async function upsertPlayer(puuid: string, region: string): Promise<void>
 }
 
 export async function upsertPlayersIfMissing(puuids: string[], region: string): Promise<void> {
-  const deduped = Array.from(new Set(puuids.map((puuid) => String(puuid ?? '').trim()).filter(Boolean)))
+  const deduped = Array.from(new Set(puuids.map((puuid) => String(puuid ?? '').trim()).filter(Boolean))).sort()
   if (deduped.length === 0) return
 
   await sql`

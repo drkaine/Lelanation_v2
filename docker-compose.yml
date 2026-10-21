@@ -21,6 +21,29 @@ services:
     container_name: lelanation-postgres-statistiques
     restart: unless-stopped
     shm_size: '512mb'
+    # Defaults (128MB buffers, HDD costs) gave a 20% cache hit ratio on a 25GB DB (31GB RAM, SSD).
+    command:
+      - postgres
+      - -c
+      - shared_buffers=4GB
+      - -c
+      - effective_cache_size=16GB
+      - -c
+      - work_mem=16MB
+      - -c
+      - maintenance_work_mem=512MB
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+      - -c
+      - max_wal_size=4GB
+      - -c
+      - wal_compression=on
+      - -c
+      - autovacuum_vacuum_scale_factor=0.05
+      - -c
+      - autovacuum_analyze_scale_factor=0.02
     env_file:
       - .env
     environment:

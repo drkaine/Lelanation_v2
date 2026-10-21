@@ -3,6 +3,7 @@ import { config } from "../config/index.js";
 import { normalizePlatformRegion } from "../riot/platform-region.js";
 import { normalizeLolRankTier, normalizeLolRole } from "../constants/lolEnums.js";
 import { sql } from "../db/client.js";
+import { sortByPuuid } from "../db/puuidLockOrder.js";
 import { CHAMPION_STATS_METRIC_COLUMNS } from "../constants/championStatsMetricColumns.js";
 import { CHAMPION_VS_STATS_ALL_METRIC_COLUMNS } from "../constants/championVsStatsMetricColumns.js";
 import { championVsMetricValue } from "../parsers/champion-vs-metric-value.js";
@@ -118,7 +119,7 @@ async function upsertPlayersFromParticipants(tx: any, participants: ParsedPartic
   }
 
   let insertedPlayers = 0;
-  const orderedParticipants = Array.from(latestByPuuid.values()).sort((a, b) => a.puuid.localeCompare(b.puuid));
+  const orderedParticipants = sortByPuuid(Array.from(latestByPuuid.values()));
 
   for (const participant of orderedParticipants) {
     const puuid = String(participant.puuid).trim();

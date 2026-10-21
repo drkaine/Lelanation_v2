@@ -71,16 +71,31 @@ export function pinoArgsToMessage(args: unknown[]): string {
 const DETAILS_MAX_KEYS = 12
 const DETAILS_SKIP_KEYS = new Set(['err', 'error', 'msg', 'level', 'time', 'pid', 'hostname'])
 
-/** Scalar context fields of a pino call (e.g. operation, p95_ms), for diagnosis in the unified log. */
+function addScalar(details: ErrorDetails, key: string, value: unknown): void {
+  if (typeof value === 'string') details[key] = value.slice(0, 200)
+  else if (typeof value === 'number' || typeof value === 'boolean') details[key] = value
+}
+
+/**
+ * Scalar context fields of a pino call (e.g. operation, p95_ms), for diagnosis in the unified log.
+ * Nested objects are flattened one level (`finalError.statusCode`).
+ */
 export function pinoArgsToDetails(args: unknown[]): ErrorDetails | undefined {
   const [first] = args
   if (typeof first !== 'object' || first === null || first instanceof Error) return undefined
   const details: ErrorDetails = {}
+  const full = () => Object.keys(details).length >= DETAILS_MAX_KEYS
   for (const [key, value] of Object.entries(first)) {
     if (DETAILS_SKIP_KEYS.has(key)) continue
-    if (typeof value === 'string') details[key] = value.slice(0, 200)
-    else if (typeof value === 'number' || typeof value === 'boolean') details[key] = value
-    if (Object.keys(details).length >= DETAILS_MAX_KEYS) break
+    if (typeof value === 'object' && value !== null && !Array.isArray(value) && !(value instanceof Error)) {
+      for (const [subKey, subValue] of Object.entries(value)) {
+        addScalar(details, `${key}.${subKey}`, subValue)
+        if (full()) break
+      }
+    } else {
+      addScalar(details, key, value)
+    }
+    if (full()) break
   }
   return Object.keys(details).length > 0 ? details : undefined
 }

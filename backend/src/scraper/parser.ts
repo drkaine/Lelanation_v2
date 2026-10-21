@@ -470,7 +470,7 @@ function isStructuredSectionCategory(category: EntityCategory): boolean {
 }
 
 const STRUCTURED_SUBSECTION_RE =
-  /^(champions?|items?|objets?|runes?|syst[eè]mes?|systems?|gameplay|corrections?|bug|honored guests|invit[eé]s d'honneur|skins?)/i;
+  /^(champions?|items?|objets?|runes?|syst[eè]mes?|systems?|gameplay|corrections?|bug|honored guests|invit[eé]s d'honneur|skins?|augments?|optimisations?)/i;
 
 function isSkinSubSectionHeading(text: string): boolean {
   const normalized = text.toLowerCase();
@@ -622,7 +622,12 @@ function parseInlineEntityName(_$: cheerio.CheerioAPI, $p: cheerio.Cheerio<any>)
   const strongText = $strong.text().replace(/\s+/g, ' ').trim().replace(/:$/, '');
   if (!strongText || strongText.length > 80) return null;
 
+  // Arena "NEW" badge: <span><strong> NOUVEAU </strong></span> <strong>Name</strong>
   const pText = $p
+    .clone()
+    .children('span')
+    .remove()
+    .end()
     .text()
     .replace(/\s+/g, ' ')
     .trim()
@@ -775,7 +780,7 @@ function attachPendingEntityImage(
 
 function setCurrentSubSection(
   state: SectionParseState,
-  text: string,
+  text: string | null,
   $elem?: cheerio.Cheerio<any>
 ): void {
   state.currentSubSection = text;
@@ -846,6 +851,21 @@ function parseSectionContent(
         },
       ],
     });
+    clearPending();
+  };
+
+  /** Mode entity described only by a blockquote (e.g. new Arena augment), closed by the next name. */
+  const flushPendingModeEntity = () => {
+    if (!isStructuredSectionCategory(sectionCategory)) return;
+    if (!state.pendingName || !state.pendingContext) return;
+    entities.push(
+      attachPendingEntityImage(
+        createModeEntity(state.pendingName, sectionCategory, modeEntitySubCategory(state), [
+          { stat: '', before: '', after: state.pendingContext, type: 'text' },
+        ]),
+        state
+      )
+    );
     clearPending();
   };
 
@@ -923,7 +943,7 @@ function parseSectionContent(
     if (state.pendingName) {
       flushCurrentEntity();
       const changes = parseListItems($, $ul, locale, {
-        allowDescriptive: sectionCategory === 'classic',
+        allowDescriptive: isStructuredSectionCategory(sectionCategory),
       }).map(change =>
         tagChangeWithSubSection(change, state.currentSubSection, state.currentSubSectionIconUrl)
       );
@@ -1039,6 +1059,20 @@ function parseSectionContent(
           state.structuredSubSection = null;
           state.currentSubSection = text;
           state.inSkinSubsection = false;
+        } else if (
+          isStructuredSectionCategory(sectionCategory) &&
+          (state.pendingName || state.currentEntity) &&
+          isAbilityOrBaseStatsHeading($elem, text)
+        ) {
+          // Arena 26.21+: <p><strong>Champion</strong></p> then one h4.ability-title per skill
+          if (state.pendingName) {
+            state.currentEntity = attachPendingEntityImage(
+              createModeEntity(state.pendingName, sectionCategory, modeEntitySubCategory(state), []),
+              state
+            );
+            clearPending();
+          }
+          setCurrentSubSection(state, text, $elem);
         } else if (isStructuredSectionCategory(sectionCategory)) {
           flushCurrentEntity();
           clearPending();
@@ -1166,7 +1200,11 @@ function parseSectionContent(
           continue;
         }
         flushCurrentEntity();
+        flushPendingModeEntity();
         state.pendingName = inlineName;
+        if (isStructuredSectionCategory(sectionCategory) && !state.inBugfixSubsection) {
+          setCurrentSubSection(state, null);
+        }
         continue;
       }
 
@@ -1220,6 +1258,7 @@ function parseSectionContent(
     }
   }
 
+  flushPendingModeEntity();
   flushPendingContextEntity();
   flushCurrentEntity();
 }

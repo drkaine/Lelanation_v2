@@ -58,7 +58,7 @@ function resolveModeContentTab(entity: PatchEntity): PatchNotesContentTabId | nu
   if (sub.includes('objet') || sub.includes('item')) return 'items'
   if (sub.includes('rune')) return 'runes'
   if (sub.includes('system') || sub.includes('systeme')) return 'systems'
-  if (sub.includes('optim')) return 'optimizations'
+  if (sub.includes('optim') || sub.includes('augment')) return 'optimizations'
 
   return null
 }

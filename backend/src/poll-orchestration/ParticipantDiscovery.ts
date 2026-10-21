@@ -1,4 +1,5 @@
 import { sql } from '../db/client.js';
+import { sortByPuuid } from '../db/puuidLockOrder.js';
 import { parsePlatformFromMatchId } from '../poller/utils/parseMatchId.js';
 import { normalizePlatformRegion } from '../riot/platform-region.js';
 import type { MatchDto } from '../riot-gateway/routes/dto.js';
@@ -53,7 +54,7 @@ export class ParticipantDiscovery {
     for (const participant of participants) {
       if (participant.puuid) deduped.set(participant.puuid, participant);
     }
-    const rows = [...deduped.values()];
+    const rows = sortByPuuid([...deduped.values()]);
     if (rows.length === 0) return 0;
 
     const puuids = rows.map((r) => r.puuid);

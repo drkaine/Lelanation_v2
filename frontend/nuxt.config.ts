@@ -3,6 +3,11 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { DEFAULT_SITE_URL } from './utils/siteUrl'
+import { ICON_API_ENDPOINT, apiProxyRouteRules } from './utils/apiRouteRules'
+import { createSharedStatsChunk, statsPageChunk } from './utils/statsChunks'
+
+// One memo per Rollup build (client and server builds have their own module graph).
+const sharedStatsChunks = new WeakMap<object, (id: string) => string | undefined>()
 
 /** Read fallback game version from backend/data/game/version.json at build time */
 function getFallbackGameVersionFromBackend(): string {
@@ -71,6 +76,7 @@ export default defineNuxtConfig({
   },
   modules: ['@nuxtjs/tailwindcss', '@nuxt/icon', '@pinia/nuxt', '@nuxtjs/i18n', '@nuxtjs/robots'],
   icon: {
+    localApiEndpoint: ICON_API_ENDPOINT,
     clientBundle: {
       scan: true,
       icons: [
@@ -279,21 +285,14 @@ export default defineNuxtConfig({
           'Cache-Control': 'public, max-age=86400',
         },
       },
-      // IMPORTANT: Nuxt Icon module serves icons via a Nuxt endpoint under /api/_nuxt_icon/**.
-      // Do NOT proxy this to the backend, otherwise users get 502s.
-      // This rule MUST come before the /api/** proxy rule to take precedence.
-      '/api/_nuxt_icon/**': {
+      [`${ICON_API_ENDPOINT}/**`]: {
         cors: true,
         headers: {
           // Safe cache: response depends on querystring, but is static per request.
           'Cache-Control': 'public, max-age=86400',
         },
       },
-      // Proxy all other /api/** requests to the backend, but NOT /api/_nuxt_icon/**
-      // Note: Nitro strips /api from the path, so target must include /api to rebuild full path.
-      '/api/**': {
-        proxy: defaultApiBase + '/api/**',
-      },
+      ...apiProxyRouteRules(defaultApiBase),
       // Pages/HTML: no-store would block back/forward cache (bfcache). Use no-cache
       // so the doc can be bfcached while still revalidating on return.
       // Security headers (HSTS, CSP, X-Frame-Options, nosniff…) are set by nginx.
@@ -312,7 +311,12 @@ export default defineNuxtConfig({
       chunkSizeWarningLimit: 600,
       rollupOptions: {
         output: {
-          manualChunks(id) {
+          manualChunks(id, { getModuleInfo }) {
+            let sharedStatsChunk = sharedStatsChunks.get(getModuleInfo)
+            if (!sharedStatsChunk) {
+              sharedStatsChunk = createSharedStatsChunk(m => getModuleInfo(m)?.importers ?? [])
+              sharedStatsChunks.set(getModuleInfo, sharedStatsChunk)
+            }
             if (id.includes('node_modules/vue/') || id.includes('node_modules/@vue/')) {
               return 'vendor-vue'
             }
@@ -330,26 +334,7 @@ export default defineNuxtConfig({
             if (id.includes('node_modules/@lelanation/builds-ui')) {
               return 'builds-ui'
             }
-            if (id.includes('/frontend/stores/') && id.includes('Statistics')) {
-              return 'statistics-store'
-            }
-            // Per-route stats pages only — do NOT lump all components/composables together.
-            if (id.includes('/frontend/components/statistics/pages/StatisticsIndexPage')) {
-              return 'page-stats-index'
-            }
-            if (id.includes('/frontend/components/statistics/pages/ChampionStatsPage')) {
-              return 'page-stats-champion'
-            }
-            if (id.includes('/frontend/pages/statistics/')) {
-              if (id.includes('/champion/')) return 'page-stats-champion-shell'
-              if (id.includes('/statistics/index.')) return 'page-stats-index-shell'
-              if (id.includes('/tier-list')) return 'page-stats-tier-list'
-              if (id.includes('/settings')) return 'page-stats-settings'
-              if (id.includes('/recap')) return 'page-stats-recap'
-              if (id.includes('/item/')) return 'page-stats-item'
-              return 'page-stats-misc'
-            }
-            return undefined
+            return statsPageChunk(id) ?? sharedStatsChunk(id)
           },
         },
       },
