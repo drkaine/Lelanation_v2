@@ -4,6 +4,15 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FRONTEND="$ROOT/frontend"
 
+# Node version from .nvmrc, whatever the calling shell's PATH.
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+  set +u
+  \. "$NVM_DIR/nvm.sh"
+  nvm use --silent "$(cat "$ROOT/.nvmrc")"
+  set -u
+fi
+
 if pm2 describe lelanation-frontend >/dev/null 2>&1; then
   status="$(pm2 jlist 2>/dev/null | node -e "
     let s='';
@@ -30,19 +39,32 @@ rm -rf .output node_modules/.cache/nuxt
 npm run build:no-restart
 rm -f .output/public/index.html
 
-echo "[build-frontend] Verifying server chunk manifest..."
+echo "[build-frontend] Verifying server chunk imports..."
+# Every relative import of every server chunk must exist (chunk names change between Nuxt versions).
 node -e "
 const fs = require('fs')
 const path = require('path')
-const dir = '.output/server/chunks/build'
-const server = fs.readFileSync(path.join(dir, 'server.mjs'), 'utf8')
-const imports = [...server.matchAll(/import\\('\\.\\/([^']+)'\\)/g)].map(m => m[1])
-const missing = imports.filter(f => !fs.existsSync(path.join(dir, f)))
+const files = fs.readdirSync('.output/server', { recursive: true })
+  .filter(f => f.endsWith('.mjs') && !f.startsWith('node_modules'))
+  .map(f => path.join('.output/server', f))
+const pattern = /(?:import\\(|from )'(\\.\\.?\\/[^']+)'/g
+let count = 0
+const missing = []
+for (const file of files) {
+  for (const [, rel] of fs.readFileSync(file, 'utf8').matchAll(pattern)) {
+    count++
+    if (!fs.existsSync(path.join(path.dirname(file), rel))) missing.push(file + ' -> ' + rel)
+  }
+}
+if (!count) {
+  console.error('No relative imports found: server output layout changed?')
+  process.exit(1)
+}
 if (missing.length) {
   console.error('Missing chunks:', missing.slice(0, 10).join(', '))
   process.exit(1)
 }
-console.log('OK:', imports.length, 'lazy imports')
+console.log('OK:', count, 'relative imports in', files.length, 'files')
 "
 
 echo "[build-frontend] Done."

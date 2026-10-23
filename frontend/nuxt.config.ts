@@ -6,8 +6,37 @@ import { DEFAULT_SITE_URL } from './utils/siteUrl'
 import { ICON_API_ENDPOINT, apiProxyRouteRules } from './utils/apiRouteRules'
 import { createSharedStatsChunk, statsPageChunk } from './utils/statsChunks'
 
-// One memo per Rollup build (client and server builds have their own module graph).
+// One memo per Rollup build.
 const sharedStatsChunks = new WeakMap<object, (id: string) => string | undefined>()
+
+type GetModuleInfo = (id: string) => { importers: readonly string[] } | null
+
+/** Client-only: on the server build (Vite 8), manual chunks leave unresolved style chunk refs. */
+function manualChunks(id: string, { getModuleInfo }: { getModuleInfo: GetModuleInfo }) {
+  let sharedStatsChunk = sharedStatsChunks.get(getModuleInfo)
+  if (!sharedStatsChunk) {
+    sharedStatsChunk = createSharedStatsChunk(m => getModuleInfo(m)?.importers ?? [])
+    sharedStatsChunks.set(getModuleInfo, sharedStatsChunk)
+  }
+  if (id.includes('node_modules/vue/') || id.includes('node_modules/@vue/')) {
+    return 'vendor-vue'
+  }
+  if (id.includes('node_modules/pinia/') || id.includes('node_modules/vue-router/')) {
+    return 'vendor-state-router'
+  }
+  // Locale JSON stays out of this chunk: lazy i18n loads fr.json / en.json on demand.
+  if (
+    id.includes('node_modules/@nuxtjs/i18n') ||
+    id.includes('node_modules/vue-i18n') ||
+    (id.includes('/frontend/i18n/') && !id.includes('/frontend/i18n/locales/'))
+  ) {
+    return 'i18n'
+  }
+  if (id.includes('node_modules/@lelanation/builds-ui')) {
+    return 'builds-ui'
+  }
+  return statsPageChunk(id) ?? sharedStatsChunk(id)
+}
 
 /** Read fallback game version from backend/data/game/version.json at build time */
 function getFallbackGameVersionFromBackend(): string {
@@ -43,6 +72,19 @@ export default defineNuxtConfig({
   // SSR enabled by default in Nuxt 3 for MPA support
   // File-based routing via pages/ directory automatically creates routes
   ssr: true,
+  // Nuxt imports PostCSS plugins as ESM; Tailwind 3 only exposes `tailwindcss/nesting` to require().
+  postcss: {
+    plugins: { 'tailwindcss/nesting/index.js': {}, 'tailwindcss/nesting': false },
+  },
+  hooks: {
+    'vite:extendConfig'(config, { isClient }) {
+      const build = config.build
+      if (!isClient || !build) return
+      const output = build.rollupOptions?.output
+      if (Array.isArray(output)) return
+      build.rollupOptions = { ...build.rollupOptions, output: { ...output, manualChunks } }
+    },
+  },
   experimental: {
     // Désactivé : l'extraction externe ne garde que les asyncData (~108 o) et le client
     // préfère data-src au JSON inline (Pinia 240k+ o) → hydratation cassée, 500 "26".
@@ -309,35 +351,8 @@ export default defineNuxtConfig({
   vite: {
     build: {
       chunkSizeWarningLimit: 600,
-      rollupOptions: {
-        output: {
-          manualChunks(id, { getModuleInfo }) {
-            let sharedStatsChunk = sharedStatsChunks.get(getModuleInfo)
-            if (!sharedStatsChunk) {
-              sharedStatsChunk = createSharedStatsChunk(m => getModuleInfo(m)?.importers ?? [])
-              sharedStatsChunks.set(getModuleInfo, sharedStatsChunk)
-            }
-            if (id.includes('node_modules/vue/') || id.includes('node_modules/@vue/')) {
-              return 'vendor-vue'
-            }
-            if (id.includes('node_modules/pinia/') || id.includes('node_modules/vue-router/')) {
-              return 'vendor-state-router'
-            }
-            // Locale JSON stays out of this chunk: lazy i18n loads fr.json / en.json on demand.
-            if (
-              id.includes('node_modules/@nuxtjs/i18n') ||
-              id.includes('node_modules/vue-i18n') ||
-              (id.includes('/frontend/i18n/') && !id.includes('/frontend/i18n/locales/'))
-            ) {
-              return 'i18n'
-            }
-            if (id.includes('node_modules/@lelanation/builds-ui')) {
-              return 'builds-ui'
-            }
-            return statsPageChunk(id) ?? sharedStatsChunk(id)
-          },
-        },
-      },
+      // Rolldown timing report is profiling noise, not a build problem.
+      rolldownOptions: { checks: { pluginTimings: false } },
     },
     server: {
       allowedHosts: ['www.lelanation.fr', 'lelanation.fr', 'localhost', '127.0.0.1'],

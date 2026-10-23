@@ -5,6 +5,16 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+# Node version from .nvmrc, whatever the calling shell's PATH (PM2 --update-env keeps it).
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+  set +u
+  \. "$NVM_DIR/nvm.sh"
+  nvm use --silent "$(cat "$ROOT/.nvmrc")"
+  set -u
+fi
+
 PM2="${PM2:-pm2}"
 NPM="${NPM:-npm}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:3500/health}"

@@ -5,8 +5,23 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FRONTEND="$ROOT/frontend"
 LOCK="$FRONTEND/.deploy-frontend.lock"
 
+# Node version from .nvmrc, whatever the calling shell's PATH.
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+  set +u
+  \. "$NVM_DIR/nvm.sh"
+  nvm use --silent "$(cat "$ROOT/.nvmrc")"
+  set -u
+fi
+
 cleanup() {
+  local code=$?
   rm -f "$LOCK"
+  # A failed deploy must not leave the site down when a usable build exists.
+  if [[ $code -ne 0 && -f "$FRONTEND/.output/server/index.mjs" ]]; then
+    echo "[deploy-frontend] Failed (exit $code): restarting frontend on the current build." >&2
+    pm2 restart lelanation-frontend >/dev/null 2>&1 || true
+  fi
 }
 trap cleanup EXIT
 

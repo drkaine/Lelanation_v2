@@ -169,7 +169,17 @@ useHead(() => {
         key: `hreflang-${link.hreflang}`,
       })),
     ],
-    meta: localeHead.value.meta ?? [],
+    meta: (localeHead.value.meta ?? []).flatMap(meta =>
+      typeof meta.property === 'string' && typeof meta.content === 'string'
+        ? [
+            {
+              property: meta.property,
+              content: meta.content,
+              ...(typeof meta.key === 'string' ? { key: meta.key } : {}),
+            },
+          ]
+        : []
+    ),
   }
 })
 
@@ -438,10 +448,6 @@ if (import.meta.client) {
   transform: translateY(0);
 }
 
-.streamer-panel-top :deep(.header) {
-  position: static;
-}
-
 .streamer-toggle {
   position: fixed;
   left: 6px;
@@ -508,13 +514,6 @@ if (import.meta.client) {
     top: calc(var(--app-header-height, 50px) + 10rem);
     max-height: none;
   }
-}
-
-.app-chrome-sticky :deep(.header) {
-  position: static;
-  top: auto;
-  margin-bottom: 0;
-  z-index: auto;
 }
 
 .command-toggle {

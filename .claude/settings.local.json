@@ -1,0 +1,13 @@
+{
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "agentvibes"
+  ],
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p utils/__scan__)",
+      "Bash(rm -f /tmp/claude-1000/-home-ubuntu-dev-Lelanation-v2/ea1dc6c2-938f-4023-b69d-2e4fa759f964/scratchpad/out.txt)",
+      "Bash(npx vitest *)"
+    ]
+  }
+}

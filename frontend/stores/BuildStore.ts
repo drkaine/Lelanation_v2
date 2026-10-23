@@ -17,6 +17,7 @@ import type {
   BuildNotesMode,
 } from '@lelanation/shared-types'
 import { isStarterItem } from '@lelanation/builds-ui'
+import { calculateStats, type CalculateStatsOptions } from '@lelanation/builds-stats'
 import { getFallbackGameVersion } from '~/config/version'
 import { isStandaloneLibraryBuild } from '~/utils/buildLibrary'
 import { serializeBuild, hydrateBuild, isStoredBuild } from '~/utils/buildSerialize'
@@ -1851,8 +1852,8 @@ export const useBuildStore = defineStore('build', {
 
       const recalcToken = ++statsRecalcToken
 
-      // Import and use stats calculator
-      import('@lelanation/builds-stats').then(async ({ calculateStats }) => {
+      // Static import: the stats package is already in the bundle via BuildCard / StatsTable.
+      Promise.resolve().then(async () => {
         if (recalcToken !== statsRecalcToken) return
         const b = this.displayedBuild ?? this.currentBuild
         if (!b || !b.champion || !hasChampionStats(b.champion)) {
@@ -1864,7 +1865,7 @@ export const useBuildStore = defineStore('build', {
         const activeItemsForCalc =
           this.builderSession === 'theorycraft' ? this.getTheorycraftItemsForStats() : b.items
 
-        let options: import('@lelanation/builds-stats').CalculateStatsOptions | undefined
+        let options: CalculateStatsOptions | undefined
         if (this.builderSession === 'theorycraft') {
           options = {
             includeStarterItems: true,

@@ -11,7 +11,10 @@ type OgMetaTagsOptions = {
 export function useOgMetaTags(options: OgMetaTagsOptions) {
   useHead({
     meta: computed(() => {
-      const tags: Array<Record<string, string>> = []
+      const tags: Array<
+        | { property: string; content: string; key: string }
+        | { name: string; content: string; key: string }
+      > = []
       const title = toValue(options.title)
       const description = toValue(options.description)
       const image = toValue(options.image)

@@ -16,7 +16,8 @@
     "minimatch": "9.0.7",
     "drizzle-kit": "0.31.10",
     "c12": "3.3.4",
-    "magicast": "0.5.2"
+    "magicast": "0.5.2",
+    "vite": "$vite"
   },
   "optionalDependencies": {
     "@esbuild/win32-x64": "0.25.12",
@@ -93,14 +94,14 @@
   "devDependencies": {
     "husky": "^9.0.0",
     "lint-staged": "^15.0.0",
-    "prisma": "^6.19.3"
+    "prisma": "^6.19.3",
+    "vite": "^8.3.5"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3"
   },
   "allowScripts": {
     "esbuild@0.25.12": true,
-    "esbuild@0.28.1": true,
     "esbuild@0.27.7": true,
     "esbuild@0.18.20": true,
     "msgpackr-extract@3.0.3": true,
@@ -109,6 +110,7 @@
     "unrs-resolver@1.11.1": true,
     "@parcel/watcher@2.5.6": true,
     "@prisma/client@6.19.3": true,
-    "@prisma/engines@6.19.3": true
+    "@prisma/engines@6.19.3": true,
+    "esbuild@0.28.2": true
   }
 }

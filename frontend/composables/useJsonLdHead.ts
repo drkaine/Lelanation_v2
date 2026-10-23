@@ -13,7 +13,7 @@ export function useJsonLdHead(
         {
           type: 'application/ld+json',
           key: `jsonld-${key}`,
-          children: JSON.stringify(value),
+          innerHTML: JSON.stringify(value),
         },
       ]
     }),
