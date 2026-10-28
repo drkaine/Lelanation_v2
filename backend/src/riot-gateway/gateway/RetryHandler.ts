@@ -30,3 +30,12 @@ export function classifyRateLimitType(headers: Record<string, string>): RateLimi
   if (raw === 'application' || raw === 'method') return raw;
   return 'service';
 }
+
+const SERVICE_BACKOFF_BASE_MS = 2_000;
+const SERVICE_BACKOFF_MAX_MS = 60_000;
+
+/** Riot-side overload clears slowly: back off exponentially on consecutive service 429s of one method. */
+export function getServiceBackoffMs(streak: number, retryAfterMs: number): number {
+  const exp = SERVICE_BACKOFF_BASE_MS * 2 ** (Math.max(streak, 1) - 1);
+  return Math.max(Math.min(exp, SERVICE_BACKOFF_MAX_MS), retryAfterMs);
+}

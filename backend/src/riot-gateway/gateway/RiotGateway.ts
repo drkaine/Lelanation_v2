@@ -22,7 +22,13 @@ import { detectThroughputAnomaly, MetricsCollector } from './MetricsCollector.js
 import { observabilityBus, ObservabilityBus } from './ObservabilityBus.js';
 import { RateLimitTracker } from './RateLimitTracker.js';
 import { RequestQueue } from './RequestQueue.js';
-import { classifyRateLimitType, classifyRetryReason, getRetryBackoffMs, parseRetryAfterMs } from './RetryHandler.js';
+import {
+  classifyRateLimitType,
+  classifyRetryReason,
+  getRetryBackoffMs,
+  getServiceBackoffMs,
+  parseRetryAfterMs,
+} from './RetryHandler.js';
 
 function interpolatePath(template: string, pathParams: Record<string, string>): string {
   return template.replace(/\{(\w+)\}/g, (_, key: string) => encodeURIComponent(pathParams[key] ?? ''));
@@ -34,6 +40,8 @@ export class RiotGateway {
   private readonly queue = new RequestQueue();
   private readonly tracker = new RateLimitTracker();
   private readonly metrics = new MetricsCollector();
+  /** Consecutive service 429s per method, reset on the next success. */
+  private readonly serviceStreaks = new Map<string, number>();
   private readonly startedAt = Date.now();
   private pendingFlushTimer: NodeJS.Timeout | null = null;
   private pendingFlushAt = 0;
@@ -460,6 +468,7 @@ export class RiotGateway {
         return;
       }
 
+      this.serviceStreaks.delete(request.methodKey);
       this.metrics.record('success', response.latencyMs);
       recordGatewayRequest({
         latencyMs: response.latencyMs,
@@ -544,10 +553,16 @@ export class RiotGateway {
   }
 
   private async handle429(request: QueuedRequest, headers: Record<string, string>, url: string): Promise<void> {
-    const retryAfterMs = parseRetryAfterMs(headers);
+    let retryAfterMs = parseRetryAfterMs(headers);
     const limitType = classifyRateLimitType(headers);
-    // A service 429 is Riot-side overload: our quota is fine, so only this request waits.
-    if (limitType !== 'service') {
+    // A service 429 is Riot-side overload: our quota is fine, but hammering the method keeps it failing,
+    // so the whole method pauses with an exponential backoff.
+    if (limitType === 'service') {
+      const streak = (this.serviceStreaks.get(request.methodKey) ?? 0) + 1;
+      this.serviceStreaks.set(request.methodKey, streak);
+      retryAfterMs = getServiceBackoffMs(streak, retryAfterMs);
+      this.tracker.saturate(request.methodKey, Date.now() + retryAfterMs, false);
+    } else {
       const includeApp = limitType === 'application';
       recordSaturation({
         windowMs: includeApp ? 120_000 : 1_000,

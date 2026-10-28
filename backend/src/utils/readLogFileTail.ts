@@ -26,3 +26,13 @@ export async function readLogFileTail(filePath: string, maxBytes = 512 * 1024): 
     await fh.close()
   }
 }
+
+/** Tail across logrotate: when the current file is shorter than `maxBytes`, prepend the tail of `<file>.1`. */
+export async function readLogFileTailWithRotated(filePath: string, maxBytes = 512 * 1024): Promise<string> {
+  const current = await readLogFileTail(filePath, maxBytes)
+  const remaining = maxBytes - Buffer.byteLength(current, 'utf-8')
+  if (remaining <= 0) return current
+  const rotated = await readLogFileTail(`${filePath}.1`, remaining)
+  if (!rotated) return current
+  return rotated.endsWith('\n') || !current ? rotated + current : `${rotated}\n${current}`
+}

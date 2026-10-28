@@ -1,12 +1,9 @@
 import { resolveSiteUrl } from './siteUrl'
 
 function getRuntimeConfigSafe(): any {
-  try {
-    return useRuntimeConfig()
-  } catch {
-    // Can happen if called outside of a Nuxt app context (e.g. certain store calls).
-    return { public: {} }
-  }
+  // Outside a Nuxt app context (e.g. store calls after an await), useRuntimeConfig() reports
+  // NUXT_E1001 on stderr before throwing: probe with tryUseNuxtApp() instead.
+  return tryUseNuxtApp()?.$config ?? { public: {} }
 }
 
 export function apiUrl(path: string): string {
