@@ -20,6 +20,15 @@
           {{ t('footer.privacy') }}
         </NuxtLink>
         <span class="hidden md:inline">•</span>
+        <button
+          type="button"
+          class="transition-colors hover:text-accent"
+          :title="t('footer.manageCookies')"
+          @click="cookieConsent.reopen()"
+        >
+          {{ t('footer.manageCookies') }}
+        </button>
+        <span class="hidden md:inline">•</span>
         <NuxtLink
           :to="localePath('/information')"
           class="transition-colors hover:text-accent"
@@ -77,10 +86,12 @@
 <script setup lang="ts">
 import ContactForm from '~/components/Contact/ContactForm.vue'
 import { useAdminAuth } from '~/composables/useAdminAuth'
+import { useCookieConsentStore } from '~/stores/CookieConsentStore'
 
 const { t } = useI18n()
 const currentYear = new Date().getFullYear()
 const localePath = useLocalePath()
+const cookieConsent = useCookieConsentStore()
 const { isLoggedIn: adminMode } = useAdminAuth()
 
 const contactModalOpen = ref(false)

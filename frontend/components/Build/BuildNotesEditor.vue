@@ -252,6 +252,7 @@ import {
   BUILD_NOTES_SIMPLE_CARD_MAX_CHARS,
 } from '@lelanation/shared-types'
 import { useBuildStore } from '~/stores/BuildStore'
+import { youtubeEmbedUrl as toYoutubeEmbedUrl } from '~/utils/externalMedia'
 import NotesRichEditor from '~/components/Build/NotesRichEditor.vue'
 import {
   cloneNotesContent,
@@ -320,7 +321,7 @@ const normalizedYoutubeUrl = computed(() => normalizeYoutubeUrl(youtubeDraft.val
 
 const youtubeEmbedUrl = computed(() => {
   const id = extractYoutubeVideoId(youtubeDraft.value || localNotes.value.youtubeUrl)
-  return id ? `https://www.youtube.com/embed/${id}` : null
+  return toYoutubeEmbedUrl(id)
 })
 
 const canApplyCopy = computed(() => copyDestinations.value.length > 0)

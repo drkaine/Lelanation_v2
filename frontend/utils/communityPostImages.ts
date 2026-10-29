@@ -1,5 +1,6 @@
 import type { YouTubeVideo } from '~/types/youtube'
 import { apiUrl } from '~/utils/apiUrl'
+import { proxiedImageUrl } from '~/utils/externalMedia'
 
 export function normalizeCommunityPostImageUrl(url?: string): string {
   if (!url) return ''
@@ -8,7 +9,7 @@ export function normalizeCommunityPostImageUrl(url?: string): string {
     normalized = normalized.replace(/=s\d+-c-fcrop64=[^&?#]+(-rw-nd-v1)?/i, '=s0')
     normalized = normalized.replace(/=s\d+(-rw-nd-v1)?$/i, '=s0')
   }
-  return normalized
+  return proxiedImageUrl(normalized)
 }
 
 export function getCommunityPostImages(post: YouTubeVideo): string[] {

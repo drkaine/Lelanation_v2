@@ -11,6 +11,13 @@ import {
   type StoredChannelData,
   type YouTubeChannelsConfig,
 } from '../services/youtubeChannels.js'
+import {
+  fetchOEmbed,
+  fetchProxiedImage,
+  parseOEmbedTargetUrl,
+  parseProxiedImageUrl,
+  type OEmbedSummary,
+} from '../services/youtubeMediaProxy.js'
 
 const router = Router()
 const youtubeService = new YouTubeService()
@@ -190,6 +197,45 @@ router.get('/channels/:channelId/posts/:postId', async (req, res) => {
   }
 
   return res.json(post)
+})
+
+/**
+ * Vignette YouTube servie par notre serveur (aucune requête du visiteur vers Google).
+ * GET /api/youtube/image?url=https://i.ytimg.com/...
+ */
+router.get('/image', async (req, res) => {
+  const url = parseProxiedImageUrl(req.query.url)
+  if (!url) return res.status(400).json({ error: 'Invalid image url' })
+  const image = await fetchProxiedImage(url)
+  if (!image) return res.status(502).json({ error: 'Image unavailable' })
+  res.setHeader('Content-Type', image.contentType)
+  res.setHeader('Cache-Control', 'public, max-age=86400, immutable')
+  return res.send(image.body)
+})
+
+const OEMBED_CACHE_MAX = 500
+const oembedCache = new Map<string, OEmbedSummary>()
+
+/**
+ * Métadonnées d'un lien vidéo (titre, chaîne) récupérées côté serveur via noembed.
+ * GET /api/youtube/oembed?url=https://youtu.be/...
+ */
+router.get('/oembed', async (req, res) => {
+  const target = parseOEmbedTargetUrl(req.query.url)
+  if (!target) return res.status(400).json({ error: 'Invalid video url' })
+  const key = target.toString()
+  let summary = oembedCache.get(key) ?? null
+  if (!summary) {
+    summary = await fetchOEmbed(target)
+    if (!summary) return res.status(502).json({ error: 'oEmbed unavailable' })
+    if (oembedCache.size >= OEMBED_CACHE_MAX) {
+      const oldest = oembedCache.keys().next().value
+      if (oldest !== undefined) oembedCache.delete(oldest)
+    }
+    oembedCache.set(key, summary)
+  }
+  res.setHeader('Cache-Control', 'public, max-age=86400')
+  return res.json(summary)
 })
 
 /**

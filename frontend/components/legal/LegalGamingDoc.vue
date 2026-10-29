@@ -50,6 +50,13 @@
               <ul v-else-if="block.kind === 'list'" class="lg-list">
                 <li v-for="item in block.items" :key="item">{{ t(item) }}</li>
               </ul>
+              <p v-else-if="block.kind === 'contact'">
+                {{ t(block.text) }}
+                <a v-if="contactEmail" :href="`mailto:${contactEmail}`" class="lg-link">
+                  {{ contactEmail }}
+                </a>
+                <em v-else>{{ t('legalTest.noContact') }}</em>
+              </p>
               <a
                 v-else-if="block.kind === 'link'"
                 :href="t(block.href)"
@@ -70,12 +77,13 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { LEGAL_DOCS, legalToc, type LegalDoc } from '~/utils/legalPageGaming'
+import { LEGAL_DOCS, LEGAL_LAST_UPDATE, legalToc, type LegalDoc } from '~/utils/legalPageGaming'
 
 const props = defineProps<{ doc: LegalDoc }>()
 
 const { t, locale } = useI18n()
 const localePath = useLocalePath()
+const contactEmail = (useRuntimeConfig().public as { contactEmail?: string }).contactEmail ?? ''
 
 const sections = computed(() => LEGAL_DOCS[props.doc])
 const toc = computed(() => legalToc(props.doc))
@@ -86,11 +94,14 @@ const heroIcon = computed(() =>
 )
 
 const lastUpdateDate = computed(() =>
-  new Date().toLocaleDateString(locale.value === 'fr' ? 'fr-FR' : 'en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  })
+  new Date(`${LEGAL_LAST_UPDATE}T12:00:00Z`).toLocaleDateString(
+    locale.value === 'fr' ? 'fr-FR' : 'en-US',
+    {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }
+  )
 )
 </script>
 

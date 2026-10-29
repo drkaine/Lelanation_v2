@@ -30,6 +30,8 @@
 
 <script setup lang="ts">
 import { computed, reactive, watch } from 'vue'
+import { apiUrl } from '~/utils/apiUrl'
+import { oembedProxyPath, proxiedImageUrl } from '~/utils/externalMedia'
 import {
   extractVideoUrls,
   getVideoLinkFallbackTitle,
@@ -102,8 +104,7 @@ async function loadPreview(url: string): Promise<void> {
   previewMap[url] = buildFallbackCard(url, null)
 
   try {
-    const endpoint = `https://noembed.com/embed?url=${encodeURIComponent(url)}`
-    const response = await fetch(endpoint, { method: 'GET' })
+    const response = await fetch(apiUrl(oembedProxyPath(url)), { method: 'GET' })
     if (!response.ok) return
 
     const data = (await response.json()) as OEmbedResponse
@@ -116,7 +117,9 @@ async function loadPreview(url: string): Promise<void> {
         (data.provider_name || '').trim() ||
         previewMap[url].channelName,
       providerLabel: (data.provider_name || '').trim() || previewMap[url].providerLabel,
-      thumbnailUrl: data.thumbnail_url || previewMap[url].thumbnailUrl,
+      thumbnailUrl: data.thumbnail_url
+        ? proxiedImageUrl(data.thumbnail_url)
+        : previewMap[url].thumbnailUrl,
     }
   } catch {
     // Keep fallback card if oEmbed fails.

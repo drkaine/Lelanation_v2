@@ -124,6 +124,7 @@ import { ref, computed, watch } from 'vue'
 import type { BuildNotesContent, Champion } from '@lelanation/shared-types'
 import NotesContentRenderer from '~/components/Build/NotesContentRenderer.vue'
 import { extractYoutubeVideoId } from '~/utils/buildNotes'
+import { youtubeEmbedUrl as toYoutubeEmbedUrl } from '~/utils/externalMedia'
 
 const props = defineProps<{
   notes: BuildNotesContent
@@ -169,7 +170,7 @@ const visibleDetailedSections = computed(() => {
 
 const youtubeEmbedUrl = computed(() => {
   const id = extractYoutubeVideoId(props.notes.youtubeUrl)
-  return id ? `https://www.youtube.com/embed/${id}` : null
+  return toYoutubeEmbedUrl(id)
 })
 
 watch(

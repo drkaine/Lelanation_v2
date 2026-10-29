@@ -155,6 +155,8 @@ export default defineNuxtConfig({
       // Matomo: set NUXT_PUBLIC_MATOMO_HOST and NUXT_PUBLIC_MATOMO_SITE_ID to enable
       matomoHost: process.env.NUXT_PUBLIC_MATOMO_HOST || '',
       matomoSiteId: process.env.NUXT_PUBLIC_MATOMO_SITE_ID || '',
+      // Adresse affichée sur /legal et /privacy (EMAIL_CONTACT dans frontend/.env)
+      contactEmail: process.env.EMAIL_CONTACT || '',
       /** Fallback game version from backend/data/game/version.json (read at build time) */
       fallbackGameVersion: getFallbackGameVersionFromBackend(),
     },

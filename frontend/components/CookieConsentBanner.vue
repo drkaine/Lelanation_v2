@@ -62,16 +62,18 @@ const matomo = useMatomo()
 const shouldShow = computed(() => choice.value === 'unknown')
 
 function accept() {
+  const alreadyLoaded = consent.previousChoice === 'accepted'
   consent.accept()
-  if (matomo.enabled) {
+  if (matomo.enabled && !alreadyLoaded) {
     matomo.loadMatomo()
     matomo.trackPageView()
   }
 }
 
 function reject() {
-  if (matomo.enabled) matomo.sendAnonymousBeacon()
-  consent.reject()
+  const firstChoice = consent.previousChoice === 'unknown'
+  if (matomo.enabled && firstChoice) matomo.sendAnonymousBeacon()
+  if (consent.reject()) window.location.reload()
 }
 
 onMounted(() => consent.load())

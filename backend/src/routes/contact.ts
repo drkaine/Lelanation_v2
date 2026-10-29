@@ -7,7 +7,7 @@ import { createRateLimit } from '../utils/httpRateLimit.js'
 const contactRateLimit = createRateLimit({ windowMs: 60_000, max: 10, keyPrefix: 'contact' })
 
 const router = Router()
-const contactFilePath = join(process.cwd(), 'data', 'contact.json')
+export const contactFilePath = join(process.cwd(), 'data', 'contact.json')
 const discord = new DiscordService()
 
 const VALID_TYPES = ['suggestion', 'bug', 'reclamation', 'autre'] as const
@@ -23,7 +23,7 @@ interface ContactEntry {
 type ContactData = Record<ContactType, ContactEntry[]>
 
 let contactQueue: Promise<unknown> = Promise.resolve()
-function withContactLock<T>(task: () => Promise<T>): Promise<T> {
+export function withContactLock<T>(task: () => Promise<T>): Promise<T> {
   const run = contactQueue.then(task, task)
   contactQueue = run.catch(() => undefined)
   return run
@@ -90,7 +90,7 @@ router.post('/', contactRateLimit, async (req: Request, res: Response) => {
     return res.status(500).json({ error: 'Failed to save contact' })
   }
 
-  await discord.sendContactNotification(type, entry.name, entry.message, entry.contact)
+  await discord.sendContactNotification(type)
 
   return res.status(201).json({ ok: true })
 })

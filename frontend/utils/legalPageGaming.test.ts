@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { LEGAL_DOCS, legalSectionAnchor, legalToc, recentDownloadCount } from './legalPageGaming'
+import {
+  LEGAL_DOCS,
+  LEGAL_LAST_UPDATE,
+  legalSectionAnchor,
+  legalToc,
+  recentDownloadCount,
+} from './legalPageGaming'
 
 describe('legalPageGaming', () => {
   it('legal_section_anchor_is_prefixed_and_kebab', () => {
@@ -11,8 +17,8 @@ describe('legalPageGaming', () => {
     const toc = legalToc('privacy')
     expect(toc[0]).toEqual({
       index: '01',
-      anchor: 'sec-data-collected',
-      titleKey: 'privacy.dataCollected.title',
+      anchor: 'sec-controller',
+      titleKey: 'privacy.controller.title',
     })
     expect(toc.map(e => e.index)).toEqual(
       LEGAL_DOCS.privacy.map((_, i) => String(i + 1).padStart(2, '0'))
@@ -38,6 +44,32 @@ describe('legalPageGaming', () => {
         }
       }
     }
+  })
+
+  it('legal_docs_cover_mandatory_sections', () => {
+    const keys = (doc: 'privacy' | 'legal') => LEGAL_DOCS[doc].map(s => s.key)
+    expect(keys('legal')).toEqual(expect.arrayContaining(['editor', 'host', 'riotData', 'contact']))
+    expect(keys('privacy')).toEqual(
+      expect.arrayContaining([
+        'controller',
+        'riotData',
+        'analytics',
+        'retention',
+        'rights',
+        'contact',
+      ])
+    )
+  })
+
+  it('contact_sections_render_the_contact_email', () => {
+    for (const doc of ['privacy', 'legal'] as const) {
+      const contact = LEGAL_DOCS[doc].find(s => s.key === 'contact')!
+      expect(contact.blocks.some(b => b.kind === 'contact')).toBe(true)
+    }
+  })
+
+  it('last_update_is_a_fixed_iso_date', () => {
+    expect(LEGAL_LAST_UPDATE).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 
   it('recent_download_count_sums_last_n_days_including_today', () => {

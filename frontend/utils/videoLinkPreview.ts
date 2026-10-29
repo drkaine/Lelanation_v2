@@ -1,3 +1,5 @@
+import { proxiedImageUrl } from './externalMedia'
+
 const URL_REGEX = /(https?:\/\/[^\s<>"']+)/g
 
 const KNOWN_VIDEO_HOSTS = [
@@ -81,7 +83,7 @@ export function extractVideoUrls(text: string): string[] {
 export function getYouTubeThumbnailUrl(rawUrl: string): string | null {
   const videoId = extractYouTubeVideoId(rawUrl)
   if (!videoId) return null
-  return `https://i.ytimg.com/vi/${encodeURIComponent(videoId)}/hqdefault.jpg`
+  return proxiedImageUrl(`https://i.ytimg.com/vi/${encodeURIComponent(videoId)}/hqdefault.jpg`)
 }
 
 export function getVideoLinkFallbackTitle(rawUrl: string): string {

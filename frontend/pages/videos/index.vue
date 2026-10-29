@@ -186,10 +186,6 @@ const videosSiteUrl = useSiteUrl()
 useHead({
   title: () => t('videosPage.metaTitle'),
   meta: [{ name: 'description', content: () => t('videosPage.metaDescription') }],
-  link: [
-    { rel: 'preconnect', href: 'https://i.ytimg.com', crossorigin: '' },
-    { rel: 'preconnect', href: 'https://www.youtube.com', crossorigin: '' },
-  ],
 })
 useSeoMeta({
   ogTitle: () => t('videosPage.metaTitle'),

@@ -21,6 +21,16 @@ interface DiscordWebhookPayload {
   }>
 }
 
+export function buildContactAlertEmbed(type: string, timestamp: string) {
+  return {
+    title: `📬 Nouvelle demande de contact - ${type}`,
+    description: 'Message enregistré sur le serveur (data/contact.json).',
+    color: 0x5865f2,
+    timestamp,
+    footer: { text: 'Lelanation Contact' },
+  }
+}
+
 export class DiscordService {
   private readonly webhookUrl: string | null
   /** Webhook URL for contact form notifications (DISCORD_CONTACT_WEBHOOK_URL) */
@@ -250,39 +260,19 @@ export class DiscordService {
    * Send contact form notification (type, name, message, optional contact).
    * Uses DISCORD_CONTACT_WEBHOOK_URL (separate from cron/alert webhook).
    */
-  async sendContactNotification(
-    type: string,
-    name: string,
-    message: string,
-    contact?: string
-  ): Promise<Result<void, AppError>> {
+  /** Alerte sans donnée personnelle : le message reste sur notre serveur (RGPD, pas de transfert). */
+  async sendContactNotification(type: string): Promise<Result<void, AppError>> {
     if (!this.contactWebhookUrl) {
       return Result.ok(undefined)
     }
 
-    const fields: Array<{ name: string; value: string; inline?: boolean }> = [
-      { name: 'Type', value: type, inline: true },
-      { name: 'Nom', value: name.substring(0, 256), inline: true }
-    ]
-    if (contact) {
-      fields.push({ name: 'Mail / Discord', value: contact.substring(0, 256), inline: true })
-    }
-
     try {
       const embed: DiscordWebhookPayload['embeds'] = [
-        {
-          title: `📬 Demande de contact - ${type}`,
-          description: message.substring(0, 2000),
-          color: 0x5865f2,
-          timestamp: new Date().toISOString(),
-          fields,
-          footer: { text: 'Lelanation Contact' }
-        }
+        buildContactAlertEmbed(type, new Date().toISOString()),
       ]
 
       await postJson(
         this.contactWebhookUrl,
-        // User-submitted text: never let it ping @everyone / roles.
         { embeds: embed, allowed_mentions: { parse: [] } },
         { timeoutMs: 10_000 }
       )

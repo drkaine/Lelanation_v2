@@ -202,7 +202,7 @@
   },
   "cookies": {
     "title": "Gestion des cookies et du stockage",
-    "text": "Nous utilisons le stockage local pour vos builds et préférences. Nous utilisons également <strong>Matomo</strong> (mesure d'audience). Vous pouvez accepter ou refuser les cookies non essentiels.",
+    "text": "Le stockage local sert à vos builds et préférences. Avec votre accord, <strong>Matomo</strong> (auto-hébergé, IP anonymisées) mesure l'audience avec des cookies. Refuser n'empêche rien.",
     "accept": "Accepter",
     "reject": "Refuser",
     "learnMore": "En savoir plus"
@@ -2843,42 +2843,49 @@
     "metaTitle": "Mentions légales - Lelanation",
     "metaDescription": "Mentions légales de Lelanation - Informations sur l'utilisation des données de Riot Games et du contenu de Lelariva",
     "lastUpdate": "Dernière mise à jour :",
-    "siteInfo": {
-      "title": "Informations sur le site",
-      "intro": "Le site <strong>Lelanation</strong> est une plateforme communautaire dédiée aux builds League of Legends. Ce site est édité à titre personnel et n'est pas affilié, associé, autorisé, approuvé ou parrainé par Riot Games, Inc. ou ses filiales."
+    "editor": {
+      "title": "Éditeur du site",
+      "p1": "Le site <strong>Lelanation</strong> est une plateforme communautaire gratuite dédiée à League of Legends, éditée par un <strong>particulier, à titre non professionnel</strong>.",
+      "p2": "Conformément à l'article 6-III-2 de la loi n° 2004-575 du 21 juin 2004 pour la confiance dans l'économie numérique (LCEN), l'éditeur a choisi de rester anonyme. Ses coordonnées ont été communiquées à l'hébergeur, qui les tient à disposition de l'autorité judiciaire.",
+      "p3": "Lelanation n'est pas affilié, associé, autorisé, approuvé ou parrainé par Riot Games, Inc. ou ses filiales."
+    },
+    "host": {
+      "title": "Hébergeur",
+      "p1": "<strong>OVH SAS</strong> — 2 rue Kellermann, 59100 Roubaix, France — Tél. : +33 9 72 10 10 07 — www.ovhcloud.com",
+      "p2": "Le site, sa base de données et l'outil de mesure d'audience Matomo sont hébergés sur un serveur OVH situé en France."
     },
     "riotData": {
       "title": "Données de Riot Games",
       "disclaimer": "Lelanation n'est pas approuvé par Riot Games et ne reflète pas les vues ou opinions de Riot Games ou de quiconque officiellement impliqué dans la production ou la gestion des propriétés de Riot Games. Riot Games et toutes les propriétés associées sont des marques déposées ou des marques de Riot Games, Inc.",
-      "p1": "Ce site utilise des données de jeu (champions, items, runes, sorts d'invocateur, etc.) provenant de l'API Data Dragon de <strong>Riot Games, Inc.</strong>",
-      "p2": "<strong>Lelanation n'est pas un partenaire officiel de Riot Games</strong> et n'a aucun droit, licence ou autorisation officielle de la part de Riot Games pour l'utilisation de ces données. L'utilisation de ces données se fait dans le cadre de la politique d'utilisation des données de Riot Games pour les projets communautaires non commerciaux.",
+      "p1": "Ce site utilise des données de jeu (champions, objets, runes, sorts d'invocateur) issues de Data Dragon et des données de parties issues de l'<strong>API officielle de Riot Games, Inc.</strong>, sous une clé d'API délivrée par Riot Games.",
+      "p2": "<strong>Lelanation n'est pas un partenaire officiel de Riot Games.</strong> Ces données sont utilisées dans le cadre des conditions des développeurs et de la politique « Legal Jibber Jabber » de Riot Games pour les projets communautaires. Le site est et restera <strong>gratuit</strong>, sans fonctionnalité payante.",
       "p3": "League of Legends est une marque déposée de Riot Games, Inc. Tous les droits sont réservés à Riot Games, Inc.",
-      "p4": "Pour plus d'informations sur la politique d'utilisation des données de Riot Games, veuillez consulter :",
+      "p4": "Pour plus d'informations sur la politique de Riot Games concernant les projets communautaires :",
       "riotLegalUrl": "https://www.riotgames.com/fr/legal"
     },
     "lelariva": {
       "title": "Contenu de Lelariva",
-      "p1": "Ce site peut faire référence au créateur de contenu YouTube <strong>Lelariva</strong> et peut utiliser certaines de ses vidéos ou contenus dans le cadre de la fonctionnalité de découverte de builds.",
-      "p2": "<strong>Lelanation n'est pas un partenaire officiel de Lelariva</strong> et n'a aucun droit, licence ou autorisation officielle de la part de Lelariva pour l'utilisation de son contenu. L'utilisation de ce contenu se fait dans le cadre de l'utilisation équitable et de la promotion de contenu communautaire.",
-      "p3": "Tous les droits sur le contenu de Lelariva restent la propriété de Lelariva. Si vous êtes Lelariva et souhaitez que votre contenu soit retiré de ce site, veuillez nous contacter."
+      "p1": "Ce site met en avant le créateur de contenu YouTube <strong>Lelariva</strong> : vidéos, builds et liens vers ses pages (YouTube, Patreon, réseaux sociaux).",
+      "p2": "Ces liens renvoient vers les pages de Lelariva. <strong>Lelanation ne perçoit aucune rémunération</strong> sur les dons ou abonnements qui y sont faits.",
+      "p3": "Tous les droits sur le contenu de Lelariva restent sa propriété. Sur simple demande de Lelariva, tout contenu sera retiré."
     },
     "ip": {
       "title": "Propriété intellectuelle",
-      "p1": "Tous les contenus créés par les utilisateurs de Lelanation (builds, descriptions, etc.) restent la propriété de leurs auteurs respectifs. En publiant du contenu sur Lelanation, vous accordez au site le droit de l'afficher et de le partager dans le cadre de la plateforme.",
-      "p2": "Le design, la structure et le code source de Lelanation sont protégés par les lois sur la propriété intellectuelle."
+      "p1": "Les contenus créés par les utilisateurs de Lelanation (builds, descriptions, etc.) restent la propriété de leurs auteurs. En publiant du contenu sur Lelanation, vous accordez au site le droit de l'afficher et de le partager dans le cadre de la plateforme.",
+      "p2": "Le design, la structure et le code source de Lelanation sont protégés par le Code de la propriété intellectuelle."
     },
     "liability": {
       "title": "Responsabilité",
-      "p1": "Lelanation est un site communautaire. Les builds et contenus partagés par les utilisateurs sont fournis à titre informatif uniquement. Nous ne garantissons pas l'exactitude, la pertinence ou l'efficacité des builds partagés.",
-      "p2": "Lelanation ne peut être tenu responsable des dommages directs ou indirects résultant de l'utilisation ou de l'impossibilité d'utiliser le site ou son contenu."
-    },
-    "contact": {
-      "title": "Contact",
-      "text": "Pour toute question concernant ces mentions légales ou pour signaler un contenu, vous pouvez nous contacter via les réseaux sociaux ou le formulaire de contact."
+      "p1": "Lelanation est un site communautaire. Les builds et contenus partagés par les utilisateurs sont fournis à titre informatif. Nous ne garantissons pas l'exactitude, la pertinence ou l'efficacité des builds partagés.",
+      "p2": "Tout contenu illicite peut nous être signalé via l'adresse de contact ci-dessous ; il sera retiré promptement (article 6-I-2 de la LCEN)."
     },
     "analytics": {
       "title": "Mesure d'audience (Matomo)",
-      "p1": "Ce site utilise <strong>Matomo</strong>, un outil d'analyse d'audience open source, pour mesurer la fréquentation (pages vues, parcours). Le suivi n'est activé qu'avec votre consentement (bannière cookies). Les données sont utilisées uniquement pour améliorer le site et ne sont pas vendues à des tiers."
+      "p1": "Ce site utilise <strong>Matomo</strong>, auto-hébergé sur notre serveur OVH en France, avec adresses IP anonymisées. Les cookies de mesure ne sont déposés qu'avec votre consentement. Détails dans la politique de confidentialité."
+    },
+    "contact": {
+      "title": "Contact",
+      "text": "Pour toute question sur ces mentions légales ou pour signaler un contenu :"
     }
   },
   "privacy": {
@@ -2886,62 +2893,98 @@
     "metaTitle": "Politique de confidentialité - Lelanation",
     "metaDescription": "Politique de confidentialité de Lelanation - Informations sur les cookies, les données collectées et vos droits",
     "lastUpdate": "Dernière mise à jour :",
+    "controller": {
+      "title": "Responsable du traitement",
+      "p1": "Lelanation est édité par un particulier, à titre non professionnel et sans but lucratif. Il est le responsable des traitements décrits sur cette page. Le site ne propose ni compte, ni connexion, ni publicité.",
+      "contact": "Pour toute question sur vos données :"
+    },
     "dataCollected": {
-      "title": "Données collectées",
-      "p1": "Lelanation utilise le stockage local du navigateur (localStorage) pour sauvegarder vos builds et certaines préférences (ex: votes, consentement aux cookies, onglet actif). Aucun compte n'est requis et aucune donnée personnelle n'est collectée.",
-      "p2": "Toutes les données sont stockées localement sur votre appareil et ne sont jamais transmises à des serveurs externes, sauf lorsque vous choisissez de partager un build publiquement."
+      "title": "Données traitées",
+      "p1": "Lelanation ne demande <strong>aucune inscription</strong> et ne collecte pas de donnée d'identification de ses visiteurs. Les seules données traitées sont :",
+      "local": "Stockage local du navigateur : builds enregistrés, votes, préférences et choix cookies. Ces données restent sur votre appareil.",
+      "builds": "Builds publics : le contenu que vous choisissez de publier (nom du build, description, pseudo d'auteur facultatif).",
+      "contactForm": "Formulaire de contact : le nom ou pseudo, le message et le moyen de contact facultatif que vous saisissez, stockés sur notre serveur uniquement.",
+      "technical": "Données techniques : adresse IP traitée de façon éphémère pour la sécurité et la limitation du nombre de requêtes.",
+      "p2": "Base légale : votre demande (publication d'un build, message de contact), notre intérêt légitime à sécuriser le site et à produire des statistiques, et votre consentement pour la mesure d'audience avec cookies."
     },
     "cookies": {
-      "title": "Cookies et technologies similaires",
+      "title": "Cookies et traceurs",
       "essential": {
-        "title": "Cookies essentiels",
-        "p1": "Lelanation n'utilise pas de cookies HTTP traditionnels. À la place, nous utilisons le <strong>localStorage</strong> du navigateur pour stocker :",
+        "title": "Stockage strictement nécessaire",
+        "p1": "Lelanation utilise le <strong>localStorage</strong> du navigateur, sans cookie publicitaire, pour stocker :",
         "li1": "Vos builds sauvegardés",
         "li2": "Vos votes sur les builds",
-        "li3": "Votre consentement aux cookies",
+        "li3": "Votre choix concernant les cookies (redemandé tous les 6 mois)",
         "li4": "Vos préférences d'interface (onglet actif, etc.)",
-        "p2": "Ces données sont nécessaires au fonctionnement du site et ne nécessitent pas de consentement explicite selon le RGPD, car elles sont strictement nécessaires à la fourniture du service demandé."
+        "p2": "Ce stockage est strictement nécessaire au service demandé et n'exige pas de consentement (article 82 de la loi Informatique et Libertés)."
       },
       "nonEssential": {
-        "title": "Cookies non essentiels",
-        "p1": "Lelanation utilise <strong>Matomo</strong> pour la mesure d'audience (pages vues, navigation). Matomo est un outil d'analyse open source qui nous aide à comprendre l'utilisation du site (sans publicité ni revente de données).",
-        "p2": "Le suivi Matomo n'est activé qu'après votre consentement explicite via la bannière cookies. Vous pouvez refuser ; le site fonctionne alors sans analyse d'audience."
+        "title": "Mesure d'audience",
+        "p1": "Si vous acceptez, <strong>Matomo</strong> (auto-hébergé, voir ci-dessous) dépose des cookies de mesure d'audience. Si vous refusez, aucun cookie n'est déposé et le site fonctionne normalement."
       },
       "manage": {
-        "title": "Gestion de vos préférences",
-        "p1": "Vous pouvez à tout moment modifier ou supprimer les données stockées dans votre navigateur en :",
-        "li1": "Supprimant les données du site dans les paramètres de votre navigateur",
-        "li2": "Utilisant le mode navigation privée",
-        "li3": "Désactivant le JavaScript (cela empêchera le fonctionnement du site)"
+        "title": "Modifier votre choix",
+        "p1": "Vous pouvez changer d'avis à tout moment via le lien <strong>« Gérer les cookies »</strong> en bas de chaque page. Votre choix est conservé 6 mois, puis le bandeau vous est de nouveau proposé."
       }
-    },
-    "shareBuilds": {
-      "title": "Partage de builds",
-      "p1": "Lorsque vous choisissez de rendre un build public, celui-ci est stocké sur nos serveurs et peut être consulté par tous les utilisateurs du site. Les builds publics incluent uniquement les informations que vous avez choisies de partager (nom, description, auteur, configuration du build).",
-      "p2": "Vous pouvez à tout moment supprimer un build public depuis la page \"Mes Builds\" ou en le rendant privé."
-    },
-    "thirdParty": {
-      "title": "Données provenant de tiers",
-      "p1": "Lelanation récupère des données de jeu (champions, items, runes, etc.) depuis l'API Data Dragon de Riot Games. Ces données sont mises en cache localement pour améliorer les performances du site.",
-      "p2": "Aucune donnée personnelle n'est partagée avec Riot Games ou d'autres tiers dans le cadre de cette récupération de données."
-    },
-    "rights": {
-      "title": "Vos droits",
-      "intro": "Conformément au RGPD, vous disposez des droits suivants :",
-      "access": "Droit d'accès : Vous pouvez consulter toutes vos données stockées localement",
-      "rectification": "Droit de rectification : Vous pouvez modifier vos builds et préférences à tout moment",
-      "erasure": "Droit à l'effacement : Vous pouvez supprimer vos builds et données localement",
-      "portability": "Droit à la portabilité : Vos données sont déjà dans votre navigateur, vous pouvez les exporter",
-      "p2": "Pour exercer ces droits, vous pouvez simplement supprimer les données du site dans les paramètres de votre navigateur ou supprimer individuellement vos builds depuis l'interface."
-    },
-    "contact": {
-      "title": "Contact",
-      "text": "Pour toute question concernant cette politique de confidentialité, vous pouvez nous contacter via les réseaux sociaux ou le formulaire de contact."
     },
     "analytics": {
       "title": "Mesure d'audience (Matomo)",
-      "p1": "Lelanation utilise <strong>Matomo</strong> pour analyser l'usage du site (pages vues, durée, navigation). Matomo est hébergé selon notre configuration ; les données ne sont pas transmises à des régies publicitaires.",
-      "p2": "Le suivi n'est activé qu'après votre consentement (bannière cookies). Vous pouvez à tout moment retirer votre consentement en supprimant les données du site dans les paramètres de votre navigateur."
+      "p1": "Lelanation utilise <strong>Matomo</strong>, outil open source <strong>hébergé sur notre propre serveur OVH en France</strong>. Aucune donnée n'est envoyée à un tiers.",
+      "li1": "Adresses IP anonymisées : aucune identification possible.",
+      "li2": "Aucun recoupement avec d'autres sites, aucune publicité, aucune revente.",
+      "li3": "Statistiques utilisées uniquement pour améliorer le site (pages vues, navigation).",
+      "li4": "En cas de refus : un seul comptage anonyme de la visite, sans cookie ni script.",
+      "p2": "Les cookies Matomo expirent au plus tard après 13 mois ; les statistiques brutes sont conservées 25 mois au plus."
+    },
+    "riotData": {
+      "title": "Données de parties Riot Games",
+      "p1": "Les statistiques (taux de victoire, builds, matchups…) sont calculées à partir des <strong>données de parties publiques</strong> fournies par l'API officielle de Riot Games.",
+      "p2": "Ces données contiennent des identifiants de joueurs (PUUID, Riot ID). Ils sont <strong>nécessaires à la collecte</strong> : l'API Riot donne accès aux parties joueur par joueur, et ces identifiants servent à retrouver les nouvelles parties et à éviter les doublons. Ils ne sont <strong>jamais affichés</strong> : le site ne publie que des statistiques agrégées et anonymes, sans profil ni recherche de joueur.",
+      "p3": "Base légale : intérêt légitime à produire des statistiques de jeu, dans le respect des conditions des développeurs Riot Games. Les identifiants sont conservés tant que le joueur fait partie de la collecte ; les données brutes de parties sont purgées régulièrement ; seuls les agrégats anonymes sont conservés durablement.",
+      "p4": "Si vous êtes joueur et souhaitez que vos parties soient exclues de nos calculs, écrivez-nous en indiquant votre Riot ID : vos identifiants seront supprimés et exclus des prochaines collectes."
+    },
+    "shareBuilds": {
+      "title": "Partage de builds",
+      "p1": "Lorsque vous rendez un build public, il est stocké sur notre serveur et visible par tous. Il contient uniquement les informations que vous avez choisi de partager (nom, description, auteur, configuration du build).",
+      "p2": "Vous pouvez à tout moment supprimer un build public depuis la page « Mes Builds » ou le rendre privé."
+    },
+    "thirdParty": {
+      "title": "Contenus tiers",
+      "p1": "Les données de jeu (champions, objets, runes) proviennent de Riot Games et sont téléchargées <strong>par notre serveur</strong> : votre navigateur ne contacte pas Riot Games.",
+      "p2": "Les vignettes et informations des vidéos YouTube sont également <strong>servies par notre serveur</strong> : votre navigateur ne contacte pas Google tant que vous ne lancez pas une vidéo.",
+      "p3": "Le lecteur vidéo (youtube-nocookie.com, mode confidentialité renforcée) ne se charge que lorsque vous cliquez pour regarder une vidéo. Les liens vers les réseaux sociaux sont de simples liens : rien n'est chargé avant que vous cliquiez."
+    },
+    "recipients": {
+      "title": "Hébergement et destinataires",
+      "p1": "Aucune donnée n'est vendue ni cédée, et aucune donnée personnelle ne quitte l'Union européenne. Prestataires techniques :",
+      "ovh": "OVH SAS (France) : hébergement du site, de la base de données et de Matomo.",
+      "discord": "Discord : reçoit seulement une alerte « nouvelle demande de contact », sans nom, message ni coordonnées. Votre message reste sur notre serveur en France.",
+      "p2": "Les messages de contact sont supprimés automatiquement 12 mois après leur réception."
+    },
+    "retention": {
+      "title": "Durées de conservation",
+      "local": "Stockage local : jusqu'à ce que vous l'effaciez ; choix cookies : 6 mois.",
+      "builds": "Builds publics : jusqu'à leur suppression par vous.",
+      "contact": "Messages de contact : supprimés automatiquement après 12 mois.",
+      "logs": "Journaux techniques du serveur : 14 jours en rotation, suppression automatique au-delà de 12 mois en tout état de cause.",
+      "analytics": "Matomo : cookies 13 mois, statistiques 25 mois au plus.",
+      "riot": "Identifiants de joueurs Riot : tant que le joueur fait partie de la collecte (ou jusqu'à sa demande d'exclusion) ; données brutes de parties : purgées régulièrement ; statistiques agrégées anonymes : sans limite."
+    },
+    "rights": {
+      "title": "Vos droits",
+      "intro": "Conformément au RGPD et à la loi Informatique et Libertés, vous disposez des droits suivants :",
+      "access": "Droit d'accès : savoir quelles données vous concernant sont traitées",
+      "rectification": "Droit de rectification : corriger vos données",
+      "erasure": "Droit à l'effacement : faire supprimer vos données",
+      "opposition": "Droit d'opposition : notamment à l'utilisation de vos parties dans nos statistiques",
+      "limitation": "Droit à la limitation du traitement",
+      "portability": "Droit à la portabilité : vos builds sont déjà dans votre navigateur et exportables",
+      "p2": "Pour les données stockées dans votre navigateur, vous pouvez les supprimer vous-même dans les paramètres du navigateur. Pour toute autre demande, écrivez-nous : nous répondons sous un mois.",
+      "cnil": "Si vous estimez que vos droits ne sont pas respectés, vous pouvez adresser une réclamation à la <strong>CNIL</strong> (www.cnil.fr)."
+    },
+    "contact": {
+      "title": "Contact",
+      "text": "Pour toute question sur cette politique ou pour exercer vos droits :"
     }
   },
   "footer": {
@@ -2950,7 +2993,8 @@
     "information": "Informations",
     "app": "Lelanation App",
     "contact": "Contact",
-    "presentationMode": "Mode présentation"
+    "presentationMode": "Mode présentation",
+    "manageCookies": "Gérer les cookies"
   },
   "lelanationApp": {
     "metaTitle": "Lelanation App - Application compagnon Windows",
@@ -3590,7 +3634,8 @@
     "eyebrow": "Lelanation · transparence",
     "toc": "Sommaire",
     "privacySubtitle": "Ce que le site et l'app collectent, pourquoi, et comment garder la main sur vos données.",
-    "legalSubtitle": "Qui édite Lelanation, ce que nous devons à Riot Games et les règles d'utilisation du site."
+    "legalSubtitle": "Qui édite Lelanation, ce que nous devons à Riot Games et les règles d'utilisation du site.",
+    "noContact": "adresse de contact à venir"
   },
   "downloadTest": {
     "eyebrow": "Windows 10 / 11 · gratuit",
