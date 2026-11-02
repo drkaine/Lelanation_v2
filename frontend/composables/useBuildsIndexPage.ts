@@ -15,22 +15,7 @@ import { useAdminAuth } from '~/composables/useAdminAuth'
 import { useClientHydrated } from '~/composables/useClientHydrated'
 import { useStreamerMode } from '~/composables/useStreamerMode'
 import { usePageOgImage } from '~/composables/usePageOgImage'
-
-export type BuildsIndexTab = 'discover' | 'my-builds' | 'favoris' | 'lelariva'
-
-const TAB_PATH_SEGMENTS: Record<BuildsIndexTab, string> = {
-  discover: '/builds/discover',
-  'my-builds': '/builds/my-builds',
-  favoris: '/builds/favoris',
-  lelariva: '/statistics/lelariva',
-}
-
-function tabFromPath(path: string): BuildsIndexTab | undefined {
-  if (path.endsWith('/builds/discover')) return 'discover'
-  if (path.endsWith('/builds/my-builds')) return 'my-builds'
-  if (path.endsWith('/builds/favoris')) return 'favoris'
-  return undefined
-}
+import { buildsTabFromPath, buildsTabPath, type BuildsIndexTab } from '~/utils/buildsIndexTabs'
 
 export function useBuildsIndexPage(fixedTab?: MaybeRefOrGetter<BuildsIndexTab | undefined>) {
   const buildStore = useBuildStore()
@@ -48,7 +33,7 @@ export function useBuildsIndexPage(fixedTab?: MaybeRefOrGetter<BuildsIndexTab | 
 
   const routeTab = computed(() => {
     if (fixedTabValue.value) return fixedTabValue.value
-    const fromPath = tabFromPath(route.path)
+    const fromPath = buildsTabFromPath(route.path)
     if (fromPath) return fromPath
     if (typeof route.query.tab === 'string') return route.query.tab
     return 'discover'
@@ -58,6 +43,7 @@ export function useBuildsIndexPage(fixedTab?: MaybeRefOrGetter<BuildsIndexTab | 
     title: () => {
       if (routeTab.value === 'my-builds') return t('buildsPage.myBuilds')
       if (routeTab.value === 'favoris') return t('buildsPage.myFavorites')
+      if (routeTab.value === 'team') return t('buildsPage.teamBuilds')
       return t('buildsPage.metaTitle')
     },
     description: () => t('buildsPage.metaDescription'),
@@ -97,8 +83,7 @@ export function useBuildsIndexPage(fixedTab?: MaybeRefOrGetter<BuildsIndexTab | 
     isStreamerMode,
     routeTab,
     updateRouteTab: async tab => {
-      const segment = TAB_PATH_SEGMENTS[tab as BuildsIndexTab] ?? TAB_PATH_SEGMENTS.discover
-      await navigateTo(localePath(segment), { replace: true })
+      await navigateTo(localePath(buildsTabPath(tab)), { replace: true })
     },
     t,
     buildStore: libraryBuildStore,

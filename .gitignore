@@ -79,3 +79,18 @@ CLAUDE.md.harness
 
 # Actions à faire par le développeur (clés, domaines, commandes) : locales
 /actions.md
+
+# harness-forge secretguard — secrets jamais versionnés
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+credentials.json
+service-account*.json

@@ -48,6 +48,8 @@ export function serializeBuild(build: Build): StoredBuild {
     description: build.description,
     notes: build.notes,
     visibility: build.visibility,
+    teamShared: build.teamShared,
+    lelarivaBadge: build.lelarivaBadge,
     matchupGuideEmbed: build.matchupGuideEmbed,
     champion: build.champion
       ? { id: build.champion.id, name: build.champion.name, image: build.champion.image }
@@ -207,6 +209,8 @@ export function hydrateBuild(stored: StoredBuild, catalogs: HydrationCatalogs): 
     notes: stored.notes,
     visibility: stored.visibility, champion, items, runes: stored.runes, shards: stored.shards,
     matchupGuideEmbed: stored.matchupGuideEmbed,
+    teamShared: stored.teamShared,
+    lelarivaBadge: stored.lelarivaBadge,
     summonerSpells, skillOrder: normalizeSkillOrder(stored.skillOrder),
     roles: stored.roles, tags: stored.tags ?? [], upvote: stored.upvote, downvote: stored.downvote,
     gameVersion: stored.gameVersion, createdAt: stored.createdAt, updatedAt: stored.updatedAt,

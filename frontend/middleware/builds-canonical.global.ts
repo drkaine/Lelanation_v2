@@ -2,6 +2,7 @@ const TAB_PATHS: Record<string, string> = {
   discover: '/builds/discover',
   'my-builds': '/builds/my-builds',
   favoris: '/builds/favoris',
+  team: '/builds/team',
   lelariva: '/statistics/lelariva',
 }
 

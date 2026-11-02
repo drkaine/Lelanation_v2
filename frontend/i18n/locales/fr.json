@@ -28,7 +28,8 @@
     "disableTooltips": "Désactiver les tooltips",
     "mobileMenu": "Menu",
     "settings": "Paramètres",
-    "companionApp": "Obtenir l'app in-game"
+    "companionApp": "Obtenir l'app in-game",
+    "team": "Équipe"
   },
   "mobileTabBar": {
     "ariaLabel": "Navigation principale",
@@ -2206,6 +2207,8 @@
     "all": "Tous",
     "private": "Privé",
     "public": "Public",
+    "shared": "Équipe",
+    "sharedHint": "Partagé à l'équipe : reste dans l'espace équipe jusqu'à suppression. Seuls admin et Lelariva peuvent le rendre public.",
     "buildsInComparison": "build en comparaison",
     "buildsInComparison_other": "builds en comparaison",
     "compare": "Comparer",
@@ -2242,7 +2245,15 @@
         "item": "objets",
         "rune": "runes"
       }
-    }
+    },
+    "teamBuilds": "Builds team",
+    "teamLoginRequired": "Connecte-toi avec ton compte équipe pour voir les builds partagés.",
+    "teamLogin": "Se connecter",
+    "teamEmpty": "Aucun build partagé pour l'instant.",
+    "teamLoadError": "Impossible de charger les builds de l'équipe.",
+    "teamActionError": "L'action a échoué. Réessaie.",
+    "teamDeleteConfirm": "Supprimer ce build de l'espace équipe (et de Découvrir s'il est public) ?",
+    "lelarivaBadgeTitle": "Build validé par Lelariva"
   },
   "championBuildsPage": {
     "metaTitle": "Build {champion} LoL — runes, objets et sorts",
@@ -2537,6 +2548,7 @@
     "tagExotique": "Exotique",
     "tagTroll": "Troll",
     "tagNotes": "Notes",
+    "tagLelariva": "Validés par Lelariva",
     "filterNotesTitle": "Afficher uniquement les builds avec des notes",
     "viewBuildNotes": "Voir les notes du build",
     "role": "Rôle :",
@@ -3660,6 +3672,97 @@
       "surveillance": "Ce que le site surveille en continu.",
       "shortcuts": "Raccourcis clavier pour aller plus vite.",
       "data": "D'où viennent les données."
+    }
+  },
+  "errorPage": {
+    "eyebrow": "Erreur {code}",
+    "eyebrowNoCode": "Erreur",
+    "notFound": {
+      "title": "Cette page s'est perdue dans le brouillard de guerre",
+      "message": "Le lien est peut-être cassé ou la page a été déplacée. Aucune ward ne la révèle ici."
+    },
+    "forbidden": {
+      "title": "Zone réservée",
+      "message": "Cette page demande une autorisation. Connecte-toi avec un compte qui y a accès."
+    },
+    "server": {
+      "title": "Le Nexus a encaissé un coup",
+      "message": "Une erreur inattendue s'est produite de notre côté. Réessaie dans un instant."
+    },
+    "unavailable": {
+      "title": "Serveur en recall",
+      "message": "Le service est momentanément indisponible. Il revient sur la carte très vite."
+    },
+    "generic": {
+      "title": "Quelque chose s'est mal passé",
+      "message": "Une erreur est survenue. Réessaie ou retourne à l'accueil."
+    },
+    "home": "Retour à l'accueil",
+    "back": "Page précédente",
+    "retry": "Réessayer",
+    "requested": "Adresse demandée",
+    "suggestions": "Tu cherchais peut-être",
+    "details": "Détails techniques"
+  },
+  "auth": {
+    "haveCode": "Un code d'invitation ?",
+    "registerLink": "Créer un compte",
+    "loginLink": "Déjà un compte ? Se connecter",
+    "register": {
+      "title": "Créer un compte",
+      "intro": "L'inscription se fait sur invitation : saisis le code reçu.",
+      "code": "Code d'invitation",
+      "username": "Pseudo",
+      "password": "Mot de passe",
+      "passwordHint": "8 caractères minimum. Pseudo : 3 à 24 lettres, chiffres, - ou _.",
+      "submit": "Créer mon compte"
+    },
+    "errors": {
+      "invalidCode": "Code invalide, expiré ou déjà utilisé.",
+      "usernameTaken": "Ce pseudo est déjà pris.",
+      "invalidUsername": "Pseudo invalide : 3 à 24 lettres, chiffres, - ou _.",
+      "weakPassword": "Mot de passe trop court (8 caractères minimum).",
+      "invalidCredentials": "Identifiants incorrects.",
+      "generic": "Une erreur est survenue, réessaie."
+    }
+  },
+  "team": {
+    "title": "Gestion de l'équipe",
+    "signedInAs": "Connecté : {name} ({role})",
+    "logout": "Se déconnecter",
+    "role": "Rôle",
+    "roles": {
+      "admin": "Admin",
+      "lelariva": "Lelariva",
+      "lelateam": "Lelateam"
+    },
+    "invite": {
+      "title": "Inviter",
+      "help": "Crée un code valable 7 jours et envoie le lien d'inscription.",
+      "create": "Créer un code",
+      "none": "Aucune invitation en attente.",
+      "expires": "expire le {date}",
+      "copy": "Copier le lien",
+      "copied": "Lien copié",
+      "revoke": "Révoquer",
+      "created": "Invitation créée.",
+      "revoked": "Invitation révoquée."
+    },
+    "users": {
+      "title": "Comptes",
+      "none": "Aucun compte à gérer.",
+      "username": "Pseudo",
+      "since": "Inscrit le",
+      "you": "toi",
+      "delete": "Supprimer",
+      "confirmDelete": "Supprimer le compte {name} ? Ses sessions seront fermées.",
+      "roleChanged": "Rôle modifié.",
+      "deleted": "Compte supprimé."
+    },
+    "errors": {
+      "forbidden": "Tu n'as pas les droits pour cette action.",
+      "self": "Impossible sur ton propre compte.",
+      "generic": "Une erreur est survenue, réessaie."
     }
   }
 }

@@ -77,6 +77,21 @@ describe('hydrateBuild', () => {
   })
 })
 
+describe('teamShared', () => {
+  it('survives serialize then hydrate', () => {
+    const stored = serializeBuild({ ...fullBuild, teamShared: true })
+    expect(stored.teamShared).toBe(true)
+    const hydrated = hydrateBuild(stored, { champions: [fakeChampion], items: [fakeItem], getSpellById: () => undefined })
+    expect(hydrated.teamShared).toBe(true)
+  })
+
+  it('keeps the lelariva badge of a published team build', () => {
+    const stored = serializeBuild({ ...fullBuild, lelarivaBadge: true })
+    const hydrated = hydrateBuild(stored, { champions: [fakeChampion], items: [fakeItem], getSpellById: () => undefined })
+    expect(hydrated.lelarivaBadge).toBe(true)
+  })
+})
+
 describe('isStoredBuild', () => {
   it('detects stored builds (no gold property)', () => {
     const stored = serializeBuild(fullBuild)

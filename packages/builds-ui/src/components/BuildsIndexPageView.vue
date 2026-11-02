@@ -9,7 +9,7 @@
               class="streamer-tab-button"
               @click="emit('create-build')"
             >
-              {{ t('buildsPage.createBuild') }}
+              {{ t("buildsPage.createBuild") }}
             </button>
             <button
               type="button"
@@ -17,7 +17,7 @@
               :class="{ 'is-active': activeTab === 'discover' }"
               @click="emit('update:activeTab', 'discover')"
             >
-              {{ t('buildsPage.discover') }}
+              {{ t("buildsPage.discover") }}
             </button>
             <button
               v-if="userBuilds.length > 0"
@@ -26,7 +26,7 @@
               :class="{ 'is-active': activeTab === 'my-builds' }"
               @click="emit('update:activeTab', 'my-builds')"
             >
-              {{ t('buildsPage.myBuilds') }}
+              {{ t("buildsPage.myBuilds") }}
             </button>
             <button
               v-if="favoriteBuilds.length > 0"
@@ -35,7 +35,16 @@
               :class="{ 'is-active': activeTab === 'favoris' }"
               @click="emit('update:activeTab', 'favoris')"
             >
-              {{ t('buildsPage.myFavorites') }}
+              {{ t("buildsPage.myFavorites") }}
+            </button>
+            <button
+              v-if="showTeamTab"
+              type="button"
+              class="streamer-tab-button"
+              :class="{ 'is-active': activeTab === 'team' }"
+              @click="emit('update:activeTab', 'team')"
+            >
+              {{ t("buildsPage.teamBuilds") }}
             </button>
           </div>
         </div>
@@ -53,14 +62,16 @@
           v-if="comparisonBuilds.length > 0"
           class="mb-6 rounded-lg border-2 border-accent bg-accent/20 p-4"
         >
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div
+            class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+          >
             <div>
               <p class="font-semibold text-text">
                 {{ comparisonBuilds.length }}
                 {{
                   comparisonBuilds.length === 1
-                    ? t('buildsPage.buildsInComparison')
-                    : t('buildsPage.buildsInComparison_other')
+                    ? t("buildsPage.buildsInComparison")
+                    : t("buildsPage.buildsInComparison_other")
                 }}
               </p>
             </div>
@@ -70,14 +81,14 @@
                 :to="localePath('/builds/compare')"
                 class="rounded-lg bg-accent px-4 py-2 text-background transition-colors hover:bg-accent-dark"
               >
-                {{ t('buildsPage.compare') }}
+                {{ t("buildsPage.compare") }}
               </component>
               <button
                 type="button"
                 class="rounded-lg border border-accent/70 bg-surface px-4 py-2 text-text transition-colors hover:bg-accent/10"
                 @click="emit('clear-comparison')"
               >
-                {{ t('buildsPage.clear') }}
+                {{ t("buildsPage.clear") }}
               </button>
             </div>
           </div>
@@ -86,12 +97,16 @@
         <component :is="buildGridComponent" :show-favorite-toggle="true" />
       </div>
 
+      <div v-if="activeTab === 'team'" class="tab-content">
+        <slot name="team" />
+      </div>
+
       <div v-if="activeTab === 'my-builds'" class="tab-content">
         <div class="mb-3 flex flex-wrap items-center gap-2">
           <component :is="buildSearchComponent" />
           <component :is="buildFiltersComponent" />
           <span class="text-sm text-text-secondary">
-            {{ t('buildsPage.visibility') }}
+            {{ t("buildsPage.visibility") }}
           </span>
           <select
             :value="myBuildsVisibilityFilter"
@@ -100,11 +115,16 @@
             @change="
               emit(
                 'update:myBuildsVisibilityFilter',
-                ($event.target as HTMLSelectElement).value as VisibilityFilterValue
+                ($event.target as HTMLSelectElement)
+                  .value as VisibilityFilterValue,
               )
             "
           >
-            <option v-for="opt in visibilityFilterOptions" :key="opt.value" :value="opt.value">
+            <option
+              v-for="opt in visibilityFilterOptions"
+              :key="opt.value"
+              :value="opt.value"
+            >
               {{ opt.label }}
             </option>
           </select>
@@ -150,8 +170,12 @@
 
       <div v-if="activeTab === 'lelariva'" class="tab-content">
         <div class="py-12 text-center">
-          <p class="mb-4 text-lg text-text-secondary">{{ t('buildsPage.lelarivaBuilds') }}</p>
-          <p class="text-text-secondary">{{ t('buildsPage.lelarivaComingSoon') }}</p>
+          <p class="mb-4 text-lg text-text-secondary">
+            {{ t("buildsPage.lelarivaBuilds") }}
+          </p>
+          <p class="text-text-secondary">
+            {{ t("buildsPage.lelarivaComingSoon") }}
+          </p>
         </div>
       </div>
     </div>
@@ -166,9 +190,11 @@
         style="background-color: var(--color-surface); opacity: 1"
         @click.stop
       >
-        <h3 class="mb-4 text-lg font-bold text-text">{{ t('buildsPage.deleteBuildTitle') }}</h3>
+        <h3 class="mb-4 text-lg font-bold text-text">
+          {{ t("buildsPage.deleteBuildTitle") }}
+        </h3>
         <p class="mb-6 text-text">
-          {{ t('buildsPage.deleteBuildConfirm') }}
+          {{ t("buildsPage.deleteBuildConfirm") }}
         </p>
         <div class="flex gap-4">
           <button
@@ -176,14 +202,14 @@
             class="rounded-lg bg-error px-4 py-2 text-text transition-colors hover:bg-error/80"
             @click="emit('delete-build')"
           >
-            {{ t('buildsPage.delete') }}
+            {{ t("buildsPage.delete") }}
           </button>
           <button
             type="button"
             class="rounded-lg border border-accent/70 bg-surface px-4 py-2 text-text transition-colors hover:bg-accent/10"
             @click="emit('close-delete-modal')"
           >
-            {{ t('buildsPage.cancel') }}
+            {{ t("buildsPage.cancel") }}
           </button>
         </div>
       </div>
@@ -192,39 +218,40 @@
 </template>
 
 <script setup lang="ts">
-import type { Component } from 'vue'
-import type { Build } from '@lelanation/shared-types'
+import type { Component } from "vue";
+import type { Build } from "@lelanation/shared-types";
 
-type VisibilityFilterValue = 'all' | 'private' | 'public'
+type VisibilityFilterValue = "all" | "private" | "public";
 
 defineProps<{
-  t: (key: string) => string
-  localePath: (path: string) => string
-  linkComponent: Component | string
-  buildSearchComponent: Component | string
-  buildFiltersComponent: Component | string
-  buildGridComponent: Component | string
-  activeTab: string
-  favoriteBuilds: Build[]
-  userBuilds: Build[]
-  comparisonBuilds: unknown[]
-  myBuildsVisibilityFilter: VisibilityFilterValue
-  visibilityFilterOptions: { value: VisibilityFilterValue; label: string }[]
-  adminMode: boolean
-  buildsFilteredByVisibility: Build[]
-  buildToDelete: string | null
-}>()
+  t: (key: string) => string;
+  localePath: (path: string) => string;
+  linkComponent: Component | string;
+  buildSearchComponent: Component | string;
+  buildFiltersComponent: Component | string;
+  buildGridComponent: Component | string;
+  activeTab: string;
+  favoriteBuilds: Build[];
+  userBuilds: Build[];
+  comparisonBuilds: unknown[];
+  myBuildsVisibilityFilter: VisibilityFilterValue;
+  visibilityFilterOptions: { value: VisibilityFilterValue; label: string }[];
+  adminMode: boolean;
+  buildsFilteredByVisibility: Build[];
+  buildToDelete: string | null;
+  showTeamTab?: boolean;
+}>();
 
 const emit = defineEmits<{
-  'update:activeTab': [value: string]
-  'update:myBuildsVisibilityFilter': [value: VisibilityFilterValue]
-  'create-build': []
-  'clear-comparison': []
-  'confirm-delete': [buildId: string]
-  'toggle-visibility': [buildId: string]
-  'delete-build': []
-  'close-delete-modal': []
-}>()
+  "update:activeTab": [value: string];
+  "update:myBuildsVisibilityFilter": [value: VisibilityFilterValue];
+  "create-build": [];
+  "clear-comparison": [];
+  "confirm-delete": [buildId: string];
+  "toggle-visibility": [buildId: string];
+  "delete-build": [];
+  "close-delete-modal": [];
+}>();
 </script>
 
 <style scoped>

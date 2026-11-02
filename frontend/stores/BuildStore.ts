@@ -20,7 +20,15 @@ import { isStarterItem } from '@lelanation/builds-ui'
 import { calculateStats, type CalculateStatsOptions } from '@lelanation/builds-stats'
 import { getFallbackGameVersion } from '~/config/version'
 import { isStandaloneLibraryBuild } from '~/utils/buildLibrary'
+import {
+  sharedBuildHeaders,
+  visibilityAfterTeamShare,
+  visibilitySyncAction,
+} from '~/utils/sharedBuildSync'
+import type { UserRole } from '~/utils/userSession'
+import { readStoredSession, useUserSession } from '~/composables/useUserSession'
 import { serializeBuild, hydrateBuild, isStoredBuild } from '~/utils/buildSerialize'
+import { fetchTeamBuildForEdit } from '~/utils/teamBuildEdit'
 import {
   applyPatchStaleToBuild,
   extractPatchStaleMap,
@@ -1122,6 +1130,18 @@ export const useBuildStore = defineStore('build', {
       this.recalculateStats()
     },
 
+    /** Édition par id : un build d'équipe est rechargé depuis le serveur avant l'ouverture. */
+    async startEditingBuildById(buildId: string): Promise<boolean> {
+      const { session, authFetch } = useUserSession()
+      if (session.value ?? readStoredSession()) {
+        const shared = await fetchTeamBuildForEdit(buildId, url => authFetch(url))
+        if (shared) {
+          this.upsertImportedBuild(isStoredBuild(shared) ? hydrateBuild(shared) : (shared as Build))
+        }
+      }
+      return this.startEditingBuild(buildId)
+    },
+
     /**
      * Charge un build existant dans le builder pour le modifier (même id).
      * La sauvegarde remplace l’entrée dans `lelanation_builds` au lieu d’en ajouter une nouvelle.
@@ -1796,11 +1816,48 @@ export const useBuildStore = defineStore('build', {
       }
     },
 
+    /** Envoie le build courant dans l'espace équipe ; le serveur gère sa copie publique. */
+    async syncSharedBuild(): Promise<boolean> {
+      const build = this.currentBuild
+      const session = readStoredSession()
+      if (!build || !session) return false
+      const response = await fetch(apiUrl('/api/shared-builds'), {
+        method: 'POST',
+        headers: sharedBuildHeaders(session.token, build.editSecret),
+        body: JSON.stringify(
+          serializeBuildForApi({ ...build, teamShared: true, matchupGuideEmbed: undefined })
+        ),
+      })
+      if (!response.ok) return false
+      const result = (await response.json().catch(() => ({}))) as {
+        id?: string
+        editSecret?: string
+      }
+      if (result.id && !build.id) build.id = result.id
+      if (result.editSecret && result.editSecret !== build.editSecret) {
+        this.persistBuildEditSecret(build.id, result.editSecret)
+      }
+      return true
+    },
+
     setVisibility(visibility: 'public' | 'private') {
       if (this.currentBuild) {
         this.currentBuild.visibility = visibility
         this.currentBuild.updatedAt = new Date().toISOString()
       }
+    },
+
+    /** Coche « Équipe » ; un compte lelateam repasse le build en privé. */
+    setTeamShared(teamShared: boolean, role: UserRole | null) {
+      if (!this.currentBuild) return
+      this.currentBuild.teamShared = teamShared
+      if (teamShared) {
+        this.currentBuild.visibility = visibilityAfterTeamShare(
+          this.currentBuild.visibility ?? 'public',
+          role
+        )
+      }
+      this.currentBuild.updatedAt = new Date().toISOString()
     },
 
     mergeTheorycraftChampionDetail(detail: Record<string, unknown>) {
@@ -2074,10 +2131,16 @@ export const useBuildStore = defineStore('build', {
 
         // 2) Sync serveur selon visibilité
         if (publishToLibrary) {
-          serverAttempted = newVisibility === 'public' || previousVisibility === 'public'
+          const syncAction = visibilitySyncAction(
+            previousBuild ? { visibility: previousVisibility ?? 'public' } : null,
+            { visibility: newVisibility, teamShared: this.currentBuild!.teamShared }
+          )
+          serverAttempted = syncAction !== 'none'
           try {
-            if (newVisibility === 'private') {
-              if (previousVisibility === 'public' && this.currentBuild!.id) {
+            if (syncAction === 'saveShared') {
+              serverOk = await this.syncSharedBuild()
+            } else if (newVisibility === 'private') {
+              if (syncAction === 'deletePublic' && this.currentBuild!.id) {
                 const delResponse = await fetch(
                   apiUrl(`/api/builds/${encodeURIComponent(this.currentBuild!.id)}`),
                   {

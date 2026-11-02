@@ -196,7 +196,10 @@ export default defineNuxtConfig({
   routeRules: {
     // Pas de swr/cache Nitro sur les pages HTML : évite data-src _payload.json (500 client "26").
     '/': { prerender: false },
-    // Pas de SWR sur /builds/* : même raison (payload.json fantôme après navigation).
+    // Ancienne URL de connexion admin.
+    '/admin/connexion': { redirect: { to: '/admin/login', statusCode: 301 } },
+    '/en/admin/connexion': { redirect: { to: '/en/admin/login', statusCode: 301 } },
+    // Pas de SWR sur /builds/*: même raison (payload.json fantôme après navigation).
     '/builds/discover': { prerender: false },
     '/builds/my-builds': { prerender: false },
     '/builds/favoris': { prerender: false },

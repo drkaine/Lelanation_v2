@@ -339,6 +339,10 @@ export interface Build {
   description?: string
   notes?: BuildNotesContent
   visibility?: 'public' | 'private'
+  /** Copie dans l'espace équipe (/api/shared-builds) ; reste jusqu'à suppression. */
+  teamShared?: boolean
+  /** Copie publique d'un build d'équipe : badge « Lelariva » dans Découvrir. */
+  lelarivaBadge?: boolean
   /** Build embarqué dans un guide matchup — hors bibliothèque Découvrir / Mes builds. */
   matchupGuideEmbed?: boolean
   champion: Champion | null
@@ -388,6 +392,10 @@ export interface StoredBuild {
   description?: string
   notes?: BuildNotesContent
   visibility?: 'public' | 'private'
+  /** Copie dans l'espace équipe (/api/shared-builds) ; reste jusqu'à suppression. */
+  teamShared?: boolean
+  /** Copie publique d'un build d'équipe : badge « Lelariva » dans Découvrir. */
+  lelarivaBadge?: boolean
   /** Build embarqué dans un guide matchup — hors bibliothèque Découvrir / Mes builds. */
   matchupGuideEmbed?: boolean
   champion: ChampionRef | null

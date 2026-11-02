@@ -1,4 +1,5 @@
 import { spawn } from 'child_process'
+import { readBearerToken, resolveUser } from './userAuth.js'
 import { timingSafeEqual, createHash } from 'crypto'
 import { Router } from 'express'
 import { promises as fs } from 'fs'
@@ -108,8 +109,24 @@ const adminAuthFailures = createFailureLimiter({
   keyPrefix: 'admin-auth-fail',
 })
 
+// Session of a user with the admin role (Bearer token from /api/users/login).
+router.use(async (req, res, next) => {
+  if (!readBearerToken(req)) return next()
+  try {
+    const user = await resolveUser(req)
+    if (!user) return res.status(401).json({ error: 'Invalid session' })
+    if (user.role !== 'admin') return res.status(403).json({ error: 'Admin role required' })
+    res.locals.adminSession = true
+    return next()
+  } catch (err) {
+    console.error('[admin] session lookup failed', err)
+    return res.status(500).json({ error: 'Session lookup failed' })
+  }
+})
+
 // Basic auth for admin API (supports ADMIN_USER_NAME or ADMIN_USERNAME)
 router.use((req, res, next) => {
+  if (res.locals.adminSession === true) return next()
   const user = process.env.ADMIN_USER_NAME ?? process.env.ADMIN_USERNAME
   const pass = process.env.ADMIN_PASSWORD
   if (!user || !pass) {

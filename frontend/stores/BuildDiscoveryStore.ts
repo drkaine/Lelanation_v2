@@ -9,7 +9,7 @@ import { filterStandaloneLibraryBuilds } from '~/utils/buildLibrary'
 import { extractPatchStaleMap, mergePatchStaleIntoBuilds } from '~/utils/mergePatchStale'
 import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import { matchesChampionSearch, matchesLocalizedTextSearch } from '~/utils/multilingualEntitySearch'
-import { buildHasAnyNotes } from '~/utils/buildNotes'
+import { buildMatchesTag } from '~/utils/buildTagFilter'
 import { patchFromGameVersion } from '~/utils/patchVersion'
 import { fetchPublicBuildsProgressive } from '~/utils/fetchPublicBuilds'
 import type { JsonFetcher } from '~/utils/jsonFetcher'
@@ -17,7 +17,7 @@ import type { JsonFetcher } from '~/utils/jsonFetcher'
 export type SortOption = 'recent' | 'popular' | 'name'
 export type FilterRole = 'top' | 'jungle' | 'mid' | 'adc' | 'support' | null
 /** Filtre découverte : tag build (Pro / OTP / …) ou filtre « notes ». */
-export type FilterBuildTag = 'pro' | 'otp' | 'exotique' | 'troll' | 'notes' | null
+export type FilterBuildTag = 'pro' | 'otp' | 'exotique' | 'troll' | 'notes' | 'lelariva' | null
 export type PageSizeOption = 20 | 30 | 40 | 50 | 'all'
 
 const PAGINATION_STORAGE_KEY = 'lelanation_builds_pagination'
@@ -151,11 +151,7 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
       // Filter by build tag (Pro, OTP, …) or notes presence
       if (this.selectedTag) {
         const tag = this.selectedTag
-        results = results.filter(build => {
-          if (tag === 'notes') return buildHasAnyNotes(build)
-          if (build.tags?.includes(tag)) return true
-          return (build.subBuilds ?? []).some(sub => sub.tags?.includes(tag))
-        })
+        results = results.filter(build => buildMatchesTag(build, tag))
       }
 
       // Filter by version
@@ -263,7 +259,7 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
 
         const mergePublicCatalog = (catalog: (Build | StoredBuild)[]) => {
           const patchStaleById = extractPatchStaleMap(catalog)
-          const localBuildIds = new Set(localBuilds.map(b => b.id))
+          const localBuildIds = new Set(localBuilds.filter(b => !b.teamShared).map(b => b.id))
           const filtered = catalog.filter(
             b => !localBuildIds.has(b.id) && b.visibility !== 'private'
           )

@@ -33,7 +33,7 @@
 
       <div class="tag-filter-row flex shrink-0 items-center gap-1 whitespace-nowrap">
         <button
-          v-for="opt in tagFilterOptions"
+          v-for="opt in visibleTagFilterOptions"
           :key="opt.value"
           type="button"
           class="build-tag-chip"
@@ -125,6 +125,7 @@ import type {
 } from '~/stores/BuildDiscoveryStore'
 import { comparePatchMajorMinor, patchFromGameVersion } from '~/utils/patchVersion'
 import { riotLanguage } from '~/utils/riotLanguage'
+import { hasLelarivaBuild } from '~/utils/buildTagFilter'
 
 const { locale, t } = useI18n()
 const discoveryStore = useBuildDiscoveryStore()
@@ -190,6 +191,7 @@ const tagFilterOptions: Array<{
     | 'buildDiscovery.tagExotique'
     | 'buildDiscovery.tagTroll'
     | 'buildDiscovery.tagNotes'
+    | 'buildDiscovery.tagLelariva'
   chipStyle: Record<string, string>
 }> = [
   {
@@ -222,7 +224,19 @@ const tagFilterOptions: Array<{
     labelKey: 'buildDiscovery.tagNotes',
     chipStyle: { '--tag-g1': '#2f855a', '--tag-g2': '#1a4731' },
   },
+  {
+    value: 'lelariva',
+    label: 'Lelariva',
+    labelKey: 'buildDiscovery.tagLelariva',
+    chipStyle: { '--tag-g1': '#2fb9a5', '--tag-g2': '#0b2e2a' },
+  },
 ]
+
+const visibleTagFilterOptions = computed(() =>
+  tagFilterOptions.filter(
+    opt => opt.value !== 'lelariva' || hasLelarivaBuild(discoveryStore.builds)
+  )
+)
 
 const setRole = (role: FilterRole) => {
   selectedRole.value = role

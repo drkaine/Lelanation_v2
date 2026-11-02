@@ -29,9 +29,13 @@ export function getMatchupGuideEmbeddedBuildIds(): Set<string> {
   }
 }
 
-export function filterStandaloneLibraryBuilds<T extends Pick<Build, 'id' | 'matchupGuideEmbed'>>(
-  builds: T[]
-): T[] {
+/** Builds de la bibliothèque perso : ni embarqués dans un guide, ni partagés à l'équipe (onglet Builds team). */
+export function filterStandaloneLibraryBuilds<
+  T extends Pick<Build, 'id' | 'matchupGuideEmbed'> & { teamShared?: boolean },
+>(builds: T[]): T[] {
   const embeddedIds = getMatchupGuideEmbeddedBuildIds()
-  return builds.filter(build => build.matchupGuideEmbed !== true && !embeddedIds.has(build.id))
+  return builds.filter(
+    build =>
+      build.matchupGuideEmbed !== true && build.teamShared !== true && !embeddedIds.has(build.id)
+  )
 }

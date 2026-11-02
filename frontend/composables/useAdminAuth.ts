@@ -5,6 +5,9 @@
  */
 
 import { onMounted } from 'vue'
+import { adminAuthHeader } from '~/utils/teamAccess'
+import { USER_SESSION_KEY } from '~/utils/userSession'
+import { readStoredSession } from '~/composables/useUserSession'
 
 const ADMIN_AUTH_KEY = 'adminAuth'
 
@@ -29,6 +32,11 @@ export function toBasicToken(username: string, password: string): string {
   return btoa(binary)
 }
 
+/** Accès admin : jeton Basic historique ou session Bearer d'un compte admin. */
+export function hasAdminAccess(): boolean {
+  return adminAuthHeader(readStoredSession(), getStoredToken()) !== null
+}
+
 export function useAdminAuth() {
   const isLoggedIn = useState<boolean>('adminLoggedIn', () => false)
   const initialized = useState<boolean>('admin-auth-initialized', () => false)
@@ -38,16 +46,13 @@ export function useAdminAuth() {
     onMounted(() => {
       if (initialized.value) return
       initialized.value = true
-      isLoggedIn.value = !!getStoredToken()
+      isLoggedIn.value = hasAdminAccess()
     })
   }
 
   function getAuthHeader(): { Authorization: string } | null {
-    if (import.meta.client) {
-      const token = getStoredToken()
-      if (token) return { Authorization: `Basic ${token}` }
-    }
-    return null
+    if (!import.meta.client) return null
+    return adminAuthHeader(readStoredSession(), getStoredToken())
   }
 
   function fetchWithAuth(url: string, init?: RequestInit): Promise<Response> {
@@ -67,12 +72,14 @@ export function useAdminAuth() {
   function clearAuth() {
     localStorage.removeItem(ADMIN_AUTH_KEY)
     sessionStorage.removeItem(ADMIN_AUTH_KEY)
+    localStorage.removeItem(USER_SESSION_KEY)
+    useState('userSession').value = null
     isLoggedIn.value = false
   }
 
   function checkLoggedIn(): boolean {
     if (import.meta.client) {
-      isLoggedIn.value = !!getStoredToken()
+      isLoggedIn.value = hasAdminAccess()
     }
     return isLoggedIn.value
   }

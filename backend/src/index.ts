@@ -18,6 +18,8 @@ import appRoutes from './routes/app.js'
 import shareBuildsRoutes from './routes/shareBuilds.js'
 import matchupGuidesRoutes from './routes/matchupGuides.js'
 import lelarivaRoutes from './routes/lelariva.js'
+import usersRoutes from './routes/users.js'
+import sharedBuildsRoutes from './routes/sharedBuilds.js'
 // import patchNotesRoutes from './routes/patchNotes.js'
 import { setupDataDragonSync } from './cron/dataDragonSync.js'
 import { setupYouTubeSync } from './cron/youtubeSync.js'
@@ -65,7 +67,7 @@ app.use((_req, res, next) => {
 app.use(createCorsMiddleware())
 app.use(compression())
 // Routes that legitimately receive large payloads (shared build bundles, admin tools).
-app.use(['/api/share-builds', '/api/admin', '/api/matchup-guides'], express.json({ limit: '12mb' }))
+app.use(['/api/share-builds', '/api/shared-builds', '/api/admin', '/api/matchup-guides'], express.json({ limit: '12mb' }))
 // Everything else is small JSON: cap it to limit memory/CPU abuse.
 app.use(express.json({ limit: '1mb' }))
 app.use(
@@ -105,6 +107,8 @@ app.use('/api/app', appRoutes)
 app.use('/api/share-builds', shareBuildsRoutes)
 app.use('/api/matchup-guides', matchupGuidesRoutes)
 app.use('/api/lelariva', lelarivaRoutes)
+app.use('/api/users', usersRoutes)
+app.use('/api/shared-builds', sharedBuildsRoutes)
 // app.use('/api/patch-notes', patchNotesRoutes)
 
 // Unknown API routes / malformed bodies: JSON errors, never stack traces or HTML.

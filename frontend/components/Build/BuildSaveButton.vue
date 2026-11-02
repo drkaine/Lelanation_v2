@@ -23,6 +23,7 @@
 
 <script setup lang="ts">
 import { useBuildStore } from '~/stores/BuildStore'
+import { buildsTabPath, tabAfterBuildChange } from '~/utils/buildsIndexTabs'
 import { useLayoutScaled } from '~/composables/useLayoutScaled'
 
 const buildStore = useBuildStore()
@@ -64,12 +65,13 @@ const handleSave = async () => {
     return
   }
   emit('highlight-missing', false)
+  const tab = tabAfterBuildChange(buildStore.currentBuild)
   const success = await buildStore.saveBuild()
   if (!success.ok) return
   buildStore.createNewBuild()
-  const query: Record<string, string> = { tab: 'my-builds' }
+  const query: Record<string, string> = {}
   if (route.query.app === 'on') query.app = 'on'
-  router.push(localePath({ path: '/builds', query }))
+  router.push(localePath({ path: buildsTabPath(tab), query }))
 }
 </script>
 

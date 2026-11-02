@@ -330,6 +330,13 @@
       "when": 1751289600000,
       "tag": "0046_drop_removed_riot_challenge_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1751376000000,
+      "tag": "0047_users_roles_invitations",
+      "breakpoints": true
     }
   ]
 }

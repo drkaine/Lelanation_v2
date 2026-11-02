@@ -59,7 +59,7 @@
               {{ build.author || t('buildDiscovery.anonymous') }}
             </span>
             <button
-              v-if="props.showUserActions"
+              v-if="props.showVisibilityToggle ?? props.showUserActions"
               type="button"
               class="inline-flex shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none tracking-wide transition-colors"
               :class="
@@ -246,12 +246,12 @@
           <div v-if="props.showComparisonButtons" class="relative flex-1">
             <div class="flex items-stretch gap-1.5">
               <NuxtLink
-                v-if="props.showUserActions"
+                v-if="props.showEditAction ?? props.showUserActions"
                 :to="localePath(`/builds/create/rune?editId=${build.id}`)"
                 class="build-grid-action-button build-grid-action-button--icon build-grid-action-button--edit"
                 :title="t('buildDiscovery.editBuild')"
                 :aria-label="t('buildDiscovery.editBuild')"
-                @click.stop
+                @click.stop="$emit('edit-build', build.id)"
               >
                 ✎
               </NuxtLink>
@@ -300,7 +300,7 @@
                 </svg>
               </button>
               <button
-                v-if="props.showUserActions"
+                v-if="props.showDeleteAction ?? props.showUserActions"
                 type="button"
                 class="build-grid-action-button build-grid-action-button--icon build-grid-action-button--delete"
                 :title="t('buildDiscovery.deleteBuild')"
@@ -518,7 +518,7 @@ import {
   uiFavoriteActionClass,
   uiUpvoteActionClass,
 } from '~/utils/uiColorClasses'
-import { buildHasAnyNotes } from '~/utils/buildNotes'
+import { buildMatchesTag } from '~/utils/buildTagFilter'
 import { patchFromGameVersion } from '~/utils/patchVersion'
 
 function buildMatchesSearchQuery(build: Build, query: string): boolean {
@@ -615,6 +615,12 @@ interface Props {
   showComparisonButtons?: boolean
   customBuilds?: Build[]
   showUserActions?: boolean
+  /** Bouton public / privé seul (onglet Builds team) ; défaut = showUserActions. */
+  showVisibilityToggle?: boolean
+  /** Bouton supprimer seul (onglet Builds team) ; défaut = showUserActions. */
+  showDeleteAction?: boolean
+  /** Bouton modifier seul (onglet Builds team) ; défaut = showUserActions. */
+  showEditAction?: boolean
   showFavoriteToggle?: boolean
   /** Hide votes, share and companion actions under the card (e.g. homepage preview). */
   hideBottomActions?: boolean
@@ -628,6 +634,9 @@ const props = withDefaults(defineProps<Props>(), {
   showComparisonButtons: true,
   customBuilds: undefined,
   showUserActions: false,
+  showVisibilityToggle: undefined,
+  showDeleteAction: undefined,
+  showEditAction: undefined,
   showFavoriteToggle: false,
   hideBottomActions: false,
   showAllCustomBuilds: false,
@@ -637,6 +646,7 @@ const props = withDefaults(defineProps<Props>(), {
 defineEmits<{
   'delete-build': [buildId: string]
   'toggle-visibility': [buildId: string]
+  'edit-build': [buildId: string]
 }>()
 
 const discoveryStore = useBuildDiscoveryStore()
@@ -675,11 +685,7 @@ const filteredCustomBuilds = computed(() => {
   // Filter by build tag
   if (discoveryStore.selectedTag) {
     const tag = discoveryStore.selectedTag
-    results = results.filter(build => {
-      if (tag === 'notes') return buildHasAnyNotes(build)
-      if (build.tags?.includes(tag)) return true
-      return (build.subBuilds ?? []).some(sub => sub.tags?.includes(tag))
-    })
+    results = results.filter(build => buildMatchesTag(build, tag))
   }
 
   // Filter by version

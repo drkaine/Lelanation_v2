@@ -28,7 +28,8 @@
     "disableTooltips": "Disable tooltips",
     "mobileMenu": "Menu",
     "settings": "Settings",
-    "companionApp": "Get the in-game app"
+    "companionApp": "Get the in-game app",
+    "team": "Team"
   },
   "mobileTabBar": {
     "ariaLabel": "Main navigation",
@@ -2206,6 +2207,8 @@
     "all": "All",
     "private": "Private",
     "public": "Public",
+    "shared": "Team",
+    "sharedHint": "Shared with the team: stays in the team space until deleted. Only admin and Lelariva can make it public.",
     "buildsInComparison": "build in comparison",
     "buildsInComparison_other": "builds in comparison",
     "compare": "Compare",
@@ -2242,7 +2245,15 @@
         "item": "items",
         "rune": "runes"
       }
-    }
+    },
+    "teamBuilds": "Team builds",
+    "teamLoginRequired": "Log in with your team account to see shared builds.",
+    "teamLogin": "Log in",
+    "teamEmpty": "No shared build yet.",
+    "teamLoadError": "Could not load team builds.",
+    "teamActionError": "Action failed. Try again.",
+    "teamDeleteConfirm": "Delete this build from the team space (and from Discover if public)?",
+    "lelarivaBadgeTitle": "Build approved by Lelariva"
   },
   "championBuildsPage": {
     "metaTitle": "{champion} LoL build — runes, items and skill order",
@@ -2537,6 +2548,7 @@
     "tagExotique": "Exotic",
     "tagTroll": "Troll",
     "tagNotes": "Notes",
+    "tagLelariva": "Approved by Lelariva",
     "filterNotesTitle": "Show only builds with notes",
     "viewBuildNotes": "View build notes",
     "role": "Role:",
@@ -3660,6 +3672,97 @@
       "surveillance": "What the site keeps monitoring.",
       "shortcuts": "Keyboard shortcuts to go faster.",
       "data": "Where the data comes from."
+    }
+  },
+  "errorPage": {
+    "eyebrow": "Error {code}",
+    "eyebrowNoCode": "Error",
+    "notFound": {
+      "title": "This page got lost in the fog of war",
+      "message": "The link may be broken or the page has moved. No ward reveals it here."
+    },
+    "forbidden": {
+      "title": "Restricted area",
+      "message": "This page requires permission. Sign in with an account that has access."
+    },
+    "server": {
+      "title": "The Nexus took a hit",
+      "message": "Something unexpected went wrong on our side. Try again in a moment."
+    },
+    "unavailable": {
+      "title": "Server is recalling",
+      "message": "The service is temporarily unavailable. It will be back on the map shortly."
+    },
+    "generic": {
+      "title": "Something went wrong",
+      "message": "An error occurred. Try again or head back home."
+    },
+    "home": "Back to home",
+    "back": "Previous page",
+    "retry": "Try again",
+    "requested": "Requested address",
+    "suggestions": "Maybe you were looking for",
+    "details": "Technical details"
+  },
+  "auth": {
+    "haveCode": "Got an invitation code?",
+    "registerLink": "Create an account",
+    "loginLink": "Already have an account? Sign in",
+    "register": {
+      "title": "Create an account",
+      "intro": "Sign-up is invitation only: enter the code you received.",
+      "code": "Invitation code",
+      "username": "Username",
+      "password": "Password",
+      "passwordHint": "At least 8 characters. Username: 3 to 24 letters, digits, - or _.",
+      "submit": "Create my account"
+    },
+    "errors": {
+      "invalidCode": "Invalid, expired or already used code.",
+      "usernameTaken": "This username is already taken.",
+      "invalidUsername": "Invalid username: 3 to 24 letters, digits, - or _.",
+      "weakPassword": "Password too short (at least 8 characters).",
+      "invalidCredentials": "Wrong credentials.",
+      "generic": "Something went wrong, please retry."
+    }
+  },
+  "team": {
+    "title": "Team management",
+    "signedInAs": "Signed in: {name} ({role})",
+    "logout": "Sign out",
+    "role": "Role",
+    "roles": {
+      "admin": "Admin",
+      "lelariva": "Lelariva",
+      "lelateam": "Lelateam"
+    },
+    "invite": {
+      "title": "Invite",
+      "help": "Create a code valid for 7 days and send the sign-up link.",
+      "create": "Create a code",
+      "none": "No pending invitation.",
+      "expires": "expires {date}",
+      "copy": "Copy link",
+      "copied": "Link copied",
+      "revoke": "Revoke",
+      "created": "Invitation created.",
+      "revoked": "Invitation revoked."
+    },
+    "users": {
+      "title": "Accounts",
+      "none": "No account to manage.",
+      "username": "Username",
+      "since": "Joined",
+      "you": "you",
+      "delete": "Delete",
+      "confirmDelete": "Delete account {name}? Their sessions will be closed.",
+      "roleChanged": "Role changed.",
+      "deleted": "Account deleted."
+    },
+    "errors": {
+      "forbidden": "You don't have permission for this action.",
+      "self": "Not allowed on your own account.",
+      "generic": "Something went wrong, please retry."
     }
   }
 }

@@ -319,7 +319,7 @@ function restoreBuilderBuildBeforeLeave(): void {
 onMounted(async () => {
   const editId = typeof route.query.editId === 'string' ? route.query.editId : null
   if (editId && buildStore.editSourceBuildId !== editId) {
-    const loaded = buildStore.startEditingBuild(editId)
+    const loaded = await buildStore.startEditingBuildById(editId)
     if (!loaded) buildStore.ensureCurrentBuild()
   } else {
     buildStore.ensureCurrentBuild()

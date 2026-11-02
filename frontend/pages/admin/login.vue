@@ -38,12 +38,21 @@
           {{ loading ? '…' : t('admin.login.submit') }}
         </button>
       </form>
+      <p class="mt-4 text-center text-sm text-text/70">
+        {{ t('auth.haveCode') }}
+        <NuxtLink :to="localePath('/inscription')" class="text-accent hover:underline">
+          {{ t('auth.registerLink') }}
+        </NuxtLink>
+      </p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { useUserSession } from '~/composables/useUserSession'
 import { apiUrl } from '~/utils/apiUrl'
+import { isLoginEndpointMissing } from '~/utils/teamAccess'
+import { parseStoredSession, postLoginPath } from '~/utils/userSession'
 
 definePageMeta({
   layout: false,
@@ -51,37 +60,71 @@ definePageMeta({
 
 const { t } = useI18n()
 const localePath = useLocalePath()
+const route = useRoute()
 const { setAuth, checkLoggedIn } = useAdminAuth()
+const { setSession } = useUserSession()
 
 const username = ref('')
 const password = ref('')
 const error = ref<string | null>(null)
 const loading = ref(false)
 
+/** Retour vers la page demandée (chemin interne seulement). */
+function redirectTarget(fallback: string): string {
+  const r = route.query.redirect
+  return typeof r === 'string' && r.startsWith('/') && !r.startsWith('//')
+    ? r
+    : localePath(fallback)
+}
+
 onMounted(() => {
   if (checkLoggedIn()) {
-    navigateTo(localePath('/admin'))
+    navigateTo(redirectTarget('/admin'))
   }
 })
+
+/** Ancien backend sans /api/users : vérification Basic sur /api/admin/me. */
+async function basicLogin(): Promise<boolean> {
+  const token = toBasicToken(username.value, password.value)
+  const res = await fetch(apiUrl('/api/admin/me'), {
+    headers: { Authorization: `Basic ${token}` },
+  })
+  if (res.status === 429) {
+    error.value = t('admin.login.tooManyAttempts')
+    return false
+  }
+  if (!res.ok) {
+    error.value = t('admin.login.invalid')
+    return false
+  }
+  setAuth(username.value, password.value)
+  return true
+}
 
 async function submit() {
   error.value = null
   loading.value = true
   try {
-    const token = toBasicToken(username.value, password.value)
-    const res = await fetch(apiUrl('/api/admin/me'), {
-      headers: { Authorization: `Basic ${token}` },
+    const res = await fetch(apiUrl('/api/users/login'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: username.value, password: password.value }),
     })
+    if (isLoginEndpointMissing(res.status)) {
+      if (await basicLogin()) await navigateTo(localePath('/admin'))
+      return
+    }
     if (res.status === 429) {
       error.value = t('admin.login.tooManyAttempts')
       return
     }
-    if (!res.ok) {
+    const session = res.ok ? parseStoredSession(JSON.stringify(await res.json())) : null
+    if (!session) {
       error.value = t('admin.login.invalid')
       return
     }
-    setAuth(username.value, password.value)
-    await navigateTo(localePath('/admin'))
+    setSession(session)
+    await navigateTo(redirectTarget(postLoginPath(session.user.role)))
   } catch {
     error.value = t('admin.login.error')
   } finally {

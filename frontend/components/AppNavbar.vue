@@ -90,6 +90,17 @@
                 {{ t('buildsPage.myBuilds') }}
               </NuxtLink>
               <NuxtLink
+                v-if="sessionRole"
+                :to="teamBuildsLink"
+                :title="t('buildsPage.teamBuilds')"
+                class="builds-submenu-link"
+                :class="{ 'is-active': isTeamBuildsActive }"
+                :prefetch="false"
+                @click="closeBuildsMenu"
+              >
+                {{ t('buildsPage.teamBuilds') }}
+              </NuxtLink>
+              <NuxtLink
                 v-if="hasFavorites"
                 :to="favoriteBuildsLink"
                 :title="t('buildsPage.myFavorites')"
@@ -272,6 +283,14 @@
           >
             {{ t('nav.admin') }}
           </NuxtLink>
+          <NuxtLink
+            v-if="canSeeTeam"
+            :to="localePath('/equipe')"
+            :title="t('nav.team')"
+            class="version"
+          >
+            {{ t('nav.team') }}
+          </NuxtLink>
         </div>
       </div>
     </nav>
@@ -281,9 +300,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { useUserSession } from '~/composables/useUserSession'
 import LanguageSwitcher from '~/components/LanguageSwitcher.vue'
 import { getFallbackGameVersion } from '~/config/version'
 import { useAdminAuth } from '~/composables/useAdminAuth'
+import { canAccessTeamPage } from '~/utils/teamAccess'
 import { useClientHydrated } from '~/composables/useClientHydrated'
 import { useMobileViewport } from '~/composables/useMobileViewport'
 import { useFavoritesStore } from '~/stores/FavoritesStore'
@@ -302,6 +323,8 @@ const isStatisticsMenuOpen = ref(false)
 const { isMobileViewport } = useMobileViewport()
 const { t } = useI18n()
 const { isLoggedIn: isAdminLoggedIn, checkLoggedIn } = useAdminAuth()
+const { role: sessionRole } = useUserSession()
+const canSeeTeam = computed(() => canAccessTeamPage(sessionRole.value))
 const localePath = useLocalePath()
 const route = useRoute()
 const versionStore = useVersionStore()
@@ -310,6 +333,7 @@ const gameVersion = computed(() => versionStore.currentVersion || getFallbackGam
 const discoverBuildsLink = computed(() => localePath('/builds/discover'))
 const itemShopLink = computed(() => localePath('/items'))
 const myBuildsLink = computed(() => localePath('/builds/my-builds'))
+const teamBuildsLink = computed(() => localePath('/builds/team'))
 const favoriteBuildsLink = computed(() => localePath('/builds/favoris'))
 const discoverGuidesLink = computed(() => localePath('/matchups/sheets/discover'))
 const myGuidesLink = computed(() => localePath('/matchups/sheets/my-guides'))
@@ -338,6 +362,7 @@ const isCompanionAppActive = computed(() => {
 const currentBuildsTab = computed(() => {
   if (route.path.endsWith('/builds/discover')) return 'discover'
   if (route.path.endsWith('/builds/my-builds')) return 'my-builds'
+  if (route.path.endsWith('/builds/team')) return 'team'
   if (route.path.endsWith('/builds/favoris')) return 'favoris'
   if (!route.path.includes('/builds') || route.path.includes('/builds/create')) return null
   return typeof route.query.tab === 'string' ? route.query.tab : 'discover'
@@ -347,6 +372,7 @@ const isItemShopActive = computed(
   () => route.path === itemShopLink.value || route.path.endsWith('/items')
 )
 const isMyBuildsActive = computed(() => currentBuildsTab.value === 'my-builds')
+const isTeamBuildsActive = computed(() => currentBuildsTab.value === 'team')
 const isFavoriteBuildsActive = computed(() => currentBuildsTab.value === 'favoris')
 const favoritesStore = useFavoritesStore()
 const buildStore = useBuildStore()

@@ -84,6 +84,7 @@
           type="button"
           class="card-top-visibility-button"
           :class="{ 'is-active': cardVisibility === 'public' }"
+          :disabled="teamControls.visibilityLocked"
           @click="setCardVisibility('public')"
         >
           {{ t('buildsPage.public') }}
@@ -92,10 +93,24 @@
           type="button"
           class="card-top-visibility-button"
           :class="{ 'is-active': cardVisibility === 'private' }"
+          :disabled="teamControls.visibilityLocked"
           @click="setCardVisibility('private')"
         >
           {{ t('buildsPage.private') }}
         </button>
+        <label
+          v-if="teamControls.showTeamShare"
+          class="card-top-team-share"
+          :title="t('buildsPage.sharedHint')"
+        >
+          <input
+            type="checkbox"
+            :checked="cardTeamShared"
+            :disabled="teamControls.teamShareLocked"
+            @change="setCardTeamShared(($event.target as HTMLInputElement).checked)"
+          />
+          {{ t('buildsPage.shared') }}
+        </label>
       </div>
 
       <button
@@ -312,7 +327,11 @@
           :base-image-full="selectedChampion.image.full"
         />
 
-        <div v-if="showFrontVariantsTagsStack" class="variants-tags-stack">
+        <div
+          v-if="showFrontVariantsTagsStack"
+          class="variants-tags-stack"
+          :class="{ 'variants-tags-stack--compact': notesInTagStack }"
+        >
           <button
             v-if="showVariantTriggerButton"
             ref="variantsTriggerRef"
@@ -361,10 +380,23 @@
           </div>
 
           <div
-            v-if="!readonly || selectedBuildTags.length > 0 || displayBuild?.patchStale"
+            v-if="
+              !readonly ||
+              selectedBuildTags.length > 0 ||
+              displayBuild?.patchStale ||
+              hasLelarivaBadge
+            "
             class="build-tags-section"
           >
             <div class="build-tags-container">
+              <span
+                v-if="hasLelarivaBadge"
+                class="build-tag-chip build-tag-chip--selected build-tag-chip--lelariva"
+                :style="{ '--tag-g1': '#2fb9a5', '--tag-g2': '#0b2e2a' }"
+                :title="t('buildsPage.lelarivaBadgeTitle')"
+              >
+                Lelariva
+              </span>
               <PatchStaleBuildBadge
                 v-if="displayBuild?.patchStale"
                 :patch-stale="displayBuild.patchStale"
@@ -393,6 +425,24 @@
               >
                 {{ tag.label }}
               </button>
+              <button
+                v-if="showNotesTag && notesInTagStack && !forScreenshot"
+                type="button"
+                class="build-tag-chip build-tag-chip--selected build-card-notes-tag"
+                :style="{ '--tag-g1': '#2f855a', '--tag-g2': '#1a4731' }"
+                :title="t('buildDiscovery.viewBuildNotes')"
+                :aria-label="t('buildDiscovery.viewBuildNotes')"
+                @click.stop="emit('notes-click')"
+              >
+                {{ t('buildDiscovery.tagNotes') }}
+              </button>
+              <span
+                v-else-if="showNotesTag && notesInTagStack"
+                class="build-tag-chip build-tag-chip--selected build-card-notes-tag"
+                :style="{ '--tag-g1': '#2f855a', '--tag-g2': '#1a4731' }"
+              >
+                {{ t('buildDiscovery.tagNotes') }}
+              </span>
             </div>
           </div>
         </div>
@@ -482,7 +532,7 @@
           <!-- Sorts d'invocateur (juste sous le nom) - Toujours visible -->
           <div class="summoner-spells-strip">
             <button
-              v-if="showNotesTag && !forScreenshot"
+              v-if="showNotesTag && !notesInTagStack && !forScreenshot"
               type="button"
               class="build-tag-chip build-tag-chip--selected build-card-notes-tag build-card-notes-tag--summoner-row"
               :style="{ '--tag-g1': '#2f855a', '--tag-g2': '#1a4731' }"
@@ -493,7 +543,7 @@
               {{ t('buildDiscovery.tagNotes') }}
             </button>
             <span
-              v-else-if="showNotesTag"
+              v-else-if="showNotesTag && !notesInTagStack"
               class="build-tag-chip build-tag-chip--selected build-card-notes-tag build-card-notes-tag--summoner-row"
               :style="{ '--tag-g1': '#2f855a', '--tag-g2': '#1a4731' }"
             >
@@ -1849,6 +1899,9 @@ import type {
   SkillOrder,
   CalculatedStats,
 } from '@lelanation/shared-types'
+import { showLelarivaBadge, teamShareControls } from '~/utils/sharedBuildSync'
+import { notesChipPlacement } from '~/utils/buildCardNotesChip'
+import { useUserSession } from '~/composables/useUserSession'
 import { THEORYCRAFT_ITEM_STATE_KEY, type TheorycraftItemState } from '~/utils/theorycraftItemState'
 import {
   activeItemLimitLabel,
@@ -2249,9 +2302,24 @@ const theorycraftDescriptionFlipTitle = computed(() =>
 )
 
 const cardAuthor = computed(() => buildStore.currentBuild?.author ?? '')
-const cardVisibility = computed<'public' | 'private'>(() => {
-  return (buildStore.currentBuild?.visibility as 'public' | 'private' | undefined) ?? 'public'
+const cardVisibility = computed<'public' | 'private'>(
+  () => buildStore.currentBuild?.visibility ?? 'public'
+)
+const cardTeamShared = computed(() => buildStore.currentBuild?.teamShared === true)
+const { role: sessionRole, load: loadUserSession } = useUserSession()
+const savedTeamShared = computed(() => {
+  const id = buildStore.currentBuild?.id
+  if (!id || buildStore.savedBuildsVersion < 0) return false
+  return buildStore.getSavedBuilds().some(b => b.id === id && b.teamShared === true)
 })
+const teamControls = computed(() =>
+  teamShareControls({
+    role: sessionRole.value,
+    teamShared: cardTeamShared.value,
+    savedTeamShared: savedTeamShared.value,
+  })
+)
+onMounted(loadUserSession)
 
 const activeDescriptionTitle = computed(() => {
   if (!isBuilderPage.value) {
@@ -2421,8 +2489,16 @@ function updateCardAuthor(author: string) {
 }
 
 function setCardVisibility(visibility: 'public' | 'private') {
-  if (props.readonly || props.build) return
+  if (props.readonly || props.build || teamControls.value.visibilityLocked) return
   buildStore.setVisibility(visibility)
+  if (isMatchupGuideBuilder.value) {
+    buildStore.persistCurrentBuildDraft()
+  }
+}
+
+function setCardTeamShared(teamShared: boolean) {
+  if (props.readonly || props.build || teamControls.value.teamShareLocked) return
+  buildStore.setTeamShared(teamShared, sessionRole.value)
   if (isMatchupGuideBuilder.value) {
     buildStore.persistCurrentBuildDraft()
   }
@@ -3071,11 +3147,24 @@ const showVariantTriggerButton = computed(
 )
 
 const hasPatchStaleBadge = computed(() => Boolean(displayBuild.value?.patchStale))
+const hasLelarivaBadge = computed(() => showLelarivaBadge(displayBuild.value))
+
+/** Chips empilés dans la colonne gauche (Lelariva, patch obsolète, tags). */
+const tagChipCount = computed(
+  () =>
+    Number(hasLelarivaBadge.value) +
+    Number(hasPatchStaleBadge.value) +
+    visibleBuildTags.value.length
+)
+const notesInTagStack = computed(() => notesChipPlacement(tagChipCount.value) === 'stack')
 
 const showFrontVariantsTagsStack = computed(() => {
   const variantShown = showVariantTriggerButton.value
   const tagsShown =
-    !props.readonly || selectedBuildTags.value.length > 0 || hasPatchStaleBadge.value
+    !props.readonly ||
+    selectedBuildTags.value.length > 0 ||
+    hasPatchStaleBadge.value ||
+    hasLelarivaBadge.value
   return variantShown || tagsShown
 })
 
@@ -3085,7 +3174,10 @@ const showVariantsTagColumnSpacer = computed(
     !props.forScreenshot &&
     showFrontVariantsTagsStack.value &&
     !showVariantTriggerButton.value &&
-    (!props.readonly || selectedBuildTags.value.length > 0 || hasPatchStaleBadge.value)
+    (!props.readonly ||
+      selectedBuildTags.value.length > 0 ||
+      hasPatchStaleBadge.value ||
+      hasLelarivaBadge.value)
 )
 
 const getRoleName = (role: Role): string => {
@@ -4170,6 +4262,35 @@ defineExpose({
   flex: 0 0 auto;
 }
 
+.card-top-team-share {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.card-top-team-share input {
+  width: 12px;
+  height: 12px;
+  margin: 0;
+  accent-color: rgb(200, 155, 60);
+}
+
+.card-top-team-share input:disabled {
+  cursor: not-allowed;
+}
+
+.card-top-visibility-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .card-top-visibility-button {
   border: none;
   background: transparent;
@@ -4191,7 +4312,7 @@ defineExpose({
   background: rgba(22, 163, 74, 0.9);
 }
 
-.card-top-visibility-button.is-active:last-child {
+.card-top-visibility-button.is-active:nth-child(2) {
   background: rgba(220, 38, 38, 0.9);
 }
 
@@ -4919,6 +5040,19 @@ defineExpose({
 
 .variants-tags-stack > .variants-count-indicator {
   position: static;
+}
+
+/* Beaucoup de tags : colonne remontée et resserrée pour garder Notes au-dessus des sorts. */
+.variants-tags-stack--compact {
+  gap: 4px;
+}
+
+.variants-tags-stack--compact .build-tags-container {
+  gap: 2px;
+}
+
+.variants-tags-stack--compact .build-tags-container .build-tag-chip {
+  margin-top: 2px;
 }
 
 /* Espace réservé : même classes que le bouton sauf visibilité (liste sans bouton, capture, etc.). */

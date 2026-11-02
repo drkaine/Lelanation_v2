@@ -6,8 +6,6 @@ import {
   type ConsentChoice,
 } from '~/utils/cookieConsent'
 
-export type { ConsentChoice }
-
 const KEY = 'cookie_consent'
 
 function save(choice: 'accepted' | 'rejected') {
