@@ -31,6 +31,48 @@
       </div>
 
       <button
+        v-if="showCompareToggle"
+        type="button"
+        class="item-shop-detail-toolbar__btn item-shop-detail-toolbar__btn--vs"
+        :class="{ 'item-shop-detail-toolbar__btn--active': compareActive }"
+        :aria-pressed="compareActive"
+        :title="compareActive ? t('itemShopPage.compare.close') : t('itemShopPage.compare.open')"
+        :aria-label="
+          compareActive ? t('itemShopPage.compare.close') : t('itemShopPage.compare.open')
+        "
+        @click="emit('toggle-compare')"
+      >
+        VS
+      </button>
+
+      <button
+        v-if="showCardsToggle"
+        type="button"
+        class="item-shop-detail-toolbar__cards-toggle"
+        :aria-expanded="!collapsed"
+        @click="emit('toggle-cards')"
+      >
+        <span>{{
+          collapsed ? t('itemShopPage.compare.showCards') : t('itemShopPage.compare.hideCards')
+        }}</span>
+        <svg
+          class="item-shop-detail-toolbar__chevron"
+          :class="{ 'item-shop-detail-toolbar__chevron--open': !collapsed }"
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+
+      <button
         type="button"
         class="item-shop-detail-toolbar__btn item-shop-detail-toolbar__btn--reset"
         :disabled="!item"
@@ -42,7 +84,11 @@
       </button>
     </div>
 
-    <div class="item-shop-detail ui-build-card-surface">
+    <div
+      v-show="!collapsed"
+      class="item-shop-detail ui-build-card-surface"
+      :class="{ 'item-shop-detail--targeted': targeted }"
+    >
       <header class="item-shop-detail__header">
         <div
           class="item-shop-detail__image-slot"
@@ -110,33 +156,32 @@
           </section>
         </div>
       </div>
+      <section v-if="item && buildIntoItems.length" class="item-shop-detail__transforms">
+        <h3 class="item-shop-detail__section-title">{{ t('item.transforms-into') }}</h3>
+        <div class="item-shop-detail__recipe">
+          <button
+            v-for="upgrade in buildIntoItems"
+            :key="upgrade.id"
+            type="button"
+            class="item-shop-detail__recipe-item"
+            @click="emit('select-item', upgrade)"
+            @mouseenter="itemHoverTooltip?.handleItemHover(upgrade, $event)"
+            @mouseleave="itemHoverTooltip?.clearItemHover()"
+            @mousemove="itemHoverTooltip?.handleMouseMove($event)"
+          >
+            <span class="item-shop-detail__recipe-icon">
+              <img
+                :src="getItemShopImageUrl(version, upgrade)"
+                :alt="upgrade.name"
+                width="40"
+                height="40"
+              />
+            </span>
+            <span class="item-shop-detail__recipe-price">{{ upgrade.gold?.total ?? 0 }}</span>
+          </button>
+        </div>
+      </section>
     </div>
-
-    <section v-if="item && buildIntoItems.length" class="item-shop-detail__transforms">
-      <h3 class="item-shop-detail__section-title">{{ t('item.transforms-into') }}</h3>
-      <div class="item-shop-detail__recipe">
-        <button
-          v-for="upgrade in buildIntoItems"
-          :key="upgrade.id"
-          type="button"
-          class="item-shop-detail__recipe-item"
-          @click="emit('select-item', upgrade)"
-          @mouseenter="itemHoverTooltip?.handleItemHover(upgrade, $event)"
-          @mouseleave="itemHoverTooltip?.clearItemHover()"
-          @mousemove="itemHoverTooltip?.handleMouseMove($event)"
-        >
-          <span class="item-shop-detail__recipe-icon">
-            <img
-              :src="getItemShopImageUrl(version, upgrade)"
-              :alt="upgrade.name"
-              width="40"
-              height="40"
-            />
-          </span>
-          <span class="item-shop-detail__recipe-price">{{ upgrade.gold?.total ?? 0 }}</span>
-        </button>
-      </div>
-    </section>
   </aside>
 </template>
 
@@ -163,11 +208,20 @@ const props = defineProps<{
   allItems: Item[]
   categorySortMode: ItemShopCategorySortMode
   riotLocale: string
+  showCompareToggle?: boolean
+  compareActive?: boolean
+  /** Carte qui reçoit le prochain objet cliqué dans la grille (mode comparaison). */
+  targeted?: boolean
+  /** Bouton « masquer / afficher les cards » (mode comparaison). */
+  showCardsToggle?: boolean
+  collapsed?: boolean
 }>()
 
 const emit = defineEmits<{
   'select-item': [item: Item]
   reset: []
+  'toggle-compare': []
+  'toggle-cards': []
 }>()
 
 const { t } = useI18n()
@@ -230,6 +284,32 @@ const formattedDescription = computed(() => {
   gap: 0.375rem;
 }
 
+.item-shop-detail-toolbar__cards-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 38px;
+  border: 1px solid rgb(var(--rgb-accent) / 0.3);
+  border-radius: 0.25rem;
+  background: rgb(var(--rgb-background) / 0.55);
+  padding: 0 0.6rem;
+  font-size: 0.8rem;
+  color: rgb(var(--rgb-text) / 0.8);
+  cursor: pointer;
+}
+
+.item-shop-detail-toolbar__cards-toggle:hover {
+  border-color: rgb(var(--rgb-accent) / 0.6);
+}
+
+.item-shop-detail-toolbar__chevron {
+  transition: transform 0.15s ease;
+}
+
+.item-shop-detail-toolbar__chevron--open {
+  transform: rotate(180deg);
+}
+
 .item-shop-detail-toolbar__btn {
   display: inline-flex;
   flex-shrink: 0;
@@ -258,6 +338,20 @@ const formattedDescription = computed(() => {
 
 .item-shop-detail-toolbar__btn--reset {
   margin-left: auto;
+}
+
+.item-shop-detail-toolbar__btn--vs {
+  margin-left: auto;
+  width: auto;
+  padding: 0 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.item-shop-detail--targeted {
+  outline: 2px solid rgb(200 155 60 / 0.85);
+  outline-offset: 2px;
 }
 
 .item-shop-detail-toolbar__btn--reset:hover:not(:disabled) {
@@ -441,9 +535,22 @@ const formattedDescription = computed(() => {
   color: rgb(var(--rgb-text) / 0.6);
 }
 
+/* Pied de carte : hauteur fixe, défilement horizontal — la carte garde sa taille. */
 .item-shop-detail__transforms {
-  margin-top: 0.75rem;
+  flex: 0 0 auto;
   width: 100%;
+  min-width: 0;
+}
+
+.item-shop-detail__transforms .item-shop-detail__section-title {
+  margin-bottom: 0.3rem;
+}
+
+.item-shop-detail__transforms .item-shop-detail__recipe {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
 }
 
 .item-shop-detail__recipe {

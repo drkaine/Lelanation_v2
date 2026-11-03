@@ -74,14 +74,47 @@
       class="item-shop-browser__layout"
       :class="{ 'item-shop-browser__layout--scaled': isLayoutScaled }"
     >
-      <ItemShopDetailPanel
-        :item="selectedItem"
-        :all-items="catalogItems"
-        :category-sort-mode="categorySortMode"
-        :riot-locale="riotLocale"
-        @select-item="selectItem"
-        @reset="clearSelectedItem"
-      />
+      <div
+        class="item-shop-browser__panels"
+        :class="{ 'item-shop-browser__panels--compare': compareOpen }"
+      >
+        <div class="item-shop-browser__cards">
+          <ItemShopDetailPanel
+            :item="selectedItem"
+            :all-items="catalogItems"
+            :category-sort-mode="categorySortMode"
+            :riot-locale="riotLocale"
+            show-compare-toggle
+            :compare-active="compareOpen"
+            :targeted="compareOpen && compareTarget === 'primary'"
+            :collapsed="compareOpen && !cardsVisible"
+            @click.capture="compareTarget = 'primary'"
+            @select-item="selectItem"
+            @reset="clearSelectedItem"
+            @toggle-compare="toggleCompare"
+          />
+          <ItemShopDetailPanel
+            v-if="compareOpen"
+            :item="compareItem"
+            :all-items="catalogItems"
+            :category-sort-mode="categorySortMode"
+            :riot-locale="riotLocale"
+            :targeted="compareTarget === 'compare'"
+            show-cards-toggle
+            :collapsed="!cardsVisible"
+            @toggle-cards="cardsVisible = !cardsVisible"
+            @click.capture="compareTarget = 'compare'"
+            @select-item="selectCompareItem"
+            @reset="clearCompareItem"
+          />
+        </div>
+        <ItemCompareTable
+          v-if="compareOpen && selectedItem && compareItem"
+          :a="selectedItem"
+          :b="compareItem"
+          :all-items="catalogItems"
+        />
+      </div>
 
       <div class="item-shop-browser__grid">
         <template v-for="category in categoryOrderKeys" :key="category">
@@ -116,8 +149,11 @@
                 <button
                   type="button"
                   class="item"
-                  :class="{ 'item--selected': selectedItemId === item.id }"
-                  @click="selectItem(item)"
+                  :class="{
+                    'item--selected': selectedItemId === item.id,
+                    'item--compared': compareOpen && compareItemId === item.id,
+                  }"
+                  @click="pickGridItem(item)"
                 >
                   <img
                     :src="getItemShopImageUrl(version, item)"
@@ -169,6 +205,7 @@ import { useGameVersion } from '~/composables/useGameVersion'
 import { useLayoutScaled } from '~/composables/useLayoutScaled'
 import { formatItemGoldEfficiency, getItemGoldValue } from '~/utils/formatItemStats'
 import ItemShopDetailPanel from '~/components/Items/ItemShopDetailPanel.vue'
+import ItemCompareTable from '~/components/Items/ItemCompareTable.vue'
 import ItemFilterTagButton from '~/components/Items/ItemFilterTagButton.vue'
 import ItemCategorySortButton from '~/components/Items/ItemCategorySortButton.vue'
 import ItemHoverTooltip from '~/components/Items/ItemHoverTooltip.vue'
@@ -260,6 +297,16 @@ const availableTags = computed(() =>
   ITEM_SHOP_ALLOWED_TAGS.filter(tag => catalogItems.value.some(item => itemHasTag(item, tag)))
 )
 
+const compareOpen = ref(false)
+const compareItemId = ref<string | null>(null)
+/** Carte qui reçoit le prochain clic dans la grille. */
+const compareTarget = ref<'primary' | 'compare'>('primary')
+const compareItem = computed(
+  () => catalogItems.value.find(item => item.id === compareItemId.value) ?? null
+)
+/** Fiches détaillées repliables en mode comparaison. */
+const cardsVisible = ref(true)
+
 const selectedItem = computed(
   () => catalogItems.value.find(item => item.id === selectedItemId.value) ?? null
 )
@@ -311,6 +358,34 @@ function selectItem(item: Item) {
   router.replace({ query: { ...route.query, item: item.id } }).catch(() => undefined)
 }
 
+function pickGridItem(item: Item) {
+  if (compareOpen.value && compareTarget.value === 'compare') selectCompareItem(item)
+  else selectItem(item)
+}
+
+function setVsQuery(itemId: string | null) {
+  const { vs: _vs, ...restQuery } = route.query
+  router
+    .replace({ query: itemId ? { ...restQuery, vs: itemId } : restQuery })
+    .catch(() => undefined)
+}
+
+function selectCompareItem(item: Item) {
+  compareItemId.value = item.id
+  setVsQuery(item.id)
+}
+
+function clearCompareItem() {
+  compareItemId.value = null
+  setVsQuery(null)
+}
+
+function toggleCompare() {
+  compareOpen.value = !compareOpen.value
+  compareTarget.value = compareOpen.value ? 'compare' : 'primary'
+  if (!compareOpen.value) clearCompareItem()
+}
+
 function clearSelectedItem() {
   selectedItemId.value = null
   clearItemHover()
@@ -323,10 +398,16 @@ function syncSelectedFromQuery() {
   if (typeof queryItem !== 'string' || !queryItem.trim()) return
   const match = catalogItems.value.find(item => item.id === queryItem.trim())
   if (match) selectedItemId.value = match.id
+  const queryVs = route.query.vs
+  if (typeof queryVs !== 'string' || !queryVs.trim()) return
+  const vsMatch = catalogItems.value.find(item => item.id === queryVs.trim())
+  if (!vsMatch) return
+  compareOpen.value = true
+  compareItemId.value = vsMatch.id
 }
 
 watch(
-  () => [catalogItems.value.length, route.query.item] as const,
+  () => [catalogItems.value.length, route.query.item, route.query.vs] as const,
   () => syncSelectedFromQuery(),
   { immediate: true }
 )
@@ -414,6 +495,40 @@ watch(isLayoutScaled, enabled => {
   order: 1;
   width: var(--build-card-width, 300px);
   max-width: 100%;
+}
+
+.item-shop-browser__panels {
+  position: sticky;
+  top: 1rem;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.item-shop-browser__layout > .item-shop-browser__panels--compare {
+  width: calc(var(--build-card-width, 300px) * 2 + 0.75rem);
+}
+
+.item-shop-browser__cards {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.item-shop-browser__cards > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .item-shop-browser__panels {
+    position: static;
+  }
+
+  .item-shop-browser__cards {
+    flex-direction: column;
+  }
 }
 
 .item-shop-browser__grid {
@@ -509,6 +624,11 @@ watch(isLayoutScaled, enabled => {
 .item--selected {
   border-color: rgb(var(--rgb-accent));
   box-shadow: 0 0 0 1px rgb(var(--rgb-accent) / 0.35);
+}
+
+.item--compared {
+  border-color: rgb(96 165 250);
+  box-shadow: 0 0 0 1px rgb(96 165 250 / 0.45);
 }
 
 .item img {
