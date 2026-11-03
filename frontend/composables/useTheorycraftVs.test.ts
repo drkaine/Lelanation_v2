@@ -3,6 +3,7 @@ import { nextTick, ref } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { useTheorycraftVs } from './useTheorycraftVs'
 import { useBuildStore } from '~/stores/BuildStore'
+import type { Build } from '~/types/build'
 
 vi.mock('~/composables/useChampionData', () => ({
   useChampionData: () => ({ loadChampion: () => Promise.resolve(null) }),
@@ -196,5 +197,30 @@ describe('useTheorycraftVs', () => {
     const { vs } = setup()
     vs.activateSide('enemy')
     expect(vs.activePanel.value).toBe('champion')
+  })
+
+  it('loads a library build as the opponent without touching the ally', () => {
+    const { store, vs } = setup()
+    const allyId = store.currentBuild!.id
+    const library = {
+      ...store.currentBuild!,
+      id: 'lib-1',
+      name: 'Biblio',
+      champion: { id: 'Ahri', name: 'Ahri' } as Build['champion'],
+    }
+    vs.setEnemyBuild(library)
+    expect(vs.sideBuilds.value.enemy?.name).toBe('Biblio')
+    expect(vs.sideBuilds.value.enemy).not.toBe(library)
+    expect(store.currentBuild?.id).toBe(allyId)
+    vs.activateSide('enemy')
+    expect(store.currentBuild?.name).toBe('Biblio')
+    expect(vs.activePanel.value).toBe('theorycraft')
+  })
+
+  it('reloads the store when the opponent is the active side', () => {
+    const { store, vs } = setup()
+    vs.activateSide('enemy')
+    vs.setEnemyBuild({ ...store.currentBuild!, id: 'lib-2', name: 'Autre' })
+    expect(store.currentBuild?.name).toBe('Autre')
   })
 })

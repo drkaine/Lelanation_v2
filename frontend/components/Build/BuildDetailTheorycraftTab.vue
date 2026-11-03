@@ -1,9 +1,5 @@
 <template>
   <div class="build-detail-theorycraft w-full">
-    <div class="theorycraft-page-header mb-4">
-      <TheorycraftRuneStackPanel variant="header" />
-    </div>
-
     <div
       class="build-layout build-layout--versus flex flex-col items-start gap-4 md:flex-row"
       :class="{ 'build-layout--streamer': isLayoutScaled }"
@@ -174,19 +170,22 @@
           :active-selection-region="
             activeSide !== 'enemy' ? null : activePanel === 'theorycraft' ? null : activePanel
           "
+          library-picker
           @select-region="onSelectRegion('enemy', $event)"
           @toggle-description-flip="toggleDescriptionFlip('enemy')"
+          @pick-library="libraryPickerOpen = true"
         />
       </div>
     </div>
+    <MatchupGuideBuildPickerModal v-model:open="libraryPickerOpen" @select="pickEnemyFromLibrary" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, toRef } from 'vue'
+import { computed, onMounted, onUnmounted, ref, toRef } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import BuildCard from '~/components/Build/BuildCard.vue'
-import TheorycraftRuneStackPanel from '~/components/Build/TheorycraftRuneStackPanel.vue'
+import MatchupGuideBuildPickerModal from '~/components/matchups/MatchupGuideBuildPickerModal.vue'
 import TheorycraftWorkspacePanel from '~/components/Build/TheorycraftWorkspacePanel.vue'
 import { useBuildDetailTheorycraft } from '~/composables/useBuildDetailTheorycraft'
 import { useLayoutScaled } from '~/composables/useLayoutScaled'
@@ -232,7 +231,14 @@ const {
   activateTheorycraft,
   onSelectRegion,
   onLevelSelectChange,
+  setEnemyBuild,
 } = useBuildDetailTheorycraft(sourceBuild)
+
+const libraryPickerOpen = ref(false)
+
+function pickEnemyFromLibrary(build: Build) {
+  setEnemyBuild(build)
+}
 
 const allyCardFlipped = computed({
   get: () => sideFlipped.value.ally,

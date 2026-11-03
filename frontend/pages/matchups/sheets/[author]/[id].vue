@@ -20,8 +20,13 @@ const { data: guide } = await useAsyncData(
   async () => {
     const loaded = await fetchMatchupGuideById(guideId.value, requestFetch)
     if (!loaded) return null
-    if (!matchupGuideAuthorSlugMatches(loaded, authorParam.value)) {
-      await navigateTo(matchupGuideDetailPath(loaded, localePath), { replace: true })
+    const target = matchupGuideDetailPath(loaded, localePath)
+    // Guide lié à un build : il vit dans l'onglet guide du build (ancienne URL redirigée).
+    if (
+      target.includes('?tab=guide') ||
+      !matchupGuideAuthorSlugMatches(loaded, authorParam.value)
+    ) {
+      await navigateTo(target, { replace: true, redirectCode: 301 })
     }
     return loaded
   },

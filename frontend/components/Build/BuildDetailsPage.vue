@@ -50,15 +50,6 @@
                 {{ t('createBuild.stats') }}
               </button>
               <button
-                v-if="linkedGuide"
-                type="button"
-                class="streamer-tab-button"
-                :class="{ 'is-active': activeDetailTab === 'guide' }"
-                @click="setDetailTab('guide')"
-              >
-                {{ t('buildDetailPage.tabGuide') }}
-              </button>
-              <button
                 v-if="hasBuildNotes"
                 type="button"
                 class="streamer-tab-button"
@@ -66,6 +57,15 @@
                 @click="setDetailTab('notes')"
               >
                 {{ t('buildDetailPage.tabNotes') }}
+              </button>
+              <button
+                v-if="linkedGuide"
+                type="button"
+                class="streamer-tab-button"
+                :class="{ 'is-active': activeDetailTab === 'guide' }"
+                @click="setDetailTab('guide')"
+              >
+                {{ t('buildDetailPage.tabGuide') }}
               </button>
               <button
                 type="button"
@@ -391,6 +391,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import type { MatchupGuide } from '@lelanation/shared-types'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useVoteStore } from '~/stores/VoteStore'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
@@ -412,7 +413,10 @@ import {
   copyPngBlobToClipboard,
 } from '~/utils/buildCardShareImage'
 import { migrateBuildToCurrent } from '~/utils/migrateBuildToCurrent'
-import { findMatchupGuideForBuildId } from '~/utils/matchupGuideByBuild'
+import { findMatchupGuideForBuildId, getMatchupGuideBuildId } from '~/utils/matchupGuideByBuild'
+import { fetchTeamBuildForEdit } from '~/utils/teamBuildEdit'
+import { linkedGuideForBuild } from '~/utils/builderGuideStep'
+import { readStoredSession, useUserSession } from '~/composables/useUserSession'
 import { championWithStatsForBuild, resolveChampionStatsForBuild } from '~/utils/theorycraftStats'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useItemsStore } from '~/stores/ItemsStore'
@@ -507,11 +511,30 @@ const detailDisplayedBuild = computed<Build | null>(() => {
   } as Build
 })
 
+/** Guide d'un build d'équipe (privé : absent des guides publics). */
+const teamGuide = ref<MatchupGuide | null>(null)
+
 const linkedGuide = computed(() => {
   if (!build.value?.id) return null
   const guides = [...matchupGuideDiscoveryStore.guides, ...matchupGuideStore.getSavedGuides()]
-  return findMatchupGuideForBuildId(build.value.id, guides)
+  const sharedGuide =
+    teamGuide.value && getMatchupGuideBuildId(teamGuide.value) === build.value.id
+      ? teamGuide.value
+      : null
+  return sharedGuide ?? findMatchupGuideForBuildId(build.value.id, guides)
 })
+
+/** Build d'équipe (session requise) : le build et son guide lié, `null` sinon. */
+async function fetchTeamBuild(id: string): Promise<Build | null> {
+  const { session, authFetch } = useUserSession()
+  if (!(session.value ?? readStoredSession())) return null
+  const shared = await fetchTeamBuildForEdit(id, url => authFetch(url))
+  if (!shared) return null
+  const guide = (shared as { matchupGuide?: MatchupGuide }).matchupGuide ?? null
+  teamGuide.value = linkedGuideForBuild(id, guide, [])
+  const { hydrateBuild, isStoredBuild } = await import('~/utils/buildSerialize')
+  return isStoredBuild(shared) ? hydrateBuild(shared) : (shared as Build)
+}
 
 function getDisplayedDescription(target: Build): string | undefined {
   const idx = detailDisplayedSubIndex.value
@@ -860,6 +883,8 @@ watch(
         const savedBuilds = buildStore.getSavedBuilds()
         const localBuild = savedBuilds.find(b => b.id === id) || null
         if (localBuild) {
+          // Copie locale d'un build d'équipe : son guide n'est que sur le serveur.
+          if (localBuild.teamShared) fetchTeamBuild(id).catch(() => undefined)
           const withPatchStale = await buildStore.applyServerPatchStale(localBuild)
           const { migrated } = await migrateBuildToCurrent(withPatchStale)
           detailRootBuild.value = migrated
@@ -884,7 +909,13 @@ watch(
         const { migrated } = await migrateBuildToCurrent(buildToMigrate)
         detailRootBuild.value = migrated
       } else {
-        error.value = 'Build not found'
+        const teamBuild = await fetchTeamBuild(id)
+        if (teamBuild) {
+          const { migrated } = await migrateBuildToCurrent(teamBuild)
+          detailRootBuild.value = migrated
+        } else {
+          error.value = 'Build not found'
+        }
       }
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load build'

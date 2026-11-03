@@ -2,23 +2,32 @@
   <AppModal
     :open="open"
     size="xl"
+    dialog-class="matchup-build-picker-modal__dialog"
     scrollable
     :close-label="t('matchupGuideCreate.closeEntryEditor')"
     @close="close"
   >
-    <template #header>
-      <div>
-        <h2 class="text-lg font-semibold text-accent md:text-xl">
-          {{ t('matchupGuideCreate.pickBuildModalTitle') }}
-        </h2>
-        <p class="mt-1 text-sm text-text/70">
-          {{ t('matchupGuideCreate.pickBuildModalHint') }}
-        </p>
-      </div>
-    </template>
+    <div class="mb-3 flex flex-wrap items-center gap-2">
+      <button
+        v-for="tab in BUILD_PICKER_TABS"
+        :key="tab"
+        type="button"
+        class="ui-build-card-button rounded-lg px-3 py-1.5 text-sm"
+        :class="{ 'matchup-build-picker-modal__tab--active': activeTab === tab }"
+        @click="activeTab = tab"
+      >
+        {{ t(TAB_LABELS[tab]) }}
+      </button>
+      <input
+        v-model="searchQuery"
+        type="search"
+        class="ml-auto min-w-[12rem] flex-1 rounded-lg border border-primary/40 bg-background/60 px-3 py-1.5 text-sm"
+        :placeholder="t('matchupGuideCreate.pickBuildSearch')"
+      />
+    </div>
 
     <p v-if="availableBuilds.length === 0" class="text-sm text-text/70">
-      {{ t('matchupGuideCreate.noSavedBuilds') }}
+      {{ t('matchupGuideCreate.pickBuildEmpty') }}
     </p>
 
     <div v-else class="matchup-build-picker-modal__grid">
@@ -27,7 +36,7 @@
         :key="build.id"
         type="button"
         class="matchup-build-picker-modal__card"
-        @click="selectBuild(build.id)"
+        @click="selectBuild(build)"
       >
         <div class="matchup-build-picker-modal__card-visual">
           <BuildCard :build="build" readonly hide-top-actions sheet-tooltips />
@@ -51,27 +60,56 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { Build } from '@lelanation/shared-types'
 import BuildCard from '~/components/Build/BuildCard.vue'
 import { useBuildStore } from '~/stores/BuildStore'
-import { filterStandaloneLibraryBuilds } from '~/utils/buildLibrary'
+import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
+import { useFavoritesStore } from '~/stores/FavoritesStore'
+import { BUILD_PICKER_TABS, buildPickerList, type BuildPickerTab } from '~/utils/buildPickerTabs'
 
-defineProps<{
+const TAB_LABELS: Record<BuildPickerTab, string> = {
+  favorites: 'buildsPage.myFavorites',
+  discover: 'buildsPage.discover',
+  mine: 'buildsPage.myBuilds',
+}
+
+const props = defineProps<{
   open: boolean
 }>()
 
 const emit = defineEmits<{
   'update:open': [value: boolean]
-  select: [buildId: string]
+  select: [build: Build]
 }>()
 
 const { t } = useI18n()
 const buildStore = useBuildStore()
+const discoveryStore = useBuildDiscoveryStore()
+const favoritesStore = useFavoritesStore()
+
+const activeTab = ref<BuildPickerTab>('mine')
+const searchQuery = ref('')
+
+watch(
+  () => props.open,
+  isOpen => {
+    if (!isOpen) return
+    favoritesStore.init()
+    if (discoveryStore.builds.length === 0) discoveryStore.loadBuilds().catch(() => {})
+  },
+  { immediate: true }
+)
 
 const availableBuilds = computed<Build[]>(() =>
-  filterStandaloneLibraryBuilds(buildStore.getSavedBuilds()).sort((a, b) =>
-    String(b.updatedAt ?? '').localeCompare(String(a.updatedAt ?? ''))
+  buildPickerList(
+    activeTab.value,
+    {
+      saved: buildStore.getSavedBuilds(),
+      discovery: discoveryStore.builds,
+      favoriteIds: favoritesStore.favoriteBuildIds,
+    },
+    searchQuery.value
   )
 )
 
@@ -79,8 +117,8 @@ function close(): void {
   emit('update:open', false)
 }
 
-function selectBuild(buildId: string): void {
-  emit('select', buildId)
+function selectBuild(build: Build): void {
+  emit('select', build)
   close()
 }
 </script>
@@ -88,8 +126,14 @@ function selectBuild(buildId: string): void {
 <style scoped>
 .matchup-build-picker-modal__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(316px, 100%), 1fr));
+  justify-items: center;
   gap: 0.75rem;
+}
+
+.matchup-build-picker-modal__tab--active {
+  border-color: rgb(var(--rgb-accent) / 0.85);
+  color: rgb(var(--rgb-accent));
 }
 
 .matchup-build-picker-modal__card {
@@ -113,8 +157,7 @@ function selectBuild(buildId: string): void {
 }
 
 .matchup-build-picker-modal__card-visual {
-  width: 100%;
-  overflow: hidden;
+  width: 300px;
   border-radius: 0.45rem;
 }
 
@@ -126,5 +169,23 @@ function selectBuild(buildId: string): void {
   font-size: 0.78rem;
   font-weight: 600;
   color: rgb(var(--rgb-text));
+}
+</style>
+
+<style>
+.app-modal__dialog.matchup-build-picker-modal__dialog {
+  width: 80vw;
+  max-width: 80vw;
+  height: 80vh;
+  max-height: 80vh;
+}
+
+@media (max-width: 639px) {
+  .app-modal__dialog.matchup-build-picker-modal__dialog {
+    width: 100%;
+    max-width: 100%;
+    height: 90vh;
+    max-height: 90vh;
+  }
 }
 </style>

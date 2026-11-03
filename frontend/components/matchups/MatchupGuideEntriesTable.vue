@@ -314,6 +314,7 @@
     <Teleport to="body">
       <div
         v-if="buildPopover"
+        ref="buildPopoverEl"
         class="matchup-entries-table__build-popover"
         :style="buildPopoverStyle"
         @mouseenter="cancelHideBuildPopover"
@@ -333,7 +334,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import type { MatchupEntry } from '@lelanation/shared-types'
 import type { Build } from '~/types/build'
@@ -354,6 +355,7 @@ import {
   getMatchupBuildVariants,
   OUTCOME_KINDS,
 } from '~/utils/matchupEntryUtils'
+import { placePopoverNearAnchor } from '~/utils/popoverPlacement'
 import { isMatchupEntryFinalizeReady } from '~/utils/matchupGuideCreateSteps'
 import { opponentHasVisibleCohortColor } from '~/utils/matchupGuideCohorts'
 import {
@@ -434,7 +436,10 @@ type BuildPopoverState = {
   left: number
 }
 
+const BUILD_POPOVER_WIDTH = 300
+const BUILD_POPOVER_ESTIMATED_HEIGHT = 585
 const buildPopover = ref<BuildPopoverState | null>(null)
+const buildPopoverEl = ref<HTMLElement | null>(null)
 const expandedMobileOpponentIds = ref<Record<string, true>>({})
 let hidePopoverTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -528,16 +533,18 @@ function showBuildPopover(entry: MatchupEntry, event: MouseEvent): void {
   if (!resolvedBuild.value || !getMatchupBuildVariants(entry).length) return
   cancelHideBuildPopover()
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
-  const popoverWidth = 300
-  let left = rect.left
-  if (left + popoverWidth > window.innerWidth - 12) {
-    left = Math.max(12, window.innerWidth - popoverWidth - 12)
-  }
+  const viewport = { width: window.innerWidth, height: window.innerHeight }
+  const place = (height: number) =>
+    placePopoverNearAnchor(rect, { width: BUILD_POPOVER_WIDTH, height }, viewport)
   buildPopover.value = {
     variantIndex: variantIndexForEntry(entry),
-    top: rect.bottom + 8,
-    left,
+    ...place(BUILD_POPOVER_ESTIMATED_HEIGHT),
   }
+  nextTick(() => {
+    const height = buildPopoverEl.value?.offsetHeight
+    if (!buildPopover.value || !height) return
+    buildPopover.value = { ...buildPopover.value, ...place(height) }
+  })
 }
 
 function scheduleHideBuildPopover(): void {
@@ -936,6 +943,8 @@ function cancelHideBuildPopover(): void {
   position: fixed;
   z-index: 10040;
   width: 300px;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
   pointer-events: auto;
   filter: drop-shadow(0 12px 28px rgb(0 0 0 / 0.45));
 }

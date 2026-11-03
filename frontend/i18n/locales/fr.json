@@ -378,6 +378,7 @@
       "vsDisable": "Désactiver le mode VS",
       "allyCard": "Vous",
       "enemyCard": "Adversaire",
+      "pickFromLibrary": "Bibliothèque",
       "emptyHint": "Cliquez sur une zone de la build card (champion, items, runes) pour ouvrir le sélecteur correspondant. L'ordre de montée se modifie directement sur la card."
     },
     "spells": {
@@ -2464,7 +2465,9 @@
     "fieldGuideDescriptionPlaceholder": "Présentation du guide, style de jeu, contexte de lane…",
     "finalizeMissingIdentity": "Renseignez le nom du guide, l’auteur et la description courte pour enregistrer.",
     "finalizeVisibilityLabel": "Visibilité du guide",
-    "finalizeVisibilityHint": "Public : visible dans Découvrir. Privé : enregistré localement, non publié."
+    "finalizeVisibilityHint": "Public : visible dans Découvrir. Privé : enregistré localement, non publié.",
+    "pickBuildSearch": "Rechercher par titre, auteur ou champion…",
+    "pickBuildEmpty": "Aucun build dans cet onglet."
   },
   "matchupGuideDiscovery": {
     "searchPlaceholder": "Rechercher par champion, adversaire ou auteur...",

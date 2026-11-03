@@ -22,6 +22,12 @@
               }"
             />
             <div class="matchup-sheet__identity-meta">
+              <span
+                v-if="(guide.visibility ?? 'public') === 'private'"
+                class="matchup-sheet__badge matchup-sheet__badge--private"
+              >
+                {{ t('buildsPage.private') }}
+              </span>
               <div class="matchup-sheet__name-line">
                 <h3 class="matchup-sheet__champion-name">
                   {{ guide.champion?.name ?? '?' }}
@@ -59,12 +65,6 @@
             <time v-if="formattedDate" class="matchup-sheet__date" :datetime="displayDateIso">
               {{ formattedDate }}
             </time>
-            <span
-              v-if="(guide.visibility ?? 'public') === 'private'"
-              class="matchup-sheet__badge matchup-sheet__badge--private"
-            >
-              {{ t('buildsPage.private') }}
-            </span>
             <span v-if="guide.patchStale" class="matchup-sheet__badge matchup-sheet__badge--stale">
               {{ t('matchupGuideDiscovery.outdated') }}
             </span>
@@ -88,6 +88,12 @@
           />
           <div class="matchup-sheet__identity-text">
             <div class="matchup-sheet__identity-meta">
+              <span
+                v-if="(guide.visibility ?? 'public') === 'private'"
+                class="matchup-sheet__badge matchup-sheet__badge--private"
+              >
+                {{ t('buildsPage.private') }}
+              </span>
               <div class="matchup-sheet__name-line">
                 <h3 class="matchup-sheet__champion-name">
                   {{ guide.champion?.name ?? '?' }}
@@ -158,12 +164,6 @@
               />
             </svg>
           </button>
-          <span
-            v-if="(guide.visibility ?? 'public') === 'private'"
-            class="matchup-sheet__badge matchup-sheet__badge--private"
-          >
-            {{ t('buildsPage.private') }}
-          </span>
           <span v-if="guide.patchStale" class="matchup-sheet__badge matchup-sheet__badge--stale">
             {{ t('matchupGuideDiscovery.outdated') }}
           </span>

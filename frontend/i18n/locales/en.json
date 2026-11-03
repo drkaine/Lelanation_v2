@@ -378,6 +378,7 @@
       "vsDisable": "Disable VS mode",
       "allyCard": "You",
       "enemyCard": "Enemy",
+      "pickFromLibrary": "Library",
       "emptyHint": "Click an area on the build card (champion, items, runes) to open the related selector. Skill order is edited directly on the card."
     },
     "spells": {
@@ -2464,7 +2465,9 @@
     "fieldGuideDescriptionPlaceholder": "Guide overview, playstyle, lane context…",
     "finalizeMissingIdentity": "Fill in the guide name, author, and short description to save.",
     "finalizeVisibilityLabel": "Guide visibility",
-    "finalizeVisibilityHint": "Public: visible in Discover. Private: saved locally, not published."
+    "finalizeVisibilityHint": "Public: visible in Discover. Private: saved locally, not published.",
+    "pickBuildSearch": "Search by title, author or champion…",
+    "pickBuildEmpty": "No build in this tab."
   },
   "matchupGuideDiscovery": {
     "searchPlaceholder": "Search by champion, opponent or author...",

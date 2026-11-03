@@ -75,16 +75,26 @@
         type="text"
         maxlength="30"
         class="card-top-author-input"
+        :readonly="!cardTopEditable"
         :placeholder="t('createBuild.author')"
         @input="updateCardAuthor(($event.target as HTMLInputElement).value)"
       />
 
-      <div v-if="!readonly" class="card-top-visibility-toggle">
+      <div v-if="!readonly && libraryPicker" class="card-top-visibility-toggle">
+        <button
+          type="button"
+          class="card-top-visibility-button is-active"
+          @click.stop="emit('pick-library')"
+        >
+          {{ t('theorycraft.panel.pickFromLibrary') }}
+        </button>
+      </div>
+      <div v-else-if="!readonly" class="card-top-visibility-toggle">
         <button
           type="button"
           class="card-top-visibility-button"
           :class="{ 'is-active': cardVisibility === 'public' }"
-          :disabled="teamControls.visibilityLocked"
+          :disabled="teamControls.visibilityLocked || !cardTopEditable"
           @click="setCardVisibility('public')"
         >
           {{ t('buildsPage.public') }}
@@ -93,7 +103,7 @@
           type="button"
           class="card-top-visibility-button"
           :class="{ 'is-active': cardVisibility === 'private' }"
-          :disabled="teamControls.visibilityLocked"
+          :disabled="teamControls.visibilityLocked || !cardTopEditable"
           @click="setCardVisibility('private')"
         >
           {{ t('buildsPage.private') }}
@@ -106,7 +116,7 @@
           <input
             type="checkbox"
             :checked="cardTeamShared"
-            :disabled="teamControls.teamShareLocked"
+            :disabled="teamControls.teamShareLocked || !cardTopEditable"
             @change="setCardTeamShared(($event.target as HTMLInputElement).checked)"
           />
           {{ t('buildsPage.shared') }}
@@ -1915,6 +1925,7 @@ import type {
   CalculatedStats,
 } from '@lelanation/shared-types'
 import { showLelarivaBadge, teamShareControls } from '~/utils/sharedBuildSync'
+import { buildCardTopState } from '~/utils/buildCardTopState'
 import { notesChipPlacement, tagColumnVisible } from '~/utils/buildCardNotesChip'
 import { BUILD_TAG_COLORS, buildTagChipStyle, buildTagUsesDarkText } from '~/utils/buildTagColors'
 import { useUserSession } from '~/composables/useUserSession'
@@ -2032,6 +2043,8 @@ interface Props {
   flipped?: boolean
   /** Theorycraft vs : état des objets de la card inactive (le store porte celui du côté actif). */
   theorycraftItemState?: TheorycraftItemState | null
+  /** Theorycraft adversaire : bouton « bibliothèque » à la place de la visibilité. */
+  libraryPicker?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -2050,6 +2063,7 @@ const props = withDefaults(defineProps<Props>(), {
   activeSelectionRegion: null,
   flipBackFace: 'description',
   flipped: undefined,
+  libraryPicker: false,
 })
 type BuildTag = NonNullable<Build['tags']>[number]
 
@@ -2063,6 +2077,7 @@ const emit = defineEmits<{
   /** Discover / readonly grid : ouvrir l’onglet notes du build. */
   'notes-click': []
   'guide-click': []
+  'pick-library': []
 }>()
 
 const buildStore = useBuildStore()
@@ -2314,11 +2329,11 @@ const theorycraftDescriptionFlipTitle = computed(() =>
     : t('theorycraft.description.showDescription')
 )
 
-const cardAuthor = computed(() => buildStore.currentBuild?.author ?? '')
-const cardVisibility = computed<'public' | 'private'>(
-  () => buildStore.currentBuild?.visibility ?? 'public'
-)
-const cardTeamShared = computed(() => buildStore.currentBuild?.teamShared === true)
+const cardTopState = computed(() => buildCardTopState(props.build, buildStore.currentBuild))
+const cardAuthor = computed(() => cardTopState.value.author)
+const cardVisibility = computed(() => cardTopState.value.visibility)
+const cardTeamShared = computed(() => cardTopState.value.teamShared)
+const cardTopEditable = computed(() => cardTopState.value.editable)
 const { role: sessionRole, load: loadUserSession } = useUserSession()
 const savedTeamShared = computed(() => {
   const id = buildStore.currentBuild?.id

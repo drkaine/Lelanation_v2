@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { DEFAULT_SITE_URL } from './utils/siteUrl'
 import { ICON_API_ENDPOINT, apiProxyRouteRules } from './utils/apiRouteRules'
 import { createSharedStatsChunk, statsPageChunk } from './utils/statsChunks'
+import { isIgnorableRollupWarning } from './utils/rollupWarnings'
 
 // One memo per Rollup build.
 const sharedStatsChunks = new WeakMap<object, (id: string) => string | undefined>()
@@ -251,6 +252,12 @@ export default defineNuxtConfig({
   // NUXT_BUILD_DIR / NUXT_OUTPUT_DIR: build elsewhere than the live `.output` (verification builds).
   ...(process.env.NUXT_BUILD_DIR ? { buildDir: process.env.NUXT_BUILD_DIR } : {}),
   nitro: {
+    rollupConfig: {
+      onwarn(warning, warn) {
+        if (isIgnorableRollupWarning(warning)) return
+        warn(warning)
+      },
+    },
     ...(process.env.NUXT_OUTPUT_DIR ? { output: { dir: process.env.NUXT_OUTPUT_DIR } } : {}),
     prerender: {
       crawlLinks: false,

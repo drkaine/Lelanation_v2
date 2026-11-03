@@ -47,6 +47,12 @@ export function igniteTotalDamage(level: number): number {
   return 50 + 20 * level
 }
 
+/** Ignite ticks: one true-damage tick per second for 5 s, starting 1 s after cast. */
+export function igniteTicks(level: number, now: number): { at: number; trueDamage: number }[] {
+  const tick = igniteTotalDamage(level) / 5
+  return [1, 2, 3, 4, 5].map(second => ({ at: now + second, trueDamage: tick }))
+}
+
 export function summonerBarrierShield(level: number): number {
   return 87 + 18 * level
 }
@@ -72,6 +78,17 @@ const CONSUMABLE_HEALS: Record<string, { total: number; duration: number }> = {
 
 export function consumableHeal(itemId: string): { total: number; duration: number } | null {
   return CONSUMABLE_HEALS[itemId] ?? null
+}
+
+/** Soins d'une potion, un tick par seconde à partir de `now + 1`. */
+export function potionTicks(itemId: string, now: number): { at: number; heal: number }[] {
+  const potion = consumableHeal(itemId)
+  if (!potion) return []
+  const perTick = potion.total / potion.duration
+  return Array.from({ length: potion.duration }, (_, index) => ({
+    at: now + index + 1,
+    heal: perTick,
+  }))
 }
 
 /** Heals the target (never above max health, never a dead target). */

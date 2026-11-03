@@ -247,6 +247,15 @@ export function useTheorycraftVs(opts: TheorycraftVsOptions) {
     buildStore.setStatsLevel(sideLevels.value[side])
   }
 
+  /** Opponent taken from the library: a copy, the ally stays as it is. */
+  function setEnemyBuild(build: Build) {
+    sideBuilds.value.enemy = cloneBuild(build)
+    sidePanels.value.enemy = 'theorycraft'
+    if (activeSide.value !== 'enemy') return
+    activePanel.value = 'theorycraft'
+    loadSideBuild('enemy')
+  }
+
   function statsFlipActive(side: TheorycraftSide): boolean {
     return sideFlipped.value[side] && sideBackFace.value[side] === 'stats'
   }
@@ -413,6 +422,7 @@ export function useTheorycraftVs(opts: TheorycraftVsOptions) {
     emptyEnemyBuild,
     restoreActiveSide,
     activateSide,
+    setEnemyBuild,
     statsFlipActive,
     statsFlipTitle,
     theorycraftPanelActive,

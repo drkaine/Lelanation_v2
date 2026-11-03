@@ -147,6 +147,7 @@ export function useBuildDetailTheorycraft(sourceBuild: Ref<Build | null>) {
     enter,
     leave,
     activateSide: vs.activateSide,
+    setEnemyBuild: vs.setEnemyBuild,
     statsFlipActive: vs.statsFlipActive,
     statsFlipTitle: vs.statsFlipTitle,
     theorycraftPanelActive: vs.theorycraftPanelActive,

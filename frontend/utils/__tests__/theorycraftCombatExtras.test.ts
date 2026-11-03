@@ -9,6 +9,8 @@ import {
   healTarget,
   regenerateHp,
   igniteTotalDamage,
+  igniteTicks,
+  potionTicks,
   summonerBarrierShield,
   summonerHealAmount,
 } from '../theorycraftCombatExtras'
@@ -136,5 +138,27 @@ describe('combineControlDurations', () => {
 
   it('returns zeros without controls', () => {
     expect(combineControlDurations([])).toEqual({ duration: 0, hardDuration: 0, slowDuration: 0 })
+  })
+})
+
+describe('igniteTicks', () => {
+  it('5 ticks de dégâts bruts, un par seconde, total = dégâts d’embrasement', () => {
+    const ticks = igniteTicks(1, 10)
+    expect(ticks.map(tick => tick.at)).toEqual([11, 12, 13, 14, 15])
+    expect(ticks.reduce((sum, tick) => sum + tick.trueDamage, 0)).toBe(igniteTotalDamage(1))
+  })
+})
+
+describe('potionTicks', () => {
+  it('soin réparti sur la durée de la potion, un tick par seconde', () => {
+    const ticks = potionTicks('2003', 4)
+    expect(ticks).toHaveLength(15)
+    expect(ticks[0]!.at).toBe(5)
+    expect(ticks[14]!.at).toBe(19)
+    expect(ticks.reduce((sum, tick) => sum + tick.heal, 0)).toBeCloseTo(120)
+  })
+
+  it('aucun tick pour un objet qui n’est pas une potion', () => {
+    expect(potionTicks('1001', 0)).toEqual([])
   })
 })

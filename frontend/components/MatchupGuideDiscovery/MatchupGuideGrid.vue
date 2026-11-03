@@ -21,7 +21,7 @@
     </div>
 
     <template v-else>
-      <div class="matchup-guide-grid-list ui-card-grid" style="--ui-card-grid-max: 420px">
+      <div class="matchup-guide-grid-list ui-card-grid" style="--ui-card-grid-max: 560px">
         <div v-for="guide in guides" :key="guide.id" class="matchup-guide-grid-item">
           <div class="matchup-guide-grid-author-row">
             <span class="truncate font-semibold">

@@ -375,6 +375,7 @@
             </span>
           </span>
         </div>
+        <TheorycraftRuneStackPanel variant="header" class="mb-2" />
         <table class="w-full text-xs">
           <thead>
             <tr class="text-[10px] uppercase text-muted">
@@ -654,6 +655,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
+import TheorycraftRuneStackPanel from '~/components/Build/TheorycraftRuneStackPanel.vue'
 import { useChampionData } from '~/composables/useChampionData'
 import {
   finalizeTooltipDisplay,
@@ -734,7 +736,8 @@ import {
   eclipseTriggered,
   healTarget,
   regenerateHp,
-  igniteTotalDamage,
+  igniteTicks,
+  potionTicks,
   summonerBarrierShield,
   summonerCooldown,
   summonerHealAmount,
@@ -1712,18 +1715,19 @@ function useExtraAction(action: ExtraAction) {
   spellReadyAt[action.key] = now + action.cooldown
   const level = attackerLevelForMitigation()
   if (action.kind === 'ignite') {
-    const tick = igniteTotalDamage(level) / 5
     targetGrievousUntil.value = Math.max(targetGrievousUntil.value, now + 5)
-    for (let second = 1; second <= 5; second += 1) {
+    for (const tick of igniteTicks(level, now)) {
       queueHitEvent({
-        at: now + second,
+        at: tick.at,
         label,
-        split: { ...emptySplit(), true: tick },
+        split: { ...emptySplit(), true: tick.trueDamage },
         hardCc: 0,
         slowCc: 0,
         periodic: true,
       })
     }
+    // Sans avance du temps, les ticks restaient en attente : la cible ne perdait rien.
+    flushPendingHits()
   } else if (action.kind === 'barrier') {
     const amount = summonerBarrierShield(level)
     if (action.side === 'self') {
@@ -1758,17 +1762,18 @@ function useExtraAction(action: ExtraAction) {
         t('theorycraft.practice.log.selfHeal', { label, amount: formatDamageValue(potion.total) })
       )
     } else {
-      const perTick = potion.total / potion.duration
-      for (let second = 1; second <= potion.duration; second += 1) {
+      for (const tick of potionTicks(action.itemId ?? '', now)) {
         queueHitEvent({
-          at: now + second,
+          at: tick.at,
           label,
           split: emptySplit(),
           hardCc: 0,
           slowCc: 0,
-          heal: perTick,
+          heal: tick.heal,
         })
       }
+      // Comme l'embrasement : sans avance du temps, les soins restaient en attente.
+      flushPendingHits()
     }
   }
 }
