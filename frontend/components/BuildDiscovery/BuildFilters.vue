@@ -39,8 +39,8 @@
           class="build-tag-chip"
           :class="[
             selectedTag === opt.value ? 'build-tag-chip--selected' : 'build-tag-chip--unselected',
-            selectedTag === opt.value && opt.value === 'troll'
-              ? 'build-tag-chip--troll-selected'
+            selectedTag === opt.value && buildTagUsesDarkText(opt.value)
+              ? 'build-tag-chip--dark-text'
               : '',
           ]"
           :style="selectedTag === opt.value ? opt.chipStyle : undefined"
@@ -125,7 +125,10 @@ import type {
 } from '~/stores/BuildDiscoveryStore'
 import { comparePatchMajorMinor, patchFromGameVersion } from '~/utils/patchVersion'
 import { riotLanguage } from '~/utils/riotLanguage'
-import { hasLelarivaBuild } from '~/utils/buildTagFilter'
+import { hasGuidedBuild, hasLelarivaBuild } from '~/utils/buildTagFilter'
+import { buildTagChipStyle, buildTagUsesDarkText } from '~/utils/buildTagColors'
+import { buildMatchupGuideByBuildIdMap } from '~/utils/matchupGuideByBuild'
+import { useMatchupGuideDiscoveryStore } from '~/stores/MatchupGuideDiscoveryStore'
 
 const { locale, t } = useI18n()
 const discoveryStore = useBuildDiscoveryStore()
@@ -192,49 +195,63 @@ const tagFilterOptions: Array<{
     | 'buildDiscovery.tagTroll'
     | 'buildDiscovery.tagNotes'
     | 'buildDiscovery.tagLelariva'
+    | 'buildDiscovery.tagGuide'
   chipStyle: Record<string, string>
 }> = [
   {
     value: 'pro',
     label: 'Pro',
     labelKey: 'buildDiscovery.tagPro',
-    chipStyle: { '--tag-g1': '#bd9700', '--tag-g2': '#704b00' },
+    chipStyle: buildTagChipStyle('pro'),
   },
   {
     value: 'otp',
     label: 'OTP',
     labelKey: 'buildDiscovery.tagOtp',
-    chipStyle: { '--tag-g1': '#00b4dd', '--tag-g2': '#003366' },
+    chipStyle: buildTagChipStyle('otp'),
   },
   {
     value: 'exotique',
     label: 'Exotique',
     labelKey: 'buildDiscovery.tagExotique',
-    chipStyle: { '--tag-g1': '#6e008a', '--tag-g2': '#420042' },
+    chipStyle: buildTagChipStyle('exotique'),
   },
   {
     value: 'troll',
     label: 'Troll',
     labelKey: 'buildDiscovery.tagTroll',
-    chipStyle: { '--tag-g1': '#e4b5e4', '--tag-g2': '#36bfb1' },
+    chipStyle: buildTagChipStyle('troll'),
   },
   {
     value: 'notes',
     label: 'Notes',
     labelKey: 'buildDiscovery.tagNotes',
-    chipStyle: { '--tag-g1': '#2f855a', '--tag-g2': '#1a4731' },
+    chipStyle: buildTagChipStyle('notes'),
   },
   {
     value: 'lelariva',
     label: 'Lelariva',
     labelKey: 'buildDiscovery.tagLelariva',
-    chipStyle: { '--tag-g1': '#2fb9a5', '--tag-g2': '#0b2e2a' },
+    chipStyle: buildTagChipStyle('lelariva'),
+  },
+  {
+    value: 'guide',
+    label: 'Guide',
+    labelKey: 'buildDiscovery.tagGuide',
+    chipStyle: buildTagChipStyle('guide'),
   },
 ]
 
+const matchupGuideDiscoveryStore = useMatchupGuideDiscoveryStore()
+const guidedBuildIds = computed(
+  () => new Set(buildMatchupGuideByBuildIdMap(matchupGuideDiscoveryStore.guides).keys())
+)
+
 const visibleTagFilterOptions = computed(() =>
   tagFilterOptions.filter(
-    opt => opt.value !== 'lelariva' || hasLelarivaBuild(discoveryStore.builds)
+    opt =>
+      (opt.value !== 'lelariva' || hasLelarivaBuild(discoveryStore.builds)) &&
+      (opt.value !== 'guide' || hasGuidedBuild(discoveryStore.builds, guidedBuildIds.value))
   )
 )
 

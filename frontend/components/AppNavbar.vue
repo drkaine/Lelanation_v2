@@ -115,66 +115,6 @@
           </div>
           <div
             class="builds-menu"
-            @mouseenter="isGuidesMenuOpen = true"
-            @mouseleave="isGuidesMenuOpen = false"
-          >
-            <button
-              type="button"
-              class="builds-menu-trigger"
-              :class="{
-                'is-active': isGuidesSectionActive,
-                'is-open': isGuidesMenuOpen,
-              }"
-              :aria-expanded="isGuidesMenuOpen"
-              aria-haspopup="true"
-              @click="openGuidesMenu"
-            >
-              <span>{{ t('nav.guides') }}</span>
-              <span class="builds-menu-chevron" :class="{ 'is-open': isGuidesMenuOpen }">▾</span>
-            </button>
-            <div v-show="isGuidesMenuOpen" class="builds-menu-dropdown">
-              <NuxtLink
-                :to="createGuideLink"
-                :title="t('matchupGuidePage.createGuide')"
-                class="builds-submenu-link"
-                :class="{ 'is-active': isCreateGuideActive }"
-                @click="closeGuidesMenu"
-              >
-                {{ t('matchupGuidePage.createGuide') }}
-              </NuxtLink>
-              <NuxtLink
-                :to="discoverGuidesLink"
-                :title="t('buildsPage.discover')"
-                class="builds-submenu-link"
-                :class="{ 'is-active': isDiscoverGuidesActive }"
-                @click="closeGuidesMenu"
-              >
-                {{ t('buildsPage.discover') }}
-              </NuxtLink>
-              <NuxtLink
-                v-if="hasMyGuides"
-                :to="myGuidesLink"
-                :title="t('matchupGuidePage.myGuides')"
-                class="builds-submenu-link"
-                :class="{ 'is-active': isMyGuidesActive }"
-                @click="closeGuidesMenu"
-              >
-                {{ t('matchupGuidePage.myGuides') }}
-              </NuxtLink>
-              <NuxtLink
-                v-if="hasFavoriteGuides"
-                :to="favoriteGuidesLink"
-                :title="t('buildsPage.myFavorites')"
-                class="builds-submenu-link"
-                :class="{ 'is-active': isFavoriteGuidesActive }"
-                @click="closeGuidesMenu"
-              >
-                {{ t('buildsPage.myFavorites') }}
-              </NuxtLink>
-            </div>
-          </div>
-          <div
-            class="builds-menu"
             @mouseenter="isStatisticsMenuOpen = true"
             @mouseleave="isStatisticsMenuOpen = false"
           >
@@ -309,8 +249,6 @@ import { useClientHydrated } from '~/composables/useClientHydrated'
 import { useMobileViewport } from '~/composables/useMobileViewport'
 import { useFavoritesStore } from '~/stores/FavoritesStore'
 import { useBuildStore } from '~/stores/BuildStore'
-import { useMatchupGuideStore } from '~/stores/MatchupGuideStore'
-import { useMatchupGuideFavoritesStore } from '~/stores/MatchupGuideFavoritesStore'
 import { filterStandaloneLibraryBuilds } from '~/utils/buildLibrary'
 import { useStatisticsUiStore } from '~/stores/StatisticsUiStore'
 import { useVersionStore } from '~/stores/VersionStore'
@@ -318,7 +256,6 @@ import { normalizePatchNotesVersion, usePatchNotesStore } from '~/stores/PatchNo
 import { pickLatestPatchVersion } from '~/utils/patchVersion'
 
 const isBuildsMenuOpen = ref(false)
-const isGuidesMenuOpen = ref(false)
 const isStatisticsMenuOpen = ref(false)
 const { isMobileViewport } = useMobileViewport()
 const { t } = useI18n()
@@ -335,25 +272,6 @@ const itemShopLink = computed(() => localePath('/items'))
 const myBuildsLink = computed(() => localePath('/builds/my-builds'))
 const teamBuildsLink = computed(() => localePath('/builds/team'))
 const favoriteBuildsLink = computed(() => localePath('/builds/favoris'))
-const discoverGuidesLink = computed(() => localePath('/matchups/sheets/discover'))
-const myGuidesLink = computed(() => localePath('/matchups/sheets/my-guides'))
-const favoriteGuidesLink = computed(() => localePath('/matchups/sheets/favoris'))
-const createGuideLink = computed(() => localePath('/matchups/sheets/create'))
-const isGuidesSectionActive = computed(() => route.path.includes('/matchups/sheets'))
-const currentGuidesTab = computed(() => {
-  const path = route.path
-  if (!path.includes('/matchups/sheets')) return null
-  if (path.includes('/matchups/sheets/create')) return 'create'
-  if (path.endsWith('/matchups/sheets/my-guides')) return 'my-guides'
-  if (path.endsWith('/matchups/sheets/favoris')) return 'favoris'
-  if (path.endsWith('/matchups/sheets/discover') || path.endsWith('/matchups/sheets'))
-    return 'discover'
-  return null
-})
-const isDiscoverGuidesActive = computed(() => currentGuidesTab.value === 'discover')
-const isMyGuidesActive = computed(() => currentGuidesTab.value === 'my-guides')
-const isFavoriteGuidesActive = computed(() => currentGuidesTab.value === 'favoris')
-const isCreateGuideActive = computed(() => currentGuidesTab.value === 'create')
 const isBuildsSectionActive = computed(() => route.path.includes('/builds'))
 const isCompanionAppActive = computed(() => {
   const appPath = localePath('/download')
@@ -376,8 +294,6 @@ const isTeamBuildsActive = computed(() => currentBuildsTab.value === 'team')
 const isFavoriteBuildsActive = computed(() => currentBuildsTab.value === 'favoris')
 const favoritesStore = useFavoritesStore()
 const buildStore = useBuildStore()
-const matchupGuideStore = useMatchupGuideStore()
-const matchupGuideFavoritesStore = useMatchupGuideFavoritesStore()
 const statisticsUiStore = useStatisticsUiStore()
 const surveillanceAlertStore = useStatisticsSurveillanceAlertStore()
 const buildSurveillanceStore = useStatisticsBuildSurveillanceStore()
@@ -387,12 +303,6 @@ const hasUserBuilds = computed(
   () =>
     clientHydrated.value && filterStandaloneLibraryBuilds(buildStore.getSavedBuilds()).length > 0
 )
-const hasMyGuides = computed(() => {
-  if (!clientHydrated.value) return false
-  const version = matchupGuideStore.savedGuidesVersion
-  return version >= 0 && matchupGuideStore.getSavedGuides().length > 0
-})
-const hasFavoriteGuides = computed(() => matchupGuideFavoritesStore.favoriteGuideIds.length > 0)
 const hasWatchedChampions = computed(
   () => clientHydrated.value && statisticsUiStore.watchedChampionIds.length > 0
 )
@@ -501,7 +411,6 @@ onMounted(() => {
   }
   patchNotesStore.loadIndex().catch(() => undefined)
   favoritesStore.init()
-  matchupGuideFavoritesStore.init()
 })
 
 watch(
@@ -509,35 +418,22 @@ watch(
   () => {
     if (import.meta.client) checkLoggedIn()
     closeBuildsMenu()
-    closeGuidesMenu()
     closeStatisticsMenu()
   }
 )
 
 const openBuildsMenu = () => {
-  closeGuidesMenu()
   closeStatisticsMenu()
   isBuildsMenuOpen.value = true
 }
 
-const openGuidesMenu = () => {
-  closeBuildsMenu()
-  closeStatisticsMenu()
-  isGuidesMenuOpen.value = true
-}
-
 const openStatisticsMenu = () => {
   closeBuildsMenu()
-  closeGuidesMenu()
   isStatisticsMenuOpen.value = true
 }
 
 const closeBuildsMenu = () => {
   isBuildsMenuOpen.value = false
-}
-
-const closeGuidesMenu = () => {
-  isGuidesMenuOpen.value = false
 }
 
 const closeStatisticsMenu = () => {

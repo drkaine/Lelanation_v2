@@ -301,10 +301,10 @@ body {
   --rgb-muted: var(--rgb-grey-50);
 
   /* Build / guide tag gradients (shared across cards & filters) */
-  --gradient-tag-pro: linear-gradient(130deg, var(--color-gold-300) 0%, var(--color-gold-400) 100%);
-  --gradient-tag-otp: linear-gradient(130deg, var(--color-blue-100) 0%, var(--color-blue-300) 100%);
+  --gradient-tag-pro: linear-gradient(130deg, #dbdbdb 0%, #C8AA6E 100%);
+  --gradient-tag-otp: linear-gradient(130deg, #00b4dd 0%, #003366 100%);
   --gradient-tag-exotique: linear-gradient(130deg, #6e008a 0%, #420042 100%);
-  --gradient-tag-troll: linear-gradient(130deg, #e4b5e4 0%, var(--color-blue-100) 100%);
+  --gradient-tag-troll: linear-gradient(130deg, #e4b5e4 0%, #36bfb1 100%);
 
   /* Tier list badges (home + stats) — gold / teal / blue spectrum only */
   --color-tier-s: var(--color-gold-300);

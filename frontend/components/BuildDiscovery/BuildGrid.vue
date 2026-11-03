@@ -144,12 +144,14 @@
               :initial-displayed-variant-index="
                 getSearchMatchedVariantIndex(build, discoveryStore.searchQuery)
               "
+              :has-guide="!!getLinkedGuide(build.id)"
               @variant-change="
                 idx => {
                   displayedSubMap[build.id] = idx
                 }
               "
               @notes-click="openBuildNotes(build)"
+              @guide-click="openLinkedGuide(build.id)"
             />
           </div>
         </div>
@@ -685,7 +687,7 @@ const filteredCustomBuilds = computed(() => {
   // Filter by build tag
   if (discoveryStore.selectedTag) {
     const tag = discoveryStore.selectedTag
-    results = results.filter(build => buildMatchesTag(build, tag))
+    results = results.filter(build => buildMatchesTag(build, tag, guidedBuildIds.value))
   }
 
   // Filter by version
@@ -812,6 +814,13 @@ const guideByBuildId = computed(() => {
 
 function getLinkedGuide(buildId: string): MatchupGuide | null {
   return guideByBuildId.value.get(buildId) ?? null
+}
+
+const guidedBuildIds = computed(() => new Set(guideByBuildId.value.keys()))
+
+function openLinkedGuide(buildId: string) {
+  const guide = getLinkedGuide(buildId)
+  if (guide) router.push(matchupGuideDetailPath(guide, localePath))
 }
 
 const COMPANION_IMPORT_BRIDGE = 'http://127.0.0.1:17321/import'

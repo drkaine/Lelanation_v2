@@ -29,7 +29,7 @@
     filter: grayscale(0%);
   }
 
-  .build-tag-chip--selected.build-tag-chip--troll-selected {
+  .build-tag-chip--selected.build-tag-chip--dark-text {
     color: rgba(12, 12, 14, 0.94);
     border-color: rgb(12 12 14 / 0.35);
   }

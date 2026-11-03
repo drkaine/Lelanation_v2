@@ -152,13 +152,6 @@ export function useAppMobileTabBar() {
         icon: 'mdi:hammer-wrench',
         hasSubmenu: true,
       },
-      {
-        id: 'guides',
-        path: localePath('/matchups/sheets/discover'),
-        labelKey: 'mobileTabBar.guidesShort',
-        icon: 'mdi:sword-cross',
-        hasSubmenu: true,
-      },
     ]
 
     items.push(

@@ -2548,6 +2548,7 @@
     "tagExotique": "Exotique",
     "tagTroll": "Troll",
     "tagNotes": "Notes",
+    "tagGuide": "Guide lié",
     "tagLelariva": "Validés par Lelariva",
     "filterNotesTitle": "Afficher uniquement les builds avec des notes",
     "viewBuildNotes": "Voir les notes du build",

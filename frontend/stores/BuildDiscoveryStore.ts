@@ -10,6 +10,8 @@ import { extractPatchStaleMap, mergePatchStaleIntoBuilds } from '~/utils/mergePa
 import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import { matchesChampionSearch, matchesLocalizedTextSearch } from '~/utils/multilingualEntitySearch'
 import { buildMatchesTag } from '~/utils/buildTagFilter'
+import { buildMatchupGuideByBuildIdMap } from '~/utils/matchupGuideByBuild'
+import { useMatchupGuideDiscoveryStore } from '~/stores/MatchupGuideDiscoveryStore'
 import { patchFromGameVersion } from '~/utils/patchVersion'
 import { fetchPublicBuildsProgressive } from '~/utils/fetchPublicBuilds'
 import type { JsonFetcher } from '~/utils/jsonFetcher'
@@ -17,7 +19,15 @@ import type { JsonFetcher } from '~/utils/jsonFetcher'
 export type SortOption = 'recent' | 'popular' | 'name'
 export type FilterRole = 'top' | 'jungle' | 'mid' | 'adc' | 'support' | null
 /** Filtre découverte : tag build (Pro / OTP / …) ou filtre « notes ». */
-export type FilterBuildTag = 'pro' | 'otp' | 'exotique' | 'troll' | 'notes' | 'lelariva' | null
+export type FilterBuildTag =
+  | 'pro'
+  | 'otp'
+  | 'exotique'
+  | 'troll'
+  | 'notes'
+  | 'lelariva'
+  | 'guide'
+  | null
 export type PageSizeOption = 20 | 30 | 40 | 50 | 'all'
 
 const PAGINATION_STORAGE_KEY = 'lelanation_builds_pagination'
@@ -151,7 +161,11 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
       // Filter by build tag (Pro, OTP, …) or notes presence
       if (this.selectedTag) {
         const tag = this.selectedTag
-        results = results.filter(build => buildMatchesTag(build, tag))
+        const guidedIds =
+          tag === 'guide'
+            ? new Set(buildMatchupGuideByBuildIdMap(useMatchupGuideDiscoveryStore().guides).keys())
+            : undefined
+        results = results.filter(build => buildMatchesTag(build, tag, guidedIds))
       }
 
       // Filter by version

@@ -379,29 +379,16 @@
             </div>
           </div>
 
-          <div
-            v-if="
-              !readonly ||
-              selectedBuildTags.length > 0 ||
-              displayBuild?.patchStale ||
-              hasLelarivaBadge
-            "
-            class="build-tags-section"
-          >
+          <div v-if="showTagColumn" class="build-tags-section">
             <div class="build-tags-container">
               <span
                 v-if="hasLelarivaBadge"
                 class="build-tag-chip build-tag-chip--selected build-tag-chip--lelariva"
-                :style="{ '--tag-g1': '#2fb9a5', '--tag-g2': '#0b2e2a' }"
+                :style="buildTagChipStyle('lelariva')"
                 :title="t('buildsPage.lelarivaBadgeTitle')"
               >
                 Lelariva
               </span>
-              <PatchStaleBuildBadge
-                v-if="displayBuild?.patchStale"
-                :patch-stale="displayBuild.patchStale"
-                class="build-patch-stale-chip"
-              />
               <button
                 v-for="tag in visibleBuildTags"
                 :key="tag.id"
@@ -411,8 +398,8 @@
                   selectedBuildTags.includes(tag.id)
                     ? 'build-tag-chip--selected'
                     : 'build-tag-chip--unselected',
-                  selectedBuildTags.includes(tag.id) && tag.id === 'troll'
-                    ? 'build-tag-chip--troll-selected'
+                  selectedBuildTags.includes(tag.id) && buildTagUsesDarkText(tag.id)
+                    ? 'build-tag-chip--dark-text'
                     : '',
                 ]"
                 :style="
@@ -426,10 +413,28 @@
                 {{ tag.label }}
               </button>
               <button
+                v-if="hasGuide && !forScreenshot"
+                type="button"
+                class="build-tag-chip build-tag-chip--selected build-card-guide-tag"
+                :style="buildTagChipStyle('guide')"
+                :title="t('buildDiscovery.viewLinkedGuide')"
+                :aria-label="t('buildDiscovery.viewLinkedGuide')"
+                @click.stop="emit('guide-click')"
+              >
+                Guide
+              </button>
+              <span
+                v-else-if="hasGuide"
+                class="build-tag-chip build-tag-chip--selected build-card-guide-tag"
+                :style="buildTagChipStyle('guide')"
+              >
+                Guide
+              </span>
+              <button
                 v-if="showNotesTag && notesInTagStack && !forScreenshot"
                 type="button"
                 class="build-tag-chip build-tag-chip--selected build-card-notes-tag"
-                :style="{ '--tag-g1': '#2f855a', '--tag-g2': '#1a4731' }"
+                :style="buildTagChipStyle('notes')"
                 :title="t('buildDiscovery.viewBuildNotes')"
                 :aria-label="t('buildDiscovery.viewBuildNotes')"
                 @click.stop="emit('notes-click')"
@@ -439,7 +444,7 @@
               <span
                 v-else-if="showNotesTag && notesInTagStack"
                 class="build-tag-chip build-tag-chip--selected build-card-notes-tag"
-                :style="{ '--tag-g1': '#2f855a', '--tag-g2': '#1a4731' }"
+                :style="buildTagChipStyle('notes')"
               >
                 {{ t('buildDiscovery.tagNotes') }}
               </span>
@@ -522,8 +527,18 @@
             <div v-else class="champion-portrait-placeholder"></div>
           </div>
 
+          <PatchStaleBuildBadge
+            v-if="displayBuild?.patchStale"
+            :patch-stale="displayBuild.patchStale"
+            class="build-patch-stale-chip"
+          />
+
           <!-- Titre du build / variante (fallback = nom du champion) — zone hauteur fixe + police ajustée -->
-          <div ref="championTitleBoxRef" class="champion-name-box">
+          <div
+            ref="championTitleBoxRef"
+            class="champion-name-box"
+            :class="{ 'champion-name-box--beside-tags': showFrontVariantsTagsStack }"
+          >
             <h2 ref="championNameRef" class="champion-name" :title="cardTitle || undefined">
               {{ cardTitle }}
             </h2>
@@ -535,7 +550,7 @@
               v-if="showNotesTag && !notesInTagStack && !forScreenshot"
               type="button"
               class="build-tag-chip build-tag-chip--selected build-card-notes-tag build-card-notes-tag--summoner-row"
-              :style="{ '--tag-g1': '#2f855a', '--tag-g2': '#1a4731' }"
+              :style="buildTagChipStyle('notes')"
               :title="t('buildDiscovery.viewBuildNotes')"
               :aria-label="t('buildDiscovery.viewBuildNotes')"
               @click.stop="emit('notes-click')"
@@ -545,7 +560,7 @@
             <span
               v-else-if="showNotesTag && !notesInTagStack"
               class="build-tag-chip build-tag-chip--selected build-card-notes-tag build-card-notes-tag--summoner-row"
-              :style="{ '--tag-g1': '#2f855a', '--tag-g2': '#1a4731' }"
+              :style="buildTagChipStyle('notes')"
             >
               {{ t('buildDiscovery.tagNotes') }}
             </span>
@@ -1900,7 +1915,8 @@ import type {
   CalculatedStats,
 } from '@lelanation/shared-types'
 import { showLelarivaBadge, teamShareControls } from '~/utils/sharedBuildSync'
-import { notesChipPlacement } from '~/utils/buildCardNotesChip'
+import { notesChipPlacement, tagColumnVisible } from '~/utils/buildCardNotesChip'
+import { BUILD_TAG_COLORS, buildTagChipStyle, buildTagUsesDarkText } from '~/utils/buildTagColors'
 import { useUserSession } from '~/composables/useUserSession'
 import { THEORYCRAFT_ITEM_STATE_KEY, type TheorycraftItemState } from '~/utils/theorycraftItemState'
 import {
@@ -1988,6 +2004,8 @@ interface RegionsPayload {
 }
 
 interface Props {
+  /** Un guide de matchup est lié au build : chip « Guide » cliquable. */
+  hasGuide?: boolean
   build?: Build | null // Build optionnel - si non fourni, utilise currentBuild du store
   calculatedStats?: CalculatedStats | null
   statsLevel?: number | null
@@ -2044,6 +2062,7 @@ const emit = defineEmits<{
   'toggle-description-flip': []
   /** Discover / readonly grid : ouvrir l’onglet notes du build. */
   'notes-click': []
+  'guide-click': []
 }>()
 
 const buildStore = useBuildStore()
@@ -3124,12 +3143,12 @@ const versionForImages = defaultVersion
 // Rôles
 const allRoles: Role[] = ['top', 'jungle', 'mid', 'adc', 'support']
 const selectedRoles = computed(() => displayBuild.value?.roles || [])
-/** Paires alignées sur `public/data/regions.json` (shurima, freljord, void, ionia). */
+/** Couleurs par région : `utils/buildTagColors.ts`. */
 const orderedBuildTags: Array<{ id: BuildTag; label: string; gradient: [string, string] }> = [
-  { id: 'pro', label: 'Pro', gradient: ['#bd9700', '#704b00'] },
-  { id: 'otp', label: 'OTP', gradient: ['#00b4dd', '#003366'] },
-  { id: 'exotique', label: 'Exotique', gradient: ['#6e008a', '#420042'] },
-  { id: 'troll', label: 'Troll', gradient: ['#e4b5e4', '#36bfb1'] },
+  { id: 'pro', label: 'Pro', gradient: [...BUILD_TAG_COLORS.pro] },
+  { id: 'otp', label: 'OTP', gradient: [...BUILD_TAG_COLORS.otp] },
+  { id: 'exotique', label: 'Exotique', gradient: [...BUILD_TAG_COLORS.exotique] },
+  { id: 'troll', label: 'Troll', gradient: [...BUILD_TAG_COLORS.troll] },
 ]
 const selectedBuildTags = computed(() => displayBuild.value?.tags ?? [])
 const visibleBuildTags = computed(() =>
@@ -3146,26 +3165,27 @@ const showVariantTriggerButton = computed(
     ((props.readonly && buildSubBuilds.value.length > 0) || (!props.readonly && hasChampion.value))
 )
 
-const hasPatchStaleBadge = computed(() => Boolean(displayBuild.value?.patchStale))
 const hasLelarivaBadge = computed(() => showLelarivaBadge(displayBuild.value))
 
-/** Chips empilés dans la colonne gauche (Lelariva, patch obsolète, tags). */
+/** Chips empilés dans la colonne gauche (Lelariva, guide, tags). */
 const tagChipCount = computed(
   () =>
-    Number(hasLelarivaBadge.value) +
-    Number(hasPatchStaleBadge.value) +
-    visibleBuildTags.value.length
+    Number(hasLelarivaBadge.value) + Number(Boolean(props.hasGuide)) + visibleBuildTags.value.length
 )
 const notesInTagStack = computed(() => notesChipPlacement(tagChipCount.value) === 'stack')
 
+const showTagColumn = computed(() =>
+  tagColumnVisible({
+    readonly: props.readonly,
+    tagCount: selectedBuildTags.value.length,
+    lelariva: hasLelarivaBadge.value,
+    guide: Boolean(props.hasGuide),
+  })
+)
+
 const showFrontVariantsTagsStack = computed(() => {
   const variantShown = showVariantTriggerButton.value
-  const tagsShown =
-    !props.readonly ||
-    selectedBuildTags.value.length > 0 ||
-    hasPatchStaleBadge.value ||
-    hasLelarivaBadge.value
-  return variantShown || tagsShown
+  return variantShown || showTagColumn.value
 })
 
 /** Même décalage vertical des tags que lorsque le bouton variantes est présent. */
@@ -3174,10 +3194,7 @@ const showVariantsTagColumnSpacer = computed(
     !props.forScreenshot &&
     showFrontVariantsTagsStack.value &&
     !showVariantTriggerButton.value &&
-    (!props.readonly ||
-      selectedBuildTags.value.length > 0 ||
-      hasPatchStaleBadge.value ||
-      hasLelarivaBadge.value)
+    showTagColumn.value
 )
 
 const getRoleName = (role: Role): string => {
@@ -5065,8 +5082,8 @@ defineExpose({
 .build-tags-section {
   display: flex;
   justify-content: flex-start;
-  width: max-content;
-  max-width: 128px;
+  /* Largeur fixe : chips identiques quel que soit le tag le plus long du build. */
+  width: 72px;
 }
 
 .build-tags-container {
@@ -5078,9 +5095,8 @@ defineExpose({
 }
 
 .build-patch-stale-chip {
-  width: 100%;
   justify-content: center;
-  margin-top: 5px;
+  margin: 4px 0 2px;
 }
 
 .build-tags-container .build-tag-chip {
@@ -5272,6 +5288,10 @@ defineExpose({
   box-sizing: border-box;
 }
 
+.champion-name-box--beside-tags {
+  /* Titre (2 lignes max) entre la colonne des chips (8px + 72px) et celle des rôles. */
+  padding: 0 44px 0 84px;
+}
 .champion-name {
   width: 100%;
   margin: 0;
