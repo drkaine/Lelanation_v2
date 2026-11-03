@@ -14,6 +14,8 @@ import { canManageSharedBuilds } from './users/userRoles.js'
 export interface SharedBuildDirs {
   sharedDir: string
   buildsDir: string
+  /** Public matchup guides (`{guidesDir}/{guideId}.json`); the guide of a team build is published there. */
+  guidesDir?: string
 }
 
 export interface SharedMeta {
@@ -72,13 +74,52 @@ function publicPath(dirs: SharedBuildDirs, id: string): string {
   return join(dirs.buildsDir, `${id}.json`)
 }
 
+const SAFE_GUIDE_ID = /^[A-Za-z0-9-]{1,80}$/
+
+/** Guide linked to the team build (saved with it from the builder); `null` if absent or malformed. */
+function linkedGuide(value: unknown): (Record<string, unknown> & { id: string }) | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const guide = value as Record<string, unknown>
+  return typeof guide.id === 'string' && SAFE_GUIDE_ID.test(guide.id)
+    ? (guide as Record<string, unknown> & { id: string })
+    : null
+}
+
+function guidePath(dirs: SharedBuildDirs, guideId: string): string | null {
+  return dirs.guidesDir ? join(dirs.guidesDir, `${guideId}.json`) : null
+}
+
+/** Publishes the linked guide, referencing the public build copy (no embedded snapshot). */
+async function writePublicGuide(dirs: SharedBuildDirs, shared: SharedBuild, now: Date): Promise<void> {
+  const guide = linkedGuide(shared.matchupGuide)
+  const path = guide && guidePath(dirs, guide.id)
+  if (!guide || !path) return
+  const { build: _snapshot, patchStale: _stale, ...rest } = guide
+  const dir = await FileManager.ensureDir(dirs.guidesDir!)
+  if (dir.isErr()) throw dir.unwrapErr()
+  const written = await FileManager.writeJson(path, {
+    ...rest,
+    buildId: shared.id,
+    visibility: 'public',
+    fileName: `${guide.id}.json`,
+    savedAt: now.toISOString(),
+  })
+  if (written.isErr()) throw written.unwrapErr()
+}
+
+async function removePublicGuide(dirs: SharedBuildDirs, shared: SharedBuild | null): Promise<void> {
+  const guide = linkedGuide(shared?.matchupGuide)
+  const path = guide && guidePath(dirs, guide.id)
+  if (path) await fs.unlink(path).catch(() => undefined)
+}
+
 /** Writes (or rewrites) the public copy, keeping the edit secret already in place. */
 async function writePublicCopy(
   dirs: SharedBuildDirs,
   shared: SharedBuild,
   now: Date
 ): Promise<string> {
-  const { sharedMeta: _meta, teamShared: _team, ...build } = shared
+  const { sharedMeta: _meta, teamShared: _team, matchupGuide: _guide, ...build } = shared
   const existing = await readJson(publicPath(dirs, shared.id))
   const previous = typeof existing?.editSecret === 'string' ? existing.editSecret : ''
   const editSecret = previous || generateEditSecret()
@@ -95,6 +136,7 @@ async function writePublicCopy(
     editSecret,
   })
   if (written.isErr()) throw written.unwrapErr()
+  await writePublicGuide(dirs, shared, now)
   return editSecret
 }
 
@@ -136,9 +178,11 @@ export async function saveSharedBuild(
 
   const at = now.toISOString()
   const visibility = teamVisibility(build.visibility, previous, actor)
-  const { patchStale: _stale, fileName: _file, ...rest } = stripEditSecret(build)
+  const { patchStale: _stale, fileName: _file, matchupGuide: rawGuide, ...rest } = stripEditSecret(build)
+  const guide = linkedGuide(rawGuide)
   const record: SharedBuild = {
     ...rest,
+    ...(guide ? { matchupGuide: guide } : {}),
     id,
     visibility,
     teamShared: true,
@@ -156,14 +200,17 @@ export async function saveSharedBuild(
     return { ok: true, id, editSecret: await writePublicCopy(dirs, record, now) }
   }
   await fs.unlink(publicPath(dirs, id)).catch(() => undefined)
+  await removePublicGuide(dirs, record)
   return { ok: true, id }
 }
 
 /** Removes the team copy and its public copy, if any. */
 export async function deleteSharedBuild(dirs: SharedBuildDirs, id: string): Promise<boolean> {
-  if (!(await getSharedBuild(dirs, id))) return false
+  const shared = await getSharedBuild(dirs, id)
+  if (!shared) return false
   await fs.unlink(sharedPath(dirs, id))
   await fs.unlink(publicPath(dirs, id)).catch(() => undefined)
+  await removePublicGuide(dirs, shared)
   return true
 }
 
@@ -186,5 +233,6 @@ export async function unpublishSharedBuild(dirs: SharedBuildDirs, id: string): P
   if (!shared) return false
   await writeShared(dirs, { ...shared, visibility: 'private', teamShared: true })
   await fs.unlink(publicPath(dirs, id)).catch(() => undefined)
+  await removePublicGuide(dirs, shared)
   return true
 }

@@ -2,8 +2,11 @@
   <div class="matchup-guide-creator min-h-screen text-text">
     <div class="w-full px-3 sm:px-5 lg:px-6">
       <div class="mb-3">
-        <MatchupGuideBuildMenuSteps current-step="matchups" :has-champion="hasChampion" />
+        <BuildMenuSteps current-step="guide" :has-champion="hasChampion" />
+        <BuildGuideSubSteps current-step="matchups" />
       </div>
+
+      <BuildSaveButton class="mb-4" />
 
       <p v-if="opponentProgress < requiredOpponents" class="matchup-guide-unlock-hint">
         {{
@@ -32,7 +35,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import MatchupGuideBuildMenuSteps from '~/components/matchups/MatchupGuideBuildMenuSteps.vue'
+import BuildMenuSteps from '~/components/Build/BuildMenuSteps.vue'
+import BuildGuideSubSteps from '~/components/Build/BuildGuideSubSteps.vue'
+import BuildSaveButton from '~/components/Build/BuildSaveButton.vue'
 import MatchupGuideMatchupScale from '~/components/matchups/MatchupGuideMatchupScale.vue'
 import MatchupGuideOpponentSelector from '~/components/matchups/MatchupGuideOpponentSelector.vue'
 import { useMatchupGuideDraftStore } from '~/stores/MatchupGuideDraftStore'

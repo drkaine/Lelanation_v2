@@ -22,6 +22,11 @@ interface ItemJson {
  * Service to copy game data and images to frontend public directory
  * This allows the frontend to serve static assets directly (faster, more scalable)
  */
+/** Verrou posé par scripts/deploy-frontend.sh pendant le build : frontend/.deploy-frontend.lock. */
+export function frontendDeployLockPath(frontendPublicDir: string): string {
+  return join(frontendPublicDir, '..', '.deploy-frontend.lock')
+}
+
 export class StaticAssetsService {
   private readonly backendDataDir: string
   private readonly backendImagesDir: string
@@ -590,7 +595,7 @@ export class StaticAssetsService {
         )
       }
     }
-    const deployLock = join(this.frontendPublicDir, '.deploy-frontend.lock')
+    const deployLock = frontendDeployLockPath(this.frontendPublicDir)
     if (await FileManager.exists(deployLock)) {
       console.warn(
         '[StaticAssets] Frontend deploy in progress (.deploy-frontend.lock), skipping PM2 restart',

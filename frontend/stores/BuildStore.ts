@@ -15,6 +15,7 @@ import type {
   StoredBuild,
   BuildNotesContent,
   BuildNotesMode,
+  MatchupGuide,
 } from '@lelanation/shared-types'
 import { isStarterItem } from '@lelanation/builds-ui'
 import { calculateStats, type CalculateStatsOptions } from '@lelanation/builds-stats'
@@ -29,6 +30,9 @@ import type { UserRole } from '~/utils/userSession'
 import { readStoredSession, useUserSession } from '~/composables/useUserSession'
 import { serializeBuild, hydrateBuild, isStoredBuild } from '~/utils/buildSerialize'
 import { fetchTeamBuildForEdit } from '~/utils/teamBuildEdit'
+import { linkedGuideForBuild } from '~/utils/builderGuideStep'
+import { useMatchupGuideStore } from '~/stores/MatchupGuideStore'
+import { useMatchupGuideDraftStore } from '~/stores/MatchupGuideDraftStore'
 import {
   applyPatchStaleToBuild,
   extractPatchStaleMap,
@@ -42,6 +46,7 @@ import {
   applyEditSecretFromResponse,
   buildEditHeaders,
   serializeBuildForApi,
+  sharedBuildPayload,
 } from '~/utils/buildApi'
 import {
   scopedTheorycraftStorageKey,
@@ -1133,13 +1138,25 @@ export const useBuildStore = defineStore('build', {
     /** Édition par id : un build d'équipe est rechargé depuis le serveur avant l'ouverture. */
     async startEditingBuildById(buildId: string): Promise<boolean> {
       const { session, authFetch } = useUserSession()
+      let sharedGuide: MatchupGuide | null = null
       if (session.value ?? readStoredSession()) {
         const shared = await fetchTeamBuildForEdit(buildId, url => authFetch(url))
         if (shared) {
+          sharedGuide = (shared as { matchupGuide?: MatchupGuide }).matchupGuide ?? null
           this.upsertImportedBuild(isStoredBuild(shared) ? hydrateBuild(shared) : (shared as Build))
         }
       }
-      return this.startEditingBuild(buildId)
+      const ok = this.startEditingBuild(buildId)
+      if (ok) {
+        // Le guide lié revient dans l'étape Guide du builder.
+        const guideStore = useMatchupGuideStore()
+        const guide = linkedGuideForBuild(buildId, sharedGuide, guideStore.getSavedGuides())
+        if (guide) {
+          guideStore.upsertGuideLocal(guide)
+          useMatchupGuideDraftStore().loadFromGuide(guide)
+        }
+      }
+      return ok
     },
 
     /**
@@ -1190,7 +1207,9 @@ export const useBuildStore = defineStore('build', {
       }
     },
 
-    setLastBuilderStep(step: 'champion' | 'rune' | 'item' | 'info' | 'notes' | 'theorycraft') {
+    setLastBuilderStep(
+      step: 'champion' | 'rune' | 'item' | 'info' | 'notes' | 'theorycraft' | 'guide'
+    ) {
       if (import.meta.server) return
       try {
         localStorage.setItem(BUILDER_STEP_STORAGE_KEY, step)
@@ -1199,7 +1218,14 @@ export const useBuildStore = defineStore('build', {
       }
     },
 
-    getLastBuilderStep(): 'champion' | 'rune' | 'item' | 'info' | 'notes' | 'theorycraft' {
+    getLastBuilderStep():
+      | 'champion'
+      | 'rune'
+      | 'item'
+      | 'info'
+      | 'notes'
+      | 'theorycraft'
+      | 'guide' {
       const build = this.currentBuild
       if (!build?.champion) return 'champion'
       if (
@@ -1227,6 +1253,7 @@ export const useBuildStore = defineStore('build', {
             saved === 'item' ||
             saved === 'info' ||
             saved === 'notes' ||
+            saved === 'guide' ||
             saved === 'theorycraft'
           ) {
             return saved
@@ -1817,16 +1844,15 @@ export const useBuildStore = defineStore('build', {
     },
 
     /** Envoie le build courant dans l'espace équipe ; le serveur gère sa copie publique. */
-    async syncSharedBuild(): Promise<boolean> {
+    /** `guide` : guide lié au build, stocké avec la copie d'équipe (publié avec elle). */
+    async syncSharedBuild(guide?: MatchupGuide | null): Promise<boolean> {
       const build = this.currentBuild
       const session = readStoredSession()
       if (!build || !session) return false
       const response = await fetch(apiUrl('/api/shared-builds'), {
         method: 'POST',
         headers: sharedBuildHeaders(session.token, build.editSecret),
-        body: JSON.stringify(
-          serializeBuildForApi({ ...build, teamShared: true, matchupGuideEmbed: undefined })
-        ),
+        body: JSON.stringify(sharedBuildPayload(build, guide)),
       })
       if (!response.ok) return false
       const result = (await response.json().catch(() => ({}))) as {

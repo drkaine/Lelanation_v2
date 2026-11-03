@@ -1,3 +1,4 @@
+import type { MatchupGuide } from '@lelanation/shared-types'
 import type { UserRole } from '~/utils/userSession'
 import { canManageSharedBuilds } from '~/utils/userSession'
 import { buildEditHeaders } from '~/utils/buildApi'
@@ -72,4 +73,19 @@ export function showLelarivaBadge(
   build: { lelarivaBadge?: boolean; teamShared?: boolean } | null | undefined
 ): boolean {
   return build?.lelarivaBadge === true || build?.teamShared === true
+}
+
+/** Guides embarqués dans les builds d'équipe (`/api/shared-builds`), rattachés à leur build. */
+export function teamBuildGuides(rawBuilds: unknown): MatchupGuide[] {
+  if (!Array.isArray(rawBuilds)) return []
+  const guides: MatchupGuide[] = []
+  for (const raw of rawBuilds) {
+    if (!raw || typeof raw !== 'object') continue
+    const { id, matchupGuide } = raw as { id?: unknown; matchupGuide?: unknown }
+    if (typeof id !== 'string' || !matchupGuide || typeof matchupGuide !== 'object') continue
+    const guide = matchupGuide as MatchupGuide
+    if (typeof guide.id !== 'string' || !guide.id) continue
+    guides.push({ ...guide, buildId: id })
+  }
+  return guides
 }

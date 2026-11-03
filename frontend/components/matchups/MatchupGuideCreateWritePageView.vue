@@ -2,8 +2,11 @@
   <div class="matchup-guide-creator min-h-screen text-text">
     <div class="w-full px-3 sm:px-5 lg:px-6">
       <div class="mb-3">
-        <MatchupGuideBuildMenuSteps current-step="write" :has-champion="hasChampion" />
+        <BuildMenuSteps current-step="guide" :has-champion="hasChampion" />
+        <BuildGuideSubSteps current-step="write" />
       </div>
+
+      <BuildSaveButton class="mb-4" />
 
       <div class="matchup-guide-write-layout space-y-4">
         <div class="matchup-guide-layout flex flex-col items-start gap-4 lg:flex-row">
@@ -22,7 +25,9 @@
 
 <script setup lang="ts">
 import { onMounted } from 'vue'
-import MatchupGuideBuildMenuSteps from '~/components/matchups/MatchupGuideBuildMenuSteps.vue'
+import BuildMenuSteps from '~/components/Build/BuildMenuSteps.vue'
+import BuildGuideSubSteps from '~/components/Build/BuildGuideSubSteps.vue'
+import BuildSaveButton from '~/components/Build/BuildSaveButton.vue'
 import MatchupGuideMatchupDetailEditor from '~/components/matchups/MatchupGuideMatchupDetailEditor.vue'
 import MatchupGuideMatchupTargetSelector from '~/components/matchups/MatchupGuideMatchupTargetSelector.vue'
 import { useMatchupGuideDraftStore } from '~/stores/MatchupGuideDraftStore'

@@ -214,6 +214,8 @@
     "item": "Item",
     "info": "Infos",
     "notes": "Notes",
+    "guide": "Guide",
+    "guideNeedsValidBuild": "Build incomplet : choisissez runes, items et compétences pour créer le guide",
     "theorycraft": "Theorycraft"
   },
   "common": {
@@ -2281,7 +2283,7 @@
     "stepsAria": "Étapes de création du guide matchup",
     "stepMatchups": "Matchups",
     "stepWrite": "Guide",
-    "stepFinalize": "Enregistrer",
+    "stepFinalize": "Infos",
     "continueToMatchups": "Continuer",
     "continueToWrite": "Continuer vers l’écriture",
     "continueToFinalize": "Continuer vers la finalisation",

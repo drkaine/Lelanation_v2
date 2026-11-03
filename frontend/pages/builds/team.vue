@@ -28,6 +28,7 @@
             :show-visibility-toggle="actions.canChangeVisibility"
             :show-delete-action="actions.canDelete"
             :show-edit-action="actions.canEdit"
+            :linked-guides="guides"
             @toggle-visibility="toggleVisibility"
             @delete-build="removeBuild"
             @edit-build="prepareEdit"
@@ -39,12 +40,13 @@
 </template>
 
 <script setup lang="ts">
-import type { Build } from '@lelanation/shared-types'
+import type { Build, MatchupGuide } from '@lelanation/shared-types'
 import BuildGrid from '~/components/BuildDiscovery/BuildGrid.vue'
 import BuildsIndexTabPage from '~/components/builds/BuildsIndexTabPage.vue'
 import { useBuildStore } from '~/stores/BuildStore'
 import { hydrateBuild, isStoredBuild } from '~/utils/buildSerialize'
-import { teamBuildActions, teamVisibilityRequest } from '~/utils/sharedBuildSync'
+import { teamBuildActions, teamBuildGuides, teamVisibilityRequest } from '~/utils/sharedBuildSync'
+import { useMatchupGuideStore } from '~/stores/MatchupGuideStore'
 
 definePageMeta({ key: 'builds-team' })
 
@@ -60,6 +62,8 @@ onMounted(() => {
 useSeoMeta({ robots: 'noindex' })
 
 const builds = ref<Build[]>([])
+const guides = ref<MatchupGuide[]>([])
+const matchupGuideStore = useMatchupGuideStore()
 const loading = ref(false)
 const error = ref('')
 const actions = computed(() => teamBuildActions(role.value))
@@ -72,6 +76,8 @@ async function load() {
     const res = await authFetch('/api/shared-builds')
     if (!res.ok) throw new Error(String(res.status))
     const data = (await res.json()) as { builds?: unknown[] }
+    guides.value = teamBuildGuides(data.builds)
+    for (const guide of guides.value) matchupGuideStore.upsertGuideLocal(guide)
     builds.value = (data.builds ?? []).map(b => (isStoredBuild(b) ? hydrateBuild(b) : (b as Build)))
   } catch {
     error.value = t('buildsPage.teamLoadError')

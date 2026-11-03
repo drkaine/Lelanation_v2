@@ -78,15 +78,18 @@ import { useGlobalSeo } from '~/composables/useGlobalSeo'
 import { absoluteSitePath } from '~/utils/siteUrl'
 import { useSiteUrl } from '~/composables/useSiteUrl'
 import { useStatisticsUiStore } from '~/stores/StatisticsUiStore'
-import {
-  useMatchupGuideDraftStore,
-  type MatchupGuideDraftStep,
-} from '~/stores/MatchupGuideDraftStore'
+import { useMatchupGuideDraftStore } from '~/stores/MatchupGuideDraftStore'
 import {
   navigateMatchupGuideCreateStepPath,
   buildMatchupGuideStepAccessContext,
 } from '~/utils/matchupGuideCreateSteps'
-import { matchupGuideCreateRouteQuery } from '~/utils/matchupGuideFromBuildSession'
+import {
+  BUILDER_GUIDE_SUBSTEPS,
+  builderGuideQuery,
+  builderGuideStepPath,
+  readBuilderGuideQuery,
+  type BuilderGuideSubstep,
+} from '~/utils/builderGuideStep'
 
 const route = useRoute()
 const router = useRouter()
@@ -341,13 +344,11 @@ const onKeyDown = (event: KeyboardEvent) => {
     return
   }
 
-  const matchupMatch = path.match(
-    /\/matchups\/sheets\/create\/(champion|rune|item|info|matchups|write|finalize)(?:\/|$)/
-  )
-  if (matchupMatch) {
+  const guideMatch = path.match(/\/builds\/create\/guide\/(matchups|write|finalize)(?:\/|$)/)
+  if (guideMatch) {
     matchupGuideDraftStore.hydrateFromStorage()
 
-    const currentStep = matchupMatch[1] as MatchupGuideDraftStep
+    const currentStep = guideMatch[1] as BuilderGuideSubstep
     const nextStep = navigateMatchupGuideCreateStepPath(direction, {
       currentStep,
       ...buildMatchupGuideStepAccessContext({
@@ -356,12 +357,12 @@ const onKeyDown = (event: KeyboardEvent) => {
         matchupEntries: matchupGuideDraftStore.matchupEntries,
       }),
     })
-    if (!nextStep) return
+    if (!nextStep || !BUILDER_GUIDE_SUBSTEPS.includes(nextStep as BuilderGuideSubstep)) return
 
     event.preventDefault()
     matchupGuideDraftStore.setLastStep(nextStep)
-    const query = matchupGuideCreateRouteQuery(route.query)
-    router.push(localePath({ path: `/matchups/sheets/create/${nextStep}`, query }))
+    const query = builderGuideQuery(readBuilderGuideQuery(route.query))
+    router.push(localePath({ path: builderGuideStepPath(nextStep as BuilderGuideSubstep), query }))
   }
 }
 

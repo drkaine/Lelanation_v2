@@ -2,18 +2,20 @@
   <div class="matchup-guide-creator min-h-screen text-text">
     <div class="w-full px-3 sm:px-5 lg:px-6">
       <div class="mb-3">
-        <MatchupGuideBuildMenuSteps current-step="finalize" :has-champion="hasChampion" />
+        <BuildMenuSteps current-step="guide" :has-champion="hasChampion" />
+        <BuildGuideSubSteps current-step="finalize" />
       </div>
 
-      <MatchupGuideFinalSaveButton class="mb-4" />
+      <BuildSaveButton class="mb-4" />
       <MatchupGuideFinalizeForm />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import MatchupGuideBuildMenuSteps from '~/components/matchups/MatchupGuideBuildMenuSteps.vue'
-import MatchupGuideFinalSaveButton from '~/components/matchups/MatchupGuideFinalSaveButton.vue'
+import BuildMenuSteps from '~/components/Build/BuildMenuSteps.vue'
+import BuildGuideSubSteps from '~/components/Build/BuildGuideSubSteps.vue'
+import BuildSaveButton from '~/components/Build/BuildSaveButton.vue'
 import MatchupGuideFinalizeForm from '~/components/matchups/MatchupGuideFinalizeForm.vue'
 
 defineProps<{

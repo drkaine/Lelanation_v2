@@ -19,6 +19,7 @@ const router = Router()
 const dirs: SharedBuildDirs = {
   sharedDir: process.env.SHARED_BUILDS_DIR?.trim() || join(process.cwd(), 'data', 'shared-builds'),
   buildsDir,
+  guidesDir: join(process.cwd(), 'data', 'matchup-guides'),
 }
 
 router.use(requireUser)

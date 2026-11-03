@@ -100,7 +100,7 @@ export function useMatchupSheetsIndexPage(
   }
 
   async function goToCreateGuide() {
-    await navigateTo(localePath('/matchups/sheets/create'))
+    await navigateTo(localePath('/builds/create/guide'))
   }
 
   const guideToDelete = ref<string | null>(null)

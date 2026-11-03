@@ -2098,7 +2098,7 @@ function regionSelectionClass(region: 'champion' | 'items' | 'runes'): Record<st
 
 const isStepBuilderFlow = computed(() => {
   const path = route.path
-  return path.includes('/builds/create/') || path.includes('/matchups/sheets/create/')
+  return path.includes('/builds/create/')
 })
 
 const activeBuilderRegion = computed((): 'champion' | 'items' | 'runes' | null => {
@@ -2119,9 +2119,6 @@ function buildCreateQuery(): Record<string, string> {
 }
 
 function buildCreateStepPath(step: 'champion' | 'rune' | 'item'): string {
-  if (route.path.includes('/matchups/sheets/create')) {
-    return `/matchups/sheets/create/${step}`
-  }
   return `/builds/create/${step}`
 }
 
@@ -2261,12 +2258,9 @@ const canShowCardBack = computed(() => {
   return canShowReadonlyDescription.value || (!props.readonly && hasChampion.value)
 })
 const isBuilderPage = computed(
-  () =>
-    route.path.includes('/builds/create') ||
-    route.path.includes('/builds/edit/') ||
-    route.path.includes('/matchups/sheets/create')
+  () => route.path.includes('/builds/create') || route.path.includes('/builds/edit/')
 )
-const isMatchupGuideBuilder = computed(() => route.path.includes('/matchups/sheets/create'))
+const isMatchupGuideBuilder = computed(() => route.path.includes('/builds/create/guide'))
 const canEditSkillOrder = computed(
   () =>
     (isBuilderPage.value || props.selectionMode === 'theorycraft') &&
@@ -4245,6 +4239,18 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: 6px;
+  /* Bornée à la carte : l'input auteur rétrécit au lieu de pousser Équipe / reset au-delà. */
+  width: var(--build-card-width);
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.card-top-actions > * {
+  flex-shrink: 0;
+}
+
+.card-top-actions > .card-top-author-input {
+  flex-shrink: 1;
 }
 
 .card-top-author-input {
@@ -5284,13 +5290,15 @@ defineExpose({
   justify-content: center;
   overflow: hidden;
   margin-bottom: 6px;
-  padding: 0 4px;
+  /* Padding symétrique (titre centré sous le portrait), 3px de la colonne des rôles :
+     rôles = right 8px + 24px depuis le bord padding, soit 22px dans la zone de contenu. */
+  padding: 0 25px;
   box-sizing: border-box;
 }
 
 .champion-name-box--beside-tags {
-  /* Titre (2 lignes max) entre la colonne des chips (8px + 72px) et celle des rôles. */
-  padding: 0 44px 0 84px;
+  /* Chips = left 8px + 72px depuis le bord padding (70px en contenu) + 3px, appliqué des deux côtés. */
+  padding: 0 73px;
 }
 .champion-name {
   width: 100%;
@@ -5339,7 +5347,7 @@ defineExpose({
   left: calc(-1 * var(--build-card-edge-inset, 10px) + 8px);
   top: 50%;
   transform: translateY(-50%);
-  width: max-content;
+  width: 72px;
   margin-top: 0;
 }
 

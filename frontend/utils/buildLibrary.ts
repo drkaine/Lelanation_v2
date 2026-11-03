@@ -1,41 +1,18 @@
 import type { Build, StoredBuild } from '@lelanation/shared-types'
 
-const MATCHUP_GUIDES_STORAGE_KEY = 'lelanation_matchup_guides'
-
-type GuideBuildRef = { buildId?: string; build?: { id?: string; matchupGuideEmbed?: boolean } }
-
+/**
+ * Build de la bibliothèque perso : pas une copie embarquée dans un guide (`matchupGuideEmbed`).
+ * Un build simplement lié à un guide (`guide.buildId`) reste dans la bibliothèque.
+ */
 export function isStandaloneLibraryBuild(
   build: Pick<Build | StoredBuild, 'id' | 'matchupGuideEmbed'>
 ): boolean {
-  if (build.matchupGuideEmbed === true) return false
-  return !getMatchupGuideEmbeddedBuildIds().has(build.id)
-}
-
-export function getMatchupGuideEmbeddedBuildIds(): Set<string> {
-  if (import.meta.server) return new Set()
-  try {
-    const raw = localStorage.getItem(MATCHUP_GUIDES_STORAGE_KEY)
-    if (!raw) return new Set()
-    const guides = JSON.parse(raw) as GuideBuildRef[]
-    if (!Array.isArray(guides)) return new Set()
-    const ids = new Set<string>()
-    for (const guide of guides) {
-      const id = guide.buildId ?? guide.build?.id
-      if (typeof id === 'string' && id.length > 0) ids.add(id)
-    }
-    return ids
-  } catch {
-    return new Set()
-  }
+  return build.matchupGuideEmbed !== true
 }
 
 /** Builds de la bibliothèque perso : ni embarqués dans un guide, ni partagés à l'équipe (onglet Builds team). */
 export function filterStandaloneLibraryBuilds<
   T extends Pick<Build, 'id' | 'matchupGuideEmbed'> & { teamShared?: boolean },
 >(builds: T[]): T[] {
-  const embeddedIds = getMatchupGuideEmbeddedBuildIds()
-  return builds.filter(
-    build =>
-      build.matchupGuideEmbed !== true && build.teamShared !== true && !embeddedIds.has(build.id)
-  )
+  return builds.filter(build => isStandaloneLibraryBuild(build) && build.teamShared !== true)
 }

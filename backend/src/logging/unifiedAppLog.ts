@@ -4,6 +4,7 @@
  *   [section] [type] [script]    ISO8601    message    optionalJSON
  */
 import { promises as fs } from 'fs'
+import { tmpdir } from 'os'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 import { readLogFileTailWithRotated } from '../utils/readLogFileTail.js'
@@ -49,10 +50,16 @@ export type ParsedUnifiedLogEntry = {
 
 const HEADER_RE = /^\[([^\]]+)\] \[([^\]]+)\] \[([^\]]+)\]$/
 
-function logPath(): string {
-  const fromEnv = process.env.UNIFIED_LOG_PATH?.trim()
+/** Chemin du log unifié. Sous vitest, un fichier temporaire : les tests ne polluent pas le monitoring. */
+export function resolveUnifiedLogPath(env: NodeJS.ProcessEnv = process.env): string {
+  const fromEnv = env.UNIFIED_LOG_PATH?.trim()
   if (fromEnv) return fromEnv
+  if (env.VITEST) return join(tmpdir(), 'lelanation-unified-test.log')
   return DEFAULT_UNIFIED_LOG_PATH
+}
+
+function logPath(): string {
+  return resolveUnifiedLogPath()
 }
 
 function normalizeMessage(msg: string): string {

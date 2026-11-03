@@ -122,9 +122,6 @@ const emit = defineEmits<{
 
 .build-card-column {
   width: var(--build-card-width);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
   margin-top: 0;
 }
 

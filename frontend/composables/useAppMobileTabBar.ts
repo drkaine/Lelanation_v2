@@ -133,8 +133,8 @@ export function useAppMobileTabBar() {
 
   const currentGuidesTab = computed(() => {
     const path = route.path
+    if (path.includes('/builds/create/guide')) return 'create'
     if (!path.includes('/matchups/sheets')) return null
-    if (path.includes('/matchups/sheets/create')) return 'create'
     if (path.endsWith('/matchups/sheets/my-guides')) return 'my-guides'
     if (path.endsWith('/matchups/sheets/favoris')) return 'favoris'
     if (path.endsWith('/matchups/sheets/discover') || path.endsWith('/matchups/sheets')) {
@@ -217,7 +217,7 @@ export function useAppMobileTabBar() {
     const items: AppMobileTabSubmenuItem[] = [
       {
         id: 'create',
-        path: localePath('/matchups/sheets/create'),
+        path: localePath('/builds/create/guide'),
         labelKey: 'matchupGuidePage.createGuide',
       },
       {

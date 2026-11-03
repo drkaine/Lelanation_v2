@@ -167,7 +167,7 @@
 
             <NuxtLink
               v-if="showUserActions"
-              :to="localePath(`/matchups/sheets/create/champion?editId=${guide.id}`)"
+              :to="localePath(`/builds/create/guide?guideEditId=${encodeURIComponent(guide.id)}`)"
               class="matchup-guide-grid-action-button matchup-guide-grid-action-button--icon matchup-guide-grid-action-button--edit"
               :title="t('matchupGuideDiscovery.editGuide')"
               :aria-label="t('matchupGuideDiscovery.editGuide')"

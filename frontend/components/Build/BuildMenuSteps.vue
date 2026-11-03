@@ -27,6 +27,14 @@
     </NuxtLink>
     <span class="arrow" aria-hidden="true"></span>
     <NuxtLink
+      :to="canOpenGuide ? localePath(stepHref('guide')) : '#'"
+      :class="[linkClass('guide'), !canOpenGuide ? 'disabled' : '']"
+      :title="!canOpenGuide ? t('menu-build.guideNeedsValidBuild') : undefined"
+    >
+      {{ t('menu-build.guide') }}
+    </NuxtLink>
+    <span class="arrow" aria-hidden="true"></span>
+    <NuxtLink
       :to="hasChampion ? localePath(stepHref('theorycraft')) : '#'"
       :class="[linkClass('theorycraft'), !hasChampion ? 'disabled' : '']"
     >
@@ -37,6 +45,7 @@
 
 <script setup lang="ts">
 import { useBuildStore } from '~/stores/BuildStore'
+import { isBuilderGuideRoute } from '~/utils/builderGuideStep'
 
 const props = defineProps<{
   currentStep: string
@@ -48,8 +57,13 @@ const route = useRoute()
 const localePath = useLocalePath()
 const buildStore = useBuildStore()
 
+/** L'étape Guide s'ouvre dès que le build est valide (champion, runes, items, compétences). */
+const canOpenGuide = computed(() => props.hasChampion && buildStore.isBuildValid)
+
 /** Garde ?editId= sur toutes les étapes tant qu'on édite un build existant */
-function stepHref(step: 'champion' | 'rune' | 'item' | 'info' | 'notes' | 'theorycraft'): string {
+function stepHref(
+  step: 'champion' | 'rune' | 'item' | 'info' | 'notes' | 'guide' | 'theorycraft'
+): string {
   const id = buildStore.editSourceBuildId
   const base = `/builds/create/${step}`
   return id ? `${base}?editId=${encodeURIComponent(id)}` : base
@@ -61,12 +75,14 @@ const stepMap = {
   item: 'item',
   info: 'info',
   notes: 'notes',
+  guide: 'guide',
   theorycraft: 'theorycraft',
 } as const
 
 // Determine active step from route
 const currentRouteStep = computed(() => {
   const path = route.path
+  if (isBuilderGuideRoute(path)) return 'guide'
   if (path.includes('/champion')) return 'champion'
   if (path.includes('/rune')) return 'rune'
   if (path.includes('/item')) return 'item'

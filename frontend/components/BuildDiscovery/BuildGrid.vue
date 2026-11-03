@@ -630,6 +630,8 @@ interface Props {
   showAllCustomBuilds?: boolean
   /** Gap between cards in the grid (e.g. `15px`). */
   gridGap?: string
+  /** Guides liés fournis par la page (onglet Builds team) : chip + bouton « voir le guide ». */
+  linkedGuides?: MatchupGuide[]
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -643,6 +645,7 @@ const props = withDefaults(defineProps<Props>(), {
   hideBottomActions: false,
   showAllCustomBuilds: false,
   gridGap: '15px',
+  linkedGuides: undefined,
 })
 
 defineEmits<{
@@ -799,13 +802,14 @@ async function openMatchupGuideFromBuild(buildId: string) {
   if (!startMatchupGuideFromBuild(buildId)) return
   await router.push(
     localePath({
-      path: '/matchups/sheets/create/matchups',
+      path: '/builds/create/guide',
       query: { fromBuildId: buildId },
     })
   )
 }
 
 const guideByBuildId = computed(() => {
+  if (props.linkedGuides) return buildMatchupGuideByBuildIdMap(props.linkedGuides)
   const guides = props.showUserActions
     ? matchupGuideStore.getSavedGuides()
     : matchupGuideDiscoveryStore.guides

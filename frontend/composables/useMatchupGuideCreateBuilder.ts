@@ -6,31 +6,10 @@ import {
   type MatchupGuideDraftStep,
 } from '~/stores/MatchupGuideDraftStore'
 import { startEditingMatchupGuide } from '~/utils/matchupGuideEditSession'
-import {
-  bootstrapMatchupGuideFromBuild,
-  readMatchupGuideCreateQuery,
-} from '~/utils/matchupGuideFromBuildSession'
-import {
-  buildMatchupGuideStepAccessContext,
-  canNavigateToMatchupGuideStep,
-  MATCHUP_GUIDE_MIN_OPPONENTS_FOR_WRITE,
-} from '~/utils/matchupGuideCreateSteps'
+import { bootstrapMatchupGuideFromBuild } from '~/utils/matchupGuideFromBuildSession'
+import { readBuilderGuideQuery, type BuilderGuideSubstep } from '~/utils/builderGuideStep'
 
 export type MatchupGuideBuilderStep = MatchupGuideDraftStep
-
-type GuideBuildStep = Extract<MatchupGuideDraftStep, 'champion' | 'rune' | 'item' | 'info'>
-const BUILD_STEPS: readonly GuideBuildStep[] = ['champion', 'rune', 'item', 'info']
-
-function isGuideBuildStep(step: string): step is GuideBuildStep {
-  const buildSteps: readonly string[] = BUILD_STEPS
-  return buildSteps.includes(step)
-}
-
-/** The build flow also has notes/theorycraft steps, which the guide flow does not: resume on info. */
-function lastBuilderStepForGuide(): GuideBuildStep {
-  const step = useBuildStore().getLastBuilderStep()
-  return isGuideBuildStep(step) ? step : 'info'
-}
 
 export function bootstrapMatchupGuideCreateSession(routeQuery?: LocationQuery | null) {
   const buildStore = useBuildStore()
@@ -38,10 +17,10 @@ export function bootstrapMatchupGuideCreateSession(routeQuery?: LocationQuery | 
 
   if (import.meta.server) return
 
-  const { editId, fromBuildId } = readMatchupGuideCreateQuery(routeQuery ?? {})
+  const { guideEditId, fromBuildId } = readBuilderGuideQuery(routeQuery ?? {})
 
   // La session d'édition est chargée de façon asynchrone dans useMatchupGuideCreateBuilder.
-  if (editId) return
+  if (guideEditId) return
 
   if (fromBuildId) {
     bootstrapMatchupGuideFromBuild(fromBuildId)
@@ -59,49 +38,12 @@ export function bootstrapMatchupGuideCreateSession(routeQuery?: LocationQuery | 
   buildStore.ensureBuildChampionStats().catch(() => undefined)
 }
 
-export function resolveMatchupGuideCreateStep(): MatchupGuideDraftStep {
-  const buildStore = useBuildStore()
-  const draftStore = useMatchupGuideDraftStore()
-  const last = draftStore.lastStep
-  const buildValid = buildStore.isBuildValid
-  const hasScale = draftStore.matchupEntries.length >= MATCHUP_GUIDE_MIN_OPPONENTS_FOR_WRITE
-
-  if (last === 'finalize' || last === 'write') {
-    if (buildValid && hasScale) return last
-    if (buildValid) return 'matchups'
-    return lastBuilderStepForGuide()
-  }
-
-  if (last === 'matchups') {
-    if (buildValid) return 'matchups'
-    return lastBuilderStepForGuide()
-  }
-
-  if (isGuideBuildStep(last)) return last
-
-  return lastBuilderStepForGuide()
-}
-
-export function canAccessMatchupGuideCreateStep(
-  step: 'matchups' | 'write' | 'finalize',
-  options?: { buildValid?: boolean; hasChampion?: boolean }
-): boolean {
-  const buildStore = useBuildStore()
-  const draftStore = useMatchupGuideDraftStore()
-  const context = buildMatchupGuideStepAccessContext({
-    buildValid: options?.buildValid ?? buildStore.isBuildValid,
-    hasChampion: options?.hasChampion ?? Boolean(buildStore.currentBuild?.champion),
-    matchupEntries: draftStore.matchupEntries,
-  })
-  return canNavigateToMatchupGuideStep(step, context)
-}
-
-export function useMatchupGuideCreateBuilder(step: MatchupGuideBuilderStep) {
+export function useMatchupGuideCreateBuilder(step: BuilderGuideSubstep) {
   const buildStore = useBuildStore()
   const draftStore = useMatchupGuideDraftStore()
   const route = useRoute()
 
-  const editId = typeof route.query.editId === 'string' ? route.query.editId : null
+  const editId = readBuilderGuideQuery(route.query).guideEditId
   const editSessionReady = ref(!editId)
 
   if (import.meta.client && !editId) {
@@ -125,9 +67,7 @@ export function useMatchupGuideCreateBuilder(step: MatchupGuideBuilderStep) {
     }
 
     draftStore.setLastStep(step)
-    if (isGuideBuildStep(step)) {
-      buildStore.setLastBuilderStep(step)
-    }
+    buildStore.setLastBuilderStep('guide')
   })
 
   watch(
