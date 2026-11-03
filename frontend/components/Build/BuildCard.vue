@@ -5100,9 +5100,17 @@ defineExpose({
   width: 100%;
 }
 
+/* Superposé au bas du portrait : ne décale ni le titre ni le reste de la carte. */
 .build-patch-stale-chip {
+  position: absolute;
+  top: 62px;
+  left: 50%;
+  z-index: 3;
   justify-content: center;
-  margin: 4px 0 2px;
+  margin: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  background-color: rgb(40 10 10 / 0.92);
 }
 
 .build-tags-container .build-tag-chip {

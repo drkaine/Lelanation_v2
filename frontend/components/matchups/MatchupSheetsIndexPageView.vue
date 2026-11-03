@@ -10,15 +10,6 @@
             <button
               type="button"
               class="matchup-sheets-tab-button"
-              :class="{ 'is-active': activeTab === 'discover' }"
-              @click="setTab('discover')"
-            >
-              {{ t('buildsPage.discover') }}
-            </button>
-            <button
-              v-if="myGuides.length > 0"
-              type="button"
-              class="matchup-sheets-tab-button"
               :class="{ 'is-active': activeTab === 'my-guides' }"
               @click="setTab('my-guides')"
             >
@@ -35,16 +26,6 @@
             </button>
           </div>
         </div>
-      </div>
-
-      <div v-if="activeTab === 'discover'" class="tab-content">
-        <div class="mb-3">
-          <div class="flex flex-wrap items-center gap-2">
-            <MatchupGuideSearch />
-            <MatchupGuideFilters />
-          </div>
-        </div>
-        <MatchupGuideGrid :show-favorite-toggle="true" />
       </div>
 
       <div v-if="activeTab === 'my-guides'" class="tab-content">
@@ -107,10 +88,8 @@ import { toRef } from 'vue'
 import MatchupGuideSearch from '~/components/MatchupGuideDiscovery/MatchupGuideSearch.vue'
 import MatchupGuideFilters from '~/components/MatchupGuideDiscovery/MatchupGuideFilters.vue'
 import MatchupGuideGrid from '~/components/MatchupGuideDiscovery/MatchupGuideGrid.vue'
-import {
-  useMatchupSheetsIndexPage,
-  type MatchupSheetsTab,
-} from '~/composables/useMatchupSheetsIndexPage'
+import { useMatchupSheetsIndexPage } from '~/composables/useMatchupSheetsIndexPage'
+import type { MatchupSheetsTab } from '~/utils/matchupSheetsTabs'
 
 const props = defineProps<{
   tab: MatchupSheetsTab

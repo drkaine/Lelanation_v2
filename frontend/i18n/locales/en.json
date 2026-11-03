@@ -2270,7 +2270,6 @@
   "matchupGuidePage": {
     "metaTitle": "Matchup guides",
     "metaDescription": "League of Legends matchup guides on Lelanation.",
-    "backToSheets": "← Back to matchup sheets",
     "notFound": "Matchup guide not found",
     "detailMetaTitle": "{champion} — matchup guide by {author}",
     "myGuides": "My guides",
@@ -3630,8 +3629,7 @@
       "nerf": "Nerfed champions",
       "adjustment": "Adjustments"
     },
-    "guidesTitle": "Latest matchup guides",
-    "guidesSeeAll": "All guides"
+    "guidesTitle": "Latest matchup guides"
   },
   "testPatch": {
     "kicker": "Patch notes",

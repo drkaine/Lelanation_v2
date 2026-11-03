@@ -9,22 +9,11 @@ import { useMatchupGuideDiscoveryStore } from '~/stores/MatchupGuideDiscoverySto
 import { useMatchupGuideFavoritesStore } from '~/stores/MatchupGuideFavoritesStore'
 import { useMatchupGuideStore } from '~/stores/MatchupGuideStore'
 
-export type MatchupSheetsTab = 'discover' | 'my-guides' | 'favoris'
-
-const TAB_PATH_SEGMENTS: Record<MatchupSheetsTab, string> = {
-  discover: '/matchups/sheets/discover',
-  'my-guides': '/matchups/sheets/my-guides',
-  favoris: '/matchups/sheets/favoris',
-}
-
-function tabFromPath(path: string): MatchupSheetsTab | undefined {
-  if (path.endsWith('/matchups/sheets/discover') || path.endsWith('/matchups/sheets')) {
-    return 'discover'
-  }
-  if (path.endsWith('/matchups/sheets/my-guides')) return 'my-guides'
-  if (path.endsWith('/matchups/sheets/favoris')) return 'favoris'
-  return undefined
-}
+import {
+  matchupSheetsTabFromPath,
+  matchupSheetsTabPath,
+  type MatchupSheetsTab,
+} from '~/utils/matchupSheetsTabs'
 
 export function useMatchupSheetsIndexPage(
   fixedTab?: MaybeRefOrGetter<MatchupSheetsTab | undefined>
@@ -41,7 +30,7 @@ export function useMatchupSheetsIndexPage(
 
   const routeTab = computed(() => {
     if (fixedTabValue.value) return fixedTabValue.value
-    return tabFromPath(route.path) ?? 'discover'
+    return matchupSheetsTabFromPath(route.path) ?? 'my-guides'
   })
 
   const activeTab = ref<MatchupSheetsTab>(routeTab.value)
@@ -95,8 +84,7 @@ export function useMatchupSheetsIndexPage(
 
   async function setTab(tab: MatchupSheetsTab) {
     activeTab.value = tab
-    const segment = TAB_PATH_SEGMENTS[tab]
-    await navigateTo(localePath(segment), { replace: true })
+    await navigateTo(localePath(matchupSheetsTabPath(tab)), { replace: true })
   }
 
   async function goToCreateGuide() {

@@ -1,5 +1,6 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { matchupSheetsTabFromPath } from '~/utils/matchupSheetsTabs'
 import { useClientHydrated } from '~/composables/useClientHydrated'
 import { useFavoritesStore } from '~/stores/FavoritesStore'
 import { useBuildStore } from '~/stores/BuildStore'
@@ -135,12 +136,7 @@ export function useAppMobileTabBar() {
     const path = route.path
     if (path.includes('/builds/create/guide')) return 'create'
     if (!path.includes('/matchups/sheets')) return null
-    if (path.endsWith('/matchups/sheets/my-guides')) return 'my-guides'
-    if (path.endsWith('/matchups/sheets/favoris')) return 'favoris'
-    if (path.endsWith('/matchups/sheets/discover') || path.endsWith('/matchups/sheets')) {
-      return 'discover'
-    }
-    return null
+    return matchupSheetsTabFromPath(path) ?? null
   })
 
   const tabs = computed((): AppMobileTab[] => {
@@ -219,11 +215,6 @@ export function useAppMobileTabBar() {
         id: 'create',
         path: localePath('/builds/create/guide'),
         labelKey: 'matchupGuidePage.createGuide',
-      },
-      {
-        id: 'discover',
-        path: localePath('/matchups/sheets/discover'),
-        labelKey: 'buildsPage.discover',
       },
     ]
 
@@ -325,8 +316,6 @@ export function useAppMobileTabBar() {
 
     if (parentTabId === 'guides') {
       switch (itemId) {
-        case 'discover':
-          return currentGuidesTab.value === 'discover'
         case 'my-guides':
           return currentGuidesTab.value === 'my-guides'
         case 'favoris':

@@ -23,7 +23,6 @@
           <BuildGrid
             v-else
             :custom-builds="builds"
-            :show-all-custom-builds="true"
             :show-comparison-buttons="true"
             :show-visibility-toggle="actions.canChangeVisibility"
             :show-delete-action="actions.canDelete"

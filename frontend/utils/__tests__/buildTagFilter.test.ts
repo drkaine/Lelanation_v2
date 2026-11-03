@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { buildMatchesTag, hasGuidedBuild, hasLelarivaBuild } from '../buildTagFilter'
+import {
+  buildMatchesAllTags,
+  buildMatchesTag,
+  hasGuidedBuild,
+  hasLelarivaBuild,
+  toggleTagInList,
+} from '../buildTagFilter'
 
 describe('buildMatchesTag', () => {
   it('matches_lelariva_on_badge_or_team_shared', () => {
@@ -37,5 +43,27 @@ describe('guide tag', () => {
     expect(hasGuidedBuild([{ id: 'b1' }], guided)).toBe(true)
     expect(hasGuidedBuild([{ id: 'b1', visibility: 'private' }], guided)).toBe(false)
     expect(hasGuidedBuild([{ id: 'b2' }], guided)).toBe(false)
+  })
+})
+
+describe('toggleTagInList', () => {
+  it('ajoute un tag absent, retire un tag présent', () => {
+    expect(toggleTagInList([], 'notes')).toEqual(['notes'])
+    expect(toggleTagInList(['notes', 'guide'], 'notes')).toEqual(['guide'])
+    expect(toggleTagInList(['guide'], 'pro')).toEqual(['guide', 'pro'])
+  })
+})
+
+describe('buildMatchesAllTags', () => {
+  const build = { id: 'b1', tags: ['pro'], notes: [] } as never
+
+  it('aucun tag : tout passe', () => {
+    expect(buildMatchesAllTags(build, [])).toBe(true)
+  })
+
+  it('cumule les tags (ET)', () => {
+    expect(buildMatchesAllTags(build, ['pro', 'guide'], new Set(['b1']))).toBe(true)
+    expect(buildMatchesAllTags(build, ['pro', 'guide'], new Set())).toBe(false)
+    expect(buildMatchesAllTags(build, ['pro', 'otp'], new Set(['b1']))).toBe(false)
   })
 })

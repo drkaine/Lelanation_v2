@@ -38,15 +38,15 @@
           type="button"
           class="build-tag-chip"
           :class="[
-            selectedTag === opt.value ? 'build-tag-chip--selected' : 'build-tag-chip--unselected',
-            selectedTag === opt.value && buildTagUsesDarkText(opt.value)
+            isTagSelected(opt.value) ? 'build-tag-chip--selected' : 'build-tag-chip--unselected',
+            isTagSelected(opt.value) && buildTagUsesDarkText(opt.value)
               ? 'build-tag-chip--dark-text'
               : '',
           ]"
-          :style="selectedTag === opt.value ? opt.chipStyle : undefined"
+          :style="isTagSelected(opt.value) ? opt.chipStyle : undefined"
           :title="t(opt.labelKey)"
           :aria-label="t(opt.labelKey)"
-          :aria-pressed="selectedTag === opt.value"
+          :aria-pressed="isTagSelected(opt.value)"
           @click="toggleTag(opt.value)"
         >
           {{ opt.label }}
@@ -119,16 +119,14 @@ import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useVersionStore } from '~/stores/VersionStore'
 import type {
   FilterRole,
-  FilterBuildTag,
+  BuildTagValue,
   SortOption,
   PageSizeOption,
 } from '~/stores/BuildDiscoveryStore'
 import { comparePatchMajorMinor, patchFromGameVersion } from '~/utils/patchVersion'
 import { riotLanguage } from '~/utils/riotLanguage'
-import { hasGuidedBuild, hasLelarivaBuild } from '~/utils/buildTagFilter'
+import { hasLelarivaBuild } from '~/utils/buildTagFilter'
 import { buildTagChipStyle, buildTagUsesDarkText } from '~/utils/buildTagColors'
-import { buildMatchupGuideByBuildIdMap } from '~/utils/matchupGuideByBuild'
-import { useMatchupGuideDiscoveryStore } from '~/stores/MatchupGuideDiscoveryStore'
 
 const { locale, t } = useI18n()
 const discoveryStore = useBuildDiscoveryStore()
@@ -143,7 +141,6 @@ const riotLocale = computed(() => riotLanguage(locale.value))
 const selectedVersion = ref(discoveryStore.selectedVersion ?? '')
 const selectedChampion = ref<string | null>(discoveryStore.selectedChampion)
 const selectedRole = ref<FilterRole>(discoveryStore.selectedRole)
-const selectedTag = ref<FilterBuildTag>(discoveryStore.selectedTag)
 const sortBy = ref<SortOption>(discoveryStore.sortBy)
 const onlyUpToDate = ref(discoveryStore.onlyUpToDate)
 const pageSize = computed({
@@ -186,7 +183,7 @@ const roleOptions: Array<{ value: Exclude<FilterRole, null>; label: string; icon
 ]
 
 const tagFilterOptions: Array<{
-  value: Exclude<FilterBuildTag, null>
+  value: BuildTagValue
   label: string
   labelKey:
     | 'buildDiscovery.tagPro'
@@ -242,16 +239,9 @@ const tagFilterOptions: Array<{
   },
 ]
 
-const matchupGuideDiscoveryStore = useMatchupGuideDiscoveryStore()
-const guidedBuildIds = computed(
-  () => new Set(buildMatchupGuideByBuildIdMap(matchupGuideDiscoveryStore.guides).keys())
-)
-
 const visibleTagFilterOptions = computed(() =>
   tagFilterOptions.filter(
-    opt =>
-      (opt.value !== 'lelariva' || hasLelarivaBuild(discoveryStore.builds)) &&
-      (opt.value !== 'guide' || hasGuidedBuild(discoveryStore.builds, guidedBuildIds.value))
+    opt => opt.value !== 'lelariva' || hasLelarivaBuild(discoveryStore.builds)
   )
 )
 
@@ -269,17 +259,10 @@ const toggleRole = (role: FilterRole) => {
   }
 }
 
-const setTag = (tag: FilterBuildTag) => {
-  selectedTag.value = tag
-  discoveryStore.setSelectedTag(tag)
-}
+const isTagSelected = (tag: BuildTagValue) => discoveryStore.selectedTags.includes(tag)
 
-const toggleTag = (tag: Exclude<FilterBuildTag, null>) => {
-  if (selectedTag.value === tag) {
-    setTag(null)
-  } else {
-    setTag(tag)
-  }
+const toggleTag = (tag: BuildTagValue) => {
+  discoveryStore.toggleSelectedTag(tag)
 }
 
 const roleChipClass = (active: boolean) =>
@@ -308,7 +291,6 @@ const clearFilters = () => {
   selectedChampion.value = null
   championSearchQuery.value = ''
   selectedRole.value = null
-  selectedTag.value = null
   onlyUpToDate.value = false
   sortBy.value = 'recent'
 }

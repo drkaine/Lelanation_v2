@@ -238,6 +238,12 @@ export default defineNuxtConfig({
     '/matchups/sheets/**': { ssr: false },
     '/en/matchups/sheets': { ssr: false },
     '/en/matchups/sheets/**': { ssr: false },
+    '/matchups/sheets/discover': {
+      redirect: { to: '/matchups/sheets/my-guides', statusCode: 301 },
+    },
+    '/en/matchups/sheets/discover': {
+      redirect: { to: '/en/matchups/sheets/my-guides', statusCode: 301 },
+    },
     '/guides/matchups': { redirect: { to: '/matchups/sheets', statusCode: 301 } },
     '/en/guides/matchups': { redirect: { to: '/en/matchups/sheets', statusCode: 301 } },
     '/render/**': { ssr: false },

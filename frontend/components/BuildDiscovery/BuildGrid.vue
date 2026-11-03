@@ -28,11 +28,15 @@
         <div class="build-grid-top-bar mb-[3px] flex w-full items-center gap-2">
           <div class="build-grid-top-icon-slot">
             <button
-              v-if="hasBuildDescription(build)"
+              v-if="hasBuildDescription(build) || guideShownMap[build.id]"
               type="button"
               class="build-grid-top-icon-button"
-              :title="localFlippedMap[build.id] ? 'Voir le build' : 'Voir la description'"
-              :aria-label="localFlippedMap[build.id] ? 'Voir le build' : 'Voir la description'"
+              :class="{
+                'build-grid-top-icon-button--active':
+                  localFlippedMap[build.id] || guideShownMap[build.id],
+              }"
+              :title="t(buildFlipLabelKey(isCardFlipped(build.id)))"
+              :aria-label="t(buildFlipLabelKey(isCardFlipped(build.id)))"
               @click.stop="toggleBuildDescription(build.id)"
             >
               <svg
@@ -133,14 +137,25 @@
 
         <!-- BuildCard Sheet -->
         <div class="relative w-full">
-          <div :ref="el => setBuildCardRef(build.id, el)" :data-build-id="build.id">
+          <NuxtLink
+            v-if="guideShownMap[build.id] && getLinkedGuide(build.id)"
+            :to="matchupGuideDetailPath(getLinkedGuide(build.id)!, localePath)"
+            class="build-grid-guide-face"
+          >
+            <MatchupGuideCard :guide="getLinkedGuide(build.id)!" />
+          </NuxtLink>
+          <div
+            v-show="!guideShownMap[build.id]"
+            :ref="el => setBuildCardRef(build.id, el)"
+            :data-build-id="build.id"
+          >
             <LazyBuildCard
-              :ref="instance => setBuildCardComponentRef(build.id, instance)"
               hydrate-on-visible
               :build="build"
               :readonly="true"
               :sheet-tooltips="tooltipsEnabled"
               :hide-top-actions="true"
+              :flipped="localFlippedMap[build.id] ?? false"
               :initial-displayed-variant-index="
                 getSearchMatchedVariantIndex(build, discoveryStore.searchQuery)
               "
@@ -152,6 +167,11 @@
               "
               @notes-click="openBuildNotes(build)"
               @guide-click="openLinkedGuide(build.id)"
+              @update:flipped="
+                (value: boolean) => {
+                  localFlippedMap[build.id] = value
+                }
+              "
             />
           </div>
         </div>
@@ -267,16 +287,18 @@
               >
                 {{ t('buildDiscovery.matchupGuideShort') }}
               </button>
-              <NuxtLink
+              <button
                 v-if="!props.showUserActions && getLinkedGuide(build.id)"
-                :to="matchupGuideDetailPath(getLinkedGuide(build.id)!, localePath)"
+                type="button"
                 class="build-grid-action-button build-grid-action-button--icon build-grid-action-button--guide"
+                :class="{ 'build-grid-action-button--active': guideShownMap[build.id] }"
                 :title="t('buildDiscovery.viewLinkedGuide')"
                 :aria-label="t('buildDiscovery.viewLinkedGuide')"
-                @click.stop
+                :aria-pressed="Boolean(guideShownMap[build.id])"
+                @click.stop="toggleGuideCard(build.id)"
               >
                 {{ t('buildDiscovery.viewLinkedGuideShort') }}
-              </NuxtLink>
+              </button>
               <button
                 :ref="el => setShareButtonRef(build.id, el)"
                 class="build-grid-action-button build-grid-action-button--icon flex-1"
@@ -520,9 +542,11 @@ import {
   uiFavoriteActionClass,
   uiUpvoteActionClass,
 } from '~/utils/uiColorClasses'
-import { buildMatchesTag } from '~/utils/buildTagFilter'
+import { buildMatchesAllTags } from '~/utils/buildTagFilter'
 import { patchFromGameVersion } from '~/utils/patchVersion'
 
+import { buildFlipLabelKey, buildTopFlipAction, toggleBuildFlip } from '~/utils/buildCardFlip'
+import MatchupGuideCard from '~/components/MatchupGuideDiscovery/MatchupGuideCard.vue'
 function buildMatchesSearchQuery(build: Build, query: string): boolean {
   if (matchesLocalizedTextSearch(query, [build.name, build.author])) return true
   if (
@@ -552,7 +576,6 @@ const shareToastType = ref<'success' | 'error'>('success')
 const shareButtonRefs = ref<Record<string, HTMLButtonElement | null>>({})
 const shareDropdownOpenAbove = ref<Record<string, boolean>>({})
 const buildCardRefs = ref<Record<string, HTMLElement | null>>({})
-const buildCardComponentRefs = ref<Record<string, { toggleFlipped: () => void } | null>>({})
 const localFlippedMap = ref<Record<string, boolean>>({})
 const isAdmin = ref(false)
 const adminStatsModalOpen = ref(false)
@@ -688,9 +711,9 @@ const filteredCustomBuilds = computed(() => {
   }
 
   // Filter by build tag
-  if (discoveryStore.selectedTag) {
-    const tag = discoveryStore.selectedTag
-    results = results.filter(build => buildMatchesTag(build, tag, guidedBuildIds.value))
+  if (discoveryStore.selectedTags.length > 0) {
+    const tags = discoveryStore.selectedTags
+    results = results.filter(build => buildMatchesAllTags(build, tags, guidedBuildIds.value))
   }
 
   // Filter by version
@@ -822,11 +845,6 @@ function getLinkedGuide(buildId: string): MatchupGuide | null {
 
 const guidedBuildIds = computed(() => new Set(guideByBuildId.value.keys()))
 
-function openLinkedGuide(buildId: string) {
-  const guide = getLinkedGuide(buildId)
-  if (guide) router.push(matchupGuideDetailPath(guide, localePath))
-}
-
 const COMPANION_IMPORT_BRIDGE = 'http://127.0.0.1:17321/import'
 
 async function sendBuildToCompanion(build: Build) {
@@ -929,19 +947,6 @@ const setBuildCardRef = (buildId: string, el: unknown) => {
   }
 }
 
-const setBuildCardComponentRef = (buildId: string, instance: unknown) => {
-  if (
-    instance &&
-    typeof instance === 'object' &&
-    'toggleFlipped' in instance &&
-    typeof instance.toggleFlipped === 'function'
-  ) {
-    buildCardComponentRefs.value[buildId] = instance as { toggleFlipped: () => void }
-    return
-  }
-  buildCardComponentRefs.value[buildId] = null
-}
-
 const setShareButtonRef = (buildId: string, el: unknown) => {
   if (el && el instanceof HTMLButtonElement) {
     shareButtonRefs.value[buildId] = el
@@ -950,9 +955,27 @@ const setShareButtonRef = (buildId: string, el: unknown) => {
   shareButtonRefs.value[buildId] = null
 }
 
+const guideShownMap = ref<Record<string, boolean>>({})
+
+const isCardFlipped = (buildId: string) =>
+  Boolean(localFlippedMap.value[buildId] || guideShownMap.value[buildId])
+
+const openLinkedGuide = (buildId: string) => {
+  const guide = getLinkedGuide(buildId)
+  if (guide) router.push(matchupGuideDetailPath(guide, localePath))
+}
+
+const toggleGuideCard = (buildId: string) => {
+  if (!getLinkedGuide(buildId)) return
+  guideShownMap.value = toggleBuildFlip(guideShownMap.value, buildId)
+}
+
 const toggleBuildDescription = (buildId: string) => {
-  buildCardComponentRefs.value[buildId]?.toggleFlipped()
-  localFlippedMap.value[buildId] = !localFlippedMap.value[buildId]
+  if (buildTopFlipAction({ guideShown: !!guideShownMap.value[buildId] }) === 'close-guide') {
+    guideShownMap.value = { ...guideShownMap.value, [buildId]: false }
+    return
+  }
+  localFlippedMap.value = toggleBuildFlip(localFlippedMap.value, buildId)
 }
 
 const toggleShareDropdown = (buildId: string) => {
@@ -1243,6 +1266,20 @@ onUnmounted(() => {
   height: 30px;
 }
 
+/* Card guide : toute la largeur de la colonne build, 420px de haut minimum. */
+.build-grid-guide-face {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 420px;
+  margin-inline: auto;
+}
+
+.build-grid-action-button--guide.build-grid-action-button--active {
+  background: rgb(var(--rgb-accent) / 0.45);
+}
+
+.build-grid-top-icon-button--active,
 .build-grid-top-icon-button:hover {
   box-shadow: 0 4px 14px var(--card-border-color-soft-default);
   color: var(--color-gold-300);

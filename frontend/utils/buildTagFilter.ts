@@ -35,3 +35,17 @@ export function hasGuidedBuild(
 ): boolean {
   return builds.some(b => b.visibility !== 'private' && !!b.id && guidedBuildIds.has(b.id))
 }
+
+/** Chip de tag cliqué : ajouté s'il manque, retiré s'il est déjà sélectionné. */
+export function toggleTagInList<T extends string>(tags: readonly T[], tag: T): T[] {
+  return tags.includes(tag) ? tags.filter(value => value !== tag) : [...tags, tag]
+}
+
+/** Plusieurs chips sélectionnés : le build doit les porter tous. */
+export function buildMatchesAllTags(
+  build: TaggableBuild,
+  tags: readonly string[],
+  guidedBuildIds?: ReadonlySet<string>
+): boolean {
+  return tags.every(tag => buildMatchesTag(build, tag, guidedBuildIds))
+}

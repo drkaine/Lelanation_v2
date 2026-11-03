@@ -8,14 +8,6 @@
     "
   >
     <div class="w-full">
-      <NuxtLink
-        v-if="!embedded"
-        :to="localePath('/matchups/sheets/discover')"
-        class="mb-4 inline-flex items-center gap-1 text-sm text-text-secondary transition-colors hover:text-text"
-      >
-        {{ t('matchupGuidePage.backToSheets') }}
-      </NuxtLink>
-
       <article class="matchup-guide-detail__panel" :style="themeVars">
         <MatchupGuideSheetView :guide="guide" variant="detail" />
       </article>
@@ -36,8 +28,6 @@ const props = withDefaults(
   { embedded: false }
 )
 
-const { t } = useI18n()
-const localePath = useLocalePath()
 const { themeVars } = useBuildCardBorderTheme(() => props.guide.champion?.id)
 </script>
 

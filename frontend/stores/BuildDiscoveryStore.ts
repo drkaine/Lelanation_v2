@@ -9,7 +9,7 @@ import { filterStandaloneLibraryBuilds } from '~/utils/buildLibrary'
 import { extractPatchStaleMap, mergePatchStaleIntoBuilds } from '~/utils/mergePatchStale'
 import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import { matchesChampionSearch, matchesLocalizedTextSearch } from '~/utils/multilingualEntitySearch'
-import { buildMatchesTag } from '~/utils/buildTagFilter'
+import { buildMatchesAllTags, toggleTagInList } from '~/utils/buildTagFilter'
 import { buildMatchupGuideByBuildIdMap } from '~/utils/matchupGuideByBuild'
 import { useMatchupGuideDiscoveryStore } from '~/stores/MatchupGuideDiscoveryStore'
 import { patchFromGameVersion } from '~/utils/patchVersion'
@@ -28,6 +28,8 @@ export type FilterBuildTag =
   | 'lelariva'
   | 'guide'
   | null
+/** Tag de chip sélectionnable (sans le « aucun » `null`). */
+export type BuildTagValue = Exclude<FilterBuildTag, null>
 export type PageSizeOption = 20 | 30 | 40 | 50 | 'all'
 
 const PAGINATION_STORAGE_KEY = 'lelanation_builds_pagination'
@@ -93,7 +95,7 @@ interface BuildDiscoveryState {
   searchQuery: string
   selectedChampion: string | null
   selectedRole: FilterRole
-  selectedTag: FilterBuildTag
+  selectedTags: BuildTagValue[]
   selectedVersion: string | null
   onlyUpToDate: boolean
   sortBy: SortOption
@@ -109,7 +111,7 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
     searchQuery: '',
     selectedChampion: null,
     selectedRole: null,
-    selectedTag: null,
+    selectedTags: [],
     selectedVersion: null,
     onlyUpToDate: false,
     sortBy: 'recent',
@@ -159,13 +161,12 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
       }
 
       // Filter by build tag (Pro, OTP, …) or notes presence
-      if (this.selectedTag) {
-        const tag = this.selectedTag
-        const guidedIds =
-          tag === 'guide'
-            ? new Set(buildMatchupGuideByBuildIdMap(useMatchupGuideDiscoveryStore().guides).keys())
-            : undefined
-        results = results.filter(build => buildMatchesTag(build, tag, guidedIds))
+      if (this.selectedTags.length > 0) {
+        const tags = this.selectedTags
+        const guidedIds = tags.includes('guide')
+          ? new Set(buildMatchupGuideByBuildIdMap(useMatchupGuideDiscoveryStore().guides).keys())
+          : undefined
+        results = results.filter(build => buildMatchesAllTags(build, tags, guidedIds))
       }
 
       // Filter by version
@@ -232,7 +233,7 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
         this.searchQuery !== '' ||
         this.selectedChampion !== null ||
         this.selectedRole !== null ||
-        this.selectedTag !== null ||
+        this.selectedTags.length > 0 ||
         this.selectedVersion !== null ||
         this.onlyUpToDate
       )
@@ -353,8 +354,8 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
       this.applyFilters()
     },
 
-    setSelectedTag(tag: FilterBuildTag) {
-      this.selectedTag = tag
+    toggleSelectedTag(tag: BuildTagValue) {
+      this.selectedTags = toggleTagInList(this.selectedTags, tag)
       this.applyFilters()
     },
 
@@ -377,7 +378,7 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
       this.searchQuery = ''
       this.selectedChampion = null
       this.selectedRole = null
-      this.selectedTag = null
+      this.selectedTags = []
       this.selectedVersion = null
       this.onlyUpToDate = false
       this.applyFilters()

@@ -98,6 +98,10 @@
       </div>
 
       <div v-if="activeTab === 'team'" class="tab-content">
+        <div class="mb-3 flex flex-wrap items-center gap-2">
+          <component :is="buildSearchComponent" />
+          <component :is="buildFiltersComponent" />
+        </div>
         <slot name="team" />
       </div>
 

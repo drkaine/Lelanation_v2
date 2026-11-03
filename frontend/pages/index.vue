@@ -168,9 +168,6 @@
       <section v-if="latestGuides.length" class="hg-section">
         <div class="hg-section-head">
           <h2 class="hg-h2">{{ t('homeTest.guidesTitle') }}</h2>
-          <NuxtLink :to="localePath('/matchups/sheets/discover')" class="hg-more">
-            {{ t('homeTest.guidesSeeAll') }} →
-          </NuxtLink>
         </div>
         <div class="hg-guides">
           <NuxtLink
