@@ -11,8 +11,8 @@
   >
     <div class="relative aspect-video w-full overflow-hidden bg-black/40">
       <img
-        v-if="previewImageUrl"
-        :src="previewImageUrl"
+        v-if="imageSrc"
+        :src="imageSrc"
         :alt="video.title"
         width="640"
         height="360"
@@ -20,6 +20,7 @@
         :loading="fetchPriority === 'high' ? 'eager' : 'lazy'"
         :fetchpriority="fetchPriority"
         decoding="async"
+        @error="onImageError"
       />
       <div
         v-else
@@ -60,6 +61,7 @@ import { computed, ref } from 'vue'
 import type { YouTubeVideo } from '~/types/youtube'
 import CommunityPostModal from '~/components/Videos/CommunityPostModal.vue'
 import { normalizeCommunityPostImageUrl } from '~/utils/communityPostImages'
+import { thumbnailRetryDelayMs, thumbnailRetrySrc } from '~/utils/thumbnailRetry'
 
 const props = withDefaults(
   defineProps<{
@@ -82,6 +84,30 @@ const previewImageUrl = computed(() => {
   if (!props.video.thumbnailUrl) return ''
   return normalizeCommunityPostImageUrl(props.video.thumbnailUrl)
 })
+
+const imageSrc = ref(previewImageUrl.value)
+let imageAttempt = 0
+let retryTimer: ReturnType<typeof setTimeout> | undefined
+
+watch(previewImageUrl, url => {
+  clearTimeout(retryTimer)
+  imageAttempt = 0
+  imageSrc.value = url
+})
+
+const onImageError = () => {
+  imageAttempt += 1
+  const next = thumbnailRetrySrc(previewImageUrl.value, imageAttempt)
+  if (!next) {
+    imageSrc.value = ''
+    return
+  }
+  retryTimer = setTimeout(() => {
+    imageSrc.value = next
+  }, thumbnailRetryDelayMs(imageAttempt))
+}
+
+onBeforeUnmount(() => clearTimeout(retryTimer))
 
 const onCardClick = (event: MouseEvent) => {
   if (!isCommunityPost.value) return
