@@ -6,6 +6,7 @@
     "communityBuilds": "Community builds",
     "createBuild": "Create Build",
     "videos": "Videos",
+    "championGuides": "Champions",
     "map": "Map",
     "statistics": "Statistics",
     "statisticsGeneral": "General",
@@ -1673,6 +1674,17 @@
     "championDashboardBreakdown_damageType_magic": "Magic",
     "championDashboardBreakdown_damageType_true": "True",
     "championStatsTabMisc": "Base stats",
+    "championStatsTabVideos": "Videos",
+    "championVideosLoading": "Loading videos…",
+    "championVideosEmpty": "No video guide for {champion} yet.",
+    "championVideosRoleOther": "Other",
+    "championVideosRole": {
+      "top": "Top",
+      "jungle": "Jungle",
+      "mid": "Mid",
+      "adc": "ADC",
+      "support": "Support"
+    },
     "championMiscEmpty": "Not enough games for these stats.",
     "championMiscGroup_healing": "Healing & shields",
     "championMiscGroup_damageTypes": "Damage dealt (total)",
@@ -3804,5 +3816,15 @@
       "self": "Not allowed on your own account.",
       "generic": "Something went wrong, please retry."
     }
+  },
+  "championGuidesPage": {
+    "noMatch": "No champion with a guide for this filter.",
+    "title": "Video guides by champion",
+    "hint": "Every champion in the game. The number shows how many video guides exist; roles filter on guide roles.",
+    "search": "Search a champion",
+    "back": "All champions",
+    "heading": "Video guides – {champion}",
+    "stats": "View statistics",
+    "notFound": "Champion not found."
   }
 }

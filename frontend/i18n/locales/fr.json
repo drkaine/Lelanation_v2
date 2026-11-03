@@ -6,6 +6,7 @@
     "communityBuilds": "Builds de la communauté",
     "createBuild": "Créer un Build",
     "videos": "Vidéos",
+    "championGuides": "Champions",
     "map": "Map",
     "statistics": "Statistiques",
     "statisticsGeneral": "Général",
@@ -1674,6 +1675,17 @@
     "championDashboardBreakdown_damageType_magic": "Magiques",
     "championDashboardBreakdown_damageType_true": "Bruts",
     "championStatsTabMisc": "Stat de base",
+    "championStatsTabVideos": "Vidéos",
+    "championVideosLoading": "Chargement des vidéos…",
+    "championVideosEmpty": "Aucun guide vidéo pour {champion} pour l’instant.",
+    "championVideosRoleOther": "Autres",
+    "championVideosRole": {
+      "top": "Top",
+      "jungle": "Jungle",
+      "mid": "Mid",
+      "adc": "ADC",
+      "support": "Support"
+    },
     "championMiscEmpty": "Pas assez de parties pour ces statistiques.",
     "championMiscGroup_healing": "Soins & boucliers",
     "championMiscGroup_damageTypes": "Dégâts infligés (total)",
@@ -3804,5 +3816,15 @@
       "self": "Impossible sur ton propre compte.",
       "generic": "Une erreur est survenue, réessaie."
     }
+  },
+  "championGuidesPage": {
+    "noMatch": "Aucun champion avec un guide pour ce filtre.",
+    "title": "Guides vidéo par champion",
+    "hint": "Tous les champions du jeu. Le chiffre indique le nombre de guides vidéo ; les rôles filtrent sur les rôles des guides.",
+    "search": "Rechercher un champion",
+    "back": "Tous les champions",
+    "heading": "Guides vidéo – {champion}",
+    "stats": "Voir les statistiques",
+    "notFound": "Champion introuvable."
   }
 }

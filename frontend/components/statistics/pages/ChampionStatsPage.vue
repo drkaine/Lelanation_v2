@@ -1849,6 +1849,14 @@
               >
                 <ChampionMiscTab :data="championMiscData" :pending="championMiscPending" />
               </div>
+              <div
+                v-if="activeChampionTab === 'videos'"
+                id="champion-tab-panel-videos"
+                role="tabpanel"
+                class="champion-tab-panel p-4 max-lg:px-3 max-lg:py-3"
+              >
+                <ChampionVideosTab :champion-name="championName(championId) ?? ''" />
+              </div>
             </div>
           </template>
         </div>
@@ -1970,6 +1978,9 @@ const ChampionDashboardTab = defineAsyncComponent(
 )
 const ChampionMiscTab = defineAsyncComponent(
   () => import('~/components/statistics/ChampionMiscTab.vue')
+)
+const ChampionVideosTab = defineAsyncComponent(
+  () => import('~/components/statistics/ChampionVideosTab.vue')
 )
 const ChampionPingsTab = defineAsyncComponent(
   () => import('~/components/statistics/ChampionPingsTab.vue')
@@ -3109,6 +3120,7 @@ const activeChampionTab = ref<
   | 'pings'
   | 'vision'
   | 'misc'
+  | 'videos'
 >('overview')
 type ChampionTabId =
   | 'overview'
@@ -3122,6 +3134,7 @@ type ChampionTabId =
   | 'pings'
   | 'vision'
   | 'misc'
+  | 'videos'
 const championPageBootstrapped = ref(false)
 const championTabLoaded = ref<Record<ChampionTabId, boolean>>({
   overview: false,
@@ -3135,6 +3148,7 @@ const championTabLoaded = ref<Record<ChampionTabId, boolean>>({
   pings: false,
   vision: false,
   misc: false,
+  videos: false,
 })
 const championTabs = [
   { id: 'overview' as const, label: 'statisticsPage.championStatsTabOverview' },
@@ -3148,6 +3162,7 @@ const championTabs = [
   { id: 'pings' as const, label: 'statisticsPage.tabPings' },
   { id: 'vision' as const, label: 'statisticsPage.tabVision' },
   { id: 'misc' as const, label: 'statisticsPage.championStatsTabMisc' },
+  { id: 'videos' as const, label: 'statisticsPage.championStatsTabVideos' },
 ]
 const championTabsNavEl = ref<HTMLElement | null>(null)
 useHorizontalScrollContainer(championTabsNavEl)
@@ -3233,6 +3248,7 @@ function resetChampionTabLoadState(): void {
     pings: false,
     vision: false,
     misc: false,
+    videos: false,
   }
 }
 
@@ -3960,7 +3976,9 @@ async function loadChampionDataForTab(tab: ChampionTabId, force = false): Promis
   if (tab === 'misc') {
     await loadChampionMisc()
     markChampionTabLoaded('misc')
+    return
   }
+  if (tab === 'videos') markChampionTabLoaded('videos')
 }
 
 async function reloadChampionBaseAndActiveTabData(): Promise<void> {
