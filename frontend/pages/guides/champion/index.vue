@@ -79,13 +79,13 @@
 import ChampionGuidesModal from '~/components/Videos/ChampionGuidesModal.vue'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { useChampionsStore } from '~/stores/ChampionsStore'
-import { useYouTubeStore } from '~/stores/YouTubeStore'
 import type { Champion } from '~/types/build'
 import {
   CHAMPION_GUIDE_ROLES,
   championGuideRoles,
   championGuideVideoCounts,
   championMatchesGuideFilter,
+  type GuideVideoRef,
   type ChampionGuideRole,
 } from '~/utils/championGuideVideos'
 import {
@@ -101,27 +101,31 @@ const { t, locale } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const championsStore = useChampionsStore()
-const youtube = useYouTubeStore()
 const { version } = useGameVersion()
 
 const searchQuery = ref('')
 const selectedRoles = ref<ChampionGuideRole[]>([])
 
-await championsStore.loadChampions(riotLanguage(locale.value)).catch(() => undefined)
+/** Champions, titres des vidéos et guides matchups attendus en SSR : badges affichés avec les images. */
+const [, { data: guideVideos }, { data: matchupGuideData }] = await Promise.all([
+  championsStore.loadChampions(riotLanguage(locale.value)).catch(() => undefined),
+  useFetch<GuideVideoRef[]>('/champion-guide-videos.json', {
+    key: 'champion-guide-videos',
+    default: () => [],
+  }),
+  useFetch<MatchupGuidesByChampion>('/matchup-guides.json', {
+    key: 'matchup-guides',
+    default: () => ({}),
+  }),
+])
 
 const champions = computed(() =>
   [...championsStore.champions].sort((a, b) => a.name.localeCompare(b.name, locale.value))
 )
 const names = computed(() => champions.value.map(c => c.name))
-const videos = computed(() => Object.values(youtube.channelDataById).flatMap(d => d?.videos ?? []))
+const videos = computed(() => guideVideos.value ?? [])
 const counts = computed(() => championGuideVideoCounts(videos.value, names.value))
 const rolesByName = computed(() => championGuideRoles(videos.value, names.value))
-
-const { data: matchupGuideData } = useLazyFetch<MatchupGuidesByChampion>('/matchup-guides.json', {
-  key: 'matchup-guides',
-  server: false,
-  default: () => ({}),
-})
 
 const matchupCounts = computed(() => matchupGuideCounts(matchupGuideData.value ?? {}, names.value))
 /** Filtre par rôle : rôles des vidéos + onglet du sheet des guides matchups. */
@@ -162,10 +166,6 @@ function isVisible(champion: Champion): boolean {
     selectedRoles.value
   )
 }
-
-onMounted(() => {
-  youtube.loadAllChannelsData().catch(() => undefined)
-})
 
 useHead({
   title: () => t('championGuidesPage.title'),

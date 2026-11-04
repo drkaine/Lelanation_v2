@@ -99,9 +99,21 @@ export function championGuideVideosByRole(
     }))
 }
 
+/** Vidéo réduite au strict nécessaire pour compter et filtrer les guides (payload SSR léger). */
+export type GuideVideoRef = Pick<YouTubeVideo, 'id' | 'title'>
+
+/** Réduit les vidéos à { id, title } : dédoublonnées par id, sans titre vide. */
+export function slimGuideVideos(videos: readonly YouTubeVideo[]): GuideVideoRef[] {
+  const byId = new Map<string, GuideVideoRef>()
+  for (const { id, title } of videos) {
+    if (id && title && !byId.has(id)) byId.set(id, { id, title })
+  }
+  return [...byId.values()]
+}
+
 /** Nombre de guides vidéo (ids uniques) par nom de champion. */
 export function championGuideVideoCounts(
-  videos: readonly YouTubeVideo[],
+  videos: readonly GuideVideoRef[],
   championNames: readonly string[]
 ): Record<string, number> {
   const counts: Record<string, number> = {}
@@ -117,7 +129,7 @@ export function championGuideVideoCounts(
 
 /** Rôles couverts par les guides de chaque champion, dans l'ordre des lanes. */
 export function championGuideRoles(
-  videos: readonly YouTubeVideo[],
+  videos: readonly GuideVideoRef[],
   championNames: readonly string[]
 ): Record<string, ChampionGuideRole[]> {
   const out: Record<string, ChampionGuideRole[]> = {}

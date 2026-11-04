@@ -91,7 +91,6 @@ const allVideos = computed<YouTubeVideo[]>(() =>
 
 const { data: matchupGuideData } = useLazyFetch<MatchupGuidesByChampion>('/matchup-guides.json', {
   key: 'matchup-guides',
-  server: false,
   default: () => ({}),
 })
 const matchupGuides = computed(() =>

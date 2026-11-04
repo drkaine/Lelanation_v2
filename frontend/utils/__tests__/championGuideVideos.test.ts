@@ -5,6 +5,7 @@ import {
   championMatchesGuideFilter,
   championGuideVideosByRole,
   parseChampionGuideTitle,
+  slimGuideVideos,
 } from '../championGuideVideos'
 import type { YouTubeVideo } from '~/types/youtube'
 
@@ -178,5 +179,20 @@ describe('parseChampionGuideTitle — autres séries de guides', () => {
   it('ignore les titres hors séries', () => {
     expect(parseChampionGuideTitle('Comment build Camille TOP', 'Camille')).toBeNull()
     expect(parseChampionGuideTitle('Hard carry avec Viego MID !', 'Viego')).toBeNull()
+  })
+})
+
+describe('slimGuideVideos', () => {
+  it('garde id + titre, dédoublonne par id, ignore les vidéos sans titre', () => {
+    const videos = [
+      video('a', 'Guide Ahri Mid'),
+      video('a', 'Guide Ahri Mid'),
+      { ...video('b', ''), title: '' },
+      video('c', 'Macro Garen Top'),
+    ]
+    expect(slimGuideVideos(videos)).toEqual([
+      { id: 'a', title: 'Guide Ahri Mid' },
+      { id: 'c', title: 'Macro Garen Top' },
+    ])
   })
 })
