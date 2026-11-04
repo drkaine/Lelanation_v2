@@ -246,6 +246,7 @@ import { absoluteSitePath, pageOgImageUrl } from '~/utils/siteUrl'
 import { useOgMetaTags } from '~/composables/useOgMetaTags'
 import { parseRankTierQuery, rankTierSelectionsEqual } from '~/utils/statisticsRankTierQuery'
 import { compareVersionsDesc, normalizeVersionToPrefix } from '~/utils/statistics/statsVersion'
+import { displayedPatch } from '~/utils/statistics/championVersionQuery'
 import { riotLanguage } from '~/utils/riotLanguage'
 import StatisticsFiltersPanel from '~/components/statistics/StatisticsFiltersPanel.vue'
 
@@ -265,10 +266,16 @@ const { version: gameVersion } = useGameVersion()
 const championNamesRequest = useChampionNames()
 const { data: championNames } = championNamesRequest
 
+const metaChartSeoPatch = computed(() =>
+  displayedPatch(
+    queryFirst(route.query.version as string | string[] | null | undefined),
+    gameVersion.value
+  )
+)
 const metaChartSeoTitle = computed(() =>
   t('statisticsPage.metaChartMetaTitle', {
-    season: lolSeasonFromGameVersion(gameVersion.value),
-    patch: gameVersion.value,
+    season: lolSeasonFromGameVersion(metaChartSeoPatch.value),
+    patch: metaChartSeoPatch.value,
   })
 )
 const metaChartSeoDescription = computed(() => t('statisticsPage.metaChartMetaDescription'))

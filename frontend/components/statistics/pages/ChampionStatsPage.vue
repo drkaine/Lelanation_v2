@@ -1889,6 +1889,10 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted, provide, nextTi
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { queryFirst } from '~/utils/statistics/statisticsTabRouting'
+import { progressionReferenceVersion } from '~/utils/statistics/progressionReference'
+import { trendChartDomain } from '~/utils/statistics/trendDomain'
+import { displayedPatch, withVersionQuery } from '~/utils/statistics/championVersionQuery'
 import { statisticsFiltersSheetPanelClass } from '~/composables/useStatisticsFiltersSheetMode'
 import { PAGE_SIZE_OPTIONS } from '~/utils/statistics/statisticsTableFormat'
 import type { RunesSpellsTabCtx } from '~/composables/statistics/statisticsPageCtx'
@@ -1991,6 +1995,7 @@ const ChampionVisionTab = defineAsyncComponent(
 
 const route = useRoute()
 const router = useRouter()
+const filterVersion = ref(queryFirst(route.query.version as string | string[] | null | undefined))
 const { t, locale } = useI18n()
 const versionStore = useVersionStore()
 const championsStore = useChampionsStore()
@@ -2035,7 +2040,8 @@ const { data: championNamesMap } = await useChampionNames()
 
 const { data: championPageSsr, pending: championPageSsrPending } = await useChampionPageSsr(
   championRouteParam,
-  riotLocale
+  riotLocale,
+  filterVersion
 )
 
 const lolSeasonLabel = computed(() => lolSeasonFromGameVersion(gameVersion.value))
@@ -2489,7 +2495,6 @@ const {
   filtersFabClass,
 } = useStatisticsFiltersSheetMode()
 
-const filterVersion = ref('')
 const trendChartFromDate = ref('')
 const filterRank = ref<string[]>([])
 const filterRole = ref('')
@@ -2546,18 +2551,8 @@ function normalizeTrendChartFromDate(raw: string): string | null {
 const championProgressionFromVersionOverride = ref('')
 function syncChampionProgressionDeltaToVersionBeforeFilter(): boolean {
   const filter = filterVersion.value.trim()
-  const list = versionsFromOverview.value
   const before = championProgressionFromVersionOverride.value
-  if (!filter) {
-    if (before !== '') {
-      championProgressionFromVersionOverride.value = ''
-      return true
-    }
-    return false
-  }
-  const idx = list.findIndex(v => v.version === filter)
-  if (idx < 0) return false
-  const prev = list[idx + 1]?.version ?? ''
+  const prev = filter ? (progressionReferenceVersion(versionsFromOverview.value, filter) ?? '') : ''
   if (before === prev) return false
   championProgressionFromVersionOverride.value = prev
   return true
@@ -2565,10 +2560,10 @@ function syncChampionProgressionDeltaToVersionBeforeFilter(): boolean {
 const championProgressionFromVersion = computed(() => {
   if (championProgressionFromVersionOverride.value)
     return championProgressionFromVersionOverride.value
-  const versions = versionsFromOverview.value
-  if (versions.length >= 2) return versions[1]?.version ?? null
-  if (versions.length === 1) return versions[0]?.version ?? null
-  return normalizeVersionToPrefix(versionStore.currentVersion)
+  return (
+    progressionReferenceVersion(versionsFromOverview.value, filterVersion.value) ??
+    normalizeVersionToPrefix(versionStore.currentVersion)
+  )
 })
 const championProgressionSelectableVersions = computed(() => {
   const versions = versionsFromOverview.value
@@ -4301,19 +4296,13 @@ const trendChartCards = computed<TrendChartCard[]>(() => {
     })
 
     const allValues = smoothedByTier.flatMap(s => s.smoothValues).filter(v => Number.isFinite(v))
-    let minVal = allValues.length ? Math.min(...allValues) : 0
-    let maxVal = allValues.length ? Math.max(...allValues) : 1
-    if (!Number.isFinite(minVal)) minVal = 0
-    if (!Number.isFinite(maxVal)) maxVal = 1
-    if (metric.id === 'games') {
-      minVal = 0
-      if (maxVal <= 0) maxVal = 1
-    } else if (maxVal <= minVal) {
-      maxVal = minVal + (metric.id === 'pickrate' || metric.id === 'banrate' ? 0.5 : 1)
-    }
-    const spread = Math.max(1e-6, maxVal - minVal)
-    const domainMin = metric.id === 'games' ? 0 : Math.max(0, minVal - spread * 0.12)
-    const domainMax = maxVal + spread * 0.08
+    const domain = trendChartDomain(
+      allValues.length ? Math.min(...allValues) : 0,
+      allValues.length ? Math.max(...allValues) : 1,
+      metric.id
+    )
+    const domainMin = domain.min
+    const domainMax = domain.max
     const domainSpan = Math.max(1e-6, domainMax - domainMin)
 
     const series: TrendSeries[] = smoothedByTier.map(serie => {
@@ -4685,8 +4674,11 @@ if (import.meta.client) {
       },
     })
   })
-  watch(filterVersion, () => {
+  watch(filterVersion, v => {
     syncChampionProgressionDeltaToVersionBeforeFilter()
+    if (queryFirst(route.query.version as string | string[] | null | undefined) !== v.trim()) {
+      router.replace({ query: withVersionQuery(route.query, v) }).catch(() => undefined)
+    }
   })
   watch(
     () => versionsFromOverview.value.map(v => v.version).join('\n'),
@@ -4782,8 +4774,10 @@ useHead({
     if (!name) return t('statisticsPage.championStatsMetaTitleFallback')
     return t('statisticsPage.championStatsMetaTitle', {
       champion: name,
-      season: lolSeasonFromGameVersion(resolvedGamePatch.value),
-      patch: resolvedGamePatch.value,
+      season: lolSeasonFromGameVersion(
+        displayedPatch(filterVersion.value, resolvedGamePatch.value)
+      ),
+      patch: displayedPatch(filterVersion.value, resolvedGamePatch.value),
     })
   },
 })

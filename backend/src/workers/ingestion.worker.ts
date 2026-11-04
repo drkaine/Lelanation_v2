@@ -38,6 +38,7 @@ import {
   participantWinCount,
 } from "./duoRoleAggregation.js";
 import { runAdditiveUpsert } from "./aggregationUpsert.js";
+import { banRoleColumn } from "./banRoleColumn.js";
 
 export class AlreadyProcessedMatchError extends Error {
   constructor(matchId: string) {
@@ -710,19 +711,7 @@ async function upsertBansByBanner(tx: any, participants: ParsedParticipantDto[])
   const rows: Array<{ keys: unknown[]; sums: number[] }> = [];
   for (const participant of participants.filter((row) => row.bannedChampionId > 0)) {
     const isTeam100 = participant.teamId === 100;
-    const roleKey = participant.role.toLowerCase();
-    const roleColumn =
-      roleKey === "top"
-        ? "count_banner_top"
-        : roleKey === "jungle"
-          ? "count_banner_jungle"
-          : roleKey === "mid"
-            ? "count_banner_mid"
-            : roleKey === "adc"
-              ? "count_banner_adc"
-              : roleKey === "support"
-                ? "count_banner_support"
-                : null;
+    const roleColumn = banRoleColumn(participant.role);
 
     rows.push({
       keys: [participant.patch, participant.rankTier, participant.region, participant.bannedChampionId],

@@ -22,6 +22,9 @@ export function normalizeVersionToPrefix(v: string | null | undefined): string |
  * Patch du filtre version des stats : le filtre courant s’il a des matchs, sinon `?version=` de l’URL
  * (le chargement des versions peut finir avant que la page applique la query), sinon le plus récent avec matchs.
  */
+/** Un patch sous cette part du plus gros patch n'est pas comparable (ex. 93 parties vs 50 000). */
+export const MIN_VERSION_SHARE = 0.05
+
 export function pickStatsVersionFilter(input: {
   current: string
   queryVersion: string
@@ -35,5 +38,9 @@ export function pickStatsVersionFilter(input: {
   if (hasData(current)) return current
   const fromQuery = input.queryVersion.trim()
   if (hasData(fromQuery)) return fromQuery
-  return versions.find(v => Number(v.matchCount ?? 0) > 0)?.version ?? versions[0]?.version ?? ''
+  const max = Math.max(0, ...versions.map(v => Number(v.matchCount ?? 0)))
+  const enough = versions
+    .filter(v => Number(v.matchCount ?? 0) > 0 && Number(v.matchCount) >= max * MIN_VERSION_SHARE)
+    .sort((a, b) => compareVersionsDesc(a.version, b.version))
+  return enough[0]?.version ?? versions[0]?.version ?? ''
 }

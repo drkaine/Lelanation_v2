@@ -53,3 +53,30 @@ describe('pickStatsVersionFilter', () => {
     )
   })
 })
+
+describe('pickStatsVersionFilter — patch trop maigre', () => {
+  it('ignore un nouveau patch quasi vide par défaut', () => {
+    expect(
+      pickStatsVersionFilter({
+        current: '',
+        queryVersion: '',
+        versions: [
+          { version: '16.22', matchCount: 93 },
+          { version: '16.21', matchCount: 51929 },
+        ],
+      })
+    ).toBe('16.21')
+  })
+  it('garde le patch maigre si demandé explicitement', () => {
+    expect(
+      pickStatsVersionFilter({
+        current: '',
+        queryVersion: '16.22',
+        versions: [
+          { version: '16.22', matchCount: 93 },
+          { version: '16.21', matchCount: 51929 },
+        ],
+      })
+    ).toBe('16.22')
+  })
+})

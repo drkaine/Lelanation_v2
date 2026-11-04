@@ -3,6 +3,7 @@ import { championKeyFromRouteParam } from '~/utils/championSlug'
 import { championNameFromMap, type ChampionNamesMap } from '~/composables/useChampionNames'
 import { getChampionIndexUrl, getVersionUrl, fetchPublicJson } from '~/utils/staticDataUrl'
 import type { JsonFetcher } from '~/utils/jsonFetcher'
+import { championSsrStatsQuery } from '~/utils/statistics/championVersionQuery'
 
 export type ChampionStatsSummary = {
   championId: number
@@ -17,13 +18,6 @@ export type ChampionStatsSummary = {
 }
 
 type ChampionIndexRow = { id: string; key: string | number; name?: string }
-
-function defaultChampionStatsQuery(): string {
-  const p = new URLSearchParams()
-  p.set('otp', 'oui')
-  const q = p.toString()
-  return q ? `?${q}` : ''
-}
 
 type ChampionPageSsrPayload = {
   championId: number
@@ -64,11 +58,15 @@ async function loadChampionIndexRows(
 }
 
 /** Champions index + stats API en un fetch SSR (slug résolu avant l’API). */
-export function useChampionPageSsr(championSlug: Ref<string>, riotLocale: Ref<string>) {
+export function useChampionPageSsr(
+  championSlug: Ref<string>,
+  riotLocale: Ref<string>,
+  version: Ref<string> = ref('')
+) {
   const requestFetch = useRequestFetch()
 
   return useAsyncData(
-    () => `champion-page-ssr-${championSlug.value}-${riotLocale.value}`,
+    () => `champion-page-ssr-${championSlug.value}-${riotLocale.value}-${version.value}`,
     async (): Promise<ChampionPageSsrPayload> => {
       const champions = await loadChampionIndexRows(requestFetch, riotLocale.value)
       const id = championKeyFromRouteParam(championSlug.value, champions)
@@ -85,13 +83,13 @@ export function useChampionPageSsr(championSlug: Ref<string>, riotLocale: Ref<st
       }
       try {
         const stats = await requestFetch<ChampionStatsSummary>(
-          `/api/stats/champions/${id}${defaultChampionStatsQuery()}`
+          `/api/stats/champions/${id}${championSsrStatsQuery(version.value)}`
         )
         return { championId: id, championName, stats }
       } catch {
         return { championId: id, championName, stats: null }
       }
     },
-    { watch: [championSlug, riotLocale] }
+    { watch: [championSlug, riotLocale, version] }
   )
 }

@@ -1,5 +1,6 @@
 import { computed, ref, watch, type Ref } from 'vue'
 import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
+import { banPct, banPctDelta } from '~/utils/statistics/bansMath'
 
 export type BansTableRow = {
   championId: number
@@ -100,14 +101,10 @@ export function useStatisticsBansTab(params: {
   const bansPage = ref(1)
 
   function banRateForBansRow(row: { bansTotal: number }, matchCount: number): number {
-    if (matchCount <= 0) return 0
-    return Math.round((10000 * row.bansTotal) / (2 * matchCount)) / 100
+    return banPct(row.bansTotal, matchCount)
   }
 
-  function banPctForCount(count: number, matchCount: number, bansPerMatch: number): number {
-    if (matchCount <= 0 || bansPerMatch <= 0) return 0
-    return Math.round((10000 * count) / (bansPerMatch * matchCount)) / 100
-  }
+  const banPctForCount = banPct
 
   const bansRefByChampion = computed(() => {
     const m = new Map<number, BansTableRow>()
@@ -115,18 +112,14 @@ export function useStatisticsBansTab(params: {
     return m
   })
 
-  function bansDeltaPct(
-    row: BansTableRow,
-    key: BansMetricKey,
-    bansPerMatch: number
-  ): number | null {
+  function bansDeltaPct(row: BansTableRow, key: BansMetricKey): number | null {
     const refRow = bansRefByChampion.value.get(row.championId)
-    const currMc = bansTableData.value?.matchCount ?? 0
-    const refMc = bansTableRefData.value?.matchCount ?? 0
-    if (!refRow || currMc <= 0 || refMc <= 0) return null
-    const currPct = banPctForCount(Number(row[key] ?? 0), currMc, bansPerMatch)
-    const refPct = banPctForCount(Number(refRow[key] ?? 0), refMc, bansPerMatch)
-    return Math.round((currPct - refPct) * 100) / 100
+    return banPctDelta(
+      Number(row[key] ?? 0),
+      refRow ? Number(refRow[key] ?? 0) : null,
+      bansTableData.value?.matchCount ?? 0,
+      bansTableRefData.value?.matchCount ?? 0
+    )
   }
 
   function pctDeltaClass(delta: number): string {
@@ -179,31 +172,28 @@ export function useStatisticsBansTab(params: {
       : (bansByLossMap.value.get(championId) ?? 0)
   }
 
-  function bansOutcomeRefCount(championId: number, outcome: 'win' | 'loss'): number {
+  function bansOutcomeRefCount(championId: number, outcome: 'win' | 'loss'): number | null {
     const refRow = bansRefByChampion.value.get(championId)
     if (refRow) {
       return outcome === 'win'
         ? Number(refRow.bansWhenTeamWon ?? 0)
         : Number(refRow.bansWhenTeamLost ?? 0)
     }
-    return outcome === 'win'
-      ? (bansByWinRefMap.value.get(championId) ?? 0)
-      : (bansByLossRefMap.value.get(championId) ?? 0)
+    const refMap = outcome === 'win' ? bansByWinRefMap.value : bansByLossRefMap.value
+    return refMap.get(championId) ?? null
   }
 
   function bansOutcomePct(championId: number, outcome: 'win' | 'loss'): number {
-    const matchCount = bansTableData.value?.matchCount ?? 0
-    if (matchCount <= 0) return 0
-    return banPctForCount(bansOutcomeCount(championId, outcome), matchCount, 2)
+    return banPct(bansOutcomeCount(championId, outcome), bansTableData.value?.matchCount ?? 0)
   }
 
   function bansOutcomeDeltaPct(championId: number, outcome: 'win' | 'loss'): number | null {
-    const currMc = bansTableData.value?.matchCount ?? 0
-    const refMc = bansTableRefData.value?.matchCount ?? 0
-    if (currMc <= 0 || refMc <= 0) return null
-    const currPct = banPctForCount(bansOutcomeCount(championId, outcome), currMc, 2)
-    const refPct = banPctForCount(bansOutcomeRefCount(championId, outcome), refMc, 2)
-    return Math.round((currPct - refPct) * 100) / 100
+    return banPctDelta(
+      bansOutcomeCount(championId, outcome),
+      bansOutcomeRefCount(championId, outcome),
+      bansTableData.value?.matchCount ?? 0,
+      bansTableRefData.value?.matchCount ?? 0
+    )
   }
 
   function bansSortHint(col: BansSortCol): string {
@@ -235,8 +225,8 @@ export function useStatisticsBansTab(params: {
           vb = banRateForBansRow(b, mc)
           break
         case 'rateDelta':
-          va = bansDeltaPct(a, 'bansTotal', 2) ?? 0
-          vb = bansDeltaPct(b, 'bansTotal', 2) ?? 0
+          va = bansDeltaPct(a, 'bansTotal') ?? 0
+          vb = bansDeltaPct(b, 'bansTotal') ?? 0
           break
         case 'win':
           va = bansOutcomePct(a.championId, 'win')
@@ -259,56 +249,56 @@ export function useStatisticsBansTab(params: {
           vb = b.bansBlue
           break
         case 'blueDelta':
-          va = bansDeltaPct(a, 'bansBlue', 1) ?? 0
-          vb = bansDeltaPct(b, 'bansBlue', 1) ?? 0
+          va = bansDeltaPct(a, 'bansBlue') ?? 0
+          vb = bansDeltaPct(b, 'bansBlue') ?? 0
           break
         case 'red':
           va = a.bansRed
           vb = b.bansRed
           break
         case 'redDelta':
-          va = bansDeltaPct(a, 'bansRed', 1) ?? 0
-          vb = bansDeltaPct(b, 'bansRed', 1) ?? 0
+          va = bansDeltaPct(a, 'bansRed') ?? 0
+          vb = bansDeltaPct(b, 'bansRed') ?? 0
           break
         case 'top':
           va = a.bansTop
           vb = b.bansTop
           break
         case 'topDelta':
-          va = bansDeltaPct(a, 'bansTop', 1) ?? 0
-          vb = bansDeltaPct(b, 'bansTop', 1) ?? 0
+          va = bansDeltaPct(a, 'bansTop') ?? 0
+          vb = bansDeltaPct(b, 'bansTop') ?? 0
           break
         case 'jungle':
           va = a.bansJungle
           vb = b.bansJungle
           break
         case 'jungleDelta':
-          va = bansDeltaPct(a, 'bansJungle', 1) ?? 0
-          vb = bansDeltaPct(b, 'bansJungle', 1) ?? 0
+          va = bansDeltaPct(a, 'bansJungle') ?? 0
+          vb = bansDeltaPct(b, 'bansJungle') ?? 0
           break
         case 'middle':
           va = a.bansMiddle
           vb = b.bansMiddle
           break
         case 'middleDelta':
-          va = bansDeltaPct(a, 'bansMiddle', 1) ?? 0
-          vb = bansDeltaPct(b, 'bansMiddle', 1) ?? 0
+          va = bansDeltaPct(a, 'bansMiddle') ?? 0
+          vb = bansDeltaPct(b, 'bansMiddle') ?? 0
           break
         case 'bottom':
           va = a.bansBottom
           vb = b.bansBottom
           break
         case 'bottomDelta':
-          va = bansDeltaPct(a, 'bansBottom', 1) ?? 0
-          vb = bansDeltaPct(b, 'bansBottom', 1) ?? 0
+          va = bansDeltaPct(a, 'bansBottom') ?? 0
+          vb = bansDeltaPct(b, 'bansBottom') ?? 0
           break
         case 'support':
           va = a.bansSupport
           vb = b.bansSupport
           break
         case 'supportDelta':
-          va = bansDeltaPct(a, 'bansSupport', 1) ?? 0
-          vb = bansDeltaPct(b, 'bansSupport', 1) ?? 0
+          va = bansDeltaPct(a, 'bansSupport') ?? 0
+          vb = bansDeltaPct(b, 'bansSupport') ?? 0
           break
       }
       return mult * (vb - va)

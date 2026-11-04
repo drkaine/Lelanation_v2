@@ -1674,7 +1674,7 @@
     "championDashboardBreakdown_damageType_physical": "Physical",
     "championDashboardBreakdown_damageType_magic": "Magic",
     "championDashboardBreakdown_damageType_true": "True",
-    "championStatsTabMisc": "Base stats",
+    "championStatsTabMisc": "Healing, damage & multikills",
     "championStatsTabVideos": "Videos",
     "championVideosLoading": "Loading videos…",
     "championVideosEmpty": "No video guide for {champion} yet.",

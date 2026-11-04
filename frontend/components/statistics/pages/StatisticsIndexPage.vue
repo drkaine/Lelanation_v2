@@ -912,6 +912,7 @@ import {
   isStatisticsMainTab,
   statisticsTabNeedsOverviewLoad,
 } from '~/utils/statistics/statisticsTabRouting'
+import { progressionReferenceVersion } from '~/utils/statistics/progressionReference'
 import {
   PAGE_SIZE_OPTIONS,
   tierListPatchDeltaClass,
@@ -2171,42 +2172,20 @@ async function loadOverviewProgression() {
  */
 function syncProgressionDeltaToVersionBeforeFilter(): boolean {
   const filter = statsVersionFilter.value.trim()
-  const list = statsVersionOptions.value
   const before = progressionFromVersionOverride.value
-  if (!filter) {
-    if (before !== '') {
-      progressionFromVersionOverride.value = ''
-      return true
-    }
-    return false
-  }
-  const idx = list.findIndex(v => v.version === filter)
-  if (idx < 0) return false
-  const prevWithData = list.slice(idx + 1).find(v => Number(v.matchCount ?? 0) > 0)?.version
-  const prev = prevWithData ?? list[idx + 1]?.version ?? ''
+  const prev = filter ? (progressionReferenceVersion(statsVersionOptions.value, filter) ?? '') : ''
   if (before === prev) return false
   progressionFromVersionOverride.value = prev
   return true
 }
 
-/** Version for "since" cards: user override, else latest-1, else latest/current. */
+/** Version for "since" cards: user override, else previous patch with enough games. */
 const progressionFromVersion = computed(() => {
   if (progressionFromVersionOverride.value) return progressionFromVersionOverride.value
-  const versions = statsVersionOptions.value
-  if (statsVersionFilter.value) {
-    const idx = versions.findIndex(v => v.version === statsVersionFilter.value)
-    if (idx >= 0) {
-      const prevWithData = versions.slice(idx + 1).find(v => Number(v.matchCount ?? 0) > 0)?.version
-      if (prevWithData) return prevWithData
-      const nextVersion = versions[idx + 1]?.version
-      if (nextVersion) return nextVersion
-    }
-  }
-  const fallbackWithData = versions.find(v => Number(v.matchCount ?? 0) > 0)?.version
-  if (fallbackWithData) return fallbackWithData
-  if (versions.length >= 2) return versions[1]?.version ?? null
-  if (versions.length === 1) return versions[0]?.version ?? null
-  return normalizeVersionToPrefix(versionStore.currentVersion)
+  return (
+    progressionReferenceVersion(statsVersionOptions.value, statsVersionFilter.value) ??
+    normalizeVersionToPrefix(versionStore.currentVersion)
+  )
 })
 const progressionSelectableVersions = computed(() => {
   const versions = statsVersionOptions.value.filter(v => Number(v.matchCount) > 0)

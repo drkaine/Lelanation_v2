@@ -343,6 +343,8 @@ import { championStatsDetailPath } from '~/utils/championStatsRoutes'
 import { parseRankTierQuery, rankTierSelectionsEqual } from '~/utils/statisticsRankTierQuery'
 import StatisticsBotlaneTierTab from '~/components/statistics/tabs/StatisticsBotlaneTierTab.vue'
 import { compareVersionsDesc, normalizeVersionToPrefix } from '~/utils/statistics/statsVersion'
+import { progressionReferenceVersion } from '~/utils/statistics/progressionReference'
+import { displayedPatch } from '~/utils/statistics/championVersionQuery'
 import { riotLanguage } from '~/utils/riotLanguage'
 import StatisticsFiltersPanel from '~/components/statistics/StatisticsFiltersPanel.vue'
 
@@ -366,16 +368,22 @@ useHorizontalScrollContainer(tierListTabsNavEl)
 const championNamesRequest = useChampionNames()
 const { data: championNames } = championNamesRequest
 
+const tierListSeoPatch = computed(() =>
+  displayedPatch(
+    queryFirst(route.query.version as string | string[] | null | undefined),
+    gameVersion.value
+  )
+)
 const tierListSeoTitle = computed(() =>
   t('statisticsPage.tierListMetaTitle', {
-    season: lolSeasonFromGameVersion(gameVersion.value),
-    patch: gameVersion.value,
+    season: lolSeasonFromGameVersion(tierListSeoPatch.value),
+    patch: tierListSeoPatch.value,
   })
 )
 const tierListSeoDescription = computed(() =>
   t('statisticsPage.tierListMetaDescription', {
-    season: lolSeasonFromGameVersion(gameVersion.value),
-    patch: gameVersion.value,
+    season: lolSeasonFromGameVersion(tierListSeoPatch.value),
+    patch: tierListSeoPatch.value,
   })
 )
 const tierListSiteUrl = useSiteUrl()
@@ -469,18 +477,8 @@ const activeStatsFiltersCount = computed(() => {
 
 function syncProgressionDeltaToVersionBeforeFilter(): boolean {
   const filter = statsVersionFilter.value.trim()
-  const list = statsVersionOptions.value
   const before = progressionFromVersionOverride.value
-  if (!filter) {
-    if (before !== '') {
-      progressionFromVersionOverride.value = ''
-      return true
-    }
-    return false
-  }
-  const idx = list.findIndex(v => v.version === filter)
-  if (idx < 0) return false
-  const prev = list[idx + 1]?.version ?? ''
+  const prev = filter ? (progressionReferenceVersion(statsVersionOptions.value, filter) ?? '') : ''
   if (before === prev) return false
   progressionFromVersionOverride.value = prev
   return true
@@ -488,10 +486,10 @@ function syncProgressionDeltaToVersionBeforeFilter(): boolean {
 
 const progressionFromVersion = computed(() => {
   if (progressionFromVersionOverride.value) return progressionFromVersionOverride.value
-  const versions = statsVersionOptions.value
-  if (versions.length >= 2) return versions[1]?.version ?? null
-  if (versions.length === 1) return versions[0]?.version ?? null
-  return normalizeVersionToPrefix(versionStore.currentVersion)
+  return (
+    progressionReferenceVersion(statsVersionOptions.value, statsVersionFilter.value) ??
+    normalizeVersionToPrefix(versionStore.currentVersion)
+  )
 })
 
 const progressionSelectableVersions = computed(() => {

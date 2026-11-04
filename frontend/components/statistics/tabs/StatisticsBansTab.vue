@@ -57,11 +57,11 @@
                 {{ p.banRateForBansRow(row, p.bansTableData?.matchCount ?? 0).toFixed(2) }}%
               </div>
               <div
-                v-if="p.bansDeltaPct(row, 'bansTotal', 2) != null"
+                v-if="p.bansDeltaPct(row, 'bansTotal') != null"
                 class="mt-0.5 text-xs tabular-nums leading-none"
-                :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansTotal', 2)!)"
+                :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansTotal')!)"
               >
-                {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansTotal', 2)!) }}
+                {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansTotal')!) }}
               </div>
             </button>
           </div>
@@ -94,16 +94,16 @@
                 <span class="text-sm font-semibold tabular-nums text-text">
                   {{
                     p
-                      .banPctForCount(row[role.countKey], p.bansTableData?.matchCount ?? 0, 1)
+                      .banPctForCount(row[role.countKey], p.bansTableData?.matchCount ?? 0)
                       .toFixed(2)
                   }}%
                 </span>
                 <span
-                  v-if="p.bansDeltaPct(row, role.countKey, 1) != null"
+                  v-if="p.bansDeltaPct(row, role.countKey) != null"
                   class="text-[10px] tabular-nums leading-none"
-                  :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, role.countKey, 1)!)"
+                  :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, role.countKey)!)"
                 >
-                  {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, role.countKey, 1)!) }}
+                  {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, role.countKey)!) }}
                 </span>
               </div>
             </div>
@@ -151,15 +151,13 @@
             >
               <span>{{ p.t('statisticsPage.bansColBlueSide') }}</span>
               <span class="tabular-nums">
-                {{
-                  p.banPctForCount(row.bansBlue, p.bansTableData?.matchCount ?? 0, 1).toFixed(2)
-                }}%
+                {{ p.banPctForCount(row.bansBlue, p.bansTableData?.matchCount ?? 0).toFixed(2) }}%
                 <span
-                  v-if="p.bansDeltaPct(row, 'bansBlue', 1) != null"
+                  v-if="p.bansDeltaPct(row, 'bansBlue') != null"
                   class="ml-1 text-xs"
-                  :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansBlue', 1)!)"
+                  :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansBlue')!)"
                 >
-                  {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansBlue', 1)!) }}
+                  {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansBlue')!) }}
                 </span>
               </span>
             </div>
@@ -169,13 +167,13 @@
             >
               <span>{{ p.t('statisticsPage.bansColRedSide') }}</span>
               <span class="tabular-nums">
-                {{ p.banPctForCount(row.bansRed, p.bansTableData?.matchCount ?? 0, 1).toFixed(2) }}%
+                {{ p.banPctForCount(row.bansRed, p.bansTableData?.matchCount ?? 0).toFixed(2) }}%
                 <span
-                  v-if="p.bansDeltaPct(row, 'bansRed', 1) != null"
+                  v-if="p.bansDeltaPct(row, 'bansRed') != null"
                   class="ml-1 text-xs"
-                  :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansRed', 1)!)"
+                  :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansRed')!)"
                 >
-                  {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansRed', 1)!) }}
+                  {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansRed')!) }}
                 </span>
               </span>
             </div>
@@ -304,9 +302,10 @@
                         loading="lazy"
                         decoding="async"
                         :src="role.icon"
-                        :alt="role.alt"
+                        alt=""
                         class="h-4 w-4"
-                      />{{ p.bansSortHint(role.key) }}
+                      /><span class="ml-1">{{ role.alt }}</span
+                      >{{ p.bansSortHint(role.key) }}
                     </button>
                     <button
                       v-if="p.bansTableRefData"
@@ -341,11 +340,11 @@
                       p.banRateForBansRow(row, p.bansTableData?.matchCount ?? 0).toFixed(2)
                     }}</span>
                     <span
-                      v-if="p.bansDeltaPct(row, 'bansTotal', 2) != null"
+                      v-if="p.bansDeltaPct(row, 'bansTotal') != null"
                       class="text-[10px] leading-none"
-                      :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansTotal', 2)!)"
+                      :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansTotal')!)"
                     >
-                      {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansTotal', 2)!) }}
+                      {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansTotal')!) }}
                     </span>
                   </div>
                 </td>
@@ -386,14 +385,14 @@
                     class="flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight text-primary-light/95"
                   >
                     <span>{{
-                      p.banPctForCount(row.bansBlue, p.bansTableData?.matchCount ?? 0, 1).toFixed(2)
+                      p.banPctForCount(row.bansBlue, p.bansTableData?.matchCount ?? 0).toFixed(2)
                     }}</span>
                     <span
-                      v-if="p.bansDeltaPct(row, 'bansBlue', 1) != null"
+                      v-if="p.bansDeltaPct(row, 'bansBlue') != null"
                       class="text-[10px] leading-none"
-                      :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansBlue', 1)!)"
+                      :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansBlue')!)"
                     >
-                      {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansBlue', 1)!) }}
+                      {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansBlue')!) }}
                     </span>
                   </div>
                 </td>
@@ -402,14 +401,14 @@
                     class="text-error/70/95 flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight"
                   >
                     <span>{{
-                      p.banPctForCount(row.bansRed, p.bansTableData?.matchCount ?? 0, 1).toFixed(2)
+                      p.banPctForCount(row.bansRed, p.bansTableData?.matchCount ?? 0).toFixed(2)
                     }}</span>
                     <span
-                      v-if="p.bansDeltaPct(row, 'bansRed', 1) != null"
+                      v-if="p.bansDeltaPct(row, 'bansRed') != null"
                       class="text-[10px] leading-none"
-                      :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansRed', 1)!)"
+                      :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansRed')!)"
                     >
-                      {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansRed', 1)!) }}
+                      {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansRed')!) }}
                     </span>
                   </div>
                 </td>
@@ -418,14 +417,14 @@
                     class="flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight"
                   >
                     <span>{{
-                      p.banPctForCount(row.bansTop, p.bansTableData?.matchCount ?? 0, 1).toFixed(2)
+                      p.banPctForCount(row.bansTop, p.bansTableData?.matchCount ?? 0).toFixed(2)
                     }}</span>
                     <span
-                      v-if="p.bansDeltaPct(row, 'bansTop', 1) != null"
+                      v-if="p.bansDeltaPct(row, 'bansTop') != null"
                       class="text-[10px] leading-none"
-                      :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansTop', 1)!)"
+                      :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansTop')!)"
                     >
-                      {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansTop', 1)!) }}
+                      {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansTop')!) }}
                     </span>
                   </div>
                 </td>
@@ -434,16 +433,14 @@
                     class="flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight"
                   >
                     <span>{{
-                      p
-                        .banPctForCount(row.bansJungle, p.bansTableData?.matchCount ?? 0, 1)
-                        .toFixed(2)
+                      p.banPctForCount(row.bansJungle, p.bansTableData?.matchCount ?? 0).toFixed(2)
                     }}</span>
                     <span
-                      v-if="p.bansDeltaPct(row, 'bansJungle', 1) != null"
+                      v-if="p.bansDeltaPct(row, 'bansJungle') != null"
                       class="text-[10px] leading-none"
-                      :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansJungle', 1)!)"
+                      :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansJungle')!)"
                     >
-                      {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansJungle', 1)!) }}
+                      {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansJungle')!) }}
                     </span>
                   </div>
                 </td>
@@ -452,16 +449,14 @@
                     class="flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight"
                   >
                     <span>{{
-                      p
-                        .banPctForCount(row.bansMiddle, p.bansTableData?.matchCount ?? 0, 1)
-                        .toFixed(2)
+                      p.banPctForCount(row.bansMiddle, p.bansTableData?.matchCount ?? 0).toFixed(2)
                     }}</span>
                     <span
-                      v-if="p.bansDeltaPct(row, 'bansMiddle', 1) != null"
+                      v-if="p.bansDeltaPct(row, 'bansMiddle') != null"
                       class="text-[10px] leading-none"
-                      :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansMiddle', 1)!)"
+                      :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansMiddle')!)"
                     >
-                      {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansMiddle', 1)!) }}
+                      {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansMiddle')!) }}
                     </span>
                   </div>
                 </td>
@@ -470,16 +465,14 @@
                     class="flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight"
                   >
                     <span>{{
-                      p
-                        .banPctForCount(row.bansBottom, p.bansTableData?.matchCount ?? 0, 1)
-                        .toFixed(2)
+                      p.banPctForCount(row.bansBottom, p.bansTableData?.matchCount ?? 0).toFixed(2)
                     }}</span>
                     <span
-                      v-if="p.bansDeltaPct(row, 'bansBottom', 1) != null"
+                      v-if="p.bansDeltaPct(row, 'bansBottom') != null"
                       class="text-[10px] leading-none"
-                      :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansBottom', 1)!)"
+                      :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansBottom')!)"
                     >
-                      {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansBottom', 1)!) }}
+                      {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansBottom')!) }}
                     </span>
                   </div>
                 </td>
@@ -488,16 +481,14 @@
                     class="flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight"
                   >
                     <span>{{
-                      p
-                        .banPctForCount(row.bansSupport, p.bansTableData?.matchCount ?? 0, 1)
-                        .toFixed(2)
+                      p.banPctForCount(row.bansSupport, p.bansTableData?.matchCount ?? 0).toFixed(2)
                     }}</span>
                     <span
-                      v-if="p.bansDeltaPct(row, 'bansSupport', 1) != null"
+                      v-if="p.bansDeltaPct(row, 'bansSupport') != null"
                       class="text-[10px] leading-none"
-                      :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansSupport', 1)!)"
+                      :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansSupport')!)"
                     >
-                      {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansSupport', 1)!) }}
+                      {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansSupport')!) }}
                     </span>
                   </div>
                 </td>
