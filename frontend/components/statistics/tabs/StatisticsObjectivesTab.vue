@@ -10,6 +10,10 @@ import StatisticsObjectivesMobileCard, {
   type ObjectivesMobileSubRow,
 } from '~/components/statistics/StatisticsObjectivesMobileCard.vue'
 import { aggregateObjectiveHistogramDist } from '~/utils/statistics/statisticsObjectives'
+import {
+  objectivesGapRows,
+  type ObjectivesCompareMode,
+} from '~/utils/statistics/objectivesGapCompare'
 
 const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
 const tooltipsEnabled = inject('tooltipsEnabled', ref(true)) as Ref<boolean>
@@ -37,6 +41,45 @@ function cappedObtentionCount(raw: number, matchCount: number): number {
   if (n <= 0 || matchCount <= 0) return 0
   return Math.min(n, matchCount)
 }
+
+const objectivesCompareMode = ref<ObjectivesCompareMode>('winLoss')
+
+function firstPctRaw(key: string, side: 'win' | 'loss' | 'blue' | 'red'): number | null {
+  let matchCount = 0
+  let raw = 0
+  if (side === 'blue' || side === 'red') {
+    const data = p.overviewSidesData
+    matchCount = Number(data?.matchCount ?? 0)
+    const obj = data?.objectivesBySideTable?.[key] ?? {}
+    raw = Number(side === 'blue' ? (obj.firstByBlue ?? 0) : (obj.firstByRed ?? 0))
+  } else {
+    const data = p.overviewTeamsData
+    matchCount = Number(data?.matchCount ?? 0)
+    const obj = data?.objectives?.[key as TeamObjectiveKey]
+    raw = Number(side === 'win' ? (obj?.firstByWin ?? 0) : (obj?.firstByLoss ?? 0))
+  }
+  if (matchCount <= 0) return null
+  return pct(cappedObtentionCount(raw, matchCount), matchCount)
+}
+
+function objectiveCompareLabel(key: string): string {
+  return key === 'firstBlood'
+    ? p.t('statisticsPage.overviewTeamsFirstBlood')
+    : p.t('statisticsPage.overviewTeamsObjective_' + key)
+}
+
+const objectivesGap = computed(() => {
+  const keys = ['firstBlood', ...((p.objectiveKeysOrdered ?? []) as readonly string[])].filter(
+    (k, i, arr) => arr.indexOf(k) === i
+  )
+  const [sa, sb] =
+    objectivesCompareMode.value === 'winLoss'
+      ? (['win', 'loss'] as const)
+      : (['blue', 'red'] as const)
+  return objectivesGapRows(
+    keys.map(key => ({ key, a: firstPctRaw(key, sa), b: firstPctRaw(key, sb) }))
+  )
+})
 
 /** Limite les comptages soul agrégés (évite >100 % si chevauchement des types). */
 function cappedSoulObtentionCount(raw: number, matchCount: number): number {
@@ -1569,6 +1612,73 @@ function drakeDropdownCountLabel(count: number): string {
         </span>
       </div>
 
+      <article
+        v-if="
+          p.objectivesPanelTab === 'objectives' &&
+          objectivesDisplayMode === 'obtention' &&
+          objectivesGap.length
+        "
+        class="obj-gap"
+      >
+        <header class="obj-gap__head">
+          <h3 class="obj-gap__title">{{ p.t('statisticsPage.objectivesGapTitle') }}</h3>
+          <div
+            class="obj-gap__modes"
+            role="group"
+            :aria-label="p.t('statisticsPage.objectivesGapCompareAria')"
+          >
+            <button
+              v-for="m in ['winLoss', 'sides'] as const"
+              :key="m"
+              type="button"
+              class="obj-gap__mode"
+              :class="{ 'is-active': objectivesCompareMode === m }"
+              :aria-pressed="objectivesCompareMode === m"
+              @click="objectivesCompareMode = m"
+            >
+              {{ p.t('statisticsPage.objectivesGapMode_' + m) }}
+            </button>
+          </div>
+        </header>
+        <div class="obj-gap__legend">
+          <span>{{ p.t('statisticsPage.objectivesGapSorted') }}</span>
+          <span class="obj-gap__key obj-gap__key--a">{{
+            p.t('statisticsPage.objectivesGapA_' + objectivesCompareMode)
+          }}</span>
+          <span class="obj-gap__key obj-gap__key--b">{{
+            p.t('statisticsPage.objectivesGapB_' + objectivesCompareMode)
+          }}</span>
+          <span class="obj-gap__num">{{ p.t('statisticsPage.objectivesGapCol') }}</span>
+        </div>
+        <ul class="obj-gap__list">
+          <li
+            v-for="row in objectivesGap"
+            :key="'gap-' + row.key"
+            class="obj-gap__row"
+            :class="'obj-gap__row--' + objectivesCompareMode"
+          >
+            <span class="obj-gap__name">{{ objectiveCompareLabel(row.key) }}</span>
+            <div class="obj-gap__bars">
+              <div class="obj-gap__bar-line">
+                <div class="obj-gap__track">
+                  <div class="obj-gap__bar obj-gap__bar--a" :style="{ width: row.a + '%' }" />
+                </div>
+                <span class="obj-gap__num">{{ row.a.toFixed(2) }} %</span>
+              </div>
+              <div class="obj-gap__bar-line">
+                <div class="obj-gap__track">
+                  <div class="obj-gap__bar obj-gap__bar--b" :style="{ width: row.b + '%' }" />
+                </div>
+                <span class="obj-gap__num">{{ row.b.toFixed(2) }} %</span>
+              </div>
+            </div>
+            <span class="obj-gap__num obj-gap__delta">
+              {{ (row.gap > 0 ? '+' : '') + row.gap.toFixed(2) }}
+            </span>
+          </li>
+        </ul>
+      </article>
+
       <!-- Principal : premier par équipe + par côté -->
       <div
         v-if="p.objectivesPanelTab === 'objectives' && objectivesDisplayMode === 'obtention'"
@@ -2656,6 +2766,130 @@ function drakeDropdownCountLabel(count: number): string {
 </template>
 
 <style scoped>
+.obj-gap {
+  margin-bottom: 0.75rem;
+  border: 1px solid rgb(200 155 60 / 0.25);
+  border-radius: 0.375rem;
+  padding: 0.75rem 1rem;
+}
+.obj-gap__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.obj-gap__title {
+  font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  font-size: 1.05rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-gold-50, #f0e6d2);
+}
+.obj-gap__modes {
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.2rem;
+  border: 1px solid rgb(200 155 60 / 0.3);
+  border-radius: 0.375rem;
+}
+.obj-gap__mode {
+  padding: 0.2rem 0.65rem;
+  border-radius: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--color-grey-50, #a09b8c);
+}
+.obj-gap__mode.is-active {
+  background: var(--color-gold-300, #c89b3c);
+  color: var(--color-blue-600, #0a1428);
+}
+.obj-gap__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.72rem;
+  color: var(--color-grey-50, #a09b8c);
+  margin-bottom: 0.4rem;
+}
+.obj-gap__legend .obj-gap__num {
+  margin-left: auto;
+}
+.obj-gap__key::before {
+  content: '';
+  display: inline-block;
+  width: 0.6rem;
+  height: 0.6rem;
+  margin-right: 0.3rem;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+.obj-gap__key--a::before {
+  background: var(--color-blue-100, #0ac8b9);
+}
+.obj-gap__key--b::before {
+  background: #e2665a;
+}
+.obj-gap__list {
+  display: grid;
+  gap: 0.5rem;
+}
+.obj-gap__row {
+  display: grid;
+  grid-template-columns: minmax(6rem, 10rem) 1fr 4rem;
+  align-items: center;
+  gap: 0.75rem;
+}
+.obj-gap__name {
+  font-size: 0.85rem;
+  color: var(--color-gold-50, #f0e6d2);
+}
+.obj-gap__bars {
+  display: grid;
+  gap: 0.15rem;
+}
+.obj-gap__bar-line {
+  display: grid;
+  grid-template-columns: 1fr 4rem;
+  align-items: center;
+  gap: 0.5rem;
+}
+.obj-gap__track {
+  height: 6px;
+  border-radius: 3px;
+  background: rgb(160 155 140 / 0.2);
+}
+.obj-gap__bar {
+  height: 100%;
+  border-radius: 3px;
+}
+.obj-gap__bar--a {
+  background: var(--color-blue-100, #0ac8b9);
+}
+.obj-gap__bar--b {
+  background: #e2665a;
+}
+.obj-gap__row--sides .obj-gap__bar--a {
+  background: #3b82f6;
+}
+.obj-gap__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
+}
+.obj-gap__delta {
+  color: var(--color-gold-300, #c89b3c);
+  font-weight: 600;
+}
+@media (max-width: 640px) {
+  .obj-gap__row {
+    grid-template-columns: 1fr 3.5rem;
+  }
+  .obj-gap__bars {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
 .objectives-zebra-cols th:nth-child(even),
 .objectives-zebra-cols td:nth-child(even) {
   background-color: rgba(255, 255, 255, 0.04);

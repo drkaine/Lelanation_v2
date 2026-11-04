@@ -1309,7 +1309,15 @@
                   {{ matchupsExtError }}
                 </div>
                 <div v-else-if="!filteredMatchupsExt.length" class="py-4 text-text/70">
-                  {{ t('statisticsPage.noData') }}
+                  <p>{{ t('statisticsPage.matchupsEmpty') }}</p>
+                  <button
+                    v-if="matchupsFallback"
+                    type="button"
+                    class="mt-2 rounded border border-accent/50 px-2 py-1 text-xs font-semibold text-accent hover:bg-accent/10"
+                    @click="filterVersion = matchupsFallback"
+                  >
+                    {{ t('statisticsPage.matchupsEmptySeeVersion', { version: matchupsFallback }) }}
+                  </button>
                 </div>
                 <div v-else class="space-y-1.5">
                   <StatisticsMobileSortBar
@@ -1791,6 +1799,21 @@
                       />
                     </div>
                   </section>
+                  <button
+                    v-if="championSpellOrdersReliable.hidden > 0"
+                    type="button"
+                    class="text-xs font-semibold text-accent underline-offset-2 hover:underline"
+                    :aria-pressed="showRareSpellOrders"
+                    @click="showRareSpellOrders = !showRareSpellOrders"
+                  >
+                    {{
+                      showRareSpellOrders
+                        ? t('statisticsPage.spellOrdersHideRare')
+                        : t('statisticsPage.spellOrdersShowRare', {
+                            n: championSpellOrdersReliable.hidden,
+                          })
+                    }}
+                  </button>
                 </div>
               </div>
               <div
@@ -1892,6 +1915,8 @@ import { useI18n } from 'vue-i18n'
 import { queryFirst } from '~/utils/statistics/statisticsTabRouting'
 import { progressionReferenceVersion } from '~/utils/statistics/progressionReference'
 import { trendChartDomain } from '~/utils/statistics/trendDomain'
+import { matchupsFallbackVersion } from '~/utils/statistics/matchupsFallbackVersion'
+import { splitRareRows } from '~/utils/statistics/lowSample'
 import { displayedPatch, withVersionQuery } from '~/utils/statistics/championVersionQuery'
 import { statisticsFiltersSheetPanelClass } from '~/composables/useStatisticsFiltersSheetMode'
 import { PAGE_SIZE_OPTIONS } from '~/utils/statistics/statisticsTableFormat'
@@ -2500,6 +2525,12 @@ const filterRank = ref<string[]>([])
 const filterRole = ref('')
 /** Versions chargées depuis l’overview pour le filtre (version + matchCount). */
 const versionsFromOverview = ref<Array<{ version: string; matchCount: number }>>([])
+const matchupsFallback = computed(() =>
+  matchupsFallbackVersion(
+    versionsFromOverview.value,
+    filterVersion.value || gameVersion.value || ''
+  )
+)
 const championSearchQueryPlaceholder = ref('')
 const rankTiers = RANK_TIERS
 
@@ -3016,23 +3047,27 @@ const championSpellOrderSectionsVisible = computed(() =>
   championSpellOrderSections.value.filter(section => section.rows.length > 0)
 )
 const championSkillChampion = computed(() => championByKey(championId.value))
+const showRareSpellOrders = ref(false)
+const championSpellOrdersReliable = computed(() =>
+  splitRareRows(championSpellOrdersRows.value, showRareSpellOrders.value)
+)
 const championSpellOrdersTopWinrate = computed(() =>
-  [...championSpellOrdersRows.value]
+  [...championSpellOrdersReliable.value.rows]
     .sort((a, b) => b.winrate - a.winrate || b.games - a.games)
     .slice(0, 3)
 )
 const championSpellOrdersLowWinrate = computed(() =>
-  [...championSpellOrdersRows.value]
+  [...championSpellOrdersReliable.value.rows]
     .sort((a, b) => a.winrate - b.winrate || b.games - a.games)
     .slice(0, 3)
 )
 const championSpellOrdersTopPickrate = computed(() =>
-  [...championSpellOrdersRows.value]
+  [...championSpellOrdersReliable.value.rows]
     .sort((a, b) => b.pickrate - a.pickrate || b.games - a.games)
     .slice(0, 3)
 )
 const championSpellOrdersLowPickrate = computed(() =>
-  [...championSpellOrdersRows.value]
+  [...championSpellOrdersReliable.value.rows]
     .sort((a, b) => a.pickrate - b.pickrate || b.games - a.games)
     .slice(0, 3)
 )

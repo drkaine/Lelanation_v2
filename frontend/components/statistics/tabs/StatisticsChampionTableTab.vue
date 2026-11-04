@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { isOneOf } from '~/utils/statistics/isOneOf'
+import {
+  CHAMPION_COLUMN_MODES,
+  championColumnFlags,
+  championColumnMode,
+  type ChampionColumnMode,
+} from '~/utils/statistics/championColumnGroups'
 import { CHAMPION_GLOBAL_SORT_COLUMNS } from '~/utils/statistics/statisticsTableFormat'
 import {
   injectStatisticsPageCtx,
@@ -17,6 +23,28 @@ import {
 import { useToggleSet } from '~/composables/useToggleSet'
 
 const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
+
+const columnModeLabelKeys: Record<ChampionColumnMode, string> = {
+  all: 'statisticsPage.championColumnsAll',
+  heal: 'statisticsPage.championTableGroupHeal',
+  dealt: 'statisticsPage.championTableGroupDealt',
+  taken: 'statisticsPage.championTableGroupTaken',
+}
+
+const columnMode = computed(() =>
+  championColumnMode({
+    heal: Boolean(p.showChampionHealColumns),
+    dealt: Boolean(p.showChampionDealtColumns),
+    taken: Boolean(p.showChampionTakenColumns),
+  })
+)
+
+function setColumnMode(mode: ChampionColumnMode): void {
+  const flags = championColumnFlags(mode)
+  p.showChampionHealColumns = flags.heal
+  p.showChampionDealtColumns = flags.dealt
+  p.showChampionTakenColumns = flags.taken
+}
 const showChampionDealtBreakdown = ref(false)
 const showChampionTakenBreakdown = ref(false)
 const showChampionHealBreakdown = ref(false)
@@ -764,6 +792,24 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             </button>
           </div>
         </div>
+      </div>
+
+      <div
+        class="champion-colgroups"
+        role="group"
+        :aria-label="p.t('statisticsPage.championColumnsAria')"
+      >
+        <button
+          v-for="mode in CHAMPION_COLUMN_MODES"
+          :key="mode"
+          type="button"
+          class="champion-colgroup-btn"
+          :class="{ 'is-active': columnMode === mode }"
+          :aria-pressed="columnMode === mode"
+          @click="setColumnMode(mode)"
+        >
+          {{ p.t(columnModeLabelKeys[mode]) }}
+        </button>
       </div>
 
       <!-- Desktop : tableau -->
@@ -1674,6 +1720,30 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
 </template>
 
 <style scoped>
+.champion-colgroups {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-bottom: 8px;
+  padding: 2px;
+  border: 1px solid rgb(200 155 60 / 0.35);
+  border-radius: 6px;
+  background: rgb(10 20 40 / 0.6);
+}
+.champion-colgroup-btn {
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  color: var(--color-grey-50, #a09b8c);
+}
+.champion-colgroup-btn:hover {
+  color: var(--color-gold-50, #f0e6d2);
+}
+.champion-colgroup-btn.is-active {
+  color: var(--color-blue-600, #0a1428);
+  background: var(--color-gold-300, #c89b3c);
+}
+
 .champion-global-table :deep(.tier-list-lolalytics-head),
 .champion-global-table :deep(.tier-list-lolalytics-row) {
   width: 100%;

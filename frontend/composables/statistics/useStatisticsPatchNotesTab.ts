@@ -47,6 +47,19 @@ export function patchNotesRowMatchesQuery(
   return targetLabel ? normalizeSearch(targetLabel(row)).includes(q) : false
 }
 
+export type PatchNotesChangeFilter = 'all' | 'up' | 'nerf' | 'adjust'
+
+/** Ligne gardée si elle a au moins un changement du type demandé. */
+export function patchNotesRowMatchesChange(
+  row: PatchNotesStatsRow,
+  kind: PatchNotesChangeFilter
+): boolean {
+  if (kind === 'up') return row.countUp > 0
+  if (kind === 'nerf') return row.countNerf > 0
+  if (kind === 'adjust') return row.countAjust > 0
+  return true
+}
+
 export function useStatisticsPatchNotesTab(params: {
   patchNotesFromVersion: Ref<string>
   patchNotesToVersion: Ref<string>
@@ -71,7 +84,9 @@ export function useStatisticsPatchNotesTab(params: {
   const patchNotesPage = ref(1)
   const patchNotesPageSize = ref(50)
 
-  watch(params.championSearchQuery, () => {
+  const patchNotesChangeFilter = ref<PatchNotesChangeFilter>('all')
+
+  watch([params.championSearchQuery, patchNotesChangeFilter], () => {
     patchNotesPage.value = 1
   })
 
@@ -134,7 +149,11 @@ export function useStatisticsPatchNotesTab(params: {
   const filteredPatchNotesRows = computed(() => {
     const q = params.championSearchQuery.value
     const rows = patchNotesData.value?.rows ?? []
-    return rows.filter(row => patchNotesRowMatchesQuery(row, q, params.targetLabel))
+    return rows.filter(
+      row =>
+        patchNotesRowMatchesChange(row, patchNotesChangeFilter.value) &&
+        patchNotesRowMatchesQuery(row, q, params.targetLabel)
+    )
   })
 
   function comparePatchNotesRows(a: PatchNotesStatsRow, b: PatchNotesStatsRow): number {
@@ -200,6 +219,7 @@ export function useStatisticsPatchNotesTab(params: {
     patchNotesTargetActive,
     patchNotesAllTargetsSelected,
     activeTargetTypes,
+    patchNotesChangeFilter,
   }
 }
 

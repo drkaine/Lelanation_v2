@@ -7,6 +7,7 @@ import {
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
 import { usePagination } from '~/composables/usePagination'
 import { compareVersionsDesc } from '~/utils/statistics/statsVersion'
+import { infosSummary, type InfosRow } from '~/utils/statistics/infosSummary'
 
 const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
 type InfosSortKey = 'version' | 'total'
@@ -45,6 +46,12 @@ const infosDivisionColumns = computed(() =>
   infosMatrixColumns.value.filter((d: string) => d !== 'ALL')
 )
 
+const summary = computed(() =>
+  infosSummary((p.infosMatrixRows ?? []) as InfosRow[], infosDivisionColumns.value)
+)
+const { locale } = useI18n()
+const fmtInt = (v: number) => v.toLocaleString(locale.value === 'en' ? 'en-US' : 'fr-FR')
+
 function divisionLabel(division: string): string {
   if (division === 'ALL') return p.t('statisticsPage.overviewVersionAll')
   return p.formatDivisionLabel(division)
@@ -73,6 +80,55 @@ function cellValue(
       {{ p.infosMatrixError }}
     </div>
     <div v-else class="statistics-infos-tab space-y-3">
+      <div v-if="summary.patches.length" class="infos-summary">
+        <article class="infos-card">
+          <h3 class="infos-card-title">{{ p.t('statisticsPage.infosGamesTitle') }}</h3>
+          <p class="infos-total">{{ fmtInt(summary.total) }}</p>
+          <span class="infos-sub">
+            {{ p.t('statisticsPage.infosGamesSub', { n: summary.patches.length }) }}
+          </span>
+          <div
+            class="infos-bars"
+            role="img"
+            :aria-label="summary.patches.map(x => `${x.version} ${fmtInt(x.games)}`).join(', ')"
+          >
+            <div
+              v-for="(x, i) in summary.patches"
+              :key="x.version"
+              class="infos-bar"
+              :title="`${x.version} · ${fmtInt(x.games)}`"
+            >
+              <div
+                class="infos-bar-fill"
+                :class="{ 'is-last': i === summary.patches.length - 1 }"
+                :style="{ height: `${x.heightPct}%` }"
+              />
+              <span class="infos-bar-label">{{ x.version }}</span>
+            </div>
+          </div>
+        </article>
+        <article v-if="summary.divisions.length" class="infos-card">
+          <h3 class="infos-card-title">
+            {{ p.t('statisticsPage.infosDivisionTitle', { version: summary.latestVersion }) }}
+          </h3>
+          <span v-if="summary.core" class="infos-sub">
+            {{
+              p.t('statisticsPage.infosDivisionCore', {
+                pct: summary.core.sharePct,
+                from: divisionLabel(summary.core.from),
+                to: divisionLabel(summary.core.to),
+              })
+            }}
+          </span>
+          <div v-for="d in summary.divisions" :key="d.division" class="infos-div-row">
+            <span class="infos-div-name">{{ divisionLabel(d.division) }}</span>
+            <div class="infos-div-track">
+              <div class="infos-div-fill" :style="{ width: `${d.widthPct}%` }" />
+            </div>
+            <span class="infos-div-num">{{ fmtInt(d.games) }} · {{ d.sharePct }} %</span>
+          </div>
+        </article>
+      </div>
       <div v-if="paginatedRows.length" class="space-y-3">
         <StatisticsMobileSortBar
           id="infos-mobile-sort"
@@ -223,5 +279,90 @@ function cellValue(
   .statistics-infos-mobile-card {
     width: 100%;
   }
+}
+</style>
+
+<style scoped>
+.infos-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+.infos-card {
+  border: 1px solid rgb(200 155 60 / 0.3);
+  border-radius: 8px;
+  padding: 12px;
+}
+.infos-card-title {
+  font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-gold-50, #f0e6d2);
+}
+.infos-total {
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-gold-300, #c89b3c);
+}
+.infos-sub {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--color-grey-50, #a09b8c);
+}
+.infos-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 120px;
+  padding-bottom: 18px;
+}
+.infos-bar {
+  position: relative;
+  display: flex;
+  flex: 1;
+  height: 100%;
+  align-items: flex-end;
+}
+.infos-bar-fill {
+  width: 100%;
+  min-height: 2px;
+  border-radius: 3px 3px 0 0;
+  background: #5b5a56;
+}
+.infos-bar-fill.is-last {
+  background: var(--color-gold-300, #c89b3c);
+}
+.infos-bar-label {
+  position: absolute;
+  bottom: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  color: var(--color-grey-50, #a09b8c);
+  white-space: nowrap;
+}
+.infos-div-row {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 13px;
+}
+.infos-div-track {
+  height: 8px;
+  border-radius: 4px;
+  background: rgb(160 155 140 / 0.15);
+  overflow: hidden;
+}
+.infos-div-fill {
+  height: 100%;
+  background: var(--color-blue-100, #0ac8b9);
+}
+.infos-div-num {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-grey-50, #a09b8c);
 }
 </style>

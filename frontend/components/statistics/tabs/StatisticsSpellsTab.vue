@@ -407,6 +407,21 @@ function deltaLabelClass(v: number | null | undefined): string {
 
 <template>
   <div class="space-y-4">
+    <div class="spells-mode" role="group" :aria-label="p.t('statisticsPage.spellsModeAria')">
+      <button
+        v-for="mode in ['solo', 'pair'] as const"
+        :key="mode"
+        type="button"
+        class="spells-mode-btn"
+        :class="{ 'is-active': spellsMode === mode }"
+        :aria-pressed="spellsMode === mode"
+        @click="spellsMode = mode"
+      >
+        {{
+          p.t(mode === 'solo' ? 'statisticsPage.spellsModeSolo' : 'statisticsPage.spellsModePair')
+        }}
+      </button>
+    </div>
     <div v-if="p.overviewDetailPending" class="text-text/70">
       {{ p.t('statisticsPage.loading') }}
     </div>
@@ -714,3 +729,24 @@ function deltaLabelClass(v: number | null | undefined): string {
     <div v-else class="text-text/70">{{ p.t('statisticsPage.overviewDetailNoData') }}</div>
   </div>
 </template>
+
+<style scoped>
+.spells-mode {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid rgb(200 155 60 / 0.35);
+  border-radius: 6px;
+  background: rgb(10 20 40 / 0.6);
+}
+.spells-mode-btn {
+  padding: 4px 14px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  color: var(--color-grey-50, #a09b8c);
+}
+.spells-mode-btn.is-active {
+  color: var(--color-blue-600, #0a1428);
+  background: var(--color-gold-300, #c89b3c);
+}
+</style>

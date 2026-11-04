@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, unref, watch } from 'vue'
 import {
+  BALANCE_QUICK_FILTERS,
+  balanceQuickMatch,
+  countBalanceQuick,
+  type BalanceQuickFilter,
+} from '~/utils/statistics/balanceQuickFilter'
+import {
   injectStatisticsPageCtx,
   type StatisticsIndexPageCtx,
 } from '~/composables/statistics/statisticsPageCtx'
@@ -19,6 +25,8 @@ const { set: expandedBalanceKeys, toggle: toggleExpandedBalanceKeys } = useToggl
 
 type LevelRow = BalanceLevelRow
 type BalanceRow = BalanceFrameworkRow
+
+const quickFilter = ref<BalanceQuickFilter>('ALL')
 
 type StatusFilter = 'ALL' | 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'
 
@@ -174,6 +182,7 @@ const filteredRows = computed<BalanceRow[]>(() => {
   const roleFilter = String(p.statsRoleFilter ?? '').trim()
   const source = roleFilter ? rows.value : collapseToMainRolePerChampion(rows.value)
   const out = source.filter(row => {
+    if (!balanceQuickMatch(row, quickFilter.value)) return false
     if (searchQuery.value) {
       const role = String(row.role ?? '').toLowerCase()
       if (
@@ -230,6 +239,18 @@ const balanceMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => [
 
 const balancePage = ref(1)
 const pageSize = computed(() => Number(unref(p.championsPageSize) ?? 20))
+const quickCounts = computed(() => {
+  const roleFilter = String(p.statsRoleFilter ?? '').trim()
+  return countBalanceQuick(roleFilter ? rows.value : collapseToMainRolePerChampion(rows.value))
+})
+
+const quickLabelKeys: Record<BalanceQuickFilter, string> = {
+  ALL: 'statisticsPage.balanceQuickAll',
+  NERF: 'statisticsPage.balanceQuickNerf',
+  BUFF: 'statisticsPage.balanceQuickBuff',
+  CHANGED: 'statisticsPage.balanceQuickChanged',
+}
+
 const totalRowsCount = computed(() => filteredRows.value.length)
 const totalPages = computed(() => Math.max(1, Math.ceil(totalRowsCount.value / pageSize.value)))
 const paginatedRows = computed(() => {
@@ -274,6 +295,20 @@ function globalTooltip(row: BalanceRow): string {
       {{ p.t('statisticsPage.overviewDetailTimeout') }}
     </div>
     <template v-else>
+      <div class="balance-quick" role="group" :aria-label="p.t('statisticsPage.balanceQuickAria')">
+        <button
+          v-for="f in BALANCE_QUICK_FILTERS"
+          :key="f"
+          type="button"
+          class="balance-quick-btn"
+          :class="{ 'is-active': quickFilter === f }"
+          :aria-pressed="quickFilter === f"
+          @click="quickFilter = f"
+        >
+          {{ p.t(quickLabelKeys[f]) }}
+          <span class="balance-quick-count">{{ quickCounts[f] }}</span>
+        </button>
+      </div>
       <div v-if="paginatedRows.length" class="statistics-balance-tab space-y-3">
         <StatisticsMobileSortBar
           id="balance-mobile-sort"
@@ -534,6 +569,32 @@ function globalTooltip(row: BalanceRow): string {
 </template>
 
 <style scoped>
+.balance-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.balance-quick-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid rgb(200 155 60 / 0.35);
+  border-radius: 999px;
+  font-size: 0.8rem;
+  color: var(--color-grey-50, #a09b8c);
+  background: transparent;
+}
+.balance-quick-btn.is-active {
+  border-color: var(--color-gold-300, #c89b3c);
+  color: var(--color-gold-50, #f0e6d2);
+  background: rgb(200 155 60 / 0.15);
+}
+.balance-quick-count {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
 @media (max-width: 768px) {
   .statistics-balance-tab {
     margin-inline: -1rem;

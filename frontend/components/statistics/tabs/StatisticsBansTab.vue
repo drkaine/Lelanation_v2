@@ -10,11 +10,12 @@
     >
       {{ p.bansTableData.message }}
     </div>
-    <div v-else class="space-y-3">
+    <div v-else class="flex flex-col gap-3">
       <StatisticsMobileSortBar
         id="bans-mobile-sort"
         v-model:column="bansMobileSortColumn"
         v-model:direction="bansMobileSortDir"
+        class="max-md:order-first"
         :options="bansMobileSortOptions"
         :help-aria-label="p.t('statisticsPage.tooltipTableBansAria')"
         :help-text="p.t('statisticsPage.tooltipTableBans')"
@@ -64,6 +65,32 @@
                 {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansTotal')!) }}
               </div>
             </button>
+          </div>
+
+          <div class="statistics-ban-mobile-card-bars space-y-1.5 px-3 pb-2.5">
+            <div class="h-1.5 rounded bg-[var(--color-grey-300)]" aria-hidden="true">
+              <div
+                class="h-1.5 rounded bg-[var(--color-gold-300)]"
+                :style="{
+                  width: `${banBarWidth(p.banRateForBansRow(row, p.bansTableData?.matchCount ?? 0), maxBanRate)}%`,
+                }"
+              />
+            </div>
+            <div
+              v-if="splitShare(row) != null"
+              role="img"
+              :aria-label="splitAria(row)"
+              class="flex items-center gap-2 text-[11px] tabular-nums"
+            >
+              <span :style="{ color: splitColors[0] }">{{ splitShare(row)!.toFixed(1) }} %</span>
+              <div class="flex h-1.5 flex-1 gap-0.5 overflow-hidden rounded" aria-hidden="true">
+                <div :style="{ width: `${splitShare(row)}%`, background: splitColors[0] }" />
+                <div class="flex-1" :style="{ background: splitColors[1] }" />
+              </div>
+              <span :style="{ color: splitColors[1] }"
+                >{{ (100 - splitShare(row)!).toFixed(1) }} %</span
+              >
+            </div>
           </div>
 
           <div
@@ -181,6 +208,41 @@
         </article>
       </div>
 
+      <div class="mb-2 flex flex-wrap items-center gap-3 max-md:order-first">
+        <div
+          role="group"
+          :aria-label="p.t('statisticsPage.bansSplitAria')"
+          class="flex gap-0.5 rounded-lg border border-[var(--color-blue-400)] bg-[var(--color-blue-600)] p-[3px] max-md:w-full"
+        >
+          <button
+            v-for="m in splitModes"
+            :key="m.value"
+            type="button"
+            :aria-pressed="splitMode === m.value"
+            class="h-[34px] rounded-md px-3 max-md:h-[38px] max-md:flex-1"
+            :class="
+              splitMode === m.value
+                ? 'bg-[var(--color-blue-400)] font-semibold text-[var(--color-gold-50)]'
+                : 'text-[var(--color-grey-50)]'
+            "
+            @click="splitMode = m.value"
+          >
+            {{ m.label }}
+          </button>
+        </div>
+        <span class="ml-auto flex gap-4 text-xs text-[var(--color-grey-50)]">
+          <span class="flex items-center gap-1.5"
+            ><span class="h-2.5 w-2.5 rounded-sm" :style="{ background: splitColors[0] }" />{{
+              splitModes.find(m => m.value === splitMode)!.left
+            }}</span
+          >
+          <span class="flex items-center gap-1.5"
+            ><span class="h-2.5 w-2.5 rounded-sm" :style="{ background: splitColors[1] }" />{{
+              splitModes.find(m => m.value === splitMode)!.right
+            }}</span
+          >
+        </span>
+      </div>
       <div
         class="tier-list-mobile-rotate statistics-overview-surface hidden w-full overflow-x-auto rounded-lg border border-primary/30 md:block"
       >
@@ -318,6 +380,9 @@
                     </button>
                   </div>
                 </th>
+                <th class="px-3 py-1.5 font-semibold text-text">
+                  {{ p.t('statisticsPage.bansColSplit') }}
+                </th>
               </tr>
             </thead>
             <tbody class="divide-y divide-primary/20">
@@ -333,19 +398,33 @@
                   />
                 </td>
                 <td class="px-1 py-0.5 align-middle">
-                  <div
-                    class="flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight"
-                  >
-                    <span>{{
-                      p.banRateForBansRow(row, p.bansTableData?.matchCount ?? 0).toFixed(2)
-                    }}</span>
-                    <span
-                      v-if="p.bansDeltaPct(row, 'bansTotal') != null"
-                      class="text-[10px] leading-none"
-                      :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansTotal')!)"
-                    >
-                      {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansTotal')!) }}
-                    </span>
+                  <div class="flex min-h-[60px] min-w-[180px] items-center gap-2 px-2 tabular-nums">
+                    <div class="h-2 flex-1 rounded bg-[var(--color-grey-300)]" aria-hidden="true">
+                      <div
+                        class="h-2 rounded bg-[var(--color-gold-300)]"
+                        :style="{
+                          width: `${banBarWidth(p.banRateForBansRow(row, p.bansTableData?.matchCount ?? 0), maxBanRate)}%`,
+                        }"
+                      />
+                    </div>
+                    <div class="flex w-14 flex-col items-end leading-tight">
+                      <span class="font-semibold">{{
+                        p.banRateForBansRow(row, p.bansTableData?.matchCount ?? 0).toFixed(2)
+                      }}</span>
+                      <span
+                        v-if="p.bansDeltaPct(row, 'bansTotal') != null"
+                        class="text-[10px] leading-none"
+                        :class="p.tierListPatchDeltaClass(p.bansDeltaPct(row, 'bansTotal')!)"
+                      >
+                        {{ formatBansPatchDeltaPct(p.bansDeltaPct(row, 'bansTotal')!) }}
+                      </span>
+                      <span
+                        v-else-if="p.bansTableRefData"
+                        class="text-[10px] leading-none text-text/55"
+                      >
+                        {{ p.t('statisticsPage.bansNew') }}
+                      </span>
+                    </div>
                   </div>
                 </td>
                 <td v-show="p.showBansOutcomeColumns" class="px-1 py-0.5 align-middle">
@@ -492,6 +571,17 @@
                     </span>
                   </div>
                 </td>
+                <td class="w-[180px] px-3 py-0.5">
+                  <div
+                    v-if="splitShare(row) != null"
+                    role="img"
+                    :aria-label="splitAria(row)"
+                    class="flex h-2 gap-0.5 overflow-hidden rounded"
+                  >
+                    <div :style="{ width: `${splitShare(row)}%`, background: splitColors[0] }" />
+                    <div class="flex-1" :style="{ background: splitColors[1] }" />
+                  </div>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -515,7 +605,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { isOneOf } from '~/utils/statistics/isOneOf'
 import { BANS_SORT_COLS } from '~/composables/statistics/useStatisticsBansTab'
 import {
@@ -525,8 +615,54 @@ import {
 import type { BansSortCol } from '~/composables/statistics/useStatisticsBansTab'
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
 import { useToggleSet } from '~/composables/useToggleSet'
+import { banBarWidth, banSplitShare } from '~/utils/statistics/bansMath'
 
 const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
+
+/** Banrate max des lignes affichées : échelle des barres. */
+type BansSplitMode = 'outcome' | 'side'
+const splitMode = ref<BansSplitMode>('outcome')
+const splitModes = computed(() => [
+  {
+    value: 'outcome' as const,
+    label: p.t('statisticsPage.bansSplitOutcome'),
+    left: p.t('statisticsPage.bansSplitWinner'),
+    right: p.t('statisticsPage.bansSplitLoser'),
+  },
+  {
+    value: 'side' as const,
+    label: p.t('statisticsPage.bansSplitSide'),
+    left: p.t('statisticsPage.bansColBlueSide'),
+    right: p.t('statisticsPage.bansColRedSide'),
+  },
+])
+const splitColors = computed(() =>
+  splitMode.value === 'outcome' ? ['#0ac8b9', '#e2665a'] : ['#0397ab', '#e2665a']
+)
+function splitValues(row: (typeof p.paginatedBans)[number]): [number, number] {
+  if (splitMode.value === 'outcome') {
+    return [p.bansOutcomePct(row.championId, 'win'), p.bansOutcomePct(row.championId, 'loss')]
+  }
+  return [row.bansBlue, row.bansRed]
+}
+function splitShare(row: (typeof p.paginatedBans)[number]): number | null {
+  const [a, b] = splitValues(row)
+  return banSplitShare(a, b)
+}
+function splitAria(row: (typeof p.paginatedBans)[number]): string {
+  const share = splitShare(row) ?? 0
+  const mode = splitModes.value.find(m => m.value === splitMode.value)!
+  return `${mode.left} ${share.toFixed(1)} %, ${mode.right} ${(100 - share).toFixed(1)} %`
+}
+
+const maxBanRate = computed(() =>
+  Math.max(
+    0,
+    ...(p.paginatedBans ?? []).map(row =>
+      p.banRateForBansRow(row, p.bansTableData?.matchCount ?? 0)
+    )
+  )
+)
 const { set: expandedBanIds, toggle: toggleBanCardExpanded } = useToggleSet<number>()
 
 function formatBansPatchDeltaPct(pp: number): string {

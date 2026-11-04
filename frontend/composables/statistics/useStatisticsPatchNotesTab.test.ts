@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { nextTick, ref } from 'vue'
 import {
+  patchNotesRowMatchesChange,
   patchNotesRowMatchesQuery,
   useStatisticsPatchNotesTab,
   type PatchNotesStatsRow,
@@ -66,6 +67,43 @@ describe('useStatisticsPatchNotesTab search', () => {
     tab.patchNotesPage.value = 2
     query.value = 'infini'
     expect(tab.sortedPatchNotesRows.value.map(r => r.targetId)).toEqual(['3031'])
+    await nextTick()
+    expect(tab.patchNotesPage.value).toBe(1)
+  })
+})
+
+describe('patchNotesRowMatchesChange', () => {
+  const r = { ...row('champion', 'Leona'), countUp: 2, countNerf: 0, countAjust: 1 }
+  it('keeps every row on all', () => {
+    expect(patchNotesRowMatchesChange(r, 'all')).toBe(true)
+  })
+  it('keeps a row only when it has a change of that kind', () => {
+    expect(patchNotesRowMatchesChange(r, 'up')).toBe(true)
+    expect(patchNotesRowMatchesChange(r, 'nerf')).toBe(false)
+    expect(patchNotesRowMatchesChange(r, 'adjust')).toBe(true)
+  })
+})
+
+describe('useStatisticsPatchNotesTab change filter', () => {
+  it('filters rows by change kind and resets the page', async () => {
+    const tab = useStatisticsPatchNotesTab({
+      patchNotesFromVersion: ref(''),
+      patchNotesToVersion: ref(''),
+      patchNotesTargetFilters: ref(new Set<PatchNotesTargetType>()),
+      championSearchQuery: ref(''),
+      statsFetch: <T>() =>
+        Promise.resolve({
+          fromVersion: null,
+          toVersion: null,
+          totalPatches: 1,
+          rows: [row('items', '3031'), { ...row('champion', 'Leona'), countUp: 0, countNerf: 3 }],
+        } as T),
+      apiUrl: (path: string) => path,
+    })
+    await tab.loadPatchNotesStats()
+    tab.patchNotesPage.value = 2
+    tab.patchNotesChangeFilter.value = 'nerf'
+    expect(tab.sortedPatchNotesRows.value.map(r => r.targetId)).toEqual(['Leona'])
     await nextTick()
     expect(tab.patchNotesPage.value).toBe(1)
   })

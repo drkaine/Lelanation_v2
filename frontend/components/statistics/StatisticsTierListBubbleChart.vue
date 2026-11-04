@@ -16,11 +16,15 @@ import { useStatisticsTierListBubbleViewport } from '~/composables/statistics/us
 const props = withDefaults(
   defineProps<{
     hideZoomHint?: boolean
+    highlightId?: number | null
   }>(),
   {
     hideZoomHint: false,
+    highlightId: null,
   }
 )
+
+const emit = defineEmits<{ select: [championId: number] }>()
 
 const p =
   injectStatisticsPageCtx<
@@ -114,7 +118,8 @@ function championImage(id: number): string | null {
 
 const t = (key: string, params?: Record<string, unknown>) => (params ? p.t(key, params) : p.t(key))
 
-const activeChampionId = computed(() => tooltip.value?.championId ?? null)
+const activeChampionId = computed(() => tooltip.value?.championId ?? props.highlightId ?? null)
+const dimOthers = computed(() => props.highlightId != null)
 
 const labelPlacements = computed(() =>
   computeBubbleLabelPlacements(layout.value.points, championName)
@@ -320,15 +325,20 @@ defineExpose({
               @mouseenter="onBubbleEnter(point.championId, $event)"
               @mousemove="onBubbleMove"
               @mouseleave="onBubbleLeave"
+              @click="emit('select', point.championId)"
             >
               <circle
                 :cx="point.cx"
                 :cy="point.cy"
                 :r="point.r"
                 :fill="point.color"
-                :fill-opacity="activeChampionId === point.championId ? 0.92 : 0.72"
-                stroke="rgb(255 255 255 / 0.35)"
-                :stroke-width="activeChampionId === point.championId ? 2 : 1"
+                :fill-opacity="
+                  activeChampionId === point.championId ? 0.95 : dimOthers ? 0.3 : 0.72
+                "
+                :stroke="
+                  props.highlightId === point.championId ? '#ffffff' : 'rgb(255 255 255 / 0.35)'
+                "
+                :stroke-width="activeChampionId === point.championId ? 2.5 : 1"
               />
             </g>
           </g>

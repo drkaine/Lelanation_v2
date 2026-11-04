@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { VISION_ROLE_QUICK, visionRoleQuickActive } from '~/utils/statistics/visionRoleQuick'
 import {
   injectStatisticsPageCtx,
   type StatisticsIndexPageCtx,
@@ -13,6 +14,11 @@ import {
 } from '~/composables/statistics/useStatisticsVisionTab'
 
 const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
+
+const visionRoleActive = computed(() => visionRoleQuickActive(p.statsRoleFilter))
+function setVisionRole(value: string) {
+  p.statsRoleFilter = value
+}
 
 const visionMobileSortColumn = computed({
   get: () => String(p.visionSortColumn ?? 'visionScore'),
@@ -83,6 +89,19 @@ const visionPageSize = computed({
 
 <template>
   <div class="space-y-3">
+    <div class="vision-role" role="group" :aria-label="p.t('statisticsPage.visionRoleAria')">
+      <button
+        v-for="o in VISION_ROLE_QUICK"
+        :key="o.value || 'all'"
+        type="button"
+        class="vision-role__btn"
+        :class="{ 'is-active': visionRoleActive === o.value }"
+        :aria-pressed="visionRoleActive === o.value"
+        @click="setVisionRole(o.value)"
+      >
+        {{ p.t(o.labelKey) }}
+      </button>
+    </div>
     <div v-if="p.visionPending" class="text-text/70">{{ p.t('statisticsPage.loading') }}</div>
     <div v-else-if="p.visionError" class="rounded border border-error bg-surface p-3 text-error">
       {{ p.visionError }}
@@ -248,3 +267,30 @@ const visionPageSize = computed({
     </template>
   </div>
 </template>
+
+<style scoped>
+.vision-role {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border: 1px solid rgb(200 155 60 / 0.3);
+  border-radius: 0.375rem;
+}
+.vision-role__btn {
+  padding: 0.25rem 0.75rem;
+  border-radius: 0.25rem;
+  font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-grey-50, #a09b8c);
+}
+.vision-role__btn:hover {
+  color: var(--color-gold-50, #f0e6d2);
+}
+.vision-role__btn.is-active {
+  background: var(--color-gold-300, #c89b3c);
+  color: var(--color-blue-600, #0a1428);
+}
+</style>

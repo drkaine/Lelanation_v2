@@ -2,9 +2,10 @@
 /**
  * Onglet Runes (stats globales) : grille type arbre + fragments, pick / WR, deltas vs patch de comparaison.
  */
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { RunePath } from '@lelanation/shared-types'
+import { visibleRunePaths, type RuneTreeTab } from '~/utils/statistics/runeTreeTabs'
 import type { RunesDetailPayload } from '~/types/statisticsIndexPage'
 import { useRunesStore } from '~/stores/RunesStore'
 import { getRuneImageUrl } from '~/utils/imageUrl'
@@ -26,6 +27,7 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const runesStore = useRunesStore()
+const runeTreeTab = ref<RuneTreeTab>('all')
 
 const runeTreeReady = computed(
   () => runesStore.status === 'success' && (runesStore.runePaths?.length ?? 0) > 0
@@ -121,6 +123,13 @@ function shardStat(shardId: number, slot: number): RuneStat | null {
 function baselineShardStat(shardId: number, slot: number): RuneStat | null {
   return mergedShardStat(props.baseline, shardId, slot)
 }
+
+const visiblePathsWithCells = computed(() =>
+  visibleRunePaths(
+    pathsWithCells.value.map(x => ({ ...x, id: x.path.id })),
+    runeTreeTab.value
+  )
+)
 
 const pathsWithCells = computed(() => {
   const stats = runeMap.value
@@ -483,10 +492,38 @@ function runeSetLayout(
     >
       <div class="flex flex-col gap-7">
         <div
+          class="rune-tree-tabs"
+          role="tablist"
+          :aria-label="t('statisticsPage.runeTreeTabsAria')"
+        >
+          <button
+            type="button"
+            role="tab"
+            class="rune-tree-tabs__btn"
+            :class="{ 'is-active': runeTreeTab === 'all' }"
+            :aria-selected="runeTreeTab === 'all'"
+            @click="runeTreeTab = 'all'"
+          >
+            {{ t('statisticsPage.runeTreeTabsAll') }}
+          </button>
+          <button
+            v-for="rp in runesStore.runePaths"
+            :key="'rtab-' + rp.id"
+            type="button"
+            role="tab"
+            class="rune-tree-tabs__btn"
+            :class="{ 'is-active': runeTreeTab === rp.id }"
+            :aria-selected="runeTreeTab === rp.id"
+            @click="runeTreeTab = rp.id"
+          >
+            {{ rp.name }}
+          </button>
+        </div>
+        <div
           class="stats-runes-paths-grid grid min-w-0 gap-x-4 gap-y-8 overflow-x-auto pb-2 lg:gap-x-6"
         >
           <div
-            v-for="{ path, cells } in pathsWithCells"
+            v-for="{ path, cells } in visiblePathsWithCells"
             v-show="cells.length > 0"
             :key="path.id"
             class="stats-runes-path flex min-w-[9.5rem] flex-col gap-2"
@@ -518,6 +555,9 @@ function runeSetLayout(
                     height="24"
                     class="h-6 w-6 rounded-full bg-black/25 object-contain"
                   />
+                  <span v-if="runeTreeTab !== 'all'" class="rune-cell-name">{{
+                    cell.rune.name
+                  }}</span>
                   <span
                     class="text-[11px] font-bold tabular-nums leading-none"
                     :class="wrClass(cell.stats.winrate)"
@@ -825,6 +865,36 @@ function runeSetLayout(
 </template>
 
 <style scoped>
+.rune-tree-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  border-bottom: 1px solid rgb(200 155 60 / 0.25);
+}
+.rune-tree-tabs__btn {
+  padding: 0.35rem 0.8rem;
+  font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-grey-50, #a09b8c);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.rune-tree-tabs__btn:hover {
+  color: var(--color-gold-50, #f0e6d2);
+}
+.rune-tree-tabs__btn.is-active {
+  color: var(--color-gold-50, #f0e6d2);
+  border-bottom-color: var(--color-gold-300, #c89b3c);
+}
+.rune-cell-name {
+  max-width: 6rem;
+  text-align: center;
+  font-size: 10px;
+  line-height: 1.1;
+  color: var(--color-gold-50, #f0e6d2);
+}
 .stats-runes-paths-grid {
   grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
   scrollbar-gutter: stable;

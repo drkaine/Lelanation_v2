@@ -18,6 +18,12 @@ import {
   injectStatisticsPageCtx,
   type StatisticsIndexPageCtx,
 } from '~/composables/statistics/statisticsPageCtx'
+import {
+  PATCH_NOTES_CHIPS,
+  applyPatchNotesChip,
+  patchNotesChipActive,
+  type PatchNotesChip,
+} from '~/utils/statistics/patchNotesChips'
 
 const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
 
@@ -25,6 +31,26 @@ const championsStore = useChampionsStore()
 const itemsStore = useItemsStore()
 const runesStore = useRunesStore()
 const { currentVersion: gameVersionFromStore } = storeToRefs(useVersionStore())
+
+const PATCH_NOTES_CHIP_LABEL_KEYS: Record<PatchNotesChip, string> = {
+  all: 'statisticsPage.patchNotesChipAll',
+  champion: 'statisticsPage.patchNotesTargetChampion',
+  items: 'statisticsPage.patchNotesTargetItems',
+  runes: 'statisticsPage.patchNotesTargetRunes',
+  up: 'patchNotesPage.changeTypes.buff',
+  nerf: 'patchNotesPage.changeTypes.nerf',
+  adjust: 'patchNotesPage.changeTypes.adjustment',
+}
+
+function isChipActive(chip: PatchNotesChip): boolean {
+  return patchNotesChipActive(chip, p.patchNotesTargetFilters, p.patchNotesChangeFilter)
+}
+
+function onChip(chip: PatchNotesChip): void {
+  const next = applyPatchNotesChip(chip, p.patchNotesChangeFilter)
+  if (next.targets) p.patchNotesTargetFilters = next.targets
+  p.patchNotesChangeFilter = next.change
+}
 
 const PATCH_NOTES_SORT_COLS: readonly PatchNotesSortCol[] = [
   'target',
@@ -136,10 +162,6 @@ function changeTypeClass(type: PatchNotesChangeType): string {
   return 'text-accent-light'
 }
 
-function formatRegularity(value: number): string {
-  return `${(value * 100).toFixed(1)}%`
-}
-
 function sortIndicator(col: PatchNotesSortCol): string {
   if (p.patchNotesSortColumn !== col) return ''
   return p.patchNotesSortDir === 'asc' ? ' ▲' : ' ▼'
@@ -159,6 +181,27 @@ function patchNotesMessage(message: string | undefined): string {
 
 <template>
   <div class="space-y-3">
+    <div
+      class="statistics-patch-notes-chips flex gap-2 overflow-x-auto pb-1 md:hidden"
+      role="group"
+      :aria-label="p.t('statisticsPage.patchNotesChipsAria')"
+    >
+      <button
+        v-for="chip in PATCH_NOTES_CHIPS"
+        :key="chip"
+        type="button"
+        class="shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors"
+        :class="
+          isChipActive(chip)
+            ? 'border-accent bg-accent/15 text-accent'
+            : 'border-primary/40 text-text/80 hover:border-accent/60'
+        "
+        :aria-pressed="isChipActive(chip)"
+        @click="onChip(chip)"
+      >
+        {{ p.t(PATCH_NOTES_CHIP_LABEL_KEYS[chip]) }}
+      </button>
+    </div>
     <div v-if="p.patchNotesPending" class="text-text/70">{{ p.t('statisticsPage.loading') }}</div>
     <div
       v-else-if="p.patchNotesError"
@@ -251,8 +294,12 @@ function patchNotesMessage(message: string | undefined): string {
             </span>
             <span>
               {{ p.t('statisticsPage.patchNotesColRegularity') }}:
-              <strong class="tabular-nums">{{ formatRegularity(row.regularity) }}</strong>
-              <span class="text-text/50"> ({{ row.patchesTouched }}/{{ row.totalPatches }}) </span>
+              <strong class="tabular-nums">{{
+                p.t('statisticsPage.patchNotesTouchedIn', {
+                  n: row.patchesTouched,
+                  total: row.totalPatches,
+                })
+              }}</strong>
             </span>
           </div>
         </article>
@@ -373,10 +420,12 @@ function patchNotesMessage(message: string | undefined): string {
                 </span>
               </td>
               <td class="px-2 py-2 text-right tabular-nums">
-                {{ formatRegularity(row.regularity) }}
-                <span class="text-xs text-text/50"
-                  >({{ row.patchesTouched }}/{{ row.totalPatches }})</span
-                >
+                {{
+                  p.t('statisticsPage.patchNotesTouchedIn', {
+                    n: row.patchesTouched,
+                    total: row.totalPatches,
+                  })
+                }}
               </td>
             </tr>
           </tbody>

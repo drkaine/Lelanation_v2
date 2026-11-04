@@ -16,6 +16,11 @@ import {
 } from '~/utils/formatItemStats'
 import { matchesItemSearch } from '~/utils/multilingualEntitySearch'
 import { useToggleSet } from '~/composables/useToggleSet'
+import {
+  ITEM_TYPE_CHIPS,
+  countItemTypes,
+  type ItemTypeChip,
+} from '~/utils/statistics/itemTypeCounts'
 
 const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
 const itemsStore = useItemsStore()
@@ -121,6 +126,13 @@ const tableRows = computed<TableRow[]>(() =>
     }
   })
 )
+
+const itemTypeCounts = computed(() => countItemTypes(tableRows.value))
+const itemTypeChipLabel = (chip: ItemTypeChip) =>
+  chip === 'all' ? p.t('statisticsPage.itemsTypeAll') : typeLabel(chip)
+const setItemTypeChip = (chip: ItemTypeChip) => {
+  p.itemsTypeFilter = chip
+}
 
 const itemSearchQuery = computed(() => String(unref(p.championSearchQuery) ?? '').trim())
 
@@ -319,6 +331,20 @@ function deltaClass(value: number | null | undefined): string {
         :comparison-version="p.overviewDetailComparisonVersion"
       />
       <div v-if="tableRows.length > 0" class="statistics-items-tab space-y-3">
+        <div class="items-type" role="group" :aria-label="p.t('statisticsPage.itemsTypeAria')">
+          <button
+            v-for="chip in ITEM_TYPE_CHIPS"
+            :key="chip"
+            type="button"
+            class="items-type-btn"
+            :class="{ 'is-active': itemTypeFilter === chip }"
+            :aria-pressed="itemTypeFilter === chip"
+            @click="setItemTypeChip(chip)"
+          >
+            {{ itemTypeChipLabel(chip) }}
+            <span class="items-type-count">{{ itemTypeCounts[chip] }}</span>
+          </button>
+        </div>
         <StatisticsMobileSortBar
           id="items-mobile-sort"
           v-model:column="itemsMobileSortColumn"
@@ -589,3 +615,36 @@ function deltaClass(value: number | null | undefined): string {
     <div v-else class="text-text/70">{{ p.t('statisticsPage.overviewDetailNoData') }}</div>
   </div>
 </template>
+
+<style scoped>
+.items-type {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.items-type-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border: 1px solid rgb(200 155 60 / 0.35);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-grey-50, #a09b8c);
+  font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.items-type-btn.is-active {
+  background: var(--color-gold-300, #c89b3c);
+  border-color: var(--color-gold-300, #c89b3c);
+  color: var(--color-blue-600, #0a1428);
+}
+.items-type-count {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+</style>

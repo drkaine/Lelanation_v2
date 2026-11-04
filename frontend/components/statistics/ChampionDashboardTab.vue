@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { statsRoleIconPath, statsRoleLabel } from '~/utils/statsRoleDisplay'
+import { isLowSample } from '~/utils/statistics/lowSample'
 import {
   DASHBOARD_RADAR_AXES,
   barWidthPct,
@@ -600,7 +601,12 @@ function maxTileGames(tiles: DashboardTile[]): number {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="r in roleRows" :key="r.role" class="border-b border-primary/10">
+              <tr
+                v-for="r in roleRows"
+                :key="r.role"
+                class="border-b border-primary/10"
+                :class="{ 'opacity-50': isLowSample(r.games) }"
+              >
                 <td class="p-1.5 text-center font-bold text-text-accent">
                   <span class="inline-flex items-center justify-center gap-1">
                     <img
@@ -611,6 +617,12 @@ function maxTileGames(tiles: DashboardTile[]): number {
                       class="h-3.5 w-3.5 object-contain"
                     />
                     {{ statsRoleLabel(r.role) }}
+                    <span
+                      v-if="isLowSample(r.games)"
+                      class="rounded border border-text/30 px-1 text-[9px] font-normal text-text/70"
+                    >
+                      {{ t('statisticsPage.lowSampleBadge') }}
+                    </span>
                   </span>
                 </td>
                 <td class="p-1.5">

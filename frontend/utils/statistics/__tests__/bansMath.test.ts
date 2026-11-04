@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { banPct, banPctDelta } from '../bansMath'
+import { banBarWidth, banSplitShare, banPct, banPctDelta } from '../bansMath'
 
 describe('banPct', () => {
   it('rate = bans / matches', () => {
@@ -20,5 +20,27 @@ describe('banPctDelta', () => {
   })
   it('difference of rates in points', () => {
     expect(banPctDelta(300, 100, 1000, 1000)).toBe(20)
+  })
+})
+
+describe('banBarWidth', () => {
+  it('share of the max banrate, in %', () => {
+    expect(banBarWidth(7.7, 15.4)).toBe(50)
+  })
+  it('clamped to 0–100, 0 when max invalid', () => {
+    expect(banBarWidth(20, 15)).toBe(100)
+    expect(banBarWidth(-1, 15)).toBe(0)
+    expect(banBarWidth(5, 0)).toBe(0)
+  })
+})
+
+describe('banSplitShare', () => {
+  it('donne la part du premier côté en %', () => {
+    expect(banSplitShare(3, 1)).toBe(75)
+    expect(banSplitShare(7.61, 7.78)).toBeCloseTo(49.45, 2)
+  })
+  it('renvoie null sans donnée', () => {
+    expect(banSplitShare(0, 0)).toBeNull()
+    expect(banSplitShare(Number.NaN, 2)).toBeNull()
   })
 })

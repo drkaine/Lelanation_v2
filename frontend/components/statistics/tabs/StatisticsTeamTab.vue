@@ -62,53 +62,27 @@ const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
               </span>
             </h3>
             <div
-              class="pie-chart-2 relative inline-flex h-[150px] w-[150px] shrink-0 items-center justify-center"
+              class="sides-split"
+              role="img"
+              :aria-label="`${p.t('statisticsPage.sidesBlue')} ${p.sidesDonutBluePct}% · ${p.t('statisticsPage.sidesRed')} ${p.sidesDonutRedPct}%`"
             >
-              <svg class="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 120 120">
-                <circle
-                  cx="60"
-                  cy="60"
-                  r="48"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="14"
-                  stroke-linecap="butt"
-                  class="text-surface/50 dark:text-surface/40"
-                  :stroke-dasharray="p.sidesDonutCircumference + ' ' + p.sidesDonutCircumference"
-                  stroke-dashoffset="0"
+              <div class="sides-split-labels">
+                <span class="sides-split-blue"
+                  >{{ p.t('statisticsPage.sidesBlue') }} {{ p.sidesDonutBluePct }}%</span
+                >
+                <span class="sides-split-red"
+                  >{{ p.sidesDonutRedPct }}% {{ p.t('statisticsPage.sidesRed') }}</span
+                >
+              </div>
+              <div class="sides-split-bar">
+                <span
+                  class="sides-split-fill-blue"
+                  :style="{ width: `${Number(p.sidesDonutBluePct) || 0}%` }"
                 />
-                <circle
-                  cx="60"
-                  cy="60"
-                  r="48"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="14"
-                  stroke-linecap="butt"
-                  class="text-info dark:text-info"
-                  :stroke-dasharray="p.sidesDonutBlueDash + ' ' + p.sidesDonutCircumference"
-                  stroke-dashoffset="0"
+                <span
+                  class="sides-split-fill-red"
+                  :style="{ width: `${Number(p.sidesDonutRedPct) || 0}%` }"
                 />
-                <circle
-                  cx="60"
-                  cy="60"
-                  r="48"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="14"
-                  stroke-linecap="butt"
-                  class="text-error/900 text-error"
-                  :stroke-dasharray="p.sidesDonutRedDash + ' ' + p.sidesDonutCircumference"
-                  :stroke-dashoffset="-p.sidesDonutBlueDash"
-                />
-              </svg>
-              <div class="relative z-10 flex flex-col items-center text-center">
-                <span class="block text-xl font-bold text-info dark:text-info">
-                  {{ p.sidesDonutBluePct }}%
-                </span>
-                <span class="block text-lg font-medium text-error text-error/70">
-                  {{ p.sidesDonutRedPct }}%
-                </span>
               </div>
             </div>
           </div>
@@ -470,3 +444,37 @@ const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
     </div>
   </div>
 </template>
+
+<style scoped>
+.sides-split {
+  width: 100%;
+  min-width: 220px;
+}
+.sides-split-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+.sides-split-blue {
+  color: var(--color-blue-100, #0ac8b9);
+}
+.sides-split-red {
+  color: #e2665a;
+}
+.sides-split-bar {
+  display: flex;
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(30 35 40 / 0.8);
+}
+.sides-split-fill-blue {
+  background: var(--color-blue-100, #0ac8b9);
+}
+.sides-split-fill-red {
+  background: #e2665a;
+}
+</style>

@@ -16,8 +16,11 @@ import {
   type ChampionMiscStatRow,
 } from '~/utils/championBaseStatsFromJson'
 import {
+  CHAMPION_MISC_MAX_LEVEL,
+  CHAMPION_MISC_MIN_LEVEL,
   championMiscStatUnavailable,
   championMiscStatValueAtLevel,
+  clampChampionMiscLevel,
 } from '~/utils/championMiscStatLevel'
 import {
   championMiscStatDisplayName,
@@ -85,6 +88,10 @@ const miscPageSize = computed({
 })
 
 const miscLevel = computed(() => Number(p.miscLevel) || 1)
+
+function onMiscLevelInput(event: Event): void {
+  p.miscLevel = clampChampionMiscLevel(Number((event.target as HTMLInputElement).value))
+}
 
 const baseColumnLabel = computed(() => {
   if (miscLevel.value <= 1) return String(p.t?.('statisticsPage.miscColBase') ?? 'Base')
@@ -173,6 +180,22 @@ function rowKey(row: ChampionMiscStatRow): string {
       {{ p.t('statisticsPage.noData') }}
     </div>
     <template v-else>
+      <div class="misc-level">
+        <label for="misc-level-slider" class="misc-level-label">
+          {{ p.t('statisticsPage.miscLevelLabel') }}
+          <span class="misc-level-value">{{ miscLevel }}</span>
+        </label>
+        <input
+          id="misc-level-slider"
+          type="range"
+          class="misc-level-range"
+          :min="CHAMPION_MISC_MIN_LEVEL"
+          :max="CHAMPION_MISC_MAX_LEVEL"
+          step="1"
+          :value="miscLevel"
+          @input="onMiscLevelInput"
+        />
+      </div>
       <StatisticsMobileSortBar
         id="misc-mobile-sort"
         v-model:column="miscMobileSortColumn"
@@ -404,3 +427,37 @@ function rowKey(row: ChampionMiscStatRow): string {
     </template>
   </div>
 </template>
+
+<style scoped>
+.misc-level {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 420px;
+  padding: 8px 12px;
+  border: 1px solid rgb(200 155 60 / 0.3);
+  border-radius: 8px;
+  background: rgb(10 50 60 / 0.35);
+}
+.misc-level-label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-grey-50, #a09b8c);
+  white-space: nowrap;
+}
+.misc-level-value {
+  min-width: 2ch;
+  font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-gold-50, #f0e6d2);
+}
+.misc-level-range {
+  flex: 1;
+  accent-color: var(--color-gold-300, #c89b3c);
+}
+</style>

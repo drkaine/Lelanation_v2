@@ -1,32 +1,50 @@
 <template>
   <div class="statistics flex min-h-screen min-w-0 flex-col overflow-x-hidden text-text">
-    <!-- Onglets : scroll horizontal + snap (mobile) -->
-    <div
-      class="statistics-tabs-bar flex w-full min-w-0 flex-shrink-0 items-start gap-2 overflow-x-hidden px-4 pb-2 pt-4"
-    >
-      <div class="statistics-tabs-scroll-wrap statistics-tabs-wrap-mode relative min-w-0 flex-1">
-        <div
-          ref="tabsNavEl"
-          role="tablist"
-          :aria-label="t('statisticsPage.title')"
-          class="statistics-tabs-nav statistics-tabs-nav--wrap flex flex-wrap items-center gap-1 border-b border-primary/30 pb-2"
-        >
-          <button
-            v-for="tab in tabs"
-            :id="`statistics-tab-${tab.id}`"
-            :key="tab.id"
-            type="button"
-            role="tab"
-            :data-tab-id="tab.id"
-            :aria-selected="displayedActiveTab === tab.id"
-            :tabindex="displayedActiveTab === tab.id ? 0 : -1"
-            :class="['statistics-tab-btn', displayedActiveTab === tab.id ? 'is-active' : '']"
-            @click="activeTab = tab.id"
-            @keydown="onStatisticsTabsKeydown($event, tab.id)"
-          >
-            {{ tab.label }}
-          </button>
+    <!-- En-tête + nav à 9 sections (maquette Redesign Statistiques) -->
+    <header class="stats-head">
+      <div class="stats-head-inner">
+        <div class="flex flex-col gap-1">
+          <span class="stats-eyebrow">{{ t('statisticsPage.title') }}</span>
+          <h1 class="stats-h1">{{ currentNavGroupLabel }}</h1>
         </div>
+        <nav :aria-label="t('statisticsPage.navAria')" class="stats-nav">
+          <template v-for="group in navGroups" :key="group.id">
+            <NuxtLink v-if="group.route" :to="localePath(group.route)" class="stats-nav-link">
+              {{ t(group.labelKey) }}
+            </NuxtLink>
+            <button
+              v-else
+              type="button"
+              :aria-current="currentNavGroup === group.id ? 'page' : undefined"
+              :class="['stats-nav-link', currentNavGroup === group.id ? 'is-active' : '']"
+              @click="activeTab = group.tabs[0]!"
+            >
+              {{ t(group.labelKey) }}
+            </button>
+          </template>
+        </nav>
+      </div>
+    </header>
+    <div
+      v-if="currentNavGroupTabs.length > 1"
+      class="statistics-tabs-bar flex w-full min-w-0 flex-shrink-0 px-4 pt-4"
+    >
+      <div ref="tabsNavEl" role="tablist" :aria-label="currentNavGroupLabel" class="stats-subtabs">
+        <button
+          v-for="tab in currentNavGroupTabs"
+          :id="`statistics-tab-${tab.id}`"
+          :key="tab.id"
+          type="button"
+          role="tab"
+          :data-tab-id="tab.id"
+          :aria-selected="displayedActiveTab === tab.id"
+          :tabindex="displayedActiveTab === tab.id ? 0 : -1"
+          :class="['stats-subtab', displayedActiveTab === tab.id ? 'is-active' : '']"
+          @click="activeTab = tab.id"
+          @keydown="onStatisticsTabsKeydown($event, tab.id)"
+        >
+          {{ tab.label }}
+        </button>
       </div>
     </div>
 
@@ -768,6 +786,29 @@
         :class="[showFiltersPanel ? 'max-lg:pb-20' : 'pt-2']"
       >
         <div class="w-full">
+          <div
+            v-if="showFiltersPanel && (mobileFilterChips.length || mobileCanAddRole)"
+            class="statistics-filter-chips mb-3 flex flex-wrap gap-2 lg:hidden"
+          >
+            <button
+              v-for="chip in mobileFilterChips"
+              :key="chip.key"
+              type="button"
+              class="statistics-filter-chip"
+              :aria-label="t('statisticsPage.filterChipRemove', { value: chip.value })"
+              @click="removeFilterChip(chip.key)"
+            >
+              {{ filterChipLabel(chip) }} <span aria-hidden="true">✕</span>
+            </button>
+            <button
+              v-if="mobileCanAddRole"
+              type="button"
+              class="statistics-filter-chip is-add"
+              @click="openFilters"
+            >
+              + {{ t('statisticsPage.filterRole') }}
+            </button>
+          </div>
           <Transition name="statistics-tab" mode="out-in">
             <div :key="displayedActiveTab" class="statistics-tab-panel min-h-[12rem]">
               <div v-if="displayedActiveTab === 'overview'" class="space-y-6">
@@ -912,6 +953,7 @@ import {
   isStatisticsMainTab,
   statisticsTabNeedsOverviewLoad,
 } from '~/utils/statistics/statisticsTabRouting'
+import { navGroupOfTab, visibleNavGroups } from '~/utils/statistics/statisticsNavGroups'
 import { progressionReferenceVersion } from '~/utils/statistics/progressionReference'
 import {
   PAGE_SIZE_OPTIONS,
@@ -954,6 +996,11 @@ import {
   pickStatsVersionFilter,
 } from '~/utils/statistics/statsVersion'
 import { comparePatchMajorMinor } from '~/utils/patchVersion'
+import {
+  statsFilterChips,
+  type StatsFilterChip,
+  type StatsFilterChipKey,
+} from '~/utils/statistics/statsFilterChips'
 import { apiUrl } from '~/utils/apiUrl'
 import { getRankedEmblemUrl } from '~/utils/rankedEmblem'
 import { useChampionsStore } from '~/stores/ChampionsStore'
@@ -1139,6 +1186,17 @@ const displayedActiveTab = computed<StatisticsMainTab>(() => {
   return fallback ?? 'overview'
 })
 
+const navGroups = computed(() => visibleNavGroups(tabs.value.map(tab => tab.id)))
+const currentNavGroup = computed(() => navGroupOfTab(displayedActiveTab.value))
+const currentNavGroupLabel = computed(() => {
+  const group = navGroups.value.find(g => g.id === currentNavGroup.value)
+  return group ? t(group.labelKey) : t('statisticsPage.title')
+})
+const currentNavGroupTabs = computed(() => {
+  const ids = new Set(navGroups.value.find(g => g.id === currentNavGroup.value)?.tabs ?? [])
+  return tabs.value.filter(tab => ids.has(tab.id))
+})
+
 function isStatisticsTabConfiguredVisible(tab: string): boolean {
   const normalized = normalizeLegacyTab(tab)
   if (!isStatisticsMainTab(normalized)) return true
@@ -1191,7 +1249,7 @@ function focusStatisticsTabButton(nextId: VisibleStatisticsTabId): void {
 }
 
 function orderedVisibleTabIds(): VisibleStatisticsTabId[] {
-  return tabs.value.map(t => t.id) as VisibleStatisticsTabId[]
+  return currentNavGroupTabs.value.map(t => t.id) as VisibleStatisticsTabId[]
 }
 
 function focusPrevNextTab(currentTabId: VisibleStatisticsTabId, direction: -1 | 1): void {
@@ -1483,6 +1541,44 @@ const activeStatsFiltersCount = computed(() => {
   if (activeTab.value === 'misc' && miscLevel.value !== 1) count++
   return count
 })
+
+const mobileFilterChips = computed(() =>
+  activeTab.value === 'patchNotes' || activeTab.value === 'misc'
+    ? []
+    : statsFilterChips(
+        {
+          version: statsVersionFilter.value ?? '',
+          divisions: statsDivisionFilter.value,
+          role: statsRoleFilter.value,
+          otp: statsOtpFilter.value,
+          search: championSearchQuery.value,
+        },
+        statisticsTabFilterFlags(activeTab.value)
+      )
+)
+const mobileCanAddRole = computed(
+  () =>
+    statisticsTabFilterFlags(activeTab.value).role &&
+    !statsRoleFilter.value &&
+    activeTab.value !== 'patchNotes' &&
+    activeTab.value !== 'misc'
+)
+function filterChipLabel(chip: StatsFilterChip): string {
+  if (chip.key === 'version') return t('statisticsPage.filterChipVersion', { value: chip.value })
+  if (chip.key === 'otp') {
+    return chip.value === 'solo'
+      ? t('statisticsPage.filterOtpSolo')
+      : t('statisticsPage.filterOtpYes')
+  }
+  return chip.value
+}
+function removeFilterChip(key: StatsFilterChipKey) {
+  if (key === 'version') statsVersionFilter.value = ''
+  else if (key === 'division') statsDivisionFilter.value = []
+  else if (key === 'role') statsRoleFilter.value = ''
+  else if (key === 'otp') statsOtpFilter.value = 'non'
+  else championSearchQuery.value = ''
+}
 
 function closeFilters() {
   statisticsUiStore.setFiltersOpen(false)
@@ -4139,6 +4235,8 @@ const statisticsPageCtx = reactive({
   paginatedPingsRows: pingsTab.paginatedPingsRows,
   paginatedVisionRows: visionTab.paginatedVisionRows,
   patchNotesData: patchNotesTab.patchNotesData,
+  patchNotesChangeFilter: patchNotesTab.patchNotesChangeFilter,
+  patchNotesTargetFilters,
   patchNotesError: patchNotesTab.patchNotesError,
   patchNotesPage: patchNotesTab.patchNotesPage,
   patchNotesPageSize: patchNotesTab.patchNotesPageSize,
@@ -4240,6 +4338,23 @@ defineExpose({ statisticsPageCtx })
 </script>
 
 <style scoped>
+.statistics-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgb(200 170 110 / 0.55);
+  border-radius: 999px;
+  background: rgb(30 35 40 / 0.8);
+  padding: 4px 10px;
+  font-size: 12px;
+  color: #f0e6d2;
+}
+.statistics-filter-chip.is-add {
+  border-style: dashed;
+  border-color: rgb(160 155 140 / 0.6);
+  background: transparent;
+  color: #a09b8c;
+}
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.15s ease;
@@ -4398,6 +4513,91 @@ defineExpose({ statisticsPageCtx })
 </style>
 
 <style>
+/* En-tête + nav sections (maquette Redesign Statistiques) */
+.statistics .stats-head {
+  border-bottom: 1px solid var(--color-gold-500);
+  background: var(--color-blue-600);
+}
+.statistics .stats-head-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px 32px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.statistics .stats-eyebrow {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-grey-50);
+}
+.statistics .stats-h1 {
+  margin: 0;
+  font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  font-weight: 700;
+  font-size: 40px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--color-gold-100);
+}
+.statistics .stats-nav {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.statistics .stats-nav-link {
+  padding: 12px 16px;
+  font-weight: 500;
+  color: var(--color-grey-50);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  background: none;
+}
+.statistics .stats-nav-link:hover {
+  color: var(--color-gold-50);
+}
+.statistics .stats-nav-link.is-active {
+  font-weight: 600;
+  color: var(--color-gold-50);
+  border-bottom-color: var(--color-gold-100);
+}
+.statistics .stats-subtabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  background: var(--color-blue-600);
+  border: 1px solid var(--color-blue-400);
+  border-radius: 8px;
+}
+.statistics .stats-subtab {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 6px;
+  color: var(--color-grey-50);
+}
+.statistics .stats-subtab.is-active {
+  background: var(--color-blue-400);
+  color: var(--color-gold-50);
+  font-weight: 600;
+}
+@media (max-width: 767px) {
+  .statistics .stats-head-inner {
+    padding: 16px 16px 0;
+    gap: 12px;
+  }
+  .statistics .stats-h1 {
+    font-size: 28px;
+  }
+  .statistics .stats-nav-link {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+}
 /**
  * Surfaces & fast-stat : hors scoped pour que les composants enfants (objets, tooltips)
  * héritent le même fond rgb(var(--rgb-chrome) / 1) que les cartes « Vue d’ensemble ».

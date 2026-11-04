@@ -13,6 +13,36 @@
         </p>
         <h1 class="hg-title">{{ t('homeTest.title') }}</h1>
         <p class="hg-subtitle">{{ t('homeTest.subtitle') }}</p>
+        <form class="hg-search" role="search" @submit.prevent="submitChampionSearch">
+          <label for="hg-search-input" class="sr-only">{{ t('homeTest.searchLabel') }}</label>
+          <input
+            id="hg-search-input"
+            v-model="championQuery"
+            type="search"
+            list="hg-search-champions"
+            autocomplete="off"
+            :placeholder="t('homeTest.searchLabel')"
+            class="hg-search-input"
+          />
+          <datalist id="hg-search-champions">
+            <option v-for="c in championsStore.champions" :key="c.id" :value="c.name" />
+          </datalist>
+          <button type="submit" class="hg-search-btn">{{ t('homeTest.searchSubmit') }}</button>
+        </form>
+        <p v-if="searchMiss" class="mt-1 text-xs text-error" role="status">
+          {{ t('homeTest.searchMiss') }}
+        </p>
+        <p v-if="popularPicks.length" class="hg-popular">
+          <span>{{ t('homeTest.popular') }}</span>
+          <NuxtLink
+            v-for="row in popularPicks"
+            :key="row.championId"
+            :to="championBuildsLink(row)"
+            class="hg-popular-chip"
+          >
+            {{ championName(row) }}
+          </NuxtLink>
+        </p>
 
         <div class="mt-6 flex flex-wrap gap-3">
           <NuxtLink
@@ -55,6 +85,27 @@
     </section>
 
     <div class="hg-container">
+      <!-- Trois façons de progresser -->
+      <section class="hg-section">
+        <h2 class="hg-h2">{{ t('homeTest.pillarsTitle') }}</h2>
+        <ol class="hg-pillars">
+          <li
+            v-for="pillar in pillars"
+            :key="pillar.id"
+            class="hg-pillar"
+            :style="{ '--c': pillar.color }"
+          >
+            <p class="hg-pillar-step">{{ t(`homeTest.pillars.${pillar.id}.step`) }}</p>
+            <h3 class="hg-pillar-title">{{ t(`homeTest.pillars.${pillar.id}.title`) }}</h3>
+            <p class="hg-pillar-desc">{{ t(`homeTest.pillars.${pillar.id}.desc`) }}</p>
+            <NuxtLink :to="localePath(pillar.to)" class="hg-more">
+              {{ t(`homeTest.pillars.${pillar.id}.cta`) }} →
+            </NuxtLink>
+          </li>
+        </ol>
+      </section>
+    </div>
+    <div class="hg-container">
       <!-- Derniers builds -->
       <section class="hg-section">
         <div class="hg-section-head">
@@ -75,6 +126,26 @@
     </div>
 
     <div class="hg-container">
+      <!-- Ton build, ta carte -->
+      <section class="hg-section hg-editor ui-build-card-surface">
+        <div>
+          <h2 class="hg-h2">{{ t('homeTest.editorTitle') }}</h2>
+          <p class="hg-pillar-desc mt-2">{{ t('homeTest.editorDesc') }}</p>
+        </div>
+        <ol class="hg-editor-steps">
+          <li v-for="n in 3" :key="n">
+            <span class="hg-editor-num">{{ n }}</span>
+            {{ t(`homeTest.editorStep${n}`) }}
+          </li>
+        </ol>
+        <NuxtLink
+          :to="localePath('/builds/create')"
+          class="inline-flex items-center gap-2 self-start rounded-lg bg-accent px-5 py-2.5 text-sm font-bold text-background transition hover:bg-accent-dark"
+        >
+          <Icon name="mdi:hammer-wrench" size="18px" />
+          {{ t('homeTest.editorCta') }}
+        </NuxtLink>
+      </section>
       <!-- Meta du patch -->
       <section class="hg-section">
         <div class="hg-section-head">
@@ -230,6 +301,7 @@ import VideoGridCard from '~/components/Videos/VideoGridCard.vue'
 import type { HomeTierListRow } from '~/composables/useHomePage'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { championStatsDetailPath } from '~/utils/championStatsRoutes'
+import { findChampionSlug, homePopularPicks } from '~/utils/homeHero'
 import { homeGuides, homePatchRecap, pickHeroRow, topPicksByRole } from '~/utils/homeGaming'
 import { apiUrl } from '~/utils/apiUrl'
 import { matchupGuideDetailPath } from '~/utils/matchupGuideSlug'
@@ -313,6 +385,25 @@ const latestGuides = computed(() => homeGuides(guides.value ?? [], 4))
 
 const homeBuilds = computed((): Build[] => recentBuilds.value.slice(0, 6) as Build[])
 const metaPicks = computed(() => topPicksByRole(tierByRole.value, 3))
+const popularPicks = computed(() => homePopularPicks(tierByRole.value, 5))
+const championQuery = ref('')
+const searchMiss = ref(false)
+const pillars = [
+  { id: 'find', to: '/builds/discover', color: '#c89b3c' },
+  { id: 'learn', to: '/videos', color: '#0ac8b9' },
+  { id: 'create', to: '/builds/create', color: '#0397ab' },
+] as const
+function submitChampionSearch() {
+  const slug = findChampionSlug(championQuery.value, championsStore.champions)
+  searchMiss.value = !slug
+  if (slug) navigateTo(localePath(`/builds/champion/${slug}`))
+}
+function championBuildsLink(row: HomeTierListRow) {
+  const champ = championForId(row.championId)
+  return champ
+    ? localePath(`/builds/champion/${String(champ.id).toLowerCase()}`)
+    : championLink(row)
+}
 const heroRow = computed(() => pickHeroRow(tierByRole.value))
 const heroChampion = computed(() =>
   heroRow.value ? championForId(heroRow.value.championId) : null
@@ -770,5 +861,112 @@ const socialLinks = [
   .hg-hero-bg {
     animation: none;
   }
+}
+</style>
+
+<style scoped>
+.hg-search {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+  max-width: 34rem;
+}
+.hg-search-input {
+  flex: 1;
+  min-width: 0;
+  border-radius: 0.5rem;
+  border: 1px solid rgb(200 155 60 / 0.45);
+  background: rgb(10 20 40 / 0.85);
+  padding: 0.65rem 0.9rem;
+  color: #f0e6d2;
+}
+.hg-search-input:focus {
+  outline: 2px solid #0ac8b9;
+  outline-offset: 1px;
+}
+.hg-search-btn {
+  border-radius: 0.5rem;
+  border: 1px solid #c89b3c;
+  padding: 0 1rem;
+  font-weight: 700;
+  color: #c89b3c;
+  white-space: nowrap;
+}
+.hg-search-btn:hover {
+  background: rgb(200 155 60 / 0.12);
+}
+.hg-popular {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+  font-size: 0.8rem;
+  color: #a09b8c;
+}
+.hg-popular-chip {
+  border-radius: 999px;
+  border: 1px solid rgb(10 200 185 / 0.4);
+  padding: 0.1rem 0.6rem;
+  color: #f0e6d2;
+}
+.hg-popular-chip:hover {
+  border-color: #0ac8b9;
+}
+.hg-pillars {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+.hg-pillar {
+  border-top: 3px solid var(--c);
+  border-radius: 0.5rem;
+  background: rgb(10 20 40 / 0.6);
+  padding: 1rem;
+}
+.hg-pillar-step {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c);
+}
+.hg-pillar-title {
+  margin: 0.25rem 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #f0e6d2;
+}
+.hg-pillar-desc {
+  font-size: 0.875rem;
+  color: #a09b8c;
+}
+.hg-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem;
+}
+.hg-editor-steps {
+  display: grid;
+  gap: 0.5rem;
+}
+.hg-editor-steps li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.9rem;
+}
+.hg-editor-num {
+  display: inline-grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 1px solid #c89b3c;
+  font-weight: 700;
+  color: #c89b3c;
 }
 </style>

@@ -14,3 +14,17 @@ export function banPctDelta(
   if (refCount == null || matchCount <= 0 || refMatchCount <= 0) return null
   return Math.round((banPct(count, matchCount) - banPct(refCount, refMatchCount)) * 100) / 100
 }
+
+/** Largeur (%) de la barre de banrate, relative au banrate maximal affiché. */
+export function banBarWidth(rate: number, maxRate: number): number {
+  if (!Number.isFinite(rate) || !Number.isFinite(maxRate) || maxRate <= 0) return 0
+  return Math.min(100, Math.max(0, (rate / maxRate) * 100))
+}
+
+/** Part (0–100) du premier terme dans a + b, pour une barre de répartition ; null sans donnée. */
+export function banSplitShare(a: number, b: number): number | null {
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null
+  const total = a + b
+  if (total <= 0) return null
+  return (a / total) * 100
+}

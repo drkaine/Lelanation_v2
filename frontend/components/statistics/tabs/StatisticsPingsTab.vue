@@ -5,6 +5,7 @@ import {
   type StatisticsIndexPageCtx,
 } from '~/composables/statistics/statisticsPageCtx'
 import { onPingIconError, pingIconSrc } from '~/utils/pingIcons'
+import { topPingers } from '~/utils/statistics/topPingers'
 import {
   PING_METRIC_KEYS,
   pingsMobileSortOptions,
@@ -15,6 +16,16 @@ import {
 } from '~/composables/statistics/useStatisticsPingsTab'
 
 const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
+
+const talkers = computed(() => {
+  const rows = (p.pingsTableData?.rows ?? []) as PingsTableRow[]
+  const byId = new Map(rows.map(r => [r.championId, r]))
+  return topPingers(rows, 8).map(tk => {
+    const row = byId.get(tk.championId)
+    const d = row ? p.pingsDelta?.(row, 'totalPerGame') : null
+    return { ...tk, delta: typeof d === 'number' && Number.isFinite(d) ? d : null }
+  })
+})
 
 const pingsMobileSortColumn = computed({
   get: () => String(p.pingsSortColumn ?? 'totalPerGame'),
@@ -100,6 +111,29 @@ const pingsPageSize = computed({
       {{ p.t('statisticsPage.noData') }}
     </div>
     <template v-else>
+      <article v-if="talkers.length" class="pings-talkers">
+        <header class="pings-talkers__head">
+          <h3 class="pings-talkers__title">{{ p.t('statisticsPage.pingsTalkersTitle') }}</h3>
+          <span class="pings-talkers__unit">{{ p.t('statisticsPage.pingsTalkersUnit') }}</span>
+        </header>
+        <ol class="pings-talkers__list">
+          <li v-for="tk in talkers" :key="'talker-' + tk.championId" class="pings-talkers__row">
+            <div class="pings-talkers__name">
+              <span>{{ p.championName(tk.championId) || tk.championId }}</span>
+              <div class="pings-talkers__track">
+                <div class="pings-talkers__bar" :style="{ width: tk.barPct + '%' }" />
+              </div>
+            </div>
+            <span class="pings-talkers__num">{{ tk.totalPerGame.toFixed(2) }}</span>
+            <span
+              class="pings-talkers__num"
+              :class="tk.delta != null ? p.championGlobalNumericDeltaClass(tk.delta) : ''"
+            >
+              {{ tk.delta != null ? (tk.delta > 0 ? '+' : '') + tk.delta.toFixed(2) : '' }}
+            </span>
+          </li>
+        </ol>
+      </article>
       <StatisticsMobileSortBar
         id="pings-mobile-sort"
         v-model:column="pingsMobileSortColumn"
@@ -209,7 +243,8 @@ const pingsPageSize = computed({
                         loading="lazy"
                         decoding="async"
                         @error="onPingIconError($event, key)"
-                      />{{ sortIndicator(key) }}
+                      /><span class="pings-th-label">{{ pingMetricLabel(key) }}</span
+                      >{{ sortIndicator(key) }}
                     </button>
                     <button
                       v-if="p.pingsTableRefData"
@@ -289,3 +324,63 @@ const pingsPageSize = computed({
     </template>
   </div>
 </template>
+
+<style scoped>
+.pings-talkers {
+  border: 1px solid rgb(200 155 60 / 0.25);
+  border-radius: 0.375rem;
+  padding: 0.75rem 1rem;
+}
+.pings-talkers__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+.pings-talkers__title {
+  font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  font-size: 1.05rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-gold-50, #f0e6d2);
+}
+.pings-talkers__unit {
+  font-size: 0.75rem;
+  color: var(--color-grey-50, #a09b8c);
+}
+.pings-talkers__list {
+  display: grid;
+  gap: 0.35rem;
+}
+.pings-talkers__row {
+  display: grid;
+  grid-template-columns: 1fr 4rem 4rem;
+  align-items: center;
+  gap: 0.5rem;
+}
+.pings-talkers__name {
+  display: grid;
+  gap: 0.15rem;
+  font-size: 0.85rem;
+  color: var(--color-gold-50, #f0e6d2);
+}
+.pings-talkers__track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgb(160 155 140 / 0.2);
+}
+.pings-talkers__bar {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--color-blue-100, #0ac8b9);
+}
+.pings-talkers__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+}
+.pings-th-label {
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+</style>

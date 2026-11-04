@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { isLowSample } from '~/utils/statistics/lowSample'
 import {
   injectStatisticsPageCtx,
   type StatisticsIndexPageCtx,
@@ -135,6 +136,7 @@ function rankIcon(rank: string): string {
             v-for="group in groupedRows"
             :key="`surrender-mobile-${group.rank}`"
             class="statistics-champion-stats-mobile-card statistics-surrender-mobile-card w-full max-w-full overflow-hidden py-2"
+            :class="{ 'is-low-sample': isLowSample(group.all?.matchCount) }"
           >
             <button
               type="button"
@@ -351,6 +353,9 @@ function rankIcon(rank: string): string {
         </div>
 
         <!-- Desktop : tableau (même gabarit que pings / bans / champions) -->
+        <p class="surrender-low-sample-note">
+          {{ p.t('statisticsPage.surrenderLowSampleNote') }}
+        </p>
         <div
           class="tier-list-mobile-rotate statistics-overview-surface hidden w-full overflow-x-auto rounded-lg border border-primary/30 md:block"
         >
@@ -375,6 +380,7 @@ function rankIcon(rank: string): string {
                 <template v-for="group in groupedRows" :key="`rank-${group.rank}`">
                   <tr
                     class="text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
+                    :class="{ 'is-low-sample': isLowSample(group.all?.matchCount) }"
                   >
                     <td class="min-w-[220px] py-0.5 pl-2 pr-0">
                       <button
@@ -489,6 +495,13 @@ function rankIcon(rank: string): string {
 </template>
 
 <style scoped>
+.is-low-sample {
+  opacity: 0.5;
+}
+.surrender-low-sample-note {
+  font-size: 0.75rem;
+  color: var(--color-grey-50, #a09b8c);
+}
 .statistics-surrender-panel,
 .statistics-surrender-mobile-list {
   width: 100%;
