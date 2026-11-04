@@ -196,25 +196,52 @@
               </NuxtLink>
             </div>
           </div>
-          <NuxtLink
-            :to="itemShopLink"
-            :title="t('itemShopPage.title')"
-            class="version"
-            :class="{ 'is-active': isItemShopActive }"
+          <div
+            class="builds-menu"
+            @mouseenter="isLearnMenuOpen = true"
+            @mouseleave="isLearnMenuOpen = false"
           >
-            {{ t('itemShopPage.navLabel') }}
-          </NuxtLink>
-          <NuxtLink :to="localePath('/videos')" :title="t('nav.videos')" class="version">
-            {{ t('nav.videos') }}
-          </NuxtLink>
-          <NuxtLink
-            :to="localePath('/guides/champion')"
-            :title="t('championGuidesPage.title')"
-            class="version"
-            :class="{ 'is-active': route.path.startsWith(localePath('/guides/champion')) }"
-          >
-            {{ t('nav.championGuides') }}
-          </NuxtLink>
+            <button
+              type="button"
+              class="builds-menu-trigger"
+              :class="{ 'is-active': learnActiveId !== null, 'is-open': isLearnMenuOpen }"
+              :aria-expanded="isLearnMenuOpen"
+              aria-haspopup="true"
+              @click="openLearnMenu"
+            >
+              <span>{{ t('nav.learn') }}</span>
+              <span class="builds-menu-chevron" :class="{ 'is-open': isLearnMenuOpen }">▾</span>
+            </button>
+            <div v-show="isLearnMenuOpen" class="builds-menu-dropdown">
+              <NuxtLink
+                :to="itemShopLink"
+                :title="t('itemShopPage.title')"
+                class="builds-submenu-link"
+                :class="{ 'is-active': learnActiveId === 'items' }"
+                @click="closeLearnMenu"
+              >
+                {{ t('itemShopPage.navLabel') }}
+              </NuxtLink>
+              <NuxtLink
+                :to="localePath('/videos')"
+                :title="t('nav.videos')"
+                class="builds-submenu-link"
+                :class="{ 'is-active': learnActiveId === 'videos' }"
+                @click="closeLearnMenu"
+              >
+                {{ t('nav.videos') }}
+              </NuxtLink>
+              <NuxtLink
+                :to="localePath('/guides/champion')"
+                :title="t('championGuidesPage.title')"
+                class="builds-submenu-link"
+                :class="{ 'is-active': learnActiveId === 'guides' }"
+                @click="closeLearnMenu"
+              >
+                {{ t('nav.championGuides') }}
+              </NuxtLink>
+            </div>
+          </div>
           <NuxtLink
             :to="patchSummaryLink"
             :title="t('nav.patchSummary')"
@@ -262,9 +289,11 @@ import { useStatisticsUiStore } from '~/stores/StatisticsUiStore'
 import { useVersionStore } from '~/stores/VersionStore'
 import { normalizePatchNotesVersion, usePatchNotesStore } from '~/stores/PatchNotesStore'
 import { pickLatestPatchVersion } from '~/utils/patchVersion'
+import { learnSectionActiveId } from '~/utils/navLearnSection'
 
 const isBuildsMenuOpen = ref(false)
 const isStatisticsMenuOpen = ref(false)
+const isLearnMenuOpen = ref(false)
 const { isMobileViewport } = useMobileViewport()
 const { t } = useI18n()
 const { isLoggedIn: isAdminLoggedIn, checkLoggedIn } = useAdminAuth()
@@ -294,9 +323,7 @@ const currentBuildsTab = computed(() => {
   return typeof route.query.tab === 'string' ? route.query.tab : 'discover'
 })
 const isDiscoverBuildsActive = computed(() => currentBuildsTab.value === 'discover')
-const isItemShopActive = computed(
-  () => route.path === itemShopLink.value || route.path.endsWith('/items')
-)
+const learnActiveId = computed(() => learnSectionActiveId(route.path))
 const isMyBuildsActive = computed(() => currentBuildsTab.value === 'my-builds')
 const isTeamBuildsActive = computed(() => currentBuildsTab.value === 'team')
 const isFavoriteBuildsActive = computed(() => currentBuildsTab.value === 'favoris')
@@ -427,16 +454,19 @@ watch(
     if (import.meta.client) checkLoggedIn()
     closeBuildsMenu()
     closeStatisticsMenu()
+    closeLearnMenu()
   }
 )
 
 const openBuildsMenu = () => {
   closeStatisticsMenu()
+  closeLearnMenu()
   isBuildsMenuOpen.value = true
 }
 
 const openStatisticsMenu = () => {
   closeBuildsMenu()
+  closeLearnMenu()
   isStatisticsMenuOpen.value = true
 }
 
@@ -446,6 +476,16 @@ const closeBuildsMenu = () => {
 
 const closeStatisticsMenu = () => {
   isStatisticsMenuOpen.value = false
+}
+
+const openLearnMenu = () => {
+  closeBuildsMenu()
+  closeStatisticsMenu()
+  isLearnMenuOpen.value = true
+}
+
+const closeLearnMenu = () => {
+  isLearnMenuOpen.value = false
 }
 </script>
 

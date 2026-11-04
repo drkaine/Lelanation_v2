@@ -163,8 +163,8 @@ export function useAppMobileTabBar() {
       {
         id: 'videos',
         path: localePath('/videos'),
-        labelKey: 'nav.videos',
-        icon: 'mdi:play-circle-outline',
+        labelKey: 'nav.learn',
+        icon: 'mdi:school-outline',
         hasSubmenu: true,
       },
       {

@@ -30,7 +30,8 @@
     "mobileMenu": "Menu",
     "settings": "Paramètres",
     "companionApp": "Obtenir l'app in-game",
-    "team": "Équipe"
+    "team": "Équipe",
+    "learn": "Apprendre"
   },
   "mobileTabBar": {
     "ariaLabel": "Navigation principale",

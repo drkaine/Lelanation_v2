@@ -30,7 +30,8 @@
     "mobileMenu": "Menu",
     "settings": "Settings",
     "companionApp": "Get the in-game app",
-    "team": "Team"
+    "team": "Team",
+    "learn": "Learn"
   },
   "mobileTabBar": {
     "ariaLabel": "Main navigation",
