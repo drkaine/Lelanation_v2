@@ -1,5 +1,6 @@
 /**
- * Production build: bundles the API (src/index.ts) and the poller (src/main.ts) into dist/app/.
+ * Production build: bundles the API (src/index.ts), the poller (src/main.ts) and the theorycraft
+ * worker (src/scripts/buildTheorycraftData.ts) into dist/app/.
  * - npm dependencies stay external (resolved from node_modules at runtime);
  * - workspace packages (@lelanation/*) are bundled, since they ship TypeScript sources;
  * - dist/app/ sits two levels under backend/ like src/<dir>/, so `__dirname`-relative paths still resolve.
@@ -26,6 +27,8 @@ await build({
   entryPoints: {
     index: join(backendRoot, 'src', 'index.ts'),
     main: join(backendRoot, 'src', 'main.ts'),
+    // Child process of the Data Dragon sync (cron/dataDragonSyncRecovery.ts): >1 GB peak, own heap.
+    buildTheorycraftData: join(backendRoot, 'src', 'scripts', 'buildTheorycraftData.ts'),
   },
   outdir,
   bundle: true,

@@ -6,7 +6,7 @@
     "communityBuilds": "Builds de la communauté",
     "createBuild": "Créer un Build",
     "videos": "Vidéos",
-    "championGuides": "Champions",
+    "championGuides": "Guides",
     "map": "Map",
     "statistics": "Statistiques",
     "statisticsGeneral": "Général",
@@ -2127,7 +2127,10 @@
     "itemsColumn": "Objet",
     "tierPresentation": "Présentation",
     "tierPresentation_grid": "Grille",
-    "tierPresentation_table": "Détaillée"
+    "tierPresentation_table": "Détaillée",
+    "championMatchupGuides": "Guide matchups",
+    "championMatchupGuidesBy": "par {who}",
+    "championMatchupGuidesEmpty": "Aucun guide matchup pour {champion} pour l’instant."
   },
   "stats": {
     "title": "Statistiques",
@@ -3825,6 +3828,10 @@
     "back": "Tous les champions",
     "heading": "Guides vidéo – {champion}",
     "stats": "Voir les statistiques",
-    "notFound": "Champion introuvable."
+    "notFound": "Champion introuvable.",
+    "close": "Fermer",
+    "tabVideos": "Guides vidéo",
+    "tabMatchups": "Guides matchup",
+    "matchupCount": "{count} guide(s) matchup"
   }
 }

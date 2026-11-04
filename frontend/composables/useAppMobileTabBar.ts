@@ -8,6 +8,7 @@ import { useMatchupGuideStore } from '~/stores/MatchupGuideStore'
 import { useMatchupGuideFavoritesStore } from '~/stores/MatchupGuideFavoritesStore'
 import { filterStandaloneLibraryBuilds } from '~/utils/buildLibrary'
 import { useStatisticsUiStore } from '~/stores/StatisticsUiStore'
+import { VIDEOS_SUBMENU_ITEMS, videosSubmenuActiveId } from '~/utils/videosMobileSubmenu'
 
 export type AppMobileTabId = 'builds' | 'guides' | 'statistics' | 'videos' | 'patchNotes'
 
@@ -164,6 +165,7 @@ export function useAppMobileTabBar() {
         path: localePath('/videos'),
         labelKey: 'nav.videos',
         icon: 'mdi:play-circle-outline',
+        hasSubmenu: true,
       },
       {
         id: 'patchNotes',
@@ -273,10 +275,15 @@ export function useAppMobileTabBar() {
     return items
   })
 
+  const videosSubmenuItems = computed((): AppMobileTabSubmenuItem[] =>
+    VIDEOS_SUBMENU_ITEMS.map(item => ({ ...item, path: localePath(item.path) }))
+  )
+
   const activeSubmenuItems = computed(() => {
     if (openSubmenuTabId.value === 'builds') return buildsSubmenuItems.value
     if (openSubmenuTabId.value === 'guides') return guidesSubmenuItems.value
     if (openSubmenuTabId.value === 'statistics') return statisticsSubmenuItems.value
+    if (openSubmenuTabId.value === 'videos') return videosSubmenuItems.value
     return []
   })
 
@@ -290,7 +297,7 @@ export function useAppMobileTabBar() {
       case 'statistics':
         return path.includes('/statistics')
       case 'videos':
-        return path.includes('/videos')
+        return videosSubmenuActiveId(path) !== null
       case 'patchNotes':
         return path.includes('/patch-notes')
       default:
@@ -352,11 +359,14 @@ export function useAppMobileTabBar() {
       }
     }
 
+    if (parentTabId === 'videos') return videosSubmenuActiveId(route.path) === itemId
+
     return false
   }
 
   function toggleSubmenu(tabId: AppMobileTabId) {
-    if (tabId !== 'builds' && tabId !== 'guides' && tabId !== 'statistics') return
+    if (tabId !== 'builds' && tabId !== 'guides' && tabId !== 'statistics' && tabId !== 'videos')
+      return
     openSubmenuTabId.value = openSubmenuTabId.value === tabId ? null : tabId
   }
 

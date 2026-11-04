@@ -32,3 +32,16 @@ export type {
   MatchupBuildVariantPick,
   MatchupPowerSpike,
 } from './matchupGuide'
+export type {
+  SheetMatchupGuide,
+  SheetMatchupGuideRole,
+  SheetMatchupGuidesByChampion,
+} from './matchupGuidesSheet.js'
+export {
+  allMatchupGuideUrls,
+  MATCHUP_GUIDES_SHEET_TABS,
+  matchupGuidesSheetUrl,
+  mergeMatchupGuideTabs,
+  parseMatchupGuidesSheet,
+  withoutDeadMatchupGuides,
+} from './matchupGuidesSheet.js'

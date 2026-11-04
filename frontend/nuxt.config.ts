@@ -3,7 +3,7 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { DEFAULT_SITE_URL } from './utils/siteUrl'
-import { ICON_API_ENDPOINT, apiProxyRouteRules } from './utils/apiRouteRules'
+import { ICON_API_ENDPOINT, apiDevProxy, apiProxyRouteRules } from './utils/apiRouteRules'
 import { createSharedStatsChunk, statsPageChunk } from './utils/statsChunks'
 import { isIgnorableRollupWarning } from './utils/rollupWarnings'
 
@@ -264,12 +264,7 @@ export default defineNuxtConfig({
       // Sitemap uniquement — collectPrerenderRoutes() (~644 routes) ne produisait que 2 fichiers.
       routes: [],
     },
-    devProxy: {
-      '/api': {
-        target: defaultApiBase,
-        changeOrigin: true,
-      },
-    },
+    devProxy: apiDevProxy(defaultApiBase),
     // Also proxy in production (when running `.output/server/index.mjs`)
     routeRules: {
       // Immutable build assets (hashed filenames).

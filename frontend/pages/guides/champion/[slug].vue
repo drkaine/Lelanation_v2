@@ -2,7 +2,7 @@
   <div class="champion-guide-videos min-h-screen px-4 pb-8 pt-4 text-text max-lg:px-3">
     <header class="mb-4 flex flex-wrap items-center gap-3">
       <NuxtLink
-        :to="localePath('/videos/champions')"
+        :to="localePath('/guides/champion')"
         class="rounded-lg border border-primary/30 px-3 py-1.5 text-sm transition-colors hover:bg-primary hover:text-white"
       >
         {{ t('championGuidesPage.back') }}

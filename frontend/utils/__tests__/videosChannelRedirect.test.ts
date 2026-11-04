@@ -7,14 +7,18 @@ describe('legacyVideosChannelRedirect', () => {
     expect(legacyVideosChannelRedirect('/en/videos/UCabc/')).toBe('/en/videos?channelId=UCabc')
   })
 
-  it('laisse passer les pages guides par champion', () => {
-    expect(legacyVideosChannelRedirect('/videos/champions')).toBeNull()
-    expect(legacyVideosChannelRedirect('/en/videos/champions/')).toBeNull()
-    expect(legacyVideosChannelRedirect('/videos/champions/ahri')).toBeNull()
+  it('redirige les anciennes pages guides par champion vers /guides/champion', () => {
+    expect(legacyVideosChannelRedirect('/videos/champions')).toBe('/guides/champion')
+    expect(legacyVideosChannelRedirect('/en/videos/champions/')).toBe('/en/guides/champion')
+    expect(legacyVideosChannelRedirect('/videos/champions/ahri')).toBe('/guides/champion/ahri')
+    expect(legacyVideosChannelRedirect('/en/videos/champions/Lee%20Sin')).toBe(
+      '/en/guides/champion/Lee%20Sin'
+    )
   })
 
   it('ignore le catalogue et les fichiers internes', () => {
     expect(legacyVideosChannelRedirect('/videos')).toBeNull()
     expect(legacyVideosChannelRedirect('/videos/_payload.json')).toBeNull()
+    expect(legacyVideosChannelRedirect('/guides/champion')).toBeNull()
   })
 })

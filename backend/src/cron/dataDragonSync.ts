@@ -1,4 +1,5 @@
 import cron from 'node-cron'
+import { promises as fs } from 'fs'
 import { join } from 'path'
 import { DataDragonService } from '../services/DataDragonService.js'
 import { VersionService } from '../services/VersionService.js'
@@ -10,7 +11,13 @@ import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
 import { createCronLogger } from '../utils/cronLogger.js'
 import { ensureActivePatchVersion, syncActivePatchesFromConfigAndCounts } from '../services/ActivePatchService.js'
 import { FileManager } from '../utils/fileManager.js'
-import { TheorycraftDataBuilderService } from '../services/TheorycraftDataBuilderService.js'
+import {
+  DATA_DRAGON_MAX_CATCH_UP_ATTEMPTS,
+  planDataDragonCatchUp,
+  runTheorycraftWorker,
+  type DataDragonCatchUpPlan,
+  type DataDragonPendingRun,
+} from './dataDragonSyncRecovery.js'
 import { scrapePatchNotesIfNeeded } from '../services/PatchNotesScraperService.js'
 import { refreshApiRiotFixturesOnPatchChange } from '../services/ApiRiotFixturesService.js'
 import {
@@ -20,17 +27,253 @@ import {
 import { syncChampionRegions } from '../services/ChampionRegionSyncService.js'
 import { runCommunityDragonSyncOnce } from './communityDragonSync.js'
 import { watchWikiGlobalRules } from '../services/WikiGlobalRulesWatchService.js'
+import { runMatchupGuideLinkCheck } from '../services/MatchupGuideLinkCheckService.js'
+
+
+type CronLog = ReturnType<typeof createCronLogger>
+type CopyAssetsStats = {
+  dataCopied: number
+  imagesCopied: number
+  imagesSkipped: number
+  patchNotesMoved: number
+  theorycraftCacheDeleted: boolean
+}
+
+let syncRunning = false
+
+function pendingRunPath(): string {
+  return join(process.cwd(), 'data', 'cron', 'dataDragonSync-pending.json')
+}
+
+async function readPendingRun(): Promise<DataDragonPendingRun | null> {
+  const res = await FileManager.readJson<DataDragonPendingRun>(pendingRunPath())
+  if (res.isErr()) return null
+  const v = res.unwrap()
+  return v && typeof v.version === 'string' ? v : null
+}
+
+async function writePendingRun(run: DataDragonPendingRun): Promise<void> {
+  await FileManager.writeJson(pendingRunPath(), run)
+}
+
+async function clearPendingRun(): Promise<void> {
+  await fs.rm(pendingRunPath(), { force: true })
+}
+
+async function readFrontendPublishState(): Promise<{ gameVersion: string | null; patchVersions: string[] }> {
+  const publicDir = join(process.cwd(), '..', 'frontend', 'public', 'data')
+  const patchDir = process.env.PATCH_FRONTEND_DIR?.trim() || join(publicDir, 'patch-notes')
+  const game = await FileManager.readJson<{ currentVersion?: string }>(join(publicDir, 'game', 'version.json'))
+  const index = await FileManager.readJson<{ patches?: Array<{ version?: string }> }>(join(patchDir, 'index.json'))
+  return {
+    gameVersion: game.isOk() ? String(game.unwrap().currentVersion ?? '').trim() || null : null,
+    patchVersions: index.isOk()
+      ? (index.unwrap().patches ?? []).map((p) => String(p.version ?? '')).filter(Boolean)
+      : [],
+  }
+}
+
+/**
+ * Steps 3-6 of a new-version sync: patch notes, theorycraft (child process), wiki watch, copy to frontend.
+ * Clears the pending marker only when assets reached the frontend.
+ */
+async function runPublishSteps(
+  version: string,
+  patch: string,
+  log: CronLog,
+  discordService: DiscordService,
+  staticAssets: StaticAssetsService
+): Promise<{ assetsStats: CopyAssetsStats | null; theorycraftChampions: number | undefined }> {
+  // Step 3: Scrape patch notes for new version (non-blocking, keeps previous patches)
+  await log.step('Step 3/7: Scraping patch notes', { version: version })
+  const patchScrapeResult = await scrapePatchNotesIfNeeded(version, 'dataDragonSync')
+  if (!patchScrapeResult.ok) {
+    await log.warn('Patch notes scrape failed (non-blocking):', patchScrapeResult.error)
+  } else if (patchScrapeResult.scraped) {
+    await log.info('Patch notes scraped', { patchVersion: patchScrapeResult.patchVersion })
+  } else {
+    await log.info('Patch notes scrape skipped', { reason: patchScrapeResult.reason })
+  }
+
+  // Step 4: Build theorycraft-ready static datasets
+  await log.step('Step 4/7: Building theorycraft datasets', { version: version })
+  const theorycraftBuild = await runTheorycraftWorker()
+  let theorycraftChampions: number | undefined
+  if (!theorycraftBuild.ok) {
+    await log.warn('Theorycraft dataset generation failed:', theorycraftBuild.error)
+  } else {
+    const tc = theorycraftBuild.result
+    theorycraftChampions = tc.champions
+    await log.info('Theorycraft datasets built', { champions: tc.champions })
+    if (tc.validationIssues > 0) {
+      await log.warn('Theorycraft data validation issues detected', { count: tc.validationIssues })
+    }
+  }
+
+  // Step 5: Watch wiki for global stats not present in Data Dragon
+  await log.step('Step 5/7: Wiki global rules watch', { version: version })
+  const wikiWatchResult = await watchWikiGlobalRules({
+    patch: patch || version,
+    triggeredBy: 'dataDragonSync',
+  })
+  if (!wikiWatchResult.ok) {
+    await log.warn('Wiki global rules watch failed (non-blocking):', wikiWatchResult.error)
+  } else if (wikiWatchResult.driftCount > 0 || wikiWatchResult.errorCount > 0) {
+    await log.warn('Wiki global rules drift detected', {
+      driftCount: wikiWatchResult.driftCount,
+      errorCount: wikiWatchResult.errorCount,
+      issues: wikiWatchResult.rules
+        .filter((rule) => rule.status !== 'ok')
+        .slice(0, 10),
+    })
+  } else {
+    await log.info('Wiki global rules match hardcoded constants', {
+      rulesChecked: wikiWatchResult.rules.length,
+    })
+  }
+
+  // Step 6: Copy static assets to frontend
+  await log.step('Step 6/7: Copying static assets to frontend', { version: version })
+
+  const copyResult = await staticAssets.copyAllAssetsToFrontend(
+    version,
+    ['fr_FR', 'en_US'],
+    true,
+    true,
+    patch
+  )
+
+  let assetsStats: CopyAssetsStats | null = null
+  if (copyResult.isOk()) {
+    assetsStats = copyResult.unwrap()
+    await log.info(
+      'Static assets copied:',
+      assetsStats.dataCopied,
+      'data files,',
+      assetsStats.imagesCopied,
+      'images,',
+      assetsStats.imagesSkipped,
+      'skipped,',
+      assetsStats.patchNotesMoved,
+      'patch files moved,',
+      'theorycraft-cache deleted:',
+      assetsStats.theorycraftCacheDeleted
+    )
+  } else {
+    const copyError = copyResult.unwrapErr()
+    await log.warn('Failed to copy static assets to frontend:', copyError)
+    await discordService.sendAlert(
+      '⚠️ Data Dragon Sync - Avertissement Étape 3/4',
+      'Synchronisation terminée mais échec de la copie des assets statiques',
+      copyError,
+      {
+        step: '3/4',
+        version: version,
+        timestamp: new Date().toISOString()
+      }
+    )
+  }
+
+  if (assetsStats) await clearPendingRun()
+  return { assetsStats, theorycraftChampions }
+}
+
+/**
+ * No new Data Dragon version: replay the publish steps if the previous run died before the frontend copy
+ * (pending marker) or the frontend lags behind (game data / patch notes index). Alerts Discord.
+ */
+async function runCatchUpIfNeeded(
+  currentVersion: string,
+  log: CronLog,
+  discordService: DiscordService,
+  staticAssets: StaticAssetsService
+): Promise<DataDragonCatchUpPlan> {
+  const pending = await readPendingRun()
+  const front = await readFrontendPublishState()
+  const plan = planDataDragonCatchUp({
+    pending,
+    currentVersion,
+    frontendGameVersion: front.gameVersion,
+    frontendPatchVersions: front.patchVersions,
+  })
+  if (plan.reasons.length === 0) {
+    if (pending) await clearPendingRun()
+    return plan
+  }
+
+  const attempts = (pending?.attempts ?? 0) + (plan.resume ? 1 : 0)
+  const context = {
+    version: currentVersion,
+    reasons: plan.reasons.join(', '),
+    attempts: `${attempts}/${DATA_DRAGON_MAX_CATCH_UP_ATTEMPTS}`,
+    previousStartAt: pending?.startedAt ?? 'n/a',
+    frontendGameVersion: front.gameVersion ?? 'absent',
+    timestamp: new Date().toISOString(),
+  }
+
+  if (plan.gaveUp) {
+    if (!pending?.gaveUpAlerted) {
+      await log.error('Data Dragon catch-up abandoned', context)
+      await discordService.sendAlert(
+        '❌ Data Dragon Sync - Rattrapage abandonné',
+        `Publication de v${currentVersion} vers le frontend toujours incomplète après ${DATA_DRAGON_MAX_CATCH_UP_ATTEMPTS} tentatives. Action manuelle : npm run build:theorycraft-data && npm run copy:assets (backend), puis make deploy-frontend.`,
+        new Error(plan.reasons.join(', ')),
+        context
+      )
+      await writePendingRun({ ...(pending as DataDragonPendingRun), gaveUpAlerted: true })
+    }
+    return plan
+  }
+
+  await log.warn('Data Dragon publish incomplete, catching up', context)
+  await discordService.sendAlert(
+    plan.interrupted
+      ? '⚠️ Data Dragon Sync - Exécution précédente interrompue'
+      : '⚠️ Data Dragon Sync - Frontend en retard',
+    plan.interrupted
+      ? `La sync de v${pending?.version} s'est arrêtée avant l'étape 7/7 (process tué ?). Reprise des étapes 3 à 6.`
+      : `Le frontend ne sert pas encore v${currentVersion}. Reprise des étapes 3 à 6.`,
+    new Error(plan.reasons.join(', ')),
+    context
+  )
+  await writePendingRun({
+    version: currentVersion,
+    startedAt: new Date().toISOString(),
+    attempts,
+  })
+  const patch = currentVersion.split('.').slice(0, 2).join('.')
+  const result = await runPublishSteps(currentVersion, patch, log, discordService, staticAssets)
+  await appendUnifiedLog({
+    section: 'back',
+    type: result.assetsStats ? 'fin' : 'erreur',
+    script: 'datadragon',
+    message: result.assetsStats
+      ? `Rattrapage Data Dragon terminé — v${currentVersion}`
+      : `Rattrapage Data Dragon échoué — v${currentVersion}`,
+    json: { ...context, assets: result.assetsStats },
+  })
+  return plan
+}
 
 /**
  * Run Data Dragon sync once (used by cron schedule and manual trigger).
  */
 export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: string } | { ok: false; error: string }> {
+  if (syncRunning) return { ok: true }
+  syncRunning = true
+  try {
+    return await runDataDragonSyncUnguarded()
+  } finally {
+    syncRunning = false
+  }
+}
+
+async function runDataDragonSyncUnguarded(): Promise<{ ok: true; version?: string } | { ok: false; error: string }> {
   const dataDragonService = new DataDragonService()
   const versionService = new VersionService()
   const discordService = new DiscordService()
   const cronStatus = new CronStatusService()
   const staticAssets = new StaticAssetsService()
-  const theorycraftBuilder = new TheorycraftDataBuilderService()
   const log = createCronLogger('dataDragonSync')
 
   const startTime = new Date()
@@ -84,6 +327,7 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
       await syncActivePatchesFromConfigAndCounts().catch(() => undefined)
 
       await log.info('No new version available. Current:', versionInfo.current)
+      await runCatchUpIfNeeded(versionInfo.current, log, discordService, staticAssets)
       await cronStatus.markSuccess('dataDragonSync')
       await appendUnifiedLog({
         section: 'back',
@@ -180,96 +424,9 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
       }
     }
 
-    // Step 3: Scrape patch notes for new version (non-blocking, keeps previous patches)
-    await log.step('Step 3/7: Scraping patch notes', { version: syncData.version })
-    const patchScrapeResult = await scrapePatchNotesIfNeeded(syncData.version, 'dataDragonSync')
-    if (!patchScrapeResult.ok) {
-      await log.warn('Patch notes scrape failed (non-blocking):', patchScrapeResult.error)
-    } else if (patchScrapeResult.scraped) {
-      await log.info('Patch notes scraped', { patchVersion: patchScrapeResult.patchVersion })
-    } else {
-      await log.info('Patch notes scrape skipped', { reason: patchScrapeResult.reason })
-    }
-
-    // Step 4: Build theorycraft-ready static datasets
-    await log.step('Step 4/7: Building theorycraft datasets', { version: syncData.version })
-    const theorycraftBuild = await theorycraftBuilder.build(syncData.version)
-    if (theorycraftBuild.isErr()) {
-      await log.warn('Theorycraft dataset generation failed:', theorycraftBuild.unwrapErr())
-    } else {
-      const tc = theorycraftBuild.unwrap()
-      await log.info('Theorycraft datasets built', { champions: tc.champions })
-      if (tc.validationIssues.length > 0) {
-        await log.warn('Theorycraft data validation issues detected', {
-          count: tc.validationIssues.length,
-          issues: tc.validationIssues.slice(0, 50),
-        })
-      }
-    }
-
-    // Step 5: Watch wiki for global stats not present in Data Dragon
-    await log.step('Step 5/7: Wiki global rules watch', { version: syncData.version })
-    const wikiWatchResult = await watchWikiGlobalRules({
-      patch: patch || syncData.version,
-      triggeredBy: 'dataDragonSync',
-    })
-    if (!wikiWatchResult.ok) {
-      await log.warn('Wiki global rules watch failed (non-blocking):', wikiWatchResult.error)
-    } else if (wikiWatchResult.driftCount > 0 || wikiWatchResult.errorCount > 0) {
-      await log.warn('Wiki global rules drift detected', {
-        driftCount: wikiWatchResult.driftCount,
-        errorCount: wikiWatchResult.errorCount,
-        issues: wikiWatchResult.rules
-          .filter((rule) => rule.status !== 'ok')
-          .slice(0, 10),
-      })
-    } else {
-      await log.info('Wiki global rules match hardcoded constants', {
-        rulesChecked: wikiWatchResult.rules.length,
-      })
-    }
-
-    // Step 6: Copy static assets to frontend
-    await log.step('Step 6/7: Copying static assets to frontend', { version: syncData.version })
-
-    const copyResult = await staticAssets.copyAllAssetsToFrontend(
-      syncData.version,
-      ['fr_FR', 'en_US'],
-      true,
-      true,
-      patch
-    )
-
-    let assetsStats = null
-    if (copyResult.isOk()) {
-      assetsStats = copyResult.unwrap()
-      await log.info(
-        'Static assets copied:',
-        assetsStats.dataCopied,
-        'data files,',
-        assetsStats.imagesCopied,
-        'images,',
-        assetsStats.imagesSkipped,
-        'skipped,',
-        assetsStats.patchNotesMoved,
-        'patch files moved,',
-        'theorycraft-cache deleted:',
-        assetsStats.theorycraftCacheDeleted
-      )
-    } else {
-      const copyError = copyResult.unwrapErr()
-      await log.warn('Failed to copy static assets to frontend:', copyError)
-      await discordService.sendAlert(
-        '⚠️ Data Dragon Sync - Avertissement Étape 3/4',
-        'Synchronisation terminée mais échec de la copie des assets statiques',
-        copyError,
-        {
-          step: '3/4',
-          version: syncData.version,
-          timestamp: new Date().toISOString()
-        }
-      )
-    }
+    await writePendingRun({ version: syncData.version, startedAt: startTime.toISOString(), attempts: 1 })
+    const publish = await runPublishSteps(syncData.version, patch, log, discordService, staticAssets)
+    const assetsStats = publish.assetsStats
 
     await cronStatus.markSuccess('dataDragonSync')
 
@@ -304,7 +461,7 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
       previousVersion: versionInfo.current,
       syncedAt: syncData.syncedAt.toISOString(),
       durationSeconds: duration,
-      theorycraftChampions: theorycraftBuild.isOk() ? theorycraftBuild.unwrap().champions : undefined,
+      theorycraftChampions: publish.theorycraftChampions,
       assetsDataFiles: assetsStats?.dataCopied,
       assetsImagesCopied: assetsStats?.imagesCopied,
       triggeredBy: 'dataDragonSync',
@@ -333,6 +490,26 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
         synced: communityDragonResult.synced,
         failed: communityDragonResult.failed,
       })
+    }
+
+    await log.step('Matchup guide links check (new patch)')
+    try {
+      const links = await runMatchupGuideLinkCheck(syncData.version)
+      await log.info('Matchup guide links checked', {
+        checked: links.checked,
+        dead: links.dead.length,
+        unknown: links.unknown.length,
+      })
+      if (links.dead.length > 0) {
+        await discordService.sendInfo(
+          '🔗 Guides matchups - liens morts retirés du site',
+          `${links.dead.length} lien(s) mort(s) sur ${links.checked}, retirés de /guides/champion. À supprimer aussi du Google Sheet :\n${links.dead.slice(0, 20).join('\n')}`,
+          { version: syncData.version }
+        )
+      }
+    } catch (linkError) {
+      const message = linkError instanceof Error ? linkError.message : String(linkError)
+      await log.warn('Matchup guide links check failed (non-blocking):', message)
     }
 
     return { ok: true, version: syncData.version }

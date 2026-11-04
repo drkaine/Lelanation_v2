@@ -208,10 +208,10 @@
             {{ t('nav.videos') }}
           </NuxtLink>
           <NuxtLink
-            :to="localePath('/videos/champions')"
+            :to="localePath('/guides/champion')"
             :title="t('championGuidesPage.title')"
             class="version"
-            :class="{ 'is-active': route.path.startsWith(localePath('/videos/champions')) }"
+            :class="{ 'is-active': route.path.startsWith(localePath('/guides/champion')) }"
           >
             {{ t('nav.championGuides') }}
           </NuxtLink>

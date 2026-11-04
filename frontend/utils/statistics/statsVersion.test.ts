@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { compareVersionsDesc, normalizeVersionToPrefix } from './statsVersion'
+import {
+  compareVersionsDesc,
+  normalizeVersionToPrefix,
+  pickStatsVersionFilter,
+} from './statsVersion'
 
 describe('compareVersionsDesc', () => {
   it('sorts_versions_newest_first_numerically', () => {
@@ -18,5 +22,34 @@ describe('normalizeVersionToPrefix', () => {
 
   it('returns_null_when_empty', () => {
     expect(normalizeVersionToPrefix('')).toBeNull()
+  })
+})
+
+describe('pickStatsVersionFilter', () => {
+  const versions = [
+    { version: '16.22', matchCount: 10 },
+    { version: '16.21', matchCount: 5 },
+    { version: '16.20', matchCount: 0 },
+  ]
+
+  it('keeps the current filter when it has matches', () => {
+    expect(pickStatsVersionFilter({ current: '16.21', queryVersion: '16.22', versions })).toBe(
+      '16.21'
+    )
+  })
+
+  it('uses ?version= from the URL when the filter is not applied yet (hydration race)', () => {
+    expect(pickStatsVersionFilter({ current: '', queryVersion: '16.21', versions })).toBe('16.21')
+  })
+
+  it('falls back to the newest patch with matches when URL version has no data', () => {
+    expect(pickStatsVersionFilter({ current: '', queryVersion: '16.20', versions })).toBe('16.22')
+    expect(pickStatsVersionFilter({ current: '15.1', queryVersion: '', versions })).toBe('16.22')
+  })
+
+  it('keeps the current value when no versions are known yet', () => {
+    expect(pickStatsVersionFilter({ current: '16.21', queryVersion: '', versions: [] })).toBe(
+      '16.21'
+    )
   })
 })

@@ -1,12 +1,5 @@
 <template>
   <div class="champion-guides min-h-screen px-4 pb-8 pt-4 text-text max-lg:px-3">
-    <header class="mb-4">
-      <h1 class="text-lg font-bold text-text-accent sm:text-xl">
-        {{ t('championGuidesPage.title') }}
-      </h1>
-      <p class="mt-1 text-sm text-text/65">{{ t('championGuidesPage.hint') }}</p>
-    </header>
-
     <div class="champion-selector">
       <div class="champion-toolbar mb-3">
         <label for="champion-guides-search" class="sr-only">{{ t('common.search') }}</label>
@@ -35,12 +28,14 @@
       </div>
 
       <div class="champions-list mt-2">
-        <NuxtLink
+        <button
           v-for="champion in champions"
           :key="champion.id"
-          :to="localePath(`/videos/champions/${champion.id.toLowerCase()}`)"
+          type="button"
+          :disabled="!isVisible(champion)"
           :title="champion.name"
           :class="['champ', isVisible(champion) ? '' : 'hide']"
+          @click="openChampion(champion)"
         >
           <img
             :src="getChampionImageUrl(version, champion.image.full)"
@@ -53,17 +48,35 @@
           <span v-if="counts[champion.name]" class="champ-count">
             {{ counts[champion.name] }}
           </span>
-        </NuxtLink>
+          <span
+            v-if="matchupCounts[champion.name]"
+            class="champ-matchup-count"
+            :aria-label="
+              t('championGuidesPage.matchupCount', { count: matchupCounts[champion.name] })
+            "
+          >
+            {{ matchupCounts[champion.name] }}
+          </span>
+        </button>
       </div>
 
       <p v-if="!champions.some(isVisible)" class="py-8 text-center text-sm text-text/70">
         {{ t('championGuidesPage.noMatch') }}
       </p>
     </div>
+
+    <ChampionGuidesModal
+      :champion="selectedChampion"
+      :version="version"
+      :video-count="selectedChampion ? (counts[selectedChampion.name] ?? 0) : 0"
+      :matchup-count="selectedChampion ? (matchupCounts[selectedChampion.name] ?? 0) : 0"
+      @close="closeChampion"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
+import ChampionGuidesModal from '~/components/Videos/ChampionGuidesModal.vue'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useYouTubeStore } from '~/stores/YouTubeStore'
@@ -75,11 +88,13 @@ import {
   championMatchesGuideFilter,
   type ChampionGuideRole,
 } from '~/utils/championGuideVideos'
+import { matchupGuideCounts, type MatchupGuidesByChampion } from '~/utils/matchupGuidesSheet'
 import { getChampionImageUrl } from '~/utils/imageUrl'
 import { riotLanguage } from '~/utils/riotLanguage'
 
 const { t, locale } = useI18n()
-const localePath = useLocalePath()
+const route = useRoute()
+const router = useRouter()
 const championsStore = useChampionsStore()
 const youtube = useYouTubeStore()
 const { version } = useGameVersion()
@@ -97,6 +112,29 @@ const videos = computed(() => Object.values(youtube.channelDataById).flatMap(d =
 const counts = computed(() => championGuideVideoCounts(videos.value, names.value))
 const rolesByName = computed(() => championGuideRoles(videos.value, names.value))
 
+const { data: matchupGuideData } = useLazyFetch<MatchupGuidesByChampion>('/matchup-guides.json', {
+  key: 'matchup-guides',
+  server: false,
+  default: () => ({}),
+})
+
+const matchupCounts = computed(() => matchupGuideCounts(matchupGuideData.value ?? {}, names.value))
+
+/** Champion ouvert dans la modale, gardé dans l'URL (?champion=ahri) pour partager le lien. */
+const selectedChampion = computed<Champion | null>(() => {
+  const slug = String(route.query.champion ?? '').toLowerCase()
+  return slug ? (champions.value.find(c => c.id.toLowerCase() === slug) ?? null) : null
+})
+
+function openChampion(champion: Champion): void {
+  router.replace({ query: { ...route.query, champion: champion.id.toLowerCase() } })
+}
+
+function closeChampion(): void {
+  const { champion: _closed, ...query } = route.query
+  router.replace({ query })
+}
+
 function toggleRole(role: ChampionGuideRole): void {
   const i = selectedRoles.value.indexOf(role)
   if (i > -1) selectedRoles.value.splice(i, 1)
@@ -105,7 +143,7 @@ function toggleRole(role: ChampionGuideRole): void {
 
 /** Sans filtre, un champion sans guide est grisé ; avec filtre, ceux hors filtre le sont. */
 function isVisible(champion: Champion): boolean {
-  if (!counts.value[champion.name]) return false
+  if (!counts.value[champion.name] && !matchupCounts.value[champion.name]) return false
   return championMatchesGuideFilter(
     { name: champion.name, roles: rolesByName.value[champion.name] ?? [] },
     searchQuery.value,
@@ -194,7 +232,28 @@ useHead({
   pointer-events: none;
 }
 
-.champ.hide .champ-count {
+.champ-matchup-count {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  min-width: 1rem;
+  border-radius: 9999px;
+  background: #dc2626;
+  padding: 0 0.25rem;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1rem;
+  text-align: center;
+  color: #fff;
+  pointer-events: none;
+}
+
+.champ.hide {
+  cursor: default;
+}
+
+.champ.hide .champ-count,
+.champ.hide .champ-matchup-count {
   display: none;
 }
 

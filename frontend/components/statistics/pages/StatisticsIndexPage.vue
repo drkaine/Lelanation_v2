@@ -947,7 +947,11 @@ import {
   objectiveKeysOrdered,
   objectiveHasKillDropdown,
 } from '~/utils/statistics/statisticsObjectives'
-import { compareVersionsDesc, normalizeVersionToPrefix } from '~/utils/statistics/statsVersion'
+import {
+  compareVersionsDesc,
+  normalizeVersionToPrefix,
+  pickStatsVersionFilter,
+} from '~/utils/statistics/statsVersion'
 import { comparePatchMajorMinor } from '~/utils/patchVersion'
 import { apiUrl } from '~/utils/apiUrl'
 import { getRankedEmblemUrl } from '~/utils/rankedEmblem'
@@ -1354,7 +1358,10 @@ const overviewData = ref<OverviewData | null>(null)
 const overviewPending = ref(true)
 /** Selected version filter for overview (null = all versions). */
 /** Filtres communs à tous les onglets (version, division, rôle). */
-const statsVersionFilter = ref('')
+// Lu dès le setup : le bootstrap (versions) peut finir avant onMounted et forcer le dernier patch.
+const statsVersionFilter = ref(
+  queryFirst(route.query.version as string | string[] | null | undefined)
+)
 const statsDivisionFilter = ref<string[]>([])
 const statsRoleFilter = ref('')
 const statsOtpFilter = ref<'oui' | 'non' | 'solo'>('non')
@@ -2232,26 +2239,20 @@ if (import.meta.client) {
 function ensureStatsVersionFilterHasData(): boolean {
   const versions = statsVersionOptions.value
   if (!versions.length) return false
-  const current = statsVersionFilter.value.trim()
-  if (current && versions.some(v => v.version === current && Number(v.matchCount ?? 0) > 0)) {
-    return false
-  }
-  const withData = versions.find(v => Number(v.matchCount ?? 0) > 0)
-  statsVersionFilter.value = withData?.version ?? versions[0]?.version ?? ''
+  const next = pickStatsVersionFilter({
+    current: statsVersionFilter.value,
+    queryVersion: queryFirst(route.query.version as string | string[] | null | undefined),
+    versions,
+  })
+  if (next === statsVersionFilter.value) return false
+  statsVersionFilter.value = next
   return true
 }
 
 function applyDefaultVersionFiltersFromKnownVersions(): boolean {
   const versions = statsVersionOptions.value
   if (!versions.length) return false
-  let changed = false
-  if (!statsVersionFilter.value) {
-    const withData = versions.find(v => Number(v.matchCount ?? 0) > 0)
-    statsVersionFilter.value = withData?.version ?? versions[0]?.version ?? ''
-    changed = true
-  } else {
-    changed = ensureStatsVersionFilterHasData() || changed
-  }
+  const changed = ensureStatsVersionFilterHasData()
   const progChanged = syncProgressionDeltaToVersionBeforeFilter()
   return changed || progChanged
 }

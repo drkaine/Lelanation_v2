@@ -12,3 +12,10 @@ export function apiProxyRouteRules(apiBase: string) {
     },
   }
 }
+
+/** Proxy de `nuxt dev` : il retire le préfixe monté (/api), la cible doit le remettre. */
+export function apiDevProxy(apiBase: string) {
+  return {
+    '/api': { target: apiBase + '/api', changeOrigin: true },
+  }
+}

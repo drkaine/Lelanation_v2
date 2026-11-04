@@ -17,3 +17,23 @@ export function normalizeVersionToPrefix(v: string | null | undefined): string |
   if (parts.length >= 2) return `${parts[0]}.${parts[1]}`
   return parts[0] || null
 }
+
+/**
+ * Patch du filtre version des stats : le filtre courant s’il a des matchs, sinon `?version=` de l’URL
+ * (le chargement des versions peut finir avant que la page applique la query), sinon le plus récent avec matchs.
+ */
+export function pickStatsVersionFilter(input: {
+  current: string
+  queryVersion: string
+  versions: ReadonlyArray<{ version: string; matchCount?: number | null }>
+}): string {
+  const { versions } = input
+  if (!versions.length) return input.current
+  const hasData = (v: string) =>
+    v !== '' && versions.some(o => o.version === v && Number(o.matchCount ?? 0) > 0)
+  const current = input.current.trim()
+  if (hasData(current)) return current
+  const fromQuery = input.queryVersion.trim()
+  if (hasData(fromQuery)) return fromQuery
+  return versions.find(v => Number(v.matchCount ?? 0) > 0)?.version ?? versions[0]?.version ?? ''
+}

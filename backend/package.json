@@ -16,6 +16,7 @@
     "build:theorycraft-data": "tsx src/scripts/buildTheorycraftData.ts",
     "watch:wiki-global-rules": "tsx src/scripts/watchWikiGlobalRules.ts",
     "copy:assets": "tsx src/scripts/copyStaticAssets.ts",
+    "check:matchup-guide-links": "tsx src/scripts/checkMatchupGuideLinks.ts",
     "generate:excluded-items": "tsx src/scripts/generateExcludedItems.ts",
     "generate:riot-field-registry": "tsx src/scripts/generateRiotApiFieldRegistry.ts",
     "typecheck": "tsc --noEmit",
