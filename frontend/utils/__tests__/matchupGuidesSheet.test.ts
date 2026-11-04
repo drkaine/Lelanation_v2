@@ -7,6 +7,8 @@ import {
   mergeMatchupGuideTabs,
   withoutDeadMatchupGuides,
   matchupGuideCounts,
+  matchupGuideRoles,
+  championRolesWithMatchupGuides,
   matchupGuidesForChampion,
   parseMatchupGuidesSheet,
 } from '../matchupGuidesSheet'
@@ -124,5 +126,34 @@ describe('onglets du sheet', () => {
   it('liste tous les liens uniques', () => {
     const g = (url: string) => ({ who: '', level: '', url, label: '', notes: '' })
     expect(allMatchupGuideUrls({ A: [g('a'), g('b')], B: [g('a')] })).toEqual(['a', 'b'])
+  })
+})
+
+describe('matchupGuideRoles', () => {
+  const g = (role?: 'top' | 'jungle' | 'mid' | 'adc' | 'support') => ({
+    who: '',
+    level: '',
+    url: `u-${role}`,
+    label: '',
+    notes: '',
+    ...(role ? { role } : {}),
+  })
+  it('donne les rôles (onglets du sheet) des guides de chaque champion, sans doublon', () => {
+    const data = { Aatrox: [g('top'), g('top')], "Kai'Sa": [g('adc'), g('mid')], Ahri: [g()] }
+    expect(matchupGuideRoles(data, ['Aatrox', 'Kai’Sa', 'Ahri', 'Annie'])).toEqual({
+      Aatrox: ['top'],
+      'Kai’Sa': ['mid', 'adc'],
+    })
+  })
+})
+
+describe('championRolesWithMatchupGuides', () => {
+  it('ajoute les rôles des guides matchups à ceux des vidéos, dans l’ordre des rôles', () => {
+    expect(
+      championRolesWithMatchupGuides(
+        { Aatrox: ['mid'], Ahri: ['mid'] },
+        { Aatrox: ['top'], Garen: ['top'] }
+      )
+    ).toEqual({ Aatrox: ['top', 'mid'], Ahri: ['mid'], Garen: ['top'] })
   })
 })

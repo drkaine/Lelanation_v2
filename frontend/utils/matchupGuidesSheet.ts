@@ -3,6 +3,7 @@
  * dans @lelanation/shared-types.
  */
 import type { SheetMatchupGuide, SheetMatchupGuidesByChampion } from '@lelanation/shared-types'
+import { CHAMPION_GUIDE_ROLES, type ChampionGuideRole } from './championGuideVideos'
 
 export {
   allMatchupGuideUrls,
@@ -43,6 +44,33 @@ export function matchupGuideCounts(
   for (const name of championNames) {
     const count = matchupGuidesForChampion(data, name).length
     if (count > 0) out[name] = count
+  }
+  return out
+}
+
+/** Rôles (onglet du sheet) des guides matchups de chaque champion du jeu, dans l'ordre des rôles. */
+export function matchupGuideRoles(
+  data: MatchupGuidesByChampion,
+  championNames: string[]
+): Record<string, ChampionGuideRole[]> {
+  const out: Record<string, ChampionGuideRole[]> = {}
+  for (const name of championNames) {
+    const roles = new Set(matchupGuidesForChampion(data, name).map(g => g.role))
+    const ordered = CHAMPION_GUIDE_ROLES.filter(r => roles.has(r))
+    if (ordered.length > 0) out[name] = ordered
+  }
+  return out
+}
+
+/** Rôles vidéos + rôles des guides matchups : le filtre par rôle couvre les deux sources. */
+export function championRolesWithMatchupGuides(
+  videoRoles: Record<string, readonly ChampionGuideRole[]>,
+  matchupRoles: Record<string, readonly ChampionGuideRole[]>
+): Record<string, ChampionGuideRole[]> {
+  const out: Record<string, ChampionGuideRole[]> = {}
+  for (const name of new Set([...Object.keys(videoRoles), ...Object.keys(matchupRoles)])) {
+    const roles = new Set([...(videoRoles[name] ?? []), ...(matchupRoles[name] ?? [])])
+    out[name] = CHAMPION_GUIDE_ROLES.filter(r => roles.has(r))
   }
   return out
 }

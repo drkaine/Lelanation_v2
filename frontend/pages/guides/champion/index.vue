@@ -88,7 +88,12 @@ import {
   championMatchesGuideFilter,
   type ChampionGuideRole,
 } from '~/utils/championGuideVideos'
-import { matchupGuideCounts, type MatchupGuidesByChampion } from '~/utils/matchupGuidesSheet'
+import {
+  championRolesWithMatchupGuides,
+  matchupGuideCounts,
+  matchupGuideRoles,
+  type MatchupGuidesByChampion,
+} from '~/utils/matchupGuidesSheet'
 import { getChampionImageUrl } from '~/utils/imageUrl'
 import { riotLanguage } from '~/utils/riotLanguage'
 
@@ -119,6 +124,13 @@ const { data: matchupGuideData } = useLazyFetch<MatchupGuidesByChampion>('/match
 })
 
 const matchupCounts = computed(() => matchupGuideCounts(matchupGuideData.value ?? {}, names.value))
+/** Filtre par rôle : rôles des vidéos + onglet du sheet des guides matchups. */
+const filterRolesByName = computed(() =>
+  championRolesWithMatchupGuides(
+    rolesByName.value,
+    matchupGuideRoles(matchupGuideData.value ?? {}, names.value)
+  )
+)
 
 /** Champion ouvert dans la modale, gardé dans l'URL (?champion=ahri) pour partager le lien. */
 const selectedChampion = computed<Champion | null>(() => {
@@ -145,7 +157,7 @@ function toggleRole(role: ChampionGuideRole): void {
 function isVisible(champion: Champion): boolean {
   if (!counts.value[champion.name] && !matchupCounts.value[champion.name]) return false
   return championMatchesGuideFilter(
-    { name: champion.name, roles: rolesByName.value[champion.name] ?? [] },
+    { name: champion.name, roles: filterRolesByName.value[champion.name] ?? [] },
     searchQuery.value,
     selectedRoles.value
   )
