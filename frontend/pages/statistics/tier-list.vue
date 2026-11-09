@@ -1,5 +1,10 @@
 <template>
   <div class="statistics flex min-h-screen min-w-0 flex-col overflow-x-hidden text-text">
+    <StatisticsSectionsHeader
+      :groups="STATISTICS_NAV_GROUPS"
+      current-group-id="tierList"
+      link-tabs
+    />
     <div
       class="statistics-tabs-bar flex w-full min-w-0 flex-shrink-0 items-start gap-2 overflow-x-hidden px-4 pb-2 pt-4"
     >
@@ -17,10 +22,17 @@
           </button>
           <button
             type="button"
-            :class="['statistics-tab-btn', tierListViewModel === 'chart' ? 'is-active' : '']"
+            :class="['statistics-tab-btn', activeTierListTab === 'chart' ? 'is-active' : '']"
             @click="setTierListMainView('chart')"
           >
             {{ t('statisticsPage.tierListViewChart') }}
+          </button>
+          <button
+            type="button"
+            :class="['statistics-tab-btn', activeTierListTab === 'meta' ? 'is-active' : '']"
+            @click="setTierListMainView('meta')"
+          >
+            {{ t('statisticsPage.tierListViewMeta') }}
           </button>
           <button
             type="button"
@@ -44,12 +56,6 @@
           </button>
         </div>
       </div>
-      <h2
-        v-if="tierListViewModel === 'chart'"
-        class="mt-0.5 min-w-0 max-w-[42%] shrink-0 truncate text-right text-[11px] font-bold uppercase tracking-tight text-text-accent sm:max-w-[min(100%,36rem)] sm:text-xs md:max-w-none md:text-sm"
-      >
-        {{ tierListChartHeading }}
-      </h2>
     </div>
 
     <StatisticsFiltersPanel
@@ -315,6 +321,14 @@ import { ref, computed, watch, onMounted, provide, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { statsFetch } from '~/utils/statsFetch'
+import StatisticsSectionsHeader from '~/components/statistics/StatisticsSectionsHeader.vue'
+import { STATISTICS_NAV_GROUPS } from '~/utils/statistics/statisticsNavGroups'
+import {
+  tierListTabOf,
+  tierListTabState,
+  tierListViewFromQuery,
+  type TierListTab,
+} from '~/utils/statistics/tierListTabs'
 import StatisticsTierListTab from '~/components/statistics/tabs/StatisticsTierListTab.vue'
 import { RANK_TIERS } from '~/utils/rankTiers'
 import { getRankedEmblemUrl } from '~/utils/rankedEmblem'
@@ -602,7 +616,6 @@ const tierList = useStatisticsTierListPage({
 const {
   tierListViewModel,
   setTierListViewModel,
-  tierListChartHeading,
   TIER_DIVERGING_LEGEND,
   toggleTierListChartTier,
   tierListChartTierEnabled,
@@ -742,7 +755,13 @@ async function loadActiveBotlanePanel(): Promise<void> {
   }
 }
 
-function setTierListMainView(view: 'table' | 'chart' | 'botlaneMatchups' | 'botlaneDuoRank') {
+const activeTierListTab = computed(() =>
+  tierListTabOf(tierList.tierListViewModel.value, tierList.tierListChartType.value)
+)
+
+function setTierListMainView(tab: TierListTab) {
+  const { view, chartType } = tierListTabState(tab)
+  if (chartType) tierList.tierListChartType.value = chartType
   setTierListViewModel(view)
   if (isBotlaneTierListView(view)) {
     loadActiveBotlanePanel().catch(() => undefined)
@@ -804,8 +823,10 @@ function applyTierListStateFromQuery(): void {
     tierList.tierListViewModel.value = 'botlaneDuoRank'
   } else if (viewRaw === 'botlane') {
     tierList.tierListViewModel.value = 'botlaneDuoRank'
-  } else if (viewRaw === 'chart') {
-    tierList.tierListViewModel.value = 'chart'
+  } else if (tierListViewFromQuery(viewRaw)) {
+    const { view, chartType } = tierListTabState(tierListViewFromQuery(viewRaw)!)
+    tierList.tierListViewModel.value = view
+    if (chartType) tierList.tierListChartType.value = chartType
   } else if (viewRaw === 'table') {
     tierList.tierListViewModel.value = 'table'
   }
@@ -841,7 +862,7 @@ function syncTierListStateToQuery(): void {
   else delete nextQuery.sort
 
   if (tierList.tierListViewModel.value === 'chart') {
-    nextQuery.view = 'chart'
+    nextQuery.view = tierList.tierListChartType.value === 'bubble' ? 'meta' : 'chart'
     delete nextQuery.botlaneMode
   } else if (tierList.tierListViewModel.value === 'botlaneMatchups') {
     nextQuery.view = 'botlane-matchups'
@@ -888,6 +909,7 @@ watch(
     () => tierList.tierListSortColumn.value,
     () => tierList.tierListSortDir.value,
     () => tierList.tierListViewModel.value,
+    () => tierList.tierListChartType.value,
   ],
   () => {
     syncTierListStateToQuery()

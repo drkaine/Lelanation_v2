@@ -15,11 +15,9 @@ import { useStatisticsTierListBubbleViewport } from '~/composables/statistics/us
 
 const props = withDefaults(
   defineProps<{
-    hideZoomHint?: boolean
     highlightId?: number | null
   }>(),
   {
-    hideZoomHint: false,
     highlightId: null,
   }
 )
@@ -65,6 +63,13 @@ const referenceRows = computed(() => {
     | undefined
   return rows ?? []
 })
+
+function tierColorOf(tier: string): string {
+  return typeof p.tierListChartBarColor === 'function' ? p.tierListChartBarColor(tier) : '#60a5fa'
+}
+function tierLabel(tier: string): string {
+  return tier === 'D' || tier === 'F' ? 'F' : tier
+}
 
 const viewportResetKey = computed(
   () =>
@@ -155,9 +160,6 @@ defineExpose({
 <template>
   <div class="tier-list-bubble-wrap w-full">
     <div class="mb-2 flex items-center gap-2 overflow-x-auto px-1" data-bubble-chart-toolbar>
-      <p v-if="!props.hideZoomHint" class="min-w-0 shrink text-[11px] text-text/60">
-        {{ t('statisticsPage.tierListBubbleZoomHint') }}
-      </p>
       <slot name="toolbar-leading" />
       <div class="ml-auto flex shrink-0 items-center gap-1.5">
         <span class="text-[11px] tabular-nums text-text/65">{{ zoomPercent }}%</span>
@@ -187,7 +189,6 @@ defineExpose({
         >
           {{ t('statisticsPage.tierListBubbleResetView') }}
         </button>
-        <slot name="toolbar-actions" />
       </div>
     </div>
 
@@ -431,11 +432,20 @@ defineExpose({
       </p>
     </div>
 
+    <div
+      v-if="$slots['toolbar-actions']"
+      class="mt-2 flex items-center justify-end gap-1.5 px-1"
+      data-bubble-chart-actions
+    >
+      <slot name="toolbar-actions" />
+    </div>
+
     <Teleport to="body">
       <div
         v-if="tooltip && tooltipPoint"
-        class="pointer-events-none fixed z-[300] w-max max-w-[17rem] rounded border border-accent/45 bg-panel p-2 text-left text-xs text-accent-light shadow-xl"
+        class="pointer-events-none fixed z-[300] w-max max-w-[17rem] rounded border border-l-4 border-accent/45 bg-panel p-2 text-left text-xs text-accent-light shadow-xl"
         :style="{
+          borderLeftColor: tierColorOf(tooltipPoint.tier),
           left: tooltip.x + 'px',
           top: tooltip.y + 'px',
           transform: 'translate(-50%, calc(-100% - 12px))',
@@ -449,11 +459,28 @@ defineExpose({
             class="h-8 w-8 shrink-0 rounded object-cover"
           />
           <div class="min-w-0">
-            <div class="truncate font-semibold text-accent-light">
-              {{ championName(tooltipPoint.championId) }}
+            <div class="flex items-center gap-1.5">
+              <span class="truncate font-semibold text-accent-light">
+                {{ championName(tooltipPoint.championId) }}
+              </span>
+              <span
+                class="rounded px-1 text-[10px] font-bold leading-4 text-background"
+                :style="{ backgroundColor: tierColorOf(tooltipPoint.tier) }"
+                >{{ tierLabel(tooltipPoint.tier) }}</span
+              >
             </div>
             <div class="text-[11px] text-accent-light/80">
-              {{ t('statisticsPage.winrate') }}: {{ formatPct(tooltipPoint.winPct) }}
+              {{ t('statisticsPage.winrate') }}:
+              <span
+                :class="
+                  tooltipPoint.winPct >= 52
+                    ? 'text-[#4ade80]'
+                    : tooltipPoint.winPct <= 48
+                      ? 'text-[#f87171]'
+                      : ''
+                "
+                >{{ formatPct(tooltipPoint.winPct) }}</span
+              >
             </div>
             <div class="text-[11px] text-accent-light/80">
               {{ t('statisticsPage.pickrate') }}: {{ formatPct(tooltipPoint.pickPct) }}

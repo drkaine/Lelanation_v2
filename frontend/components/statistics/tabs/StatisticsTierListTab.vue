@@ -7,7 +7,7 @@ import {
   type StatisticsTierListPageCtx,
 } from '~/composables/statistics/statisticsPageCtx'
 import StatisticsTierListMobileChart from '~/components/statistics/StatisticsTierListMobileChart.vue'
-import StatisticsTierListBubbleChart from '~/components/statistics/StatisticsTierListBubbleChart.vue'
+import StatisticsMetaChartTab from '~/components/statistics/tabs/StatisticsMetaChartTab.vue'
 import StatisticsTierGrid from '~/components/statistics/StatisticsTierGrid.vue'
 import NotificationToast from '~/components/NotificationToast.vue'
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
@@ -665,45 +665,6 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
           data-tier-list-chart-export-root
           class="tier-list-chart-export-root space-y-2"
         >
-          <div
-            class="statistics-overview-surface rounded-xl border border-primary/30 px-3 py-2.5 shadow-inner"
-          >
-            <div class="text-sm font-bold uppercase tracking-tight text-text-accent">
-              {{ p.tierListChartHeading }}
-            </div>
-            <div
-              v-if="p.tierListChartType === 'bubble'"
-              class="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-text-accent/80"
-            >
-              {{ p.t('statisticsPage.tierListBubbleChartSubtitle') }}
-            </div>
-            <div class="mt-1 text-[11px] leading-snug text-text/75">
-              {{ p.tierListChartFilterSummary }}
-            </div>
-            <div class="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                :class="[
-                  'statistics-tab-btn text-xs',
-                  p.tierListChartType === 'bubble' ? 'is-active' : '',
-                ]"
-                @click="p.tierListChartType = 'bubble'"
-              >
-                {{ p.t('statisticsPage.tierListChartTypeBubble') }}
-              </button>
-              <button
-                type="button"
-                :class="[
-                  'statistics-tab-btn text-xs',
-                  p.tierListChartType === 'pbi' ? 'is-active' : '',
-                ]"
-                @click="p.tierListChartType = 'pbi'"
-              >
-                {{ p.t('statisticsPage.tierListChartTypePbi') }}
-              </button>
-            </div>
-          </div>
-
           <!-- Vue graphique mobile : barres PBI ou bulles WR/PR -->
           <div
             v-if="p.tierListChartType === 'pbi'"
@@ -714,15 +675,9 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
             </p>
             <StatisticsTierListMobileChart />
           </div>
-          <div v-else class="w-full lg:hidden">
-            <StatisticsTierListBubbleChart class="w-full" />
-          </div>
 
-          <!-- Vue graphique desktop : bulles WR vs PR -->
-          <StatisticsTierListBubbleChart
-            v-if="p.tierListChartType === 'bubble'"
-            class="hidden w-full lg:block"
-          />
+          <!-- Graphique méta : recherche, détail champion, quadrants (mobile + desktop) -->
+          <StatisticsMetaChartTab v-if="p.tierListChartType === 'bubble'" />
 
           <!-- Vue graphique desktop : barres divergentes (PBI) -->
           <div

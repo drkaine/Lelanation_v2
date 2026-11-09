@@ -55,6 +55,9 @@
           <span class="stg-wr" :class="`wr-${winrateTone(row.winrate)}`">
             {{ percent(row.winrate) }}
           </span>
+          <span class="stg-pr"
+            >{{ t('statisticsPage.tierGridPick') }} {{ percent(row.pickrate) }}</span
+          >
         </NuxtLink>
         <button
           v-if="shown(group).hidden > 0"
@@ -282,6 +285,13 @@ function percent(ratio: number): string {
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--color-gold-300);
+}
+
+.stg-pr {
+  color: var(--color-grey-200);
+  font-size: 0.65rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .stg-wr {

@@ -185,7 +185,7 @@ async function copyMetaChartImage() {
             {{ p.t('statisticsPage.metaHighlightMiss') }}
           </span>
         </form>
-        <div class="meta-chart-layout" :class="{ 'has-detail': selectedRow }">
+        <div class="meta-chart-layout">
           <StatisticsTierListBubbleChart
             ref="bubbleChartRef"
             class="w-full min-w-0"
@@ -242,47 +242,82 @@ async function copyMetaChartImage() {
               </button>
             </template>
           </StatisticsTierListBubbleChart>
-          <aside v-if="selectedRow" class="meta-detail" aria-live="polite">
-            <div class="flex items-center gap-3">
-              <img
-                v-if="p.tierListChartChampionImage(selectedRow.championId)"
-                :src="p.tierListChartChampionImage(selectedRow.championId) ?? undefined"
-                :alt="nameOf(selectedRow.championId)"
-                class="h-12 w-12 shrink-0 rounded-full object-cover"
-              />
-              <div class="min-w-0">
-                <p class="truncate text-lg font-bold text-text">
-                  {{ nameOf(selectedRow.championId) }}
-                </p>
-                <p
-                  class="text-xs font-semibold"
-                  :style="{ color: p.tierListChartBarColor(selectedRow.tier) }"
-                >
-                  {{ p.t('statisticsPage.metaDetailTier', { tier: selectedRow.tier }) }}
-                </p>
+          <div class="meta-side">
+            <aside v-if="selectedRow" class="meta-detail" aria-live="polite">
+              <div class="flex items-center gap-3">
+                <img
+                  v-if="p.tierListChartChampionImage(selectedRow.championId)"
+                  :src="p.tierListChartChampionImage(selectedRow.championId) ?? undefined"
+                  :alt="nameOf(selectedRow.championId)"
+                  class="h-12 w-12 shrink-0 rounded-full object-cover"
+                />
+                <div class="min-w-0">
+                  <p class="truncate text-lg font-bold text-text">
+                    {{ nameOf(selectedRow.championId) }}
+                  </p>
+                  <p
+                    class="text-xs font-semibold"
+                    :style="{ color: p.tierListChartBarColor(selectedRow.tier) }"
+                  >
+                    {{ p.t('statisticsPage.metaDetailTier', { tier: selectedRow.tier }) }}
+                  </p>
+                </div>
               </div>
+              <dl class="meta-detail-stats">
+                <div>
+                  <dt>{{ p.t('statisticsPage.metaDetailWinrate') }}</dt>
+                  <dd>{{ pct1(selectedRow.winrate) }} %</dd>
+                </div>
+                <div>
+                  <dt>{{ p.t('statisticsPage.metaDetailPickrate') }}</dt>
+                  <dd>{{ pct1(selectedRow.pickrate) }} %</dd>
+                </div>
+                <div>
+                  <dt>{{ p.t('statisticsPage.metaDetailGames') }}</dt>
+                  <dd>{{ selectedRow.games.toLocaleString() }}</dd>
+                </div>
+              </dl>
+              <StatisticsChampionDetailLink
+                :champion-id="selectedRow.championId"
+                class="meta-detail-cta"
+              >
+                {{ p.t('statisticsPage.metaDetailCta') }}
+              </StatisticsChampionDetailLink>
+            </aside>
+            <div class="meta-quadrants max-md:hidden">
+              <article v-for="list in quadrantLists" :key="list.key" class="meta-quadrant">
+                <h3 class="meta-quadrant-title" :class="`is-${list.key}`">
+                  {{ p.t(`statisticsPage.metaQuadrantList_${list.key}`) }}
+                </h3>
+                <p v-if="!list.rows.length" class="text-xs text-text/60">
+                  {{ p.t('statisticsPage.noData') }}
+                </p>
+                <ol v-else class="meta-quadrant-list">
+                  <li v-for="row in list.rows" :key="row.championId" class="meta-quadrant-row">
+                    <StatisticsChampionDetailLink
+                      :champion-id="row.championId"
+                      class="meta-quadrant-champ"
+                    >
+                      <img
+                        v-if="p.tierListChartChampionImage(row.championId)"
+                        :src="p.tierListChartChampionImage(row.championId) ?? undefined"
+                        :alt="p.championName(row.championId) || ''"
+                        loading="lazy"
+                        class="h-6 w-6 shrink-0 rounded-full object-cover"
+                      />
+                      <span class="truncate">{{
+                        p.championName(row.championId) || row.championId
+                      }}</span>
+                    </StatisticsChampionDetailLink>
+                    <span class="meta-quadrant-num">{{ fmt1(row.winPct) }} %</span>
+                    <span class="meta-quadrant-num is-dim">
+                      {{ fmt1(row.pickPct) }} % {{ p.t('statisticsPage.metaQuadrantPick') }}
+                    </span>
+                  </li>
+                </ol>
+              </article>
             </div>
-            <dl class="meta-detail-stats">
-              <div>
-                <dt>{{ p.t('statisticsPage.metaDetailWinrate') }}</dt>
-                <dd>{{ pct1(selectedRow.winrate) }} %</dd>
-              </div>
-              <div>
-                <dt>{{ p.t('statisticsPage.metaDetailPickrate') }}</dt>
-                <dd>{{ pct1(selectedRow.pickrate) }} %</dd>
-              </div>
-              <div>
-                <dt>{{ p.t('statisticsPage.metaDetailGames') }}</dt>
-                <dd>{{ selectedRow.games.toLocaleString() }}</dd>
-              </div>
-            </dl>
-            <StatisticsChampionDetailLink
-              :champion-id="selectedRow.championId"
-              class="meta-detail-cta"
-            >
-              {{ p.t('statisticsPage.metaDetailCta') }}
-            </StatisticsChampionDetailLink>
-          </aside>
+          </div>
         </div>
       </template>
       <section class="meta-mobile-quadrants md:hidden">
@@ -322,37 +357,6 @@ async function copyMetaChartImage() {
           </li>
         </ol>
       </section>
-      <div class="meta-quadrants max-md:hidden">
-        <article v-for="list in quadrantLists" :key="list.key" class="meta-quadrant">
-          <h3 class="meta-quadrant-title" :class="`is-${list.key}`">
-            {{ p.t(`statisticsPage.metaQuadrantList_${list.key}`) }}
-          </h3>
-          <p v-if="!list.rows.length" class="text-xs text-text/60">
-            {{ p.t('statisticsPage.noData') }}
-          </p>
-          <ol v-else class="meta-quadrant-list">
-            <li v-for="row in list.rows" :key="row.championId" class="meta-quadrant-row">
-              <StatisticsChampionDetailLink
-                :champion-id="row.championId"
-                class="meta-quadrant-champ"
-              >
-                <img
-                  v-if="p.tierListChartChampionImage(row.championId)"
-                  :src="p.tierListChartChampionImage(row.championId) ?? undefined"
-                  :alt="p.championName(row.championId) || ''"
-                  loading="lazy"
-                  class="h-6 w-6 shrink-0 rounded-full object-cover"
-                />
-                <span class="truncate">{{ p.championName(row.championId) || row.championId }}</span>
-              </StatisticsChampionDetailLink>
-              <span class="meta-quadrant-num">{{ fmt1(row.winPct) }} %</span>
-              <span class="meta-quadrant-num is-dim">
-                {{ fmt1(row.pickPct) }} % {{ p.t('statisticsPage.metaQuadrantPick') }}
-              </span>
-            </li>
-          </ol>
-        </article>
-      </div>
     </template>
     <NotificationToast
       v-if="chartExportToastVisible"
@@ -393,12 +397,18 @@ async function copyMetaChartImage() {
   display: grid;
   gap: 12px;
 }
-.meta-chart-layout.has-detail {
+.meta-chart-layout {
   grid-template-columns: minmax(0, 1fr);
 }
+.meta-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
 @media (min-width: 1024px) {
-  .meta-chart-layout.has-detail {
-    grid-template-columns: minmax(0, 1fr) 260px;
+  .meta-chart-layout {
+    grid-template-columns: minmax(0, 1fr) 300px;
     align-items: start;
   }
 }
@@ -463,7 +473,11 @@ async function copyMetaChartImage() {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 12px;
-  margin-top: 12px;
+}
+@media (min-width: 1024px) {
+  .meta-quadrants {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .meta-quadrant {
   border: 1px solid rgb(200 155 60 / 0.3);

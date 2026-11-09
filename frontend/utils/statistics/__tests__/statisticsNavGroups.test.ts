@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { STATISTICS_NAV_GROUPS, navGroupOfTab, visibleNavGroups } from '../statisticsNavGroups'
+import {
+  STATISTICS_NAV_GROUPS,
+  navGroupOfTab,
+  navGroupTarget,
+  visibleNavGroups,
+} from '../statisticsNavGroups'
 
 describe('statisticsNavGroups', () => {
   it('liste les 9 sections de la maquette dans l’ordre', () => {
@@ -35,5 +40,15 @@ describe('statisticsNavGroups', () => {
     const groups = visibleNavGroups(['overview'])
     expect(groups.map(g => g.id)).toEqual(['overview', 'tierList'])
     expect(groups[1]?.route).toBe('/statistics/tier-list')
+  })
+
+  it('cible d’une section : page dédiée ou /statistics?tab=', () => {
+    const byId = (id: string) => STATISTICS_NAV_GROUPS.find(g => g.id === id)!
+    expect(navGroupTarget(byId('tierList'))).toEqual({ path: '/statistics/tier-list' })
+    expect(navGroupTarget(byId('builds'))).toEqual({
+      path: '/statistics',
+      query: { tab: 'runes' },
+    })
+    expect(navGroupTarget(byId('overview'))).toEqual({ path: '/statistics' })
   })
 })

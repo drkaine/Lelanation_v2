@@ -2,6 +2,7 @@
  * Table globale champions : WR / pick / ban par côté, dégâts moyens, KDA.
  * Runtime source policy: incremental aggregate tables.
  */
+import { championGlobalTableCacheKey } from './championGlobalTableCacheKey.js'
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
 import {
   buildRankTierSqlConditions,
@@ -188,7 +189,7 @@ function rowKey(championId: number, transform: ChampionTransform): string {
   return `${championId}:${transform}`
 }
 
-export async function getChampionGlobalTable(
+async function computeChampionGlobalTable(
   version?: string | string[] | null,
   rankTier?: string | string[] | null,
   role?: string | null,
@@ -659,4 +660,41 @@ export async function getChampionGlobalTable(
     transformBreakdown:
       transformBreakdownFiltered.length > 0 ? transformBreakdownFiltered : undefined,
   }
+}
+
+type ChampionGlobalTableResult = {
+  matchCount: number
+  rows: ChampionGlobalTableRow[]
+  transformBreakdown?: ChampionGlobalTableRow[]
+}
+
+// Requêtes d'agrégat lourdes (10-20 s à froid) : cache court Redis + mémoire.
+const GLOBAL_TABLE_CACHE_TTL_MS = (() => {
+  const raw = Number(process.env.CHAMPION_GLOBAL_TABLE_CACHE_TTL_MS)
+  return Number.isFinite(raw) && raw > 0 ? raw : 10 * 60 * 1000
+})()
+const globalTableInflight = new Map<string, Promise<ChampionGlobalTableResult | null>>()
+
+export async function getChampionGlobalTable(
+  version?: string | string[] | null,
+  rankTier?: string | string[] | null,
+  role?: string | null,
+  splitTransform = false
+): Promise<ChampionGlobalTableResult | null> {
+  if (!isDatabaseConfigured()) return null
+  const key = championGlobalTableCacheKey(version, rankTier, role, splitTransform)
+  // Import paresseux : garde ce module chargeable sans Redis (helpers SQL testés en unitaire).
+  const { statsRedisCacheGet, statsRedisCacheSet } = await import('./statsRedisCache.js')
+  const cached = await statsRedisCacheGet<ChampionGlobalTableResult>('champion-global-table', key)
+  if (cached) return cached
+  const pending = globalTableInflight.get(key)
+  if (pending) return pending
+  const p = computeChampionGlobalTable(version, rankTier, role, splitTransform)
+    .then((res) => {
+      if (res) void statsRedisCacheSet('champion-global-table', key, res, GLOBAL_TABLE_CACHE_TTL_MS)
+      return res
+    })
+    .finally(() => globalTableInflight.delete(key))
+  globalTableInflight.set(key, p)
+  return p
 }

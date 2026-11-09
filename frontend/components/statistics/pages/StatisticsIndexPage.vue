@@ -1,30 +1,10 @@
 <template>
   <div class="statistics flex min-h-screen min-w-0 flex-col overflow-x-hidden text-text">
-    <!-- En-tête + nav à 9 sections (maquette Redesign Statistiques) -->
-    <header class="stats-head">
-      <div class="stats-head-inner">
-        <div class="flex flex-col gap-1">
-          <span class="stats-eyebrow">{{ t('statisticsPage.title') }}</span>
-          <h1 class="stats-h1">{{ currentNavGroupLabel }}</h1>
-        </div>
-        <nav :aria-label="t('statisticsPage.navAria')" class="stats-nav">
-          <template v-for="group in navGroups" :key="group.id">
-            <NuxtLink v-if="group.route" :to="localePath(group.route)" class="stats-nav-link">
-              {{ t(group.labelKey) }}
-            </NuxtLink>
-            <button
-              v-else
-              type="button"
-              :aria-current="currentNavGroup === group.id ? 'page' : undefined"
-              :class="['stats-nav-link', currentNavGroup === group.id ? 'is-active' : '']"
-              @click="activeTab = group.tabs[0]!"
-            >
-              {{ t(group.labelKey) }}
-            </button>
-          </template>
-        </nav>
-      </div>
-    </header>
+    <StatisticsSectionsHeader
+      :groups="navGroups"
+      :current-group-id="currentNavGroup"
+      @select="group => (activeTab = group.tabs[0]!)"
+    />
     <div
       v-if="currentNavGroupTabs.length > 1"
       class="statistics-tabs-bar flex w-full min-w-0 flex-shrink-0 px-4 pt-4"
@@ -922,6 +902,7 @@ import {
 } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
+import StatisticsSectionsHeader from '~/components/statistics/StatisticsSectionsHeader.vue'
 import { statisticsFiltersSheetPanelClass } from '~/composables/useStatisticsFiltersSheetMode'
 import { statsFetch } from '~/utils/statsFetch'
 import type {
@@ -4513,58 +4494,6 @@ defineExpose({ statisticsPageCtx })
 </style>
 
 <style>
-/* En-tête + nav sections (maquette Redesign Statistiques) */
-.statistics .stats-head {
-  border-bottom: 1px solid var(--color-gold-500);
-  background: var(--color-blue-600);
-}
-.statistics .stats-head-inner {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 24px 32px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-.statistics .stats-eyebrow {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--color-grey-50);
-}
-.statistics .stats-h1 {
-  margin: 0;
-  font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
-  font-weight: 700;
-  font-size: 40px;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--color-gold-100);
-}
-.statistics .stats-nav {
-  display: flex;
-  gap: 4px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.statistics .stats-nav-link {
-  padding: 12px 16px;
-  font-weight: 500;
-  color: var(--color-grey-50);
-  text-decoration: none;
-  border-bottom: 2px solid transparent;
-  white-space: nowrap;
-  background: none;
-}
-.statistics .stats-nav-link:hover {
-  color: var(--color-gold-50);
-}
-.statistics .stats-nav-link.is-active {
-  font-weight: 600;
-  color: var(--color-gold-50);
-  border-bottom-color: var(--color-gold-100);
-}
 .statistics .stats-subtabs {
   display: inline-flex;
   flex-wrap: wrap;
@@ -4584,19 +4513,6 @@ defineExpose({ statisticsPageCtx })
   background: var(--color-blue-400);
   color: var(--color-gold-50);
   font-weight: 600;
-}
-@media (max-width: 767px) {
-  .statistics .stats-head-inner {
-    padding: 16px 16px 0;
-    gap: 12px;
-  }
-  .statistics .stats-h1 {
-    font-size: 28px;
-  }
-  .statistics .stats-nav-link {
-    padding: 10px 12px;
-    font-size: 13px;
-  }
 }
 /**
  * Surfaces & fast-stat : hors scoped pour que les composants enfants (objets, tooltips)

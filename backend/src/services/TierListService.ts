@@ -17,6 +17,7 @@ import {
 import { assignTiersFromNotes, type LolalyticsTier } from './tierListAssign.js'
 import { statsRedisCacheGet, statsRedisCacheSet } from './statsRedisCache.js'
 import { sqlLiteral } from '../stats/sqlLiteral.js'
+import { rolePickrate, tierListMinGames } from './tierListSample.js'
 
 const MIN_GAMES = 1
 const MIN_PICKRATE = 0.0001
@@ -166,6 +167,9 @@ function buildTierListRows(
   }> = []
 
   const focus = focusRole?.trim() ? normalizeTierListRole(focusRole) : null
+  let allGames = 0
+  for (const r of roleRows) allGames += toNum(r.games)
+  const minGames = tierListMinGames(Math.round(allGames / 10))
 
   for (const [championId, { totalGames, roleRows: rrs }] of byChampion) {
     if (!rrs.length) continue
@@ -195,7 +199,7 @@ function buildTierListRows(
     })
   }
 
-  const filtered = rows.filter(r => r.games >= MIN_GAMES && r.pickrate >= MIN_PICKRATE)
+  const filtered = rows.filter(r => r.mainRoleGames >= minGames && r.pickrate >= MIN_PICKRATE)
   const notes = computeChampionMatchupScores(
     filtered.map(r => ({
       championId: r.championId,
@@ -412,7 +416,7 @@ async function fetchRoleRows(
       games: entry.games,
       wins: entry.wins,
       winrate: entry.games > 0 ? entry.wins / entry.games : 0,
-      pickrate: roleTotalGames > 0 ? entry.games / roleTotalGames : 0,
+      pickrate: rolePickrate(entry.games, roleTotalGames),
       banrate: totalMatches > 0 ? entry.bans / totalMatches : 0,
     })
   }

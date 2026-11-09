@@ -57,3 +57,13 @@ export function visibleNavGroups(visibleTabs: readonly StatisticsMainTab[]): Sta
     tabs: g.tabs.filter(t => visible.has(t)),
   })).filter(g => g.route != null || g.tabs.length > 0)
 }
+
+export type StatisticsNavTarget = { path: string; query?: { tab: StatisticsMainTab } }
+
+/** Lien d’une section depuis une autre page : page dédiée, ou index avec `?tab=`. */
+export function navGroupTarget(group: StatisticsNavGroup): StatisticsNavTarget {
+  if (group.route) return { path: group.route }
+  const tab = group.tabs[0]
+  if (!tab || tab === 'overview') return { path: '/statistics' }
+  return { path: '/statistics', query: { tab } }
+}
