@@ -225,6 +225,9 @@ export function championGlobalNumericDeltaClass(delta: number, invert = false): 
 }
 
 export function formatChampionGlobalNumericDelta(d: number): string {
-  const sign = d > 0 ? '+' : ''
-  return `${sign}${Number(d).toFixed(1)}`
+  const n = Number(d)
+  if (Math.abs(n) < 0.05) return '0.0'
+  const abs = Math.abs(n)
+  const v = abs >= 100 ? Math.round(abs).toString() : abs.toFixed(1)
+  return n > 0 ? `▲ +${v}` : `▼ −${v}`
 }

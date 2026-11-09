@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { deltaToneClass, fmtLocNum, fmtLocSigned } from '~/utils/statistics/localeNum'
 import {
   injectStatisticsPageCtx,
   type StatisticsIndexPageCtx,
@@ -8,14 +9,21 @@ import { onPingIconError, pingIconSrc } from '~/utils/pingIcons'
 import { topPingers } from '~/utils/statistics/topPingers'
 import {
   PING_METRIC_KEYS,
-  pingsMobileSortOptions,
   type PingMetricKey,
   type PingsNumericKey,
   type PingsSortCol,
   type PingsTableRow,
 } from '~/composables/statistics/useStatisticsPingsTab'
 
+const props = withDefaults(defineProps<{ section?: 'all' | 'talkers' | 'table' }>(), {
+  section: 'all',
+})
+const section = computed(() => props.section)
+
 const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
+const { locale } = useI18n()
+const fmtLoc = (v: number | null | undefined, d: number) => fmtLocNum(v, d, locale.value)
+const fmtSigned = (v: number | null | undefined, d: number) => fmtLocSigned(v, d, locale.value)
 
 const talkers = computed(() => {
   const rows = (p.pingsTableData?.rows ?? []) as PingsTableRow[]
@@ -27,36 +35,20 @@ const talkers = computed(() => {
   })
 })
 
-const pingsMobileSortColumn = computed({
-  get: () => String(p.pingsSortColumn ?? 'totalPerGame'),
-  set: (v: string) => {
-    ;(p.setPingsSort as (c: PingsSortCol) => void)?.(v as PingsSortCol)
-  },
-})
-
-const pingsMobileSortDir = computed({
-  get: () => (p.pingsSortDir === 'asc' ? 'asc' : 'desc') as 'asc' | 'desc',
-  set: (v: 'asc' | 'desc') => {
-    p.pingsSortDir = v
-  },
-})
-
-const pingsMobileSortOptionsComputed = computed(() =>
-  pingsMobileSortOptions((key: string) => String(p.t?.(key) ?? key))
+const openPing = ref<number | null>(null)
+const maxPingTotal = computed(() =>
+  Math.max(
+    1,
+    ...((p.paginatedPingsRows ?? []) as PingsTableRow[]).map(r => Number(r.totalPerGame) || 0)
+  )
 )
+function barPct(v: number): number {
+  return Math.round(((Number(v) || 0) / maxPingTotal.value) * 100)
+}
 
 function championPortraitSrc(championId: number): string | null {
   if (!p.gameVersion || !p.championByKey(championId)) return null
   return p.getChampionImageUrl(p.gameVersion, p.championByKey(championId)!.image.full)
-}
-
-function formatPing(value: number): string {
-  return Number(value).toFixed(2)
-}
-
-function formatPingDelta(value: number): string {
-  const sign = value > 0 ? '+' : ''
-  return `${sign}${Number(value).toFixed(2)}`
 }
 
 function pingValue(row: PingsTableRow, key: PingMetricKey): number {
@@ -77,10 +69,6 @@ function pingsMessage(message: string | undefined): string {
     return String(p.t?.('statisticsPage.pingsDbNotConfigured') ?? message)
   }
   return message
-}
-
-function deltaSortKey(key: PingsNumericKey): PingsSortCol {
-  return `${key}Delta`
 }
 
 function pingMetricLabel(key: PingMetricKey): string {
@@ -111,7 +99,10 @@ const pingsPageSize = computed({
       {{ p.t('statisticsPage.noData') }}
     </div>
     <template v-else>
-      <article v-if="talkers.length" class="pings-talkers">
+      <h2 v-if="talkers.length && section === 'talkers'" class="pings-h2">
+        {{ p.t('statisticsPage.tabPings') }}
+      </h2>
+      <article v-if="talkers.length && section !== 'table'" class="pings-talkers">
         <header class="pings-talkers__head">
           <h3 class="pings-talkers__title">{{ p.t('statisticsPage.pingsTalkersTitle') }}</h3>
           <span class="pings-talkers__unit">{{ p.t('statisticsPage.pingsTalkersUnit') }}</span>
@@ -124,192 +115,148 @@ const pingsPageSize = computed({
                 <div class="pings-talkers__bar" :style="{ width: tk.barPct + '%' }" />
               </div>
             </div>
-            <span class="pings-talkers__num">{{ tk.totalPerGame.toFixed(2) }}</span>
+            <b class="pings-talkers__num">{{ fmtLoc(tk.totalPerGame, 1) }}</b>
             <span
-              class="pings-talkers__num"
-              :class="tk.delta != null ? p.championGlobalNumericDeltaClass(tk.delta) : ''"
+              class="pings-talkers__delta"
+              :class="
+                tk.delta == null || Math.abs(tk.delta) < 0.005
+                  ? ''
+                  : tk.delta > 0
+                    ? 'is-up'
+                    : 'is-down'
+              "
             >
-              {{ tk.delta != null ? (tk.delta > 0 ? '+' : '') + tk.delta.toFixed(2) : '' }}
+              {{ fmtSigned(tk.delta, 2) }}
             </span>
           </li>
         </ol>
       </article>
-      <StatisticsMobileSortBar
-        id="pings-mobile-sort"
-        v-model:column="pingsMobileSortColumn"
-        v-model:direction="pingsMobileSortDir"
-        :options="pingsMobileSortOptionsComputed"
-      />
-
-      <div class="statistics-pings-mobile-list space-y-2 md:hidden">
-        <article
-          v-for="row in p.paginatedPingsRows"
-          :key="'ping-mobile-' + row.championId"
-          class="statistics-champion-stats-mobile-card statistics-pings-mobile-card w-full overflow-hidden"
-        >
-          <div
-            class="statistics-champion-stats-mobile-card-header flex w-full items-center gap-3 p-3"
-          >
-            <StatisticsChampionStatsMobileCardHeader
-              :champion-id="row.championId"
-              :champion-name="String(p.championName(row.championId) || row.championId)"
-              :search-query="p.championSearchQuery"
-              :portrait-src="championPortraitSrc(row.championId)"
-              :portrait-alt="p.championName(row.championId) || ''"
-            />
-            <div class="flex min-w-0 flex-1 flex-col items-end justify-center text-right">
-              <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
-                {{ p.t('statisticsPage.pingsColTotal') }}
-              </div>
-              <div class="text-2xl font-bold tabular-nums leading-none text-text sm:text-3xl">
-                {{ formatPing(row.totalPerGame) }}
-              </div>
-              <div
-                v-if="pingDelta(row, 'totalPerGame') != null"
-                class="mt-0.5 text-xs tabular-nums leading-none"
-                :class="p.championGlobalNumericDeltaClass(pingDelta(row, 'totalPerGame')!)"
+      <template v-if="section !== 'talkers'">
+        <article class="pg-mcard md:hidden">
+          <header class="pg-mhead">
+            <h3 class="pg-mtitle">{{ p.t('statisticsPage.pingsMobileTitle') }}</h3>
+          </header>
+          <ul class="pg-mlist">
+            <li v-for="row in p.paginatedPingsRows" :key="'ping-m-' + row.championId">
+              <button
+                type="button"
+                class="pg-mrow"
+                :aria-expanded="openPing === row.championId"
+                @click="openPing = openPing === row.championId ? null : row.championId"
               >
-                {{ formatPingDelta(pingDelta(row, 'totalPerGame')!) }}
+                <span class="pg-mname">
+                  <span class="truncate">{{
+                    p.championName(row.championId) || row.championId
+                  }}</span>
+                  <span class="pg-mtrack">
+                    <span class="pg-mbar" :style="{ width: barPct(row.totalPerGame) + '%' }" />
+                  </span>
+                </span>
+                <b class="pg-mnum">{{ fmtLoc(row.totalPerGame, 1) }}</b>
+                <span class="pg-mdelta" :class="deltaToneClass(pingDelta(row, 'totalPerGame'))">
+                  {{ fmtSigned(pingDelta(row, 'totalPerGame'), 2) }}
+                </span>
+              </button>
+              <div v-if="openPing === row.championId" class="pg-mdetail">
+                <span
+                  v-for="key in PING_METRIC_KEYS"
+                  :key="'pm-' + row.championId + key"
+                  class="pg-mmetric"
+                >
+                  <img
+                    :src="pingIconSrc(key)"
+                    alt=""
+                    width="16"
+                    height="16"
+                    @error="onPingIconError($event, key)"
+                  />
+                  <span>{{ pingMetricLabel(key) }}</span>
+                  <b>{{ fmtLoc(pingValue(row, key), 2) }}</b>
+                </span>
               </div>
-            </div>
-          </div>
-
-          <div class="border-t border-primary/15 px-3 py-2.5">
-            <div class="grid grid-cols-3 gap-2 text-xs sm:grid-cols-4">
-              <StatisticsPingMetricCardCell
-                v-for="key in PING_METRIC_KEYS"
-                :key="'ping-mobile-metric-' + row.championId + '-' + key"
-                :metric-key="key"
-                :label="pingMetricLabel(key)"
-                :value="formatPing(pingValue(row, key))"
-                :delta="pingDelta(row, key) != null ? formatPingDelta(pingDelta(row, key)!) : null"
-                :delta-class="
-                  pingDelta(row, key) != null
-                    ? p.championGlobalNumericDeltaClass(pingDelta(row, key)!)
-                    : null
-                "
-              />
-            </div>
-          </div>
+            </li>
+          </ul>
+          <p class="pg-mfoot">{{ p.t('statisticsPage.pingsMobileFoot') }}</p>
         </article>
-      </div>
 
-      <div
-        class="tier-list-mobile-rotate statistics-overview-surface hidden w-full overflow-x-auto rounded-lg border border-primary/30 md:block"
-      >
-        <div class="tier-list-lolalytics w-full min-w-0 text-[13px] max-lg:min-w-[720px]">
-          <table class="w-full min-w-[520px] text-left text-[13px]">
-            <thead
-              class="sticky top-0 z-10 border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
-            >
-              <tr>
-                <th class="min-w-[220px] px-2 py-1.5 text-left font-semibold text-text">
-                  {{ p.t('statisticsPage.tierListColChampion') }}
-                </th>
-                <th class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text">
-                  <div class="flex items-center justify-center gap-1">
+        <h2 v-if="section === 'table'" class="pings-h2 hidden md:block">
+          {{ p.t('statisticsPage.pingsDetailTitle') }}
+        </h2>
+        <div class="pg-card hidden md:block">
+          <div class="pg-scroll">
+            <table class="pg-table">
+              <thead>
+                <tr>
+                  <th class="pg-th-name">{{ p.t('statisticsPage.tierListColChampion') }}</th>
+                  <th class="pg-r">
                     <button type="button" @click="p.setPingsSort('totalPerGame')">
                       {{ p.t('statisticsPage.pingsColTotal') }}{{ sortIndicator('totalPerGame') }}
                     </button>
-                    <button
-                      v-if="p.pingsTableRefData"
-                      type="button"
-                      class="text-[10px] text-text/70 hover:text-text"
-                      :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
-                      @click="p.setPingsSort('totalPerGameDelta')"
-                    >
-                      Δ{{ sortIndicator('totalPerGameDelta') }}
-                    </button>
-                  </div>
-                </th>
-                <th
-                  v-for="key in PING_METRIC_KEYS"
-                  :key="'ping-th-' + key"
-                  class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text"
-                >
-                  <div class="flex items-center justify-center gap-1">
+                  </th>
+                  <th v-for="key in PING_METRIC_KEYS" :key="'ping-th-' + key" class="pg-r">
                     <button
                       type="button"
-                      class="inline-flex items-center gap-1"
+                      class="pings-th-btn"
                       :title="pingMetricLabel(key)"
                       @click="p.setPingsSort(key)"
                     >
                       <img
                         :src="pingIconSrc(key)"
-                        :alt="pingMetricLabel(key)"
-                        class="h-4 w-4 object-contain"
+                        alt=""
+                        class="pings-th-icon"
                         width="16"
                         height="16"
                         loading="lazy"
                         decoding="async"
                         @error="onPingIconError($event, key)"
-                      /><span class="pings-th-label">{{ pingMetricLabel(key) }}</span
-                      >{{ sortIndicator(key) }}
+                      /><span class="pings-th-label"
+                        >{{ pingMetricLabel(key) }}{{ sortIndicator(key) }}</span
+                      >
                     </button>
-                    <button
-                      v-if="p.pingsTableRefData"
-                      type="button"
-                      class="text-[10px] text-text/70 hover:text-text"
-                      :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
-                      @click="p.setPingsSort(deltaSortKey(key))"
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in p.paginatedPingsRows" :key="'ping-' + row.championId">
+                  <td>
+                    <div class="pg-name">
+                      <img
+                        v-if="championPortraitSrc(row.championId)"
+                        :src="championPortraitSrc(row.championId)!"
+                        alt=""
+                        width="28"
+                        height="28"
+                        loading="lazy"
+                      />
+                      <StatisticsChampionDetailLink :champion-id="row.championId" class="pg-link">
+                        {{ p.championName(row.championId) || row.championId }}
+                      </StatisticsChampionDetailLink>
+                    </div>
+                  </td>
+                  <td class="pg-r">
+                    <b class="pg-num">{{ fmtLoc(row.totalPerGame, 1) }}</b>
+                    <div
+                      class="pings-talkers__delta"
+                      :class="deltaToneClass(pingDelta(row, 'totalPerGame'))"
                     >
-                      Δ{{ sortIndicator(deltaSortKey(key)) }}
-                    </button>
-                  </div>
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-primary/20">
-              <tr
-                v-for="row in p.paginatedPingsRows"
-                :key="'ping-' + row.championId"
-                class="text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
-              >
-                <td class="min-w-[220px] py-0.5 pl-2 pr-0">
-                  <StatisticsChampionTableLink
-                    :champion-id="row.championId"
-                    :query="p.championSearchQuery"
-                  />
-                </td>
-                <td class="px-1 py-0.5 align-middle">
-                  <div
-                    class="flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight"
+                      {{ fmtSigned(pingDelta(row, 'totalPerGame'), 2) }}
+                    </div>
+                  </td>
+                  <td
+                    v-for="key in PING_METRIC_KEYS"
+                    :key="'ping-td-' + row.championId + '-' + key"
+                    class="pg-r pg-num"
                   >
-                    <span class="font-semibold">{{ formatPing(row.totalPerGame) }}</span>
-                    <span
-                      v-if="pingDelta(row, 'totalPerGame') != null"
-                      class="text-[10px] leading-none"
-                      :class="p.championGlobalNumericDeltaClass(pingDelta(row, 'totalPerGame')!)"
-                    >
-                      {{ formatPingDelta(pingDelta(row, 'totalPerGame')!) }}
-                    </span>
-                  </div>
-                </td>
-                <td
-                  v-for="key in PING_METRIC_KEYS"
-                  :key="'ping-td-' + row.championId + '-' + key"
-                  class="px-1 py-0.5 align-middle"
-                >
-                  <div
-                    class="flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight"
-                  >
-                    <span>{{ formatPing(pingValue(row, key)) }}</span>
-                    <span
-                      v-if="pingDelta(row, key) != null"
-                      class="text-[10px] leading-none"
-                      :class="p.championGlobalNumericDeltaClass(pingDelta(row, key)!)"
-                    >
-                      {{ formatPingDelta(pingDelta(row, key)!) }}
-                    </span>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                    {{ fmtLoc(pingValue(row, key), 2) }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
           <StatisticsRangePagination
             v-model:page-size="pingsPageSize"
             :page="p.pingsPage"
-            class="border-t border-primary/20 px-4 py-2 text-sm text-text/80"
+            class="pg-pagination"
             :total-count="p.totalPingsCount"
             :total-pages="p.totalPingsPages"
             indicator="pages"
@@ -320,67 +267,263 @@ const pingsPageSize = computed({
             </template>
           </StatisticsRangePagination>
         </div>
-      </div>
+      </template>
     </template>
   </div>
 </template>
 
 <style scoped>
+.pings-h2 {
+  margin-bottom: 16px;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 36px;
+  color: #f0e6d2;
+}
 .pings-talkers {
-  border: 1px solid rgb(200 155 60 / 0.25);
-  border-radius: 0.375rem;
-  padding: 0.75rem 1rem;
+  background: #0a1428;
+  border: 1px solid #463714;
+  border-radius: 12px;
+  padding: 20px;
 }
 .pings-talkers__head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  margin-bottom: 0.5rem;
+  margin-bottom: 12px;
 }
 .pings-talkers__title {
-  font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
-  font-size: 1.05rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--color-gold-50, #f0e6d2);
+  font-size: 15px;
+  font-weight: 600;
+  color: #f0e6d2;
 }
 .pings-talkers__unit {
-  font-size: 0.75rem;
-  color: var(--color-grey-50, #a09b8c);
+  font-size: 12px;
+  color: #a09b8c;
 }
 .pings-talkers__list {
   display: grid;
-  gap: 0.35rem;
+  gap: 12px;
 }
 .pings-talkers__row {
   display: grid;
-  grid-template-columns: 1fr 4rem 4rem;
+  grid-template-columns: 1fr 3.5rem 3.5rem;
   align-items: center;
-  gap: 0.5rem;
+  gap: 12px;
 }
 .pings-talkers__name {
   display: grid;
-  gap: 0.15rem;
-  font-size: 0.85rem;
-  color: var(--color-gold-50, #f0e6d2);
+  gap: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #f0e6d2;
 }
 .pings-talkers__track {
   height: 4px;
   border-radius: 2px;
-  background: rgb(160 155 140 / 0.2);
+  background: #1e2328;
 }
 .pings-talkers__bar {
   height: 100%;
   border-radius: 2px;
-  background: var(--color-blue-100, #0ac8b9);
+  background: #c8aa6e;
 }
 .pings-talkers__num {
   text-align: right;
   font-variant-numeric: tabular-nums;
-  font-size: 0.85rem;
+  font-size: 14px;
+  color: #f0e6d2;
+}
+.pings-talkers__delta {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: #a09b8c;
+}
+.pings-talkers__delta.is-up {
+  color: #0ac8b9;
+}
+.pings-talkers__delta.is-down {
+  color: #e2665a;
+}
+.pg-card {
+  background: #0a1428;
+  border: 1px solid #463714;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.pg-scroll {
+  overflow-x: auto;
+}
+.pg-table {
+  width: 100%;
+  min-width: 900px;
+  border-collapse: collapse;
+  font-size: 14px;
+  color: #f0e6d2;
+}
+.pg-table th {
+  padding: 12px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #a09b8c;
+  text-align: left;
+  border-bottom: 1px solid #0a323c;
+  vertical-align: bottom;
+}
+.pg-table td {
+  padding: 8px 14px;
+  border-bottom: 1px solid #1e2328;
+  vertical-align: middle;
+}
+.pg-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.pg-table .pg-r {
+  text-align: right;
+}
+.pg-th-name {
+  min-width: 180px;
+}
+.pg-table th:nth-child(2) {
+  white-space: nowrap;
+}
+.pg-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 500;
+}
+.pg-name img {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid #0a323c;
+}
+.pg-link {
+  color: #f0e6d2;
+}
+.pg-link:hover {
+  color: #c8aa6e;
+}
+.pg-num {
+  font-variant-numeric: tabular-nums;
+}
+.pg-pagination {
+  border-top: 1px solid #0a323c;
+  padding: 10px 20px;
+  font-size: 14px;
+  color: #a09b8c;
+}
+.pings-th-btn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 4.5rem;
+}
+.pings-th-icon {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  object-fit: contain;
 }
 .pings-th-label {
   font-size: 0.7rem;
-  white-space: nowrap;
+  line-height: 1.15;
+  text-align: center;
+  white-space: normal;
+  max-width: 6rem;
+}
+
+.pg-mcard {
+  background: #0a1428;
+  border: 1px solid #463714;
+  border-radius: 12px;
+  padding: 14px 14px 12px;
+}
+.pg-mtitle {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #f0e6d2;
+}
+.pg-mlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.pg-mlist > li + li {
+  border-top: 1px solid rgba(70, 55, 20, 0.5);
+}
+.pg-mrow {
+  display: grid;
+  grid-template-columns: 1fr auto 48px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 0;
+  background: none;
+  border: 0;
+  color: #f0e6d2;
+  text-align: left;
+}
+.pg-mname {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.pg-mtrack {
+  display: block;
+  height: 5px;
+  border-radius: 3px;
+  background: #1e2328;
+  overflow: hidden;
+}
+.pg-mbar {
+  display: block;
+  height: 100%;
+  background: #c8aa6e;
+}
+.pg-mnum {
+  font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.pg-mdelta {
+  font-size: 12px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.pg-mdetail {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
+  padding: 0 0 10px;
+}
+.pg-mmetric {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #a09b8c;
+}
+.pg-mmetric b {
+  margin-left: auto;
+  color: #f0e6d2;
+}
+.pg-mfoot {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: #a09b8c;
+}
+@media (max-width: 767px) {
+  .pings-talkers {
+    display: none !important;
+  }
 }
 </style>

@@ -1,11 +1,65 @@
 <template>
-  <div class="statistics flex min-h-screen min-w-0 flex-col overflow-x-hidden text-text">
+  <div
+    :class="[
+      'statistics flex min-h-screen min-w-0 flex-col overflow-x-hidden text-text',
+      mobileFiltersOpen ? 'is-mfilters-open' : '',
+    ]"
+  >
     <!-- En-tête + nav à 9 sections (maquette Redesign Statistiques) -->
     <header class="stats-head">
       <div class="stats-head-inner">
-        <div class="flex flex-col gap-1">
-          <span class="stats-eyebrow">{{ t('statisticsPage.title') }}</span>
-          <h1 class="stats-h1">{{ currentNavGroupLabel }}</h1>
+        <div class="stats-head-top">
+          <div class="flex min-w-0 flex-col gap-1">
+            <span class="stats-eyebrow hidden md:inline">{{ statsHeadEyebrow }}</span>
+            <span class="stats-eyebrow md:hidden">{{ mobileHead.eyebrow }}</span>
+            <h1 class="stats-h1 hidden md:block">{{ currentNavGroupLabel }}</h1>
+            <h1 class="stats-h1 md:hidden">{{ mobileHead.title }}</h1>
+          </div>
+          <button
+            v-if="showHeadVersionSelects || showFilterBar"
+            type="button"
+            class="stats-mfilters-btn md:hidden"
+            :aria-expanded="mobileFiltersOpen"
+            @click="mobileFiltersOpen = !mobileFiltersOpen"
+          >
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+              <path
+                d="M2 4h12M4 8h8M6 12h4"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+              />
+            </svg>
+            {{ t('statisticsPage.filtersTitle') }}
+            <span v-if="mobileChips.length" class="stats-mfilters-badge">
+              {{ mobileChips.filter((c: MobileFilterChip) => c.id !== 'addRole').length }}
+            </span>
+          </button>
+          <div v-if="showHeadVersionSelects" class="stats-head-selects">
+            <label class="stats-head-select">
+              <span class="stats-head-select-label">{{ t('statisticsPage.filterBarPatch') }}</span>
+              <select v-model="statsVersionFilter" @change="onStatsFilterChange">
+                <option value="">{{ t('statisticsPage.overviewVersionAll') }}</option>
+                <option v-for="v in statsVersionOptions" :key="v.version" :value="v.version">
+                  {{ v.version }}
+                </option>
+              </select>
+            </label>
+            <label class="stats-head-select">
+              <span class="stats-head-select-label">{{
+                t('statisticsPage.filterBarCompare')
+              }}</span>
+              <select v-model="progressionFromVersionModel">
+                <option
+                  v-for="v in progressionSelectableVersions"
+                  :key="'delta-from-' + v.version"
+                  :value="v.version"
+                >
+                  {{ v.version }}
+                </option>
+              </select>
+            </label>
+          </div>
         </div>
         <nav :aria-label="t('statisticsPage.navAria')" class="stats-nav">
           <template v-for="group in navGroups" :key="group.id">
@@ -25,9 +79,24 @@
         </nav>
       </div>
     </header>
+    <div v-if="mobileChips.length && !mobileFiltersOpen" class="stats-mchips md:hidden">
+      <button
+        v-for="chip in mobileChips"
+        :key="chip.id"
+        type="button"
+        :class="['stats-mchip', chip.id === 'addRole' ? 'is-add' : '']"
+        @click="onMobileChip(chip)"
+      >
+        <template v-if="chip.id === 'addRole'">+ {{ t('statisticsPage.filterRole') }}</template>
+        <template v-else>
+          {{ mobileChipLabel(chip) }}
+          <span aria-hidden="true">×</span>
+        </template>
+      </button>
+    </div>
     <div
-      v-if="currentNavGroupTabs.length > 1"
-      class="statistics-tabs-bar flex w-full min-w-0 flex-shrink-0 px-4 pt-4"
+      v-if="currentNavGroupTabs.length > 1 && !currentNavGroupCombined"
+      class="statistics-tabs-bar flex w-full min-w-0 flex-shrink-0"
     >
       <div ref="tabsNavEl" role="tablist" :aria-label="currentNavGroupLabel" class="stats-subtabs">
         <button
@@ -43,13 +112,33 @@
           @click="activeTab = tab.id"
           @keydown="onStatisticsTabsKeydown($event, tab.id)"
         >
-          {{ tab.label }}
+          <span :class="{ 'hidden md:inline': tab.shortLabel }">{{ tab.label }}</span>
+          <span v-if="tab.shortLabel" class="md:hidden">{{ tab.shortLabel }}</span>
         </button>
       </div>
     </div>
 
+    <StatisticsFilterBar
+      v-if="showFilterBar"
+      :roles="roles"
+      :role="statsRoleFilter"
+      :divisions="rankTiers"
+      :selected-divisions="statsDivisionFilter"
+      :otp="statsOtpFilter"
+      :active-count="activeStatsFiltersCount"
+      :show-role="statisticsTabFilterFlags(displayedActiveTab).role"
+      :show-division="statisticsTabFilterFlags(displayedActiveTab).division"
+      :show-otp="statisticsTabFilterFlags(displayedActiveTab).otp"
+      :division-label="formatDivisionLabel"
+      :emblem-url="getRankedEmblemUrl"
+      @update:role="onFilterBarRole"
+      @update:otp="setStatsOtpFilter"
+      @toggle-division="toggleDivisionFilter"
+      @clear-divisions="selectAllDivisions"
+      @reset="resetStatsFilters"
+    />
     <!-- Filtres + contenu -->
-    <div class="flex min-h-0 flex-1">
+    <div class="stats-body flex min-h-0 flex-1">
       <button
         v-if="showFiltersPanel && showDesktopFiltersTrigger"
         type="button"
@@ -255,45 +344,6 @@
                 </select>
               </div>
             </template>
-            <template v-else>
-              <div>
-                <label for="stats-filter-version" class="mb-1 block text-sm font-medium text-text">
-                  {{ t('statisticsPage.overviewFilterByVersion') }}
-                </label>
-                <select
-                  id="stats-filter-version"
-                  v-model="statsVersionFilter"
-                  class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-                  @change="onStatsFilterChange"
-                >
-                  <option value="">{{ t('statisticsPage.overviewVersionAll') }}</option>
-                  <option v-for="v in statsVersionOptions" :key="v.version" :value="v.version">
-                    {{ v.version }}
-                  </option>
-                </select>
-              </div>
-              <div>
-                <label
-                  for="stats-filter-progression-version"
-                  class="mb-1 block text-sm font-medium text-text"
-                >
-                  {{ t('statisticsPage.progressionsReferenceVersion') }}
-                </label>
-                <select
-                  id="stats-filter-progression-version"
-                  v-model="progressionFromVersionModel"
-                  class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-                >
-                  <option
-                    v-for="v in progressionSelectableVersions"
-                    :key="'delta-from-' + v.version"
-                    :value="v.version"
-                  >
-                    {{ v.version }}
-                  </option>
-                </select>
-              </div>
-            </template>
             <div v-if="displayedActiveTab === 'patchNotes'">
               <div class="mb-1 text-sm font-medium text-text">
                 {{ t('statisticsPage.patchNotesTargetFilterTitle') }}
@@ -347,78 +397,7 @@
                 {{ t('statisticsPage.patchNotesTargetAllHint') }}
               </p>
             </div>
-            <div
-              v-if="
-                displayedActiveTab !== 'balance' &&
-                displayedActiveTab !== 'surrender' &&
-                displayedActiveTab !== 'patchNotes' &&
-                displayedActiveTab !== 'misc'
-              "
-            >
-              <div class="mb-1 text-sm font-medium text-text">
-                {{ t('statisticsPage.overviewMatchesByDivision') }}
-              </div>
-              <div class="flex flex-wrap gap-1">
-                <button
-                  type="button"
-                  class="stats-division-btn rounded p-0.5 transition-colors"
-                  :class="
-                    statsDivisionFilter.length === 0
-                      ? 'bg-info/20 ring-1 ring-info/60'
-                      : 'bg-black/20 hover:bg-white/10'
-                  "
-                  :title="t('statisticsPage.allRanks')"
-                  :aria-pressed="statsDivisionFilter.length === 0"
-                  @mousedown.prevent
-                  @click.stop="selectAllDivisions()"
-                >
-                  <img
-                    src="/data/community-dragon/ranked-emblem/Unranked.png"
-                    :alt="t('statisticsPage.allRanks')"
-                    class="h-3 w-3 object-contain"
-                    :class="
-                      statsDivisionFilter.length === 0
-                        ? 'saturate-110 opacity-100'
-                        : 'brightness-125 grayscale'
-                    "
-                    width="12"
-                    height="12"
-                  />
-                </button>
-                <button
-                  v-for="tier in rankTiers"
-                  :key="tier"
-                  type="button"
-                  class="stats-division-btn rounded p-0.5 transition-colors"
-                  :class="
-                    statsDivisionFilter.includes(tier)
-                      ? 'bg-info/20 ring-1 ring-info/60'
-                      : 'bg-black/20 hover:bg-white/10'
-                  "
-                  :title="formatDivisionLabel(tier)"
-                  :aria-pressed="statsDivisionFilter.includes(tier)"
-                  @mousedown.prevent
-                  @click.stop="toggleDivisionFilter(tier)"
-                >
-                  <img
-                    v-if="getRankedEmblemUrl(tier)"
-                    loading="lazy"
-                    decoding="async"
-                    :src="getRankedEmblemUrl(tier)!"
-                    :alt="tier"
-                    class="h-3 w-3 object-contain"
-                    :class="
-                      statsDivisionFilter.includes(tier)
-                        ? 'saturate-110 opacity-100'
-                        : 'brightness-125 grayscale'
-                    "
-                    width="12"
-                    height="12"
-                  />
-                </button>
-              </div>
-            </div>
-            <div v-else-if="displayedActiveTab === 'balance'">
+            <div v-if="displayedActiveTab === 'balance'">
               <div class="mb-1 text-sm font-medium text-text">
                 {{ t('statisticsPage.balanceGlobalStatus') }}
               </div>
@@ -508,64 +487,6 @@
                 </select>
               </div>
             </div>
-            <div
-              v-if="
-                displayedActiveTab !== 'objectives' &&
-                displayedActiveTab !== 'surrender' &&
-                displayedActiveTab !== 'patchNotes' &&
-                displayedActiveTab !== 'misc'
-              "
-            >
-              <div class="mb-1 text-sm font-medium text-text">
-                {{ t('statisticsPage.filterRole') }}
-              </div>
-              <div class="flex flex-wrap gap-1">
-                <button
-                  type="button"
-                  class="stats-role-btn rounded p-0.5 transition-colors"
-                  :class="!statsRoleFilter ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10'"
-                  :title="t('statisticsPage.allRoles')"
-                  @click="selectAllRoles()"
-                >
-                  <img
-                    src="/icons/roles/all-role.png"
-                    :alt="t('statisticsPage.allRoles')"
-                    class="h-3 w-3 object-contain"
-                    :class="
-                      !statsRoleFilter ? 'saturate-110 opacity-100' : 'brightness-125 grayscale'
-                    "
-                    width="12"
-                    height="12"
-                  />
-                </button>
-                <button
-                  v-for="r in roles"
-                  :key="r.value"
-                  type="button"
-                  class="stats-role-btn rounded p-0.5 transition-colors"
-                  :class="
-                    statsRoleFilter === r.value ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10'
-                  "
-                  :title="r.label"
-                  @click="toggleRoleFilter(r)"
-                >
-                  <img
-                    loading="lazy"
-                    decoding="async"
-                    :src="r.icon"
-                    :alt="r.label"
-                    class="h-3 w-3 object-contain"
-                    :class="
-                      statsRoleFilter === r.value
-                        ? 'saturate-110 opacity-100'
-                        : 'brightness-125 grayscale'
-                    "
-                    width="12"
-                    height="12"
-                  />
-                </button>
-              </div>
-            </div>
             <div v-show="displayedActiveTab === 'bans'">
               <div class="mb-1 text-sm font-medium text-text">Colonnes bans</div>
               <div class="flex flex-wrap gap-1">
@@ -595,115 +516,7 @@
                 </button>
               </div>
             </div>
-            <div v-show="displayedActiveTab === 'championTable'">
-              <div class="mb-1 text-sm font-medium text-text">
-                {{ t('statisticsPage.filterTransform') }}
-              </div>
-              <button
-                type="button"
-                class="mb-3 w-full rounded border px-2 py-1.5 text-left text-xs font-medium transition-colors"
-                :class="
-                  statsSplitTransformEnabled
-                    ? 'border-info/60 bg-info/20 text-primary-light'
-                    : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
-                "
-                :aria-pressed="statsSplitTransformEnabled"
-                @click="toggleStatsSplitTransformEnabled()"
-              >
-                {{ t('statisticsPage.filterTransformSplit') }}
-                <span class="ml-2 text-[10px] text-text/50">Shift + T</span>
-              </button>
-              <div class="mb-1 text-sm font-medium text-text">Colonnes champion</div>
-              <div class="flex flex-wrap gap-1">
-                <button
-                  type="button"
-                  class="rounded border px-2 py-1 text-xs font-medium transition-colors"
-                  :class="
-                    showChampionHealColumns
-                      ? 'border-info/60 bg-info/20 text-primary-light'
-                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
-                  "
-                  @click="toggleChampionColumnGroup('heal')"
-                >
-                  {{ t('statisticsPage.championTableGroupHeal') }}
-                </button>
-                <button
-                  type="button"
-                  class="rounded border px-2 py-1 text-xs font-medium transition-colors"
-                  :class="
-                    showChampionDealtColumns
-                      ? 'border-info/60 bg-info/20 text-primary-light'
-                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
-                  "
-                  @click="toggleChampionColumnGroup('dealt')"
-                >
-                  Dégâts infligés
-                </button>
-                <button
-                  type="button"
-                  class="rounded border px-2 py-1 text-xs font-medium transition-colors"
-                  :class="
-                    showChampionTakenColumns
-                      ? 'border-info/60 bg-info/20 text-primary-light'
-                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
-                  "
-                  @click="toggleChampionColumnGroup('taken')"
-                >
-                  Dégâts subis
-                </button>
-              </div>
-            </div>
-            <div
-              v-show="
-                displayedActiveTab !== 'bans' &&
-                displayedActiveTab !== 'objectives' &&
-                displayedActiveTab !== 'surrender' &&
-                displayedActiveTab !== 'patchNotes' &&
-                displayedActiveTab !== 'misc'
-              "
-            >
-              <div class="mb-1 text-sm font-medium text-text">
-                {{ t('statisticsPage.filterOtp') }}
-              </div>
-              <div class="flex flex-wrap gap-1">
-                <button
-                  type="button"
-                  class="rounded border px-2 py-1 text-xs font-medium transition-colors"
-                  :class="
-                    statsOtpFilter === 'non'
-                      ? 'border-info/60 bg-info/20 text-primary-light'
-                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
-                  "
-                  @click="setStatsOtpFilter('non')"
-                >
-                  {{ t('statisticsPage.filterOtpNo') }}
-                </button>
-                <button
-                  type="button"
-                  class="rounded border px-2 py-1 text-xs font-medium transition-colors"
-                  :class="
-                    statsOtpFilter === 'oui'
-                      ? 'border-info/60 bg-info/20 text-primary-light'
-                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
-                  "
-                  @click="setStatsOtpFilter('oui')"
-                >
-                  {{ t('statisticsPage.filterOtpYes') }}
-                </button>
-                <button
-                  type="button"
-                  class="rounded border px-2 py-1 text-xs font-medium transition-colors"
-                  :class="
-                    statsOtpFilter === 'solo'
-                      ? 'border-info/60 bg-info/20 text-primary-light'
-                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
-                  "
-                  @click="setStatsOtpFilter('solo')"
-                >
-                  {{ t('statisticsPage.filterOtpSolo') }}
-                </button>
-              </div>
-            </div>
+
             <div v-if="displayedActiveTab === 'spells'">
               <label for="spells-mode-filter" class="mb-1 block text-sm font-medium text-text">
                 {{ t('statisticsPage.overviewDetailSummonerSpells') }}
@@ -782,33 +595,10 @@
 
       <!-- Contenu principal : à côté des filtres, même hauteur -->
       <div
-        class="min-w-0 flex-1 p-4 lg:px-3 lg:pb-4 lg:pt-0"
+        class="stats-content min-w-0 flex-1 p-4 lg:px-3 lg:pb-4 lg:pt-0"
         :class="[showFiltersPanel ? 'max-lg:pb-20' : 'pt-2']"
       >
         <div class="w-full">
-          <div
-            v-if="showFiltersPanel && (mobileFilterChips.length || mobileCanAddRole)"
-            class="statistics-filter-chips mb-3 flex flex-wrap gap-2 lg:hidden"
-          >
-            <button
-              v-for="chip in mobileFilterChips"
-              :key="chip.key"
-              type="button"
-              class="statistics-filter-chip"
-              :aria-label="t('statisticsPage.filterChipRemove', { value: chip.value })"
-              @click="removeFilterChip(chip.key)"
-            >
-              {{ filterChipLabel(chip) }} <span aria-hidden="true">✕</span>
-            </button>
-            <button
-              v-if="mobileCanAddRole"
-              type="button"
-              class="statistics-filter-chip is-add"
-              @click="openFilters"
-            >
-              + {{ t('statisticsPage.filterRole') }}
-            </button>
-          </div>
           <Transition name="statistics-tab" mode="out-in">
             <div :key="displayedActiveTab" class="statistics-tab-panel min-h-[12rem]">
               <div v-if="displayedActiveTab === 'overview'" class="space-y-6">
@@ -844,11 +634,16 @@
               <div v-else-if="displayedActiveTab === 'spells'" class="space-y-4">
                 <StatisticsSpellsTab />
               </div>
-              <div v-else-if="displayedActiveTab === 'pings'" class="space-y-4">
-                <StatisticsPingsTab />
-              </div>
-              <div v-else-if="displayedActiveTab === 'vision'" class="space-y-4">
-                <StatisticsVisionTab />
+              <div v-else-if="currentNavGroup === 'behavior'" class="behavior-page pt-2 md:pt-8">
+                <section class="behavior-page__vision">
+                  <StatisticsVisionTab />
+                </section>
+                <section class="behavior-page__talkers">
+                  <StatisticsPingsTab section="talkers" />
+                </section>
+                <section class="behavior-page__pings">
+                  <StatisticsPingsTab section="table" />
+                </section>
               </div>
               <div v-else-if="displayedActiveTab === 'misc'" class="space-y-4">
                 <StatisticsMiscTab />
@@ -922,6 +717,7 @@ import {
 } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
+import { mobileFilterChips, type MobileFilterChip } from '~/utils/statistics/mobileFilterChips'
 import { statisticsFiltersSheetPanelClass } from '~/composables/useStatisticsFiltersSheetMode'
 import { statsFetch } from '~/utils/statsFetch'
 import type {
@@ -953,7 +749,12 @@ import {
   isStatisticsMainTab,
   statisticsTabNeedsOverviewLoad,
 } from '~/utils/statistics/statisticsTabRouting'
-import { navGroupOfTab, visibleNavGroups } from '~/utils/statistics/statisticsNavGroups'
+import {
+  isCombinedNavGroup,
+  navGroupOfTab,
+  tabsToLoadWith,
+  visibleNavGroups,
+} from '~/utils/statistics/statisticsNavGroups'
 import { progressionReferenceVersion } from '~/utils/statistics/progressionReference'
 import {
   PAGE_SIZE_OPTIONS,
@@ -994,15 +795,12 @@ import {
   compareVersionsDesc,
   normalizeVersionToPrefix,
   pickStatsVersionFilter,
+  thinPatchNotice,
 } from '~/utils/statistics/statsVersion'
 import { comparePatchMajorMinor } from '~/utils/patchVersion'
-import {
-  statsFilterChips,
-  type StatsFilterChip,
-  type StatsFilterChipKey,
-} from '~/utils/statistics/statsFilterChips'
 import { apiUrl } from '~/utils/apiUrl'
 import { getRankedEmblemUrl } from '~/utils/rankedEmblem'
+import StatisticsFilterBar from '~/components/statistics/StatisticsFilterBar.vue'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useItemsStore } from '~/stores/ItemsStore'
 import { useRunesStore } from '~/stores/RunesStore'
@@ -1136,13 +934,24 @@ const statisticsTabNavOrder = computed(() => tabOrder.value)
 
 const allTabs = computed(() => [
   { id: 'overview' as const, label: t('statisticsPage.tabOverview'), widgetId: 'overview' },
-  { id: 'team' as const, label: t('statisticsPage.tabTeam'), widgetId: 'team' },
+  {
+    id: 'team' as const,
+    label: t('statisticsPage.tabTeam'),
+    shortLabel: t('statisticsPage.tabTeamShort'),
+    widgetId: 'team',
+  },
   {
     id: 'objectives' as const,
     label: t('statisticsPage.tabObjectives'),
+    shortLabel: t('statisticsPage.tabObjectivesShort'),
     widgetId: 'objectives',
   },
-  { id: 'surrender' as const, label: t('statisticsPage.tabSurrender'), widgetId: 'surrender' },
+  {
+    id: 'surrender' as const,
+    label: t('statisticsPage.tabSurrender'),
+    shortLabel: t('statisticsPage.tabSurrenderShort'),
+    widgetId: 'surrender',
+  },
   { id: 'bans' as const, label: t('statisticsPage.tabBans'), widgetId: 'bans' },
   {
     id: 'championTable' as const,
@@ -1152,7 +961,12 @@ const allTabs = computed(() => [
   { id: 'balance' as const, label: t('statisticsPage.tabBalance'), widgetId: 'balance' },
   // { id: 'trends' as const, label: t('statisticsPage.tabTrends'), widgetId: 'trends' },
   { id: 'runes' as const, label: t('statisticsPage.tabRunes'), widgetId: 'runes' },
-  { id: 'spells' as const, label: t('statisticsPage.tabSummonerSpells'), widgetId: 'spells' },
+  {
+    id: 'spells' as const,
+    label: t('statisticsPage.tabSummonerSpells'),
+    shortLabel: t('statisticsPage.tabSpellsShort'),
+    widgetId: 'spells',
+  },
   { id: 'items' as const, label: t('statisticsPage.tabItems'), widgetId: 'items' },
   { id: 'pings' as const, label: t('statisticsPage.tabPings'), widgetId: 'pings' },
   { id: 'vision' as const, label: t('statisticsPage.tabVision'), widgetId: 'vision' },
@@ -1188,6 +1002,7 @@ const displayedActiveTab = computed<StatisticsMainTab>(() => {
 
 const navGroups = computed(() => visibleNavGroups(tabs.value.map(tab => tab.id)))
 const currentNavGroup = computed(() => navGroupOfTab(displayedActiveTab.value))
+const currentNavGroupCombined = computed(() => isCombinedNavGroup(currentNavGroup.value))
 const currentNavGroupLabel = computed(() => {
   const group = navGroups.value.find(g => g.id === currentNavGroup.value)
   return group ? t(group.labelKey) : t('statisticsPage.title')
@@ -1510,7 +1325,120 @@ function syncStatisticsStateToQuery(): void {
     isSyncingQueryState.value = false
   })
 }
-const showFiltersPanel = computed(() => displayedActiveTab.value !== 'infos')
+/** Onglets qui gardent un panneau latéral pour leurs filtres propres (colonnes, recherche…). */
+const SIDEBAR_EXTRA_TABS = new Set<string>([])
+/** Onglets dont la recherche est intégrée à la barre d'outils (maquette). */
+const INLINE_SEARCH_TABS = new Set([
+  'bans',
+  'runes',
+  'spells',
+  'items',
+  'balance',
+  'misc',
+  'patchNotes',
+])
+const showFiltersPanel = computed(
+  () =>
+    displayedActiveTab.value !== 'infos' &&
+    !INLINE_SEARCH_TABS.has(displayedActiveTab.value) &&
+    !currentNavGroupCombined.value &&
+    (SIDEBAR_EXTRA_TABS.has(displayedActiveTab.value) ||
+      (displayedActiveTab.value !== 'championTable' &&
+        statisticsTabFilterFlags(displayedActiveTab.value).championSearch))
+)
+const showHeadVersionSelects = computed(
+  () => !['patchNotes', 'misc', 'infos'].includes(displayedActiveTab.value)
+)
+const showFilterBar = computed(() => {
+  if (currentNavGroupCombined.value || displayedActiveTab.value === 'infos') return false
+  const f = statisticsTabFilterFlags(displayedActiveTab.value)
+  return f.role || f.division || f.otp
+})
+const mobileFiltersOpen = ref(false)
+const mobileChips = computed(() => {
+  const flags = statisticsTabFilterFlags(displayedActiveTab.value)
+  return mobileFilterChips({
+    compareVersion: showHeadVersionSelects.value ? progressionFromVersionModel.value : '',
+    otp: statsOtpFilter.value,
+    role: statsRoleFilter.value,
+    divisions: statsDivisionFilter.value,
+    showRole: showFilterBar.value && flags.role,
+    showDivision: showFilterBar.value && flags.division,
+    showOtp: showFilterBar.value && flags.otp,
+  })
+})
+function mobileChipLabel(chip: MobileFilterChip): string {
+  if (chip.id === 'compare') return t('statisticsPage.mobileChipCompare', { v: chip.value })
+  if (chip.id === 'otp')
+    return t(
+      chip.value === 'solo' ? 'statisticsPage.mobileChipOtpOnly' : 'statisticsPage.mobileChipNoOtp'
+    )
+  if (chip.id === 'role') return roles.find(r => r.value === chip.value)?.label ?? chip.value
+  const tiers = chip.value.split(',')
+  return tiers.length === 1
+    ? formatDivisionLabel(tiers[0]!)
+    : t('statisticsPage.mobileChipDivisions', { n: tiers.length })
+}
+function onMobileChip(chip: MobileFilterChip) {
+  if (chip.id === 'addRole') mobileFiltersOpen.value = true
+  else if (chip.id === 'otp') setStatsOtpFilter('oui')
+  else if (chip.id === 'role') onFilterBarRole('')
+  else if (chip.id === 'division') selectAllDivisions()
+  else mobileFiltersOpen.value = true
+}
+/** Version affichée (filtre, sinon patch fiable par défaut). */
+const shownStatsVersion = computed(() => {
+  if (statsVersionFilter.value) return statsVersionFilter.value
+  const thin = overviewThinPatch.value
+  if (thin?.mode === 'fallback') return thin.reliableVersion
+  const opts = statsVersionOptions.value as Array<{ version: string; matchCount?: number }>
+  return opts.find(o => Number(o.matchCount ?? 0) > 0)?.version ?? ''
+})
+/** En-tête mobile (maquettes 02, 11…) : « Patch X vs Y » au-dessus du titre de section. */
+const mobileHead = computed(() => {
+  const v = shownStatsVersion.value
+  const tab = displayedActiveTab.value
+  if (tab === 'overview')
+    return {
+      eyebrow: t('statisticsPage.title'),
+      title: v ? `Patch ${v}` : currentNavGroupLabel.value,
+    }
+  if (!v) return { eyebrow: statsHeadEyebrow.value, title: currentNavGroupLabel.value }
+  if (!showHeadVersionSelects.value)
+    return { eyebrow: `Patch ${v}`, title: currentNavGroupLabel.value }
+  const ref = progressionFromVersion.value
+  return {
+    eyebrow: ref && ref !== v ? `Patch ${v} vs ${ref}` : `Patch ${v}`,
+    title: currentNavGroupLabel.value,
+  }
+})
+const statsHeadEyebrow = computed(() => {
+  if (displayedActiveTab.value === 'infos') return t('statisticsPage.infosEyebrow')
+  if (displayedActiveTab.value === 'patchNotes') {
+    const v = patchNotesVersionOptions.value
+    if (!v.length) return t('statisticsPage.patchNotesEyebrow')
+    return t('statisticsPage.patchNotesEyebrowRange', {
+      n: v.length,
+      from: v[v.length - 1],
+      to: v[0],
+    })
+  }
+  const parts = [t('statisticsPage.title')]
+  const opts = statsVersionOptions.value as Array<{ version: string; matchCount?: number }>
+  const cur = statsVersionFilter.value
+    ? opts.find(o => o.version === statsVersionFilter.value)
+    : undefined
+  if (cur?.version) parts.push(`Patch ${cur.version}`)
+  if (cur?.matchCount)
+    parts.push(
+      `${cur.matchCount.toLocaleString(locale.value)} ${t('statisticsPage.championsSortGames').toLowerCase()}`
+    )
+  return parts.join(' · ')
+})
+function onFilterBarRole(value: string) {
+  statsRoleFilter.value = value
+  onStatsFilterChange()
+}
 
 const activeStatsFiltersCount = computed(() => {
   let count = 0
@@ -1541,44 +1469,6 @@ const activeStatsFiltersCount = computed(() => {
   if (activeTab.value === 'misc' && miscLevel.value !== 1) count++
   return count
 })
-
-const mobileFilterChips = computed(() =>
-  activeTab.value === 'patchNotes' || activeTab.value === 'misc'
-    ? []
-    : statsFilterChips(
-        {
-          version: statsVersionFilter.value ?? '',
-          divisions: statsDivisionFilter.value,
-          role: statsRoleFilter.value,
-          otp: statsOtpFilter.value,
-          search: championSearchQuery.value,
-        },
-        statisticsTabFilterFlags(activeTab.value)
-      )
-)
-const mobileCanAddRole = computed(
-  () =>
-    statisticsTabFilterFlags(activeTab.value).role &&
-    !statsRoleFilter.value &&
-    activeTab.value !== 'patchNotes' &&
-    activeTab.value !== 'misc'
-)
-function filterChipLabel(chip: StatsFilterChip): string {
-  if (chip.key === 'version') return t('statisticsPage.filterChipVersion', { value: chip.value })
-  if (chip.key === 'otp') {
-    return chip.value === 'solo'
-      ? t('statisticsPage.filterOtpSolo')
-      : t('statisticsPage.filterOtpYes')
-  }
-  return chip.value
-}
-function removeFilterChip(key: StatsFilterChipKey) {
-  if (key === 'version') statsVersionFilter.value = ''
-  else if (key === 'division') statsDivisionFilter.value = []
-  else if (key === 'role') statsRoleFilter.value = ''
-  else if (key === 'otp') statsOtpFilter.value = 'non'
-  else championSearchQuery.value = ''
-}
 
 function closeFilters() {
   statisticsUiStore.setFiltersOpen(false)
@@ -1771,14 +1661,6 @@ function _divisionPercent(d: { matchCount: number }): string {
   if (!total) return '0'
   return (Math.round((d.matchCount / total) * 10000) / 100).toFixed(2)
 }
-function toggleRoleFilter(r: (typeof roles)[number]) {
-  statsRoleFilter.value = statsRoleFilter.value === r.value ? '' : r.value
-  onStatsFilterChange()
-}
-function selectAllRoles() {
-  statsRoleFilter.value = ''
-  onStatsFilterChange()
-}
 function setStatsOtpFilter(value: 'oui' | 'non' | 'solo') {
   statsOtpFilter.value = value
   onStatsFilterChange()
@@ -1796,24 +1678,6 @@ function toggleBansSideColumns() {
   showBansSideColumns.value = !showBansSideColumns.value
 }
 
-function toggleChampionColumnGroup(group: 'heal' | 'dealt' | 'taken') {
-  const activeCount =
-    Number(showChampionHealColumns.value) +
-    Number(showChampionDealtColumns.value) +
-    Number(showChampionTakenColumns.value)
-  if (group === 'heal') {
-    if (showChampionHealColumns.value && activeCount <= 1) return
-    showChampionHealColumns.value = !showChampionHealColumns.value
-    return
-  }
-  if (group === 'dealt') {
-    if (showChampionDealtColumns.value && activeCount <= 1) return
-    showChampionDealtColumns.value = !showChampionDealtColumns.value
-    return
-  }
-  if (showChampionTakenColumns.value && activeCount <= 1) return
-  showChampionTakenColumns.value = !showChampionTakenColumns.value
-}
 let cohortDivisionEffectTimer: ReturnType<typeof setTimeout> | null = null
 
 function scheduleDivisionCohortEffects() {
@@ -2308,6 +2172,17 @@ if (import.meta.client) {
       syncProgressionDeltaToVersionBeforeFilter()
     }
   )
+}
+
+/** Bandeau « nouveau patch » de la vue d'ensemble. */
+const overviewThinPatch = computed(() =>
+  thinPatchNotice({ selected: statsVersionFilter.value, versions: statsVersionOptions.value })
+)
+
+function selectStatsVersion(version: string): void {
+  if (statsVersionFilter.value === version) return
+  statsVersionFilter.value = version
+  onStatsFilterChange()
 }
 
 /** Garde un patch présent dans `statsVersionOptions` avec des matchs (évite balance/tierlist vides sur ?version= obsolète). */
@@ -3909,8 +3784,9 @@ async function loadStatisticsTabData(tab: typeof activeTab.value): Promise<void>
     loadOverviewDetailBaseline()
   }
   if (tab === 'surrender') loadSurrenderMatrix()
-  if (tab === 'pings') pingsTab.loadPingsTable()
-  if (tab === 'vision') visionTab.loadVisionTable()
+  const loadWith = tabsToLoadWith(tab)
+  if (loadWith.includes('pings')) pingsTab.loadPingsTable()
+  if (loadWith.includes('vision')) visionTab.loadVisionTable()
   if (tab === 'misc') miscTab.loadMiscTable()
   if (tab === 'patchNotes') {
     runInBackground(loadPatchNotesVersionOptions())
@@ -3950,8 +3826,8 @@ watch([statsVersionFilter, statsRoleFilter, statsOtpFilter], () => {
     loadOverviewTeams()
     loadObjectivesBaseline()
   }
-  if (activeTab.value === 'pings') pingsTab.loadPingsTable()
-  if (activeTab.value === 'vision') visionTab.loadVisionTable()
+  if (tabsToLoadWith(activeTab.value).includes('pings')) pingsTab.loadPingsTable()
+  if (tabsToLoadWith(activeTab.value).includes('vision')) visionTab.loadVisionTable()
   if (activeTab.value === 'surrender') loadSurrenderMatrix()
   if (activeTab.value === 'runes' || activeTab.value === 'items' || activeTab.value === 'spells') {
     loadOverviewDetail()
@@ -3993,8 +3869,8 @@ watch(progressionFromVersion, () => {
     bansTab.loadBansTable()
     loadObjectivesBaseline()
   }
-  if (activeTab.value === 'pings') pingsTab.loadPingsTable()
-  if (activeTab.value === 'vision') visionTab.loadVisionTable()
+  if (tabsToLoadWith(activeTab.value).includes('pings')) pingsTab.loadPingsTable()
+  if (tabsToLoadWith(activeTab.value).includes('vision')) visionTab.loadVisionTable()
   if (activeTab.value === 'surrender') loadSurrenderMatrix()
   if (activeTab.value === 'runes' || activeTab.value === 'items' || activeTab.value === 'spells') {
     loadOverviewDetail()
@@ -4228,6 +4104,8 @@ const statisticsPageCtx = reactive({
   overviewTopPickrateChampionsFiltered,
   overviewTopPickrateSince,
   overviewTopWinrateSince,
+  overviewThinPatch,
+  selectStatsVersion,
   paginatedBans: bansTab.paginatedBans,
   paginatedChampionGlobalRows,
   paginatedMiscRows: miscTab.paginatedMiscRows,
@@ -4237,6 +4115,9 @@ const statisticsPageCtx = reactive({
   patchNotesData: patchNotesTab.patchNotesData,
   patchNotesChangeFilter: patchNotesTab.patchNotesChangeFilter,
   patchNotesTargetFilters,
+  patchNotesFromVersion,
+  patchNotesToVersion,
+  patchNotesVersionOptions,
   patchNotesError: patchNotesTab.patchNotesError,
   patchNotesPage: patchNotesTab.patchNotesPage,
   patchNotesPageSize: patchNotesTab.patchNotesPageSize,
@@ -4309,6 +4190,7 @@ const statisticsPageCtx = reactive({
   t,
   tierListPatchDeltaClass,
   toggleFavoriteCard,
+  toggleStatsSplitTransformEnabled,
   toggleObjective,
   totalBansCount: bansTab.totalBansCount,
   totalBansPages: bansTab.totalBansPages,
@@ -4338,6 +4220,28 @@ defineExpose({ statisticsPageCtx })
 </script>
 
 <style scoped>
+.behavior-page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+.behavior-page > section {
+  min-width: 0;
+}
+@media (min-width: 1024px) {
+  .behavior-page {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+  .behavior-page__vision {
+    grid-column: span 8 / span 8;
+  }
+  .behavior-page__talkers {
+    grid-column: span 4 / span 4;
+  }
+  .behavior-page__pings {
+    grid-column: 1 / -1;
+  }
+}
 .statistics-filter-chip {
   display: inline-flex;
   align-items: center;
@@ -4512,92 +4416,8 @@ defineExpose({ statisticsPageCtx })
 }
 </style>
 
+<style src="~/assets/css/stats-head.css"></style>
 <style>
-/* En-tête + nav sections (maquette Redesign Statistiques) */
-.statistics .stats-head {
-  border-bottom: 1px solid var(--color-gold-500);
-  background: var(--color-blue-600);
-}
-.statistics .stats-head-inner {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 24px 32px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-.statistics .stats-eyebrow {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--color-grey-50);
-}
-.statistics .stats-h1 {
-  margin: 0;
-  font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
-  font-weight: 700;
-  font-size: 40px;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--color-gold-100);
-}
-.statistics .stats-nav {
-  display: flex;
-  gap: 4px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.statistics .stats-nav-link {
-  padding: 12px 16px;
-  font-weight: 500;
-  color: var(--color-grey-50);
-  text-decoration: none;
-  border-bottom: 2px solid transparent;
-  white-space: nowrap;
-  background: none;
-}
-.statistics .stats-nav-link:hover {
-  color: var(--color-gold-50);
-}
-.statistics .stats-nav-link.is-active {
-  font-weight: 600;
-  color: var(--color-gold-50);
-  border-bottom-color: var(--color-gold-100);
-}
-.statistics .stats-subtabs {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 2px;
-  padding: 3px;
-  background: var(--color-blue-600);
-  border: 1px solid var(--color-blue-400);
-  border-radius: 8px;
-}
-.statistics .stats-subtab {
-  height: 34px;
-  padding: 0 12px;
-  border-radius: 6px;
-  color: var(--color-grey-50);
-}
-.statistics .stats-subtab.is-active {
-  background: var(--color-blue-400);
-  color: var(--color-gold-50);
-  font-weight: 600;
-}
-@media (max-width: 767px) {
-  .statistics .stats-head-inner {
-    padding: 16px 16px 0;
-    gap: 12px;
-  }
-  .statistics .stats-h1 {
-    font-size: 28px;
-  }
-  .statistics .stats-nav-link {
-    padding: 10px 12px;
-    font-size: 13px;
-  }
-}
 /**
  * Surfaces & fast-stat : hors scoped pour que les composants enfants (objets, tooltips)
  * héritent le même fond rgb(var(--rgb-chrome) / 1) que les cartes « Vue d’ensemble ».

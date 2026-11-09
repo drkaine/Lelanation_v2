@@ -1,37 +1,51 @@
 <template>
-  <div class="statistics-overview-surface space-y-3 rounded-lg border border-primary/30 p-3">
-    <div v-if="distribution.length" class="stg-dist">
-      <div class="stg-dist-head">
-        <span class="font-semibold">{{ t('statisticsPage.tierGridDistribution') }}</span>
-        <span class="text-xs text-text/60">{{ t('statisticsPage.tierGridDistributionHint') }}</span>
-      </div>
-      <div class="stg-dist-bar" role="img" :aria-label="distributionAria">
-        <div
-          v-for="d in distribution"
-          :key="d.tier"
-          class="stg-dist-seg"
-          :class="tierTokenClass(d.tier)"
-          :style="{ flexGrow: d.count }"
-        >
-          {{ d.tier }}
+  <div class="space-y-3">
+    <div class="stg-top">
+      <div v-if="distribution.length" class="stg-dist">
+        <div class="stg-dist-head">
+          <span class="font-semibold">{{ t('statisticsPage.tierGridDistribution') }}</span>
+          <span class="text-xs text-text/60">{{
+            t('statisticsPage.tierGridDistributionHint')
+          }}</span>
+        </div>
+        <div class="stg-dist-bar" role="img" :aria-label="distributionAria">
+          <div
+            v-for="d in distribution"
+            :key="d.tier"
+            class="stg-dist-seg"
+            :class="tierTokenClass(d.tier)"
+            :style="{ flexGrow: d.count }"
+          >
+            {{ d.tier }}
+          </div>
+        </div>
+        <div class="stg-dist-counts" aria-hidden="true">
+          <span v-for="d in distribution" :key="d.tier" :style="{ flexGrow: d.count }">
+            {{ d.count }}
+          </span>
         </div>
       </div>
-      <div class="stg-dist-counts" aria-hidden="true">
-        <span v-for="d in distribution" :key="d.tier" :style="{ flexGrow: d.count }">
-          {{ d.count }}
-        </span>
-      </div>
+      <aside class="stg-how">
+        <h3>{{ t('statisticsPage.tierGridHowTitle') }}</h3>
+        <p>{{ t('statisticsPage.tierGridHowText') }}</p>
+        <NuxtLink :to="localePath('/statistics?tab=infos')">{{
+          t('statisticsPage.tierGridHowLink')
+        }}</NuxtLink>
+      </aside>
     </div>
 
     <section
       v-for="group in groups"
       :key="group.tier"
       class="stg-tier"
-      :class="tierTokenClass(group.tier)"
+      :class="[tierTokenClass(group.tier), expanded[group.tier] ? 'is-expanded' : '']"
     >
       <h3 class="stg-label">
         <span>{{ group.tier }}</span>
         <span class="stg-count">{{ group.rows.length }}</span>
+        <span class="stg-count-m">
+          {{ t('statisticsPage.tierGridCountChampions', { count: group.rows.length }) }}
+        </span>
       </h3>
       <div class="stg-tiles">
         <NuxtLink
@@ -73,6 +87,14 @@
           {{ t('statisticsPage.tierGridLess') }}
         </button>
       </div>
+      <button
+        v-if="!expanded[group.tier] && group.rows.length > MOBILE_TILE_LIMIT"
+        type="button"
+        class="stg-more-m"
+        @click="expanded[group.tier] = true"
+      >
+        {{ t('statisticsPage.tierGridSeeAll', { count: group.rows.length }) }}
+      </button>
     </section>
     <p class="text-xs text-text/60">{{ t('statisticsPage.tierGridLegend') }}</p>
   </div>
@@ -82,6 +104,7 @@
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { championStatsDetailPath } from '~/utils/championStatsRoutes'
 import { getChampionImageUrl } from '~/utils/imageUrl'
+import { fmtLocNum } from '~/utils/statistics/localeNum'
 import {
   tierTokenClass,
   type TierGridGroup,
@@ -95,8 +118,10 @@ const props = defineProps<{ groups: TierGridGroup<GridRow>[] }>()
 
 /** Tuiles affichées par tier avant « + N autres ». */
 const TILE_LIMIT = 20
+/** Mobile : 2 rangées de 4 avant « Voir les N champions » (masquage CSS). */
+const MOBILE_TILE_LIMIT = 8
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const expanded = reactive<Record<string, boolean>>({})
 const distribution = computed(() => tierDistribution(props.groups))
 const distributionAria = computed(() =>
@@ -123,7 +148,7 @@ function championImage(id: number): string {
 }
 /** Ratio 0–1 → « 52.3% ». */
 function percent(ratio: number): string {
-  return Number.isFinite(ratio) ? `${(ratio * 100).toFixed(1)}%` : '—'
+  return Number.isFinite(ratio) ? `${fmtLocNum(ratio * 100, 1, locale.value)} %` : '—'
 }
 </script>
 
@@ -162,7 +187,7 @@ function percent(ratio: number): string {
   flex-basis: 0;
   place-items: center;
   background: var(--tier-color);
-  color: var(--color-grey-500);
+  color: var(--tier-ink);
   font-size: 0.75rem;
   font-weight: 700;
 }
@@ -178,11 +203,12 @@ function percent(ratio: number): string {
 
 .stg-tier {
   --tier-color: var(--color-tier-badge-d);
+  --tier-ink: #f0e6d2;
   display: grid;
   overflow: hidden;
-  border: 1px solid var(--color-gold-500);
+  border: 1px solid #463714;
   border-radius: 0.75rem;
-  background: var(--color-blue-600);
+  background: #0a1428;
   grid-template-columns: 4.5rem 1fr;
 }
 
@@ -194,7 +220,7 @@ function percent(ratio: number): string {
   gap: 0.1rem;
   margin: 0;
   background: var(--tier-color);
-  color: var(--color-grey-500);
+  color: var(--tier-ink);
   font-family: 'Barlow Condensed', var(--font-heading, sans-serif);
   font-size: 2rem;
   font-weight: 700;
@@ -242,31 +268,34 @@ function percent(ratio: number): string {
 
 .stg-tile {
   display: flex;
-  width: 4.5rem;
+  width: 6.5rem;
   flex-direction: column;
   align-items: center;
-  gap: 0.15rem;
+  gap: 0.2rem;
+  padding: 0.6rem 0.4rem 0.5rem;
+  border: 1px solid #463714;
+  border-radius: 0.5rem;
+  background: #091428;
   color: var(--color-text);
   text-align: center;
-  transition: transform 0.15s;
+  transition:
+    border-color 0.15s,
+    transform 0.15s;
 }
 
 .stg-tile:hover {
+  border-color: #c8aa6e;
   transform: translateY(-2px);
 }
 
 .stg-portrait {
   display: block;
-  width: 3.25rem;
-  height: 3.25rem;
+  width: 3rem;
+  height: 3rem;
+  margin-bottom: 0.3rem;
   overflow: hidden;
-  border: 2px solid var(--tier-color);
-  border-radius: 0.6rem;
-  background: var(--color-blue-600);
-}
-
-.stg-tile:hover .stg-portrait {
-  box-shadow: 0 0 12px var(--tier-color);
+  border-radius: 0.4rem;
+  background: #0a323c;
 }
 
 .stg-portrait img {
@@ -291,7 +320,7 @@ function percent(ratio: number): string {
 }
 
 .stg-wr.wr-high {
-  color: var(--color-blue-100);
+  color: #0ac8b9;
 }
 
 .stg-wr.wr-low {
@@ -300,25 +329,142 @@ function percent(ratio: number): string {
 
 .tier-s-plus {
   --tier-color: var(--color-tier-badge-s-plus);
+  --tier-ink: #010a13;
 }
 
 .tier-s {
   --tier-color: var(--color-tier-badge-s);
+  --tier-ink: #010a13;
 }
 
 .tier-a {
   --tier-color: var(--color-tier-badge-a);
+  --tier-ink: #0a323c;
 }
 
 .tier-b {
   --tier-color: var(--color-tier-badge-b);
+  --tier-ink: #0a323c;
 }
 
 .tier-c {
   --tier-color: var(--color-tier-badge-c);
+  --tier-ink: #f0e6d2;
 }
 
 .tier-d {
   --tier-color: var(--color-tier-badge-d);
+  --tier-ink: #f0e6d2;
+}
+
+.stg-top {
+  display: grid;
+  gap: 0.75rem;
+}
+@media (min-width: 1024px) {
+  .stg-top {
+    grid-template-columns: 1.6fr 1fr;
+  }
+}
+.stg-dist,
+.stg-how {
+  border: 1px solid #463714;
+  border-radius: 0.75rem;
+  background: #0a1428;
+}
+.stg-how {
+  padding: 1rem 1.25rem;
+  font-size: 0.8rem;
+  color: #a09b8c;
+}
+.stg-how h3 {
+  margin: 0 0 0.3rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #f0e6d2;
+}
+.stg-how p {
+  margin: 0 0 0.3rem;
+}
+.stg-how a {
+  color: #c8aa6e;
+  font-weight: 600;
+  text-decoration: underline;
+}
+.stg-count-m,
+.stg-more-m {
+  display: none;
+}
+@media (max-width: 767px) {
+  .stg-how,
+  .stg-dist-head,
+  .stg-dist-counts,
+  .stg-count {
+    display: none;
+  }
+  .stg-dist {
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+  .stg-dist-bar {
+    height: 1.25rem;
+  }
+  .stg-dist-seg {
+    min-width: 1.1rem;
+    font-size: 0.6rem;
+  }
+  .stg-tier {
+    grid-template-columns: 1fr;
+  }
+  .stg-label {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 0.6rem;
+    padding: 0.6rem 0.75rem;
+    font-size: 1.5rem;
+  }
+  .stg-count-m {
+    display: inline;
+    font-family: Inter, var(--font-sans, sans-serif);
+    font-size: 0.8rem;
+    font-weight: 500;
+  }
+  .stg-tiles {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.9rem 0.25rem;
+    padding: 1rem 0.5rem;
+  }
+  .stg-tile {
+    width: auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+  .stg-tile:hover {
+    transform: none;
+  }
+  .stg-portrait {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+  .stg-tier:not(.is-expanded) .stg-tile:nth-child(n + 9),
+  .stg-tier:not(.is-expanded) .stg-more {
+    display: none;
+  }
+  .stg-tiles .stg-more {
+    grid-column: 1 / -1;
+  }
+  .stg-more-m {
+    display: block;
+    width: 100%;
+    padding: 0.8rem;
+    border-top: 1px solid #463714;
+    background: transparent;
+    color: #c8aa6e;
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
 }
 </style>

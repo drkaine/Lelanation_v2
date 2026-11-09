@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { isLowSample } from '~/utils/statistics/lowSample'
+import { surrenderBarWidths, surrenderDeltaView } from '~/utils/statistics/surrenderDivisionRows'
 import {
   injectStatisticsPageCtx,
   type StatisticsIndexPageCtx,
@@ -8,26 +9,9 @@ import {
 
 const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
 
-function teamLabel(team: 'ALL' | 100 | 200): string {
-  if (team === 100) return p.t('statisticsPage.sidesBlue')
-  if (team === 200) return p.t('statisticsPage.sidesRed')
-  return p.t('statisticsPage.allRanks')
-}
-
 function rankLabel(rank: string): string {
   if (rank === 'ALL') return p.t('statisticsPage.allRanks')
   return p.formatDivisionLabel(rank)
-}
-
-function pct(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return '—'
-  return `${Number(value).toFixed(2)}%`
-}
-
-function delta(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return ''
-  const sign = value > 0 ? '+' : ''
-  return `${sign}${Number(value).toFixed(2)}%`
 }
 
 function formatStatCount(value: number): string {
@@ -36,19 +20,7 @@ function formatStatCount(value: number): string {
     .replace(/\u202F/g, '')
 }
 
-function deltaClass(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return 'text-text/60'
-  if (value === 0) return 'text-text/60'
-  return value > 0 ? 'text-error' : 'text-info'
-}
-
 const rows = computed(() => p.surrenderMatrixRows ?? [])
-
-const openRanks = ref(new Set<string>())
-function toggleRank(rank: string) {
-  if (openRanks.value.has(rank)) openRanks.value.delete(rank)
-  else openRanks.value.add(rank)
-}
 
 type Row = {
   rankTier: string
@@ -62,27 +34,12 @@ type Row = {
   earlySurrenderDelta: number | null
 }
 
-function surrenderOnlyCount(row: Row | null | undefined): number {
-  if (!row) return 0
-  return Math.max(0, Number(row.surrenderCount ?? 0) - Number(row.earlySurrenderCount ?? 0))
-}
-
-function playedCount(row: Row | null | undefined): number {
-  if (!row) return 0
-  return Math.max(0, Number(row.matchCount ?? 0) - Number(row.surrenderCount ?? 0))
-}
-
 function rowHasData(row: Row | null | undefined): boolean {
   return !!row && Number(row.matchCount) > 0
 }
 
 function groupHasData(group: { all: Row | null; blue: Row | null; red: Row | null }): boolean {
   return rowHasData(group.all) || rowHasData(group.blue) || rowHasData(group.red)
-}
-
-function outcomePct(part: number, total: number): string {
-  if (!total || total <= 0) return '0.00'
-  return ((part / total) * 100).toFixed(2)
 }
 
 const groupedRows = computed(() => {
@@ -114,6 +71,27 @@ const groupedRows = computed(() => {
     .filter(groupHasData)
 })
 
+const { locale } = useI18n()
+function fmtPct(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(Number(v))) return '—'
+  return `${Number(v).toLocaleString(locale.value, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %`
+}
+function barW(row: Row) {
+  return surrenderBarWidths(row.surrenderRate, row.earlySurrenderRate)
+}
+function deltaV(row: Row) {
+  return surrenderDeltaView(row.surrenderDelta)
+}
+function deltaText(row: Row): string {
+  const d = deltaV(row)
+  if (d.abs == null) return '—'
+  const n = d.abs.toLocaleString(locale.value, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+  return d.dir === 'up' ? `▲ +${n}` : `▼ −${n}`
+}
+
 function rankIcon(rank: string): string {
   if (rank === 'ALL') return '/data/community-dragon/ranked-emblem/Unranked.png'
   return p.getRankedEmblemUrl(rank) || '/data/community-dragon/ranked-emblem/Unranked.png'
@@ -130,365 +108,71 @@ function rankIcon(rank: string): string {
         {{ p.t('statisticsPage.noData') }}
       </div>
       <div v-else class="w-full min-w-0">
-        <!-- Mobile : une carte « Répartition des parties » par division -->
-        <div class="statistics-surrender-mobile-list space-y-3 md:hidden">
-          <article
-            v-for="group in groupedRows"
-            :key="`surrender-mobile-${group.rank}`"
-            class="statistics-champion-stats-mobile-card statistics-surrender-mobile-card w-full max-w-full overflow-hidden py-2"
-            :class="{ 'is-low-sample': isLowSample(group.all?.matchCount) }"
-          >
-            <button
-              type="button"
-              class="statistics-surrender-mobile-card-header mb-2 flex w-full items-center gap-2.5 text-left"
-              @click="toggleRank(group.rank)"
-            >
-              <span
-                class="inline-block shrink-0 text-xs text-text/60 transition-transform duration-200"
-                :class="openRanks.has(group.rank) ? 'rotate-180' : ''"
-                aria-hidden
-                >▼</span
+        <!-- Desktop : tableau de la maquette 03 -->
+        <section class="sr-section flex">
+          <h2 class="sr-h2">{{ p.t('statisticsPage.tabSurrender') }}</h2>
+          <article class="sr-card">
+            <div class="sr-grid sr-head">
+              <span>{{ p.t('statisticsPage.surrenderColDivision') }}</span>
+              <span class="sr-right">{{ p.t('statisticsPage.surrenderColGames') }}</span>
+              <span>{{ p.t('statisticsPage.surrenderColRate') }}</span>
+              <span class="sr-right">{{ p.t('statisticsPage.surrenderColDelta') }}</span>
+            </div>
+            <template v-for="group in groupedRows" :key="`rank-${group.rank}`">
+              <div
+                v-if="group.all"
+                class="sr-grid sr-row"
+                :class="{ 'is-low-sample': isLowSample(group.all.matchCount) }"
               >
-              <img
-                :src="rankIcon(group.rank)"
-                :alt="rankLabel(group.rank)"
-                class="statistics-surrender-mobile-rank-icon h-8 w-8 shrink-0 object-contain"
-                loading="lazy"
-              />
-              <h3
-                class="statistics-surrender-mobile-rank-title min-w-0 flex-1 text-base font-semibold leading-snug text-text-accent"
-              >
-                {{ rankLabel(group.rank) }}
-              </h3>
-              <span
-                v-if="group.all?.matchCount"
-                class="statistics-surrender-mobile-match-count shrink-0 text-xs tabular-nums leading-tight text-text/60"
-              >
-                {{ Number(group.all.matchCount).toLocaleString() }}
-                <span class="statistics-surrender-mobile-match-count-label">
-                  {{ p.t('statisticsPage.overviewDurationWinrateTooltipMatches') }}
+                <span class="sr-div">
+                  <img
+                    :src="rankIcon(group.rank)"
+                    alt=""
+                    width="20"
+                    height="20"
+                    class="sr-emblem"
+                  />
+                  <span class="sr-divname">
+                    {{ rankLabel(group.rank) }}
+                    <small class="sr-mgames">{{
+                      p.t('statisticsPage.surrenderMobileGames', {
+                        n: formatStatCount(group.all.matchCount),
+                      })
+                    }}</small>
+                  </span>
+                  <span v-if="isLowSample(group.all.matchCount)" class="sr-badge">{{
+                    p.t('statisticsPage.surrenderLowBadge')
+                  }}</span>
                 </span>
-              </span>
-            </button>
-
-            <div
-              v-if="group.all && Number(group.all.matchCount) > 0"
-              class="statistics-surrender-mobile-card-body flex flex-col items-center gap-3 pt-3"
-            >
-              <StatisticsMatchOutcomeDonut
-                :total="Number(group.all.matchCount)"
-                :early="Number(group.all.earlySurrenderCount)"
-                :surrender-only="surrenderOnlyCount(group.all)"
-                :played="playedCount(group.all)"
-              />
-              <div class="statistics-surrender-mobile-details w-full min-w-0 space-y-1.5">
-                <div class="statistics-surrender-details-title font-medium text-text/90">
-                  {{ p.t('statisticsPage.overviewMatchOutcomesTitle') }}
-                </div>
-                <div class="statistics-surrender-stat-block">
-                  <span class="statistics-surrender-stat-label">
-                    <span class="statistics-surrender-stat-dot bg-accent" />
-                    <span>{{ p.t('statisticsPage.surrenderStatEarlyShort') }}</span>
-                  </span>
-                  <span class="statistics-surrender-stat-value">
-                    {{ formatStatCount(Number(group.all.earlySurrenderCount)) }}
-                    <span class="text-text/55"
-                      >({{
-                        outcomePct(
-                          Number(group.all.earlySurrenderCount),
-                          Number(group.all.matchCount)
-                        )
-                      }}%)</span
-                    >
-                    <span
-                      v-if="delta(group.all.earlySurrenderDelta)"
-                      class="statistics-surrender-stat-delta"
-                      :class="deltaClass(group.all.earlySurrenderDelta)"
-                    >
-                      {{ delta(group.all.earlySurrenderDelta) }}
-                    </span>
-                  </span>
-                </div>
-                <div class="statistics-surrender-stat-block">
-                  <span class="statistics-surrender-stat-label">
-                    <span class="statistics-surrender-stat-dot bg-accent-light" />
-                    <span>{{ p.t('statisticsPage.surrenderStatSurrenderShort') }}</span>
-                  </span>
-                  <span class="statistics-surrender-stat-value">
-                    {{ formatStatCount(surrenderOnlyCount(group.all)) }}
-                    <span class="text-text/55"
-                      >({{
-                        outcomePct(surrenderOnlyCount(group.all), Number(group.all.matchCount))
-                      }}%)</span
-                    >
-                    <span
-                      v-if="delta(group.all.surrenderDelta)"
-                      class="statistics-surrender-stat-delta"
-                      :class="deltaClass(group.all.surrenderDelta)"
-                    >
-                      {{ delta(group.all.surrenderDelta) }}
-                    </span>
-                  </span>
-                </div>
-                <div class="statistics-surrender-stat-block">
-                  <span class="statistics-surrender-stat-label">
-                    <span class="statistics-surrender-stat-dot bg-info" />
-                    <span>{{ p.t('statisticsPage.surrenderPlayedMatches') }}</span>
-                  </span>
-                  <span class="statistics-surrender-stat-value">
-                    {{ formatStatCount(playedCount(group.all)) }}
-                    <span class="text-text/55"
-                      >({{
-                        outcomePct(playedCount(group.all), Number(group.all.matchCount))
-                      }}%)</span
-                    >
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div v-else class="py-3 text-center text-xs text-text/60">
-              {{ p.t('statisticsPage.noData') }}
-            </div>
-
-            <div
-              v-if="openRanks.has(group.rank) && (group.blue || group.red)"
-              class="statistics-surrender-mobile-side-block mt-3 space-y-3 pt-3"
-            >
-              <div
-                v-if="group.blue && Number(group.blue.matchCount) > 0"
-                class="statistics-surrender-mobile-side-card rounded-lg border border-primary/30 bg-info/5 p-2"
-              >
-                <div class="mb-2 text-sm font-semibold text-info">{{ teamLabel(100) }}</div>
-                <div class="flex flex-col items-center gap-2 sm:flex-row sm:items-center">
-                  <StatisticsMatchOutcomeDonut
-                    side-accent="blue"
-                    :total="Number(group.blue.matchCount)"
-                    :early="Number(group.blue.earlySurrenderCount)"
-                    :surrender-only="surrenderOnlyCount(group.blue)"
-                    :played="playedCount(group.blue)"
-                  />
-                  <div class="w-full min-w-0 space-y-1.5">
-                    <div class="statistics-surrender-stat-block">
-                      <span class="statistics-surrender-stat-label">
-                        {{ p.t('statisticsPage.surrenderStatSurrenderShort') }}
-                      </span>
-                      <span class="statistics-surrender-stat-value">
-                        {{ pct(group.blue.surrenderRate) }}
-                        <span
-                          v-if="delta(group.blue.surrenderDelta)"
-                          class="statistics-surrender-stat-delta"
-                          :class="deltaClass(group.blue.surrenderDelta)"
-                        >
-                          {{ delta(group.blue.surrenderDelta) }}
-                        </span>
-                      </span>
-                    </div>
-                    <div class="statistics-surrender-stat-block">
-                      <span class="statistics-surrender-stat-label">
-                        {{ p.t('statisticsPage.surrenderStatEarlyShort') }}
-                      </span>
-                      <span class="statistics-surrender-stat-value">
-                        {{ pct(group.blue.earlySurrenderRate) }}
-                        <span
-                          v-if="delta(group.blue.earlySurrenderDelta)"
-                          class="statistics-surrender-stat-delta"
-                          :class="deltaClass(group.blue.earlySurrenderDelta)"
-                        >
-                          {{ delta(group.blue.earlySurrenderDelta) }}
-                        </span>
-                      </span>
-                    </div>
+                <span class="sr-right sr-num sr-muted">{{
+                  formatStatCount(group.all.matchCount)
+                }}</span>
+                <div class="sr-barcell">
+                  <div class="sr-track">
+                    <div
+                      class="sr-seg sr-seg--early"
+                      :style="{ width: `${barW(group.all).early}%` }"
+                    />
+                    <div
+                      class="sr-seg sr-seg--rest"
+                      :style="{ width: `${barW(group.all).rest}%` }"
+                    />
                   </div>
-                </div>
-              </div>
-              <div
-                v-if="group.red && Number(group.red.matchCount) > 0"
-                class="statistics-surrender-mobile-side-card rounded-lg border border-primary/30 bg-error/5 p-2"
-              >
-                <div class="mb-2 text-sm font-semibold text-error/70">{{ teamLabel(200) }}</div>
-                <div class="flex flex-col items-center gap-2 sm:flex-row sm:items-center">
-                  <StatisticsMatchOutcomeDonut
-                    side-accent="red"
-                    :total="Number(group.red.matchCount)"
-                    :early="Number(group.red.earlySurrenderCount)"
-                    :surrender-only="surrenderOnlyCount(group.red)"
-                    :played="playedCount(group.red)"
-                  />
-                  <div class="w-full min-w-0 space-y-1.5">
-                    <div class="statistics-surrender-stat-block">
-                      <span class="statistics-surrender-stat-label">
-                        {{ p.t('statisticsPage.surrenderStatSurrenderShort') }}
-                      </span>
-                      <span class="statistics-surrender-stat-value">
-                        {{ pct(group.red.surrenderRate) }}
-                        <span
-                          v-if="delta(group.red.surrenderDelta)"
-                          class="statistics-surrender-stat-delta"
-                          :class="deltaClass(group.red.surrenderDelta)"
-                        >
-                          {{ delta(group.red.surrenderDelta) }}
-                        </span>
-                      </span>
-                    </div>
-                    <div class="statistics-surrender-stat-block">
-                      <span class="statistics-surrender-stat-label">
-                        {{ p.t('statisticsPage.surrenderStatEarlyShort') }}
-                      </span>
-                      <span class="statistics-surrender-stat-value">
-                        {{ pct(group.red.earlySurrenderRate) }}
-                        <span
-                          v-if="delta(group.red.earlySurrenderDelta)"
-                          class="statistics-surrender-stat-delta"
-                          :class="deltaClass(group.red.earlySurrenderDelta)"
-                        >
-                          {{ delta(group.red.earlySurrenderDelta) }}
-                        </span>
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </article>
-        </div>
-
-        <!-- Desktop : tableau (même gabarit que pings / bans / champions) -->
-        <p class="surrender-low-sample-note">
-          {{ p.t('statisticsPage.surrenderLowSampleNote') }}
-        </p>
-        <div
-          class="tier-list-mobile-rotate statistics-overview-surface hidden w-full overflow-x-auto rounded-lg border border-primary/30 md:block"
-        >
-          <div class="tier-list-lolalytics w-full min-w-0 text-[13px]">
-            <table class="w-full min-w-[480px] text-left text-[13px]">
-              <thead
-                class="sticky top-0 z-10 border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
-              >
-                <tr>
-                  <th class="min-w-[220px] px-2 py-1.5 text-left font-semibold text-text">
-                    {{ p.t('statisticsPage.overviewMatchesByDivision') }}
-                  </th>
-                  <th class="px-3 py-1.5 text-center font-semibold text-text">
-                    {{ p.t('statisticsPage.abandonsSurrenderRate') }}
-                  </th>
-                  <th class="px-3 py-1.5 text-center font-semibold text-text">
-                    {{ p.t('statisticsPage.abandonsEarlySurrenderRate') }}
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-primary/20">
-                <template v-for="group in groupedRows" :key="`rank-${group.rank}`">
-                  <tr
-                    class="text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
-                    :class="{ 'is-low-sample': isLowSample(group.all?.matchCount) }"
+                  <span class="sr-num sr-val"
+                    ><strong>{{ fmtPct(group.all.surrenderRate) }}</strong>
+                    <span class="sr-muted">
+                      ({{ fmtPct(group.all.earlySurrenderRate) }})</span
+                    ></span
                   >
-                    <td class="min-w-[220px] py-0.5 pl-2 pr-0">
-                      <button
-                        type="button"
-                        class="flex items-center gap-2 font-medium text-text hover:text-text-accent"
-                        @click="toggleRank(group.rank)"
-                      >
-                        <span
-                          class="inline-block text-xs text-text/60 transition-transform duration-200"
-                          :class="openRanks.has(group.rank) ? 'rotate-180' : ''"
-                          aria-hidden
-                          >▼</span
-                        >
-                        <img
-                          :src="rankIcon(group.rank)"
-                          :alt="rankLabel(group.rank)"
-                          class="h-5 w-5 shrink-0 object-contain"
-                          loading="lazy"
-                        />
-                        <span class="truncate">{{ rankLabel(group.rank) }}</span>
-                        <span
-                          v-if="group.all?.matchCount"
-                          class="ml-auto shrink-0 text-[11px] tabular-nums text-text/55"
-                        >
-                          {{ Number(group.all.matchCount).toLocaleString() }}
-                        </span>
-                      </button>
-                    </td>
-                    <td class="px-1 py-0.5 text-center align-middle tabular-nums">
-                      {{ pct(group.all?.surrenderRate) }}
-                      <span
-                        v-if="delta(group.all?.surrenderDelta)"
-                        class="ml-1 text-[10px]"
-                        :class="deltaClass(group.all?.surrenderDelta)"
-                      >
-                        {{ delta(group.all?.surrenderDelta) }}
-                      </span>
-                    </td>
-                    <td class="px-1 py-0.5 text-center align-middle tabular-nums">
-                      {{ pct(group.all?.earlySurrenderRate) }}
-                      <span
-                        v-if="delta(group.all?.earlySurrenderDelta)"
-                        class="ml-1 text-[10px]"
-                        :class="deltaClass(group.all?.earlySurrenderDelta)"
-                      >
-                        {{ delta(group.all?.earlySurrenderDelta) }}
-                      </span>
-                    </td>
-                  </tr>
-                  <template v-if="openRanks.has(group.rank)">
-                    <tr
-                      v-if="group.blue"
-                      class="text-text-primary/85 odd:bg-white/[0.02] even:bg-black/15"
-                    >
-                      <td class="py-0.5 pl-10 pr-2 text-info">{{ teamLabel(100) }}</td>
-                      <td class="px-1 py-0.5 text-center align-middle tabular-nums">
-                        {{ pct(group.blue.surrenderRate) }}
-                        <span
-                          v-if="delta(group.blue.surrenderDelta)"
-                          class="ml-1 text-[10px]"
-                          :class="deltaClass(group.blue.surrenderDelta)"
-                        >
-                          {{ delta(group.blue.surrenderDelta) }}
-                        </span>
-                      </td>
-                      <td class="px-1 py-0.5 text-center align-middle tabular-nums">
-                        {{ pct(group.blue.earlySurrenderRate) }}
-                        <span
-                          v-if="delta(group.blue.earlySurrenderDelta)"
-                          class="ml-1 text-[10px]"
-                          :class="deltaClass(group.blue.earlySurrenderDelta)"
-                        >
-                          {{ delta(group.blue.earlySurrenderDelta) }}
-                        </span>
-                      </td>
-                    </tr>
-                    <tr
-                      v-if="group.red"
-                      class="text-text-primary/85 odd:bg-white/[0.02] even:bg-black/15"
-                    >
-                      <td class="py-0.5 pl-10 pr-2 text-error/70">{{ teamLabel(200) }}</td>
-                      <td class="px-1 py-0.5 text-center align-middle tabular-nums">
-                        {{ pct(group.red.surrenderRate) }}
-                        <span
-                          v-if="delta(group.red.surrenderDelta)"
-                          class="ml-1 text-[10px]"
-                          :class="deltaClass(group.red.surrenderDelta)"
-                        >
-                          {{ delta(group.red.surrenderDelta) }}
-                        </span>
-                      </td>
-                      <td class="px-1 py-0.5 text-center align-middle tabular-nums">
-                        {{ pct(group.red.earlySurrenderRate) }}
-                        <span
-                          v-if="delta(group.red.earlySurrenderDelta)"
-                          class="ml-1 text-[10px]"
-                          :class="deltaClass(group.red.earlySurrenderDelta)"
-                        >
-                          {{ delta(group.red.earlySurrenderDelta) }}
-                        </span>
-                      </td>
-                    </tr>
-                  </template>
-                </template>
-              </tbody>
-            </table>
-          </div>
-        </div>
+                </div>
+                <span class="sr-right sr-num" :class="`sr-delta--${deltaV(group.all).dir}`">{{
+                  deltaText(group.all)
+                }}</span>
+              </div>
+            </template>
+            <p class="sr-foot">{{ p.t('statisticsPage.surrenderLowSampleNote') }}</p>
+          </article>
+        </section>
       </div>
     </div>
   </div>
@@ -497,6 +181,110 @@ function rankIcon(rank: string): string {
 <style scoped>
 .is-low-sample {
   opacity: 0.5;
+}
+.sr-section {
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
+}
+.sr-h2 {
+  font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: #f0e6d2;
+}
+.sr-card {
+  display: flex;
+  flex-direction: column;
+  background: #0a1428;
+  border: 1px solid #463714;
+  border-radius: 12px;
+  padding: 20px 24px;
+}
+.sr-grid {
+  display: grid;
+  grid-template-columns: 220px 90px 1fr 120px;
+  align-items: center;
+  gap: 16px;
+}
+.sr-head {
+  padding-bottom: 8px;
+  border-bottom: 1px solid #0a323c;
+  font-size: 12px;
+  color: #a09b8c;
+}
+.sr-row {
+  padding: 9px 0;
+  border-bottom: 1px solid #1e2328;
+  font-size: 14px;
+  color: #f0e6d2;
+}
+.sr-right {
+  text-align: right;
+}
+.sr-num {
+  font-variant-numeric: tabular-nums;
+}
+.sr-muted {
+  color: #a09b8c;
+}
+.sr-div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+.sr-emblem {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+.sr-badge {
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 500;
+  color: #a09b8c;
+  border: 1px solid #785a28;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.sr-barcell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sr-track {
+  flex: 1;
+  height: 10px;
+  display: flex;
+  overflow: hidden;
+  border-radius: 5px;
+  background: #1e2328;
+}
+.sr-seg--early {
+  background: #cdfafa;
+}
+.sr-seg--rest {
+  background: #005a82;
+}
+.sr-val {
+  width: 130px;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.sr-delta--up {
+  color: #e2665a;
+}
+.sr-delta--down {
+  color: #0ac8b9;
+}
+.sr-delta--none {
+  color: #a09b8c;
+}
+.sr-foot {
+  margin-top: 12px;
+  font-size: 12px;
+  color: #a09b8c;
 }
 .surrender-low-sample-note {
   font-size: 0.75rem;
@@ -557,25 +345,44 @@ function rankIcon(rank: string): string {
   font-size: 0.75rem;
 }
 
-@media (max-width: 768px) {
-  .statistics-surrender-tab {
-    margin-inline: -1rem;
-    width: calc(100% + 2rem);
-    max-width: 100vw;
+.sr-mgames {
+  display: none;
+}
+@media (max-width: 767px) {
+  .sr-section {
+    margin-top: 0;
   }
-
-  .statistics-surrender-mobile-card {
-    width: 100%;
-    padding-left: 0;
-    padding-right: 0;
+  .sr-h2 {
+    font-family: Inter, system-ui, sans-serif;
+    font-size: 18px;
+    font-weight: 600;
   }
-
-  .statistics-surrender-mobile-list {
-    gap: 1rem;
+  .sr-card {
+    padding: 8px 16px;
   }
-
-  .statistics-surrender-mobile-side-block {
-    border-top: none;
+  .sr-head,
+  .sr-emblem,
+  .sr-badge,
+  .sr-row > .sr-right,
+  .sr-val .sr-muted {
+    display: none !important;
+  }
+  .sr-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+    gap: 12px;
+  }
+  .sr-val {
+    width: 56px;
+    text-align: right;
+  }
+  .sr-divname {
+    display: flex;
+    flex-direction: column;
+  }
+  .sr-mgames {
+    display: block;
+    font-size: 11px;
+    color: #a09b8c;
   }
 }
 </style>

@@ -57,3 +57,16 @@ export function visibleNavGroups(visibleTabs: readonly StatisticsMainTab[]): Sta
     tabs: g.tabs.filter(t => visible.has(t)),
   })).filter(g => g.route != null || g.tabs.length > 0)
 }
+
+/** Sections rendues en une seule page (maquette « Comportement ») : pas de sous-onglets. */
+const COMBINED_NAV_GROUPS: ReadonlySet<StatisticsNavGroupId> = new Set(['behavior'])
+
+export function isCombinedNavGroup(id: StatisticsNavGroupId | null): boolean {
+  return id != null && COMBINED_NAV_GROUPS.has(id)
+}
+
+/** Onglets dont les données se chargent avec `tab` (tous ceux de sa section combinée). */
+export function tabsToLoadWith(tab: StatisticsMainTab): StatisticsMainTab[] {
+  const group = STATISTICS_NAV_GROUPS.find(g => g.tabs.includes(tab))
+  return group && COMBINED_NAV_GROUPS.has(group.id) ? [...group.tabs] : [tab]
+}

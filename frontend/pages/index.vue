@@ -1,18 +1,10 @@
 <template>
   <div class="hg-page text-text">
-    <!-- Hero : splash du meilleur pick -->
+    <!-- Hero (maquette 30) : texte à gauche, carte de build à droite -->
     <section class="hg-hero">
-      <div
-        class="hg-hero-bg"
-        :style="heroSplash ? { backgroundImage: `url(${heroSplash})` } : undefined"
-        aria-hidden="true"
-      />
       <div class="hg-hero-inner">
-        <p v-if="stats.patch" class="hg-eyebrow">
-          {{ t('homeTest.eyebrow', { patch: stats.patch }) }}
-        </p>
+        <p class="hg-eyebrow">{{ t('homeTest.eyebrowCommunity') }}</p>
         <h1 class="hg-title">{{ t('homeTest.title') }}</h1>
-        <p class="hg-subtitle">{{ t('homeTest.subtitle') }}</p>
         <form class="hg-search" role="search" @submit.prevent="submitChampionSearch">
           <label for="hg-search-input" class="sr-only">{{ t('homeTest.searchLabel') }}</label>
           <input
@@ -29,43 +21,20 @@
           </datalist>
           <button type="submit" class="hg-search-btn">{{ t('homeTest.searchSubmit') }}</button>
         </form>
-        <p v-if="searchMiss" class="mt-1 text-xs text-error" role="status">
-          {{ t('homeTest.searchMiss') }}
-        </p>
         <p v-if="popularPicks.length" class="hg-popular">
           <span>{{ t('homeTest.popular') }}</span>
           <NuxtLink
             v-for="row in popularPicks"
             :key="row.championId"
-            :to="championBuildsLink(row)"
+            :to="localePath('/builds/discover')"
             class="hg-popular-chip"
+            @click="discoveryStore.setSearchQuery(championName(row))"
           >
             {{ championName(row) }}
           </NuxtLink>
         </p>
 
-        <div class="mt-6 flex flex-wrap gap-3">
-          <NuxtLink
-            :to="localePath('/builds/create')"
-            class="inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-bold text-background transition hover:bg-accent-dark"
-          >
-            <Icon name="mdi:hammer-wrench" size="20px" />
-            {{ t('homeTest.ctaCreate') }}
-          </NuxtLink>
-          <NuxtLink
-            :to="localePath('/builds/discover')"
-            class="ui-build-card-button inline-flex items-center gap-2 px-6 py-3 text-sm font-bold transition"
-          >
-            <Icon name="mdi:sword-cross" size="20px" />
-            {{ t('homeTest.ctaDiscover') }}
-          </NuxtLink>
-        </div>
-
         <ul class="hg-stats">
-          <li>
-            <strong>{{ formatStat(stats.matches) }}</strong>
-            <span>{{ t('homeTest.statMatches') }}</span>
-          </li>
           <li>
             <strong>{{ formatStat(stats.builds) }}</strong>
             <span>{{ t('homeTest.statBuilds') }}</span>
@@ -74,14 +43,31 @@
             <strong>{{ formatStat(stats.videos) }}</strong>
             <span>{{ t('homeTest.statVideos') }}</span>
           </li>
+          <li>
+            <strong>{{ formatStat(stats.matches) }}</strong>
+            <span>{{ t('homeTest.statMatches') }}</span>
+          </li>
         </ul>
       </div>
 
-      <NuxtLink v-if="heroRow && heroChampion" :to="championLink(heroRow)" class="hg-hero-pick">
+      <NuxtLink
+        v-if="heroRow && heroChampion"
+        :to="championLink(heroRow)"
+        class="hg-hero-pick"
+        :style="heroSplash ? { backgroundImage: `url(${heroSplash})` } : undefined"
+      >
         <span class="hg-hero-pick-label">{{ t('homeTest.heroPick') }}</span>
         <span class="hg-hero-pick-name">{{ heroChampion.name }}</span>
         <span :class="uiStatisticsTierBadgeClass(heroRow.tier)">{{ heroRow.tier }}</span>
       </NuxtLink>
+
+      <aside v-if="heroBuild" class="hg-hero-card" :aria-label="t('homeTest.heroBuild')">
+        <BuildGrid
+          :custom-builds="[heroBuild]"
+          :show-comparison-buttons="false"
+          :show-all-custom-builds="true"
+        />
+      </aside>
     </section>
 
     <div class="hg-container">
@@ -301,7 +287,7 @@ import VideoGridCard from '~/components/Videos/VideoGridCard.vue'
 import type { HomeTierListRow } from '~/composables/useHomePage'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { championStatsDetailPath } from '~/utils/championStatsRoutes'
-import { findChampionSlug, homePopularPicks } from '~/utils/homeHero'
+import { homePopularPicks, homeSearchQuery } from '~/utils/homeHero'
 import { homeGuides, homePatchRecap, pickHeroRow, topPicksByRole } from '~/utils/homeGaming'
 import { apiUrl } from '~/utils/apiUrl'
 import { matchupGuideDetailPath } from '~/utils/matchupGuideSlug'
@@ -313,6 +299,7 @@ import {
   type PatchData,
 } from '~/stores/PatchNotesStore'
 import { getChampionImageUrl, getChampionSplashImageUrl } from '~/utils/imageUrl'
+import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import { uiStatisticsTierBadgeClass } from '~/utils/uiColorClasses'
 
 const { locale, t } = useI18n()
@@ -384,26 +371,11 @@ const { data: guides } = useAsyncData(
 const latestGuides = computed(() => homeGuides(guides.value ?? [], 4))
 
 const homeBuilds = computed((): Build[] => recentBuilds.value.slice(0, 6) as Build[])
+const heroBuild = computed((): Build | null => (recentBuilds.value[0] as Build | undefined) ?? null)
 const metaPicks = computed(() => topPicksByRole(tierByRole.value, 3))
 const popularPicks = computed(() => homePopularPicks(tierByRole.value, 5))
 const championQuery = ref('')
-const searchMiss = ref(false)
-const pillars = [
-  { id: 'find', to: '/builds/discover', color: '#c89b3c' },
-  { id: 'learn', to: '/videos', color: '#0ac8b9' },
-  { id: 'create', to: '/builds/create', color: '#0397ab' },
-] as const
-function submitChampionSearch() {
-  const slug = findChampionSlug(championQuery.value, championsStore.champions)
-  searchMiss.value = !slug
-  if (slug) navigateTo(localePath(`/builds/champion/${slug}`))
-}
-function championBuildsLink(row: HomeTierListRow) {
-  const champ = championForId(row.championId)
-  return champ
-    ? localePath(`/builds/champion/${String(champ.id).toLowerCase()}`)
-    : championLink(row)
-}
+const discoveryStore = useBuildDiscoveryStore()
 const heroRow = computed(() => pickHeroRow(tierByRole.value))
 const heroChampion = computed(() =>
   heroRow.value ? championForId(heroRow.value.championId) : null
@@ -411,7 +383,16 @@ const heroChampion = computed(() =>
 const heroSplash = computed(() =>
   heroChampion.value ? getChampionSplashImageUrl('latest', heroChampion.value.id) : ''
 )
-
+const pillars = [
+  // Couleurs de région : Demacia (or blanc), Freljord (bleu glace), Îles obscures (vert spectral).
+  { id: 'find', to: '/builds/discover', color: '#e3c88a' },
+  { id: 'learn', to: '/videos', color: '#8fd3f4' },
+  { id: 'create', to: '/builds/create', color: '#2fd6a8' },
+] as const
+function submitChampionSearch() {
+  discoveryStore.setSearchQuery(homeSearchQuery(championQuery.value, championsStore.champions))
+  navigateTo(localePath('/builds/discover'))
+}
 function championName(row: HomeTierListRow): string {
   return row.championName ?? championForId(row.championId)?.name ?? '—'
 }
@@ -448,113 +429,97 @@ const socialLinks = [
   padding-bottom: 3rem;
 }
 
-/* ---------- Hero ---------- */
+/* ---------- Hero (maquette 30/31) ---------- */
 .hg-hero {
-  position: relative;
-  overflow: hidden;
-  min-height: 460px;
-  display: flex;
-  align-items: flex-end;
-  border-bottom: 1px solid rgb(var(--rgb-accent) / 0.3);
-  background: var(--color-blue-600);
-  isolation: isolate;
-}
-
-/* Splash 1215×717 : jamais affiché au-delà de sa taille native (sinon pixellisé). */
-.hg-hero-bg {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  z-index: -1;
-  width: min(1215px, 100%);
-  background-size: cover;
-  background-position: center 20%;
-  -webkit-mask-image:
-    linear-gradient(90deg, transparent 0%, #000 45%),
-    linear-gradient(0deg, transparent 0%, #000 40%);
-  -webkit-mask-composite: source-in;
-  mask-image:
-    linear-gradient(90deg, transparent 0%, #000 45%),
-    linear-gradient(0deg, transparent 0%, #000 40%);
-  mask-composite: intersect;
-  animation: hg-fade 0.6s ease-out both;
-}
-
-.hg-hero-inner {
-  width: 100%;
-  max-width: none;
-  margin-inline: auto;
-  padding: 3rem 16px 2rem;
+  display: grid;
+  gap: 2rem;
+  align-items: center;
+  padding: 3rem 16px 2.5rem;
+  border-bottom: 1px solid #463714;
+  background: #010a13;
 }
 
 @media (min-width: 640px) {
-  .hg-hero-inner {
+  .hg-hero {
     padding-inline: 2rem;
   }
+}
+
+@media (min-width: 1024px) {
+  .hg-hero {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 300px;
+    gap: 3rem;
+    padding: 4.5rem 5rem 3rem;
+  }
+}
+
+.hg-hero-inner {
+  min-width: 0;
 }
 
 .hg-eyebrow {
   font-size: 0.8rem;
   font-weight: 700;
-  letter-spacing: 0.25em;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: rgb(var(--rgb-accent) / 0.75);
+  color: var(--color-blue-50);
 }
 
 .hg-title {
-  margin-top: 0.25rem;
-  font-size: clamp(2.25rem, 6vw, 4.5rem);
-  font-weight: 900;
-  line-height: 1;
+  margin-top: 1rem;
+  max-width: 40rem;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: clamp(1.75rem, 4.5vw, 2.75rem);
+  font-weight: 700;
+  line-height: 0.95;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
-  color: var(--color-text-accent);
-  text-shadow: 0 4px 24px rgb(0 0 0 / 0.5);
-}
-
-.hg-subtitle {
-  margin-top: 0.75rem;
-  max-width: 36rem;
-  font-size: 1.05rem;
-  color: rgb(var(--rgb-text) / 0.8);
+  color: var(--color-gold-300);
 }
 
 .hg-stats {
-  margin-top: 2rem;
+  margin-top: 3rem;
   display: flex;
   flex-wrap: wrap;
-  gap: 1.5rem 2.5rem;
+  gap: 1rem 2.5rem;
 }
 
 .hg-stats li {
   display: flex;
-  flex-direction: column;
+  align-items: baseline;
+  gap: 0.6rem;
 }
 
 .hg-stats strong {
-  font-size: 1.6rem;
-  font-weight: 900;
-  color: var(--color-accent);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 2.25rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--color-blue-50);
   font-variant-numeric: tabular-nums;
 }
 
 .hg-stats span {
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: rgb(var(--rgb-text) / 0.6);
+  font-size: 0.85rem;
+  color: var(--color-blue-50);
 }
 
+/* Splash 1215×717 du meilleur pick de la tier list, entre le texte et le build. */
 .hg-hero-pick {
-  position: absolute;
-  right: 2rem;
-  bottom: 2rem;
+  position: relative;
   display: none;
+  align-self: stretch;
+  min-height: 320px;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
+  justify-content: flex-end;
   gap: 0.35rem;
-  text-align: right;
+  padding-bottom: 1rem;
+  border-radius: 10px;
+  background-color: #0a1428;
+  background-size: cover;
+  background-position: center 20%;
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 55%, transparent 100%);
+  mask-image: radial-gradient(ellipse at center, #000 55%, transparent 100%);
 }
 
 @media (min-width: 1024px) {
@@ -567,15 +532,22 @@ const socialLinks = [
   font-size: 0.7rem;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: rgb(var(--rgb-text) / 0.7);
+  color: var(--color-gold-300);
+  text-shadow: 0 2px 8px rgb(0 0 0 / 0.9);
 }
 
 .hg-hero-pick-name {
   font-size: 1.75rem;
   font-weight: 900;
   text-transform: uppercase;
-  color: var(--color-text);
+  color: var(--color-blue-50);
   text-shadow: 0 2px 12px rgb(0 0 0 / 0.8);
+}
+
+.hg-hero-card {
+  width: 100%;
+  max-width: 300px;
+  justify-self: center;
 }
 
 /* ---------- Sections ---------- */
@@ -847,68 +819,62 @@ const socialLinks = [
   width: 48px;
   height: 48px;
 }
-
-@keyframes hg-fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .hg-hero-bg {
-    animation: none;
-  }
-}
 </style>
 
 <style scoped>
 .hg-search {
   display: flex;
   gap: 0.5rem;
-  margin-top: 1.25rem;
-  max-width: 34rem;
+  margin-top: 1.75rem;
+  max-width: 32rem;
+  padding: 4px 4px 4px 0.9rem;
+  border-radius: 10px;
+  border: 1px solid var(--color-gold-300);
+  background: #0a1428;
+}
+.hg-search:focus-within {
+  outline: 2px solid #0ac8b9;
+  outline-offset: 1px;
 }
 .hg-search-input {
   flex: 1;
   min-width: 0;
-  border-radius: 0.5rem;
-  border: 1px solid rgb(200 155 60 / 0.45);
-  background: rgb(10 20 40 / 0.85);
-  padding: 0.65rem 0.9rem;
-  color: #f0e6d2;
+  border: 0;
+  background: transparent;
+  padding: 0.6rem 0;
+  color: var(--color-gold-300);
+  outline: none;
 }
-.hg-search-input:focus {
-  outline: 2px solid #0ac8b9;
-  outline-offset: 1px;
+.hg-search-input::placeholder {
+  color: var(--color-gold-300);
+  opacity: 0.7;
 }
 .hg-search-btn {
-  border-radius: 0.5rem;
-  border: 1px solid #c89b3c;
-  padding: 0 1rem;
+  border-radius: 7px;
+  background: var(--color-gold-300);
+  padding: 0 1.1rem;
   font-weight: 700;
-  color: #c89b3c;
+  color: #010a13;
   white-space: nowrap;
 }
 .hg-search-btn:hover {
-  background: rgb(200 155 60 / 0.12);
+  background: #d8bb80;
 }
 .hg-popular {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.4rem;
-  margin-top: 0.6rem;
-  font-size: 0.8rem;
-  color: #a09b8c;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+  font-size: 0.85rem;
+  color: var(--color-gold-300);
 }
 .hg-popular-chip {
   border-radius: 999px;
-  border: 1px solid rgb(10 200 185 / 0.4);
-  padding: 0.1rem 0.6rem;
-  color: #f0e6d2;
+  border: 1px solid #463714;
+  background: #0a1428;
+  padding: 0.35rem 0.8rem;
+  color: var(--color-blue-50);
 }
 .hg-popular-chip:hover {
   border-color: #0ac8b9;
@@ -936,7 +902,7 @@ const socialLinks = [
   margin: 0.25rem 0;
   font-size: 1.15rem;
   font-weight: 700;
-  color: #f0e6d2;
+  color: var(--color-blue-50);
 }
 .hg-pillar-desc {
   font-size: 0.875rem;

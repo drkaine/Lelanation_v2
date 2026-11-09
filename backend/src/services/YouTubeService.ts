@@ -1,3 +1,4 @@
+import { planUploadsFetch, isBackfillComplete } from './youtubeSyncPlan.js'
 import { join } from 'path'
 import { Result } from '../utils/Result.js'
 import { ExternalApiError, AppError } from '../utils/errors.js'
@@ -42,6 +43,8 @@ interface StoredYouTubeChannelData {
   channelId: string
   channelName?: string
   lastSync?: string
+  /** true once the whole uploads playlist has been listed at least once */
+  backfillComplete?: boolean
   videos: YouTubeVideo[]
 }
 
@@ -423,19 +426,22 @@ export class YouTubeService {
     channelName?: string
     videos: YouTubeVideo[]
     lastSync: string
+    backfillComplete?: boolean
   }): Promise<Result<void, AppError>> {
     const filePath = join(this.dataDir, `${params.channelId}.json`)
     return FileManager.writeJson(filePath, {
       channelId: params.channelId,
       channelName: params.channelName,
       videos: params.videos,
-      lastSync: params.lastSync
+      lastSync: params.lastSync,
+      backfillComplete: params.backfillComplete
     })
   }
 
   /**
    * V2 behavior:
-   * - First sync: backfill up to YOUTUBE_BACKFILL_MAX_VIDEOS (default 500)
+   * - Until the whole uploads playlist was listed once (backfillComplete):
+   *   full listing up to YOUTUBE_FULL_LIST_MAX_VIDEOS (default 5000)
    * - Next syncs: only fetch newest videos until we hit a known video id,
    *   capped by YOUTUBE_INCREMENTAL_MAX_VIDEOS (default 200)
    */
@@ -470,13 +476,10 @@ export class YouTubeService {
       const existing = existingResult.unwrap()
       const existingVideos = existing?.videos ?? []
       const existingIds = new Set(existingVideos.map((v) => v.id))
-      const isFirstSync = existingVideos.length === 0
-
-      const maxVideos = Number(
-        isFirstSync
-          ? process.env.YOUTUBE_BACKFILL_MAX_VIDEOS || '500'
-          : process.env.YOUTUBE_INCREMENTAL_MAX_VIDEOS || '200'
-      )
+      const plan = planUploadsFetch({
+        videoCount: existingVideos.length,
+        backfillComplete: existing?.backfillComplete
+      })
 
       const uploadsPlaylistIdResult = await this.getUploadsPlaylistId(channel.channelId)
       if (uploadsPlaylistIdResult.isErr()) return Result.err(uploadsPlaylistIdResult.unwrapErr())
@@ -484,12 +487,13 @@ export class YouTubeService {
       const uploadsPlaylistId = uploadsPlaylistIdResult.unwrap()
       const idsResult = await this.fetchUploadsVideoIds({
         uploadsPlaylistId,
-        maxVideos,
-        stopWhenSeenIds: isFirstSync ? undefined : existingIds
+        maxVideos: plan.maxVideos,
+        stopWhenSeenIds: plan.mode === 'full' ? undefined : existingIds
       })
       if (idsResult.isErr()) return Result.err(idsResult.unwrapErr())
 
       const fetchedIds = idsResult.unwrap()
+      const backfillComplete = isBackfillComplete(plan, fetchedIds.length)
       const newIds = fetchedIds.filter((id) => !existingIds.has(id))
 
       const detailsResult = await this.fetchVideoDetails(newIds)
@@ -545,7 +549,8 @@ export class YouTubeService {
         channelId: channel.channelId,
         channelName: channel.channelName,
         videos: finalItems,
-        lastSync: new Date().toISOString()
+        lastSync: new Date().toISOString(),
+        backfillComplete
       })
       if (save.isErr()) return Result.err(save.unwrapErr())
 

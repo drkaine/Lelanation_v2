@@ -15,26 +15,32 @@
   }
 
   .ui-statistics-tier-badge--s-plus {
-    background-color: #f5c542;
+    background-color: #c8aa6e;
+    color: #010a13;
   }
 
   .ui-statistics-tier-badge--s {
-    background-color: #22c55e;
+    background-color: #c89b3c;
+    color: #010a13;
   }
 
   .ui-statistics-tier-badge--a {
-    background-color: #2563eb;
+    background-color: #0ac8b9;
+    color: #0a323c;
   }
 
   .ui-statistics-tier-badge--b {
-    background-color: #60a5fa;
+    background-color: #0397ab;
+    color: #0a323c;
   }
 
   .ui-statistics-tier-badge--c {
-    background-color: #a855f7;
+    background-color: #5b5a56;
+    color: #f0e6d2;
   }
 
   .ui-statistics-tier-badge--d {
-    background-color: #dc2626;
+    background-color: #3c3c41;
+    color: #f0e6d2;
   }
 }

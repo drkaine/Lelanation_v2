@@ -3,6 +3,7 @@ import {
   compareVersionsDesc,
   normalizeVersionToPrefix,
   pickStatsVersionFilter,
+  thinPatchNotice,
 } from './statsVersion'
 
 describe('compareVersionsDesc', () => {
@@ -78,5 +79,37 @@ describe('pickStatsVersionFilter — patch trop maigre', () => {
         ],
       })
     ).toBe('16.22')
+  })
+})
+
+describe('thinPatchNotice', () => {
+  const versions = [
+    { version: '16.22', matchCount: 182 },
+    { version: '16.21', matchCount: 51000 },
+    { version: '16.20', matchCount: 48000 },
+  ]
+
+  it('flags_selected_thin_patch_and_points_to_reliable_one', () => {
+    expect(thinPatchNotice({ selected: '16.22', versions })).toEqual({
+      mode: 'selected',
+      thinVersion: '16.22',
+      matchCount: 182,
+      needed: 2550,
+      reliableVersion: '16.21',
+    })
+  })
+
+  it('flags_new_patch_when_viewing_reliable_fallback', () => {
+    expect(thinPatchNotice({ selected: '16.21', versions })?.mode).toBe('fallback')
+  })
+
+  it('returns_null_when_newest_patch_has_enough_matches', () => {
+    expect(
+      thinPatchNotice({ selected: '16.21', versions: versions.filter(v => v.version !== '16.22') })
+    ).toBeNull()
+  })
+
+  it('returns_null_when_viewing_older_patch_on_purpose', () => {
+    expect(thinPatchNotice({ selected: '16.20', versions })).toBeNull()
   })
 })

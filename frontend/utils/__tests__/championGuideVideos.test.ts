@@ -4,6 +4,7 @@ import {
   championGuideVideoCounts,
   championMatchesGuideFilter,
   championGuideVideosByRole,
+  isGuideVideoTitle,
   parseChampionGuideTitle,
   slimGuideVideos,
 } from '../championGuideVideos'
@@ -194,5 +195,59 @@ describe('slimGuideVideos', () => {
       { id: 'a', title: 'Guide Ahri Mid' },
       { id: 'c', title: 'Macro Garen Top' },
     ])
+  })
+})
+
+describe('règles de titres des guides', () => {
+  const cases: Array<[string, string]> = [
+    ["Les erreurs qui t'empêchent de carry avec Ahri MID", 'guide'],
+    ['Propulse tes bases sur Ahri MID', 'guide'],
+    ['Et si on allait plus loin que les bases ? Ahri MID', 'guide'],
+    ['Le plus gros spammeur Ahri MID', 'guide'],
+    ['Le plus GROS SPAMMER de AHRI ne joue QUE MID !', 'guide'],
+    ["Ahri MID, c'est d'abord maîtriser les bases", 'guide'],
+    ["Ahri MID, c'est surtout savoir quoi faire", 'guide'],
+    ["Ahri MID, c'est surtout savoir que faire", 'guide'],
+    ['Ahri MID, c’est SURTOUT savoir que faire !', 'guide'],
+    ['Joue Ahri MID comme le top 10', 'guide'],
+    ['Une masterclass du top monde sur Ahri MID', 'topMonde'],
+    ["Je n'ai jamais vu un OTP aussi fort sur Ahri MID", 'guide'],
+    ['Voici comment le top monde joue Ahri MID', 'topMonde'],
+    ['Comment le meilleur OTP joue Ahri MID', 'guide'],
+    ['Comment la meilleure Ahri MID gagne', 'guide'],
+    ['Comment la meilleur Ahri MID gagne', 'guide'],
+    ["La touche en plus que l'élite sur Ahri MID", 'guide'],
+    ["Comment l'élite joue Ahri MID", 'guide'],
+    ['Joue Ahri MID comme le top', 'guide'],
+    ['Une masterclass sur Ahri MID', 'guide'],
+    ['Va plus loin que les bases avec Ahri MID', 'guide'],
+  ]
+  it.each(cases)('%s → série %s, rôle mid', (title, series) => {
+    expect(parseChampionGuideTitle(title, 'Ahri')).toEqual({ series, role: 'mid' })
+  })
+  it('ne prend pas le TOP de « comme le top » pour le rôle', () => {
+    expect(parseChampionGuideTitle('Joue Ahri comme le top', 'Ahri')).toEqual({
+      series: 'guide',
+      role: null,
+    })
+    expect(parseChampionGuideTitle('Ahri comme le top, en mid', 'Ahri')).toEqual({
+      series: 'guide',
+      role: 'mid',
+    })
+  })
+  it('ne prend pas le TOP de « top 10 » pour le rôle', () => {
+    expect(parseChampionGuideTitle('Joue Ahri comme le top 10', 'Ahri')).toEqual({
+      series: 'guide',
+      role: null,
+    })
+  })
+  it.each(cases)('%s → classé guide sur la page vidéos', title => {
+    expect(isGuideVideoTitle(title)).toBe(true)
+  })
+  it('garde les anciennes règles de la page vidéos', () => {
+    expect(isGuideVideoTitle('Guide Ahri')).toBe(true)
+    expect(isGuideVideoTitle('Comment jouer Ahri')).toBe(true)
+    expect(isGuideVideoTitle('Comment build Ahri')).toBe(true)
+    expect(isGuideVideoTitle('Lobby de la semaine')).toBe(false)
   })
 })

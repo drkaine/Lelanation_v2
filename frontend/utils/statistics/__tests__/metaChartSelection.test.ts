@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findMetaChartChampion, metaQuadrantList } from '../metaChartSelection'
+import { defaultMetaChampion, findMetaChartChampion, metaQuadrantList } from '../metaChartSelection'
 
 const names: Record<number, string> = { 1: 'Miss Fortune', 2: "Kai'Sa", 3: 'Jhin', 4: 'Jax' }
 const nameOf = (id: number) => names[id] ?? ''
@@ -35,5 +35,16 @@ describe('metaQuadrantList', () => {
   })
   it('renvoie une liste vide sans lignes', () => {
     expect(metaQuadrantList([], 'meta')).toEqual([])
+  })
+
+  it('champion affiché par défaut : le plus joué parmi les gagnants', () => {
+    const rows = [
+      { championId: 1, winrate: 0.53, pickrate: 0.089 },
+      { championId: 2, winrate: 0.499, pickrate: 0.1 },
+      { championId: 3, winrate: 0.533, pickrate: 0.026 },
+    ]
+    expect(defaultMetaChampion(rows)).toBe(1)
+    expect(defaultMetaChampion([{ championId: 2, winrate: 0.49, pickrate: 0.1 }])).toBe(2)
+    expect(defaultMetaChampion([])).toBeNull()
   })
 })

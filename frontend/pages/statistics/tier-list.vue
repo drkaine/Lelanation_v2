@@ -1,55 +1,94 @@
 <template>
   <div class="statistics flex min-h-screen min-w-0 flex-col overflow-x-hidden text-text">
-    <div
-      class="statistics-tabs-bar flex w-full min-w-0 flex-shrink-0 items-start gap-2 overflow-x-hidden px-4 pb-2 pt-4"
-    >
-      <div class="statistics-tabs-scroll-wrap relative min-w-0 flex-1 overflow-hidden">
+    <header class="stats-head">
+      <div class="stats-head-inner">
+        <div class="stats-head-top">
+          <div class="flex min-w-0 flex-col gap-1">
+            <span class="stats-eyebrow">{{ tierListEyebrow }}</span>
+            <h1 class="stats-h1">{{ t('statisticsPage.navTierList') }}</h1>
+          </div>
+          <div class="stats-head-selects">
+            <label class="stats-head-select">
+              <span class="stats-head-select-label">{{ t('statisticsPage.filterBarPatch') }}</span>
+              <select v-model="statsVersionFilter" @change="onStatsFilterChange">
+                <option value="">{{ t('statisticsPage.overviewVersionAll') }}</option>
+                <option v-for="v in statsVersionOptions" :key="v.version" :value="v.version">
+                  {{ v.version }}
+                </option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <nav :aria-label="t('statisticsPage.navAria')" class="stats-nav">
+          <NuxtLink
+            v-for="group in STATISTICS_NAV_GROUPS"
+            :key="group.id"
+            :to="localePath(group.route ?? `/statistics?tab=${group.tabs[0]}`)"
+            :aria-current="group.id === 'tierList' ? 'page' : undefined"
+            :class="['stats-nav-link', group.id === 'tierList' ? 'is-active' : '']"
+          >
+            {{ t(group.labelKey) }}
+          </NuxtLink>
+        </nav>
+      </div>
+    </header>
+    <div class="statistics-tabs-bar tl-subbar">
+      <div ref="tierListTabsNavEl" class="stats-subtabs">
+        <button
+          v-for="v in TIER_LIST_VIEWS"
+          :key="v.id"
+          type="button"
+          :class="['stats-subtab', tierListViewModel === v.id ? 'is-active' : '']"
+          @click="setTierListMainView(v.id)"
+        >
+          <span class="stats-subtab-long">{{ t(v.labelKey) }}</span>
+          <span class="stats-subtab-short">{{ t(v.shortLabelKey) }}</span>
+        </button>
+      </div>
+      <div class="tl-subbar-right">
         <div
-          ref="tierListTabsNavEl"
-          class="statistics-tabs-nav flex flex-nowrap gap-1 overflow-x-auto border-b border-primary/30 pb-2"
+          v-if="tierListViewModel !== 'botlaneMatchups' && tierListViewModel !== 'botlaneDuoRank'"
+          class="tl-seg"
+          role="group"
+          :aria-label="t('statisticsPage.filterRole')"
         >
           <button
             type="button"
-            :class="['statistics-tab-btn', tierListViewModel === 'table' ? 'is-active' : '']"
-            @click="setTierListMainView('table')"
+            :class="['tl-seg-btn', !statsRoleFilter ? 'is-active' : '']"
+            :aria-pressed="!statsRoleFilter"
+            @click="selectAllRoles"
           >
-            {{ t('statisticsPage.tierListViewTable') }}
+            {{ t('statisticsPage.tierListRoleAll') }}
           </button>
           <button
+            v-for="r in roles"
+            :key="'seg-' + r.value"
             type="button"
-            :class="['statistics-tab-btn', tierListViewModel === 'chart' ? 'is-active' : '']"
-            @click="setTierListMainView('chart')"
+            :class="['tl-seg-btn', statsRoleFilter === r.value ? 'is-active' : '']"
+            :aria-pressed="statsRoleFilter === r.value"
+            @click="toggleRoleFilter(r)"
           >
-            {{ t('statisticsPage.tierListViewChart') }}
+            {{ r.label }}
           </button>
+        </div>
+        <div
+          v-if="tierListViewModel === 'table'"
+          class="tl-seg tl-seg-pres"
+          role="group"
+          :aria-label="t('statisticsPage.tierPresentation')"
+        >
           <button
+            v-for="mode in TIER_PRESENTATIONS"
+            :key="'seg-' + mode"
             type="button"
-            :class="[
-              'statistics-tab-btn',
-              tierListViewModel === 'botlaneMatchups' ? 'is-active' : '',
-            ]"
-            @click="setTierListMainView('botlaneMatchups')"
+            :class="['tl-seg-btn', tierPresentation === mode ? 'is-active' : '']"
+            :aria-pressed="tierPresentation === mode"
+            @click="tierPresentation = mode"
           >
-            {{ t('statisticsPage.tierListViewBotlaneMatchups') }}
-          </button>
-          <button
-            type="button"
-            :class="[
-              'statistics-tab-btn',
-              tierListViewModel === 'botlaneDuoRank' ? 'is-active' : '',
-            ]"
-            @click="setTierListMainView('botlaneDuoRank')"
-          >
-            {{ t('statisticsPage.tierListViewBotlaneDuoRank') }}
+            {{ t(`statisticsPage.tierPresentation_${mode}`) }}
           </button>
         </div>
       </div>
-      <h2
-        v-if="tierListViewModel === 'chart'"
-        class="mt-0.5 min-w-0 max-w-[42%] shrink-0 truncate text-right text-[11px] font-bold uppercase tracking-tight text-text-accent sm:max-w-[min(100%,36rem)] sm:text-xs md:max-w-none md:text-sm"
-      >
-        {{ tierListChartHeading }}
-      </h2>
     </div>
 
     <StatisticsFiltersPanel
@@ -91,22 +130,6 @@
               </span>
             </button>
           </div>
-        </div>
-        <div>
-          <label for="stats-filter-version-tl" class="mb-1 block text-sm font-medium text-text">
-            {{ t('statisticsPage.overviewFilterByVersion') }}
-          </label>
-          <select
-            id="stats-filter-version-tl"
-            v-model="statsVersionFilter"
-            class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-            @change="onStatsFilterChange"
-          >
-            <option value="">{{ t('statisticsPage.overviewVersionAll') }}</option>
-            <option v-for="v in statsVersionOptions" :key="v.version" :value="v.version">
-              {{ v.version }}
-            </option>
-          </select>
         </div>
         <div>
           <label
@@ -195,55 +218,6 @@
             </button>
           </div>
         </div>
-        <div
-          v-if="tierListViewModel !== 'botlaneMatchups' && tierListViewModel !== 'botlaneDuoRank'"
-        >
-          <div class="mb-1 text-sm font-medium text-text">
-            {{ t('statisticsPage.filterRole') }}
-          </div>
-          <div class="flex flex-wrap gap-1">
-            <button
-              type="button"
-              class="stats-role-btn rounded p-0.5 transition-colors"
-              :class="!statsRoleFilter ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10'"
-              :title="t('statisticsPage.allRoles')"
-              @click="selectAllRoles()"
-            >
-              <img
-                src="/icons/roles/all-role.png"
-                :alt="t('statisticsPage.allRoles')"
-                class="h-3 w-3 object-contain"
-                :class="!statsRoleFilter ? 'saturate-110 opacity-100' : 'brightness-125 grayscale'"
-                width="12"
-                height="12"
-              />
-            </button>
-            <button
-              v-for="r in roles"
-              :key="r.value"
-              type="button"
-              class="stats-role-btn rounded p-0.5 transition-colors"
-              :class="statsRoleFilter === r.value ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10'"
-              :title="r.label"
-              @click="toggleRoleFilter(r)"
-            >
-              <img
-                loading="lazy"
-                decoding="async"
-                :src="r.icon"
-                :alt="r.label"
-                class="h-3 w-3 object-contain"
-                :class="
-                  statsRoleFilter === r.value
-                    ? 'saturate-110 opacity-100'
-                    : 'brightness-125 grayscale'
-                "
-                width="12"
-                height="12"
-              />
-            </button>
-          </div>
-        </div>
         <div>
           <label for="otp-filter-tl" class="mb-1 block text-sm font-medium text-text">
             {{ t('statisticsPage.filterOtp') }}
@@ -270,28 +244,6 @@
             :placeholder="t('statisticsPage.searchChampionPlaceholder')"
             class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text placeholder:text-text/50"
           />
-        </div>
-        <div v-if="tierListViewModel === 'table'">
-          <span class="mb-1 block text-sm font-medium text-text">
-            {{ t('statisticsPage.tierPresentation') }}
-          </span>
-          <div class="flex gap-1" role="group" :aria-label="t('statisticsPage.tierPresentation')">
-            <button
-              v-for="mode in ['grid', 'table'] as const"
-              :key="mode"
-              type="button"
-              :aria-pressed="tierPresentation === mode"
-              :class="[
-                'flex-1 rounded border px-1.5 py-0.5 text-[11px] font-medium',
-                tierPresentation === mode
-                  ? 'border-accent bg-accent/20 text-text'
-                  : 'border-primary/40 bg-background text-text/70 hover:text-text',
-              ]"
-              @click="tierPresentation = mode"
-            >
-              {{ t(`statisticsPage.tierPresentation_${mode}`) }}
-            </button>
-          </div>
         </div>
       </div>
       <template #main>
@@ -347,6 +299,8 @@ import { progressionReferenceVersion } from '~/utils/statistics/progressionRefer
 import { displayedPatch } from '~/utils/statistics/championVersionQuery'
 import { riotLanguage } from '~/utils/riotLanguage'
 import StatisticsFiltersPanel from '~/components/statistics/StatisticsFiltersPanel.vue'
+import { STATISTICS_NAV_GROUPS } from '~/utils/statistics/statisticsNavGroups'
+import { TIER_LIST_VIEWS, tierListEyebrowParts } from '~/utils/statistics/tierListHeader'
 
 definePageMeta({
   layout: 'default',
@@ -355,6 +309,8 @@ definePageMeta({
 const BOTLANE_STATS_TIMEOUT_MS = 60_000
 
 const { t, locale } = useI18n()
+const localePath = useLocalePath()
+const TIER_PRESENTATIONS = ['grid', 'table'] as const
 const route = useRoute()
 const router = useRouter()
 const championsStore = useChampionsStore()
@@ -453,6 +409,9 @@ const statsVersionOptions = computed(() => {
 })
 
 const statsVersionFilter = ref('')
+const tierListEyebrow = computed(() =>
+  tierListEyebrowParts(statsVersionFilter.value, t('statisticsPage.tierListQueue')).join(' · ')
+)
 const statsDivisionFilter = ref<string[]>([])
 const statsRoleFilter = ref('')
 const statsOtpFilter = ref<'oui' | 'non' | 'solo'>('non')
@@ -602,7 +561,6 @@ const tierList = useStatisticsTierListPage({
 const {
   tierListViewModel,
   setTierListViewModel,
-  tierListChartHeading,
   TIER_DIVERGING_LEGEND,
   toggleTierListChartTier,
   tierListChartTierEnabled,
@@ -743,6 +701,10 @@ async function loadActiveBotlanePanel(): Promise<void> {
 }
 
 function setTierListMainView(view: 'table' | 'chart' | 'botlaneMatchups' | 'botlaneDuoRank') {
+  if (view === 'chart') {
+    router.push(localePath('/statistics/meta-chart')).catch(() => {})
+    return
+  }
   setTierListViewModel(view)
   if (isBotlaneTierListView(view)) {
     loadActiveBotlanePanel().catch(() => undefined)
@@ -1037,6 +999,7 @@ defineExpose({ statisticsPageCtx })
 await championNamesRequest
 </script>
 
+<style src="~/assets/css/stats-head.css"></style>
 <style>
 /* width/overflow scroll rules in app.vue */
 .statistics-tabs-scroll-wrap::before,

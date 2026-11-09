@@ -3,8 +3,41 @@ import {
   injectStatisticsPageCtx,
   type StatisticsIndexPageCtx,
 } from '~/composables/statistics/statisticsPageCtx'
+import { barList } from '~/utils/statistics/overviewCards'
+import { sideSurrenderRates } from '~/utils/statistics/sideSummary'
 
 const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
+const { locale } = useI18n()
+const detailOpen = ref(false)
+const mobileSide = ref<'blue' | 'red'>('blue')
+
+function fmtPct(v: number | string | null | undefined, digits = 2): string {
+  const n = Number(v)
+  if (v == null || !Number.isFinite(n)) return '—'
+  return `${n.toLocaleString(locale.value, { minimumFractionDigits: digits, maximumFractionDigits: digits })} %`
+}
+
+const blueRates = computed(() => sideSurrenderRates(p.sidesSurrenderBySide.blue))
+const redRates = computed(() => sideSurrenderRates(p.sidesSurrenderBySide.red))
+
+type WrRow = { championId: number | string; winrate: number | string }
+const toBars = (rows: readonly WrRow[]) =>
+  barList(
+    rows.map(r => ({ championId: Number(r.championId), value: Number(r.winrate) || 0 })),
+    { limit: 5, baseline: 50 }
+  )
+const bestCols = computed(() => [
+  {
+    side: 'blue',
+    labelKey: 'statisticsPage.sidesBlueCol',
+    rows: toBars(p.sidesBlueBestWinrateRows as WrRow[]),
+  },
+  {
+    side: 'red',
+    labelKey: 'statisticsPage.sidesRedCol',
+    rows: toBars(p.sidesRedBestWinrateRows as WrRow[]),
+  },
+])
 </script>
 
 <template>
@@ -13,8 +46,141 @@ const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
       <div v-if="p.overviewSidesPending" class="text-text/70">
         {{ p.t('statisticsPage.loading') }}
       </div>
-      <div v-else-if="p.overviewSidesData" class="space-y-[10px]">
+      <div v-else-if="p.overviewSidesData" class="tm-wrap">
+        <h2 class="tm-h2">{{ p.t('statisticsPage.sidesSectionTitle') }}</h2>
+        <section class="tm-card">
+          <div class="tm-split-head">
+            <div>
+              <div class="tm-side-label is-blue">{{ p.t('statisticsPage.sidesBlueSide') }}</div>
+              <div class="tm-big">{{ fmtPct(p.sidesDonutBluePct) }}</div>
+            </div>
+            <div class="tm-split-mid">{{ p.t('statisticsPage.sidesWinrateSoloDuo') }}</div>
+            <div class="tm-right">
+              <div class="tm-side-label is-red">{{ p.t('statisticsPage.sidesRedSide') }}</div>
+              <div class="tm-big">{{ fmtPct(p.sidesDonutRedPct) }}</div>
+            </div>
+          </div>
+          <div
+            class="tm-split-bar"
+            role="img"
+            :aria-label="`${p.t('statisticsPage.sidesBlueSide')} ${p.sidesDonutBluePct}% · ${p.t('statisticsPage.sidesRedSide')} ${p.sidesDonutRedPct}%`"
+          >
+            <div class="tm-fill-blue" :style="{ width: `${Number(p.sidesDonutBluePct) || 0}%` }" />
+            <div class="tm-fill-red" :style="{ width: `${Number(p.sidesDonutRedPct) || 0}%` }" />
+          </div>
+          <div class="tm-facts">
+            <div>
+              <div class="tm-fact-label">{{ p.t('statisticsPage.sidesSurrenders') }}</div>
+              <div class="tm-fact">
+                <span class="is-blue">{{ fmtPct(blueRates.surrenderPct, 1) }}</span>
+                {{ p.t('statisticsPage.sidesBlueShort') }} ·
+                <span class="is-red">{{ fmtPct(redRates.surrenderPct, 1) }}</span>
+                {{ p.t('statisticsPage.sidesRedShort') }}
+              </div>
+            </div>
+            <div>
+              <div class="tm-fact-label">{{ p.t('statisticsPage.sidesEarlySurrenders') }}</div>
+              <div class="tm-fact">
+                <span class="is-blue">{{ fmtPct(blueRates.earlyPct) }}</span>
+                {{ p.t('statisticsPage.sidesBlueShort') }} ·
+                <span class="is-red">{{ fmtPct(redRates.earlyPct) }}</span>
+                {{ p.t('statisticsPage.sidesRedShort') }}
+              </div>
+            </div>
+            <div>
+              <div class="tm-fact-label">{{ p.t('statisticsPage.sidesPicksBans') }}</div>
+              <div class="tm-fact">
+                {{ p.t('statisticsPage.sidesPicksBansNote') }} —
+                <button type="button" class="tm-link" @click="detailOpen = !detailOpen">
+                  {{
+                    p.t(
+                      detailOpen
+                        ? 'statisticsPage.sidesHideDetail'
+                        : 'statisticsPage.sidesSeeDetail'
+                    )
+                  }}
+                </button>
+              </div>
+            </div>
+          </div>
+          <p class="tm-mfacts">
+            {{ p.t('statisticsPage.sidesMobileAbandons') }}
+            <span class="is-blue">{{ fmtPct(blueRates.surrenderPct, 1) }}</span>
+            {{ p.t('statisticsPage.sidesMobileBlue') }} ·
+            <span class="is-red">{{ fmtPct(redRates.surrenderPct, 1) }}</span>
+            {{ p.t('statisticsPage.sidesMobileRed') }}.
+            {{ p.t('statisticsPage.sidesMobilePicksSame') }}
+          </p>
+        </section>
+
+        <section class="tm-card">
+          <header class="tm-card-head">
+            <h3 class="tm-card-title">{{ p.t('statisticsPage.sidesBestWinrateTitle') }}</h3>
+            <span class="tm-card-sub">{{ p.t('statisticsPage.sidesBestWinrateSub') }}</span>
+            <div class="tm-mseg" role="group">
+              <button
+                v-for="side in ['blue', 'red'] as const"
+                :key="side"
+                type="button"
+                :class="{ 'is-on': mobileSide === side }"
+                :aria-pressed="mobileSide === side"
+                @click="mobileSide = side"
+              >
+                {{
+                  p.t(
+                    side === 'blue'
+                      ? 'statisticsPage.sidesMobileSegBlue'
+                      : 'statisticsPage.sidesMobileSegRed'
+                  )
+                }}
+              </button>
+            </div>
+          </header>
+          <div class="tm-cols">
+            <div
+              v-for="col in bestCols"
+              :key="col.side"
+              :class="{ 'is-moff': col.side !== mobileSide }"
+            >
+              <div class="tm-col-title" :class="col.side === 'blue' ? 'is-blue' : 'is-red'">
+                {{ p.t(col.labelKey) }}
+              </div>
+              <ol v-if="col.rows.length" class="tm-bars">
+                <li v-for="row in col.rows" :key="row.championId" class="tm-bar-row">
+                  <img
+                    v-if="p.gameVersion && p.championByKey(row.championId)"
+                    loading="lazy"
+                    decoding="async"
+                    :src="
+                      p.getChampionImageUrl(
+                        p.gameVersion,
+                        p.championByKey(row.championId)!.image.full
+                      )
+                    "
+                    :alt="p.championName(row.championId) || ''"
+                    class="tm-thumb"
+                  />
+                  <span v-else class="tm-thumb" />
+                  <StatisticsChampionDetailLink :champion-id="row.championId" class="tm-bar-name">
+                    {{ p.championName(row.championId) || row.championId }}
+                  </StatisticsChampionDetailLink>
+                  <div class="tm-track">
+                    <div
+                      class="tm-fill"
+                      :class="col.side === 'blue' ? 'tm-fill-blue' : 'tm-fill-red'"
+                      :style="{ width: `${row.pct}%` }"
+                    />
+                  </div>
+                  <span class="tm-bar-val">{{ fmtPct(row.value, 1) }}</span>
+                </li>
+              </ol>
+              <p v-else class="tm-empty">{{ p.t('statisticsPage.fastStatsNoData') }}</p>
+            </div>
+          </div>
+        </section>
+
         <div
+          v-show="detailOpen"
           class="statistics-fast-stat-grid flex flex-wrap items-start justify-center gap-x-[5px] gap-y-[10px] pb-[10px]"
         >
           <div
@@ -476,5 +642,237 @@ const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
 }
 .sides-split-fill-red {
   background: #e2665a;
+}
+</style>
+
+<style scoped>
+.tm-wrap {
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  font-family: Inter, system-ui, sans-serif;
+  color: #f0e6d2;
+}
+.tm-h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #f0e6d2;
+}
+.tm-card {
+  background: #0a1428;
+  border: 1px solid #463714;
+  border-radius: 12px;
+  padding: 20px 24px;
+}
+.tm-split-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.tm-right {
+  text-align: right;
+}
+.tm-split-mid {
+  font-size: 12px;
+  color: #a09b8c;
+}
+.tm-side-label {
+  font-size: 12px;
+  font-weight: 600;
+}
+.is-blue {
+  color: #0ac8b9;
+}
+.is-red {
+  color: #e2665a;
+}
+.tm-big {
+  font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #f0e6d2;
+  font-variant-numeric: tabular-nums;
+}
+.tm-split-bar {
+  display: flex;
+  gap: 2px;
+  height: 10px;
+  margin: 10px 0 16px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #1e2328;
+}
+.tm-fill-blue {
+  background: #0ac8b9;
+}
+.tm-fill-red {
+  background: #e2665a;
+}
+.tm-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.tm-fact-label {
+  font-size: 12px;
+  color: #a09b8c;
+  margin-bottom: 2px;
+}
+.tm-fact {
+  font-size: 13px;
+  color: #f0e6d2;
+}
+.tm-fact .is-blue,
+.tm-fact .is-red {
+  font-weight: 600;
+}
+.tm-link {
+  color: #c8aa6e;
+  text-decoration: underline;
+}
+.tm-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.tm-card-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.tm-card-sub {
+  font-size: 12px;
+  color: #a09b8c;
+}
+.tm-cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 32px;
+}
+.tm-col-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.tm-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tm-bar-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 120px 56px;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.tm-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  background: #0a323c;
+}
+.tm-bar-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: #f0e6d2;
+}
+.tm-track {
+  height: 4px;
+  border-radius: 999px;
+  background: #1e2328;
+  overflow: hidden;
+}
+.tm-fill {
+  height: 100%;
+  border-radius: 999px;
+}
+.tm-bar-val {
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.tm-mfacts,
+.tm-mseg {
+  display: none;
+}
+.tm-empty {
+  font-size: 13px;
+  color: #a09b8c;
+}
+@media (max-width: 767px) {
+  .tm-card {
+    padding: 16px;
+  }
+  .tm-facts,
+  .tm-cols {
+    grid-template-columns: 1fr;
+  }
+  .tm-h2,
+  .tm-facts,
+  .tm-card-sub,
+  .tm-col-title,
+  .is-moff {
+    display: none !important;
+  }
+  .tm-mfacts {
+    display: block;
+    font-size: 13px;
+    line-height: 1.45;
+    color: #f0e6d2;
+  }
+  .tm-mfacts .is-blue,
+  .tm-mfacts .is-red {
+    font-weight: 600;
+  }
+  .tm-card-head {
+    align-items: center;
+  }
+  .tm-mseg {
+    display: inline-flex;
+    padding: 3px;
+    border: 1px solid #463714;
+    border-radius: 8px;
+    background: #010a13;
+  }
+  .tm-mseg button {
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #a09b8c;
+  }
+  .tm-mseg button.is-on {
+    background: #0a323c;
+    color: #0ac8b9;
+  }
+  .tm-bar-row {
+    grid-template-columns: 28px minmax(0, 1fr) 56px;
+    grid-template-areas:
+      'thumb name val'
+      'thumb track val';
+    row-gap: 4px;
+  }
+  .tm-thumb {
+    grid-area: thumb;
+    width: 28px;
+    height: 28px;
+  }
+  .tm-bar-name {
+    grid-area: name;
+  }
+  .tm-track {
+    grid-area: track;
+  }
+  .tm-bar-val {
+    grid-area: val;
+  }
 }
 </style>

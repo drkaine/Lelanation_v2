@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, unref } from 'vue'
+import { computed, ref, unref } from 'vue'
 import { spellsDetail } from '~/utils/statistics/detailPayload'
 import {
   injectStatisticsPageCtx,
@@ -7,11 +7,14 @@ import {
 } from '~/composables/statistics/statisticsPageCtx'
 import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import { getSpellImageUrl } from '~/utils/imageUrl'
-import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
 import { usePagination } from '~/composables/usePagination'
 import { useTableSort } from '~/composables/useTableSort'
-import { useToggleSet } from '~/composables/useToggleSet'
+import { barPct } from '~/utils/statistics/barPct'
+import { surrenderDeltaView } from '~/utils/statistics/surrenderDivisionRows'
+import { spellSlotSplit } from '~/utils/statistics/spellSlotSplit'
+import { spellCardSplit } from '~/utils/statistics/spellCardSplit'
 
+const props = defineProps<{ cardSummary?: boolean }>()
 const p = injectStatisticsPageCtx<RunesSpellsTabCtx>()
 const summonerSpellsStore = useSummonerSpellsStore()
 
@@ -92,8 +95,6 @@ const spellsMode = computed<'solo' | 'pair'>({
     p.spellsModeFilter = value
   },
 })
-const { set: expandedSpellKeys, toggle: toggleSpellCardExpanded } = useToggleSet<string>()
-
 const rows = computed<SoloRow[]>(() => spellsDetail(p.overviewDetailData)?.summonerSpells ?? [])
 const pairRows = computed<PairRow[]>(
   () => spellsDetail(p.overviewDetailData)?.summonerSpellSets ?? []
@@ -337,6 +338,15 @@ const displayRows = computed<DisplayRow[]>(() => {
     deltaF: soloBySpell.get(r.spellIdF)?.deltaPick ?? null,
   }))
 })
+/** Maquette 26 : sorts ≥ 1 % des parties en cartes, les autres repliés. */
+const SPELL_CARD_MIN_PICK = 1
+const showAllSpells = ref(false)
+const spellCards = computed(() =>
+  props.cardSummary && spellsMode.value === 'solo'
+    ? spellCardSplit(displayRows.value, SPELL_CARD_MIN_PICK, 4)
+    : null
+)
+const showFullSpellList = computed(() => !spellCards.value?.cards.length || showAllSpells.value)
 const {
   page,
   pageSize,
@@ -347,80 +357,59 @@ const {
   resetOn: [spellsMode, sortBy, sortDir, spellSearchQuery],
 })
 
-const spellsMobileSortColumn = computed({
-  get: () => String(sortBy.value ?? 'pickrate'),
-  set: (v: string) => {
-    sortBy.value = v as SortKey
-  },
-})
-
-const spellsMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
-  const t = p.t
-  const delta = t('statisticsPage.championTableDeltaSymbol')
-  const opts: StatisticsMobileSortOption[] = [
-    { value: 'spell', label: t('statisticsPage.overviewDetailSummonerSpells') },
-    { value: 'pickrate', label: t('statisticsPage.overviewDetailPickRate') },
-    { value: 'casts', label: t('statisticsPage.spellsCasts') },
-    { value: 'winrate', label: t('statisticsPage.overviewDetailWinRate') },
-  ]
-  if (spellsMode.value === 'solo') {
-    opts.push({ value: 'pctD', label: '% D' }, { value: 'pctF', label: '% F' })
-  }
-  if (hasComparison.value) {
-    opts.push(
-      { value: 'deltaPick', label: `${delta} pick` },
-      { value: 'deltaCasts', label: `${delta} ${t('statisticsPage.spellsCasts')}` },
-      { value: 'deltaWin', label: `${delta} WR` }
-    )
-    if (spellsMode.value === 'solo') {
-      opts.push({ value: 'deltaD', label: `${delta} D` }, { value: 'deltaF', label: `${delta} F` })
-    }
-  }
-  return opts
-})
-
 function fmtPct(v: number | null | undefined): string {
   if (v == null) return '—'
-  return `${Number(v).toFixed(2)}%`
+  return `${fmtNum(Number(v), 2)} %`
 }
 
-function fmtDelta(v: number | null | undefined): string {
-  if (!hasComparison.value || p.overviewDetailBaselinePending || v == null) return '—'
-  const val = Number(v)
-  return `${val >= 0 ? '+' : ''}${val.toFixed(2)}%`
+const { locale } = useI18n()
+const maxPick = computed(() => Math.max(0, ...displayRows.value.map(r => Number(r.pickrate) || 0)))
+function fmtNum(v: number, digits: number): string {
+  return v.toLocaleString(locale.value, {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  })
 }
-
-function deltaClass(v: number | null | undefined): string {
-  if (!hasComparison.value || v == null || p.overviewDetailBaselinePending) return 'text-text/55'
-  if (v > 0) return 'text-success'
-  if (v < 0) return 'text-error'
-  return 'text-text/75'
+function fmtCasts(label: string): string {
+  return label
+    .split('/')
+    .map(x => (Number.isFinite(Number(x)) ? fmtNum(Number(x), 1) : x))
+    .join(' / ')
 }
-
-function deltaLabelClass(v: number | null | undefined): string {
-  if (!hasComparison.value || v == null || p.overviewDetailBaselinePending) return 'text-text/55'
-  if (v > 0) return 'text-success'
-  if (v < 0) return 'text-error'
-  return 'text-text/75'
+function fmtDeltaPts(v: number | null | undefined): string {
+  if (!hasComparison.value || p.overviewDetailBaselinePending) return ''
+  const d = surrenderDeltaView(v)
+  if (d.abs == null) return ''
+  if (d.abs < 0.005) return '='
+  return d.dir === 'up' ? `▲ +${fmtNum(d.abs, 2)}` : `▼ −${fmtNum(d.abs, 2)}`
+}
+function fmtPct1(v: number | null | undefined): string {
+  return v == null ? '—' : `${fmtNum(Number(v), 1)} %`
+}
+function deltaTone(v: number | null | undefined): string {
+  if (v == null || Math.abs(v) < 0.005) return ''
+  return v > 0 ? 'is-up' : 'is-down'
 }
 </script>
 
 <template>
-  <div class="space-y-4">
-    <div class="spells-mode" role="group" :aria-label="p.t('statisticsPage.spellsModeAria')">
-      <button
-        v-for="mode in ['solo', 'pair'] as const"
-        :key="mode"
-        type="button"
-        class="spells-mode-btn"
-        :class="{ 'is-active': spellsMode === mode }"
-        :aria-pressed="spellsMode === mode"
-        @click="spellsMode = mode"
-      >
-        {{
-          p.t(mode === 'solo' ? 'statisticsPage.spellsModeSolo' : 'statisticsPage.spellsModePair')
-        }}
-      </button>
+  <div class="space-y-4 pt-2 md:pt-8">
+    <div class="sp-head">
+      <h2 class="sp-title">{{ p.t('statisticsPage.overviewDetailSummonerSpells') }}</h2>
+      <div class="sp-seg" role="group" :aria-label="p.t('statisticsPage.spellsModeAria')">
+        <button
+          v-for="mode in ['solo', 'pair'] as const"
+          :key="mode"
+          type="button"
+          :class="['sp-seg-btn', spellsMode === mode ? 'is-active' : '']"
+          :aria-pressed="spellsMode === mode"
+          @click="spellsMode = mode"
+        >
+          {{
+            p.t(mode === 'solo' ? 'statisticsPage.spellsModeSolo' : 'statisticsPage.spellsModePair')
+          }}
+        </button>
+      </div>
     </div>
     <div v-if="p.overviewDetailPending" class="text-text/70">
       {{ p.t('statisticsPage.loading') }}
@@ -429,324 +418,501 @@ function deltaLabelClass(v: number | null | undefined): string {
       {{ p.t('statisticsPage.overviewDetailTimeout') }}
     </div>
     <div v-else-if="displayRows.length" class="statistics-spells-tab space-y-3">
-      <StatisticsMobileSortBar
-        id="spells-mobile-sort"
-        v-model:column="spellsMobileSortColumn"
-        v-model:direction="sortDir"
-        :options="spellsMobileSortOptions"
-        :asc-default-columns="['spell']"
-        :help-aria-label="p.t('statisticsPage.tooltipTableSpellsAria')"
-        :help-text="p.t('statisticsPage.tooltipTableSpells')"
-        :help-secondary-text="p.t('statisticsPage.tooltipTableSpellsSecondary')"
-      />
-      <div class="statistics-spells-mobile-list space-y-2 md:hidden">
-        <article
-          v-for="row in paginatedDisplayRows"
-          :key="'spell-mobile-' + row.key"
-          class="statistics-champion-stats-mobile-card statistics-spell-mobile-card w-full overflow-hidden"
-        >
-          <button
-            type="button"
-            class="statistics-champion-stats-mobile-card-header flex w-full min-w-0 items-center gap-3 p-3 text-left"
-            @click="toggleSpellCardExpanded(row.key)"
-          >
-            <StatisticsSpellStatsMobileCardHeader
-              :label="row.label"
-              :game-version="p.gameVersion"
-              :image-spell-id="row.imageSpellId"
-              :image-file1="row.imageSpellId != null ? spellImage(row.imageSpellId) : null"
-              :image-spell-id2="row.imageSpellId2 ?? null"
-              :image-file2="row.imageSpellId2 != null ? spellImage(row.imageSpellId2) : null"
-              :is-pair="spellsMode === 'pair'"
-            />
-            <div
-              class="statistics-spell-mobile-stats flex min-w-0 flex-1 justify-end gap-2 text-right sm:gap-3"
-            >
-              <div class="min-w-0 shrink">
-                <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
-                  {{ p.t('statisticsPage.overviewDetailPickRate') }}
-                </div>
-                <div class="text-xl font-bold tabular-nums leading-none text-text sm:text-2xl">
-                  {{ fmtPct(row.pickrate) }}
-                </div>
-                <div
-                  class="mt-0.5 text-xs tabular-nums leading-none"
-                  :class="deltaClass(row.deltaPick)"
-                >
-                  {{ fmtDelta(row.deltaPick) }}
-                </div>
-              </div>
-              <div class="min-w-0 shrink">
-                <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
-                  {{ p.t('statisticsPage.overviewDetailWinRate') }}
-                </div>
-                <div class="text-xl font-bold tabular-nums leading-none text-text sm:text-2xl">
-                  {{ fmtPct(row.winrate) }}
-                </div>
-                <div
-                  class="mt-0.5 text-xs tabular-nums leading-none"
-                  :class="deltaClass(row.deltaWin)"
-                >
-                  {{ fmtDelta(row.deltaWin) }}
-                </div>
-              </div>
+      <template v-if="spellCards?.cards.length">
+        <div class="sp-cards">
+          <article v-for="row in spellCards.cards" :key="'spc-' + row.key" class="sp-cardx">
+            <div class="sp-cardx-head">
+              <img
+                v-if="row.imageSpellId != null && spellImage(row.imageSpellId) && p.gameVersion"
+                loading="lazy"
+                decoding="async"
+                :src="getSpellImageUrl(p.gameVersion, spellImage(row.imageSpellId)!)"
+                alt=""
+                width="36"
+                height="36"
+              />
+              <span class="sp-cardx-name">{{ row.label }}</span>
             </div>
-          </button>
-          <div
-            v-if="expandedSpellKeys.has(row.key)"
-            class="space-y-1.5 border-t border-primary/20 bg-black/20 px-3 py-2.5 text-sm text-text/85"
-          >
-            <div
-              class="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1"
-              :class="
-                spellsMode === 'pair' ? 'flex-col items-stretch sm:flex-row sm:items-baseline' : ''
-              "
-            >
-              <span class="shrink-0">{{ p.t('statisticsPage.spellsCasts') }}</span>
-              <span
-                class="min-w-0 tabular-nums"
-                :class="spellsMode === 'pair' ? 'break-words text-right' : ''"
+            <span class="sp-cardx-pick">{{ fmtPct1(row.pickrate) }}</span>
+            <div class="sp-cardx-track">
+              <div class="sp-cardx-fill" :style="{ width: `${barPct(row.pickrate, 100)}%` }" />
+            </div>
+            <span class="sp-cardx-sub">
+              WR {{ fmtPct1(row.winrate) }} · {{ fmtCasts(row.castsLabel) }}
+              {{ p.t('statisticsPage.spellsCardCasts')
+              }}<template v-if="spellSlotSplit(row.pctD, row.pctF)">
+                ·
+                {{
+                  p.t('statisticsPage.spellsCardKeyD', {
+                    pct: spellSlotSplit(row.pctD, row.pctF)!.d,
+                  })
+                }}</template
               >
-                <template v-if="spellsMode === 'pair'">
-                  <span class="block">{{ row.castsLabel }}</span>
-                  <span class="block text-xs" :class="deltaLabelClass(row.deltaCastsSort)">
-                    {{ row.deltaCastsLabel }}
-                  </span>
-                </template>
-                <template v-else>
-                  {{ row.castsLabel }}
-                  <span class="ml-1 text-xs" :class="deltaLabelClass(row.deltaCastsSort)">
-                    {{ row.deltaCastsLabel }}
-                  </span>
-                </template>
-              </span>
+            </span>
+          </article>
+        </div>
+        <p v-if="spellCards.rest.length" class="sp-cards-note">
+          {{ p.t('statisticsPage.spellsCardRest', { n: spellCards.rest.length }) }}
+          <button type="button" class="sp-cards-toggle" @click="showAllSpells = !showAllSpells">
+            {{
+              p.t(
+                showAllSpells
+                  ? 'statisticsPage.spellsCardHideAll'
+                  : 'statisticsPage.spellsCardShowAll'
+              )
+            }}
+          </button>
+        </p>
+      </template>
+      <template v-if="showFullSpellList">
+        <div class="sp-mlist md:hidden">
+          <div v-for="row in paginatedDisplayRows" :key="'spm-' + row.key" class="sp-mrow">
+            <div class="sp-micons">
+              <img
+                v-if="row.imageSpellId != null && spellImage(row.imageSpellId) && p.gameVersion"
+                loading="lazy"
+                decoding="async"
+                :src="getSpellImageUrl(p.gameVersion, spellImage(row.imageSpellId)!)"
+                alt=""
+                width="40"
+                height="40"
+              />
+              <img
+                v-if="row.imageSpellId2 != null && spellImage(row.imageSpellId2) && p.gameVersion"
+                loading="lazy"
+                decoding="async"
+                :src="getSpellImageUrl(p.gameVersion, spellImage(row.imageSpellId2)!)"
+                alt=""
+                width="40"
+                height="40"
+              />
             </div>
-            <div
-              v-if="spellsMode === 'solo'"
-              class="flex flex-wrap items-baseline justify-between gap-x-2"
-            >
-              <span>% D</span>
-              <span class="tabular-nums">
-                {{ fmtPct(row.pctD) }}
-                <span class="ml-1 text-xs" :class="deltaClass(row.deltaD)">{{
-                  fmtDelta(row.deltaD)
-                }}</span>
-              </span>
+            <div class="sp-mbody">
+              <span class="sp-mname">{{ row.label }}</span>
+              <div class="sp-track">
+                <div class="sp-fill" :style="{ width: `${barPct(row.pickrate, maxPick)}%` }" />
+              </div>
             </div>
-            <div
-              v-if="spellsMode === 'solo'"
-              class="flex flex-wrap items-baseline justify-between gap-x-2"
-            >
-              <span>% F</span>
-              <span class="tabular-nums">
-                {{ fmtPct(row.pctF) }}
-                <span class="ml-1 text-xs" :class="deltaClass(row.deltaF)">{{
-                  fmtDelta(row.deltaF)
-                }}</span>
+            <div class="sp-mnums">
+              <span class="sp-mpick">{{ fmtPct1(row.pickrate) }}</span>
+              <span class="sp-msub">
+                WR {{ fmtPct1(row.winrate)
+                }}<template v-if="spellsMode === 'solo' && spellSlotSplit(row.pctD, row.pctF)">
+                  · D {{ spellSlotSplit(row.pctD, row.pctF)!.d }} %</template
+                >
               </span>
-            </div>
-            <div
-              v-if="spellsMode === 'pair'"
-              class="flex flex-wrap items-baseline justify-between gap-x-2"
-            >
-              <span>% D / % F</span>
-              <span class="tabular-nums"> {{ fmtPct(row.pctD) }} / {{ fmtPct(row.pctF) }} </span>
             </div>
           </div>
-        </article>
-      </div>
-
-      <div
-        class="statistics-overview-surface hidden w-full overflow-x-auto rounded-lg border border-primary/30 md:block"
-      >
-        <table class="w-full min-w-[1100px] text-left text-sm">
-          <thead class="border-b border-primary/30 bg-black/25">
-            <tr>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.spellsTooltipSummoner')"
-              >
-                <button type="button" class="hover:underline" @click="toggleSort('spell')">
-                  {{ p.t('statisticsPage.overviewDetailSummonerSpells') }}{{ sortIcon('spell') }}
-                </button>
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.spellsTooltipPickrate')"
-              >
-                <button type="button" class="hover:underline" @click="toggleSort('pickrate')">
-                  {{ p.t('statisticsPage.overviewDetailPickRate') }}{{ sortIcon('pickrate') }}
-                </button>
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.spellsTooltipDeltaPick')"
-              >
-                <button type="button" class="hover:underline" @click="toggleSort('deltaPick')">
-                  {{ p.t('statisticsPage.championTableDeltaSymbol') }} pick{{
-                    sortIcon('deltaPick')
-                  }}
-                </button>
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.spellsTooltipCasts')"
-              >
-                <button type="button" class="hover:underline" @click="toggleSort('casts')">
-                  {{ p.t('statisticsPage.spellsCasts') }}{{ sortIcon('casts') }}
-                </button>
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.spellsTooltipDeltaCasts')"
-              >
-                <button type="button" class="hover:underline" @click="toggleSort('deltaCasts')">
-                  {{ p.t('statisticsPage.championTableDeltaSymbol') }}
-                  {{ p.t('statisticsPage.spellsCasts') }}{{ sortIcon('deltaCasts') }}
-                </button>
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.spellsTooltipWinrate')"
-              >
-                <button type="button" class="hover:underline" @click="toggleSort('winrate')">
-                  {{ p.t('statisticsPage.overviewDetailWinRate') }}{{ sortIcon('winrate') }}
-                </button>
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.spellsTooltipDeltaWin')"
-              >
-                <button type="button" class="hover:underline" @click="toggleSort('deltaWin')">
-                  {{ p.t('statisticsPage.championTableDeltaSymbol') }} WR{{ sortIcon('deltaWin') }}
-                </button>
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.spellsTooltipPctD')"
-              >
-                <button type="button" class="hover:underline" @click="toggleSort('pctD')">
-                  % D{{ sortIcon('pctD') }}
-                </button>
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.spellsTooltipDeltaD')"
-              >
-                <button type="button" class="hover:underline" @click="toggleSort('deltaD')">
-                  {{ p.t('statisticsPage.championTableDeltaSymbol') }} D{{ sortIcon('deltaD') }}
-                </button>
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.spellsTooltipPctF')"
-              >
-                <button type="button" class="hover:underline" @click="toggleSort('pctF')">
-                  % F{{ sortIcon('pctF') }}
-                </button>
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.spellsTooltipDeltaF')"
-              >
-                <button type="button" class="hover:underline" @click="toggleSort('deltaF')">
-                  {{ p.t('statisticsPage.championTableDeltaSymbol') }} F{{ sortIcon('deltaF') }}
-                </button>
-              </th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-primary/20">
-            <tr
-              v-for="row in paginatedDisplayRows"
-              :key="row.key"
-              class="odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
-            >
-              <td class="px-3 py-2">
-                <div class="flex items-center gap-2">
-                  <img
-                    v-if="row.imageSpellId != null && spellImage(row.imageSpellId) && p.gameVersion"
-                    loading="lazy"
-                    decoding="async"
-                    :src="getSpellImageUrl(p.gameVersion, spellImage(row.imageSpellId)!)"
-                    :alt="row.label"
-                    class="h-[50px] w-[50px] rounded border border-black/30 object-cover"
-                    width="50"
-                    height="50"
-                  />
-                  <img
-                    v-if="
-                      row.imageSpellId2 != null && spellImage(row.imageSpellId2) && p.gameVersion
-                    "
-                    loading="lazy"
-                    decoding="async"
-                    :src="getSpellImageUrl(p.gameVersion, spellImage(row.imageSpellId2)!)"
-                    :alt="row.label"
-                    class="h-[50px] w-[50px] rounded border border-black/30 object-cover"
-                    width="50"
-                    height="50"
-                  />
-                  <span v-if="!row.imageOnly" class="font-medium text-accent">{{ row.label }}</span>
-                </div>
-              </td>
-              <td class="px-3 py-2 tabular-nums text-text/90">{{ fmtPct(row.pickrate) }}</td>
-              <td class="px-3 py-2 tabular-nums" :class="deltaClass(row.deltaPick)">
-                {{ fmtDelta(row.deltaPick) }}
-              </td>
-              <td class="px-3 py-2 tabular-nums text-text/90">{{ row.castsLabel }}</td>
-              <td class="px-3 py-2 tabular-nums" :class="deltaLabelClass(row.deltaCastsSort)">
-                {{ row.deltaCastsLabel }}
-              </td>
-              <td class="px-3 py-2 tabular-nums text-text/90">{{ fmtPct(row.winrate) }}</td>
-              <td class="px-3 py-2 tabular-nums" :class="deltaClass(row.deltaWin)">
-                {{ fmtDelta(row.deltaWin) }}
-              </td>
-              <td class="px-3 py-2 tabular-nums text-text/90">
-                {{ fmtPct(row.pctD) }}
-              </td>
-              <td class="px-3 py-2 tabular-nums" :class="deltaClass(row.deltaD)">
-                {{ fmtDelta(row.deltaD) }}
-              </td>
-              <td class="px-3 py-2 tabular-nums text-text/90">
-                {{ fmtPct(row.pctF) }}
-              </td>
-              <td class="px-3 py-2 tabular-nums" :class="deltaClass(row.deltaF)">
-                {{ fmtDelta(row.deltaF) }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <StatisticsRangePagination
-        v-model:page="page"
-        v-model:page-size="pageSize"
-        class="statistics-spells-pagination rounded-lg border border-primary/20 bg-surface/20 px-3 py-2 text-sm text-text/80 md:rounded-none md:border-t md:bg-transparent md:px-4"
-        :total-count="totalRowsCount"
-        :total-pages="totalPages"
-      >
-        {{ totalRowsCount }} {{ p.t('statisticsPage.overviewDetailSummonerSpells') }}
-      </StatisticsRangePagination>
+        </div>
+        <div class="sp-card hidden md:block">
+          <table class="sp-table">
+            <thead>
+              <tr>
+                <th class="sp-th-name">
+                  <button type="button" @click="toggleSort('spell')">
+                    {{ p.t('statisticsPage.spellsColSpell') }}{{ sortIcon('spell') }}
+                  </button>
+                </th>
+                <th class="sp-th-pick" :title="p.t('statisticsPage.spellsTooltipPickrate')">
+                  <button type="button" @click="toggleSort('pickrate')">
+                    {{ p.t('statisticsPage.spellsColPick') }}{{ sortIcon('pickrate') }}
+                  </button>
+                </th>
+                <th class="sp-r" :title="p.t('statisticsPage.spellsTooltipCasts')">
+                  <button type="button" @click="toggleSort('casts')">
+                    {{ p.t('statisticsPage.spellsColCasts') }}{{ sortIcon('casts') }}
+                  </button>
+                </th>
+                <th class="sp-r" :title="p.t('statisticsPage.spellsTooltipWinrate')">
+                  <button type="button" @click="toggleSort('winrate')">
+                    {{ p.t('statisticsPage.spellsColWr') }}{{ sortIcon('winrate') }}
+                  </button>
+                </th>
+                <th v-if="spellsMode === 'solo'" class="sp-th-split">
+                  <button type="button" @click="toggleSort('pctD')">
+                    {{ p.t('statisticsPage.spellsColSlot') }}{{ sortIcon('pctD') }}
+                  </button>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in paginatedDisplayRows" :key="row.key">
+                <td>
+                  <div class="sp-name">
+                    <img
+                      v-if="
+                        row.imageSpellId != null && spellImage(row.imageSpellId) && p.gameVersion
+                      "
+                      loading="lazy"
+                      decoding="async"
+                      :src="getSpellImageUrl(p.gameVersion, spellImage(row.imageSpellId)!)"
+                      alt=""
+                      width="32"
+                      height="32"
+                    />
+                    <img
+                      v-if="
+                        row.imageSpellId2 != null && spellImage(row.imageSpellId2) && p.gameVersion
+                      "
+                      loading="lazy"
+                      decoding="async"
+                      :src="getSpellImageUrl(p.gameVersion, spellImage(row.imageSpellId2)!)"
+                      alt=""
+                      width="32"
+                      height="32"
+                    />
+                    <span>{{ row.label }}</span>
+                  </div>
+                </td>
+                <td class="sp-td-bar">
+                  <div class="sp-bar-wrap">
+                    <div class="sp-track">
+                      <div
+                        class="sp-fill"
+                        :style="{ width: `${barPct(row.pickrate, maxPick)}%` }"
+                      />
+                    </div>
+                    <b>{{ fmtPct(row.pickrate) }}</b>
+                  </div>
+                </td>
+                <td class="sp-r sp-num">{{ fmtCasts(row.castsLabel) }}</td>
+                <td class="sp-r">
+                  <div class="sp-num">{{ fmtPct(row.winrate) }}</div>
+                  <div class="sp-delta" :class="deltaTone(row.deltaWin)">
+                    {{ fmtDeltaPts(row.deltaWin) }}
+                  </div>
+                </td>
+                <td v-if="spellsMode === 'solo'">
+                  <div v-if="spellSlotSplit(row.pctD, row.pctF)" class="sp-split">
+                    <span>{{ spellSlotSplit(row.pctD, row.pctF)!.d }}</span>
+                    <div class="sp-split-bar">
+                      <div
+                        class="sp-split-d"
+                        :style="{ width: `${spellSlotSplit(row.pctD, row.pctF)!.d}%` }"
+                      />
+                      <div class="sp-split-f" />
+                    </div>
+                    <span>{{ spellSlotSplit(row.pctD, row.pctF)!.f }}</span>
+                  </div>
+                  <span v-else class="sp-muted">—</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <StatisticsRangePagination
+            v-model:page="page"
+            v-model:page-size="pageSize"
+            class="sp-pagination"
+            :total-count="totalRowsCount"
+            :total-pages="totalPages"
+          >
+            {{ totalRowsCount }} {{ p.t('statisticsPage.overviewDetailSummonerSpells') }}
+          </StatisticsRangePagination>
+        </div>
+        <StatisticsRangePagination
+          v-if="totalPages > 1"
+          v-model:page="page"
+          v-model:page-size="pageSize"
+          class="rounded-lg border border-primary/20 bg-surface/20 px-3 py-2 text-sm text-text/80 md:hidden"
+          :total-count="totalRowsCount"
+          :total-pages="totalPages"
+        >
+          {{ totalRowsCount }} {{ p.t('statisticsPage.overviewDetailSummonerSpells') }}
+        </StatisticsRangePagination>
+      </template>
     </div>
     <div v-else class="text-text/70">{{ p.t('statisticsPage.overviewDetailNoData') }}</div>
   </div>
 </template>
 
 <style scoped>
-.spells-mode {
+.sp-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.sp-cardx {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid #463714;
+  border-radius: 12px;
+  background: #0a1428;
+}
+.sp-cardx-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sp-cardx-head img {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+}
+.sp-cardx-name {
+  font-weight: 600;
+  color: #f0e6d2;
+}
+.sp-cardx-pick {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  color: #f0e6d2;
+  font-variant-numeric: tabular-nums;
+}
+.sp-cardx-track {
+  height: 6px;
+  border-radius: 3px;
+  background: #1e2328;
+}
+.sp-cardx-fill {
+  height: 6px;
+  border-radius: 3px;
+  background: #c89b3c;
+}
+.sp-cardx-sub,
+.sp-cards-note {
+  font-size: 12px;
+  color: #a09b8c;
+  font-variant-numeric: tabular-nums;
+}
+.sp-cards-note {
+  margin: 0;
+}
+.sp-cards-toggle {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: #c8aa6e;
+  cursor: pointer;
+}
+@media (max-width: 1023px) {
+  .sp-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.sp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.sp-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #f0e6d2;
+}
+.sp-seg {
   display: inline-flex;
   gap: 2px;
-  padding: 2px;
-  border: 1px solid rgb(200 155 60 / 0.35);
+  padding: 3px;
+  background: #0a1428;
+  border: 1px solid #0a323c;
+  border-radius: 8px;
+}
+.sp-seg-btn {
+  height: 34px;
+  padding: 0 12px;
   border-radius: 6px;
-  background: rgb(10 20 40 / 0.6);
+  font-size: 14px;
+  color: #a09b8c;
 }
-.spells-mode-btn {
-  padding: 4px 14px;
+.sp-seg-btn.is-active {
+  background: #0a323c;
+  color: #f0e6d2;
+  font-weight: 600;
+}
+.sp-card {
+  background: #0a1428;
+  border: 1px solid #463714;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.sp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  color: #f0e6d2;
+}
+.sp-table th {
+  padding: 12px 20px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #a09b8c;
+  text-align: left;
+  border-bottom: 1px solid #0a323c;
+  white-space: nowrap;
+}
+.sp-table td {
+  padding: 10px 20px;
+  border-bottom: 1px solid #1e2328;
+  vertical-align: middle;
+}
+.sp-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.sp-table .sp-r {
+  text-align: right;
+}
+.sp-th-name {
+  width: 22%;
+}
+.sp-th-pick {
+  width: 34%;
+}
+.sp-th-split {
+  width: 18%;
+}
+.sp-name {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 500;
+}
+.sp-name img {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid #0a323c;
+}
+.sp-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.sp-track {
+  flex: 1;
+  height: 8px;
   border-radius: 4px;
-  font-size: 0.8rem;
-  color: var(--color-grey-50, #a09b8c);
+  background: #1e2328;
+  overflow: hidden;
 }
-.spells-mode-btn.is-active {
-  color: var(--color-blue-600, #0a1428);
-  background: var(--color-gold-300, #c89b3c);
+.sp-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: #c8aa6e;
+}
+.sp-bar-wrap b {
+  min-width: 64px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.sp-num {
+  font-variant-numeric: tabular-nums;
+}
+.sp-delta {
+  font-size: 11px;
+  color: #a09b8c;
+  font-variant-numeric: tabular-nums;
+}
+.sp-delta.is-up {
+  color: #0ac8b9;
+}
+.sp-delta.is-down {
+  color: #e2665a;
+}
+.sp-split {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: #a09b8c;
+  font-variant-numeric: tabular-nums;
+}
+.sp-split-bar {
+  flex: 1;
+  display: flex;
+  gap: 2px;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.sp-split-d {
+  background: #0ac8b9;
+  opacity: 0.8;
+}
+.sp-split-f {
+  flex: 1;
+  background: #005a82;
+}
+.sp-muted {
+  color: #a09b8c;
+}
+.sp-pagination {
+  border-top: 1px solid #0a323c;
+  padding: 10px 20px;
+  font-size: 14px;
+  color: #a09b8c;
+}
+.sp-mlist {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 16px;
+  background: #0a1428;
+  border: 1px solid #463714;
+  border-radius: 12px;
+}
+.sp-mrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid #1e2328;
+}
+.sp-mrow:last-child {
+  border-bottom: 0;
+}
+.sp-micons {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+.sp-micons img {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+}
+.sp-mbody {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+}
+.sp-mname {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+  color: #f0e6d2;
+}
+.sp-mnums {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 116px;
+}
+.sp-mbody .sp-track {
+  flex: none;
+  height: 6px;
+}
+.sp-mpick {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f0e6d2;
+  font-variant-numeric: tabular-nums;
+}
+.sp-msub {
+  font-size: 11px;
+  color: #a09b8c;
+  white-space: nowrap;
 }
 </style>

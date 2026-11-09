@@ -65,7 +65,7 @@ YOUTUBE_API_KEY=your_youtube_api_key
 
 # YouTube sync tuning (optional)
 # First run backfill limit (default: 500)
-YOUTUBE_BACKFILL_MAX_VIDEOS=500
+YOUTUBE_FULL_LIST_MAX_VIDEOS=5000
 # Subsequent runs incremental limit (default: 200)
 YOUTUBE_INCREMENTAL_MAX_VIDEOS=200
 ```

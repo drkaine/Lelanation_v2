@@ -1,5 +1,79 @@
 <template>
   <div class="statistics flex min-h-screen min-w-0 flex-col overflow-x-hidden text-text">
+    <header class="stats-head">
+      <div class="stats-head-inner">
+        <div class="stats-head-top">
+          <div class="flex min-w-0 flex-col gap-1">
+            <span class="stats-eyebrow">{{ metaChartEyebrow }}</span>
+            <h1 class="stats-h1">{{ t('statisticsPage.navTierList') }}</h1>
+          </div>
+          <div class="stats-head-selects">
+            <label class="stats-head-select">
+              <span class="stats-head-select-label">{{ t('statisticsPage.filterBarPatch') }}</span>
+              <select v-model="statsVersionFilter" @change="onStatsFilterChange">
+                <option value="">{{ t('statisticsPage.overviewVersionAll') }}</option>
+                <option v-for="v in statsVersionOptions" :key="v.version" :value="v.version">
+                  {{ v.version }}
+                </option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <nav :aria-label="t('statisticsPage.navAria')" class="stats-nav">
+          <NuxtLink
+            v-for="group in STATISTICS_NAV_GROUPS"
+            :key="group.id"
+            :to="localePath(group.route ?? `/statistics?tab=${group.tabs[0]}`)"
+            :aria-current="group.id === 'tierList' ? 'page' : undefined"
+            :class="['stats-nav-link', group.id === 'tierList' ? 'is-active' : '']"
+          >
+            {{ t(group.labelKey) }}
+          </NuxtLink>
+        </nav>
+      </div>
+    </header>
+    <div class="statistics-tabs-bar tl-subbar">
+      <div class="stats-subtabs">
+        <NuxtLink
+          v-for="v in TIER_LIST_VIEWS"
+          :key="v.id"
+          :to="
+            v.id === 'chart'
+              ? localePath('/statistics/meta-chart')
+              : localePath({
+                  path: '/statistics/tier-list',
+                  query: tierListViewQuery(v.id) ? { view: tierListViewQuery(v.id) } : {},
+                })
+          "
+          :class="['stats-subtab', v.id === 'chart' ? 'is-active' : '']"
+        >
+          <span class="stats-subtab-long">{{ t(v.labelKey) }}</span>
+          <span class="stats-subtab-short">{{ t(v.shortLabelKey) }}</span>
+        </NuxtLink>
+      </div>
+      <div class="tl-subbar-right">
+        <div class="tl-seg" role="group" :aria-label="t('statisticsPage.filterRole')">
+          <button
+            type="button"
+            :class="['tl-seg-btn', !statsRoleFilter ? 'is-active' : '']"
+            :aria-pressed="!statsRoleFilter"
+            @click="selectAllRoles"
+          >
+            {{ t('statisticsPage.tierListRoleAll') }}
+          </button>
+          <button
+            v-for="r in roles"
+            :key="'seg-' + r.value"
+            type="button"
+            :class="['tl-seg-btn', statsRoleFilter === r.value ? 'is-active' : '']"
+            :aria-pressed="statsRoleFilter === r.value"
+            @click="toggleRoleFilter(r)"
+          >
+            {{ r.label }}
+          </button>
+        </div>
+      </div>
+    </div>
     <StatisticsFiltersPanel
       :active-filters-count="activeStatsFiltersCount"
       main-class="p-2 max-lg:pb-20 lg:px-2 lg:pb-4 lg:pt-0"
@@ -39,22 +113,6 @@
               </span>
             </button>
           </div>
-        </div>
-        <div>
-          <label for="stats-filter-version-mc" class="mb-1 block text-sm font-medium text-text">
-            {{ t('statisticsPage.overviewFilterByVersion') }}
-          </label>
-          <select
-            id="stats-filter-version-mc"
-            v-model="statsVersionFilter"
-            class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-            @change="onStatsFilterChange"
-          >
-            <option value="">{{ t('statisticsPage.overviewVersionAll') }}</option>
-            <option v-for="v in statsVersionOptions" :key="v.version" :value="v.version">
-              {{ v.version }}
-            </option>
-          </select>
         </div>
         <div>
           <label
@@ -144,53 +202,6 @@
           </div>
         </div>
         <div>
-          <div class="mb-1 text-sm font-medium text-text">
-            {{ t('statisticsPage.filterRole') }}
-          </div>
-          <div class="flex flex-wrap gap-1">
-            <button
-              type="button"
-              class="stats-role-btn rounded p-0.5 transition-colors"
-              :class="!statsRoleFilter ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10'"
-              :title="t('statisticsPage.allRoles')"
-              @click="selectAllRoles()"
-            >
-              <img
-                src="/icons/roles/all-role.png"
-                :alt="t('statisticsPage.allRoles')"
-                class="h-3 w-3 object-contain"
-                :class="!statsRoleFilter ? 'saturate-110 opacity-100' : 'brightness-125 grayscale'"
-                width="12"
-                height="12"
-              />
-            </button>
-            <button
-              v-for="r in roles"
-              :key="r.value"
-              type="button"
-              class="stats-role-btn rounded p-0.5 transition-colors"
-              :class="statsRoleFilter === r.value ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10'"
-              :title="r.label"
-              @click="toggleRoleFilter(r)"
-            >
-              <img
-                loading="lazy"
-                decoding="async"
-                :src="r.icon"
-                :alt="r.label"
-                class="h-3 w-3 object-contain"
-                :class="
-                  statsRoleFilter === r.value
-                    ? 'saturate-110 opacity-100'
-                    : 'brightness-125 grayscale'
-                "
-                width="12"
-                height="12"
-              />
-            </button>
-          </div>
-        </div>
-        <div>
           <label for="otp-filter-mc" class="mb-1 block text-sm font-medium text-text">
             {{ t('statisticsPage.filterOtp') }}
           </label>
@@ -229,6 +240,12 @@
 import { ref, computed, watch, onMounted, provide, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
+import { STATISTICS_NAV_GROUPS } from '~/utils/statistics/statisticsNavGroups'
+import {
+  TIER_LIST_VIEWS,
+  tierListEyebrowParts,
+  tierListViewQuery,
+} from '~/utils/statistics/tierListHeader'
 import { statsFetch } from '~/utils/statsFetch'
 import StatisticsMetaChartTab from '~/components/statistics/tabs/StatisticsMetaChartTab.vue'
 import { RANK_TIERS } from '~/utils/rankTiers'
@@ -255,6 +272,7 @@ definePageMeta({
 })
 
 const { t, locale } = useI18n()
+const localePath = useLocalePath()
 const route = useRoute()
 const router = useRouter()
 const championsStore = useChampionsStore()
@@ -342,6 +360,11 @@ const statsVersionOptions = computed(() => {
 const statsVersionFilter = ref('')
 const statsDivisionFilter = ref<string[]>([])
 const statsRoleFilter = ref('')
+const metaChartEyebrow = computed(() =>
+  tierListEyebrowParts(statsVersionFilter.value, t('statisticsPage.metaChartEyebrowAxis')).join(
+    ' · '
+  )
+)
 const statsOtpFilter = ref<'oui' | 'non' | 'solo'>('non')
 const championSearchQuery = ref('')
 const championsPageSize = ref(20)
@@ -674,3 +697,5 @@ defineExpose({ statisticsPageCtx })
 
 await championNamesRequest
 </script>
+
+<style src="~/assets/css/stats-head.css"></style>

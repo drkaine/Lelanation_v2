@@ -23,6 +23,21 @@ function formatMetric(value: number): string {
   return Number(value).toFixed(2)
 }
 
+const VISION_SUB_KEYS = VISION_METRIC_KEYS.filter(
+  k => k !== 'visionScore' && k !== 'visionScorePerMinute'
+)
+
+function formatOne(value: number): string {
+  return Number(value).toLocaleString('fr-FR', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })
+}
+
+function formatDeltaOne(value: number): string {
+  return `${value > 0 ? '▲ +' : value < 0 ? '▼ ' : ''}${formatOne(value)}`
+}
+
 function formatDelta(value: number): string {
   const sign = value > 0 ? '+' : ''
   return `${sign}${Number(value).toFixed(2)}`
@@ -57,27 +72,83 @@ function metricLabel(key: VisionMetricKey): string {
       {{ t('statisticsPage.noData') }}
     </div>
     <template v-else>
-      <div class="fast-stat-card ui-build-card-surface rounded-xl p-3">
-        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3">
-          <div
-            v-for="key in VISION_METRIC_KEYS"
-            :key="key"
-            class="flex flex-col rounded-lg border border-primary/20 bg-primary/5 px-3 py-2"
-          >
-            <span class="text-xs font-medium text-text/70">{{ metricLabel(key) }}</span>
-            <span class="mt-1 text-lg font-bold tabular-nums text-text">
-              {{ formatMetric(metricValue(key)) }}
-            </span>
+      <div class="vp-card">
+        <div class="vp-hero">
+          <span class="vp-big">{{ formatOne(metricValue('visionScore')) }}</span>
+          <span class="vp-hero-txt">
+            <span>{{ t('statisticsPage.visionScorePerGame') }}</span>
             <span
-              v-if="metricDelta(key) != null"
-              class="mt-0.5 text-xs tabular-nums"
-              :class="deltaClass(metricDelta(key) ?? 0)"
+              v-if="metricDelta('visionScore') != null"
+              :class="deltaClass(metricDelta('visionScore') ?? 0)"
             >
-              {{ formatDelta(metricDelta(key) ?? 0) }}
+              {{ formatDeltaOne(metricDelta('visionScore') ?? 0) }} ·
+              {{ formatMetric(metricValue('visionScorePerMinute')) }} / min
             </span>
-          </div>
+          </span>
         </div>
+        <dl class="vp-grid">
+          <div v-for="key in VISION_SUB_KEYS" :key="key">
+            <dt>{{ metricLabel(key) }}</dt>
+            <dd>
+              {{ formatOne(metricValue(key)) }}
+              <small v-if="metricDelta(key) != null" :class="deltaClass(metricDelta(key) ?? 0)">
+                {{ formatDelta(metricDelta(key) ?? 0) }}
+              </small>
+            </dd>
+          </div>
+        </dl>
       </div>
     </template>
   </div>
 </template>
+
+<style scoped>
+.vp-card {
+  padding: 20px;
+  border: 1px solid #463714;
+  border-radius: 10px;
+  background: #0a1428;
+}
+.vp-hero {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.vp-big {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 44px;
+  line-height: 1;
+  color: #f0e6d2;
+}
+.vp-hero-txt {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  color: #f0e6d2;
+}
+.vp-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 24px;
+  margin: 0;
+  padding: 0 12px;
+}
+.vp-grid dt {
+  font-size: 12px;
+  color: #a09b8c;
+}
+.vp-grid dd {
+  margin: 2px 0 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #f0e6d2;
+  font-variant-numeric: tabular-nums;
+}
+.vp-grid small {
+  margin-left: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+</style>

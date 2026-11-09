@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { STATISTICS_NAV_GROUPS, navGroupOfTab, visibleNavGroups } from '../statisticsNavGroups'
+import {
+  STATISTICS_NAV_GROUPS,
+  isCombinedNavGroup,
+  navGroupOfTab,
+  tabsToLoadWith,
+  visibleNavGroups,
+} from '../statisticsNavGroups'
 
 describe('statisticsNavGroups', () => {
   it('liste les 9 sections de la maquette dans l’ordre', () => {
@@ -35,5 +41,17 @@ describe('statisticsNavGroups', () => {
     const groups = visibleNavGroups(['overview'])
     expect(groups.map(g => g.id)).toEqual(['overview', 'tierList'])
     expect(groups[1]?.route).toBe('/statistics/tier-list')
+  })
+
+  it('Comportement : une seule page, sans sous-onglets', () => {
+    expect(isCombinedNavGroup('behavior')).toBe(true)
+    expect(isCombinedNavGroup('builds')).toBe(false)
+    expect(isCombinedNavGroup(null)).toBe(false)
+  })
+
+  it('charge Pings et Vision ensemble', () => {
+    expect(tabsToLoadWith('pings')).toEqual(['pings', 'vision'])
+    expect(tabsToLoadWith('vision')).toEqual(['pings', 'vision'])
+    expect(tabsToLoadWith('items')).toEqual(['items'])
   })
 })

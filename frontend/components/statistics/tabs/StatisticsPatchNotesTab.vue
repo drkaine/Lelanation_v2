@@ -1,14 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
-import { isOneOf } from '~/utils/statistics/isOneOf'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useItemsStore } from '~/stores/ItemsStore'
 import { useRunesStore } from '~/stores/RunesStore'
 import { useVersionStore } from '~/stores/VersionStore'
 import { getChampionImageUrl, getItemImageUrl, getRuneImageUrl } from '~/utils/imageUrl'
 import {
-  patchNotesMobileSortOptions,
   type PatchNotesChangeType,
   type PatchNotesSortCol,
   type PatchNotesStatsRow,
@@ -24,8 +22,17 @@ import {
   patchNotesChipActive,
   type PatchNotesChip,
 } from '~/utils/statistics/patchNotesChips'
+import {
+  PATCH_NOTES_PERIODS,
+  patchNotesBarSegments,
+  patchNotesPeriodOf,
+  patchNotesPeriodRange,
+  type PatchNotesPeriod,
+} from '~/utils/statistics/patchNotesBars'
 
 const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
+const { locale } = useI18n()
+const loc = computed(() => (String(locale.value).startsWith('fr') ? 'fr' : 'en'))
 
 const championsStore = useChampionsStore()
 const itemsStore = useItemsStore()
@@ -52,33 +59,34 @@ function onChip(chip: PatchNotesChip): void {
   p.patchNotesChangeFilter = next.change
 }
 
-const PATCH_NOTES_SORT_COLS: readonly PatchNotesSortCol[] = [
-  'target',
-  'countUp',
-  'countNerf',
-  'countAjust',
-  'totalChanges',
-  'lastMod',
-  'regularity',
-]
+const TARGET_CHIPS: readonly PatchNotesChip[] = ['all', 'champion', 'items', 'runes']
 
-const patchNotesMobileSortColumn = computed({
-  get: () => p.patchNotesSortColumn,
-  set: (v: string) => {
-    if (isOneOf(PATCH_NOTES_SORT_COLS, v)) p.setPatchNotesSort(v)
+const PERIOD_LABEL_KEYS: Record<PatchNotesPeriod | 'custom', string> = {
+  all: 'statisticsPage.patchNotesPeriodAll',
+  last3: 'statisticsPage.patchNotesPeriodLast3',
+  last5: 'statisticsPage.patchNotesPeriodLast5',
+  last10: 'statisticsPage.patchNotesPeriodLast10',
+  custom: 'statisticsPage.patchNotesPeriodCustom',
+}
+
+const period = computed({
+  get: () =>
+    patchNotesPeriodOf(p.patchNotesVersionOptions, p.patchNotesFromVersion, p.patchNotesToVersion),
+  set: (v: PatchNotesPeriod | 'custom') => {
+    if (v === 'custom') return
+    const r = patchNotesPeriodRange(p.patchNotesVersionOptions, v)
+    p.patchNotesFromVersion = r.from
+    p.patchNotesToVersion = r.to
   },
 })
 
-const patchNotesMobileSortDir = computed({
-  get: () => p.patchNotesSortDir,
-  set: (v: 'asc' | 'desc') => {
-    p.patchNotesSortDir = v
-  },
-})
-
-const patchNotesMobileSortOptionsComputed = computed(() =>
-  patchNotesMobileSortOptions((key: string) => p.t(key))
+const maxTotal = computed(() =>
+  Math.max(0, ...(p.paginatedPatchNotesRows ?? []).map(r => r.totalChanges))
 )
+
+function barSegments(row: PatchNotesStatsRow) {
+  return patchNotesBarSegments(row, maxTotal.value)
+}
 
 function normalizeKey(value: string): string {
   return value
@@ -145,9 +153,9 @@ function entityImageUrl(row: PatchNotesStatsRow): string | null {
 }
 
 function targetTypeLabel(type: PatchNotesTargetType): string {
-  if (type === 'champion') return String(p.t('statisticsPage.patchNotesTargetChampion') ?? type)
-  if (type === 'items') return String(p.t('statisticsPage.patchNotesTargetItems') ?? type)
-  return String(p.t('statisticsPage.patchNotesTargetRunes') ?? type)
+  if (type === 'champion') return String(p.t('statisticsPage.patchNotesTypeChampion'))
+  if (type === 'items') return String(p.t('statisticsPage.patchNotesTypeItem'))
+  return String(p.t('statisticsPage.patchNotesTypeRune'))
 }
 
 function changeTypeLabel(type: PatchNotesChangeType): string {
@@ -156,10 +164,10 @@ function changeTypeLabel(type: PatchNotesChangeType): string {
   return String(p.t('patchNotesPage.changeTypes.adjustment') ?? 'Adjust')
 }
 
-function changeTypeClass(type: PatchNotesChangeType): string {
-  if (type === 'up') return 'text-info'
-  if (type === 'nerf') return 'text-error/70'
-  return 'text-accent-light'
+function changeTypeTone(type: PatchNotesChangeType): string {
+  if (type === 'up') return 'is-up'
+  if (type === 'nerf') return 'is-nerf'
+  return 'is-adjust'
 }
 
 function sortIndicator(col: PatchNotesSortCol): string {
@@ -180,9 +188,51 @@ function patchNotesMessage(message: string | undefined): string {
 </script>
 
 <template>
-  <div class="space-y-3">
+  <div class="space-y-4 pt-2 md:pt-8">
+    <div class="pn-bar">
+      <label class="pn-search">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2" />
+          <path d="M20 20l-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+        </svg>
+        <input
+          v-model.trim="p.championSearchQuery"
+          type="search"
+          :placeholder="p.t('statisticsPage.patchNotesSearchPlaceholder')"
+          :aria-label="p.t('statisticsPage.patchNotesSearchPlaceholder')"
+        />
+      </label>
+      <div class="pn-seg" role="group">
+        <button
+          v-for="chip in TARGET_CHIPS"
+          :key="'pn-seg-' + chip"
+          type="button"
+          :class="{ 'is-active': isChipActive(chip) }"
+          :aria-pressed="isChipActive(chip)"
+          @click="onChip(chip)"
+        >
+          {{ p.t(PATCH_NOTES_CHIP_LABEL_KEYS[chip]) }}
+        </button>
+      </div>
+      <label class="pn-period hidden md:inline-flex">
+        <span>{{ p.t('statisticsPage.patchNotesPeriod') }}</span>
+        <select v-model="period">
+          <option v-for="per in PATCH_NOTES_PERIODS" :key="'pn-per-' + per" :value="per">
+            {{ p.t(PERIOD_LABEL_KEYS[per]) }}
+          </option>
+          <option v-if="period === 'custom'" value="custom">
+            {{ p.t(PERIOD_LABEL_KEYS.custom) }}
+          </option>
+        </select>
+      </label>
+      <div class="pn-legend">
+        <span><i class="is-up" />{{ p.t('patchNotesPage.changeTypes.buff') }}</span>
+        <span><i class="is-nerf" />{{ p.t('patchNotesPage.changeTypes.nerf') }}</span>
+        <span><i class="is-adjust" />{{ p.t('patchNotesPage.changeTypes.adjustment') }}</span>
+      </div>
+    </div>
     <div
-      class="statistics-patch-notes-chips flex gap-2 overflow-x-auto pb-1 md:hidden"
+      class="statistics-patch-notes-chips hidden"
       role="group"
       :aria-label="p.t('statisticsPage.patchNotesChipsAria')"
     >
@@ -219,218 +269,138 @@ function patchNotesMessage(message: string | undefined): string {
       {{ p.t('statisticsPage.noData') }}
     </div>
     <template v-else>
-      <StatisticsMobileSortBar
-        id="patch-notes-mobile-sort"
-        v-model:column="patchNotesMobileSortColumn"
-        v-model:direction="patchNotesMobileSortDir"
-        :options="patchNotesMobileSortOptionsComputed"
-      />
-
-      <div class="statistics-patch-notes-mobile-list space-y-2 md:hidden">
-        <article
+      <ul class="pn-mlist md:hidden">
+        <li
           v-for="row in p.paginatedPatchNotesRows"
-          :key="'pn-mobile-' + row.targetType + '-' + row.targetId"
-          class="statistics-patch-notes-mobile-card statistics-panel-surface p-3"
+          :key="'pn-m-' + row.targetType + '-' + row.targetId"
+          class="pn-mrow"
         >
-          <div class="flex items-center gap-3">
-            <img
-              v-if="entityImageUrl(row)"
-              loading="lazy"
-              decoding="async"
-              :src="entityImageUrl(row)!"
-              :alt="entityLabel(row)"
-              class="h-11 w-11 shrink-0 rounded-full object-cover"
-              width="44"
-              height="44"
-            />
-            <div
-              v-else
-              class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-text/70"
-            >
-              ?
-            </div>
-            <div class="min-w-0 flex-1">
-              <div class="truncate text-sm font-semibold text-accent">{{ entityLabel(row) }}</div>
-              <div class="text-[10px] uppercase tracking-wide text-text/50">
-                {{ targetTypeLabel(row.targetType) }}
-              </div>
-            </div>
-            <div class="text-right">
-              <div class="text-[10px] uppercase text-text/50">
-                {{ p.t('statisticsPage.patchNotesColTotal') }}
-              </div>
-              <div class="text-xl font-bold tabular-nums text-text">{{ row.totalChanges }}</div>
-            </div>
-          </div>
-          <div class="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
-            <div class="rounded bg-info/10 px-2 py-1.5">
-              <div class="text-[10px] uppercase text-text/55">
-                {{ p.t('statisticsPage.patchNotesColUp') }}
-              </div>
-              <div class="font-bold tabular-nums text-info">{{ row.countUp }}</div>
-            </div>
-            <div class="rounded bg-error/10 px-2 py-1.5">
-              <div class="text-[10px] uppercase text-text/55">
-                {{ p.t('statisticsPage.patchNotesColNerf') }}
-              </div>
-              <div class="font-bold tabular-nums text-error/70">{{ row.countNerf }}</div>
-            </div>
-            <div class="rounded bg-accent/10 px-2 py-1.5">
-              <div class="text-[10px] uppercase text-text/55">
-                {{ p.t('statisticsPage.patchNotesColAdjust') }}
-              </div>
-              <div class="font-bold tabular-nums text-accent-light">{{ row.countAjust }}</div>
-            </div>
-          </div>
-          <div
-            class="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-text/75"
-          >
-            <span>
-              {{ p.t('statisticsPage.patchNotesColLastMod') }}:
-              <strong>{{ row.lastModPatch }}</strong>
-              <span class="ml-1" :class="changeTypeClass(row.lastModType)">
-                {{ changeTypeLabel(row.lastModType) }}
-              </span>
+          <img
+            v-if="entityImageUrl(row)"
+            loading="lazy"
+            decoding="async"
+            :src="entityImageUrl(row)!"
+            :alt="entityLabel(row)"
+            class="pn-mimg"
+            width="40"
+            height="40"
+          />
+          <span v-else class="pn-mimg pn-img-empty">?</span>
+          <span class="pn-mbody">
+            <span class="pn-mname">
+              <b class="truncate">{{ entityLabel(row) }}</b>
+              <span class="pn-type">{{ targetTypeLabel(row.targetType) }}</span>
             </span>
-            <span>
-              {{ p.t('statisticsPage.patchNotesColRegularity') }}:
-              <strong class="tabular-nums">{{
-                p.t('statisticsPage.patchNotesTouchedIn', {
-                  n: row.patchesTouched,
-                  total: row.totalPatches,
+            <span class="pn-stack">
+              <span
+                v-for="seg in barSegments(row)"
+                :key="seg.type"
+                :class="'is-' + seg.type"
+                :style="{ width: seg.pct + '%' }"
+              />
+            </span>
+          </span>
+          <span class="pn-mnums">
+            <b class="pn-mtotal">{{ row.totalChanges }}</b>
+            <span class="pn-mlast" :class="changeTypeTone(row.lastModType)">
+              {{
+                p.t('statisticsPage.patchNotesMobileLast', {
+                  type: changeTypeLabel(row.lastModType).toLowerCase(),
+                  patch: row.lastModPatch,
                 })
-              }}</strong>
+              }}
             </span>
-          </div>
-        </article>
-      </div>
+          </span>
+        </li>
+      </ul>
 
-      <div
-        class="tier-list-mobile-rotate statistics-overview-surface hidden w-full overflow-x-auto rounded-lg border border-primary/30 md:block"
-      >
-        <table class="statistics-table w-full min-w-[56rem] border-collapse text-sm">
-          <thead>
-            <tr
-              class="sticky top-0 z-10 border-b border-black bg-[var(--color-grey-300)] text-left text-xs uppercase tracking-wide text-text-primary/85"
-            >
-              <th class="px-2 py-2">
-                <button
-                  type="button"
-                  class="font-semibold hover:text-text"
-                  @click="p.setPatchNotesSort('target')"
-                >
+      <div class="pn-card hidden md:block">
+        <div class="overflow-x-auto">
+          <table class="pn-table">
+            <thead>
+              <tr>
+                <th class="pn-th-target" @click="p.setPatchNotesSort('target')">
                   {{ p.t('statisticsPage.patchNotesColTarget') }}{{ sortIndicator('target') }}
-                </button>
-              </th>
-              <th class="px-2 py-2 text-right">
-                <button
-                  type="button"
-                  class="font-semibold hover:text-text"
-                  @click="p.setPatchNotesSort('countUp')"
-                >
-                  {{ p.t('statisticsPage.patchNotesColUp') }}{{ sortIndicator('countUp') }}
-                </button>
-              </th>
-              <th class="px-2 py-2 text-right">
-                <button
-                  type="button"
-                  class="font-semibold hover:text-text"
-                  @click="p.setPatchNotesSort('countNerf')"
-                >
-                  {{ p.t('statisticsPage.patchNotesColNerf') }}{{ sortIndicator('countNerf') }}
-                </button>
-              </th>
-              <th class="px-2 py-2 text-right">
-                <button
-                  type="button"
-                  class="font-semibold hover:text-text"
-                  @click="p.setPatchNotesSort('countAjust')"
-                >
-                  {{ p.t('statisticsPage.patchNotesColAdjust') }}{{ sortIndicator('countAjust') }}
-                </button>
-              </th>
-              <th class="px-2 py-2 text-right">
-                <button
-                  type="button"
-                  class="font-semibold hover:text-text"
+                </th>
+                <th
+                  class="pn-th-changes"
+                  :class="{ 'is-sorted': p.patchNotesSortColumn === 'totalChanges' }"
                   @click="p.setPatchNotesSort('totalChanges')"
                 >
-                  {{ p.t('statisticsPage.patchNotesColTotal') }}{{ sortIndicator('totalChanges') }}
-                </button>
-              </th>
-              <th class="px-2 py-2">
-                <button
-                  type="button"
-                  class="font-semibold hover:text-text"
-                  @click="p.setPatchNotesSort('lastMod')"
-                >
+                  {{ p.t('statisticsPage.patchNotesColChanges')
+                  }}{{ sortIndicator('totalChanges') }}
+                </th>
+                <th class="pn-th-num" @click="p.setPatchNotesSort('totalChanges')">
+                  {{ p.t('statisticsPage.patchNotesColTotal') }}
+                </th>
+                <th @click="p.setPatchNotesSort('lastMod')">
                   {{ p.t('statisticsPage.patchNotesColLastMod') }}{{ sortIndicator('lastMod') }}
-                </button>
-              </th>
-              <th class="px-2 py-2 text-right">
-                <button
-                  type="button"
-                  class="font-semibold hover:text-text"
-                  @click="p.setPatchNotesSort('regularity')"
-                >
-                  {{ p.t('statisticsPage.patchNotesColRegularity')
-                  }}{{ sortIndicator('regularity') }}
-                </button>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="row in p.paginatedPatchNotesRows"
-              :key="'pn-' + row.targetType + '-' + row.targetId"
-              class="border-b border-primary/15 odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
-            >
-              <td class="px-2 py-2">
-                <div class="flex min-w-0 items-center gap-2">
+                </th>
+                <th @click="p.setPatchNotesSort('regularity')">
+                  {{ p.t('statisticsPage.patchNotesColTouched') }}{{ sortIndicator('regularity') }}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="row in p.paginatedPatchNotesRows"
+                :key="'pn-' + row.targetType + '-' + row.targetId"
+              >
+                <td class="pn-td-target">
                   <img
                     v-if="entityImageUrl(row)"
                     loading="lazy"
                     decoding="async"
                     :src="entityImageUrl(row)!"
                     :alt="entityLabel(row)"
-                    class="h-8 w-8 shrink-0 rounded-full object-cover"
+                    class="pn-img"
                     width="32"
                     height="32"
                   />
-                  <div class="min-w-0">
-                    <div class="truncate font-medium text-text">{{ entityLabel(row) }}</div>
-                    <div class="text-[10px] uppercase text-text/50">
-                      {{ targetTypeLabel(row.targetType) }}
-                    </div>
+                  <span v-else class="pn-img pn-img-empty">?</span>
+                  <span class="min-w-0">
+                    <span class="pn-name">{{ entityLabel(row) }}</span>
+                    <span class="pn-type">{{ targetTypeLabel(row.targetType) }}</span>
+                  </span>
+                </td>
+                <td class="pn-td-changes">
+                  <div class="pn-stack">
+                    <span
+                      v-for="seg in barSegments(row)"
+                      :key="seg.type"
+                      :class="'is-' + seg.type"
+                      :style="{ width: seg.pct + '%' }"
+                    />
                   </div>
-                </div>
-              </td>
-              <td class="px-2 py-2 text-right tabular-nums text-info">{{ row.countUp }}</td>
-              <td class="px-2 py-2 text-right tabular-nums text-error/70">{{ row.countNerf }}</td>
-              <td class="px-2 py-2 text-right tabular-nums text-accent-light">
-                {{ row.countAjust }}
-              </td>
-              <td class="px-2 py-2 text-right font-semibold tabular-nums">
-                {{ row.totalChanges }}
-              </td>
-              <td class="px-2 py-2">
-                <span class="tabular-nums">{{ row.lastModPatch }}</span>
-                <span class="ml-1 text-xs" :class="changeTypeClass(row.lastModType)">
-                  {{ changeTypeLabel(row.lastModType) }}
-                </span>
-              </td>
-              <td class="px-2 py-2 text-right tabular-nums">
-                {{
-                  p.t('statisticsPage.patchNotesTouchedIn', {
-                    n: row.patchesTouched,
-                    total: row.totalPatches,
-                  })
-                }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
+                  <div class="pn-counts">
+                    <span class="is-up">{{ row.countUp }} buffs</span> ·
+                    <span class="is-nerf">{{ row.countNerf }} nerfs</span> ·
+                    <span class="is-adjust"
+                      >{{ row.countAjust }} {{ loc === 'fr' ? 'ajust.' : 'adj.' }}</span
+                    >
+                  </div>
+                </td>
+                <td class="pn-total">{{ row.totalChanges }}</td>
+                <td class="pn-last">
+                  <span class="tabular-nums">{{ row.lastModPatch }}</span>
+                  <span class="pn-pill" :class="changeTypeTone(row.lastModType)">
+                    {{ changeTypeLabel(row.lastModType) }}
+                  </span>
+                </td>
+                <td class="pn-touched">
+                  {{
+                    p.t('statisticsPage.patchNotesTouchedIn', {
+                      n: row.patchesTouched,
+                      total: row.totalPatches,
+                    })
+                  }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
+      <p class="pn-footnote hidden md:block">{{ p.t('statisticsPage.patchNotesFootnote') }}</p>
 
       <StatisticsTabPagination
         v-if="p.totalPatchNotesPages > 1"
@@ -441,3 +411,313 @@ function patchNotesMessage(message: string | undefined): string {
     </template>
   </div>
 </template>
+
+<style scoped>
+.pn-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.pn-search {
+  display: flex;
+  flex: 0 1 340px;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid #463714;
+  border-radius: 8px;
+  background: #010a13;
+  color: #a09b8c;
+}
+.pn-search input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  color: #f0e6d2;
+  font-size: 14px;
+  outline: none;
+}
+.pn-seg {
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid #0a323c;
+  border-radius: 8px;
+  background: #010a13;
+}
+.pn-seg button {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #a09b8c;
+}
+.pn-seg button.is-active {
+  background: #0a323c;
+  color: #f0e6d2;
+  font-weight: 600;
+}
+.pn-period {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #a09b8c;
+}
+.pn-period select {
+  padding: 7px 10px;
+  border: 1px solid #463714;
+  border-radius: 8px;
+  background: #010a13;
+  color: #f0e6d2;
+  font-weight: 600;
+  font-size: 13px;
+}
+.pn-legend {
+  margin-left: auto;
+  gap: 14px;
+  font-size: 12px;
+  color: #a09b8c;
+}
+.pn-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.pn-legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+.pn-legend i.is-up,
+.pn-stack .is-up {
+  background: #0ac8b9;
+}
+.pn-legend i.is-nerf,
+.pn-stack .is-nerf {
+  background: #e2665a;
+}
+.pn-legend i.is-adjust,
+.pn-stack .is-adjust {
+  background: #0397ab;
+}
+.pn-card {
+  border: 1px solid #463714;
+  border-radius: 12px;
+  background: #0a1428;
+  overflow: hidden;
+}
+.pn-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: #f0e6d2;
+}
+.pn-table th {
+  padding: 12px 20px;
+  border-bottom: 1px solid #0a323c;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: #a09b8c;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.pn-table th.is-sorted {
+  color: #c8aa6e;
+}
+.pn-table th.pn-th-num {
+  text-align: right;
+}
+.pn-table tbody tr {
+  border-bottom: 1px solid #1e2328;
+}
+.pn-table tbody tr:last-child {
+  border-bottom: 0;
+}
+.pn-table td {
+  padding: 9px 20px;
+  vertical-align: middle;
+}
+.pn-td-target {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 220px;
+}
+.pn-img {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  object-fit: cover;
+}
+.pn-img-empty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #0a323c;
+  color: #a09b8c;
+  font-size: 11px;
+}
+.pn-name {
+  display: block;
+  font-weight: 500;
+  font-size: 14px;
+}
+.pn-type {
+  display: block;
+  font-size: 11px;
+  color: #a09b8c;
+}
+.pn-td-changes {
+  width: 42%;
+}
+.pn-stack {
+  display: flex;
+  gap: 2px;
+  height: 8px;
+}
+.pn-stack span {
+  height: 100%;
+  border-radius: 2px;
+}
+.pn-counts {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #a09b8c;
+}
+.pn-counts .is-up {
+  color: #0ac8b9;
+}
+.pn-counts .is-nerf {
+  color: #e2665a;
+}
+.pn-counts .is-adjust {
+  color: #0397ab;
+}
+.pn-total {
+  text-align: right;
+  font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.pn-last {
+  white-space: nowrap;
+  font-weight: 600;
+}
+.pn-pill {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.pn-pill.is-up {
+  color: #0ac8b9;
+}
+.pn-pill.is-nerf {
+  color: #e2665a;
+}
+.pn-pill.is-adjust {
+  color: #0397ab;
+}
+.pn-touched {
+  white-space: nowrap;
+}
+.pn-footnote {
+  font-size: 12px;
+  color: #a09b8c;
+}
+
+.pn-mlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pn-mrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #463714;
+  border-radius: 12px;
+  background: #0a1428;
+  color: #f0e6d2;
+}
+.pn-mimg {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+}
+.pn-mbody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.pn-mname {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font-size: 14px;
+}
+.pn-mbody .pn-stack {
+  height: 8px;
+}
+.pn-mnums {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  width: 118px;
+}
+.pn-mtotal {
+  font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+}
+.pn-mlast {
+  margin-top: 4px;
+  font-size: 11px;
+}
+.pn-mlast.is-up {
+  color: #0ac8b9;
+}
+.pn-mlast.is-nerf {
+  color: #e2665a;
+}
+.pn-mlast.is-adjust {
+  color: #0397ab;
+}
+@media (max-width: 767px) {
+  .pn-search {
+    flex: 1 1 100%;
+  }
+  .pn-seg {
+    display: flex;
+    width: 100%;
+  }
+  .pn-seg button {
+    flex: 1;
+    padding: 9px 4px;
+  }
+  .pn-legend {
+    display: flex;
+    margin-left: 0;
+  }
+  .pn-period {
+    display: none !important;
+  }
+}
+</style>

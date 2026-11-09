@@ -9,6 +9,44 @@
     </div>
 
     <template v-else>
+      <section v-if="winLossGap.length" class="cobj-gap" aria-labelledby="cobj-gap-title">
+        <header class="cobj-gap__head">
+          <h2 id="cobj-gap-title" class="cobj-gap__title">
+            {{ t('statisticsPage.championObjectivesGapTitle') }}
+          </h2>
+          <p class="cobj-gap__legend">
+            <span class="cobj-gap__key cobj-gap__key--win">{{
+              t('statisticsPage.championObjectivesGapWin')
+            }}</span>
+            <span class="cobj-gap__key cobj-gap__key--loss">{{
+              t('statisticsPage.championObjectivesGapLoss')
+            }}</span>
+          </p>
+        </header>
+        <ul class="cobj-gap__list">
+          <li v-for="row in winLossGap" :key="'gap-' + row.key" class="cobj-gap__row">
+            <span class="cobj-gap__name">{{ row.label }}</span>
+            <div class="cobj-gap__bars">
+              <div class="cobj-gap__line">
+                <div class="cobj-gap__track">
+                  <div class="cobj-gap__bar cobj-gap__bar--win" :style="{ width: row.a + '%' }" />
+                </div>
+                <span class="cobj-gap__pct">{{ formatPct(row.a) }}</span>
+              </div>
+              <div class="cobj-gap__line">
+                <div class="cobj-gap__track">
+                  <div class="cobj-gap__bar cobj-gap__bar--loss" :style="{ width: row.b + '%' }" />
+                </div>
+                <span class="cobj-gap__pct">{{ formatPct(row.b) }}</span>
+              </div>
+            </div>
+            <span class="cobj-gap__delta">{{
+              (row.gap > 0 ? '+' : row.gap < 0 ? '−' : '') + Math.abs(Math.round(row.gap))
+            }}</span>
+          </li>
+        </ul>
+      </section>
+
       <div
         class="fast-stat-card fast-stat-card-objectives ui-build-card-surface w-full max-w-full rounded-xl p-3"
       >
@@ -539,6 +577,7 @@ import {
 } from '~/utils/objectiveScoreboardIcons'
 import { drakeIconSrc, objectiveIconSrc } from '~/utils/statistics/statisticsObjectives'
 import { useToggleSet } from '~/composables/useToggleSet'
+import { objectivesGapRows } from '~/utils/statistics/objectivesGapCompare'
 
 export type ChampionObjectivesParticipationCard = {
   stealPct: number
@@ -664,6 +703,14 @@ const mainTableRows = computed(() => {
     if (row) out.push(row)
   }
   return out
+})
+
+/** Maquette 27 : obtention en premier, équipe gagnante vs perdante, trié par écart. */
+const winLossGap = computed(() => {
+  const labels = new Map(mainTableRows.value.map(r => [r.key, rowTitle(r)]))
+  return objectivesGapRows(
+    mainTableRows.value.map(r => ({ key: r.key, a: r.firstByWin, b: r.firstByLoss }))
+  ).map(g => ({ ...g, label: labels.get(g.key) ?? g.key }))
 })
 
 const drakeTypeRows = computed(() => {
@@ -900,6 +947,107 @@ function onDrakeIconError(e: Event, key: string): void {
 </script>
 
 <style scoped>
+/* Maquette 27 : barres gagnée / perdue + écart */
+.cobj-gap {
+  padding-top: 1rem;
+}
+.cobj-gap__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.75rem;
+}
+.cobj-gap__title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #f0e6d2;
+}
+.cobj-gap__legend {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.8rem;
+  color: #a09b8c;
+}
+.cobj-gap__key::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 0.4rem;
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+.cobj-gap__key--win::before {
+  background: #0ac8b9;
+}
+.cobj-gap__key--loss::before {
+  background: #e2665a;
+}
+.cobj-gap__list {
+  border: 1px solid #463714;
+  border-radius: 12px;
+  background: #0a1428;
+}
+.cobj-gap__row {
+  display: grid;
+  grid-template-columns: minmax(7rem, 11rem) minmax(0, 1fr) 3.5rem;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1.25rem;
+}
+.cobj-gap__row + .cobj-gap__row {
+  border-top: 1px solid rgb(70 55 20 / 0.6);
+}
+.cobj-gap__name {
+  font-weight: 600;
+  color: #f0e6d2;
+}
+.cobj-gap__line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 3.5rem;
+  align-items: center;
+  gap: 0.75rem;
+}
+.cobj-gap__track {
+  height: 6px;
+  border-radius: 999px;
+  background: #1e2328;
+  overflow: hidden;
+}
+.cobj-gap__bar {
+  height: 100%;
+  border-radius: inherit;
+}
+.cobj-gap__bar--win {
+  background: #0ac8b9;
+}
+.cobj-gap__bar--loss {
+  background: #e2665a;
+}
+.cobj-gap__pct {
+  font-size: 0.75rem;
+  text-align: right;
+  color: #a09b8c;
+  font-variant-numeric: tabular-nums;
+}
+.cobj-gap__delta {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  text-align: right;
+  color: #f0e6d2;
+}
+@media (max-width: 639px) {
+  .cobj-gap__row {
+    grid-template-columns: minmax(0, 1fr) 2.75rem;
+    padding: 0.75rem;
+  }
+  .cobj-gap__name {
+    grid-column: 1 / -1;
+  }
+}
 .objectives-zebra-cols th:nth-child(even),
 .objectives-zebra-cols td:nth-child(even) {
   background-color: rgba(255, 255, 255, 0.04);

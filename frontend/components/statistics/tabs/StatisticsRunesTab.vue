@@ -5,6 +5,7 @@ import {
   type RunesSpellsTabCtx,
 } from '~/composables/statistics/statisticsPageCtx'
 
+defineProps<{ buildSummary?: boolean }>()
 const p = injectStatisticsPageCtx<RunesSpellsTabCtx>()
 </script>
 
@@ -43,11 +44,10 @@ const p = injectStatisticsPageCtx<RunesSpellsTabCtx>()
           :baseline="runesDetail(p.overviewDetailBaselineData)"
           :baseline-pending="p.overviewDetailBaselinePending"
           :comparison-version="p.overviewDetailComparisonVersion"
+          :build-summary="buildSummary"
         />
-        <div v-else class="statistics-overview-surface rounded-lg border border-primary/30 p-6">
-          <div class="py-4 text-text/70">
-            {{ p.t('statisticsPage.overviewDetailNoData') }}
-          </div>
+        <div v-else class="text-text/70">
+          {{ p.t('statisticsPage.overviewDetailNoData') }}
         </div>
       </template>
     </template>

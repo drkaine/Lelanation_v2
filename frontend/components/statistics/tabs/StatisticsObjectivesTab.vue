@@ -14,6 +14,7 @@ import {
   objectivesGapRows,
   type ObjectivesCompareMode,
 } from '~/utils/statistics/objectivesGapCompare'
+import { drakeSoulTable } from '~/utils/statistics/drakeSoulTable'
 
 const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
 const tooltipsEnabled = inject('tooltipsEnabled', ref(true)) as Ref<boolean>
@@ -854,6 +855,14 @@ function buildDrakeDistRows(
 const drakeDistRows = computed<DistRow[]>(() => buildDrakeDistRows(p.drakeTypeRows ?? []))
 const soulDistRows = computed<DistRow[]>(() => buildDistRows(p.drakeSoulRows ?? []))
 
+const detailOpen = ref(false)
+const { locale } = useI18n()
+function fmtLocalePct(v: number | null, digits = 2): string {
+  if (v == null || !Number.isFinite(v)) return '—'
+  return `${v.toLocaleString(locale.value, { minimumFractionDigits: digits, maximumFractionDigits: digits })} %`
+}
+const drakeSoulRows = computed(() => drakeSoulTable(drakeDistRows.value, soulDistRows.value))
+
 const showDistributionCards = computed(
   () => (p.overviewTeamsData?.matchCount ?? 0) > 0 || (p.overviewSidesData?.matchCount ?? 0) > 0
 )
@@ -1508,120 +1517,10 @@ function drakeDropdownCountLabel(count: number): string {
       {{ p.t('statisticsPage.objectivesCombinedEmpty') }}
     </div>
 
-    <div
-      v-else
-      class="fast-stat-card fast-stat-card-objectives ui-build-card-surface w-full max-w-full rounded-xl p-3"
-    >
-      <div class="mb-3 flex min-w-0 flex-wrap items-center gap-2">
-        <button
-          type="button"
-          class="shrink-0 text-base leading-none transition-colors"
-          :class="
-            p.cardIsFavorite('overview.objectives')
-              ? 'text-text-accent hover:text-accent-light'
-              : 'text-text/45 grayscale hover:text-text/75'
-          "
-          :title="
-            p.cardIsFavorite('overview.objectives') ? 'Retirer des favoris' : 'Ajouter aux favoris'
-          "
-          @click="
-            p.toggleFavoriteCard(
-              'overview.objectives',
-              p.t('statisticsPage.overviewTeamsObjectives')
-            )
-          "
-        >
-          {{ p.cardIsFavorite('overview.objectives') ? '★' : '☆' }}
-        </button>
-        <button
-          type="button"
-          class="rounded px-2 py-1 text-xs font-semibold transition-colors"
-          :class="
-            p.objectivesPanelTab === 'objectives'
-              ? 'bg-accent text-background'
-              : 'bg-black/20 text-text/80 hover:bg-white/10'
-          "
-          @click="p.setObjectivesPanelTab('objectives')"
-        >
-          {{ p.t('statisticsPage.objectivesTabMain') }}
-        </button>
-        <button
-          type="button"
-          class="rounded px-2 py-1 text-xs font-semibold transition-colors"
-          :class="
-            p.objectivesPanelTab === 'drakeTypes'
-              ? 'bg-accent text-background'
-              : 'bg-black/20 text-text/80 hover:bg-white/10'
-          "
-          @click="p.setObjectivesPanelTab('drakeTypes')"
-        >
-          {{ p.t('statisticsPage.objectivesTabDrakeTypes') }}
-        </button>
-        <button
-          type="button"
-          class="rounded px-2 py-1 text-xs font-semibold transition-colors"
-          :class="
-            p.objectivesPanelTab === 'drakeSouls'
-              ? 'bg-accent text-background'
-              : 'bg-black/20 text-text/80 hover:bg-white/10'
-          "
-          @click="p.setObjectivesPanelTab('drakeSouls')"
-        >
-          {{ p.t('statisticsPage.objectivesTabSouls') }}
-        </button>
-        <div class="ml-auto inline-flex overflow-hidden rounded border border-primary/30 text-xs">
-          <button
-            type="button"
-            class="px-2 py-1 font-semibold transition-colors"
-            :class="
-              objectivesDisplayMode === 'obtention'
-                ? 'bg-accent text-background'
-                : 'bg-black/20 text-text/80 hover:bg-white/10'
-            "
-            @click="objectivesDisplayMode = 'obtention'"
-          >
-            {{ p.t('statisticsPage.objectivesModeObtention') }}
-          </button>
-          <button
-            type="button"
-            class="border-l border-primary/30 px-2 py-1 font-semibold transition-colors"
-            :class="
-              objectivesDisplayMode === 'winrate'
-                ? 'bg-accent text-background'
-                : 'bg-black/20 text-text/80 hover:bg-white/10'
-            "
-            @click="objectivesDisplayMode = 'winrate'"
-          >
-            {{ p.t('statisticsPage.objectivesModeWinrate') }}
-          </button>
-        </div>
-        <span
-          class="group/stat-tip relative inline-flex shrink-0 cursor-help text-text/50"
-          :aria-label="p.t('statisticsPage.tooltipOverviewObjectives')"
-        >
-          ⓘ
-          <span
-            role="tooltip"
-            class="fast-stat-tooltip-popover fast-stat-tooltip-popover--objectives fast-stat-tooltip-popover--end hidden group-hover/stat-tip:block"
-          >
-            {{ p.t('statisticsPage.tooltipOverviewObjectives') }}
-            <span class="mt-1 block border-t border-primary/20 pt-1 text-text/80">
-              {{ p.t('statisticsPage.tooltipSidesObjectives') }}
-            </span>
-          </span>
-        </span>
-      </div>
-
-      <article
-        v-if="
-          p.objectivesPanelTab === 'objectives' &&
-          objectivesDisplayMode === 'obtention' &&
-          objectivesGap.length
-        "
-        class="obj-gap"
-      >
+    <template v-else>
+      <section v-if="objectivesGap.length" class="obj-section">
         <header class="obj-gap__head">
-          <h3 class="obj-gap__title">{{ p.t('statisticsPage.objectivesGapTitle') }}</h3>
+          <h2 class="obj-gap__title">{{ p.t('statisticsPage.objectivesGapTitle') }}</h2>
           <div
             class="obj-gap__modes"
             role="group"
@@ -1640,816 +1539,1120 @@ function drakeDropdownCountLabel(count: number): string {
             </button>
           </div>
         </header>
-        <div class="obj-gap__legend">
-          <span>{{ p.t('statisticsPage.objectivesGapSorted') }}</span>
-          <span class="obj-gap__key obj-gap__key--a">{{
-            p.t('statisticsPage.objectivesGapA_' + objectivesCompareMode)
-          }}</span>
-          <span class="obj-gap__key obj-gap__key--b">{{
-            p.t('statisticsPage.objectivesGapB_' + objectivesCompareMode)
-          }}</span>
-          <span class="obj-gap__num">{{ p.t('statisticsPage.objectivesGapCol') }}</span>
-        </div>
-        <ul class="obj-gap__list">
-          <li
-            v-for="row in objectivesGap"
-            :key="'gap-' + row.key"
-            class="obj-gap__row"
-            :class="'obj-gap__row--' + objectivesCompareMode"
+        <article class="obj-gap">
+          <div class="obj-gap__legend">
+            <span>{{ p.t('statisticsPage.objectivesGapSorted') }}</span>
+            <span class="obj-gap__key obj-gap__key--a">{{
+              p.t('statisticsPage.objectivesGapA_' + objectivesCompareMode)
+            }}</span>
+            <span class="obj-gap__key obj-gap__key--b">{{
+              p.t('statisticsPage.objectivesGapB_' + objectivesCompareMode)
+            }}</span>
+            <span class="obj-gap__num">{{ p.t('statisticsPage.objectivesGapCol') }}</span>
+          </div>
+          <ul class="obj-gap__list">
+            <li
+              v-for="row in objectivesGap"
+              :key="'gap-' + row.key"
+              class="obj-gap__row"
+              :class="'obj-gap__row--' + objectivesCompareMode"
+            >
+              <span class="obj-gap__name">{{ objectiveCompareLabel(row.key) }}</span>
+              <div class="obj-gap__bars">
+                <div class="obj-gap__bar-line">
+                  <div class="obj-gap__track">
+                    <div class="obj-gap__bar obj-gap__bar--a" :style="{ width: row.a + '%' }" />
+                  </div>
+                  <span class="obj-gap__num">{{ fmtLocalePct(row.a, 1) }}</span>
+                </div>
+                <div class="obj-gap__bar-line">
+                  <div class="obj-gap__track">
+                    <div class="obj-gap__bar obj-gap__bar--b" :style="{ width: row.b + '%' }" />
+                  </div>
+                  <span class="obj-gap__num">{{ fmtLocalePct(row.b, 1) }}</span>
+                </div>
+              </div>
+              <span class="obj-gap__num obj-gap__delta">
+                {{ (row.gap > 0 ? '+' : row.gap < 0 ? '−' : '') + Math.abs(Math.round(row.gap)) }}
+              </span>
+            </li>
+          </ul>
+        </article>
+      </section>
+
+      <section v-if="drakeSoulRows.length" class="obj-card">
+        <header class="obj-card__head">
+          <h3 class="obj-card__title">{{ p.t('statisticsPage.objectivesDrakeSoulTitle') }}</h3>
+          <p class="obj-card__sub">{{ p.t('statisticsPage.objectivesDrakeSoulSub') }}</p>
+        </header>
+        <table class="obj-ds">
+          <thead>
+            <tr>
+              <th>{{ p.t('statisticsPage.objectivesDrakeSoulElement') }}</th>
+              <th>{{ p.t('statisticsPage.objectivesDrakeSoulKilled') }}</th>
+              <th>{{ p.t('statisticsPage.objectivesDrakeSoulSouls') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in drakeSoulRows" :key="row.key">
+              <td>{{ row.label }}</td>
+              <td>{{ fmtLocalePct(row.drakePct) }}</td>
+              <td>{{ fmtLocalePct(row.soulPct) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <button
+        type="button"
+        class="obj-detail-toggle"
+        :aria-expanded="detailOpen"
+        @click="detailOpen = !detailOpen"
+      >
+        {{
+          p.t(
+            detailOpen
+              ? 'statisticsPage.objectivesHideDetail'
+              : 'statisticsPage.objectivesSeeDetail'
+          )
+        }}
+        <span aria-hidden="true">{{ detailOpen ? '▴' : '▾' }}</span>
+      </button>
+
+      <div
+        v-show="detailOpen"
+        class="fast-stat-card fast-stat-card-objectives ui-build-card-surface w-full max-w-full rounded-xl p-3"
+      >
+        <div class="mb-3 flex min-w-0 flex-wrap items-center gap-2">
+          <button
+            type="button"
+            class="shrink-0 text-base leading-none transition-colors"
+            :class="
+              p.cardIsFavorite('overview.objectives')
+                ? 'text-text-accent hover:text-accent-light'
+                : 'text-text/45 grayscale hover:text-text/75'
+            "
+            :title="
+              p.cardIsFavorite('overview.objectives')
+                ? 'Retirer des favoris'
+                : 'Ajouter aux favoris'
+            "
+            @click="
+              p.toggleFavoriteCard(
+                'overview.objectives',
+                p.t('statisticsPage.overviewTeamsObjectives')
+              )
+            "
           >
-            <span class="obj-gap__name">{{ objectiveCompareLabel(row.key) }}</span>
-            <div class="obj-gap__bars">
-              <div class="obj-gap__bar-line">
-                <div class="obj-gap__track">
-                  <div class="obj-gap__bar obj-gap__bar--a" :style="{ width: row.a + '%' }" />
-                </div>
-                <span class="obj-gap__num">{{ row.a.toFixed(2) }} %</span>
-              </div>
-              <div class="obj-gap__bar-line">
-                <div class="obj-gap__track">
-                  <div class="obj-gap__bar obj-gap__bar--b" :style="{ width: row.b + '%' }" />
-                </div>
-                <span class="obj-gap__num">{{ row.b.toFixed(2) }} %</span>
-              </div>
-            </div>
-            <span class="obj-gap__num obj-gap__delta">
-              {{ (row.gap > 0 ? '+' : '') + row.gap.toFixed(2) }}
+            {{ p.cardIsFavorite('overview.objectives') ? '★' : '☆' }}
+          </button>
+          <button
+            type="button"
+            class="rounded px-2 py-1 text-xs font-semibold transition-colors"
+            :class="
+              p.objectivesPanelTab === 'objectives'
+                ? 'bg-accent text-background'
+                : 'bg-black/20 text-text/80 hover:bg-white/10'
+            "
+            @click="p.setObjectivesPanelTab('objectives')"
+          >
+            {{ p.t('statisticsPage.objectivesTabMain') }}
+          </button>
+          <button
+            type="button"
+            class="rounded px-2 py-1 text-xs font-semibold transition-colors"
+            :class="
+              p.objectivesPanelTab === 'drakeTypes'
+                ? 'bg-accent text-background'
+                : 'bg-black/20 text-text/80 hover:bg-white/10'
+            "
+            @click="p.setObjectivesPanelTab('drakeTypes')"
+          >
+            {{ p.t('statisticsPage.objectivesTabDrakeTypes') }}
+          </button>
+          <button
+            type="button"
+            class="rounded px-2 py-1 text-xs font-semibold transition-colors"
+            :class="
+              p.objectivesPanelTab === 'drakeSouls'
+                ? 'bg-accent text-background'
+                : 'bg-black/20 text-text/80 hover:bg-white/10'
+            "
+            @click="p.setObjectivesPanelTab('drakeSouls')"
+          >
+            {{ p.t('statisticsPage.objectivesTabSouls') }}
+          </button>
+          <div class="ml-auto inline-flex overflow-hidden rounded border border-primary/30 text-xs">
+            <button
+              type="button"
+              class="px-2 py-1 font-semibold transition-colors"
+              :class="
+                objectivesDisplayMode === 'obtention'
+                  ? 'bg-accent text-background'
+                  : 'bg-black/20 text-text/80 hover:bg-white/10'
+              "
+              @click="objectivesDisplayMode = 'obtention'"
+            >
+              {{ p.t('statisticsPage.objectivesModeObtention') }}
+            </button>
+            <button
+              type="button"
+              class="border-l border-primary/30 px-2 py-1 font-semibold transition-colors"
+              :class="
+                objectivesDisplayMode === 'winrate'
+                  ? 'bg-accent text-background'
+                  : 'bg-black/20 text-text/80 hover:bg-white/10'
+              "
+              @click="objectivesDisplayMode = 'winrate'"
+            >
+              {{ p.t('statisticsPage.objectivesModeWinrate') }}
+            </button>
+          </div>
+          <span
+            class="group/stat-tip relative inline-flex shrink-0 cursor-help text-text/50"
+            :aria-label="p.t('statisticsPage.tooltipOverviewObjectives')"
+          >
+            ⓘ
+            <span
+              role="tooltip"
+              class="fast-stat-tooltip-popover fast-stat-tooltip-popover--objectives fast-stat-tooltip-popover--end hidden group-hover/stat-tip:block"
+            >
+              {{ p.t('statisticsPage.tooltipOverviewObjectives') }}
+              <span class="mt-1 block border-t border-primary/20 pt-1 text-text/80">
+                {{ p.t('statisticsPage.tooltipSidesObjectives') }}
+              </span>
             </span>
-          </li>
-        </ul>
-      </article>
-
-      <!-- Principal : premier par équipe + par côté -->
-      <div
-        v-if="p.objectivesPanelTab === 'objectives' && objectivesDisplayMode === 'obtention'"
-        class="w-full min-w-0"
-      >
-        <div class="statistics-objectives-mobile-list space-y-3 md:hidden">
-          <StatisticsObjectivesMobileCard
-            v-for="row in mobileMainObtentionRows"
-            :key="'mob-main-obt-' + row.id"
-            :title="row.title"
-            :icon-src="row.iconSrc"
-            :expandable="row.expandable"
-            :expanded="row.expanded"
-            :metrics="row.metrics"
-            :sub-rows="row.subRows"
-            @toggle="onMobileObjectiveToggle(row.id)"
-          />
+          </span>
         </div>
-        <div class="hidden min-w-0 overflow-x-auto md:block">
-          <table class="objectives-zebra-cols w-full min-w-[480px] text-left text-sm">
-            <thead>
-              <tr class="border-b border-primary/30 text-text/70">
-                <th class="py-1.5 pr-2 font-medium">
-                  {{ p.t('statisticsPage.overviewTeamsObjective') }}
-                </th>
-                <th class="px-1 py-1.5 text-center font-medium">
-                  {{ p.t('statisticsPage.overviewTeamsFirstByWin') }}
-                </th>
-                <th class="px-1 py-1.5 text-center font-medium">
-                  {{ p.t('statisticsPage.overviewTeamsFirstByLoss') }}
-                </th>
-                <th class="px-1 py-1.5 text-center font-medium text-info">
-                  {{ p.t('statisticsPage.sidesBlue') }}
-                </th>
-                <th class="py-1.5 pl-1 text-center font-medium text-error">
-                  {{ p.t('statisticsPage.sidesRed') }}
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-primary/20 text-text/80">
-              <tr>
-                <td class="py-1.5 pr-2">
-                  {{ p.t('statisticsPage.overviewTeamsFirstBlood') }}
-                </td>
-                <td class="px-1 py-1.5 text-center">
-                  {{ teamFirstPctParts('firstBlood', 'win').current }}
-                  <span :class="teamFirstPctParts('firstBlood', 'win').deltaClass">
-                    {{ teamFirstPctParts('firstBlood', 'win').delta }}
-                  </span>
-                </td>
-                <td class="px-1 py-1.5 text-center">
-                  {{ teamFirstPctParts('firstBlood', 'loss').current }}
-                  <span :class="teamFirstPctParts('firstBlood', 'loss').deltaClass">
-                    {{ teamFirstPctParts('firstBlood', 'loss').delta }}
-                  </span>
-                </td>
-                <td class="px-1 py-1.5 text-center">
-                  {{ sideFirstPctParts('firstBlood', 'blue').current }}
-                  <span :class="sideFirstPctParts('firstBlood', 'blue').deltaClass">
-                    {{ sideFirstPctParts('firstBlood', 'blue').delta }}
-                  </span>
-                </td>
-                <td class="py-1.5 pl-1 text-center">
-                  {{ sideFirstPctParts('firstBlood', 'red').current }}
-                  <span :class="sideFirstPctParts('firstBlood', 'red').deltaClass">
-                    {{ sideFirstPctParts('firstBlood', 'red').delta }}
-                  </span>
-                </td>
-              </tr>
-              <template v-for="key in p.objectiveKeysOrdered" :key="key">
+
+        <!-- Principal : premier par équipe + par côté -->
+        <div
+          v-if="p.objectivesPanelTab === 'objectives' && objectivesDisplayMode === 'obtention'"
+          class="w-full min-w-0"
+        >
+          <div class="statistics-objectives-mobile-list space-y-3 md:hidden">
+            <StatisticsObjectivesMobileCard
+              v-for="row in mobileMainObtentionRows"
+              :key="'mob-main-obt-' + row.id"
+              :title="row.title"
+              :icon-src="row.iconSrc"
+              :expandable="row.expandable"
+              :expanded="row.expanded"
+              :metrics="row.metrics"
+              :sub-rows="row.subRows"
+              @toggle="onMobileObjectiveToggle(row.id)"
+            />
+          </div>
+          <div class="hidden min-w-0 overflow-x-auto md:block">
+            <table class="objectives-zebra-cols w-full min-w-[480px] text-left text-sm">
+              <thead>
+                <tr class="border-b border-primary/30 text-text/70">
+                  <th class="py-1.5 pr-2 font-medium">
+                    {{ p.t('statisticsPage.overviewTeamsObjective') }}
+                  </th>
+                  <th class="px-1 py-1.5 text-center font-medium">
+                    {{ p.t('statisticsPage.overviewTeamsFirstByWin') }}
+                  </th>
+                  <th class="px-1 py-1.5 text-center font-medium">
+                    {{ p.t('statisticsPage.overviewTeamsFirstByLoss') }}
+                  </th>
+                  <th class="px-1 py-1.5 text-center font-medium text-info">
+                    {{ p.t('statisticsPage.sidesBlue') }}
+                  </th>
+                  <th class="py-1.5 pl-1 text-center font-medium text-error">
+                    {{ p.t('statisticsPage.sidesRed') }}
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-primary/20 text-text/80">
                 <tr>
                   <td class="py-1.5 pr-2">
-                    <button
-                      v-if="p.objectiveHasKillDropdown(key)"
-                      type="button"
-                      class="flex items-center gap-1 font-medium text-text/90 hover:text-text"
-                      @click="p.toggleObjective(key)"
-                    >
-                      <span
-                        class="inline-block transition-transform duration-200"
-                        :class="p.openObjectiveKeys.has(key) ? 'rotate-180' : ''"
-                        aria-hidden
-                        >▼</span
-                      >
-                      <img
-                        v-if="p.objectiveIconSrc(key)"
-                        :src="p.objectiveIconSrc(key)"
-                        :alt="p.t('statisticsPage.overviewTeamsObjective_' + key)"
-                        class="h-4 w-4 object-contain"
-                        loading="lazy"
-                        decoding="async"
-                        @error="p.onObjectiveIconError($event, key)"
-                      />
-                      {{ p.t('statisticsPage.overviewTeamsObjective_' + key) }}
-                    </button>
-                    <div v-else class="flex items-center gap-1 font-medium text-text/90">
-                      <img
-                        v-if="p.objectiveIconSrc(key)"
-                        :src="p.objectiveIconSrc(key)"
-                        :alt="p.t('statisticsPage.overviewTeamsObjective_' + key)"
-                        class="h-4 w-4 object-contain"
-                        loading="lazy"
-                        decoding="async"
-                        @error="p.onObjectiveIconError($event, key)"
-                      />
-                      {{ p.t('statisticsPage.overviewTeamsObjective_' + key) }}
-                    </div>
+                    {{ p.t('statisticsPage.overviewTeamsFirstBlood') }}
                   </td>
                   <td class="px-1 py-1.5 text-center">
-                    {{ teamFirstPctParts(key, 'win').current }}
-                    <span :class="teamFirstPctParts(key, 'win').deltaClass">
-                      {{ teamFirstPctParts(key, 'win').delta }}
+                    {{ teamFirstPctParts('firstBlood', 'win').current }}
+                    <span :class="teamFirstPctParts('firstBlood', 'win').deltaClass">
+                      {{ teamFirstPctParts('firstBlood', 'win').delta }}
                     </span>
                   </td>
                   <td class="px-1 py-1.5 text-center">
-                    {{ teamFirstPctParts(key, 'loss').current }}
-                    <span :class="teamFirstPctParts(key, 'loss').deltaClass">
-                      {{ teamFirstPctParts(key, 'loss').delta }}
+                    {{ teamFirstPctParts('firstBlood', 'loss').current }}
+                    <span :class="teamFirstPctParts('firstBlood', 'loss').deltaClass">
+                      {{ teamFirstPctParts('firstBlood', 'loss').delta }}
                     </span>
                   </td>
                   <td class="px-1 py-1.5 text-center">
-                    {{ sideFirstPctParts(key, 'blue').current }}
-                    <span :class="sideFirstPctParts(key, 'blue').deltaClass">
-                      {{ sideFirstPctParts(key, 'blue').delta }}
+                    {{ sideFirstPctParts('firstBlood', 'blue').current }}
+                    <span :class="sideFirstPctParts('firstBlood', 'blue').deltaClass">
+                      {{ sideFirstPctParts('firstBlood', 'blue').delta }}
                     </span>
                   </td>
                   <td class="py-1.5 pl-1 text-center">
-                    {{ sideFirstPctParts(key, 'red').current }}
-                    <span :class="sideFirstPctParts(key, 'red').deltaClass">
-                      {{ sideFirstPctParts(key, 'red').delta }}
+                    {{ sideFirstPctParts('firstBlood', 'red').current }}
+                    <span :class="sideFirstPctParts('firstBlood', 'red').deltaClass">
+                      {{ sideFirstPctParts('firstBlood', 'red').delta }}
                     </span>
                   </td>
                 </tr>
-                <template v-if="p.objectiveHasKillDropdown(key) && p.openObjectiveKeys.has(key)">
-                  <tr
-                    v-for="count in p.objectiveCounts(key)"
-                    :key="key + '-' + count"
-                    class="bg-surface/30"
-                  >
-                    <td class="py-1 pl-6 pr-2 text-text/70">
-                      {{ drakeDropdownCountLabel(count) }}
-                    </td>
-                    <td class="px-1 py-1 text-center text-text/80">
-                      <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
-                        {{ p.percentForCount(key, count, true) }}
-                      </template>
-                      <template v-else>—</template>
-                    </td>
-                    <td class="px-1 py-1 text-center text-text/80">
-                      <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
-                        {{ p.percentForCount(key, count, false) }}
-                      </template>
-                      <template v-else>—</template>
-                    </td>
-                    <td class="px-1 py-1 text-center text-text/80">
-                      <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                        {{ p.percentForCountSides(key, count, true) }}
-                      </template>
-                      <template v-else>—</template>
-                    </td>
-                    <td class="py-1 pl-1 text-center text-text/80">
-                      <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                        {{ p.percentForCountSides(key, count, false) }}
-                      </template>
-                      <template v-else>—</template>
-                    </td>
-                  </tr>
-                </template>
-              </template>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Drakes par type -->
-      <div
-        v-else-if="p.objectivesPanelTab === 'drakeTypes' && objectivesDisplayMode === 'obtention'"
-        class="w-full min-w-0"
-      >
-        <div class="statistics-objectives-mobile-list space-y-3 md:hidden">
-          <StatisticsObjectivesMobileCard
-            v-for="row in mobileDrakeTypeObtentionRows"
-            :key="'mob-drake-obt-' + row.id"
-            :title="row.title"
-            :icon-src="row.iconSrc"
-            :color="row.color"
-            expandable
-            :expanded="row.expanded"
-            :metrics="row.metrics"
-            :sub-rows="row.subRows"
-            @toggle="toggleDrakeType(row.key)"
-          />
-          <p
-            v-if="mobileDrakeTypeObtentionRows.length === 0"
-            class="py-2 text-center text-sm text-text/60"
-          >
-            {{ p.t('statisticsPage.noData') }}
-          </p>
-        </div>
-        <div class="hidden min-w-0 overflow-x-auto md:block">
-          <table class="objectives-zebra-cols w-full min-w-[480px] text-left text-sm">
-            <thead>
-              <tr class="border-b border-primary/30 text-text/70">
-                <th class="py-1.5 pr-2 font-medium">
-                  {{ p.t('statisticsPage.overviewTeamsObjective') }}
-                </th>
-                <th class="px-1 py-1.5 text-center font-medium">
-                  {{ p.t('statisticsPage.overviewTeamsByWin') }}
-                </th>
-                <th class="px-1 py-1.5 text-center font-medium">
-                  {{ p.t('statisticsPage.overviewTeamsByLoss') }}
-                </th>
-                <th class="px-1 py-1.5 text-center font-medium text-info">
-                  {{ p.t('statisticsPage.sidesBlue') }}
-                </th>
-                <th class="py-1.5 pl-1 text-center font-medium text-error">
-                  {{ p.t('statisticsPage.sidesRed') }}
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-primary/20 text-text/80">
-              <template v-for="row in p.drakeTypeRows" :key="'drake-type-' + row.key">
-                <tr>
-                  <td class="py-1.5 pr-2 font-medium text-text/90">
-                    <button
-                      type="button"
-                      class="flex items-center gap-2 hover:text-text"
-                      @click="toggleDrakeType(row.key)"
-                    >
-                      <span
-                        class="inline-block transition-transform duration-200"
-                        :class="openDrakeTypeKeys.has(row.key) ? 'rotate-180' : ''"
-                        aria-hidden
-                        >▼</span
+                <template v-for="key in p.objectiveKeysOrdered" :key="key">
+                  <tr>
+                    <td class="py-1.5 pr-2">
+                      <button
+                        v-if="p.objectiveHasKillDropdown(key)"
+                        type="button"
+                        class="flex items-center gap-1 font-medium text-text/90 hover:text-text"
+                        @click="p.toggleObjective(key)"
                       >
-                      <span
-                        class="h-2.5 w-2.5 rounded-full"
-                        :style="{ backgroundColor: rowColor(row.key) }"
-                      />
-                      <img
-                        v-if="p.drakeIconSrc(row.key)"
-                        :src="p.drakeIconSrc(row.key)"
-                        :alt="row.label"
-                        class="h-4 w-4 object-contain"
-                        loading="lazy"
-                        decoding="async"
-                        @error="p.onDrakeIconError($event, row.key)"
-                      />
-                      <span>{{ row.label }}</span>
-                    </button>
-                  </td>
-                  <td class="px-1 py-1.5 text-center">
-                    <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
-                      {{ drakeTypePctParts(row.key, 'win').current }}
-                      <span :class="drakeTypePctParts(row.key, 'win').deltaClass">
-                        {{ drakeTypePctParts(row.key, 'win').delta }}
-                      </span>
-                    </template>
-                    <template v-else>—</template>
-                  </td>
-                  <td class="px-1 py-1.5 text-center">
-                    <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
-                      {{ drakeTypePctParts(row.key, 'loss').current }}
-                      <span :class="drakeTypePctParts(row.key, 'loss').deltaClass">
-                        {{ drakeTypePctParts(row.key, 'loss').delta }}
-                      </span>
-                    </template>
-                    <template v-else>—</template>
-                  </td>
-                  <td class="px-1 py-1.5 text-center">
-                    <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                      {{ drakeTypePctPartsSides(row.key, 'blue').current }}
-                      <span :class="drakeTypePctPartsSides(row.key, 'blue').deltaClass">
-                        {{ drakeTypePctPartsSides(row.key, 'blue').delta }}
-                      </span>
-                    </template>
-                    <template v-else>—</template>
-                  </td>
-                  <td class="py-1.5 pl-1 text-center">
-                    <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                      {{ drakeTypePctPartsSides(row.key, 'red').current }}
-                      <span :class="drakeTypePctPartsSides(row.key, 'red').deltaClass">
-                        {{ drakeTypePctPartsSides(row.key, 'red').delta }}
-                      </span>
-                    </template>
-                    <template v-else>—</template>
-                  </td>
-                </tr>
-                <template v-if="openDrakeTypeKeys.has(row.key)">
-                  <tr
-                    v-for="count in p.drakeTypeCounts(row.key)"
-                    :key="'drake-type-dist-' + row.key + '-' + count"
-                    class="bg-surface/30"
-                  >
-                    <td class="py-1 pl-6 pr-2 text-text/70">
-                      {{ drakeDropdownCountLabel(count) }}
-                    </td>
-                    <td class="px-1 py-1 text-center text-text/80">
-                      {{
-                        p.overviewTeamsData && p.overviewTeamsData.matchCount > 0
-                          ? p.drakeTypePercentForCount(row.key, count, true)
-                          : '—'
-                      }}
-                    </td>
-                    <td class="px-1 py-1 text-center text-text/80">
-                      {{
-                        p.overviewTeamsData && p.overviewTeamsData.matchCount > 0
-                          ? p.drakeTypePercentForCount(row.key, count, false)
-                          : '—'
-                      }}
-                    </td>
-                    <td class="px-1 py-1 text-center text-text/80">
-                      {{
-                        p.overviewSidesData && p.overviewSidesData.matchCount > 0
-                          ? p.drakeTypePercentForCountSides(row.key, count, true)
-                          : '—'
-                      }}
-                    </td>
-                    <td class="py-1 pl-1 text-center text-text/80">
-                      {{
-                        p.overviewSidesData && p.overviewSidesData.matchCount > 0
-                          ? p.drakeTypePercentForCountSides(row.key, count, false)
-                          : '—'
-                      }}
-                    </td>
-                  </tr>
-                  <tr v-if="p.drakeTypeCounts(row.key).length === 0" class="bg-surface/30">
-                    <td class="py-1 pl-6 pr-2 text-text/70">—</td>
-                    <td class="px-1 py-1 text-center text-text/80">—</td>
-                    <td class="px-1 py-1 text-center text-text/80">—</td>
-                    <td class="px-1 py-1 text-center text-text/80">—</td>
-                    <td class="py-1 pl-1 text-center text-text/80">—</td>
-                  </tr>
-                </template>
-              </template>
-              <tr v-if="p.drakeTypeRows.length === 0">
-                <td colspan="5" class="py-2 text-center text-text/60">
-                  {{ p.t('statisticsPage.noData') }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div
-        v-else-if="p.objectivesPanelTab === 'drakeTypes' && objectivesDisplayMode === 'winrate'"
-        class="w-full min-w-0"
-      >
-        <div class="statistics-objectives-mobile-list space-y-3 md:hidden">
-          <StatisticsObjectivesMobileCard
-            v-for="row in mobileDrakeTypeWinrateRows"
-            :key="'mob-drake-wr-' + row.id"
-            :title="row.title"
-            :icon-src="row.iconSrc"
-            :color="row.color"
-            expandable
-            :expanded="row.expanded"
-            :metrics="row.metrics"
-            :sub-rows="row.subRows"
-            @toggle="toggleDrakeType(row.key)"
-          />
-          <p
-            v-if="mobileDrakeTypeWinrateRows.length === 0"
-            class="py-2 text-center text-sm text-text/60"
-          >
-            {{ p.t('statisticsPage.noData') }}
-          </p>
-        </div>
-        <div class="hidden min-w-0 overflow-x-auto md:block">
-          <table class="objectives-zebra-cols w-full min-w-[480px] text-left text-sm">
-            <thead>
-              <tr class="border-b border-primary/30 text-text/70">
-                <th class="py-1.5 pr-2 font-medium">
-                  {{ p.t('statisticsPage.overviewTeamsObjective') }}
-                </th>
-                <th class="px-1 py-1.5 text-center font-medium">
-                  {{ p.t('statisticsPage.objectivesFirstWinrateColGlobal') }}
-                </th>
-                <th class="px-1 py-1.5 text-center font-medium text-info">
-                  {{ p.t('statisticsPage.sidesBlue') }}
-                </th>
-                <th class="py-1.5 pl-1 text-center font-medium text-error">
-                  {{ p.t('statisticsPage.sidesRed') }}
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-primary/20 text-text/80">
-              <template v-for="row in p.drakeTypeRows" :key="'drake-type-wr-' + row.key">
-                <tr>
-                  <td class="py-1.5 pr-2 font-medium text-text/90">
-                    <button
-                      type="button"
-                      class="flex items-center gap-2 hover:text-text"
-                      @click="toggleDrakeType(row.key)"
-                    >
-                      <span
-                        class="inline-block transition-transform duration-200"
-                        :class="openDrakeTypeKeys.has(row.key) ? 'rotate-180' : ''"
-                        aria-hidden
-                        >▼</span
-                      >
-                      <span
-                        class="h-2.5 w-2.5 rounded-full"
-                        :style="{ backgroundColor: rowColor(row.key) }"
-                      />
-                      <img
-                        v-if="p.drakeIconSrc(row.key)"
-                        :src="p.drakeIconSrc(row.key)"
-                        :alt="row.label"
-                        class="h-4 w-4 object-contain"
-                        loading="lazy"
-                        decoding="async"
-                        @error="p.onDrakeIconError($event, row.key)"
-                      />
-                      <span>{{ row.label }}</span>
-                    </button>
-                  </td>
-                  <td class="px-1 py-1.5 text-center">
-                    <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
-                      {{ drakeTypeWinrateGlobalParts(row.key).current }}
-                      <span :class="drakeTypeWinrateGlobalParts(row.key).deltaClass">
-                        {{ drakeTypeWinrateGlobalParts(row.key).delta }}
-                      </span>
-                    </template>
-                    <template v-else>—</template>
-                  </td>
-                  <td class="px-1 py-1.5 text-center">
-                    <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                      {{ drakeTypeWinrateSideParts(row.key, 'blue').current }}
-                      <span :class="drakeTypeWinrateSideParts(row.key, 'blue').deltaClass">
-                        {{ drakeTypeWinrateSideParts(row.key, 'blue').delta }}
-                      </span>
-                    </template>
-                    <template v-else>—</template>
-                  </td>
-                  <td class="py-1.5 pl-1 text-center">
-                    <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                      {{ drakeTypeWinrateSideParts(row.key, 'red').current }}
-                      <span :class="drakeTypeWinrateSideParts(row.key, 'red').deltaClass">
-                        {{ drakeTypeWinrateSideParts(row.key, 'red').delta }}
-                      </span>
-                    </template>
-                    <template v-else>—</template>
-                  </td>
-                </tr>
-                <template v-if="openDrakeTypeKeys.has(row.key)">
-                  <tr
-                    v-for="count in p.drakeTypeCounts(row.key)"
-                    :key="'drake-type-wr-dist-' + row.key + '-' + count"
-                    class="bg-surface/30"
-                  >
-                    <td class="py-1 pl-6 pr-2 text-text/70">{{ count }}</td>
-                    <td class="px-1 py-1 text-center text-text/80">
-                      <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
-                        {{ drakeTypeWinrateCountGlobalParts(row.key, count).current }}
-                        <span :class="drakeTypeWinrateCountGlobalParts(row.key, count).deltaClass">
-                          {{ drakeTypeWinrateCountGlobalParts(row.key, count).delta }}
-                        </span>
-                      </template>
-                      <template v-else>—</template>
-                    </td>
-                    <td class="px-1 py-1 text-center text-text/80">
-                      <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                        {{ drakeTypeWinrateCountSideParts(row.key, count, 'blue').current }}
                         <span
-                          :class="drakeTypeWinrateCountSideParts(row.key, count, 'blue').deltaClass"
+                          class="inline-block transition-transform duration-200"
+                          :class="p.openObjectiveKeys.has(key) ? 'rotate-180' : ''"
+                          aria-hidden
+                          >▼</span
                         >
-                          {{ drakeTypeWinrateCountSideParts(row.key, count, 'blue').delta }}
-                        </span>
-                      </template>
-                      <template v-else>—</template>
+                        <img
+                          v-if="p.objectiveIconSrc(key)"
+                          :src="p.objectiveIconSrc(key)"
+                          :alt="p.t('statisticsPage.overviewTeamsObjective_' + key)"
+                          class="h-4 w-4 object-contain"
+                          loading="lazy"
+                          decoding="async"
+                          @error="p.onObjectiveIconError($event, key)"
+                        />
+                        {{ p.t('statisticsPage.overviewTeamsObjective_' + key) }}
+                      </button>
+                      <div v-else class="flex items-center gap-1 font-medium text-text/90">
+                        <img
+                          v-if="p.objectiveIconSrc(key)"
+                          :src="p.objectiveIconSrc(key)"
+                          :alt="p.t('statisticsPage.overviewTeamsObjective_' + key)"
+                          class="h-4 w-4 object-contain"
+                          loading="lazy"
+                          decoding="async"
+                          @error="p.onObjectiveIconError($event, key)"
+                        />
+                        {{ p.t('statisticsPage.overviewTeamsObjective_' + key) }}
+                      </div>
                     </td>
-                    <td class="py-1 pl-1 text-center text-text/80">
-                      <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                        {{ drakeTypeWinrateCountSideParts(row.key, count, 'red').current }}
-                        <span
-                          :class="drakeTypeWinrateCountSideParts(row.key, count, 'red').deltaClass"
-                        >
-                          {{ drakeTypeWinrateCountSideParts(row.key, count, 'red').delta }}
-                        </span>
-                      </template>
-                      <template v-else>—</template>
+                    <td class="px-1 py-1.5 text-center">
+                      {{ teamFirstPctParts(key, 'win').current }}
+                      <span :class="teamFirstPctParts(key, 'win').deltaClass">
+                        {{ teamFirstPctParts(key, 'win').delta }}
+                      </span>
+                    </td>
+                    <td class="px-1 py-1.5 text-center">
+                      {{ teamFirstPctParts(key, 'loss').current }}
+                      <span :class="teamFirstPctParts(key, 'loss').deltaClass">
+                        {{ teamFirstPctParts(key, 'loss').delta }}
+                      </span>
+                    </td>
+                    <td class="px-1 py-1.5 text-center">
+                      {{ sideFirstPctParts(key, 'blue').current }}
+                      <span :class="sideFirstPctParts(key, 'blue').deltaClass">
+                        {{ sideFirstPctParts(key, 'blue').delta }}
+                      </span>
+                    </td>
+                    <td class="py-1.5 pl-1 text-center">
+                      {{ sideFirstPctParts(key, 'red').current }}
+                      <span :class="sideFirstPctParts(key, 'red').deltaClass">
+                        {{ sideFirstPctParts(key, 'red').delta }}
+                      </span>
                     </td>
                   </tr>
-                  <tr v-if="p.drakeTypeCounts(row.key).length === 0" class="bg-surface/30">
-                    <td class="py-1 pl-6 pr-2 text-text/70">—</td>
-                    <td class="px-1 py-1 text-center text-text/80">—</td>
-                    <td class="px-1 py-1 text-center text-text/80">—</td>
-                    <td class="py-1 pl-1 text-center text-text/80">—</td>
-                  </tr>
+                  <template v-if="p.objectiveHasKillDropdown(key) && p.openObjectiveKeys.has(key)">
+                    <tr
+                      v-for="count in p.objectiveCounts(key)"
+                      :key="key + '-' + count"
+                      class="bg-surface/30"
+                    >
+                      <td class="py-1 pl-6 pr-2 text-text/70">
+                        {{ drakeDropdownCountLabel(count) }}
+                      </td>
+                      <td class="px-1 py-1 text-center text-text/80">
+                        <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
+                          {{ p.percentForCount(key, count, true) }}
+                        </template>
+                        <template v-else>—</template>
+                      </td>
+                      <td class="px-1 py-1 text-center text-text/80">
+                        <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
+                          {{ p.percentForCount(key, count, false) }}
+                        </template>
+                        <template v-else>—</template>
+                      </td>
+                      <td class="px-1 py-1 text-center text-text/80">
+                        <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
+                          {{ p.percentForCountSides(key, count, true) }}
+                        </template>
+                        <template v-else>—</template>
+                      </td>
+                      <td class="py-1 pl-1 text-center text-text/80">
+                        <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
+                          {{ p.percentForCountSides(key, count, false) }}
+                        </template>
+                        <template v-else>—</template>
+                      </td>
+                    </tr>
+                  </template>
                 </template>
-              </template>
-              <tr v-if="p.drakeTypeRows.length === 0">
-                <td colspan="4" class="py-2 text-center text-text/60">
-                  {{ p.t('statisticsPage.noData') }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
 
-      <!-- Winrate quand first (global + par côté) -->
-      <div
-        v-else-if="p.objectivesPanelTab === 'objectives' && objectivesDisplayMode === 'winrate'"
-        class="w-full min-w-0"
-      >
-        <div class="statistics-objectives-mobile-list space-y-3 md:hidden">
-          <StatisticsObjectivesMobileCard
-            v-for="row in mobileMainWinrateRows"
-            :key="'mob-main-wr-' + row.id"
-            :title="row.title"
-            :icon-src="row.iconSrc"
-            :expandable="row.expandable"
-            :expanded="row.expanded"
-            :metrics="row.metrics"
-            :sub-rows="row.subRows"
-            @toggle="onMobileObjectiveToggle(row.id)"
-          />
+        <!-- Drakes par type -->
+        <div
+          v-else-if="p.objectivesPanelTab === 'drakeTypes' && objectivesDisplayMode === 'obtention'"
+          class="w-full min-w-0"
+        >
+          <div class="statistics-objectives-mobile-list space-y-3 md:hidden">
+            <StatisticsObjectivesMobileCard
+              v-for="row in mobileDrakeTypeObtentionRows"
+              :key="'mob-drake-obt-' + row.id"
+              :title="row.title"
+              :icon-src="row.iconSrc"
+              :color="row.color"
+              expandable
+              :expanded="row.expanded"
+              :metrics="row.metrics"
+              :sub-rows="row.subRows"
+              @toggle="toggleDrakeType(row.key)"
+            />
+            <p
+              v-if="mobileDrakeTypeObtentionRows.length === 0"
+              class="py-2 text-center text-sm text-text/60"
+            >
+              {{ p.t('statisticsPage.noData') }}
+            </p>
+          </div>
+          <div class="hidden min-w-0 overflow-x-auto md:block">
+            <table class="objectives-zebra-cols w-full min-w-[480px] text-left text-sm">
+              <thead>
+                <tr class="border-b border-primary/30 text-text/70">
+                  <th class="py-1.5 pr-2 font-medium">
+                    {{ p.t('statisticsPage.overviewTeamsObjective') }}
+                  </th>
+                  <th class="px-1 py-1.5 text-center font-medium">
+                    {{ p.t('statisticsPage.overviewTeamsByWin') }}
+                  </th>
+                  <th class="px-1 py-1.5 text-center font-medium">
+                    {{ p.t('statisticsPage.overviewTeamsByLoss') }}
+                  </th>
+                  <th class="px-1 py-1.5 text-center font-medium text-info">
+                    {{ p.t('statisticsPage.sidesBlue') }}
+                  </th>
+                  <th class="py-1.5 pl-1 text-center font-medium text-error">
+                    {{ p.t('statisticsPage.sidesRed') }}
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-primary/20 text-text/80">
+                <template v-for="row in p.drakeTypeRows" :key="'drake-type-' + row.key">
+                  <tr>
+                    <td class="py-1.5 pr-2 font-medium text-text/90">
+                      <button
+                        type="button"
+                        class="flex items-center gap-2 hover:text-text"
+                        @click="toggleDrakeType(row.key)"
+                      >
+                        <span
+                          class="inline-block transition-transform duration-200"
+                          :class="openDrakeTypeKeys.has(row.key) ? 'rotate-180' : ''"
+                          aria-hidden
+                          >▼</span
+                        >
+                        <span
+                          class="h-2.5 w-2.5 rounded-full"
+                          :style="{ backgroundColor: rowColor(row.key) }"
+                        />
+                        <img
+                          v-if="p.drakeIconSrc(row.key)"
+                          :src="p.drakeIconSrc(row.key)"
+                          :alt="row.label"
+                          class="h-4 w-4 object-contain"
+                          loading="lazy"
+                          decoding="async"
+                          @error="p.onDrakeIconError($event, row.key)"
+                        />
+                        <span>{{ row.label }}</span>
+                      </button>
+                    </td>
+                    <td class="px-1 py-1.5 text-center">
+                      <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
+                        {{ drakeTypePctParts(row.key, 'win').current }}
+                        <span :class="drakeTypePctParts(row.key, 'win').deltaClass">
+                          {{ drakeTypePctParts(row.key, 'win').delta }}
+                        </span>
+                      </template>
+                      <template v-else>—</template>
+                    </td>
+                    <td class="px-1 py-1.5 text-center">
+                      <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
+                        {{ drakeTypePctParts(row.key, 'loss').current }}
+                        <span :class="drakeTypePctParts(row.key, 'loss').deltaClass">
+                          {{ drakeTypePctParts(row.key, 'loss').delta }}
+                        </span>
+                      </template>
+                      <template v-else>—</template>
+                    </td>
+                    <td class="px-1 py-1.5 text-center">
+                      <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
+                        {{ drakeTypePctPartsSides(row.key, 'blue').current }}
+                        <span :class="drakeTypePctPartsSides(row.key, 'blue').deltaClass">
+                          {{ drakeTypePctPartsSides(row.key, 'blue').delta }}
+                        </span>
+                      </template>
+                      <template v-else>—</template>
+                    </td>
+                    <td class="py-1.5 pl-1 text-center">
+                      <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
+                        {{ drakeTypePctPartsSides(row.key, 'red').current }}
+                        <span :class="drakeTypePctPartsSides(row.key, 'red').deltaClass">
+                          {{ drakeTypePctPartsSides(row.key, 'red').delta }}
+                        </span>
+                      </template>
+                      <template v-else>—</template>
+                    </td>
+                  </tr>
+                  <template v-if="openDrakeTypeKeys.has(row.key)">
+                    <tr
+                      v-for="count in p.drakeTypeCounts(row.key)"
+                      :key="'drake-type-dist-' + row.key + '-' + count"
+                      class="bg-surface/30"
+                    >
+                      <td class="py-1 pl-6 pr-2 text-text/70">
+                        {{ drakeDropdownCountLabel(count) }}
+                      </td>
+                      <td class="px-1 py-1 text-center text-text/80">
+                        {{
+                          p.overviewTeamsData && p.overviewTeamsData.matchCount > 0
+                            ? p.drakeTypePercentForCount(row.key, count, true)
+                            : '—'
+                        }}
+                      </td>
+                      <td class="px-1 py-1 text-center text-text/80">
+                        {{
+                          p.overviewTeamsData && p.overviewTeamsData.matchCount > 0
+                            ? p.drakeTypePercentForCount(row.key, count, false)
+                            : '—'
+                        }}
+                      </td>
+                      <td class="px-1 py-1 text-center text-text/80">
+                        {{
+                          p.overviewSidesData && p.overviewSidesData.matchCount > 0
+                            ? p.drakeTypePercentForCountSides(row.key, count, true)
+                            : '—'
+                        }}
+                      </td>
+                      <td class="py-1 pl-1 text-center text-text/80">
+                        {{
+                          p.overviewSidesData && p.overviewSidesData.matchCount > 0
+                            ? p.drakeTypePercentForCountSides(row.key, count, false)
+                            : '—'
+                        }}
+                      </td>
+                    </tr>
+                    <tr v-if="p.drakeTypeCounts(row.key).length === 0" class="bg-surface/30">
+                      <td class="py-1 pl-6 pr-2 text-text/70">—</td>
+                      <td class="px-1 py-1 text-center text-text/80">—</td>
+                      <td class="px-1 py-1 text-center text-text/80">—</td>
+                      <td class="px-1 py-1 text-center text-text/80">—</td>
+                      <td class="py-1 pl-1 text-center text-text/80">—</td>
+                    </tr>
+                  </template>
+                </template>
+                <tr v-if="p.drakeTypeRows.length === 0">
+                  <td colspan="5" class="py-2 text-center text-text/60">
+                    {{ p.t('statisticsPage.noData') }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-        <div class="hidden min-w-0 overflow-x-auto md:block">
-          <table class="objectives-zebra-cols w-full min-w-[480px] text-left text-sm">
-            <thead>
-              <tr class="border-b border-primary/30 text-text/70">
-                <th class="py-1.5 pr-2 font-medium">
-                  {{ p.t('statisticsPage.overviewTeamsObjective') }}
-                </th>
-                <th class="px-1 py-1.5 text-center font-medium">
-                  {{ p.t('statisticsPage.objectivesFirstWinrateColGlobal') }}
-                </th>
-                <th class="px-1 py-1.5 text-center font-medium text-info">
-                  {{ p.t('statisticsPage.sidesBlue') }}
-                </th>
-                <th class="py-1.5 pl-1 text-center font-medium text-error">
-                  {{ p.t('statisticsPage.sidesRed') }}
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-primary/20 text-text/80">
-              <tr>
-                <td class="py-1.5 pr-2">
-                  {{ p.t('statisticsPage.overviewTeamsFirstBlood') }}
-                </td>
-                <td class="px-1 py-1.5 text-center">
-                  <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
-                    {{ objectiveFirstWinrateGlobalParts('firstBlood').current }}
-                    <span :class="objectiveFirstWinrateGlobalParts('firstBlood').deltaClass">
-                      {{ objectiveFirstWinrateGlobalParts('firstBlood').delta }}
-                    </span>
+
+        <div
+          v-else-if="p.objectivesPanelTab === 'drakeTypes' && objectivesDisplayMode === 'winrate'"
+          class="w-full min-w-0"
+        >
+          <div class="statistics-objectives-mobile-list space-y-3 md:hidden">
+            <StatisticsObjectivesMobileCard
+              v-for="row in mobileDrakeTypeWinrateRows"
+              :key="'mob-drake-wr-' + row.id"
+              :title="row.title"
+              :icon-src="row.iconSrc"
+              :color="row.color"
+              expandable
+              :expanded="row.expanded"
+              :metrics="row.metrics"
+              :sub-rows="row.subRows"
+              @toggle="toggleDrakeType(row.key)"
+            />
+            <p
+              v-if="mobileDrakeTypeWinrateRows.length === 0"
+              class="py-2 text-center text-sm text-text/60"
+            >
+              {{ p.t('statisticsPage.noData') }}
+            </p>
+          </div>
+          <div class="hidden min-w-0 overflow-x-auto md:block">
+            <table class="objectives-zebra-cols w-full min-w-[480px] text-left text-sm">
+              <thead>
+                <tr class="border-b border-primary/30 text-text/70">
+                  <th class="py-1.5 pr-2 font-medium">
+                    {{ p.t('statisticsPage.overviewTeamsObjective') }}
+                  </th>
+                  <th class="px-1 py-1.5 text-center font-medium">
+                    {{ p.t('statisticsPage.objectivesFirstWinrateColGlobal') }}
+                  </th>
+                  <th class="px-1 py-1.5 text-center font-medium text-info">
+                    {{ p.t('statisticsPage.sidesBlue') }}
+                  </th>
+                  <th class="py-1.5 pl-1 text-center font-medium text-error">
+                    {{ p.t('statisticsPage.sidesRed') }}
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-primary/20 text-text/80">
+                <template v-for="row in p.drakeTypeRows" :key="'drake-type-wr-' + row.key">
+                  <tr>
+                    <td class="py-1.5 pr-2 font-medium text-text/90">
+                      <button
+                        type="button"
+                        class="flex items-center gap-2 hover:text-text"
+                        @click="toggleDrakeType(row.key)"
+                      >
+                        <span
+                          class="inline-block transition-transform duration-200"
+                          :class="openDrakeTypeKeys.has(row.key) ? 'rotate-180' : ''"
+                          aria-hidden
+                          >▼</span
+                        >
+                        <span
+                          class="h-2.5 w-2.5 rounded-full"
+                          :style="{ backgroundColor: rowColor(row.key) }"
+                        />
+                        <img
+                          v-if="p.drakeIconSrc(row.key)"
+                          :src="p.drakeIconSrc(row.key)"
+                          :alt="row.label"
+                          class="h-4 w-4 object-contain"
+                          loading="lazy"
+                          decoding="async"
+                          @error="p.onDrakeIconError($event, row.key)"
+                        />
+                        <span>{{ row.label }}</span>
+                      </button>
+                    </td>
+                    <td class="px-1 py-1.5 text-center">
+                      <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
+                        {{ drakeTypeWinrateGlobalParts(row.key).current }}
+                        <span :class="drakeTypeWinrateGlobalParts(row.key).deltaClass">
+                          {{ drakeTypeWinrateGlobalParts(row.key).delta }}
+                        </span>
+                      </template>
+                      <template v-else>—</template>
+                    </td>
+                    <td class="px-1 py-1.5 text-center">
+                      <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
+                        {{ drakeTypeWinrateSideParts(row.key, 'blue').current }}
+                        <span :class="drakeTypeWinrateSideParts(row.key, 'blue').deltaClass">
+                          {{ drakeTypeWinrateSideParts(row.key, 'blue').delta }}
+                        </span>
+                      </template>
+                      <template v-else>—</template>
+                    </td>
+                    <td class="py-1.5 pl-1 text-center">
+                      <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
+                        {{ drakeTypeWinrateSideParts(row.key, 'red').current }}
+                        <span :class="drakeTypeWinrateSideParts(row.key, 'red').deltaClass">
+                          {{ drakeTypeWinrateSideParts(row.key, 'red').delta }}
+                        </span>
+                      </template>
+                      <template v-else>—</template>
+                    </td>
+                  </tr>
+                  <template v-if="openDrakeTypeKeys.has(row.key)">
+                    <tr
+                      v-for="count in p.drakeTypeCounts(row.key)"
+                      :key="'drake-type-wr-dist-' + row.key + '-' + count"
+                      class="bg-surface/30"
+                    >
+                      <td class="py-1 pl-6 pr-2 text-text/70">{{ count }}</td>
+                      <td class="px-1 py-1 text-center text-text/80">
+                        <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
+                          {{ drakeTypeWinrateCountGlobalParts(row.key, count).current }}
+                          <span
+                            :class="drakeTypeWinrateCountGlobalParts(row.key, count).deltaClass"
+                          >
+                            {{ drakeTypeWinrateCountGlobalParts(row.key, count).delta }}
+                          </span>
+                        </template>
+                        <template v-else>—</template>
+                      </td>
+                      <td class="px-1 py-1 text-center text-text/80">
+                        <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
+                          {{ drakeTypeWinrateCountSideParts(row.key, count, 'blue').current }}
+                          <span
+                            :class="
+                              drakeTypeWinrateCountSideParts(row.key, count, 'blue').deltaClass
+                            "
+                          >
+                            {{ drakeTypeWinrateCountSideParts(row.key, count, 'blue').delta }}
+                          </span>
+                        </template>
+                        <template v-else>—</template>
+                      </td>
+                      <td class="py-1 pl-1 text-center text-text/80">
+                        <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
+                          {{ drakeTypeWinrateCountSideParts(row.key, count, 'red').current }}
+                          <span
+                            :class="
+                              drakeTypeWinrateCountSideParts(row.key, count, 'red').deltaClass
+                            "
+                          >
+                            {{ drakeTypeWinrateCountSideParts(row.key, count, 'red').delta }}
+                          </span>
+                        </template>
+                        <template v-else>—</template>
+                      </td>
+                    </tr>
+                    <tr v-if="p.drakeTypeCounts(row.key).length === 0" class="bg-surface/30">
+                      <td class="py-1 pl-6 pr-2 text-text/70">—</td>
+                      <td class="px-1 py-1 text-center text-text/80">—</td>
+                      <td class="px-1 py-1 text-center text-text/80">—</td>
+                      <td class="py-1 pl-1 text-center text-text/80">—</td>
+                    </tr>
                   </template>
-                  <template v-else>—</template>
-                </td>
-                <td class="px-1 py-1.5 text-center">
-                  <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                    {{ objectiveFirstWinrateSideParts('firstBlood', 'blue').current }}
-                    <span :class="objectiveFirstWinrateSideParts('firstBlood', 'blue').deltaClass">
-                      {{ objectiveFirstWinrateSideParts('firstBlood', 'blue').delta }}
-                    </span>
-                  </template>
-                  <template v-else>—</template>
-                </td>
-                <td class="py-1.5 pl-1 text-center">
-                  <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                    {{ objectiveFirstWinrateSideParts('firstBlood', 'red').current }}
-                    <span :class="objectiveFirstWinrateSideParts('firstBlood', 'red').deltaClass">
-                      {{ objectiveFirstWinrateSideParts('firstBlood', 'red').delta }}
-                    </span>
-                  </template>
-                  <template v-else>—</template>
-                </td>
-              </tr>
-              <template v-for="key in p.objectiveKeysOrdered" :key="'first-wr-' + key">
+                </template>
+                <tr v-if="p.drakeTypeRows.length === 0">
+                  <td colspan="4" class="py-2 text-center text-text/60">
+                    {{ p.t('statisticsPage.noData') }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Winrate quand first (global + par côté) -->
+        <div
+          v-else-if="p.objectivesPanelTab === 'objectives' && objectivesDisplayMode === 'winrate'"
+          class="w-full min-w-0"
+        >
+          <div class="statistics-objectives-mobile-list space-y-3 md:hidden">
+            <StatisticsObjectivesMobileCard
+              v-for="row in mobileMainWinrateRows"
+              :key="'mob-main-wr-' + row.id"
+              :title="row.title"
+              :icon-src="row.iconSrc"
+              :expandable="row.expandable"
+              :expanded="row.expanded"
+              :metrics="row.metrics"
+              :sub-rows="row.subRows"
+              @toggle="onMobileObjectiveToggle(row.id)"
+            />
+          </div>
+          <div class="hidden min-w-0 overflow-x-auto md:block">
+            <table class="objectives-zebra-cols w-full min-w-[480px] text-left text-sm">
+              <thead>
+                <tr class="border-b border-primary/30 text-text/70">
+                  <th class="py-1.5 pr-2 font-medium">
+                    {{ p.t('statisticsPage.overviewTeamsObjective') }}
+                  </th>
+                  <th class="px-1 py-1.5 text-center font-medium">
+                    {{ p.t('statisticsPage.objectivesFirstWinrateColGlobal') }}
+                  </th>
+                  <th class="px-1 py-1.5 text-center font-medium text-info">
+                    {{ p.t('statisticsPage.sidesBlue') }}
+                  </th>
+                  <th class="py-1.5 pl-1 text-center font-medium text-error">
+                    {{ p.t('statisticsPage.sidesRed') }}
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-primary/20 text-text/80">
                 <tr>
                   <td class="py-1.5 pr-2">
-                    <button
-                      v-if="p.objectiveHasKillDropdown(key)"
-                      type="button"
-                      class="flex items-center gap-1 font-medium text-text/90 hover:text-text"
-                      @click="p.toggleObjective(key)"
-                    >
-                      <span
-                        class="inline-block transition-transform duration-200"
-                        :class="p.openObjectiveKeys.has(key) ? 'rotate-180' : ''"
-                        aria-hidden
-                        >▼</span
-                      >
-                      <img
-                        v-if="p.objectiveIconSrc(key)"
-                        :src="p.objectiveIconSrc(key)"
-                        :alt="p.t('statisticsPage.overviewTeamsObjective_' + key)"
-                        class="h-4 w-4 object-contain"
-                        loading="lazy"
-                        decoding="async"
-                        @error="p.onObjectiveIconError($event, key)"
-                      />
-                      {{ p.t('statisticsPage.overviewTeamsObjective_' + key) }}
-                    </button>
-                    <div v-else class="flex items-center gap-1 font-medium text-text/90">
-                      <img
-                        v-if="p.objectiveIconSrc(key)"
-                        :src="p.objectiveIconSrc(key)"
-                        :alt="p.t('statisticsPage.overviewTeamsObjective_' + key)"
-                        class="h-4 w-4 object-contain"
-                        loading="lazy"
-                        decoding="async"
-                        @error="p.onObjectiveIconError($event, key)"
-                      />
-                      {{ p.t('statisticsPage.overviewTeamsObjective_' + key) }}
-                    </div>
+                    {{ p.t('statisticsPage.overviewTeamsFirstBlood') }}
                   </td>
                   <td class="px-1 py-1.5 text-center">
                     <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
-                      {{ objectiveFirstWinrateGlobalParts(key).current }}
-                      <span :class="objectiveFirstWinrateGlobalParts(key).deltaClass">
-                        {{ objectiveFirstWinrateGlobalParts(key).delta }}
+                      {{ objectiveFirstWinrateGlobalParts('firstBlood').current }}
+                      <span :class="objectiveFirstWinrateGlobalParts('firstBlood').deltaClass">
+                        {{ objectiveFirstWinrateGlobalParts('firstBlood').delta }}
                       </span>
                     </template>
                     <template v-else>—</template>
                   </td>
                   <td class="px-1 py-1.5 text-center">
                     <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                      {{ objectiveFirstWinrateSideParts(key, 'blue').current }}
-                      <span :class="objectiveFirstWinrateSideParts(key, 'blue').deltaClass">
-                        {{ objectiveFirstWinrateSideParts(key, 'blue').delta }}
+                      {{ objectiveFirstWinrateSideParts('firstBlood', 'blue').current }}
+                      <span
+                        :class="objectiveFirstWinrateSideParts('firstBlood', 'blue').deltaClass"
+                      >
+                        {{ objectiveFirstWinrateSideParts('firstBlood', 'blue').delta }}
                       </span>
                     </template>
                     <template v-else>—</template>
                   </td>
                   <td class="py-1.5 pl-1 text-center">
                     <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                      {{ objectiveFirstWinrateSideParts(key, 'red').current }}
-                      <span :class="objectiveFirstWinrateSideParts(key, 'red').deltaClass">
-                        {{ objectiveFirstWinrateSideParts(key, 'red').delta }}
+                      {{ objectiveFirstWinrateSideParts('firstBlood', 'red').current }}
+                      <span :class="objectiveFirstWinrateSideParts('firstBlood', 'red').deltaClass">
+                        {{ objectiveFirstWinrateSideParts('firstBlood', 'red').delta }}
                       </span>
                     </template>
                     <template v-else>—</template>
                   </td>
                 </tr>
-                <template v-if="p.objectiveHasKillDropdown(key) && p.openObjectiveKeys.has(key)">
-                  <tr
-                    v-for="count in p.objectiveCounts(key)"
-                    :key="key + '-wr-' + count"
-                    class="bg-surface/30"
-                  >
-                    <td class="py-1 pl-6 pr-2 text-text/70">{{ count }}</td>
-                    <td class="px-1 py-1 text-center text-text/80">
-                      <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
-                        {{ objectiveWinrateCountGlobalParts(key, count).current }}
-                        <span :class="objectiveWinrateCountGlobalParts(key, count).deltaClass">
-                          {{ objectiveWinrateCountGlobalParts(key, count).delta }}
-                        </span>
-                      </template>
-                      <template v-else>—</template>
-                    </td>
-                    <td class="px-1 py-1 text-center text-text/80">
-                      <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                        {{ objectiveWinrateCountSideParts(key, count, 'blue').current }}
+                <template v-for="key in p.objectiveKeysOrdered" :key="'first-wr-' + key">
+                  <tr>
+                    <td class="py-1.5 pr-2">
+                      <button
+                        v-if="p.objectiveHasKillDropdown(key)"
+                        type="button"
+                        class="flex items-center gap-1 font-medium text-text/90 hover:text-text"
+                        @click="p.toggleObjective(key)"
+                      >
                         <span
-                          :class="objectiveWinrateCountSideParts(key, count, 'blue').deltaClass"
+                          class="inline-block transition-transform duration-200"
+                          :class="p.openObjectiveKeys.has(key) ? 'rotate-180' : ''"
+                          aria-hidden
+                          >▼</span
                         >
-                          {{ objectiveWinrateCountSideParts(key, count, 'blue').delta }}
+                        <img
+                          v-if="p.objectiveIconSrc(key)"
+                          :src="p.objectiveIconSrc(key)"
+                          :alt="p.t('statisticsPage.overviewTeamsObjective_' + key)"
+                          class="h-4 w-4 object-contain"
+                          loading="lazy"
+                          decoding="async"
+                          @error="p.onObjectiveIconError($event, key)"
+                        />
+                        {{ p.t('statisticsPage.overviewTeamsObjective_' + key) }}
+                      </button>
+                      <div v-else class="flex items-center gap-1 font-medium text-text/90">
+                        <img
+                          v-if="p.objectiveIconSrc(key)"
+                          :src="p.objectiveIconSrc(key)"
+                          :alt="p.t('statisticsPage.overviewTeamsObjective_' + key)"
+                          class="h-4 w-4 object-contain"
+                          loading="lazy"
+                          decoding="async"
+                          @error="p.onObjectiveIconError($event, key)"
+                        />
+                        {{ p.t('statisticsPage.overviewTeamsObjective_' + key) }}
+                      </div>
+                    </td>
+                    <td class="px-1 py-1.5 text-center">
+                      <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
+                        {{ objectiveFirstWinrateGlobalParts(key).current }}
+                        <span :class="objectiveFirstWinrateGlobalParts(key).deltaClass">
+                          {{ objectiveFirstWinrateGlobalParts(key).delta }}
                         </span>
                       </template>
                       <template v-else>—</template>
                     </td>
-                    <td class="py-1 pl-1 text-center text-text/80">
+                    <td class="px-1 py-1.5 text-center">
                       <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                        {{ objectiveWinrateCountSideParts(key, count, 'red').current }}
-                        <span :class="objectiveWinrateCountSideParts(key, count, 'red').deltaClass">
-                          {{ objectiveWinrateCountSideParts(key, count, 'red').delta }}
+                        {{ objectiveFirstWinrateSideParts(key, 'blue').current }}
+                        <span :class="objectiveFirstWinrateSideParts(key, 'blue').deltaClass">
+                          {{ objectiveFirstWinrateSideParts(key, 'blue').delta }}
+                        </span>
+                      </template>
+                      <template v-else>—</template>
+                    </td>
+                    <td class="py-1.5 pl-1 text-center">
+                      <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
+                        {{ objectiveFirstWinrateSideParts(key, 'red').current }}
+                        <span :class="objectiveFirstWinrateSideParts(key, 'red').deltaClass">
+                          {{ objectiveFirstWinrateSideParts(key, 'red').delta }}
+                        </span>
+                      </template>
+                      <template v-else>—</template>
+                    </td>
+                  </tr>
+                  <template v-if="p.objectiveHasKillDropdown(key) && p.openObjectiveKeys.has(key)">
+                    <tr
+                      v-for="count in p.objectiveCounts(key)"
+                      :key="key + '-wr-' + count"
+                      class="bg-surface/30"
+                    >
+                      <td class="py-1 pl-6 pr-2 text-text/70">{{ count }}</td>
+                      <td class="px-1 py-1 text-center text-text/80">
+                        <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
+                          {{ objectiveWinrateCountGlobalParts(key, count).current }}
+                          <span :class="objectiveWinrateCountGlobalParts(key, count).deltaClass">
+                            {{ objectiveWinrateCountGlobalParts(key, count).delta }}
+                          </span>
+                        </template>
+                        <template v-else>—</template>
+                      </td>
+                      <td class="px-1 py-1 text-center text-text/80">
+                        <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
+                          {{ objectiveWinrateCountSideParts(key, count, 'blue').current }}
+                          <span
+                            :class="objectiveWinrateCountSideParts(key, count, 'blue').deltaClass"
+                          >
+                            {{ objectiveWinrateCountSideParts(key, count, 'blue').delta }}
+                          </span>
+                        </template>
+                        <template v-else>—</template>
+                      </td>
+                      <td class="py-1 pl-1 text-center text-text/80">
+                        <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
+                          {{ objectiveWinrateCountSideParts(key, count, 'red').current }}
+                          <span
+                            :class="objectiveWinrateCountSideParts(key, count, 'red').deltaClass"
+                          >
+                            {{ objectiveWinrateCountSideParts(key, count, 'red').delta }}
+                          </span>
+                        </template>
+                        <template v-else>—</template>
+                      </td>
+                    </tr>
+                  </template>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Âmes -->
+        <div
+          v-else-if="p.objectivesPanelTab === 'drakeSouls' && objectivesDisplayMode === 'obtention'"
+          class="w-full min-w-0"
+        >
+          <div class="statistics-objectives-mobile-list space-y-3 md:hidden">
+            <StatisticsObjectivesMobileCard
+              v-for="row in mobileSoulObtentionRows"
+              :key="'mob-soul-obt-' + row.id"
+              :title="row.title"
+              :icon-src="row.iconSrc"
+              :color="row.color"
+              :metrics="row.metrics"
+            />
+            <p
+              v-if="mobileSoulObtentionRows.length === 0"
+              class="py-2 text-center text-sm text-text/60"
+            >
+              {{ p.t('statisticsPage.noData') }}
+            </p>
+          </div>
+          <div class="hidden min-w-0 overflow-x-auto md:block">
+            <table class="objectives-zebra-cols w-full min-w-[480px] text-left text-sm">
+              <thead>
+                <tr class="border-b border-primary/30 text-text/70">
+                  <th class="py-1.5 pr-2 font-medium">
+                    {{ p.t('statisticsPage.overviewTeamsObjective') }}
+                  </th>
+                  <th class="px-1 py-1.5 text-center font-medium">
+                    {{ p.t('statisticsPage.overviewTeamsByWin') }}
+                  </th>
+                  <th class="px-1 py-1.5 text-center font-medium">
+                    {{ p.t('statisticsPage.overviewTeamsByLoss') }}
+                  </th>
+                  <th class="px-1 py-1.5 text-center font-medium text-info">
+                    {{ p.t('statisticsPage.sidesBlue') }}
+                  </th>
+                  <th class="py-1.5 pl-1 text-center font-medium text-error">
+                    {{ p.t('statisticsPage.sidesRed') }}
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-primary/20 text-text/80">
+                <tr>
+                  <td class="py-1.5 pr-2 font-medium text-text/90">
+                    {{ p.t('statisticsPage.objectivesSoulGlobal') }}
+                  </td>
+                  <td class="px-1 py-1.5 text-center">
+                    <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
+                      {{ soulGlobalPctParts('win').current }}
+                      <span :class="soulGlobalPctParts('win').deltaClass">
+                        {{ soulGlobalPctParts('win').delta }}
+                      </span>
+                    </template>
+                    <template v-else>—</template>
+                  </td>
+                  <td class="px-1 py-1.5 text-center">
+                    <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
+                      {{ soulGlobalPctParts('loss').current }}
+                      <span :class="soulGlobalPctParts('loss').deltaClass">
+                        {{ soulGlobalPctParts('loss').delta }}
+                      </span>
+                    </template>
+                    <template v-else>—</template>
+                  </td>
+                  <td class="px-1 py-1.5 text-center">
+                    <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
+                      {{ soulGlobalPctPartsSides('blue').current }}
+                      <span :class="soulGlobalPctPartsSides('blue').deltaClass">
+                        {{ soulGlobalPctPartsSides('blue').delta }}
+                      </span>
+                    </template>
+                    <template v-else>—</template>
+                  </td>
+                  <td class="py-1.5 pl-1 text-center">
+                    <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
+                      {{ soulGlobalPctPartsSides('red').current }}
+                      <span :class="soulGlobalPctPartsSides('red').deltaClass">
+                        {{ soulGlobalPctPartsSides('red').delta }}
+                      </span>
+                    </template>
+                    <template v-else>—</template>
+                  </td>
+                </tr>
+                <template v-for="row in p.drakeSoulRows" :key="'drake-soul-' + row.key">
+                  <tr>
+                    <td class="py-1.5 pr-2 font-medium text-text/90">
+                      <div class="flex items-center gap-2">
+                        <span
+                          class="h-2.5 w-2.5 rounded-full"
+                          :style="{ backgroundColor: rowColor(row.key) }"
+                        />
+                        <img
+                          v-if="p.drakeIconSrc(row.key)"
+                          :src="p.drakeIconSrc(row.key)"
+                          :alt="row.label"
+                          class="h-4 w-4 object-contain"
+                          loading="lazy"
+                          decoding="async"
+                          @error="p.onDrakeIconError($event, row.key)"
+                        />
+                        <span>{{ row.label }}</span>
+                      </div>
+                    </td>
+                    <td class="px-1 py-1.5 text-center">
+                      <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
+                        {{ drakeSoulPctParts(row.key, 'win').current }}
+                        <span :class="drakeSoulPctParts(row.key, 'win').deltaClass">
+                          {{ drakeSoulPctParts(row.key, 'win').delta }}
+                        </span>
+                      </template>
+                      <template v-else>—</template>
+                    </td>
+                    <td class="px-1 py-1.5 text-center">
+                      <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
+                        {{ drakeSoulPctParts(row.key, 'loss').current }}
+                        <span :class="drakeSoulPctParts(row.key, 'loss').deltaClass">
+                          {{ drakeSoulPctParts(row.key, 'loss').delta }}
+                        </span>
+                      </template>
+                      <template v-else>—</template>
+                    </td>
+                    <td class="px-1 py-1.5 text-center">
+                      <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
+                        {{ drakeSoulPctPartsSides(row.key, 'blue').current }}
+                        <span :class="drakeSoulPctPartsSides(row.key, 'blue').deltaClass">
+                          {{ drakeSoulPctPartsSides(row.key, 'blue').delta }}
+                        </span>
+                      </template>
+                      <template v-else>—</template>
+                    </td>
+                    <td class="py-1.5 pl-1 text-center">
+                      <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
+                        {{ drakeSoulPctPartsSides(row.key, 'red').current }}
+                        <span :class="drakeSoulPctPartsSides(row.key, 'red').deltaClass">
+                          {{ drakeSoulPctPartsSides(row.key, 'red').delta }}
                         </span>
                       </template>
                       <template v-else>—</template>
                     </td>
                   </tr>
                 </template>
-              </template>
-            </tbody>
-          </table>
+                <tr v-if="p.drakeSoulRows.length === 0">
+                  <td colspan="5" class="py-2 text-center text-text/60">
+                    {{ p.t('statisticsPage.noData') }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
 
-      <!-- Âmes -->
-      <div
-        v-else-if="p.objectivesPanelTab === 'drakeSouls' && objectivesDisplayMode === 'obtention'"
-        class="w-full min-w-0"
-      >
-        <div class="statistics-objectives-mobile-list space-y-3 md:hidden">
-          <StatisticsObjectivesMobileCard
-            v-for="row in mobileSoulObtentionRows"
-            :key="'mob-soul-obt-' + row.id"
-            :title="row.title"
-            :icon-src="row.iconSrc"
-            :color="row.color"
-            :metrics="row.metrics"
-          />
-          <p
-            v-if="mobileSoulObtentionRows.length === 0"
-            class="py-2 text-center text-sm text-text/60"
-          >
-            {{ p.t('statisticsPage.noData') }}
-          </p>
-        </div>
-        <div class="hidden min-w-0 overflow-x-auto md:block">
-          <table class="objectives-zebra-cols w-full min-w-[480px] text-left text-sm">
-            <thead>
-              <tr class="border-b border-primary/30 text-text/70">
-                <th class="py-1.5 pr-2 font-medium">
-                  {{ p.t('statisticsPage.overviewTeamsObjective') }}
-                </th>
-                <th class="px-1 py-1.5 text-center font-medium">
-                  {{ p.t('statisticsPage.overviewTeamsByWin') }}
-                </th>
-                <th class="px-1 py-1.5 text-center font-medium">
-                  {{ p.t('statisticsPage.overviewTeamsByLoss') }}
-                </th>
-                <th class="px-1 py-1.5 text-center font-medium text-info">
-                  {{ p.t('statisticsPage.sidesBlue') }}
-                </th>
-                <th class="py-1.5 pl-1 text-center font-medium text-error">
-                  {{ p.t('statisticsPage.sidesRed') }}
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-primary/20 text-text/80">
-              <tr>
-                <td class="py-1.5 pr-2 font-medium text-text/90">
-                  {{ p.t('statisticsPage.objectivesSoulGlobal') }}
-                </td>
-                <td class="px-1 py-1.5 text-center">
-                  <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
-                    {{ soulGlobalPctParts('win').current }}
-                    <span :class="soulGlobalPctParts('win').deltaClass">
-                      {{ soulGlobalPctParts('win').delta }}
-                    </span>
-                  </template>
-                  <template v-else>—</template>
-                </td>
-                <td class="px-1 py-1.5 text-center">
-                  <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
-                    {{ soulGlobalPctParts('loss').current }}
-                    <span :class="soulGlobalPctParts('loss').deltaClass">
-                      {{ soulGlobalPctParts('loss').delta }}
-                    </span>
-                  </template>
-                  <template v-else>—</template>
-                </td>
-                <td class="px-1 py-1.5 text-center">
-                  <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                    {{ soulGlobalPctPartsSides('blue').current }}
-                    <span :class="soulGlobalPctPartsSides('blue').deltaClass">
-                      {{ soulGlobalPctPartsSides('blue').delta }}
-                    </span>
-                  </template>
-                  <template v-else>—</template>
-                </td>
-                <td class="py-1.5 pl-1 text-center">
-                  <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                    {{ soulGlobalPctPartsSides('red').current }}
-                    <span :class="soulGlobalPctPartsSides('red').deltaClass">
-                      {{ soulGlobalPctPartsSides('red').delta }}
-                    </span>
-                  </template>
-                  <template v-else>—</template>
-                </td>
-              </tr>
-              <template v-for="row in p.drakeSoulRows" :key="'drake-soul-' + row.key">
+        <div
+          v-else-if="p.objectivesPanelTab === 'drakeSouls' && objectivesDisplayMode === 'winrate'"
+          class="w-full min-w-0"
+        >
+          <div class="statistics-objectives-mobile-list space-y-3 md:hidden">
+            <StatisticsObjectivesMobileCard
+              v-for="row in mobileSoulWinrateRows"
+              :key="'mob-soul-wr-' + row.id"
+              :title="row.title"
+              :icon-src="row.iconSrc"
+              :color="row.color"
+              :metrics="row.metrics"
+            />
+            <p
+              v-if="mobileSoulWinrateRows.length === 0"
+              class="py-2 text-center text-sm text-text/60"
+            >
+              {{ p.t('statisticsPage.noData') }}
+            </p>
+          </div>
+          <div class="hidden min-w-0 overflow-x-auto md:block">
+            <table class="objectives-zebra-cols w-full min-w-[480px] text-left text-sm">
+              <thead>
+                <tr class="border-b border-primary/30 text-text/70">
+                  <th class="py-1.5 pr-2 font-medium">
+                    {{ p.t('statisticsPage.overviewTeamsObjective') }}
+                  </th>
+                  <th class="px-1 py-1.5 text-center font-medium">
+                    {{ p.t('statisticsPage.objectivesFirstWinrateColGlobal') }}
+                  </th>
+                  <th class="px-1 py-1.5 text-center font-medium text-info">
+                    {{ p.t('statisticsPage.sidesBlue') }}
+                  </th>
+                  <th class="py-1.5 pl-1 text-center font-medium text-error">
+                    {{ p.t('statisticsPage.sidesRed') }}
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-primary/20 text-text/80">
                 <tr>
                   <td class="py-1.5 pr-2 font-medium text-text/90">
-                    <div class="flex items-center gap-2">
+                    {{ p.t('statisticsPage.objectivesSoulGlobal') }}
+                  </td>
+                  <td class="px-1 py-1.5 text-center">
+                    <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
+                      {{ soulGlobalSecureWinrateParts().current }}
+                      <span
+                        v-if="soulGlobalSecureWinrateParts().deltaDisplay"
+                        :class="soulGlobalSecureWinrateParts().deltaClass"
+                      >
+                        {{ soulGlobalSecureWinrateParts().deltaDisplay }}
+                      </span>
+                    </template>
+                    <template v-else>—</template>
+                  </td>
+                  <td class="px-1 py-1.5 text-center">
+                    <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
+                      {{ soulGlobalSecureWinrateSideParts('blue').current }}
+                      <span
+                        v-if="soulGlobalSecureWinrateSideParts('blue').delta"
+                        :class="soulGlobalSecureWinrateSideParts('blue').deltaClass"
+                      >
+                        {{ soulGlobalSecureWinrateSideParts('blue').delta }}
+                      </span>
+                    </template>
+                    <template v-else>—</template>
+                  </td>
+                  <td class="py-1.5 pl-1 text-center">
+                    <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
+                      {{ soulGlobalSecureWinrateSideParts('red').current }}
+                      <span
+                        v-if="soulGlobalSecureWinrateSideParts('red').delta"
+                        :class="soulGlobalSecureWinrateSideParts('red').deltaClass"
+                      >
+                        {{ soulGlobalSecureWinrateSideParts('red').delta }}
+                      </span>
+                    </template>
+                    <template v-else>—</template>
+                  </td>
+                </tr>
+                <tr v-for="row in drakeSoulWinrateRows" :key="'drake-soul-wr-' + row.key">
+                  <td class="py-1.5 pr-2">
+                    <span class="inline-flex items-center gap-2 font-medium text-text/90">
                       <span
                         class="h-2.5 w-2.5 rounded-full"
                         :style="{ backgroundColor: rowColor(row.key) }"
@@ -2464,353 +2667,227 @@ function drakeDropdownCountLabel(count: number): string {
                         @error="p.onDrakeIconError($event, row.key)"
                       />
                       <span>{{ row.label }}</span>
-                    </div>
+                    </span>
                   </td>
                   <td class="px-1 py-1.5 text-center">
-                    <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
-                      {{ drakeSoulPctParts(row.key, 'win').current }}
-                      <span :class="drakeSoulPctParts(row.key, 'win').deltaClass">
-                        {{ drakeSoulPctParts(row.key, 'win').delta }}
-                      </span>
-                    </template>
-                    <template v-else>—</template>
+                    {{ row.parts.current }}
+                    <span v-if="row.parts.deltaDisplay" :class="row.parts.deltaClass">{{
+                      row.parts.deltaDisplay
+                    }}</span>
                   </td>
                   <td class="px-1 py-1.5 text-center">
-                    <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
-                      {{ drakeSoulPctParts(row.key, 'loss').current }}
-                      <span :class="drakeSoulPctParts(row.key, 'loss').deltaClass">
-                        {{ drakeSoulPctParts(row.key, 'loss').delta }}
-                      </span>
-                    </template>
-                    <template v-else>—</template>
-                  </td>
-                  <td class="px-1 py-1.5 text-center">
-                    <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                      {{ drakeSoulPctPartsSides(row.key, 'blue').current }}
-                      <span :class="drakeSoulPctPartsSides(row.key, 'blue').deltaClass">
-                        {{ drakeSoulPctPartsSides(row.key, 'blue').delta }}
-                      </span>
-                    </template>
-                    <template v-else>—</template>
+                    {{ soulSecureWinrateSideParts(row.key, 'blue').current }}
+                    <span
+                      v-if="soulSecureWinrateSideParts(row.key, 'blue').delta"
+                      :class="soulSecureWinrateSideParts(row.key, 'blue').deltaClass"
+                    >
+                      {{ soulSecureWinrateSideParts(row.key, 'blue').delta }}
+                    </span>
                   </td>
                   <td class="py-1.5 pl-1 text-center">
-                    <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                      {{ drakeSoulPctPartsSides(row.key, 'red').current }}
-                      <span :class="drakeSoulPctPartsSides(row.key, 'red').deltaClass">
-                        {{ drakeSoulPctPartsSides(row.key, 'red').delta }}
-                      </span>
-                    </template>
-                    <template v-else>—</template>
+                    {{ soulSecureWinrateSideParts(row.key, 'red').current }}
+                    <span
+                      v-if="soulSecureWinrateSideParts(row.key, 'red').delta"
+                      :class="soulSecureWinrateSideParts(row.key, 'red').deltaClass"
+                    >
+                      {{ soulSecureWinrateSideParts(row.key, 'red').delta }}
+                    </span>
                   </td>
                 </tr>
-              </template>
-              <tr v-if="p.drakeSoulRows.length === 0">
-                <td colspan="5" class="py-2 text-center text-text/60">
-                  {{ p.t('statisticsPage.noData') }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div
-        v-else-if="p.objectivesPanelTab === 'drakeSouls' && objectivesDisplayMode === 'winrate'"
-        class="w-full min-w-0"
-      >
-        <div class="statistics-objectives-mobile-list space-y-3 md:hidden">
-          <StatisticsObjectivesMobileCard
-            v-for="row in mobileSoulWinrateRows"
-            :key="'mob-soul-wr-' + row.id"
-            :title="row.title"
-            :icon-src="row.iconSrc"
-            :color="row.color"
-            :metrics="row.metrics"
-          />
-          <p
-            v-if="mobileSoulWinrateRows.length === 0"
-            class="py-2 text-center text-sm text-text/60"
-          >
-            {{ p.t('statisticsPage.noData') }}
-          </p>
-        </div>
-        <div class="hidden min-w-0 overflow-x-auto md:block">
-          <table class="objectives-zebra-cols w-full min-w-[480px] text-left text-sm">
-            <thead>
-              <tr class="border-b border-primary/30 text-text/70">
-                <th class="py-1.5 pr-2 font-medium">
-                  {{ p.t('statisticsPage.overviewTeamsObjective') }}
-                </th>
-                <th class="px-1 py-1.5 text-center font-medium">
-                  {{ p.t('statisticsPage.objectivesFirstWinrateColGlobal') }}
-                </th>
-                <th class="px-1 py-1.5 text-center font-medium text-info">
-                  {{ p.t('statisticsPage.sidesBlue') }}
-                </th>
-                <th class="py-1.5 pl-1 text-center font-medium text-error">
-                  {{ p.t('statisticsPage.sidesRed') }}
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-primary/20 text-text/80">
-              <tr>
-                <td class="py-1.5 pr-2 font-medium text-text/90">
-                  {{ p.t('statisticsPage.objectivesSoulGlobal') }}
-                </td>
-                <td class="px-1 py-1.5 text-center">
-                  <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
-                    {{ soulGlobalSecureWinrateParts().current }}
-                    <span
-                      v-if="soulGlobalSecureWinrateParts().deltaDisplay"
-                      :class="soulGlobalSecureWinrateParts().deltaClass"
-                    >
-                      {{ soulGlobalSecureWinrateParts().deltaDisplay }}
-                    </span>
-                  </template>
-                  <template v-else>—</template>
-                </td>
-                <td class="px-1 py-1.5 text-center">
-                  <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                    {{ soulGlobalSecureWinrateSideParts('blue').current }}
-                    <span
-                      v-if="soulGlobalSecureWinrateSideParts('blue').delta"
-                      :class="soulGlobalSecureWinrateSideParts('blue').deltaClass"
-                    >
-                      {{ soulGlobalSecureWinrateSideParts('blue').delta }}
-                    </span>
-                  </template>
-                  <template v-else>—</template>
-                </td>
-                <td class="py-1.5 pl-1 text-center">
-                  <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                    {{ soulGlobalSecureWinrateSideParts('red').current }}
-                    <span
-                      v-if="soulGlobalSecureWinrateSideParts('red').delta"
-                      :class="soulGlobalSecureWinrateSideParts('red').deltaClass"
-                    >
-                      {{ soulGlobalSecureWinrateSideParts('red').delta }}
-                    </span>
-                  </template>
-                  <template v-else>—</template>
-                </td>
-              </tr>
-              <tr v-for="row in drakeSoulWinrateRows" :key="'drake-soul-wr-' + row.key">
-                <td class="py-1.5 pr-2">
-                  <span class="inline-flex items-center gap-2 font-medium text-text/90">
-                    <span
-                      class="h-2.5 w-2.5 rounded-full"
-                      :style="{ backgroundColor: rowColor(row.key) }"
-                    />
-                    <img
-                      v-if="p.drakeIconSrc(row.key)"
-                      :src="p.drakeIconSrc(row.key)"
-                      :alt="row.label"
-                      class="h-4 w-4 object-contain"
-                      loading="lazy"
-                      decoding="async"
-                      @error="p.onDrakeIconError($event, row.key)"
-                    />
-                    <span>{{ row.label }}</span>
-                  </span>
-                </td>
-                <td class="px-1 py-1.5 text-center">
-                  {{ row.parts.current }}
-                  <span v-if="row.parts.deltaDisplay" :class="row.parts.deltaClass">{{
-                    row.parts.deltaDisplay
-                  }}</span>
-                </td>
-                <td class="px-1 py-1.5 text-center">
-                  {{ soulSecureWinrateSideParts(row.key, 'blue').current }}
-                  <span
-                    v-if="soulSecureWinrateSideParts(row.key, 'blue').delta"
-                    :class="soulSecureWinrateSideParts(row.key, 'blue').deltaClass"
-                  >
-                    {{ soulSecureWinrateSideParts(row.key, 'blue').delta }}
-                  </span>
-                </td>
-                <td class="py-1.5 pl-1 text-center">
-                  {{ soulSecureWinrateSideParts(row.key, 'red').current }}
-                  <span
-                    v-if="soulSecureWinrateSideParts(row.key, 'red').delta"
-                    :class="soulSecureWinrateSideParts(row.key, 'red').deltaClass"
-                  >
-                    {{ soulSecureWinrateSideParts(row.key, 'red').delta }}
-                  </span>
-                </td>
-              </tr>
-              <tr v-if="drakeSoulWinrateRows.length === 0">
-                <td colspan="4" class="py-2 text-center text-text/60">
-                  {{ p.t('statisticsPage.noData') }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="showDistributionCards" class="grid grid-cols-1 gap-4 md:grid-cols-2">
-      <div
-        class="fast-stat-card fast-stat-card-distribution ui-build-card-surface mx-auto w-full max-w-[420px] rounded-xl p-3 md:mx-0"
-      >
-        <h4 class="mb-2 text-sm font-semibold text-text/90">
-          {{ p.t('statisticsPage.objectivesDrakeDistributionCardTitle') }}
-        </h4>
-        <div v-if="drakeDistRows.length > 0" class="flex flex-col items-center gap-3">
-          <div class="relative inline-flex h-[132px] w-[132px] items-center justify-center">
-            <svg viewBox="0 0 120 120" class="absolute inset-0 h-full w-full -rotate-90">
-              <circle
-                cx="60"
-                cy="60"
-                :r="DONUT_RADIUS"
-                fill="none"
-                stroke="rgba(148, 163, 184, 0.18)"
-                :stroke-width="DONUT_STROKE"
-              />
-              <circle
-                v-for="(row, idx) in drakeDistRows"
-                :key="'drake-donut-' + row.key"
-                cx="60"
-                cy="60"
-                :r="DONUT_RADIUS"
-                fill="none"
-                :stroke="drakeDonutSegments[idx]?.color"
-                :stroke-width="DONUT_STROKE"
-                :stroke-dasharray="`${drakeDonutSegments[idx]?.arc ?? 0} ${DONUT_CIRCLE - (drakeDonutSegments[idx]?.arc ?? 0)}`"
-                :stroke-dashoffset="`-${drakeDonutSegments[idx]?.offset ?? 0}`"
-              >
-                <title v-if="tooltipsEnabled">{{ donutTooltip(row, drakeDistTotal) }}</title>
-              </circle>
-            </svg>
-            <span class="relative z-10 text-lg font-bold text-info dark:text-primary-light"
-              >100%</span
-            >
+                <tr v-if="drakeSoulWinrateRows.length === 0">
+                  <td colspan="4" class="py-2 text-center text-text/60">
+                    {{ p.t('statisticsPage.noData') }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-          <ul class="grid w-full max-w-[360px] grid-cols-2 gap-x-3 gap-y-1 text-xs text-text/85">
-            <li
-              v-for="row in drakeDistRows"
-              :key="'drake-dist-legend-' + row.key"
-              class="flex items-center justify-between gap-2"
-            >
-              <span class="inline-flex min-w-0 items-center gap-2">
-                <span
-                  class="h-2.5 w-2.5 shrink-0 rounded-full"
-                  :style="{ backgroundColor: row.color }"
-                />
-                <span class="truncate">{{ row.label }}</span>
-              </span>
-              <span class="shrink-0 font-semibold">{{ distPct(row.value, drakeDistTotal) }}</span>
-            </li>
-          </ul>
         </div>
-        <div v-else class="text-sm text-text/60">{{ p.t('statisticsPage.noData') }}</div>
       </div>
 
-      <div
-        class="fast-stat-card fast-stat-card-distribution ui-build-card-surface mx-auto w-full max-w-[420px] rounded-xl p-3 md:mx-0"
-      >
-        <h4 class="mb-2 text-sm font-semibold text-text/90">
-          {{ p.t('statisticsPage.objectivesSoulDistributionCardTitle') }}
-        </h4>
-        <div v-if="soulDistRows.length > 0" class="flex flex-col items-center gap-3">
-          <div class="relative inline-flex h-[132px] w-[132px] items-center justify-center">
-            <svg viewBox="0 0 120 120" class="absolute inset-0 h-full w-full -rotate-90">
-              <circle
-                cx="60"
-                cy="60"
-                :r="DONUT_RADIUS"
-                fill="none"
-                stroke="rgba(148, 163, 184, 0.18)"
-                :stroke-width="DONUT_STROKE"
-              />
-              <circle
-                v-for="(row, idx) in soulDistRows"
-                :key="'soul-donut-' + row.key"
-                cx="60"
-                cy="60"
-                :r="DONUT_RADIUS"
-                fill="none"
-                :stroke="soulDonutSegments[idx]?.color"
-                :stroke-width="DONUT_STROKE"
-                :stroke-dasharray="`${soulDonutSegments[idx]?.arc ?? 0} ${DONUT_CIRCLE - (soulDonutSegments[idx]?.arc ?? 0)}`"
-                :stroke-dashoffset="`-${soulDonutSegments[idx]?.offset ?? 0}`"
-              >
-                <title v-if="tooltipsEnabled">{{ donutTooltip(row, soulDistTotal) }}</title>
-              </circle>
-            </svg>
-            <span class="relative z-10 text-lg font-bold text-info dark:text-primary-light"
-              >100%</span
-            >
-          </div>
-          <ul class="grid w-full max-w-[360px] grid-cols-2 gap-x-3 gap-y-1 text-xs text-text/85">
-            <li
-              v-for="row in soulDistRows"
-              :key="'soul-dist-legend-' + row.key"
-              class="flex items-center justify-between gap-2"
-            >
-              <span class="inline-flex min-w-0 items-center gap-2">
-                <span
-                  class="h-2.5 w-2.5 shrink-0 rounded-full"
-                  :style="{ backgroundColor: row.color }"
+      <div v-if="showDistributionCards && detailOpen" class="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div
+          class="fast-stat-card fast-stat-card-distribution ui-build-card-surface mx-auto w-full max-w-[420px] rounded-xl p-3 md:mx-0"
+        >
+          <h4 class="mb-2 text-sm font-semibold text-text/90">
+            {{ p.t('statisticsPage.objectivesDrakeDistributionCardTitle') }}
+          </h4>
+          <div v-if="drakeDistRows.length > 0" class="flex flex-col items-center gap-3">
+            <div class="relative inline-flex h-[132px] w-[132px] items-center justify-center">
+              <svg viewBox="0 0 120 120" class="absolute inset-0 h-full w-full -rotate-90">
+                <circle
+                  cx="60"
+                  cy="60"
+                  :r="DONUT_RADIUS"
+                  fill="none"
+                  stroke="rgba(148, 163, 184, 0.18)"
+                  :stroke-width="DONUT_STROKE"
                 />
-                <span class="truncate">{{ row.label }}</span>
-              </span>
-              <span class="shrink-0 font-semibold">{{ distPct(row.value, soulDistTotal) }}</span>
-            </li>
-          </ul>
+                <circle
+                  v-for="(row, idx) in drakeDistRows"
+                  :key="'drake-donut-' + row.key"
+                  cx="60"
+                  cy="60"
+                  :r="DONUT_RADIUS"
+                  fill="none"
+                  :stroke="drakeDonutSegments[idx]?.color"
+                  :stroke-width="DONUT_STROKE"
+                  :stroke-dasharray="`${drakeDonutSegments[idx]?.arc ?? 0} ${DONUT_CIRCLE - (drakeDonutSegments[idx]?.arc ?? 0)}`"
+                  :stroke-dashoffset="`-${drakeDonutSegments[idx]?.offset ?? 0}`"
+                >
+                  <title v-if="tooltipsEnabled">{{ donutTooltip(row, drakeDistTotal) }}</title>
+                </circle>
+              </svg>
+              <span class="relative z-10 text-lg font-bold text-info dark:text-primary-light"
+                >100%</span
+              >
+            </div>
+            <ul class="grid w-full max-w-[360px] grid-cols-2 gap-x-3 gap-y-1 text-xs text-text/85">
+              <li
+                v-for="row in drakeDistRows"
+                :key="'drake-dist-legend-' + row.key"
+                class="flex items-center justify-between gap-2"
+              >
+                <span class="inline-flex min-w-0 items-center gap-2">
+                  <span
+                    class="h-2.5 w-2.5 shrink-0 rounded-full"
+                    :style="{ backgroundColor: row.color }"
+                  />
+                  <span class="truncate">{{ row.label }}</span>
+                </span>
+                <span class="shrink-0 font-semibold">{{ distPct(row.value, drakeDistTotal) }}</span>
+              </li>
+            </ul>
+          </div>
+          <div v-else class="text-sm text-text/60">{{ p.t('statisticsPage.noData') }}</div>
         </div>
-        <div v-else class="text-sm text-text/60">{{ p.t('statisticsPage.noData') }}</div>
+
+        <div
+          class="fast-stat-card fast-stat-card-distribution ui-build-card-surface mx-auto w-full max-w-[420px] rounded-xl p-3 md:mx-0"
+        >
+          <h4 class="mb-2 text-sm font-semibold text-text/90">
+            {{ p.t('statisticsPage.objectivesSoulDistributionCardTitle') }}
+          </h4>
+          <div v-if="soulDistRows.length > 0" class="flex flex-col items-center gap-3">
+            <div class="relative inline-flex h-[132px] w-[132px] items-center justify-center">
+              <svg viewBox="0 0 120 120" class="absolute inset-0 h-full w-full -rotate-90">
+                <circle
+                  cx="60"
+                  cy="60"
+                  :r="DONUT_RADIUS"
+                  fill="none"
+                  stroke="rgba(148, 163, 184, 0.18)"
+                  :stroke-width="DONUT_STROKE"
+                />
+                <circle
+                  v-for="(row, idx) in soulDistRows"
+                  :key="'soul-donut-' + row.key"
+                  cx="60"
+                  cy="60"
+                  :r="DONUT_RADIUS"
+                  fill="none"
+                  :stroke="soulDonutSegments[idx]?.color"
+                  :stroke-width="DONUT_STROKE"
+                  :stroke-dasharray="`${soulDonutSegments[idx]?.arc ?? 0} ${DONUT_CIRCLE - (soulDonutSegments[idx]?.arc ?? 0)}`"
+                  :stroke-dashoffset="`-${soulDonutSegments[idx]?.offset ?? 0}`"
+                >
+                  <title v-if="tooltipsEnabled">{{ donutTooltip(row, soulDistTotal) }}</title>
+                </circle>
+              </svg>
+              <span class="relative z-10 text-lg font-bold text-info dark:text-primary-light"
+                >100%</span
+              >
+            </div>
+            <ul class="grid w-full max-w-[360px] grid-cols-2 gap-x-3 gap-y-1 text-xs text-text/85">
+              <li
+                v-for="row in soulDistRows"
+                :key="'soul-dist-legend-' + row.key"
+                class="flex items-center justify-between gap-2"
+              >
+                <span class="inline-flex min-w-0 items-center gap-2">
+                  <span
+                    class="h-2.5 w-2.5 shrink-0 rounded-full"
+                    :style="{ backgroundColor: row.color }"
+                  />
+                  <span class="truncate">{{ row.label }}</span>
+                </span>
+                <span class="shrink-0 font-semibold">{{ distPct(row.value, soulDistTotal) }}</span>
+              </li>
+            </ul>
+          </div>
+          <div v-else class="text-sm text-text/60">{{ p.t('statisticsPage.noData') }}</div>
+        </div>
       </div>
-    </div>
+    </template>
   </div>
 </template>
 
 <style scoped>
-.obj-gap {
-  margin-bottom: 0.75rem;
-  border: 1px solid rgb(200 155 60 / 0.25);
-  border-radius: 0.375rem;
-  padding: 0.75rem 1rem;
+.obj-section {
+  margin: 16px 0 24px;
 }
 .obj-gap__head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 .obj-gap__title {
   font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
-  font-size: 1.05rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--color-gold-50, #f0e6d2);
+  font-size: 24px;
+  font-weight: 700;
+  color: #f0e6d2;
 }
 .obj-gap__modes {
   display: inline-flex;
-  gap: 0.25rem;
-  padding: 0.2rem;
-  border: 1px solid rgb(200 155 60 / 0.3);
-  border-radius: 0.375rem;
+  gap: 2px;
+  padding: 3px;
+  background: #0a1428;
+  border: 1px solid #0a323c;
+  border-radius: 8px;
 }
 .obj-gap__mode {
-  padding: 0.2rem 0.65rem;
-  border-radius: 0.25rem;
-  font-size: 0.8rem;
-  color: var(--color-grey-50, #a09b8c);
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #a09b8c;
 }
 .obj-gap__mode.is-active {
-  background: var(--color-gold-300, #c89b3c);
-  color: var(--color-blue-600, #0a1428);
+  background: #0a323c;
+  color: #f0e6d2;
+  font-weight: 600;
+}
+.obj-gap,
+.obj-card {
+  background: #0a1428;
+  border: 1px solid #463714;
+  border-radius: 12px;
+  padding: 20px 24px;
+}
+.obj-card {
+  margin-bottom: 16px;
+}
+.obj-card__title {
+  font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: #f0e6d2;
+}
+.obj-card__sub {
+  font-size: 13px;
+  color: #a09b8c;
+  margin: 2px 0 12px;
 }
 .obj-gap__legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
-  font-size: 0.72rem;
-  color: var(--color-grey-50, #a09b8c);
-  margin-bottom: 0.4rem;
+  gap: 16px;
+  font-size: 13px;
+  color: #a09b8c;
+  margin-bottom: 12px;
 }
 .obj-gap__legend .obj-gap__num {
   margin-left: auto;
@@ -2818,53 +2895,54 @@ function drakeDropdownCountLabel(count: number): string {
 .obj-gap__key::before {
   content: '';
   display: inline-block;
-  width: 0.6rem;
-  height: 0.6rem;
-  margin-right: 0.3rem;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
   border-radius: 2px;
   vertical-align: middle;
 }
 .obj-gap__key--a::before {
-  background: var(--color-blue-100, #0ac8b9);
+  background: #0ac8b9;
 }
 .obj-gap__key--b::before {
   background: #e2665a;
 }
 .obj-gap__list {
   display: grid;
-  gap: 0.5rem;
+  gap: 14px;
 }
 .obj-gap__row {
   display: grid;
-  grid-template-columns: minmax(6rem, 10rem) 1fr 4rem;
+  grid-template-columns: minmax(8rem, 11rem) 1fr 4rem;
   align-items: center;
-  gap: 0.75rem;
+  gap: 16px;
 }
 .obj-gap__name {
-  font-size: 0.85rem;
-  color: var(--color-gold-50, #f0e6d2);
+  font-size: 15px;
+  font-weight: 500;
+  color: #f0e6d2;
 }
 .obj-gap__bars {
   display: grid;
-  gap: 0.15rem;
+  gap: 4px;
 }
 .obj-gap__bar-line {
   display: grid;
-  grid-template-columns: 1fr 4rem;
+  grid-template-columns: 1fr 4.5rem;
   align-items: center;
-  gap: 0.5rem;
+  gap: 10px;
 }
 .obj-gap__track {
-  height: 6px;
-  border-radius: 3px;
-  background: rgb(160 155 140 / 0.2);
+  height: 8px;
+  border-radius: 4px;
+  background: #1e2328;
 }
 .obj-gap__bar {
   height: 100%;
-  border-radius: 3px;
+  border-radius: 4px;
 }
 .obj-gap__bar--a {
-  background: var(--color-blue-100, #0ac8b9);
+  background: #0ac8b9;
 }
 .obj-gap__bar--b {
   background: #e2665a;
@@ -2875,13 +2953,54 @@ function drakeDropdownCountLabel(count: number): string {
 .obj-gap__num {
   text-align: right;
   font-variant-numeric: tabular-nums;
-  font-size: 0.8rem;
+  font-size: 13px;
+  color: #a09b8c;
 }
 .obj-gap__delta {
-  color: var(--color-gold-300, #c89b3c);
+  font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: #f0e6d2;
+}
+.obj-ds {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.obj-ds th {
+  text-align: left;
+  font-size: 12px;
   font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #a09b8c;
+  padding: 8px 0;
+  border-bottom: 1px solid #1e2328;
+}
+.obj-ds td {
+  padding: 10px 0;
+  color: #f0e6d2;
+  border-bottom: 1px solid #1e2328;
+  font-variant-numeric: tabular-nums;
+}
+.obj-ds th:not(:first-child),
+.obj-ds td:not(:first-child) {
+  text-align: right;
+}
+.obj-detail-toggle {
+  margin: 4px 0 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #c8aa6e;
+}
+.obj-detail-toggle:hover {
+  text-decoration: underline;
 }
 @media (max-width: 640px) {
+  .obj-gap,
+  .obj-card {
+    padding: 16px;
+  }
   .obj-gap__row {
     grid-template-columns: 1fr 3.5rem;
   }
