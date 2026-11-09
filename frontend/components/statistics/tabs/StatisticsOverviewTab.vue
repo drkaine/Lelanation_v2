@@ -151,9 +151,84 @@ function bansByOutcomeEntries(
         </button>
       </div>
       <div v-else-if="p.overviewData" class="space-y-[10px]">
+        <!-- Tendances depuis X : hausse / baisse, onglets métrique -->
+        <section class="ov-trends w-full rounded-lg border border-primary/30">
+          <header class="ov-trends-head">
+            <div>
+              <h3 class="ov-trends-title text-text-accent">
+                {{
+                  p.t('statisticsPage.overviewTrendsTitle', {
+                    version: p.progressionFromVersion || '—',
+                  })
+                }}
+              </h3>
+              <span class="ov-trends-sub">{{ p.t('statisticsPage.overviewTrendsSub') }}</span>
+            </div>
+            <div
+              role="tablist"
+              class="ov-trends-tabs"
+              :aria-label="p.t('statisticsPage.overviewTrendsAria')"
+            >
+              <button
+                v-for="m in TREND_METRICS"
+                :key="m"
+                type="button"
+                role="tab"
+                class="ov-trends-tab"
+                :class="{ 'is-active': trendMetric === m }"
+                :aria-selected="trendMetric === m"
+                @click="trendMetric = m"
+              >
+                {{ p.t(`statisticsPage.overviewTrendsMetric_${m}`) }}
+              </button>
+            </div>
+          </header>
+          <div class="ov-trends-cols">
+            <div v-for="col in trendCols" :key="col.key" class="ov-trends-col">
+              <h4 class="ov-trends-col-title" :class="col.key === 'ups' ? 'is-up' : 'is-down'">
+                {{ col.key === 'ups' ? '▲' : '▼' }}
+                {{ p.t(`statisticsPage.overviewTrends_${col.key}`) }}
+              </h4>
+              <p v-if="!col.rows.length" class="text-xs text-text/60">
+                {{ p.t('statisticsPage.fastStatsNoProgression') }}
+              </p>
+              <div v-for="row in col.rows" :key="row.championId" class="ov-trend-row">
+                <StatisticsChampionDetailLink :champion-id="row.championId" class="ov-trend-champ">
+                  <img
+                    v-if="p.gameVersion && p.championByKey(row.championId)"
+                    loading="lazy"
+                    decoding="async"
+                    :src="
+                      p.getChampionImageUrl(
+                        p.gameVersion,
+                        p.championByKey(row.championId)!.image.full
+                      )
+                    "
+                    :alt="p.championName(row.championId) || ''"
+                    class="h-6 w-6 shrink-0 rounded-full object-cover"
+                  />
+                  <span class="truncate">{{
+                    p.championName(row.championId) || row.championId
+                  }}</span>
+                </StatisticsChampionDetailLink>
+                <span class="ov-trend-fromto">
+                  {{ row.from.toFixed(1) }} → <strong>{{ row.to.toFixed(1) }}</strong>
+                </span>
+                <div class="ov-trend-bar" :class="col.key === 'ups' ? 'is-up' : 'is-down'">
+                  <div class="ov-trend-track">
+                    <div class="ov-trend-fill" :style="{ width: `${row.barPct}%` }" />
+                  </div>
+                  <span class="ov-trend-delta"
+                    >{{ row.delta > 0 ? '+' : '−' }}{{ Math.abs(row.delta).toFixed(1) }}</span
+                  >
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
         <!-- Fast Stats : même gabarit que TeamSideFastStatTable -->
         <div
-          class="statistics-fast-stat-grid flex flex-wrap items-start justify-center gap-x-[5px] gap-y-[10px] pb-[10px]"
+          class="statistics-fast-stat-grid ov-cards flex flex-wrap items-start justify-center gap-[15px] pb-[10px]"
         >
           <!-- Champions les plus choisis -->
           <div class="team-side-fast-stat fast-stat-card rounded-lg border border-primary/30 p-2">
@@ -365,85 +440,6 @@ function bansByOutcomeEntries(
               </button>
             </div>
           </div>
-
-          <!-- Tendances depuis X : hausse / baisse, onglets métrique -->
-          <section class="ov-trends w-full rounded-lg border border-primary/30">
-            <header class="ov-trends-head">
-              <div>
-                <h3 class="ov-trends-title text-text-accent">
-                  {{
-                    p.t('statisticsPage.overviewTrendsTitle', {
-                      version: p.progressionFromVersion || '—',
-                    })
-                  }}
-                </h3>
-                <span class="ov-trends-sub">{{ p.t('statisticsPage.overviewTrendsSub') }}</span>
-              </div>
-              <div
-                role="tablist"
-                class="ov-trends-tabs"
-                :aria-label="p.t('statisticsPage.overviewTrendsAria')"
-              >
-                <button
-                  v-for="m in TREND_METRICS"
-                  :key="m"
-                  type="button"
-                  role="tab"
-                  class="ov-trends-tab"
-                  :class="{ 'is-active': trendMetric === m }"
-                  :aria-selected="trendMetric === m"
-                  @click="trendMetric = m"
-                >
-                  {{ p.t(`statisticsPage.overviewTrendsMetric_${m}`) }}
-                </button>
-              </div>
-            </header>
-            <div class="ov-trends-cols">
-              <div v-for="col in trendCols" :key="col.key" class="ov-trends-col">
-                <h4 class="ov-trends-col-title" :class="col.key === 'ups' ? 'is-up' : 'is-down'">
-                  {{ col.key === 'ups' ? '▲' : '▼' }}
-                  {{ p.t(`statisticsPage.overviewTrends_${col.key}`) }}
-                </h4>
-                <p v-if="!col.rows.length" class="text-xs text-text/60">
-                  {{ p.t('statisticsPage.fastStatsNoProgression') }}
-                </p>
-                <div v-for="row in col.rows" :key="row.championId" class="ov-trend-row">
-                  <StatisticsChampionDetailLink
-                    :champion-id="row.championId"
-                    class="ov-trend-champ"
-                  >
-                    <img
-                      v-if="p.gameVersion && p.championByKey(row.championId)"
-                      loading="lazy"
-                      decoding="async"
-                      :src="
-                        p.getChampionImageUrl(
-                          p.gameVersion,
-                          p.championByKey(row.championId)!.image.full
-                        )
-                      "
-                      :alt="p.championName(row.championId) || ''"
-                      class="h-6 w-6 shrink-0 rounded-full object-cover"
-                    />
-                    <span class="truncate">{{
-                      p.championName(row.championId) || row.championId
-                    }}</span>
-                  </StatisticsChampionDetailLink>
-                  <span class="ov-trend-fromto">
-                    {{ row.from.toFixed(1) }} → <strong>{{ row.to.toFixed(1) }}</strong>
-                  </span>
-                  <div class="ov-trend-bar" :class="col.key === 'ups' ? 'is-up' : 'is-down'">
-                    <div class="ov-trend-track">
-                      <div class="ov-trend-fill" :style="{ width: `${row.barPct}%` }" />
-                    </div>
-                    <span class="ov-trend-delta"
-                      >{{ row.delta > 0 ? '+' : '−' }}{{ Math.abs(row.delta).toFixed(1) }}</span
-                    >
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
 
           <!-- Répartition des parties (global uniquement) — donut SVG comme Solo/Duo -->
           <div class="team-side-fast-stat fast-stat-card rounded-lg border border-primary/30 p-2">
@@ -658,6 +654,15 @@ function bansByOutcomeEntries(
 </template>
 
 <style scoped>
+@media (min-width: 769px) {
+  /* Écart max 15px entre cartes ; neutralise les marges auto de la grille globale. */
+  .ov-cards > .fast-stat-card {
+    flex: 1 1 300px !important;
+    max-width: calc((100% - 30px) / 3);
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+}
 .ov-trends {
   background: rgb(var(--rgb-chrome) / 1);
   padding: 12px;

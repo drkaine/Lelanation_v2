@@ -1,15 +1,13 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed } from 'vue'
 import {
   injectStatisticsPageCtx,
   type StatisticsIndexPageCtx,
 } from '~/composables/statistics/statisticsPageCtx'
 import { miscMobileSortOptions } from '~/composables/statistics/useStatisticsMiscTab'
 import {
-  CHAMPION_MISC_BASE_STAT_KEYS,
   CHAMPION_MISC_GROWTH_STAT_KEYS,
   CHAMPION_MISC_STAT_ICON_KEYS,
-  formatChampionMiscStatValue,
   type ChampionMiscBaseStatKey,
   type ChampionMiscGrowthStatKey,
   type ChampionMiscSortCol,
@@ -27,40 +25,27 @@ import {
   championMiscStatRowKey,
 } from '~/utils/championMiscStatVariants'
 import {
-  getChampionStatIconImageClass,
-  getChampionStatIconSrc,
-  getChampionStatIconToneClass,
-} from '~/utils/championStatIcons'
-import { useToggleSet } from '~/composables/useToggleSet'
+  MISC_STAT_GROUPS,
+  formatMiscGrowth,
+  formatMiscValue,
+  miscResourceCell,
+  miscStatMeta,
+} from '~/utils/statistics/miscStatCells'
+
+const { locale } = useI18n()
+const loc = computed<'fr' | 'en'>(() => (String(locale.value).startsWith('fr') ? 'fr' : 'en'))
 
 const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
 
-const MISC_MOBILE_PREVIEW_KEYS = [
-  'hp',
+const MISC_MOBILE_KEYS = [
+  'armor',
+  'magicResist',
   'attackDamage',
   'attackSpeed',
+  'attackRange',
+  'movespeed',
+  'mp',
 ] as const satisfies readonly ChampionMiscBaseStatKey[]
-
-const MISC_MOBILE_EXPANDED_KEYS = CHAMPION_MISC_BASE_STAT_KEYS.filter(
-  key => !(MISC_MOBILE_PREVIEW_KEYS as readonly string[]).includes(key)
-)
-
-const { set: expandedMiscRowKeys, toggle: toggleExpandedMiscRowKeys } = useToggleSet<string>()
-
-watch(
-  () => p.paginatedMiscRows,
-  () => {
-    expandedMiscRowKeys.value = new Set()
-  }
-)
-
-function toggleMiscCardExpanded(row: ChampionMiscStatRow): void {
-  toggleExpandedMiscRowKeys(rowKey(row))
-}
-
-function isMiscCardExpanded(row: ChampionMiscStatRow): boolean {
-  return expandedMiscRowKeys.value.has(rowKey(row))
-}
 
 const miscMobileSortColumn = computed({
   get: () => String(p.miscSortColumn ?? 'base_hp'),
@@ -93,13 +78,6 @@ function onMiscLevelInput(event: Event): void {
   p.miscLevel = clampChampionMiscLevel(Number((event.target as HTMLInputElement).value))
 }
 
-const baseColumnLabel = computed(() => {
-  if (miscLevel.value <= 1) return String(p.t?.('statisticsPage.miscColBase') ?? 'Base')
-  return String(
-    p.t?.('statisticsPage.miscColAtLevel', { level: miscLevel.value }) ?? miscLevel.value
-  )
-})
-
 function championPortraitSrc(row: ChampionMiscStatRow): string | null {
   if (!p.gameVersion || !row.imageFull) return null
   return p.getChampionImageUrl(p.gameVersion, row.imageFull)
@@ -110,28 +88,8 @@ function statLabel(key: ChampionMiscBaseStatKey | ChampionMiscGrowthStatKey): st
   return String(p.t?.(`stats.labels.${iconKey}`) ?? key)
 }
 
-function statIconKey(key: ChampionMiscBaseStatKey | ChampionMiscGrowthStatKey): string {
-  return CHAMPION_MISC_STAT_ICON_KEYS[key]
-}
-
-function statIconSrc(key: ChampionMiscBaseStatKey | ChampionMiscGrowthStatKey): string | null {
-  return getChampionStatIconSrc(statIconKey(key))
-}
-
-function statIconToneClass(key: ChampionMiscBaseStatKey | ChampionMiscGrowthStatKey): string {
-  return getChampionStatIconToneClass(statIconKey(key))
-}
-
-function statIconImageClass(key: ChampionMiscBaseStatKey | ChampionMiscGrowthStatKey): string {
-  return getChampionStatIconImageClass(statIconKey(key))
-}
-
 function baseSortCol(key: ChampionMiscBaseStatKey): ChampionMiscSortCol {
   return `base_${key}`
-}
-
-function growthSortCol(key: ChampionMiscGrowthStatKey): ChampionMiscSortCol {
-  return `growth_${key}`
 }
 
 function hasMiscGrowthColumn(key: ChampionMiscBaseStatKey): boolean {
@@ -146,19 +104,47 @@ function miscUnavailableLabel(): string {
   return String(p.t?.('statisticsPage.miscStatNA') ?? 'NA')
 }
 
-function formatBase(row: ChampionMiscStatRow, key: ChampionMiscBaseStatKey): string {
+function cellValue(row: ChampionMiscStatRow, key: ChampionMiscBaseStatKey): string {
+  const v = championMiscStatValueAtLevel(row, key, miscLevel.value)
+  if (key === 'mp') return miscResourceCell(row, v, loc.value)
   if (championMiscStatUnavailable(row, key)) return miscUnavailableLabel()
-  return formatChampionMiscStatValue(key, championMiscStatValueAtLevel(row, key, miscLevel.value))
+  return formatMiscValue(key, v, loc.value)
 }
 
-function formatGrowth(row: ChampionMiscStatRow, key: ChampionMiscGrowthStatKey): string {
-  if (championMiscStatUnavailable(row, key)) return miscUnavailableLabel()
-  return formatChampionMiscStatValue(key, row.growth[key] ?? 0)
+function cellGrowth(row: ChampionMiscStatRow, key: ChampionMiscBaseStatKey): string | null {
+  if (!hasMiscGrowthColumn(key) || championMiscStatUnavailable(row, key)) return null
+  const g = formatMiscGrowth(key, row.growth[key as ChampionMiscGrowthStatKey] ?? 0, loc.value)
+  if (!g) return null
+  return key === 'hp' ? `${g} ${p.t('statisticsPage.miscPerLevel')}` : g
 }
 
-function formatGrowthDisplay(row: ChampionMiscStatRow, key: ChampionMiscGrowthStatKey): string {
-  if (championMiscStatUnavailable(row, key)) return miscUnavailableLabel()
-  return `+${formatGrowth(row, key)}`
+function cellTitle(row: ChampionMiscStatRow, key: ChampionMiscBaseStatKey): string | undefined {
+  const regenKey = key === 'hp' ? 'hpRegen' : key === 'mp' ? 'mpRegen' : null
+  if (!regenKey || championMiscStatUnavailable(row, regenKey)) return undefined
+  return String(
+    p.t('statisticsPage.miscRegen', {
+      value: formatMiscValue(
+        regenKey,
+        championMiscStatValueAtLevel(row, regenKey, miscLevel.value),
+        loc.value
+      ),
+      growth: formatMiscValue(regenKey, row.growth[regenKey] ?? 0, loc.value),
+    })
+  )
+}
+
+function groupLabel(key: 'survival' | 'attack' | 'other'): string {
+  const k = { survival: 'miscGroupSurvival', attack: 'miscGroupAttack', other: 'miscGroupOther' }[
+    key
+  ]
+  return String(p.t(`statisticsPage.${k}`))
+}
+
+function columnLabel(key: ChampionMiscBaseStatKey): string {
+  if (key === 'mp') return String(p.t('statisticsPage.miscColResource'))
+  const k = `statisticsPage.miscShort.${key}`
+  const v = String(p.t(k))
+  return v === k ? statLabel(key) : v
 }
 
 function rowDisplayName(row: ChampionMiscStatRow): string {
@@ -171,7 +157,7 @@ function rowKey(row: ChampionMiscStatRow): string {
 </script>
 
 <template>
-  <div class="space-y-3">
+  <div class="space-y-4 pt-2 md:pt-4">
     <div v-if="p.miscPending" class="text-text/70">{{ p.t('statisticsPage.loading') }}</div>
     <div v-else-if="p.miscError" class="rounded border border-error bg-surface p-3 text-error">
       {{ p.miscError }}
@@ -183,7 +169,6 @@ function rowKey(row: ChampionMiscStatRow): string {
       <div class="misc-level">
         <label for="misc-level-slider" class="misc-level-label">
           {{ p.t('statisticsPage.miscLevelLabel') }}
-          <span class="misc-level-value">{{ miscLevel }}</span>
         </label>
         <input
           id="misc-level-slider"
@@ -195,204 +180,89 @@ function rowKey(row: ChampionMiscStatRow): string {
           :value="miscLevel"
           @input="onMiscLevelInput"
         />
+        <span class="misc-level-value">{{ miscLevel }}</span>
+        <span class="misc-level-hint hidden md:inline">{{
+          p.t('statisticsPage.miscLevelHint')
+        }}</span>
       </div>
       <StatisticsMobileSortBar
         id="misc-mobile-sort"
         v-model:column="miscMobileSortColumn"
         v-model:direction="miscMobileSortDir"
+        class="misc-msortbar"
         :options="miscMobileSortOptionsComputed"
       />
 
-      <div class="statistics-misc-mobile-list space-y-2 md:hidden">
-        <article
+      <div class="misc-mlist md:hidden">
+        <StatisticsChampionDetailLink
           v-for="row in p.paginatedMiscRows"
           :key="'misc-mobile-' + rowKey(row)"
-          class="statistics-champion-stats-mobile-card statistics-misc-mobile-card w-full cursor-pointer overflow-hidden"
-          role="button"
-          tabindex="0"
-          :aria-expanded="isMiscCardExpanded(row)"
-          @click="toggleMiscCardExpanded(row)"
-          @keydown.enter.prevent="toggleMiscCardExpanded(row)"
-          @keydown.space.prevent="toggleMiscCardExpanded(row)"
+          :champion-id="row.championId"
+          class="misc-mcard"
         >
-          <div
-            class="statistics-misc-mobile-identity flex w-full min-w-0 items-center gap-2.5 px-2.5 py-2"
-          >
-            <StatisticsChampionDetailLink
-              :champion-id="row.championId"
-              class="shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
-              @click.stop
-            >
-              <img
-                v-if="championPortraitSrc(row)"
-                :src="championPortraitSrc(row)!"
-                :alt="rowDisplayName(row)"
-                class="h-11 w-11 border-2 border-black object-cover"
-                width="44"
-                height="44"
-                loading="lazy"
-                decoding="async"
-              />
-            </StatisticsChampionDetailLink>
-            <StatisticsChampionDetailLink
-              :champion-id="row.championId"
-              class="min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
-              @click.stop
-            >
-              <div
-                class="truncate text-sm font-semibold leading-tight text-accent underline decoration-accent/40 underline-offset-2"
-              >
-                <StatisticsChampionNameHighlight
-                  :name="rowDisplayName(row)"
-                  :query="p.championSearchQuery"
-                />
-              </div>
-            </StatisticsChampionDetailLink>
+          <div class="misc-mcard-top">
+            <img
+              v-if="championPortraitSrc(row)"
+              :src="championPortraitSrc(row)!"
+              :alt="rowDisplayName(row)"
+              class="misc-mcard-img"
+              loading="lazy"
+            />
+            <span class="misc-mcard-name">{{ rowDisplayName(row) }}</span>
+            <span class="misc-mcard-hp">
+              {{ cellValue(row, 'hp') }}<small>{{ p.t('statisticsPage.miscMobile.hp') }}</small>
+            </span>
           </div>
-
-          <div class="border-t border-primary/15 px-2.5 py-2">
-            <div class="grid grid-cols-3 gap-1.5">
-              <div
-                v-for="key in MISC_MOBILE_PREVIEW_KEYS"
-                :key="'misc-mobile-preview-' + rowKey(row) + '-' + key"
-                class="flex min-w-0 flex-col items-center gap-0.5 rounded border border-primary/15 bg-black/15 px-1.5 py-1.5 text-center"
+          <div class="misc-mcard-grid">
+            <span v-for="key in MISC_MOBILE_KEYS" :key="'mm-' + key">
+              <em
+                ><img :src="miscStatMeta(key).icon" alt="" class="misc-icon" />{{
+                  p.t(`statisticsPage.miscMobile.${key}`)
+                }}</em
               >
-                <span
-                  v-if="statIconSrc(key)"
-                  class="stat-inline-icon stat-inline-icon--sm shrink-0"
-                  :class="statIconToneClass(key)"
-                  :title="statLabel(key)"
-                >
-                  <img
-                    :src="statIconSrc(key)!"
-                    :alt="statLabel(key)"
-                    :class="['stat-inline-icon-image', statIconImageClass(key)]"
-                    width="14"
-                    height="14"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                </span>
-                <span class="text-sm font-semibold tabular-nums leading-none text-text">
-                  {{ formatBase(row, key) }}
-                </span>
-                <span
-                  v-if="hasMiscGrowthColumn(key)"
-                  class="text-[10px] tabular-nums leading-none text-text/60"
-                >
-                  {{ formatGrowthDisplay(row, key as ChampionMiscGrowthStatKey) }}
-                </span>
-              </div>
-            </div>
-
-            <div v-if="isMiscCardExpanded(row)" class="mt-1.5 grid grid-cols-4 gap-1.5">
-              <div
-                v-for="key in MISC_MOBILE_EXPANDED_KEYS"
-                :key="'misc-mobile-expanded-' + rowKey(row) + '-' + key"
-                class="flex min-w-0 flex-col items-center gap-0.5 rounded border border-primary/15 bg-black/15 px-1.5 py-1.5 text-center"
-              >
-                <span
-                  v-if="statIconSrc(key)"
-                  class="stat-inline-icon stat-inline-icon--sm shrink-0"
-                  :class="statIconToneClass(key)"
-                  :title="statLabel(key)"
-                >
-                  <img
-                    :src="statIconSrc(key)!"
-                    :alt="statLabel(key)"
-                    :class="['stat-inline-icon-image', statIconImageClass(key)]"
-                    width="14"
-                    height="14"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                </span>
-                <span class="text-xs font-semibold tabular-nums leading-none text-text">
-                  {{ formatBase(row, key) }}
-                </span>
-                <span
-                  v-if="hasMiscGrowthColumn(key)"
-                  class="text-[10px] tabular-nums leading-none text-text/60"
-                >
-                  {{ formatGrowthDisplay(row, key as ChampionMiscGrowthStatKey) }}
-                </span>
-              </div>
-            </div>
+              <b :style="{ color: miscStatMeta(key).color }">{{ cellValue(row, key) }}</b>
+            </span>
           </div>
-        </article>
+        </StatisticsChampionDetailLink>
       </div>
 
-      <div
-        class="tier-list-mobile-rotate statistics-overview-surface hidden w-full overflow-x-auto rounded-lg border border-primary/30 md:block"
-      >
-        <div class="tier-list-lolalytics w-full min-w-0 text-[13px] max-lg:min-w-[1100px]">
-          <table class="w-full min-w-[1100px] text-left text-[13px]">
-            <thead
-              class="sticky top-0 z-10 border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
-            >
-              <tr>
-                <th
-                  class="sticky left-0 z-20 min-w-[200px] cursor-pointer select-none bg-[var(--color-grey-300)] px-2 py-1.5 text-left font-semibold text-text"
-                  rowspan="2"
-                  @click="p.setMiscSort('champion')"
-                >
+      <div class="misc-card hidden md:block">
+        <div class="overflow-x-auto">
+          <table class="misc-table">
+            <thead>
+              <tr class="misc-group-row">
+                <th rowspan="2" class="misc-th-champ" @click="p.setMiscSort('champion')">
                   {{ p.t('statisticsPage.miscColChampion') }}{{ sortIndicator('champion') }}
                 </th>
                 <th
-                  v-for="key in CHAMPION_MISC_BASE_STAT_KEYS"
-                  :key="'misc-th-group-' + key"
-                  :colspan="hasMiscGrowthColumn(key) ? 2 : 1"
-                  class="border-l border-black/20 px-1 py-1 text-center text-[10px] font-semibold uppercase tracking-wide text-text/80"
+                  v-for="g in MISC_STAT_GROUPS"
+                  :key="'misc-g-' + g.key"
+                  :colspan="g.stats.length"
+                  class="misc-th-group"
                 >
-                  <span class="inline-flex items-center justify-center gap-1">
-                    <span
-                      v-if="statIconSrc(key)"
-                      class="stat-inline-icon stat-inline-icon--sm"
-                      :class="statIconToneClass(key)"
-                      aria-hidden="true"
-                    >
-                      <img
-                        :src="statIconSrc(key)!"
-                        alt=""
-                        :class="['stat-inline-icon-image', statIconImageClass(key)]"
-                        width="14"
-                        height="14"
-                        loading="lazy"
-                        decoding="async"
-                      />
-                    </span>
-                    {{ statLabel(key) }}
-                  </span>
+                  {{ groupLabel(g.key) }}
                 </th>
               </tr>
               <tr>
-                <template v-for="key in CHAMPION_MISC_BASE_STAT_KEYS" :key="'misc-th-sub-' + key">
+                <template v-for="g in MISC_STAT_GROUPS" :key="'misc-gs-' + g.key">
                   <th
-                    class="cursor-pointer select-none border-l border-black/15 px-2 py-1 text-center text-[10px] font-semibold text-text"
+                    v-for="(key, i) in g.stats"
+                    :key="'misc-th-' + key"
+                    class="misc-th"
+                    :class="{ 'is-first': i === 0 }"
                     @click="p.setMiscSort(baseSortCol(key))"
                   >
-                    {{ baseColumnLabel }}{{ sortIndicator(baseSortCol(key)) }}
-                  </th>
-                  <th
-                    v-if="hasMiscGrowthColumn(key)"
-                    class="cursor-pointer select-none px-2 py-1 text-center text-[10px] font-semibold text-text"
-                    @click="p.setMiscSort(growthSortCol(key as ChampionMiscGrowthStatKey))"
-                  >
-                    {{ p.t('statisticsPage.miscColGrowth')
-                    }}{{ sortIndicator(growthSortCol(key as ChampionMiscGrowthStatKey)) }}
+                    <span class="misc-th-in">
+                      <img :src="miscStatMeta(key).icon" alt="" class="misc-icon" />
+                      {{ columnLabel(key) }}{{ sortIndicator(baseSortCol(key)) }}
+                    </span>
                   </th>
                 </template>
               </tr>
             </thead>
-            <tbody class="divide-y divide-primary/20">
-              <tr
-                v-for="row in p.paginatedMiscRows"
-                :key="'misc-' + rowKey(row)"
-                class="text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
-              >
-                <td
-                  class="sticky left-0 z-10 min-w-[200px] bg-inherit py-0.5 pl-2 pr-0 odd:bg-[rgb(255_255_255/0.04)] even:bg-[rgb(0_0_0/0.25)]"
-                >
+            <tbody>
+              <tr v-for="row in p.paginatedMiscRows" :key="'misc-' + rowKey(row)">
+                <td class="misc-td-champ">
                   <StatisticsChampionTableLink
                     :champion-id="row.championId"
                     :name="rowDisplayName(row)"
@@ -400,15 +270,20 @@ function rowKey(row: ChampionMiscStatRow): string {
                     :query="p.championSearchQuery"
                   />
                 </td>
-                <template v-for="key in CHAMPION_MISC_BASE_STAT_KEYS" :key="'misc-td-' + key">
-                  <td class="border-l border-primary/10 px-2 py-1 text-center tabular-nums">
-                    {{ formatBase(row, key) }}
-                  </td>
+                <template v-for="g in MISC_STAT_GROUPS" :key="'misc-tdg-' + g.key">
                   <td
-                    v-if="hasMiscGrowthColumn(key)"
-                    class="px-2 py-1 text-center tabular-nums text-text/80"
+                    v-for="(key, i) in g.stats"
+                    :key="'misc-td-' + key"
+                    class="misc-td"
+                    :class="{ 'is-first': i === 0 }"
+                    :title="cellTitle(row, key)"
                   >
-                    {{ formatGrowthDisplay(row, key as ChampionMiscGrowthStatKey) }}
+                    <span class="misc-val" :style="{ color: miscStatMeta(key).color }">{{
+                      cellValue(row, key)
+                    }}</span>
+                    <span v-if="cellGrowth(row, key)" class="misc-growth">{{
+                      cellGrowth(row, key)
+                    }}</span>
                   </td>
                 </template>
               </tr>
@@ -416,6 +291,7 @@ function rowKey(row: ChampionMiscStatRow): string {
           </table>
         </div>
       </div>
+      <p class="misc-footnote hidden md:block">{{ p.t('statisticsPage.miscFootnote') }}</p>
 
       <StatisticsTabPagination
         v-model:page="p.miscPage"
@@ -429,35 +305,192 @@ function rowKey(row: ChampionMiscStatRow): string {
 </template>
 
 <style scoped>
-.misc-level {
+.misc-mlist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+@media (min-width: 768px) {
+  .misc-mlist {
+    display: none;
+  }
+}
+.misc-mcard {
+  display: block;
+  padding: 12px 14px;
+  border: 1px solid #463714;
+  border-radius: 12px;
+  background: #0a1428;
+  color: #f0e6d2;
+}
+.misc-mcard-top {
   display: flex;
   align-items: center;
-  gap: 12px;
-  max-width: 420px;
-  padding: 8px 12px;
-  border: 1px solid rgb(200 155 60 / 0.3);
-  border-radius: 8px;
-  background: rgb(10 50 60 / 0.35);
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.misc-mcard-img {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+}
+.misc-mcard-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  font-size: 14px;
+}
+.misc-mcard-hp {
+  font-family: var(--font-display, inherit);
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.misc-mcard-hp small {
+  margin-left: 4px;
+  font-size: 10px;
+  color: #a09b8c;
+}
+.misc-mcard-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.misc-mcard-grid em {
+  display: block;
+  white-space: nowrap;
+  font-style: normal;
+  font-weight: 400;
+  color: #a09b8c;
+}
+@media (max-width: 767px) {
+  .misc-msortbar {
+    display: none !important;
+  }
+}
+.misc-level {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  border: 1px solid #463714;
+  border-radius: 12px;
+  background: #0a1428;
 }
 .misc-level-label {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  font-size: 0.75rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-grey-50, #a09b8c);
-  white-space: nowrap;
-}
-.misc-level-value {
-  min-width: 2ch;
-  font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: var(--color-gold-50, #f0e6d2);
+  font-size: 14px;
+  color: #f0e6d2;
 }
 .misc-level-range {
-  flex: 1;
-  accent-color: var(--color-gold-300, #c89b3c);
+  flex: 1 1 260px;
+  min-width: 120px;
+  accent-color: #c8aa6e;
+}
+.misc-level-value {
+  min-width: 44px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #0a323c;
+  text-align: center;
+  font-family: 'Barlow', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #f0e6d2;
+}
+.misc-level-hint {
+  font-size: 12px;
+  color: #a09b8c;
+}
+.misc-card {
+  border: 1px solid #463714;
+  border-radius: 12px;
+  background: #0a1428;
+  overflow: hidden;
+}
+.misc-table {
+  width: 100%;
+  min-width: 960px;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: #f0e6d2;
+}
+.misc-table th {
+  font-size: 12px;
+  font-weight: 600;
+  color: #a09b8c;
+  border-bottom: 1px solid #0a323c;
+  padding: 9px 14px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.misc-th-champ {
+  text-align: left;
+  padding-left: 20px !important;
+}
+.misc-th-group {
+  text-align: center;
+  font-size: 11px !important;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #c8aa6e !important;
+  border-left: 1px solid #1e2328;
+  cursor: default !important;
+}
+.misc-th,
+.misc-td {
+  text-align: right;
+}
+.misc-th.is-first,
+.misc-td.is-first {
+  border-left: 1px solid #1e2328;
+}
+.misc-table tbody tr {
+  border-bottom: 1px solid #1e2328;
+}
+.misc-table tbody tr:hover {
+  background: rgb(200 170 110 / 0.04);
+}
+.misc-td-champ {
+  padding: 8px 20px;
+}
+.misc-td {
+  padding: 8px 14px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.misc-th-in {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.misc-icon {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+  vertical-align: -3px;
+  object-fit: contain;
+}
+.misc-th-in .misc-icon {
+  margin-right: 0;
+}
+.misc-val {
+  display: block;
+  font-weight: 700;
+}
+.misc-growth {
+  display: block;
+  font-size: 11px;
+  color: #a09b8c;
+}
+.misc-footnote {
+  font-size: 12px;
+  color: #a09b8c;
 }
 </style>

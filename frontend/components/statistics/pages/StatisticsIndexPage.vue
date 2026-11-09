@@ -7,7 +7,7 @@
     />
     <div
       v-if="currentNavGroupTabs.length > 1"
-      class="statistics-tabs-bar flex w-full min-w-0 flex-shrink-0 px-4 pt-4"
+      class="statistics-tabs-bar flex w-full min-w-0 flex-shrink-0 justify-center border-b border-[#0a323c] px-4 py-3"
     >
       <div ref="tabsNavEl" role="tablist" :aria-label="currentNavGroupLabel" class="stats-subtabs">
         <button
@@ -216,24 +216,7 @@
               </div>
             </template>
             <template v-else-if="displayedActiveTab === 'misc'">
-              <div>
-                <label for="misc-level-filter" class="mb-1 block text-sm font-medium text-text">
-                  {{ t('statisticsPage.miscLevelLabel') }}
-                </label>
-                <select
-                  id="misc-level-filter"
-                  v-model.number="miscLevel"
-                  class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-                >
-                  <option
-                    v-for="lvl in miscLevelFilterOptions"
-                    :key="'misc-filter-lvl-' + lvl"
-                    :value="lvl"
-                  >
-                    {{ lvl }}
-                  </option>
-                </select>
-              </div>
+              <!-- Niveau : curseur dans l'onglet (maquette), pas de doublon ici -->
             </template>
             <template v-else>
               <div>
@@ -1001,7 +984,6 @@ import {
 import { useStatisticsPingsTab } from '~/composables/statistics/useStatisticsPingsTab'
 import { useStatisticsVisionTab } from '~/composables/statistics/useStatisticsVisionTab'
 import { useStatisticsMiscTab } from '~/composables/statistics/useStatisticsMiscTab'
-import { CHAMPION_MISC_MAX_LEVEL, CHAMPION_MISC_MIN_LEVEL } from '~/utils/championMiscStatLevel'
 import {
   appendStatisticsCohortParams,
   cohortFiltersForTab,
@@ -1287,12 +1269,6 @@ const { isMobileViewport, showMobileViewToast, setOverviewFastStatView, dismissM
 
 const championSearchQuery = ref('')
 const miscLevel = ref(1)
-const miscLevelFilterOptions = computed(() =>
-  Array.from(
-    { length: CHAMPION_MISC_MAX_LEVEL - CHAMPION_MISC_MIN_LEVEL + 1 },
-    (_, i) => CHAMPION_MISC_MIN_LEVEL + i
-  )
-)
 const championSearchFocused = ref(false)
 const championSearchInputEl = ref<HTMLInputElement | null>(null)
 let championSearchBlurTimer: ReturnType<typeof setTimeout> | null = null
@@ -4285,6 +4261,7 @@ const statisticsPageCtx = reactive({
   spellsModeFilter,
   statsRoleFilter,
   statsSplitTransformEnabled,
+  toggleStatsSplitTransformEnabled,
   surrenderMatrixPending,
   surrenderMatrixRows,
   t,
@@ -4495,23 +4472,24 @@ defineExpose({ statisticsPageCtx })
 
 <style>
 .statistics .stats-subtabs {
-  display: inline-flex;
+  display: flex;
   flex-wrap: wrap;
-  gap: 2px;
-  padding: 3px;
-  background: var(--color-blue-600);
-  border: 1px solid var(--color-blue-400);
-  border-radius: 8px;
+  gap: 8px;
 }
 .statistics .stats-subtab {
-  height: 34px;
-  padding: 0 12px;
-  border-radius: 6px;
-  color: var(--color-grey-50);
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid #0a323c;
+  border-radius: 18px;
+  color: #cbc3b0;
+  font-size: 14px;
+}
+.statistics .stats-subtab:hover {
+  color: #f0e6d2;
 }
 .statistics .stats-subtab.is-active {
-  background: var(--color-blue-400);
-  color: var(--color-gold-50);
+  background: #0a323c;
+  color: #f0e6d2;
   font-weight: 600;
 }
 /**

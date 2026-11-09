@@ -13,15 +13,18 @@ import {
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
 import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
 import type { BalanceFrameworkRow, BalanceLevelRow } from '~/types/statisticsIndexPage'
-import { useToggleSet } from '~/composables/useToggleSet'
+import {
+  balanceLevelGlyph,
+  balanceVerdictRank,
+  splitStatusDelta,
+} from '~/utils/statistics/balanceVerdict'
 
 const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
 
 type BalanceSortKey = 'champion' | 'globalStatus' | 'games'
 
-const balanceSortBy = ref<BalanceSortKey>('champion')
+const balanceSortBy = ref<BalanceSortKey>('globalStatus')
 const balanceSortDir = ref<'asc' | 'desc'>('asc')
-const { set: expandedBalanceKeys, toggle: toggleExpandedBalanceKeys } = useToggleSet<string>()
 
 type LevelRow = BalanceLevelRow
 type BalanceRow = BalanceFrameworkRow
@@ -34,17 +37,13 @@ const balanceLevelColumns: Array<{
   key: 'average' | 'skilled' | 'elite'
   label: string
 }> = [
-  { key: 'average', label: 'Average' },
-  { key: 'skilled', label: 'Skilled' },
-  { key: 'elite', label: 'Elite' },
+  { key: 'average', label: p.t('statisticsPage.balanceLevelAverage') },
+  { key: 'skilled', label: p.t('statisticsPage.balanceLevelSkilled') },
+  { key: 'elite', label: p.t('statisticsPage.balanceLevelElite') },
 ]
 
 function balanceRowKey(row: BalanceRow): string {
   return `${row.championId}-${row.role}`
-}
-
-function toggleBalanceCardExpanded(row: BalanceRow): void {
-  toggleExpandedBalanceKeys(balanceRowKey(row))
 }
 
 const rows = computed<BalanceRow[]>(() => p.balanceFrameworkData?.rows ?? [])
@@ -138,18 +137,6 @@ function formatDeltaLabel(v: string | null): string {
   return statusCodeToLabel(v)
 }
 
-function statusClass(v: 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'): string {
-  if (v === 'OVERPOWERED') return 'text-error'
-  if (v === 'UNDERPOWERED') return 'text-info'
-  return 'text-success'
-}
-
-function frameworkNeedLabel(v: 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'): string {
-  if (v === 'OVERPOWERED') return p.t('statisticsPage.balanceNeedNerf')
-  if (v === 'UNDERPOWERED') return p.t('statisticsPage.balanceNeedBuff')
-  return p.t('statisticsPage.balanceNeedNormal')
-}
-
 function frameworkNeedCode(
   v: 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'
 ): 'NERF' | 'BUFF' | 'NORMAL' {
@@ -218,9 +205,8 @@ const filteredRows = computed<BalanceRow[]>(() => {
       return dir * (an < bn ? -1 : 1)
     }
     if (key === 'globalStatus') {
-      const order = { OVERPOWERED: 0, BALANCED: 1, UNDERPOWERED: 2 }
-      const av = order[a.globalStatus] ?? 1
-      const bv = order[b.globalStatus] ?? 1
+      const av = balanceVerdictRank(a.globalStatus)
+      const bv = balanceVerdictRank(b.globalStatus)
       if (av !== bv) return dir * (av - bv)
       const an = String(p.championName(a.championId) || a.championId).toLowerCase()
       const bn = String(p.championName(b.championId) || b.championId).toLowerCase()
@@ -247,8 +233,30 @@ const quickCounts = computed(() => {
 const quickLabelKeys: Record<BalanceQuickFilter, string> = {
   ALL: 'statisticsPage.balanceQuickAll',
   NERF: 'statisticsPage.balanceQuickNerf',
+  EQUAL: 'statisticsPage.balanceQuickEqual',
   BUFF: 'statisticsPage.balanceQuickBuff',
   CHANGED: 'statisticsPage.balanceQuickChanged',
+}
+
+const previousPatch = computed(() => p.balanceFrameworkData?.previousPatch ?? '')
+
+function quickLabel(f: BalanceQuickFilter): string {
+  if (f === 'CHANGED' && previousPatch.value) {
+    return p.t('statisticsPage.balanceQuickChangedSince', { patch: previousPatch.value })
+  }
+  return p.t(quickLabelKeys[f])
+}
+
+function verdictLabel(v: 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'): string {
+  if (v === 'OVERPOWERED') return `▲ ${p.t('statisticsPage.balanceVerdictNerf')}`
+  if (v === 'UNDERPOWERED') return `▼ ${p.t('statisticsPage.balanceVerdictBuff')}`
+  return p.t('statisticsPage.balanceStatusBalanced')
+}
+
+function sinceLabel(delta: string | null): string {
+  const parts = splitStatusDelta(delta)
+  if (!parts) return '—'
+  return `${statusCodeToLabel(parts[0])} → ${statusCodeToLabel(parts[1])}`
 }
 
 const totalRowsCount = computed(() => filteredRows.value.length)
@@ -287,7 +295,7 @@ function globalTooltip(row: BalanceRow): string {
 </script>
 
 <template>
-  <div class="space-y-4">
+  <div class="space-y-5 pt-2 md:pt-4">
     <div v-if="p.balanceFrameworkPending" class="text-text/70">
       {{ p.t('statisticsPage.loading') }}
     </div>
@@ -295,262 +303,198 @@ function globalTooltip(row: BalanceRow): string {
       {{ p.t('statisticsPage.overviewDetailTimeout') }}
     </div>
     <template v-else>
-      <div class="balance-quick" role="group" :aria-label="p.t('statisticsPage.balanceQuickAria')">
-        <button
-          v-for="f in BALANCE_QUICK_FILTERS"
-          :key="f"
-          type="button"
-          class="balance-quick-btn"
-          :class="{ 'is-active': quickFilter === f }"
-          :aria-pressed="quickFilter === f"
-          @click="quickFilter = f"
+      <div class="ba-bar">
+        <span class="ba-bar__label">{{ p.t('statisticsPage.balanceShow') }}</span>
+        <div
+          class="balance-quick"
+          role="group"
+          :aria-label="p.t('statisticsPage.balanceQuickAria')"
         >
-          {{ p.t(quickLabelKeys[f]) }}
-          <span class="balance-quick-count">{{ quickCounts[f] }}</span>
-        </button>
+          <button
+            v-for="f in BALANCE_QUICK_FILTERS"
+            :key="f"
+            type="button"
+            class="balance-quick-btn"
+            :class="[`is-${f.toLowerCase()}`, { 'is-active': quickFilter === f }]"
+            :aria-pressed="quickFilter === f"
+            @click="quickFilter = f"
+          >
+            <span v-if="f === 'NERF'" aria-hidden="true">▲</span>
+            <span v-else-if="f === 'EQUAL'" aria-hidden="true">=</span>
+            <span v-else-if="f === 'BUFF'" aria-hidden="true">▼</span>
+            {{ quickLabel(f) }}
+            <template v-if="f === 'ALL'"> · {{ quickCounts[f] }}</template>
+          </button>
+        </div>
+        <ul class="ba-legend">
+          <li class="is-op">
+            ▲ <span>{{ p.t('statisticsPage.balanceStatusOverpowered') }}</span>
+          </li>
+          <li class="is-eq">
+            = <span>{{ p.t('statisticsPage.balanceStatusBalanced') }}</span>
+          </li>
+          <li class="is-up">
+            ▼ <span>{{ p.t('statisticsPage.balanceStatusUnderpowered') }}</span>
+          </li>
+        </ul>
       </div>
       <div v-if="paginatedRows.length" class="statistics-balance-tab space-y-3">
         <StatisticsMobileSortBar
           id="balance-mobile-sort"
           v-model:column="balanceSortBy"
           v-model:direction="balanceSortDir"
+          class="ba-msortbar"
           :options="balanceMobileSortOptions"
           :asc-default-columns="['champion']"
         />
-        <div class="statistics-balance-mobile-list space-y-2 md:hidden">
-          <article
+        <div class="ba-mlist md:hidden">
+          <div class="ba-mhead">
+            <span>{{ p.t('statisticsPage.balanceMobileAxis') }}</span>
+            <span class="ba-mhead-cols">
+              <span>{{ p.t('statisticsPage.balanceLevelAverageShort') }}</span>
+              <span>{{ p.t('statisticsPage.balanceLevelSkilledShort') }}</span>
+              <span>{{ p.t('statisticsPage.balanceLevelElite') }}</span>
+            </span>
+          </div>
+          <StatisticsChampionDetailLink
             v-for="row in paginatedRows"
             :key="'balance-mobile-' + balanceRowKey(row)"
-            class="statistics-champion-stats-mobile-card statistics-balance-mobile-card w-full overflow-hidden"
+            :champion-id="row.championId"
+            class="ba-mcard"
           >
-            <div
-              class="statistics-champion-stats-mobile-card-header flex w-full items-center gap-3 p-3"
-            >
-              <StatisticsChampionStatsMobileCardHeader
-                :champion-id="row.championId"
-                :champion-name="String(p.championName(row.championId) || row.championId)"
-                :search-query="p.championSearchQuery"
-                :role-label="p.mainRoleLabel(row.role)"
-                :role-icon-src="p.mainRoleIconSrc(row.role)"
-                :portrait-src="
-                  p.gameVersion && p.championByKey(row.championId)
-                    ? p.getChampionImageUrl(
-                        p.gameVersion,
-                        p.championByKey(row.championId)!.image.full
-                      )
-                    : null
-                "
-                :portrait-alt="p.championName(row.championId) || ''"
-              />
-              <button
-                type="button"
-                class="flex min-w-0 flex-1 flex-col items-end justify-center text-right"
-                @click="toggleBalanceCardExpanded(row)"
-              >
-                <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
-                  {{ p.t('statisticsPage.balanceGlobalStatus') }}
-                </div>
-                <div class="text-lg font-bold leading-tight" :class="statusClass(row.globalStatus)">
-                  {{ statusLabel(row.globalStatus) }}
-                </div>
-                <div class="mt-0.5 text-xs text-text/55">
-                  {{ frameworkNeedLabel(row.globalStatus) }}
-                </div>
-                <div
-                  v-if="row.globalDelta"
-                  class="mt-0.5 max-w-[9rem] text-[10px] leading-snug text-text/70"
-                >
-                  {{ formatDeltaLabel(row.globalDelta) }}
-                </div>
-              </button>
-            </div>
-
-            <div class="statistics-balance-mobile-levels border-t border-primary/15 px-3 py-2.5">
-              <div class="grid grid-cols-3 gap-2">
-                <div
+            <div class="ba-mcard-row">
+              <div class="min-w-0">
+                <div class="ba-mcard-name">{{ p.championName(row.championId) }}</div>
+                <div class="ba-mcard-role">{{ p.mainRoleLabel(row.role) }}</div>
+              </div>
+              <div class="ba-mcard-lvls">
+                <span
                   v-for="level in balanceLevelColumns"
-                  :key="'balance-mobile-lvl-' + balanceRowKey(row) + '-' + level.key"
-                  class="flex min-w-0 flex-col items-center gap-0.5 text-center"
+                  :key="'bam-' + level.key"
+                  class="ba-glyph"
+                  :class="'is-' + balanceLevelGlyph(row[level.key].status).tone"
+                  :aria-label="`${level.label} : ${statusLabel(row[level.key].status)}`"
                 >
-                  <span class="text-[10px] font-semibold uppercase tracking-wide text-text/55">
-                    {{ level.label }}
-                  </span>
-                  <span
-                    class="text-xs font-semibold leading-tight"
-                    :class="statusClass(row[level.key].status)"
-                    :title="levelTooltip(row, level.key)"
-                  >
-                    {{ statusLabel(row[level.key].status) }}
-                  </span>
-                  <span
-                    v-if="row[level.key].delta"
-                    class="max-w-full truncate text-[10px] leading-snug text-text/60"
-                  >
-                    {{ formatDeltaLabel(row[level.key].delta) }}
-                  </span>
-                </div>
+                  {{ balanceLevelGlyph(row[level.key].status).glyph }}
+                </span>
               </div>
             </div>
-
-            <div
-              v-if="expandedBalanceKeys.has(balanceRowKey(row))"
-              class="statistics-balance-mobile-details space-y-2 border-t border-primary/20 bg-black/20 px-3 py-2.5 text-xs text-text/85"
-            >
-              <div
-                v-for="level in balanceLevelColumns"
-                :key="'balance-mobile-detail-' + balanceRowKey(row) + '-' + level.key"
-                class="rounded-md bg-black/15 px-2 py-1.5"
-              >
-                <div class="font-semibold text-text">{{ level.label }}</div>
-                <template v-if="row[level.key].games > 0">
-                  <div class="mt-1 tabular-nums">
-                    WR {{ fmt(row[level.key].winrate) }}% · BR {{ fmt3(row[level.key].banrate) }}% ·
-                    PR {{ fmt(row[level.key].presence) }}%
-                  </div>
-                  <div class="mt-0.5 text-text/70">{{ levelTooltip(row, level.key) }}</div>
-                </template>
-                <div v-else class="mt-1 text-text/55">
-                  {{ p.t('statisticsPage.balanceTooltipNoGames') }}
-                </div>
-              </div>
-              <div class="text-text/70" :title="globalTooltip(row)">
-                {{ globalTooltip(row) }}
-              </div>
+            <div class="ba-mcard-row">
+              <span class="ba-verdict" :class="'is-' + balanceLevelGlyph(row.globalStatus).tone">
+                {{ verdictLabel(row.globalStatus) }}
+              </span>
+              <span class="ba-mcard-since" :class="{ 'is-same': !row.globalDelta }">
+                {{
+                  row.globalDelta
+                    ? sinceLabel(row.globalDelta)
+                    : p.t('statisticsPage.balanceUnchanged')
+                }}
+              </span>
             </div>
-          </article>
+          </StatisticsChampionDetailLink>
         </div>
 
-        <div
-          class="statistics-overview-surface hidden w-full overflow-x-auto rounded-lg border border-primary/30 md:block"
-        >
-          <table class="w-full min-w-[900px] text-left text-sm">
-            <thead class="border-b border-primary/30 bg-black/25">
-              <tr>
-                <th
-                  class="px-3 py-2 font-semibold text-text"
-                  :title="p.t('statisticsPage.balanceTooltipChampion')"
-                >
-                  {{ p.t('statisticsPage.tierListColChampion') }}
-                </th>
-                <th
-                  class="px-3 py-2 font-semibold text-text"
-                  :title="p.t('statisticsPage.balanceTooltipRole')"
-                >
-                  {{ p.t('statisticsPage.tierListRole') }}
-                </th>
-                <th
-                  class="px-3 py-2 font-semibold text-text"
-                  :title="p.t('statisticsPage.balanceTooltipAverage')"
-                >
-                  Average
-                </th>
-                <th
-                  class="px-3 py-2 font-semibold text-text"
-                  :title="p.t('statisticsPage.balanceTooltipSkilled')"
-                >
-                  Skilled
-                </th>
-                <th
-                  class="px-3 py-2 font-semibold text-text"
-                  :title="p.t('statisticsPage.balanceTooltipElite')"
-                >
-                  Elite
-                </th>
-                <th
-                  class="px-3 py-2 font-semibold text-text"
-                  :title="p.t('statisticsPage.balanceTooltipGlobal')"
-                >
-                  {{ p.t('statisticsPage.balanceGlobalStatus') }}
-                </th>
-                <th
-                  class="px-3 py-2 font-semibold text-text"
-                  :title="p.t('statisticsPage.balanceTooltipNeed')"
-                >
-                  {{ p.t('statisticsPage.balanceNeedColumn') }}
-                </th>
-                <th
-                  class="px-3 py-2 font-semibold text-text"
-                  :title="p.t('statisticsPage.balanceTooltipGlobalDelta')"
-                >
-                  {{ p.t('statisticsPage.balanceAbbrevDelta') }}
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-primary/20">
-              <tr
-                v-for="row in paginatedRows"
-                :key="`${row.championId}-${row.role}`"
-                class="odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
-              >
-                <td class="px-3 py-2">
-                  <StatisticsChampionDetailLink
-                    :champion-id="row.championId"
-                    class="flex items-center gap-2"
+        <div class="ba-card hidden md:block">
+          <div class="ba-scroll">
+            <table class="ba-table">
+              <thead>
+                <tr class="ba-group-row">
+                  <th colspan="2"></th>
+                  <th colspan="3" class="ba-group">
+                    <span>{{ p.t('statisticsPage.balanceLevelsGroup') }}</span>
+                  </th>
+                  <th colspan="2"></th>
+                </tr>
+                <tr>
+                  <th :title="p.t('statisticsPage.balanceTooltipChampion')">
+                    {{ p.t('statisticsPage.tierListColChampion') }}
+                  </th>
+                  <th :title="p.t('statisticsPage.balanceTooltipRole')">
+                    {{ p.t('statisticsPage.tierListRole') }}
+                  </th>
+                  <th
+                    v-for="level in balanceLevelColumns"
+                    :key="'ba-h-' + level.key"
+                    class="ba-lvl"
+                    :title="
+                      p.t(
+                        level.key === 'average'
+                          ? 'statisticsPage.balanceTooltipAverage'
+                          : level.key === 'skilled'
+                            ? 'statisticsPage.balanceTooltipSkilled'
+                            : 'statisticsPage.balanceTooltipElite'
+                      )
+                    "
                   >
-                    <img
-                      v-if="p.gameVersion && p.championByKey(row.championId)"
-                      loading="lazy"
-                      decoding="async"
-                      :src="
-                        p.getChampionImageUrl(
-                          p.gameVersion,
-                          p.championByKey(row.championId)!.image.full
-                        )
-                      "
-                      :alt="p.championName(row.championId) ?? undefined"
-                      class="h-8 w-8 rounded border border-black/30 object-cover"
-                      width="32"
-                      height="32"
-                    />
+                    {{ level.label }}
+                  </th>
+                  <th :title="p.t('statisticsPage.balanceTooltipGlobal')">
+                    {{ p.t('statisticsPage.balanceVerdict') }}
+                  </th>
+                  <th :title="p.t('statisticsPage.balanceTooltipGlobalDelta')">
+                    {{
+                      previousPatch
+                        ? p.t('statisticsPage.balanceSince', { patch: previousPatch })
+                        : p.t('statisticsPage.balanceAbbrevDelta')
+                    }}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in paginatedRows" :key="`${row.championId}-${row.role}`">
+                  <td>
+                    <StatisticsChampionDetailLink :champion-id="row.championId" class="ba-champ">
+                      <img
+                        v-if="p.gameVersion && p.championByKey(row.championId)"
+                        loading="lazy"
+                        decoding="async"
+                        :src="
+                          p.getChampionImageUrl(
+                            p.gameVersion,
+                            p.championByKey(row.championId)!.image.full
+                          )
+                        "
+                        :alt="p.championName(row.championId) ?? undefined"
+                        width="28"
+                        height="28"
+                      />
+                      <span>{{ p.championName(row.championId) }}</span>
+                    </StatisticsChampionDetailLink>
+                  </td>
+                  <td class="ba-role">{{ p.mainRoleLabel(row.role) }}</td>
+                  <td
+                    v-for="level in balanceLevelColumns"
+                    :key="'ba-c-' + level.key"
+                    class="ba-lvl"
+                  >
                     <span
-                      class="font-medium text-accent underline decoration-accent/40 underline-offset-2"
-                      >{{ p.championName(row.championId) }}</span
+                      class="ba-glyph"
+                      :class="'is-' + balanceLevelGlyph(row[level.key].status).tone"
+                      :title="levelTooltip(row, level.key)"
+                      :aria-label="statusLabel(row[level.key].status)"
                     >
-                  </StatisticsChampionDetailLink>
-                </td>
-                <td class="px-3 py-2 text-text/90">{{ row.role }}</td>
-                <td
-                  class="px-3 py-2 font-medium"
-                  :class="statusClass(row.average.status)"
-                  :title="levelTooltip(row, 'average')"
-                >
-                  {{ statusLabel(row.average.status) }}
-                </td>
-                <td
-                  class="px-3 py-2 font-medium"
-                  :class="statusClass(row.skilled.status)"
-                  :title="levelTooltip(row, 'skilled')"
-                >
-                  {{ statusLabel(row.skilled.status) }}
-                </td>
-                <td
-                  class="px-3 py-2 font-medium"
-                  :class="statusClass(row.elite.status)"
-                  :title="levelTooltip(row, 'elite')"
-                >
-                  {{ statusLabel(row.elite.status) }}
-                </td>
-                <td
-                  class="px-3 py-2 font-semibold"
-                  :class="statusClass(row.globalStatus)"
-                  :title="globalTooltip(row)"
-                >
-                  {{ statusLabel(row.globalStatus) }}
-                </td>
-                <td class="px-3 py-2 text-text/90">
-                  {{ frameworkNeedLabel(row.globalStatus) }}
-                </td>
-                <td class="px-3 py-2 text-text/80">
-                  {{ formatDeltaLabel(row.globalDelta) }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                      {{ balanceLevelGlyph(row[level.key].status).glyph }}
+                    </span>
+                  </td>
+                  <td>
+                    <span
+                      class="ba-verdict"
+                      :class="'is-' + balanceLevelGlyph(row.globalStatus).tone"
+                      :title="globalTooltip(row)"
+                    >
+                      {{ verdictLabel(row.globalStatus) }}
+                    </span>
+                  </td>
+                  <td class="ba-since">{{ sinceLabel(row.globalDelta) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
         <StatisticsRangePagination
           v-model:page="balancePage"
           :page-size="pageSize"
-          class="statistics-balance-pagination rounded-lg border border-primary/20 bg-surface/20 px-3 py-2 text-sm text-text/80 md:rounded-none md:border-t md:bg-transparent md:px-4"
+          class="statistics-balance-pagination ba-pagination"
           :total-count="totalRowsCount"
           :total-pages="totalPages"
           @update:page-size="p.onBansPageSizeUpdated"
@@ -569,41 +513,248 @@ function globalTooltip(row: BalanceRow): string {
 </template>
 
 <style scoped>
+.ba-mlist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+@media (min-width: 768px) {
+  .ba-mlist {
+    display: none;
+  }
+}
+.ba-mhead {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 12px;
+  font-size: 11px;
+  color: #a09b8c;
+}
+.ba-mhead-cols,
+.ba-mcard-lvls {
+  display: grid;
+  grid-template-columns: repeat(3, 40px);
+  gap: 6px;
+  text-align: center;
+}
+.ba-mcard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #463714;
+  border-radius: 12px;
+  background: #0a1428;
+  color: #f0e6d2;
+}
+.ba-mcard-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.ba-mcard-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+.ba-mcard-role {
+  font-size: 11px;
+  color: #a09b8c;
+}
+.ba-mcard-lvls .ba-glyph {
+  width: 40px;
+}
+.ba-mcard-since {
+  font-size: 12px;
+  text-align: right;
+}
+.ba-mcard-since.is-same {
+  color: #a09b8c;
+}
+@media (max-width: 767px) {
+  .ba-msortbar,
+  .ba-legend,
+  .ba-bar__label {
+    display: none !important;
+  }
+  .ba-bar .balance-quick {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .ba-bar .balance-quick-btn {
+    flex-shrink: 0;
+  }
+}
+.ba-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+.ba-bar__label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #a09b8c;
+}
 .balance-quick {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 .balance-quick-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 12px;
-  border: 1px solid rgb(200 155 60 / 0.35);
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid #1e2328;
   border-radius: 999px;
-  font-size: 0.8rem;
-  color: var(--color-grey-50, #a09b8c);
+  font-size: 14px;
+  color: #f0e6d2;
   background: transparent;
 }
+.balance-quick-btn.is-nerf {
+  border-color: #6b2a22;
+  color: #e2665a;
+}
+.balance-quick-btn.is-equal {
+  border-color: #463714;
+  color: #c8aa6e;
+}
+.balance-quick-btn.is-buff {
+  border-color: #005a82;
+  color: #0397ab;
+}
 .balance-quick-btn.is-active {
-  border-color: var(--color-gold-300, #c89b3c);
-  color: var(--color-gold-50, #f0e6d2);
-  background: rgb(200 155 60 / 0.15);
+  background: #0a323c;
+  border-color: #0a323c;
+  color: #f0e6d2;
+  font-weight: 600;
 }
-.balance-quick-count {
-  font-variant-numeric: tabular-nums;
-  opacity: 0.75;
+.ba-legend {
+  display: flex;
+  gap: 16px;
+  margin-left: auto;
+  font-size: 12px;
+  color: #a09b8c;
 }
-
-@media (max-width: 768px) {
-  .statistics-balance-tab {
-    margin-inline: -1rem;
-    width: calc(100% + 2rem);
-    max-width: 100vw;
-  }
-
-  .statistics-balance-mobile-card {
-    width: 100%;
-  }
+.ba-legend .is-op {
+  color: #e2665a;
+}
+.ba-legend .is-up {
+  color: #0397ab;
+}
+.ba-legend span {
+  color: #a09b8c;
+}
+.ba-card {
+  background: #0a1428;
+  border: 1px solid #463714;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.ba-scroll {
+  overflow-x: auto;
+}
+.ba-table {
+  width: 100%;
+  min-width: 900px;
+  border-collapse: collapse;
+  font-size: 14px;
+  color: #f0e6d2;
+}
+.ba-table th {
+  padding: 10px 20px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #a09b8c;
+  text-align: left;
+  border-bottom: 1px solid #0a323c;
+  white-space: nowrap;
+}
+.ba-group-row th {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.ba-group span {
+  display: block;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #0a323c;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.ba-table td {
+  padding: 9px 20px;
+  border-bottom: 1px solid #1e2328;
+  vertical-align: middle;
+}
+.ba-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.ba-table th.ba-lvl,
+.ba-table td.ba-lvl {
+  text-align: center;
+}
+.ba-champ {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 600;
+  color: #f0e6d2;
+}
+.ba-champ img {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+.ba-role {
+  color: #a09b8c;
+}
+.ba-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 28px;
+  border-radius: 6px;
+  font-size: 12px;
+  background: #1e2328;
+  color: #a09b8c;
+}
+.ba-glyph.is-op {
+  background: #3a1a16;
+  color: #e2665a;
+}
+.ba-glyph.is-up {
+  background: #0a323c;
+  color: #0397ab;
+}
+.ba-verdict {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid #1e2328;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ba-verdict.is-op {
+  border-color: #6b2a22;
+  color: #e2665a;
+}
+.ba-verdict.is-up {
+  border-color: #005a82;
+  color: #0397ab;
+}
+.ba-since {
+  white-space: nowrap;
 }
 </style>

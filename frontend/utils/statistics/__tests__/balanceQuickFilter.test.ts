@@ -14,6 +14,10 @@ describe('balanceQuickMatch', () => {
     expect(balanceQuickMatch(up, 'NERF')).toBe(false)
     expect(balanceQuickMatch(up, 'BUFF')).toBe(true)
   })
+  it('EQUAL keeps balanced rows', () => {
+    expect(balanceQuickMatch(ok, 'EQUAL')).toBe(true)
+    expect(balanceQuickMatch(op, 'EQUAL')).toBe(false)
+  })
   it('CHANGED keeps rows with a global delta', () => {
     expect(balanceQuickMatch(up, 'CHANGED')).toBe(true)
     expect(balanceQuickMatch(op, 'CHANGED')).toBe(false)
@@ -23,6 +27,12 @@ describe('balanceQuickMatch', () => {
 
 describe('countBalanceQuick', () => {
   it('counts each quick filter', () => {
-    expect(countBalanceQuick([op, up, ok])).toEqual({ ALL: 3, NERF: 1, BUFF: 1, CHANGED: 1 })
+    expect(countBalanceQuick([op, up, ok])).toEqual({
+      ALL: 3,
+      NERF: 1,
+      EQUAL: 1,
+      BUFF: 1,
+      CHANGED: 1,
+    })
   })
 })

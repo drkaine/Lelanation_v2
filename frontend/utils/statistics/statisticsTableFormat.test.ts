@@ -19,8 +19,16 @@ describe('statisticsTableFormat', () => {
   it('delta_formatters_add_explicit_plus_sign', () => {
     expect([formatTierListPatchDeltaPp(1.234), formatChampionGlobalNumericDelta(-0.26)]).toEqual([
       '+1.23',
-      '-0.3',
+      '▼ −0.3',
     ])
+  })
+
+  it('numeric_delta_uses_arrows_and_rounds_large_values', () => {
+    expect([
+      formatChampionGlobalNumericDelta(320.4),
+      formatChampionGlobalNumericDelta(3.14),
+      formatChampionGlobalNumericDelta(0.01),
+    ]).toEqual(['▲ +320', '▲ +3.1', '0.0'])
   })
 
   it('numeric_delta_class_inverts_when_lower_is_better', () => {
