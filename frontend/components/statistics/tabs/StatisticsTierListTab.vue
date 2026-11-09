@@ -890,7 +890,10 @@ const tierListMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
           </div>
         </div>
 
-        <div class="mt-[5px] flex w-full max-w-md items-stretch gap-1.5">
+        <div
+          v-if="p.tierListChartType === 'pbi'"
+          class="mt-[5px] flex w-full max-w-md items-stretch gap-1.5"
+        >
           <button
             type="button"
             class="ui-build-card-action-button ui-build-card-action-button--icon"

@@ -11,7 +11,7 @@
       <div class="statistics-tabs-scroll-wrap relative min-w-0 flex-1 overflow-hidden">
         <div
           ref="tierListTabsNavEl"
-          class="statistics-tabs-nav flex flex-nowrap gap-1 overflow-x-auto border-b border-primary/30 pb-2"
+          class="statistics-tabs-nav flex flex-nowrap gap-1 overflow-x-auto border-b border-primary/30 pb-2 [justify-content:safe_center]"
         >
           <button
             type="button"

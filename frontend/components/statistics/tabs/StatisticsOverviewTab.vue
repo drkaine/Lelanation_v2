@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { overviewKeyFigures } from '~/utils/statistics/overviewKeyFigures'
 import { TREND_METRICS, trendRows, type TrendMetric } from '~/utils/statistics/overviewTrends'
 import {
   injectStatisticsPageCtx,
@@ -9,16 +8,6 @@ import {
 import type { FastStatChampionEntry } from '~/components/statistics/FastStatChampionRowList.vue'
 
 const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
-
-const keyFigures = computed(() =>
-  overviewKeyFigures({
-    total: p.overviewMatchOutcomeTotal,
-    surrenderOnly: p.overviewSurrenderOnlyCount,
-    early: p.overviewEarlySurrenderCount,
-    topBan: asChampionRows(p.overviewEffectiveTopBanrateChampions),
-    topWinrateRise: asChampionRows(p.overviewTopWinrateSince),
-  })
-)
 
 const trendMetric = ref<TrendMetric>('winrate')
 const trendCols = computed(() => {
@@ -162,44 +151,6 @@ function bansByOutcomeEntries(
         </button>
       </div>
       <div v-else-if="p.overviewData" class="space-y-[10px]">
-        <ul class="ov-keys" :aria-label="p.t('statisticsPage.overviewKeysAria')">
-          <li class="ov-key">
-            <span class="ov-key-label">{{ p.t('statisticsPage.overviewKeyGames') }}</span>
-            <span class="ov-key-value">{{ keyFigures.games.toLocaleString() }}</span>
-          </li>
-          <li class="ov-key">
-            <span class="ov-key-label">{{ p.t('statisticsPage.overviewKeySurrender') }}</span>
-            <span class="ov-key-value">{{
-              keyFigures.surrenderPct != null ? `${keyFigures.surrenderPct.toFixed(1)} %` : '—'
-            }}</span>
-            <span v-if="keyFigures.earlyPct != null" class="ov-key-sub">{{
-              p.t('statisticsPage.overviewKeyEarly', { pct: keyFigures.earlyPct.toFixed(1) })
-            }}</span>
-          </li>
-          <li class="ov-key">
-            <span class="ov-key-label">{{ p.t('statisticsPage.overviewKeyTopBan') }}</span>
-            <span class="ov-key-value">{{
-              keyFigures.topBan
-                ? (p.championName(keyFigures.topBan.championId) ?? keyFigures.topBan.championId)
-                : '—'
-            }}</span>
-            <span v-if="keyFigures.topBan" class="ov-key-sub"
-              >{{ keyFigures.topBan.banrate.toFixed(1) }} % banrate</span
-            >
-          </li>
-          <li class="ov-key">
-            <span class="ov-key-label">{{ p.t('statisticsPage.overviewKeyTopRise') }}</span>
-            <span class="ov-key-value">{{
-              keyFigures.topRise
-                ? (p.championName(keyFigures.topRise.championId) ?? keyFigures.topRise.championId)
-                : '—'
-            }}</span>
-            <span v-if="keyFigures.topRise" class="ov-key-sub ov-key-up"
-              >▲ +{{ keyFigures.topRise.delta.toFixed(1) }} pts ·
-              {{ keyFigures.topRise.winrate.toFixed(1) }} %</span
-            >
-          </li>
-        </ul>
         <!-- Fast Stats : même gabarit que TeamSideFastStatTable -->
         <div
           class="statistics-fast-stat-grid flex flex-wrap items-start justify-center gap-x-[5px] gap-y-[10px] pb-[10px]"
@@ -416,10 +367,10 @@ function bansByOutcomeEntries(
           </div>
 
           <!-- Tendances depuis X : hausse / baisse, onglets métrique -->
-          <section class="ov-trends w-full">
+          <section class="ov-trends w-full rounded-lg border border-primary/30">
             <header class="ov-trends-head">
               <div>
-                <h3 class="ov-trends-title">
+                <h3 class="ov-trends-title text-text-accent">
                   {{
                     p.t('statisticsPage.overviewTrendsTitle', {
                       version: p.progressionFromVersion || '—',
@@ -707,58 +658,8 @@ function bansByOutcomeEntries(
 </template>
 
 <style scoped>
-.ov-keys {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin: 0 0 6px;
-  padding: 0;
-  list-style: none;
-}
-.ov-key {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  padding: 12px 14px;
-  border: 1px solid rgb(200 155 60 / 0.3);
-  border-radius: 8px;
-  background: rgb(10 50 60 / 0.35);
-}
-.ov-key-label {
-  font-size: 0.7rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-grey-50, #a09b8c);
-}
-.ov-key-value {
-  overflow: hidden;
-  font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
-  font-size: 1.6rem;
-  font-weight: 600;
-  line-height: 1.1;
-  color: var(--color-gold-50, #f0e6d2);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ov-key-sub {
-  font-size: 0.75rem;
-  color: var(--color-grey-50, #a09b8c);
-}
-.ov-key-up {
-  color: var(--color-blue-100, #0ac8b9);
-}
-@media (max-width: 768px) {
-  .ov-keys {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-</style>
-
-<style scoped>
 .ov-trends {
-  border: 1px solid rgb(200 155 60 / 0.3);
-  border-radius: 8px;
+  background: rgb(var(--rgb-chrome) / 1);
   padding: 12px;
 }
 .ov-trends-head {
@@ -773,7 +674,6 @@ function bansByOutcomeEntries(
   font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
   font-size: 18px;
   font-weight: 700;
-  color: var(--color-gold-50, #f0e6d2);
 }
 .ov-trends-sub {
   font-size: 12px;

@@ -156,35 +156,6 @@ async function copyMetaChartImage() {
         {{ p.t('statisticsPage.tierListNoData') }}
       </div>
       <template v-else>
-        <form class="meta-highlight" role="search" @submit.prevent="applyHighlight">
-          <label for="meta-highlight-input" class="meta-highlight-label">
-            {{ p.t('statisticsPage.metaHighlightLabel') }}
-          </label>
-          <input
-            id="meta-highlight-input"
-            v-model="highlightQuery"
-            list="meta-highlight-options"
-            type="search"
-            autocomplete="off"
-            class="meta-highlight-input"
-            :placeholder="p.t('statisticsPage.metaHighlightPlaceholder')"
-            @change="applyHighlight"
-          />
-          <datalist id="meta-highlight-options">
-            <option v-for="r in chartRows" :key="r.championId" :value="nameOf(r.championId)" />
-          </datalist>
-          <button
-            v-if="selectedId != null"
-            type="button"
-            class="meta-highlight-clear"
-            @click="clearHighlight"
-          >
-            {{ p.t('statisticsPage.metaHighlightClear') }}
-          </button>
-          <span v-if="highlightMiss" class="text-xs text-error" role="status">
-            {{ p.t('statisticsPage.metaHighlightMiss') }}
-          </span>
-        </form>
         <div class="meta-chart-layout">
           <StatisticsTierListBubbleChart
             ref="bubbleChartRef"
@@ -192,6 +163,41 @@ async function copyMetaChartImage() {
             :highlight-id="selectedId"
             @select="onBubbleSelect"
           >
+            <template #toolbar-leading>
+              <form class="meta-highlight" role="search" @submit.prevent="applyHighlight">
+                <label for="meta-highlight-input" class="meta-highlight-label">
+                  {{ p.t('statisticsPage.metaHighlightLabel') }}
+                </label>
+                <input
+                  id="meta-highlight-input"
+                  v-model="highlightQuery"
+                  list="meta-highlight-options"
+                  type="search"
+                  autocomplete="off"
+                  class="meta-highlight-input"
+                  :placeholder="p.t('statisticsPage.metaHighlightPlaceholder')"
+                  @change="applyHighlight"
+                />
+                <datalist id="meta-highlight-options">
+                  <option
+                    v-for="r in chartRows"
+                    :key="r.championId"
+                    :value="nameOf(r.championId)"
+                  />
+                </datalist>
+                <button
+                  v-if="selectedId != null"
+                  type="button"
+                  class="meta-highlight-clear"
+                  @click="clearHighlight"
+                >
+                  {{ p.t('statisticsPage.metaHighlightClear') }}
+                </button>
+                <span v-if="highlightMiss" class="text-xs text-error" role="status">
+                  {{ p.t('statisticsPage.metaHighlightMiss') }}
+                </span>
+              </form>
+            </template>
             <template #toolbar-actions>
               <button
                 type="button"
@@ -370,7 +376,8 @@ async function copyMetaChartImage() {
 <style scoped>
 .meta-highlight {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-width: 0;
   align-items: center;
   gap: 8px;
 }

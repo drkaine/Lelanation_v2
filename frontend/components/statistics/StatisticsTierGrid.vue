@@ -289,8 +289,9 @@ function percent(ratio: number): string {
 }
 
 .stg-pr {
-  color: var(--color-grey-200);
-  font-size: 0.65rem;
+  color: var(--color-grey-50);
+  font-size: 0.7rem;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
