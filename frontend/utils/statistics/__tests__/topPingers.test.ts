@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { topPingers } from '../topPingers'
+import { pingColumnsForMode, topPingers } from '../topPingers'
 
 describe('topPingers', () => {
   const rows = [
@@ -18,5 +18,15 @@ describe('topPingers', () => {
   it('handles empty and non-finite input', () => {
     expect(topPingers([], 8)).toEqual([])
     expect(topPingers([{ championId: 1, totalPerGame: Number.NaN }], 8)).toEqual([])
+  })
+})
+
+describe('pingColumnsForMode', () => {
+  it('simple: the three named key pings of the mock', () => {
+    expect(pingColumnsForMode('simple')).toEqual(['danger', 'onMyWay', 'assistMe'])
+  })
+  it('detailed: every ping type', () => {
+    expect(pingColumnsForMode('detailed')).toHaveLength(10)
+    expect(pingColumnsForMode('detailed')).toContain('enemyVision')
   })
 })

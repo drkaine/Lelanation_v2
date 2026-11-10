@@ -745,13 +745,13 @@
 
       <!-- Contenu principal : à côté des filtres, même hauteur -->
       <div
-        class="min-w-0 flex-1 p-4 lg:px-3 lg:pb-4 lg:pt-0"
+        class="min-w-0 flex-1 py-4 max-lg:px-0 lg:px-3 lg:pb-4 lg:pt-0"
         :class="[showFiltersPanel ? 'max-lg:pb-20' : 'pt-2']"
       >
         <div class="w-full">
           <div
             v-if="showFiltersPanel && (mobileFilterChips.length || mobileCanAddRole)"
-            class="statistics-filter-chips mb-3 flex flex-wrap gap-2 lg:hidden"
+            class="statistics-filter-chips mb-3 flex flex-wrap gap-2 px-2 lg:hidden"
           >
             <button
               v-for="chip in mobileFilterChips"

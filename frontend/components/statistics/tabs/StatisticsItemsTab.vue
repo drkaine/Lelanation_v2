@@ -18,9 +18,11 @@ import { matchesItemSearch } from '~/utils/multilingualEntitySearch'
 import { useToggleSet } from '~/composables/useToggleSet'
 import {
   ITEM_TYPE_CHIPS,
+  classifyItemType,
   countItemTypes,
   type ItemTypeChip,
 } from '~/utils/statistics/itemTypeCounts'
+import { championMobileBarPct } from '~/utils/statistics/championMobileCards'
 
 const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
 const itemsStore = useItemsStore()
@@ -52,7 +54,7 @@ type TableRow = RawItemRow & {
   goldEfficiency: number | null
 }
 
-const { sortBy, sortDir, toggleSort, sortIcon } = useTableSort<SortKey>({ resettable: true })
+const { sortBy, sortDir, toggleSort } = useTableSort<SortKey>({ resettable: true })
 const { set: expandedItemKeys, toggle: toggleItemCardExpanded } = useToggleSet<string>()
 
 function itemRowKey(row: TableRow): string {
@@ -69,12 +71,15 @@ const baseRows = computed<TableRow[]>(() => {
   const d = p.overviewDetailData
   if (!d) return []
 
-  const pushTyped = (type: ItemType, rows: RawItemRow[] | undefined, out: TableRow[]) => {
+  const seen = new Set<number>()
+  const pushTyped = (rows: RawItemRow[] | undefined, out: TableRow[]) => {
     for (const row of rows ?? []) {
+      if (seen.has(row.itemId)) continue
+      seen.add(row.itemId)
       const item = itemById.value.get(row.itemId)
       out.push({
         ...row,
-        type,
+        type: classifyItemType(item),
         deltaPick: null,
         deltaWin: null,
         goldValue: item ? getItemGoldValue(item) : null,
@@ -84,10 +89,8 @@ const baseRows = computed<TableRow[]>(() => {
   }
 
   const out: TableRow[] = []
-  pushTyped('starter', d.itemsStarters, out)
-  pushTyped('core', d.itemsCores, out)
-  pushTyped('boots', d.itemsBoots, out)
-  pushTyped('final', d.itemsFinals, out)
+  pushTyped(d.items, out)
+  pushTyped(d.itemsBoots, out)
   return out
 })
 
@@ -95,13 +98,11 @@ const baselineByKey = computed<Map<string, RawItemRow>>(() => {
   const b = p.overviewDetailBaselineData
   const map = new Map<string, RawItemRow>()
   if (!b) return map
-  const add = (type: ItemType, rows: RawItemRow[] | undefined) => {
-    for (const row of rows ?? []) map.set(`${type}:${row.itemId}`, row)
+  const add = (rows: RawItemRow[] | undefined) => {
+    for (const row of rows ?? []) map.set(String(row.itemId), row)
   }
-  add('starter', b.itemsStarters)
-  add('core', b.itemsCores)
-  add('boots', b.itemsBoots)
-  add('final', b.itemsFinals)
+  add(b.items)
+  add(b.itemsBoots)
   return map
 })
 
@@ -118,7 +119,7 @@ function deltaWhenComparison(
 
 const tableRows = computed<TableRow[]>(() =>
   baseRows.value.map(row => {
-    const baseline = baselineByKey.value.get(`${row.type}:${row.itemId}`)
+    const baseline = baselineByKey.value.get(String(row.itemId))
     return {
       ...row,
       deltaPick: deltaWhenComparison(row.pickrate, baseline?.pickrate),
@@ -128,8 +129,14 @@ const tableRows = computed<TableRow[]>(() =>
 )
 
 const itemTypeCounts = computed(() => countItemTypes(tableRows.value))
-const itemTypeChipLabel = (chip: ItemTypeChip) =>
-  chip === 'all' ? p.t('statisticsPage.itemsTypeAll') : typeLabel(chip)
+const ITEM_CHIP_LABEL_KEYS: Record<ItemTypeChip, string> = {
+  all: 'statisticsPage.itemsTypeAll',
+  final: 'statisticsPage.itemsChipFinal',
+  core: 'statisticsPage.itemsChipCore',
+  boots: 'statisticsPage.itemsChipBoots',
+  starter: 'statisticsPage.itemsChipStarter',
+}
+const itemTypeChipLabel = (chip: ItemTypeChip) => p.t(ITEM_CHIP_LABEL_KEYS[chip])
 const setItemTypeChip = (chip: ItemTypeChip) => {
   p.itemsTypeFilter = chip
 }
@@ -275,6 +282,49 @@ const itemsMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
   return opts
 })
 
+interface DesktopColumn {
+  sort: SortKey
+  deltaSort?: SortKey
+  labelKey: string
+  tooltipKey?: string
+  cls: string
+}
+
+const desktopColumns = computed<DesktopColumn[]>(() => [
+  {
+    sort: 'item',
+    labelKey: 'statisticsPage.itemsColItem',
+    tooltipKey: 'statisticsPage.itemsTooltipItem',
+    cls: 'it-dleft',
+  },
+  { sort: 'goldValue', labelKey: 'statisticsPage.itemsColCost', cls: 'it-dnum' },
+  { sort: 'goldEfficiency', labelKey: 'statisticsPage.itemsColProfit', cls: 'it-dnum' },
+  {
+    sort: 'pickrate',
+    deltaSort: 'deltaPick',
+    labelKey: 'statisticsPage.itemsColBoughtIn',
+    cls: 'it-dleft',
+  },
+  {
+    sort: 'winrate',
+    deltaSort: 'deltaWin',
+    labelKey: 'statisticsPage.overviewDetailWinRate',
+    cls: 'it-dnum it-dlast',
+  },
+])
+
+const pickrateMax = computed(() =>
+  Math.max(0, ...sortedRows.value.map(r => Number(r.pickrate) || 0))
+)
+
+function showDelta(v: number | null | undefined): boolean {
+  return hasComparison.value && !p.overviewDetailBaselinePending && v != null
+}
+
+function deltaTone(v: number): 'up' | 'down' | 'flat' {
+  return v > 0 ? 'up' : v < 0 ? 'down' : 'flat'
+}
+
 function fmtPct(value: number | null | undefined): string {
   if (value == null) return '—'
   return `${Number(value).toFixed(2)}%`
@@ -321,29 +371,24 @@ function deltaClass(value: number | null | undefined): string {
     <div v-else-if="p.overviewDetailError" class="rounded border border-error/50 p-3 text-error">
       {{ p.t('statisticsPage.overviewDetailTimeout') }}
     </div>
-    <template v-else-if="tableRows.length > 0 || (p.overviewDetailData?.itemSets?.length ?? 0) > 0">
-      <StatisticsItemSetsOverviewPanel
-        v-if="p.overviewDetailData?.itemSets?.length"
-        :game-version="p.gameVersion || p.versionStore.currentVersion || ''"
-        :data="p.overviewDetailData"
-        :baseline="p.overviewDetailBaselineData"
-        :baseline-pending="p.overviewDetailBaselinePending"
-        :comparison-version="p.overviewDetailComparisonVersion"
-      />
+    <template v-else-if="tableRows.length > 0">
       <div v-if="tableRows.length > 0" class="statistics-items-tab space-y-3">
-        <div class="items-type" role="group" :aria-label="p.t('statisticsPage.itemsTypeAria')">
-          <button
-            v-for="chip in ITEM_TYPE_CHIPS"
-            :key="chip"
-            type="button"
-            class="items-type-btn"
-            :class="{ 'is-active': itemTypeFilter === chip }"
-            :aria-pressed="itemTypeFilter === chip"
-            @click="setItemTypeChip(chip)"
-          >
-            {{ itemTypeChipLabel(chip) }}
-            <span class="items-type-count">{{ itemTypeCounts[chip] }}</span>
-          </button>
+        <div class="it-head">
+          <h2 class="it-title">{{ p.t('statisticsPage.overviewDetailItems') }}</h2>
+          <div class="items-type" role="group" :aria-label="p.t('statisticsPage.itemsTypeAria')">
+            <button
+              v-for="chip in ITEM_TYPE_CHIPS"
+              :key="chip"
+              type="button"
+              class="items-type-btn"
+              :class="{ 'is-active': itemTypeFilter === chip }"
+              :aria-pressed="itemTypeFilter === chip"
+              @click="setItemTypeChip(chip)"
+            >
+              {{ itemTypeChipLabel(chip) }}
+              <template v-if="chip === 'all'"> · {{ itemTypeCounts[chip] }}</template>
+            </button>
+          </div>
         </div>
         <StatisticsMobileSortBar
           id="items-mobile-sort"
@@ -461,144 +506,107 @@ function deltaClass(value: number | null | undefined): string {
           </article>
         </div>
 
-        <div
-          class="statistics-overview-surface hidden w-full overflow-x-auto rounded-lg border border-primary/30 md:block"
-        >
-          <div class="tier-list-lolalytics w-full min-w-[1180px] text-[13px]">
-            <div
-              class="tier-list-lolalytics-head sticky top-0 z-10 flex h-auto min-h-8 w-full items-stretch justify-between border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
-            >
-              <button
-                type="button"
-                class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[320px] shrink-0 items-center justify-start border-b border-t border-black border-t-[var(--color-grey-300)] px-2 hover:bg-primary/25"
-                :title="p.t('statisticsPage.itemsTooltipItem')"
-                @click="toggleSort('item')"
-              >
-                {{ p.t('statisticsPage.overviewDetailItems') }}{{ sortIcon('item') }}
-              </button>
-              <div
-                class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[160px] shrink-0 flex-col justify-center border-b border-t border-black border-t-[var(--color-grey-300)] px-2 py-1"
-                :title="p.t('statisticsPage.itemsTooltipType')"
-              >
-                <button
-                  type="button"
-                  class="w-fit hover:bg-primary/25"
-                  :title="p.t('statisticsPage.itemsTooltipType')"
-                  @click="toggleSort('type')"
+        <div class="it-dtable-wrap hidden md:block">
+          <table class="it-dtable">
+            <thead>
+              <tr class="it-dhead">
+                <th
+                  v-for="col in desktopColumns"
+                  :key="col.sort"
+                  scope="col"
+                  :class="[col.cls, { 'is-sorted': sortBy === col.sort }]"
+                  :title="col.tooltipKey ? p.t(col.tooltipKey) : undefined"
+                  :aria-sort="
+                    sortBy === col.sort ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+                  "
                 >
-                  {{ p.t('statisticsPage.itemsColType') }}{{ sortIcon('type') }}
-                </button>
-              </div>
-              <button
-                type="button"
-                class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[100px] shrink-0 items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
-                @click="toggleSort('goldValue')"
-              >
-                {{ p.t('statisticsPage.itemsColGoldValue') }}{{ sortIcon('goldValue') }}
-              </button>
-              <button
-                type="button"
-                class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[100px] shrink-0 items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
-                @click="toggleSort('goldEfficiency')"
-              >
-                {{ p.t('statisticsPage.itemsColGoldEfficiency') }}{{ sortIcon('goldEfficiency') }}
-              </button>
-              <button
-                type="button"
-                class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[120px] shrink-0 items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
-                :title="p.t('statisticsPage.itemsTooltipPickrate')"
-                @click="toggleSort('pickrate')"
-              >
-                {{ p.t('statisticsPage.overviewDetailPickRate') }} %{{ sortIcon('pickrate') }}
-              </button>
-              <button
-                type="button"
-                class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[120px] shrink-0 items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
-                :title="p.t('statisticsPage.itemsTooltipDeltaPick')"
-                @click="toggleSort('deltaPick')"
-              >
-                {{ p.t('statisticsPage.itemsColDeltaPick') }}{{ sortIcon('deltaPick') }}
-              </button>
-              <button
-                type="button"
-                class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[120px] shrink-0 items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
-                :title="p.t('statisticsPage.itemsTooltipWinrate')"
-                @click="toggleSort('winrate')"
-              >
-                {{ p.t('statisticsPage.overviewDetailWinRate') }} %{{ sortIcon('winrate') }}
-              </button>
-              <button
-                type="button"
-                class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[120px] shrink-0 items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
-                :title="p.t('statisticsPage.itemsTooltipDeltaWin')"
-                @click="toggleSort('deltaWin')"
-              >
-                {{ p.t('statisticsPage.itemsColDeltaWin') }}{{ sortIcon('deltaWin') }}
-              </button>
-            </div>
-
-            <div
-              v-for="row in paginatedRows"
-              :key="`${row.type}-${row.itemId}`"
-              class="tier-list-lolalytics-row flex min-h-[52px] w-full items-center justify-between py-0.5 text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
-            >
-              <div class="tier-list-lolalytics-td flex w-[320px] shrink-0 items-center gap-2 px-2">
-                <img
-                  v-if="p.itemImageName(row.itemId)"
-                  loading="lazy"
-                  decoding="async"
-                  :src="p.getItemImageUrl(p.gameVersion, p.itemImageName(row.itemId)!)"
-                  :alt="p.itemName(row.itemId) || ''"
-                  class="h-[50px] w-[50px] shrink-0 rounded border border-black/30 object-cover"
-                  width="50"
-                  height="50"
-                />
-                <StatisticsItemDetailLink :item-id="row.itemId" class="min-w-0 truncate text-left">
-                  <span class="font-medium text-accent underline decoration-accent/40">{{
-                    p.itemName(row.itemId) || row.itemId
-                  }}</span>
-                </StatisticsItemDetailLink>
-              </div>
-              <div
-                class="tier-list-lolalytics-td flex w-[160px] shrink-0 items-center px-2 text-text/90"
-              >
-                {{ typeLabel(row.type) }}
-              </div>
-              <div
-                class="tier-list-lolalytics-td flex w-[100px] shrink-0 items-center justify-center tabular-nums text-text/90"
-              >
-                {{ fmtGoldValue(row.goldValue) }}
-              </div>
-              <div
-                class="tier-list-lolalytics-td flex w-[100px] shrink-0 items-center justify-center tabular-nums text-text/90"
-              >
-                {{ fmtGoldEfficiency(row) }}
-              </div>
-              <div
-                class="tier-list-lolalytics-td flex w-[120px] shrink-0 items-center justify-center tabular-nums text-text/90"
-              >
-                {{ fmtPct(row.pickrate) }}
-              </div>
-              <div
-                class="tier-list-lolalytics-td flex w-[120px] shrink-0 items-center justify-center tabular-nums"
-                :class="deltaClass(row.deltaPick)"
-              >
-                {{ fmtDelta(row.deltaPick) }}
-              </div>
-              <div
-                class="tier-list-lolalytics-td flex w-[120px] shrink-0 items-center justify-center tabular-nums"
-                :class="winrateClass(row.winrate)"
-              >
-                {{ fmtPct(row.winrate) }}
-              </div>
-              <div
-                class="tier-list-lolalytics-td flex w-[120px] shrink-0 items-center justify-center tabular-nums"
-                :class="deltaClass(row.deltaWin)"
-              >
-                {{ fmtDelta(row.deltaWin) }}
-              </div>
-            </div>
-          </div>
+                  <button type="button" class="it-dsort" @click="toggleSort(col.sort)">
+                    {{ p.t(col.labelKey) }}
+                    <svg
+                      v-if="sortBy === col.sort"
+                      width="10"
+                      height="10"
+                      viewBox="0 0 10 10"
+                      aria-hidden="true"
+                      :style="sortDir === 'asc' ? 'transform:rotate(180deg)' : ''"
+                    >
+                      <path
+                        d="M2 3.5 5 6.5 8 3.5"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    v-if="hasComparison && col.deltaSort"
+                    type="button"
+                    class="it-dsort-delta"
+                    :class="{ 'is-on': sortBy === col.deltaSort }"
+                    @click="toggleSort(col.deltaSort)"
+                  >
+                    {{ p.t('statisticsPage.championTableDeltaSymbol') }}
+                  </button>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in paginatedRows" :key="`${row.type}-${row.itemId}`" class="it-drow">
+                <th scope="row" class="it-dleft it-ditem">
+                  <div class="it-ditem-cell">
+                    <img
+                      v-if="p.itemImageName(row.itemId)"
+                      loading="lazy"
+                      decoding="async"
+                      :src="p.getItemImageUrl(p.gameVersion, p.itemImageName(row.itemId)!)"
+                      alt=""
+                      class="it-dicon"
+                      width="32"
+                      height="32"
+                    />
+                    <span class="min-w-0">
+                      <StatisticsItemDetailLink :item-id="row.itemId" class="it-dname">
+                        {{ p.itemName(row.itemId) || row.itemId }}
+                      </StatisticsItemDetailLink>
+                      <span v-if="itemTypeFilter === 'all'" class="it-dtype">{{
+                        typeLabel(row.type)
+                      }}</span>
+                    </span>
+                  </div>
+                </th>
+                <td class="it-dnum it-dmuted">{{ fmtGoldValue(row.goldValue) }}</td>
+                <td class="it-dnum it-dmuted">{{ fmtGoldEfficiency(row) }}</td>
+                <td class="it-dbar-cell">
+                  <div class="it-dbar-row">
+                    <span class="it-dbar" aria-hidden="true">
+                      <span
+                        class="it-dbar-fill"
+                        :style="{
+                          width: championMobileBarPct(Number(row.pickrate) || 0, pickrateMax) + '%',
+                        }"
+                      />
+                    </span>
+                    <span class="it-dval it-dstrong">{{ fmtPct(row.pickrate) }}</span>
+                  </div>
+                  <span
+                    v-if="showDelta(row.deltaPick)"
+                    class="it-ddelta it-ddelta-bar"
+                    :class="`is-${deltaTone(row.deltaPick!)}`"
+                    >{{ fmtDelta(row.deltaPick) }}</span
+                  >
+                </td>
+                <td class="it-dnum it-dlast">
+                  <span class="it-dval">{{ fmtPct(row.winrate) }}</span>
+                  <span
+                    v-if="showDelta(row.deltaWin)"
+                    class="it-ddelta"
+                    :class="`is-${deltaTone(row.deltaWin!)}`"
+                    >{{ fmtDelta(row.deltaWin) }}</span
+                  >
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
         <StatisticsRangePagination
@@ -617,34 +625,189 @@ function deltaClass(value: number | null | undefined): string {
 </template>
 
 <style scoped>
+.it-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.it-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #f0e6d2;
+}
 .items-type {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 .items-type-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
-  border: 1px solid rgb(200 155 60 / 0.35);
-  border-radius: 999px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid #0a323c;
+  border-radius: 18px;
   background: transparent;
-  color: var(--color-grey-50, #a09b8c);
-  font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  color: #cbc3b0;
+  font-size: 14px;
   cursor: pointer;
 }
-.items-type-btn.is-active {
-  background: var(--color-gold-300, #c89b3c);
-  border-color: var(--color-gold-300, #c89b3c);
-  color: var(--color-blue-600, #0a1428);
+.items-type-btn:hover {
+  color: #f0e6d2;
 }
-.items-type-count {
+.items-type-btn.is-active {
+  border-color: #0a323c;
+  background: #0a323c;
+  color: #f0e6d2;
+  font-weight: 600;
+}
+.it-dtable-wrap {
+  overflow-x: auto;
+  background: #0a1428;
+  border: 1px solid #463714;
+  border-radius: 12px;
+}
+.it-dtable {
+  width: 100%;
+  min-width: 900px;
+  border-collapse: collapse;
+  font-size: 14px;
+  color: #f0e6d2;
+}
+.it-dhead th {
+  padding: 12px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #a09b8c;
+  border-bottom: 1px solid #0a323c;
+  white-space: nowrap;
+}
+.it-dhead th.is-sorted {
+  color: #c8aa6e;
+}
+.it-dsort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: inherit;
+}
+.it-dsort:hover {
+  color: #f0e6d2;
+}
+.it-dsort-delta {
+  margin-left: 4px;
+  font-size: 11px;
+  color: #5b5a56;
+}
+.it-dsort-delta.is-on,
+.it-dsort-delta:hover {
+  color: #c8aa6e;
+}
+.it-dleft {
+  text-align: left;
+}
+.it-dhead th:first-child,
+.it-ditem {
+  padding-left: 20px;
+}
+.it-dnum {
+  text-align: right;
+  padding: 10px 16px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.it-dhead th.it-dlast,
+.it-dlast {
+  padding-right: 20px;
+}
+.it-ditem {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  font-weight: 500;
+}
+.it-ditem-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.it-dicon {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 6px;
+  object-fit: cover;
+}
+.it-dname {
+  display: block;
+  text-align: left;
+  color: #f0e6d2;
+}
+.it-dname:hover {
+  color: #c8aa6e;
+}
+.it-dtype {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: #5b5a56;
+}
+.it-dmuted {
+  color: #cbc3b0;
   font-variant-numeric: tabular-nums;
-  opacity: 0.75;
+}
+.it-drow {
+  border-bottom: 1px solid #1e2328;
+}
+.it-drow:hover {
+  background: #0e1a2e;
+}
+.it-dval {
+  display: block;
+  font-variant-numeric: tabular-nums;
+}
+.it-dstrong {
+  font-weight: 600;
+}
+.it-ddelta {
+  display: block;
+  font-size: 11px;
+  line-height: 1.2;
+  color: #5b5a56;
+}
+.it-ddelta-bar {
+  text-align: right;
+}
+.it-ddelta.is-up {
+  color: #0ac8b9;
+}
+.it-ddelta.is-down {
+  color: #e2665a;
+}
+.it-dbar-cell {
+  min-width: 240px;
+  padding: 10px 16px;
+  vertical-align: middle;
+}
+.it-dbar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.it-dbar {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: #1e2328;
+  overflow: hidden;
+}
+.it-dbar-fill {
+  display: block;
+  height: 100%;
+  background: #c89b3c;
+  border-radius: 4px;
+}
+.it-dbar-row .it-dval {
+  width: 64px;
+  text-align: right;
 }
 </style>

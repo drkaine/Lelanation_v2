@@ -19,11 +19,11 @@ import {
   type StatisticsIndexPageCtx,
 } from '~/composables/statistics/statisticsPageCtx'
 import {
-  PATCH_NOTES_CHIPS,
   applyPatchNotesChip,
   patchNotesChipActive,
   type PatchNotesChip,
 } from '~/utils/statistics/patchNotesChips'
+import { PATCH_NOTES_TARGET_SEGMENTS, patchNotesBar } from '~/utils/statistics/patchNotesBar'
 
 const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
 
@@ -156,15 +156,21 @@ function changeTypeLabel(type: PatchNotesChangeType): string {
   return String(p.t('patchNotesPage.changeTypes.adjustment') ?? 'Adjust')
 }
 
-function changeTypeClass(type: PatchNotesChangeType): string {
-  if (type === 'up') return 'text-info'
-  if (type === 'nerf') return 'text-error/70'
-  return 'text-accent-light'
-}
-
 function sortIndicator(col: PatchNotesSortCol): string {
   if (p.patchNotesSortColumn !== col) return ''
   return p.patchNotesSortDir === 'asc' ? ' ▲' : ' ▼'
+}
+
+function isSorted(col: PatchNotesSortCol): boolean {
+  return p.patchNotesSortColumn === col
+}
+
+const maxTotalChanges = computed(() =>
+  Math.max(0, ...(p.paginatedPatchNotesRows ?? []).map((r: PatchNotesStatsRow) => r.totalChanges))
+)
+
+function barOf(row: PatchNotesStatsRow) {
+  return patchNotesBar(row, maxTotalChanges.value)
 }
 
 function patchNotesMessage(message: string | undefined): string {
@@ -181,26 +187,30 @@ function patchNotesMessage(message: string | undefined): string {
 
 <template>
   <div class="space-y-3">
-    <div
-      class="statistics-patch-notes-chips flex gap-2 overflow-x-auto pb-1 md:hidden"
-      role="group"
-      :aria-label="p.t('statisticsPage.patchNotesChipsAria')"
-    >
-      <button
-        v-for="chip in PATCH_NOTES_CHIPS"
-        :key="chip"
-        type="button"
-        class="shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors"
-        :class="
-          isChipActive(chip)
-            ? 'border-accent bg-accent/15 text-accent'
-            : 'border-primary/40 text-text/80 hover:border-accent/60'
-        "
-        :aria-pressed="isChipActive(chip)"
-        @click="onChip(chip)"
+    <h2 class="pn-title hidden md:block">{{ p.t('statisticsPage.patchNotesTitle') }}</h2>
+    <div class="pn-toolbar">
+      <div
+        class="pn-seg-group"
+        role="group"
+        :aria-label="p.t('statisticsPage.patchNotesChipsAria')"
       >
-        {{ p.t(PATCH_NOTES_CHIP_LABEL_KEYS[chip]) }}
-      </button>
+        <button
+          v-for="seg in PATCH_NOTES_TARGET_SEGMENTS"
+          :key="seg"
+          type="button"
+          class="pn-seg-btn"
+          :class="{ 'is-active': isChipActive(seg) }"
+          :aria-pressed="isChipActive(seg)"
+          @click="onChip(seg)"
+        >
+          {{ p.t(PATCH_NOTES_CHIP_LABEL_KEYS[seg]) }}
+        </button>
+      </div>
+      <div class="pn-legend">
+        <span><i class="is-up" />{{ changeTypeLabel('up') }}</span>
+        <span><i class="is-nerf" />{{ changeTypeLabel('nerf') }}</span>
+        <span><i class="is-ajust" />{{ changeTypeLabel('ajust') }}</span>
+      </div>
     </div>
     <div v-if="p.patchNotesPending" class="text-text/70">{{ p.t('statisticsPage.loading') }}</div>
     <div
@@ -226,153 +236,79 @@ function patchNotesMessage(message: string | undefined): string {
         :options="patchNotesMobileSortOptionsComputed"
       />
 
-      <div class="statistics-patch-notes-mobile-list space-y-2 md:hidden">
-        <article
+      <ol class="pn-mlist md:hidden">
+        <li
           v-for="row in p.paginatedPatchNotesRows"
           :key="'pn-mobile-' + row.targetType + '-' + row.targetId"
-          class="statistics-patch-notes-mobile-card statistics-panel-surface p-3"
+          class="pn-mcard"
         >
-          <div class="flex items-center gap-3">
-            <img
-              v-if="entityImageUrl(row)"
-              loading="lazy"
-              decoding="async"
-              :src="entityImageUrl(row)!"
-              :alt="entityLabel(row)"
-              class="h-11 w-11 shrink-0 rounded-full object-cover"
-              width="44"
-              height="44"
-            />
-            <div
-              v-else
-              class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-text/70"
-            >
-              ?
-            </div>
-            <div class="min-w-0 flex-1">
-              <div class="truncate text-sm font-semibold text-accent">{{ entityLabel(row) }}</div>
-              <div class="text-[10px] uppercase tracking-wide text-text/50">
-                {{ targetTypeLabel(row.targetType) }}
-              </div>
-            </div>
-            <div class="text-right">
-              <div class="text-[10px] uppercase text-text/50">
-                {{ p.t('statisticsPage.patchNotesColTotal') }}
-              </div>
-              <div class="text-xl font-bold tabular-nums text-text">{{ row.totalChanges }}</div>
-            </div>
-          </div>
-          <div class="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
-            <div class="rounded bg-info/10 px-2 py-1.5">
-              <div class="text-[10px] uppercase text-text/55">
-                {{ p.t('statisticsPage.patchNotesColUp') }}
-              </div>
-              <div class="font-bold tabular-nums text-info">{{ row.countUp }}</div>
-            </div>
-            <div class="rounded bg-error/10 px-2 py-1.5">
-              <div class="text-[10px] uppercase text-text/55">
-                {{ p.t('statisticsPage.patchNotesColNerf') }}
-              </div>
-              <div class="font-bold tabular-nums text-error/70">{{ row.countNerf }}</div>
-            </div>
-            <div class="rounded bg-accent/10 px-2 py-1.5">
-              <div class="text-[10px] uppercase text-text/55">
-                {{ p.t('statisticsPage.patchNotesColAdjust') }}
-              </div>
-              <div class="font-bold tabular-nums text-accent-light">{{ row.countAjust }}</div>
-            </div>
-          </div>
+          <img
+            v-if="entityImageUrl(row)"
+            loading="lazy"
+            decoding="async"
+            :src="entityImageUrl(row)!"
+            :alt="entityLabel(row)"
+            class="pn-img pn-mimg"
+            width="32"
+            height="32"
+          />
+          <div v-else class="pn-img pn-img-empty pn-mimg">?</div>
+          <span class="pn-mname">
+            <span class="pn-name">{{ entityLabel(row) }}</span>
+            <span class="pn-type">{{ targetTypeLabel(row.targetType) }}</span>
+          </span>
+          <span class="pn-mtotal">{{ row.totalChanges }}</span>
           <div
-            class="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-text/75"
+            class="pn-bar pn-mbar"
+            role="img"
+            :aria-label="
+              p.t('statisticsPage.patchNotesCountBuffs', { n: row.countUp }) +
+              ', ' +
+              p.t('statisticsPage.patchNotesCountNerfs', { n: row.countNerf }) +
+              ', ' +
+              p.t('statisticsPage.patchNotesCountAdjusts', { n: row.countAjust })
+            "
+            :style="{ width: barOf(row).widthPct + '%' }"
           >
-            <span>
-              {{ p.t('statisticsPage.patchNotesColLastMod') }}:
-              <strong>{{ row.lastModPatch }}</strong>
-              <span class="ml-1" :class="changeTypeClass(row.lastModType)">
-                {{ changeTypeLabel(row.lastModType) }}
-              </span>
-            </span>
-            <span>
-              {{ p.t('statisticsPage.patchNotesColRegularity') }}:
-              <strong class="tabular-nums">{{
-                p.t('statisticsPage.patchNotesTouchedIn', {
-                  n: row.patchesTouched,
-                  total: row.totalPatches,
-                })
-              }}</strong>
-            </span>
+            <span
+              v-for="seg in barOf(row).segments"
+              :key="seg.kind"
+              class="pn-seg"
+              :class="'is-' + seg.kind"
+              :style="{ flex: seg.count }"
+            />
           </div>
-        </article>
-      </div>
+          <span class="pn-mlast" :class="'is-' + row.lastModType">
+            {{ changeTypeLabel(row.lastModType) }} {{ row.lastModPatch }}
+          </span>
+        </li>
+      </ol>
 
-      <div
-        class="tier-list-mobile-rotate statistics-overview-surface hidden w-full overflow-x-auto rounded-lg border border-primary/30 md:block"
-      >
-        <table class="statistics-table w-full min-w-[56rem] border-collapse text-sm">
+      <div class="pn-dtable-wrap hidden md:block">
+        <table class="pn-dtable">
           <thead>
-            <tr
-              class="sticky top-0 z-10 border-b border-black bg-[var(--color-grey-300)] text-left text-xs uppercase tracking-wide text-text-primary/85"
-            >
-              <th class="px-2 py-2">
-                <button
-                  type="button"
-                  class="font-semibold hover:text-text"
-                  @click="p.setPatchNotesSort('target')"
-                >
+            <tr class="pn-dhead">
+              <th class="text-left" :class="{ 'is-sorted': isSorted('target') }">
+                <button type="button" class="pn-dsort" @click="p.setPatchNotesSort('target')">
                   {{ p.t('statisticsPage.patchNotesColTarget') }}{{ sortIndicator('target') }}
                 </button>
               </th>
-              <th class="px-2 py-2 text-right">
-                <button
-                  type="button"
-                  class="font-semibold hover:text-text"
-                  @click="p.setPatchNotesSort('countUp')"
-                >
-                  {{ p.t('statisticsPage.patchNotesColUp') }}{{ sortIndicator('countUp') }}
+              <th class="text-left" :class="{ 'is-sorted': isSorted('totalChanges') }">
+                <button type="button" class="pn-dsort" @click="p.setPatchNotesSort('totalChanges')">
+                  {{ p.t('statisticsPage.patchNotesColChanges')
+                  }}{{ sortIndicator('totalChanges') }}
                 </button>
               </th>
-              <th class="px-2 py-2 text-right">
-                <button
-                  type="button"
-                  class="font-semibold hover:text-text"
-                  @click="p.setPatchNotesSort('countNerf')"
-                >
-                  {{ p.t('statisticsPage.patchNotesColNerf') }}{{ sortIndicator('countNerf') }}
-                </button>
+              <th class="text-right" :class="{ 'is-sorted': isSorted('totalChanges') }">
+                {{ p.t('statisticsPage.patchNotesColTotal') }}
               </th>
-              <th class="px-2 py-2 text-right">
-                <button
-                  type="button"
-                  class="font-semibold hover:text-text"
-                  @click="p.setPatchNotesSort('countAjust')"
-                >
-                  {{ p.t('statisticsPage.patchNotesColAdjust') }}{{ sortIndicator('countAjust') }}
-                </button>
-              </th>
-              <th class="px-2 py-2 text-right">
-                <button
-                  type="button"
-                  class="font-semibold hover:text-text"
-                  @click="p.setPatchNotesSort('totalChanges')"
-                >
-                  {{ p.t('statisticsPage.patchNotesColTotal') }}{{ sortIndicator('totalChanges') }}
-                </button>
-              </th>
-              <th class="px-2 py-2">
-                <button
-                  type="button"
-                  class="font-semibold hover:text-text"
-                  @click="p.setPatchNotesSort('lastMod')"
-                >
+              <th class="text-left" :class="{ 'is-sorted': isSorted('lastMod') }">
+                <button type="button" class="pn-dsort" @click="p.setPatchNotesSort('lastMod')">
                   {{ p.t('statisticsPage.patchNotesColLastMod') }}{{ sortIndicator('lastMod') }}
                 </button>
               </th>
-              <th class="px-2 py-2 text-right">
-                <button
-                  type="button"
-                  class="font-semibold hover:text-text"
-                  @click="p.setPatchNotesSort('regularity')"
-                >
+              <th class="text-left" :class="{ 'is-sorted': isSorted('regularity') }">
+                <button type="button" class="pn-dsort" @click="p.setPatchNotesSort('regularity')">
                   {{ p.t('statisticsPage.patchNotesColRegularity')
                   }}{{ sortIndicator('regularity') }}
                 </button>
@@ -383,43 +319,61 @@ function patchNotesMessage(message: string | undefined): string {
             <tr
               v-for="row in p.paginatedPatchNotesRows"
               :key="'pn-' + row.targetType + '-' + row.targetId"
-              class="border-b border-primary/15 odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
+              class="pn-drow"
             >
-              <td class="px-2 py-2">
-                <div class="flex min-w-0 items-center gap-2">
+              <td>
+                <div class="pn-target">
                   <img
                     v-if="entityImageUrl(row)"
                     loading="lazy"
                     decoding="async"
                     :src="entityImageUrl(row)!"
                     :alt="entityLabel(row)"
-                    class="h-8 w-8 shrink-0 rounded-full object-cover"
+                    class="pn-img"
                     width="32"
                     height="32"
                   />
+                  <div v-else class="pn-img pn-img-empty">?</div>
                   <div class="min-w-0">
-                    <div class="truncate font-medium text-text">{{ entityLabel(row) }}</div>
-                    <div class="text-[10px] uppercase text-text/50">
-                      {{ targetTypeLabel(row.targetType) }}
-                    </div>
+                    <div class="pn-name">{{ entityLabel(row) }}</div>
+                    <div class="pn-type">{{ targetTypeLabel(row.targetType) }}</div>
                   </div>
                 </div>
               </td>
-              <td class="px-2 py-2 text-right tabular-nums text-info">{{ row.countUp }}</td>
-              <td class="px-2 py-2 text-right tabular-nums text-error/70">{{ row.countNerf }}</td>
-              <td class="px-2 py-2 text-right tabular-nums text-accent-light">
-                {{ row.countAjust }}
+              <td class="pn-changes">
+                <div class="pn-bar" :style="{ width: barOf(row).widthPct + '%' }">
+                  <span
+                    v-for="seg in barOf(row).segments"
+                    :key="seg.kind"
+                    class="pn-seg"
+                    :class="'is-' + seg.kind"
+                    :style="{ flex: seg.count }"
+                  />
+                </div>
+                <div class="pn-counts">
+                  <span class="is-up">{{
+                    p.t('statisticsPage.patchNotesCountBuffs', { n: row.countUp })
+                  }}</span>
+                  ·
+                  <span class="is-nerf">{{
+                    p.t('statisticsPage.patchNotesCountNerfs', { n: row.countNerf })
+                  }}</span>
+                  ·
+                  <span class="is-ajust">{{
+                    p.t('statisticsPage.patchNotesCountAdjusts', { n: row.countAjust })
+                  }}</span>
+                </div>
               </td>
-              <td class="px-2 py-2 text-right font-semibold tabular-nums">
-                {{ row.totalChanges }}
+              <td class="pn-total">{{ row.totalChanges }}</td>
+              <td>
+                <div class="pn-last">
+                  <span class="pn-last-ver">{{ row.lastModPatch }}</span>
+                  <span class="pn-pill" :class="'is-' + row.lastModType">
+                    {{ changeTypeLabel(row.lastModType) }}
+                  </span>
+                </div>
               </td>
-              <td class="px-2 py-2">
-                <span class="tabular-nums">{{ row.lastModPatch }}</span>
-                <span class="ml-1 text-xs" :class="changeTypeClass(row.lastModType)">
-                  {{ changeTypeLabel(row.lastModType) }}
-                </span>
-              </td>
-              <td class="px-2 py-2 text-right tabular-nums">
+              <td class="pn-touched">
                 {{
                   p.t('statisticsPage.patchNotesTouchedIn', {
                     n: row.patchesTouched,
@@ -441,3 +395,257 @@ function patchNotesMessage(message: string | undefined): string {
     </template>
   </div>
 </template>
+
+<style scoped>
+.pn-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #f0e6d2;
+}
+.pn-toolbar {
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pn-seg-group {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid #0a323c;
+  border-radius: 8px;
+  background: #0a1428;
+}
+.pn-seg-btn {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #a09b8c;
+}
+.pn-seg-btn:hover {
+  color: #f0e6d2;
+}
+.pn-seg-btn.is-active {
+  color: #f0e6d2;
+  font-weight: 600;
+  background: #0a323c;
+}
+.pn-legend {
+  display: flex;
+  gap: 14px;
+  font-size: 12px;
+  color: #a09b8c;
+}
+.pn-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.pn-legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+.is-up {
+  color: #0ac8b9;
+}
+.is-nerf {
+  color: #e2665a;
+}
+.is-ajust {
+  color: #0397ab;
+}
+.pn-legend i.is-up,
+.pn-seg.is-up {
+  background: #0ac8b9;
+}
+.pn-legend i.is-nerf,
+.pn-seg.is-nerf {
+  background: #e2665a;
+}
+.pn-legend i.is-ajust,
+.pn-seg.is-ajust {
+  background: #0397ab;
+}
+.pn-dtable-wrap {
+  overflow-x: auto;
+  background: #0a1428;
+  border: 1px solid #463714;
+  border-radius: 12px;
+}
+.pn-dtable {
+  width: 100%;
+  min-width: 960px;
+  border-collapse: collapse;
+  font-size: 14px;
+  color: #f0e6d2;
+}
+.pn-dhead th {
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #a09b8c;
+  border-bottom: 1px solid #0a323c;
+  white-space: nowrap;
+}
+.pn-dhead th.is-sorted {
+  color: #c8aa6e;
+}
+.pn-dsort {
+  color: inherit;
+  font-weight: inherit;
+}
+.pn-dsort:hover {
+  color: #f0e6d2;
+}
+.pn-drow td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #1e2328;
+  vertical-align: middle;
+}
+.pn-drow:last-child td {
+  border-bottom: 0;
+}
+.pn-drow:hover {
+  background: rgba(10, 50, 60, 0.35);
+}
+.pn-target {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.pn-img {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  object-fit: cover;
+  border: 1px solid #463714;
+}
+.pn-img-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #a09b8c;
+  background: #1e2328;
+}
+.pn-name {
+  font-weight: 600;
+  color: #f0e6d2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pn-type {
+  font-size: 11px;
+  color: #a09b8c;
+}
+.pn-changes {
+  min-width: 280px;
+}
+.pn-bar {
+  display: flex;
+  gap: 2px;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  min-width: 4px;
+}
+.pn-seg {
+  display: block;
+  height: 100%;
+}
+.pn-counts {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #5b5a56;
+}
+.pn-total {
+  text-align: right;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.pn-last {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pn-last-ver {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.pn-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 11px;
+  border: 1px solid currentColor;
+  font-size: 12px;
+  font-weight: 600;
+}
+.pn-touched {
+  color: #cbc3b0;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.pn-seg-group {
+  flex: 1 1 auto;
+}
+@media (min-width: 768px) {
+  .pn-seg-group {
+    flex: 0 0 auto;
+  }
+}
+.pn-seg-btn {
+  flex: 1;
+}
+.pn-mlist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pn-mcard {
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  gap: 6px 10px;
+  align-items: center;
+  padding: 10px 12px;
+  background: #0a1428;
+  border: 1px solid #463714;
+  border-radius: 10px;
+}
+.pn-mimg {
+  grid-row: span 2;
+}
+.pn-mname {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.pn-mtotal {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  text-align: right;
+  color: #f0e6d2;
+}
+.pn-mbar {
+  height: 8px;
+  border-radius: 4px;
+}
+.pn-mlast {
+  font-size: 11px;
+  white-space: nowrap;
+  text-align: right;
+}
+</style>

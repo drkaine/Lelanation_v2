@@ -407,7 +407,8 @@ Backend cron jobs run automatically:
 
 Add to server block:
 ```nginx
-add_header X-Frame-Options "SAMEORIGIN" always;
+# Pas de X-Frame-Options : l'app compagnon (Tauri) affiche le site en iframe.
+add_header Content-Security-Policy "frame-ancestors 'self' tauri://localhost http://tauri.localhost https://tauri.localhost http://127.0.0.1:17321" always;
 add_header X-Content-Type-Options "nosniff" always;
 add_header X-XSS-Protection "1; mode=block" always;
 add_header Referrer-Policy "no-referrer-when-downgrade" always;

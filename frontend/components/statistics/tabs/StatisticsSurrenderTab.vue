@@ -410,12 +410,6 @@ function rankIcon(rank: string): string {
 }
 
 @media (max-width: 768px) {
-  .statistics-surrender-tab {
-    margin-inline: -1rem;
-    width: calc(100% + 2rem);
-    max-width: 100vw;
-  }
-
   .statistics-surrender-mobile-card {
     width: 100%;
     padding-left: 0;

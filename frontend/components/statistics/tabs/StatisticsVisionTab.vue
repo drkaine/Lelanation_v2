@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { VISION_ROLE_QUICK, visionRoleQuickActive } from '~/utils/statistics/visionRoleQuick'
+import {
+  VISION_ROLE_QUICK,
+  VISION_TABLE_COLUMNS,
+  visionRoleQuickActive,
+} from '~/utils/statistics/visionRoleQuick'
+import { breakdownSharePct } from '~/utils/championDashboard'
 import {
   injectStatisticsPageCtx,
   type StatisticsIndexPageCtx,
@@ -79,6 +84,26 @@ function deltaSortKey(key: VisionMetricKey): VisionSortCol {
   return `${key}Delta`
 }
 
+function isSorted(col: VisionSortCol): boolean {
+  return p.visionSortColumn === col
+}
+
+const maxVisionScore = computed(() => {
+  const rows = (p.visionTableData?.rows ?? []) as VisionTableRow[]
+  return rows.reduce((m, r) => Math.max(m, Number(r.visionScore) || 0), 0)
+})
+
+function deltaLabel(row: VisionTableRow, key: VisionMetricKey): string {
+  const d = visionDelta(row, key)
+  return d == null ? '' : formatVisionDelta(key, d)
+}
+
+function deltaClass(row: VisionTableRow, key: VisionMetricKey): string {
+  const d = visionDelta(row, key)
+  if (d == null || d === 0) return ''
+  return d > 0 ? 'is-up' : 'is-down'
+}
+
 const visionPageSize = computed({
   get: () => Number(p.championsPageSize) || 20,
   set: (value: number) => {
@@ -88,19 +113,22 @@ const visionPageSize = computed({
 </script>
 
 <template>
-  <div class="space-y-3">
-    <div class="vision-role" role="group" :aria-label="p.t('statisticsPage.visionRoleAria')">
-      <button
-        v-for="o in VISION_ROLE_QUICK"
-        :key="o.value || 'all'"
-        type="button"
-        class="vision-role__btn"
-        :class="{ 'is-active': visionRoleActive === o.value }"
-        :aria-pressed="visionRoleActive === o.value"
-        @click="setVisionRole(o.value)"
-      >
-        {{ p.t(o.labelKey) }}
-      </button>
+  <div class="vi-root">
+    <div class="vi-head">
+      <h2 class="vi-title">{{ p.t('statisticsPage.visionTitle') }}</h2>
+      <div class="vision-role" role="group" :aria-label="p.t('statisticsPage.visionRoleAria')">
+        <button
+          v-for="o in VISION_ROLE_QUICK"
+          :key="o.value || 'all'"
+          type="button"
+          class="vision-role__btn"
+          :class="{ 'is-active': visionRoleActive === o.value }"
+          :aria-pressed="visionRoleActive === o.value"
+          @click="setVisionRole(o.value)"
+        >
+          {{ p.t(o.labelKey) }}
+        </button>
+      </div>
     </div>
     <div v-if="p.visionPending" class="text-text/70">{{ p.t('statisticsPage.loading') }}</div>
     <div v-else-if="p.visionError" class="rounded border border-error bg-surface p-3 text-error">
@@ -181,116 +209,267 @@ const visionPageSize = computed({
         </article>
       </div>
 
-      <div
-        class="tier-list-mobile-rotate statistics-overview-surface hidden w-full overflow-x-auto rounded-lg border border-primary/30 md:block"
-      >
-        <div class="tier-list-lolalytics w-full min-w-0 text-[13px] max-lg:min-w-[720px]">
-          <table class="w-full min-w-[520px] text-left text-[13px]">
-            <thead
-              class="sticky top-0 z-10 border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
-            >
-              <tr>
-                <th class="min-w-[220px] px-2 py-1.5 text-left font-semibold text-text">
-                  {{ p.t('statisticsPage.tierListColChampion') }}
-                </th>
-                <th
-                  v-for="key in VISION_METRIC_KEYS"
-                  :key="'vision-th-' + key"
-                  class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text"
-                >
-                  <div class="flex items-center justify-center gap-1">
-                    <button type="button" @click="p.setVisionSort(key)">
-                      {{ p.t('statisticsPage.visionMetric.' + key) }}{{ sortIndicator(key) }}
-                    </button>
-                    <button
-                      v-if="p.visionTableRefData"
-                      type="button"
-                      class="text-[10px] text-text/70 hover:text-text"
-                      :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
-                      @click="p.setVisionSort(deltaSortKey(key))"
-                    >
-                      Δ{{ sortIndicator(deltaSortKey(key)) }}
-                    </button>
-                  </div>
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-primary/20">
-              <tr
-                v-for="row in p.paginatedVisionRows"
-                :key="'vision-' + row.championId"
-                class="text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
+      <div class="vi-dtable-wrap hidden md:block">
+        <table class="vi-dtable">
+          <thead>
+            <tr class="vi-dhead">
+              <th scope="col" class="vi-dleft">
+                {{ p.t('statisticsPage.tierListColChampion') }}
+              </th>
+              <th
+                v-for="key in VISION_TABLE_COLUMNS"
+                :key="'vision-th-' + key"
+                scope="col"
+                :class="[
+                  key === 'visionScore' ? 'vi-dleft vi-dbar-cell' : 'vi-dnum',
+                  { 'is-sorted': isSorted(key) },
+                ]"
               >
-                <td class="min-w-[220px] py-0.5 pl-2 pr-0">
-                  <StatisticsChampionTableLink
-                    :champion-id="row.championId"
-                    :query="p.championSearchQuery"
-                  />
-                </td>
-                <td
-                  v-for="key in VISION_METRIC_KEYS"
-                  :key="'vision-td-' + row.championId + '-' + key"
-                  class="px-1 py-0.5 align-middle"
+                <button type="button" class="vi-dsort" @click="p.setVisionSort(key)">
+                  {{ p.t('statisticsPage.visionMetric.' + key) }}{{ sortIndicator(key) }}
+                </button>
+                <button
+                  v-if="p.visionTableRefData"
+                  type="button"
+                  class="vi-dsort-delta"
+                  :class="{ 'is-on': isSorted(deltaSortKey(key)) }"
+                  :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
+                  @click="p.setVisionSort(deltaSortKey(key))"
                 >
-                  <div
-                    class="flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight"
-                    :class="key === 'visionScore' ? 'font-semibold' : ''"
-                  >
-                    <span>{{ formatVisionValue(key, visionValue(row, key)) }}</span>
+                  Δ{{ sortIndicator(deltaSortKey(key)) }}
+                </button>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="row in p.paginatedVisionRows"
+              :key="'vision-' + row.championId"
+              class="vi-drow"
+            >
+              <th scope="row" class="vi-dleft vi-dchamp">
+                <StatisticsChampionTableLink
+                  :champion-id="row.championId"
+                  :query="p.championSearchQuery"
+                />
+              </th>
+              <td
+                v-for="key in VISION_TABLE_COLUMNS"
+                :key="'vision-td-' + row.championId + '-' + key"
+                :class="key === 'visionScore' ? 'vi-dbar-cell' : 'vi-dnum'"
+              >
+                <div v-if="key === 'visionScore'" class="vi-dbar-row">
+                  <span class="vi-dbar" aria-hidden="true">
                     <span
-                      v-if="visionDelta(row, key) != null"
-                      class="text-[10px] leading-none"
-                      :class="p.championGlobalNumericDeltaClass(visionDelta(row, key)!)"
-                    >
-                      {{ formatVisionDelta(key, visionDelta(row, key)!) }}
-                    </span>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <StatisticsRangePagination
-            v-model:page-size="visionPageSize"
-            :page="p.visionPage"
-            class="border-t border-primary/20 px-4 py-2 text-sm text-text/80"
-            :total-count="p.totalVisionCount"
-            :total-pages="p.totalVisionPages"
-            indicator="pages"
-            @update:page="p.onVisionPageUpdated"
-          >
-            <template v-if="p.championSearchQuery" #default>
-              {{ p.t('statisticsPage.showing') }} {{ p.totalVisionCount }}
-            </template>
-          </StatisticsRangePagination>
-        </div>
+                      class="vi-dbar-fill"
+                      :style="{ width: breakdownSharePct(row.visionScore, maxVisionScore) + '%' }"
+                    />
+                  </span>
+                  <span class="vi-dval vi-dstrong">{{
+                    formatVisionValue(key, row.visionScore)
+                  }}</span>
+                  <span class="vi-ddelta vi-ddelta--inline" :class="deltaClass(row, key)">
+                    {{ deltaLabel(row, key) }}
+                  </span>
+                </div>
+                <template v-else>
+                  <span class="vi-dval" :class="{ 'vi-dmuted': key === 'controlWardsPlaced' }">
+                    {{ formatVisionValue(key, visionValue(row, key)) }}
+                  </span>
+                  <span
+                    v-if="visionDelta(row, key) != null"
+                    class="vi-ddelta"
+                    :class="deltaClass(row, key)"
+                  >
+                    {{ deltaLabel(row, key) }}
+                  </span>
+                </template>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <StatisticsRangePagination
+          v-model:page-size="visionPageSize"
+          :page="p.visionPage"
+          class="vi-dpager"
+          :total-count="p.totalVisionCount"
+          :total-pages="p.totalVisionPages"
+          indicator="pages"
+          @update:page="p.onVisionPageUpdated"
+        >
+          <template v-if="p.championSearchQuery" #default>
+            {{ p.t('statisticsPage.showing') }} {{ p.totalVisionCount }}
+          </template>
+        </StatisticsRangePagination>
       </div>
+      <p class="vi-note hidden md:block">{{ p.t('statisticsPage.visionStealthImplicitNote') }}</p>
     </template>
   </div>
 </template>
 
 <style scoped>
+.vi-root {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.vi-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.vi-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #f0e6d2;
+}
 .vision-role {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 0.25rem;
-  padding: 0.25rem;
-  border: 1px solid rgb(200 155 60 / 0.3);
-  border-radius: 0.375rem;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid #0a323c;
+  border-radius: 8px;
+  background: #0a1428;
 }
 .vision-role__btn {
-  padding: 0.25rem 0.75rem;
-  border-radius: 0.25rem;
-  font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif;
-  font-size: 0.85rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--color-grey-50, #a09b8c);
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #a09b8c;
 }
 .vision-role__btn:hover {
-  color: var(--color-gold-50, #f0e6d2);
+  color: #f0e6d2;
 }
 .vision-role__btn.is-active {
-  background: var(--color-gold-300, #c89b3c);
-  color: var(--color-blue-600, #0a1428);
+  background: #0a323c;
+  color: #f0e6d2;
+  font-weight: 600;
+}
+.vi-dtable-wrap {
+  overflow-x: auto;
+  background: #0a1428;
+  border: 1px solid #463714;
+  border-radius: 12px;
+}
+.vi-dtable {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  font-size: 14px;
+  color: #f0e6d2;
+}
+.vi-dhead th {
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #a09b8c;
+  border-bottom: 1px solid #0a323c;
+  white-space: nowrap;
+}
+.vi-dhead th.is-sorted {
+  color: #c8aa6e;
+}
+.vi-dsort {
+  color: inherit;
+}
+.vi-dsort:hover {
+  color: #f0e6d2;
+}
+.vi-dsort-delta {
+  margin-left: 4px;
+  font-size: 11px;
+  color: #5b5a56;
+}
+.vi-dsort-delta.is-on,
+.vi-dsort-delta:hover {
+  color: #c8aa6e;
+}
+.vi-dleft {
+  text-align: left;
+  padding: 9px 20px;
+}
+.vi-dchamp {
+  font-weight: 500;
+}
+.vi-dnum {
+  text-align: right;
+  padding: 9px 12px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.vi-dnum:last-child {
+  padding-right: 20px;
+}
+.vi-drow {
+  border-bottom: 1px solid #1e2328;
+}
+.vi-drow:hover {
+  background: #0e1a2e;
+}
+.vi-dval {
+  display: block;
+  font-variant-numeric: tabular-nums;
+}
+.vi-dmuted {
+  color: #cbc3b0;
+}
+.vi-dstrong {
+  font-weight: 600;
+}
+.vi-ddelta {
+  display: block;
+  font-size: 11px;
+  line-height: 1.2;
+  color: #5b5a56;
+  font-variant-numeric: tabular-nums;
+}
+.vi-ddelta.is-up {
+  color: #0ac8b9;
+}
+.vi-ddelta.is-down {
+  color: #e2665a;
+}
+.vi-dbar-cell {
+  min-width: 200px;
+  padding: 9px 16px;
+}
+.vi-dbar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.vi-dbar-row .vi-dval {
+  width: 36px;
+  text-align: right;
+}
+.vi-ddelta--inline {
+  width: 44px;
+}
+.vi-dbar {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: #1e2328;
+  overflow: hidden;
+}
+.vi-dbar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: #c89b3c;
+}
+.vi-dpager {
+  border-top: 1px solid #1e2328;
+  padding: 8px 16px;
+  font-size: 14px;
+  color: #a09b8c;
+}
+.vi-note {
+  font-size: 12px;
+  color: #a09b8c;
 }
 </style>

@@ -11,6 +11,7 @@ import type { StatisticsMobileSortOption } from '~/components/statistics/Statist
 import { usePagination } from '~/composables/usePagination'
 import { useTableSort } from '~/composables/useTableSort'
 import { useToggleSet } from '~/composables/useToggleSet'
+import { spellBarPct, spellDeltaTone, spellSlotSplit } from '~/utils/statistics/spellsTable'
 
 const p = injectStatisticsPageCtx<RunesSpellsTabCtx>()
 const summonerSpellsStore = useSummonerSpellsStore()
@@ -85,7 +86,7 @@ type DisplayRow = {
   deltaF: number | null
 }
 
-const { sortBy, sortDir, toggleSort, sortIcon } = useTableSort<SortKey>({ resettable: true })
+const { sortBy, sortDir, toggleSort } = useTableSort<SortKey>({ resettable: true })
 const spellsMode = computed<'solo' | 'pair'>({
   get: () => (p.spellsModeFilter === 'pair' ? 'pair' : 'solo'),
   set: (value: 'solo' | 'pair') => {
@@ -379,6 +380,65 @@ const spellsMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
   return opts
 })
 
+interface DesktopColumn {
+  sort: SortKey
+  deltaSort?: SortKey
+  label: string
+  tooltipKey: string
+  align?: 'left'
+}
+
+const desktopColumns = computed<DesktopColumn[]>(() => {
+  const t = p.t
+  const cols: DesktopColumn[] = [
+    {
+      sort: 'spell',
+      label: t('statisticsPage.spellsColSpell'),
+      tooltipKey: 'statisticsPage.spellsTooltipSummoner',
+      align: 'left',
+    },
+    {
+      sort: 'pickrate',
+      deltaSort: 'deltaPick',
+      label: t('statisticsPage.overviewDetailPickRate'),
+      tooltipKey: 'statisticsPage.spellsTooltipPickrate',
+    },
+    {
+      sort: 'casts',
+      deltaSort: 'deltaCasts',
+      label: t('statisticsPage.spellsCastsPerGame'),
+      tooltipKey: 'statisticsPage.spellsTooltipCasts',
+    },
+    {
+      sort: 'winrate',
+      deltaSort: 'deltaWin',
+      label: t('statisticsPage.overviewDetailWinRate'),
+      tooltipKey: 'statisticsPage.spellsTooltipWinrate',
+    },
+  ]
+  if (spellsMode.value === 'solo') {
+    cols.push({
+      sort: 'pctD',
+      deltaSort: 'deltaD',
+      label: t('statisticsPage.spellsKeyCol'),
+      tooltipKey: 'statisticsPage.spellsTooltipPctD',
+    })
+  }
+  return cols
+})
+
+const pickrateMax = computed(() =>
+  Math.max(0, ...displayRows.value.map(r => Number(r.pickrate ?? 0)))
+)
+
+function showDelta(v: number | null | undefined): boolean {
+  return hasComparison.value && !p.overviewDetailBaselinePending && v != null
+}
+
+function fmtShort(v: number | null | undefined): string {
+  return v == null ? '—' : `${Number(v).toFixed(0)}%`
+}
+
 function fmtPct(v: number | null | undefined): string {
   if (v == null) return '—'
   return `${Number(v).toFixed(2)}%`
@@ -407,20 +467,23 @@ function deltaLabelClass(v: number | null | undefined): string {
 
 <template>
   <div class="space-y-4">
-    <div class="spells-mode" role="group" :aria-label="p.t('statisticsPage.spellsModeAria')">
-      <button
-        v-for="mode in ['solo', 'pair'] as const"
-        :key="mode"
-        type="button"
-        class="spells-mode-btn"
-        :class="{ 'is-active': spellsMode === mode }"
-        :aria-pressed="spellsMode === mode"
-        @click="spellsMode = mode"
-      >
-        {{
-          p.t(mode === 'solo' ? 'statisticsPage.spellsModeSolo' : 'statisticsPage.spellsModePair')
-        }}
-      </button>
+    <div class="sp-head">
+      <h2 class="sp-title">{{ p.t('statisticsPage.overviewDetailSummonerSpells') }}</h2>
+      <div class="spells-mode" role="group" :aria-label="p.t('statisticsPage.spellsModeAria')">
+        <button
+          v-for="mode in ['solo', 'pair'] as const"
+          :key="mode"
+          type="button"
+          class="spells-mode-btn"
+          :class="{ 'is-active': spellsMode === mode }"
+          :aria-pressed="spellsMode === mode"
+          @click="spellsMode = mode"
+        >
+          {{
+            p.t(mode === 'solo' ? 'statisticsPage.spellsModeSolo' : 'statisticsPage.spellsModePair')
+          }}
+        </button>
+      </div>
     </div>
     <div v-if="p.overviewDetailPending" class="text-text/70">
       {{ p.t('statisticsPage.loading') }}
@@ -556,161 +619,123 @@ function deltaLabelClass(v: number | null | undefined): string {
         </article>
       </div>
 
-      <div
-        class="statistics-overview-surface hidden w-full overflow-x-auto rounded-lg border border-primary/30 md:block"
-      >
-        <table class="w-full min-w-[1100px] text-left text-sm">
-          <thead class="border-b border-primary/30 bg-black/25">
-            <tr>
+      <div class="sp-dtable-wrap hidden md:block">
+        <table class="sp-dtable">
+          <thead>
+            <tr class="sp-dhead">
               <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.spellsTooltipSummoner')"
+                v-for="col in desktopColumns"
+                :key="col.sort"
+                scope="col"
+                :class="[
+                  col.align === 'left' ? 'sp-dleft' : 'sp-dnum',
+                  { 'is-sorted': sortBy === col.sort },
+                ]"
+                :title="p.t(col.tooltipKey)"
+                :aria-sort="
+                  sortBy === col.sort ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+                "
               >
-                <button type="button" class="hover:underline" @click="toggleSort('spell')">
-                  {{ p.t('statisticsPage.overviewDetailSummonerSpells') }}{{ sortIcon('spell') }}
+                <button type="button" class="sp-dsort" @click="toggleSort(col.sort)">
+                  {{ col.label }}
+                  <svg
+                    v-if="sortBy === col.sort"
+                    width="10"
+                    height="10"
+                    viewBox="0 0 10 10"
+                    aria-hidden="true"
+                    :style="sortDir === 'asc' ? 'transform:rotate(180deg)' : ''"
+                  >
+                    <path
+                      d="M2 3.5 5 6.5 8 3.5"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                    />
+                  </svg>
                 </button>
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.spellsTooltipPickrate')"
-              >
-                <button type="button" class="hover:underline" @click="toggleSort('pickrate')">
-                  {{ p.t('statisticsPage.overviewDetailPickRate') }}{{ sortIcon('pickrate') }}
-                </button>
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.spellsTooltipDeltaPick')"
-              >
-                <button type="button" class="hover:underline" @click="toggleSort('deltaPick')">
-                  {{ p.t('statisticsPage.championTableDeltaSymbol') }} pick{{
-                    sortIcon('deltaPick')
-                  }}
-                </button>
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.spellsTooltipCasts')"
-              >
-                <button type="button" class="hover:underline" @click="toggleSort('casts')">
-                  {{ p.t('statisticsPage.spellsCasts') }}{{ sortIcon('casts') }}
-                </button>
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.spellsTooltipDeltaCasts')"
-              >
-                <button type="button" class="hover:underline" @click="toggleSort('deltaCasts')">
+                <button
+                  v-if="hasComparison && col.deltaSort"
+                  type="button"
+                  class="sp-dsort-delta"
+                  :class="{ 'is-on': sortBy === col.deltaSort }"
+                  @click="toggleSort(col.deltaSort)"
+                >
                   {{ p.t('statisticsPage.championTableDeltaSymbol') }}
-                  {{ p.t('statisticsPage.spellsCasts') }}{{ sortIcon('deltaCasts') }}
-                </button>
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.spellsTooltipWinrate')"
-              >
-                <button type="button" class="hover:underline" @click="toggleSort('winrate')">
-                  {{ p.t('statisticsPage.overviewDetailWinRate') }}{{ sortIcon('winrate') }}
-                </button>
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.spellsTooltipDeltaWin')"
-              >
-                <button type="button" class="hover:underline" @click="toggleSort('deltaWin')">
-                  {{ p.t('statisticsPage.championTableDeltaSymbol') }} WR{{ sortIcon('deltaWin') }}
-                </button>
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.spellsTooltipPctD')"
-              >
-                <button type="button" class="hover:underline" @click="toggleSort('pctD')">
-                  % D{{ sortIcon('pctD') }}
-                </button>
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.spellsTooltipDeltaD')"
-              >
-                <button type="button" class="hover:underline" @click="toggleSort('deltaD')">
-                  {{ p.t('statisticsPage.championTableDeltaSymbol') }} D{{ sortIcon('deltaD') }}
-                </button>
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.spellsTooltipPctF')"
-              >
-                <button type="button" class="hover:underline" @click="toggleSort('pctF')">
-                  % F{{ sortIcon('pctF') }}
-                </button>
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.spellsTooltipDeltaF')"
-              >
-                <button type="button" class="hover:underline" @click="toggleSort('deltaF')">
-                  {{ p.t('statisticsPage.championTableDeltaSymbol') }} F{{ sortIcon('deltaF') }}
                 </button>
               </th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-primary/20">
-            <tr
-              v-for="row in paginatedDisplayRows"
-              :key="row.key"
-              class="odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
-            >
-              <td class="px-3 py-2">
-                <div class="flex items-center gap-2">
-                  <img
-                    v-if="row.imageSpellId != null && spellImage(row.imageSpellId) && p.gameVersion"
-                    loading="lazy"
-                    decoding="async"
-                    :src="getSpellImageUrl(p.gameVersion, spellImage(row.imageSpellId)!)"
-                    :alt="row.label"
-                    class="h-[50px] w-[50px] rounded border border-black/30 object-cover"
-                    width="50"
-                    height="50"
-                  />
-                  <img
-                    v-if="
-                      row.imageSpellId2 != null && spellImage(row.imageSpellId2) && p.gameVersion
-                    "
-                    loading="lazy"
-                    decoding="async"
-                    :src="getSpellImageUrl(p.gameVersion, spellImage(row.imageSpellId2)!)"
-                    :alt="row.label"
-                    class="h-[50px] w-[50px] rounded border border-black/30 object-cover"
-                    width="50"
-                    height="50"
-                  />
-                  <span v-if="!row.imageOnly" class="font-medium text-accent">{{ row.label }}</span>
+          <tbody>
+            <tr v-for="row in paginatedDisplayRows" :key="row.key" class="sp-drow">
+              <th scope="row" class="sp-dleft sp-dspell">
+                <div class="sp-dspell-cell">
+                  <template v-for="sid in [row.imageSpellId, row.imageSpellId2]" :key="String(sid)">
+                    <img
+                      v-if="sid != null && spellImage(sid) && p.gameVersion"
+                      loading="lazy"
+                      decoding="async"
+                      :src="getSpellImageUrl(p.gameVersion, spellImage(sid)!)"
+                      alt=""
+                      class="sp-dicon"
+                      width="32"
+                      height="32"
+                    />
+                  </template>
+                  <span>{{ row.label }}</span>
                 </div>
+              </th>
+              <td class="sp-dnum sp-dbar-cell">
+                <div class="sp-dbar-row">
+                  <span class="sp-dbar" aria-hidden="true">
+                    <span
+                      class="sp-dbar-fill"
+                      :style="{ width: spellBarPct(row.pickrate, pickrateMax) + '%' }"
+                    />
+                  </span>
+                  <span class="sp-dval sp-dstrong">{{ fmtPct(row.pickrate) }}</span>
+                </div>
+                <span
+                  v-if="showDelta(row.deltaPick)"
+                  class="sp-ddelta"
+                  :class="`is-${spellDeltaTone(row.deltaPick!)}`"
+                  >{{ fmtDelta(row.deltaPick) }}</span
+                >
               </td>
-              <td class="px-3 py-2 tabular-nums text-text/90">{{ fmtPct(row.pickrate) }}</td>
-              <td class="px-3 py-2 tabular-nums" :class="deltaClass(row.deltaPick)">
-                {{ fmtDelta(row.deltaPick) }}
+              <td class="sp-dnum">
+                <span class="sp-dval">{{ row.castsLabel }}</span>
+                <span
+                  v-if="showDelta(row.deltaCastsSort)"
+                  class="sp-ddelta"
+                  :class="`is-${spellDeltaTone(row.deltaCastsSort!)}`"
+                  >{{ row.deltaCastsLabel }}</span
+                >
               </td>
-              <td class="px-3 py-2 tabular-nums text-text/90">{{ row.castsLabel }}</td>
-              <td class="px-3 py-2 tabular-nums" :class="deltaLabelClass(row.deltaCastsSort)">
-                {{ row.deltaCastsLabel }}
+              <td class="sp-dnum">
+                <span class="sp-dval">{{ fmtPct(row.winrate) }}</span>
+                <span
+                  v-if="showDelta(row.deltaWin)"
+                  class="sp-ddelta"
+                  :class="`is-${spellDeltaTone(row.deltaWin!)}`"
+                  >{{ fmtDelta(row.deltaWin) }}</span
+                >
               </td>
-              <td class="px-3 py-2 tabular-nums text-text/90">{{ fmtPct(row.winrate) }}</td>
-              <td class="px-3 py-2 tabular-nums" :class="deltaClass(row.deltaWin)">
-                {{ fmtDelta(row.deltaWin) }}
-              </td>
-              <td class="px-3 py-2 tabular-nums text-text/90">
-                {{ fmtPct(row.pctD) }}
-              </td>
-              <td class="px-3 py-2 tabular-nums" :class="deltaClass(row.deltaD)">
-                {{ fmtDelta(row.deltaD) }}
-              </td>
-              <td class="px-3 py-2 tabular-nums text-text/90">
-                {{ fmtPct(row.pctF) }}
-              </td>
-              <td class="px-3 py-2 tabular-nums" :class="deltaClass(row.deltaF)">
-                {{ fmtDelta(row.deltaF) }}
+              <td v-if="spellsMode === 'solo'" class="sp-dnum sp-dkey-cell">
+                <div v-if="spellSlotSplit(row.pctD, row.pctF)" class="sp-dkey-row">
+                  <span class="sp-dkey-val">D {{ fmtShort(row.pctD) }}</span>
+                  <span class="sp-dkey-bar" aria-hidden="true">
+                    <span
+                      class="sp-dkey-d"
+                      :style="{ width: spellSlotSplit(row.pctD, row.pctF)!.d + '%' }"
+                    />
+                    <span
+                      class="sp-dkey-f"
+                      :style="{ width: spellSlotSplit(row.pctD, row.pctF)!.f + '%' }"
+                    />
+                  </span>
+                  <span class="sp-dkey-val">{{ fmtShort(row.pctF) }} F</span>
+                </div>
+                <span v-else class="sp-dval">—</span>
               </td>
             </tr>
           </tbody>
@@ -731,22 +756,178 @@ function deltaLabelClass(v: number | null | undefined): string {
 </template>
 
 <style scoped>
+.sp-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.sp-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #f0e6d2;
+}
 .spells-mode {
   display: inline-flex;
   gap: 2px;
-  padding: 2px;
-  border: 1px solid rgb(200 155 60 / 0.35);
-  border-radius: 6px;
-  background: rgb(10 20 40 / 0.6);
+  padding: 3px;
+  border: 1px solid #0a323c;
+  border-radius: 8px;
+  background: #0a1428;
 }
 .spells-mode-btn {
-  padding: 4px 14px;
-  border-radius: 4px;
-  font-size: 0.8rem;
-  color: var(--color-grey-50, #a09b8c);
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #a09b8c;
+}
+.spells-mode-btn:hover {
+  color: #f0e6d2;
 }
 .spells-mode-btn.is-active {
-  color: var(--color-blue-600, #0a1428);
-  background: var(--color-gold-300, #c89b3c);
+  color: #f0e6d2;
+  background: #0a323c;
+}
+.sp-dtable-wrap {
+  overflow-x: auto;
+  background: #0a1428;
+  border: 1px solid #463714;
+  border-radius: 12px;
+}
+.sp-dtable {
+  width: 100%;
+  min-width: 900px;
+  border-collapse: collapse;
+  font-size: 14px;
+  color: #f0e6d2;
+}
+.sp-dhead th {
+  padding: 10px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #a09b8c;
+  border-bottom: 1px solid #0a323c;
+  white-space: nowrap;
+}
+.sp-dhead th.is-sorted {
+  color: #c8aa6e;
+}
+.sp-dsort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: inherit;
+}
+.sp-dsort:hover {
+  color: #f0e6d2;
+}
+.sp-dsort-delta {
+  margin-left: 4px;
+  font-size: 11px;
+  color: #5b5a56;
+}
+.sp-dsort-delta.is-on,
+.sp-dsort-delta:hover {
+  color: #c8aa6e;
+}
+.sp-dleft {
+  text-align: left;
+  padding: 8px 20px;
+}
+.sp-dnum {
+  text-align: right;
+  padding: 10px 16px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.sp-dspell {
+  font-weight: 400;
+}
+.sp-dspell-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sp-dicon {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+.sp-drow {
+  border-bottom: 1px solid #1e2328;
+}
+.sp-drow:hover {
+  background: #0e1a2e;
+}
+.sp-dval {
+  display: block;
+  font-variant-numeric: tabular-nums;
+}
+.sp-dstrong {
+  font-weight: 600;
+}
+.sp-ddelta {
+  display: block;
+  font-size: 11px;
+  line-height: 1.2;
+  color: #5b5a56;
+}
+.sp-ddelta.is-up {
+  color: #0ac8b9;
+}
+.sp-ddelta.is-down {
+  color: #e2665a;
+}
+.sp-dbar-cell {
+  min-width: 200px;
+}
+.sp-dbar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sp-dbar {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: #1e2328;
+  overflow: hidden;
+}
+.sp-dbar-fill {
+  display: block;
+  height: 100%;
+  background: #c89b3c;
+  border-radius: 4px;
+}
+.sp-dbar-row .sp-dval {
+  width: 64px;
+  text-align: right;
+}
+.sp-dkey-cell {
+  width: 200px;
+}
+.sp-dkey-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.sp-dkey-bar {
+  display: flex;
+  flex: 1;
+  gap: 2px;
+  height: 8px;
+}
+.sp-dkey-d {
+  background: #0397ab;
+  border-radius: 4px 0 0 4px;
+}
+.sp-dkey-f {
+  background: #005a82;
+  border-radius: 0 4px 4px 0;
 }
 </style>

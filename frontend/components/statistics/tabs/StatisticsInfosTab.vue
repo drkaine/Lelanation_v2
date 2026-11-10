@@ -270,12 +270,6 @@ function cellValue(
 
 <style scoped>
 @media (max-width: 768px) {
-  .statistics-infos-tab {
-    margin-inline: -1rem;
-    width: calc(100% + 2rem);
-    max-width: 100vw;
-  }
-
   .statistics-infos-mobile-card {
     width: 100%;
   }

@@ -20,6 +20,15 @@ export const COMPANION_BENCHMARK_METRIC_KEYS = CHAMPION_VS_STATS_LEGACY_METRIC_C
     k === 'sum_vision_score_u15',
 ) as readonly string[]
 
+/** Dégâts aux champions dans agg_champion_core_stats (colonnes `*_done_to_champions`). */
+export function companionCoreDamageSelect(alias: string): string {
+  return [
+    `COALESCE(SUM(${alias}.sum_physical_damage_done_to_champions), 0)::bigint AS sum_phys`,
+    `COALESCE(SUM(${alias}.sum_magic_damage_done_to_champions), 0)::bigint AS sum_magic`,
+    `COALESCE(SUM(${alias}.sum_true_damage_done_to_champions), 0)::bigint AS sum_true`,
+  ].join(',\n      ')
+}
+
 export type CompanionChampionBenchmark = {
   championId: number
   patch: string | null
@@ -109,9 +118,7 @@ export async function getCompanionChampionBenchmark(
     SELECT
       COALESCE(SUM(cs.count_game), 0)::bigint AS games,
       COALESCE(SUM(cs.count_win), 0)::bigint AS wins,
-      COALESCE(SUM(cs.sum_physical_damage_to_champions), 0)::bigint AS sum_phys,
-      COALESCE(SUM(cs.sum_magic_damage_to_champions), 0)::bigint AS sum_magic,
-      COALESCE(SUM(cs.sum_true_damage_to_champions), 0)::bigint AS sum_true
+      ${companionCoreDamageSelect('cs')}
     FROM ${coreFrom}
     WHERE ${coreWhere}
   `)
