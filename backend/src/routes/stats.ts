@@ -443,6 +443,8 @@ router.get('/overview-detail', async (req: Request, res: Response) => {
     return res.status(200).json({
       totalParticipants: 0,
       runes: [],
+      runePositions: [],
+      shardsByKeystone: [],
       runeSets: [],
       items: [],
       itemsStarters: [],

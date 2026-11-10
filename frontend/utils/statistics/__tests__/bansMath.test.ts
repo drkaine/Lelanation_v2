@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { banBarWidth, banSplitShare, banPct, banPctDelta } from '../bansMath'
+import { banBarWidth, banSplitShare, banPct, banPctDelta, bansSplitColumns } from '../bansMath'
 
 describe('banPct', () => {
   it('rate = bans / matches', () => {
@@ -42,5 +42,14 @@ describe('banSplitShare', () => {
   it('renvoie null sans donnée', () => {
     expect(banSplitShare(0, 0)).toBeNull()
     expect(banSplitShare(Number.NaN, 2)).toBeNull()
+  })
+})
+
+describe('bansSplitColumns', () => {
+  it('outcome mode shows team columns only', () => {
+    expect(bansSplitColumns('outcome')).toEqual({ outcome: true, side: false })
+  })
+  it('side mode shows side columns only', () => {
+    expect(bansSplitColumns('side')).toEqual({ outcome: false, side: true })
   })
 })

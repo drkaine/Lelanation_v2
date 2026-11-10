@@ -141,7 +141,7 @@
             class="statistics-ban-mobile-card-details space-y-1.5 border-t border-primary/20 bg-black/20 px-3 py-2.5 text-sm text-text/85"
           >
             <div
-              v-if="p.showBansOutcomeColumns"
+              v-if="showOutcomeCols"
               class="flex flex-wrap items-baseline justify-between gap-x-2"
             >
               <span>{{ p.t('statisticsPage.overviewTeamsByWin') }}</span>
@@ -157,7 +157,7 @@
               </span>
             </div>
             <div
-              v-if="p.showBansOutcomeColumns"
+              v-if="showOutcomeCols"
               class="flex flex-wrap items-baseline justify-between gap-x-2"
             >
               <span>{{ p.t('statisticsPage.overviewTeamsByLoss') }}</span>
@@ -173,7 +173,7 @@
               </span>
             </div>
             <div
-              v-if="p.showBansSideColumns"
+              v-if="showSideCols"
               class="flex flex-wrap items-baseline justify-between gap-x-2 text-primary-light/95"
             >
               <span>{{ p.t('statisticsPage.bansColBlueSide') }}</span>
@@ -189,7 +189,7 @@
               </span>
             </div>
             <div
-              v-if="p.showBansSideColumns"
+              v-if="showSideCols"
               class="text-error/70/95 flex flex-wrap items-baseline justify-between gap-x-2"
             >
               <span>{{ p.t('statisticsPage.bansColRedSide') }}</span>
@@ -208,7 +208,7 @@
         </article>
       </div>
 
-      <div class="mb-2 flex flex-wrap items-center gap-3 max-md:order-first">
+      <div class="mb-2 flex flex-wrap items-center justify-center gap-3 max-md:order-first">
         <div
           role="group"
           :aria-label="p.t('statisticsPage.bansSplitAria')"
@@ -230,7 +230,7 @@
             {{ m.label }}
           </button>
         </div>
-        <span class="ml-auto flex gap-4 text-xs text-[var(--color-grey-50)]">
+        <span class="flex gap-4 text-xs text-[var(--color-grey-50)]">
           <span class="flex items-center gap-1.5"
             ><span class="h-2.5 w-2.5 rounded-sm" :style="{ background: splitColors[0] }" />{{
               splitModes.find(m => m.value === splitMode)!.left
@@ -272,7 +272,7 @@
                   </div>
                 </th>
                 <th
-                  v-show="p.showBansOutcomeColumns"
+                  v-show="showOutcomeCols"
                   class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text"
                 >
                   <div class="flex items-center gap-1">
@@ -291,7 +291,7 @@
                   </div>
                 </th>
                 <th
-                  v-show="p.showBansOutcomeColumns"
+                  v-show="showOutcomeCols"
                   class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text"
                 >
                   <div class="flex items-center gap-1">
@@ -310,7 +310,7 @@
                   </div>
                 </th>
                 <th
-                  v-show="p.showBansSideColumns"
+                  v-show="showSideCols"
                   class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text"
                 >
                   <div class="flex items-center gap-1">
@@ -329,7 +329,7 @@
                   </div>
                 </th>
                 <th
-                  v-show="p.showBansSideColumns"
+                  v-show="showSideCols"
                   class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text"
                 >
                   <div class="flex items-center gap-1">
@@ -427,7 +427,7 @@
                     </div>
                   </div>
                 </td>
-                <td v-show="p.showBansOutcomeColumns" class="px-1 py-0.5 align-middle">
+                <td v-show="showOutcomeCols" class="px-1 py-0.5 align-middle">
                   <div
                     class="flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight"
                   >
@@ -443,7 +443,7 @@
                     </span>
                   </div>
                 </td>
-                <td v-show="p.showBansOutcomeColumns" class="px-1 py-0.5 align-middle">
+                <td v-show="showOutcomeCols" class="px-1 py-0.5 align-middle">
                   <div
                     class="flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight"
                   >
@@ -459,7 +459,7 @@
                     </span>
                   </div>
                 </td>
-                <td v-show="p.showBansSideColumns" class="px-1 py-0.5 align-middle">
+                <td v-show="showSideCols" class="px-1 py-0.5 align-middle">
                   <div
                     class="flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight text-primary-light/95"
                   >
@@ -475,7 +475,7 @@
                     </span>
                   </div>
                 </td>
-                <td v-show="p.showBansSideColumns" class="px-1 py-0.5 align-middle">
+                <td v-show="showSideCols" class="px-1 py-0.5 align-middle">
                   <div
                     class="text-error/70/95 flex min-h-[60px] flex-col items-center justify-center gap-0 text-center tabular-nums leading-tight"
                   >
@@ -615,13 +615,16 @@ import {
 import type { BansSortCol } from '~/composables/statistics/useStatisticsBansTab'
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
 import { useToggleSet } from '~/composables/useToggleSet'
-import { banBarWidth, banSplitShare } from '~/utils/statistics/bansMath'
+import { banBarWidth, banSplitShare, bansSplitColumns } from '~/utils/statistics/bansMath'
+import type { BansSplitMode } from '~/utils/statistics/bansMath'
 
 const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
 
 /** Banrate max des lignes affichées : échelle des barres. */
-type BansSplitMode = 'outcome' | 'side'
 const splitMode = ref<BansSplitMode>('outcome')
+const splitCols = computed(() => bansSplitColumns(splitMode.value))
+const showOutcomeCols = computed(() => p.showBansOutcomeColumns && splitCols.value.outcome)
+const showSideCols = computed(() => p.showBansSideColumns && splitCols.value.side)
 const splitModes = computed(() => [
   {
     value: 'outcome' as const,

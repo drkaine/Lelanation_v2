@@ -6,6 +6,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { RunePath } from '@lelanation/shared-types'
 import { visibleRunePaths, type RuneTreeTab } from '~/utils/statistics/runeTreeTabs'
+import { runeSideMap, shardsForTree, sideTreeCells } from '~/utils/statistics/runePositions'
 import type { RunesDetailPayload } from '~/types/statisticsIndexPage'
 import { useRunesStore } from '~/stores/RunesStore'
 import { getRuneImageUrl } from '~/utils/imageUrl'
@@ -116,12 +117,55 @@ function mergedShardStat(
   }
 }
 
+const sideMap = computed(() => runeSideMap(props.data?.runePositions))
+const showSides = computed(
+  () => runeTreeTab.value !== 'all' && (props.data?.runePositions?.length ?? 0) > 0
+)
+
+/** Blocs d'arbre affichés : un par arbre, ou (arbre choisi) primaire entier + secondaire sans keystones. */
+const runeTreeBlocks = computed(() => {
+  if (!showSides.value) {
+    return visiblePathsWithCells.value.map(x => ({
+      key: String(x.path.id),
+      labelKey: null as string | null,
+      cells: x.cells,
+    }))
+  }
+  return visiblePathsWithCells.value.flatMap(x => [
+    {
+      key: `${x.path.id}-primary`,
+      labelKey: 'statisticsPage.runeSidePrimary' as string | null,
+      cells: sideTreeCells(x.cells, sideMap.value, 'primary'),
+    },
+    {
+      key: `${x.path.id}-secondary`,
+      labelKey: 'statisticsPage.runeSideSecondary' as string | null,
+      cells: sideTreeCells(x.cells, sideMap.value, 'secondary'),
+    },
+  ])
+})
+
+/** Arbre sélectionné : fragments restreints aux keystones de l'arbre (arbre primaire). */
+function treeShardPayload(
+  payload: RunesDetailPayload | null | undefined
+): RunesDetailPayload | null | undefined {
+  const tab = runeTreeTab.value
+  if (tab === 'all' || !payload?.shardsByKeystone?.length) return payload
+  const path = runesStore.runePaths.find(rp => rp.id === tab)
+  const ks = path?.slots[0]?.runes.map(r => r.id) ?? []
+  return { ...payload, ...shardsForTree(payload.shardsByKeystone, ks) }
+}
+
+const shardsByTree = computed(
+  () => runeTreeTab.value !== 'all' && (props.data?.shardsByKeystone?.length ?? 0) > 0
+)
+
 function shardStat(shardId: number, slot: number): RuneStat | null {
-  return mergedShardStat(props.data, shardId, slot)
+  return mergedShardStat(treeShardPayload(props.data), shardId, slot)
 }
 
 function baselineShardStat(shardId: number, slot: number): RuneStat | null {
-  return mergedShardStat(props.baseline, shardId, slot)
+  return mergedShardStat(treeShardPayload(props.baseline), shardId, slot)
 }
 
 const visiblePathsWithCells = computed(() =>
@@ -523,89 +567,99 @@ function runeSetLayout(
           class="stats-runes-paths-grid grid min-w-0 gap-x-4 gap-y-8 overflow-x-auto pb-2 lg:gap-x-6"
         >
           <div
-            v-for="{ path, cells } in visiblePathsWithCells"
+            v-for="{ key, labelKey, cells } in runeTreeBlocks"
             v-show="cells.length > 0"
-            :key="path.id"
+            :key="key"
             class="stats-runes-path flex min-w-[9.5rem] flex-col gap-2"
           >
-            <div
-              v-for="rowIdx in 4"
-              :key="path.id + '-r' + (rowIdx - 1)"
-              class="flex flex-wrap justify-center gap-2"
-            >
-              <template v-for="cell in cells.filter(c => c.row === rowIdx - 1)" :key="cell.rune.id">
-                <div
-                  v-if="cell.stats"
-                  class="flex min-w-[2rem] flex-col items-center gap-1"
-                  :title="
-                    cell.rune.name +
-                    ' — pR: ' +
-                    Number(cell.stats.pickrate).toFixed(2) +
-                    '%, WR: ' +
-                    Number(cell.stats.winrate).toFixed(2) +
-                    '%'
-                  "
+            <p v-if="labelKey" class="rune-side-title">{{ t(labelKey) }}</p>
+            <template v-for="rowIdx in 4" :key="key + '-r' + (rowIdx - 1)">
+              <div
+                v-if="cells.some(c => c.row === rowIdx - 1)"
+                class="flex flex-wrap justify-center gap-2"
+              >
+                <template
+                  v-for="cell in cells.filter(c => c.row === rowIdx - 1)"
+                  :key="cell.rune.id"
                 >
-                  <img
-                    loading="lazy"
-                    decoding="async"
-                    :src="getRuneImageUrl(gameVersion, cell.rune.icon)"
-                    :alt="cell.rune.name"
-                    width="24"
-                    height="24"
-                    class="h-6 w-6 rounded-full bg-black/25 object-contain"
-                  />
-                  <span v-if="runeTreeTab !== 'all'" class="rune-cell-name">{{
-                    cell.rune.name
-                  }}</span>
-                  <span
-                    class="text-[11px] font-bold tabular-nums leading-none"
-                    :class="wrClass(cell.stats.winrate)"
-                    >WR: {{ Number(cell.stats.winrate).toFixed(1) }}</span
+                  <div
+                    v-if="cell.stats"
+                    class="flex min-w-[2rem] flex-col items-center gap-1"
+                    :title="
+                      cell.rune.name +
+                      ' — pR: ' +
+                      Number(cell.stats.pickrate).toFixed(2) +
+                      '%, WR: ' +
+                      Number(cell.stats.winrate).toFixed(2) +
+                      '%'
+                    "
                   >
-                  <span class="text-[10px] tabular-nums leading-none text-text/60"
-                    >pR: {{ Number(cell.stats.pickrate).toFixed(1) }}</span
-                  >
-                  <template v-if="comparisonVersion && !baselinePending">
+                    <img
+                      loading="lazy"
+                      decoding="async"
+                      :src="getRuneImageUrl(gameVersion, cell.rune.icon)"
+                      :alt="cell.rune.name"
+                      width="24"
+                      height="24"
+                      class="h-6 w-6 rounded-full bg-black/25 object-contain"
+                    />
+                    <span v-if="runeTreeTab !== 'all'" class="rune-cell-name">{{
+                      cell.rune.name
+                    }}</span>
                     <span
-                      class="text-[9px] tabular-nums"
-                      :class="
-                        deltaClass(cell.stats.pickrate, baselineRuneMap[cell.rune.id]?.pickrate)
-                      "
+                      class="text-[11px] font-bold tabular-nums leading-none"
+                      :class="wrClass(cell.stats.winrate)"
+                      >WR: {{ Number(cell.stats.winrate).toFixed(1) }}</span
                     >
-                      ΔP
-                      {{
-                        formatDelta(cell.stats.pickrate, baselineRuneMap[cell.rune.id]?.pickrate)
-                      }}
-                    </span>
-                    <span
-                      class="text-[9px] tabular-nums"
-                      :class="
-                        deltaClass(cell.stats.winrate, baselineRuneMap[cell.rune.id]?.winrate)
-                      "
+                    <span class="text-[10px] tabular-nums leading-none text-text/60"
+                      >pR: {{ Number(cell.stats.pickrate).toFixed(1) }}</span
                     >
-                      ΔWR
-                      {{ formatDelta(cell.stats.winrate, baselineRuneMap[cell.rune.id]?.winrate) }}
-                    </span>
-                  </template>
-                </div>
-                <div v-else class="flex min-w-[2rem] flex-col items-center gap-1">
-                  <img
-                    :src="getRuneImageUrl(gameVersion, cell.rune.icon)"
-                    :alt="cell.rune.name"
-                    width="24"
-                    height="24"
-                    class="h-6 w-6 rounded-full bg-black/20 object-contain opacity-50"
-                  />
-                  <span class="text-[10px] text-text/45">—</span>
-                </div>
-              </template>
-            </div>
+                    <template v-if="comparisonVersion && !baselinePending && !showSides">
+                      <span
+                        class="text-[9px] tabular-nums"
+                        :class="
+                          deltaClass(cell.stats.pickrate, baselineRuneMap[cell.rune.id]?.pickrate)
+                        "
+                      >
+                        ΔP
+                        {{
+                          formatDelta(cell.stats.pickrate, baselineRuneMap[cell.rune.id]?.pickrate)
+                        }}
+                      </span>
+                      <span
+                        class="text-[9px] tabular-nums"
+                        :class="
+                          deltaClass(cell.stats.winrate, baselineRuneMap[cell.rune.id]?.winrate)
+                        "
+                      >
+                        ΔWR
+                        {{
+                          formatDelta(cell.stats.winrate, baselineRuneMap[cell.rune.id]?.winrate)
+                        }}
+                      </span>
+                    </template>
+                  </div>
+                  <div v-else class="flex min-w-[2rem] flex-col items-center gap-1">
+                    <img
+                      :src="getRuneImageUrl(gameVersion, cell.rune.icon)"
+                      :alt="cell.rune.name"
+                      width="24"
+                      height="24"
+                      class="h-6 w-6 rounded-full bg-black/20 object-contain opacity-50"
+                    />
+                    <span class="text-[10px] text-text/45">—</span>
+                  </div>
+                </template>
+              </div>
+            </template>
           </div>
         </div>
 
         <!-- Fragments -->
         <div>
+          <p v-if="shardsByTree" class="rune-shards-note">
+            {{ t('statisticsPage.runeShardsByTree') }}
+          </p>
           <div
             class="stats-runes-shards-grid flex flex-col items-center gap-6 sm:flex-row sm:flex-wrap sm:items-end sm:justify-center sm:gap-12 md:gap-16"
           >
@@ -963,6 +1017,21 @@ function runeSetLayout(
   .rune-set-stat-delta {
     font-size: 0.75rem;
   }
+}
+.rune-side-title {
+  margin-bottom: 4px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #c8aa6e;
+}
+.rune-shards-note {
+  margin-bottom: 10px;
+  text-align: center;
+  font-size: 11px;
+  color: #a09b8c;
 }
 </style>
 

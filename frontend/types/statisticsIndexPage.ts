@@ -521,6 +521,8 @@ export type DrakeTypeRow = {
 
 export type DrakeSoulRow = { key: DrakeSoulKey; label: string; byWin: number; byLoss: number }
 
+export type RuneSideStat = { games: number; wins: number; pickrate: number; winrate: number }
+
 /** Runes panel payload (overview-detail runes part, also built by the champion page). */
 export type RunesDetailPayload = {
   totalParticipants: number
@@ -542,6 +544,20 @@ export type RunesDetailPayload = {
     wins: number
     pickrate: number
     winrate: number
+  }>
+  /** Par rune : stats quand prise en arbre primaire / secondaire. */
+  runePositions?: Array<{
+    runeId: number
+    primary: RuneSideStat
+    secondary: RuneSideStat
+  }>
+  /** Fragments par keystone (arbre primaire). */
+  shardsByKeystone?: Array<{
+    keystoneId: number
+    shardId: number
+    slot: number
+    games: number
+    wins: number
   }>
 }
 

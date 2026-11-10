@@ -28,3 +28,10 @@ export function banSplitShare(a: number, b: number): number | null {
   if (total <= 0) return null
   return (a / total) * 100
 }
+
+export type BansSplitMode = 'outcome' | 'side'
+
+/** Colonnes du tableau bans affichées selon le découpage choisi. */
+export function bansSplitColumns(mode: BansSplitMode): { outcome: boolean; side: boolean } {
+  return { outcome: mode === 'outcome', side: mode === 'side' }
+}

@@ -1621,7 +1621,6 @@ function drakeDropdownCountLabel(count: number): string {
         class="obj-gap"
       >
         <header class="obj-gap__head">
-          <h3 class="obj-gap__title">{{ p.t('statisticsPage.objectivesGapTitle') }}</h3>
           <div
             class="obj-gap__modes"
             role="group"

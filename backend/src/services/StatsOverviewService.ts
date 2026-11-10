@@ -35,6 +35,12 @@ import {
 import { normalizeGameVersionToMajorMinor } from '../utils/gameVersion.js'
 import { getTeamSurrenderTotalsBySide } from './StatsAbandonsService.js'
 import { sqlLiteral } from '../stats/sqlLiteral.js'
+import {
+  foldRunePositions,
+  foldShardsByKeystone,
+  type RunePositionStat,
+  type ShardByKeystoneRow,
+} from '../stats/runePositionStats.js'
 
 /** Surrenders imputés par côté (équipe) — mêmes agrégats que overview-sides. */
 export interface OverviewSurrenderBySide {
@@ -82,6 +88,10 @@ export interface InfosPatchDivisionMatrix {
 
 export interface OverviewDetailStats {
   totalParticipants: number
+  /** Par rune : stats en arbre primaire (slots 1-4) et secondaire (slots 5-6). */
+  runePositions?: RunePositionStat[]
+  /** Fragments par keystone (arbre primaire déduit côté front). */
+  shardsByKeystone?: ShardByKeystoneRow[]
   runes: Array<{ runeId: number; games: number; wins: number; pickrate: number; winrate: number }>
   runeSets: Array<{
     runes: unknown
@@ -1623,6 +1633,52 @@ export async function getOverviewDetailStats(
       GROUP BY crs.rune_list, crs.shard_list
       LIMIT 2000
     `)
+    const [runePosRows, shardKsRows] = await Promise.all([
+      queryRawUnsafe<Array<{ runeId: number; pos: number; countWin: bigint; countGame: bigint }>>(`
+        SELECT
+          rp.perk::int AS "runeId",
+          rp.pos::int AS pos,
+          SUM(crs.count_win)::bigint AS "countWin",
+          SUM(crs.count_game)::bigint AS "countGame"
+        FROM ${crsFrom}
+        CROSS JOIN LATERAL unnest(string_to_array(crs.rune_list, '_')) WITH ORDINALITY AS rp(perk, pos)
+        WHERE ${crsWhere} AND rp.perk ~ '^[0-9]+$'
+        GROUP BY 1, 2
+      `),
+      queryRawUnsafe<
+        Array<{ keystoneId: number; shardId: number; slot: number; countWin: bigint; countGame: bigint }>
+      >(`
+        SELECT
+          NULLIF(split_part(crs.rune_list, '_', 1), '')::int AS "keystoneId",
+          sp.shard::int AS "shardId",
+          (sp.pos - 1)::int AS slot,
+          SUM(crs.count_win)::bigint AS "countWin",
+          SUM(crs.count_game)::bigint AS "countGame"
+        FROM ${crsFrom}
+        CROSS JOIN LATERAL unnest(string_to_array(crs.shard_list, '_')) WITH ORDINALITY AS sp(shard, pos)
+        WHERE ${crsWhere} AND sp.shard ~ '^[0-9]+$' AND split_part(crs.rune_list, '_', 1) ~ '^[0-9]+$'
+        GROUP BY 1, 2, 3
+      `),
+    ])
+    const runePositions = foldRunePositions(
+      runePosRows.map((r) => ({
+        runeId: Number(r.runeId),
+        pos: Number(r.pos),
+        games: Number(r.countGame ?? 0),
+        wins: Number(r.countWin ?? 0),
+      })),
+      totalParticipants
+    )
+    const shardsByKeystone = foldShardsByKeystone(
+      shardKsRows.map((r) => ({
+        keystoneId: Number(r.keystoneId),
+        shardId: Number(r.shardId),
+        slot: Number(r.slot),
+        games: Number(r.countGame ?? 0),
+        wins: Number(r.countWin ?? 0),
+      }))
+    )
+
     const runeSetAggKeySep = '\u001e'
     const runeSetMap = new Map<string, { wins: number; games: number; shardList: string }>()
     for (const r of runeSetRows) {
@@ -1662,6 +1718,8 @@ export async function getOverviewDetailStats(
     const result: OverviewDetailStats = {
       totalParticipants,
       runes,
+      runePositions,
+      shardsByKeystone,
       runeSets,
       items,
       itemsStarters,
