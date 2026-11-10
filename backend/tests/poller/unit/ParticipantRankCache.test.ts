@@ -28,4 +28,14 @@ describe('ParticipantRankCache', () => {
     cache.has('a');
     expect(cache.hitCount).toBeGreaterThanOrEqual(1);
   });
+
+  test('release forgets reservation and entries', () => {
+    const cache = new ParticipantRankCache();
+    cache.reserve('a');
+    cache.release('a');
+    expect(cache.has('a')).toBe(false);
+    cache.set('b', []);
+    cache.release('b');
+    expect(cache.get('b')).toBeNull();
+  });
 });

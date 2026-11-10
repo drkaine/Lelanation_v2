@@ -187,7 +187,6 @@ function patchNotesMessage(message: string | undefined): string {
 
 <template>
   <div class="space-y-3">
-    <h2 class="pn-title hidden md:block">{{ p.t('statisticsPage.patchNotesTitle') }}</h2>
     <div class="pn-toolbar">
       <div
         class="pn-seg-group"
@@ -280,6 +279,14 @@ function patchNotesMessage(message: string | undefined): string {
           </div>
           <span class="pn-mlast" :class="'is-' + row.lastModType">
             {{ changeTypeLabel(row.lastModType) }} {{ row.lastModPatch }}
+          </span>
+          <span class="pn-mtouched">
+            {{
+              p.t('statisticsPage.patchNotesTouchedIn', {
+                n: row.patchesTouched,
+                total: row.totalPatches,
+              })
+            }}
           </span>
         </li>
       </ol>
@@ -397,16 +404,11 @@ function patchNotesMessage(message: string | undefined): string {
 </template>
 
 <style scoped>
-.pn-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #f0e6d2;
-}
 .pn-toolbar {
-  flex-wrap: wrap;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
 }
 .pn-seg-group {
   display: inline-flex;
@@ -433,6 +435,8 @@ function patchNotesMessage(message: string | undefined): string {
 }
 .pn-legend {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 14px;
   font-size: 12px;
   color: #a09b8c;
@@ -448,25 +452,25 @@ function patchNotesMessage(message: string | undefined): string {
   border-radius: 2px;
 }
 .is-up {
-  color: #0ac8b9;
+  color: rgb(var(--rgb-info));
 }
 .is-nerf {
-  color: #e2665a;
+  color: rgb(var(--rgb-error));
 }
 .is-ajust {
-  color: #0397ab;
+  color: rgb(var(--rgb-warning));
 }
 .pn-legend i.is-up,
 .pn-seg.is-up {
-  background: #0ac8b9;
+  background: rgb(var(--rgb-info));
 }
 .pn-legend i.is-nerf,
 .pn-seg.is-nerf {
-  background: #e2665a;
+  background: rgb(var(--rgb-error));
 }
 .pn-legend i.is-ajust,
 .pn-seg.is-ajust {
-  background: #0397ab;
+  background: rgb(var(--rgb-warning));
 }
 .pn-dtable-wrap {
   overflow-x: auto;
@@ -613,6 +617,12 @@ function patchNotesMessage(message: string | undefined): string {
   padding: 0;
   list-style: none;
 }
+/* `md:hidden` perd contre le display scoped ci-dessus : masquage explicite en desktop. */
+@media (min-width: 768px) {
+  .pn-mlist {
+    display: none;
+  }
+}
 .pn-mcard {
   display: grid;
   grid-template-columns: 32px 1fr auto;
@@ -647,5 +657,10 @@ function patchNotesMessage(message: string | undefined): string {
   font-size: 11px;
   white-space: nowrap;
   text-align: right;
+}
+.pn-mtouched {
+  grid-column: 2 / -1;
+  font-size: 11px;
+  color: #a09b8c;
 }
 </style>

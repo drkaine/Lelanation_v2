@@ -121,7 +121,7 @@
           <button
             v-if="showFiltersHeaderClose"
             type="button"
-            class="statistics-filters-close ui-build-card-button hidden shrink-0 touch-manipulation items-center justify-center px-2 py-1.5 lg:inline-flex"
+            class="statistics-filters-close ui-build-card-button inline-flex shrink-0 touch-manipulation items-center justify-center px-2 py-1.5"
             :aria-label="t('statisticsPage.closeFilters')"
             @click="closeFilters"
           >
@@ -257,59 +257,6 @@
                 </select>
               </div>
             </template>
-            <div v-if="displayedActiveTab === 'patchNotes'">
-              <div class="mb-1 text-sm font-medium text-text">
-                {{ t('statisticsPage.patchNotesTargetFilterTitle') }}
-              </div>
-              <div class="flex flex-wrap gap-1">
-                <button
-                  type="button"
-                  class="rounded border px-2 py-1 text-xs font-medium transition-colors"
-                  :class="
-                    patchNotesTab.patchNotesTargetActive('champion')
-                      ? 'border-info/60 bg-info/20 text-primary-light'
-                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
-                  "
-                  @click="patchNotesTab.togglePatchNotesTarget('champion')"
-                >
-                  {{ t('statisticsPage.patchNotesTargetChampion') }}
-                </button>
-                <button
-                  type="button"
-                  class="rounded border px-2 py-1 text-xs font-medium transition-colors"
-                  :class="
-                    patchNotesTab.patchNotesTargetActive('items')
-                      ? 'border-info/60 bg-info/20 text-primary-light'
-                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
-                  "
-                  @click="patchNotesTab.togglePatchNotesTarget('items')"
-                >
-                  {{ t('statisticsPage.patchNotesTargetItems') }}
-                </button>
-                <button
-                  type="button"
-                  class="rounded border px-2 py-1 text-xs font-medium transition-colors"
-                  :class="
-                    patchNotesTab.patchNotesTargetActive('runes')
-                      ? 'border-info/60 bg-info/20 text-primary-light'
-                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
-                  "
-                  @click="patchNotesTab.togglePatchNotesTarget('runes')"
-                >
-                  {{ t('statisticsPage.patchNotesTargetRunes') }}
-                </button>
-              </div>
-              <p
-                v-if="
-                  patchNotesTab.patchNotesTargetActive('champion') &&
-                  patchNotesTab.patchNotesTargetActive('items') &&
-                  patchNotesTab.patchNotesTargetActive('runes')
-                "
-                class="mt-1 text-[10px] text-text/50"
-              >
-                {{ t('statisticsPage.patchNotesTargetAllHint') }}
-              </p>
-            </div>
             <div
               v-if="
                 displayedActiveTab !== 'balance' &&
@@ -4471,27 +4418,6 @@ defineExpose({ statisticsPageCtx })
 </style>
 
 <style>
-.statistics .stats-subtabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.statistics .stats-subtab {
-  height: 36px;
-  padding: 0 14px;
-  border: 1px solid #0a323c;
-  border-radius: 18px;
-  color: #cbc3b0;
-  font-size: 14px;
-}
-.statistics .stats-subtab:hover {
-  color: #f0e6d2;
-}
-.statistics .stats-subtab.is-active {
-  background: #0a323c;
-  color: #f0e6d2;
-  font-weight: 600;
-}
 /**
  * Surfaces & fast-stat : hors scoped pour que les composants enfants (objets, tooltips)
  * héritent le même fond rgb(var(--rgb-chrome) / 1) que les cartes « Vue d’ensemble ».

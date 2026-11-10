@@ -198,11 +198,22 @@ export class MatchProcessor {
             matchId,
             participantPuuid: puuid,
             error: message,
-            cachedEmpty: true,
+            cachedEmpty: false,
           },
           'participant rank failed',
         );
-        this.rankCache.set(puuid, []);
+        // Pas de rang vide en cache : il écraserait le snapshot DB. Le match est
+        // débloqué comme « inconnu » (entries vides, fromCache) et l'ingestion
+        // retombe sur player_rank_history / la file rank-gate.
+        this.rankCache.release(puuid);
+        this.eventBus.emit('participant:rank', {
+          sessionId: this.sessionId,
+          triggerMatchId: matchId,
+          participant: { puuid, platform: matchPlatform },
+          entries: [],
+          fromCache: true,
+          fetchedAt: Date.now(),
+        });
         this.onError({
           ts: Date.now(),
           matchId,

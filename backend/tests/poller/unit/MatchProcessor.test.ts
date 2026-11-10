@@ -144,4 +144,44 @@ describe('MatchProcessor', () => {
     await processor.process('EUW1_201');
     expect(fetchLeagueEntriesByPUUID).toHaveBeenCalledTimes(10);
   });
+
+  test('failed participant rank is not cached and is emitted as unknown', async () => {
+    vi.mocked(fetchMatch).mockResolvedValue(buildMatch(['p-ok', 'p-ko']));
+    vi.mocked(fetchMatchTimeline).mockResolvedValue({ info: {} });
+    vi.mocked(fetchLeagueEntriesByPUUID).mockImplementation(async (puuid: string) => {
+      if (puuid === 'p-ko') throw new Error('timeout');
+      return [{ tier: 'GOLD' }];
+    });
+
+    const bus = new PollerEventBus();
+    const events: Array<{ puuid: string; entries: unknown[]; fromCache: boolean }> = [];
+    bus.on('participant:rank', (event) =>
+      events.push({ puuid: event.participant.puuid, entries: event.entries, fromCache: event.fromCache }),
+    );
+    const cache = new ParticipantRankCache();
+    const processor = new MatchProcessor(player, config, bus, cache, 's1', () => undefined, () => undefined, () => undefined);
+
+    await processor.process('EUW1_301');
+
+    expect(cache.has('p-ko')).toBe(false);
+    expect(cache.get('p-ok')).toEqual([{ tier: 'GOLD' }]);
+    expect(events.find((e) => e.puuid === 'p-ko')).toEqual({ puuid: 'p-ko', entries: [], fromCache: true });
+  });
+
+  test('participant whose rank failed is retried on the next match', async () => {
+    vi.mocked(fetchMatch).mockResolvedValue(buildMatch(['p-ko']));
+    vi.mocked(fetchMatchTimeline).mockResolvedValue({ info: {} });
+    vi.mocked(fetchLeagueEntriesByPUUID)
+      .mockRejectedValueOnce(new Error('timeout'))
+      .mockResolvedValueOnce([{ tier: 'SILVER' }]);
+
+    const cache = new ParticipantRankCache();
+    const processor = new MatchProcessor(player, config, new PollerEventBus(), cache, 's1', () => undefined, () => undefined, () => undefined);
+
+    await processor.process('EUW1_302');
+    await processor.process('EUW1_303');
+
+    expect(fetchLeagueEntriesByPUUID).toHaveBeenCalledTimes(2);
+    expect(cache.get('p-ko')).toEqual([{ tier: 'SILVER' }]);
+  });
 });

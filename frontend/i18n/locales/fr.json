@@ -3834,8 +3834,7 @@
   },
   "homeTest": {
     "eyebrow": "Patch {patch}",
-    "title": "Crée ton build. Comprends pourquoi il marche.",
-    "subtitle": "Chaque build est relié à la vidéo qui l'explique et aux stats qui le prouvent. Du build pro au build troll, tout est sur la même carte.",
+    "subtitle": "Trouve un build pour ton champion, un guide, une vidéo ou un guide.",
     "ctaCreate": "Créer un build",
     "ctaDiscover": "Voir les builds",
     "heroPick": "Pick du moment",
@@ -3903,7 +3902,10 @@
     "editorStep1": "Choisis ton champion et ton rôle",
     "editorStep2": "Compose objets, runes et sorts avec les stats en direct",
     "editorStep3": "Publie, partage ou exporte vers le client",
-    "editorCta": "Créer mon build"
+    "editorCta": "Créer mon build",
+    "lastBuild": "Dernier build",
+    "titleLine1": "Crée ton build,",
+    "titleLine2": "améliore-toi"
   },
   "testPatch": {
     "kicker": "Notes de patch",

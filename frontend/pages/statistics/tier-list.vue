@@ -6,55 +6,54 @@
       link-tabs
     />
     <div
-      class="statistics-tabs-bar flex w-full min-w-0 flex-shrink-0 items-start gap-2 overflow-x-hidden px-4 pb-2 pt-4"
+      class="statistics-tabs-bar flex w-full min-w-0 flex-shrink-0 justify-center border-b border-[#0a323c] px-4 py-3"
     >
-      <div class="statistics-tabs-scroll-wrap relative min-w-0 flex-1 overflow-hidden">
-        <div
-          ref="tierListTabsNavEl"
-          class="statistics-tabs-nav flex flex-nowrap gap-1 overflow-x-auto border-b border-primary/30 pb-2 [justify-content:safe_center]"
+      <div ref="tierListTabsNavEl" role="tablist" class="stats-subtabs">
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="tierListViewModel === 'table'"
+          :class="['stats-subtab', tierListViewModel === 'table' ? 'is-active' : '']"
+          @click="setTierListMainView('table')"
         >
-          <button
-            type="button"
-            :class="['statistics-tab-btn', tierListViewModel === 'table' ? 'is-active' : '']"
-            @click="setTierListMainView('table')"
-          >
-            {{ t('statisticsPage.tierListViewTable') }}
-          </button>
-          <button
-            type="button"
-            :class="['statistics-tab-btn', activeTierListTab === 'chart' ? 'is-active' : '']"
-            @click="setTierListMainView('chart')"
-          >
-            {{ t('statisticsPage.tierListViewChart') }}
-          </button>
-          <button
-            type="button"
-            :class="['statistics-tab-btn', activeTierListTab === 'meta' ? 'is-active' : '']"
-            @click="setTierListMainView('meta')"
-          >
-            {{ t('statisticsPage.tierListViewMeta') }}
-          </button>
-          <button
-            type="button"
-            :class="[
-              'statistics-tab-btn',
-              tierListViewModel === 'botlaneMatchups' ? 'is-active' : '',
-            ]"
-            @click="setTierListMainView('botlaneMatchups')"
-          >
-            {{ t('statisticsPage.tierListViewBotlaneMatchups') }}
-          </button>
-          <button
-            type="button"
-            :class="[
-              'statistics-tab-btn',
-              tierListViewModel === 'botlaneDuoRank' ? 'is-active' : '',
-            ]"
-            @click="setTierListMainView('botlaneDuoRank')"
-          >
-            {{ t('statisticsPage.tierListViewBotlaneDuoRank') }}
-          </button>
-        </div>
+          {{ t('statisticsPage.tierListViewTable') }}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="activeTierListTab === 'chart'"
+          :class="['stats-subtab', activeTierListTab === 'chart' ? 'is-active' : '']"
+          @click="setTierListMainView('chart')"
+        >
+          {{ t('statisticsPage.tierListViewChart') }}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="activeTierListTab === 'meta'"
+          :class="['stats-subtab', activeTierListTab === 'meta' ? 'is-active' : '']"
+          @click="setTierListMainView('meta')"
+        >
+          {{ t('statisticsPage.tierListViewMeta') }}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="tierListViewModel === 'botlaneMatchups'"
+          :class="['stats-subtab', tierListViewModel === 'botlaneMatchups' ? 'is-active' : '']"
+          @click="setTierListMainView('botlaneMatchups')"
+        >
+          {{ t('statisticsPage.tierListViewBotlaneMatchups') }}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="tierListViewModel === 'botlaneDuoRank'"
+          :class="['stats-subtab', tierListViewModel === 'botlaneDuoRank' ? 'is-active' : '']"
+          @click="setTierListMainView('botlaneDuoRank')"
+        >
+          {{ t('statisticsPage.tierListViewBotlaneDuoRank') }}
+        </button>
       </div>
     </div>
 

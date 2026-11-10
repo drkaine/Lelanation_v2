@@ -23,6 +23,7 @@ import {
   type ItemTypeChip,
 } from '~/utils/statistics/itemTypeCounts'
 import { championMobileBarPct } from '~/utils/statistics/championMobileCards'
+import { itemSetsForDisplay, type ItemSetStat } from '~/utils/statistics/itemSetsDisplay'
 
 const p = injectStatisticsPageCtx<StatisticsIndexPageCtx>()
 const itemsStore = useItemsStore()
@@ -146,6 +147,20 @@ const itemSearchQuery = computed(() => String(unref(p.championSearchQuery) ?? ''
 const itemById = computed<Map<number, Item>>(
   () => new Map(itemsStore.items.map(i => [Number(i.id), i] as const))
 )
+
+type ItemSetsDetail = { totalParticipants: number; itemSets: ItemSetStat[] }
+
+function itemSetsDetail(
+  d: { totalParticipants?: number; itemSets?: ItemSetStat[] } | null | undefined
+): ItemSetsDetail | null {
+  if (!d) return null
+  return {
+    totalParticipants: d.totalParticipants ?? 0,
+    itemSets: itemSetsForDisplay(d.itemSets ?? [], id => classifyItemType(itemById.value.get(id))),
+  }
+}
+const itemSetsData = computed(() => itemSetsDetail(p.overviewDetailData))
+const itemSetsBaseline = computed(() => itemSetsDetail(p.overviewDetailBaselineData))
 
 function isCompleteLegendary(item: Item | undefined): boolean {
   if (!item) return false
@@ -374,7 +389,6 @@ function deltaClass(value: number | null | undefined): string {
     <template v-else-if="tableRows.length > 0">
       <div v-if="tableRows.length > 0" class="statistics-items-tab space-y-3">
         <div class="it-head">
-          <h2 class="it-title">{{ p.t('statisticsPage.overviewDetailItems') }}</h2>
           <div class="items-type" role="group" :aria-label="p.t('statisticsPage.itemsTypeAria')">
             <button
               v-for="chip in ITEM_TYPE_CHIPS"
@@ -619,6 +633,15 @@ function deltaClass(value: number | null | undefined): string {
           {{ totalRowsCount }} {{ p.t('statisticsPage.overviewDetailItems') }}
         </StatisticsRangePagination>
       </div>
+      <StatisticsItemSetsOverviewPanel
+        v-if="itemSetsData && itemSetsData.itemSets.length > 0"
+        class="mt-4"
+        :game-version="p.gameVersion || p.versionStore.currentVersion || ''"
+        :data="itemSetsData"
+        :baseline="itemSetsBaseline"
+        :baseline-pending="p.overviewDetailBaselinePending"
+        :comparison-version="p.overviewDetailComparisonVersion"
+      />
     </template>
     <div v-else class="text-text/70">{{ p.t('statisticsPage.overviewDetailNoData') }}</div>
   </div>
@@ -631,11 +654,6 @@ function deltaClass(value: number | null | undefined): string {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-}
-.it-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #f0e6d2;
 }
 .items-type {
   display: flex;

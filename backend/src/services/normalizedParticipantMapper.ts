@@ -38,6 +38,11 @@ function n(v: unknown): number {
   return Number.isFinite(x) ? x : 0;
 }
 
+/** Clés de sets (starter/core/bottes/final) d'un participant depuis `item_history`. */
+export function participantItemSetKeys(raw: unknown): ItemSetKeys {
+  return itemSetKeysFromHistory(itemsFromItemHistory(raw, false));
+}
+
 function itemsFromItemHistory(raw: unknown, win: boolean): ParsedItemDto[] {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
   return Object.entries(raw as Record<string, number>)
@@ -50,6 +55,7 @@ function itemsFromItemHistory(raw: unknown, win: boolean): ParsedItemDto[] {
     .filter((item) => item.itemId > 0);
 }
 
+import { itemSetKeysFromHistory, type ItemSetKeys } from '../parsers/itemSetKeys.js'
 import {
   spellOrderFromHistoryDoc,
   spellTimestampSumFromHistoryDoc,
@@ -196,7 +202,7 @@ export function participantRowsToParsedDtos(
   for (const row of sorted) {
     const win = row.win === true;
     const items = itemsFromItemHistory(row.item_history, win);
-    const finalIds = items.map((i) => i.itemId);
+    const setKeys = itemSetKeysFromHistory(items);
     const opponent = findOpponent(row, sorted);
     const opponentRow = rowByParticipantId.get(opponent.participantId);
     const perks = perksFromRow(row);
@@ -246,11 +252,11 @@ export function participantRowsToParsedDtos(
       spell3Casts: n(row.spell3_casts),
       spell4Casts: n(row.spell4_casts),
       spellLevelUpTimestampSumMs: spellTimestampSumFromHistoryDoc(row.spell_history),
-      starterKey: "",
-      coreKey: "",
+      starterKey: setKeys.starterKey,
+      coreKey: setKeys.coreKey,
       materialKey: "",
-      bootsKey: "",
-      finalKey: finalIds.join("_"),
+      bootsKey: setKeys.bootsKey,
+      finalKey: setKeys.finalKey,
       items,
       runeList: perks.slice(0, 6).join("_"),
       shardList: perks.slice(6).join("_"),

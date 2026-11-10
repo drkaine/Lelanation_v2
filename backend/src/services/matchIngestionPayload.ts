@@ -16,7 +16,7 @@ import {
   matchReadyForAggregation,
   normalizeParticipantRankTier,
 } from '../workers/match-rank-readiness.js';
-import { rankSnapshotFromLeagueEntries } from './rankFromLeagueEntries.js';
+import { eventRankSnapshots, rankSnapshotFromLeagueEntries } from './rankFromLeagueEntries.js';
 import { riotConfig } from '../riot-gateway/config/riotConfig.js';
 
 /** Clé perso : pas de fetch-rank participants (quota API) — materialize + fallback rang match. */
@@ -291,12 +291,11 @@ async function buildClosestSnapshots(
   gameDate: Date,
   eventRankByPuuid: ReadonlyMap<string, LeagueEntryDto[]>,
 ): Promise<Map<string, RankSnapshot>> {
-  const fromEvents = new Map<string, RankSnapshot>();
-  for (const participant of participants) {
-    const puuid = String(participant.puuid ?? '').trim();
-    if (!puuid || !eventRankByPuuid.has(puuid)) continue;
-    fromEvents.set(puuid, rankSnapshotFromLeagueEntries(eventRankByPuuid.get(puuid) ?? [], gameDate));
-  }
+  const fromEvents = eventRankSnapshots(
+    participants.map((p) => p.puuid),
+    eventRankByPuuid,
+    gameDate,
+  );
 
   const puuids = participants.map((p) => p.puuid).filter(Boolean);
   const fromDb = await getRankSnapshotsAtOrAfterForMatch(puuids, region, gameDate);

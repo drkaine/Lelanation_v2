@@ -1221,8 +1221,20 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* Autant de cartes par ligne que la largeur permet avec 10 px d'écart minimum ;
+   l'espace restant élargit les écarts (space-evenly), sans retirer de carte. */
 .build-grid-list {
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, var(--ui-card-grid-max));
+  justify-content: space-evenly;
+  align-items: start;
+  column-gap: 10px;
+  row-gap: var(--ui-card-grid-gap, 15px);
+}
+
+.build-grid-list > * {
+  width: auto;
+  max-width: none;
 }
 
 .build-grid-item {

@@ -37,7 +37,12 @@ export async function insertRankHistory(entry: RankHistoryRow): Promise<void> {
       ${entry.rankDivision},
       ${entry.rankLp}
     )
-    ON CONFLICT (puuid, date, region) DO NOTHING
+    ON CONFLICT (puuid, date, region) DO UPDATE SET
+      rank_tier = EXCLUDED.rank_tier,
+      rank_division = EXCLUDED.rank_division,
+      rank_lp = EXCLUDED.rank_lp
+    WHERE EXCLUDED.rank_tier <> 'UNRANKED'
+       OR player_rank_history.rank_tier = 'UNRANKED'
   `
 }
 

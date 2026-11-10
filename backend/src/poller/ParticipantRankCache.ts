@@ -24,6 +24,12 @@ export class ParticipantRankCache {
     this.reserved.add(puuid);
   }
 
+  /** Oublie un joueur (fetch échoué) : il sera retenté au prochain match. */
+  release(puuid: string): void {
+    this.entries.delete(puuid);
+    this.reserved.delete(puuid);
+  }
+
   get(puuid: string): LeagueEntryDto[] | null {
     if (!this.entries.has(puuid)) return null;
     return this.entries.get(puuid) ?? null;

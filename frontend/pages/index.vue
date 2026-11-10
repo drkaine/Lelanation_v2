@@ -11,7 +11,10 @@
         <p v-if="stats.patch" class="hg-eyebrow">
           {{ t('homeTest.eyebrow', { patch: stats.patch }) }}
         </p>
-        <h1 class="hg-title">{{ t('homeTest.title') }}</h1>
+        <h1 class="hg-title">
+          <span>{{ t('homeTest.titleLine1') }}</span>
+          <span>{{ t('homeTest.titleLine2') }}</span>
+        </h1>
         <p class="hg-subtitle">{{ t('homeTest.subtitle') }}</p>
         <form class="hg-search" role="search" @submit.prevent="submitChampionSearch">
           <label for="hg-search-input" class="sr-only">{{ t('homeTest.searchLabel') }}</label>
@@ -82,6 +85,16 @@
         <span class="hg-hero-pick-name">{{ heroChampion.name }}</span>
         <span :class="uiStatisticsTierBadgeClass(heroRow.tier)">{{ heroRow.tier }}</span>
       </NuxtLink>
+
+      <div v-if="lastBuild" class="hg-hero-build">
+        <p class="hg-hero-pick-label">{{ t('homeTest.lastBuild') }}</p>
+        <BuildGrid
+          :custom-builds="[lastBuild]"
+          :show-comparison-buttons="true"
+          :hide-bottom-actions="false"
+          :show-all-custom-builds="true"
+        />
+      </div>
     </section>
 
     <div class="hg-container">
@@ -119,8 +132,8 @@
     <div v-if="!pending && recentBuilds.length" class="hg-builds-wrap">
       <BuildGrid
         :custom-builds="homeBuilds"
-        :show-comparison-buttons="false"
-        :hide-bottom-actions="true"
+        :show-comparison-buttons="true"
+        :hide-bottom-actions="false"
         :show-all-custom-builds="true"
       />
     </div>
@@ -301,7 +314,7 @@ import VideoGridCard from '~/components/Videos/VideoGridCard.vue'
 import type { HomeTierListRow } from '~/composables/useHomePage'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { championStatsDetailPath } from '~/utils/championStatsRoutes'
-import { findChampionSlug, homePopularPicks } from '~/utils/homeHero'
+import { findChampionSlug, homePopularPicks, latestHomeBuild } from '~/utils/homeHero'
 import { homeGuides, homePatchRecap, pickHeroRow, topPicksByRole } from '~/utils/homeGaming'
 import { apiUrl } from '~/utils/apiUrl'
 import { matchupGuideDetailPath } from '~/utils/matchupGuideSlug'
@@ -384,6 +397,7 @@ const { data: guides } = useAsyncData(
 const latestGuides = computed(() => homeGuides(guides.value ?? [], 4))
 
 const homeBuilds = computed((): Build[] => recentBuilds.value.slice(0, 6) as Build[])
+const lastBuild = computed(() => latestHomeBuild(recentBuilds.value as Build[]))
 const metaPicks = computed(() => topPicksByRole(tierByRole.value, 3))
 const popularPicks = computed(() => homePopularPicks(tierByRole.value, 5))
 const championQuery = ref('')
@@ -452,9 +466,12 @@ const socialLinks = [
 .hg-hero {
   position: relative;
   overflow: hidden;
-  min-height: 460px;
-  display: flex;
-  align-items: flex-end;
+  min-height: 340px;
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: center;
+  gap: 1.5rem;
+  padding-bottom: 1.5rem;
   border-bottom: 1px solid rgb(var(--rgb-accent) / 0.3);
   background: var(--color-blue-600);
   isolation: isolate;
@@ -485,7 +502,29 @@ const socialLinks = [
   width: 100%;
   max-width: none;
   margin-inline: auto;
-  padding: 3rem 16px 2rem;
+  padding: 2rem 16px 1.5rem;
+}
+
+@media (min-width: 1024px) {
+  .hg-hero {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    padding-bottom: 0;
+  }
+}
+
+.hg-hero-build {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding-inline: 16px;
+}
+
+@media (min-width: 1024px) {
+  .hg-hero-build {
+    align-items: flex-end;
+    padding: 1.5rem 2rem;
+  }
 }
 
 @media (min-width: 640px) {
@@ -504,13 +543,17 @@ const socialLinks = [
 
 .hg-title {
   margin-top: 0.25rem;
-  font-size: clamp(2.25rem, 6vw, 4.5rem);
+  font-size: clamp(1.6rem, 3.5vw, 2.6rem);
   font-weight: 900;
-  line-height: 1;
+  line-height: 1.1;
   text-transform: uppercase;
   letter-spacing: 0.02em;
   color: var(--color-text-accent);
   text-shadow: 0 4px 24px rgb(0 0 0 / 0.5);
+}
+
+.hg-title span {
+  display: block;
 }
 
 .hg-subtitle {
@@ -547,20 +590,11 @@ const socialLinks = [
 }
 
 .hg-hero-pick {
-  position: absolute;
-  right: 2rem;
-  bottom: 2rem;
-  display: none;
+  display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
   gap: 0.35rem;
-  text-align: right;
-}
-
-@media (min-width: 1024px) {
-  .hg-hero-pick {
-    display: flex;
-  }
+  text-align: center;
 }
 
 .hg-hero-pick-label {

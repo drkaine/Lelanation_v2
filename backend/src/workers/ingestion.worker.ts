@@ -485,7 +485,7 @@ export async function upsertSpellOrderStats(tx: any, participants: ParsedPartici
   }
 }
 
-async function upsertItemSetStats(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
+export async function upsertItemSetStats(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
   const rows: Array<{ keys: unknown[]; sums: number[] }> = [];
   for (const participant of participants) {
     const { championTransform } = championTransformFields(participant);

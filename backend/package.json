@@ -58,6 +58,7 @@
     "scrape:patches:rescrape-below": "tsx src/scripts/scrapeAllPatches.ts 16.1 --force --below 16.11",
     "publish:patches": "tsx src/scripts/publishPatchNotes.ts",
     "backfill:patch-notes-stats": "tsx src/scripts/backfillPatchNotesStats.ts",
+    "backfill:item-set-stats": "tsx src/scripts/backfillChampionItemSetStats.ts",
     "flag:builds-patch-stale": "tsx src/scripts/flagBuildsPatchStale.ts",
     "flag:builds-patch-stale:all": "tsx src/scripts/flagBuildsPatchStale.ts --all",
     "script:sync-champion-regions": "tsx src/scripts/syncChampionRegions.ts",

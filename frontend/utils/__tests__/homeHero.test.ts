@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findChampionSlug, homePopularPicks } from '../homeHero'
+import { findChampionSlug, homePopularPicks, latestHomeBuild } from '../homeHero'
 
 const blocks = [
   {
@@ -43,5 +43,26 @@ describe('findChampionSlug', () => {
   it('rien trouvé', () => {
     expect(findChampionSlug('zzz', champs)).toBeNull()
     expect(findChampionSlug('  ', champs)).toBeNull()
+  })
+})
+
+describe('latestHomeBuild', () => {
+  it('rend le build créé le plus récemment', () => {
+    const builds = [
+      { id: 'a', createdAt: '2026-11-01T10:00:00Z' },
+      { id: 'b', createdAt: '2026-11-09T10:00:00Z' },
+      { id: 'c', createdAt: '2026-11-05T10:00:00Z' },
+    ]
+    expect(latestHomeBuild(builds)?.id).toBe('b')
+  })
+
+  it('ignore les dates invalides et rend null sans build', () => {
+    expect(latestHomeBuild([])).toBeNull()
+    expect(
+      latestHomeBuild([
+        { id: 'x', createdAt: '' },
+        { id: 'y', createdAt: '2026-01-01' },
+      ])?.id
+    ).toBe('y')
   })
 })

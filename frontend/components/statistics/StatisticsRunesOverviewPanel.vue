@@ -736,9 +736,6 @@ function runeSetLayout(
 
         <template v-if="unifiedLayout">
           <hr class="border-primary/25" aria-hidden="true" />
-          <h3 class="text-sm font-semibold text-text">
-            {{ t('statisticsPage.runeSetsSectionTitle') }}
-          </h3>
           <div class="build-set-cards-grid rune-set-cards-grid">
             <div
               v-for="(row, idx) in allRuneSetsListed.map(s => ({

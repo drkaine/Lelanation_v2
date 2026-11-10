@@ -41,6 +41,11 @@ import {
   type RunePositionStat,
   type ShardByKeystoneRow,
 } from '../stats/runePositionStats.js'
+import {
+  OVERVIEW_DETAIL_EXCLUDED_ITEM_IDS,
+  overviewItemSetItems,
+  parseItemSetKeyString,
+} from './overviewItemSets.js'
 
 /** Surrenders imputés par côté (équipe) — mêmes agrégats que overview-sides. */
 export interface OverviewSurrenderBySide {
@@ -987,8 +992,6 @@ export async function getMatchesByVersionStats(
 
 // ── getOverviewDetailStats ───────────────────────────────────────────────────
 
-/** Trinkets + balise de contrôle (2055) : exclus des stats objets agrégées. */
-const OVERVIEW_DETAIL_EXCLUDED_ITEM_IDS = new Set([3340, 3364, 3363, 2055])
 
 /** Potions / consommables : exclus du slice starter et des combinaisons starter (pas du solo global). */
 const OVERVIEW_STARTER_SLICE_EXCLUDED_IDS = new Set([
@@ -1059,24 +1062,6 @@ function buildOverviewDetailWhere(
   return parts.join(' AND ')
 }
 
-function parseItemSetKeyString(key: string): number[] {
-  if (!key) return []
-  const trimmed = key.trim()
-  if (trimmed.startsWith('[')) {
-    try {
-      const parsed = JSON.parse(trimmed) as unknown
-      if (Array.isArray(parsed)) {
-        return parsed.map((x) => Number(x)).filter((n) => Number.isFinite(n) && n > 0)
-      }
-    } catch {
-      /* legacy JSON parse failed */
-    }
-  }
-  return trimmed
-    .split('_')
-    .map((x) => Number(x.trim()))
-    .filter((n) => Number.isFinite(n) && n > 0)
-}
 
 function securedGamesFromOutcome(dist: Record<string, number>): number {
   let total = 0
@@ -1572,6 +1557,7 @@ export async function getOverviewDetailStats(
         AND ist.phase = 'final'
         AND ist.item_set_key <> ''
       GROUP BY ist.item_set_key
+      ORDER BY SUM(ist.count_game) DESC
       LIMIT 2000
     `)
     const itemSetMap = new Map<string, { wins: number; games: number }>()
@@ -1583,11 +1569,8 @@ export async function getOverviewDetailStats(
     const itemSets = Array.from(itemSetMap.entries())
       .filter(([, e]) => e.games >= 5)
       .map(([listStr, e]) => {
-        const parsedItems = parseItemSetKeyString(listStr)
         return {
-          items: parsedItems.filter(
-            (id) => !OVERVIEW_DETAIL_EXCLUDED_ITEM_IDS.has(id) && !isBootItemId(id)
-          ),
+          items: overviewItemSetItems(listStr),
           games: e.games,
           wins: e.wins,
           pickrate: totalParticipants > 0 ? Math.round((e.games / totalParticipants) * 10000) / 100 : 0,
@@ -4432,74 +4415,14 @@ export async function getOverviewSidesProgressionFullStats(
   }
 }
 
+/**
+ * Ancien agrégat patch/division/objectif lu dans archive_agg_team_bucket.
+ * Le schéma actuel n'a plus de buckets d'objectifs par équipe : réponse vide, sans requête.
+ */
 export async function getObjectiveOutcomeAggByPatchDivision(
-  version?: string | string[] | null,
-  rankTier?: string | string[] | null,
-  objectiveKey?: string | null
+  _version?: string | string[] | null,
+  _rankTier?: string | string[] | null,
+  _objectiveKey?: string | null
 ): Promise<ObjectiveOutcomeAggByPatchDivision> {
-  if (!isDatabaseConfigured()) return { rows: [] }
-  const versions = toQueryStringArrayParam(version)
-  const conditions: string[] = ['1=1']
-  if (versions.length === 1) {
-    conditions.push(`tc.game_version LIKE '${sqlLiteral(normalizePatchMajorMinor(versions[0]))}%'`)
-  } else if (versions.length > 1) {
-    conditions.push(
-      `tc.game_version IN (${versions.map((v) => `'${sqlLiteral(normalizePatchMajorMinor(v))}'`).join(',')})`
-    )
-  }
-  conditions.push(...buildRankTierSqlConditions('tc', rankTier))
-  const objective = (objectiveKey ?? '').trim()
-  if (objective) {
-    conditions.push(`tb.objective_key = '${sqlLiteral(objective)}'`)
-  }
-
-  const whereSql = conditions.join(' AND ')
-  try {
-    const rows = await queryRawUnsafe<
-      Array<{
-        game_version: string
-        rank_tier: string
-        objective_key: string
-        objective_bucket: number
-        games: bigint
-        wins: bigint
-      }>
-    >(`
-      SELECT
-        tc.game_version,
-        tc.rank_tier,
-        tb.objective_key,
-        tb.objective_bucket,
-        SUM(tb.count_game)::bigint AS games,
-        SUM(tb.count_win)::bigint AS wins
-      FROM archive_agg_team_bucket tb
-      INNER JOIN archive_agg_team_core_stats tc ON tc.id = tb.team_stat_id
-      WHERE ${whereSql}
-      GROUP BY tc.game_version, tc.rank_tier, tb.objective_key, tb.objective_bucket
-      ORDER BY tc.game_version DESC, tc.rank_tier ASC, tb.objective_key ASC, tb.objective_bucket ASC
-    `)
-    return {
-      rows: rows.map((r) => {
-        const games = Number(r.games ?? 0)
-        const wins = Number(r.wins ?? 0)
-        const losses = Math.max(0, games - wins)
-        const winrateWinner = games > 0 ? Math.round((wins / games) * 10000) / 100 : 0
-        const winrateOther = games > 0 ? Math.round((losses / games) * 10000) / 100 : 0
-        return {
-          version: String(r.game_version ?? ''),
-          rankTier: String(r.rank_tier ?? ''),
-          objectiveKey: String(r.objective_key ?? ''),
-          objectiveCount: Number(r.objective_bucket ?? 0),
-          games,
-          wins,
-          losses,
-          winrateWinner,
-          winrateOther,
-        }
-      }),
-    }
-  } catch (err) {
-    console.error('[getObjectiveOutcomeAggByPatchDivision]', err)
-    return { rows: [] }
-  }
+  return { rows: [] }
 }

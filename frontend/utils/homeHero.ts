@@ -35,3 +35,17 @@ export function findChampionSlug(
     champions.find(c => norm(c.name).startsWith(q) || norm(c.id).startsWith(q))
   return hit ? hit.id.toLowerCase() : null
 }
+
+/** Dernier build créé (date `createdAt` la plus récente) ; null si aucun. */
+export function latestHomeBuild<B extends { createdAt?: string }>(builds: readonly B[]): B | null {
+  let best: B | null = null
+  let bestTime = -Infinity
+  for (const build of builds) {
+    const time = Date.parse(build.createdAt ?? '')
+    if (Number.isFinite(time) && time > bestTime) {
+      best = build
+      bestTime = time
+    }
+  }
+  return best
+}

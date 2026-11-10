@@ -3834,7 +3834,6 @@
   },
   "homeTest": {
     "eyebrow": "Patch {patch}",
-    "title": "Build it. Understand why it works.",
     "subtitle": "Every build is linked to the video that explains it and the stats that back it up. From pro to troll builds, everything fits on one card.",
     "ctaCreate": "Create a build",
     "ctaDiscover": "Browse builds",
@@ -3903,7 +3902,10 @@
     "editorStep1": "Pick your champion and role",
     "editorStep2": "Choose items, runes and spells with live stats",
     "editorStep3": "Publish, share or export to the client",
-    "editorCta": "Create my build"
+    "editorCta": "Create my build",
+    "lastBuild": "Latest build",
+    "titleLine1": "Build it,",
+    "titleLine2": "level up"
   },
   "testPatch": {
     "kicker": "Patch notes",

@@ -54,3 +54,22 @@ export function rankHistoryFromLeagueEntries(
     rankedAt,
   };
 }
+
+/**
+ * Snapshots issus des events poller. Les listes vides (rang déjà en base, fetch
+ * échoué) sont ignorées : elles ne doivent pas écraser le snapshot DB par UNRANKED.
+ */
+export function eventRankSnapshots(
+  puuids: readonly string[],
+  eventRankByPuuid: ReadonlyMap<string, LeagueEntryDto[]>,
+  gameDate: Date,
+): Map<string, RankSnapshot> {
+  const out = new Map<string, RankSnapshot>();
+  for (const raw of puuids) {
+    const puuid = String(raw ?? '').trim();
+    const entries = puuid ? eventRankByPuuid.get(puuid) : undefined;
+    if (!entries || entries.length === 0) continue;
+    out.set(puuid, rankSnapshotFromLeagueEntries(entries, gameDate));
+  }
+  return out;
+}

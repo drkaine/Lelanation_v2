@@ -112,3 +112,26 @@
     @apply ui-build-card-surface rounded-xl p-4;
   }
 }
+
+/* Sous-onglets en pastilles : /statistics et /statistics/tier-list */
+.statistics .stats-subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.statistics .stats-subtab {
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid #0a323c;
+  border-radius: 18px;
+  color: #cbc3b0;
+  font-size: 14px;
+}
+.statistics .stats-subtab:hover {
+  color: #f0e6d2;
+}
+.statistics .stats-subtab.is-active {
+  background: #0a323c;
+  color: #f0e6d2;
+  font-weight: 600;
+}
