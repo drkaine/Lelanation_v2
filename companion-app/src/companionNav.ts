@@ -6,14 +6,14 @@ export type CompanionNavSubItem = {
 
 export type CompanionNavMenu = {
   type: "menu"
-  id: "builds" | "guides" | "statistics"
+  id: "builds" | "statistics" | "learn"
   labelKey: string
   items: CompanionNavSubItem[]
 }
 
 export type CompanionNavLink = {
   type: "link"
-  id: "videos" | "patch-notes"
+  id: "patch-notes"
   labelKey: string
   path: string
 }
@@ -42,34 +42,8 @@ export function buildCompanionNav(language: "fr" | "en"): CompanionNavEntry[] {
         { id: "create", path: `${prefix}/builds/create`, labelKey: "buildsPage.createBuild" },
         { id: "discover", path: `${prefix}/builds/discover`, labelKey: "buildsPage.discover" },
         { id: "my-builds", path: `${prefix}/builds/my-builds`, labelKey: "buildsPage.myBuilds" },
+        { id: "team", path: `${prefix}/builds/team`, labelKey: "buildsPage.teamBuilds" },
         { id: "favoris", path: `${prefix}/builds/favoris`, labelKey: "buildsPage.myFavorites" },
-      ],
-    },
-    {
-      type: "menu",
-      id: "guides",
-      labelKey: "nav.guides",
-      items: [
-        {
-          id: "create",
-          path: `${prefix}/matchups/sheets/create`,
-          labelKey: "matchupGuidePage.createGuide",
-        },
-        {
-          id: "discover",
-          path: `${prefix}/matchups/sheets/discover`,
-          labelKey: "buildsPage.discover",
-        },
-        {
-          id: "my-guides",
-          path: `${prefix}/matchups/sheets/my-guides`,
-          labelKey: "matchupGuidePage.myGuides",
-        },
-        {
-          id: "favoris",
-          path: `${prefix}/matchups/sheets/favoris`,
-          labelKey: "buildsPage.myFavorites",
-        },
       ],
     },
     {
@@ -77,21 +51,8 @@ export function buildCompanionNav(language: "fr" | "en"): CompanionNavEntry[] {
       id: "statistics",
       labelKey: "nav.statistics",
       items: [
-        {
-          id: "tier-list",
-          path: `${prefix}/statistics/tier-list`,
-          labelKey: "nav.tierList",
-        },
-        {
-          id: "overview",
-          path: `${prefix}/statistics`,
-          labelKey: "nav.statisticsGeneral",
-        },
-        {
-          id: "champions",
-          path: `${prefix}/statistics/champion`,
-          labelKey: "nav.statisticsChampions",
-        },
+        { id: "overview", path: `${prefix}/statistics`, labelKey: "nav.statisticsGeneral" },
+        { id: "champions", path: `${prefix}/statistics/champion`, labelKey: "nav.statisticsChampions" },
         {
           id: "surveillance",
           path: `${prefix}/statistics/surveillance`,
@@ -100,15 +61,19 @@ export function buildCompanionNav(language: "fr" | "en"): CompanionNavEntry[] {
       ],
     },
     {
-      type: "link",
-      id: "videos",
-      labelKey: "nav.videos",
-      path: `${prefix}/videos`,
+      type: "menu",
+      id: "learn",
+      labelKey: "nav.learn",
+      items: [
+        { id: "items", path: `${prefix}/items`, labelKey: "nav.itemShop" },
+        { id: "videos", path: `${prefix}/videos`, labelKey: "nav.videos" },
+        { id: "guides", path: `${prefix}/guides/champion`, labelKey: "nav.championGuides" },
+      ],
     },
     {
       type: "link",
       id: "patch-notes",
-      labelKey: "nav.patchNotes",
+      labelKey: "nav.patchSummary",
       path: `${prefix}/patch-notes`,
     },
     {
@@ -131,8 +96,8 @@ export function isCompanionMenuActive(menuId: CompanionNavMenu["id"], iframePath
   switch (menuId) {
     case "builds":
       return path.includes("/builds")
-    case "guides":
-      return path.includes("/matchups/sheets")
+    case "learn":
+      return /^(?:\/en)?\/(items|videos|guides)(?:\/|$)/.test(path)
     case "statistics":
       return path.includes("/statistics")
     default:
@@ -160,8 +125,6 @@ export function isCompanionSubItemActive(itemPath: string, iframePath: string): 
 export function isCompanionLinkActive(linkId: CompanionNavLink["id"], iframePath: string): boolean {
   const path = normalizeCompanionPath(iframePath)
   switch (linkId) {
-    case "videos":
-      return path.includes("/videos")
     case "patch-notes":
       return path.includes("/patch-notes")
     default:
