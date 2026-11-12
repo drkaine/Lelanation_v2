@@ -635,7 +635,15 @@ function runeSetLayout(
                 <span class="rb-wr">{{ t('statisticsPage.runesWr') }} {{ fmt1(row.wr) }} %</span>
               </div>
               <p v-for="alt in row.alts" :key="'rba-' + alt.id" class="rb-alt">
-                <span>{{ t('statisticsPage.runesBuildOr', { name: alt.name }) }}</span>
+                <span class="rb-alt-label">
+                  <img
+                    :src="col.shard ? alt.icon : getRuneImageUrl(gameVersion, alt.icon)"
+                    :alt="alt.name"
+                    class="rb-alt-icon"
+                    loading="lazy"
+                  />
+                  {{ t('statisticsPage.runesBuildOr', { name: alt.name }) }}
+                </span>
                 <span class="rb-alt-num"
                   >{{ fmt1(alt.pick) }} % · {{ t('statisticsPage.runesWr') }}
                   {{ fmt1(alt.wr) }} %</span
@@ -1328,8 +1336,21 @@ function runeSetLayout(
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+.rb-alt-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.rb-alt-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #0a0e13;
+  flex-shrink: 0;
+}
 .rb-alt {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
   margin-top: 0.45rem;

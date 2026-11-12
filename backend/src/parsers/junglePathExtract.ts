@@ -6,6 +6,7 @@ import {
   isNeutralJunglePathCamp,
   MAX_JUNGLE_PATH_CAMPS,
 } from "../constants/mapSpatial.js";
+import { reconstructFirstClear } from "./jungleFullClear.js";
 
 export type JungleCampEntry = {
   camp_type: string;
@@ -83,9 +84,10 @@ export function readEarlyPath(raw: unknown): JunglePathResult | null {
 
 export function extractJunglePathFromCamps(camps: JungleCampEntry[]): JunglePathResult | null {
   const neutral = camps.filter((c) => isNeutralJunglePathCamp(c.camp_type));
+  const reconstructed = reconstructFirstClear(neutral);
   const early: JungleCampEntry[] = [];
 
-  for (const camp of neutral) {
+  for (const camp of reconstructed ?? neutral) {
     if (camp.timestamp_ms > FIRST_JUNGLE_CLEAR_MAX_MS) break;
     early.push(camp);
     if (camp.camp_type === "scuttler" && early.length >= 2) break;

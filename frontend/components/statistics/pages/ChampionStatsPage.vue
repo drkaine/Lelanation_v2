@@ -1,6 +1,6 @@
 <template>
   <div
-    class="champion-stats flex min-h-screen min-w-0 flex-col overflow-x-hidden bg-background text-text"
+    class="champion-stats flex min-h-screen min-w-0 flex-col overflow-x-clip bg-background text-text"
   >
     <div class="w-full flex-shrink-0 px-4 pb-2 pt-4 max-lg:px-3">
       <nav class="champion-crumbs" :aria-label="t('statisticsPage.championHeroBreadcrumb')">
@@ -14,11 +14,7 @@
         <span aria-hidden="true">›</span>
         <span class="is-current">{{ championName(championId) || championId }}</span>
       </nav>
-      <header
-        v-if="championStats"
-        class="champion-hero"
-        :class="{ 'is-compact': activeChampionGroup !== 'overview' }"
-      >
+      <header v-if="championStats" class="champion-hero">
         <img
           v-if="gameVersion && championByKey(championId)"
           :src="getChampionImageUrl(gameVersion, championByKey(championId)!.image.full)"
@@ -456,82 +452,6 @@
                   {{ opt.label }}
                 </option>
               </select>
-              <div
-                class="mt-2 space-y-2 rounded-md border border-primary/20 bg-background/40 p-2 text-[10px] text-text/70"
-                :title="
-                  activeChampionTab === 'synergy'
-                    ? t('statisticsPage.championSynergyTooltipLaneProfile')
-                    : t('statisticsPage.championMatchupTooltipLaneProfile')
-                "
-              >
-                <p class="leading-snug text-text/60">
-                  {{ t('statisticsPage.championMatchupLaneProfileLegendHint') }}
-                </p>
-                <p v-if="activeChampionTab === 'synergy'" class="leading-snug text-text/55">
-                  {{ t('statisticsPage.championSynergyProfileWarningsHint') }}
-                </p>
-                <div class="font-semibold text-text/80">
-                  {{ t('statisticsPage.championMatchupLaneProfileLegendTitle') }}
-                </div>
-                <div class="space-y-1">
-                  <div class="inline-flex items-center gap-1 font-semibold text-info">
-                    <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-info" aria-hidden="true" />
-                    {{
-                      activeChampionTab === 'synergy'
-                        ? t('statisticsPage.championSynergyProfileStrengths')
-                        : t('statisticsPage.championMatchupProfileChampion')
-                    }}
-                  </div>
-                  <div class="flex flex-wrap gap-1">
-                    <span
-                      v-for="lvl in laneProfileStrengthLegendLevels"
-                      :key="'leg-s-' + lvl"
-                      :class="laneProfileSignalChipClass(lvl, 'strength')"
-                      class="pointer-events-none"
-                    >
-                      {{ t(`statisticsPage.championMatchupSignalLevelShort.${lvl}`) }}
-                    </span>
-                  </div>
-                </div>
-                <div class="space-y-1">
-                  <div class="inline-flex items-center gap-1 font-semibold text-error">
-                    <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-error" aria-hidden="true" />
-                    {{
-                      activeChampionTab === 'synergy'
-                        ? t('statisticsPage.championSynergyProfileWarnings')
-                        : t('statisticsPage.championMatchupProfileOpponent')
-                    }}
-                  </div>
-                  <div class="flex flex-wrap gap-1">
-                    <span
-                      v-for="lvl in laneProfileWeaknessLegendLevels"
-                      :key="'leg-w-' + lvl"
-                      :class="laneProfileSignalChipClass(lvl, 'weakness')"
-                      class="pointer-events-none"
-                    >
-                      {{ t(`statisticsPage.championMatchupSignalLevelShort.${lvl}`) }}
-                    </span>
-                  </div>
-                </div>
-                <div class="space-y-1 border-t border-primary/15 pt-2">
-                  <div class="font-semibold text-text/80">
-                    {{ t('statisticsPage.championMatchupLaneProfileDimensionsTitle') }}
-                  </div>
-                  <ul class="space-y-1 leading-snug">
-                    <li
-                      v-for="key in MATCHUP_LANE_PROFILE_DIMENSION_KEYS"
-                      :key="'dim-leg-' + key"
-                      class="text-text/65"
-                    >
-                      <span class="font-semibold text-text/85">{{
-                        t(`statisticsPage.championMatchupDominanceShort.${key}`)
-                      }}</span>
-                      <span class="text-text/55"> — </span>
-                      <span>{{ t(`statisticsPage.championMatchupDominance.${key}`) }}</span>
-                    </li>
-                  </ul>
-                </div>
-              </div>
             </div>
             <div v-if="activeChampionTab === 'matchups' || activeChampionTab === 'synergy'">
               <label
@@ -709,6 +629,22 @@
                             @click="setTrendPeriod('patch')"
                           >
                             {{ t('statisticsPage.ovEvoByPatch') }}
+                          </button>
+                        </div>
+                        <div
+                          class="ov-seg"
+                          role="group"
+                          :aria-label="t('statisticsPage.balanceLevelsGroup')"
+                        >
+                          <button
+                            v-for="lv in trendLevelOptions"
+                            :key="lv.id"
+                            type="button"
+                            :class="{ 'is-on': trendLevel === lv.id }"
+                            :aria-pressed="trendLevel === lv.id"
+                            @click="trendLevel = lv.id"
+                          >
+                            {{ lv.label }}
                           </button>
                         </div>
                         <label class="ov-evo-div">
@@ -899,8 +835,90 @@
                   </section>
                 </template>
               </ChampionOverviewCards>
+              <ChampionJunglePaths
+                v-if="activeChampionTab === 'overview' && showJunglePaths"
+                :champion-id="championId"
+                :version="filterVersion || gameVersion || ''"
+              />
             </div>
             <div class="champion-tab-panels mb-6 w-full min-w-0 space-y-3 max-lg:mb-4">
+              <details
+                v-if="activeChampionTab === 'matchups' || activeChampionTab === 'synergy'"
+                class="mu-legend"
+                :title="
+                  activeChampionTab === 'synergy'
+                    ? t('statisticsPage.championSynergyTooltipLaneProfile')
+                    : t('statisticsPage.championMatchupTooltipLaneProfile')
+                "
+              >
+                <summary>{{ t('statisticsPage.championMatchupLaneProfileLegendTitle') }}</summary>
+                <div class="mu-legend-body space-y-2">
+                  <p class="leading-snug text-text/60">
+                    {{ t('statisticsPage.championMatchupLaneProfileLegendHint') }}
+                  </p>
+                  <p v-if="activeChampionTab === 'synergy'" class="leading-snug text-text/55">
+                    {{ t('statisticsPage.championSynergyProfileWarningsHint') }}
+                  </p>
+                  <div class="space-y-1">
+                    <div class="inline-flex items-center gap-1 font-semibold text-info">
+                      <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-info" aria-hidden="true" />
+                      {{
+                        activeChampionTab === 'synergy'
+                          ? t('statisticsPage.championSynergyProfileStrengths')
+                          : t('statisticsPage.championMatchupProfileChampion')
+                      }}
+                    </div>
+                    <div class="flex flex-wrap gap-1">
+                      <span
+                        v-for="lvl in laneProfileStrengthLegendLevels"
+                        :key="'leg-s-' + lvl"
+                        :class="laneProfileSignalChipClass(lvl, 'strength')"
+                        class="pointer-events-none"
+                      >
+                        {{ t(`statisticsPage.championMatchupSignalLevelShort.${lvl}`) }}
+                      </span>
+                    </div>
+                  </div>
+                  <div class="space-y-1">
+                    <div class="inline-flex items-center gap-1 font-semibold text-error">
+                      <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-error" aria-hidden="true" />
+                      {{
+                        activeChampionTab === 'synergy'
+                          ? t('statisticsPage.championSynergyProfileWarnings')
+                          : t('statisticsPage.championMatchupProfileOpponent')
+                      }}
+                    </div>
+                    <div class="flex flex-wrap gap-1">
+                      <span
+                        v-for="lvl in laneProfileWeaknessLegendLevels"
+                        :key="'leg-w-' + lvl"
+                        :class="laneProfileSignalChipClass(lvl, 'weakness')"
+                        class="pointer-events-none"
+                      >
+                        {{ t(`statisticsPage.championMatchupSignalLevelShort.${lvl}`) }}
+                      </span>
+                    </div>
+                  </div>
+                  <div class="space-y-1 border-t border-primary/15 pt-2">
+                    <div class="font-semibold text-text/80">
+                      {{ t('statisticsPage.championMatchupLaneProfileDimensionsTitle') }}
+                    </div>
+                    <ul class="space-y-1 leading-snug">
+                      <li
+                        v-for="key in MATCHUP_LANE_PROFILE_DIMENSION_KEYS"
+                        :key="'dim-leg-' + key"
+                        class="text-text/65"
+                      >
+                        <span class="font-semibold text-text/85">{{
+                          t(`statisticsPage.championMatchupDominanceShort.${key}`)
+                        }}</span>
+                        <span class="text-text/55"> — </span>
+                        <span>{{ t(`statisticsPage.championMatchupDominance.${key}`) }}</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </details>
               <div
                 v-if="activeChampionTab === 'matchups'"
                 id="champion-tab-panel-matchups"
@@ -925,6 +943,11 @@
                   </button>
                 </div>
                 <div v-else class="space-y-1.5">
+                  <ChampionMatchupHighlights
+                    mode="matchups"
+                    :rows="matchupHlRows"
+                    :min-games="LOW_SAMPLE_MIN_GAMES"
+                  />
                   <StatisticsMobileSortBar
                     id="champion-matchups-mobile-sort"
                     v-model:column="matchupMobileSortColumn"
@@ -1335,6 +1358,12 @@
                 role="tabpanel"
                 class="champion-tab-panel champion-tab-panel-synergy champion-tab-panel-flush"
               >
+                <ChampionMatchupHighlights
+                  v-if="!synergyExtPending && !synergyExtError"
+                  mode="synergy"
+                  :rows="synergyHlRows"
+                  :min-games="LOW_SAMPLE_MIN_GAMES"
+                />
                 <ChampionSynergyTab
                   :pending="synergyExtPending"
                   :error="synergyExtError"
@@ -1561,6 +1590,7 @@ import { statisticsFiltersSheetPanelClass } from '~/composables/useStatisticsFil
 import { PAGE_SIZE_OPTIONS } from '~/utils/statistics/statisticsTableFormat'
 import type { RunesSpellsTabCtx } from '~/composables/statistics/statisticsPageCtx'
 import { statsFetch } from '~/utils/statsFetch'
+import { trendTiersForLevel, type TrendLevel } from '~/utils/statistics/trendLevel'
 import { apiUrl } from '~/utils/apiUrl'
 import { matchesChampionSearch } from '~/utils/multilingualEntitySearch'
 import { useChampionsStore } from '~/stores/ChampionsStore'
@@ -1664,6 +1694,9 @@ const ChampionMiscTab = defineAsyncComponent(
 )
 const ChampionMatchupHighlights = defineAsyncComponent(
   () => import('~/components/statistics/ChampionMatchupHighlights.vue')
+)
+const ChampionJunglePaths = defineAsyncComponent(
+  () => import('~/components/statistics/ChampionJunglePaths.vue')
 )
 const ChampionBuildsTab = defineAsyncComponent(
   () => import('~/components/statistics/ChampionBuildsTab.vue')
@@ -1973,14 +2006,15 @@ function matchupMatchesSearch(opponentChampionId: number): boolean {
 }
 
 /** Matchups filtrés par recherche champion (nom ou id). */
-function matchupMatchesLaneProfileFilter(row: MatchupsExtRow): boolean {
+type LaneProfileRow = Pick<MatchupsExtRow, 'dominanceKeys' | 'weaknessKeys'>
+function matchupMatchesLaneProfileFilter(row: LaneProfileRow): boolean {
   const f = matchupLaneProfileFilter.value
   if (f === 'ALL') return true
   if (f === 'balanced') return !row.dominanceKeys?.length && !row.weaknessKeys?.length
   return (row.dominanceKeys?.includes(f) ?? false) || (row.weaknessKeys?.includes(f) ?? false)
 }
 
-function matchupMatchesOtpFilter(row: MatchupsExtRow): boolean {
+function matchupMatchesOtpFilter(row: { pickrate?: number | null }): boolean {
   if (matchupOtpMode.value === 'oui') {
     return true
   }
@@ -3646,9 +3680,18 @@ function onTrendPointHover(
   }
 }
 
+const trendLevel = ref<TrendLevel>('all')
+const trendLevelOptions = computed(() => [
+  { id: 'all' as const, label: t('statisticsPage.ovEvoLevelAll') },
+  { id: 'average' as const, label: t('statisticsPage.balanceLevelAverage') },
+  { id: 'skilled' as const, label: t('statisticsPage.balanceLevelSkilled') },
+  { id: 'elite' as const, label: t('statisticsPage.balanceLevelElite') },
+])
+
 const trendChartCards = computed<TrendChartCard[]>(() => {
   const buckets = trendBuckets.value
-  const tiers = trendSelectedTiers.value
+  const tiers = trendTiersForLevel(trendSelectedTiers.value, trendLevel.value)
+  const tierSet = new Set(tiers)
   if (!buckets.length || !tiers.length) return []
   const n = buckets.length
   const xAt = (index: number) =>
@@ -3666,7 +3709,8 @@ const trendChartCards = computed<TrendChartCard[]>(() => {
       const global = globalRawByIndex[index]
       if (!global) return
       for (const [tierKey, raw] of bucket.byTier) {
-        if (!normalizeRankTier(tierKey)) continue
+        const tierNorm = normalizeRankTier(tierKey)
+        if (!tierNorm || !tierSet.has(tierNorm)) continue
         global.games += raw.games
         global.wins += raw.wins
         global.pickNum += raw.pickNum
@@ -3854,6 +3898,31 @@ function ovMatchupRow(r: {
     games: r.games,
   }
 }
+function hlRow(id: number, role: string, games: number, winrate: number): HighlightRow {
+  const c = championByKey(id)
+  return {
+    id,
+    name: championName(id) ?? String(id),
+    img: c?.image?.full ? getChampionImageUrl(gameVersion.value, c.image.full) : '',
+    sub: filterRole.value ? undefined : roleLabel(role),
+    games,
+    winrate,
+  }
+}
+const matchupHlRows = computed(() =>
+  filteredMatchupsExt.value.map(r => hlRow(r.opponentChampionId, r.role, r.games, r.winrate))
+)
+/** Mêmes filtres (recherche, profil de lane, OTP) que le tableau de ChampionSynergyTab. */
+const synergyHlRows = computed(() =>
+  (synergyExtData.value?.rows ?? [])
+    .filter(
+      r =>
+        matchupMatchesSearch(r.allyChampionId) &&
+        matchupMatchesLaneProfileFilter(r) &&
+        matchupMatchesOtpFilter(r)
+    )
+    .map(r => hlRow(r.allyChampionId, r.allyRole, r.games, r.winrate))
+)
 const ovMatchups = computed(() => {
   const ex = matchupExtremes(matchupsExtData.value?.rows ?? [], LOW_SAMPLE_MIN_GAMES, 3)
   return { best: ex.best.map(ovMatchupRow), worst: ex.worst.map(ovMatchupRow) }
@@ -3862,6 +3931,10 @@ const ovMainRoleLabel = computed(() => {
   const r = roleDistribution.value[0]
   return r ? roleLabel(r.role) : ''
 })
+/** Section chemins de jungle : rôle filtré Jungle, ou Jungle = rôle principal. */
+const showJunglePaths = computed(() =>
+  filterRole.value ? filterRole.value === 'JUNGLE' : roleDistribution.value[0]?.role === 'JUNGLE'
+)
 const ovPending = computed(
   () => championSpellsPending.value || buildsPending.value || matchupsExtPending.value
 )
@@ -4163,53 +4236,6 @@ useJsonLdHead(
   background: #0a323c;
   border-color: #0a323c;
   font-weight: 600;
-}
-.champion-hero.is-compact {
-  gap: 16px;
-}
-.champion-hero.is-compact .champion-hero-portrait {
-  width: 56px;
-  height: 56px;
-  border-radius: 12px;
-}
-.champion-hero.is-compact .champion-hero-name {
-  font-size: 32px;
-}
-.champion-hero.is-compact .champion-hero-id {
-  gap: 2px;
-}
-.champion-hero.is-compact .champion-hero-sub,
-.champion-hero.is-compact .champion-hero-pill:not(.is-main) {
-  display: none;
-}
-.champion-hero.is-compact .champion-hero-pill {
-  background: none;
-  padding: 0;
-  height: auto;
-  font-weight: 400;
-  color: #cbc3b0;
-}
-.champion-hero.is-compact .champion-hero-kpis {
-  display: flex;
-  flex: 0 1 auto;
-  margin-left: auto;
-  gap: 20px;
-}
-.champion-hero.is-compact .champion-hero-kpi {
-  flex-direction: row;
-  align-items: baseline;
-  gap: 4px;
-  padding: 0;
-  border: 0;
-  background: none;
-}
-.champion-hero.is-compact .champion-hero-kpi dt {
-  font-size: 13px;
-}
-.champion-hero.is-compact .champion-hero-kpi dd {
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 700;
 }
 .champion-ov-card {
   margin: 12px;
@@ -4640,6 +4666,30 @@ useJsonLdHead(
 
 .champion-stats .champion-tab-panels {
   margin-top: 0;
+}
+
+.champion-stats .mu-legend {
+  margin-bottom: 12px;
+  padding: 12px 18px;
+  border: 1px solid #463714;
+  border-radius: 10px;
+  background: #0a1428;
+  font-size: 12px;
+  color: #a09b8c;
+}
+.champion-stats .mu-legend summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #c89b3c;
+}
+.champion-stats .mu-legend[open] summary {
+  margin-bottom: 10px;
+}
+.champion-stats .mu-legend-body {
+  max-width: 72rem;
 }
 
 .champion-stats .champion-tab-panel-flush {
