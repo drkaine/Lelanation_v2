@@ -69,7 +69,7 @@ const defaultApiBase =
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
-  devtools: { enabled: true },
+  devtools: { enabled: process.env.NODE_ENV !== 'production' },
   // SSR enabled by default in Nuxt 3 for MPA support
   // File-based routing via pages/ directory automatically creates routes
   ssr: true,

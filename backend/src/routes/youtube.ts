@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { join } from 'path'
 import { FileManager } from '../utils/fileManager.js'
+import { requireAdmin } from '../utils/adminAuth.js'
 import { YouTubeService } from '../services/YouTubeService.js'
 import { fetchYouTubeCommunityPosts } from '../services/youtubeCommunityPosts.js'
 import {
@@ -54,7 +55,7 @@ router.get('/channels', async (_req, res) => {
  * Body:
  * - { channel: "UC..." } OR { channelId: "UC..." } OR { query: "Lelariva_LoL" }
  */
-router.post('/channels', async (req, res) => {
+router.post('/channels', ...requireAdmin, async (req, res) => {
   const raw =
     (req.body?.channel as unknown) ??
     (req.body?.channelId as unknown) ??
@@ -78,8 +79,8 @@ router.post('/channels', async (req, res) => {
 /**
  * Admin: remove a channel from config
  */
-router.delete('/channels/:channelId', async (req, res) => {
-  const channelId = req.params.channelId
+router.delete('/channels/:channelId', ...requireAdmin, async (req, res) => {
+  const channelId = typeof req.params.channelId === 'string' ? req.params.channelId : ''
   if (!channelId || channelId.trim().length === 0) {
     return res.status(400).json({ error: 'Missing channelId' })
   }

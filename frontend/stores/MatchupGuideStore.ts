@@ -2,11 +2,46 @@ import { defineStore } from 'pinia'
 import type { MatchupGuide } from '@lelanation/shared-types'
 import { getFallbackGameVersion } from '~/config/version'
 import { apiUrl } from '~/utils/apiUrl'
+import { buildEditHeaders } from '~/utils/buildApi'
+import {
+  GUIDE_SECRETS_STORAGE_KEY,
+  parseGuideSecrets,
+  withGuideSecret,
+  withoutGuideSecret,
+  type GuideSecrets,
+} from '~/utils/matchupGuideEditSecrets'
 import { shouldAutoPrivatizeFromCommunityVotes } from '~/utils/communityVoteVisibility'
 import { useMatchupGuideVoteStore } from '~/stores/MatchupGuideVoteStore'
 import { useVersionStore } from '~/stores/VersionStore'
 
 const STORAGE_KEY = 'lelanation_matchup_guides'
+
+function readGuideSecrets(): GuideSecrets {
+  try {
+    return parseGuideSecrets(localStorage.getItem(GUIDE_SECRETS_STORAGE_KEY))
+  } catch {
+    return {}
+  }
+}
+
+function writeGuideSecrets(secrets: GuideSecrets): void {
+  try {
+    localStorage.setItem(GUIDE_SECRETS_STORAGE_KEY, JSON.stringify(secrets))
+  } catch {
+    // Storage unavailable: the guide stays editable only until the server locks it.
+  }
+}
+
+/** DELETE with the edit secret this browser holds; forgets the secret once the server confirms. */
+async function deleteGuideOnServer(guideId: string): Promise<void> {
+  const secrets = readGuideSecrets()
+  const res = await fetch(apiUrl(`/api/matchup-guides/${encodeURIComponent(guideId)}`), {
+    method: 'DELETE',
+    headers: buildEditHeaders(secrets[guideId]),
+  })
+  if (res.ok || res.status === 404)
+    writeGuideSecrets(withoutGuideSecret(readGuideSecrets(), guideId))
+}
 
 export const useMatchupGuideStore = defineStore('matchupGuide', {
   state: () => ({
@@ -77,16 +112,19 @@ export const useMatchupGuideStore = defineStore('matchupGuide', {
         try {
           if (newVisibility === 'private') {
             if (previousVisibility === 'public' && toSave.id) {
-              await fetch(apiUrl(`/api/matchup-guides/${encodeURIComponent(toSave.id)}`), {
-                method: 'DELETE',
-              })
+              await deleteGuideOnServer(toSave.id)
             }
           } else {
-            await fetch(apiUrl('/api/matchup-guides'), {
+            const res = await fetch(apiUrl('/api/matchup-guides'), {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: buildEditHeaders(toSave.id ? readGuideSecrets()[toSave.id] : undefined),
               body: JSON.stringify({ ...toSave, patchStale: null }),
             })
+            if (res.ok) {
+              const data = (await res.json()) as { id?: string; editSecret?: string }
+              if (data.id)
+                writeGuideSecrets(withGuideSecret(readGuideSecrets(), data.id, data.editSecret))
+            }
           }
         } catch {
           // Saved locally; server sync best-effort
@@ -126,9 +164,7 @@ export const useMatchupGuideStore = defineStore('matchupGuide', {
         this.savedGuidesVersion++
 
         if (existing?.visibility !== 'private') {
-          await fetch(apiUrl(`/api/matchup-guides/${encodeURIComponent(guideId)}`), {
-            method: 'DELETE',
-          }).catch(() => undefined)
+          await deleteGuideOnServer(guideId).catch(() => undefined)
         }
 
         return true
@@ -160,9 +196,8 @@ export const useMatchupGuideStore = defineStore('matchupGuide', {
       }
 
       try {
-        await fetch(apiUrl(`/api/matchup-guides/${encodeURIComponent(guideId)}`), {
-          method: 'DELETE',
-        })
+        // Only the browser that published the guide holds its secret; others get a 403.
+        await deleteGuideOnServer(guideId)
       } catch {
         // Ignore errors
       }

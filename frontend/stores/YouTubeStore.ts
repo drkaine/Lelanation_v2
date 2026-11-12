@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import type { YouTubeChannelData, YouTubeChannelStatus } from '~/types/youtube'
 import { apiUrl } from '~/utils/apiUrl'
+import { getAdminAuthHeader } from '~/composables/useAdminAuth'
 import { getYouTubeChannelDataUrl, getYouTubeChannelsConfigUrl } from '~/utils/staticDataUrl'
 
 type ChannelsConfig = {
@@ -344,7 +345,7 @@ export const useYouTubeStore = defineStore('youtube', {
       try {
         const res = await fetch(apiUrl('/api/youtube/channels'), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...(getAdminAuthHeader() ?? {}) },
           body: JSON.stringify({ channel }),
         })
         const data = await res.json()
@@ -363,6 +364,7 @@ export const useYouTubeStore = defineStore('youtube', {
       try {
         const res = await fetch(apiUrl(`/api/youtube/channels/${encodeURIComponent(channelId)}`), {
           method: 'DELETE',
+          headers: { ...(getAdminAuthHeader() ?? {}) },
         })
         const data = await res.json()
         if (!res.ok) throw new Error(data?.error || 'Failed to remove creator')

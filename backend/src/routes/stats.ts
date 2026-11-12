@@ -2,6 +2,7 @@
  * API statistiques LoL (agrégats uniquement, pas de données brutes).
  * Champions, builds, runes, meilleurs joueurs.
  */
+import { createRateLimit } from '../utils/httpRateLimit.js'
 import { Router, Request, Response } from 'express'
 import { RiotStatsAggregator } from '../services/RiotStatsAggregator.js'
 import { getBuildsByChampion } from '../services/StatsBuildsService.js'
@@ -1570,8 +1571,10 @@ getChampionRoute('/vision', async (req, res, championId) => {
   return res.json(data)
 })
 
+const playerSearchRateLimit = createRateLimit({ windowMs: 60_000, max: 30, keyPrefix: 'stats-player-search' })
+
 /** GET /api/stats/players/search?name=... - lookup player by summoner name */
-router.get('/players/search', async (req: Request, res: Response) => {
+router.get('/players/search', playerSearchRateLimit, async (req: Request, res: Response) => {
   const name = (req.query.name as string)?.trim()
   if (!name) {
     return res.status(400).json({ error: 'Query "name" is required' })

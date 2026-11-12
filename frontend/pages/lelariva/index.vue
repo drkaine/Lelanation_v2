@@ -219,6 +219,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { apiUrl } from '~/utils/apiUrl'
+import { readStoredSession } from '~/composables/useUserSession'
 
 const HIDDEN_ROWS_STORAGE_KEY = 'lelariva.registry.hiddenRowIds'
 
@@ -377,6 +378,15 @@ function formatGeneratedAt(iso: string): string {
   }
 }
 
+/** Registry edits need the signed-in account (admin or lelariva). */
+function registryWriteHeaders(): Record<string, string> {
+  const token = readStoredSession()?.token
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  }
+}
+
 async function loadRegistry(): Promise<void> {
   pending.value = true
   error.value = ''
@@ -399,7 +409,7 @@ async function cycleReview(row: RegistryRow, column: string): Promise<void> {
   try {
     const res = await fetch(apiUrl('/api/lelariva/field-registry/review'), {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: registryWriteHeaders(),
       body: JSON.stringify({ rowId: row.id, column }),
     })
     if (!res.ok) throw new Error(String(res.status))
@@ -420,7 +430,7 @@ async function addColumn(): Promise<void> {
   try {
     const res = await fetch(apiUrl('/api/lelariva/field-registry/columns'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: registryWriteHeaders(),
       body: JSON.stringify({ name }),
     })
     if (!res.ok) throw new Error(String(res.status))

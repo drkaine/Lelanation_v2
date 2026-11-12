@@ -68,6 +68,47 @@ describe('fetchProxiedImage', () => {
     )
     expect(await fetchProxiedImage(new URL('https://i.ytimg.com/a.jpg'), big, 5)).toBeNull()
   })
+
+  it('fetchProxiedImage_skips_the_body_when_declared_length_exceeds_the_limit', async () => {
+    // Arrange
+    const res = response(new Uint8Array(3), {
+      status: 200,
+      headers: { 'content-type': 'image/png', 'content-length': '999' },
+    })
+    const arrayBuffer = vi.spyOn(res, 'arrayBuffer')
+    const getReader = vi.spyOn(res.body as ReadableStream, 'getReader')
+
+    // Act
+    const result = await fetchProxiedImage(new URL('https://i.ytimg.com/a.jpg'), async () => res, 5)
+
+    // Assert
+    expect(result).toBeNull()
+    expect(arrayBuffer).not.toHaveBeenCalled()
+    expect(getReader).not.toHaveBeenCalled()
+  })
+
+  it('fetchProxiedImage_stops_reading_when_stream_exceeds_the_limit', async () => {
+    // Arrange: 3 chunks of 4 bytes, limit 5 → the third chunk must never be pulled.
+    let pulled = 0
+    const stream = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          pulled += 1
+          if (pulled > 3) return controller.close()
+          controller.enqueue(new Uint8Array(4))
+        },
+      },
+      { highWaterMark: 0 }
+    )
+    const res = response(stream, { status: 200, headers: { 'content-type': 'image/png' } })
+
+    // Act
+    const result = await fetchProxiedImage(new URL('https://i.ytimg.com/a.jpg'), async () => res, 5)
+
+    // Assert
+    expect(result).toBeNull()
+    expect(pulled).toBe(2)
+  })
 })
 
 describe('fetchOEmbed', () => {

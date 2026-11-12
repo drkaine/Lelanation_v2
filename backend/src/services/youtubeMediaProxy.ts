@@ -60,9 +60,24 @@ export async function fetchProxiedImage(
     })
     const contentType = res.headers.get('content-type') ?? ''
     if (!res.ok || !contentType.startsWith('image/')) return null
-    const body = Buffer.from(await res.arrayBuffer())
-    if (body.length > maxBytes) return null
-    return { contentType, body }
+    // Refuse on the declared size first, then cap the stream: never buffer an oversized body.
+    const declared = Number(res.headers.get('content-length'))
+    if (Number.isFinite(declared) && declared > maxBytes) return null
+    if (!res.body) return null
+    const reader = res.body.getReader()
+    const chunks: Uint8Array[] = []
+    let total = 0
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      total += value.byteLength
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => undefined)
+        return null
+      }
+      chunks.push(value)
+    }
+    return { contentType, body: Buffer.concat(chunks) }
   } catch {
     return null
   }

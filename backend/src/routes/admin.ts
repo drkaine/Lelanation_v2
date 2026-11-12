@@ -1,6 +1,4 @@
 import { spawn } from 'child_process'
-import { readBearerToken, resolveUser } from './userAuth.js'
-import { timingSafeEqual, createHash } from 'crypto'
 import { Router } from 'express'
 import { promises as fs } from 'fs'
 import { dirname, join, resolve, isAbsolute } from 'path'
@@ -46,10 +44,8 @@ import {
   loadPollerObservabilityAdminResponse,
   readPollerProcessLogTail,
 } from '../services/PollerMetricsAdminService.js'
-import { resolveRiotApiKey } from '../services/RiotGateway.js'
-import { riotGateway } from '../services/RiotGateway.js'
-import { isDevelopmentEnv } from '../utils/env.js'
-import { createFailureLimiter } from '../utils/httpRateLimit.js'
+import { resolveRiotApiKey, riotGateway } from '../services/RiotGateway.js'
+import { requireAdmin } from '../utils/adminAuth.js'
 import { addChannelToConfig, channelSyncStatus, type YouTubeChannelsConfig } from '../services/youtubeChannels.js'
 export type { AdminDataCollectStats } from '../services/AdminDataCollectService.js'
 
@@ -82,81 +78,7 @@ function maskKey(key: string): string {
   return key.slice(0, 4) + '…' + key.slice(-4)
 }
 
-function parseBasicAuth(authHeader: string): { username: string; password: string } | null {
-  const [scheme, token] = authHeader.split(' ')
-  if (scheme !== 'Basic' || !token) return null
-  try {
-    const decoded = Buffer.from(token, 'base64').toString('utf8')
-    const idx = decoded.indexOf(':')
-    if (idx === -1) return null
-    return { username: decoded.slice(0, idx), password: decoded.slice(idx + 1) }
-  } catch {
-    return null
-  }
-}
-
-/** Constant-time string comparison (hashing first so lengths never leak). */
-function safeEqual(a: string, b: string): boolean {
-  const ha = createHash('sha256').update(a).digest()
-  const hb = createHash('sha256').update(b).digest()
-  return timingSafeEqual(ha, hb)
-}
-
-// 10 bad credentials in 15 minutes from one IP => locked out for the rest of the window.
-const adminAuthFailures = createFailureLimiter({
-  windowMs: 15 * 60_000,
-  max: 10,
-  keyPrefix: 'admin-auth-fail',
-})
-
-// Session of a user with the admin role (Bearer token from /api/users/login).
-router.use(async (req, res, next) => {
-  if (!readBearerToken(req)) return next()
-  try {
-    const user = await resolveUser(req)
-    if (!user) return res.status(401).json({ error: 'Invalid session' })
-    if (user.role !== 'admin') return res.status(403).json({ error: 'Admin role required' })
-    res.locals.adminSession = true
-    return next()
-  } catch (err) {
-    console.error('[admin] session lookup failed', err)
-    return res.status(500).json({ error: 'Session lookup failed' })
-  }
-})
-
-// Basic auth for admin API (supports ADMIN_USER_NAME or ADMIN_USERNAME)
-router.use((req, res, next) => {
-  if (res.locals.adminSession === true) return next()
-  const user = process.env.ADMIN_USER_NAME ?? process.env.ADMIN_USERNAME
-  const pass = process.env.ADMIN_PASSWORD
-  if (!user || !pass) {
-    if (isDevelopmentEnv()) return next()
-    return res.status(503).json({ error: 'Admin API disabled: credentials not configured' })
-  }
-
-  const blockedFor = adminAuthFailures.blockedFor(req)
-  if (blockedFor > 0) {
-    res.setHeader('Retry-After', String(blockedFor))
-    return res.status(429).json({ error: 'Too many failed attempts' })
-  }
-
-  const header = req.header('authorization')
-  if (!header) {
-    res.setHeader('WWW-Authenticate', 'Basic realm="Admin"')
-    return res.status(401).json({ error: 'Authentication required' })
-  }
-  const parsed = parseBasicAuth(header)
-  // Evaluate both comparisons so timing does not reveal which field was wrong.
-  const userOk = parsed ? safeEqual(parsed.username, user) : false
-  const passOk = parsed ? safeEqual(parsed.password, pass) : false
-  if (!parsed || !userOk || !passOk) {
-    adminAuthFailures.recordFailure(req)
-    res.setHeader('WWW-Authenticate', 'Basic realm="Admin"')
-    return res.status(401).json({ error: 'Invalid credentials' })
-  }
-  adminAuthFailures.reset(req)
-  return next()
-})
+router.use(...requireAdmin)
 
 router.get('/me', (_req, res) => {
   return res.json({ ok: true })
@@ -329,18 +251,6 @@ router.get('/riot-poller/status', async (_req, res) => {
 
 /** GET /api/admin/poller/observability — snapshots poller-metrics + files d’attente live. */
 router.get('/poller/observability', async (_req, res) => {
-  const payload = await loadPollerObservabilityAdminResponse(backendRoot, ROOT_LOGS_DIR)
-  return res.json(payload)
-})
-
-/** @deprecated use GET /api/admin/poller/observability */
-router.get('/poller-v2/observability', async (_req, res) => {
-  const payload = await loadPollerObservabilityAdminResponse(backendRoot, ROOT_LOGS_DIR)
-  return res.json(payload)
-})
-
-/** @deprecated alias */
-router.get('/poller-v3/metrics', async (_req, res) => {
   const payload = await loadPollerObservabilityAdminResponse(backendRoot, ROOT_LOGS_DIR)
   return res.json(payload)
 })

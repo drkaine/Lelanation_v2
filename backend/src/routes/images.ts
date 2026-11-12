@@ -1,12 +1,11 @@
 import express from 'express'
 import { join, resolve, sep } from 'path'
-import { promises as fs } from 'fs'
-import { FileManager } from '../utils/fileManager.js'
 
 const router = express.Router()
 const imagesDir = join(process.cwd(), 'data', 'images')
 /** Resolved root for path-traversal checks (must compare resolved paths). */
 const imagesDirResolved = resolve(imagesDir)
+const IMAGE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
 /**
  * Serve images from local storage
@@ -57,31 +56,17 @@ router.get('/:version/:type/{*filename}', async (req, res) => {
       return res.status(403).json({ error: 'Invalid path' })
     }
 
-    // Check if file exists (use resolved path for consistency)
-    const exists = await FileManager.exists(resolvedPath)
-    if (!exists) {
-      return res.status(404).json({ error: 'Image not found' })
-    }
-
-    // Read and serve file
-    const fileBuffer = await fs.readFile(resolvedPath)
-
-    // Set appropriate content type
-    const ext = filename.split('.').pop()?.toLowerCase()
-    const contentType =
-      ext === 'png'
-        ? 'image/png'
-        : ext === 'jpg' || ext === 'jpeg'
-          ? 'image/jpeg'
-          : ext === 'gif'
-            ? 'image/gif'
-            : ext === 'webp'
-              ? 'image/webp'
-              : 'application/octet-stream'
-
-    res.setHeader('Content-Type', contentType)
-    res.setHeader('Cache-Control', 'public, max-age=604800')
-    res.send(fileBuffer)
+    // sendFile streams the file and handles ETag / Last-Modified / Range (304 instead of a re-download).
+    res.sendFile(resolvedPath, { maxAge: IMAGE_MAX_AGE_MS, dotfiles: 'deny' }, err => {
+      if (!err || res.headersSent) return
+      const status = (err as { status?: number; statusCode?: number }).status ?? (err as { statusCode?: number }).statusCode
+      if (status === 404 || (err as NodeJS.ErrnoException).code === 'ENOENT') {
+        res.status(404).json({ error: 'Image not found' })
+        return
+      }
+      console.error('[Images] Error serving image:', err)
+      res.status(500).json({ error: 'Failed to serve image' })
+    })
     return
   } catch (error) {
     console.error('[Images] Error serving image:', error)

@@ -1,4 +1,5 @@
-import { Router, type Request, type Response } from 'express'
+import { Router, type NextFunction, type Request, type Response } from 'express'
+import { currentUser, requireUser } from './userAuth.js'
 import {
   addReviewColumn,
   cycleFieldReview,
@@ -7,6 +8,16 @@ import {
 } from '../services/RiotApiFieldRegistryService.js'
 
 const router = Router()
+
+/** Registry edits: signed-in admin or lelariva account only. */
+function requireRegistryEditor(_req: Request, res: Response, next: NextFunction) {
+  const role = currentUser(res).role
+  if (role !== 'admin' && role !== 'lelariva') {
+    return res.status(403).json({ error: 'Forbidden' })
+  }
+  return next()
+}
+const registryEditor = [requireUser, requireRegistryEditor]
 
 router.get('/field-registry', async (_req: Request, res: Response) => {
   try {
@@ -18,7 +29,7 @@ router.get('/field-registry', async (_req: Request, res: Response) => {
   }
 })
 
-router.patch('/field-registry/review', async (req: Request, res: Response) => {
+router.patch('/field-registry/review', ...registryEditor, async (req: Request, res: Response) => {
   const rowId = String(req.body?.rowId ?? '').trim()
   const column = String(req.body?.column ?? '').trim()
   if (!rowId || !column) {
@@ -40,7 +51,7 @@ router.patch('/field-registry/review', async (req: Request, res: Response) => {
   }
 })
 
-router.post('/field-registry/columns', async (req: Request, res: Response) => {
+router.post('/field-registry/columns', ...registryEditor, async (req: Request, res: Response) => {
   const name = String(req.body?.name ?? '').trim()
   if (!name) {
     return res.status(400).json({ error: 'name is required' })

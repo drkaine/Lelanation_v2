@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { CommunityDragonService } from '../services/CommunityDragonService.js'
 import { VersionService } from '../services/VersionService.js'
+import { requireAdmin } from '../utils/adminAuth.js'
 
 const router = Router()
 const communityDragonService = new CommunityDragonService()
@@ -12,7 +13,8 @@ const versionService = new VersionService()
 router.get('/status', async (_req, res) => {
   const versionResult = await versionService.getCurrentVersion()
   if (versionResult.isErr()) {
-    return res.status(500).json({ error: versionResult.unwrapErr().message })
+    console.error('[Sync] version read failed:', versionResult.unwrapErr())
+    return res.status(500).json({ error: 'Failed to read sync status' })
   }
 
   const versionInfo = versionResult.unwrap()
@@ -32,16 +34,9 @@ router.get('/status', async (_req, res) => {
 })
 
 /**
- * Manual sync trigger — disabled on public API (use admin or cron).
+ * Trigger manual Community Dragon sync (admin only: five heavy outbound syncs).
  */
-router.post('/trigger', (_req, res) => {
-  return res.status(404).json({ error: 'Not found' })
-})
-
-/**
- * Trigger manual Community Dragon sync
- */
-router.post('/community-dragon', async (_req, res) => {
+router.post('/community-dragon', ...requireAdmin, async (_req, res) => {
 
   try {
     const [emblemsResult, objectiveIconsResult, pingIconsResult, mapPlannerResult, kaynHudResult] =
@@ -70,10 +65,7 @@ router.post('/community-dragon', async (_req, res) => {
               ? mapPlannerResult.unwrapErr()
               : kaynHudResult.unwrapErr()
       console.error('[Manual Sync] Community Dragon assets sync failed:', error)
-      return res.status(500).json({
-        error: 'Community Dragon assets sync failed',
-        details: error.message,
-      })
+      return res.status(500).json({ error: 'Community Dragon assets sync failed' })
     }
 
     const emblems = emblemsResult.unwrap()
@@ -102,10 +94,7 @@ router.post('/community-dragon', async (_req, res) => {
     })
   } catch (error) {
     console.error('[Manual Sync] Unexpected error:', error)
-    return res.status(500).json({
-      error: 'Unexpected error during sync',
-      details: error instanceof Error ? error.message : 'Unknown error',
-    })
+    return res.status(500).json({ error: 'Unexpected error during sync' })
   }
 })
 

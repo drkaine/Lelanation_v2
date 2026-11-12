@@ -20,7 +20,6 @@ import matchupGuidesRoutes from './routes/matchupGuides.js'
 import lelarivaRoutes from './routes/lelariva.js'
 import usersRoutes from './routes/users.js'
 import sharedBuildsRoutes from './routes/sharedBuilds.js'
-// import patchNotesRoutes from './routes/patchNotes.js'
 import { setupDataDragonSync } from './cron/dataDragonSync.js'
 import { setupYouTubeSync } from './cron/youtubeSync.js'
 import { setupCommunityDragonSync } from './cron/communityDragonSync.js'
@@ -36,7 +35,9 @@ installProcessErrorCapture('backend')
 void recordProcessStart('backend').catch((e) => console.warn('[Server] recordProcessStart failed:', e))
 
 const app = express()
-const PORT = process.env.PORT || 3001
+const PORT = Number(process.env.PORT) || 3001
+// nginx and Nuxt reach the API on loopback: never listen on public interfaces by default.
+const HOST = process.env.HOST?.trim() || '127.0.0.1'
 
 // Only trust X-Forwarded-For from the reverse proxy (nginx on the same host by default),
 // otherwise clients could spoof their IP and bypass rate limiting.
@@ -109,7 +110,6 @@ app.use('/api/matchup-guides', matchupGuidesRoutes)
 app.use('/api/lelariva', lelarivaRoutes)
 app.use('/api/users', usersRoutes)
 app.use('/api/shared-builds', sharedBuildsRoutes)
-// app.use('/api/patch-notes', patchNotesRoutes)
 
 // Unknown API routes / malformed bodies: JSON errors, never stack traces or HTML.
 app.use('/api', (_req, res) => {
@@ -167,7 +167,7 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'))
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-app.listen(PORT, () => {
+app.listen(PORT, HOST, () => {
   console.log('[Server] Match ingestion runs in PM2 as lelanation-poller-v2 (not in this API process).')
 })
 

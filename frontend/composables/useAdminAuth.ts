@@ -37,6 +37,12 @@ export function hasAdminAccess(): boolean {
   return adminAuthHeader(readStoredSession(), getStoredToken()) !== null
 }
 
+/** Authorization header for admin API calls, usable outside a component (stores). */
+export function getAdminAuthHeader(): { Authorization: string } | null {
+  if (!import.meta.client) return null
+  return adminAuthHeader(readStoredSession(), getStoredToken())
+}
+
 export function useAdminAuth() {
   const isLoggedIn = useState<boolean>('adminLoggedIn', () => false)
   const initialized = useState<boolean>('admin-auth-initialized', () => false)
@@ -50,10 +56,7 @@ export function useAdminAuth() {
     })
   }
 
-  function getAuthHeader(): { Authorization: string } | null {
-    if (!import.meta.client) return null
-    return adminAuthHeader(readStoredSession(), getStoredToken())
-  }
+  const getAuthHeader = getAdminAuthHeader
 
   function fetchWithAuth(url: string, init?: RequestInit): Promise<Response> {
     const header = getAuthHeader()

@@ -297,16 +297,7 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Build not found' })
     }
 
-    const readResult = await FileManager.readJson(existing.filePath)
-    
-    if (readResult.isErr()) {
-      if (readResult.unwrapErr().code === 'FILE_NOT_FOUND') {
-        return res.status(404).json({ error: 'Build not found' })
-      }
-      return res.status(500).json({ error: readResult.unwrapErr().message })
-    }
-
-    return res.json(stripEditSecret(readResult.unwrap() as Record<string, unknown>))
+    return res.json(stripEditSecret(existing.data))
   } catch (error) {
     return res.status(500).json({ error: 'Failed to read builds directory' })
   }

@@ -90,7 +90,10 @@ router.post('/', contactRateLimit, async (req: Request, res: Response) => {
     return res.status(500).json({ error: 'Failed to save contact' })
   }
 
-  await discord.sendContactNotification(type)
+  // The message is saved: do not make the visitor wait for (or fail on) Discord.
+  void discord
+    .sendContactNotification(type)
+    .catch(error => console.error('[Contact] Discord notification failed:', error))
 
   return res.status(201).json({ ok: true })
 })

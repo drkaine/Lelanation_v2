@@ -251,7 +251,7 @@ Trois **drips** indépendants sur fenêtre 120 s :
 | Snapshot JSON | `logs/poller-v2-observability.json` |
 | Métriques | Toutes les 30 s (depth files, data lag, pipelines paused) |
 | Résumés | 30 min / 1 h dans le log unifié |
-| Admin API | `GET /api/admin/poller-v2/observability` |
+| Admin API | `GET /api/admin/poller/observability` |
 | Dashboard | `GET /api/admin/riot-poller/metrics` |
 
 ### 3.5 Scripts de maintenance

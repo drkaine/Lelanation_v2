@@ -173,7 +173,6 @@ backend/
 │   │   ├── youtube.ts
 │   │   └── images.ts
 │   ├── scripts/        # Manual scripts
-│   │   ├── syncData.ts
 │   │   └── copyStaticAssets.ts
 │   ├── utils/          # Utility functions
 │   │   ├── Result.ts
