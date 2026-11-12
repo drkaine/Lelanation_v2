@@ -114,7 +114,15 @@ export default defineNuxtConfig({
         { name: 'twitter:card', content: 'summary_large_image' },
         { name: 'twitter:image', content: `${defaultSiteUrl}/og/default.png` },
       ],
-      link: [{ rel: 'canonical', href: defaultSiteUrl }],
+      link: [
+        { rel: 'canonical', href: defaultSiteUrl },
+        { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
+        { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
+        {
+          rel: 'stylesheet',
+          href: 'https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700&display=swap',
+        },
+      ],
     },
   },
   modules: ['@nuxtjs/tailwindcss', '@nuxt/icon', '@pinia/nuxt', '@nuxtjs/i18n', '@nuxtjs/robots'],

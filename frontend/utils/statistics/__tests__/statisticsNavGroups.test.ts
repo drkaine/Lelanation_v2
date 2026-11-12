@@ -3,6 +3,8 @@ import {
   STATISTICS_NAV_GROUPS,
   navGroupOfTab,
   navGroupTarget,
+  isCombinedNavGroup,
+  tabsToLoadWith,
   visibleNavGroups,
 } from '../statisticsNavGroups'
 
@@ -50,5 +52,17 @@ describe('statisticsNavGroups', () => {
       query: { tab: 'runes' },
     })
     expect(navGroupTarget(byId('overview'))).toEqual({ path: '/statistics' })
+  })
+
+  it('Comportement : une seule page, sans sous-onglets', () => {
+    expect(isCombinedNavGroup('behavior')).toBe(true)
+    expect(isCombinedNavGroup('builds')).toBe(false)
+    expect(isCombinedNavGroup(null)).toBe(false)
+  })
+
+  it('charge Pings et Vision ensemble', () => {
+    expect(tabsToLoadWith('pings')).toEqual(['pings', 'vision'])
+    expect(tabsToLoadWith('vision')).toEqual(['pings', 'vision'])
+    expect(tabsToLoadWith('items')).toEqual(['items'])
   })
 })

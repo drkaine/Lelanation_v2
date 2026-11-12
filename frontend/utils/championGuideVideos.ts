@@ -12,18 +12,60 @@ export const CHAMPION_GUIDE_ROLES: readonly ChampionGuideRole[] = [
   'support',
 ]
 
-const SERIES_PATTERNS: ReadonlyArray<[ChampionGuideSeries, RegExp]> = [
-  ['macro', /\bguide macro\b/],
-  ['micro', /\bguide micro\b|\bbases? micro\b/],
-  ['topMonde', /\bvoici comment le top monde\b/],
-  [
-    'guide',
-    /\bcomment l'elite\b|\bles erreurs qui t'empechent\b|\bla (perfection|micro|macro)\b|\bvoici comment\b|\bcomment build et carry\b/,
+/**
+ * Règles des titres de guides : pour en ajouter, compléter la liste de la série.
+ * Phrases écrites sans accents ni majuscules (le titre est normalisé avant comparaison).
+ * Elles servent au filtre « Guide » de /videos et aux guides par champion.
+ */
+export const GUIDE_TITLE_PHRASES: Readonly<Record<ChampionGuideSeries, readonly string[]>> = {
+  macro: ['guide macro'],
+  micro: ['guide micro', 'base micro', 'bases micro'],
+  topMonde: ['voici comment le top monde', 'une masterclass du top monde'],
+  guide: [
+    "comment l'elite",
+    "la touche en plus que l'elite",
+    'comment le meilleur otp',
+    'comment la meilleur',
+    'comment la meilleure',
+    "les erreurs qui t'empechent",
+    'la perfection',
+    'la micro',
+    'la macro',
+    'voici comment',
+    'comment build et carry',
+    "c'est d'abord maitriser les bases",
+    "c'est surtout savoir",
+    'comme le top',
+    'une masterclass',
+    'propulse tes bases',
+    'plus loin que les bases',
+    'le plus gros spammeur',
+    'le plus gros spammer',
+    "je n'ai jamais vu un otp aussi",
   ],
-]
+}
 
-/** Rôle n'importe où dans le titre (« top » de « top monde » exclu). */
-const ANY_ROLE_RE = /\b(top|jgl|jungle|mid|adc|bot|sup|supp|support)\b(?! monde)/
+const SERIES_ORDER: readonly ChampionGuideSeries[] = ['macro', 'micro', 'topMonde', 'guide']
+
+function phraseRegExp(phrases: readonly string[]): RegExp {
+  return new RegExp(`(?<![a-z0-9])(?:${phrases.map(escapeRegExp).join('|')})(?![a-z0-9])`)
+}
+
+const SERIES_PATTERNS: ReadonlyArray<[ChampionGuideSeries, RegExp]> = SERIES_ORDER.map(series => [
+  series,
+  phraseRegExp(GUIDE_TITLE_PHRASES[series]),
+])
+
+/** Titre de guide pour le filtre « Guide » de /videos (règles des séries + règles génériques). */
+export function isGuideVideoTitle(title: string): boolean {
+  const t = normalize(title)
+  if (SERIES_PATTERNS.some(([, pattern]) => pattern.test(t))) return true
+  if (/\bguide\b/.test(t) || /comment\s+jouer/.test(t)) return true
+  return /\bcomment\b/.test(t) && /\b(builds?|carry)\b/.test(t)
+}
+
+/** Rôle n'importe où dans le titre (« top » de « top monde », « top 10 », « le top » exclu). */
+const ANY_ROLE_RE = /(?<!\ble )\b(top|jgl|jungle|mid|adc|bot|sup|supp|support)\b(?! monde| ?\d)/
 
 const ROLE_TOKENS: Record<string, ChampionGuideRole> = {
   top: 'top',

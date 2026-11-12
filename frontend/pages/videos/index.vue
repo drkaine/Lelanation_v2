@@ -170,6 +170,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { isGuideVideoTitle } from '~/utils/championGuideVideos'
 import { useAsyncData } from '#app'
 import { useYouTubeStore } from '~/stores/YouTubeStore'
 import VideoGridCard from '~/components/Videos/VideoGridCard.vue'
@@ -240,19 +241,10 @@ const normalize = (s: string) =>
 
     .replace(/[\u0300-\u036F]/g, '')
 
-const isGuideTitle = (title: string): boolean => {
-  const t = normalize(title)
-  if (/\bguide\b/.test(t)) return true
-  if (/comment\s+jouer/.test(t)) return true
-  if (/voici\s+comment/.test(t)) return true
-  if (/\bcomment\b/.test(t) && (/\bbuilds?\b/.test(t) || /\bcarry\b/.test(t))) return true
-  return false
-}
-
 const detectType = (title: string): Exclude<VideoCategory, 'all'> => {
   const t = normalize(title)
   if (/\bcast\b/.test(t)) return 'cast'
-  if (isGuideTitle(title)) return 'guide'
+  if (isGuideVideoTitle(title)) return 'guide'
   if (/lobby/.test(t)) return 'lobby'
   if (/\bbuilds?\b/.test(t)) return 'builds'
   return 'other'

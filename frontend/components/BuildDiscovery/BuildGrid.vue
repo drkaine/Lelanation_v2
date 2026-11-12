@@ -1225,7 +1225,7 @@ onUnmounted(() => {
    l'espace restant élargit les écarts (space-evenly), sans retirer de carte. */
 .build-grid-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, var(--ui-card-grid-max));
+  grid-template-columns: repeat(auto-fit, var(--ui-card-grid-max));
   justify-content: space-evenly;
   align-items: start;
   column-gap: 10px;

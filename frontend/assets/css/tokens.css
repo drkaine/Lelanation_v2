@@ -315,12 +315,12 @@ body {
   --rgb-tier-b: var(--rgb-blue-200);
 
   /* Tier list note badges (solid fills — statistics table palette) */
-  --color-tier-badge-s-plus: #f5c542;
-  --color-tier-badge-s: #22c55e;
-  --color-tier-badge-a: #2563eb;
-  --color-tier-badge-b: #60a5fa;
-  --color-tier-badge-c: #a855f7;
-  --color-tier-badge-d: #dc2626;
+  --color-tier-badge-s-plus: #c8aa6e;
+  --color-tier-badge-s: #c89b3c;
+  --color-tier-badge-a: #0ac8b9;
+  --color-tier-badge-b: #0397ab;
+  --color-tier-badge-c: #5b5a56;
+  --color-tier-badge-d: #3c3c41;
 
   /* Default build-card border (region palette fallback) */
   --card-border-color-default: #bba077;

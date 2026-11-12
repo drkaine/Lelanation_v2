@@ -7,6 +7,8 @@ import {
   type PingsNumericKey,
   type PingsTableRow,
 } from '~/composables/statistics/useStatisticsPingsTab'
+import { onPingIconError, pingIconSrc } from '~/utils/pingIcons'
+import { pingBarRows } from '~/utils/statistics/pingBarRows'
 
 export type ChampionPingsSummary = PingsTableRow
 
@@ -20,28 +22,17 @@ const { t } = useI18n()
 
 const hasData = computed(() => Number(props.data?.games ?? 0) > 0)
 
-function formatPing(value: number): string {
-  return Number(value).toFixed(2)
-}
+const bars = computed(() => pingBarRows(props.data, PING_METRIC_KEYS))
 
-function formatDelta(value: number): string {
-  const sign = value > 0 ? '+' : ''
-  return `${sign}${Number(value).toFixed(2)}`
+function formatOne(value: number): string {
+  return Number(value).toLocaleString('fr-FR', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })
 }
 
 function metricValue(key: PingsNumericKey): number {
   return Number(props.data?.[key] ?? 0)
-}
-
-function metricDelta(key: PingsNumericKey): number | null {
-  if (!props.baseline) return null
-  return metricValue(key) - Number(props.baseline[key] ?? 0)
-}
-
-function deltaClass(delta: number): string {
-  if (delta > 0) return 'text-info'
-  if (delta < 0) return 'text-error'
-  return 'text-text/55'
 }
 
 function metricLabel(key: PingMetricKey): string {
@@ -58,37 +49,97 @@ function metricLabel(key: PingMetricKey): string {
       {{ t('statisticsPage.noData') }}
     </div>
     <template v-else>
-      <div class="fast-stat-card ui-build-card-surface rounded-xl p-3">
-        <div class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-          <h3 class="text-sm font-semibold text-text">
+      <div class="pb-card">
+        <div class="pb-head">
+          <h3>{{ t('statisticsPage.pingsPerGameTitle') }}</h3>
+          <span>
             {{ t('statisticsPage.pingsColTotal') }}
-          </h3>
-          <div class="text-right">
-            <div class="text-lg font-bold tabular-nums text-text">
-              {{ formatPing(metricValue('totalPerGame')) }}
-            </div>
-            <div
-              v-if="metricDelta('totalPerGame') != null"
-              class="text-xs tabular-nums"
-              :class="deltaClass(metricDelta('totalPerGame') ?? 0)"
-            >
-              {{ formatDelta(metricDelta('totalPerGame') ?? 0) }}
-            </div>
-          </div>
+            <b>{{ formatOne(metricValue('totalPerGame')) }}</b>
+          </span>
         </div>
-
-        <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-          <StatisticsPingMetricCardCell
-            v-for="key in PING_METRIC_KEYS"
-            :key="key"
-            :metric-key="key"
-            :label="metricLabel(key)"
-            :value="formatPing(metricValue(key))"
-            :delta="metricDelta(key) != null ? formatDelta(metricDelta(key) ?? 0) : null"
-            :delta-class="metricDelta(key) != null ? deltaClass(metricDelta(key) ?? 0) : null"
-          />
-        </div>
+        <ul class="pb-list">
+          <li v-for="row in bars" :key="row.key">
+            <img
+              :src="pingIconSrc(row.key)"
+              alt=""
+              class="pb-icon"
+              loading="lazy"
+              @error="onPingIconError($event, row.key)"
+            />
+            <span class="pb-name">{{ metricLabel(row.key) }}</span>
+            <span class="pb-track"><span :style="{ width: `${row.pct}%` }" /></span>
+            <span class="pb-val">{{ formatOne(row.value) }}</span>
+          </li>
+        </ul>
       </div>
     </template>
   </div>
 </template>
+
+<style scoped>
+.pb-card {
+  padding: 20px;
+  border: 1px solid #463714;
+  border-radius: 10px;
+  background: #0a1428;
+}
+.pb-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 10px;
+}
+.pb-head h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #f0e6d2;
+}
+.pb-head span {
+  font-size: 13px;
+  color: #a09b8c;
+}
+.pb-head b {
+  color: #f0e6d2;
+}
+.pb-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pb-list li {
+  display: grid;
+  grid-template-columns: 24px 130px 1fr 44px;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #f0e6d2;
+}
+.pb-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 9999px;
+  background: #0d2a33;
+  object-fit: contain;
+}
+.pb-track {
+  height: 6px;
+  border-radius: 3px;
+  background: #1e2328;
+  overflow: hidden;
+}
+.pb-track > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: #c89b3c;
+}
+.pb-val {
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+</style>

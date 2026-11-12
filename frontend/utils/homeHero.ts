@@ -23,6 +23,16 @@ function norm(s: string): string {
     .toLowerCase()
 }
 
+/** Texte du filtre de /builds/discover : nom du champion reconnu, sinon la saisie nettoyée. */
+export function homeSearchQuery(
+  query: string,
+  champions: ReadonlyArray<{ id: string; name: string }>
+): string {
+  const slug = findChampionSlug(query, champions)
+  const hit = slug ? champions.find(c => c.id.toLowerCase() === slug) : undefined
+  return hit?.name ?? query.trim()
+}
+
 /** Slug de /builds/champion/<slug> pour une saisie libre ; nom exact d'abord, puis début de nom. */
 export function findChampionSlug(
   query: string,

@@ -7,69 +7,45 @@
       {{ t('statisticsPage.championMiscEmpty') }}
     </div>
     <template v-else>
-      <div
-        class="champion-misc-grid flex w-full min-w-0 max-w-full flex-wrap items-stretch justify-center gap-x-[5px] gap-y-[10px] pb-[10px] max-lg:px-0"
-      >
-        <div
-          v-for="group in visibleGroups"
-          :key="group.key"
-          class="fast-stat-card fast-stat-card-misc team-side-fast-stat rounded-lg border p-2"
-          :class="groupCardClass(group.key)"
-        >
-          <h3
-            class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold leading-snug"
-          >
+      <h2 class="hd-title">{{ t('statisticsPage.healDamageTitle') }}</h2>
+      <div class="hd-grid">
+        <section v-if="heal.length" class="hd-card">
+          <h3>{{ t('statisticsPage.championMiscGroup_healing') }}</h3>
+          <ul class="hd-bars">
+            <li v-for="m in heal" :key="m.key">
+              <span>{{ t(`statisticsPage.championMisc_healing_${m.key}`) }}</span>
+              <span class="hd-track"><span :style="{ width: `${m.pct}%` }" /></span>
+              <b>{{ fmt(m.avgPerGame) }}</b>
+            </li>
+          </ul>
+        </section>
+        <section v-if="damage.total > 0" class="hd-card">
+          <h3>{{ t('statisticsPage.championMiscDamageTotal', { total: fmt(damage.total) }) }}</h3>
+          <div class="hd-stack">
             <span
-              class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border text-base"
-              :class="groupIconWrapClass(group.key)"
-              aria-hidden="true"
-            >
-              {{ groupIcon(group.key) }}
+              v-for="p in damage.parts"
+              :key="p.key"
+              :class="`hd-seg-${p.key}`"
+              :style="{ width: `${p.pct}%` }"
+            />
+          </div>
+          <p class="hd-legend">
+            <span v-for="p in damage.parts" :key="p.key">
+              {{ t(`statisticsPage.championMisc_damageTypes_${p.key}`) }}
+              <b>{{ fmt(p.value) }}</b> · {{ Math.round(p.pct) }} %
             </span>
-            <span class="min-w-0 flex-1 leading-tight">
-              {{ t(`statisticsPage.championMiscGroup_${group.key}`) }}
-            </span>
-          </h3>
-          <table class="fast-stat-table w-full text-xs">
-            <tbody>
-              <tr v-for="metric in group.metrics" :key="metric.key" class="fast-stat-row">
-                <td class="py-1 align-middle">
-                  <div class="flex min-w-0 items-center gap-1.5">
-                    <span
-                      v-if="metricSwatch(group.key, metric.key)"
-                      class="h-2.5 w-2.5 shrink-0 rounded-sm"
-                      :style="{ backgroundColor: metricSwatch(group.key, metric.key) }"
-                      aria-hidden="true"
-                    />
-                    <span class="min-w-0 flex-1 truncate font-medium text-text/90">
-                      {{ t(`statisticsPage.championMisc_${group.key}_${metric.key}`) }}
-                    </span>
-                    <span
-                      class="ml-1 shrink-0 text-right font-semibold tabular-nums"
-                      :class="metricValueClass(group.key)"
-                    >
-                      {{ formatMetric(metric) }}
-                    </span>
-                  </div>
-                  <div v-if="showBar(group.key, metric)" class="mt-1.5 flex items-center gap-2">
-                    <div class="champion-misc-bar-track h-1.5 flex-1 overflow-hidden rounded-full">
-                      <div
-                        class="h-full rounded-full transition-[width] duration-300"
-                        :class="metricBarClass(group.key, metric.key)"
-                        :style="{ width: `${metricBarPct(metric, group.metrics)}%` }"
-                      />
-                    </div>
-                    <span
-                      class="champion-misc-bar-pct shrink-0 text-[10px] tabular-nums text-text/55"
-                    >
-                      {{ metricBarPctLabel(metric, group.metrics) }}
-                    </span>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+          </p>
+        </section>
+        <section v-if="multikills.length" class="hd-card">
+          <h3>{{ t('statisticsPage.championMiscGroup_multikills') }}</h3>
+          <ul class="hd-bars">
+            <li v-for="m in multikills" :key="m.key">
+              <span>{{ t(`statisticsPage.championMisc_multikills_${m.key}`) }}</span>
+              <span class="hd-track"><span :style="{ width: `${m.pct}%` }" /></span>
+              <b>{{ formatMetric(m) }}</b>
+            </li>
+          </ul>
+        </section>
       </div>
     </template>
   </div>
@@ -78,6 +54,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { damageSplit, healingBars } from '~/utils/statistics/healDamageView'
 
 export type ChampionMiscMetric = { key: string; avgPerGame: number }
 export type ChampionMiscMetricGroup = { key: string; metrics: ChampionMiscMetric[] }
@@ -108,79 +85,17 @@ const visibleGroups = computed(() =>
 
 const hasData = computed(() => gamesCount.value > 0 && visibleGroups.value.length > 0)
 
-const GROUP_CARD_CLASS: Record<string, string> = {
-  healing: 'border-info/45 bg-info/[0.06]',
-  damageTypes: 'border-accent/35',
-  multikills: 'border-violet-500/45 bg-violet-500/[0.06]',
-}
-
-const GROUP_ICON_WRAP: Record<string, string> = {
-  healing: 'border-info/35 bg-info/10 text-info',
-  damageTypes: 'border-accent/35 bg-accent/10 text-text-accent',
-  multikills: 'border-violet-500/35 bg-violet-500/10 text-violet-300',
-}
-
-const GROUP_ICON: Record<string, string> = {
-  healing: '♥',
-  damageTypes: '⚔',
-  multikills: '✦',
-}
-
-const DAMAGE_SWATCH: Record<string, string> = {
-  physicalDone: '#f59e0b',
-  magicDone: '#8b5cf6',
-  trueDone: '#94a3b8',
-}
-
 const MULTIKILL_KEYS = new Set(['double', 'triple', 'quadra', 'penta', 'unreal'])
 
-function groupCardClass(key: string): string {
-  return GROUP_CARD_CLASS[key] ?? 'border-primary/20'
-}
+const groupMetrics = (key: string) => visibleGroups.value.find(g => g.key === key)?.metrics ?? []
+const heal = computed(() => healingBars(groupMetrics('healing')))
+const damage = computed(() => damageSplit(groupMetrics('damageTypes')))
+const multikills = computed(() => healingBars(groupMetrics('multikills')))
 
-function groupIconWrapClass(key: string): string {
-  return GROUP_ICON_WRAP[key] ?? 'border-primary/30 bg-black/10 text-text/70'
-}
-
-function groupIcon(key: string): string {
-  return GROUP_ICON[key] ?? '◆'
-}
-
-function metricSwatch(groupKey: string, metricKey: string): string | undefined {
-  if (groupKey === 'damageTypes') return DAMAGE_SWATCH[metricKey]
-  return undefined
-}
-
-function metricValueClass(groupKey: string): string {
-  if (groupKey === 'healing') return 'text-info'
-  if (groupKey === 'multikills') return 'text-violet-200'
-  return 'text-accent'
-}
-
-function metricBarClass(groupKey: string, metricKey: string): string {
-  if (groupKey === 'damageTypes') {
-    if (metricKey === 'physicalDone') return 'bg-accent'
-    if (metricKey === 'magicDone') return 'bg-violet-500'
-    if (metricKey === 'trueDone') return 'bg-slate-400'
-  }
-  if (groupKey === 'healing') return 'bg-info/80'
-  if (groupKey === 'multikills') return 'bg-violet-500/80'
-  return 'bg-accent/80'
-}
-
-function showBar(groupKey: string, metric: ChampionMiscMetric): boolean {
-  return Number(metric.avgPerGame) > 0
-}
-
-function metricBarPct(metric: ChampionMiscMetric, metrics: ChampionMiscMetric[]): number {
-  const v = Number(metric.avgPerGame)
-  if (!Number.isFinite(v) || v <= 0) return 0
-  const max = Math.max(...metrics.map(m => Number(m.avgPerGame) || 0), 1)
-  return Math.min(100, (v / max) * 100)
-}
-
-function metricBarPctLabel(metric: ChampionMiscMetric, metrics: ChampionMiscMetric[]): string {
-  return `${Math.round(metricBarPct(metric, metrics))}%`
+function fmt(v: number): string {
+  return Math.round(v)
+    .toLocaleString('fr-FR')
+    .replace(/[\u202F\u00A0]/g, ' ')
 }
 
 function formatMetric(metric: ChampionMiscMetric): string {
@@ -194,72 +109,93 @@ function formatMetric(metric: ChampionMiscMetric): string {
 </script>
 
 <style scoped>
-.champion-misc-tab .fast-stat-title {
-  line-height: 1.4;
-  color: rgb(252 211 77) !important;
+.hd-title {
+  margin: 0 0 12px;
+  font-size: 20px;
+  font-weight: 600;
+  color: #f0e6d2;
 }
-
-.champion-misc-tab .fast-stat-table {
-  width: 100%;
-  max-width: 100%;
-  table-layout: fixed;
-  border-collapse: collapse;
+.hd-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
 }
-
-.champion-misc-tab .fast-stat-row {
-  border-bottom: 1px solid rgb(var(--rgb-primary) / 0.1);
+.hd-card {
+  padding: 20px;
+  border: 1px solid #463714;
+  border-radius: 10px;
+  background: #0a1428;
 }
-
-.champion-misc-tab .fast-stat-row:last-child {
-  border-bottom: none;
+.hd-card h3 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #f0e6d2;
 }
-
-.champion-misc-bar-track {
-  background: rgb(15 23 42 / 0.75);
-  border: 1px solid rgb(var(--rgb-primary) / 0.18);
+.hd-bars {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
-
-.champion-misc-tab {
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
+.hd-bars li {
+  display: grid;
+  grid-template-columns: 200px 1fr 60px;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: #f0e6d2;
 }
-
-.champion-misc-tab .fast-stat-card-misc {
-  margin-bottom: 0;
-  width: 313px;
-  min-width: 313px;
-  max-width: 313px;
-  min-height: 200px;
-  height: auto;
-  flex: 0 0 313px;
-  margin-left: auto;
-  margin-right: auto;
-  background: rgb(var(--rgb-chrome) / 1) !important;
-  justify-self: center;
+.hd-bars b {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.hd-track {
+  height: 6px;
+  border-radius: 3px;
+  background: #1e2328;
   overflow: hidden;
-  box-sizing: border-box;
 }
-
+.hd-track > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: #0ac8b9;
+}
+.hd-stack {
+  display: flex;
+  height: 14px;
+  gap: 2px;
+  border-radius: 7px;
+  overflow: hidden;
+  background: #1e2328;
+}
+.hd-seg-magicDone {
+  background: #0397ab;
+}
+.hd-seg-physicalDone {
+  background: #e2665a;
+}
+.hd-seg-trueDone {
+  background: #f0e6d2;
+}
+.hd-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: #f0e6d2;
+}
 @media (max-width: 1023px) {
-  .champion-misc-tab .champion-misc-grid > .fast-stat-card-misc {
-    width: 100% !important;
-    min-width: 0 !important;
-    max-width: 100% !important;
-    flex: 1 1 100% !important;
-    margin-left: 0 !important;
-    margin-right: 0 !important;
-    align-self: stretch;
-    padding: 0.85rem 1rem !important;
+  .hd-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
-
-  .champion-misc-tab .fast-stat-title {
-    font-size: 1rem !important;
-    line-height: 1.35;
-  }
-
-  .champion-misc-tab .fast-stat-table {
-    font-size: 0.875rem;
+  .hd-bars li {
+    grid-template-columns: minmax(0, 1fr) 80px 56px;
   }
 }
 </style>

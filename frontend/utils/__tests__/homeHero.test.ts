@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findChampionSlug, homePopularPicks, latestHomeBuild } from '../homeHero'
+import { findChampionSlug, homePopularPicks, homeSearchQuery, latestHomeBuild } from '../homeHero'
 
 const blocks = [
   {
@@ -64,5 +64,24 @@ describe('latestHomeBuild', () => {
         { id: 'y', createdAt: '2026-01-01' },
       ])?.id
     ).toBe('y')
+  })
+})
+
+describe('homeSearchQuery', () => {
+  const list = [
+    { id: 'MissFortune', name: 'Miss Fortune' },
+    { id: 'Ahri', name: 'Ahri' },
+  ]
+  it('rend le nom exact du champion reconnu', () => {
+    expect(homeSearchQuery('miss fortune', list)).toBe('Miss Fortune')
+  })
+  it('complète un début de nom', () => {
+    expect(homeSearchQuery('ahr', list)).toBe('Ahri')
+  })
+  it('garde la saisie brute si aucun champion ne correspond', () => {
+    expect(homeSearchQuery('  troll  ', list)).toBe('troll')
+  })
+  it('rend une chaîne vide pour une saisie vide', () => {
+    expect(homeSearchQuery('   ', list)).toBe('')
   })
 })

@@ -44,3 +44,47 @@ export function pickStatsVersionFilter(input: {
     .sort((a, b) => compareVersionsDesc(a.version, b.version))
   return enough[0]?.version ?? versions[0]?.version ?? ''
 }
+
+export interface ThinPatchNotice {
+  /** `selected` : le patch choisi est trop maigre ; `fallback` : le dernier patch l'est, on montre le précédent. */
+  mode: 'selected' | 'fallback'
+  thinVersion: string
+  matchCount: number
+  needed: number
+  reliableVersion: string
+}
+
+/** Bandeau « nouveau patch » (maquette Vue d'ensemble) : patch trop récent pour des stats fiables. */
+export function thinPatchNotice(input: {
+  selected: string
+  versions: ReadonlyArray<{ version: string; matchCount?: number | null }>
+}): ThinPatchNotice | null {
+  const withData = input.versions
+    .filter(v => Number(v.matchCount ?? 0) > 0)
+    .sort((a, b) => compareVersionsDesc(a.version, b.version))
+  const newest = withData[0]
+  if (!newest) return null
+  const max = Math.max(...withData.map(v => Number(v.matchCount)))
+  const needed = Math.ceil(max * MIN_VERSION_SHARE)
+  const isThin = (v: { matchCount?: number | null }) => Number(v.matchCount) < needed
+  if (!isThin(newest)) return null
+  const reliable = withData.find(v => !isThin(v))
+  if (!reliable) return null
+  const selected = input.selected.trim()
+  const chosen = withData.find(v => v.version === selected)
+  const mode =
+    chosen && isThin(chosen)
+      ? 'selected'
+      : selected === '' || selected === reliable.version
+        ? 'fallback'
+        : null
+  if (!mode) return null
+  const thin = mode === 'selected' ? chosen! : newest
+  return {
+    mode,
+    thinVersion: thin.version,
+    matchCount: Number(thin.matchCount),
+    needed,
+    reliableVersion: reliable.version,
+  }
+}

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { metaBubbleColor } from '~/utils/statistics/metaBubbleColor'
 import {
   injectStatisticsPageCtx,
   type TierListOrMetaChartCtx,
@@ -82,8 +83,7 @@ const { layout, tooltip, tooltipPoint, onBubbleEnter, onBubbleMove, onBubbleLeav
   useStatisticsTierListBubbleChart({
     rows: visibleRows,
     referenceRows,
-    tierColor: (tier: string) =>
-      typeof p.tierListChartBarColor === 'function' ? p.tierListChartBarColor(tier) : '#60a5fa',
+    tierColor: metaBubbleColor,
   })
 
 const {
@@ -128,6 +128,10 @@ const dimOthers = computed(() => props.highlightId != null)
 
 const labelPlacements = computed(() =>
   computeBubbleLabelPlacements(layout.value.points, championName)
+)
+/** Maquette : étiquettes seulement pour les points remarquables, sélectionnés ou survolés. */
+const visibleLabels = computed(() =>
+  labelPlacements.value.filter(l => !l.hidden || l.championId === activeChampionId.value)
 )
 
 function handleWheel(event: WheelEvent) {
@@ -194,7 +198,7 @@ defineExpose({
 
     <div ref="chartCaptureRoot">
       <div
-        class="tier-list-bubble-viewport statistics-overview-surface overflow-hidden rounded-xl border border-primary/30 shadow-inner"
+        class="tier-list-bubble-viewport overflow-hidden"
         :class="isPanning ? 'cursor-grabbing' : 'cursor-grab'"
       >
         <svg
@@ -221,24 +225,29 @@ defineExpose({
             fill="rgb(8 16 31 / 0.55)"
             rx="4"
           />
+          <rect
+            :x="BUBBLE_CHART_PAD.left"
+            :y="BUBBLE_CHART_PAD.top"
+            :width="Math.max(0, layout.refX - BUBBLE_CHART_PAD.left)"
+            :height="Math.max(0, layout.refY - BUBBLE_CHART_PAD.top)"
+            fill="rgb(10 200 185 / 0.06)"
+          />
 
           <text
             :x="BUBBLE_CHART_PAD.left + 10"
             :y="BUBBLE_CHART_PAD.top + 18"
-            fill="rgb(var(--rgb-gold-100) / 0.55)"
-            font-size="12"
-            font-weight="700"
-            letter-spacing="0.08em"
+            fill="#0ac8b9"
+            font-size="13"
+            font-weight="600"
           >
             {{ t('statisticsPage.tierListBubbleQuadrantHiddenOp') }}
           </text>
           <text
             :x="BUBBLE_CHART_W - BUBBLE_CHART_PAD.right - 10"
             :y="BUBBLE_CHART_PAD.top + 18"
-            fill="rgb(var(--rgb-gold-100) / 0.55)"
-            font-size="12"
-            font-weight="700"
-            letter-spacing="0.08em"
+            fill="#c8aa6e"
+            font-size="13"
+            font-weight="600"
             text-anchor="end"
           >
             {{ t('statisticsPage.tierListBubbleQuadrantOverpowered') }}
@@ -246,20 +255,18 @@ defineExpose({
           <text
             :x="BUBBLE_CHART_PAD.left + 10"
             :y="BUBBLE_CHART_PAD.top + layout.plotH - 8"
-            fill="rgb(var(--rgb-gold-100) / 0.45)"
-            font-size="12"
-            font-weight="700"
-            letter-spacing="0.08em"
+            fill="#a09b8c"
+            font-size="13"
+            font-weight="600"
           >
             {{ t('statisticsPage.tierListBubbleQuadrantWeak') }}
           </text>
           <text
             :x="BUBBLE_CHART_W - BUBBLE_CHART_PAD.right - 10"
             :y="BUBBLE_CHART_PAD.top + layout.plotH - 8"
-            fill="rgb(var(--rgb-gold-100) / 0.45)"
-            font-size="12"
-            font-weight="700"
-            letter-spacing="0.08em"
+            fill="#e2665a"
+            font-size="13"
+            font-weight="600"
             text-anchor="end"
           >
             {{ t('statisticsPage.tierListBubbleQuadrantPopularWeak') }}
@@ -346,7 +353,7 @@ defineExpose({
 
           <g pointer-events="none">
             <text
-              v-for="label in labelPlacements"
+              v-for="label in visibleLabels"
               :key="'label-' + label.championId"
               :x="label.x"
               :y="label.y"
@@ -367,6 +374,7 @@ defineExpose({
               "
               stroke-width="2"
               paint-order="stroke"
+              :class="['bubble-label', activeChampionId === label.championId ? 'is-active' : '']"
             >
               {{ championName(label.championId) }}
             </text>
@@ -496,13 +504,19 @@ defineExpose({
 </template>
 
 <style scoped>
+@media (max-width: 767px) {
+  .bubble-label:not(.is-active) {
+    display: none;
+  }
+}
 .tier-list-bubble-wrap {
   width: 100%;
 }
 
 .tier-list-bubble-viewport {
   width: 100%;
-  height: min(82dvh, calc(100vw * 760 / 1280));
-  min-height: 480px;
+  aspect-ratio: 1280 / 760;
+  max-height: 82dvh;
+  min-height: 280px;
 }
 </style>

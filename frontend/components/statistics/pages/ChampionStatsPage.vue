@@ -3,37 +3,118 @@
     class="champion-stats flex min-h-screen min-w-0 flex-col overflow-x-hidden bg-background text-text"
   >
     <div class="w-full flex-shrink-0 px-4 pb-2 pt-4 max-lg:px-3">
+      <nav class="champion-crumbs" :aria-label="t('statisticsPage.championHeroBreadcrumb')">
+        <NuxtLink :to="localePath('/statistics')">{{
+          t('statisticsPage.championHeroCrumbStats')
+        }}</NuxtLink>
+        <span aria-hidden="true">›</span>
+        <NuxtLink :to="localePath('/statistics/tier-list')">{{
+          t('statisticsPage.navTierList')
+        }}</NuxtLink>
+        <span aria-hidden="true">›</span>
+        <span class="is-current">{{ championName(championId) || championId }}</span>
+      </nav>
+      <header
+        v-if="championStats"
+        class="champion-hero"
+        :class="{ 'is-compact': activeChampionGroup !== 'overview' }"
+      >
+        <img
+          v-if="gameVersion && championByKey(championId)"
+          :src="getChampionImageUrl(gameVersion, championByKey(championId)!.image.full)"
+          :alt="championName(championId) ?? ''"
+          class="champion-hero-portrait"
+          width="100"
+          height="100"
+        />
+        <div class="champion-hero-id">
+          <h1 class="champion-hero-name">{{ championName(championId) || championId }}</h1>
+          <p v-if="championByKey(championId)?.title" class="champion-hero-sub">
+            {{ championByKey(championId)?.title
+            }}<template v-if="championByKey(championId)?.tags?.length">
+              · {{ championByKey(championId)?.tags?.join(', ') }}</template
+            >
+          </p>
+          <div class="champion-hero-pills">
+            <span
+              v-for="(role, i) in roleDistribution.slice(0, 2)"
+              :key="role.role"
+              class="champion-hero-pill"
+              :class="i === 0 ? 'is-main' : ''"
+            >
+              <img :src="roleIconPath(role.role)" alt="" width="14" height="14" />
+              {{
+                t('statisticsPage.championHeroRoleShare', {
+                  role: roleLabel(role.role),
+                  pct: formatDonutPercent(role.pickrate),
+                })
+              }}
+            </span>
+          </div>
+        </div>
+        <dl class="champion-hero-kpis">
+          <div class="champion-hero-kpi">
+            <dt>{{ t('statisticsPage.championHeroWinrate') }}</dt>
+            <dd :class="(championStats.winrate ?? 0) >= 50 ? 'is-up' : 'is-down'">
+              {{ formatDonutPercent(championStats.winrate ?? 0) }} %
+            </dd>
+          </div>
+          <div class="champion-hero-kpi">
+            <dt>{{ t('statisticsPage.championHeroPickrate') }}</dt>
+            <dd>{{ formatDonutPercent(championStats.pickrate ?? 0) }} %</dd>
+          </div>
+          <div class="champion-hero-kpi">
+            <dt>{{ t('statisticsPage.championHeroBanrate') }}</dt>
+            <dd>{{ formatDonutPercent(championStats.banrate ?? 0) }} %</dd>
+          </div>
+          <div class="champion-hero-kpi">
+            <dt>{{ t('statisticsPage.championDashboardGamesShort') }}</dt>
+            <dd>{{ Number(championStats.games ?? 0).toLocaleString(locale) }}</dd>
+          </div>
+        </dl>
+      </header>
       <div
         class="statistics-tabs-bar champion-tabs-bar flex w-full min-w-0 items-start gap-2 overflow-x-hidden"
       >
-        <div
-          class="statistics-tabs-scroll-wrap champion-tabs-scroll-wrap relative min-w-0 flex-1 overflow-hidden"
-        >
+        <div class="champion-mobile-tabs flex w-full min-w-0 flex-col gap-2">
           <nav
             ref="championTabsNavEl"
             role="tablist"
             :aria-label="t('statisticsPage.championStatsTitle')"
-            class="statistics-tabs-nav champion-tabs-nav flex flex-nowrap gap-1 overflow-x-auto border-b border-primary/30 pb-2"
+            class="champion-group-nav flex gap-1 overflow-x-auto"
           >
             <button
-              v-for="tab in championTabs"
-              :id="`champion-tab-${tab.id}`"
-              :key="tab.id"
+              v-for="group in CHAMPION_TAB_GROUPS"
+              :key="group.id"
               type="button"
               role="tab"
-              :data-tab-id="tab.id"
-              :aria-selected="activeChampionTab === tab.id"
-              :tabindex="activeChampionTab === tab.id ? 0 : -1"
+              :aria-selected="activeChampionGroup === group.id"
               :class="[
-                'statistics-tab-btn champion-tab-btn',
-                activeChampionTab === tab.id ? 'is-active' : '',
+                'champion-group-btn shrink-0',
+                activeChampionGroup === group.id ? 'is-active' : '',
               ]"
-              @click="activeChampionTab = tab.id"
-              @keydown="onChampionTabsKeydown($event, tab.id)"
+              @click="selectChampionGroup(group.id)"
             >
-              {{ t(tab.label) }}
+              {{ t(group.label) }}
             </button>
           </nav>
+          <div
+            v-if="championTabsInGroup(activeChampionGroup).length > 1"
+            class="flex gap-2 overflow-x-auto pb-1"
+            role="group"
+            :aria-label="t(activeChampionGroupLabel)"
+          >
+            <button
+              v-for="tabId in championTabsInGroup(activeChampionGroup)"
+              :key="tabId"
+              type="button"
+              :class="['champion-subtab shrink-0', activeChampionTab === tabId ? 'is-active' : '']"
+              :aria-pressed="activeChampionTab === tabId"
+              @click="activeChampionTab = tabId"
+            >
+              {{ t(championTabLabel(tabId)) }}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -560,740 +641,264 @@
             <div
               class="champion-content-stack ui-build-card-surface w-full min-w-0 overflow-hidden rounded-xl max-lg:rounded-none max-lg:border-x-0"
             >
-              <!-- Header: image + nom + KPI principaux (repliable sur mobile) -->
-              <div
-                class="champion-header-wrap border-b border-primary/25 max-lg:border-b max-lg:border-primary/25"
-              >
-                <button
-                  v-if="!championHeaderBandOpen"
-                  type="button"
-                  class="champion-header-band-toggle flex w-full touch-manipulation items-center gap-2.5 px-3 py-2.5 text-left lg:hidden"
-                  :aria-expanded="false"
-                  :aria-controls="'champion-header-band'"
-                  @click="championHeaderBandOpen = true"
-                >
-                  <img
-                    v-if="gameVersion && championByKey(championId)"
-                    :src="getChampionImageUrl(gameVersion, championByKey(championId)!.image.full)"
-                    :alt="championName(championId) ?? ''"
-                    class="h-9 w-9 shrink-0 rounded-full object-cover"
-                    width="36"
-                    height="36"
-                  />
-                  <span class="min-w-0 flex-1">
-                    <span class="block truncate text-sm font-semibold text-accent">
-                      {{ championName(championId) || championId }}
-                    </span>
-                    <span class="mt-0.5 block truncate text-[11px] tabular-nums text-text/70">
-                      {{ championHeaderCollapsedSummary }}
-                    </span>
-                  </span>
-                  <svg
-                    class="h-4 w-4 shrink-0 text-text/60"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M19 9l-7 7-7-7"
-                    />
-                  </svg>
-                </button>
-                <div
-                  id="champion-header-band"
-                  class="champion-header-band flex flex-wrap items-center gap-2 px-3 py-2 max-lg:flex-col max-lg:items-stretch lg:flex-nowrap lg:items-center lg:gap-3 lg:py-2.5"
-                  :class="championHeaderBandOpen ? 'flex' : 'hidden lg:flex'"
-                >
-                  <div
-                    class="champion-header-identity flex shrink-0 items-center gap-2 max-lg:w-full lg:flex-col lg:gap-0.5 lg:text-center"
-                  >
-                    <h1
-                      class="order-2 min-w-0 truncate text-sm font-semibold leading-tight text-accent max-lg:flex-1 lg:order-1 lg:max-w-[5.5rem]"
-                    >
-                      {{ championName(championId) || championId }}
-                    </h1>
-                    <img
-                      v-if="gameVersion && championByKey(championId)"
-                      :src="getChampionImageUrl(gameVersion, championByKey(championId)!.image.full)"
-                      :alt="championName(championId) ?? ''"
-                      class="order-1 h-9 w-9 shrink-0 rounded-full object-cover lg:order-2 lg:h-10 lg:w-10"
-                      width="40"
-                      height="40"
-                    />
-                  </div>
-                  <div class="champion-header-roles text-[11px] text-text/80">
-                    <span
-                      v-for="role in roleDistribution"
-                      :key="role.role"
-                      class="champion-header-role-badge inline-flex items-center justify-between gap-1.5"
-                      :title="roleLabel(role.role)"
-                    >
-                      <img
-                        loading="lazy"
-                        decoding="async"
-                        :src="roleIconPath(role.role)"
-                        :alt="roleLabel(role.role)"
-                        class="h-3 w-3 shrink-0 object-contain"
-                        width="12"
-                        height="12"
-                      />
-                      <span class="shrink-0 font-medium tabular-nums">
-                        {{ formatDonutPercent(role.pickrate) }}%
-                      </span>
-                    </span>
-                  </div>
-                  <div
-                    v-if="
-                      championByKey(championId)?.title || championByKey(championId)?.tags?.length
-                    "
-                    class="champion-header-about min-w-0 text-[11px] leading-tight max-lg:w-full lg:max-w-[12rem]"
-                  >
-                    <p
-                      v-if="championByKey(championId)?.title"
-                      class="truncate italic text-text/75"
-                      :title="championByKey(championId)?.title"
-                    >
-                      {{ championByKey(championId)?.title }}
-                    </p>
-                    <p
-                      v-if="championByKey(championId)?.tags?.length"
-                      class="truncate font-semibold text-text/60"
-                    >
-                      {{ championByKey(championId)?.tags?.join(', ') }}
-                    </p>
-                  </div>
-                  <div
-                    v-if="championDamageSplit && championDamageSplit.total > 0"
-                    class="champion-header-damage-split flex min-w-0 shrink-0 flex-nowrap items-center gap-2 max-lg:w-full max-lg:flex-col max-lg:items-stretch"
-                  >
-                    <div
-                      class="flex min-w-0 items-center gap-3 rounded bg-surface/40 px-2 py-1.5 max-lg:w-full"
-                    >
-                      <div
-                        class="h-12 w-12 shrink-0 rounded-full"
-                        :style="championDamageDonutStyle"
-                        :title="t('statisticsPage.championStatsDamageSplitTitle')"
-                        aria-hidden="true"
-                      />
-                      <div class="space-y-0.5 text-[10px] leading-tight text-text/85">
-                        <div class="text-[11px] font-semibold text-text">
-                          {{ t('statisticsPage.championStatsDamageSplitTitle') }}
-                        </div>
-                        <div
-                          v-for="entry in championDamageShareLegend"
-                          :key="entry.key"
-                          class="flex items-center gap-1"
-                        >
-                          <span
-                            class="inline-block h-2.5 w-2.5 rounded-sm"
-                            :style="{ backgroundColor: entry.color }"
-                          />
-                          <span>{{ entry.label }}: {{ entry.pct.toFixed(1) }}%</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div
-                      v-if="championDamageTargetTotal > 0"
-                      class="flex min-w-0 items-center gap-3 rounded bg-surface/40 px-2 py-1.5 max-lg:w-full"
-                    >
-                      <div
-                        class="h-12 w-12 shrink-0 rounded-full"
-                        :style="championDamageTargetDonutStyle"
-                        :title="t('statisticsPage.championStatsDamageTargetSplitTitle')"
-                        aria-hidden="true"
-                      />
-                      <div class="space-y-0.5 text-[10px] leading-tight text-text/85">
-                        <div class="text-[11px] font-semibold text-text">
-                          {{ t('statisticsPage.championStatsDamageTargetSplitTitle') }}
-                        </div>
-                        <div
-                          v-for="entry in championDamageTargetLegend"
-                          :key="entry.key"
-                          class="flex items-center gap-1"
-                        >
-                          <span
-                            class="inline-block h-2.5 w-2.5 rounded-sm"
-                            :style="{ backgroundColor: entry.color }"
-                          />
-                          <span>{{ entry.label }}: {{ entry.pct.toFixed(1) }}%</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div
-                    class="champion-header-kpis-wrap ml-auto flex shrink-0 items-center gap-2 max-lg:ml-0 max-lg:w-full max-lg:justify-between"
-                  >
-                    <div
-                      class="champion-header-kpis flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text/85"
-                    >
-                      <span
-                        >{{ t('statisticsPage.championDashboardGamesShort') }}:
-                        <strong>{{
-                          Number(championStats.games ?? 0).toLocaleString('en-US')
-                        }}</strong></span
-                      >
-                      <span
-                        >{{ t('statisticsPage.pickrate') }}:
-                        <strong
-                          >{{ formatDonutPercent(championStats.pickrate ?? 0) }}%</strong
-                        ></span
-                      >
-                      <span
-                        >{{ t('statisticsPage.winrate') }}:
-                        <strong>{{ formatDonutPercent(championStats.winrate ?? 0) }}%</strong></span
-                      >
-                      <span
-                        >{{ t('statisticsPage.championStatsBanrateTitle') }}:
-                        <strong>{{ formatDonutPercent(championStats.banrate ?? 0) }}%</strong></span
-                      >
-                    </div>
-                    <button
-                      type="button"
-                      class="champion-header-band-collapse shrink-0 rounded p-1 text-text/60 transition-colors hover:bg-white/5 hover:text-text lg:hidden"
-                      :aria-expanded="true"
-                      :aria-controls="'champion-header-band'"
-                      :title="t('statisticsPage.championStatsHeaderHide')"
-                      @click="championHeaderBandOpen = false"
-                    >
-                      <svg
-                        class="h-4 w-4 rotate-180"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        aria-hidden="true"
-                      >
-                        <path
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          stroke-width="2"
-                          d="M19 9l-7 7-7-7"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <section
+              <ChampionOverviewCards
                 v-if="activeChampionTab === 'overview'"
-                id="champion-tab-panel-overview"
-                role="tabpanel"
-                class="champion-tab-panel p-1 max-lg:px-3 max-lg:py-3"
+                :main-role="ovMainRoleLabel"
+                :skill="ovSkill"
+                :spells="ovSpells"
+                :items="ovItems"
+                :roles="ovRoles"
+                :damage="championDamageSplit"
+                :profile="ovProfile"
+                :matchups-best="ovMatchups.best"
+                :matchups-worst="ovMatchups.worst"
+                :pending="ovPending"
+                class="p-1 max-lg:px-3 max-lg:py-3"
+                @go-tab="onOverviewGoTab"
               >
-                <div
-                  class="champion-overview-filters mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs"
-                >
-                  <h2 class="shrink-0 text-base font-semibold text-text">
-                    {{ t('statisticsPage.championStatsTrendsTitle') }}
-                  </h2>
-                  <label class="inline-flex shrink-0 items-center gap-2 text-text/80">
-                    <span>{{ t('statisticsPage.championStatsTrendsGranularity') }}</span>
-                    <select
-                      v-model="trendGranularity"
-                      class="rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-                    >
-                      <option value="day">
-                        {{ t('statisticsPage.championStatsTrendsDay') }}
-                      </option>
-                      <option value="week">
-                        {{ t('statisticsPage.championStatsTrendsWeek') }}
-                      </option>
-                      <option value="month">
-                        {{ t('statisticsPage.championStatsTrendsMonth') }}
-                      </option>
-                      <option value="patch">
-                        {{ t('statisticsPage.championStatsTrendsPatch') }}
-                      </option>
-                    </select>
-                  </label>
-                  <div class="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      class="rounded px-2 py-1 font-medium transition-colors"
-                      :class="
-                        trendRangeMode === '7d'
-                          ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
-                          : 'bg-black/20 text-text/85 hover:bg-white/10'
-                      "
-                      @click="trendRangeMode = '7d'"
-                    >
-                      {{ t('statisticsPage.championStatsTrendsRange7d') }}
-                    </button>
-                    <button
-                      type="button"
-                      class="rounded px-2 py-1 font-medium transition-colors"
-                      :class="
-                        trendRangeMode === '14d'
-                          ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
-                          : 'bg-black/20 text-text/85 hover:bg-white/10'
-                      "
-                      @click="trendRangeMode = '14d'"
-                    >
-                      {{ t('statisticsPage.championStatsTrendsRange14d') }}
-                    </button>
-                    <button
-                      type="button"
-                      class="rounded px-2 py-1 font-medium transition-colors"
-                      :class="
-                        trendRangeMode === 'months'
-                          ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
-                          : 'bg-black/20 text-text/85 hover:bg-white/10'
-                      "
-                      @click="trendRangeMode = 'months'"
-                    >
-                      {{ t('statisticsPage.championStatsTrendsRangeMonths') }}
-                    </button>
-                    <label
-                      v-if="trendRangeMode === 'months'"
-                      class="inline-flex items-center gap-1 text-text/80"
-                    >
-                      <span>{{ t('statisticsPage.championStatsTrendsMonthsLabel') }}</span>
-                      <input
-                        v-model.number="trendMonthsWindowModel"
-                        type="number"
-                        min="1"
-                        max="24"
-                        class="w-16 rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-                      />
-                    </label>
-                  </div>
-                  <div class="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      class="rounded px-2 py-1 font-medium transition-colors"
-                      :class="
-                        trendDivisionPreset === 'selected'
-                          ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
-                          : 'bg-black/20 text-text/85 hover:bg-white/10'
-                      "
-                      @click="setTrendDivisionPreset('selected')"
-                    >
-                      {{ t('statisticsPage.championStatsTrendsPresetSelected') }}
-                    </button>
-                    <button
-                      type="button"
-                      class="rounded px-2 py-1 font-medium transition-colors"
-                      :class="
-                        trendDivisionPreset === 'average'
-                          ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
-                          : 'bg-black/20 text-text/85 hover:bg-white/10'
-                      "
-                      @click="setTrendDivisionPreset('average')"
-                    >
-                      Average
-                    </button>
-                    <button
-                      type="button"
-                      class="rounded px-2 py-1 font-medium transition-colors"
-                      :class="
-                        trendDivisionPreset === 'skilled'
-                          ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
-                          : 'bg-black/20 text-text/85 hover:bg-white/10'
-                      "
-                      @click="setTrendDivisionPreset('skilled')"
-                    >
-                      Skilled
-                    </button>
-                    <button
-                      type="button"
-                      class="rounded px-2 py-1 font-medium transition-colors"
-                      :class="
-                        trendDivisionPreset === 'elite'
-                          ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
-                          : 'bg-black/20 text-text/85 hover:bg-white/10'
-                      "
-                      @click="setTrendDivisionPreset('elite')"
-                    >
-                      Elite
-                    </button>
-                    <label class="inline-flex items-center gap-1 text-text/80">
-                      <input
-                        v-model="trendShowGlobalLine"
-                        type="checkbox"
-                        class="rounded border-primary/50"
-                      />
-                      <span>{{ t('statisticsPage.championStatsTrendsGlobalLine') }}</span>
-                    </label>
-                  </div>
-                </div>
-                <div v-if="trendPending" class="py-4 text-text/70">
-                  {{ t('statisticsPage.loading') }}
-                </div>
-                <template v-else>
-                  <p v-if="trendError" class="py-2 text-sm text-error">{{ trendError }}</p>
-                  <div
-                    v-if="
-                      trendChartCards.length ||
-                      durationByTierPending ||
-                      durationTrendExtraCards.length
-                    "
-                    class="champion-trend-charts-grid grid w-full min-w-0 grid-cols-1 gap-4 lg:grid-cols-2"
+                <template #evolution>
+                  <section
+                    v-if="activeChampionTab === 'overview'"
+                    id="champion-tab-panel-overview"
+                    role="tabpanel"
+                    class="champion-tab-panel p-1 max-lg:px-3 max-lg:py-3"
                   >
-                    <article
-                      v-for="card in trendChartCards"
-                      :key="card.metricId"
-                      class="champion-trend-chart-card w-full min-w-0 max-w-full rounded border border-primary/20 bg-background/30 p-3"
-                    >
-                      <h3 class="mb-2 text-sm font-medium text-text">{{ card.title }}</h3>
-                      <div class="champion-trend-chart-wrap max-w-full overflow-hidden">
-                        <svg
-                          :viewBox="`0 0 ${TREND_CHART_W} ${TREND_CHART_H}`"
-                          class="champion-trend-chart-svg block h-auto w-full max-w-full"
-                          preserveAspectRatio="xMidYMid meet"
-                          aria-hidden="true"
-                        >
-                          <defs>
-                            <linearGradient
-                              :id="`trend-bg-${card.metricId}`"
-                              x1="0"
-                              y1="0"
-                              x2="0"
-                              y2="1"
-                            >
-                              <stop offset="0%" stop-color="rgb(71 85 105 / 0.28)" />
-                              <stop offset="100%" stop-color="rgb(15 23 42 / 0.08)" />
-                            </linearGradient>
-                          </defs>
-                          <rect
-                            :x="TREND_CHART_PAD.left"
-                            :y="TREND_CHART_PAD.top"
-                            :width="TREND_PLOT_W"
-                            :height="TREND_PLOT_H"
-                            :fill="`url(#trend-bg-${card.metricId})`"
-                          />
-                          <g v-for="tick in card.yTicks" :key="`${card.metricId}-y-${tick.value}`">
-                            <line
-                              :x1="TREND_CHART_PAD.left"
-                              :y1="tick.y"
-                              :x2="TREND_CHART_PAD.left + TREND_PLOT_W"
-                              :y2="tick.y"
-                              class="text-text/25"
-                              stroke="currentColor"
-                              stroke-width="1"
-                            />
-                            <text
-                              :x="TREND_CHART_PAD.left - 6"
-                              :y="tick.y + 4"
-                              text-anchor="end"
-                              class="fill-text/70 text-[10px]"
-                            >
-                              {{ tick.label }}
-                            </text>
-                          </g>
-                          <line
-                            :x1="TREND_CHART_PAD.left"
-                            :y1="TREND_CHART_PAD.top + TREND_PLOT_H"
-                            :x2="TREND_CHART_PAD.left + TREND_PLOT_W"
-                            :y2="TREND_CHART_PAD.top + TREND_PLOT_H"
-                            class="text-text/35"
-                            stroke="currentColor"
-                            stroke-width="1"
-                          />
-                          <line
-                            :x1="TREND_CHART_PAD.left"
-                            :y1="TREND_CHART_PAD.top"
-                            :x2="TREND_CHART_PAD.left"
-                            :y2="TREND_CHART_PAD.top + TREND_PLOT_H"
-                            class="text-text/35"
-                            stroke="currentColor"
-                            stroke-width="1"
-                          />
-                          <path
-                            v-for="serie in card.series"
-                            v-show="isLegendTierVisible(serie.tier)"
-                            :key="`${card.metricId}-${serie.tier}`"
-                            :d="serie.path"
-                            fill="none"
-                            :stroke="serie.color"
-                            stroke-width="2"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                          />
-                          <g
-                            v-for="serie in card.series"
-                            v-show="isLegendTierVisible(serie.tier)"
-                            :key="`${card.metricId}-${serie.tier}-points`"
-                          >
-                            <circle
-                              v-for="pt in serie.points"
-                              :key="`${card.metricId}-${serie.tier}-${pt.idx}`"
-                              :cx="pt.x"
-                              :cy="pt.y"
-                              r="3"
-                              :fill="serie.color"
-                              class="cursor-pointer"
-                              @mouseenter="onTrendPointHover($event, card.metricId, serie.tier, pt)"
-                              @mousemove="onTrendPointHover($event, card.metricId, serie.tier, pt)"
-                              @mouseleave="trendTooltip = null"
-                            />
-                          </g>
-                          <g v-for="tick in card.xTicks" :key="`${card.metricId}-x-${tick.index}`">
-                            <line
-                              :x1="tick.x"
-                              :y1="TREND_CHART_PAD.top + TREND_PLOT_H"
-                              :x2="tick.x"
-                              :y2="TREND_CHART_PAD.top + TREND_PLOT_H + 4"
-                              class="text-text/40"
-                              stroke="currentColor"
-                              stroke-width="1"
-                            />
-                            <text
-                              :x="tick.x"
-                              :y="TREND_CHART_H - 6"
-                              text-anchor="middle"
-                              class="fill-text/70 text-[10px]"
-                            >
-                              {{ tick.label }}
-                            </text>
-                          </g>
-                        </svg>
-                      </div>
-                      <div
-                        v-if="trendTooltip && trendTooltip.metricId === card.metricId"
-                        class="statistics-chart-tooltip pointer-events-none fixed z-[90]"
-                        :style="{
-                          left: `${trendTooltip.mouseX}px`,
-                          top: `${trendTooltip.mouseY}px`,
-                          transform: 'translate(-50%, -110%)',
-                        }"
-                      >
-                        <strong>{{ trendTooltip.tier }}</strong> · {{ trendTooltip.bucketLabel }} ·
-                        {{ formatTrendValue(card.metricId, trendTooltip.value) }}
-                      </div>
-                      <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-text/80">
-                        <button
-                          v-for="serie in card.series"
-                          :key="`${card.metricId}-legend-${serie.tier}`"
-                          type="button"
-                          class="inline-flex items-center gap-1 rounded px-1 py-0.5 transition hover:bg-primary/20"
-                          :class="
-                            isLegendTierVisible(serie.tier)
-                              ? 'text-text/85'
-                              : 'text-text/45 line-through opacity-70'
-                          "
-                          :title="t('statisticsPage.championStatsLegendToggleDivision')"
-                          @click="toggleLegendTierVisibility(serie.tier)"
-                        >
-                          <span
-                            class="inline-block h-2.5 w-2.5 rounded-full"
-                            :style="{ backgroundColor: serie.color }"
-                          />
-                          {{ serie.tier }}
-                        </button>
-                      </div>
-                    </article>
-
-                    <article
-                      v-if="durationByTierPending"
-                      class="champion-trend-chart-card w-full min-w-0 max-w-full rounded border border-primary/20 bg-background/30 p-3"
-                    >
-                      <h3 class="mb-2 text-sm font-medium text-text">
-                        {{ t('statisticsPage.championStatsDurationChartsLoading') }}
-                      </h3>
-                      <div class="py-10 text-center text-xs text-text/60">
-                        {{ t('statisticsPage.loading') }}
-                      </div>
-                    </article>
-                    <template v-else>
-                      <article
-                        v-for="card in durationTrendExtraCards"
-                        :key="`duration-extra-${card.metricId}`"
-                        class="champion-trend-chart-card w-full min-w-0 max-w-full rounded border border-primary/20 bg-background/30 p-3"
-                      >
-                        <h3 class="mb-2 text-sm font-medium text-text">{{ card.title }}</h3>
-                        <div class="champion-trend-chart-wrap max-w-full overflow-hidden">
-                          <svg
-                            :viewBox="`0 0 ${TREND_CHART_W} ${TREND_CHART_H}`"
-                            class="champion-trend-chart-svg block h-auto w-full max-w-full"
-                            preserveAspectRatio="xMidYMid meet"
-                            aria-hidden="true"
-                          >
-                            <defs>
-                              <linearGradient
-                                :id="`trend-bg-duration-${card.metricId}`"
-                                x1="0"
-                                y1="0"
-                                x2="0"
-                                y2="1"
-                              >
-                                <stop offset="0%" stop-color="rgb(71 85 105 / 0.28)" />
-                                <stop offset="100%" stop-color="rgb(15 23 42 / 0.08)" />
-                              </linearGradient>
-                            </defs>
-                            <rect
-                              :x="TREND_CHART_PAD.left"
-                              :y="TREND_CHART_PAD.top"
-                              :width="TREND_PLOT_W"
-                              :height="TREND_PLOT_H"
-                              :fill="`url(#trend-bg-duration-${card.metricId})`"
-                            />
-                            <g
-                              v-for="tick in card.yTicks"
-                              :key="`duration-${card.metricId}-y-${tick.value}`"
-                            >
-                              <line
-                                :x1="TREND_CHART_PAD.left"
-                                :y1="tick.y"
-                                :x2="TREND_CHART_PAD.left + TREND_PLOT_W"
-                                :y2="tick.y"
-                                class="text-text/25"
-                                stroke="currentColor"
-                                stroke-width="1"
-                              />
-                              <text
-                                :x="TREND_CHART_PAD.left - 6"
-                                :y="tick.y + 4"
-                                text-anchor="end"
-                                class="fill-text/70 text-[10px]"
-                              >
-                                {{ tick.label }}
-                              </text>
-                            </g>
-                            <line
-                              :x1="TREND_CHART_PAD.left"
-                              :y1="TREND_CHART_PAD.top + TREND_PLOT_H"
-                              :x2="TREND_CHART_PAD.left + TREND_PLOT_W"
-                              :y2="TREND_CHART_PAD.top + TREND_PLOT_H"
-                              class="text-text/35"
-                              stroke="currentColor"
-                              stroke-width="1"
-                            />
-                            <line
-                              :x1="TREND_CHART_PAD.left"
-                              :y1="TREND_CHART_PAD.top"
-                              :x2="TREND_CHART_PAD.left"
-                              :y2="TREND_CHART_PAD.top + TREND_PLOT_H"
-                              class="text-text/35"
-                              stroke="currentColor"
-                              stroke-width="1"
-                            />
-                            <path
-                              v-for="serie in card.series"
-                              v-show="isLegendTierVisible(serie.tier)"
-                              :key="`duration-${card.metricId}-${serie.tier}`"
-                              :d="serie.path"
-                              fill="none"
-                              :stroke="serie.color"
-                              stroke-width="2"
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                            />
-                            <g
-                              v-for="serie in card.series"
-                              v-show="isLegendTierVisible(serie.tier)"
-                              :key="`duration-${card.metricId}-${serie.tier}-points`"
-                            >
-                              <circle
-                                v-for="pt in serie.points"
-                                v-show="(pt.games ?? 0) > 0"
-                                :key="`duration-${card.metricId}-${serie.tier}-${pt.idx}`"
-                                :cx="pt.x"
-                                :cy="pt.y"
-                                r="3"
-                                :fill="serie.color"
-                                class="cursor-pointer"
-                                @mouseenter="
-                                  onDurationExtraChartHover(
-                                    $event,
-                                    card.metricId === 'games' ? 'games' : 'winrate',
-                                    serie.tier,
-                                    pt
-                                  )
-                                "
-                                @mousemove="
-                                  onDurationExtraChartHover(
-                                    $event,
-                                    card.metricId === 'games' ? 'games' : 'winrate',
-                                    serie.tier,
-                                    pt
-                                  )
-                                "
-                                @mouseleave="durationExtraTooltip = null"
-                              />
-                            </g>
-                            <g
-                              v-for="tick in card.xTicks"
-                              :key="`duration-${card.metricId}-x-${tick.index}`"
-                            >
-                              <line
-                                :x1="tick.x"
-                                :y1="TREND_CHART_PAD.top + TREND_PLOT_H"
-                                :x2="tick.x"
-                                :y2="TREND_CHART_PAD.top + TREND_PLOT_H + 4"
-                                class="text-text/40"
-                                stroke="currentColor"
-                                stroke-width="1"
-                              />
-                              <text
-                                :x="tick.x"
-                                :y="TREND_CHART_H - 6"
-                                text-anchor="middle"
-                                class="fill-text/70 text-[10px]"
-                              >
-                                {{ tick.label }}
-                              </text>
-                            </g>
-                          </svg>
-                        </div>
-                        <div
-                          v-if="
-                            durationExtraTooltip &&
-                            durationExtraTooltip.metricId ===
-                              (card.metricId === 'games' ? 'games' : 'winrate')
-                          "
-                          class="statistics-chart-tooltip pointer-events-none fixed z-[90]"
-                          :style="{
-                            left: `${durationExtraTooltip.mouseX}px`,
-                            top: `${durationExtraTooltip.mouseY}px`,
-                            transform: 'translate(-50%, -110%)',
-                          }"
-                        >
-                          <template v-if="durationExtraTooltip.metricId === 'winrate'">
-                            <strong>{{ durationExtraTooltip.tier }}</strong> ·
-                            {{ durationExtraTooltip.bucketLabel }} ·
-                            {{ Number(durationExtraTooltip.value).toFixed(2) }}% ·
-                            {{ durationExtraTooltip.games }}
-                            {{ t('statisticsPage.championStatsDurationWinrateTooltipMatches') }}
-                          </template>
-                          <template v-else>
-                            <strong>{{ durationExtraTooltip.tier }}</strong> ·
-                            {{ durationExtraTooltip.bucketLabel }} ·
-                            {{ Math.round(durationExtraTooltip.games) }}
-                            {{ t('statisticsPage.championStatsDurationWinrateTooltipMatches') }}
-                          </template>
-                        </div>
-                        <div
-                          class="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-text/80"
-                        >
+                    <div class="ov-evo-head">
+                      <h2>{{ t('statisticsPage.ovEvolutionTitle') }}</h2>
+                      <div class="ov-evo-controls">
+                        <div class="ov-seg" role="group">
                           <button
-                            v-for="serie in card.series"
-                            :key="`duration-${card.metricId}-legend-${serie.tier}`"
                             type="button"
-                            class="inline-flex items-center gap-1 rounded px-1 py-0.5 transition hover:bg-primary/20"
-                            :class="
-                              isLegendTierVisible(serie.tier)
-                                ? 'text-text/85'
-                                : 'text-text/45 line-through opacity-70'
-                            "
-                            :title="t('statisticsPage.championStatsLegendToggleDivision')"
-                            @click="toggleLegendTierVisibility(serie.tier)"
+                            :class="{ 'is-on': trendFocusMetric === 'all' }"
+                            @click="trendFocusMetric = 'all'"
                           >
-                            <span
-                              class="inline-block h-2.5 w-2.5 rounded-full"
-                              :style="{ backgroundColor: serie.color }"
-                            />
-                            {{ serie.tier }}
+                            {{ t('statisticsPage.ovEvoMetric_all') }}
+                          </button>
+                          <button
+                            v-for="m in trendMetricDefs"
+                            :key="m.id"
+                            type="button"
+                            :class="{ 'is-on': trendFocusMetric === m.id }"
+                            @click="trendFocusMetric = m.id"
+                          >
+                            {{ t(`statisticsPage.ovEvoMetric_${m.id}`) }}
                           </button>
                         </div>
-                      </article>
+                        <div class="ov-seg" role="group">
+                          <button
+                            type="button"
+                            :class="{
+                              'is-on': trendRangeMode === '7d' && trendGranularity !== 'patch',
+                            }"
+                            @click="setTrendPeriod('7d')"
+                          >
+                            {{ t('statisticsPage.ovEvo7d') }}
+                          </button>
+                          <button
+                            type="button"
+                            :class="{
+                              'is-on': trendRangeMode === '14d' && trendGranularity !== 'patch',
+                            }"
+                            @click="setTrendPeriod('14d')"
+                          >
+                            {{ t('statisticsPage.ovEvo14d') }}
+                          </button>
+                          <button
+                            type="button"
+                            :class="{ 'is-on': trendGranularity === 'patch' }"
+                            @click="setTrendPeriod('patch')"
+                          >
+                            {{ t('statisticsPage.ovEvoByPatch') }}
+                          </button>
+                        </div>
+                        <label class="ov-evo-div">
+                          <input v-model="trendShowDivisions" type="checkbox" />
+                          {{ t('statisticsPage.ovEvoByDivision') }}
+                        </label>
+                      </div>
+                    </div>
+                    <div v-if="trendPending" class="py-4 text-text/70">
+                      {{ t('statisticsPage.loading') }}
+                    </div>
+                    <template v-else>
+                      <p v-if="trendError" class="py-2 text-sm text-error">{{ trendError }}</p>
+                      <div
+                        v-if="trendFocusCards.length"
+                        class="champion-trend-charts-grid grid w-full min-w-0 grid-cols-1 gap-4"
+                        :class="{ 'lg:grid-cols-2': trendFocusCards.length > 1 }"
+                      >
+                        <article
+                          v-for="card in trendFocusCards"
+                          :key="card.metricId"
+                          class="champion-trend-chart-card w-full min-w-0 max-w-full rounded border border-primary/20 bg-background/30 p-3"
+                        >
+                          <h3 class="mb-2 text-sm font-medium text-text">{{ card.title }}</h3>
+                          <div class="champion-trend-chart-wrap max-w-full overflow-hidden">
+                            <svg
+                              :viewBox="`0 0 ${TREND_CHART_W} ${TREND_CHART_H}`"
+                              class="champion-trend-chart-svg block h-auto w-full max-w-full"
+                              preserveAspectRatio="xMidYMid meet"
+                              aria-hidden="true"
+                            >
+                              <defs>
+                                <linearGradient
+                                  :id="`trend-bg-${card.metricId}`"
+                                  x1="0"
+                                  y1="0"
+                                  x2="0"
+                                  y2="1"
+                                >
+                                  <stop offset="0%" stop-color="rgb(71 85 105 / 0.28)" />
+                                  <stop offset="100%" stop-color="rgb(15 23 42 / 0.08)" />
+                                </linearGradient>
+                              </defs>
+                              <rect
+                                :x="TREND_CHART_PAD.left"
+                                :y="TREND_CHART_PAD.top"
+                                :width="TREND_PLOT_W"
+                                :height="TREND_PLOT_H"
+                                :fill="`url(#trend-bg-${card.metricId})`"
+                              />
+                              <g
+                                v-for="tick in card.yTicks"
+                                :key="`${card.metricId}-y-${tick.value}`"
+                              >
+                                <line
+                                  :x1="TREND_CHART_PAD.left"
+                                  :y1="tick.y"
+                                  :x2="TREND_CHART_PAD.left + TREND_PLOT_W"
+                                  :y2="tick.y"
+                                  class="text-text/25"
+                                  stroke="currentColor"
+                                  stroke-width="1"
+                                />
+                                <text
+                                  :x="TREND_CHART_PAD.left - 6"
+                                  :y="tick.y + 4"
+                                  text-anchor="end"
+                                  class="fill-text/70 text-[10px]"
+                                >
+                                  {{ tick.label }}
+                                </text>
+                              </g>
+                              <line
+                                :x1="TREND_CHART_PAD.left"
+                                :y1="TREND_CHART_PAD.top + TREND_PLOT_H"
+                                :x2="TREND_CHART_PAD.left + TREND_PLOT_W"
+                                :y2="TREND_CHART_PAD.top + TREND_PLOT_H"
+                                class="text-text/35"
+                                stroke="currentColor"
+                                stroke-width="1"
+                              />
+                              <line
+                                :x1="TREND_CHART_PAD.left"
+                                :y1="TREND_CHART_PAD.top"
+                                :x2="TREND_CHART_PAD.left"
+                                :y2="TREND_CHART_PAD.top + TREND_PLOT_H"
+                                class="text-text/35"
+                                stroke="currentColor"
+                                stroke-width="1"
+                              />
+                              <path
+                                v-for="serie in card.series"
+                                v-show="isLegendTierVisible(serie.tier)"
+                                :key="`${card.metricId}-${serie.tier}`"
+                                :d="serie.path"
+                                fill="none"
+                                :stroke="serie.color"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                              />
+                              <g
+                                v-for="serie in card.series"
+                                v-show="isLegendTierVisible(serie.tier)"
+                                :key="`${card.metricId}-${serie.tier}-points`"
+                              >
+                                <circle
+                                  v-for="pt in serie.points"
+                                  :key="`${card.metricId}-${serie.tier}-${pt.idx}`"
+                                  :cx="pt.x"
+                                  :cy="pt.y"
+                                  r="3"
+                                  :fill="serie.color"
+                                  class="cursor-pointer"
+                                  @mouseenter="
+                                    onTrendPointHover($event, card.metricId, serie.tier, pt)
+                                  "
+                                  @mousemove="
+                                    onTrendPointHover($event, card.metricId, serie.tier, pt)
+                                  "
+                                  @mouseleave="trendTooltip = null"
+                                />
+                              </g>
+                              <g
+                                v-for="tick in card.xTicks"
+                                :key="`${card.metricId}-x-${tick.index}`"
+                              >
+                                <line
+                                  :x1="tick.x"
+                                  :y1="TREND_CHART_PAD.top + TREND_PLOT_H"
+                                  :x2="tick.x"
+                                  :y2="TREND_CHART_PAD.top + TREND_PLOT_H + 4"
+                                  class="text-text/40"
+                                  stroke="currentColor"
+                                  stroke-width="1"
+                                />
+                                <text
+                                  :x="tick.x"
+                                  :y="TREND_CHART_H - 6"
+                                  text-anchor="middle"
+                                  class="fill-text/70 text-[10px]"
+                                >
+                                  {{ tick.label }}
+                                </text>
+                              </g>
+                            </svg>
+                          </div>
+                          <div
+                            v-if="trendTooltip && trendTooltip.metricId === card.metricId"
+                            class="statistics-chart-tooltip pointer-events-none fixed z-[90]"
+                            :style="{
+                              left: `${trendTooltip.mouseX}px`,
+                              top: `${trendTooltip.mouseY}px`,
+                              transform: 'translate(-50%, -110%)',
+                            }"
+                          >
+                            <strong>{{ trendTooltip.tier }}</strong> ·
+                            {{ trendTooltip.bucketLabel }} ·
+                            {{ formatTrendValue(card.metricId, trendTooltip.value) }}
+                          </div>
+                          <div
+                            class="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-text/80"
+                          >
+                            <button
+                              v-for="serie in card.series"
+                              :key="`${card.metricId}-legend-${serie.tier}`"
+                              type="button"
+                              class="inline-flex items-center gap-1 rounded px-1 py-0.5 transition hover:bg-primary/20"
+                              :class="
+                                isLegendTierVisible(serie.tier)
+                                  ? 'text-text/85'
+                                  : 'text-text/45 line-through opacity-70'
+                              "
+                              :title="t('statisticsPage.championStatsLegendToggleDivision')"
+                              @click="toggleLegendTierVisibility(serie.tier)"
+                            >
+                              <span
+                                class="inline-block h-2.5 w-2.5 rounded-full"
+                                :style="{ backgroundColor: serie.color }"
+                              />
+                              {{ serie.tier }}
+                            </button>
+                          </div>
+                        </article>
+                      </div>
+                      <p v-else class="py-2 text-text/70">{{ t('statisticsPage.noData') }}</p>
                     </template>
-                  </div>
-                  <p v-else class="py-2 text-text/70">{{ t('statisticsPage.noData') }}</p>
+                  </section>
                 </template>
-              </section>
+              </ChampionOverviewCards>
             </div>
             <div class="champion-tab-panels mb-6 w-full min-w-0 space-y-3 max-lg:mb-4">
               <div
@@ -1746,23 +1351,23 @@
                 v-if="isChampionTab('runes')"
                 id="champion-tab-panel-runes"
                 role="tabpanel"
-                class="champion-tab-panel-runes"
+                class="champion-tab-panel champion-tab-panel-runes p-4 max-lg:px-3 max-lg:py-3"
               >
-                <StatisticsRunesTab />
+                <StatisticsRunesTab build-summary />
               </div>
               <div
                 v-if="isChampionTab('spells')"
                 id="champion-tab-panel-spells"
                 role="tabpanel"
-                class="champion-tab-panel-spells"
+                class="champion-tab-panel champion-tab-panel-spells p-4 max-lg:px-3 max-lg:py-3"
               >
-                <StatisticsSpellsTab />
+                <StatisticsSpellsTab card-summary />
               </div>
               <div
                 v-if="isChampionTab('skills')"
                 id="champion-tab-panel-skills"
                 role="tabpanel"
-                class="champion-tab-panel-skills"
+                class="champion-tab-panel champion-tab-panel-skills p-4 max-lg:px-3 max-lg:py-3"
               >
                 <div
                   v-if="championSpellsPending && !championSpellOrdersRows.length"
@@ -1777,6 +1382,41 @@
                   {{ t('statisticsPage.noData') }}
                 </div>
                 <div v-else class="champion-skills-sections space-y-[5px]">
+                  <section v-if="championMainSkillOrder" class="sk-grid-section">
+                    <header class="sk-grid-head">
+                      <h2 class="sk-grid-title">{{ t('statisticsPage.skillOrderGridTitle') }}</h2>
+                      <p class="sk-grid-sub">
+                        <b>{{ fmtLocNum(championMainSkillOrder.winrate, 1, locale) }} %</b>
+                        {{ t('statisticsPage.runesWr') }} ·
+                        {{ fmtLocNum(championMainSkillOrder.pickrate, 1, locale) }} %
+                        {{ t('statisticsPage.skillOrderGridOfGames') }} ·
+                        {{ championMainSkillOrder.games.toLocaleString(locale) }}
+                        {{ t('statisticsPage.skillOrderGridGames') }}
+                      </p>
+                    </header>
+                    <div class="sk-grid-card">
+                      <div class="sk-grid">
+                        <span />
+                        <span v-for="lvl in 18" :key="'skl-' + lvl" class="sk-grid-lvl">{{
+                          lvl
+                        }}</span>
+                        <template v-for="gr in championMainSkillGrid" :key="'skr-' + gr.key">
+                          <span class="sk-grid-key" :class="'is-' + gr.key">{{
+                            t(`skills.key.${gr.key}`)
+                          }}</span>
+                          <span
+                            v-for="(on, i) in gr.levels"
+                            :key="'skc-' + gr.key + i"
+                            class="sk-grid-cell"
+                          >
+                            <span v-if="on" class="sk-grid-chip" :class="'is-' + gr.key">{{
+                              t(`skills.key.${gr.key}`)
+                            }}</span>
+                          </span>
+                        </template>
+                      </div>
+                    </div>
+                  </section>
                   <section
                     v-for="section in championSpellOrderSectionsVisible"
                     :key="section.key"
@@ -1828,28 +1468,24 @@
                 />
               </div>
               <div
-                v-if="activeChampionTab === 'pings'"
-                id="champion-tab-panel-pings"
-                role="tabpanel"
-                class="champion-tab-panel p-4 max-lg:px-3 max-lg:py-3"
-              >
-                <ChampionPingsTab
-                  :data="championPingsData"
-                  :baseline="championPingsBaselineData"
-                  :pending="championPingsPending"
-                />
-              </div>
-              <div
-                v-if="activeChampionTab === 'vision'"
+                v-if="activeChampionTab === 'vision' || activeChampionTab === 'pings'"
                 id="champion-tab-panel-vision"
                 role="tabpanel"
                 class="champion-tab-panel p-4 max-lg:px-3 max-lg:py-3"
               >
-                <ChampionVisionTab
-                  :data="championVisionData"
-                  :baseline="championVisionBaselineData"
-                  :pending="championVisionPending"
-                />
+                <h2 class="champion-section-title">{{ t('statisticsPage.visionPingsTitle') }}</h2>
+                <div class="champion-vision-pings-grid">
+                  <ChampionVisionTab
+                    :data="championVisionData"
+                    :baseline="championVisionBaselineData"
+                    :pending="championVisionPending"
+                  />
+                  <ChampionPingsTab
+                    :data="championPingsData"
+                    :baseline="championPingsBaselineData"
+                    :pending="championPingsPending"
+                  />
+                </div>
               </div>
               <div
                 v-if="activeChampionTab === 'dashboard'"
@@ -1857,11 +1493,10 @@
                 role="tabpanel"
                 class="champion-tab-panel p-4 max-lg:px-3 max-lg:py-3"
               >
-                <ChampionDashboardTab
-                  :data="championDashboardData"
+                <ChampionCombatRolesPanel
+                  :metrics="championDashboardData?.metrics"
+                  :roles="championDashboardData?.roles"
                   :pending="championDashboardPending"
-                  :items="dashboardTopItems"
-                  :spells="dashboardTopSpells"
                 />
               </div>
               <div
@@ -1873,12 +1508,15 @@
                 <ChampionMiscTab :data="championMiscData" :pending="championMiscPending" />
               </div>
               <div
-                v-if="activeChampionTab === 'videos'"
-                id="champion-tab-panel-videos"
+                v-if="activeChampionTab === 'builds'"
+                id="champion-tab-panel-builds"
                 role="tabpanel"
                 class="champion-tab-panel p-4 max-lg:px-3 max-lg:py-3"
               >
-                <ChampionVideosTab :champion-name="championName(championId) ?? ''" />
+                <ChampionBuildsTab
+                  :champion-id="championByKey(championId)?.id ?? ''"
+                  :champion-name="championName(championId) ?? ''"
+                />
               </div>
             </div>
           </template>
@@ -1916,7 +1554,8 @@ import { queryFirst } from '~/utils/statistics/statisticsTabRouting'
 import { progressionReferenceVersion } from '~/utils/statistics/progressionReference'
 import { trendChartDomain } from '~/utils/statistics/trendDomain'
 import { matchupsFallbackVersion } from '~/utils/statistics/matchupsFallbackVersion'
-import { splitRareRows } from '~/utils/statistics/lowSample'
+import { splitRareRows, LOW_SAMPLE_MIN_GAMES } from '~/utils/statistics/lowSample'
+import type { HighlightRow } from '~/components/statistics/ChampionMatchupHighlights.vue'
 import { displayedPatch, withVersionQuery } from '~/utils/statistics/championVersionQuery'
 import { statisticsFiltersSheetPanelClass } from '~/composables/useStatisticsFiltersSheetMode'
 import { PAGE_SIZE_OPTIONS } from '~/utils/statistics/statisticsTableFormat'
@@ -1940,15 +1579,24 @@ import type { MatchupDetailTabId } from '~/components/statistics/ChampionMatchup
 import type { SynergyExtRow } from '~/components/statistics/ChampionSynergyTab.vue'
 import type { ChampionObjectivesSummary } from '~/components/statistics/ChampionObjectivesTab.vue'
 import type { ChampionMiscSummary } from '~/components/statistics/ChampionMiscTab.vue'
-import type {
-  ChampionDashboardSummary,
-  DashboardTile,
-} from '~/components/statistics/ChampionDashboardTab.vue'
-import { topItemsFromBuilds } from '~/utils/championDashboard'
+import { trendCardsForFocus, type TrendFocus } from '~/utils/statistics/trendFocus'
+import type { ChampionDashboardSummary } from '~/components/statistics/ChampionDashboardTab.vue'
 import type { ChampionPingsSummary } from '~/components/statistics/ChampionPingsTab.vue'
 import type { ChampionVisionSummary } from '~/components/statistics/ChampionVisionTab.vue'
 import ChampionSpellOrderCard from '~/components/statistics/ChampionSpellOrderCard.vue'
+import ChampionOverviewCards, {
+  type OverviewIconRow,
+} from '~/components/statistics/ChampionOverviewCards.vue'
+import {
+  matchupExtremes,
+  overviewRoleRows,
+  profileColumns,
+  skillPriority,
+} from '~/utils/statistics/overviewBuildSummary'
+import { topItemsFromBuilds } from '~/utils/championDashboard'
 import { mergeChampionSpellOrderRows } from '~/utils/championSpellOrderMerge'
+import { fmtLocNum } from '~/utils/statistics/localeNum'
+import { mainSkillOrder, skillOrderGrid } from '~/utils/statistics/skillOrderGrid'
 import {
   getChampionImageUrl,
   getItemImageUrl as _getItemImageUrl,
@@ -1986,6 +1634,12 @@ import {
   smoothSeries,
   svgLinePath,
 } from '~/utils/statistics/trendChart'
+import {
+  CHAMPION_TAB_GROUPS,
+  championTabGroupOf,
+  championTabsInGroup,
+  type ChampionTabGroupId,
+} from '~/utils/statistics/championTabGroups'
 const StatisticsRunesTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsRunesTab.vue')
 )
@@ -2002,14 +1656,17 @@ const ChampionSynergyTab = defineAsyncComponent(
 const ChampionObjectivesTab = defineAsyncComponent(
   () => import('~/components/statistics/ChampionObjectivesTab.vue')
 )
-const ChampionDashboardTab = defineAsyncComponent(
-  () => import('~/components/statistics/ChampionDashboardTab.vue')
+const ChampionCombatRolesPanel = defineAsyncComponent(
+  () => import('~/components/statistics/ChampionCombatRolesPanel.vue')
 )
 const ChampionMiscTab = defineAsyncComponent(
   () => import('~/components/statistics/ChampionMiscTab.vue')
 )
-const ChampionVideosTab = defineAsyncComponent(
-  () => import('~/components/statistics/ChampionVideosTab.vue')
+const ChampionMatchupHighlights = defineAsyncComponent(
+  () => import('~/components/statistics/ChampionMatchupHighlights.vue')
+)
+const ChampionBuildsTab = defineAsyncComponent(
+  () => import('~/components/statistics/ChampionBuildsTab.vue')
 )
 const ChampionPingsTab = defineAsyncComponent(
   () => import('~/components/statistics/ChampionPingsTab.vue')
@@ -2022,6 +1679,7 @@ const route = useRoute()
 const router = useRouter()
 const filterVersion = ref(queryFirst(route.query.version as string | string[] | null | undefined))
 const { t, locale } = useI18n()
+const localePath = useLocalePath()
 const versionStore = useVersionStore()
 const championsStore = useChampionsStore()
 const itemsStore = useItemsStore()
@@ -2485,32 +2143,6 @@ const statisticsUiStore = useStatisticsUiStore()
 const statisticsCustomStore = useStatisticsCustomStore()
 const { filtersOpen } = storeToRefs(statisticsUiStore)
 
-const CHAMPION_HEADER_BAND_STORAGE_KEY = 'champion-header-band-open'
-const championHeaderBandOpen = ref(true)
-
-const championHeaderCollapsedSummary = computed(() => {
-  if (!championStats.value) return ''
-  const pr = formatDonutPercent(championStats.value.pickrate ?? 0)
-  const wr = formatDonutPercent(championStats.value.winrate ?? 0)
-  const ban = formatDonutPercent(championStats.value.banrate ?? 0)
-  return `${t('statisticsPage.pickrate')} ${pr}% · ${t('statisticsPage.winrate')} ${wr}% · ${t('statisticsPage.championStatsBanrateTitle')} ${ban}%`
-})
-
-function initChampionHeaderBandOpen(): void {
-  if (!import.meta.client) return
-  const stored = sessionStorage.getItem(CHAMPION_HEADER_BAND_STORAGE_KEY)
-  if (stored === '0' || stored === '1') {
-    championHeaderBandOpen.value = stored === '1'
-    return
-  }
-  championHeaderBandOpen.value = window.matchMedia('(min-width: 1024px)').matches
-}
-
-watch(championHeaderBandOpen, open => {
-  if (!import.meta.client) return
-  sessionStorage.setItem(CHAMPION_HEADER_BAND_STORAGE_KEY, open ? '1' : '0')
-})
-
 const {
   effectiveFiltersSheetMode,
   showFiltersBackdrop,
@@ -2702,108 +2334,6 @@ function formatDonutPercent(value: number) {
   return Number.isFinite(value) ? Number(value).toFixed(2) : '0'
 }
 
-const championDamageShareLegend = computed(() => {
-  const d = championDamageSplit.value
-  if (!d) return [] as Array<{ key: string; label: string; pct: number; color: string }>
-  const toPct = (v: number) => (d.total > 0 ? (v / d.total) * 100 : 0)
-  return [
-    {
-      key: 'phys',
-      label: t('statisticsPage.championTableColPhys'),
-      pct: toPct(d.phys),
-      color: '#f59e0b',
-    },
-    {
-      key: 'magic',
-      label: t('statisticsPage.championTableColMagic'),
-      pct: toPct(d.magic),
-      color: '#3b82f6',
-    },
-    {
-      key: 'true',
-      label: t('statisticsPage.championTableColBrut'),
-      pct: toPct(d.trueDamage),
-      color: '#22c55e',
-    },
-  ]
-})
-
-const championDamageTargetTotal = computed(() => {
-  const d = championDamageSplit.value
-  if (!d) return 0
-  return d.champions + d.objectives + d.buildings + d.neutralMonsters + d.minions
-})
-
-const championDamageTargetLegend = computed(() => {
-  const d = championDamageSplit.value
-  const total = championDamageTargetTotal.value
-  if (!d || total <= 0)
-    return [] as Array<{ key: string; label: string; pct: number; color: string }>
-  const toPct = (v: number) => (v / total) * 100
-  return [
-    {
-      key: 'champions',
-      label: t('statisticsPage.championDamageTargetChampions'),
-      pct: toPct(d.champions),
-      color: '#ef4444',
-    },
-    {
-      key: 'objectives',
-      label: t('statisticsPage.championDamageTargetObjectives'),
-      pct: toPct(d.objectives),
-      color: '#8b5cf6',
-    },
-    {
-      key: 'buildings',
-      label: t('statisticsPage.championDamageTargetBuildings'),
-      pct: toPct(d.buildings),
-      color: '#f59e0b',
-    },
-    {
-      key: 'neutralMonsters',
-      label: t('statisticsPage.championDamageTargetNeutralMonsters'),
-      pct: toPct(d.neutralMonsters),
-      color: '#10b981',
-    },
-    {
-      key: 'minions',
-      label: t('statisticsPage.championDamageTargetMinions'),
-      pct: toPct(d.minions),
-      color: '#64748b',
-    },
-  ].filter(e => e.pct > 0)
-})
-
-function conicDonutStyleFromLegend(
-  entries: Array<{ pct: number; color: string }>
-): Record<string, string> {
-  if (!entries.length) {
-    return {
-      background:
-        'radial-gradient(circle at center, rgb(var(--rgb-surface)) 58%, transparent 59%), rgb(var(--rgb-primary) / 0.25)',
-    }
-  }
-  const parts: string[] = []
-  let cursor = 0
-  for (const e of entries) {
-    const start = cursor
-    const end = cursor + e.pct
-    parts.push(`${e.color} ${start.toFixed(3)}% ${end.toFixed(3)}%`)
-    cursor = end
-  }
-  return {
-    background: `radial-gradient(circle at center, rgb(var(--rgb-surface)) 58%, transparent 59%), conic-gradient(${parts.join(',')})`,
-  }
-}
-
-const championDamageDonutStyle = computed(() =>
-  conicDonutStyleFromLegend(championDamageShareLegend.value)
-)
-
-const championDamageTargetDonutStyle = computed(() =>
-  conicDonutStyleFromLegend(championDamageTargetLegend.value)
-)
-
 const buildsPending = ref(false)
 const buildsData = ref<{
   totalGames: number
@@ -2905,42 +2435,6 @@ const championSpellOrdersData = ref<{
 const championObjectivesData = ref<ChampionObjectivesSummary | null>(null)
 const championObjectivesPending = ref(false)
 
-const DASHBOARD_TOP_TILES = 6
-
-const dashboardTopItems = computed((): DashboardTile[] =>
-  topItemsFromBuilds(buildsData.value?.builds ?? [], DASHBOARD_TOP_TILES).flatMap(row => {
-    const name = _itemName(row.itemId)
-    const image = _itemImageName(row.itemId)
-    if (!name || !image) return []
-    return [
-      {
-        id: row.itemId,
-        name,
-        imageUrl: _getItemImageUrl(gameVersion.value, image),
-        games: row.games,
-      },
-    ]
-  })
-)
-
-const dashboardTopSpells = computed((): DashboardTile[] =>
-  [...(championSpellsData.value?.spells ?? [])]
-    .sort((a, b) => b.games - a.games)
-    .flatMap(row => {
-      const name = _spellName(row.spellId)
-      const image = _spellImageName(row.spellId)
-      if (!name || !image) return []
-      return [
-        {
-          id: row.spellId,
-          name,
-          imageUrl: _getSpellImageUrl(gameVersion.value, image),
-          games: row.games,
-        },
-      ]
-    })
-    .slice(0, DASHBOARD_TOP_TILES)
-)
 const championSpellsModeFilter = ref<'solo' | 'pair'>('solo')
 const championRunesPanelData = computed(() =>
   assembleChampionRunesPanel(runesPerRuneData.value, runesData.value, runesShardsData.value)
@@ -3048,6 +2542,12 @@ const championSpellOrderSectionsVisible = computed(() =>
 )
 const championSkillChampion = computed(() => championByKey(championId.value))
 const showRareSpellOrders = ref(false)
+const championMainSkillOrder = computed(() =>
+  mainSkillOrder(championSpellOrdersReliable.value.rows)
+)
+const championMainSkillGrid = computed(() =>
+  skillOrderGrid(championMainSkillOrder.value?.displayOrder ?? [])
+)
 const championSpellOrdersReliable = computed(() =>
   splitRareRows(championSpellOrdersRows.value, showRareSpellOrders.value)
 )
@@ -3071,14 +2571,6 @@ const championSpellOrdersLowPickrate = computed(() =>
     .sort((a, b) => a.pickrate - b.pickrate || b.games - a.games)
     .slice(0, 3)
 )
-
-const durationByTierPending = ref(false)
-const durationByTierData = ref<{
-  series: Array<{
-    rankTier: string
-    buckets: Array<{ durationMin: number; matchCount: number; wins: number; winrate: number }>
-  }>
-} | null>(null)
 
 const matchupsExtPending = ref(false)
 const matchupsExtError = ref<string | null>(null)
@@ -3125,14 +2617,20 @@ const TREND_PRESET_TIERS: Record<Exclude<TrendDivisionPreset, 'selected'>, strin
 const trendGranularity = ref<TrendGranularity>('day')
 const trendRangeMode = ref<'7d' | '14d' | 'months'>('7d')
 const trendMonthsWindow = ref(1)
-const trendMonthsWindowModel = computed({
-  get: () => trendMonthsWindow.value,
-  set: (value: number) => {
-    trendMonthsWindow.value = Math.max(1, Math.min(24, Number(value) || 1))
-  },
-})
 const trendDivisionPreset = ref<TrendDivisionPreset>('selected')
 const trendShowGlobalLine = ref(true)
+const trendFocusMetric = ref<TrendFocus>('all')
+const trendShowDivisions = ref(false)
+function setTrendPeriod(p: '7d' | '14d' | 'patch'): void {
+  if (p === 'patch') {
+    trendGranularity.value = 'patch'
+    trendRangeMode.value = 'months'
+    trendMonthsWindow.value = 3
+    return
+  }
+  trendGranularity.value = 'day'
+  trendRangeMode.value = p
+}
 const trendPending = ref(false)
 const trendError = ref<string | null>(null)
 const trendPoints = ref<TrendSnapshotPoint[]>([])
@@ -3150,7 +2648,7 @@ const activeChampionTab = ref<
   | 'pings'
   | 'vision'
   | 'misc'
-  | 'videos'
+  | 'builds'
 >('overview')
 type ChampionTabId =
   | 'overview'
@@ -3164,7 +2662,7 @@ type ChampionTabId =
   | 'pings'
   | 'vision'
   | 'misc'
-  | 'videos'
+  | 'builds'
 const championPageBootstrapped = ref(false)
 const championTabLoaded = ref<Record<ChampionTabId, boolean>>({
   overview: false,
@@ -3178,11 +2676,11 @@ const championTabLoaded = ref<Record<ChampionTabId, boolean>>({
   pings: false,
   vision: false,
   misc: false,
-  videos: false,
+  builds: false,
 })
 const championTabs = [
   { id: 'overview' as const, label: 'statisticsPage.championStatsTabOverview' },
-  { id: 'dashboard' as const, label: 'statisticsPage.championStatsTabDashboard' },
+  { id: 'dashboard' as const, label: 'statisticsPage.championStatsTabCombatRoles' },
   { id: 'matchups' as const, label: 'statisticsPage.championStatsTabMatchups' },
   { id: 'synergy' as const, label: 'statisticsPage.championStatsTabSynergy' },
   { id: 'runes' as const, label: 'statisticsPage.championStatsTabRunes' },
@@ -3190,10 +2688,21 @@ const championTabs = [
   { id: 'skills' as const, label: 'statisticsPage.championStatsTabSkills' },
   { id: 'objectives' as const, label: 'statisticsPage.objectivesTabMain' },
   { id: 'pings' as const, label: 'statisticsPage.tabPings' },
-  { id: 'vision' as const, label: 'statisticsPage.tabVision' },
-  { id: 'misc' as const, label: 'statisticsPage.championStatsTabMisc' },
-  { id: 'videos' as const, label: 'statisticsPage.championStatsTabVideos' },
+  { id: 'vision' as const, label: 'statisticsPage.championStatsTabVisionPings' },
+  { id: 'misc' as const, label: 'statisticsPage.championStatsTabHealDamage' },
+  { id: 'builds' as const, label: 'statisticsPage.championStatsTabBuilds' },
 ]
+const activeChampionGroup = computed(() => championTabGroupOf(activeChampionTab.value))
+const activeChampionGroupLabel = computed(
+  () => CHAMPION_TAB_GROUPS.find(g => g.id === activeChampionGroup.value)?.label ?? ''
+)
+function championTabLabel(id: ChampionTabId): string {
+  return championTabs.find(tab => tab.id === id)?.label ?? id
+}
+function selectChampionGroup(group: ChampionTabGroupId): void {
+  if (activeChampionGroup.value === group) return
+  activeChampionTab.value = championTabsInGroup(group)[0] ?? 'overview'
+}
 const championTabsNavEl = ref<HTMLElement | null>(null)
 useHorizontalScrollContainer(championTabsNavEl)
 
@@ -3205,61 +2714,14 @@ function scrollActiveChampionTabIntoView(behavior: ScrollBehavior = 'smooth'): v
   el?.scrollIntoView({ inline: 'start', block: 'nearest', behavior })
 }
 
-function focusChampionTabButton(nextId: ChampionTabId): void {
-  activeChampionTab.value = nextId
-  if (!import.meta.client) return
-  requestAnimationFrame(() => {
-    const el = championTabsNavEl.value?.querySelector<HTMLButtonElement>(
-      `button[data-tab-id="${nextId}"]`
-    )
-    el?.focus()
-    scrollActiveChampionTabIntoView()
-  })
-}
-
-function focusPrevNextChampionTab(currentTabId: ChampionTabId, direction: -1 | 1): void {
-  const ids = championTabs.map(t => t.id)
-  let idx = ids.indexOf(currentTabId)
-  if (idx < 0) idx = ids.indexOf(activeChampionTab.value)
-  if (idx < 0) idx = 0
-  const nextIdx = (idx + direction + ids.length) % ids.length
-  const nextId = ids[nextIdx]
-  if (nextId) focusChampionTabButton(nextId)
-}
-
-function focusChampionTabEdge(which: 'first' | 'last'): void {
-  const ids = championTabs.map(t => t.id)
-  const nextId = which === 'first' ? ids[0] : ids[ids.length - 1]
-  if (nextId) focusChampionTabButton(nextId)
-}
-
-function onChampionTabsKeydown(e: KeyboardEvent, tabId: ChampionTabId): void {
-  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-    e.preventDefault()
-    focusPrevNextChampionTab(tabId, -1)
-    return
-  }
-  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-    e.preventDefault()
-    focusPrevNextChampionTab(tabId, 1)
-    return
-  }
-  if (e.key === 'Home') {
-    e.preventDefault()
-    focusChampionTabEdge('first')
-    return
-  }
-  if (e.key === 'End') {
-    e.preventDefault()
-    focusChampionTabEdge('last')
-  }
-}
 const championTabIds = new Set<ChampionTabId>(championTabs.map(t => t.id))
 function normalizeChampionTab(input: unknown): ChampionTabId {
   const raw = Array.isArray(input) ? input[0] : input
   const val = String(raw ?? '').trim() as ChampionTabId
   return championTabIds.has(val) ? val : 'overview'
 }
+// Onglet lu dès le setup (SSR) : sinon la nav de groupe hydrate sur « Aperçu ».
+activeChampionTab.value = normalizeChampionTab(route.query.tab)
 
 function isChampionTab(tab: ChampionTabId): boolean {
   return activeChampionTab.value === tab
@@ -3278,7 +2740,7 @@ function resetChampionTabLoadState(): void {
     pings: false,
     vision: false,
     misc: false,
-    videos: false,
+    builds: false,
   }
 }
 
@@ -3394,12 +2856,6 @@ function detectTrendDivisionPresetFromFilter(): TrendDivisionPreset {
 function syncTrendDivisionPresetFromFilter(): void {
   const detected = detectTrendDivisionPresetFromFilter()
   if (trendDivisionPreset.value !== detected) trendDivisionPreset.value = detected
-}
-
-function setTrendDivisionPreset(preset: TrendDivisionPreset): void {
-  trendDivisionPreset.value = preset
-  if (preset === 'selected') return
-  filterRank.value = [...TREND_PRESET_TIERS[preset]]
 }
 
 function toggleRankFilter(tier: string) {
@@ -3889,30 +3345,6 @@ async function loadChampionVision() {
 }
 
 /** Query durée par tier : version + rôle seulement (rankTier non envoyé ; ligues = presets des graphes). */
-function durationByTierQueryParams() {
-  const p = new URLSearchParams()
-  if (filterVersion.value) p.set('version', filterVersion.value)
-  if (filterRole.value) p.set('role', filterRole.value)
-  return p.toString() ? '?' + p.toString() : ''
-}
-
-async function loadDurationByTier() {
-  if (!championId.value) return
-  const t = statsPerfStart('loadDurationByTier')
-  durationByTierPending.value = true
-  try {
-    const q = durationByTierQueryParams()
-    durationByTierData.value = await statsFetch(
-      apiUrl(`/api/stats/champions/${championId.value}/duration-winrate-by-tier${q || ''}`)
-    )
-  } catch {
-    durationByTierData.value = null
-  } finally {
-    durationByTierPending.value = false
-    statsPerfEnd('loadDurationByTier', t)
-  }
-}
-
 async function loadTrendSnapshots() {
   if (!championId.value) return
   const t = statsPerfStart('loadTrendSnapshots')
@@ -3959,12 +3391,18 @@ async function loadChampionDataForTab(tab: ChampionTabId, force = false): Promis
   if (!championId.value || Number.isNaN(championId.value)) return
   if (!force && championTabLoaded.value[tab]) return
   if (tab === 'overview') {
-    await Promise.all([loadDurationByTier(), loadTrendSnapshots()])
+    await Promise.all([
+      loadTrendSnapshots(),
+      _loadChampionSpells(),
+      _loadBuilds(),
+      loadChampionDashboard(),
+      loadMatchupsExtended(),
+    ])
     markChampionTabLoaded('overview')
     return
   }
   if (tab === 'dashboard') {
-    await Promise.all([loadChampionDashboard(), _loadBuilds(), _loadChampionSpells()])
+    await loadChampionDashboard()
     markChampionTabLoaded('dashboard')
     return
   }
@@ -3993,13 +3431,9 @@ async function loadChampionDataForTab(tab: ChampionTabId, force = false): Promis
     markChampionTabLoaded('objectives')
     return
   }
-  if (tab === 'pings') {
-    await loadChampionPings()
+  if (tab === 'pings' || tab === 'vision') {
+    await Promise.all([loadChampionPings(), loadChampionVision()])
     markChampionTabLoaded('pings')
-    return
-  }
-  if (tab === 'vision') {
-    await loadChampionVision()
     markChampionTabLoaded('vision')
     return
   }
@@ -4008,7 +3442,7 @@ async function loadChampionDataForTab(tab: ChampionTabId, force = false): Promis
     markChampionTabLoaded('misc')
     return
   }
-  if (tab === 'videos') markChampionTabLoaded('videos')
+  if (tab === 'builds') markChampionTabLoaded('builds')
 }
 
 async function reloadChampionBaseAndActiveTabData(): Promise<void> {
@@ -4063,16 +3497,6 @@ function toggleLegendTierVisibility(tier: string): void {
   }
   hiddenLegendTiers.value = [...hiddenLegendTiers.value, key]
 }
-const durationExtraTooltip = ref<{
-  metricId: 'winrate' | 'games'
-  tier: string
-  bucketLabel: string
-  value: number
-  games: number
-  mouseX: number
-  mouseY: number
-} | null>(null)
-
 function isoWeekBucket(dateIso: string): string {
   const d = new Date(`${dateIso}T00:00:00.000Z`)
   if (Number.isNaN(d.getTime())) return dateIso
@@ -4108,15 +3532,6 @@ const trendTiersFromFilterOrData = computed(() => {
 const trendSelectedTiers = computed(() => trendTiersFromFilterOrData.value)
 
 /** Tiers affichés sur le graphe durée (fallback API si pas de snapshots tendance). */
-const durationDisplayTiers = computed(() => {
-  const sel = trendSelectedTiers.value
-  if (sel.length) return sel
-  const fromApi =
-    durationByTierData.value?.series?.map(s => normalizeRankTier(s.rankTier)).filter(Boolean) ?? []
-  const uniq = [...new Set(fromApi)]
-  return uniq.sort((a, b) => compareRankTiers(a, b))
-})
-
 type TrendBucket = {
   key: string
   label: string
@@ -4231,23 +3646,6 @@ function onTrendPointHover(
   }
 }
 
-function onDurationExtraChartHover(
-  event: MouseEvent,
-  metricId: 'winrate' | 'games',
-  tier: string,
-  pt: TrendSeriesPoint
-) {
-  durationExtraTooltip.value = {
-    metricId,
-    tier,
-    bucketLabel: pt.bucketLabel,
-    value: pt.value,
-    games: pt.games ?? (metricId === 'games' ? Math.round(pt.value) : 0),
-    mouseX: event.clientX,
-    mouseY: event.clientY,
-  }
-}
-
 const trendChartCards = computed<TrendChartCard[]>(() => {
   const buckets = trendBuckets.value
   const tiers = trendSelectedTiers.value
@@ -4282,7 +3680,7 @@ const trendChartCards = computed<TrendChartCard[]>(() => {
       color: string
       rawValues: Array<{ idx: number; value: number; bucketLabel: string }>
     }
-    const pendingSeries: PendingSerie[] = tiers.map(tier => {
+    const pendingSeries: PendingSerie[] = (trendShowDivisions.value ? tiers : []).map(tier => {
       const rawValues: Array<{ idx: number; value: number; bucketLabel: string }> = []
       buckets.forEach((bucket, index) => {
         const raw = bucket.byTier.get(tier)
@@ -4300,7 +3698,7 @@ const trendChartCards = computed<TrendChartCard[]>(() => {
       }
     })
 
-    if (trendShowGlobalLine.value) {
+    if (trendShowGlobalLine.value || !trendShowDivisions.value) {
       const rawValues: Array<{ idx: number; value: number; bucketLabel: string }> = []
       globalRawByIndex.forEach((raw, idx) => {
         if (raw.weight <= 0 && raw.games <= 0) return
@@ -4313,7 +3711,7 @@ const trendChartCards = computed<TrendChartCard[]>(() => {
       if (rawValues.length) {
         pendingSeries.push({
           tier: 'GLOBAL',
-          color: RANK_TIER_COLORS.GLOBAL ?? '#c084fc',
+          color: trendShowDivisions.value ? (RANK_TIER_COLORS.GLOBAL ?? '#c084fc') : '#c89b3c',
           rawValues,
         })
       }
@@ -4393,282 +3791,83 @@ const trendChartCards = computed<TrendChartCard[]>(() => {
   })
 })
 
-type DurationByTierChartMode = 'winrate' | 'games'
+const trendFocusCards = computed(() =>
+  trendCardsForFocus(trendChartCards.value, trendFocusMetric.value)
+)
 
-function buildDurationByTierChart(mode: DurationByTierChartMode): TrendChartCard | null {
-  const seriesRaw = durationByTierData.value?.series ?? []
-  const tiers = durationDisplayTiers.value
-  if (!tiers.length) return null
-
-  const tierBucketMap = new Map<
-    string,
-    Map<number, { winrate: number; games: number; wins: number }>
-  >()
-  for (const s of seriesRaw) {
-    const tier = normalizeRankTier(s.rankTier)
-    if (!tier) continue
-    let m = tierBucketMap.get(tier)
-    if (!m) {
-      m = new Map()
-      tierBucketMap.set(tier, m)
-    }
-    for (const b of s.buckets) {
-      const prev = m.get(b.durationMin) ?? { winrate: 0, games: 0, wins: 0 }
-      const games = prev.games + b.matchCount
-      const wins = prev.wins + b.wins
-      m.set(b.durationMin, {
-        games,
-        wins,
-        winrate: games > 0 ? Math.round((wins / games) * 10000) / 100 : 0,
-      })
-    }
-  }
-
-  const durSet = new Set<number>()
-  for (const m of tierBucketMap.values()) {
-    for (const d of m.keys()) durSet.add(d)
-  }
-  if (!durSet.size) return null
-
-  /** Axe X : toujours partir de 0 min, puis pas de 5 min (aligné backend) + toute clé présente dans les données. */
-  const maxDur = Math.max(...durSet)
-  const durationAxisMinutes = new Set<number>([0])
-  for (let d = 5; d <= maxDur; d += 5) {
-    durationAxisMinutes.add(d)
-  }
-  for (const d of durSet) {
-    durationAxisMinutes.add(d)
-  }
-  const fullDurations = [...durationAxisMinutes].sort((a, b) => a - b)
-
-  const n = fullDurations.length
-  const xAt = (index: number) =>
-    TREND_CHART_PAD.left + (n <= 1 ? 0 : index / (n - 1)) * TREND_PLOT_W
-
-  const tiersOrdered = [...tiers].sort((a, b) => compareRankTiers(a, b))
-
-  type DurPendingSerie = {
-    tier: string
-    color: string
-    rawValues: Array<{ idx: number; value: number; bucketLabel: string; games: number }>
-  }
-
-  function buildDenseRowForTier(tier: string): {
-    rawValues: DurPendingSerie['rawValues']
-    hasData: boolean
-  } {
-    const m = tierBucketMap.get(tier)
-    const rawValues: DurPendingSerie['rawValues'] = []
-    let hasData = false
-    fullDurations.forEach((durMin, index) => {
-      const defaultLabel = `${durMin}–${durMin + 5} min`
-      /** Toujours 0 à l’origine (0 min) : ancrage pour l’axe Y et le lissage. */
-      if (index === 0) {
-        rawValues.push({ idx: index, value: 0, bucketLabel: defaultLabel, games: 0 })
-        return
-      }
-      let cell = m?.get(durMin)
-      let bucketLabel = defaultLabel
-      /** Bucket [0,5) côté API (durationMin=0) : si pas de ligne à 5 min, on l’affiche au tick 5 min. */
-      if ((!cell || cell.games <= 0) && durMin === 5) {
-        const b0 = m?.get(0)
-        if (b0 && b0.games > 0) {
-          cell = b0
-          bucketLabel = `0–5 min`
-        }
-      }
-      if (!cell || cell.games <= 0) {
-        rawValues.push({ idx: index, value: 0, bucketLabel: defaultLabel, games: 0 })
-        return
-      }
-      hasData = true
-      const value = mode === 'winrate' ? cell.winrate : cell.games
-      rawValues.push({
-        idx: index,
-        value,
-        bucketLabel,
-        games: cell.games,
-      })
-    })
-    return { rawValues, hasData }
-  }
-
-  const pendingSeries: DurPendingSerie[] = tiersOrdered
-    .map(tier => {
-      const { rawValues, hasData } = buildDenseRowForTier(tier)
-      if (!hasData) return null
-      return {
-        tier,
-        color: RANK_TIER_COLORS[tier] ?? '#64748b',
-        rawValues,
-      }
-    })
-    .filter((s): s is DurPendingSerie => s !== null)
-
-  if (trendShowGlobalLine.value) {
-    const rawValues: DurPendingSerie['rawValues'] = []
-    let hasData = false
-    fullDurations.forEach((durMin, idx) => {
-      const bucketLabel = `${durMin}–${durMin + 5} min`
-      if (idx === 0) {
-        rawValues.push({ idx, value: 0, bucketLabel, games: 0 })
-        return
-      }
-      if (mode === 'winrate') {
-        let tw = 0
-        let tg = 0
-        for (const map of tierBucketMap.values()) {
-          const c = map.get(durMin)
-          if (c && c.games > 0) {
-            tw += c.wins
-            tg += c.games
-          }
-        }
-        let label = bucketLabel
-        if (tg === 0 && durMin === 5) {
-          let tw0 = 0
-          let tg0 = 0
-          for (const map of tierBucketMap.values()) {
-            const c = map.get(0)
-            if (c && c.games > 0) {
-              tw0 += c.wins
-              tg0 += c.games
-            }
-          }
-          if (tg0 > 0) {
-            tw = tw0
-            tg = tg0
-            label = `0–5 min`
-          }
-        }
-        if (tg > 0) hasData = true
-        const value = tg > 0 ? (100 * tw) / tg : 0
-        rawValues.push({ idx, value, bucketLabel: label, games: tg })
-      } else {
-        let tg = 0
-        for (const map of tierBucketMap.values()) {
-          const c = map.get(durMin)
-          if (c && c.games > 0) tg += c.games
-        }
-        let label = bucketLabel
-        if (tg === 0 && durMin === 5) {
-          let tg0 = 0
-          for (const map of tierBucketMap.values()) {
-            const c = map.get(0)
-            if (c && c.games > 0) tg0 += c.games
-          }
-          if (tg0 > 0) {
-            tg = tg0
-            label = `0–5 min`
-          }
-        }
-        if (tg > 0) hasData = true
-        rawValues.push({ idx, value: tg, bucketLabel: label, games: tg })
-      }
-    })
-    if (hasData && rawValues.length) {
-      pendingSeries.push({
-        tier: 'GLOBAL',
-        color: RANK_TIER_COLORS.GLOBAL ?? '#c084fc',
-        rawValues,
-      })
-    }
-  }
-
-  if (!pendingSeries.length) return null
-
-  const smoothedByTier = pendingSeries.map(serie => {
-    const smoothValues = smoothSeries(
-      serie.rawValues.map(v => v.value),
-      3
-    )
-    /** Après lissage, l’origine reste exactement à 0. */
-    if (smoothValues.length) smoothValues[0] = 0
-    return { ...serie, smoothValues }
-  })
-
-  const allSmoothed = smoothedByTier.flatMap(s => s.smoothValues).filter(v => Number.isFinite(v))
-  const maxVal = allSmoothed.length ? Math.max(0, ...allSmoothed) : 0
-  const domainMin = 0
-  const domainMax =
-    mode === 'games' ? Math.max(1, maxVal * 1.08) : Math.min(100, Math.max(maxVal * 1.12, 1))
-  const domainSpan = Math.max(1e-6, domainMax - domainMin)
-
-  const series: TrendSeries[] = smoothedByTier.map(serie => {
-    const points: TrendSeriesPoint[] = serie.rawValues.map((v, i) => {
-      const value = serie.smoothValues[i] ?? v.value
-      return {
-        idx: v.idx,
-        x: xAt(v.idx),
-        y: TREND_CHART_PAD.top + (1 - (value - domainMin) / domainSpan) * TREND_PLOT_H,
-        value,
-        bucketLabel: v.bucketLabel,
-        games: v.games,
-      }
-    })
-    return {
-      tier: serie.tier,
-      color: serie.color,
-      path: svgLinePath(points.map(p => ({ x: p.x, y: p.y }))),
-      points,
-    }
-  })
-
-  const yTicks: Array<{ value: number; y: number; label: string }> = []
-  for (let i = 0; i <= 4; i += 1) {
-    const value = domainMin + (domainSpan * i) / 4
-    const y = TREND_CHART_PAD.top + (1 - i / 4) * TREND_PLOT_H
-    yTicks.push({
-      value,
-      y,
-      label: mode === 'games' ? `${Math.round(value)}` : `${value.toFixed(1)}%`,
-    })
-  }
-
-  const tickCount = Math.min(6, Math.max(2, n))
-  const step = n <= 1 ? 1 : Math.max(1, Math.floor((n - 1) / (tickCount - 1)))
-  const xTicks: Array<{ index: number; x: number; label: string }> = []
-  for (let i = 0; i < n; i += step) {
-    const durMin = fullDurations[i]
-    if (durMin === undefined) continue
-    xTicks.push({
-      index: i,
-      x: xAt(i),
-      label: `${durMin}`,
-    })
-  }
-  const lastIdx = n - 1
-  if (!xTicks.some(t => t.index === lastIdx)) {
-    const durMin = fullDurations[lastIdx]
-    if (durMin !== undefined) {
-      xTicks.push({ index: lastIdx, x: xAt(lastIdx), label: `${durMin}` })
-    }
-  }
-
-  const metricId: TrendMetricId = mode === 'games' ? 'games' : 'winrate'
+const ovSkill = computed(() => {
+  const row = mainSkillOrder(championSpellOrdersRows.value)
+  if (!row) return null
   return {
-    metricId,
-    title:
-      mode === 'games'
-        ? t('statisticsPage.championStatsDurationGamesDistribution')
-        : t('statisticsPage.championStatsDurationWinrate'),
-    series: series.filter(s => s.path.length > 0),
-    xTicks,
-    yTicks,
+    ...skillPriority(row.order),
+    winrate: row.winrate,
+    pickrate: row.pickrate,
+    games: row.games,
+  }
+})
+const ovSpells = computed<OverviewIconRow[]>(() =>
+  championSpellsTableSolo.value.slice(0, 4).map(r => {
+    const img = _spellImageName(r.spellId)
+    return {
+      id: r.spellId,
+      name: _spellName(r.spellId) ?? String(r.spellId),
+      img: img ? _getSpellImageUrl(gameVersion.value, img) : '',
+      pct: r.pickrate,
+    }
+  })
+)
+const ovItems = computed<OverviewIconRow[]>(() =>
+  topItemsFromBuilds(buildsData.value?.builds ?? [], 8)
+    .filter(r => _itemImageName(r.itemId))
+    .slice(0, 5)
+    .map(r => {
+      const img = _itemImageName(r.itemId)
+      return {
+        id: r.itemId,
+        name: _itemName(r.itemId) ?? String(r.itemId),
+        img: img ? _getItemImageUrl(gameVersion.value, img) : '',
+        games: r.games,
+      }
+    })
+)
+const ovRoles = computed(() =>
+  overviewRoleRows(roleDistribution.value, LOW_SAMPLE_MIN_GAMES).map(r => ({
+    ...r,
+    label: roleLabel(r.role),
+  }))
+)
+const ovProfile = computed(() => {
+  const m = championDashboardData.value?.metrics
+  return m ? profileColumns(m) : null
+})
+function ovMatchupRow(r: {
+  opponentChampionId: number
+  games: number
+  winrate: number
+}): OverviewIconRow {
+  const c = championByKey(r.opponentChampionId)
+  return {
+    id: r.opponentChampionId,
+    name: championName(r.opponentChampionId) ?? String(r.opponentChampionId),
+    img: c?.image?.full ? getChampionImageUrl(gameVersion.value, c.image.full) : '',
+    winrate: r.winrate,
+    games: r.games,
   }
 }
-
-const durationWinrateChartCard = computed(() => buildDurationByTierChart('winrate'))
-const durationGamesChartCard = computed(() => buildDurationByTierChart('games'))
-
-const durationTrendExtraCards = computed((): TrendChartCard[] => {
-  const out: TrendChartCard[] = []
-  const wr = durationWinrateChartCard.value
-  const g = durationGamesChartCard.value
-  if (wr) out.push(wr)
-  if (g) out.push(g)
-  return out
+const ovMatchups = computed(() => {
+  const ex = matchupExtremes(matchupsExtData.value?.rows ?? [], LOW_SAMPLE_MIN_GAMES, 3)
+  return { best: ex.best.map(ovMatchupRow), worst: ex.worst.map(ovMatchupRow) }
 })
+const ovMainRoleLabel = computed(() => {
+  const r = roleDistribution.value[0]
+  return r ? roleLabel(r.role) : ''
+})
+const ovPending = computed(
+  () => championSpellsPending.value || buildsPending.value || matchupsExtPending.value
+)
+function onOverviewGoTab(tab: 'spells' | 'items' | 'matchups'): void {
+  activeChampionTab.value = tab === 'items' ? 'dashboard' : tab
+}
 
 watch(
   [
@@ -4777,7 +3976,6 @@ if (import.meta.client) {
 
 onMounted(async () => {
   if (import.meta.client) {
-    initChampionHeaderBandOpen()
     document.addEventListener('keydown', onFiltersEscapeKey)
   }
   const versionPromise = versionStore.currentVersion
@@ -4948,6 +4146,372 @@ useJsonLdHead(
 </script>
 
 <style scoped>
+.champion-subtab {
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid #463714;
+  background: none;
+  color: #f0e6d2;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.champion-subtab:hover {
+  border-color: #c8aa6e;
+}
+.champion-subtab.is-active {
+  background: #0a323c;
+  border-color: #0a323c;
+  font-weight: 600;
+}
+.champion-hero.is-compact {
+  gap: 16px;
+}
+.champion-hero.is-compact .champion-hero-portrait {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+}
+.champion-hero.is-compact .champion-hero-name {
+  font-size: 32px;
+}
+.champion-hero.is-compact .champion-hero-id {
+  gap: 2px;
+}
+.champion-hero.is-compact .champion-hero-sub,
+.champion-hero.is-compact .champion-hero-pill:not(.is-main) {
+  display: none;
+}
+.champion-hero.is-compact .champion-hero-pill {
+  background: none;
+  padding: 0;
+  height: auto;
+  font-weight: 400;
+  color: #cbc3b0;
+}
+.champion-hero.is-compact .champion-hero-kpis {
+  display: flex;
+  flex: 0 1 auto;
+  margin-left: auto;
+  gap: 20px;
+}
+.champion-hero.is-compact .champion-hero-kpi {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.champion-hero.is-compact .champion-hero-kpi dt {
+  font-size: 13px;
+}
+.champion-hero.is-compact .champion-hero-kpi dd {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+}
+.champion-ov-card {
+  margin: 12px;
+  padding: 20px 24px;
+  background: #0a1428;
+  border: 1px solid #463714;
+  border-radius: 12px;
+}
+.champion-ov-title {
+  margin: 0 0 14px;
+  font-size: 18px;
+  font-weight: 600;
+  color: #f0e6d2;
+}
+.champion-ov-sub {
+  margin: 18px 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #a09b8c;
+}
+.champion-ov-roles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.champion-ov-roles li {
+  display: grid;
+  grid-template-columns: 16px 90px minmax(0, 1fr) 64px 64px;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.champion-ov-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: #1e2328;
+  overflow: hidden;
+}
+.champion-ov-bar span {
+  display: block;
+  height: 100%;
+  background: #c8aa6e;
+}
+.champion-ov-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.champion-ov-num.is-up {
+  color: #0ac8b9;
+}
+.champion-ov-num.is-down {
+  color: #e2665a;
+}
+.champion-ov-stack {
+  display: flex;
+  height: 12px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #1e2328;
+}
+.champion-ov-stack .is-phys,
+.champion-ov-legend .is-phys {
+  background: #e2665a;
+}
+.champion-ov-stack .is-magic,
+.champion-ov-legend .is-magic {
+  background: #0ac8b9;
+}
+.champion-ov-stack .is-true,
+.champion-ov-legend .is-true {
+  background: #f0e6d2;
+}
+.champion-ov-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #a09b8c;
+}
+.champion-ov-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 6px;
+  vertical-align: -1px;
+}
+.champion-tabs-bar {
+  background: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+@media (max-width: 767px) {
+  .champion-ov-card {
+    margin: 0 0 12px;
+    padding: 14px;
+  }
+  .champion-ov-roles li {
+    grid-template-columns: 16px 70px minmax(0, 1fr) 52px 52px;
+    gap: 8px;
+    font-size: 12px;
+  }
+}
+.champion-crumbs {
+  display: flex;
+  gap: 8px;
+  font-size: 13px;
+  color: #a09b8c;
+  margin: 4px 0 20px;
+}
+.champion-crumbs a {
+  color: #a09b8c;
+  text-decoration: none;
+}
+.champion-crumbs a:hover {
+  color: #f0e6d2;
+}
+.champion-crumbs .is-current {
+  color: #f0e6d2;
+}
+.champion-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 20px;
+}
+.champion-hero-portrait {
+  width: 96px;
+  height: 96px;
+  border-radius: 16px;
+  border: 2px solid #c89b3c;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.champion-hero-id {
+  flex: 1 1 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.champion-hero-name {
+  margin: 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 48px;
+  line-height: 1;
+  text-transform: uppercase;
+  color: #c8aa6e;
+}
+.champion-hero-sub {
+  margin: 0;
+  color: #cbc3b0;
+}
+.champion-hero-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+.champion-hero-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 13px;
+  background: #1e2328;
+  font-size: 13px;
+  font-weight: 600;
+  color: #f0e6d2;
+}
+.champion-hero-pill.is-main {
+  background: #0a323c;
+}
+.champion-hero-pill img {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+}
+.champion-hero-kpis {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  flex: 2 1 520px;
+}
+.champion-hero-kpi {
+  padding: 14px 16px;
+  background: #0a1428;
+  border: 1px solid #463714;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.champion-hero-kpi dt {
+  font-size: 12px;
+  color: #a09b8c;
+}
+.champion-hero-kpi dd {
+  margin: 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: #f0e6d2;
+}
+.champion-hero-kpi dd.is-up {
+  color: #0ac8b9;
+}
+.champion-hero-kpi dd.is-down {
+  color: #e2665a;
+}
+.champion-group-nav {
+  border-bottom: 1px solid #463714;
+  margin-bottom: 8px;
+}
+.champion-group-btn {
+  padding: 12px 16px;
+  color: #a09b8c;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  font-size: 14px;
+  background: none;
+}
+.champion-group-btn:hover {
+  color: #f0e6d2;
+}
+.champion-group-btn.is-active {
+  color: #f0e6d2;
+  font-weight: 600;
+  border-bottom-color: #c8aa6e;
+}
+@media (max-width: 767px) {
+  .champion-crumbs {
+    margin-bottom: 12px;
+    font-size: 12px;
+  }
+  .champion-hero {
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+  .champion-hero-portrait {
+    width: 64px;
+    height: 64px;
+    border-radius: 12px;
+  }
+  .champion-hero-id {
+    flex: 1 1 0;
+  }
+  .champion-hero-name {
+    font-size: 32px;
+  }
+  .champion-hero-sub {
+    font-size: 13px;
+  }
+  .champion-hero-kpis {
+    flex: 1 1 100%;
+    gap: 8px;
+  }
+  .champion-hero-kpi {
+    padding: 10px;
+  }
+  .champion-hero-kpi dt {
+    font-size: 11px;
+  }
+  .champion-hero-kpi dd {
+    font-size: 18px;
+    white-space: nowrap;
+  }
+  .champion-group-btn {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+}
+@media (max-width: 1023px) {
+  .champion-header-kpi {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    border: 1px solid color-mix(in srgb, var(--color-primary) 25%, transparent);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .champion-header-kpi strong {
+    font-size: 15px;
+    letter-spacing: 0;
+    text-transform: none;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
 .filters-collapse-floating {
   width: 24px;
   height: 24px;
@@ -5394,6 +4958,89 @@ useJsonLdHead(
 </style>
 
 <style scoped>
+.sk-grid-section {
+  margin-bottom: 1.25rem;
+}
+.sk-grid-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.75rem;
+}
+.sk-grid-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #f0e6d2;
+}
+.sk-grid-sub {
+  font-size: 0.8125rem;
+  color: #a09b8c;
+}
+.sk-grid-sub b {
+  color: #f0e6d2;
+}
+.sk-grid-card {
+  overflow-x: auto;
+  border: 1px solid #463714;
+  border-radius: 0.5rem;
+  background: #0a1428;
+  padding: 1rem 1.25rem;
+}
+.sk-grid {
+  display: grid;
+  grid-template-columns: 2.5rem repeat(18, minmax(2rem, 1fr));
+  gap: 0.4rem 0.25rem;
+  align-items: center;
+  min-width: 40rem;
+}
+.sk-grid-lvl {
+  text-align: center;
+  font-size: 0.75rem;
+  color: #a09b8c;
+}
+.sk-grid-key {
+  font-weight: 700;
+}
+.sk-grid-cell {
+  height: 1.9rem;
+}
+.sk-grid-chip {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #010a13;
+}
+.sk-grid-key.is-Q {
+  color: #c8aa6e;
+}
+.sk-grid-chip.is-Q {
+  background: #c8aa6e;
+}
+.sk-grid-key.is-W {
+  color: #0397ab;
+}
+.sk-grid-chip.is-W {
+  background: #0397ab;
+}
+.sk-grid-key.is-E {
+  color: #0ac8b9;
+}
+.sk-grid-chip.is-E {
+  background: #0ac8b9;
+}
+.sk-grid-key.is-R {
+  color: #e2665a;
+}
+.sk-grid-chip.is-R {
+  background: #e2665a;
+}
+
 /* legacy rune-set styles (overview builds) */
 .rune-set {
   display: flex;
@@ -5613,5 +5260,73 @@ useJsonLdHead(
   .statistics-filters-panel .flex.min-h-0.flex-1 {
     overflow-y: auto;
   }
+}
+.champion-section-title {
+  margin: 0 0 12px;
+  font-size: 20px;
+  font-weight: 600;
+  color: #f0e6d2;
+}
+.champion-vision-pings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 1023px) {
+  .champion-vision-pings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.ov-evo-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.ov-evo-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #f0e6d2;
+}
+.ov-evo-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.ov-seg {
+  display: inline-flex;
+  border: 1px solid #463714;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.ov-seg button {
+  padding: 5px 11px;
+  font-size: 12px;
+  color: #a09b8c;
+  background: transparent;
+  border-right: 1px solid #463714;
+}
+.ov-seg button:last-child {
+  border-right: 0;
+}
+.ov-seg button.is-on {
+  color: #0ac8b9;
+  background: #0d2a33;
+  font-weight: 700;
+}
+.ov-evo-head ~ * .champion-trend-chart-svg {
+  max-height: 300px;
+}
+.ov-evo-div {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #a09b8c;
 }
 </style>

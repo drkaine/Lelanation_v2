@@ -54,3 +54,14 @@ export function metaQuadrantList(
   }
   return pts.filter(inQuadrant).sort((a, b) => b.winPct - a.winPct)
 }
+
+/** Champion de la carte détail sans sélection : le plus joué du quadrant meta, sinon le plus joué. */
+export function defaultMetaChampion(rows: readonly ChartRow[]): number | null {
+  const meta = metaQuadrantList(rows, 'meta')
+  const pool = meta.length
+    ? meta
+    : rows.map(r => ({ championId: r.championId, pickPct: pct(r.pickrate) }))
+  let best: { championId: number; pickPct: number } | null = null
+  for (const r of pool) if (!best || r.pickPct > best.pickPct) best = r
+  return best ? best.championId : null
+}
