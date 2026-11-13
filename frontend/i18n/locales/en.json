@@ -1831,6 +1831,7 @@
     "championStatsTabMisc": "Healing, damage & multikills",
     "championStatsTabVideos": "Videos",
     "championStatsTabBuilds": "Builds",
+    "championStatsTabJungle": "Jungle",
     "championBuildsTitle": "{champion} builds",
     "championBuildsCreate": "Create a build",
     "championBuildsEmpty": "No public build for {champion} yet.",
@@ -2576,7 +2577,7 @@
       "sideRed": "Red side",
       "empty": "No jungle path recorded yet for patch {patch}.",
       "mapAlt": "Selected path on the map",
-      "clearNote": "Early game, from first camp to first scuttle. Time = average clear duration.",
+      "clearNote": "First clear up to the first scuttle. Riot only gives one position per minute: camps between two samples are reconstructed (shortest route). Time = average clear duration.",
       "campBlue": "Blue",
       "campRed": "Red",
       "campGromp": "Gromp",
@@ -2588,7 +2589,37 @@
       "campBaron": "Baron",
       "campUnknown": "?"
     },
-    "ovEvoLevelAll": "All levels"
+    "ovEvoLevelAll": "All levels",
+    "championStatsTabMaps": "Maps",
+    "eventMap": {
+      "title": "Event maps",
+      "games": "{n} games",
+      "empty": "No events recorded yet for patch {patch}.",
+      "note": "Kills: gank = jungler in a lane, roam = laner outside their lane (before 20 min). Riot does not give ward positions: they are estimated from the player's position (sampled every minute).",
+      "phase": {
+        "all": "Whole game",
+        "early": "0–14 min",
+        "mid": "14–25 min",
+        "late": "25 min +"
+      },
+      "layer": {
+        "combat": "Kills & deaths",
+        "vision": "Wards placed & destroyed"
+      },
+      "kind": {
+        "gank": "Gank",
+        "roam": "Roam",
+        "lane": "In lane",
+        "jungle": "In jungle",
+        "late": "After 20 min",
+        "death": "Death",
+        "trinket": "Trinket",
+        "control": "Control ward",
+        "farsight": "Farsight",
+        "ward": "Other ward",
+        "killed": "Ward destroyed"
+      }
+    }
   },
   "stats": {
     "title": "Statistics",

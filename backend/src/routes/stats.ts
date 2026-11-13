@@ -91,6 +91,7 @@ import { isDatabaseConfigured } from '../db/query.js'
 import { getPatchNotesAggregateStats, getPatchNotesVersionList } from '../services/StatsPatchNotesAggregateService.js'
 import type { PatchNotesTargetType } from '../services/patchNotesStatsBuilder.js'
 import {
+  queryChampionEventMap,
   queryJunglePaths,
 } from '../services/spatialStatsQueries.js'
 
@@ -1533,6 +1534,22 @@ getChampionRoute('/jungle-paths', async (req, res, championId) => {
     limit: parseOptionalInt(req.query.limit) ?? 20,
   })
   return res.json({ championId, patch, paths: rows })
+})
+
+/** GET /api/stats/champions/:championId/event-map — kills (gank/roam/lane/jungle/late), morts, wards posées/détruites. */
+getChampionRoute('/event-map', async (req, res, championId) => {
+  const patch = queryString(req.query.patch) ?? queryString(req.query.version)
+  if (!patch) {
+    return res.status(400).json({ error: 'patch or version query param required' })
+  }
+  const map = await queryChampionEventMap({
+    championId,
+    patch,
+    role: queryString(req.query.role),
+    queueId: parseOptionalInt(req.query.queueId),
+    games: parseOptionalInt(req.query.games) ?? 300,
+  })
+  return res.json({ championId, patch, ...map })
 })
 
 /** GET /api/stats/champions/:championId/misc — soins, dégâts totaux, multikills (moyennes / partie). */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LOW_SAMPLE_MIN_GAMES, isLowSample, splitRareRows } from '../lowSample'
+import { LOW_SAMPLE_MIN_GAMES, isLowSample, splitRareRows, adaptiveMinGames } from '../lowSample'
 
 describe('isLowSample', () => {
   it('flags under 100 games', () => {
@@ -31,5 +31,15 @@ describe('splitRareRows', () => {
     const r = splitRareRows([{ games: 3 }, { games: 5 }], false)
     expect(r.rows).toHaveLength(2)
     expect(r.hidden).toBe(0)
+  })
+})
+
+describe('adaptiveMinGames', () => {
+  it('garde 100 si assez de lignes, sinon divise par 2 jusqu’au plancher', () => {
+    expect(adaptiveMinGames(Array(10).fill(150))).toBe(100)
+    // 33 000 parties réparties sur ~40 adversaires × rôles : ~43 parties par ligne.
+    expect(adaptiveMinGames([43, 45, 40, 30, 28, 26, 12, 8])).toBe(25)
+    expect(adaptiveMinGames([5, 3])).toBe(10)
+    expect(adaptiveMinGames([])).toBe(10)
   })
 })

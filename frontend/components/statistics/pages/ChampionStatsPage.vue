@@ -836,9 +836,15 @@
                 </template>
               </ChampionOverviewCards>
               <ChampionJunglePaths
-                v-if="activeChampionTab === 'overview' && showJunglePaths"
+                v-if="activeChampionTab === 'jungle'"
                 :champion-id="championId"
                 :version="filterVersion || gameVersion || ''"
+              />
+              <ChampionEventMaps
+                v-if="activeChampionTab === 'maps'"
+                :champion-id="championId"
+                :version="filterVersion || gameVersion || ''"
+                :role="filterRole || null"
               />
             </div>
             <div class="champion-tab-panels mb-6 w-full min-w-0 space-y-3 max-lg:mb-4">
@@ -852,11 +858,16 @@
                 "
               >
                 <summary>{{ t('statisticsPage.championMatchupLaneProfileLegendTitle') }}</summary>
-                <div class="mu-legend-body space-y-2">
-                  <p class="leading-snug text-text/60">
+                <div
+                  class="mu-legend-body flex flex-col gap-2 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)] lg:items-start lg:gap-x-6"
+                >
+                  <p class="leading-snug text-text/60 lg:col-span-3">
                     {{ t('statisticsPage.championMatchupLaneProfileLegendHint') }}
                   </p>
-                  <p v-if="activeChampionTab === 'synergy'" class="leading-snug text-text/55">
+                  <p
+                    v-if="activeChampionTab === 'synergy'"
+                    class="leading-snug text-text/55 lg:col-span-3"
+                  >
                     {{ t('statisticsPage.championSynergyProfileWarningsHint') }}
                   </p>
                   <div class="space-y-1">
@@ -899,7 +910,9 @@
                       </span>
                     </div>
                   </div>
-                  <div class="space-y-1 border-t border-primary/15 pt-2">
+                  <div
+                    class="space-y-1 border-t border-primary/15 pt-2 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0"
+                  >
                     <div class="font-semibold text-text/80">
                       {{ t('statisticsPage.championMatchupLaneProfileDimensionsTitle') }}
                     </div>
@@ -946,7 +959,7 @@
                   <ChampionMatchupHighlights
                     mode="matchups"
                     :rows="matchupHlRows"
-                    :min-games="LOW_SAMPLE_MIN_GAMES"
+                    :min-games="matchupHlMinGames"
                   />
                   <StatisticsMobileSortBar
                     id="champion-matchups-mobile-sort"
@@ -1362,7 +1375,7 @@
                   v-if="!synergyExtPending && !synergyExtError"
                   mode="synergy"
                   :rows="synergyHlRows"
-                  :min-games="LOW_SAMPLE_MIN_GAMES"
+                  :min-games="synergyHlMinGames"
                 />
                 <ChampionSynergyTab
                   :pending="synergyExtPending"
@@ -1583,7 +1596,7 @@ import { queryFirst } from '~/utils/statistics/statisticsTabRouting'
 import { progressionReferenceVersion } from '~/utils/statistics/progressionReference'
 import { trendChartDomain } from '~/utils/statistics/trendDomain'
 import { matchupsFallbackVersion } from '~/utils/statistics/matchupsFallbackVersion'
-import { splitRareRows, LOW_SAMPLE_MIN_GAMES } from '~/utils/statistics/lowSample'
+import { splitRareRows, LOW_SAMPLE_MIN_GAMES, adaptiveMinGames } from '~/utils/statistics/lowSample'
 import type { HighlightRow } from '~/components/statistics/ChampionMatchupHighlights.vue'
 import { displayedPatch, withVersionQuery } from '~/utils/statistics/championVersionQuery'
 import { statisticsFiltersSheetPanelClass } from '~/composables/useStatisticsFiltersSheetMode'
@@ -1694,6 +1707,9 @@ const ChampionMiscTab = defineAsyncComponent(
 )
 const ChampionMatchupHighlights = defineAsyncComponent(
   () => import('~/components/statistics/ChampionMatchupHighlights.vue')
+)
+const ChampionEventMaps = defineAsyncComponent(
+  () => import('~/components/statistics/ChampionEventMaps.vue')
 )
 const ChampionJunglePaths = defineAsyncComponent(
   () => import('~/components/statistics/ChampionJunglePaths.vue')
@@ -2683,6 +2699,8 @@ const activeChampionTab = ref<
   | 'vision'
   | 'misc'
   | 'builds'
+  | 'jungle'
+  | 'maps'
 >('overview')
 type ChampionTabId =
   | 'overview'
@@ -2697,6 +2715,8 @@ type ChampionTabId =
   | 'vision'
   | 'misc'
   | 'builds'
+  | 'jungle'
+  | 'maps'
 const championPageBootstrapped = ref(false)
 const championTabLoaded = ref<Record<ChampionTabId, boolean>>({
   overview: false,
@@ -2711,6 +2731,8 @@ const championTabLoaded = ref<Record<ChampionTabId, boolean>>({
   vision: false,
   misc: false,
   builds: false,
+  jungle: false,
+  maps: false,
 })
 const championTabs = [
   { id: 'overview' as const, label: 'statisticsPage.championStatsTabOverview' },
@@ -2725,6 +2747,8 @@ const championTabs = [
   { id: 'vision' as const, label: 'statisticsPage.championStatsTabVisionPings' },
   { id: 'misc' as const, label: 'statisticsPage.championStatsTabHealDamage' },
   { id: 'builds' as const, label: 'statisticsPage.championStatsTabBuilds' },
+  { id: 'jungle' as const, label: 'statisticsPage.championStatsTabJungle' },
+  { id: 'maps' as const, label: 'statisticsPage.championStatsTabMaps' },
 ]
 const activeChampionGroup = computed(() => championTabGroupOf(activeChampionTab.value))
 const activeChampionGroupLabel = computed(
@@ -2774,6 +2798,8 @@ function resetChampionTabLoadState(): void {
     pings: false,
     vision: false,
     misc: false,
+    jungle: false,
+    maps: false,
     builds: false,
   }
 }
@@ -3435,6 +3461,11 @@ async function loadChampionDataForTab(tab: ChampionTabId, force = false): Promis
     markChampionTabLoaded('overview')
     return
   }
+  if (tab === 'jungle' || tab === 'maps') {
+    // ChampionJunglePaths / ChampionEventMaps chargent leurs données eux-mêmes.
+    markChampionTabLoaded(tab)
+    return
+  }
   if (tab === 'dashboard') {
     await loadChampionDashboard()
     markChampionTabLoaded('dashboard')
@@ -3909,6 +3940,8 @@ function hlRow(id: number, role: string, games: number, winrate: number): Highli
     winrate,
   }
 }
+const matchupHlMinGames = computed(() => adaptiveMinGames(matchupHlRows.value.map(r => r.games)))
+const synergyHlMinGames = computed(() => adaptiveMinGames(synergyHlRows.value.map(r => r.games)))
 const matchupHlRows = computed(() =>
   filteredMatchupsExt.value.map(r => hlRow(r.opponentChampionId, r.role, r.games, r.winrate))
 )
@@ -3924,7 +3957,8 @@ const synergyHlRows = computed(() =>
     .map(r => hlRow(r.allyChampionId, r.allyRole, r.games, r.winrate))
 )
 const ovMatchups = computed(() => {
-  const ex = matchupExtremes(matchupsExtData.value?.rows ?? [], LOW_SAMPLE_MIN_GAMES, 3)
+  const rows = matchupsExtData.value?.rows ?? []
+  const ex = matchupExtremes(rows, adaptiveMinGames(rows.map(r => r.games)), 3)
   return { best: ex.best.map(ovMatchupRow), worst: ex.worst.map(ovMatchupRow) }
 })
 const ovMainRoleLabel = computed(() => {
@@ -3932,9 +3966,6 @@ const ovMainRoleLabel = computed(() => {
   return r ? roleLabel(r.role) : ''
 })
 /** Section chemins de jungle : rôle filtré Jungle, ou Jungle = rôle principal. */
-const showJunglePaths = computed(() =>
-  filterRole.value ? filterRole.value === 'JUNGLE' : roleDistribution.value[0]?.role === 'JUNGLE'
-)
 const ovPending = computed(
   () => championSpellsPending.value || buildsPending.value || matchupsExtPending.value
 )
@@ -4689,7 +4720,7 @@ useJsonLdHead(
   margin-bottom: 10px;
 }
 .champion-stats .mu-legend-body {
-  max-width: 72rem;
+  max-width: none;
 }
 
 .champion-stats .champion-tab-panel-flush {

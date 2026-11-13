@@ -63,7 +63,12 @@ export function parseCampHistory(raw: unknown): JungleCampEntry[] {
     const camp = String((row as JungleCampEntry).camp_type ?? "").trim();
     const ts = Number((row as JungleCampEntry).timestamp_ms ?? 0);
     if (!camp || !Number.isFinite(ts)) continue;
-    out.push({ camp_type: camp, timestamp_ms: Math.trunc(ts) });
+    const key = String((row as JungleCampEntry).camp_key ?? "").trim();
+    out.push(
+      key
+        ? { camp_type: camp, timestamp_ms: Math.trunc(ts), camp_key: key }
+        : { camp_type: camp, timestamp_ms: Math.trunc(ts) },
+    );
   }
 
   return out.sort((a, b) => a.timestamp_ms - b.timestamp_ms);
@@ -129,4 +134,11 @@ export function toJungleCampHistoryDoc(
   }
 
   return doc;
+}
+
+/** Backfill : recalcule `early_path` d'un document stocké (null si illisible). */
+export function recalculateEarlyPath(raw: unknown): JungleCampHistoryDoc | null {
+  const data = parseJsonValue(raw);
+  if (!data || (!isJungleCampHistoryDoc(data) && !Array.isArray(data))) return null;
+  return toJungleCampHistoryDoc(parseCampHistory(data), true);
 }

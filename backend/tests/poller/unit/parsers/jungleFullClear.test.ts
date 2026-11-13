@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { reconstructFirstClear } from '../../../../src/parsers/jungleFullClear.js'
-import { extractJunglePathFromCamps } from '../../../../src/parsers/junglePathExtract.js'
+import {
+  extractJunglePathFromCamps,
+  recalculateEarlyPath,
+} from '../../../../src/parsers/junglePathExtract.js'
 
 const c = (camp_key: string, timestamp_ms: number) => ({
   camp_type: camp_key.replace(/_(blue|red)$/, '').replace('_buff', ''),
@@ -44,6 +47,20 @@ describe('reconstructFirstClear', () => {
   it('sans camp de son côté → null', () => {
     expect(reconstructFirstClear([c('scuttler_blue', 200_000)])).toBeNull()
     expect(reconstructFirstClear([])).toBeNull()
+  })
+})
+
+describe('recalculateEarlyPath (backfill)', () => {
+  it('recalcule early_path depuis un document stocké (camp_key conservé)', () => {
+    const doc = {
+      camps: [c('red_buff_blue', 120_000), c('wolves_blue', 180_000)],
+      early_path: { path_sequence: ['red_buff_blue', 'wolves_blue'], path_hash: 'old', clear_time_ms: 1 },
+    }
+    const next = recalculateEarlyPath(doc)!
+    expect(next.early_path!.path_sequence).toHaveLength(6)
+    expect(next.early_path!.path_hash).not.toBe('old')
+    expect(next.camps[0]!.camp_key).toBe('red_buff_blue')
+    expect(recalculateEarlyPath('nope')).toBeNull()
   })
 })
 

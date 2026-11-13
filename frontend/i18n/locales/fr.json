@@ -1832,6 +1832,7 @@
     "championStatsTabMisc": "Soins, dégâts & multikills",
     "championStatsTabVideos": "Vidéos",
     "championStatsTabBuilds": "Builds",
+    "championStatsTabJungle": "Jungle",
     "championBuildsTitle": "Builds {champion}",
     "championBuildsCreate": "Créer un build",
     "championBuildsEmpty": "Aucun build public pour {champion} pour l'instant.",
@@ -2576,7 +2577,7 @@
       "sideRed": "Côté rouge",
       "empty": "Pas encore de chemin de jungle enregistré pour le patch {patch}.",
       "mapAlt": "Chemin sélectionné sur la carte",
-      "clearNote": "Début de partie, du premier camp au premier crabe. Temps = durée moyenne du clear.",
+      "clearNote": "Premier clear jusqu’au premier crabe. Riot ne donne qu’une position par minute : les camps entre deux relevés sont reconstruits (trajet le plus court). Temps = durée moyenne du clear.",
       "campBlue": "Bleu",
       "campRed": "Rouge",
       "campGromp": "Gromp",
@@ -2588,7 +2589,37 @@
       "campBaron": "Nashor",
       "campUnknown": "?"
     },
-    "ovEvoLevelAll": "Tous niveaux"
+    "ovEvoLevelAll": "Tous niveaux",
+    "championStatsTabMaps": "Cartes",
+    "eventMap": {
+      "title": "Cartes des événements",
+      "games": "{n} parties",
+      "empty": "Pas encore d'événements enregistrés pour le patch {patch}.",
+      "note": "Kills : gank = jungler en lane, roam = laner hors de sa lane (avant 20 min). Riot ne donne pas la position des wards : elle est estimée à celle du joueur (relevé chaque minute).",
+      "phase": {
+        "all": "Toute la partie",
+        "early": "0–14 min",
+        "mid": "14–25 min",
+        "late": "25 min +"
+      },
+      "layer": {
+        "combat": "Kills & morts",
+        "vision": "Balises posées & détruites"
+      },
+      "kind": {
+        "gank": "Gank",
+        "roam": "Roam",
+        "lane": "En lane",
+        "jungle": "En jungle",
+        "late": "Après 20 min",
+        "death": "Mort",
+        "trinket": "Totem",
+        "control": "Balise de contrôle",
+        "farsight": "Altération longue-vue",
+        "ward": "Autre balise",
+        "killed": "Balise détruite"
+      }
+    }
   },
   "stats": {
     "title": "Statistiques",

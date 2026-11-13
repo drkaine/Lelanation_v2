@@ -11,8 +11,10 @@ export type ChampionTabId =
   | 'vision'
   | 'misc'
   | 'builds'
+  | 'jungle'
+  | 'maps'
 
-export type ChampionTabGroupId = 'overview' | 'build' | 'matchups' | 'stats' | 'builds'
+export type ChampionTabGroupId = 'overview' | 'build' | 'matchups' | 'stats' | 'jungle' | 'builds'
 
 export interface ChampionTabGroup {
   id: ChampionTabGroupId
@@ -36,8 +38,9 @@ export const CHAMPION_TAB_GROUPS: readonly ChampionTabGroup[] = [
   {
     id: 'stats',
     label: 'statisticsPage.championGroupStats',
-    tabs: ['dashboard', 'objectives', 'vision', 'misc'],
+    tabs: ['dashboard', 'objectives', 'vision', 'maps', 'misc'],
   },
+  { id: 'jungle', label: 'statisticsPage.championStatsTabJungle', tabs: ['jungle'] },
   { id: 'builds', label: 'statisticsPage.championStatsTabBuilds', tabs: ['builds'] },
 ]
 

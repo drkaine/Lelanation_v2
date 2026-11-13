@@ -20,3 +20,21 @@ export function splitRareRows<T extends { games: unknown }>(
   const hidden = rows.length - reliable.length
   return { rows: includeRare ? [...rows] : reliable, hidden }
 }
+
+/**
+ * Seuil de parties pour classer des matchups : part de LOW_SAMPLE_MIN_GAMES et le divise par 2
+ * tant qu'il reste moins de `need` lignes classables (plancher `floor`). Les lignes par
+ * adversaire × rôle ont souvent < 100 parties même avec des dizaines de milliers de parties.
+ */
+export function adaptiveMinGames(
+  games: readonly number[],
+  opts: { max?: number; floor?: number; need?: number } = {}
+): number {
+  const floor = opts.floor ?? 10
+  const need = opts.need ?? 6
+  let min = opts.max ?? LOW_SAMPLE_MIN_GAMES
+  while (min > floor && games.filter(g => g >= min).length < need) {
+    min = Math.max(floor, Math.floor(min / 2))
+  }
+  return min
+}

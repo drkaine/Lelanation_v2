@@ -1,5 +1,10 @@
 import { sql } from "../db/client.js";
 import { junglePathSequence } from "./junglePathSequence.js";
+import {
+  buildChampionEventMap,
+  type ChampionEventMap,
+  type ChampionEventMapRow,
+} from "./championEventMap.js";
 
 export type JunglePathRow = {
   championId: number;
@@ -84,4 +89,29 @@ export async function queryJunglePaths(args: {
         row.avg_clear_time_ms != null ? Math.trunc(Number(row.avg_clear_time_ms)) : null,
     };
   });
+}
+
+/** Carte des événements d'un champion (kills classés, morts, wards) sur les `games` parties les plus récentes du patch. */
+export async function queryChampionEventMap(args: {
+  championId: number;
+  patch: string;
+  role?: string | null;
+  queueId?: number | null;
+  games?: number;
+}): Promise<ChampionEventMap> {
+  const games = Math.min(Math.max(args.games ?? 300, 1), 1000);
+  const queueId = args.queueId != null ? Math.trunc(args.queueId) : null;
+  const role = args.role ? args.role.toUpperCase() : null;
+  const rows = await sql<ChampionEventMapRow[]>`
+    SELECT p.team_position, p.kill_history, p.death_history, p.ward_history, p.ward_killed_history
+    FROM participants p
+    INNER JOIN matchs m ON m.riot_match_id = p.riot_match_id
+    WHERE p.champion_id = ${args.championId}
+      AND m.patch = ${args.patch}
+      AND (${role}::text IS NULL OR p.team_position = ${role})
+      AND (${queueId}::int IS NULL OR m.queue_id = ${queueId})
+    ORDER BY m.created_at DESC
+    LIMIT ${games}
+  `;
+  return buildChampionEventMap(rows);
 }
