@@ -92,5 +92,25 @@ export function buildChampionEventMap(rows: ChampionEventMapRow[]): ChampionEven
       map.wardsKilled.push([w.position.x, w.position.y, sec(w.timestamp_ms), wardKind(w.ward_type)]);
     }
   }
+  map.kills = samplePoints(map.kills, MAX_POINTS_PER_LAYER);
+  map.deaths = samplePoints(map.deaths, MAX_POINTS_PER_LAYER);
+  map.wardsPlaced = samplePoints(map.wardsPlaced, MAX_POINTS_PER_LAYER);
+  map.wardsKilled = samplePoints(map.wardsKilled, MAX_POINTS_PER_LAYER);
   return map;
+}
+
+/** Points max par couche envoyés au front (lisibilité + poids de la réponse). */
+const MAX_POINTS_PER_LAYER = 4_000;
+
+/** Sous-échantillon régulier (1 point sur n) de `max` éléments au plus. */
+export function samplePoints<T>(items: T[], max: number): T[] {
+  if (items.length <= max) return items;
+  const step = items.length / max;
+  return Array.from({ length: max }, (_, i) => items[Math.floor(i * step)]!);
+}
+
+/** Nombre max de parties lues : null = toutes les parties du champion sur le patch. */
+export function eventMapGameLimit(games: number | null | undefined): number | null {
+  if (games == null || !Number.isFinite(games)) return null;
+  return Math.min(Math.max(Math.trunc(games), 1), 20_000);
 }

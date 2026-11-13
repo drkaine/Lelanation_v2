@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  eventMapGameLimit,
+  samplePoints,
   buildChampionEventMap,
   classifyKill,
 } from '../../../../src/services/championEventMap.js'
@@ -71,5 +73,29 @@ describe('buildChampionEventMap', () => {
       },
     ])
     expect(map.wardsPlaced.map(p => p[3])).toEqual(['farsight', 'ward'])
+  })
+})
+
+describe('eventMapGameLimit', () => {
+  it('returns null (all games) when no limit is asked', () => {
+    expect(eventMapGameLimit(null)).toBeNull()
+    expect(eventMapGameLimit(undefined)).toBeNull()
+  })
+  it('clamps an explicit limit to 1..20000', () => {
+    expect(eventMapGameLimit(0)).toBe(1)
+    expect(eventMapGameLimit(500)).toBe(500)
+    expect(eventMapGameLimit(999_999)).toBe(20_000)
+  })
+})
+
+describe('samplePoints', () => {
+  it('keeps everything under the cap', () => {
+    expect(samplePoints([1, 2, 3], 5)).toEqual([1, 2, 3])
+  })
+  it('keeps an evenly spread subset of max size', () => {
+    const out = samplePoints(Array.from({ length: 100 }, (_, i) => i), 10)
+    expect(out).toHaveLength(10)
+    expect(out[0]).toBe(0)
+    expect(out[9]).toBe(90)
   })
 })

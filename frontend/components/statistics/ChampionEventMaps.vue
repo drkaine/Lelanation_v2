@@ -8,6 +8,8 @@ import {
   COMBAT_KINDS,
   VISION_KINDS,
   eventMapDots,
+  eventMapZones,
+  type EventZone,
   type EventMapApi,
   type EventMapLayer,
   type EventPhase,
@@ -21,6 +23,11 @@ const pending = ref(false)
 const failed = ref(false)
 const phase = ref<EventPhase>('all')
 const hidden = ref<Record<EventMapLayer, Set<string>>>({ combat: new Set(), vision: new Set() })
+
+const zoomLayer = ref<EventMapLayer | null>(null)
+/** Zones par côté : carte réduite 20×20, plein écran 40×40. */
+const CARD_CELLS = 20
+const MODAL_CELLS = 40
 
 const patch = computed(() => jungleApiPatch(props.version))
 
@@ -54,9 +61,11 @@ const layers = computed(() =>
     const counts = new Map<string, number>()
     for (const d of all) counts.set(d.kind, (counts.get(d.kind) ?? 0) + 1)
     const off = hidden.value[layer]
+    const dots = all.filter(d => !off.has(d.kind))
     return {
       layer,
-      dots: all.filter(d => !off.has(d.kind)),
+      zones: eventMapZones(dots, CARD_CELLS),
+      fine: zoomLayer.value === layer ? eventMapZones(dots, MODAL_CELLS) : [],
       legend: kinds.map(k => ({ kind: k, count: counts.get(k) ?? 0, on: !off.has(k) })),
     }
   })
@@ -68,6 +77,13 @@ function toggle(layer: EventMapLayer, kind: string): void {
   if (next.has(kind)) next.delete(kind)
   else next.add(kind)
   hidden.value = { ...hidden.value, [layer]: next }
+}
+const zoomed = computed(() => layers.value.find(l => l.layer === zoomLayer.value) ?? null)
+function zoneRadius(z: EventZone, cells: number): number {
+  return Math.round(Math.max(0.3, z.r) * (100 / cells) * 0.8 * 100) / 100
+}
+function zoneTitle(z: EventZone): string {
+  return `${t(`statisticsPage.eventMap.kind.${z.kind}`)} · ${num(z.count)} (${z.pct} %)`
 }
 function num(v: number): string {
   return v.toLocaleString(locale.value)
@@ -105,6 +121,9 @@ function num(v: number): string {
       <figure v-for="l in layers" :key="l.layer" class="em-map">
         <figcaption class="em-title">
           {{ t(`statisticsPage.eventMap.layer.${l.layer}`) }}
+          <button type="button" class="em-chip" @click="zoomLayer = l.layer">
+            ⤢ {{ t('statisticsPage.mapModal.open') }}
+          </button>
         </figcaption>
         <svg
           viewBox="0 0 100 100"
@@ -113,13 +132,15 @@ function num(v: number): string {
         >
           <image href="/data/community-dragon/map-planner/map11.png" width="100" height="100" />
           <circle
-            v-for="(d, i) in l.dots"
+            v-for="(z, i) in l.zones"
             :key="i"
-            :cx="d.x"
-            :cy="d.y"
-            r="0.9"
-            :class="['em-dot', `k-${d.kind}`]"
-          />
+            :cx="z.x"
+            :cy="z.y"
+            :r="zoneRadius(z, CARD_CELLS)"
+            :class="['em-dot', `k-${z.kind}`]"
+          >
+            <title>{{ zoneTitle(z) }}</title>
+          </circle>
         </svg>
         <ul class="em-legend">
           <li v-for="g in l.legend" :key="g.kind">
@@ -137,7 +158,71 @@ function num(v: number): string {
         </ul>
       </figure>
     </div>
+    <p v-if="!pending && !empty" class="em-note">{{ t('statisticsPage.eventMap.zonesNote') }}</p>
     <p v-if="!pending && !empty" class="em-note">{{ t('statisticsPage.eventMap.note') }}</p>
+
+    <StatisticsMapZoomModal
+      :open="!!zoomed"
+      :title="zoomed ? t(`statisticsPage.eventMap.layer.${zoomed.layer}`) : ''"
+      @close="zoomLayer = null"
+    >
+      <template #filters>
+        <div v-if="zoomed" class="em-modal-filters">
+          <p class="em-label">{{ t('statisticsPage.mapModal.layer') }}</p>
+          <div class="em-phases">
+            <button
+              v-for="l in layers"
+              :key="l.layer"
+              type="button"
+              :class="['em-chip', { 'is-on': zoomLayer === l.layer }]"
+              @click="zoomLayer = l.layer"
+            >
+              {{ t(`statisticsPage.eventMap.layer.${l.layer}`) }}
+            </button>
+          </div>
+          <p class="em-label">{{ t('statisticsPage.mapModal.phase') }}</p>
+          <div class="em-phases">
+            <button
+              v-for="p in ['all', 'early', 'mid', 'late'] as const"
+              :key="p"
+              type="button"
+              :class="['em-chip', { 'is-on': phase === p }]"
+              @click="phase = p"
+            >
+              {{ t(`statisticsPage.eventMap.phase.${p}`) }}
+            </button>
+          </div>
+          <p class="em-label">{{ t('statisticsPage.mapModal.kinds') }}</p>
+          <ul class="em-legend">
+            <li v-for="g in zoomed.legend" :key="g.kind">
+              <button
+                type="button"
+                :class="['em-chip', { 'is-off': !g.on }]"
+                :aria-pressed="g.on"
+                @click="toggle(zoomed.layer, g.kind)"
+              >
+                <span :class="['em-sw', `k-${g.kind}`]" aria-hidden="true" />
+                {{ t(`statisticsPage.eventMap.kind.${g.kind}`) }}
+                <small>{{ num(g.count) }}</small>
+              </button>
+            </li>
+          </ul>
+          <p class="em-note">{{ t('statisticsPage.eventMap.zonesNote') }}</p>
+        </div>
+      </template>
+      <template v-if="zoomed">
+        <circle
+          v-for="(z, i) in zoomed.fine"
+          :key="i"
+          :cx="z.x"
+          :cy="z.y"
+          :r="zoneRadius(z, MODAL_CELLS)"
+          :class="['em-dot', `k-${z.kind}`]"
+        >
+          <title>{{ zoneTitle(z) }}</title>
+        </circle>
+      </template>
+    </StatisticsMapZoomModal>
   </section>
 </template>
 
@@ -199,18 +284,17 @@ function num(v: number): string {
 }
 .em-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 340px));
   gap: 20px;
-}
-@media (max-width: 767px) {
-  .em-grid {
-    grid-template-columns: 1fr;
-  }
 }
 .em-map {
   margin: 0;
 }
 .em-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 6px;
   font-size: 14px;
   font-weight: 600;
@@ -222,9 +306,17 @@ function num(v: number): string {
   border-radius: 8px;
 }
 .em-dot {
-  opacity: 0.7;
+  opacity: 0.75;
   stroke: #0a1428;
   stroke-width: 0.15;
+}
+.em-modal-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.em-modal-filters .em-label {
+  margin-top: 6px;
 }
 .em-legend {
   display: flex;

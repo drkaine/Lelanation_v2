@@ -1520,20 +1520,19 @@ function parseOptionalInt(value: unknown): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-/** GET /api/stats/champions/:championId/jungle-paths */
+/** GET /api/stats/champions/:championId/jungle-paths — premiers clears par côté (départs + top N). */
 getChampionRoute('/jungle-paths', async (req, res, championId) => {
   const patch = queryString(req.query.patch) ?? queryString(req.query.version)
   if (!patch) {
     return res.status(400).json({ error: 'patch or version query param required' })
   }
-  const rows = await queryJunglePaths({
+  const data = await queryJunglePaths({
     championId,
     patch,
     queueId: parseOptionalInt(req.query.queueId),
-    teamId: parseOptionalInt(req.query.teamId),
-    limit: parseOptionalInt(req.query.limit) ?? 20,
+    top: parseOptionalInt(req.query.top) ?? 6,
   })
-  return res.json({ championId, patch, paths: rows })
+  return res.json({ championId, patch, ...data })
 })
 
 /** GET /api/stats/champions/:championId/event-map — kills (gank/roam/lane/jungle/late), morts, wards posées/détruites. */
@@ -1547,7 +1546,7 @@ getChampionRoute('/event-map', async (req, res, championId) => {
     patch,
     role: queryString(req.query.role),
     queueId: parseOptionalInt(req.query.queueId),
-    games: parseOptionalInt(req.query.games) ?? 300,
+    games: parseOptionalInt(req.query.games),
   })
   return res.json({ championId, patch, ...map })
 })

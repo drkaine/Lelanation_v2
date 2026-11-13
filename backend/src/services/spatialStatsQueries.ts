@@ -1,105 +1,62 @@
 import { sql } from "../db/client.js";
-import { junglePathSequence } from "./junglePathSequence.js";
+import { recalculateEarlyPath } from "../parsers/junglePathExtract.js";
+import {
+  aggregateJunglePaths,
+  type JunglePathGameRow,
+  type JunglePathsAggregate,
+} from "./junglePathAggregate.js";
 import {
   buildChampionEventMap,
+  eventMapGameLimit,
   type ChampionEventMap,
   type ChampionEventMapRow,
 } from "./championEventMap.js";
 
-export type JunglePathRow = {
-  championId: number;
-  patch: string;
-  queueId: number;
-  teamId: number;
-  pathSequence: string[];
-  pathHash: string;
-  games: number;
-  wins: number;
-  winrate: number;
-  avgClearTimeMs: number | null;
-};
-
+/**
+ * Premiers clears d'un champion jungle sur le patch, par côté (départs + top N).
+ * Le path est recalculé depuis les camps bruts à chaque requête (algorithme courant, sans backfill).
+ */
 export async function queryJunglePaths(args: {
   championId: number;
   patch: string;
   queueId?: number | null;
-  teamId?: number | null;
-  limit?: number;
-}): Promise<JunglePathRow[]> {
-  const limit = Math.min(Math.max(args.limit ?? 20, 1), 100);
+  top?: number;
+}): Promise<JunglePathsAggregate & { games: number }> {
+  const top = Math.min(Math.max(args.top ?? 6, 1), 20);
   const queueId = args.queueId != null ? Math.trunc(args.queueId) : null;
-  const teamId = args.teamId != null ? Math.trunc(args.teamId) : null;
-
-  const rows = await sql<
-    Array<{
-      champion_id: number;
-      patch: string;
-      queue_id: number;
-      team_id: number;
-      path_sequence: unknown;
-      path_hash: string;
-      games: number;
-      wins: number;
-      avg_clear_time_ms: string | number | null;
-    }>
-  >`
-    SELECT
-      p.champion_id,
-      m.patch,
-      m.queue_id,
-      p.team_id,
-      p.jungle_camp_history->'early_path'->'path_sequence' AS path_sequence,
-      p.jungle_camp_history->'early_path'->>'path_hash' AS path_hash,
-      COUNT(*)::int AS games,
-      SUM(CASE WHEN p.win THEN 1 ELSE 0 END)::int AS wins,
-      AVG((p.jungle_camp_history->'early_path'->>'clear_time_ms')::bigint)::bigint AS avg_clear_time_ms
+  const rows = await sql<Array<{ team_id: number; win: boolean; doc: unknown }>>`
+    SELECT p.team_id, p.win, p.jungle_camp_history AS doc
     FROM participants p
     INNER JOIN matchs m ON m.riot_match_id = p.riot_match_id
     WHERE p.champion_id = ${args.championId}
       AND m.patch = ${args.patch}
       AND p.team_position = 'JUNGLE'
-      AND p.jungle_camp_history->'early_path'->>'path_hash' IS NOT NULL
+      AND p.jungle_camp_history IS NOT NULL
       AND (${queueId}::int IS NULL OR m.queue_id = ${queueId})
-      AND (${teamId}::int IS NULL OR p.team_id = ${teamId})
-    GROUP BY
-      p.champion_id,
-      m.patch,
-      m.queue_id,
-      p.team_id,
-      p.jungle_camp_history->'early_path'->>'path_hash',
-      p.jungle_camp_history->'early_path'->'path_sequence'
-    ORDER BY games DESC
-    LIMIT ${limit}
   `;
-
-  return rows.map((row) => {
-    const games = Number(row.games ?? 0);
-    const wins = Number(row.wins ?? 0);
+  const games: JunglePathGameRow[] = rows.map((r) => {
+    const early = recalculateEarlyPath(r.doc)?.early_path;
     return {
-      championId: Number(row.champion_id),
-      patch: String(row.patch),
-      queueId: Number(row.queue_id),
-      teamId: Number(row.team_id),
-      pathSequence: junglePathSequence(row.path_sequence),
-      pathHash: String(row.path_hash),
-      games,
-      wins,
-      winrate: games > 0 ? wins / games : 0,
-      avgClearTimeMs:
-        row.avg_clear_time_ms != null ? Math.trunc(Number(row.avg_clear_time_ms)) : null,
+      teamId: Number(r.team_id),
+      win: Boolean(r.win),
+      path: early
+        ? { pathSequence: early.path_sequence, pathHash: early.path_hash, clearTimeMs: early.clear_time_ms }
+        : null,
     };
   });
+  const agg = aggregateJunglePaths(games, { top });
+  return { ...agg, games: agg.sides.reduce((n, s) => n + s.games, 0) };
 }
 
-/** Carte des événements d'un champion (kills classés, morts, wards) sur les `games` parties les plus récentes du patch. */
+/** Carte des événements d'un champion (kills classés, morts, wards) : toutes ses parties du patch, ou les `games` plus récentes. */
 export async function queryChampionEventMap(args: {
   championId: number;
   patch: string;
   role?: string | null;
   queueId?: number | null;
-  games?: number;
+  games?: number | null;
 }): Promise<ChampionEventMap> {
-  const games = Math.min(Math.max(args.games ?? 300, 1), 1000);
+  const games = eventMapGameLimit(args.games);
   const queueId = args.queueId != null ? Math.trunc(args.queueId) : null;
   const role = args.role ? args.role.toUpperCase() : null;
   const rows = await sql<ChampionEventMapRow[]>`
@@ -111,7 +68,7 @@ export async function queryChampionEventMap(args: {
       AND (${role}::text IS NULL OR p.team_position = ${role})
       AND (${queueId}::int IS NULL OR m.queue_id = ${queueId})
     ORDER BY m.created_at DESC
-    LIMIT ${games}
+    LIMIT ${games ?? null}
   `;
   return buildChampionEventMap(rows);
 }

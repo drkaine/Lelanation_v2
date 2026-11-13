@@ -2572,9 +2572,9 @@
     "ovEvoByDivision": "Par division",
     "jungle": {
       "title": "Chemins de jungle",
-      "sideAll": "Tous",
       "sideBlue": "Côté bleu",
       "sideRed": "Côté rouge",
+      "start": "Départ",
       "empty": "Pas encore de chemin de jungle enregistré pour le patch {patch}.",
       "mapAlt": "Chemin sélectionné sur la carte",
       "clearNote": "Premier clear jusqu’au premier crabe. Riot ne donne qu’une position par minute : les camps entre deux relevés sont reconstruits (trajet le plus court). Temps = durée moyenne du clear.",
@@ -2587,7 +2587,12 @@
       "campScuttler": "Crabe",
       "campDragon": "Dragon",
       "campBaron": "Nashor",
-      "campUnknown": "?"
+      "campUnknown": "?",
+      "colPath": "Chemin (6 premiers camps)",
+      "colStats": "Winrate · parties · % · clear",
+      "winrateTitle": "Winrate : % de victoires des parties jouées avec ce chemin",
+      "metaTitle": "Parties avec ce chemin · part des parties du côté · temps moyen du premier clear",
+      "legend": "Winrate = % de victoires avec ce chemin. Ensuite : nombre de parties avec ce chemin, sa part (en %) parmi les parties du jungler de ce côté (équivalent du pickrate du chemin), puis le temps moyen de fin du premier clear. Départ = camp par lequel le jungler commence, en % des parties du côté."
     },
     "ovEvoLevelAll": "Tous niveaux",
     "championStatsTabMaps": "Cartes",
@@ -2618,7 +2623,19 @@
         "farsight": "Altération longue-vue",
         "ward": "Autre balise",
         "killed": "Balise détruite"
-      }
+      },
+      "zonesNote": "Chaque cercle regroupe les événements d'une zone : placé à leur position moyenne, taille selon leur nombre, couleur de la catégorie la plus fréquente. Survoler pour le détail."
+    },
+    "mapModal": {
+      "open": "Agrandir",
+      "close": "Fermer",
+      "zoomIn": "Zoomer",
+      "zoomOut": "Dézoomer",
+      "reset": "Recentrer",
+      "layer": "Carte",
+      "phase": "Moment",
+      "kinds": "Catégories",
+      "hint": "Molette ou double-clic pour zoomer, glisser pour déplacer, Échap pour fermer."
     }
   },
   "stats": {

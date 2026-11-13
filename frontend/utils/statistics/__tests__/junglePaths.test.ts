@@ -3,17 +3,17 @@ import {
   formatClearTime,
   jungleApiPatch,
   jungleStep,
-  junglePathViews,
+  jungleSideViews,
   type JunglePathApiRow,
 } from '../junglePaths'
 
 const row = (p: Partial<JunglePathApiRow>): JunglePathApiRow => ({
-  teamId: 100,
   pathSequence: ['red_buff_blue', 'scuttler_blue'],
   pathHash: 'h',
   games: 10,
   wins: 5,
   winrate: 0.5,
+  share: 0.2,
   avgClearTimeMs: 180000,
   ...p,
 })
@@ -45,18 +45,55 @@ describe('formatClearTime / jungleApiPatch', () => {
   })
 })
 
-describe('junglePathViews', () => {
-  it('trie par parties, filtre le côté, limite, winrate en %', () => {
-    const rows = [
-      row({ pathHash: 'a', games: 5, teamId: 200, winrate: 0.4 }),
-      row({ pathHash: 'b', games: 20, winrate: 0.55 }),
-      row({ pathHash: 'c', games: 12 }),
-      row({ pathHash: 'd', games: 0 }),
-    ]
-    const all = junglePathViews(rows, { limit: 2 })
-    expect(all.map(p => p.hash)).toEqual(['b', 'c'])
-    expect(all[0]).toMatchObject({ side: 'blue', winrate: 55, clearTime: '3:00' })
-    expect(all[0]!.polyline).toBe('52,74 27.3,72.7')
-    expect(junglePathViews(rows, { limit: 5, side: 'red' }).map(p => p.hash)).toEqual(['a'])
+describe('jungleSideViews', () => {
+  const res = {
+    sides: [
+      {
+        teamId: 200,
+        games: 40,
+        starts: [{ camp: 'krugs', games: 30, share: 0.75 }],
+        paths: [row({ pathHash: 'r', winrate: 0.4 })],
+      },
+      {
+        teamId: 100,
+        games: 50,
+        starts: [
+          { camp: 'blue_buff', games: 27, share: 0.54 },
+          { camp: 'red_buff', games: 23, share: 0.46 },
+        ],
+        paths: [
+          row({ pathHash: 'b', games: 20, winrate: 0.55, share: 0.4 }),
+          row({ pathHash: 'z', games: 0 }),
+        ],
+      },
+    ],
+  }
+  const views = jungleSideViews(res)
+
+  it('met le côté bleu en premier', () => {
+    expect(views.map(v => v.side)).toEqual(['blue', 'red'])
+  })
+
+  it('donne les départs en % arrondis', () => {
+    expect(views[0]!.starts).toEqual([
+      { type: 'blue_buff', pct: 54 },
+      { type: 'red_buff', pct: 46 },
+    ])
+  })
+
+  it('convertit les paths (winrate et part en %, polyline), sans path vide', () => {
+    expect(views[0]!.paths).toHaveLength(1)
+    expect(views[0]!.paths[0]).toMatchObject({
+      hash: 'b',
+      side: 'blue',
+      winrate: 55,
+      pct: 40,
+      clearTime: '3:00',
+    })
+    expect(views[0]!.paths[0]!.polyline).toBe('52,74 27.3,72.7')
+  })
+
+  it('renvoie une liste vide sans données', () => {
+    expect(jungleSideViews(null)).toEqual([])
   })
 })

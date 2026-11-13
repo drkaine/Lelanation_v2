@@ -79,3 +79,45 @@ export function eventMapDots(
   }
   return out
 }
+
+export type EventZone = {
+  /** Position moyenne des points de la zone (% carte). */
+  x: number
+  y: number
+  count: number
+  /** Catégorie la plus fréquente de la zone. */
+  kind: CombatKind | VisionKind
+  /** Part des points visibles, en %. */
+  pct: number
+  /** Taille relative (1 = zone la plus chargée). */
+  r: number
+}
+
+/** Regroupe les points en `cells`×`cells` zones ; tri croissant (les grosses zones dessinées en dernier). */
+export function eventMapZones(dots: readonly EventDot[], cells: number): EventZone[] {
+  if (!dots.length) return []
+  const size = 100 / cells
+  const acc = new Map<number, { sx: number; sy: number; n: number; kinds: Map<string, number> }>()
+  for (const d of dots) {
+    const cx = Math.min(cells - 1, Math.max(0, Math.floor(d.x / size)))
+    const cy = Math.min(cells - 1, Math.max(0, Math.floor(d.y / size)))
+    const key = cy * cells + cx
+    const z = acc.get(key) ?? { sx: 0, sy: 0, n: 0, kinds: new Map() }
+    z.sx += d.x
+    z.sy += d.y
+    z.n += 1
+    z.kinds.set(d.kind, (z.kinds.get(d.kind) ?? 0) + 1)
+    acc.set(key, z)
+  }
+  const max = Math.max(...[...acc.values()].map(z => z.n))
+  return [...acc.values()]
+    .map(z => ({
+      x: round(z.sx / z.n),
+      y: round(z.sy / z.n),
+      count: z.n,
+      kind: [...z.kinds.entries()].sort((a, b) => b[1] - a[1])[0]![0] as CombatKind | VisionKind,
+      pct: round((z.n / dots.length) * 100),
+      r: Math.round(Math.sqrt(z.n / max) * 100) / 100,
+    }))
+    .sort((a, b) => a.count - b.count)
+}

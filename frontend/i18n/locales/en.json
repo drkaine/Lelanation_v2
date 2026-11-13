@@ -2572,9 +2572,9 @@
     "ovEvoByDivision": "By division",
     "jungle": {
       "title": "Jungle paths",
-      "sideAll": "All",
       "sideBlue": "Blue side",
       "sideRed": "Red side",
+      "start": "Start",
       "empty": "No jungle path recorded yet for patch {patch}.",
       "mapAlt": "Selected path on the map",
       "clearNote": "First clear up to the first scuttle. Riot only gives one position per minute: camps between two samples are reconstructed (shortest route). Time = average clear duration.",
@@ -2587,7 +2587,12 @@
       "campScuttler": "Scuttle",
       "campDragon": "Dragon",
       "campBaron": "Baron",
-      "campUnknown": "?"
+      "campUnknown": "?",
+      "colPath": "Path (first 6 camps)",
+      "colStats": "Winrate · games · % · clear",
+      "winrateTitle": "Winrate: % of games won with this path",
+      "metaTitle": "Games with this path · share of the side’s games · average first clear time",
+      "legend": "Winrate = % of games won with this path. Then: games played with this path, its share (%) of the jungler’s games on that side (the path’s pick rate), and the average first clear end time. Start = camp the jungler opens on, as % of the side’s games."
     },
     "ovEvoLevelAll": "All levels",
     "championStatsTabMaps": "Maps",
@@ -2618,7 +2623,19 @@
         "farsight": "Farsight",
         "ward": "Other ward",
         "killed": "Ward destroyed"
-      }
+      },
+      "zonesNote": "Each circle groups the events of one area: placed at their average position, sized by their count, coloured by the most frequent category. Hover for details."
+    },
+    "mapModal": {
+      "open": "Expand",
+      "close": "Close",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "reset": "Reset",
+      "layer": "Map",
+      "phase": "Time",
+      "kinds": "Categories",
+      "hint": "Scroll or double-click to zoom, drag to pan, Esc to close."
     }
   },
   "stats": {

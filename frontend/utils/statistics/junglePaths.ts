@@ -1,15 +1,25 @@
 /** Chemins de jungle (`GET /api/stats/champions/:id/jungle-paths`). */
 
 export type JunglePathApiRow = {
-  teamId: number
   pathSequence: string[]
   pathHash: string
   games: number
   wins: number
   /** 0–1 */
   winrate: number
+  /** Part des parties du côté, 0–1. */
+  share: number
   avgClearTimeMs: number | null
 }
+
+export type JungleSideApi = {
+  teamId: number
+  games: number
+  starts: Array<{ camp: string; games: number; share: number }>
+  paths: JunglePathApiRow[]
+}
+
+export type JunglePathsApi = { sides: JungleSideApi[] }
 
 export type CampType =
   | 'blue_buff'
@@ -40,6 +50,8 @@ export type JunglePathView = {
   games: number
   /** 0–100 */
   winrate: number
+  /** Part des parties du côté, 0–100. */
+  pct: number
   clearTime: string | null
   /** Points `x,y` pour un `<polyline>` en viewBox 0 0 100 100. */
   polyline: string
@@ -109,25 +121,45 @@ export function jungleApiPatch(version: string | null | undefined): string | nul
   return m ? `${m[1]}.${m[2]}` : null
 }
 
-export function junglePathViews(
-  rows: JunglePathApiRow[],
-  opts: { limit: number; side?: 'blue' | 'red' | null }
-): JunglePathView[] {
-  return rows
-    .filter(r => r.pathSequence?.length && r.games > 0)
-    .map(r => {
-      const steps = r.pathSequence.map(jungleStep)
+export type JungleSideView = {
+  side: 'blue' | 'red'
+  games: number
+  starts: Array<{ type: CampType; pct: number }>
+  paths: JunglePathView[]
+}
+
+const pct = (v: number) => Math.round(v * 1000) / 10
+
+function pathView(r: JunglePathApiRow, side: 'blue' | 'red'): JunglePathView {
+  const steps = r.pathSequence.map(jungleStep)
+  return {
+    hash: r.pathHash,
+    side,
+    steps,
+    games: r.games,
+    winrate: pct(r.winrate),
+    pct: pct(r.share),
+    clearTime: formatClearTime(r.avgClearTimeMs),
+    polyline: steps.map(s => `${s.x},${s.y}`).join(' '),
+  }
+}
+
+/** Vue par côté (bleu puis rouge) : départs et premiers clears, façon op.gg. */
+export function jungleSideViews(res: JunglePathsApi | null | undefined): JungleSideView[] {
+  return [...(res?.sides ?? [])]
+    .sort((a, b) => a.teamId - b.teamId)
+    .map(s => {
+      const side = s.teamId === 200 ? ('red' as const) : ('blue' as const)
       return {
-        hash: r.pathHash,
-        side: r.teamId === 200 ? ('red' as const) : ('blue' as const),
-        steps,
-        games: r.games,
-        winrate: Math.round(r.winrate * 1000) / 10,
-        clearTime: formatClearTime(r.avgClearTimeMs),
-        polyline: steps.map(s => `${s.x},${s.y}`).join(' '),
+        side,
+        games: s.games,
+        starts: s.starts.map(st => ({
+          type: jungleStep(st.camp).type,
+          pct: Math.round(st.share * 100),
+        })),
+        paths: s.paths
+          .filter(r => r.pathSequence?.length && r.games > 0)
+          .map(r => pathView(r, side)),
       }
     })
-    .filter(p => !opts.side || p.side === opts.side)
-    .sort((a, b) => b.games - a.games || b.winrate - a.winrate)
-    .slice(0, opts.limit)
 }

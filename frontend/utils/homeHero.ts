@@ -59,3 +59,16 @@ export function latestHomeBuild<B extends { createdAt?: string }>(builds: readon
   }
   return best
 }
+
+/** Query de /builds/discover pour un texte de recherche (`?q=`), vide si rien à filtrer. */
+export function homeDiscoverQuery(search: string): { q?: string } {
+  const q = search.trim()
+  return q ? { q } : {}
+}
+
+/** Lit `?q=` de /builds/discover ; null si absent ou vide. */
+export function discoverSearchFromQuery(value: unknown): string | null {
+  const raw = Array.isArray(value) ? value[0] : value
+  const q = typeof raw === 'string' ? raw.trim() : ''
+  return q || null
+}

@@ -15,6 +15,7 @@ import { useAdminAuth } from '~/composables/useAdminAuth'
 import { useClientHydrated } from '~/composables/useClientHydrated'
 import { useStreamerMode } from '~/composables/useStreamerMode'
 import { usePageOgImage } from '~/composables/usePageOgImage'
+import { discoverSearchFromQuery } from '~/utils/homeHero'
 import { buildsTabFromPath, buildsTabPath, type BuildsIndexTab } from '~/utils/buildsIndexTabs'
 
 export function useBuildsIndexPage(fixedTab?: MaybeRefOrGetter<BuildsIndexTab | undefined>) {
@@ -71,6 +72,16 @@ export function useBuildsIndexPage(fixedTab?: MaybeRefOrGetter<BuildsIndexTab | 
       return discoveryStore.builds.length
     },
     { watch: [routeTab], lazy: true }
+  )
+
+  // ?q= (lien depuis la home) : préremplit la recherche de /builds/discover
+  watch(
+    () => route.query.q,
+    q => {
+      const search = discoverSearchFromQuery(q)
+      if (search !== null) discoveryStore.setSearchQuery(search)
+    },
+    { immediate: true }
   )
 
   const libraryBuildStore = {

@@ -314,7 +314,13 @@ import VideoGridCard from '~/components/Videos/VideoGridCard.vue'
 import type { HomeTierListRow } from '~/composables/useHomePage'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { championStatsDetailPath } from '~/utils/championStatsRoutes'
-import { findChampionSlug, homePopularPicks, latestHomeBuild } from '~/utils/homeHero'
+import {
+  findChampionSlug,
+  homeDiscoverQuery,
+  homePopularPicks,
+  homeSearchQuery,
+  latestHomeBuild,
+} from '~/utils/homeHero'
 import { homeGuides, homePatchRecap, pickHeroRow, topPicksByRole } from '~/utils/homeGaming'
 import { apiUrl } from '~/utils/apiUrl'
 import { matchupGuideDetailPath } from '~/utils/matchupGuideSlug'
@@ -410,13 +416,13 @@ const pillars = [
 function submitChampionSearch() {
   const slug = findChampionSlug(championQuery.value, championsStore.champions)
   searchMiss.value = !slug
-  if (slug) navigateTo(localePath(`/builds/champion/${slug}`))
+  if (slug) navigateTo(discoverLink(homeSearchQuery(championQuery.value, championsStore.champions)))
+}
+function discoverLink(search: string) {
+  return { path: localePath('/builds/discover'), query: homeDiscoverQuery(search) }
 }
 function championBuildsLink(row: HomeTierListRow) {
-  const champ = championForId(row.championId)
-  return champ
-    ? localePath(`/builds/champion/${String(champ.id).toLowerCase()}`)
-    : championLink(row)
+  return discoverLink(championName(row) === '—' ? '' : championName(row))
 }
 const heroRow = computed(() => pickHeroRow(tierByRole.value))
 const heroChampion = computed(() =>

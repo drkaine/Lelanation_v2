@@ -5,38 +5,36 @@ import { statsFetch } from '~/utils/statsFetch'
 import { apiUrl } from '~/utils/apiUrl'
 import {
   jungleApiPatch,
-  junglePathViews,
+  jungleSideViews,
   type CampType,
-  type JunglePathApiRow,
+  type JunglePathsApi,
 } from '~/utils/statistics/junglePaths'
 
 const props = defineProps<{ championId: number; version: string }>()
 const { t, locale } = useI18n()
 
-const rows = ref<JunglePathApiRow[]>([])
+const res = ref<JunglePathsApi | null>(null)
 const pending = ref(false)
 const failed = ref(false)
-const side = ref<'blue' | 'red' | null>(null)
-const selected = ref(0)
+const selected = ref<{ side: 'blue' | 'red'; index: number }>({ side: 'blue', index: 0 })
 
 const patch = computed(() => jungleApiPatch(props.version))
 
 async function load(): Promise<void> {
   if (!props.championId || !patch.value) {
-    rows.value = []
+    res.value = null
     return
   }
   pending.value = true
   failed.value = false
   try {
-    const res = await statsFetch<{ paths: JunglePathApiRow[] }>(
+    res.value = await statsFetch<JunglePathsApi>(
       apiUrl(
-        `/api/stats/champions/${props.championId}/jungle-paths?patch=${encodeURIComponent(patch.value)}&limit=60`
+        `/api/stats/champions/${props.championId}/jungle-paths?patch=${encodeURIComponent(patch.value)}&top=6`
       )
     )
-    rows.value = res?.paths ?? []
   } catch {
-    rows.value = []
+    res.value = null
     failed.value = true
   } finally {
     pending.value = false
@@ -44,11 +42,21 @@ async function load(): Promise<void> {
 }
 watch(() => [props.championId, patch.value], load, { immediate: true })
 
-const paths = computed(() => junglePathViews(rows.value, { limit: 6, side: side.value }))
-watch(paths, () => {
-  selected.value = 0
+const sides = computed(() => jungleSideViews(res.value))
+const empty = computed(() => !sides.value.some(s => s.paths.length))
+watch(sides, () => {
+  selected.value = { side: sides.value[0]?.side ?? 'blue', index: 0 }
 })
-const current = computed(() => paths.value[selected.value] ?? null)
+const current = computed(
+  () => sides.value.find(s => s.side === selected.value.side)?.paths[selected.value.index] ?? null
+)
+function isSelected(side: 'blue' | 'red', index: number): boolean {
+  return selected.value.side === side && selected.value.index === index
+}
+const zoomOpen = ref(false)
+function sideLabel(side: 'blue' | 'red'): string {
+  return side === 'blue' ? t('statisticsPage.jungle.sideBlue') : t('statisticsPage.jungle.sideRed')
+}
 
 function campLabel(type: CampType): string {
   const labels: Record<CampType, string> = {
@@ -74,68 +82,126 @@ function num(v: number): string {
   <section class="jp" :aria-label="t('statisticsPage.jungle.title')">
     <header class="jp-head">
       <h3 class="jp-label">{{ t('statisticsPage.jungle.title') }}</h3>
-      <div class="jp-sides" role="group">
-        <button
-          v-for="s in [null, 'blue', 'red'] as const"
-          :key="String(s)"
-          type="button"
-          :class="['jp-side', { 'is-on': side === s }]"
-          :aria-pressed="side === s"
-          @click="side = s"
-        >
-          {{
-            s === null
-              ? t('statisticsPage.jungle.sideAll')
-              : s === 'blue'
-                ? t('statisticsPage.jungle.sideBlue')
-                : t('statisticsPage.jungle.sideRed')
-          }}
-        </button>
-      </div>
     </header>
 
     <p v-if="pending" class="jp-empty">…</p>
-    <p v-else-if="failed || !paths.length" class="jp-empty">
+    <p v-else-if="failed || empty" class="jp-empty">
       {{ t('statisticsPage.jungle.empty', { patch: patch ?? '—' }) }}
     </p>
     <div v-else class="jp-body">
-      <ol class="jp-list">
-        <li v-for="(p, i) in paths" :key="p.hash">
-          <button
-            type="button"
-            :class="['jp-row', { 'is-on': i === selected }]"
-            :aria-pressed="i === selected"
-            @click="selected = i"
-          >
-            <span :class="['jp-dot', `is-${p.side}`]" aria-hidden="true" />
-            <span class="jp-seq">
-              <template v-for="(s, j) in p.steps" :key="j">
-                <span v-if="j" class="jp-arrow" aria-hidden="true">›</span>
-                <span>{{ campLabel(s.type) }}</span>
-              </template>
-            </span>
-            <span class="jp-meta">
-              <b :class="p.winrate >= 50 ? 'is-up' : 'is-down'">{{ p.winrate.toFixed(1) }} %</b>
-              <small
-                >{{ num(p.games) }} {{ t('statisticsPage.ovGames')
-                }}<template v-if="p.clearTime"> · {{ p.clearTime }}</template></small
-              >
-            </span>
-          </button>
-        </li>
-      </ol>
+      <div v-for="s in sides" :key="s.side" class="jp-side-col">
+        <h4 class="jp-side-title">
+          <span :class="['jp-dot', `is-${s.side}`]" aria-hidden="true" />
+          {{ sideLabel(s.side) }}
+          <small>· {{ num(s.games) }} {{ t('statisticsPage.ovGames') }}</small>
+        </h4>
+        <p class="jp-starts">
+          <span class="jp-starts-label">{{ t('statisticsPage.jungle.start') }}</span>
+          <span v-for="st in s.starts.slice(0, 4)" :key="st.type" class="jp-start">
+            {{ campLabel(st.type) }} <b>{{ st.pct }} %</b>
+          </span>
+        </p>
+        <p class="jp-cols" aria-hidden="true">
+          <span>#</span>
+          <span>{{ t('statisticsPage.jungle.colPath') }}</span>
+          <span>{{ t('statisticsPage.jungle.colStats') }}</span>
+        </p>
+        <ol class="jp-list">
+          <li v-for="(p, i) in s.paths" :key="p.hash">
+            <button
+              type="button"
+              :class="['jp-row', { 'is-on': isSelected(s.side, i) }]"
+              :aria-pressed="isSelected(s.side, i)"
+              @click="selected = { side: s.side, index: i }"
+            >
+              <span class="jp-rank">{{ i + 1 }}</span>
+              <span class="jp-seq">
+                <template v-for="(st, j) in p.steps" :key="j">
+                  <span v-if="j" class="jp-arrow" aria-hidden="true">›</span>
+                  <span>{{ campLabel(st.type) }}</span>
+                </template>
+              </span>
+              <span class="jp-meta">
+                <b
+                  :class="p.winrate >= 50 ? 'is-up' : 'is-down'"
+                  :title="t('statisticsPage.jungle.winrateTitle')"
+                  >{{ p.winrate.toFixed(1) }} %</b
+                >
+                <small :title="t('statisticsPage.jungle.metaTitle')"
+                  >{{ num(p.games) }} · {{ p.pct.toFixed(1) }} %<template v-if="p.clearTime">
+                    · {{ p.clearTime }}</template
+                  ></small
+                >
+              </span>
+            </button>
+          </li>
+        </ol>
+      </div>
       <figure v-if="current" class="jp-map">
         <svg viewBox="0 0 100 100" role="img" :aria-label="t('statisticsPage.jungle.mapAlt')">
           <image href="/data/community-dragon/map-planner/map11.png" width="100" height="100" />
           <polyline :points="current.polyline" class="jp-line" />
-          <g v-for="(s, j) in current.steps" :key="j">
-            <circle :cx="s.x" :cy="s.y" r="3.4" :class="['jp-pt', `is-${current.side}`]" />
-            <text :x="s.x" :y="s.y + 1.4" class="jp-num">{{ j + 1 }}</text>
+          <g v-for="(st, j) in current.steps" :key="j">
+            <circle :cx="st.x" :cy="st.y" r="3.4" :class="['jp-pt', `is-${current.side}`]" />
+            <text :x="st.x" :y="st.y + 1.4" class="jp-num">{{ j + 1 }}</text>
           </g>
         </svg>
+        <button type="button" class="jp-expand" @click="zoomOpen = true">
+          ⤢ {{ t('statisticsPage.mapModal.open') }}
+        </button>
         <figcaption>{{ t('statisticsPage.jungle.clearNote') }}</figcaption>
       </figure>
     </div>
+    <p v-if="!pending && !empty" class="jp-legend">{{ t('statisticsPage.jungle.legend') }}</p>
+
+    <StatisticsMapZoomModal
+      :open="zoomOpen && !!current"
+      :title="t('statisticsPage.jungle.title')"
+      @close="zoomOpen = false"
+    >
+      <template #filters>
+        <div class="jp-modal-filters">
+          <div v-for="s in sides" :key="s.side">
+            <h4 class="jp-side-title">
+              <span :class="['jp-dot', `is-${s.side}`]" aria-hidden="true" />
+              {{ sideLabel(s.side) }}
+            </h4>
+            <ol class="jp-list">
+              <li v-for="(p, i) in s.paths" :key="p.hash">
+                <button
+                  type="button"
+                  :class="['jp-row', { 'is-on': isSelected(s.side, i) }]"
+                  :aria-pressed="isSelected(s.side, i)"
+                  @click="selected = { side: s.side, index: i }"
+                >
+                  <span class="jp-rank">{{ i + 1 }}</span>
+                  <span class="jp-seq">
+                    <template v-for="(st, j) in p.steps" :key="j">
+                      <span v-if="j" class="jp-arrow" aria-hidden="true">›</span>
+                      <span>{{ campLabel(st.type) }}</span>
+                    </template>
+                  </span>
+                  <span class="jp-meta">
+                    <b :class="p.winrate >= 50 ? 'is-up' : 'is-down'"
+                      >{{ p.winrate.toFixed(1) }} %</b
+                    >
+                    <small>{{ num(p.games) }} · {{ p.pct.toFixed(1) }} %</small>
+                  </span>
+                </button>
+              </li>
+            </ol>
+          </div>
+          <p class="jp-legend">{{ t('statisticsPage.jungle.legend') }}</p>
+        </div>
+      </template>
+      <template v-if="current">
+        <polyline :points="current.polyline" class="jp-line" />
+        <g v-for="(st, j) in current.steps" :key="j">
+          <circle :cx="st.x" :cy="st.y" r="2.4" :class="['jp-pt', `is-${current.side}`]" />
+          <text :x="st.x" :y="st.y + 1" class="jp-num jp-num-sm">{{ j + 1 }}</text>
+        </g>
+      </template>
+    </StatisticsMapZoomModal>
   </section>
 </template>
 
@@ -164,31 +230,89 @@ function num(v: number): string {
   text-transform: uppercase;
   color: #a09b8c;
 }
-.jp-sides {
-  display: flex;
-  gap: 4px;
+.jp-body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(200px, 260px);
+  gap: 20px;
+  align-items: start;
 }
-.jp-side {
+@media (max-width: 1023px) {
+  .jp-body {
+    grid-template-columns: 1fr;
+  }
+  .jp-map {
+    max-width: 300px;
+  }
+}
+.jp-side-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.jp-side-title small {
+  font-weight: 400;
+  color: #a09b8c;
+}
+.jp-starts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #a09b8c;
+}
+.jp-starts-label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.jp-start b {
+  color: #f0e6d2;
+  font-variant-numeric: tabular-nums;
+}
+.jp-cols {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  gap: 10px;
+  margin: 0 0 4px;
+  padding: 0 10px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #a09b8c;
+}
+.jp-legend {
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #a09b8c;
+}
+.jp-expand {
+  display: block;
+  margin: 8px 0 4px;
   padding: 4px 10px;
   border: 1px solid #463714;
   border-radius: 6px;
   font-size: 12px;
-  color: #a09b8c;
-}
-.jp-side.is-on {
-  border-color: #c89b3c;
   color: #f0e6d2;
 }
-.jp-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
-  gap: 20px;
-  align-items: start;
+.jp-expand:hover {
+  border-color: #c89b3c;
 }
-@media (max-width: 767px) {
-  .jp-body {
-    grid-template-columns: 1fr;
-  }
+.jp-modal-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.jp-num.jp-num-sm {
+  font-size: 2.6px;
+}
+.jp-rank {
+  font-size: 12px;
+  font-weight: 700;
+  color: #c89b3c;
 }
 .jp-list {
   display: flex;
@@ -200,7 +324,7 @@ function num(v: number): string {
 }
 .jp-row {
   display: grid;
-  grid-template-columns: 10px minmax(0, 1fr) auto;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
   width: 100%;
@@ -232,7 +356,7 @@ function num(v: number): string {
   flex-wrap: wrap;
   align-items: center;
   gap: 2px 6px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
 }
 .jp-arrow {

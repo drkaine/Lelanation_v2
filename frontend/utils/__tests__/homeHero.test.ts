@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { findChampionSlug, homePopularPicks, homeSearchQuery, latestHomeBuild } from '../homeHero'
+import {
+  discoverSearchFromQuery,
+  findChampionSlug,
+  homeDiscoverQuery,
+  homePopularPicks,
+  homeSearchQuery,
+  latestHomeBuild,
+} from '../homeHero'
 
 const blocks = [
   {
@@ -83,5 +90,27 @@ describe('homeSearchQuery', () => {
   })
   it('rend une chaîne vide pour une saisie vide', () => {
     expect(homeSearchQuery('   ', list)).toBe('')
+  })
+})
+
+describe('homeDiscoverQuery', () => {
+  it('builds the ?q= query for /builds/discover', () => {
+    expect(homeDiscoverQuery('Ahri')).toEqual({ q: 'Ahri' })
+  })
+  it('returns no query when the text is empty', () => {
+    expect(homeDiscoverQuery('   ')).toEqual({})
+  })
+})
+
+describe('discoverSearchFromQuery', () => {
+  it('reads a string q', () => {
+    expect(discoverSearchFromQuery(' Miss Fortune ')).toBe('Miss Fortune')
+  })
+  it('takes the first value of an array', () => {
+    expect(discoverSearchFromQuery(['Ahri', 'Lux'])).toBe('Ahri')
+  })
+  it('returns null when missing or blank', () => {
+    expect(discoverSearchFromQuery(undefined)).toBeNull()
+    expect(discoverSearchFromQuery('  ')).toBeNull()
   })
 })
