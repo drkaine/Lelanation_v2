@@ -1494,12 +1494,7 @@ getChampionRoute('/objectives', async (req, res, championId) => {
         stealWithoutSmitePct: 0,
         soloBaronPct: 0,
         soloTowerPct: 0,
-        soloDragonPct: 0,
-        soloRiftHeraldPct: 0,
-        soloHordePct: 0,
-        soloInhibitorPct: 0,
         soloKillPct: 0,
-        soloEpicObjectivePct: 0,
       },
       structureCard: {
         damageToTurretsPerGame: 0,

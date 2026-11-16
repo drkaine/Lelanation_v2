@@ -9,6 +9,7 @@ import {
   EVENT_MAP_LAYERS,
   KILL_KINDS,
   VISION_KINDS,
+  eventKindKey,
   eventMapDots,
   eventMapZones,
   type EventZone,
@@ -93,8 +94,8 @@ const zoomed = computed(() => layers.value.find(l => l.layer === zoomLayer.value
 function zoneRadius(z: EventZone, cells: number): number {
   return Math.round(Math.max(0.3, z.r) * (100 / cells) * 0.8 * 100) / 100
 }
-function zoneTitle(z: EventZone): string {
-  return `${t(`statisticsPage.eventMap.kind.${z.kind}`)} · ${num(z.count)} (${z.pct} %)`
+function zoneTitle(layer: EventMapLayer, z: EventZone): string {
+  return `${t(`statisticsPage.eventMap.kind.${eventKindKey(layer, z.kind)}`)} · ${num(z.count)} (${z.pct} %)`
 }
 function num(v: number): string {
   return v.toLocaleString(locale.value)
@@ -148,9 +149,9 @@ function num(v: number): string {
             :cx="z.x"
             :cy="z.y"
             :r="zoneRadius(z, CARD_CELLS)"
-            :class="['em-dot', `k-${z.kind}`]"
+            :class="['em-dot', `k-${eventKindKey(l.layer, z.kind)}`]"
           >
-            <title>{{ zoneTitle(z) }}</title>
+            <title>{{ zoneTitle(l.layer, z) }}</title>
           </circle>
         </svg>
         <ul class="em-legend">
@@ -161,8 +162,8 @@ function num(v: number): string {
               :aria-pressed="g.on"
               @click="toggle(l.layer, g.kind)"
             >
-              <span :class="['em-sw', `k-${g.kind}`]" aria-hidden="true" />
-              {{ t(`statisticsPage.eventMap.kind.${g.kind}`) }}
+              <span :class="['em-sw', `k-${eventKindKey(l.layer, g.kind)}`]" aria-hidden="true" />
+              {{ t(`statisticsPage.eventMap.kind.${eventKindKey(l.layer, g.kind)}`) }}
               <small>{{ num(g.count) }}</small>
             </button>
           </li>
@@ -212,8 +213,11 @@ function num(v: number): string {
                 :aria-pressed="g.on"
                 @click="toggle(zoomed.layer, g.kind)"
               >
-                <span :class="['em-sw', `k-${g.kind}`]" aria-hidden="true" />
-                {{ t(`statisticsPage.eventMap.kind.${g.kind}`) }}
+                <span
+                  :class="['em-sw', `k-${eventKindKey(zoomed.layer, g.kind)}`]"
+                  aria-hidden="true"
+                />
+                {{ t(`statisticsPage.eventMap.kind.${eventKindKey(zoomed.layer, g.kind)}`) }}
                 <small>{{ num(g.count) }}</small>
               </button>
             </li>
@@ -228,9 +232,9 @@ function num(v: number): string {
           :cx="z.x"
           :cy="z.y"
           :r="zoneRadius(z, MODAL_CELLS)"
-          :class="['em-dot', `k-${z.kind}`]"
+          :class="['em-dot', `k-${eventKindKey(zoomed.layer, z.kind)}`]"
         >
-          <title>{{ zoneTitle(z) }}</title>
+          <title>{{ zoneTitle(zoomed.layer, z) }}</title>
         </circle>
       </template>
     </StatisticsMapZoomModal>
@@ -383,6 +387,19 @@ function num(v: number): string {
 .k-late {
   fill: #8a95a5;
   background: #8a95a5;
+}
+/* Morts : teintes distinctes des kills de même nom */
+.k-diveDeath {
+  fill: #b5552a;
+  background: #b5552a;
+}
+.k-gankDeath {
+  fill: #7d5f22;
+  background: #7d5f22;
+}
+.k-roamDeath {
+  fill: #74409e;
+  background: #74409e;
 }
 /* Vision */
 .k-trinket {

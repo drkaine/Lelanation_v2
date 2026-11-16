@@ -105,3 +105,15 @@ describe('eventMapZones', () => {
     expect(eventMapZones([], 10)).toEqual([])
   })
 })
+
+describe('eventKindKey', () => {
+  it('distingue dive/gank/roam subis (morts) de ceux infligés (kills)', async () => {
+    const { eventKindKey } = await import('../eventMap')
+    expect(eventKindKey('kills', 'dive')).toBe('dive')
+    expect(eventKindKey('deaths', 'dive')).toBe('diveDeath')
+    expect(eventKindKey('deaths', 'gank')).toBe('gankDeath')
+    expect(eventKindKey('deaths', 'roam')).toBe('roamDeath')
+    expect(eventKindKey('deaths', 'solo')).toBe('solo')
+    expect(eventKindKey('vision', 'ward')).toBe('ward')
+  })
+})

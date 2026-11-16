@@ -31,6 +31,14 @@ export const VISION_KINDS: readonly VisionKind[] = [
   'killed',
 ]
 
+/** Catégories communes aux kills et aux morts : côté morts, clé distincte (libellé + couleur). */
+const SHARED_KINDS = new Set<string>(['dive', 'gank', 'roam'])
+
+/** Clé i18n / classe CSS d'une catégorie : `diveDeath` (sous sa tour) ≠ `dive` (sous tour adverse). */
+export function eventKindKey(layer: EventMapLayer, kind: string): string {
+  return layer === 'deaths' && SHARED_KINDS.has(kind) ? `${kind}Death` : kind
+}
+
 const MAP_SIZE = 15000
 const EARLY_END_S = 14 * 60
 const MID_END_S = 25 * 60

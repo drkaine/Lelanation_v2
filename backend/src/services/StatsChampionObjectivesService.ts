@@ -1,6 +1,7 @@
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
 import { buildChampionScopedWhere } from './ChampionGlobalTableService.js'
 import { matchVersionedAggFrom } from './statsAggArchive.js'
+import { buildParticipationCard, type ParticipationCard } from './objectivesParticipationCard.js'
 
 export type ChampionObjectiveSummary = {
   championId: number
@@ -50,19 +51,7 @@ export type ChampionObjectiveSummary = {
     winrateRed: number
   }>
   /** Vol d'objectif, solo, etc. (challenges Riot agrégés). */
-  participationCard: {
-    stealPct: number
-    stealWithSmitePct: number
-    stealWithoutSmitePct: number
-    soloBaronPct: number
-    soloTowerPct: number
-    soloDragonPct: number
-    soloRiftHeraldPct: number
-    soloHordePct: number
-    soloInhibitorPct: number
-    soloKillPct: number
-    soloEpicObjectivePct: number
-  }
+  participationCard: ParticipationCard
   /** Dégâts structures / tours (moyennes par partie). */
   structureCard: {
     damageToTurretsPerGame: number
@@ -191,6 +180,8 @@ type RawObjectiveAgg = {
   sum_turrets_taken_with_rift_herald: bigint
   sum_solo_baron_kills: bigint
   sum_quick_solo_kills: bigint
+  sum_solo_kills: bigint
+  sum_solo_turrets_lategame: bigint
   team_first_baron_win: bigint
   team_first_baron_loss: bigint
   team_first_dragon_win: bigint
@@ -321,12 +312,6 @@ function soloTouchFromSumKillAssistExpr(sumKillCol: string, assistCol: string): 
 /** Parties où le joueur a le crédit kill sans assist sur cet objectif. */
 function soloTouchGamesExpr(killCol: string, assistCol: string): string {
   return `COALESCE(SUM(CASE WHEN ${killCol} > 0 AND ${assistCol} = 0 THEN cs.count_game ELSE 0 END), 0)`
-}
-
-/** % parties avec au moins un événement (proxy quand seuls des sum_* existent, max ~1 par match). */
-function pctGamesWithEvents(totalEvents: number, games: number): number {
-  if (games <= 0 || totalEvents <= 0) return 0
-  return Number(((100 * Math.min(games, totalEvents)) / games).toFixed(2))
 }
 
 function parseDurationBucketMin(bucket: string): number {
@@ -478,6 +463,8 @@ export async function getChampionObjectivesSummary(options: {
         COALESCE(SUM(cs.sum_turrets_taken_with_rift_herald), 0)::bigint AS sum_turrets_taken_with_rift_herald,
         COALESCE(SUM(cs.sum_solo_baron_kills), 0)::bigint AS sum_solo_baron_kills,
         COALESCE(SUM(cs.sum_quick_solo_kills), 0)::bigint AS sum_quick_solo_kills,
+        COALESCE(SUM(cs.sum_solo_kills), 0)::bigint AS sum_solo_kills,
+        COALESCE(SUM(cs.sum_solo_turrets_lategame), 0)::bigint AS sum_solo_turrets_lategame,
         COALESCE(SUM(cs.count_team_first_baron_win), 0)::bigint AS team_first_baron_win,
         COALESCE(SUM(cs.count_team_first_baron_loss), 0)::bigint AS team_first_baron_loss,
         COALESCE(SUM(cs.count_team_first_dragon_win), 0)::bigint AS team_first_dragon_win,
@@ -517,12 +504,7 @@ export async function getChampionObjectivesSummary(options: {
           stealWithoutSmitePct: 0,
           soloBaronPct: 0,
           soloTowerPct: 0,
-          soloDragonPct: 0,
-          soloRiftHeraldPct: 0,
-          soloHordePct: 0,
-          soloInhibitorPct: 0,
           soloKillPct: 0,
-          soloEpicObjectivePct: 0,
         },
         structureCard: {
           damageToTurretsPerGame: 0,
@@ -877,27 +859,7 @@ export async function getChampionObjectivesSummary(options: {
 
     const killHistograms = buildKillHistograms(row)
 
-    const epicSteals = Number(row?.sum_epic_monster_steals ?? 0)
-    const objectivesStolen = Number(row?.sum_objectives_stolen ?? 0)
-    const stealEvents = epicSteals > 0 ? epicSteals : objectivesStolen
-    const stealNoSmite = Number(row?.sum_epic_monster_stolen_without_smite ?? 0)
-    const stealWithSmite = Math.max(0, stealEvents - stealNoSmite)
-    const participationCard = {
-      stealPct: pctGamesWithEvents(stealEvents, games),
-      stealWithSmitePct: pctGamesWithEvents(stealWithSmite, games),
-      stealWithoutSmitePct: pctGamesWithEvents(stealNoSmite, games),
-      soloBaronPct: toPct(
-        Math.max(Number(row?.baron_solo_game ?? 0), Number(row?.sum_solo_baron_kills ?? 0)),
-        games
-      ),
-      soloTowerPct: toPct(Number(row?.tower_solo_game ?? 0), games),
-      soloDragonPct: toPct(Number(row?.dragon_solo_game ?? 0), games),
-      soloRiftHeraldPct: toPct(Number(row?.rift_herald_solo_game ?? 0), games),
-      soloHordePct: toPct(Number(row?.horde_solo_game ?? 0), games),
-      soloInhibitorPct: toPct(Number(row?.inhibitor_solo_game ?? 0), games),
-      soloKillPct: pctGamesWithEvents(Number(row?.sum_quick_solo_kills ?? 0), games),
-      soloEpicObjectivePct: toPct(Number(row?.any_epic_solo_game ?? 0), games),
-    }
+    const participationCard = buildParticipationCard(row, games)
 
     const perGameAvg = (sum: number): number =>
       games > 0 ? Number((sum / games).toFixed(2)) : 0

@@ -585,12 +585,7 @@ export type ChampionObjectivesParticipationCard = {
   stealWithoutSmitePct: number
   soloBaronPct: number
   soloTowerPct: number
-  soloDragonPct: number
-  soloRiftHeraldPct: number
-  soloHordePct: number
-  soloInhibitorPct: number
   soloKillPct: number
-  soloEpicObjectivePct: number
 }
 
 export type ChampionObjectivesStructureCard = {
@@ -791,34 +786,9 @@ const participationMetrics = computed(() => {
       value: c.soloTowerPct,
     },
     {
-      key: 'soloDragon',
-      label: t('statisticsPage.championObjectivesSoloDragonPct'),
-      value: c.soloDragonPct,
-    },
-    {
-      key: 'soloHerald',
-      label: t('statisticsPage.championObjectivesSoloHeraldPct'),
-      value: c.soloRiftHeraldPct,
-    },
-    {
-      key: 'soloHorde',
-      label: t('statisticsPage.championObjectivesSoloHordePct'),
-      value: c.soloHordePct,
-    },
-    {
-      key: 'soloInhib',
-      label: t('statisticsPage.championObjectivesSoloInhibitorPct'),
-      value: c.soloInhibitorPct,
-    },
-    {
       key: 'soloKill',
       label: t('statisticsPage.championObjectivesSoloKillPct'),
       value: c.soloKillPct,
-    },
-    {
-      key: 'soloEpic',
-      label: t('statisticsPage.championObjectivesSoloEpicPct'),
-      value: c.soloEpicObjectivePct,
     },
   ]
 })
