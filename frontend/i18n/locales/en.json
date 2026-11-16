@@ -2600,7 +2600,7 @@
       "title": "Event maps",
       "games": "{n} games",
       "empty": "No events recorded yet for patch {patch}.",
-      "note": "Kills: gank = jungler in a lane, roam = laner outside their lane (before 20 min). Riot does not give ward positions: they are estimated from the player's position (sampled every minute).",
+      "note": "Kills: dive = under an enemy tower, gank = jungler in lane, roam = laner outside their lane (before 20 min). Deaths: dive = under own tower, gank = enemy jungler involved, roam = enemy laner outside their lane, 1v1 = killed with no enemy assist, teamfight = several enemies. A lone assist is not always recorded by Riot: a 2v1 may show as 1v1. Dive ignores whether the tower was already destroyed. Riot does not give ward positions: they are estimated from the player's position (sampled every minute).",
       "phase": {
         "all": "Whole game",
         "early": "0–14 min",
@@ -2608,7 +2608,8 @@
         "late": "25 min +"
       },
       "layer": {
-        "combat": "Kills & deaths",
+        "kills": "Kills",
+        "deaths": "Deaths",
         "vision": "Wards placed & destroyed"
       },
       "kind": {
@@ -2617,12 +2618,15 @@
         "lane": "In lane",
         "jungle": "In jungle",
         "late": "After 20 min",
-        "death": "Death",
         "trinket": "Trinket",
         "control": "Control ward",
         "farsight": "Farsight",
         "ward": "Other ward",
-        "killed": "Ward destroyed"
+        "killed": "Ward destroyed",
+        "dive": "Dive (under tower)",
+        "solo": "1v1",
+        "fight": "Teamfight",
+        "other": "Tower, minions, other"
       },
       "zonesNote": "Each circle groups the events of one area: placed at their average position, sized by their count, coloured by the most frequent category. Hover for details."
     },

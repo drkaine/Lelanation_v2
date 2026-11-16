@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { eventMapDots, phaseOf, toMapPct, type EventMapApi } from '../eventMap'
+import {
+  DEATH_KINDS,
+  EVENT_MAP_LAYERS,
+  KILL_KINDS,
+  eventMapDots,
+  phaseOf,
+  toMapPct,
+  type EventMapApi,
+} from '../eventMap'
 
 const api: EventMapApi = {
   games: 2,
@@ -7,8 +15,13 @@ const api: EventMapApi = {
     [1500, 13500, 300, 'gank'],
     [7500, 7500, 900, 'roam'],
     [7500, 7500, 1500, 'late'],
+    [10504, 1200, 400, 'dive'],
   ],
-  deaths: [[3000, 3000, 200]],
+  deaths: [
+    [3000, 3000, 200, 'solo'],
+    [3000, 3000, 1000, 'gank'],
+    [3000, 3000, 1600, 'other'],
+  ],
   wardsPlaced: [
     [7500, 7500, 60, 'trinket'],
     [7500, 7500, 1000, 'control'],
@@ -32,15 +45,30 @@ describe('phaseOf', () => {
 })
 
 describe('eventMapDots', () => {
-  it('combat layer: kills keep their kind, deaths become "death"', () => {
-    const dots = eventMapDots(api, 'combat', { phase: 'all', kinds: null })
-    expect(dots.map(d => d.kind)).toEqual(['gank', 'roam', 'late', 'death'])
+  it('kills layer: kills only, with their context', () => {
+    const dots = eventMapDots(api, 'kills', { phase: 'all', kinds: null })
+    expect(dots.map(d => d.kind)).toEqual(['gank', 'roam', 'late', 'dive'])
     expect(dots[0]).toMatchObject({ x: 10, y: 10 })
+  })
+  it('deaths layer: deaths only, with their context', () => {
+    expect(eventMapDots(api, 'deaths', { phase: 'all', kinds: null }).map(d => d.kind)).toEqual([
+      'solo',
+      'gank',
+      'other',
+    ])
   })
   it('filters by kinds and phase', () => {
     expect(
-      eventMapDots(api, 'combat', { phase: 'early', kinds: ['gank', 'death'] }).map(d => d.kind)
-    ).toEqual(['gank', 'death'])
+      eventMapDots(api, 'kills', { phase: 'early', kinds: ['gank', 'dive'] }).map(d => d.kind)
+    ).toEqual(['gank', 'dive'])
+    expect(eventMapDots(api, 'deaths', { phase: 'mid', kinds: ['gank'] }).map(d => d.kind)).toEqual(
+      ['gank']
+    )
+  })
+  it('lists the categories of each map', () => {
+    expect(KILL_KINDS).toEqual(['gank', 'roam', 'dive', 'lane', 'jungle', 'late'])
+    expect(DEATH_KINDS).toEqual(['dive', 'gank', 'roam', 'solo', 'fight', 'other'])
+    expect(EVENT_MAP_LAYERS).toEqual(['kills', 'deaths', 'vision'])
   })
   it('vision layer: placed wards by type, destroyed wards as "killed"', () => {
     expect(eventMapDots(api, 'vision', { phase: 'all', kinds: null }).map(d => d.kind)).toEqual([
@@ -50,7 +78,7 @@ describe('eventMapDots', () => {
     ])
   })
   it('returns [] without data', () => {
-    expect(eventMapDots(null, 'combat', { phase: 'all', kinds: null })).toEqual([])
+    expect(eventMapDots(null, 'kills', { phase: 'all', kinds: null })).toEqual([])
   })
 })
 
@@ -61,15 +89,15 @@ describe('eventMapZones', () => {
       [
         { x: 1, y: 1, kind: 'gank' },
         { x: 3, y: 3, kind: 'gank' },
-        { x: 4, y: 2, kind: 'death' },
-        { x: 90, y: 90, kind: 'death' },
+        { x: 4, y: 2, kind: 'other' },
+        { x: 90, y: 90, kind: 'other' },
       ],
       10
     )
     expect(zones).toHaveLength(2)
     const big = zones.find(z => z.count === 3)!
     expect(big).toMatchObject({ x: 2.7, y: 2, kind: 'gank', pct: 75, r: 1 })
-    expect(zones.find(z => z.count === 1)).toMatchObject({ x: 90, y: 90, kind: 'death', pct: 25 })
+    expect(zones.find(z => z.count === 1)).toMatchObject({ x: 90, y: 90, kind: 'other', pct: 25 })
     expect(zones[zones.length - 1]!.count).toBe(3)
   })
   it('renvoie [] sans points', async () => {

@@ -2600,7 +2600,7 @@
       "title": "Cartes des événements",
       "games": "{n} parties",
       "empty": "Pas encore d'événements enregistrés pour le patch {patch}.",
-      "note": "Kills : gank = jungler en lane, roam = laner hors de sa lane (avant 20 min). Riot ne donne pas la position des wards : elle est estimée à celle du joueur (relevé chaque minute).",
+      "note": "Kills : dive = sous une tour adverse, gank = jungler en lane, roam = laner hors de sa lane (avant 20 min). Morts : dive = sous sa propre tour, gank = jungler adverse impliqué, roam = laner adverse hors de sa lane, 1v1 = tué sans assist adverse, combat = plusieurs adversaires. Riot n'enregistre pas toujours un assist isolé : un 2v1 peut apparaître en 1v1. Le dive ignore si la tour était déjà détruite. Riot ne donne pas la position des wards : elle est estimée à celle du joueur (relevé chaque minute).",
       "phase": {
         "all": "Toute la partie",
         "early": "0–14 min",
@@ -2608,7 +2608,8 @@
         "late": "25 min +"
       },
       "layer": {
-        "combat": "Kills & morts",
+        "kills": "Kills",
+        "deaths": "Morts",
         "vision": "Balises posées & détruites"
       },
       "kind": {
@@ -2617,12 +2618,15 @@
         "lane": "En lane",
         "jungle": "En jungle",
         "late": "Après 20 min",
-        "death": "Mort",
         "trinket": "Totem",
         "control": "Balise de contrôle",
         "farsight": "Altération longue-vue",
         "ward": "Autre balise",
-        "killed": "Balise détruite"
+        "killed": "Balise détruite",
+        "dive": "Dive (sous tour)",
+        "solo": "1v1",
+        "fight": "Combat à plusieurs",
+        "other": "Tour, sbires, autre"
       },
       "zonesNote": "Chaque cercle regroupe les événements d'une zone : placé à leur position moyenne, taille selon leur nombre, couleur de la catégorie la plus fréquente. Survoler pour le détail."
     },

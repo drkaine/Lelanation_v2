@@ -60,7 +60,19 @@ export async function queryChampionEventMap(args: {
   const queueId = args.queueId != null ? Math.trunc(args.queueId) : null;
   const role = args.role ? args.role.toUpperCase() : null;
   const rows = await sql<ChampionEventMapRow[]>`
-    SELECT p.team_position, p.kill_history, p.death_history, p.ward_history, p.ward_killed_history
+    SELECT p.team_id, p.team_position, p.kill_history, p.death_history, p.ward_history, p.ward_killed_history,
+      (
+        SELECT json_agg(json_build_object(
+          'id', e.participant_id,
+          'position', e.team_position,
+          'assists', (
+            SELECT json_agg(DISTINCT (a->>'timestamp_ms')::bigint)
+            FROM jsonb_array_elements(CASE WHEN jsonb_typeof(e.assist_history) = 'array' THEN e.assist_history ELSE '[]'::jsonb END) a
+          )
+        ))
+        FROM participants e
+        WHERE e.riot_match_id = p.riot_match_id AND e.team_id <> p.team_id
+      ) AS enemies
     FROM participants p
     INNER JOIN matchs m ON m.riot_match_id = p.riot_match_id
     WHERE p.champion_id = ${args.championId}

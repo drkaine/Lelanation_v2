@@ -66,3 +66,40 @@ export const INITIAL_TOWERS: TowerPosition[] = [
   { teamId: 200, lane: "NEXUS", tier: "NEXUS", x: 13300, y: 11900 },
   { teamId: 200, lane: "NEXUS", tier: "NEXUS", x: 11800, y: 13200 },
 ];
+
+/**
+ * Tours de la Faille (coordonnées Riot des tourelles, hors nexus inclus) — pour les dives.
+ * `INITIAL_TOWERS` ci-dessus a plusieurs positions fausses (ex. tour mid) ; non modifié car utilisé ailleurs.
+ */
+export const SR_TURRETS: ReadonlyArray<{ teamId: 100 | 200; x: number; y: number }> = [
+  { teamId: 100, x: 981, y: 10441 },
+  { teamId: 100, x: 1512, y: 6699 },
+  { teamId: 100, x: 1169, y: 4287 },
+  { teamId: 100, x: 5846, y: 6396 },
+  { teamId: 100, x: 5048, y: 4812 },
+  { teamId: 100, x: 3651, y: 3696 },
+  { teamId: 100, x: 10504, y: 1029 },
+  { teamId: 100, x: 6919, y: 1483 },
+  { teamId: 100, x: 4281, y: 1253 },
+  { teamId: 100, x: 1748, y: 2270 },
+  { teamId: 100, x: 2177, y: 1807 },
+  { teamId: 200, x: 4318, y: 13875 },
+  { teamId: 200, x: 7943, y: 13411 },
+  { teamId: 200, x: 10481, y: 13650 },
+  { teamId: 200, x: 8955, y: 8510 },
+  { teamId: 200, x: 9767, y: 10113 },
+  { teamId: 200, x: 11134, y: 11207 },
+  { teamId: 200, x: 13866, y: 4505 },
+  { teamId: 200, x: 13327, y: 8226 },
+  { teamId: 200, x: 13624, y: 10572 },
+  { teamId: 200, x: 12611, y: 13084 },
+  { teamId: 200, x: 13052, y: 12612 },
+];
+
+/** Portée de tir d'une tour (~750) + marge pour la position arrondie de l'événement. */
+export const DIVE_RADIUS = 900;
+
+/** L'événement a lieu sous une tour de l'équipe `teamId`. */
+export function nearTeamTurret(x: number, y: number, teamId: number): boolean {
+  return SR_TURRETS.some(t => t.teamId === teamId && Math.hypot(x - t.x, y - t.y) <= DIVE_RADIUS);
+}

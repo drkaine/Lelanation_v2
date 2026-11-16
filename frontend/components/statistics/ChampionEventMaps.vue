@@ -5,7 +5,9 @@ import { statsFetch } from '~/utils/statsFetch'
 import { apiUrl } from '~/utils/apiUrl'
 import { jungleApiPatch } from '~/utils/statistics/junglePaths'
 import {
-  COMBAT_KINDS,
+  DEATH_KINDS,
+  EVENT_MAP_LAYERS,
+  KILL_KINDS,
   VISION_KINDS,
   eventMapDots,
   eventMapZones,
@@ -22,7 +24,16 @@ const data = ref<EventMapApi | null>(null)
 const pending = ref(false)
 const failed = ref(false)
 const phase = ref<EventPhase>('all')
-const hidden = ref<Record<EventMapLayer, Set<string>>>({ combat: new Set(), vision: new Set() })
+const hidden = ref<Record<EventMapLayer, Set<string>>>({
+  kills: new Set(),
+  deaths: new Set(),
+  vision: new Set(),
+})
+const LAYER_KINDS: Record<EventMapLayer, readonly string[]> = {
+  kills: KILL_KINDS,
+  deaths: DEATH_KINDS,
+  vision: VISION_KINDS,
+}
 
 const zoomLayer = ref<EventMapLayer | null>(null)
 /** Zones par côté : carte réduite 20×20, plein écran 40×40. */
@@ -55,8 +66,8 @@ async function load(): Promise<void> {
 watch(() => [props.championId, patch.value, props.role], load, { immediate: true })
 
 const layers = computed(() =>
-  (['combat', 'vision'] as const).map(layer => {
-    const kinds = layer === 'combat' ? COMBAT_KINDS : VISION_KINDS
+  EVENT_MAP_LAYERS.map(layer => {
+    const kinds = LAYER_KINDS[layer]
     const all = eventMapDots(data.value, layer, { phase: phase.value, kinds: null })
     const counts = new Map<string, number>()
     for (const d of all) counts.set(d.kind, (counts.get(d.kind) ?? 0) + 1)
@@ -336,7 +347,23 @@ function num(v: number): string {
   font-size: 12px;
   color: #a09b8c;
 }
-/* Combat */
+/* Kills / morts */
+.k-dive {
+  fill: #ff8a3d;
+  background: #ff8a3d;
+}
+.k-solo {
+  fill: #0ac8b9;
+  background: #0ac8b9;
+}
+.k-fight {
+  fill: #e84057;
+  background: #e84057;
+}
+.k-other {
+  fill: #8a95a5;
+  background: #8a95a5;
+}
 .k-gank {
   fill: #c89b3c;
   background: #c89b3c;
@@ -356,10 +383,6 @@ function num(v: number): string {
 .k-late {
   fill: #8a95a5;
   background: #8a95a5;
-}
-.k-death {
-  fill: #e84057;
-  background: #e84057;
 }
 /* Vision */
 .k-trinket {

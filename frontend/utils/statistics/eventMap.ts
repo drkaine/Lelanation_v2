@@ -1,31 +1,28 @@
 /** Carte des événements d'un champion (`GET /api/stats/champions/:id/event-map`). */
 
-export type KillKind = 'gank' | 'roam' | 'lane' | 'jungle' | 'late'
+export type KillKind = 'dive' | 'gank' | 'roam' | 'lane' | 'jungle' | 'late'
+/** Contexte d'une mort : sous sa tour, jungler adverse, laner adverse hors lane, 1v1, plusieurs adversaires, autre. */
+export type DeathKind = 'dive' | 'gank' | 'roam' | 'solo' | 'fight' | 'other'
 export type WardKind = 'trinket' | 'control' | 'farsight' | 'ward'
-export type CombatKind = KillKind | 'death'
 export type VisionKind = WardKind | 'killed'
-export type EventMapLayer = 'combat' | 'vision'
+export type EventKind = KillKind | DeathKind | VisionKind
+export type EventMapLayer = 'kills' | 'deaths' | 'vision'
 export type EventPhase = 'all' | 'early' | 'mid' | 'late'
 
 export type EventMapApi = {
   games: number
   /** [x, y, secondes, catégorie] en coordonnées Riot. */
   kills: Array<[number, number, number, KillKind]>
-  deaths: Array<[number, number, number]>
+  deaths: Array<[number, number, number, DeathKind]>
   wardsPlaced: Array<[number, number, number, WardKind]>
   wardsKilled: Array<[number, number, number, WardKind]>
 }
 
-export type EventDot = { x: number; y: number; kind: CombatKind | VisionKind }
+export type EventDot = { x: number; y: number; kind: EventKind }
 
-export const COMBAT_KINDS: readonly CombatKind[] = [
-  'gank',
-  'roam',
-  'lane',
-  'jungle',
-  'late',
-  'death',
-]
+export const EVENT_MAP_LAYERS: readonly EventMapLayer[] = ['kills', 'deaths', 'vision']
+export const KILL_KINDS: readonly KillKind[] = ['gank', 'roam', 'dive', 'lane', 'jungle', 'late']
+export const DEATH_KINDS: readonly DeathKind[] = ['dive', 'gank', 'roam', 'solo', 'fight', 'other']
 export const VISION_KINDS: readonly VisionKind[] = [
   'trinket',
   'control',
@@ -57,20 +54,17 @@ export function eventMapDots(
   filter: { phase: EventPhase; kinds: readonly string[] | null }
 ): EventDot[] {
   if (!data) return []
-  const raw: Array<[number, number, number, CombatKind | VisionKind]> =
-    layer === 'combat'
-      ? [
-          ...data.kills,
-          ...data.deaths.map(
-            ([x, y, t]) => [x, y, t, 'death'] as [number, number, number, 'death']
-          ),
-        ]
-      : [
-          ...data.wardsPlaced,
-          ...data.wardsKilled.map(
-            ([x, y, t]) => [x, y, t, 'killed'] as [number, number, number, 'killed']
-          ),
-        ]
+  const raw: Array<[number, number, number, EventKind]> =
+    layer === 'kills'
+      ? data.kills
+      : layer === 'deaths'
+        ? data.deaths
+        : [
+            ...data.wardsPlaced,
+            ...data.wardsKilled.map(
+              ([x, y, t]) => [x, y, t, 'killed'] as [number, number, number, 'killed']
+            ),
+          ]
   const out: EventDot[] = []
   for (const [x, y, t, kind] of raw) {
     if (filter.phase !== 'all' && phaseOf(t) !== filter.phase) continue
@@ -86,7 +80,7 @@ export type EventZone = {
   y: number
   count: number
   /** Catégorie la plus fréquente de la zone. */
-  kind: CombatKind | VisionKind
+  kind: EventKind
   /** Part des points visibles, en %. */
   pct: number
   /** Taille relative (1 = zone la plus chargée). */
@@ -115,7 +109,7 @@ export function eventMapZones(dots: readonly EventDot[], cells: number): EventZo
       x: round(z.sx / z.n),
       y: round(z.sy / z.n),
       count: z.n,
-      kind: [...z.kinds.entries()].sort((a, b) => b[1] - a[1])[0]![0] as CombatKind | VisionKind,
+      kind: [...z.kinds.entries()].sort((a, b) => b[1] - a[1])[0]![0] as EventKind,
       pct: round((z.n / dots.length) * 100),
       r: Math.round(Math.sqrt(z.n / max) * 100) / 100,
     }))
