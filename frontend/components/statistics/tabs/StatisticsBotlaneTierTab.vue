@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, unref } from 'vue'
+import { tierChartColor } from '~/utils/tierChartColors'
 import type { StatisticsMobileSortOption } from '~/components/statistics/StatisticsMobileSortBar.vue'
 import {
   injectStatisticsPageCtx,
@@ -297,13 +298,8 @@ const botlaneMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => [
               <span
                 :class="[
                   'inline-flex min-h-[1.25rem] min-w-[1.25rem] items-center justify-center rounded px-0.5 text-[11px] font-bold leading-none text-background',
-                  row.tier === 'S+' && 'bg-[#f5c542]',
-                  row.tier === 'S' && 'bg-[#22c55e]',
-                  row.tier === 'A' && 'bg-[#2563eb]',
-                  row.tier === 'B' && 'bg-[#60a5fa]',
-                  row.tier === 'C' && 'bg-[#a855f7]',
-                  (row.tier === 'D' || row.tier === 'F') && 'bg-[#dc2626]',
                 ]"
+                :style="{ backgroundColor: tierChartColor(row.tier) }"
               >
                 {{ p.t(tierLabelKey(row.tier)) }}
               </span>

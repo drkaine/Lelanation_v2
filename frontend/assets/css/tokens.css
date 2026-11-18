@@ -316,13 +316,13 @@ body {
   --rgb-tier-a: var(--rgb-blue-100);
   --rgb-tier-b: var(--rgb-blue-200);
 
-  /* Tier list note badges (solid fills — statistics table palette) */
-  --color-tier-badge-s-plus: #c8aa6e;
-  --color-tier-badge-s: #c89b3c;
-  --color-tier-badge-a: #0ac8b9;
-  --color-tier-badge-b: #0397ab;
-  --color-tier-badge-c: #5b5a56;
-  --color-tier-badge-d: #3c3c41;
+  /* Tier list note badges — miroir exact de TIER_CHART_COLORS (utils/tierChartColors.ts, source unique) */
+  --color-tier-badge-s-plus: #e5c558;
+  --color-tier-badge-s: #22c55e;
+  --color-tier-badge-a: #3b82f6;
+  --color-tier-badge-b: #7dd3fc;
+  --color-tier-badge-c: #a78bfa;
+  --color-tier-badge-d: #dc2626;
 
   /* Default build-card border (region palette fallback) */
   --card-border-color-default: #bba077;

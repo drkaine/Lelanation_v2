@@ -206,7 +206,7 @@ function percent(ratio: number): string {
 
 .stg-tier {
   --tier-color: var(--color-tier-badge-d);
-  --tier-ink: #f0e6d2;
+  --tier-ink: #010a13;
   display: grid;
   overflow: hidden;
   border: 1px solid #463714;
@@ -350,22 +350,22 @@ function percent(ratio: number): string {
 
 .tier-a {
   --tier-color: var(--color-tier-badge-a);
-  --tier-ink: #0a323c;
+  --tier-ink: #010a13;
 }
 
 .tier-b {
   --tier-color: var(--color-tier-badge-b);
-  --tier-ink: #0a323c;
+  --tier-ink: #010a13;
 }
 
 .tier-c {
   --tier-color: var(--color-tier-badge-c);
-  --tier-ink: #f0e6d2;
+  --tier-ink: #010a13;
 }
 
 .tier-d {
   --tier-color: var(--color-tier-badge-d);
-  --tier-ink: #f0e6d2;
+  --tier-ink: #010a13;
 }
 
 .stg-top {
