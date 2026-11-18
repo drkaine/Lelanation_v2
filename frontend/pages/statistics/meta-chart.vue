@@ -33,7 +33,7 @@
       </div>
     </header>
     <div class="statistics-tabs-bar tl-subbar">
-      <div class="stats-subtabs">
+      <div class="stats-subtabs subnav">
         <NuxtLink
           v-for="v in TIER_LIST_VIEWS"
           :key="v.id"
@@ -45,10 +45,10 @@
                   query: tierListViewQuery(v.id) ? { view: tierListViewQuery(v.id) } : {},
                 })
           "
-          :class="['stats-subtab', v.id === 'chart' ? 'is-active' : '']"
+          :class="['subnav-link', v.id === 'chart' ? 'is-active' : '']"
         >
-          <span class="stats-subtab-long">{{ t(v.labelKey) }}</span>
-          <span class="stats-subtab-short">{{ t(v.shortLabelKey) }}</span>
+          <span class="subnav-label-long">{{ t(v.labelKey) }}</span>
+          <span class="subnav-label-short">{{ t(v.shortLabelKey) }}</span>
         </NuxtLink>
       </div>
       <div class="tl-subbar-right">

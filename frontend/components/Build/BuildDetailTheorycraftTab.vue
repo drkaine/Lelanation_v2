@@ -353,7 +353,7 @@ onUnmounted(() => {
   height: 38px;
   border-radius: 0.5rem;
   border: 1px solid rgb(200 155 60 / 0.5);
-  background: var(--color-background, #0a1428);
+  background: var(--color-background, var(--color-chrome));
   color: rgb(255 255 255 / 0.85);
   transition:
     border-color 0.15s ease,
@@ -396,7 +396,7 @@ onUnmounted(() => {
   min-width: 0;
   border-radius: 0.375rem;
   border: 1px solid rgb(200 155 60 / 0.5);
-  background: var(--color-background, #0a1428);
+  background: var(--color-background, var(--color-chrome));
   padding: 0 0.2rem;
   font-size: 0.75rem;
   font-weight: 600;

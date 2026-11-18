@@ -9,7 +9,12 @@
       v-if="currentNavGroupTabs.length > 1"
       class="statistics-tabs-bar flex w-full min-w-0 flex-shrink-0 justify-center border-b border-[#0a323c] px-4 py-3"
     >
-      <div ref="tabsNavEl" role="tablist" :aria-label="currentNavGroupLabel" class="stats-subtabs">
+      <div
+        ref="tabsNavEl"
+        role="tablist"
+        :aria-label="currentNavGroupLabel"
+        class="stats-subtabs subnav"
+      >
         <button
           v-for="tab in currentNavGroupTabs"
           :id="`statistics-tab-${tab.id}`"
@@ -19,7 +24,7 @@
           :data-tab-id="tab.id"
           :aria-selected="displayedActiveTab === tab.id"
           :tabindex="displayedActiveTab === tab.id ? 0 : -1"
-          :class="['stats-subtab', displayedActiveTab === tab.id ? 'is-active' : '']"
+          :class="['subnav-link', displayedActiveTab === tab.id ? 'is-active' : '']"
           @click="activeTab = tab.id"
           @keydown="onStatisticsTabsKeydown($event, tab.id)"
         >

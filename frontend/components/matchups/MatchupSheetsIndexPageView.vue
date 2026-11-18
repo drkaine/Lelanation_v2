@@ -3,13 +3,13 @@
     <div class="w-full px-0">
       <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
         <div class="scrollable-tabs-scroll-wrap min-w-0 max-w-full">
-          <div class="matchup-sheets-tabs scrollable-tabs-nav">
-            <button type="button" class="matchup-sheets-tab-button" @click="goToCreateGuide">
+          <nav class="subnav scrollable-tabs-nav">
+            <button type="button" class="subnav-link" @click="goToCreateGuide">
               {{ t('matchupGuidePage.createGuide') }}
             </button>
             <button
               type="button"
-              class="matchup-sheets-tab-button"
+              class="subnav-link"
               :class="{ 'is-active': activeTab === 'my-guides' }"
               @click="setTab('my-guides')"
             >
@@ -18,13 +18,13 @@
             <button
               v-if="favoriteGuides.length > 0"
               type="button"
-              class="matchup-sheets-tab-button"
+              class="subnav-link"
               :class="{ 'is-active': activeTab === 'favoris' }"
               @click="setTab('favoris')"
             >
               {{ t('buildsPage.myFavorites') }}
             </button>
-          </div>
+          </nav>
         </div>
       </div>
 
@@ -125,58 +125,5 @@ const {
   to {
     opacity: 1;
   }
-}
-
-.matchup-sheets-tabs {
-  display: inline-flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  justify-content: center;
-  gap: 0.25rem;
-  border: 1px solid rgb(var(--rgb-accent) / 0.2);
-  border-radius: 9999px;
-  background: rgb(var(--rgb-background) / 0.22);
-  padding: 0.2rem;
-  max-width: 100%;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-
-.matchup-sheets-tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.matchup-sheets-tab-button {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  scroll-snap-align: start;
-  white-space: nowrap;
-  border: none;
-  border-radius: 9999px;
-  background: transparent;
-  min-height: 36px;
-  padding: 0.45rem 0.75rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  line-height: 1.1;
-  color: rgb(var(--rgb-text) / 0.75);
-  cursor: pointer;
-  transition:
-    background-color 0.2s ease,
-    color 0.2s ease;
-}
-
-.matchup-sheets-tab-button.is-active {
-  background: rgb(var(--rgb-accent) / 0.18);
-  color: rgb(var(--rgb-text-accent));
-}
-
-.matchup-sheets-tab-button:hover {
-  color: rgb(var(--rgb-text));
 }
 </style>

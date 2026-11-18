@@ -916,7 +916,7 @@ const socialLinks = [
   min-width: 0;
   border-radius: 0.5rem;
   border: 1px solid rgb(200 155 60 / 0.45);
-  background: rgb(10 20 40 / 0.85);
+  background: rgb(var(--rgb-chrome) / 0.85);
   padding: 0.65rem 0.9rem;
   color: #f0e6d2;
 }
@@ -962,7 +962,7 @@ const socialLinks = [
 .hg-pillar {
   border-top: 3px solid var(--c);
   border-radius: 0.5rem;
-  background: rgb(10 20 40 / 0.6);
+  background: rgb(var(--rgb-chrome) / 0.6);
   padding: 1rem;
 }
 .hg-pillar-step {

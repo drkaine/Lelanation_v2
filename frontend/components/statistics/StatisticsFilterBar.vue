@@ -172,7 +172,7 @@ const divisionText = computed(() => {
   display: inline-flex;
   gap: 2px;
   padding: 3px;
-  background: #0a1428;
+  background: var(--color-chrome);
   border: 1px solid #0a323c;
   border-radius: 8px;
 }
@@ -205,7 +205,7 @@ const divisionText = computed(() => {
   padding: 0 12px;
   border: 1px solid #785a28;
   border-radius: 8px;
-  background: #0a1428;
+  background: var(--color-chrome);
   color: #f0e6d2;
   font-size: 14px;
 }
@@ -223,7 +223,7 @@ const divisionText = computed(() => {
   max-height: 360px;
   overflow-y: auto;
   padding: 6px;
-  background: #0a1428;
+  background: var(--color-chrome);
   border: 1px solid #463714;
   border-radius: 8px;
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.5);

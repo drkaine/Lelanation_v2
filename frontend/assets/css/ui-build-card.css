@@ -8,7 +8,7 @@
     border: 2px solid transparent;
     border-radius: 6px;
     background-image:
-      linear-gradient(var(--color-blue-500), var(--color-blue-500)),
+      linear-gradient(var(--color-chrome), var(--color-chrome)),
       var(--card-border-gradient-strong);
     background-origin: border-box;
     background-clip: padding-box, border-box;
@@ -22,7 +22,7 @@
     border: 2px solid transparent;
     border-radius: 0.5rem;
     background-image:
-      linear-gradient(var(--color-blue-500), var(--color-blue-500)),
+      linear-gradient(var(--color-chrome), var(--color-chrome)),
       var(--card-border-gradient-strong);
     background-origin: border-box;
     background-clip: padding-box, border-box;

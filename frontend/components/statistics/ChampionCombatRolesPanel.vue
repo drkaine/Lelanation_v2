@@ -94,7 +94,7 @@ const f = formatCombatNumber
   padding: 14px 16px;
   border: 1px solid #463714;
   border-radius: 10px;
-  background: #0a1428;
+  background: var(--color-chrome);
 }
 .cr-kpi-label {
   font-size: 12px;
@@ -112,7 +112,7 @@ const f = formatCombatNumber
   overflow-x: auto;
   border: 1px solid #463714;
   border-radius: 10px;
-  background: #0a1428;
+  background: var(--color-chrome);
 }
 .cr-table {
   width: 100%;

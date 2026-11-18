@@ -211,7 +211,7 @@ function num(v: number): string {
   padding: 18px 20px;
   border: 1px solid #463714;
   border-radius: 10px;
-  background: #0a1428;
+  background: var(--color-chrome);
   color: #f0e6d2;
 }
 .jp-head {
@@ -399,14 +399,14 @@ b.is-down {
   stroke-dasharray: 2 1.2;
 }
 .jp-pt {
-  stroke: #0a1428;
+  stroke: var(--color-chrome);
   stroke-width: 0.6;
 }
 .jp-num {
   font-size: 4px;
   font-weight: 700;
   text-anchor: middle;
-  fill: #0a1428;
+  fill: var(--color-chrome);
 }
 .jp-map figcaption,
 .jp-empty {

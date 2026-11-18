@@ -181,7 +181,6 @@ type RawObjectiveAgg = {
   sum_solo_baron_kills: bigint
   sum_quick_solo_kills: bigint
   sum_solo_kills: bigint
-  sum_solo_turrets_lategame: bigint
   team_first_baron_win: bigint
   team_first_baron_loss: bigint
   team_first_dragon_win: bigint
@@ -464,7 +463,6 @@ export async function getChampionObjectivesSummary(options: {
         COALESCE(SUM(cs.sum_solo_baron_kills), 0)::bigint AS sum_solo_baron_kills,
         COALESCE(SUM(cs.sum_quick_solo_kills), 0)::bigint AS sum_quick_solo_kills,
         COALESCE(SUM(cs.sum_solo_kills), 0)::bigint AS sum_solo_kills,
-        COALESCE(SUM(cs.sum_solo_turrets_lategame), 0)::bigint AS sum_solo_turrets_lategame,
         COALESCE(SUM(cs.count_team_first_baron_win), 0)::bigint AS team_first_baron_win,
         COALESCE(SUM(cs.count_team_first_baron_loss), 0)::bigint AS team_first_baron_loss,
         COALESCE(SUM(cs.count_team_first_dragon_win), 0)::bigint AS team_first_dragon_win,
@@ -503,7 +501,6 @@ export async function getChampionObjectivesSummary(options: {
           stealWithSmitePct: 0,
           stealWithoutSmitePct: 0,
           soloBaronPct: 0,
-          soloTowerPct: 0,
           soloKillPct: 0,
         },
         structureCard: {

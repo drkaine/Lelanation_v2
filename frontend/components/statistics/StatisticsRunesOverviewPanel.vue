@@ -1265,7 +1265,7 @@ function runeSetLayout(
   --rb-c: #0ac8b9;
   border: 1px solid #463714;
   border-radius: 0.5rem;
-  background: #0a1428;
+  background: var(--color-chrome);
   padding: 1.25rem 1.15rem 0.5rem;
 }
 .rb-col.is-secondary {
@@ -1392,7 +1392,7 @@ function runeSetLayout(
   flex-wrap: wrap;
   gap: 2px;
   padding: 3px;
-  background: #0a1428;
+  background: var(--color-chrome);
   border: 1px solid #0a323c;
   border-radius: 8px;
 }
@@ -1413,7 +1413,7 @@ function runeSetLayout(
   flex-direction: column;
   gap: 18px;
   padding: 20px 24px;
-  background: #0a1428;
+  background: var(--color-chrome);
   border: 1px solid #463714;
   border-radius: 12px;
 }
@@ -1537,7 +1537,7 @@ function runeSetLayout(
     padding: 0 12px;
     border: 1px solid #785a28;
     border-radius: 8px;
-    background: #0a1428;
+    background: var(--color-chrome);
     color: #f0e6d2;
     font-weight: 600;
     font-size: 14px;

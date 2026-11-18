@@ -7,6 +7,7 @@ describe('buildParticipationCard', () => {
     sum_epic_monster_stolen_without_smite: 9n,
     sum_objectives_stolen: 30n,
     sum_solo_baron_kills: 2n,
+    // Champ retiré par Riot (patch 16.23) : ignoré.
     sum_solo_turrets_lategame: 50n,
     sum_solo_kills: 40n,
     // Compteurs timeline jamais remplis : ne doivent plus rien produire.
@@ -20,7 +21,6 @@ describe('buildParticipationCard', () => {
       stealWithSmitePct: 0.3,
       stealWithoutSmitePct: 0.9,
       soloBaronPct: 0.2,
-      soloTowerPct: 5,
       soloKillPct: 4,
     })
   })
@@ -37,7 +37,6 @@ describe('buildParticipationCard', () => {
       stealWithSmitePct: 0,
       stealWithoutSmitePct: 0,
       soloBaronPct: 0,
-      soloTowerPct: 0,
       soloKillPct: 0,
     })
   })

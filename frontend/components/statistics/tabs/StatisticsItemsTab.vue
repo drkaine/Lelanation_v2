@@ -681,7 +681,7 @@ function deltaClass(value: number | null | undefined): string {
 }
 .it-dtable-wrap {
   overflow-x: auto;
-  background: #0a1428;
+  background: var(--color-chrome);
   border: 1px solid #463714;
   border-radius: 12px;
 }

@@ -78,7 +78,7 @@ body {
   --color-accent-dark: var(--color-gold-500);
 
   --color-background: var(--color-blue-500);
-  --color-surface: var(--color-grey-400);
+  --color-surface: var(--color-chrome);
   
   /* Semantic RGB mappings for Tailwind */
   --rgb-primary: var(--rgb-blue-400);
@@ -90,7 +90,7 @@ body {
   --rgb-accent-dark: var(--rgb-gold-500);
 
   --rgb-background: var(--rgb-blue-500);
-  --rgb-surface: var(--rgb-grey-400);
+  --rgb-surface: var(--rgb-chrome);
 
   /* Gradient Variables */
   --gradient-start: var(--color-blue-600);
@@ -287,14 +287,14 @@ body {
    * - border: default interactive outline (gold-tinted)
    */
   --color-chrome: #08101f;
-  --color-panel: var(--color-blue-600);
+  --color-panel: var(--color-chrome);
   --color-panel-elevated: var(--color-grey-400);
   --color-border: var(--color-gold-300);
   --color-border-subtle: var(--color-grey-200);
   --color-muted: var(--color-grey-50);
 
   --rgb-chrome: 8 16 31;
-  --rgb-panel: var(--rgb-blue-600);
+  --rgb-panel: var(--rgb-chrome);
   --rgb-panel-elevated: var(--rgb-grey-400);
   --rgb-border: var(--rgb-gold-300);
   --rgb-border-subtle: var(--rgb-grey-200);

@@ -381,7 +381,7 @@ const pingsPageSize = computed({
   padding: 3px;
   border: 1px solid #0a323c;
   border-radius: 8px;
-  background: #0a1428;
+  background: var(--color-chrome);
 }
 .pi-mode-btn {
   height: 34px;
@@ -411,7 +411,7 @@ const pingsPageSize = computed({
 }
 .pi-dtable-wrap {
   overflow-x: auto;
-  background: #0a1428;
+  background: var(--color-chrome);
   border: 1px solid #463714;
   border-radius: 12px;
 }
@@ -538,7 +538,7 @@ const pingsPageSize = computed({
   flex-direction: column;
   gap: 12px;
   padding: 20px;
-  background: #0a1428;
+  background: var(--color-chrome);
   border: 1px solid #463714;
   border-radius: 12px;
 }

@@ -81,7 +81,7 @@ function metricLabel(key: PingMetricKey): string {
   padding: 20px;
   border: 1px solid #463714;
   border-radius: 10px;
-  background: #0a1428;
+  background: var(--color-chrome);
 }
 .pb-head {
   display: flex;

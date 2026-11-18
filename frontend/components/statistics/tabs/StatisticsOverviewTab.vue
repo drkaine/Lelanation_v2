@@ -689,7 +689,7 @@ function bansByOutcomeEntries(
   gap: 2px;
   padding: 2px;
   border-radius: 8px;
-  background: rgb(10 20 40 / 0.6);
+  background: rgb(var(--rgb-chrome) / 0.6);
 }
 .ov-trends-tab {
   height: 32px;

@@ -4271,7 +4271,7 @@ useJsonLdHead(
 .champion-ov-card {
   margin: 12px;
   padding: 20px 24px;
-  background: #0a1428;
+  background: var(--color-chrome);
   border: 1px solid #463714;
   border-radius: 12px;
 }
@@ -4461,7 +4461,7 @@ useJsonLdHead(
 }
 .champion-hero-kpi {
   padding: 14px 16px;
-  background: #0a1428;
+  background: var(--color-chrome);
   border: 1px solid #463714;
   border-radius: 12px;
   display: flex;
@@ -4704,7 +4704,7 @@ useJsonLdHead(
   padding: 12px 18px;
   border: 1px solid #463714;
   border-radius: 10px;
-  background: #0a1428;
+  background: var(--color-chrome);
   font-size: 12px;
   color: #a09b8c;
 }
@@ -5066,7 +5066,7 @@ useJsonLdHead(
   overflow-x: auto;
   border: 1px solid #463714;
   border-radius: 0.5rem;
-  background: #0a1428;
+  background: var(--color-chrome);
   padding: 1rem 1.25rem;
 }
 .sk-grid {

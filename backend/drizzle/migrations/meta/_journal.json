@@ -337,6 +337,13 @@
       "when": 1751376000000,
       "tag": "0047_users_roles_invitations",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1751462400000,
+      "tag": "0048_drop_solo_turrets_lategame",
+      "breakpoints": true
     }
   ]
 }

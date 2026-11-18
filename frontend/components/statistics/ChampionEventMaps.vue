@@ -247,7 +247,7 @@ function num(v: number): string {
   padding: 18px 20px;
   border: 1px solid #463714;
   border-radius: 10px;
-  background: #0a1428;
+  background: var(--color-chrome);
   color: #f0e6d2;
 }
 .em-head {
@@ -322,7 +322,7 @@ function num(v: number): string {
 }
 .em-dot {
   opacity: 0.75;
-  stroke: #0a1428;
+  stroke: var(--color-chrome);
   stroke-width: 0.15;
 }
 .em-modal-filters {

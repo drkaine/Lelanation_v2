@@ -137,7 +137,7 @@ function onDurationInput(event: Event) {
   padding: 0 0.65rem;
   border-radius: 0.5rem;
   border: 1px solid rgb(200 155 60 / 0.35);
-  background: var(--color-background, #0a1428);
+  background: var(--color-background, var(--color-chrome));
 }
 
 .theorycraft-rune-panel__duration-input {
@@ -145,7 +145,7 @@ function onDurationInput(event: Event) {
   height: 1.4em;
   border-radius: 0.2em;
   border: 1px solid rgb(200 155 60 / 0.45);
-  background: rgb(10 20 40 / 0.95);
+  background: rgb(var(--rgb-chrome) / 0.95);
   padding: 0 0.35em;
   font-size: inherit;
   font-weight: 600;
@@ -186,6 +186,6 @@ function onDurationInput(event: Event) {
   padding: 0 0.5rem;
   border-radius: 0.5rem;
   border: 1px solid rgb(200 155 60 / 0.35);
-  background: var(--color-background, #0a1428);
+  background: var(--color-background, var(--color-chrome));
 }
 </style>

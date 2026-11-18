@@ -40,10 +40,10 @@
           </NuxtLink>
 
           <div class="build-detail-toolbar__tabs scrollable-tabs-scroll-wrap min-w-0 flex-1">
-            <div class="detail-page-tabs streamer-tabs scrollable-tabs-nav">
+            <nav class="detail-page-tabs subnav scrollable-tabs-nav">
               <button
                 type="button"
-                class="streamer-tab-button"
+                class="subnav-link"
                 :class="{ 'is-active': activeDetailTab === 'statistics' }"
                 @click="setDetailTab('statistics')"
               >
@@ -52,7 +52,7 @@
               <button
                 v-if="hasBuildNotes"
                 type="button"
-                class="streamer-tab-button"
+                class="subnav-link"
                 :class="{ 'is-active': activeDetailTab === 'notes' }"
                 @click="setDetailTab('notes')"
               >
@@ -61,7 +61,7 @@
               <button
                 v-if="linkedGuide"
                 type="button"
-                class="streamer-tab-button"
+                class="subnav-link"
                 :class="{ 'is-active': activeDetailTab === 'guide' }"
                 @click="setDetailTab('guide')"
               >
@@ -69,13 +69,13 @@
               </button>
               <button
                 type="button"
-                class="streamer-tab-button"
+                class="subnav-link"
                 :class="{ 'is-active': activeDetailTab === 'theorycraft' }"
                 @click="setDetailTab('theorycraft')"
               >
                 {{ t('nav.theorycraft') }}
               </button>
-            </div>
+            </nav>
           </div>
         </div>
 
@@ -1031,55 +1031,6 @@ watch(
   border-color: rgb(14 165 233 / 1);
   background: rgb(14 165 233 / 0.42);
   color: rgb(224 242 254);
-}
-
-.detail-page-tabs.streamer-tabs {
-  display: inline-flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 0.25rem;
-  border: 1px solid rgb(var(--rgb-accent) / 0.2);
-  border-radius: 9999px;
-  background: rgb(var(--rgb-background) / 0.22);
-  padding: 0.2rem;
-  max-width: 100%;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-
-.detail-page-tabs.streamer-tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.detail-page-tabs .streamer-tab-button {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  scroll-snap-align: start;
-  white-space: nowrap;
-  border: none;
-  border-radius: 9999px;
-  background: transparent;
-  min-height: 36px;
-  padding: 0.45rem 0.75rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  line-height: 1.1;
-  color: rgb(var(--rgb-text) / 0.75);
-  cursor: pointer;
-  transition:
-    background-color 0.2s ease,
-    color 0.2s ease;
-}
-
-.detail-page-tabs .streamer-tab-button.is-active {
-  background: rgb(var(--rgb-accent) / 0.2);
-  color: var(--color-accent);
 }
 
 .build-detail-card-bar__icon-button {

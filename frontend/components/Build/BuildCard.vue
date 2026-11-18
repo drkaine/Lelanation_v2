@@ -4657,7 +4657,7 @@ defineExpose({
   z-index: 0;
   width: 300px;
   height: 450px;
-  background-color: var(--color-blue-500, #0a1428);
+  background-color: var(--color-blue-500, var(--color-chrome));
   background-image: var(--gradient-primary-mirror);
   border: 2px solid transparent;
   border-image: var(--card-border-gradient-strong) 1;
@@ -4710,7 +4710,7 @@ defineExpose({
   flex-direction: column;
   gap: 12px;
   overflow: auto;
-  background-color: var(--color-blue-500, #0a1428);
+  background-color: var(--color-blue-500, var(--color-chrome));
   background-image: var(--gradient-primary-mirror);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
@@ -5188,7 +5188,7 @@ defineExpose({
   padding: 0 3px;
   border-radius: 9999px;
   background: var(--color-gold-300);
-  color: var(--color-background, #0a1428);
+  color: var(--color-background, var(--color-chrome));
   font-size: 8px;
   font-weight: 700;
   line-height: 12px;

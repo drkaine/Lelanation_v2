@@ -211,7 +211,7 @@ function percent(ratio: number): string {
   overflow: hidden;
   border: 1px solid #463714;
   border-radius: 0.75rem;
-  background: #0a1428;
+  background: var(--color-chrome);
   grid-template-columns: 4.5rem 1fr;
 }
 
@@ -381,7 +381,7 @@ function percent(ratio: number): string {
 .stg-how {
   border: 1px solid #463714;
   border-radius: 0.75rem;
-  background: #0a1428;
+  background: var(--color-chrome);
 }
 .stg-how {
   padding: 1rem 1.25rem;

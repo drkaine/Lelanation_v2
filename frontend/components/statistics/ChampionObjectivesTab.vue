@@ -584,7 +584,6 @@ export type ChampionObjectivesParticipationCard = {
   stealWithSmitePct: number
   stealWithoutSmitePct: number
   soloBaronPct: number
-  soloTowerPct: number
   soloKillPct: number
 }
 
@@ -781,11 +780,6 @@ const participationMetrics = computed(() => {
       value: c.soloBaronPct,
     },
     {
-      key: 'soloTower',
-      label: t('statisticsPage.championObjectivesSoloTowerPct'),
-      value: c.soloTowerPct,
-    },
-    {
       key: 'soloKill',
       label: t('statisticsPage.championObjectivesSoloKillPct'),
       value: c.soloKillPct,
@@ -958,7 +952,7 @@ function onDrakeIconError(e: Event, key: string): void {
 .cobj-gap__list {
   border: 1px solid #463714;
   border-radius: 12px;
-  background: #0a1428;
+  background: var(--color-chrome);
 }
 .cobj-gap__row {
   display: grid;

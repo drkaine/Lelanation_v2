@@ -2801,7 +2801,7 @@ function drakeDropdownCountLabel(count: number): string {
 }
 .obj-gap__mode.is-active {
   background: var(--color-gold-300, #c89b3c);
-  color: var(--color-blue-600, #0a1428);
+  color: var(--color-blue-600, var(--color-chrome));
 }
 .obj-gap__legend {
   display: flex;

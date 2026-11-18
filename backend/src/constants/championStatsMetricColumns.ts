@@ -168,7 +168,6 @@ export const CHAMPION_STATS_METRIC_COLUMNS = [
   "sum_skillshots_hit",
   "sum_solo_baron_kills",
   "sum_solo_kills",
-  "sum_solo_turrets_lategame",
   "sum_stealth_wards_placed",
   "sum_survived_single_digit_hp_count",
   "sum_survived_three_immobilizes_in_fight",

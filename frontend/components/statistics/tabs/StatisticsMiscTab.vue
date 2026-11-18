@@ -320,7 +320,7 @@ function rowKey(row: ChampionMiscStatRow): string {
   padding: 12px 14px;
   border: 1px solid #463714;
   border-radius: 12px;
-  background: #0a1428;
+  background: var(--color-chrome);
   color: #f0e6d2;
 }
 .misc-mcard-top {
@@ -379,7 +379,7 @@ function rowKey(row: ChampionMiscStatRow): string {
   padding: 14px 20px;
   border: 1px solid #463714;
   border-radius: 12px;
-  background: #0a1428;
+  background: var(--color-chrome);
 }
 .misc-level-label {
   font-size: 14px;
@@ -409,7 +409,7 @@ function rowKey(row: ChampionMiscStatRow): string {
 .misc-card {
   border: 1px solid #463714;
   border-radius: 12px;
-  background: #0a1428;
+  background: var(--color-chrome);
   overflow: hidden;
 }
 .misc-table {

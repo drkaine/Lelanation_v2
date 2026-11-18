@@ -3,17 +3,17 @@
     <div class="mx-auto max-w-8xl px-0">
       <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
         <div class="scrollable-tabs-scroll-wrap min-w-0 max-w-full">
-          <div class="streamer-tabs scrollable-tabs-nav">
+          <nav class="subnav scrollable-tabs-nav">
             <button
               type="button"
-              class="streamer-tab-button"
+              class="subnav-link"
               @click="emit('create-build')"
             >
               {{ t("buildsPage.createBuild") }}
             </button>
             <button
               type="button"
-              class="streamer-tab-button"
+              class="subnav-link"
               :class="{ 'is-active': activeTab === 'discover' }"
               @click="emit('update:activeTab', 'discover')"
             >
@@ -22,7 +22,7 @@
             <button
               v-if="userBuilds.length > 0"
               type="button"
-              class="streamer-tab-button"
+              class="subnav-link"
               :class="{ 'is-active': activeTab === 'my-builds' }"
               @click="emit('update:activeTab', 'my-builds')"
             >
@@ -31,7 +31,7 @@
             <button
               v-if="favoriteBuilds.length > 0"
               type="button"
-              class="streamer-tab-button"
+              class="subnav-link"
               :class="{ 'is-active': activeTab === 'favoris' }"
               @click="emit('update:activeTab', 'favoris')"
             >
@@ -40,13 +40,13 @@
             <button
               v-if="showTeamTab"
               type="button"
-              class="streamer-tab-button"
+              class="subnav-link"
               :class="{ 'is-active': activeTab === 'team' }"
               @click="emit('update:activeTab', 'team')"
             >
               {{ t("buildsPage.teamBuilds") }}
             </button>
-          </div>
+          </nav>
         </div>
       </div>
 
@@ -265,56 +265,6 @@ const emit = defineEmits<{
 
 .builds-page {
   padding-top: 10px;
-}
-
-.streamer-tabs {
-  display: inline-flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  justify-content: center;
-  gap: 0.25rem;
-  border: 1px solid rgb(var(--rgb-accent) / 0.2);
-  border-radius: 9999px;
-  background: rgb(var(--rgb-background) / 0.22);
-  padding: 0.2rem;
-  max-width: 100%;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-
-.streamer-tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.streamer-tab-button {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  scroll-snap-align: start;
-  white-space: nowrap;
-  border: none;
-  border-radius: 9999px;
-  background: transparent;
-  min-height: 36px;
-  padding: 0.45rem 0.75rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  line-height: 1.1;
-  color: rgb(var(--rgb-text) / 0.75);
-  text-decoration: none;
-  cursor: pointer;
-  transition:
-    background-color 0.2s ease,
-    color 0.2s ease;
-}
-
-.streamer-tab-button.is-active {
-  background: rgb(var(--rgb-accent) / 0.2);
-  color: var(--color-accent);
 }
 
 .filter-like-select {

@@ -14,6 +14,7 @@ const REMOVED_KEYS = [
   'earliestBaron',
   'earliestDragonTakedown',
   'shortestTimeToAceFromFirstTakedown',
+  'soloTurretsLategame',
 ]
 
 describe('participantChallengeFields', () => {
@@ -30,6 +31,7 @@ describe('participantChallengeFields', () => {
       'sum_earliest_baron',
       'sum_baron_buff_gold_advantage_over_threshold',
       'sum_shortest_time_to_ace_from_first_takedown',
+      'sum_solo_turrets_lategame',
     ]) expect(CHAMPION_STATS_METRIC_COLUMN_SET.has(col)).toBe(false)
   })
 

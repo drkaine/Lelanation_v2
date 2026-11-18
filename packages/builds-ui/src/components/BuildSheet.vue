@@ -225,7 +225,7 @@ const getBootBg = (item: { image: { full: string } }) =>
   position: relative;
   width: 300px;
   height: 450px;
-  background: linear-gradient(135deg, #0a1428 0%, #091428 45%, #0a323c 100%);
+  background: linear-gradient(135deg, var(--color-chrome) 0%, #091428 45%, #0a323c 100%);
   border: 2px solid #c89b3c;
   border-radius: 6px;
   padding: 10px;
@@ -340,7 +340,7 @@ const getBootBg = (item: { image: { full: string } }) =>
 }
 .bs-level-badge {
   position: absolute; top: -2px; left: -2px; display: flex; align-items: center; justify-content: center;
-  width: 16px; height: 16px; border-radius: 50%; background-color: #c89b3c; color: #0a1428;
+  width: 16px; height: 16px; border-radius: 50%; background-color: #c89b3c; color: var(--color-chrome);
   font-size: 9px; font-weight: bold; z-index: 1;
 }
 .bs-arrow-d { color: #c89b3c; font-size: 8px; font-weight: bold; margin-top: 1px; line-height: 1; }

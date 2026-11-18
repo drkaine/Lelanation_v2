@@ -205,7 +205,7 @@ function rankIcon(rank: string): string {
 
 <style scoped>
 .surr-card {
-  background: #0a1428;
+  background: var(--color-chrome);
   border: 1px solid #463714;
   border-radius: 12px;
   padding: 12px 16px;

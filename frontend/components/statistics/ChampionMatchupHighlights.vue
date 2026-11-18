@@ -114,7 +114,7 @@ function barWidth(wr: number): string {
   padding: 18px 24px;
   border: 1px solid #463714;
   border-radius: 10px;
-  background: #0a1428;
+  background: var(--color-chrome);
 }
 .mh-kpi {
   display: flex;
@@ -160,7 +160,7 @@ function barWidth(wr: number): string {
   padding: 18px 20px;
   border: 1px solid #463714;
   border-radius: 10px;
-  background: #0a1428;
+  background: var(--color-chrome);
   color: #f0e6d2;
 }
 .mh-label {

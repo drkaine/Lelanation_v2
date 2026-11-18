@@ -9,8 +9,6 @@ export type ParticipationCard = {
   stealWithoutSmitePct: number
   /** Barons tués seul (challenge `soloBaronKills`). */
   soloBaronPct: number
-  /** Tours détruites seul après 14 min (challenge `soloTurretsLategame`). */
-  soloTowerPct: number
   /** Kills en 1v1 (challenge `soloKills`). */
   soloKillPct: number
 }
@@ -36,7 +34,6 @@ export function buildParticipationCard(
     stealWithSmitePct: perGamePct(steals - noSmite, games),
     stealWithoutSmitePct: perGamePct(noSmite, games),
     soloBaronPct: perGamePct(n('sum_solo_baron_kills'), games),
-    soloTowerPct: perGamePct(n('sum_solo_turrets_lategame'), games),
     soloKillPct: perGamePct(n('sum_solo_kills'), games),
   }
 }

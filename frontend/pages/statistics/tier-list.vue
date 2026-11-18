@@ -8,12 +8,12 @@
     <div
       class="statistics-tabs-bar flex w-full min-w-0 flex-shrink-0 justify-center border-b border-[#0a323c] px-4 py-3"
     >
-      <div ref="tierListTabsNavEl" role="tablist" class="stats-subtabs">
+      <div ref="tierListTabsNavEl" role="tablist" class="stats-subtabs subnav">
         <button
           type="button"
           role="tab"
           :aria-selected="tierListViewModel === 'table'"
-          :class="['stats-subtab', tierListViewModel === 'table' ? 'is-active' : '']"
+          :class="['subnav-link', tierListViewModel === 'table' ? 'is-active' : '']"
           @click="setTierListMainView('table')"
         >
           {{ t('statisticsPage.tierListViewTable') }}
@@ -22,7 +22,7 @@
           type="button"
           role="tab"
           :aria-selected="activeTierListTab === 'chart'"
-          :class="['stats-subtab', activeTierListTab === 'chart' ? 'is-active' : '']"
+          :class="['subnav-link', activeTierListTab === 'chart' ? 'is-active' : '']"
           @click="setTierListMainView('chart')"
         >
           {{ t('statisticsPage.tierListViewChart') }}
@@ -31,7 +31,7 @@
           type="button"
           role="tab"
           :aria-selected="activeTierListTab === 'meta'"
-          :class="['stats-subtab', activeTierListTab === 'meta' ? 'is-active' : '']"
+          :class="['subnav-link', activeTierListTab === 'meta' ? 'is-active' : '']"
           @click="setTierListMainView('meta')"
         >
           {{ t('statisticsPage.tierListViewMeta') }}
@@ -40,7 +40,7 @@
           type="button"
           role="tab"
           :aria-selected="tierListViewModel === 'botlaneMatchups'"
-          :class="['stats-subtab', tierListViewModel === 'botlaneMatchups' ? 'is-active' : '']"
+          :class="['subnav-link', tierListViewModel === 'botlaneMatchups' ? 'is-active' : '']"
           @click="setTierListMainView('botlaneMatchups')"
         >
           {{ t('statisticsPage.tierListViewBotlaneMatchups') }}
@@ -49,7 +49,7 @@
           type="button"
           role="tab"
           :aria-selected="tierListViewModel === 'botlaneDuoRank'"
-          :class="['stats-subtab', tierListViewModel === 'botlaneDuoRank' ? 'is-active' : '']"
+          :class="['subnav-link', tierListViewModel === 'botlaneDuoRank' ? 'is-active' : '']"
           @click="setTierListMainView('botlaneDuoRank')"
         >
           {{ t('statisticsPage.tierListViewBotlaneDuoRank') }}

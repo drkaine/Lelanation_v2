@@ -177,7 +177,7 @@ function selectVariant(idx: number | null) {
 /* ── Back face ───────────────────────────────────────────────────────── */
 .flip-back {
   transform: rotateY(180deg);
-  background: linear-gradient(135deg, #0a1428 0%, #091428 45%, #0a323c 100%);
+  background: linear-gradient(135deg, var(--color-chrome) 0%, #091428 45%, #0a323c 100%);
   border: 2px solid #c89b3c;
   border-radius: 6px;
   display: flex;
@@ -266,7 +266,7 @@ function selectVariant(idx: number | null) {
   top: -5px;
   right: -5px;
   background: #c89b3c;
-  color: #0a1428;
+  color: var(--color-chrome);
   font-size: 9px;
   font-weight: 700;
   width: 13px;

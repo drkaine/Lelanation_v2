@@ -649,7 +649,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
 .ct-card {
   border: 1px solid #463714;
   border-radius: 12px;
-  background: #0a1428;
+  background: var(--color-chrome);
 }
 .ct-card .champion-global-table {
   font-family: Inter, system-ui, sans-serif;
@@ -658,7 +658,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
 }
 .ct-head {
   border-color: #463714;
-  background: #0a1428;
+  background: var(--color-chrome);
   color: #a09b8c;
   font-size: 12px;
   font-weight: 600;
@@ -678,7 +678,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
 }
 .ct-dtable-wrap {
   overflow-x: auto;
-  background: #0a1428;
+  background: var(--color-chrome);
   border: 1px solid #463714;
   border-radius: 12px;
 }
@@ -744,7 +744,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
   position: sticky;
   left: 0;
   z-index: 1;
-  background: #0a1428;
+  background: var(--color-chrome);
   text-align: left;
   padding: 8px 20px !important;
   font-weight: 400;
@@ -880,7 +880,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
   padding: 0 12px 0 36px;
   border: 1px solid #785a28;
   border-radius: 8px;
-  background: #0a1428;
+  background: var(--color-chrome);
   color: #f0e6d2;
   font-size: 14px;
 }
@@ -893,7 +893,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
   padding: 3px;
   border: 1px solid #0a323c;
   border-radius: 8px;
-  background: #0a1428;
+  background: var(--color-chrome);
   max-width: 100%;
   overflow-x: auto;
 }
@@ -953,7 +953,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
   padding: 0 10px;
   border: 1px solid #785a28;
   border-radius: 8px;
-  background: #0a1428;
+  background: var(--color-chrome);
   color: #f0e6d2;
   font-size: 13px;
 }
@@ -974,7 +974,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
   padding: 10px 12px;
   border: 1px solid #463714;
   border-radius: 12px;
-  background: #0a1428;
+  background: var(--color-chrome);
   color: #f0e6d2;
 }
 .ct-mcard-img {

@@ -131,7 +131,7 @@ function setFullStack() {
   height: 1.2em;
   border-radius: 0.2em;
   border: 1px solid rgb(200 155 60 / 0.45);
-  background: rgb(10 20 40 / 0.95);
+  background: rgb(var(--rgb-chrome) / 0.95);
   padding: 0 0.35em;
   font-size: inherit;
   font-weight: 600;

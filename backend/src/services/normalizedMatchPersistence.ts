@@ -128,7 +128,6 @@ export const CHALLENGE_COLUMN_MAP: Record<string, string> = {
   skillshotsHit: "skillshots_hit",
   soloBaronKills: "solo_baron_kills",
   soloKills: "solo_kills",
-  soloTurretsLategame: "solo_turrets_lategame",
   stealthWardsPlaced: "stealth_wards_placed",
   survivedSingleDigitHpCount: "survived_single_digit_hp_count",
   survivedThreeImmobilizesInFight: "survived_three_immobilizes_in_fight",

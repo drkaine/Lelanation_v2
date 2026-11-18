@@ -416,7 +416,7 @@ function patchNotesMessage(message: string | undefined): string {
   padding: 3px;
   border: 1px solid #0a323c;
   border-radius: 8px;
-  background: #0a1428;
+  background: var(--color-chrome);
 }
 .pn-seg-btn {
   height: 34px;
@@ -474,7 +474,7 @@ function patchNotesMessage(message: string | undefined): string {
 }
 .pn-dtable-wrap {
   overflow-x: auto;
-  background: #0a1428;
+  background: var(--color-chrome);
   border: 1px solid #463714;
   border-radius: 12px;
 }
@@ -629,7 +629,7 @@ function patchNotesMessage(message: string | undefined): string {
   gap: 6px 10px;
   align-items: center;
   padding: 10px 12px;
-  background: #0a1428;
+  background: var(--color-chrome);
   border: 1px solid #463714;
   border-radius: 10px;
 }

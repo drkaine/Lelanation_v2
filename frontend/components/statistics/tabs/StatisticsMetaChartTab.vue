@@ -391,7 +391,7 @@ async function copyMetaChartImage() {
   max-width: 320px;
   border: 1px solid rgb(200 155 60 / 0.45);
   border-radius: 6px;
-  background: rgb(10 20 40 / 0.85);
+  background: rgb(var(--rgb-chrome) / 0.85);
   padding: 6px 10px;
   color: #f0e6d2;
 }
@@ -425,7 +425,7 @@ async function copyMetaChartImage() {
   gap: 12px;
   border: 1px solid rgb(200 170 110 / 0.5);
   border-radius: 8px;
-  background: rgb(10 20 40 / 0.7);
+  background: rgb(var(--rgb-chrome) / 0.7);
   padding: 14px;
 }
 .meta-detail-stats {

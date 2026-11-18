@@ -701,7 +701,7 @@ const bestSides = computed(() => [
   gap: 16px;
 }
 .team-card {
-  background: #0a1428;
+  background: var(--color-chrome);
   border: 1px solid #463714;
   border-radius: 12px;
   padding: 16px;

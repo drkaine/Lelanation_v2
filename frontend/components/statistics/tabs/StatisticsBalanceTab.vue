@@ -544,7 +544,7 @@ function globalTooltip(row: BalanceRow): string {
   padding: 10px 12px;
   border: 1px solid #463714;
   border-radius: 12px;
-  background: #0a1428;
+  background: var(--color-chrome);
   color: #f0e6d2;
 }
 .ba-mcard-row {
@@ -651,7 +651,7 @@ function globalTooltip(row: BalanceRow): string {
   color: #a09b8c;
 }
 .ba-card {
-  background: #0a1428;
+  background: var(--color-chrome);
   border: 1px solid #463714;
   border-radius: 12px;
   overflow: hidden;

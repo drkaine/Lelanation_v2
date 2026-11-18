@@ -125,7 +125,7 @@ function formatMetric(metric: ChampionMiscMetric): string {
   padding: 20px;
   border: 1px solid #463714;
   border-radius: 10px;
-  background: #0a1428;
+  background: var(--color-chrome);
 }
 .hd-card h3 {
   margin: 0 0 12px;

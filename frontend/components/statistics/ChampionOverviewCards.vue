@@ -242,7 +242,7 @@ function share(part: number, total: number): string {
   padding: 22px 24px;
   border: 1px solid #463714;
   border-radius: 10px;
-  background: #0a1428;
+  background: var(--color-chrome);
   color: #f0e6d2;
 }
 .ov-card.is-empty {
