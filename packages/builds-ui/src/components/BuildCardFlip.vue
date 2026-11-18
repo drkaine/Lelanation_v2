@@ -241,7 +241,7 @@ function selectVariant(idx: number | null) {
   height: 24px;
   border-radius: 50%;
   border: 1px solid rgba(200, 155, 60, 0.6);
-  background: rgba(10, 20, 40, 0.85);
+  background: rgb(var(--rgb-chrome) / 0.85);
   color: #c89b3c;
   display: flex;
   align-items: center;

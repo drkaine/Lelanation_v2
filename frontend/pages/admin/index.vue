@@ -61,7 +61,7 @@
               'shrink-0 rounded px-3 py-2 text-sm font-medium transition-colors sm:px-4',
               activeTab === tab.id
                 ? 'bg-accent text-background'
-                : 'bg-surface/50 text-text/80 hover:bg-primary/20 hover:text-text',
+                : 'bg-chrome text-text/80 hover:bg-primary/20 hover:text-text',
             ]"
             @click="activeTab = tab.id"
           >

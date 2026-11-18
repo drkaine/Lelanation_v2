@@ -42,7 +42,7 @@ const emit = defineEmits<{
   padding: 0;
   border: 1px solid rgb(var(--rgb-accent) / 0.25);
   border-radius: 0.5rem;
-  background: rgb(var(--rgb-background) / 0.35);
+  background: var(--color-chrome);
   color: rgb(var(--rgb-text) / 0.85);
   cursor: pointer;
   transition:

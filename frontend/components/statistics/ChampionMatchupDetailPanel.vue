@@ -149,7 +149,7 @@ function comparePct(you: number, opp: number): { youWidth: number; oppWidth: num
               'rounded-lg border px-2.5 py-1.5 text-xs font-medium transition',
               tab === tabOption[0]
                 ? `border-primary/50 bg-gradient-to-br ${tabOption[2]} text-text shadow-sm`
-                : 'border-primary/15 bg-black/20 text-text/60 hover:border-primary/30 hover:text-text/85',
+                : 'border-primary/15 bg-chrome text-text/60 hover:border-primary/30 hover:text-text/85',
             ]"
             @click.stop="tab = tabOption[0]"
           >

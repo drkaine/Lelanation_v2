@@ -57,7 +57,7 @@
             :class="
               panelTab === 'objectives'
                 ? 'bg-accent text-background'
-                : 'bg-black/20 text-text/80 hover:bg-white/10'
+                : 'bg-chrome text-text/80 hover:bg-white/10'
             "
             @click="panelTab = 'objectives'"
           >
@@ -69,7 +69,7 @@
             :class="
               panelTab === 'drakeTypes'
                 ? 'bg-accent text-background'
-                : 'bg-black/20 text-text/80 hover:bg-white/10'
+                : 'bg-chrome text-text/80 hover:bg-white/10'
             "
             @click="panelTab = 'drakeTypes'"
           >
@@ -81,7 +81,7 @@
             :class="
               panelTab === 'drakeSouls'
                 ? 'bg-accent text-background'
-                : 'bg-black/20 text-text/80 hover:bg-white/10'
+                : 'bg-chrome text-text/80 hover:bg-white/10'
             "
             @click="panelTab = 'drakeSouls'"
           >
@@ -94,7 +94,7 @@
               :class="
                 displayMode === 'obtention'
                   ? 'bg-accent text-background'
-                  : 'bg-black/20 text-text/80 hover:bg-white/10'
+                  : 'bg-chrome text-text/80 hover:bg-white/10'
               "
               @click="displayMode = 'obtention'"
             >
@@ -106,7 +106,7 @@
               :class="
                 displayMode === 'winrate'
                   ? 'bg-accent text-background'
-                  : 'bg-black/20 text-text/80 hover:bg-white/10'
+                  : 'bg-chrome text-text/80 hover:bg-white/10'
               "
               @click="displayMode = 'winrate'"
             >

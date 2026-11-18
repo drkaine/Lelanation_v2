@@ -573,7 +573,7 @@ useHead({
   justify-content: center;
   border-radius: 0.25rem;
   border: 1px solid rgb(var(--rgb-accent) / 0.35);
-  background: rgb(var(--rgb-background) / 0.35);
+  background: var(--color-chrome);
   color: rgb(var(--rgb-text) / 0.65);
   cursor: pointer;
   font-size: 0.85rem;

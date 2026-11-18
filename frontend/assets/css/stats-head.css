@@ -55,7 +55,7 @@
   height: 40px;
   min-width: 110px;
   padding: 0 12px;
-  border: 1px solid #785a28;
+  border: 1px solid #4f3c1c;
   border-radius: 8px;
   background: var(--color-chrome);
   color: #f0e6d2;
@@ -113,7 +113,7 @@
   gap: 8px;
   height: 40px;
   padding: 0 14px;
-  border: 1px solid #785a28;
+  border: 1px solid #4f3c1c;
   border-radius: 8px;
   background: var(--color-chrome);
   color: #f0e6d2;
@@ -147,7 +147,7 @@
   gap: 4px;
   height: 32px;
   padding: 0 12px;
-  border: 1px solid #785a28;
+  border: 1px solid #4f3c1c;
   border-radius: 16px;
   background: var(--color-chrome);
   color: #f0e6d2;

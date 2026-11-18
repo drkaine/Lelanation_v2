@@ -291,7 +291,7 @@ const formattedDescription = computed(() => {
   height: 38px;
   border: 1px solid rgb(var(--rgb-accent) / 0.3);
   border-radius: 0.25rem;
-  background: rgb(var(--rgb-background) / 0.55);
+  background: var(--color-chrome);
   padding: 0 0.6rem;
   font-size: 0.8rem;
   color: rgb(var(--rgb-text) / 0.8);

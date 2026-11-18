@@ -41,7 +41,7 @@
               :class="
                 !activeDisplayRank
                   ? 'bg-info/20 ring-1 ring-info/60'
-                  : 'bg-black/20 hover:bg-white/10'
+                  : 'bg-chrome hover:bg-white/10'
               "
               :title="t('statisticsPage.allRanks')"
               :aria-pressed="!activeDisplayRank"
@@ -69,7 +69,7 @@
               :class="
                 activeDisplayRank === tier
                   ? 'bg-info/20 ring-1 ring-info/60'
-                  : 'bg-black/20 hover:bg-white/10'
+                  : 'bg-chrome hover:bg-white/10'
               "
               :title="formatDivisionLabel(tier)"
               :aria-pressed="activeDisplayRank === tier"
@@ -113,7 +113,7 @@
             <button
               type="button"
               class="stats-role-btn rounded p-0.5 transition-colors"
-              :class="!activeDisplayRole ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10'"
+              :class="!activeDisplayRole ? 'bg-info/20' : 'bg-chrome hover:bg-white/10'"
               :title="t('statisticsPage.allRoles')"
               @click="clearActiveDisplayRole()"
             >
@@ -134,7 +134,7 @@
               type="button"
               class="stats-role-btn rounded p-0.5 transition-colors"
               :class="[
-                activeDisplayRole === r.value ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10',
+                activeDisplayRole === r.value ? 'bg-info/20' : 'bg-chrome hover:bg-white/10',
                 selectedChampionId && !isRoleFilterEligible(r.value)
                   ? 'champion-role-disabled'
                   : '',
@@ -321,7 +321,7 @@
                 >
                   <button
                     type="button"
-                    class="inline-flex shrink-0 items-center gap-1 rounded-lg border border-primary/30 bg-background/40 px-2 py-1.5 text-xs transition hover:bg-primary/10 lg:mr-1"
+                    class="inline-flex shrink-0 items-center gap-1 rounded-lg border border-primary/30 bg-chrome px-2 py-1.5 text-xs transition hover:bg-primary/10 lg:mr-1"
                     @click="clearChampion"
                   >
                     <span class="iconify i-mdi:arrow-left text-base" aria-hidden="true" />

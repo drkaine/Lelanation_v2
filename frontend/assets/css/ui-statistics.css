@@ -112,3 +112,26 @@
   }
 }
 
+
+/* Statistiques : bordure des cartes 1px, or plus sombre */
+.statistics {
+  --card-border-width: 1px;
+}
+.statistics :is(.ui-build-card-surface, .ui-build-card-button),
+.statistics [class*='-btn'] {
+  --card-border-gradient-strong: var(--card-border-gradient-dark);
+}
+
+/* Statistiques : ombre marquée sous les cartes et tableaux */
+:is(
+    .statistics,
+    .champion-stats,
+    .lelariva-stats,
+    .statistics-surveillance,
+    .statistics-custom,
+    .item-stats
+  )
+  :is(.ui-build-card-surface, .ov-card, .hd-card, .team-card, .vi-dtable-wrap),
+.statistics-recap-card {
+  box-shadow: var(--shadow-stats-card);
+}

@@ -342,7 +342,7 @@
           </button>
           <button
             type="button"
-            class="rounded border border-primary/40 bg-surface/50 px-3 py-2 text-sm font-medium text-text transition-colors hover:bg-primary/20"
+            class="rounded border border-primary/40 bg-chrome px-3 py-2 text-sm font-medium text-text transition-colors hover:bg-primary/20"
             @click="loadBalanceRules"
           >
             Recharger
@@ -370,7 +370,7 @@
           <h2 class="text-lg font-semibold text-text">{{ t('admin.data.crons.title') }}</h2>
           <button
             type="button"
-            class="rounded border border-primary/40 bg-surface/60 px-3 py-1.5 text-sm font-medium text-text transition-colors hover:bg-primary/20 disabled:opacity-50"
+            class="rounded border border-primary/40 bg-chrome px-3 py-1.5 text-sm font-medium text-text transition-colors hover:bg-primary/20 disabled:opacity-50"
             :disabled="syncDataBusy"
             @click.stop="triggerSyncData"
           >
@@ -426,7 +426,7 @@
                   <td class="px-3 py-2">
                     <button
                       type="button"
-                      class="rounded border border-primary/40 bg-surface/60 px-2 py-1 text-xs font-medium text-text transition-colors hover:bg-primary/20 disabled:opacity-50"
+                      class="rounded border border-primary/40 bg-chrome px-2 py-1 text-xs font-medium text-text transition-colors hover:bg-primary/20 disabled:opacity-50"
                       :disabled="cronTriggering[c.script]"
                       @click="triggerCron(c.script)"
                     >
@@ -591,7 +591,7 @@
         <div class="flex flex-wrap gap-2">
           <button
             type="button"
-            class="rounded border border-primary/40 bg-surface/60 px-3 py-1.5 text-sm font-medium text-text transition-colors hover:bg-primary/20 disabled:opacity-50"
+            class="rounded border border-primary/40 bg-chrome px-3 py-1.5 text-sm font-medium text-text transition-colors hover:bg-primary/20 disabled:opacity-50"
             :disabled="riotPollerLogsLoading"
             @click="openRiotPollerLogs"
           >
@@ -599,7 +599,7 @@
           </button>
           <button
             type="button"
-            class="rounded border border-primary/40 bg-surface/60 px-3 py-1.5 text-sm font-medium text-text transition-colors hover:bg-primary/20 disabled:opacity-50"
+            class="rounded border border-primary/40 bg-chrome px-3 py-1.5 text-sm font-medium text-text transition-colors hover:bg-primary/20 disabled:opacity-50"
             :disabled="riotPollerPm2LogsLoading"
             @click="openRiotPollerPm2Logs"
           >
@@ -725,7 +725,7 @@
         </button>
         <button
           type="button"
-          class="rounded border border-primary/40 bg-surface/60 px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-surface/80 disabled:opacity-50"
+          class="rounded border border-primary/40 bg-chrome px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-surface/80 disabled:opacity-50"
           :disabled="matchupLoading || !matchupPatch || !matchupChampionIdInput"
           @click="loadMatchupChampionDetails"
         >
@@ -733,7 +733,7 @@
         </button>
         <button
           type="button"
-          class="rounded border border-primary/40 bg-background px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-primary/10 disabled:opacity-50"
+          class="rounded border border-primary/40 bg-chrome px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-primary/10 disabled:opacity-50"
           :disabled="matchupRebuildLoading || !matchupPatch"
           @click="rebuildMatchupTier"
         >
@@ -907,7 +907,7 @@
           </button>
           <button
             type="button"
-            class="rounded border border-primary/50 bg-background px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-primary/10 disabled:opacity-50"
+            class="rounded border border-primary/50 bg-chrome px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-primary/10 disabled:opacity-50"
             :disabled="riotApikeyTesting"
             @click="testRiotApikey"
           >
@@ -1006,7 +1006,7 @@
           </p>
           <button
             type="button"
-            class="rounded border border-primary/50 bg-background px-3 py-2 text-sm text-text transition-colors hover:bg-primary/10 disabled:opacity-50"
+            class="rounded border border-primary/50 bg-chrome px-3 py-2 text-sm text-text transition-colors hover:bg-primary/10 disabled:opacity-50"
             :disabled="allPlayersLoading"
             @click="toggleAllPlayers"
           >
@@ -1033,7 +1033,7 @@
               />
               <button
                 type="button"
-                class="rounded border border-primary/50 bg-background px-3 py-2 text-sm text-text transition-colors hover:bg-primary/10"
+                class="rounded border border-primary/50 bg-chrome px-3 py-2 text-sm text-text transition-colors hover:bg-primary/10"
                 @click="onAllPlayersSearch"
               >
                 {{ t('admin.seedPlayers.searchPlayers') }}
@@ -1097,7 +1097,7 @@
               <div class="flex items-center gap-1">
                 <button
                   type="button"
-                  class="rounded border border-primary/40 bg-background px-2 py-1 text-text transition-colors hover:bg-primary/10 disabled:opacity-50"
+                  class="rounded border border-primary/40 bg-chrome px-2 py-1 text-text transition-colors hover:bg-primary/10 disabled:opacity-50"
                   :disabled="allPlayersPage <= 1 || allPlayersLoading"
                   @click="goToAllPlayersPage(allPlayersPage - 1)"
                 >
@@ -1109,7 +1109,7 @@
                 </span>
                 <button
                   type="button"
-                  class="rounded border border-primary/40 bg-background px-2 py-1 text-text transition-colors hover:bg-primary/10 disabled:opacity-50"
+                  class="rounded border border-primary/40 bg-chrome px-2 py-1 text-text transition-colors hover:bg-primary/10 disabled:opacity-50"
                   :disabled="allPlayersPage >= allPlayersTotalPages || allPlayersLoading"
                   @click="goToAllPlayersPage(allPlayersPage + 1)"
                 >

@@ -255,7 +255,7 @@ function onMeta(field: MetaField, value: string) {
   padding: 2px;
   border-radius: 9999px;
   border: 1px solid rgb(var(--rgb-primary) / 0.35);
-  background: rgb(var(--rgb-surface) / 0.85);
+  background: var(--color-chrome);
 }
 
 .matchup-finalize-form__visibility-button {

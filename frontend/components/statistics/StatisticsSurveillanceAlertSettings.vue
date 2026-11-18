@@ -17,7 +17,7 @@
         :class="
           selectedCohortKey === profile.cohortKey
             ? 'border-primary/60 bg-primary/15 text-text'
-            : 'border-primary/25 bg-panel-elevated/50 text-text/70 hover:bg-primary/10'
+            : 'border-primary/25 bg-chrome text-text/70 hover:bg-primary/10'
         "
         @click="selectCohort(profile.cohortKey)"
       >
@@ -119,7 +119,7 @@
             :class="
               pendingRankTiers.includes(tier)
                 ? 'bg-info/20 ring-1 ring-info/60'
-                : 'bg-black/20 hover:bg-white/10'
+                : 'bg-chrome hover:bg-white/10'
             "
             :title="formatDivisionLabel(tier)"
             @click="togglePendingTier(tier)"
@@ -174,7 +174,7 @@
             :class="
               selectedProfile.rankTiers.includes(tier)
                 ? 'bg-info/20 ring-1 ring-info/60'
-                : 'bg-black/20 hover:bg-white/10'
+                : 'bg-chrome hover:bg-white/10'
             "
             :title="formatDivisionLabel(tier)"
             @click="toggleSelectedCohortTier(tier)"

@@ -4,7 +4,7 @@
       v-if="showCardHeader"
       type="button"
       class="flex w-full items-center gap-2 p-[5px] text-left transition-colors hover:bg-primary/5"
-      :class="isCardCollapsed ? '' : 'border-b border-primary/15 bg-panel-elevated/30'"
+      :class="isCardCollapsed ? '' : 'border-b border-primary/15 bg-chrome'"
       :aria-expanded="!isCardCollapsed"
       :aria-label="cardCollapseLabel"
       @click="toggleCardCollapsed"

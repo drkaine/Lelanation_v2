@@ -3222,7 +3222,7 @@ watch(loadError, value => {
   border: 2px solid transparent;
   border-radius: 6px;
   background:
-    linear-gradient(var(--color-blue-500), var(--color-blue-500)) padding-box,
+    linear-gradient(var(--color-chrome), var(--color-chrome)) padding-box,
     var(--spell-entry-border-gradient) border-box;
   box-shadow: 0 2px 8px rgb(0 0 0 / 0.35);
 }

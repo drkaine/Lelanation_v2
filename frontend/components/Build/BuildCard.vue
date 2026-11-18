@@ -4395,7 +4395,7 @@ defineExpose({
   padding: 4px 8px;
   border-radius: 4px;
   border: 1px solid rgba(200, 155, 60, 0.35);
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--color-chrome);
   color: rgba(255, 255, 255, 0.9);
   font-size: 11px;
   cursor: pointer;
@@ -4657,8 +4657,8 @@ defineExpose({
   z-index: 0;
   width: 300px;
   height: 450px;
-  background-color: var(--color-blue-500, var(--color-chrome));
-  background-image: var(--gradient-primary-mirror);
+  background-color: var(--color-chrome);
+  background-image: none;
   border: 2px solid transparent;
   border-image: var(--card-border-gradient-strong) 1;
   border-radius: 6px;
@@ -4710,18 +4710,18 @@ defineExpose({
   flex-direction: column;
   gap: 12px;
   overflow: auto;
-  background-color: var(--color-blue-500, var(--color-chrome));
-  background-image: var(--gradient-primary-mirror);
+  background-color: var(--color-chrome);
+  background-image: none;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
 }
 
 .build-card-back-cycle__face--description :deep(.description-editor) {
-  background: rgba(10, 20, 40, 0.88);
+  background: rgb(var(--rgb-chrome) / 0.88);
 }
 
 .build-card-back-cycle__face--description :deep(.description-editor-body) {
-  background: rgba(10, 20, 40, 0.45);
+  background: rgb(var(--rgb-chrome) / 0.45);
 }
 
 .build-card-back-cycle__face--stats {
@@ -4785,7 +4785,7 @@ defineExpose({
   border-radius: 9999px;
   border: 1px solid transparent;
   border-image: var(--card-border-gradient-soft) 1;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--color-chrome);
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -4968,7 +4968,7 @@ defineExpose({
   height: 450px;
   overflow: hidden;
   background:
-    linear-gradient(var(--color-blue-500), var(--color-blue-500)) padding-box,
+    linear-gradient(var(--color-chrome), var(--color-chrome)) padding-box,
     var(--card-border-gradient-strong) border-box;
   border: 2px solid transparent;
   border-radius: 6px;
@@ -5390,7 +5390,7 @@ defineExpose({
   border-radius: 4px;
   border: 1px solid transparent;
   background:
-    linear-gradient(var(--color-blue-500), var(--color-blue-500)) padding-box,
+    linear-gradient(var(--color-chrome), var(--color-chrome)) padding-box,
     var(--card-border-gradient-strong) border-box;
   object-fit: cover;
 }
@@ -5511,7 +5511,7 @@ defineExpose({
   border-radius: 2px;
   border: 1px solid transparent;
   background:
-    linear-gradient(var(--color-blue-500), var(--color-blue-500)) padding-box,
+    linear-gradient(var(--color-chrome), var(--color-chrome)) padding-box,
     var(--card-border-gradient-strong) border-box;
   object-fit: cover;
 }
@@ -5534,7 +5534,7 @@ defineExpose({
   border-radius: 3px;
   border: 1px solid transparent;
   background:
-    linear-gradient(var(--color-blue-500), var(--color-blue-500)) padding-box,
+    linear-gradient(var(--color-chrome), var(--color-chrome)) padding-box,
     var(--card-border-gradient-strong) border-box;
   object-fit: cover;
 }
@@ -5660,7 +5660,7 @@ defineExpose({
 .boots-slot--filled {
   border: 1px solid transparent;
   background:
-    linear-gradient(var(--color-blue-500), var(--color-blue-500)) padding-box,
+    linear-gradient(var(--color-chrome), var(--color-chrome)) padding-box,
     var(--card-border-gradient-soft) border-box;
 }
 
@@ -5740,7 +5740,7 @@ defineExpose({
   border-radius: 6px;
   border: 1px solid transparent;
   border-image: var(--card-border-gradient-soft) 1;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--color-chrome);
   cursor: pointer;
   opacity: 0.82;
 }
@@ -6003,7 +6003,7 @@ defineExpose({
   border-radius: 4px;
   border: 1px solid transparent;
   background:
-    linear-gradient(var(--color-blue-500), var(--color-blue-500)) padding-box,
+    linear-gradient(var(--color-chrome), var(--color-chrome)) padding-box,
     var(--card-border-gradient-soft) border-box;
   object-fit: cover;
   display: block;

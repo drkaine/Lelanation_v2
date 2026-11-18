@@ -2,11 +2,11 @@
 
 /* Global Background */
 html {
-  background: var(--color-blue-500);
+  background: var(--color-page);
 }
 
 body {
-  background: var(--color-blue-500);
+  background: var(--color-page);
   min-height: 100vh;
   margin: 0;
   padding: 0;
@@ -77,7 +77,9 @@ body {
   --color-accent-light: var(--color-gold-50);
   --color-accent-dark: var(--color-gold-500);
 
-  --color-background: var(--color-blue-500);
+  /* Fond global (body) : un cran plus clair que blue-500 */
+  --color-page: #0e1b33;
+  --color-background: var(--color-page);
   --color-surface: var(--color-chrome);
   
   /* Semantic RGB mappings for Tailwind */
@@ -89,7 +91,7 @@ body {
   --rgb-accent-light: var(--rgb-gold-50);
   --rgb-accent-dark: var(--rgb-gold-500);
 
-  --rgb-background: var(--rgb-blue-500);
+  --rgb-background: 14 27 51;
   --rgb-surface: var(--rgb-chrome);
 
   /* Gradient Variables */
@@ -332,6 +334,9 @@ body {
     #5d5548 45%,
     #1e2328 100%
   );
+  /* Bordure des cartes statistiques : or plus sombre */
+  --shadow-stats-card: 0 6px 20px rgb(0 0 0 / 0.55), 0 2px 4px rgb(0 0 0 / 0.5);
+  --card-border-gradient-dark: linear-gradient(130deg, #7d6845 0%, #3d372e 45%, #15191d 100%);
   --card-border-gradient-default-soft: linear-gradient(
     130deg,
     rgb(187 160 119 / 0.7) 0%,

@@ -107,7 +107,7 @@
         class="rounded-t border px-3 py-1.5 text-xs font-medium transition"
         :class="
           activeTab === 'charts'
-            ? 'border-primary/40 border-b-transparent bg-surface/40 text-text'
+            ? 'border-primary/40 border-b-transparent bg-chrome text-text'
             : 'border-transparent text-text/60 hover:text-text'
         "
         @click="activeTab = 'charts'"
@@ -119,7 +119,7 @@
         class="rounded-t border px-3 py-1.5 text-xs font-medium transition"
         :class="
           activeTab === 'builds'
-            ? 'border-primary/40 border-b-transparent bg-surface/40 text-text'
+            ? 'border-primary/40 border-b-transparent bg-chrome text-text'
             : 'border-transparent text-text/60 hover:text-text'
         "
         @click="activeTab = 'builds'"

@@ -83,7 +83,7 @@ const trendMonthsWindowModel = computed({
           :class="
             charts.trendRangeMode.value === '7d'
               ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
-              : 'bg-black/20 text-text/85 hover:bg-white/10'
+              : 'bg-chrome text-text/85 hover:bg-white/10'
           "
           @click="charts.trendRangeMode.value = '7d'"
         >
@@ -95,7 +95,7 @@ const trendMonthsWindowModel = computed({
           :class="
             charts.trendRangeMode.value === '14d'
               ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
-              : 'bg-black/20 text-text/85 hover:bg-white/10'
+              : 'bg-chrome text-text/85 hover:bg-white/10'
           "
           @click="charts.trendRangeMode.value = '14d'"
         >
@@ -107,7 +107,7 @@ const trendMonthsWindowModel = computed({
           :class="
             charts.trendRangeMode.value === 'months'
               ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
-              : 'bg-black/20 text-text/85 hover:bg-white/10'
+              : 'bg-chrome text-text/85 hover:bg-white/10'
           "
           @click="charts.trendRangeMode.value = 'months'"
         >
@@ -140,7 +140,7 @@ const trendMonthsWindowModel = computed({
           :class="
             charts.trendDivisionPreset.value === 'selected'
               ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
-              : 'bg-black/20 text-text/85 hover:bg-white/10'
+              : 'bg-chrome text-text/85 hover:bg-white/10'
           "
           @click="charts.setTrendDivisionPreset('selected')"
         >
@@ -152,7 +152,7 @@ const trendMonthsWindowModel = computed({
           :class="
             charts.trendDivisionPreset.value === 'average'
               ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
-              : 'bg-black/20 text-text/85 hover:bg-white/10'
+              : 'bg-chrome text-text/85 hover:bg-white/10'
           "
           @click="charts.setTrendDivisionPreset('average')"
         >
@@ -164,7 +164,7 @@ const trendMonthsWindowModel = computed({
           :class="
             charts.trendDivisionPreset.value === 'skilled'
               ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
-              : 'bg-black/20 text-text/85 hover:bg-white/10'
+              : 'bg-chrome text-text/85 hover:bg-white/10'
           "
           @click="charts.setTrendDivisionPreset('skilled')"
         >
@@ -176,7 +176,7 @@ const trendMonthsWindowModel = computed({
           :class="
             charts.trendDivisionPreset.value === 'elite'
               ? 'bg-info/20 text-primary-light ring-1 ring-info/60'
-              : 'bg-black/20 text-text/85 hover:bg-white/10'
+              : 'bg-chrome text-text/85 hover:bg-white/10'
           "
           @click="charts.setTrendDivisionPreset('elite')"
         >

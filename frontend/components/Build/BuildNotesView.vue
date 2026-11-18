@@ -217,7 +217,7 @@ watch(
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.28);
+  background: var(--color-chrome);
 }
 
 .build-notes-view__toggle-btn {

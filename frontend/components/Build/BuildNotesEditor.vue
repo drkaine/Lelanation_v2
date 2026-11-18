@@ -672,7 +672,7 @@ function applyCopy() {
   height: 28px;
   border: 1px solid rgb(var(--rgb-accent) / 0.35);
   border-radius: 6px;
-  background: rgb(var(--rgb-background) / 0.25);
+  background: var(--color-chrome);
   color: rgb(var(--rgb-text) / 0.65);
   cursor: pointer;
   transition:

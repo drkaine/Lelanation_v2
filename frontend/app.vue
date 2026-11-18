@@ -458,7 +458,7 @@ if (import.meta.client) {
   height: 24px;
   border-radius: 4px;
   border: 1px solid rgb(var(--rgb-accent) / 0.28);
-  background: rgb(var(--rgb-background) / 0.18);
+  background: var(--color-chrome);
   color: var(--color-blue-50);
   font-size: 14px;
   font-weight: 600;
@@ -527,7 +527,7 @@ if (import.meta.client) {
   border: 1px solid rgb(var(--rgb-accent) / 0.28);
   border-radius: 9999px;
   padding: 4px 8px;
-  background: rgb(var(--rgb-background) / 0.18);
+  background: var(--color-chrome);
   color: var(--color-blue-50);
   transition:
     background-color 0.2s ease,
@@ -711,7 +711,11 @@ html[data-stats-cards='1'] .champion-stats .hidden.md\:block {
       .statistics-pings-mobile-card,
       .statistics-vision-mobile-card,
       .statistics-misc-mobile-card,
-      .statistics-patch-notes-mobile-card
+      .statistics-patch-notes-mobile-card,
+      .pn-mcard,
+      .ct-mcard,
+      .ba-mcard,
+      .misc-mcard
     ) {
     width: var(--stats-simplified-card-width) !important;
     max-width: var(--stats-simplified-card-width) !important;
@@ -722,6 +726,11 @@ html[data-stats-cards='1'] .champion-stats .hidden.md\:block {
     border-radius: 0.5rem !important;
     border: 1px solid rgb(var(--rgb-accent) / 0.55) !important;
     box-sizing: border-box;
+  }
+
+  /* Onglet Champions : choix de la métrique affichée sur les cartes */
+  html[data-stats-cards='1'] .ct-msort {
+    display: inline-block !important;
   }
 
   html[data-stats-cards='1'] .champion-skills-cards-grid .champion-spell-order-card {

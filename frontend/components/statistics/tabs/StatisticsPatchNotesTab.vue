@@ -235,7 +235,7 @@ function patchNotesMessage(message: string | undefined): string {
         :options="patchNotesMobileSortOptionsComputed"
       />
 
-      <ol class="pn-mlist md:hidden">
+      <ol class="pn-mlist statistics-patch-notes-mobile-list md:hidden">
         <li
           v-for="row in p.paginatedPatchNotesRows"
           :key="'pn-mobile-' + row.targetType + '-' + row.targetId"

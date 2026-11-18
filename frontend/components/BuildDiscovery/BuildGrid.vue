@@ -1262,7 +1262,7 @@ onUnmounted(() => {
   border: 2px solid transparent;
   border-radius: 8px;
   background-image:
-    linear-gradient(var(--color-blue-500), var(--color-blue-500)),
+    linear-gradient(var(--color-chrome), var(--color-chrome)),
     var(--card-border-gradient-default-strong);
   background-origin: border-box;
   background-clip: padding-box, border-box;
@@ -1323,7 +1323,7 @@ onUnmounted(() => {
   gap: 4px;
   border: 1px solid rgb(var(--rgb-accent) / 0.55);
   border-radius: 8px;
-  background: rgb(var(--rgb-background) / 0.22);
+  background: var(--color-chrome);
   padding: 0.35rem 0.45rem;
   font-size: 0.75rem;
   font-weight: 600;
@@ -1399,7 +1399,7 @@ onUnmounted(() => {
 .pagination-btn {
   border-radius: 0.5rem;
   border: 1px solid rgb(var(--rgb-primary) / 0.8);
-  background: rgb(var(--rgb-background) / 0.25);
+  background: var(--color-chrome);
   padding: 0.45rem 0.75rem;
   font-size: 0.875rem;
   color: rgb(var(--rgb-text));

@@ -193,7 +193,7 @@ function rowKey(row: ChampionMiscStatRow): string {
         :options="miscMobileSortOptionsComputed"
       />
 
-      <div class="misc-mlist md:hidden">
+      <div class="misc-mlist statistics-misc-mobile-list md:hidden">
         <StatisticsChampionDetailLink
           v-for="row in p.paginatedMiscRows"
           :key="'misc-mobile-' + rowKey(row)"

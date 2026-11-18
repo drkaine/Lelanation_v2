@@ -981,7 +981,7 @@ watch(
   gap: 4px;
   border: 1px solid rgb(var(--rgb-accent) / 0.55);
   border-radius: 8px;
-  background: rgb(var(--rgb-background) / 0.22);
+  background: var(--color-chrome);
   padding: 0.35rem 0.45rem;
   font-size: 0.75rem;
   font-weight: 600;
@@ -1041,7 +1041,7 @@ watch(
   justify-content: center;
   border: 1px solid rgb(var(--rgb-accent) / 0.45);
   border-radius: 6px;
-  background: rgb(var(--rgb-background) / 0.22);
+  background: var(--color-chrome);
   color: var(--color-gold-300, #f0e6d2);
   transition:
     box-shadow 0.2s ease,

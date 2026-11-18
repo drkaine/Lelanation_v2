@@ -280,7 +280,7 @@
                   :class="
                     statsDivisionFilter.length === 0
                       ? 'bg-info/20 ring-1 ring-info/60'
-                      : 'bg-black/20 hover:bg-white/10'
+                      : 'bg-chrome hover:bg-white/10'
                   "
                   :title="t('statisticsPage.allRanks')"
                   :aria-pressed="statsDivisionFilter.length === 0"
@@ -308,7 +308,7 @@
                   :class="
                     statsDivisionFilter.includes(tier)
                       ? 'bg-info/20 ring-1 ring-info/60'
-                      : 'bg-black/20 hover:bg-white/10'
+                      : 'bg-chrome hover:bg-white/10'
                   "
                   :title="formatDivisionLabel(tier)"
                   :aria-pressed="statsDivisionFilter.includes(tier)"
@@ -438,7 +438,7 @@
                 <button
                   type="button"
                   class="stats-role-btn rounded p-0.5 transition-colors"
-                  :class="!statsRoleFilter ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10'"
+                  :class="!statsRoleFilter ? 'bg-info/20' : 'bg-chrome hover:bg-white/10'"
                   :title="t('statisticsPage.allRoles')"
                   @click="selectAllRoles()"
                 >
@@ -459,7 +459,7 @@
                   type="button"
                   class="stats-role-btn rounded p-0.5 transition-colors"
                   :class="
-                    statsRoleFilter === r.value ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10'
+                    statsRoleFilter === r.value ? 'bg-info/20' : 'bg-chrome hover:bg-white/10'
                   "
                   :title="r.label"
                   @click="toggleRoleFilter(r)"
@@ -490,7 +490,7 @@
                   :class="
                     showBansOutcomeColumns
                       ? 'border-info/60 bg-info/20 text-primary-light'
-                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                      : 'border-primary/40 bg-chrome text-text/80 hover:bg-white/10'
                   "
                   @click="toggleBansOutcomeColumns()"
                 >
@@ -502,7 +502,7 @@
                   :class="
                     showBansSideColumns
                       ? 'border-info/60 bg-info/20 text-primary-light'
-                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                      : 'border-primary/40 bg-chrome text-text/80 hover:bg-white/10'
                   "
                   @click="toggleBansSideColumns()"
                 >
@@ -520,7 +520,7 @@
                 :class="
                   statsSplitTransformEnabled
                     ? 'border-info/60 bg-info/20 text-primary-light'
-                    : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                    : 'border-primary/40 bg-chrome text-text/80 hover:bg-white/10'
                 "
                 :aria-pressed="statsSplitTransformEnabled"
                 @click="toggleStatsSplitTransformEnabled()"
@@ -536,7 +536,7 @@
                   :class="
                     showChampionHealColumns
                       ? 'border-info/60 bg-info/20 text-primary-light'
-                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                      : 'border-primary/40 bg-chrome text-text/80 hover:bg-white/10'
                   "
                   @click="toggleChampionColumnGroup('heal')"
                 >
@@ -548,7 +548,7 @@
                   :class="
                     showChampionDealtColumns
                       ? 'border-info/60 bg-info/20 text-primary-light'
-                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                      : 'border-primary/40 bg-chrome text-text/80 hover:bg-white/10'
                   "
                   @click="toggleChampionColumnGroup('dealt')"
                 >
@@ -560,7 +560,7 @@
                   :class="
                     showChampionTakenColumns
                       ? 'border-info/60 bg-info/20 text-primary-light'
-                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                      : 'border-primary/40 bg-chrome text-text/80 hover:bg-white/10'
                   "
                   @click="toggleChampionColumnGroup('taken')"
                 >
@@ -587,7 +587,7 @@
                   :class="
                     statsOtpFilter === 'non'
                       ? 'border-info/60 bg-info/20 text-primary-light'
-                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                      : 'border-primary/40 bg-chrome text-text/80 hover:bg-white/10'
                   "
                   @click="setStatsOtpFilter('non')"
                 >
@@ -599,7 +599,7 @@
                   :class="
                     statsOtpFilter === 'oui'
                       ? 'border-info/60 bg-info/20 text-primary-light'
-                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                      : 'border-primary/40 bg-chrome text-text/80 hover:bg-white/10'
                   "
                   @click="setStatsOtpFilter('oui')"
                 >
@@ -611,7 +611,7 @@
                   :class="
                     statsOtpFilter === 'solo'
                       ? 'border-info/60 bg-info/20 text-primary-light'
-                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                      : 'border-primary/40 bg-chrome text-text/80 hover:bg-white/10'
                   "
                   @click="setStatsOtpFilter('solo')"
                 >
@@ -664,7 +664,7 @@
                   :class="
                     itemsLegendaryFilter === 'legendary'
                       ? 'border-info/60 bg-info/20 text-primary-light'
-                      : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                      : 'border-primary/40 bg-chrome text-text/80 hover:bg-white/10'
                   "
                   @click="
                     itemsLegendaryFilter =

@@ -7,7 +7,7 @@
     <button
       v-show="!expanded"
       type="button"
-      class="search-toggle inline-flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-lg border border-primary/80 bg-background/25 text-text transition-colors hover:bg-primary/20"
+      class="search-toggle inline-flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-lg border border-primary/80 bg-chrome text-text transition-colors hover:bg-primary/20"
       :aria-label="t('matchupGuideDiscovery.searchPlaceholder')"
       :aria-expanded="false"
       @click="expand"

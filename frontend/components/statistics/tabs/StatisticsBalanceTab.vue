@@ -347,7 +347,7 @@ function globalTooltip(row: BalanceRow): string {
           :options="balanceMobileSortOptions"
           :asc-default-columns="['champion']"
         />
-        <div class="ba-mlist md:hidden">
+        <div class="ba-mlist statistics-balance-mobile-list md:hidden">
           <div class="ba-mhead">
             <span>{{ p.t('statisticsPage.balanceMobileAxis') }}</span>
             <span class="ba-mhead-cols">
@@ -363,7 +363,17 @@ function globalTooltip(row: BalanceRow): string {
             class="ba-mcard"
           >
             <div class="ba-mcard-row">
-              <div class="min-w-0">
+              <img
+                v-if="p.gameVersion && p.championByKey(row.championId)"
+                :src="
+                  p.getChampionImageUrl(p.gameVersion, p.championByKey(row.championId)!.image.full)
+                "
+                :alt="p.championName(row.championId) || ''"
+                class="ba-mcard-img"
+                loading="lazy"
+                decoding="async"
+              />
+              <div class="min-w-0 flex-1">
                 <div class="ba-mcard-name">{{ p.championName(row.championId) }}</div>
                 <div class="ba-mcard-role">{{ p.mainRoleLabel(row.role) }}</div>
               </div>
@@ -552,6 +562,13 @@ function globalTooltip(row: BalanceRow): string {
   justify-content: space-between;
   align-items: center;
   gap: 8px;
+}
+.ba-mcard-img {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  border: 1px solid #785a28;
 }
 .ba-mcard-name {
   font-weight: 600;

@@ -1539,7 +1539,7 @@ function drakeDropdownCountLabel(count: number): string {
           :class="
             p.objectivesPanelTab === 'objectives'
               ? 'bg-accent text-background'
-              : 'bg-black/20 text-text/80 hover:bg-white/10'
+              : 'bg-chrome text-text/80 hover:bg-white/10'
           "
           @click="p.setObjectivesPanelTab('objectives')"
         >
@@ -1551,7 +1551,7 @@ function drakeDropdownCountLabel(count: number): string {
           :class="
             p.objectivesPanelTab === 'drakeTypes'
               ? 'bg-accent text-background'
-              : 'bg-black/20 text-text/80 hover:bg-white/10'
+              : 'bg-chrome text-text/80 hover:bg-white/10'
           "
           @click="p.setObjectivesPanelTab('drakeTypes')"
         >
@@ -1563,7 +1563,7 @@ function drakeDropdownCountLabel(count: number): string {
           :class="
             p.objectivesPanelTab === 'drakeSouls'
               ? 'bg-accent text-background'
-              : 'bg-black/20 text-text/80 hover:bg-white/10'
+              : 'bg-chrome text-text/80 hover:bg-white/10'
           "
           @click="p.setObjectivesPanelTab('drakeSouls')"
         >
@@ -1576,7 +1576,7 @@ function drakeDropdownCountLabel(count: number): string {
             :class="
               objectivesDisplayMode === 'obtention'
                 ? 'bg-accent text-background'
-                : 'bg-black/20 text-text/80 hover:bg-white/10'
+                : 'bg-chrome text-text/80 hover:bg-white/10'
             "
             @click="objectivesDisplayMode = 'obtention'"
           >
@@ -1588,7 +1588,7 @@ function drakeDropdownCountLabel(count: number): string {
             :class="
               objectivesDisplayMode === 'winrate'
                 ? 'bg-accent text-background'
-                : 'bg-black/20 text-text/80 hover:bg-white/10'
+                : 'bg-chrome text-text/80 hover:bg-white/10'
             "
             @click="objectivesDisplayMode = 'winrate'"
           >

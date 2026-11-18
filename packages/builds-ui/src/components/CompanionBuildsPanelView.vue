@@ -321,7 +321,7 @@ const onSortByUpdate = (value: string) => {
   cursor: pointer;
   transition: all 0.15s;
   border: 1px solid rgba(200, 155, 60, 0.55);
-  background: rgba(10, 20, 40, 0.35);
+  background: var(--color-chrome);
   color: #c8aa6e;
 }
 .top-icon-button.on { color: #e6b800; background: rgba(200, 155, 60, 0.18); border-color: #e6b800; }
@@ -334,7 +334,7 @@ const onSortByUpdate = (value: string) => {
   justify-content: center;
   border-radius: 8px;
   border: 1px solid rgba(200, 155, 60, 0.55);
-  background: rgba(10, 20, 40, 0.35);
+  background: var(--color-chrome);
   color: #c8aa6e;
   transition: all 0.15s;
 }

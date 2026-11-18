@@ -80,7 +80,7 @@ watch(column, (col, prev) => {
     </div>
     <button
       type="button"
-      class="inline-flex shrink-0 touch-manipulation items-center gap-1.5 rounded border border-primary/35 bg-background/80 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-primary/15"
+      class="inline-flex shrink-0 touch-manipulation items-center gap-1.5 rounded border border-primary/35 bg-chrome px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-primary/15"
       :aria-label="t('statisticsPage.mobileSortDirectionAria')"
       @click="toggleDirection"
     >

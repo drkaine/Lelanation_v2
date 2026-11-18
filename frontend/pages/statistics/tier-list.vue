@@ -76,7 +76,7 @@
               :class="
                 tierListChartTierEnabled(entry.key)
                   ? 'bg-info/20 ring-1 ring-info/60'
-                  : 'bg-black/20 hover:bg-white/10'
+                  : 'bg-chrome hover:bg-white/10'
               "
               :title="
                 entry.key === 'S+'
@@ -145,7 +145,7 @@
               :class="
                 statsDivisionFilter.length === 0
                   ? 'bg-info/20 ring-1 ring-info/60'
-                  : 'bg-black/20 hover:bg-white/10'
+                  : 'bg-chrome hover:bg-white/10'
               "
               :title="t('statisticsPage.allRanks')"
               :aria-pressed="statsDivisionFilter.length === 0"
@@ -175,7 +175,7 @@
               :class="
                 statsDivisionFilter.includes(tier)
                   ? 'bg-info/20 ring-1 ring-info/60'
-                  : 'bg-black/20 hover:bg-white/10'
+                  : 'bg-chrome hover:bg-white/10'
               "
               :title="formatDivisionLabel(tier)"
               :aria-pressed="statsDivisionFilter.includes(tier)"
@@ -210,7 +210,7 @@
             <button
               type="button"
               class="stats-role-btn rounded p-0.5 transition-colors"
-              :class="!statsRoleFilter ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10'"
+              :class="!statsRoleFilter ? 'bg-info/20' : 'bg-chrome hover:bg-white/10'"
               :title="t('statisticsPage.allRoles')"
               @click="selectAllRoles()"
             >
@@ -228,7 +228,7 @@
               :key="r.value"
               type="button"
               class="stats-role-btn rounded p-0.5 transition-colors"
-              :class="statsRoleFilter === r.value ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10'"
+              :class="statsRoleFilter === r.value ? 'bg-info/20' : 'bg-chrome hover:bg-white/10'"
               :title="r.label"
               @click="toggleRoleFilter(r)"
             >
@@ -290,7 +290,7 @@
                 'flex-1 rounded border px-1.5 py-0.5 text-[11px] font-medium',
                 tierPresentation === mode
                   ? 'border-accent bg-accent/20 text-text'
-                  : 'border-primary/40 bg-background text-text/70 hover:text-text',
+                  : 'border-primary/40 bg-chrome text-text/70 hover:text-text',
               ]"
               @click="tierPresentation = mode"
             >

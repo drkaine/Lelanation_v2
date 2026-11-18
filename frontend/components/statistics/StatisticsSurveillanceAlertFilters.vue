@@ -13,7 +13,7 @@
           :class="
             isActive(filterId)
               ? 'border-primary/50 bg-primary/20 text-text-accent'
-              : 'border-primary/25 bg-surface/20 text-text/65 hover:bg-primary/10'
+              : 'border-primary/25 bg-chrome text-text/65 hover:bg-primary/10'
           "
           :aria-pressed="isActive(filterId)"
           @click="toggle(filterId)"
@@ -36,7 +36,7 @@
           :class="
             isActive(filterId)
               ? 'border-primary/50 bg-primary/20 text-text-accent'
-              : 'border-primary/25 bg-surface/20 text-text/65 hover:bg-primary/10'
+              : 'border-primary/25 bg-chrome text-text/65 hover:bg-primary/10'
           "
           :aria-pressed="isActive(filterId)"
           @click="toggle(filterId)"

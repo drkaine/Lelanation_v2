@@ -280,7 +280,7 @@
                   :class="
                     filterRank.length === 0
                       ? 'bg-info/20 ring-1 ring-info/60'
-                      : 'bg-black/20 hover:bg-white/10'
+                      : 'bg-chrome hover:bg-white/10'
                   "
                   :title="t('statisticsPage.allRanks')"
                   :aria-pressed="filterRank.length === 0"
@@ -310,7 +310,7 @@
                   :class="
                     filterRank.includes(tier)
                       ? 'bg-info/20 ring-1 ring-info/60'
-                      : 'bg-black/20 hover:bg-white/10'
+                      : 'bg-chrome hover:bg-white/10'
                   "
                   :title="formatDivisionLabel(tier)"
                   :aria-pressed="filterRank.includes(tier)"
@@ -343,7 +343,7 @@
                 <button
                   type="button"
                   class="stats-role-btn rounded p-0.5 transition-colors"
-                  :class="!filterRole ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10'"
+                  :class="!filterRole ? 'bg-info/20' : 'bg-chrome hover:bg-white/10'"
                   :title="t('statisticsPage.allRoles')"
                   @click="selectAllChampionRoles()"
                 >
@@ -362,7 +362,7 @@
                   type="button"
                   class="stats-role-btn rounded p-0.5 transition-colors"
                   :class="[
-                    filterRole === r.value ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10',
+                    filterRole === r.value ? 'bg-info/20' : 'bg-chrome hover:bg-white/10',
                     !rolesWithData.has(r.value) ? 'champion-role-disabled' : '',
                   ]"
                   :title="r.label"

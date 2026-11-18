@@ -457,7 +457,7 @@ function markSaved() {
 .matchup-detail-editor__save-button {
   border: 1px solid rgb(var(--rgb-primary) / 0.45);
   border-radius: 0.45rem;
-  background: rgb(var(--rgb-background) / 0.45);
+  background: var(--color-chrome);
   padding: 0.38rem 0.65rem;
   font-size: 0.74rem;
   font-weight: 700;

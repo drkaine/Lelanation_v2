@@ -93,7 +93,7 @@
               :class="
                 tierListChartTierEnabled(entry.key)
                   ? 'bg-info/20 ring-1 ring-info/60'
-                  : 'bg-black/20 hover:bg-white/10'
+                  : 'bg-chrome hover:bg-white/10'
               "
               :title="
                 entry.key === 'S+'
@@ -146,7 +146,7 @@
               :class="
                 statsDivisionFilter.length === 0
                   ? 'bg-info/20 ring-1 ring-info/60'
-                  : 'bg-black/20 hover:bg-white/10'
+                  : 'bg-chrome hover:bg-white/10'
               "
               :title="t('statisticsPage.allRanks')"
               :aria-pressed="statsDivisionFilter.length === 0"
@@ -176,7 +176,7 @@
               :class="
                 statsDivisionFilter.includes(tier)
                   ? 'bg-info/20 ring-1 ring-info/60'
-                  : 'bg-black/20 hover:bg-white/10'
+                  : 'bg-chrome hover:bg-white/10'
               "
               :title="formatDivisionLabel(tier)"
               :aria-pressed="statsDivisionFilter.includes(tier)"

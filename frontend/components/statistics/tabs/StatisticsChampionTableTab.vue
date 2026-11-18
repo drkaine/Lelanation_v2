@@ -22,6 +22,7 @@ import {
 import {
   CHAMPION_MOBILE_METRICS,
   championMobileBarPct,
+  championMobileMetricsFor,
   championMobileMetric,
   championMobileSubs,
 } from '~/utils/statistics/championMobileCards'
@@ -55,6 +56,13 @@ function setColumnMode(mode: ChampionColumnMode): void {
   p.showChampionHealColumns = flags.heal
   p.showChampionDealtColumns = flags.dealt
   p.showChampionTakenColumns = flags.taken
+  // Cartes : le tri courant hors du groupe affiché bascule sur le total du groupe.
+  const field = championMobileMetric(p.championGlobalSortColumn, mode)
+  const m = CHAMPION_MOBILE_METRICS.find(x => x.field === field)
+  if (m && m.sort !== p.championGlobalSortColumn.replace(/Delta$/, '')) {
+    p.championGlobalSortColumn = m.sort
+    p.championGlobalSortDir = 'desc'
+  }
 }
 const showChampionDealtBreakdown = ref(false)
 const showChampionTakenBreakdown = ref(false)
@@ -266,14 +274,18 @@ const championMobileSortColumn = computed({
 
 const localePath = useLocalePath()
 const mobileVisible = ref(8)
-const mobileField = computed(() => championMobileMetric(p.championGlobalSortColumn))
-const mobileSubs = computed(() => championMobileSubs(mobileField.value))
+const mobileMode = computed(() => columnMode.value ?? 'all')
+const mobileMetrics = computed(() => championMobileMetricsFor(mobileMode.value))
+const mobileField = computed(() =>
+  championMobileMetric(p.championGlobalSortColumn, mobileMode.value)
+)
+const mobileSubs = computed(() => championMobileSubs(mobileField.value, mobileMode.value))
 const mobileRows = computed(() => p.championGlobalSortedRows.slice(0, mobileVisible.value))
 const mobileMax = computed(() =>
   Math.max(0, ...p.championGlobalSortedRows.map(r => r[mobileField.value] ?? 0))
 )
 const mobileMetricModel = computed({
-  get: () => championMobileMetric(p.championGlobalSortColumn),
+  get: () => mobileField.value,
   set: (field: string) => {
     const m = CHAMPION_MOBILE_METRICS.find(x => x.field === field)
     if (m) {
@@ -343,7 +355,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
         class="ct-msort md:hidden"
         :aria-label="p.t('statisticsPage.championMobileMetricAria')"
       >
-        <option v-for="m in CHAMPION_MOBILE_METRICS" :key="m.field" :value="m.field">
+        <option v-for="m in mobileMetrics" :key="m.field" :value="m.field">
           {{ p.t(`statisticsPage.championMobileSub_${m.field}`) }}
         </option>
       </select>
@@ -410,7 +422,7 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
         :help-secondary-text="p.t('statisticsPage.championTableDeltaColumnsHint')"
       />
       <!-- Mobile : cartes compactes (maquette 11) -->
-      <div class="ct-mlist md:hidden">
+      <div class="ct-mlist statistics-champion-mobile-list md:hidden">
         <NuxtLink
           v-for="row in mobileRows"
           :key="'mobile-' + p.championGlobalRowKey(row)"
@@ -450,9 +462,9 @@ const championMobileSortOptions = computed<StatisticsMobileSortOption[]>(() => {
               />
             </div>
             <div class="ct-mcard-subs">
-              <span v-for="f in mobileSubs" :key="f">
-                <em>{{ p.t(`statisticsPage.championMobileSub_${f}`) }}</em>
-                {{ p.formatChampionGlobalNum(row[f]) }}
+              <span v-for="s in mobileSubs" :key="s.field">
+                <em>{{ p.t(s.labelKey) }}</em>
+                {{ p.formatChampionGlobalNum(row[s.field]) }}
               </span>
               <span>
                 <em>KDA</em>

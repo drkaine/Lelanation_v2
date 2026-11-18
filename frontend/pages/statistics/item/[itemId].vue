@@ -467,7 +467,7 @@ onMounted(async () => {
               :class="
                 filterRank.length === 0
                   ? 'bg-info/20 ring-1 ring-info/60'
-                  : 'bg-black/20 hover:bg-white/10'
+                  : 'bg-chrome hover:bg-white/10'
               "
               :title="t('statisticsPage.allRanks')"
               :aria-pressed="filterRank.length === 0"
@@ -493,7 +493,7 @@ onMounted(async () => {
               :class="
                 filterRank.includes(tier)
                   ? 'bg-info/20 ring-1 ring-info/60'
-                  : 'bg-black/20 hover:bg-white/10'
+                  : 'bg-chrome hover:bg-white/10'
               "
               :title="formatDivisionLabel(tier)"
               :aria-pressed="filterRank.includes(tier)"
@@ -526,7 +526,7 @@ onMounted(async () => {
             <button
               type="button"
               class="stats-role-btn rounded p-0.5 transition-colors"
-              :class="!filterRole ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10'"
+              :class="!filterRole ? 'bg-info/20' : 'bg-chrome hover:bg-white/10'"
               :title="t('statisticsPage.allRoles')"
               @click="selectAllRoles()"
             >
@@ -544,7 +544,7 @@ onMounted(async () => {
               :key="r.value"
               type="button"
               class="stats-role-btn rounded p-0.5 transition-colors"
-              :class="filterRole === r.value ? 'bg-info/20' : 'bg-black/20 hover:bg-white/10'"
+              :class="filterRole === r.value ? 'bg-info/20' : 'bg-chrome hover:bg-white/10'"
               :title="r.label"
               @click="toggleRoleFilter(r)"
             >

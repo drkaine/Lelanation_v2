@@ -452,7 +452,7 @@ watch(isLayoutScaled, enabled => {
 .item-shop-browser__role-btn {
   border: 1px solid rgb(var(--rgb-accent) / 0.25);
   border-radius: 9999px;
-  background: rgb(var(--rgb-background) / 0.35);
+  background: var(--color-chrome);
   padding: 0.35rem 0.75rem;
   font-size: 0.8rem;
   font-weight: 600;

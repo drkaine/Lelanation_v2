@@ -26,7 +26,7 @@ const { themeVars } = useBuildCardBorderTheme(() => props.guide.champion?.id)
   border-radius: 6px;
   border: 2px solid transparent;
   background:
-    linear-gradient(var(--color-blue-500), var(--color-blue-500)) padding-box,
+    linear-gradient(var(--color-chrome), var(--color-chrome)) padding-box,
     var(--card-border-gradient-strong) border-box;
   padding: 10px;
   color: inherit;
