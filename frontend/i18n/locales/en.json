@@ -2676,7 +2676,27 @@
       "towers": "Towers",
       "grubs": "Grubs",
       "heralds": "Herald"
-    }
+    },
+    "tabRegions": "Regions",
+    "navRegions": "Regions",
+    "regionsLoading": "Loading region comparison…",
+    "regionsEmpty": "Not enough data to compare regions.",
+    "regionsSummaryTitle": "Summary by region",
+    "regionsSummaryHint": "Red: highest value, green: lowest. Regions with at least 100 matches.",
+    "regionsMatches": "Matches",
+    "regionsSurrender": "Surrender",
+    "regionsEarlySurrender": "Surrender before 20 min",
+    "regionsAfk": "AFK (per player)",
+    "regionsDuration": "Average duration (min)",
+    "regionsKills": "Kills per match",
+    "regionsTopTitle": "Tops by region",
+    "regionsTopPicked": "Most picked",
+    "regionsTopBanned": "Most banned",
+    "regionsTopWinrate": "Best winrates (20 games min.)",
+    "regionsSpreadPick": "Biggest pick rate gaps",
+    "regionsSpreadBan": "Biggest ban rate gaps",
+    "regionsSpreadWinrate": "Biggest winrate gaps",
+    "regionsSpreadHint": "Highest region · lowest region, gap in points."
   },
   "stats": {
     "title": "Statistics",

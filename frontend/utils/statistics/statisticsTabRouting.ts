@@ -60,6 +60,7 @@ export function normalizeLegacyTab(tab: string): StatisticsMainTab {
     tab === 'objectives' ||
     tab === 'surrender' ||
     tab === 'teamMisc' ||
+    tab === 'regions' ||
     tab === 'bans' ||
     tab === 'runes' ||
     tab === 'items' ||

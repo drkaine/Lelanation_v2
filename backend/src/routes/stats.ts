@@ -68,6 +68,7 @@ import {
 } from '../services/StatsOverviewService.js'
 import { getOverviewAbandons, getSurrenderMatrix } from '../services/StatsAbandonsService.js'
 import { getTeamMiscStats } from '../services/StatsTeamMiscService.js'
+import { getRegionCompare } from '../services/StatsRegionCompareService.js'
 import { getAvailableRegions } from '../services/StatsAvailableRegionsService.js'
 import {
   getSummonerSpellsByChampion,
@@ -520,6 +521,13 @@ router.get('/surrender-matrix', async (req: Request, res: Response) => {
 router.get('/regions', async (req: Request, res: Response) => {
   res.set('Cache-Control', 'public, max-age=600')
   return res.json({ regions: await getAvailableRegions(queryString(req.query.version)) })
+})
+
+/** GET /api/stats/region-compare - différences entre régions (toutes régions). Query: ?version=16.9 */
+router.get('/region-compare', async (req: Request, res: Response) => {
+  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
+  const data = await getRegionCompare(queryString(req.query.version))
+  return res.json(data ?? { regions: [], topByRegion: [], spreads: { pickRate: [], banRate: [], winRate: [] } })
 })
 
 /** GET /api/stats/overview-team-misc - AFK par rôle × rang, duos par paire de rôles × rang. Query: ?version=16.9 */

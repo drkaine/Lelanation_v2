@@ -147,7 +147,7 @@
           </button>
         </div>
         <div class="flex min-h-0 flex-1 flex-col overflow-y-auto p-2 lg:flex-none">
-          <StatisticsRegionFilter />
+          <StatisticsRegionFilter v-if="displayedActiveTab !== 'regions'" />
           <div
             v-if="statisticsTabFilterFlags(displayedActiveTab).championSearch"
             :class="[
@@ -267,6 +267,7 @@
               v-if="
                 displayedActiveTab !== 'balance' &&
                 displayedActiveTab !== 'surrender' &&
+                displayedActiveTab !== 'regions' &&
                 displayedActiveTab !== 'patchNotes' &&
                 displayedActiveTab !== 'misc'
               "
@@ -429,6 +430,7 @@
                 displayedActiveTab !== 'objectives' &&
                 displayedActiveTab !== 'surrender' &&
                 displayedActiveTab !== 'teamMisc' &&
+                displayedActiveTab !== 'regions' &&
                 displayedActiveTab !== 'patchNotes' &&
                 displayedActiveTab !== 'misc'
               "
@@ -576,6 +578,7 @@
                 displayedActiveTab !== 'objectives' &&
                 displayedActiveTab !== 'surrender' &&
                 displayedActiveTab !== 'teamMisc' &&
+                displayedActiveTab !== 'regions' &&
                 displayedActiveTab !== 'patchNotes' &&
                 displayedActiveTab !== 'misc'
               "
@@ -747,6 +750,9 @@
               <div v-else-if="displayedActiveTab === 'teamMisc'" class="space-y-6">
                 <StatisticsTeamMiscTab />
               </div>
+              <div v-else-if="displayedActiveTab === 'regions'" class="space-y-6">
+                <StatisticsRegionCompareTab />
+              </div>
               <div v-else-if="displayedActiveTab === 'infos'">
                 <StatisticsInfosTab />
               </div>
@@ -847,6 +853,7 @@ import StatisticsSectionsHeader from '~/components/statistics/StatisticsSections
 import { statisticsFiltersSheetPanelClass } from '~/composables/useStatisticsFiltersSheetMode'
 import { statsFetch } from '~/utils/statsFetch'
 import type { TeamMiscData } from '~/utils/statistics/teamMiscTable'
+import { parseRegionCompare, type RegionCompareData } from '~/utils/statistics/regionCompare'
 import type {
   OverviewData,
   InfosMatrixData,
@@ -981,6 +988,9 @@ const StatisticsSurrenderTab = defineAsyncComponent(
 const StatisticsTeamMiscTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsTeamMiscTab.vue')
 )
+const StatisticsRegionCompareTab = defineAsyncComponent(
+  () => import('~/components/statistics/tabs/StatisticsRegionCompareTab.vue')
+)
 const StatisticsInfosTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsInfosTab.vue')
 )
@@ -1070,6 +1080,7 @@ const allTabs = computed(() => [
   { id: 'surrender' as const, label: t('statisticsPage.tabSurrender'), widgetId: 'surrender' },
   { id: 'teamMisc' as const, label: t('statisticsPage.tabTeamMisc'), widgetId: 'teamMisc' },
   { id: 'bans' as const, label: t('statisticsPage.tabBans'), widgetId: 'bans' },
+  { id: 'regions' as const, label: t('statisticsPage.tabRegions'), widgetId: 'regions' },
   {
     id: 'championTable' as const,
     label: t('statisticsPage.tabChampionTable'),
@@ -1798,6 +1809,7 @@ function onStatsFilterChange() {
   }
   if (activeTab.value === 'surrender') loadSurrenderMatrix()
   if (activeTab.value === 'teamMisc') loadTeamMisc()
+  if (activeTab.value === 'regions') loadRegionCompare()
   // if (activeTab.value === 'trends') loadProgressionsFull()
   if (statsVersionOptions.value.length <= 1) {
     loadOverviewVersionsCatalog()
@@ -2113,6 +2125,23 @@ async function loadTeamMisc() {
     teamMiscData.value = null
   } finally {
     teamMiscPending.value = false
+  }
+}
+const regionCompareData = ref<RegionCompareData | null>(null)
+const regionComparePending = ref(false)
+async function loadRegionCompare() {
+  regionComparePending.value = true
+  try {
+    const params = new URLSearchParams()
+    const cur = statsVersionFilter.value?.trim() ?? ''
+    if (cur) params.set('version', cur)
+    const q = params.toString()
+    const raw = await statsFetch<unknown>(apiUrl('/api/stats/region-compare' + (q ? `?${q}` : '')))
+    regionCompareData.value = parseRegionCompare(raw)
+  } catch {
+    regionCompareData.value = null
+  } finally {
+    regionComparePending.value = false
   }
 }
 async function loadSurrenderMatrix() {
@@ -3851,6 +3880,7 @@ async function loadStatisticsTabData(tab: typeof activeTab.value): Promise<void>
   }
   if (tab === 'surrender') loadSurrenderMatrix()
   if (tab === 'teamMisc') loadTeamMisc()
+  if (tab === 'regions') loadRegionCompare()
   if (tab === 'pings') pingsTab.loadPingsTable()
   if (tab === 'vision') visionTab.loadVisionTable()
   if (tab === 'misc') miscTab.loadMiscTable()
@@ -3896,6 +3926,7 @@ watch([statsVersionFilter, statsRoleFilter, statsOtpFilter], () => {
   if (activeTab.value === 'vision') visionTab.loadVisionTable()
   if (activeTab.value === 'surrender') loadSurrenderMatrix()
   if (activeTab.value === 'teamMisc') loadTeamMisc()
+  if (activeTab.value === 'regions') loadRegionCompare()
   if (activeTab.value === 'runes' || activeTab.value === 'items' || activeTab.value === 'spells') {
     loadOverviewDetail()
     loadOverviewDetailBaseline()
@@ -3940,6 +3971,7 @@ watch(progressionFromVersion, () => {
   if (activeTab.value === 'vision') visionTab.loadVisionTable()
   if (activeTab.value === 'surrender') loadSurrenderMatrix()
   if (activeTab.value === 'teamMisc') loadTeamMisc()
+  if (activeTab.value === 'regions') loadRegionCompare()
   if (activeTab.value === 'runes' || activeTab.value === 'items' || activeTab.value === 'spells') {
     loadOverviewDetail()
     loadOverviewDetailBaseline()
@@ -4253,6 +4285,8 @@ const statisticsPageCtx = reactive({
   surrenderMatrixRows,
   teamMiscData,
   teamMiscPending,
+  regionCompareData,
+  regionComparePending,
   statsDivisionFilter,
   t,
   tierListPatchDeltaClass,

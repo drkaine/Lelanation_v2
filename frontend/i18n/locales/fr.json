@@ -2676,7 +2676,27 @@
       "towers": "Tours",
       "grubs": "Larves",
       "heralds": "Héraut"
-    }
+    },
+    "tabRegions": "Régions",
+    "navRegions": "Régions",
+    "regionsLoading": "Chargement de la comparaison des régions…",
+    "regionsEmpty": "Pas assez de données pour comparer les régions.",
+    "regionsSummaryTitle": "Résumé par région",
+    "regionsSummaryHint": "Rouge : valeur la plus haute, vert : la plus basse. Régions avec au moins 100 matchs.",
+    "regionsMatches": "Matchs",
+    "regionsSurrender": "Surrender",
+    "regionsEarlySurrender": "Surrender avant 20 min",
+    "regionsAfk": "AFK (par joueur)",
+    "regionsDuration": "Durée moyenne (min)",
+    "regionsKills": "Kills par match",
+    "regionsTopTitle": "Tops par région",
+    "regionsTopPicked": "Plus pickés",
+    "regionsTopBanned": "Plus bannis",
+    "regionsTopWinrate": "Meilleurs winrates (20 parties min.)",
+    "regionsSpreadPick": "Plus grands écarts de pick rate",
+    "regionsSpreadBan": "Plus grands écarts de ban rate",
+    "regionsSpreadWinrate": "Plus grands écarts de winrate",
+    "regionsSpreadHint": "Région la plus haute · région la plus basse, écart en points."
   },
   "stats": {
     "title": "Statistiques",

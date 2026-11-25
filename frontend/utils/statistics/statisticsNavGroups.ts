@@ -6,6 +6,7 @@ export type StatisticsNavGroupId =
   | 'champions'
   | 'teamObjectives'
   | 'bans'
+  | 'regions'
   | 'builds'
   | 'behavior'
   | 'patchNotes'
@@ -39,6 +40,7 @@ export const STATISTICS_NAV_GROUPS: readonly StatisticsNavGroup[] = [
     tabs: ['team', 'objectives', 'surrender', 'teamMisc'],
   },
   { id: 'bans', labelKey: 'statisticsPage.navBans', tabs: ['bans'] },
+  { id: 'regions', labelKey: 'statisticsPage.navRegions', tabs: ['regions'] },
   { id: 'builds', labelKey: 'statisticsPage.navBuilds', tabs: ['runes', 'spells', 'items'] },
   { id: 'behavior', labelKey: 'statisticsPage.navBehavior', tabs: ['pings', 'vision'] },
   { id: 'patchNotes', labelKey: 'statisticsPage.navPatchNotes', tabs: ['patchNotes'] },

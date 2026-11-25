@@ -9,13 +9,14 @@ import {
 } from '../statisticsNavGroups'
 
 describe('statisticsNavGroups', () => {
-  it('liste les 9 sections de la maquette dans l’ordre', () => {
+  it('liste les 10 sections de la maquette dans l’ordre', () => {
     expect(STATISTICS_NAV_GROUPS.map(g => g.id)).toEqual([
       'overview',
       'tierList',
       'champions',
       'teamObjectives',
       'bans',
+      'regions',
       'builds',
       'behavior',
       'patchNotes',
@@ -26,6 +27,7 @@ describe('statisticsNavGroups', () => {
   it('rattache chaque onglet à sa section', () => {
     expect(navGroupOfTab('surrender')).toBe('teamObjectives')
     expect(navGroupOfTab('teamMisc')).toBe('teamObjectives')
+    expect(navGroupOfTab('regions')).toBe('regions')
     expect(navGroupOfTab('spells')).toBe('builds')
     expect(navGroupOfTab('vision')).toBe('behavior')
     expect(navGroupOfTab('misc')).toBe('champions')

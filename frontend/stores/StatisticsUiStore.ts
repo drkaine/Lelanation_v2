@@ -13,6 +13,7 @@ export type StatisticsMainTab =
   | 'objectives'
   | 'surrender'
   | 'teamMisc'
+  | 'regions'
   | 'runes'
   | 'items'
   | 'spells'

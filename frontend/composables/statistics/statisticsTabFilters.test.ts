@@ -44,6 +44,15 @@ describe('statisticsTabFilterFlags', () => {
     expect(statisticsTabFilterFlags('championTable').championSearch).toBe(true)
   })
 
+  it('regions: toutes régions, aucun filtre cohorte ni recherche', () => {
+    expect(statisticsTabFilterFlags('regions')).toEqual({
+      division: false,
+      role: false,
+      otp: false,
+      championSearch: false,
+    })
+  })
+
   it('patchNotes: champion/item search, no cohort filter', () => {
     expect(statisticsTabFilterFlags('patchNotes')).toEqual({
       division: false,

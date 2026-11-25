@@ -9,6 +9,7 @@ export type StatisticsCohortTab =
   | 'objectives'
   | 'surrender'
   | 'teamMisc'
+  | 'regions'
   | 'bans'
   | 'championTable'
   | 'balance'
@@ -48,11 +49,17 @@ export function statisticsTabFilterFlags(tab: StatisticsCohortTab): StatisticsTa
   const t = tab
   return {
     division:
-      t !== 'balance' && t !== 'surrender' && t !== 'infos' && t !== 'misc' && t !== 'patchNotes',
+      t !== 'balance' &&
+      t !== 'surrender' &&
+      t !== 'infos' &&
+      t !== 'misc' &&
+      t !== 'patchNotes' &&
+      t !== 'regions',
     role:
       t !== 'objectives' &&
       t !== 'surrender' &&
       t !== 'teamMisc' &&
+      t !== 'regions' &&
       t !== 'infos' &&
       t !== 'misc' &&
       t !== 'patchNotes',
@@ -61,6 +68,7 @@ export function statisticsTabFilterFlags(tab: StatisticsCohortTab): StatisticsTa
       t !== 'objectives' &&
       t !== 'surrender' &&
       t !== 'teamMisc' &&
+      t !== 'regions' &&
       t !== 'infos' &&
       t !== 'misc' &&
       t !== 'patchNotes',
@@ -70,6 +78,7 @@ export function statisticsTabFilterFlags(tab: StatisticsCohortTab): StatisticsTa
       t !== 'objectives' &&
       t !== 'surrender' &&
       t !== 'teamMisc' &&
+      t !== 'regions' &&
       t !== 'infos',
   }
 }
