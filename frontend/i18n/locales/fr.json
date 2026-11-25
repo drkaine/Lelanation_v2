@@ -30,7 +30,7 @@
     "mobileMenu": "Menu",
     "settings": "Paramètres",
     "companionApp": "Obtenir l'app in-game",
-    "team": "Équipe",
+    "team": "Gestion",
     "learn": "Apprendre",
     "learnChampion": "Champion"
   },
@@ -2662,6 +2662,20 @@
       "phase": "Moment",
       "kinds": "Catégories",
       "hint": "Molette ou double-clic pour zoomer, glisser pour déplacer, Échap pour fermer."
+    },
+    "teamMiscSurrenderFor": "Abandon du duo",
+    "teamMiscSurrenderAgainst": "Abandon adverse",
+    "teamMiscDuoObjectives": "Objectifs par partie",
+    "teamMiscDuoOwn": "Duo",
+    "teamMiscDuoEnemy": "Adverse",
+    "teamMiscDuoPicks": "Champions les plus joués",
+    "teamMiscDuoBans": "Bans de l’équipe",
+    "teamMiscObjective": {
+      "dragons": "Dragons",
+      "barons": "Barons",
+      "towers": "Tours",
+      "grubs": "Larves",
+      "heralds": "Héraut"
     }
   },
   "stats": {
@@ -4400,5 +4414,26 @@
     "tabVideos": "Guides vidéo",
     "tabMatchups": "Guides matchup",
     "matchupCount": "{count} guide(s) matchup"
+  },
+  "gestion": {
+    "title": "Gestion",
+    "tabs": {
+      "team": "Équipe",
+      "data": "Data"
+    },
+    "data": {
+      "title": "Collecte des données (poller)",
+      "loading": "Chargement…",
+      "regions": "Régions pollées",
+      "clusterNote": "Les régions d'un même cluster (europe, americas, asia, sea) partagent la limite de requêtes match-v5 de Riot : en ajouter une ralentit les autres du cluster.",
+      "tiers": "Répartition par division",
+      "tiersNote": "Part des joueurs pollés par division, en %. Total : {total} % (100 max ; modifier une division réduit les autres).",
+      "save": "Enregistrer",
+      "saved": "Enregistré. Appliqué demain à 00 h (redémarrage du poller).",
+      "saveError": "Réglages invalides ou erreur serveur.",
+      "loadError": "Impossible de charger les réglages.",
+      "scheduleNote": "Les changements enregistrés s'appliquent le lendemain à 00 h (heure du serveur), au début du balayage du jour : le poller redémarre alors avec les nouveaux réglages.",
+      "pendingNote": "Des changements sont programmés pour demain 00 h (ci-dessous). Les réglages actuels restent actifs d'ici là ; un nouvel enregistrement remplace la programmation."
+    }
   }
 }

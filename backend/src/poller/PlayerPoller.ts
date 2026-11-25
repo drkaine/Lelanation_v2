@@ -259,7 +259,7 @@ export class PlayerPoller {
         sessionId: this.sessionId,
         player: this.player,
         stats,
-        sinceTimestamp: this.config.sinceTimestamp,
+        sinceTimestamp: this.player.sinceTimestamp ?? this.config.sinceTimestamp,
       });
 
       pollerLogger.info(
@@ -301,7 +301,7 @@ export class PlayerPoller {
         sessionId: this.sessionId,
         player: this.player,
         stats,
-        sinceTimestamp: this.config.sinceTimestamp,
+        sinceTimestamp: this.player.sinceTimestamp ?? this.config.sinceTimestamp,
       });
       return stats;
     }

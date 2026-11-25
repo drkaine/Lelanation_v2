@@ -30,7 +30,7 @@
     "mobileMenu": "Menu",
     "settings": "Settings",
     "companionApp": "Get the in-game app",
-    "team": "Team",
+    "team": "Management",
     "learn": "Learn",
     "learnChampion": "Champion"
   },
@@ -2662,6 +2662,20 @@
       "phase": "Time",
       "kinds": "Categories",
       "hint": "Scroll or double-click to zoom, drag to pan, Esc to close."
+    },
+    "teamMiscSurrenderFor": "Duo surrender",
+    "teamMiscSurrenderAgainst": "Enemy surrender",
+    "teamMiscDuoObjectives": "Objectives per game",
+    "teamMiscDuoOwn": "Duo",
+    "teamMiscDuoEnemy": "Enemy",
+    "teamMiscDuoPicks": "Most played champions",
+    "teamMiscDuoBans": "Team bans",
+    "teamMiscObjective": {
+      "dragons": "Dragons",
+      "barons": "Barons",
+      "towers": "Towers",
+      "grubs": "Grubs",
+      "heralds": "Herald"
     }
   },
   "stats": {
@@ -4400,5 +4414,26 @@
     "tabVideos": "Video guides",
     "tabMatchups": "Matchup guides",
     "matchupCount": "{count} matchup guide(s)"
+  },
+  "gestion": {
+    "title": "Management",
+    "tabs": {
+      "team": "Team",
+      "data": "Data"
+    },
+    "data": {
+      "title": "Data collection (poller)",
+      "loading": "Loading…",
+      "regions": "Polled regions",
+      "clusterNote": "Regions in the same cluster (europe, americas, asia, sea) share Riot's match-v5 rate limit: adding one slows the others in that cluster.",
+      "tiers": "Split by division",
+      "tiersNote": "Share of polled players per division, in %. Total: {total}% (100 max; editing one division lowers the others).",
+      "save": "Save",
+      "saved": "Saved. Applies tomorrow at 00:00 (poller restart).",
+      "saveError": "Invalid settings or server error.",
+      "loadError": "Could not load the settings.",
+      "scheduleNote": "Saved changes apply the next day at 00:00 (server time), when the daily sweep starts: the poller then restarts with the new settings.",
+      "pendingNote": "Changes are scheduled for tomorrow 00:00 (below). Current settings stay active until then; saving again replaces the schedule."
+    }
   }
 }

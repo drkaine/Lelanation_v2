@@ -48,15 +48,17 @@ describe('PlayerDiscovery.fetchNextBatch', () => {
   beforeEach(() => sqlMock.mockReset());
 
   it('une seule requête : les cibles du balayage du jour pas encore pollées', async () => {
-    sqlMock.mockResolvedValueOnce([row('t1'), row('t2'), row('t3')]);
+    const polled = new Date('2026-11-24T10:00:00Z');
+    sqlMock.mockResolvedValueOnce([{ ...row('t1'), last_polled_at: polled }, row('t2'), row('t3')]);
     const batch = await new PlayerDiscovery(undefined, () => '2026-11-25').fetchNextBatch(2);
     expect(batch).toEqual([
-      { puuid: 't1', region: 'euw1' },
-      { puuid: 't2', region: 'euw1' },
+      { puuid: 't1', region: 'euw1', lastPolledAt: polled },
+      { puuid: 't2', region: 'euw1', lastPolledAt: null },
     ]);
     expect(sqlMock).toHaveBeenCalledTimes(1);
     const [query, values] = sqlMock.mock.calls[0];
     expect(query).toContain('FROM poll_targets t');
+    expect(query).toContain('p.last_polled_at,');
     expect(query).toContain('t.day = ?::date');
     expect(query).toMatch(/p\.last_polled_at IS NULL OR p\.last_polled_at < \?::date/);
     expect(values).toContain('2026-11-25');
@@ -71,6 +73,18 @@ describe('PlayerDiscovery.fetchNextBatch', () => {
     expect(query).toContain('ROW_NUMBER() OVER (PARTITION BY t.region, t.rank_tier ORDER BY t.puuid)');
     expect(query).not.toContain('last_seen');
     expect(query).not.toContain('next_poll_at');
+  });
+
+  it('répartition par tier : tour divisé par le poids, tiers à 0 exclus', async () => {
+    sqlMock.mockResolvedValue([]);
+    const weights = { GOLD: 75, IRON: 25 };
+    await new PlayerDiscovery(undefined, undefined, () => weights).fetchNextBatch(4);
+    const [query, values] = sqlMock.mock.calls[0];
+    expect(query).toMatch(/JOIN unnest\(\?::text\[\], \?::float8\[\]\) AS w\(tier, weight\)/);
+    expect(query).toContain('w.weight > 0');
+    expect(query).toContain('ORDER BY t.puuid) / w.weight AS turn');
+    expect(values).toContainEqual(['GOLD', 'IRON']);
+    expect(values).toContainEqual([75, 25]);
   });
 
   it('exclut les joueurs dont un duo a été pollé aujourd’hui', async () => {

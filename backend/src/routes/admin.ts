@@ -33,6 +33,9 @@ import {
 import { getBuildEngagement } from '../services/BuildEngagementService.js'
 import { getAdminBuildEngagementRecap } from '../services/AdminBuildEngagementService.js'
 import { readBalanceRules, writeBalanceRules } from '../services/BalanceRulesService.js'
+import { pollerSettingsView, updatePollerSettings } from '../services/PollerSettingsAdminService.js'
+import { pollerSettingsFile } from '../poller/pollerSettings.js'
+import { allowedPollerPlatforms } from '../poller/utils/pollerScope.js'
 import { getAdminDataCollectStats } from '../services/AdminDataCollectService.js'
 import { getAdminCollectTimeseries } from '../services/AdminCollectTimeseriesService.js'
 import { buildRiotPollerAdminPayload } from '../services/PollerAdminView.js'
@@ -234,6 +237,28 @@ router.put('/balance-rules', async (req, res) => {
       return res.status(500).json({ error: saved.error ?? 'Unable to save balance rules' })
     }
     return res.json({ success: true, rules: saved.data })
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+// Page Gestion > Data : régions et répartition par division du poller.
+// PUT = en attente ; appliqué à 00 h par cron/pollerSettingsSwitch.ts.
+const pollerFallbackPlatforms = () => allowedPollerPlatforms(process.env.POLLER_PLATFORMS)
+
+router.get('/poller-settings', (_req, res) => {
+  try {
+    return res.json(pollerSettingsView(pollerSettingsFile(), pollerFallbackPlatforms()))
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+router.put('/poller-settings', (req, res) => {
+  try {
+    const saved = updatePollerSettings(pollerSettingsFile(), req.body)
+    if (!saved.ok) return res.status(400).json({ error: 'Invalid poller settings' })
+    return res.json({ success: true, settings: saved.settings })
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
   }

@@ -52,10 +52,24 @@ const cookie = useCookie<string | null>(STATS_REGION_COOKIE, {
 })
 const selected = ref<StatsRegion[]>(parseStatsRegions(cookie.value))
 /** Seules les régions ayant des matchs en base ; erreur ou vide = toutes. */
+/** Patchs du filtre (URL) : régions ayant des matchs sur ces patchs seulement. */
+const route = useRoute()
+const patchQuery = computed(() => {
+  const v = route.query.version
+  const first = Array.isArray(v) ? v[0] : v
+  return typeof first === 'string' ? first.trim() : ''
+})
 const { data: regionsResponse } = useAsyncData(
   'stats-available-regions',
-  () => $fetch<unknown>(apiUrl('/api/stats/regions')).catch(() => null),
-  { default: () => null }
+  () =>
+    $fetch<unknown>(
+      apiUrl(
+        patchQuery.value
+          ? `/api/stats/regions?version=${encodeURIComponent(patchQuery.value)}`
+          : '/api/stats/regions'
+      )
+    ).catch(() => null),
+  { default: () => null, watch: [patchQuery] }
 )
 const options = computed(() => visibleStatsRegionOptions(regionsResponse.value, selected.value))
 let reloadTimer: ReturnType<typeof setTimeout> | null = null

@@ -1975,12 +1975,14 @@ async function loadOverview() {
   const t = statsPerfStart('loadOverview')
   overviewPending.value = true
   overviewError.value = null
-  const baseUrl = apiUrl('/api/stats')
   const query = overviewQueryParams()
   try {
-    const overviewRes = await statsFetch<typeof overviewData.value>(baseUrl + '/overview' + query, {
-      timeout: STATS_FETCH_TIMEOUT_MS,
-    })
+    const overviewRes = await statsFetch<typeof overviewData.value>(
+      apiUrl('/api/stats/overview' + query),
+      {
+        timeout: STATS_FETCH_TIMEOUT_MS,
+      }
+    )
     overviewData.value = overviewRes as typeof overviewData.value
     mergeKnownVersions(overviewData.value?.matchesByVersion)
     // Keep initial overview render fast: trigger secondary datasets in background.

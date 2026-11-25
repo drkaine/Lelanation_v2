@@ -7,11 +7,13 @@ import type { Platform } from '../poller/types.js';
 import { selectDuoSafeBatch } from './duoRules.js';
 import { pollDelayDays } from './pollYield.js';
 import { sweepDay } from './leagueSweep.js';
+import { defaultTierWeights } from '../poller/pollerSettings.js';
 
 interface DiscoveryRow {
   puuid: string;
   region: string;
   partners: string[] | null;
+  last_polled_at: Date | null;
 }
 
 /** Partenaires de duo de `p` (player_duos stocke la paire triée). */
@@ -48,6 +50,8 @@ export class PlayerDiscovery {
   constructor(
     private readonly activePlatforms: () => readonly Platform[] = () => POLLER_PLATFORMS,
     private readonly today: () => string = () => sweepDay(new Date()),
+    /** Part des joueurs par tier (%) ; tour divisé par le poids, tier à 0 ignoré. */
+    private readonly tierWeights: () => Readonly<Record<string, number>> = defaultTierWeights,
   ) {}
 
   async fetchNextBatch(limit: number): Promise<DiscoveryPlayer[]> {
@@ -63,14 +67,17 @@ export class PlayerDiscovery {
       this.pending = new Set();
       this.exhausted = new Set();
     }
-    // Cibles du balayage du jour pas encore pollées, un tier après l'autre (autant par tier).
+    // Cibles du balayage du jour pas encore pollées, tour à tour sur les tiers, au prorata des poids.
+    const weights = Object.entries(this.tierWeights());
     const targets = await timedDbOp('player_discovery_fetch', () =>
       sql<DiscoveryRow[]>`
-        SELECT puuid, region, partners FROM (
-          SELECT p.puuid, p.region, ${partnersColumn()} AS partners,
-                 ROW_NUMBER() OVER (PARTITION BY t.region, t.rank_tier ORDER BY t.puuid) AS turn
+        SELECT puuid, region, partners, last_polled_at FROM (
+          SELECT p.puuid, p.region, p.last_polled_at, ${partnersColumn()} AS partners,
+                 ROW_NUMBER() OVER (PARTITION BY t.region, t.rank_tier ORDER BY t.puuid) / w.weight AS turn
           FROM poll_targets t
           JOIN players p ON p.puuid = t.puuid
+          JOIN unnest(${sql.array(weights.map(([tier]) => tier))}::text[], ${sql.array(weights.map(([, w]) => w))}::float8[]) AS w(tier, weight)
+            ON w.tier = t.rank_tier::text AND w.weight > 0
           WHERE t.day = ${day}::date
             AND t.region::text = ANY(${regions}::text[])
             AND (p.last_polled_at IS NULL OR p.last_polled_at < ${day}::date)
@@ -97,7 +104,7 @@ export class PlayerDiscovery {
       const missing = safeLimit - rows.length;
       const fallback = await timedDbOp('player_discovery_fallback', () =>
         sql<DiscoveryRow[]>`
-          SELECT p.puuid, p.region, ${partnersColumn()} AS partners
+          SELECT p.puuid, p.region, p.last_polled_at, ${partnersColumn()} AS partners
           FROM players p
           WHERE p.region::text = ANY(${sql.array(toDbRegions(dry))}::text[])
             AND (p.last_polled_at IS NULL OR p.last_polled_at < ${day}::date)
@@ -126,6 +133,7 @@ export class PlayerDiscovery {
     return rows.map((row) => ({
       puuid: row.puuid,
       region: String(row.region ?? '').trim().toLowerCase(),
+      lastPolledAt: row.last_polled_at ?? null,
     }));
   }
 

@@ -25,6 +25,22 @@ describe('getAvailableRegions', () => {
     expect(sql).not.toContain('m.region IN');
   });
 
+  it('patchs du filtre : seules les régions ayant des matchs sur ces patchs', async () => {
+    queryMock.mockResolvedValueOnce([{ region: 'KR' }]);
+    expect(await getAvailableRegions('16.23,16.22')).toEqual(['KR']);
+    const [sql] = queryMock.mock.calls[0];
+    expect(sql).toContain("m.patch = '16.23' OR m.patch LIKE '16.23.%'");
+    expect(sql).toContain("m.patch = '16.22'");
+  });
+
+  it('cache par patchs', async () => {
+    queryMock.mockResolvedValueOnce([{ region: 'KR' }]).mockResolvedValueOnce([{ region: 'EUW1' }]);
+    expect(await getAvailableRegions('16.23')).toEqual(['KR']);
+    expect(await getAvailableRegions()).toEqual(['EUW1']);
+    expect(await getAvailableRegions('16.23')).toEqual(['KR']);
+    expect(queryMock).toHaveBeenCalledTimes(2);
+  });
+
   it('mis en cache', async () => {
     queryMock.mockResolvedValue([{ region: 'EUW1' }]);
     await getAvailableRegions();

@@ -94,7 +94,7 @@ describe('SessionPool gateway guard and shared dedup', () => {
     expect(sessionB.getProcessedMatchIds().has('EUW1_shared_match')).toBe(true);
   });
 
-  test('T3 sharedProcessedMatchIds reset after 24h', () => {
+  test('T3 sharedProcessedMatchIds : rotation 48 h, un id vu reste connu une génération', () => {
     const pool = new SessionPool(
       { size: 0, dequeue: vi.fn(() => []), isExhausted: vi.fn(() => true), waitForPlayers: vi.fn() } as never,
       { poll: vi.fn() } as never,
@@ -116,7 +116,14 @@ describe('SessionPool gateway guard and shared dedup', () => {
     internal.sharedProcessedMatchIds.add('EUW1_1');
     internal.sharedMatchIdsLastReset = Date.now() - 25 * 60 * 60 * 1000;
     internal.resetSharedMatchIdsIfNeeded();
+    expect(internal.sharedProcessedMatchIds.size).toBe(1);
+    internal.sharedMatchIdsLastReset = Date.now() - 49 * 60 * 60 * 1000;
+    internal.resetSharedMatchIdsIfNeeded();
     expect(internal.sharedProcessedMatchIds.size).toBe(0);
+    expect(internal.sharedProcessedMatchIds.has('EUW1_1')).toBe(true);
+    internal.sharedMatchIdsLastReset = Date.now() - 49 * 60 * 60 * 1000;
+    internal.resetSharedMatchIdsIfNeeded();
+    expect(internal.sharedProcessedMatchIds.has('EUW1_1')).toBe(false);
   });
 });
 

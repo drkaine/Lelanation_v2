@@ -26,6 +26,8 @@ export interface Player {
   platform: Platform;
   summonerName?: string;
   tagLine?: string;
+  /** Début de fenêtre propre au joueur (secondes) ; sinon `PollConfig.sinceTimestamp`. */
+  sinceTimestamp?: number;
 }
 
 export interface PollConfig {

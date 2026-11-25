@@ -1,6 +1,8 @@
 export interface DiscoveryPlayer {
   puuid: string;
   region: string;
+  /** Dernier poll (fenêtre 48 h / depuis le dernier poll). */
+  lastPolledAt?: Date | null;
 }
 
 export interface LastSeenStats {

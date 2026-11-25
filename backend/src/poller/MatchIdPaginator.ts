@@ -12,6 +12,10 @@ export class MatchIdPaginator {
     private readonly sessionId: string,
   ) {}
 
+  private since(): number {
+    return this.player.sinceTimestamp ?? this.config.sinceTimestamp;
+  }
+
   async fetchAll(): Promise<string[]> {
     const all: string[] = [];
     let page = 0;
@@ -27,7 +31,7 @@ export class MatchIdPaginator {
           page,
           offset,
           count: this.config.matchIdsPerPage,
-          sinceTimestamp: this.config.sinceTimestamp,
+          sinceTimestamp: this.since(),
         },
         'fetching page',
       );
@@ -36,7 +40,7 @@ export class MatchIdPaginator {
         const batch = await fetchMatchIdsByPUUID(this.player.puuid, this.player.platform, {
           start: offset,
           count: this.config.matchIdsPerPage,
-          startTime: this.config.sinceTimestamp,
+          startTime: this.since(),
         });
 
         all.push(...batch);

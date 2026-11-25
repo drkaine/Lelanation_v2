@@ -1,6 +1,7 @@
 import type { MatchDto, TimelineDto } from '../../riot-gateway/routes/dto.js';
 import type { Platform } from '../types.js';
 import { parsePlatformFromMatchId, isValidMatchId } from './parseMatchId.js';
+import { loadPollerSettings, pollerSettingsFile } from '../pollerSettings.js';
 
 const DEFAULT_PLATFORMS: Platform[] = ['euw1', 'kr'];
 
@@ -34,4 +35,9 @@ export function toDbRegions(platforms: Platform[]): string[] {
   return platforms.map((p) => p.toUpperCase());
 }
 
-export const POLLER_PLATFORMS: Platform[] = allowedPollerPlatforms(process.env.POLLER_PLATFORMS);
+/** Réglages Gestion › Data (fichier) ; repli : `POLLER_PLATFORMS` de l'env. Lus au démarrage. */
+export const POLLER_SETTINGS = loadPollerSettings(
+  pollerSettingsFile(),
+  allowedPollerPlatforms(process.env.POLLER_PLATFORMS),
+);
+export const POLLER_PLATFORMS: Platform[] = POLLER_SETTINGS.platforms;

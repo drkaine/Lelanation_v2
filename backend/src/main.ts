@@ -23,7 +23,7 @@ import {
 } from './poll-orchestration/index.js';
 import { PollerEngine } from './poller/PollerEngine.js';
 import type { PollConfig } from './poller/types.js';
-import { POLLER_PLATFORMS } from './poller/utils/pollerScope.js';
+import { POLLER_PLATFORMS, POLLER_SETTINGS } from './poller/utils/pollerScope.js';
 import { createLeagueSweeper } from './poll-orchestration/LeagueSweeper.js';
 import { sweepTickDelayMs } from './poll-orchestration/leagueSweep.js';
 import { SweepGate } from './poll-orchestration/sweepGate.js';
@@ -67,7 +67,11 @@ let observability: ObservabilityOrchestrator | null = null;
 let sessionPool: SessionPool | null = null;
 let shuttingDown = false;
 
-const playerDiscovery = new PlayerDiscovery(() => sweepGate.activePlatforms(POLLER_PLATFORMS));
+const playerDiscovery = new PlayerDiscovery(
+  () => sweepGate.activePlatforms(POLLER_PLATFORMS),
+  undefined,
+  () => POLLER_SETTINGS.tierWeights,
+);
 const sinceResolver = new SinceTimestampResolver(playerDiscovery);
 const matchFilter = new MatchFilter();
 const rankFilter = new RankFilter();

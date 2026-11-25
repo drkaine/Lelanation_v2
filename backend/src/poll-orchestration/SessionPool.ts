@@ -24,7 +24,7 @@ import { setSessionPoolStatusGetter } from './sessionPoolStatus.js';
 
 const SLOT_WAIT_MS = 200;
 const GATEWAY_QUEUE_POLL_MS = 200;
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
+import { playerSinceTimestamp, POLL_WINDOW_MS, RollingIdSet } from '../poller/playerSinceWindow.js';
 const SESSION_QUEUE_SAMPLE_MS = 1000;
 /** Pause balayage : vérification toutes les 5 s. */
 const HOLD_CHECK_MS = 5_000;
@@ -75,7 +75,7 @@ export class SessionPool {
   private totalSessionsLaunched = 0;
   private totalSessionsCompleted = 0;
   private heartbeatTimer: NodeJS.Timeout | null = null;
-  private sharedProcessedMatchIds = new Set<string>();
+  private sharedProcessedMatchIds = new RollingIdSet();
   private sharedMatchIdsLastReset = Date.now();
   private held = false;
 
@@ -157,18 +157,19 @@ export class SessionPool {
 
   private resetSharedMatchIdsIfNeeded(): void {
     const now = Date.now();
-    if (now - this.sharedMatchIdsLastReset <= MS_PER_DAY) {
+    if (now - this.sharedMatchIdsLastReset <= POLL_WINDOW_MS) {
       return;
     }
     const previousSize = this.sharedProcessedMatchIds.size;
-    this.sharedProcessedMatchIds = new Set<string>();
+    // Rotation : la génération sortante reste connue 48 h de plus (jamais re-requêtée dans la fenêtre).
+    this.sharedProcessedMatchIds.rotate();
     this.sharedMatchIdsLastReset = now;
     orchestrationLogger.info(
       {
         component: 'SessionPool',
         event: 'shared_match_ids_reset',
         previousSize,
-        reason: '24h TTL expired',
+        reason: '48h rotation',
       },
       'shared processed match ids reset',
     );
@@ -295,9 +296,11 @@ export class SessionPool {
     };
     assertPollConfigFiltersWired(pollConfig, orchestrationLogger);
 
+    const nowMs = Date.now();
     const pollerPlayers: Player[] = players.map((p) => ({
       puuid: p.puuid,
       platform: toPlatform(p.region),
+      sinceTimestamp: playerSinceTimestamp(resolved.sinceTimestamp, p.lastPolledAt ?? null, nowMs),
     }));
 
     this.dbConsumer?.resetSessionState();

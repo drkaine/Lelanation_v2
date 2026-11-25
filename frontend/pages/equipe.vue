@@ -2,7 +2,7 @@
   <div class="mx-auto w-full max-w-4xl px-4 py-8 text-text">
     <header class="mb-8 flex flex-wrap items-end justify-between gap-4">
       <div>
-        <h1 class="text-2xl font-bold text-text-accent">{{ t('team.title') }}</h1>
+        <h1 class="text-2xl font-bold text-text-accent">{{ t('gestion.title') }}</h1>
         <p v-if="session" class="mt-1 text-sm text-text/70">
           {{
             t('team.signedInAs', {
@@ -39,115 +39,140 @@
       {{ message.text }}
     </p>
 
-    <section class="mb-10 rounded-lg border border-primary/30 bg-surface/40 p-5">
-      <h2 class="mb-1 text-lg font-semibold">{{ t('team.invite.title') }}</h2>
-      <p class="mb-4 text-sm text-text/70">{{ t('team.invite.help') }}</p>
-      <form class="flex flex-wrap items-end gap-3" @submit.prevent="createInvitation">
-        <label class="flex flex-col gap-1 text-sm">
-          {{ t('team.role') }}
-          <select
-            v-model="inviteRole"
-            class="rounded border border-primary/50 bg-background px-3 py-2"
+    <nav
+      v-if="session?.user.role === 'admin'"
+      class="mb-6 flex gap-2 border-b border-primary/30"
+      role="tablist"
+    >
+      <button
+        v-for="tab in gestionTabs"
+        :key="tab"
+        type="button"
+        role="tab"
+        :aria-selected="activeTab === tab"
+        class="-mb-px border-b-2 px-3 py-2 text-sm"
+        :class="
+          activeTab === tab ? 'border-accent font-semibold' : 'border-transparent text-text/70'
+        "
+        @click="activeTab = tab"
+      >
+        {{ t(`gestion.tabs.${tab}`) }}
+      </button>
+    </nav>
+
+    <AdminGestionDataTab v-if="activeTab === 'data' && session?.user.role === 'admin'" />
+
+    <template v-else>
+      <section class="mb-10 rounded-lg border border-primary/30 bg-surface/40 p-5">
+        <h2 class="mb-1 text-lg font-semibold">{{ t('team.invite.title') }}</h2>
+        <p class="mb-4 text-sm text-text/70">{{ t('team.invite.help') }}</p>
+        <form class="flex flex-wrap items-end gap-3" @submit.prevent="createInvitation">
+          <label class="flex flex-col gap-1 text-sm">
+            {{ t('team.role') }}
+            <select
+              v-model="inviteRole"
+              class="rounded border border-primary/50 bg-background px-3 py-2"
+            >
+              <option v-for="r in invitable" :key="r" :value="r">{{ t(`team.roles.${r}`) }}</option>
+            </select>
+          </label>
+          <button
+            type="submit"
+            class="rounded bg-accent px-4 py-2 font-medium text-white hover:opacity-90 disabled:opacity-50"
+            :disabled="busy || !inviteRole"
           >
-            <option v-for="r in invitable" :key="r" :value="r">{{ t(`team.roles.${r}`) }}</option>
-          </select>
-        </label>
-        <button
-          type="submit"
-          class="rounded bg-accent px-4 py-2 font-medium text-white hover:opacity-90 disabled:opacity-50"
-          :disabled="busy || !inviteRole"
-        >
-          {{ t('team.invite.create') }}
-        </button>
-      </form>
+            {{ t('team.invite.create') }}
+          </button>
+        </form>
 
-      <ul v-if="invitations.length" class="mt-5 divide-y divide-primary/20">
-        <li
-          v-for="inv in invitations"
-          :key="inv.code"
-          class="flex flex-wrap items-center gap-3 py-3"
-        >
-          <code class="rounded bg-background px-2 py-1 font-mono text-base tracking-wider">{{
-            inv.code
-          }}</code>
-          <span class="text-sm">{{ t(`team.roles.${inv.role}`) }}</span>
-          <span class="text-xs text-text/60">{{
-            t('team.invite.expires', { date: formatDate(inv.expiresAt) })
-          }}</span>
-          <span class="ml-auto flex gap-2">
-            <button
-              type="button"
-              class="rounded border border-primary/50 px-3 py-1 text-sm hover:bg-surface"
-              @click="copyLink(inv.code)"
-            >
-              {{ copied === inv.code ? t('team.invite.copied') : t('team.invite.copy') }}
-            </button>
-            <button
-              type="button"
-              class="rounded border border-error/60 px-3 py-1 text-sm text-error hover:bg-error/10"
-              @click="revokeInvitation(inv.code)"
-            >
-              {{ t('team.invite.revoke') }}
-            </button>
-          </span>
-        </li>
-      </ul>
-      <p v-else class="mt-4 text-sm text-text/60">{{ t('team.invite.none') }}</p>
-    </section>
+        <ul v-if="invitations.length" class="mt-5 divide-y divide-primary/20">
+          <li
+            v-for="inv in invitations"
+            :key="inv.code"
+            class="flex flex-wrap items-center gap-3 py-3"
+          >
+            <code class="rounded bg-background px-2 py-1 font-mono text-base tracking-wider">{{
+              inv.code
+            }}</code>
+            <span class="text-sm">{{ t(`team.roles.${inv.role}`) }}</span>
+            <span class="text-xs text-text/60">{{
+              t('team.invite.expires', { date: formatDate(inv.expiresAt) })
+            }}</span>
+            <span class="ml-auto flex gap-2">
+              <button
+                type="button"
+                class="rounded border border-primary/50 px-3 py-1 text-sm hover:bg-surface"
+                @click="copyLink(inv.code)"
+              >
+                {{ copied === inv.code ? t('team.invite.copied') : t('team.invite.copy') }}
+              </button>
+              <button
+                type="button"
+                class="rounded border border-error/60 px-3 py-1 text-sm text-error hover:bg-error/10"
+                @click="revokeInvitation(inv.code)"
+              >
+                {{ t('team.invite.revoke') }}
+              </button>
+            </span>
+          </li>
+        </ul>
+        <p v-else class="mt-4 text-sm text-text/60">{{ t('team.invite.none') }}</p>
+      </section>
 
-    <section class="rounded-lg border border-primary/30 bg-surface/40 p-5">
-      <h2 class="mb-4 text-lg font-semibold">
-        {{ t('team.users.title') }} <span class="text-text/60">({{ users.length }})</span>
-      </h2>
-      <p v-if="loading" class="text-sm text-text/60">…</p>
-      <p v-else-if="!users.length" class="text-sm text-text/60">{{ t('team.users.none') }}</p>
-      <div v-else class="overflow-x-auto">
-        <table class="w-full text-left text-sm">
-          <thead class="text-xs uppercase text-text/60">
-            <tr>
-              <th class="py-2 pr-3">{{ t('team.users.username') }}</th>
-              <th class="py-2 pr-3">{{ t('team.role') }}</th>
-              <th class="py-2 pr-3">{{ t('team.users.since') }}</th>
-              <th class="py-2" />
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-primary/20">
-            <tr v-for="u in users" :key="u.id">
-              <td class="py-2 pr-3 font-medium">{{ u.username }}</td>
-              <td class="py-2 pr-3">
-                <span v-if="u.id === session?.user.id"
-                  >{{ t(`team.roles.${u.role}`) }} · {{ t('team.users.you') }}</span
-                >
-                <select
-                  v-else
-                  :value="u.role"
-                  :disabled="busy || roleChoicesFor(invitable, u.role).length < 2"
-                  class="rounded border border-primary/50 bg-background px-2 py-1"
-                  :aria-label="t('team.role')"
-                  @change="changeRole(u, ($event.target as HTMLSelectElement).value as UserRole)"
-                >
-                  <option v-for="r in roleChoicesFor(invitable, u.role)" :key="r" :value="r">
-                    {{ t(`team.roles.${r}`) }}
-                  </option>
-                </select>
-              </td>
-              <td class="py-2 pr-3 text-text/70">{{ formatDate(u.createdAt) }}</td>
-              <td class="py-2 text-right">
-                <button
-                  v-if="u.id !== session?.user.id"
-                  type="button"
-                  class="rounded border border-error/60 px-3 py-1 text-error hover:bg-error/10 disabled:opacity-50"
-                  :disabled="busy"
-                  @click="removeUser(u)"
-                >
-                  {{ t('team.users.delete') }}
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
+      <section class="rounded-lg border border-primary/30 bg-surface/40 p-5">
+        <h2 class="mb-4 text-lg font-semibold">
+          {{ t('team.users.title') }} <span class="text-text/60">({{ users.length }})</span>
+        </h2>
+        <p v-if="loading" class="text-sm text-text/60">…</p>
+        <p v-else-if="!users.length" class="text-sm text-text/60">{{ t('team.users.none') }}</p>
+        <div v-else class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="text-xs uppercase text-text/60">
+              <tr>
+                <th class="py-2 pr-3">{{ t('team.users.username') }}</th>
+                <th class="py-2 pr-3">{{ t('team.role') }}</th>
+                <th class="py-2 pr-3">{{ t('team.users.since') }}</th>
+                <th class="py-2" />
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-primary/20">
+              <tr v-for="u in users" :key="u.id">
+                <td class="py-2 pr-3 font-medium">{{ u.username }}</td>
+                <td class="py-2 pr-3">
+                  <span v-if="u.id === session?.user.id"
+                    >{{ t(`team.roles.${u.role}`) }} · {{ t('team.users.you') }}</span
+                  >
+                  <select
+                    v-else
+                    :value="u.role"
+                    :disabled="busy || roleChoicesFor(invitable, u.role).length < 2"
+                    class="rounded border border-primary/50 bg-background px-2 py-1"
+                    :aria-label="t('team.role')"
+                    @change="changeRole(u, ($event.target as HTMLSelectElement).value as UserRole)"
+                  >
+                    <option v-for="r in roleChoicesFor(invitable, u.role)" :key="r" :value="r">
+                      {{ t(`team.roles.${r}`) }}
+                    </option>
+                  </select>
+                </td>
+                <td class="py-2 pr-3 text-text/70">{{ formatDate(u.createdAt) }}</td>
+                <td class="py-2 text-right">
+                  <button
+                    v-if="u.id !== session?.user.id"
+                    type="button"
+                    class="rounded border border-error/60 px-3 py-1 text-error hover:bg-error/10 disabled:opacity-50"
+                    :disabled="busy"
+                    @click="removeUser(u)"
+                  >
+                    {{ t('team.users.delete') }}
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </template>
   </div>
 </template>
 
@@ -171,6 +196,8 @@ interface Invitation {
 const { t, locale } = useI18n()
 const localePath = useLocalePath()
 const { session, load, logout, authFetch } = useUserSession()
+const gestionTabs = ['team', 'data'] as const
+const activeTab = ref<(typeof gestionTabs)[number]>('team')
 
 useHead({ title: () => t('team.title'), meta: [{ name: 'robots', content: 'noindex' }] })
 

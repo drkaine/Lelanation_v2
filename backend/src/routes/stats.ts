@@ -517,9 +517,9 @@ router.get('/surrender-matrix', async (req: Request, res: Response) => {
 })
 
 /** GET /api/stats/regions - régions ayant des matchs en base (filtre région du front). */
-router.get('/regions', async (_req: Request, res: Response) => {
+router.get('/regions', async (req: Request, res: Response) => {
   res.set('Cache-Control', 'public, max-age=600')
-  return res.json({ regions: await getAvailableRegions() })
+  return res.json({ regions: await getAvailableRegions(queryString(req.query.version)) })
 })
 
 /** GET /api/stats/overview-team-misc - AFK par rôle × rang, duos par paire de rôles × rang. Query: ?version=16.9 */
