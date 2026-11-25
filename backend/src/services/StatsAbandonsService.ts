@@ -4,13 +4,14 @@
  * Cache mémoire 5 min pour limiter les requêtes lourdes.
  */
 import { queryRawUnsafe } from '../db/query.js'
+import { RegionScopedMap, regionSqlConditions } from '../stats/statsRegion.js'
 import { isDatabaseConfigured } from '../db/query.js'
 import { rankTierCacheKey, toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
 import { sqlLiteral } from '../stats/sqlLiteral.js'
 
 const ABANDONS_CACHE_TTL_MS = 5 * 60 * 1000
-const abandonsCache = new Map<string, { data: OverviewAbandonsResult; expiresAt: number }>()
+const abandonsCache = new RegionScopedMap<{ data: OverviewAbandonsResult; expiresAt: number }>()
 function abandonsCacheKey(
   pVersion: string | null,
   rankTier: string | string[] | null | undefined
@@ -91,7 +92,7 @@ function toRate(count: number, total: number): number {
 }
 
 const SURRENDER_MATRIX_CACHE_TTL_MS = 2 * 60 * 1000
-const surrenderMatrixCache = new Map<string, { data: SurrenderMatrixResult; expiresAt: number }>()
+const surrenderMatrixCache = new RegionScopedMap<{ data: SurrenderMatrixResult; expiresAt: number }>()
 
 async function ingestMatchsTableExists(): Promise<boolean> {
   return false
@@ -224,9 +225,10 @@ function buildRankTierWhere(alias: string, rankTier?: string | string[] | null):
   const ranks = toQueryStringArrayParam(rankTier)
     .map((r) => r.toUpperCase())
     .filter((r) => r && r !== 'ALL' && r !== '*')
-  if (ranks.length === 1) return ` AND ${alias}.rank_tier = '${ranks[0]}'`
-  if (ranks.length > 1) return ` AND ${alias}.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`
-  return ''
+  if (ranks.length === 1) return ` AND ${alias}.rank_tier = '${ranks[0]}'${regionSqlConditions(alias).map((c) => ` AND ${c}`).join('')}`
+  const region = regionSqlConditions(alias).map((c) => ` AND ${c}`).join('')
+  if (ranks.length > 1) return ` AND ${alias}.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})${region}`
+  return region
 }
 
 async function loadSurrenderTeamAgg(
@@ -377,6 +379,7 @@ export async function getOverviewAbandons(
       cond.push(`mo.rank_tier IN (${ranksSql})`)
       condIngest.push(`im.rank_tier IN (${ranksSql})`)
     }
+    cond.push(...regionSqlConditions('mo'))
     const whereSql = cond.join(' AND ')
     const whereIngestSql = condIngest.join(' AND ')
 

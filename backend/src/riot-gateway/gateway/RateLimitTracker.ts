@@ -5,8 +5,25 @@ import { observabilityBus } from './ObservabilityBus.js';
 import { isNearLimit, NEAR_LIMIT_RATIO } from './MetricsCollector.js';
 import { TokenBucket, parseRateLimitCounts, parseRateLimitHeader } from './TokenBucket.js';
 
+/** Default routing host key, used by callers that do not pass a host. */
+export const DEFAULT_HOST = 'default';
+
+/**
+ * Riot app limits are counted per routing host (europe, euw1, …): verified live with a personal key,
+ * the europe and euw1 counters advance independently. App buckets are therefore keyed by host.
+ */
+export function hostKey(baseUrl: string | undefined): string {
+  if (!baseUrl) return DEFAULT_HOST;
+  try {
+    return new URL(baseUrl).host || DEFAULT_HOST;
+  } catch {
+    return baseUrl.replace(/\/+$/, '');
+  }
+}
+
 export class RateLimitTracker {
-  private appBuckets: TokenBucket[] = [];
+  private readonly appBucketsByHost = new Map<string, TokenBucket[]>();
+  private readonly hostInFlight = new Map<string, number>();
   private readonly methodBuckets = new Map<string, TokenBucket[]>();
   private globalInFlight = 0;
   private readonly methodInFlight = new Map<string, number>();
@@ -25,12 +42,16 @@ export class RateLimitTracker {
     return this.safetyMargin;
   }
 
-  incrementInFlight(methodKey: string): void {
+  incrementInFlight(methodKey: string, baseUrl?: string): void {
+    const host = hostKey(baseUrl);
+    this.hostInFlight.set(host, (this.hostInFlight.get(host) ?? 0) + 1);
     this.globalInFlight += 1;
     this.methodInFlight.set(methodKey, (this.methodInFlight.get(methodKey) ?? 0) + 1);
   }
 
-  decrementInFlight(methodKey: string): void {
+  decrementInFlight(methodKey: string, baseUrl?: string): void {
+    const host = hostKey(baseUrl);
+    this.hostInFlight.set(host, Math.max(0, (this.hostInFlight.get(host) ?? 0) - 1));
     this.globalInFlight = Math.max(0, this.globalInFlight - 1);
     const current = this.methodInFlight.get(methodKey) ?? 0;
     if (current <= 1) {
@@ -57,8 +78,15 @@ export class RateLimitTracker {
     return this.methodInFlight.get(methodKey) ?? 0;
   }
 
-  canDispatch(methodKey: string): { allowed: boolean; waitMs?: number; appWindows: BucketState[]; methodWindows: BucketState[] } {
-    const appWindows = this.getAppBucketStates();
+  getHostInFlight(baseUrl?: string): number {
+    return this.hostInFlight.get(hostKey(baseUrl)) ?? 0;
+  }
+
+  canDispatch(
+    methodKey: string,
+    baseUrl?: string,
+  ): { allowed: boolean; waitMs?: number; appWindows: BucketState[]; methodWindows: BucketState[] } {
+    const appWindows = this.getAppBucketStates(baseUrl);
     const methodWindows = this.getMethodBucketStates(methodKey);
     const allWindows = [...appWindows, ...methodWindows];
 
@@ -82,12 +110,13 @@ export class RateLimitTracker {
     return { allowed, waitMs, appWindows, methodWindows };
   }
 
-  getWaitMs(methodKey: string): number {
-    const check = this.canDispatch(methodKey);
+  getWaitMs(methodKey: string, baseUrl?: string): number {
+    const check = this.canDispatch(methodKey, baseUrl);
     return check.waitMs ?? 0;
   }
 
-  updateFromHeaders(methodKey: string, headers: Record<string, string>): void {
+  updateFromHeaders(methodKey: string, headers: Record<string, string>, baseUrl?: string): void {
+    const host = hostKey(baseUrl);
     const appLimit = headers['x-app-rate-limit'];
     const appCount = headers['x-app-rate-limit-count'];
     const methodLimit = headers['x-method-rate-limit'];
@@ -98,7 +127,8 @@ export class RateLimitTracker {
     const parsedMethod = parseRateLimitHeader(methodLimit);
     const parsedMethodCounts = parseRateLimitCounts(methodCount);
 
-    this.appBuckets = this.syncBuckets('app', this.appBuckets, parsedApp, parsedAppCounts);
+    const appBuckets = this.syncBuckets(`app:${host}`, this.appBucketsFor(host), parsedApp, parsedAppCounts);
+    this.appBucketsByHost.set(host, appBuckets);
     const existingMethod = this.methodBuckets.get(methodKey) ?? [];
     this.methodBuckets.set(
       methodKey,
@@ -110,7 +140,8 @@ export class RateLimitTracker {
         event: 'headers_received',
         methodKey,
         rawHeaders: { appLimit, appCount, methodLimit, methodCount },
-        parsedAppWindows: this.getAppBucketStates(),
+        host,
+        parsedAppWindows: this.getAppBucketStates(baseUrl),
         parsedMethodWindows: this.getMethodBucketStates(methodKey),
       },
       'Rate limit headers received',
@@ -118,19 +149,20 @@ export class RateLimitTracker {
 
     observabilityBus.emitEvent('ratelimit:updated', {
       methodKey,
-      appWindows: this.getAppBucketStates(),
+      appWindows: this.getAppBucketStates(baseUrl),
       methodWindows: this.getMethodBucketStates(methodKey),
     });
 
-    this.checkNearLimitWarnings([...this.appBuckets, ...(this.methodBuckets.get(methodKey) ?? [])]);
+    this.checkNearLimitWarnings([...appBuckets, ...(this.methodBuckets.get(methodKey) ?? [])]);
   }
 
-  saturate(methodKey: string, untilMs: number, includeApp: boolean): void {
+  saturate(methodKey: string, untilMs: number, includeApp: boolean, baseUrl?: string): void {
     if (includeApp) {
-      for (const bucket of this.appBuckets) {
+      const host = hostKey(baseUrl);
+      for (const bucket of this.appBucketsFor(host)) {
         bucket.saturate(untilMs);
       }
-      observabilityBus.emitEvent('ratelimit:saturated', { scope: 'app', untilMs });
+      observabilityBus.emitEvent('ratelimit:saturated', { scope: 'app', host, untilMs });
     }
     const method = this.methodBuckets.get(methodKey) ?? [];
     for (const bucket of method) {
@@ -140,7 +172,10 @@ export class RateLimitTracker {
   }
 
   getAllBucketStates(): BucketState[] {
-    const app = this.getAppBucketStates();
+    const app: BucketState[] = [];
+    for (const host of this.appBucketsByHost.keys()) {
+      app.push(...this.getAppBucketStates(host));
+    }
     const methodStates: BucketState[] = [];
     for (const [methodKey, buckets] of this.methodBuckets.entries()) {
       methodStates.push(...this.getMethodBucketStates(methodKey, buckets));
@@ -148,8 +183,15 @@ export class RateLimitTracker {
     return [...app, ...methodStates];
   }
 
-  getAppBucketStates(): BucketState[] {
-    return this.appBuckets.map((bucket) => bucket.toState(this.globalInFlight, this.safetyMargin));
+  /** App buckets of one routing host (DEFAULT_HOST when omitted). */
+  getAppBucketStates(baseUrl?: string): BucketState[] {
+    const host = hostKey(baseUrl);
+    const inFlight = this.hostInFlight.get(host) ?? 0;
+    return this.appBucketsFor(host).map((bucket) => bucket.toState(inFlight, this.safetyMargin));
+  }
+
+  getAppHosts(): string[] {
+    return [...this.appBucketsByHost.keys()];
   }
 
   getMethodBucketStates(methodKey: string, buckets = this.methodBuckets.get(methodKey) ?? []): BucketState[] {
@@ -157,11 +199,19 @@ export class RateLimitTracker {
     return buckets.map((bucket) => bucket.toState(inFlight, this.safetyMargin));
   }
 
-  private resetFallbackBuckets(): void {
-    const fallback = riotConfig.fallbackLimits[riotConfig.apiKeyType].app;
-    this.appBuckets = fallback.map(
-      (entry) => new TokenBucket(`app:${entry.windowMs}`, entry.limit, entry.windowMs, 0),
+  private appBucketsFor(host: string): TokenBucket[] {
+    const existing = this.appBucketsByHost.get(host);
+    if (existing) return existing;
+    const fallback = riotConfig.fallbackLimits[riotConfig.apiKeyType].app.map(
+      (entry) => new TokenBucket(`app:${host}:${entry.windowMs}`, entry.limit, entry.windowMs, 0),
     );
+    this.appBucketsByHost.set(host, fallback);
+    return fallback;
+  }
+
+  private resetFallbackBuckets(): void {
+    this.appBucketsByHost.clear();
+    this.appBucketsFor(DEFAULT_HOST);
   }
 
   private syncBuckets(

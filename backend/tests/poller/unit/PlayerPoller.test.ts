@@ -97,6 +97,19 @@ describe('PlayerPoller', () => {
     expect(order.filter((x) => x.startsWith('process:'))).toHaveLength(2);
   });
 
+  test('only processes matches from allowed platforms (EUW1 by default)', async () => {
+    mocks.fetchAllMock.mockResolvedValue(['EUW1_1', 'TR1_2', 'ME1_3', 'EUN1_4', 'EUW1_5']);
+    const processed: string[] = [];
+    mocks.processMock.mockImplementation(async (id) => {
+      processed.push(id);
+    });
+
+    const { poller } = createPoller();
+    await poller.run();
+
+    expect(processed.sort()).toEqual(['EUW1_1', 'EUW1_5']);
+  });
+
   test('reserves player puuid in rank cache before pagination', async () => {
     const { poller, cache } = createPoller();
     let reservedBeforeMatchIds = false;
@@ -173,6 +186,7 @@ describe('PlayerPoller', () => {
     expect(stats.matchesFetched).toBe(0);
     expect(stats.matchIdsDiscovered).toBe(0);
     expect(mocks.processMock).not.toHaveBeenCalled();
+    expect(complete[0]).toMatchObject({ sinceTimestamp: 1 });
   });
 });
 

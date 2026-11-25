@@ -222,6 +222,15 @@
               >
                 {{ t('nav.championGuides') }}
               </NuxtLink>
+              <NuxtLink
+                :to="localePath('/theorycraft')"
+                :title="t('nav.learnChampion')"
+                class="builds-submenu-link"
+                :class="{ 'is-active': learnActiveId === 'theorycraft' }"
+                @click="closeLearnMenu"
+              >
+                {{ t('nav.learnChampion') }}
+              </NuxtLink>
             </div>
           </div>
           <NuxtLink

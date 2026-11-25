@@ -5,6 +5,7 @@
  * Tier score: somme des scores matchup (WR delta + signaux lane), alignée sur l’onglet matchups champion.
  */
 import { queryRawUnsafe } from '../db/query.js'
+import { RegionScopedMap, regionSqlConditions } from '../stats/statsRegion.js'
 import { bansPerChampionFromMvRows, type MvBanSliceRow } from '../utils/statsMvBanAggregate.js'
 import { isDatabaseConfigured } from '../db/query.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor, sqlAggUnionAllLiveAndArchives } from './statsAggArchive.js'
@@ -62,7 +63,7 @@ const TIER_LIST_CACHE_TTL_MS = (() => {
   return Number.isFinite(raw) && raw > 0 ? raw : 5 * 60 * 1000
 })()
 
-const tierListCache = new Map<string, { data: GetTierListResult; expiresAt: number }>()
+const tierListCache = new RegionScopedMap<{ data: GetTierListResult; expiresAt: number }>()
 
 export function tierListCacheKey(options: GetTierListOptions): string {
   const rt = Array.isArray(options.rankTier)
@@ -275,6 +276,7 @@ async function fetchBanTotalsByChampion(
       banFilters.push(`bb.rank_tier <> 'UNRANKED'`)
     }
 
+    banFilters.push(...regionSqlConditions('bb'))
     if (patch) {
       banFilters.push(
         `bb.game_version LIKE '${sqlLiteral(normalizePatchMajorMinor(patch))}%'`
@@ -337,6 +339,7 @@ async function fetchRoleRows(
     filters.push(`rank_tier = '${rf}'`)
   }
   if (patch) filters.push(`game_version LIKE '${sqlLiteral(normalizePatchMajorMinor(patch))}%'`)
+  filters.push(...regionSqlConditions(''))
   const whereSql = filters.length > 0 ? filters.join(' AND ') : '1=1'
 
   const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', patch, 'ac')
@@ -444,6 +447,7 @@ async function fetchMatchupVsRows(
     const rf = sqlLiteral(String(rankFilter).toUpperCase())
     filters.push(`rank_tier = '${rf}'`)
   }
+  filters.push(...regionSqlConditions(''))
   const whereSql = filters.length > 0 ? filters.join(' AND ') : '1=1'
 
   const vsFrom = await matchVersionedAggFrom('agg_champion_vs_stats', patch, 'vs')

@@ -8,6 +8,7 @@ export type StatisticsCohortTab =
   | 'team'
   | 'objectives'
   | 'surrender'
+  | 'teamMisc'
   | 'bans'
   | 'championTable'
   | 'balance'
@@ -51,6 +52,7 @@ export function statisticsTabFilterFlags(tab: StatisticsCohortTab): StatisticsTa
     role:
       t !== 'objectives' &&
       t !== 'surrender' &&
+      t !== 'teamMisc' &&
       t !== 'infos' &&
       t !== 'misc' &&
       t !== 'patchNotes',
@@ -58,11 +60,17 @@ export function statisticsTabFilterFlags(tab: StatisticsCohortTab): StatisticsTa
       t !== 'bans' &&
       t !== 'objectives' &&
       t !== 'surrender' &&
+      t !== 'teamMisc' &&
       t !== 'infos' &&
       t !== 'misc' &&
       t !== 'patchNotes',
     championSearch:
-      t !== 'overview' && t !== 'team' && t !== 'objectives' && t !== 'surrender' && t !== 'infos',
+      t !== 'overview' &&
+      t !== 'team' &&
+      t !== 'objectives' &&
+      t !== 'surrender' &&
+      t !== 'teamMisc' &&
+      t !== 'infos',
   }
 }
 

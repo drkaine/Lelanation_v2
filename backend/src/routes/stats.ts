@@ -3,6 +3,7 @@
  * Champions, builds, runes, meilleurs joueurs.
  */
 import { createRateLimit } from '../utils/httpRateLimit.js'
+import { regionParam, runWithStatsRegion } from '../stats/statsRegion.js'
 import { Router, Request, Response } from 'express'
 import { RiotStatsAggregator } from '../services/RiotStatsAggregator.js'
 import { getBuildsByChampion } from '../services/StatsBuildsService.js'
@@ -66,6 +67,8 @@ import {
   getObjectiveOutcomeAggByPatchDivision,
 } from '../services/StatsOverviewService.js'
 import { getOverviewAbandons, getSurrenderMatrix } from '../services/StatsAbandonsService.js'
+import { getTeamMiscStats } from '../services/StatsTeamMiscService.js'
+import { getAvailableRegions } from '../services/StatsAvailableRegionsService.js'
 import {
   getSummonerSpellsByChampion,
   getSummonerSpellsDuosByChampion,
@@ -105,6 +108,11 @@ import {
 
 const router = Router()
 const aggregator = new RiotStatsAggregator()
+
+/** `?region=` (plateforme) : toutes les requêtes stats de la requête HTTP filtrent sur cette région ; absent = toutes. */
+router.use((req: Request, _res: Response, next) => {
+  runWithStatsRegion(regionParam(req.query.region), next)
+})
 
 /** Perf: log backend duration and set X-Backend-Time / X-Stats-Path / X-SQL-Time so the front can show everything in one place. */
 router.use((req: Request, res: Response, next) => {
@@ -506,6 +514,19 @@ router.get('/surrender-matrix', async (req: Request, res: Response) => {
     return res.status(200).json({ version: null, baselineVersion: null, rows: [] })
   }
   return res.json(data)
+})
+
+/** GET /api/stats/regions - régions ayant des matchs en base (filtre région du front). */
+router.get('/regions', async (_req: Request, res: Response) => {
+  res.set('Cache-Control', 'public, max-age=600')
+  return res.json({ regions: await getAvailableRegions() })
+})
+
+/** GET /api/stats/overview-team-misc - AFK par rôle × rang, duos par paire de rôles × rang. Query: ?version=16.9 */
+router.get('/overview-team-misc', async (req: Request, res: Response) => {
+  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
+  const data = await getTeamMiscStats(queryString(req.query.version))
+  return res.json(data ?? { afk: [], duos: [] })
 })
 
 /** GET /api/stats/overview-progression - WR delta ref patch vs sinceVersion (patch courant). Query: ?version=16.9&sinceVersion=16.10 */

@@ -136,7 +136,8 @@ export interface PlayerCompleteEvent {
     participantRanksFetched: number;
     elapsedMs: number;
     errors: SessionError[];
-  };
+  };  /** Début de la fenêtre des ids (secondes) : sert à mesurer le rythme du joueur. */
+  sinceTimestamp?: number;
 }
 
 export interface SessionCompleteEvent {

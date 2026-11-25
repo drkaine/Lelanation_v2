@@ -5,6 +5,7 @@ import {
   toQueryStringArrayParam,
 } from '../utils/statsFilters.js'
 import { sqlLiteral } from './sqlLiteral.js'
+import { regionSqlConditions } from './statsRegion.js'
 
 /**
  * WHERE of a stats cohort on `alias` (`1=1` without filters): champion, rank tiers
@@ -30,5 +31,6 @@ export function cohortSqlWhere(
   }
   const roleDb = normalizeStatsRoleForChampion(filters.role)
   if (roleDb) parts.push(`${alias}.role = '${statsRoleSqlLiteral(roleDb)}'`)
+  parts.push(...regionSqlConditions(alias))
   return parts.join(' AND ')
 }

@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useItemsStore } from '~/stores/ItemsStore'
 import { useVersionStore } from '~/stores/VersionStore'
-import { apiUrl } from '~/utils/apiUrl'
+import { apiUrl, statsRegionPath } from '~/utils/apiUrl'
 import { getItemImageUrl } from '~/utils/imageUrl'
 import { getRankedEmblemUrl } from '~/utils/rankedEmblem'
 import {
@@ -339,9 +339,11 @@ const { data: itemStatsInitial } = await useAsyncData(
         : `/api/stats/items/${itemId.value}/breakdown?${buildItemStatsQueryParams().toString()}`
     const [trendRes, primaryRes] = await Promise.all([
       requestFetch<{ points?: DailyTrendSnapshotPoint[] }>(
-        `/api/stats/items/${itemId.value}/tier-trend-snapshots?${trendParams.toString()}`
+        statsRegionPath(
+          `/api/stats/items/${itemId.value}/tier-trend-snapshots?${trendParams.toString()}`
+        )
       ).catch(() => ({ points: [] as DailyTrendSnapshotPoint[] })),
-      requestFetch<unknown>(primaryUrl).catch(() => null),
+      requestFetch<unknown>(statsRegionPath(primaryUrl)).catch(() => null),
     ])
     return {
       tab,

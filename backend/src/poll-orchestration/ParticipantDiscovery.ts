@@ -1,6 +1,7 @@
 import { sql } from '../db/client.js';
 import { sortByPuuid } from '../db/puuidLockOrder.js';
 import { parsePlatformFromMatchId } from '../poller/utils/parseMatchId.js';
+import { POLLER_PLATFORMS, isAllowedRegion } from '../poller/utils/pollerScope.js';
 import { normalizePlatformRegion } from '../riot/platform-region.js';
 import type { MatchDto } from '../riot-gateway/routes/dto.js';
 import { orchestrationLogger } from './logger.js';
@@ -26,6 +27,7 @@ export class ParticipantDiscovery {
     }
 
     const result: ParticipantInfo[] = [];
+    if (!isAllowedRegion(region, POLLER_PLATFORMS)) return result;
     for (const participant of match.info?.participants ?? []) {
       const puuid = String(participant.puuid ?? '').trim();
       if (!puuid) continue;

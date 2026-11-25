@@ -4,6 +4,7 @@ import { championNameFromMap, type ChampionNamesMap } from '~/composables/useCha
 import { getChampionIndexUrl, getVersionUrl, fetchPublicJson } from '~/utils/staticDataUrl'
 import type { JsonFetcher } from '~/utils/jsonFetcher'
 import { championSsrStatsQuery } from '~/utils/statistics/championVersionQuery'
+import { statsRegionPath } from '~/utils/apiUrl'
 
 export type ChampionStatsSummary = {
   championId: number
@@ -83,7 +84,7 @@ export function useChampionPageSsr(
       }
       try {
         const stats = await requestFetch<ChampionStatsSummary>(
-          `/api/stats/champions/${id}${championSsrStatsQuery(version.value)}`
+          statsRegionPath(`/api/stats/champions/${id}${championSsrStatsQuery(version.value)}`)
         )
         return { championId: id, championName, stats }
       } catch {

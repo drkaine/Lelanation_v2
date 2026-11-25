@@ -1,3 +1,4 @@
+import { gamesPerDayAfterPoll } from './pollYield.js';
 import { sql } from '../db/client.js';
 import { insertRankHistory } from '../db/queries/ranks.js';
 import { ingestionQueue } from '../queues/index.js';
@@ -365,7 +366,7 @@ export class PollerDbConsumer {
 
   private async onPlayerComplete(event: PollerEvents['player:complete']): Promise<void> {
     try {
-      await this.playerDiscovery.updateLastSeen(event.player.puuid);
+      await this.playerDiscovery.updateLastSeen(event.player.puuid, gamesPerDayAfterPoll(event, Date.now()));
 
       orchestrationLogger.info(
         {

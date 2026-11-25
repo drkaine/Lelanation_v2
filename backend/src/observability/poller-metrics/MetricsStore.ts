@@ -47,6 +47,17 @@ export class MetricsStore {
     MetricsStore.instance = null;
   }
 
+  private sweepHold = false;
+
+  /** Le poller ne lance plus de session pendant le balayage des ligues. */
+  setSweepHold(held: boolean): void {
+    this.sweepHold = held;
+  }
+
+  isSweepHold(): boolean {
+    return this.sweepHold;
+  }
+
   getUptimeMs(): number {
     return Date.now() - this.startedAt;
   }

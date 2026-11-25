@@ -20,7 +20,7 @@ import {
 import { recordGatewayRequest, recordSaturation } from '../../observability/poller-metrics/instrumentation.js';
 import { detectThroughputAnomaly, MetricsCollector } from './MetricsCollector.js';
 import { observabilityBus, ObservabilityBus } from './ObservabilityBus.js';
-import { RateLimitTracker } from './RateLimitTracker.js';
+import { RateLimitTracker, hostKey } from './RateLimitTracker.js';
 import { RequestQueue } from './RequestQueue.js';
 import {
   classifyRateLimitType,
@@ -50,6 +50,8 @@ export class RiotGateway {
   private activeDispatches = 0;
   private isFlushing = false;
   private lastDispatchAt = 0;
+  private readonly activeByHost = new Map<string, number>();
+  private readonly lastDispatchByHost = new Map<string, number>();
   private lastRpsCheckAt = Date.now();
   private readonly MIN_FLUSH_INTERVAL_MS = 100;
 
@@ -333,43 +335,28 @@ export class RiotGateway {
     const maxDispatchesPerFlush = riotConfig.maxDispatchesPerFlush;
 
     try {
-    while (
-      !this.queue.isEmpty() &&
-      this.activeDispatches < riotConfig.maxConcurrency &&
-      dispatchedThisFlush < maxDispatchesPerFlush
-    ) {
-      const peekMethodKey = this.queue.snapshot()[0]?.methodKey;
-      if (!peekMethodKey) break;
-
-      const check = this.tracker.canDispatch(peekMethodKey);
-      if (!check.allowed) {
-        this.scheduleFlushTimer(check.waitMs ?? 0);
-        observabilityBus.emitEvent('queue:backpressure', {
-          queueSize: this.queue.size(),
-          waitMs: check.waitMs,
-        });
+    while (!this.queue.isEmpty() && dispatchedThisFlush < maxDispatchesPerFlush) {
+      // Each routing host has its own app limits: pick the first queued request (priority order)
+      // whose host can send now, so a saturated host never blocks the others (no head-of-line blocking).
+      const waits = new Map<string, number>();
+      let minWaitMs = Number.POSITIVE_INFINITY;
+      const request = this.queue.dequeueFirst((candidate) => {
+        const key = `${hostKey(candidate.baseUrl)}|${candidate.methodKey}`;
+        let waitMs = waits.get(key);
+        if (waitMs === undefined) {
+          waitMs = this.dispatchWaitMs(candidate);
+          waits.set(key, waitMs);
+        }
+        if (waitMs > 0) minWaitMs = Math.min(minWaitMs, waitMs);
+        return waitMs === 0;
+      });
+      if (!request) {
+        if (Number.isFinite(minWaitMs)) {
+          this.scheduleFlushTimer(minWaitMs);
+          observabilityBus.emitEvent('queue:backpressure', { queueSize: this.queue.size(), waitMs: minWaitMs });
+        }
         break;
       }
-
-      if (riotConfig.apiKeyType === 'personal') {
-        const bucket120 = check.appWindows.find((w) => w.windowMs === 120_000);
-        const limit120 = bucket120?.limit ?? 99;
-        if (bucket120 && bucket120.pctUsed >= riotConfig.personalTargetUtilizationPct * 100) {
-          this.scheduleFlushTimer(Math.max(50, bucket120.resetInMs));
-          break;
-        }
-        if (this.lastDispatchAt > 0) {
-          const spacing = riotConfig.personalDispatchSpacingMs(limit120);
-          const elapsed = Date.now() - this.lastDispatchAt;
-          if (elapsed < spacing) {
-            this.scheduleFlushTimer(spacing - elapsed);
-            break;
-          }
-        }
-      }
-
-      const request = this.queue.dequeue();
-      if (!request) break;
 
       gatewayLogger.trace(
         {
@@ -384,6 +371,9 @@ export class RiotGateway {
       );
 
       this.activeDispatches += 1;
+      const host = hostKey(request.baseUrl);
+      this.activeByHost.set(host, (this.activeByHost.get(host) ?? 0) + 1);
+      this.lastDispatchByHost.set(host, Date.now());
       dispatchedThisFlush += 1;
       void this.dispatchRequest(request, reason);
     }
@@ -410,6 +400,30 @@ export class RiotGateway {
     }
   }
 
+  /** 0 when the request may leave now, else ms to wait (Infinity = wait for a response). */
+  private dispatchWaitMs(request: QueuedRequest): number {
+    const host = hostKey(request.baseUrl);
+    if ((this.activeByHost.get(host) ?? 0) >= riotConfig.maxConcurrency) return Number.POSITIVE_INFINITY;
+
+    const check = this.tracker.canDispatch(request.methodKey, request.baseUrl);
+    if (!check.allowed) return Math.max(1, check.waitMs ?? 1);
+
+    if (riotConfig.apiKeyType === 'personal') {
+      const bucket120 = check.appWindows.find((w) => w.windowMs === 120_000);
+      const limit120 = bucket120?.limit ?? 99;
+      if (bucket120 && bucket120.pctUsed >= riotConfig.personalTargetUtilizationPct * 100) {
+        return Math.max(50, bucket120.resetInMs);
+      }
+      const last = this.lastDispatchByHost.get(host) ?? 0;
+      if (last > 0) {
+        const spacing = riotConfig.personalDispatchSpacingMs(limit120);
+        const elapsed = Date.now() - last;
+        if (elapsed < spacing) return spacing - elapsed;
+      }
+    }
+    return 0;
+  }
+
   private async dispatchRequest(request: QueuedRequest, flushReason: FlushReason): Promise<void> {
     const queueWaitMs = Date.now() - request.enqueuedAt;
     const url = `${request.baseUrl.replace(/\/$/, '')}${request.path.startsWith('/') ? request.path : `/${request.path}`}`;
@@ -424,7 +438,7 @@ export class RiotGateway {
         queueWaitMs,
         inFlight: this.tracker.getGlobalInFlight(),
         inFlightMethod: this.tracker.getMethodInFlight(request.methodKey),
-        appBuckets: this.tracker.getAppBucketStates(),
+        appBuckets: this.tracker.getAppBucketStates(request.baseUrl),
         methodBuckets: this.tracker.getMethodBucketStates(request.methodKey),
         flushReason,
       },
@@ -432,11 +446,11 @@ export class RiotGateway {
     );
     observabilityBus.emitEvent('request:dispatched', { requestId: request.id, methodKey: request.methodKey, url });
 
-    this.tracker.incrementInFlight(request.methodKey);
+    this.tracker.incrementInFlight(request.methodKey, request.baseUrl);
     try {
       this.lastDispatchAt = Date.now();
       const response = await riotFetch(request.baseUrl, request.path, request.queryParams, request.abortController.signal);
-      this.tracker.updateFromHeaders(request.methodKey, response.headers);
+      this.tracker.updateFromHeaders(request.methodKey, response.headers, request.baseUrl);
 
       if (response.statusCode === 429) {
         recordGatewayRequest({
@@ -508,7 +522,7 @@ export class RiotGateway {
           url,
           statusCode: response.statusCode,
           latencyMs: response.latencyMs,
-          remaining_tokens_app: this.tracker.getAppBucketStates().map((bucket) => ({
+          remaining_tokens_app: this.tracker.getAppBucketStates(request.baseUrl).map((bucket) => ({
             window: bucket.windowMs,
             available: bucket.available,
           })),
@@ -546,8 +560,10 @@ export class RiotGateway {
         'Uncaught queue error',
       );
     } finally {
-      this.tracker.decrementInFlight(request.methodKey);
+      this.tracker.decrementInFlight(request.methodKey, request.baseUrl);
       this.activeDispatches = Math.max(0, this.activeDispatches - 1);
+      const host = hostKey(request.baseUrl);
+      this.activeByHost.set(host, Math.max(0, (this.activeByHost.get(host) ?? 0) - 1));
       this.scheduleFlush('post_response', 0);
     }
   }
@@ -569,7 +585,7 @@ export class RiotGateway {
         methodKey: includeApp ? 'app' : request.methodKey,
         waitMs: retryAfterMs,
       });
-      this.tracker.saturate(request.methodKey, Date.now() + retryAfterMs, includeApp);
+      this.tracker.saturate(request.methodKey, Date.now() + retryAfterMs, includeApp, request.baseUrl);
     }
     this.metrics.record('429');
     observabilityBus.emitEvent('ratelimit:429', { requestId: request.id, retryAfterMs, limitType });
@@ -584,7 +600,7 @@ export class RiotGateway {
         url,
         attempt: request.retries + 1,
         retryAfterMs,
-        appBucketState: this.tracker.getAppBucketStates(),
+        appBucketState: this.tracker.getAppBucketStates(request.baseUrl),
         methodBucketState: this.tracker.getMethodBucketStates(request.methodKey),
       },
       'Rate limit 429 received',

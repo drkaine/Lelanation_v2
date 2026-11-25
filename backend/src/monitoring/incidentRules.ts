@@ -23,6 +23,8 @@ export type PollerWindowSummary = {
   matchesIngested: number
   matchesFailed: number
   topErrors: Array<{ message: string; count: number }>
+  /** Poller en pause volontaire (balayage des ligues) pendant la fenêtre. */
+  sweepHold: boolean
 }
 
 export type HttpWindowStats = {
@@ -90,6 +92,7 @@ export function parsePollerSummary(atIso: string, json: Record<string, unknown>)
     matchesIngested: num(ingestion.matches_ingested),
     matchesFailed: num(ingestion.matches_failed),
     topErrors: parseTopErrors(ingestion.failure_top_errors),
+    sweepHold: json.sweep_hold === true,
   }
 }
 
@@ -166,7 +169,10 @@ export function evaluateIngestionHealth(
     }
   }
 
-  const stalled = lastN(warm, t.ingestionStalledWindows)
+  // Pause volontaire du balayage des ligues : on ne compte que les fenêtres après la dernière pause.
+  const lastHold = warm.map((s) => s.sweepHold).lastIndexOf(true)
+  const afterHold = warm.slice(lastHold + 1)
+  const stalled = lastN(afterHold, t.ingestionStalledWindows)
   if (stalled && stalled.every((s) => s.matchesIngested === 0)) {
     incidents.push({
       code: 'INGESTION_STALLED',

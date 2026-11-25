@@ -1,4 +1,5 @@
 import { sqlLiteral } from '../stats/sqlLiteral.js'
+import { regionSqlConditions } from '../stats/statsRegion.js'
 /**
  * Normalisation des filtres stats (rankTier / version) : query répétée ou chaîne "A,B".
  */
@@ -52,11 +53,12 @@ export function buildRankTierSqlConditions(
   rankTier?: string | string[] | null,
 ): string[] {
   const ranks = normalizedRankTiers(rankTier)
-  if (ranks.length === 1) return [`${alias}.rank_tier = '${ranks[0]}'`]
+  const region = regionSqlConditions(alias)
+  if (ranks.length === 1) return [`${alias}.rank_tier = '${ranks[0]}'`, ...region]
   if (ranks.length > 1) {
-    return [`${alias}.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`]
+    return [`${alias}.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`, ...region]
   }
-  return []
+  return region
 }
 
 /** Clé de cache stable pour plusieurs ligues. */

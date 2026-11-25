@@ -2,6 +2,7 @@
  * Matchups by champion: winrate vs each opponent, from `agg_champion_vs_stats` (+ archive union).
  */
 import { queryRawUnsafe } from '../db/query.js'
+import { regionInSql, statsRegionsOr } from '../stats/statsRegion.js'
 import { isDatabaseConfigured } from '../db/query.js'
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
@@ -31,7 +32,7 @@ export async function getMatchupsByChampion(
   try {
     const pVersion = version != null && version !== '' ? version : null
     const pRole = role != null && role !== '' ? role : null
-    const pRegion = region != null && region !== '' ? region : null
+    const pRegions = statsRegionsOr(region)
 
     const filters: string[] = [`champion_id = ${championId}`]
     const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
@@ -41,7 +42,8 @@ export async function getMatchupsByChampion(
     }
     if (pRole) filters.push(`role = '${sqlLiteral(pRole)}'`)
     if (pVersion) filters.push(`game_version LIKE '${sqlLiteral(normalizePatchMajorMinor(pVersion))}%'`)
-    if (pRegion) filters.push(`region = '${sqlLiteral(pRegion)}'`)
+    const regionCond = regionInSql('region', pRegions)
+    if (regionCond) filters.push(regionCond)
     const whereSql = filters.join(' AND ')
 
     const vsFrom = await matchVersionedAggFrom('agg_champion_vs_stats', pVersion, 'vs')

@@ -1,5 +1,6 @@
 import { normalizeStatsRoleForChampion, toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { sqlLiteral } from './sqlLiteral.js'
+import { regionSqlConditions } from './statsRegion.js'
 
 /** League part of each requested tier (`GOLD_II` → `GOLD`). */
 export function snapshotRankTiers(rankTier: string | string[] | null | undefined): string[] {
@@ -33,6 +34,7 @@ export function snapshotFilterSql(options: {
   if (tiers.length === 1) parts.push(`${tierExpr} = '${sqlLiteral(tiers[0]!)}'`)
   else if (tiers.length > 1) parts.push(`${tierExpr} IN (${tiers.map((t) => `'${sqlLiteral(t)}'`).join(', ')})`)
   else parts.push(`${tierExpr} <> 'UNRANKED'`)
+  parts.push(...regionSqlConditions(a))
   if (options.role) parts.push(`${a}.role::text = '${sqlLiteral(options.role.toUpperCase())}'`)
   if (options.fromDate) parts.push(`${a}.date_of_game >= '${sqlLiteral(options.fromDate)}'::date`)
   if (options.toDate) parts.push(`${a}.date_of_game <= '${sqlLiteral(options.toDate)}'::date`)

@@ -354,6 +354,8 @@ export interface AlertHistoryObservability {
 export interface FullSnapshot {
   ts: number;
   uptime_ms: number;
+  /** Vrai si le poller était en pause balayage des ligues au moment du rapport. */
+  sweep_hold?: boolean;
   window: WindowLabel;
   /** Dernier mode `since` connu au moment du rapport (discovery). */
   since?: {

@@ -3,6 +3,7 @@
  * Runtime source policy: incremental aggregate tables.
  */
 import { championGlobalTableCacheKey } from './championGlobalTableCacheKey.js'
+import { regionCacheKey, regionInSql, regionParam } from '../stats/statsRegion.js'
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
 import {
   buildRankTierSqlConditions,
@@ -22,7 +23,7 @@ export function buildChampionScopedWhere(
     version?: string | string[] | null
     rankTier?: string | string[] | null
     role?: string | null
-    region?: string | null
+    region?: string | readonly string[] | null
   },
 ): string {
   const parts: string[] = [`${alias}.champion_id = ${Number(opts.championId)}`]
@@ -32,8 +33,8 @@ export function buildChampionScopedWhere(
   }
   const roleDb = normalizeStatsRoleForChampion(opts.role ?? null)
   if (roleDb) parts.push(`${alias}.role = '${statsRoleSqlLiteral(roleDb)}'`)
-  const region = opts.region?.trim()
-  if (region) parts.push(`${alias}.region = '${sqlLiteral(region)}'`)
+  const regionCond = regionInSql(`${alias}.region`, regionParam(opts.region))
+  if (regionCond) parts.push(regionCond)
   return parts.join(' AND ')
 }
 
@@ -42,7 +43,7 @@ export async function sumChampionCoreGames(options: {
   version?: string | null
   rankTier?: string | string[] | null
   role?: string | null
-  region?: string | null
+  region?: string | readonly string[] | null
 }): Promise<number> {
   if (!isDatabaseConfigured()) return 0
   const coreFrom = await matchVersionedAggFrom(
@@ -687,14 +688,15 @@ export async function getChampionGlobalTable(
   const { statsRedisCacheGet, statsRedisCacheSet } = await import('./statsRedisCache.js')
   const cached = await statsRedisCacheGet<ChampionGlobalTableResult>('champion-global-table', key)
   if (cached) return cached
-  const pending = globalTableInflight.get(key)
+  const inflightKey = `${regionCacheKey()}${key}`
+  const pending = globalTableInflight.get(inflightKey)
   if (pending) return pending
   const p = computeChampionGlobalTable(version, rankTier, role, splitTransform)
     .then((res) => {
       if (res) void statsRedisCacheSet('champion-global-table', key, res, GLOBAL_TABLE_CACHE_TTL_MS)
       return res
     })
-    .finally(() => globalTableInflight.delete(key))
-  globalTableInflight.set(key, p)
+    .finally(() => globalTableInflight.delete(inflightKey))
+  globalTableInflight.set(inflightKey, p)
   return p
 }

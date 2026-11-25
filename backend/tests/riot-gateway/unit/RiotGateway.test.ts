@@ -312,11 +312,13 @@ describe('RiotGateway', () => {
     const gateway = RiotGateway.getInstance();
     type TrackerInternal = {
       tracker: {
-        appBuckets: Array<{ windowMs: number; update: (u: number, l: number) => void; resetAt: number }>;
+        canDispatch: (methodKey: string, baseUrl: string) => unknown;
+        appBucketsByHost: Map<string, Array<{ windowMs: number; update: (u: number, l: number) => void; resetAt: number }>>;
       };
     };
     const tracker = (gateway as unknown as TrackerInternal).tracker;
-    const bucket = tracker.appBuckets.find((b) => b.windowMs === 1_000);
+    tracker.canDispatch(METHOD, BASE);
+    const bucket = tracker.appBucketsByHost.get('europe.api.riotgames.com')?.find((b) => b.windowMs === 1_000);
     expect(bucket).toBeDefined();
     bucket!.update(20, 20);
     bucket!.resetAt = Date.now() - 1;
@@ -357,5 +359,38 @@ describe('RiotGateway', () => {
     const check = (gateway as unknown as { checkThroughputAnomaly: () => void }).checkThroughputAnomaly.bind(gateway);
     check();
     expect(metrics.getRPS().avg60s).toBeGreaterThan(0);
+  });
+});
+
+describe('RiotGateway per-host dispatch', () => {
+  beforeEach(async () => {
+    await RiotGateway.resetInstance();
+    vi.mocked(riotFetch).mockReset();
+  });
+  afterEach(async () => {
+    await RiotGateway.resetInstance();
+  });
+
+  test('a slow europe request does not block a euw1 request', async () => {
+    let releaseEurope: () => void = () => undefined;
+    vi.mocked(riotFetch).mockImplementation(async (baseUrl: string) => {
+      if (baseUrl.includes('europe')) {
+        await new Promise<void>((resolve) => {
+          releaseEurope = resolve;
+        });
+      }
+      return okResponse([]);
+    });
+
+    const gateway = RiotGateway.getInstance();
+    const europe = gateway.request<string[]>(BASE, METHOD, { puuid: 'slow' });
+    const euw1 = await gateway.request<string[]>(
+      'https://euw1.api.riotgames.com',
+      '/lol/league/v4/entries/by-puuid/{puuid}',
+      { puuid: 'fast' },
+    );
+    expect(euw1.statusCode).toBe(200);
+    releaseEurope();
+    await europe;
   });
 });

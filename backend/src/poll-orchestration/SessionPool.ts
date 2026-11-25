@@ -26,6 +26,8 @@ const SLOT_WAIT_MS = 200;
 const GATEWAY_QUEUE_POLL_MS = 200;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const SESSION_QUEUE_SAMPLE_MS = 1000;
+/** Pause balayage : vérification toutes les 5 s. */
+const HOLD_CHECK_MS = 5_000;
 
 export function maxGatewayQueueBeforeSession(): number {
   const parsed = Number.parseInt(process.env.MAX_GATEWAY_QUEUE ?? '10', 10);
@@ -44,6 +46,8 @@ export interface SessionPoolConfig {
   maxConcurrentSessions: number;
   batchSize: number;
   pollConfig: Partial<PollConfig>;
+  /** Vrai = aucune nouvelle session (ex. balayage des rangs en cours). */
+  holdNewSessions?: () => boolean;
 }
 
 export interface SessionPoolStatus {
@@ -73,6 +77,7 @@ export class SessionPool {
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private sharedProcessedMatchIds = new Set<string>();
   private sharedMatchIdsLastReset = Date.now();
+  private held = false;
 
   constructor(
     private readonly playerQueue: PlayerQueue,
@@ -195,6 +200,19 @@ export class SessionPool {
   }
 
   private async loopIteration(): Promise<void> {
+    const hold = this.config.holdNewSessions?.() ?? false;
+    if (hold !== this.held) {
+      this.held = hold;
+      orchestrationLogger.info(
+        { component: 'SessionPool', activeSessions: this.activeSessions.size },
+        hold ? 'new sessions on hold (league sweep running)' : 'new sessions resumed (league sweep done)',
+      );
+    }
+    if (hold) {
+      await sleep(HOLD_CHECK_MS);
+      return;
+    }
+
     const params = this.tuner.compute({
       gatewayStatus: this.gateway.getStatus(),
       queueDepth: (await this.backpressure.getDepth()).total,

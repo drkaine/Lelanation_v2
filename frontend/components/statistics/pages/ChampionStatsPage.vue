@@ -229,6 +229,7 @@
           </button>
         </div>
         <div class="flex min-h-0 flex-1 flex-col overflow-y-auto p-2 lg:flex-none">
+          <StatisticsRegionFilter />
           <div class="statistics-filters-fields flex flex-col gap-3">
             <div>
               <label

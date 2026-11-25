@@ -36,7 +36,7 @@ export const STATISTICS_NAV_GROUPS: readonly StatisticsNavGroup[] = [
   {
     id: 'teamObjectives',
     labelKey: 'statisticsPage.navTeamObjectives',
-    tabs: ['team', 'objectives', 'surrender'],
+    tabs: ['team', 'objectives', 'surrender', 'teamMisc'],
   },
   { id: 'bans', labelKey: 'statisticsPage.navBans', tabs: ['bans'] },
   { id: 'builds', labelKey: 'statisticsPage.navBuilds', tabs: ['runes', 'spells', 'items'] },

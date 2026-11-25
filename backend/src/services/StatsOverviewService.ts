@@ -4,6 +4,7 @@
  * Uses incremental aggregate tables (`agg_*`) plus legacy MVs for metrics not yet migrated.
  */
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
+import { RegionScopedMap, regionSqlConditions } from '../stats/statsRegion.js'
 import { sql } from '../db/client.js'
 import {
   buildRankTierSqlConditions,
@@ -480,17 +481,14 @@ export interface ObjectiveOutcomeAggByPatchDivision {
 const OVERVIEW_CACHE_TTL_MS = 5 * 60 * 1000
 const OVERVIEW_DETAIL_CACHE_TTL_MS = 10 * 60 * 1000
 
-const overviewStatsCache = new Map<string, { data: OverviewStats; expiresAt: number }>()
-const overviewTeamsCache = new Map<string, { data: OverviewTeamsStats; expiresAt: number }>()
-const overviewDurationWinrateCache = new Map<string, { data: OverviewDurationWinrateStats; expiresAt: number }>()
-const overviewProgressionCache = new Map<string, { data: OverviewProgressionStats; expiresAt: number }>()
-const overviewProgressionFullCache = new Map<string, { data: OverviewProgressionFullStats; expiresAt: number }>()
-const overviewSidesCache = new Map<string, { data: OverviewSidesApiStats; expiresAt: number }>()
-const overviewSidesProgressionCache = new Map<
-  string,
-  { data: OverviewSidesProgressionFull; expiresAt: number }
->()
-const overviewDetailCache = new Map<string, { data: OverviewDetailStats; expiresAt: number }>()
+const overviewStatsCache = new RegionScopedMap<{ data: OverviewStats; expiresAt: number }>()
+const overviewTeamsCache = new RegionScopedMap<{ data: OverviewTeamsStats; expiresAt: number }>()
+const overviewDurationWinrateCache = new RegionScopedMap<{ data: OverviewDurationWinrateStats; expiresAt: number }>()
+const overviewProgressionCache = new RegionScopedMap<{ data: OverviewProgressionStats; expiresAt: number }>()
+const overviewProgressionFullCache = new RegionScopedMap<{ data: OverviewProgressionFullStats; expiresAt: number }>()
+const overviewSidesCache = new RegionScopedMap<{ data: OverviewSidesApiStats; expiresAt: number }>()
+const overviewSidesProgressionCache = new RegionScopedMap<{ data: OverviewSidesProgressionFull; expiresAt: number }>()
+const overviewDetailCache = new RegionScopedMap<{ data: OverviewDetailStats; expiresAt: number }>()
 
 function overviewCacheKey(v: string | null, r: string | null): string {
   return `${v ?? ''}|${r ?? ''}`
@@ -2740,6 +2738,7 @@ function buildRawMirPlayerWhereSql(
       `UPPER(COALESCE(pl.rank_tier,'')) IN (${ranks.map((r) => `'${sqlLiteral(r)}'`).join(',')})`
     )
   }
+  parts.push(...regionSqlConditions('pl'))
   const roleNorm = role != null && role !== '' ? String(role).trim().toUpperCase() : null
   if (roleNorm) {
     parts.push(
@@ -2889,6 +2888,7 @@ export async function getInfosPatchDivisionMatrix(): Promise<InfosPatchDivisionM
         mo.rank_tier::text AS rank_tier,
         COALESCE(SUM(mo.count_match), 0)::bigint AS match_count
       FROM ${moUnionPatch}
+      ${regionSqlConditions('mo').length ? `WHERE ${regionSqlConditions('mo').join(' AND ')}` : ''}
       GROUP BY mo.game_version, mo.rank_tier
     `)
     const divisionSet = new Set<string>()

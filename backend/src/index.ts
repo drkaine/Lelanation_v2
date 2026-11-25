@@ -27,6 +27,7 @@ import { setupSocialLinksHealthCheck } from './cron/socialLinksHealthCheck.js'
 import { setupDiskSpaceAlert } from './cron/diskSpaceAlert.js'
 import { setupMonitoringWatchdog } from './cron/monitoringWatchdog.js'
 import { setupPrivacyRetention } from './cron/privacyRetention.js'
+import { setupDuoRefresh } from './cron/duoRefresh.js'
 import { httpMonitoringMiddleware } from './monitoring/monitoringRuntime.js'
 import { MetricsService } from './services/MetricsService.js'
 import { requestStop, isAnyScriptRunning } from './worker/scriptOrchestrator.js'
@@ -137,6 +138,7 @@ try {
   setupDiskSpaceAlert()
   setupMonitoringWatchdog()
   setupPrivacyRetention()
+  setupDuoRefresh()
 } catch (error) {
   console.error('[Server] ❌ Failed to initialize cron jobs:', error)
   // Don't exit - server can still run without cron

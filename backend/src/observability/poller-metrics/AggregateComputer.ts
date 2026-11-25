@@ -178,6 +178,7 @@ export class AggregateComputer {
     return {
       ts: Date.now(),
       uptime_ms: this.store.getUptimeMs(),
+      sweep_hold: this.store.isSweepHold(),
       window,
       gateway,
       poll,

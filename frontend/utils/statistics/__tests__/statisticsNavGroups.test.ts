@@ -25,6 +25,7 @@ describe('statisticsNavGroups', () => {
 
   it('rattache chaque onglet à sa section', () => {
     expect(navGroupOfTab('surrender')).toBe('teamObjectives')
+    expect(navGroupOfTab('teamMisc')).toBe('teamObjectives')
     expect(navGroupOfTab('spells')).toBe('builds')
     expect(navGroupOfTab('vision')).toBe('behavior')
     expect(navGroupOfTab('misc')).toBe('champions')

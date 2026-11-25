@@ -23,6 +23,12 @@ import {
 } from './poll-orchestration/index.js';
 import { PollerEngine } from './poller/PollerEngine.js';
 import type { PollConfig } from './poller/types.js';
+import { POLLER_PLATFORMS } from './poller/utils/pollerScope.js';
+import { createLeagueSweeper } from './poll-orchestration/LeagueSweeper.js';
+import { sweepTickDelayMs } from './poll-orchestration/leagueSweep.js';
+import { SweepGate } from './poll-orchestration/sweepGate.js';
+import { MetricsStore } from './observability/poller-metrics/MetricsStore.js';
+import { createRankHistoryPurge, retentionDays } from './poll-orchestration/rankHistoryRetention.js';
 import { ingestionQueue, getQueueMetrics } from './queues/index.js';
 import { trimCompletedQueueJobs } from './queues/queue-cleanup.js';
 import { getMatchAggregationIntervalMs,
@@ -52,13 +58,16 @@ let metricsInterval: NodeJS.Timeout | null = null;
 let summary30mInterval: NodeJS.Timeout | null = null;
 let summary1hInterval: NodeJS.Timeout | null = null;
 let matchAggregationInterval: NodeJS.Timeout | null = null;
+const leagueSweepTimers = new Set<NodeJS.Timeout>();
+/** Poller en pause tant que le balayage des rangs du jour tourne. */
+const sweepGate = new SweepGate(process.env.LEAGUE_SWEEP_ENABLED === 'false' ? [] : POLLER_PLATFORMS);
 let leaderLockRenewInterval: NodeJS.Timeout | null = null;
 let dbConsumer: PollerDbConsumer | null = null;
 let observability: ObservabilityOrchestrator | null = null;
 let sessionPool: SessionPool | null = null;
 let shuttingDown = false;
 
-const playerDiscovery = new PlayerDiscovery();
+const playerDiscovery = new PlayerDiscovery(() => sweepGate.activePlatforms(POLLER_PLATFORMS));
 const sinceResolver = new SinceTimestampResolver(playerDiscovery);
 const matchFilter = new MatchFilter();
 const rankFilter = new RankFilter();
@@ -300,6 +309,7 @@ async function startSessionPool(): Promise<void> {
       maxConcurrentSessions: initialParams.maxConcurrentSessions,
       batchSize: initialParams.batchSize,
       pollConfig: basePollConfig,
+      holdNewSessions: () => sweepGate.allHeld(POLLER_PLATFORMS),
     },
   );
 
@@ -390,10 +400,95 @@ async function bootstrap(): Promise<void> {
   matchAggregationInterval = setInterval(() => void runMatchBatchAggregation(), aggregationIntervalMs);
   console.log(`[poller-main] match_batch_aggregation scheduled every ${aggregationIntervalMs}ms`);
 
+  startLeagueSweep();
+
   void startSessionPool();
 
   await startMonitoring();
   process.send?.('ready');
+}
+
+const RANK_PURGE_INTERVAL_MS = 60 * 60 * 1000;
+
+/**
+ * Rangs via league-v4 (205 joueurs / requête) chaque jour dès 00:01 : N pages par division (curseur
+ * tournant d'un jour à l'autre), même quota pour les tiers apex. Ces joueurs = cibles de poll du jour
+ * (poll_targets), rallongé si elles sont toutes pollées. Une boucle par plateforme. Purge horaire de l'historique de rangs et des cibles.
+ */
+function startLeagueSweep(): void {
+  if (process.env.LEAGUE_SWEEP_ENABLED === 'false') {
+    console.log('[poller-main] league_sweep disabled');
+    return;
+  }
+  const minIntervalRaw = Number.parseInt(process.env.LEAGUE_SWEEP_MIN_INTERVAL_MS ?? '1250', 10);
+  const minIntervalMs = Number.isFinite(minIntervalRaw) && minIntervalRaw > 0 ? minIntervalRaw : 1250;
+  const pagesRaw = Number.parseInt(process.env.LEAGUE_SWEEP_PAGES_PER_DIVISION ?? '2', 10);
+  const pagesPerDivision = Number.isFinite(pagesRaw) && pagesRaw > 0 ? pagesRaw : 2;
+  // Tours de balayage max par jour (1 = pas de rallonge quand toutes les cibles sont pollées).
+  const roundsRaw = Number.parseInt(process.env.LEAGUE_SWEEP_MAX_ROUNDS ?? '4', 10);
+  const maxRounds = Number.isFinite(roundsRaw) && roundsRaw > 0 ? roundsRaw : 4;
+
+  const schedule = (fn: () => Promise<void>, delayMs: number): void => {
+    if (shuttingDown) return;
+    const timer = setTimeout(() => {
+      leagueSweepTimers.delete(timer);
+      void fn();
+    }, delayMs);
+    leagueSweepTimers.add(timer);
+  };
+
+  for (const platform of POLLER_PLATFORMS) {
+    const sweeper = createLeagueSweeper(platform, pagesPerDivision);
+    const loop = async (): Promise<void> => {
+      let delayMs = sweepTickDelayMs('idle', minIntervalMs);
+      try {
+        const result = await sweeper.tick();
+        delayMs = sweepTickDelayMs(result.kind, minIntervalMs);
+        // Toutes les cibles du jour pollées : un tour de pages de plus (le repli de PlayerDiscovery poll en attendant).
+        if (result.kind === 'idle' && playerDiscovery.exhaustedPlatforms().includes(platform)) {
+          if (await sweeper.extend(maxRounds)) {
+            playerDiscovery.clearExhausted(platform);
+            delayMs = minIntervalMs;
+            orchestrationLogger.info({ component: 'LeagueSweeper', platform }, 'poll targets exhausted — sweep extended');
+          }
+        }
+        sweepGate.record(platform, result.kind);
+        MetricsStore.getInstance().setSweepHold(sweepGate.allHeld(POLLER_PLATFORMS));
+        if (result.kind !== 'idle') {
+          orchestrationLogger.debug({ component: 'LeagueSweeper', platform, ...result }, 'league sweep tick');
+        }
+      } catch (error) {
+        orchestrationLogger.warn(
+          { component: 'LeagueSweeper', platform, err: error instanceof Error ? error.message : String(error) },
+          'league sweep tick failed',
+        );
+      }
+      schedule(loop, delayMs);
+    };
+    schedule(loop, 0);
+  }
+
+  const keepDays = retentionDays(process.env.DATA_RETENTION_DAYS ?? process.env.RANK_HISTORY_RETENTION_DAYS);
+  const purge = createRankHistoryPurge(keepDays);
+  const purgeLoop = async (): Promise<void> => {
+    try {
+      const deleted = await purge();
+      if (deleted > 0) {
+        orchestrationLogger.info({ component: 'RankHistoryRetention', deleted, keepDays }, 'rank history and matches purged');
+      }
+    } catch (error) {
+      orchestrationLogger.warn(
+        { component: 'RankHistoryRetention', err: error instanceof Error ? error.message : String(error) },
+        'rank history purge failed',
+      );
+    }
+    schedule(purgeLoop, RANK_PURGE_INTERVAL_MS);
+  };
+  schedule(purgeLoop, 0);
+
+  console.log(
+    `[poller-main] league_sweep ${POLLER_PLATFORMS.join(',')} daily from 00:01, min ${minIntervalMs}ms; raw data (ranks, matches) ${keepDays}d`,
+  );
 }
 
 async function gracefulShutdown(signal: string): Promise<void> {
@@ -405,6 +500,8 @@ async function gracefulShutdown(signal: string): Promise<void> {
   if (summary30mInterval) clearInterval(summary30mInterval);
   if (summary1hInterval) clearInterval(summary1hInterval);
   if (matchAggregationInterval) clearInterval(matchAggregationInterval);
+  for (const timer of leagueSweepTimers) clearTimeout(timer);
+  leagueSweepTimers.clear();
 
   // Release the leader lock FIRST, before the (up to 60s) session-pool drain.
   // The incoming instance can then acquire it within seconds instead of timing

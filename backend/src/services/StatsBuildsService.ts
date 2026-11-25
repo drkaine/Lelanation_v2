@@ -2,6 +2,7 @@
  * Builds stats by champion from champion_item_stats and champion_item_solo_stats aggregate tables.
  */
 import { queryRawUnsafe } from '../db/query.js'
+import { statsRegionsOr } from '../stats/statsRegion.js'
 import { isDatabaseConfigured } from '../db/query.js'
 import { buildChampionScopedWhere, sumChampionCoreGames } from './ChampionGlobalTableService.js'
 import { matchVersionedAggFrom } from './statsAggArchive.js'
@@ -62,14 +63,14 @@ export async function getBuildsByChampion(
   try {
     const pRole = role != null && role !== '' ? role : null
     const pPatch = patch != null && patch !== '' ? patch : null
-    const pRegion = region != null && region !== '' ? region : null
+    const pRegions = statsRegionsOr(region)
 
     const totalGames = await sumChampionCoreGames({
       championId,
       version: pPatch,
       rankTier,
       role: pRole,
-      region: pRegion,
+      region: pRegions,
     })
     if (totalGames <= 0) return { totalGames: 0, builds: [], soloItems: [] }
 
@@ -79,7 +80,7 @@ export async function getBuildsByChampion(
       version: pPatch,
       rankTier,
       role: pRole,
-      region: pRegion,
+      region: pRegions,
     })
 
     const itemStatRows = await queryRawUnsafe<
@@ -118,7 +119,7 @@ export async function getBuildsByChampion(
       version: pPatch,
       rankTier,
       role: pRole,
-      region: pRegion,
+      region: pRegions,
     })
 
     const soloRows = await queryRawUnsafe<

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { planUploadsFetch, isBackfillComplete } from '../../../src/services/youtubeSyncPlan.js'
+import { planUploadsFetch, isBackfillComplete, YOUTUBE_FRONTEND_COPY } from '../../../src/services/youtubeSyncPlan.js'
 
 describe('planUploadsFetch', () => {
   it('liste toute la chaîne tant que le backfill n’est pas complet (vieux fichiers plafonnés à 500)', () => {
@@ -28,5 +28,11 @@ describe('isBackfillComplete', () => {
   })
   it('incrémental : reste complet', () => {
     expect(isBackfillComplete({ mode: 'incremental', maxVideos: 200 }, 3)).toBe(true)
+  })
+})
+
+describe('YOUTUBE_FRONTEND_COPY', () => {
+  it('ne redémarre ni ne rebuild le frontend : nginx sert /data depuis .output/public (miroir)', () => {
+    expect(YOUTUBE_FRONTEND_COPY).toEqual({ restartFrontend: false, buildFrontend: false })
   })
 })

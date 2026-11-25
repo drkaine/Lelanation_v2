@@ -1,4 +1,5 @@
 import type { Job } from "bullmq";
+import { NEXT_POLL_AFTER_GAME_SQL, POLL_DELAY_SQL } from '../poll-orchestration/pollYield.js';
 import { config } from "../config/index.js";
 import { normalizePlatformRegion } from "../riot/platform-region.js";
 import { normalizeLolRankTier, normalizeLolRole } from "../constants/lolEnums.js";
@@ -150,6 +151,7 @@ async function upsertPlayersFromParticipants(tx: any, participants: ParsedPartic
       SET
         region = ${region}::lol_region,
         last_seen = GREATEST(COALESCE(last_seen, ${snapshotDate}), ${snapshotDate}),
+        next_poll_at = ${tx.unsafe(NEXT_POLL_AFTER_GAME_SQL)}${snapshotDate}::timestamptz + ${tx.unsafe(POLL_DELAY_SQL)}),
         puuid_key_version = ${config.PLAYER_KEY_VERSION}
       WHERE puuid = ${puuid}
     `;

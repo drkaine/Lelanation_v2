@@ -1,6 +1,7 @@
 import { fetchLeagueEntriesByPUUID } from './gatewayRoutes.js';
 import { pollerLogger } from './logger.js';
 import { MatchIdPaginator } from './MatchIdPaginator.js';
+import { POLLER_PLATFORMS, filterAllowedMatchIds } from './utils/pollerScope.js';
 import { MatchProcessor } from './MatchProcessor.js';
 import type { ParticipantRankCache } from './ParticipantRankCache.js';
 import type { PollerEventBus } from './PollerEventBus.js';
@@ -133,8 +134,11 @@ export class PlayerPoller {
         }
       }
 
-      let newMatchIds = matchIds.filter((id) => !this.processedMatchIds.has(id));
-      const memorySkipped = matchIds.length - newMatchIds.length;
+      let newMatchIds = filterAllowedMatchIds(
+        matchIds.filter((id) => !this.processedMatchIds.has(id)),
+        POLLER_PLATFORMS,
+      );
+      const memorySkipped = matchIds.filter((id) => this.processedMatchIds.has(id)).length;
       let dbSkipped = 0;
 
       if (this.config.matchFilter) {
@@ -210,9 +214,9 @@ export class PlayerPoller {
             this.rankCache,
             this.sessionId,
             recordError,
-            () => {
+            (timelineFetched) => {
               matchesFetched += 1;
-              this.onStatsDelta({ matchesFetched: 1, timelinesFetched: 1 });
+              this.onStatsDelta({ matchesFetched: 1, timelinesFetched: timelineFetched ? 1 : 0 });
             },
             (fromCache) => {
               if (fromCache) {
@@ -255,6 +259,7 @@ export class PlayerPoller {
         sessionId: this.sessionId,
         player: this.player,
         stats,
+        sinceTimestamp: this.config.sinceTimestamp,
       });
 
       pollerLogger.info(
@@ -296,6 +301,7 @@ export class PlayerPoller {
         sessionId: this.sessionId,
         player: this.player,
         stats,
+        sinceTimestamp: this.config.sinceTimestamp,
       });
       return stats;
     }

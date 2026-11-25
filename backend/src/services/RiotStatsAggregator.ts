@@ -3,6 +3,7 @@
  * Winrate / pickrate by champion; optional filters by rank and role. Cache mémoire 5 min.
  */
 import { queryRawUnsafe } from '../db/query.js'
+import { RegionScopedMap, regionInSql, statsRegionsOr } from '../stats/statsRegion.js'
 import { isDatabaseConfigured } from '../db/query.js'
 import { bansPerChampionFromMvRows } from '../utils/statsMvBanAggregate.js'
 import {
@@ -15,10 +16,7 @@ import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchi
 import { sqlLiteral } from '../stats/sqlLiteral.js'
 
 const CHAMPIONS_CACHE_TTL_MS = 5 * 60 * 1000
-const championsCache = new Map<
-  string,
-  { data: AggregatedStats; expiresAt: number }
->()
+const championsCache = new RegionScopedMap<{ data: AggregatedStats; expiresAt: number }>()
 function canonicalChampionRoleForApi(role: string): string | null {
   const u = String(role ?? '')
     .trim()
@@ -91,7 +89,7 @@ export class RiotStatsAggregator {
       const { rankTier, role, version, region } = options
       const pRole = normalizeStatsRoleForChampion(role)
       const pVersion = version != null && version !== '' ? version : null
-      const pRegion = region != null && region !== '' ? region : null
+      const pRegions = statsRegionsOr(region)
 
       const now = Date.now()
       const cacheKey = championsCacheKey(rankTier ?? null, pRole, pVersion)
@@ -108,7 +106,8 @@ export class RiotStatsAggregator {
       }
       if (pRole) filters.push(`role = '${statsRoleSqlLiteral(pRole)}'`)
       if (pVersion) filters.push(`game_version LIKE '${sqlLiteral(normalizePatchMajorMinor(pVersion))}%'`)
-      if (pRegion) filters.push(`region = '${sqlLiteral(pRegion)}'`)
+      const regionCond = regionInSql('region', pRegions)
+      if (regionCond) filters.push(regionCond)
       const whereSql = filters.length > 0 ? filters.join(' AND ') : '1=1'
 
       const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', pVersion, 'ac')
@@ -152,6 +151,8 @@ export class RiotStatsAggregator {
         } else {
           banFilters.push(`bb.rank_tier <> 'UNRANKED'`)
         }
+        const banRegionCond = regionInSql('bb.region', pRegions)
+        if (banRegionCond) banFilters.push(banRegionCond)
         if (pVersion) {
           banFilters.push(
             `bb.game_version LIKE '${sqlLiteral(normalizePatchMajorMinor(pVersion))}%'`

@@ -7,6 +7,8 @@ import { pollerLogger } from './logger.js';
 import type { ParticipantRankCache } from './ParticipantRankCache.js';
 import type { PollerEventBus } from './PollerEventBus.js';
 import { parsePlatformFromMatchId } from './utils/parseMatchId.js';
+import { EMPTY_TIMELINE, isEarlySurrenderMatch } from './utils/pollerScope.js';
+import type { MatchDto, TimelineDto } from '../riot-gateway/routes/dto.js';
 import { asyncPool } from './utils/asyncPool.js';
 import type { Platform, Player, PollConfig, PollStage, SessionError } from './types.js';
 
@@ -26,7 +28,7 @@ export class MatchProcessor {
     private readonly rankCache: ParticipantRankCache,
     private readonly sessionId: string,
     private readonly onError: (error: SessionError) => void,
-    private readonly onMatchPairFetched: () => void,
+    private readonly onMatchPairFetched: (timelineFetched: boolean) => void,
     private readonly onParticipantRankFetched: (fromCache: boolean) => void,
   ) {}
 
@@ -37,21 +39,32 @@ export class MatchProcessor {
       'starting match',
     );
 
-    let match;
-    let timeline;
-    const [matchResult, timelineResult] = await Promise.allSettled([
-      fetchMatch(matchId, this.player.platform),
-      fetchMatchTimeline(matchId, this.player.platform),
-    ]);
+    let matchError: unknown = null;
+    let timelineError: unknown = null;
+    let match: MatchDto | undefined;
+    let timeline: TimelineDto | undefined;
+    let timelineFetched = false;
+    try {
+      match = await fetchMatch(matchId, this.player.platform);
+    } catch (err) {
+      matchError = err ?? new Error('match fetch failed');
+    }
+    if (match && isEarlySurrenderMatch(match)) {
+      timeline = EMPTY_TIMELINE;
+    } else if (match) {
+      try {
+        timeline = await fetchMatchTimeline(matchId, this.player.platform);
+        timelineFetched = true;
+      } catch (err) {
+        timelineError = err ?? new Error('timeline fetch failed');
+      }
+    }
 
-    if (matchResult.status === 'rejected' || timelineResult.status === 'rejected') {
-      const matchError = matchResult.status === 'rejected' ? matchResult.reason : null;
-      const timelineError = timelineResult.status === 'rejected' ? timelineResult.reason : null;
+    if (!match || !timeline) {
       const stage: PollStage = timelineError && !matchError ? 'match_timeline' : 'match_data';
-      const error = (timelineError ?? matchError) as unknown;
+      const error = timelineError ?? matchError;
       const message = error instanceof Error ? error.message : String(error);
-      const errorType =
-        matchError && timelineError ? 'both' : timelineError ? 'timeline_fetch' : 'match_fetch';
+      const errorType = timelineError ? 'timeline_fetch' : 'match_fetch';
       recordMatchFetch({
         matchId,
         patch: '0.0',
@@ -82,8 +95,6 @@ export class MatchProcessor {
       return;
     }
 
-    match = matchResult.value;
-    timeline = timelineResult.value;
     const patch = patchFromGameVersion(String(match.info?.gameVersion ?? ''));
     recordMatchFetch({
       matchId,
@@ -91,7 +102,7 @@ export class MatchProcessor {
       success: true,
       latencyMs: Date.now() - startedAt,
     });
-    this.onMatchPairFetched();
+    this.onMatchPairFetched(timelineFetched);
     this.eventBus.emit('match:data', {
       sessionId: this.sessionId,
       player: this.player,

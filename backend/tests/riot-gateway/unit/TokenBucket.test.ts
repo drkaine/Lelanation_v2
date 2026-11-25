@@ -77,4 +77,13 @@ describe('TokenBucket', () => {
     bucket.update(5, 100);
     expect(bucket.available(0, 0.05)).toBeGreaterThan(0);
   });
+
+  test('fenêtre expirée : pctUsed retombe à 0 (sinon un hôte sans réponse reste bloqué à vie)', () => {
+    const now = Date.now();
+    const bucket = new TokenBucket('app:europe:120000', 99, 120_000, 94, now - 1);
+    expect(bucket.pctUsed(0.01, now)).toBe(0);
+    expect(bucket.toState(0, 0.01).pctUsed).toBe(0);
+    const fresh = new TokenBucket('app:europe:120000', 99, 120_000, 49, now + 10_000);
+    expect(fresh.pctUsed(0.01, now)).toBeCloseTo(50, 0);
+  });
 });

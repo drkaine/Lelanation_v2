@@ -3,6 +3,7 @@
  * comparing winrate vs the same enemy botlane to other allied duos (delta method, aligned with TierListService).
  */
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
+import { regionSqlConditions } from '../stats/statsRegion.js'
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
 import { deltaToMatchupBaseScore } from './MatchupTierService.js'
@@ -29,6 +30,7 @@ function buildBdMatchCond(version?: string | string[] | null, rankTier?: string 
   }
   if (ranks.length === 1) parts.push(`bd.rank_tier = '${ranks[0]}'`)
   else if (ranks.length > 1) parts.push(`bd.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`)
+  parts.push(...regionSqlConditions('bd'))
   return parts.length > 0 ? parts.join(' AND ') : '1=1'
 }
 

@@ -3,9 +3,15 @@
  * Fallback mémoire process-local si Redis indisponible.
  */
 import { redis } from '../redis/client.js'
+import { regionCacheKey } from '../stats/statsRegion.js'
 
 const STATS_REDIS_PREFIX = 'stats:cache:'
 const REDIS_CACHE_ENABLED = process.env.STATS_REDIS_CACHE !== '0'
+
+/** Clé complète ; inclut la région filtrée de la requête. */
+export function statsRedisCacheFullKey(namespace: string, key: string): string {
+  return `${STATS_REDIS_PREFIX}${regionCacheKey()}${namespace}:${key}`
+}
 
 const memoryFallback = new Map<string, { value: string; expiresAt: number }>()
 
@@ -16,7 +22,7 @@ function purgeExpiredMemory(now: number): void {
 }
 
 export async function statsRedisCacheGet<T>(namespace: string, key: string): Promise<T | null> {
-  const fullKey = `${STATS_REDIS_PREFIX}${namespace}:${key}`
+  const fullKey = statsRedisCacheFullKey(namespace, key)
   const now = Date.now()
 
   const mem = memoryFallback.get(fullKey)
@@ -47,7 +53,7 @@ export async function statsRedisCacheSet(
   value: unknown,
   ttlMs: number
 ): Promise<void> {
-  const fullKey = `${STATS_REDIS_PREFIX}${namespace}:${key}`
+  const fullKey = statsRedisCacheFullKey(namespace, key)
   const now = Date.now()
   const ttlSec = Math.max(1, Math.ceil(ttlMs / 1000))
 

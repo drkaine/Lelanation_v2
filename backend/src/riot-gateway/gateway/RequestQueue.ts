@@ -20,6 +20,13 @@ export class RequestQueue {
     return this.items.shift();
   }
 
+  /** Removes and returns the first queued request (priority order) matching the predicate. */
+  dequeueFirst(predicate: (request: QueuedRequest) => boolean): QueuedRequest | undefined {
+    const index = this.items.findIndex(predicate);
+    if (index === -1) return undefined;
+    return this.items.splice(index, 1)[0];
+  }
+
   size(): number {
     return this.items.length;
   }

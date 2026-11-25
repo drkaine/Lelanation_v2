@@ -24,6 +24,15 @@ describe('statisticsTabFilterFlags', () => {
     })
   })
 
+  it('teamMisc: rang du panneau filtres (filtré côté client), rôle dans l’onglet', () => {
+    expect(statisticsTabFilterFlags('teamMisc')).toEqual({
+      division: true,
+      role: false,
+      otp: false,
+      championSearch: false,
+    })
+  })
+
   it('bans: no otp', () => {
     expect(statisticsTabFilterFlags('bans').otp).toBe(false)
     expect(statisticsTabFilterFlags('bans').role).toBe(true)

@@ -31,7 +31,8 @@
     "settings": "Settings",
     "companionApp": "Get the in-game app",
     "team": "Team",
-    "learn": "Learn"
+    "learn": "Learn",
+    "learnChampion": "Champion"
   },
   "mobileTabBar": {
     "ariaLabel": "Main navigation",
@@ -608,7 +609,15 @@
         "scorch": "Scorch",
         "stormsurge": "Stormsurge",
         "blackfireTorch": "Blackfire Torch"
-      }
+      },
+      "show": "Show training dummy",
+      "hide": "Hide training dummy"
+    },
+    "learn": {
+      "pickChampion": "Pick a champion to start from a blank build.",
+      "allyCard": "Your champion",
+      "metaTitle": "Champion theorycraft - Lelanation",
+      "metaDescription": "Test a champion's stats, items and runes from a blank build."
     }
   },
   "buildCard": {
@@ -745,6 +754,22 @@
     "lelarivaExportDivisionsCombined": "Combined divisions",
     "tabObjectives": "Objectives",
     "tabSurrender": "Surrender by division",
+    "tabTeamMisc": "Misc",
+    "teamMiscBlue": "Blue",
+    "teamMiscRed": "Red",
+    "teamMiscAfkTitle": "AFK by role",
+    "teamMiscAfkHint": "Players AFK during the game, player rank at match date.",
+    "teamMiscAfkRate": "AFK rate",
+    "teamMiscAfkCount": "AFK",
+    "teamMiscDuosTitle": "Duos by roles",
+    "teamMiscDuosHint": "Two players together on the same team, highest rank of the duo.",
+    "teamMiscDuoPair": "Roles",
+    "teamMiscDuoShare": "Share of duos",
+    "teamMiscGames": "Games",
+    "teamMiscWinrate": "Win rate",
+    "teamMiscRole": "Role",
+    "teamMiscEmpty": "No data yet.",
+    "teamMiscLoading": "Loading…",
     "tabTierlistBotlane": "Botlane tier list",
     "tierListViewBotlaneMatchups": "Botlane duos",
     "tierListViewBotlaneDuoRank": "Duo leaderboard",
@@ -1306,6 +1331,7 @@
     "progressionsPopularity": "Popularity",
     "progressionsDelta": "Progression",
     "filtersTitle": "Filters",
+    "regionAll": "All regions",
     "openFilters": "Open filters",
     "closeFilters": "Close filters",
     "mobileSortLabel": "Sort by",

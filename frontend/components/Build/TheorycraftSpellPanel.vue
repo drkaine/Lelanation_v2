@@ -24,441 +24,478 @@
         @keydown="onPracticeKeydown"
       >
         <div class="flex flex-wrap items-center justify-between gap-2">
-          <h3 class="text-sm font-bold uppercase tracking-wide text-accent">
-            {{ practiceTitle }}
-            <span class="ml-1 text-[11px] font-normal normal-case text-muted">
-              {{ targetSummary }}
-            </span>
-          </h3>
-          <button type="button" class="practice-btn" @click="resetSimulation">
+          <button
+            type="button"
+            class="practice-toggle flex items-center gap-1 text-left"
+            :aria-expanded="practiceOpen"
+            :title="practiceOpen ? t('theorycraft.practice.hide') : t('theorycraft.practice.show')"
+            @click="togglePractice"
+          >
+            <span
+              class="practice-chevron text-accent transition-transform"
+              :class="{ '-rotate-90': !practiceOpen }"
+              aria-hidden="true"
+              >▾</span
+            >
+            <h3 class="text-sm font-bold uppercase tracking-wide text-accent">
+              {{ practiceTitle }}
+              <span class="ml-1 text-[11px] font-normal normal-case text-muted">
+                {{ targetSummary }}
+              </span>
+            </h3>
+          </button>
+          <button v-if="practiceOpen" type="button" class="practice-btn" @click="resetSimulation">
             ↺ {{ t('theorycraft.practice.reset') }}
           </button>
         </div>
 
-        <div class="relative">
-          <div class="mb-1 flex items-baseline justify-between gap-2 text-xs">
-            <span class="text-lg font-bold tabular-nums text-text">
-              {{ Math.round(simulatedTarget.hp) }}
-              <span class="text-xs font-normal text-muted">
-                / {{ Math.round(targetMaxHp()) }} {{ t('theorycraft.practice.hp') }}
-              </span>
-              <span v-if="simulatedTarget.shield > 0" class="text-xs font-semibold text-slate-200">
-                + {{ Math.round(simulatedTarget.shield) }} {{ t('theorycraft.practice.shield') }}
-              </span>
-            </span>
-            <span v-if="activeHardCcRemaining > 0" class="practice-status practice-status--hard">
-              {{ t('theorycraft.practice.stunned') }} {{ activeHardCcRemaining.toFixed(1) }}s
-            </span>
-            <span v-else-if="activeSlowRemaining > 0" class="practice-status practice-status--slow">
-              {{ t('theorycraft.practice.slowed') }} {{ activeSlowRemaining.toFixed(1) }}s
-            </span>
-            <span v-if="targetDead" class="practice-dead"
-              >☠ {{ t('theorycraft.practice.dead') }}</span
-            >
-          </div>
-          <div class="practice-hpbar" role="img" :aria-label="practiceTitle">
-            <template v-if="dummyBar">
-              <span class="practice-hpbar__hp" :style="{ width: `${dummyBar.hp}%` }" />
-              <span class="practice-hpbar__shield" :style="{ width: `${dummyBar.shield}%` }" />
-              <span
-                v-for="type in DAMAGE_TYPES"
-                :key="`lost-${type}`"
-                :class="`practice-hpbar__lost dmg-bg-${type}`"
-                :style="{ width: `${dummyBar.lost[type]}%` }"
-              />
-            </template>
-          </div>
-          <div class="practice-floats" aria-live="polite">
-            <span
-              v-for="(hit, index) in hitFeed.slice(0, 4)"
-              :key="hit.id"
-              class="practice-float"
-              :class="[
-                `dmg-text-${hit.type}`,
-                { 'practice-float--lethal': hit.lethal, 'practice-float--crit': hit.crit },
-              ]"
-              :style="{ right: `${8 + index * 18}%` }"
-            >
-              -{{ Math.round(hit.amount) }}{{ hit.crit ? '!' : '' }}
-            </span>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-3 gap-2 text-center sm:grid-cols-6">
-          <div class="practice-stat">
-            <span class="practice-stat__label">{{ t('theorycraft.practice.total') }}</span>
-            <span class="practice-stat__value">{{ Math.round(totalDealt) }}</span>
-          </div>
-          <div class="practice-stat">
-            <span class="practice-stat__label">{{ t('theorycraft.practice.dps') }}</span>
-            <span class="practice-stat__value">{{ Math.round(combatDps) }}</span>
-          </div>
-          <div class="practice-stat">
-            <span class="practice-stat__label">{{ t('theorycraft.practice.time') }}</span>
-            <span class="practice-stat__value">{{ timelineNowSeconds.toFixed(2) }}s</span>
-          </div>
-          <div class="practice-stat">
-            <span class="practice-stat__label">{{ t('theorycraft.practice.cc') }}</span>
-            <span class="practice-stat__value text-sm">
-              {{ simulatedControl.hardCcSeconds.toFixed(1) }}s
-              <span class="text-[10px] text-muted">
-                / {{ simulatedControl.slowSeconds.toFixed(1) }}s
-              </span>
-            </span>
-          </div>
-          <div class="practice-stat">
-            <span class="practice-stat__label">{{ t('theorycraft.practice.healed') }}</span>
-            <span class="practice-stat__value text-emerald-400">{{ Math.round(healed) }}</span>
-          </div>
-          <div class="practice-stat">
-            <span class="practice-stat__label">{{ t('theorycraft.practice.shielded') }}</span>
-            <span class="practice-stat__value text-sky-300">{{ Math.round(shielded) }}</span>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-3 gap-2 text-xs">
-          <div
-            v-for="type in DAMAGE_TYPES"
-            :key="`total-${type}`"
-            class="practice-type"
-            :class="`practice-type--${type}`"
-          >
-            <span class="practice-type__label">{{ t(`theorycraft.practice.types.${type}`) }}</span>
-            <span class="practice-type__value">{{ Math.round(dealtSplit[type]) }}</span>
-            <span class="practice-type__pct">{{ Math.round(dealtShares[type]) }}%</span>
-          </div>
-        </div>
-
-        <div v-if="simulatedResource && simulatedResource.max > 0" class="text-[10px]">
-          <div class="practice-resbar">
-            <span
-              :class="
-                simulatedResource.kind === 'energy'
-                  ? 'practice-resbar__energy'
-                  : 'practice-resbar__mana'
-              "
-              :style="{
-                width: `${(simulatedResource.current / simulatedResource.max) * 100}%`,
-              }"
-            />
-            <span class="practice-resbar__text">
-              {{ t(`theorycraft.stats.${simulatedResource.kind}`) }}
-              {{ Math.round(simulatedResource.current) }} / {{ Math.round(simulatedResource.max) }}
-            </span>
-          </div>
-        </div>
-
-        <!-- Barre d'actions -->
-        <div class="practice-actions">
-          <button
-            type="button"
-            class="practice-action"
-            :disabled="autoAttackSplit == null"
-            :title="
-              damageTitle(
-                t('theorycraft.practice.autoAttack'),
-                estimatedAutoAttackDamage(),
-                autoAttackRawDamage ? rawAttackSplit(autoAttackRawDamage.expected) : null
-              )
-            "
-            @click.exact="useAutoAttack"
-            @click.shift.exact="enqueueAutoAttack"
-          >
-            <span class="practice-action__icon practice-action__icon--aa">⚔</span>
-            <span class="practice-action__key">{{ t('theorycraft.practice.spaceKey') }}</span>
-            <span v-if="autoRemainingCooldown() > 0.001" class="practice-action__cd">
-              {{ autoRemainingCooldown().toFixed(1) }}
-            </span>
-            <span class="practice-action__dmg">{{
-              Math.round(estimatedAutoAttackDamage() ?? 0)
-            }}</span>
-            <span class="practice-splitbar">
-              <span
-                v-for="seg in splitBarSegments(autoAttackSplit)"
-                :key="seg.type"
-                :class="`dmg-bg-${seg.type}`"
-                :style="{ width: seg.width }"
-              />
-            </span>
-          </button>
-          <button
-            v-if="
-              passive &&
-              (passive.damageVsChampion != null || (passive.controlDurationVsChampion ?? 0) > 0)
-            "
-            type="button"
-            class="practice-action"
-            :title="
-              damageTitle(
-                passive.name,
-                passive.damageVsChampion,
-                rawEventSplit({ profile: passive.damageProfile })
-              )
-            "
-            @click="usePassiveDamage(passive)"
-          >
-            <img
-              v-if="passive.imageUrl"
-              :src="passive.imageUrl"
-              :alt="passive.name"
-              class="practice-action__icon"
-              loading="lazy"
-            />
-            <span class="practice-action__key">P</span>
-            <span v-if="passiveRemainingCooldown() > 0.001" class="practice-action__cd">
-              {{ passiveRemainingCooldown().toFixed(1) }}
-            </span>
-            <span class="practice-action__dmg">{{
-              Math.round(passive.damageVsChampion ?? 0)
-            }}</span>
-            <span class="practice-splitbar">
-              <span
-                v-for="seg in splitBarSegments(passive.damageVsSplit)"
-                :key="seg.type"
-                :class="`dmg-bg-${seg.type}`"
-                :style="{ width: seg.width }"
-              />
-            </span>
-          </button>
-          <button
-            v-for="spell in spells"
-            :key="`action-${spell.id}`"
-            type="button"
-            class="practice-action"
-            :class="{
-              'practice-action--nomana': spellLacksResource(spell),
-              'practice-action--active': Boolean(sustainedFireState[spell.id]),
-            }"
-            :disabled="!spellIsUsable(spell)"
-            :title="
-              damageTitle(
-                spell.name,
-                spell.damageVsChampion,
-                rawEventSplit({ profile: spell.damageProfile, ability: true })
-              )
-            "
-            @click.exact="useSpellDamage(spell)"
-            @click.shift.exact="enqueueSpell(spell)"
-          >
-            <img
-              v-if="spell.imageUrl"
-              :src="spell.imageUrl"
-              :alt="spell.name"
-              class="practice-action__icon"
-              loading="lazy"
-            />
-            <span class="practice-action__key">{{ displaySpellSlot(spell.slot) }}</span>
-            <span v-if="sustainedFireState[spell.id]" class="practice-action__on">ON</span>
-            <span v-if="spellRemainingCooldown(spell.id) > 0.001" class="practice-action__cd">
-              {{ spellRemainingCooldown(spell.id).toFixed(1) }}
-            </span>
-            <span class="practice-action__dmg">
-              {{ spell.damageVsChampion != null ? Math.round(spell.damageVsChampion) : 'CC' }}
-            </span>
-            <span v-if="(spell.resourceCost ?? 0) > 0" class="practice-action__cost">
-              {{ Math.round(spell.resourceCost ?? 0) }}
-            </span>
-            <span
-              v-if="spell.executeBelow"
-              class="practice-action__exec"
-              :title="
-                t('theorycraft.practice.executeBelow', { hp: Math.round(spell.executeBelow) })
-              "
-            >
-              ☠ {{ Math.round(spell.executeBelow) }}
-            </span>
-            <span class="practice-splitbar">
-              <span
-                v-for="seg in splitBarSegments(spell.damageVsSplit)"
-                :key="seg.type"
-                :class="`dmg-bg-${seg.type}`"
-                :style="{ width: seg.width }"
-              />
-            </span>
-          </button>
-        </div>
-        <p class="text-xs text-muted">{{ t('theorycraft.practice.afterMitigation') }}</p>
-
-        <!-- Summoners et consommables -->
-        <div v-if="extraActions.length > 0" class="practice-extras flex flex-wrap gap-1.5 text-xs">
-          <button
-            v-for="action in extraActions"
-            :key="action.key"
-            type="button"
-            class="practice-extra"
-            :class="{ 'practice-extra--target': action.side === 'target' }"
-            @click="useExtraAction(action)"
-          >
-            {{ action.label }}
-            <span v-if="action.side === 'target'"
-              >({{ t('theorycraft.practice.extras.opponent') }})</span
-            >
-            <span v-if="extraRemainingCooldown(action) > 0.001" class="practice-extra__cd">
-              {{ extraRemainingCooldown(action).toFixed(0) }}
-            </span>
-          </button>
-        </div>
-
-        <!-- Combo -->
-        <div class="practice-combo flex flex-wrap items-center gap-1.5 text-xs">
-          <span class="font-semibold uppercase tracking-wide text-text/70">
-            {{ t('theorycraft.practice.combo') }}
-          </span>
-          <span v-if="actionQueue.length === 0" class="text-muted">
-            {{ t('theorycraft.practice.comboEmpty') }}
-          </span>
-          <button
-            v-for="(action, index) in actionQueue"
-            :key="`queued-${index}`"
-            type="button"
-            class="practice-chip"
-            :title="t('theorycraft.practice.removeFromCombo')"
-            @click="removeQueuedAction(index)"
-          >
-            {{ action.label }}
-          </button>
-          <span class="ml-auto flex flex-wrap gap-1">
-            <button
-              type="button"
-              class="practice-btn practice-btn--primary"
-              :disabled="actionQueue.length === 0"
-              @click="runQueueFromStart"
-            >
-              ▶ {{ t('theorycraft.practice.runCombo') }}
-            </button>
-            <button
-              type="button"
-              class="practice-btn"
-              :disabled="actionQueue.length === 0"
-              @click="clearQueue"
-            >
-              {{ t('theorycraft.practice.clearCombo') }}
-            </button>
-            <button type="button" class="practice-btn" @click="waitTimelineStep">
-              ⏱ +{{ timelineStepSeconds.toFixed(1) }}s
-            </button>
-          </span>
-        </div>
-
-        <p class="text-[10px] leading-snug text-muted">
-          {{
-            t('theorycraft.practice.keyboardHint', {
-              keys: spells.map(spell => displaySpellSlot(spell.slot)).join(' '),
-            })
-          }}
-        </p>
-
-        <details v-if="simulationLog.length > 0" class="text-[11px] text-text/80">
-          <summary class="cursor-pointer font-semibold uppercase tracking-wide text-text/60">
-            {{ t('theorycraft.practice.log.title') }} ({{ simulationLog.length }})
-          </summary>
-          <p v-for="(line, index) in simulationLog" :key="`sim-log-${index}`" class="tabular-nums">
-            {{ line }}
-          </p>
-        </details>
-      </div>
-
-      <!-- Dégâts par source -->
-      <div v-if="killRows.length > 0 || spells.length > 0" class="practice-table rounded-lg p-2">
-        <div class="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-          <h3 class="text-xs font-bold uppercase tracking-wide text-text/80">
-            {{ t('theorycraft.practice.damageTable') }}
-          </h3>
-          <span class="flex gap-2 text-[10px]">
-            <span
-              v-for="type in DAMAGE_TYPES"
-              :key="`legend-${type}`"
-              class="inline-flex items-center gap-1"
-            >
-              <span :class="`practice-dot dmg-bg-${type}`" />
-              {{ t(`theorycraft.practice.types.${type}`) }}
-            </span>
-          </span>
-        </div>
-        <TheorycraftRuneStackPanel variant="header" class="mb-2" />
-        <table class="w-full text-xs">
-          <thead>
-            <tr class="text-[10px] uppercase text-muted">
-              <th class="text-left font-semibold">{{ t('theorycraft.practice.source') }}</th>
-              <th class="text-left font-semibold">{{ t('theorycraft.practice.split') }}</th>
-              <th class="text-right font-semibold">{{ t('theorycraft.practice.perCast') }}</th>
-              <th class="text-right font-semibold">{{ t('theorycraft.practice.hitsToKill') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in killRows" :key="`row-${row.key}`" class="practice-row">
-              <td class="py-1 pr-2">
-                <span class="flex items-center gap-1.5">
-                  <span class="practice-slot">{{ row.slot }}</span>
-                  <span class="truncate font-semibold text-text">{{ row.name }}</span>
-                  <span v-if="row.spell" class="flex items-center gap-0.5">
-                    <button
-                      v-for="rank in row.spell.maxRank"
-                      :key="`${row.key}-rank-${rank}`"
-                      type="button"
-                      class="practice-rank"
-                      :class="{ 'practice-rank--on': activeRank(row.spell.id) === rank }"
-                      :title="`${t('theorycraft.spells.rank')} ${rank}`"
-                      @click="setRank(row.spell.id, rank)"
-                    >
-                      {{ rank }}
-                    </button>
-                  </span>
+        <template v-if="practiceOpen">
+          <div class="relative">
+            <div class="mb-1 flex items-baseline justify-between gap-2 text-xs">
+              <span class="text-lg font-bold tabular-nums text-text">
+                {{ Math.round(simulatedTarget.hp) }}
+                <span class="text-xs font-normal text-muted">
+                  / {{ Math.round(targetMaxHp()) }} {{ t('theorycraft.practice.hp') }}
                 </span>
-              </td>
-              <td class="py-1 pr-2">
-                <span class="flex flex-wrap gap-1 tabular-nums">
-                  <span
-                    v-for="part in splitParts(row.split)"
-                    :key="part.type"
-                    :class="`dmg-text-${part.type}`"
-                  >
-                    {{ Math.round(part.value) }}
-                  </span>
-                </span>
-              </td>
-              <td
-                class="py-1 text-right font-bold tabular-nums text-text"
-                :title="row.spell?.damageVsTooltip"
-              >
-                {{ Math.round(row.damage) }}
-              </td>
-              <td class="py-1 text-right tabular-nums">
-                <span v-if="row.hits === 1" class="practice-dead">☠</span>
-                <span v-else-if="row.hits != null">{{ row.hits }}×</span>
-                <span v-else class="text-muted">—</span>
-              </td>
-            </tr>
-            <tr class="practice-row practice-row--total">
-              <td class="py-1 pr-2 font-bold text-accent">
-                {{ t('theorycraft.practice.fullCombo') }}
-              </td>
-              <td class="py-1 pr-2">
-                <span class="flex flex-wrap gap-1 tabular-nums">
-                  <span
-                    v-for="part in splitParts(fullComboSplit)"
-                    :key="part.type"
-                    :class="`dmg-text-${part.type}`"
-                  >
-                    {{ Math.round(part.value) }}
-                  </span>
-                </span>
-              </td>
-              <td class="py-1 text-right font-bold tabular-nums text-accent">
-                {{ Math.round(sumSplit(fullComboSplit)) }}
-              </td>
-              <td class="py-1 text-right">
-                <span v-if="fullComboKills" class="practice-dead"
-                  >☠ {{ t('theorycraft.practice.lethal') }}</span
+                <span
+                  v-if="simulatedTarget.shield > 0"
+                  class="text-xs font-semibold text-slate-200"
                 >
-                <span v-else class="tabular-nums text-muted">
-                  {{ Math.round(Math.max(0, effectiveTargetHp - sumSplit(fullComboSplit))) }}
-                  {{ t('theorycraft.practice.hpLeft') }}
+                  + {{ Math.round(simulatedTarget.shield) }} {{ t('theorycraft.practice.shield') }}
                 </span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+              </span>
+              <span v-if="activeHardCcRemaining > 0" class="practice-status practice-status--hard">
+                {{ t('theorycraft.practice.stunned') }} {{ activeHardCcRemaining.toFixed(1) }}s
+              </span>
+              <span
+                v-else-if="activeSlowRemaining > 0"
+                class="practice-status practice-status--slow"
+              >
+                {{ t('theorycraft.practice.slowed') }} {{ activeSlowRemaining.toFixed(1) }}s
+              </span>
+              <span v-if="targetDead" class="practice-dead"
+                >☠ {{ t('theorycraft.practice.dead') }}</span
+              >
+            </div>
+            <div class="practice-hpbar" role="img" :aria-label="practiceTitle">
+              <template v-if="dummyBar">
+                <span class="practice-hpbar__hp" :style="{ width: `${dummyBar.hp}%` }" />
+                <span class="practice-hpbar__shield" :style="{ width: `${dummyBar.shield}%` }" />
+                <span
+                  v-for="type in DAMAGE_TYPES"
+                  :key="`lost-${type}`"
+                  :class="`practice-hpbar__lost dmg-bg-${type}`"
+                  :style="{ width: `${dummyBar.lost[type]}%` }"
+                />
+              </template>
+            </div>
+            <div class="practice-floats" aria-live="polite">
+              <span
+                v-for="(hit, index) in hitFeed.slice(0, 4)"
+                :key="hit.id"
+                class="practice-float"
+                :class="[
+                  `dmg-text-${hit.type}`,
+                  { 'practice-float--lethal': hit.lethal, 'practice-float--crit': hit.crit },
+                ]"
+                :style="{ right: `${8 + index * 18}%` }"
+              >
+                -{{ Math.round(hit.amount) }}{{ hit.crit ? '!' : '' }}
+              </span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-2 text-center sm:grid-cols-6">
+            <div class="practice-stat">
+              <span class="practice-stat__label">{{ t('theorycraft.practice.total') }}</span>
+              <span class="practice-stat__value">{{ Math.round(totalDealt) }}</span>
+            </div>
+            <div class="practice-stat">
+              <span class="practice-stat__label">{{ t('theorycraft.practice.dps') }}</span>
+              <span class="practice-stat__value">{{ Math.round(combatDps) }}</span>
+            </div>
+            <div class="practice-stat">
+              <span class="practice-stat__label">{{ t('theorycraft.practice.time') }}</span>
+              <span class="practice-stat__value">{{ timelineNowSeconds.toFixed(2) }}s</span>
+            </div>
+            <div class="practice-stat">
+              <span class="practice-stat__label">{{ t('theorycraft.practice.cc') }}</span>
+              <span class="practice-stat__value text-sm">
+                {{ simulatedControl.hardCcSeconds.toFixed(1) }}s
+                <span class="text-[10px] text-muted">
+                  / {{ simulatedControl.slowSeconds.toFixed(1) }}s
+                </span>
+              </span>
+            </div>
+            <div class="practice-stat">
+              <span class="practice-stat__label">{{ t('theorycraft.practice.healed') }}</span>
+              <span class="practice-stat__value text-emerald-400">{{ Math.round(healed) }}</span>
+            </div>
+            <div class="practice-stat">
+              <span class="practice-stat__label">{{ t('theorycraft.practice.shielded') }}</span>
+              <span class="practice-stat__value text-sky-300">{{ Math.round(shielded) }}</span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-2 text-xs">
+            <div
+              v-for="type in DAMAGE_TYPES"
+              :key="`total-${type}`"
+              class="practice-type"
+              :class="`practice-type--${type}`"
+            >
+              <span class="practice-type__label">{{
+                t(`theorycraft.practice.types.${type}`)
+              }}</span>
+              <span class="practice-type__value">{{ Math.round(dealtSplit[type]) }}</span>
+              <span class="practice-type__pct">{{ Math.round(dealtShares[type]) }}%</span>
+            </div>
+          </div>
+
+          <div v-if="simulatedResource && simulatedResource.max > 0" class="text-[10px]">
+            <div class="practice-resbar">
+              <span
+                :class="
+                  simulatedResource.kind === 'energy'
+                    ? 'practice-resbar__energy'
+                    : 'practice-resbar__mana'
+                "
+                :style="{
+                  width: `${(simulatedResource.current / simulatedResource.max) * 100}%`,
+                }"
+              />
+              <span class="practice-resbar__text">
+                {{ t(`theorycraft.stats.${simulatedResource.kind}`) }}
+                {{ Math.round(simulatedResource.current) }} /
+                {{ Math.round(simulatedResource.max) }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Barre d'actions -->
+          <div class="practice-actions">
+            <button
+              type="button"
+              class="practice-action"
+              :disabled="autoAttackSplit == null"
+              :title="
+                damageTitle(
+                  t('theorycraft.practice.autoAttack'),
+                  estimatedAutoAttackDamage(),
+                  autoAttackRawDamage ? rawAttackSplit(autoAttackRawDamage.expected) : null
+                )
+              "
+              @click.exact="useAutoAttack"
+              @click.shift.exact="enqueueAutoAttack"
+            >
+              <span class="practice-action__icon practice-action__icon--aa">⚔</span>
+              <span class="practice-action__key">{{ t('theorycraft.practice.spaceKey') }}</span>
+              <span v-if="autoRemainingCooldown() > 0.001" class="practice-action__cd">
+                {{ autoRemainingCooldown().toFixed(1) }}
+              </span>
+              <span class="practice-action__dmg">{{
+                Math.round(estimatedAutoAttackDamage() ?? 0)
+              }}</span>
+              <span class="practice-splitbar">
+                <span
+                  v-for="seg in splitBarSegments(autoAttackSplit)"
+                  :key="seg.type"
+                  :class="`dmg-bg-${seg.type}`"
+                  :style="{ width: seg.width }"
+                />
+              </span>
+            </button>
+            <button
+              v-if="
+                passive &&
+                (passive.damageVsChampion != null || (passive.controlDurationVsChampion ?? 0) > 0)
+              "
+              type="button"
+              class="practice-action"
+              :title="
+                damageTitle(
+                  passive.name,
+                  passive.damageVsChampion,
+                  rawEventSplit({ profile: passive.damageProfile })
+                )
+              "
+              @click="usePassiveDamage(passive)"
+            >
+              <img
+                v-if="passive.imageUrl"
+                :src="passive.imageUrl"
+                :alt="passive.name"
+                class="practice-action__icon"
+                loading="lazy"
+              />
+              <span class="practice-action__key">P</span>
+              <span v-if="passiveRemainingCooldown() > 0.001" class="practice-action__cd">
+                {{ passiveRemainingCooldown().toFixed(1) }}
+              </span>
+              <span class="practice-action__dmg">{{
+                Math.round(passive.damageVsChampion ?? 0)
+              }}</span>
+              <span class="practice-splitbar">
+                <span
+                  v-for="seg in splitBarSegments(passive.damageVsSplit)"
+                  :key="seg.type"
+                  :class="`dmg-bg-${seg.type}`"
+                  :style="{ width: seg.width }"
+                />
+              </span>
+            </button>
+            <button
+              v-for="spell in spells"
+              :key="`action-${spell.id}`"
+              type="button"
+              class="practice-action"
+              :class="{
+                'practice-action--nomana': spellLacksResource(spell),
+                'practice-action--active': Boolean(sustainedFireState[spell.id]),
+              }"
+              :disabled="!spellIsUsable(spell)"
+              :title="
+                damageTitle(
+                  spell.name,
+                  spell.damageVsChampion,
+                  rawEventSplit({ profile: spell.damageProfile, ability: true })
+                )
+              "
+              @click.exact="useSpellDamage(spell)"
+              @click.shift.exact="enqueueSpell(spell)"
+            >
+              <img
+                v-if="spell.imageUrl"
+                :src="spell.imageUrl"
+                :alt="spell.name"
+                class="practice-action__icon"
+                loading="lazy"
+              />
+              <span class="practice-action__key">{{ displaySpellSlot(spell.slot) }}</span>
+              <span v-if="sustainedFireState[spell.id]" class="practice-action__on">ON</span>
+              <span v-if="spellRemainingCooldown(spell.id) > 0.001" class="practice-action__cd">
+                {{ spellRemainingCooldown(spell.id).toFixed(1) }}
+              </span>
+              <span class="practice-action__dmg">
+                {{ spell.damageVsChampion != null ? Math.round(spell.damageVsChampion) : 'CC' }}
+              </span>
+              <span v-if="(spell.resourceCost ?? 0) > 0" class="practice-action__cost">
+                {{ Math.round(spell.resourceCost ?? 0) }}
+              </span>
+              <span
+                v-if="spell.executeBelow"
+                class="practice-action__exec"
+                :title="
+                  t('theorycraft.practice.executeBelow', { hp: Math.round(spell.executeBelow) })
+                "
+              >
+                ☠ {{ Math.round(spell.executeBelow) }}
+              </span>
+              <span class="practice-splitbar">
+                <span
+                  v-for="seg in splitBarSegments(spell.damageVsSplit)"
+                  :key="seg.type"
+                  :class="`dmg-bg-${seg.type}`"
+                  :style="{ width: seg.width }"
+                />
+              </span>
+            </button>
+          </div>
+          <p class="text-xs text-muted">{{ t('theorycraft.practice.afterMitigation') }}</p>
+
+          <!-- Summoners et consommables -->
+          <div
+            v-if="extraActions.length > 0"
+            class="practice-extras flex flex-wrap gap-1.5 text-xs"
+          >
+            <button
+              v-for="action in extraActions"
+              :key="action.key"
+              type="button"
+              class="practice-extra"
+              :class="{ 'practice-extra--target': action.side === 'target' }"
+              @click="useExtraAction(action)"
+            >
+              {{ action.label }}
+              <span v-if="action.side === 'target'"
+                >({{ t('theorycraft.practice.extras.opponent') }})</span
+              >
+              <span v-if="extraRemainingCooldown(action) > 0.001" class="practice-extra__cd">
+                {{ extraRemainingCooldown(action).toFixed(0) }}
+              </span>
+            </button>
+          </div>
+
+          <!-- Combo -->
+          <div class="practice-combo flex flex-wrap items-center gap-1.5 text-xs">
+            <span class="font-semibold uppercase tracking-wide text-text/70">
+              {{ t('theorycraft.practice.combo') }}
+            </span>
+            <span v-if="actionQueue.length === 0" class="text-muted">
+              {{ t('theorycraft.practice.comboEmpty') }}
+            </span>
+            <button
+              v-for="(action, index) in actionQueue"
+              :key="`queued-${index}`"
+              type="button"
+              class="practice-chip"
+              :title="t('theorycraft.practice.removeFromCombo')"
+              @click="removeQueuedAction(index)"
+            >
+              {{ action.label }}
+            </button>
+            <span class="ml-auto flex flex-wrap gap-1">
+              <button
+                type="button"
+                class="practice-btn practice-btn--primary"
+                :disabled="actionQueue.length === 0"
+                @click="runQueueFromStart"
+              >
+                ▶ {{ t('theorycraft.practice.runCombo') }}
+              </button>
+              <button
+                type="button"
+                class="practice-btn"
+                :disabled="actionQueue.length === 0"
+                @click="clearQueue"
+              >
+                {{ t('theorycraft.practice.clearCombo') }}
+              </button>
+              <button type="button" class="practice-btn" @click="waitTimelineStep">
+                ⏱ +{{ timelineStepSeconds.toFixed(1) }}s
+              </button>
+            </span>
+          </div>
+
+          <p class="text-[10px] leading-snug text-muted">
+            {{
+              t('theorycraft.practice.keyboardHint', {
+                keys: spells.map(spell => displaySpellSlot(spell.slot)).join(' '),
+              })
+            }}
+          </p>
+
+          <details v-if="simulationLog.length > 0" class="text-[11px] text-text/80">
+            <summary class="cursor-pointer font-semibold uppercase tracking-wide text-text/60">
+              {{ t('theorycraft.practice.log.title') }} ({{ simulationLog.length }})
+            </summary>
+            <p
+              v-for="(line, index) in simulationLog"
+              :key="`sim-log-${index}`"
+              class="tabular-nums"
+            >
+              {{ line }}
+            </p>
+          </details>
+
+          <!-- Dégâts par source -->
+          <div
+            v-if="killRows.length > 0 || spells.length > 0"
+            class="practice-table rounded-lg p-2"
+          >
+            <div class="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+              <h3 class="text-xs font-bold uppercase tracking-wide text-text/80">
+                {{ t('theorycraft.practice.damageTable') }}
+              </h3>
+              <span class="flex gap-2 text-[10px]">
+                <span
+                  v-for="type in DAMAGE_TYPES"
+                  :key="`legend-${type}`"
+                  class="inline-flex items-center gap-1"
+                >
+                  <span :class="`practice-dot dmg-bg-${type}`" />
+                  {{ t(`theorycraft.practice.types.${type}`) }}
+                </span>
+              </span>
+            </div>
+            <TheorycraftRuneStackPanel variant="header" class="mb-2" />
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="text-[10px] uppercase text-muted">
+                  <th class="text-left font-semibold">{{ t('theorycraft.practice.source') }}</th>
+                  <th class="text-left font-semibold">{{ t('theorycraft.practice.split') }}</th>
+                  <th class="text-right font-semibold">{{ t('theorycraft.practice.perCast') }}</th>
+                  <th class="text-right font-semibold">
+                    {{ t('theorycraft.practice.hitsToKill') }}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in killRows" :key="`row-${row.key}`" class="practice-row">
+                  <td class="py-1 pr-2">
+                    <span class="flex items-center gap-1.5">
+                      <span class="practice-slot">{{ row.slot }}</span>
+                      <span class="truncate font-semibold text-text">{{ row.name }}</span>
+                      <span v-if="row.spell" class="flex items-center gap-0.5">
+                        <button
+                          v-for="rank in row.spell.maxRank"
+                          :key="`${row.key}-rank-${rank}`"
+                          type="button"
+                          class="practice-rank"
+                          :class="{ 'practice-rank--on': activeRank(row.spell.id) === rank }"
+                          :title="`${t('theorycraft.spells.rank')} ${rank}`"
+                          @click="setRank(row.spell.id, rank)"
+                        >
+                          {{ rank }}
+                        </button>
+                      </span>
+                    </span>
+                  </td>
+                  <td class="py-1 pr-2">
+                    <span class="flex flex-wrap gap-1 tabular-nums">
+                      <span
+                        v-for="part in splitParts(row.split)"
+                        :key="part.type"
+                        :class="`dmg-text-${part.type}`"
+                      >
+                        {{ Math.round(part.value) }}
+                      </span>
+                    </span>
+                  </td>
+                  <td
+                    class="py-1 text-right font-bold tabular-nums text-text"
+                    :title="row.spell?.damageVsTooltip"
+                  >
+                    {{ Math.round(row.damage) }}
+                  </td>
+                  <td class="py-1 text-right tabular-nums">
+                    <span v-if="row.hits === 1" class="practice-dead">☠</span>
+                    <span v-else-if="row.hits != null">{{ row.hits }}×</span>
+                    <span v-else class="text-muted">—</span>
+                  </td>
+                </tr>
+                <tr class="practice-row practice-row--total">
+                  <td class="py-1 pr-2 font-bold text-accent">
+                    {{ t('theorycraft.practice.fullCombo') }}
+                  </td>
+                  <td class="py-1 pr-2">
+                    <span class="flex flex-wrap gap-1 tabular-nums">
+                      <span
+                        v-for="part in splitParts(fullComboSplit)"
+                        :key="part.type"
+                        :class="`dmg-text-${part.type}`"
+                      >
+                        {{ Math.round(part.value) }}
+                      </span>
+                    </span>
+                  </td>
+                  <td class="py-1 text-right font-bold tabular-nums text-accent">
+                    {{ Math.round(sumSplit(fullComboSplit)) }}
+                  </td>
+                  <td class="py-1 text-right">
+                    <span v-if="fullComboKills" class="practice-dead"
+                      >☠ {{ t('theorycraft.practice.lethal') }}</span
+                    >
+                    <span v-else class="tabular-nums text-muted">
+                      {{ Math.round(Math.max(0, effectiveTargetHp - sumSplit(fullComboSplit))) }}
+                      {{ t('theorycraft.practice.hpLeft') }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </template>
       </div>
 
       <p
@@ -654,9 +691,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import TheorycraftRuneStackPanel from '~/components/Build/TheorycraftRuneStackPanel.vue'
 import { useChampionData } from '~/composables/useChampionData'
+import { usePersistedToggle } from '~/composables/usePersistedToggle'
 import {
   finalizeTooltipDisplay,
   resolveTheorycraftSpellDescription,
@@ -892,6 +930,14 @@ const props = defineProps<{
 }>()
 
 const { t, locale } = useI18n()
+
+/** Mannequin d'entraînement : replié par défaut, choix retenu par navigateur. */
+const {
+  open: practiceOpen,
+  toggle: togglePractice,
+  restore: restorePractice,
+} = usePersistedToggle('lelanation_theorycraft_practice_open')
+onMounted(restorePractice)
 const buildStore = useBuildStore()
 
 /** Opponent build when one is picked, otherwise the training dummy. */

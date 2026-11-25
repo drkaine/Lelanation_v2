@@ -31,7 +31,8 @@
     "settings": "Paramètres",
     "companionApp": "Obtenir l'app in-game",
     "team": "Équipe",
-    "learn": "Apprendre"
+    "learn": "Apprendre",
+    "learnChampion": "Champion"
   },
   "mobileTabBar": {
     "ariaLabel": "Navigation principale",
@@ -608,7 +609,15 @@
         "scorch": "Brûlure",
         "stormsurge": "Onde orageuse",
         "blackfireTorch": "Torche noire"
-      }
+      },
+      "show": "Afficher le mannequin",
+      "hide": "Masquer le mannequin"
+    },
+    "learn": {
+      "pickChampion": "Choisissez un champion pour commencer sur une base vierge.",
+      "allyCard": "Votre champion",
+      "metaTitle": "Theorycraft champion - Lelanation",
+      "metaDescription": "Testez les stats, objets et runes d'un champion sur une base vierge."
     }
   },
   "buildCard": {
@@ -745,6 +754,22 @@
     "lelarivaExportDivisionsCombined": "Divisions combinées",
     "tabObjectives": "Objectifs",
     "tabSurrender": "Surrender par division",
+    "tabTeamMisc": "Divers",
+    "teamMiscBlue": "Bleu",
+    "teamMiscRed": "Rouge",
+    "teamMiscAfkTitle": "AFK par rôle",
+    "teamMiscAfkHint": "Joueurs AFK pendant la partie, rang du joueur à la date du match.",
+    "teamMiscAfkRate": "Taux AFK",
+    "teamMiscAfkCount": "AFK",
+    "teamMiscDuosTitle": "Duos par rôles",
+    "teamMiscDuosHint": "Deux joueurs ensemble dans la même équipe, rang le plus haut du duo.",
+    "teamMiscDuoPair": "Rôles",
+    "teamMiscDuoShare": "Part des duos",
+    "teamMiscGames": "Parties",
+    "teamMiscWinrate": "Victoire",
+    "teamMiscRole": "Rôle",
+    "teamMiscEmpty": "Pas encore de données.",
+    "teamMiscLoading": "Chargement…",
     "tabTierlistBotlane": "Tier-liste botlane",
     "tierListViewBotlaneMatchups": "Duos botlane",
     "tierListViewBotlaneDuoRank": "Classement duo",
@@ -1307,6 +1332,7 @@
     "progressionsPopularity": "Popularité",
     "progressionsDelta": "Progression",
     "filtersTitle": "Filtres",
+    "regionAll": "Toutes les régions",
     "openFilters": "Ouvrir les filtres",
     "closeFilters": "Fermer les filtres",
     "mobileSortLabel": "Trier par",

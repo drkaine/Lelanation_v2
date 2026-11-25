@@ -21,6 +21,7 @@ function win(minutesAgo: number, over: Partial<PollerWindowSummary> = {}): Polle
     matchesIngested: 20,
     matchesFailed: 0,
     topErrors: [],
+    sweepHold: false,
     ...over,
   };
 }
@@ -50,6 +51,7 @@ describe('parsePollerSummary', () => {
       matchesIngested: 9,
       matchesFailed: 2,
       topErrors: [{ message: 'boom', count: 2 }],
+      sweepHold: false,
     });
   });
 
@@ -102,6 +104,26 @@ describe('evaluateIngestionHealth', () => {
   test('ingestion_stalled_is_not_raised_when_only_two_windows_are_empty', () => {
     const none = { matchesIngested: 0 };
     expect(codes([win(25), win(15, none), win(5, none)])).not.toContain('INGESTION_STALLED');
+  });
+
+  test('ingestion_stalled_is_not_raised_when_a_window_is_held_by_the_league_sweep', () => {
+    const none = { matchesIngested: 0 };
+    const held = { matchesIngested: 0, sweepHold: true };
+    expect(codes([win(25, none), win(15, held), win(5, none)])).not.toContain('INGESTION_STALLED');
+    expect(codes([win(35, none), win(25, held), win(15, none), win(5, none)])).not.toContain('INGESTION_STALLED');
+  });
+
+  test('ingestion_stalled_is_raised_again_after_three_empty_windows_past_the_sweep', () => {
+    const none = { matchesIngested: 0 };
+    expect(codes([win(35, { sweepHold: true }), win(25, none), win(15, none), win(5, none)])).toContain(
+      'INGESTION_STALLED',
+    );
+  });
+
+  test('parsePollerSummary_reads_sweep_hold_flag', () => {
+    const json = { uptime_ms: 1, gateway: { total_requests: 1 }, sweep_hold: true };
+    expect(parsePollerSummary('2026-09-24T12:00:00.000Z', json)?.sweepHold).toBe(true);
+    expect(parsePollerSummary('2026-09-24T12:00:00.000Z', { gateway: {} })?.sweepHold).toBe(false);
   });
 
   test('ingestion_failing_is_raised_when_ingestion_mostly_fails_twice', () => {

@@ -1,4 +1,5 @@
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
+import { regionSqlConditions } from '../stats/statsRegion.js'
 import { buildChampionScopedWhere } from './ChampionGlobalTableService.js'
 import { toQueryStringArrayParam, normalizeStatsRoleForChampion } from '../utils/statsFilters.js'
 import { matchVersionedAggFrom } from './statsAggArchive.js'
@@ -47,6 +48,7 @@ export async function getChampionDamageSplit(
   else if (tiers.length > 1) where.push(`mv.rank_tier IN (${tiers.map((t) => `'${esc(t)}'`).join(', ')})`)
   else where.push(`mv.rank_tier <> 'UNRANKED'`)
   if (roleNorm) where.push(`mv.role = '${esc(roleNorm)}'`)
+  where.push(...regionSqlConditions('mv'))
 
   const rows = await queryRawUnsafe<
     Array<{

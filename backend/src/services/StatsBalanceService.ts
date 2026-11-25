@@ -1,4 +1,5 @@
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
+import { regionSqlConditions } from '../stats/statsRegion.js'
 import { readBalanceRules, type BalanceLevelKey, type BalanceRulesConfig } from './BalanceRulesService.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor, sqlAggUnionAllLiveAndArchives } from './statsAggArchive.js'
 import {
@@ -250,11 +251,13 @@ async function buildPatchSnapshot(
     ? `AND role = '${statsRoleSqlLiteral(roleFilter.championSql)}'`
     : ''
   const patchLike = `${sqlLiteral(normalizePatchMajorMinor(patch))}%`
+  const regionAnd = regionSqlConditions('').map((c) => `AND ${c}`).join(' ')
   const coreRowsEffective = await queryRawUnsafe<CoreRow[]>(`
       SELECT champion_id, rank_tier, role, count_game, count_win
       FROM ${coreFrom}
       WHERE game_version LIKE '${patchLike}'
         AND rank_tier IN (${tiersSql})
+        ${regionAnd}
         ${roleSql}
     `)
   const bansFrom = await matchVersionedAggFrom('agg_champion_bans_by_banner', patch, 'bb')
@@ -266,6 +269,7 @@ async function buildPatchSnapshot(
       FROM ${bansFrom}
       WHERE game_version LIKE '${patchLike}'
         AND rank_tier IN (${tiersSql})
+        ${regionAnd}
         ${banRoleSql}
     `)
 

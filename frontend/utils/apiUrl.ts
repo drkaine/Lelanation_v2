@@ -1,4 +1,10 @@
 import { resolveSiteUrl } from './siteUrl'
+import {
+  type StatsRegion,
+  getStatsRegions,
+  regionsFromCookieHeader,
+  withStatsRegions,
+} from './statsRegion'
 
 function getRuntimeConfigSafe(): any {
   // Outside a Nuxt app context (e.g. store calls after an await), useRuntimeConfig() reports
@@ -6,7 +12,19 @@ function getRuntimeConfigSafe(): any {
   return tryUseNuxtApp()?.$config ?? { public: {} }
 }
 
-export function apiUrl(path: string): string {
+/** Client : région posée par le plugin ; serveur : cookie de la requête (pas d'état partagé entre requêtes). */
+function currentStatsRegions(): StatsRegion[] {
+  if (process.client) return getStatsRegions()
+  return regionsFromCookieHeader(tryUseNuxtApp()?.ssrContext?.event?.node?.req?.headers?.cookie)
+}
+
+/** Chemin relatif avec la région des stats (pour useRequestFetch, qui ne passe pas par apiUrl). */
+export function statsRegionPath(path: string): string {
+  return withStatsRegions(path, currentStatsRegions())
+}
+
+export function apiUrl(rawPath: string): string {
+  const path = statsRegionPath(rawPath)
   const cfg = getRuntimeConfigSafe()
   const configuredBase =
     (cfg.public?.apiBase as string | undefined) ||

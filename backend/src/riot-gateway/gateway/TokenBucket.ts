@@ -46,10 +46,12 @@ export class TokenBucket {
     return this.safeLimit(safetyMargin) - effectiveUsed - inFlight;
   }
 
-  pctUsed(safetyMargin: number): number {
+  /** Expired window counts as empty: without it, a host with no traffic keeps its last count forever. */
+  pctUsed(safetyMargin: number, now = Date.now()): number {
     const safe = this.safeLimit(safetyMargin);
     if (safe <= 0) return 100;
-    return (this.used / safe) * 100;
+    const effectiveUsed = now >= this.resetAt ? 0 : this.used;
+    return (effectiveUsed / safe) * 100;
   }
 
   msUntilReset(now = Date.now()): number {
@@ -118,7 +120,7 @@ export class TokenBucket {
       resetInMs: this.msUntilReset(now),
       saturatedUntil: this.saturatedUntil,
       isBlocked: this.isBlocked(now),
-      pctUsed: this.pctUsed(safetyMargin),
+      pctUsed: this.pctUsed(safetyMargin, now),
     };
   }
 }

@@ -51,6 +51,7 @@ import {
 import {
   scopedTheorycraftStorageKey,
   setTheorycraftStorageScope,
+  theorycraftVsScope,
 } from '~/utils/theorycraftStorageScope'
 import { createEmptyNotesContent, cloneNotesContent } from '~/utils/buildNotes'
 import {
@@ -115,6 +116,8 @@ const THEORYCRAFT_ACTIVE_ITEM_PASSIVES_STORAGE_KEY = 'lelanation_theorycraft_act
 /** Spell ranks and toggled spells, per champion, in the side's storage scope. */
 const THEORYCRAFT_SPELL_STATE_STORAGE_KEY = 'lelanation_theorycraft_spell_state'
 const BUILDER_STEP_STORAGE_KEY = 'lelanation_builder_step'
+/** Session VS du theorycraft libre (Apprendre › Champion). */
+export const STANDALONE_THEORYCRAFT_SESSION = 'learn'
 
 let statsRecalcToken = 0
 
@@ -641,6 +644,40 @@ export const useBuildStore = defineStore('build', {
       }
       this.builderSession = 'create'
       this.theorycraftLinkedToBuilder = false
+    },
+
+    /**
+     * Theorycraft libre (Apprendre › Champion) : build vierge, brouillon du builder intact.
+     * La persistance du brouillon est suspendue jusqu'à endStandaloneTheorycraft().
+     */
+    startStandaloneTheorycraft() {
+      this.draftPersistenceSuspended = true
+      let lastStep: string | null = null
+      try {
+        lastStep = localStorage.getItem(BUILDER_STEP_STORAGE_KEY)
+      } catch {
+        // ignore
+      }
+      this.createNewBuild()
+      try {
+        if (lastStep === null) localStorage.removeItem(BUILDER_STEP_STORAGE_KEY)
+        else localStorage.setItem(BUILDER_STEP_STORAGE_KEY, lastStep)
+      } catch {
+        // ignore
+      }
+      setTheorycraftStorageScope(theorycraftVsScope(STANDALONE_THEORYCRAFT_SESSION, 'ally'))
+      this.builderSession = 'theorycraft'
+      this.theorycraftLinkedToBuilder = false
+      this.reloadTheorycraftModifiers()
+    },
+
+    endStandaloneTheorycraft() {
+      this.theorycraftLinkedToBuilder = false
+      this.leaveTheorycraftSession()
+      this.currentBuild = null
+      this.builderSession = 'create'
+      this.draftPersistenceSuspended = false
+      setTheorycraftStorageScope('builder:default')
     },
 
     suspendDraftPersistence() {

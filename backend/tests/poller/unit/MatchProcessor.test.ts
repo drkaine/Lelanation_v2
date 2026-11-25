@@ -41,7 +41,7 @@ describe('MatchProcessor', () => {
     vi.mocked(fetchLeagueEntriesByPUUID).mockReset();
   });
 
-  test('fetches match and timeline concurrently and emits match:data', async () => {
+  test('fetches match then timeline and emits match:data', async () => {
     const puuids = Array.from({ length: 10 }, (_, i) => `p-${i}`);
     vi.mocked(fetchMatch).mockImplementation(async () => {
       await new Promise((r) => setTimeout(r, 30));
@@ -73,6 +73,33 @@ describe('MatchProcessor', () => {
     expect(fetchMatch).toHaveBeenCalledOnce();
     expect(fetchMatchTimeline).toHaveBeenCalledOnce();
     expect(matchData).toHaveLength(1);
+  });
+
+  test('early FF: no timeline request, match:data carries an empty timeline', async () => {
+    vi.mocked(fetchMatch).mockResolvedValue({
+      info: { participants: [{ puuid: 'p-1', gameEndedInEarlySurrender: true }] },
+    });
+    const bus = new PollerEventBus();
+    const timelines: unknown[] = [];
+    bus.on('match:data', (e) => timelines.push(e.timeline));
+    const fetched: boolean[] = [];
+
+    const processor = new MatchProcessor(
+      player,
+      { ...config, resolveParticipantRanks: false },
+      bus,
+      new ParticipantRankCache(),
+      's1',
+      () => undefined,
+      (timelineFetched) => fetched.push(timelineFetched),
+      () => undefined,
+    );
+
+    await processor.process('EUW1_999');
+
+    expect(fetchMatchTimeline).not.toHaveBeenCalled();
+    expect(timelines).toEqual([{ info: { frameInterval: 60_000, frames: [] } }]);
+    expect(fetched).toEqual([false]);
   });
 
   test('deduplicates participant ranks via cache', async () => {

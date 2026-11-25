@@ -147,6 +147,7 @@
           </button>
         </div>
         <div class="flex min-h-0 flex-1 flex-col overflow-y-auto p-2 lg:flex-none">
+          <StatisticsRegionFilter />
           <div
             v-if="statisticsTabFilterFlags(displayedActiveTab).championSearch"
             :class="[
@@ -427,6 +428,7 @@
               v-if="
                 displayedActiveTab !== 'objectives' &&
                 displayedActiveTab !== 'surrender' &&
+                displayedActiveTab !== 'teamMisc' &&
                 displayedActiveTab !== 'patchNotes' &&
                 displayedActiveTab !== 'misc'
               "
@@ -573,6 +575,7 @@
                 displayedActiveTab !== 'bans' &&
                 displayedActiveTab !== 'objectives' &&
                 displayedActiveTab !== 'surrender' &&
+                displayedActiveTab !== 'teamMisc' &&
                 displayedActiveTab !== 'patchNotes' &&
                 displayedActiveTab !== 'misc'
               "
@@ -741,6 +744,9 @@
               <div v-else-if="displayedActiveTab === 'surrender'" class="space-y-6">
                 <StatisticsSurrenderTab />
               </div>
+              <div v-else-if="displayedActiveTab === 'teamMisc'" class="space-y-6">
+                <StatisticsTeamMiscTab />
+              </div>
               <div v-else-if="displayedActiveTab === 'infos'">
                 <StatisticsInfosTab />
               </div>
@@ -840,6 +846,7 @@ import { useI18n } from 'vue-i18n'
 import StatisticsSectionsHeader from '~/components/statistics/StatisticsSectionsHeader.vue'
 import { statisticsFiltersSheetPanelClass } from '~/composables/useStatisticsFiltersSheetMode'
 import { statsFetch } from '~/utils/statsFetch'
+import type { TeamMiscData } from '~/utils/statistics/teamMiscTable'
 import type {
   OverviewData,
   InfosMatrixData,
@@ -971,6 +978,9 @@ const StatisticsObjectivesTab = defineAsyncComponent(
 const StatisticsSurrenderTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsSurrenderTab.vue')
 )
+const StatisticsTeamMiscTab = defineAsyncComponent(
+  () => import('~/components/statistics/tabs/StatisticsTeamMiscTab.vue')
+)
 const StatisticsInfosTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsInfosTab.vue')
 )
@@ -1058,6 +1068,7 @@ const allTabs = computed(() => [
     widgetId: 'objectives',
   },
   { id: 'surrender' as const, label: t('statisticsPage.tabSurrender'), widgetId: 'surrender' },
+  { id: 'teamMisc' as const, label: t('statisticsPage.tabTeamMisc'), widgetId: 'teamMisc' },
   { id: 'bans' as const, label: t('statisticsPage.tabBans'), widgetId: 'bans' },
   {
     id: 'championTable' as const,
@@ -1786,6 +1797,7 @@ function onStatsFilterChange() {
     loadOverviewSides()
   }
   if (activeTab.value === 'surrender') loadSurrenderMatrix()
+  if (activeTab.value === 'teamMisc') loadTeamMisc()
   // if (activeTab.value === 'trends') loadProgressionsFull()
   if (statsVersionOptions.value.length <= 1) {
     loadOverviewVersionsCatalog()
@@ -2082,6 +2094,24 @@ function surrenderMatrixQueryParams(): string {
   }
   const s = params.toString()
   return s ? `?${s}` : ''
+}
+const teamMiscData = ref<TeamMiscData | null>(null)
+const teamMiscPending = ref(false)
+async function loadTeamMisc() {
+  teamMiscPending.value = true
+  try {
+    const params = new URLSearchParams()
+    const cur = statsVersionFilter.value?.trim() ?? ''
+    if (cur) params.set('version', cur)
+    const q = params.toString()
+    teamMiscData.value = await statsFetch<TeamMiscData>(
+      apiUrl('/api/stats/overview-team-misc' + (q ? `?${q}` : ''))
+    )
+  } catch {
+    teamMiscData.value = null
+  } finally {
+    teamMiscPending.value = false
+  }
 }
 async function loadSurrenderMatrix() {
   const tStart = statsPerfStart('loadSurrenderMatrix')
@@ -3818,6 +3848,7 @@ async function loadStatisticsTabData(tab: typeof activeTab.value): Promise<void>
     loadOverviewDetailBaseline()
   }
   if (tab === 'surrender') loadSurrenderMatrix()
+  if (tab === 'teamMisc') loadTeamMisc()
   if (tab === 'pings') pingsTab.loadPingsTable()
   if (tab === 'vision') visionTab.loadVisionTable()
   if (tab === 'misc') miscTab.loadMiscTable()
@@ -3862,6 +3893,7 @@ watch([statsVersionFilter, statsRoleFilter, statsOtpFilter], () => {
   if (activeTab.value === 'pings') pingsTab.loadPingsTable()
   if (activeTab.value === 'vision') visionTab.loadVisionTable()
   if (activeTab.value === 'surrender') loadSurrenderMatrix()
+  if (activeTab.value === 'teamMisc') loadTeamMisc()
   if (activeTab.value === 'runes' || activeTab.value === 'items' || activeTab.value === 'spells') {
     loadOverviewDetail()
     loadOverviewDetailBaseline()
@@ -3905,6 +3937,7 @@ watch(progressionFromVersion, () => {
   if (activeTab.value === 'pings') pingsTab.loadPingsTable()
   if (activeTab.value === 'vision') visionTab.loadVisionTable()
   if (activeTab.value === 'surrender') loadSurrenderMatrix()
+  if (activeTab.value === 'teamMisc') loadTeamMisc()
   if (activeTab.value === 'runes' || activeTab.value === 'items' || activeTab.value === 'spells') {
     loadOverviewDetail()
     loadOverviewDetailBaseline()
@@ -4216,6 +4249,9 @@ const statisticsPageCtx = reactive({
   toggleStatsSplitTransformEnabled,
   surrenderMatrixPending,
   surrenderMatrixRows,
+  teamMiscData,
+  teamMiscPending,
+  statsDivisionFilter,
   t,
   tierListPatchDeltaClass,
   toggleFavoriteCard,

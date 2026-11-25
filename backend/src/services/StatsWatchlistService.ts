@@ -2,6 +2,7 @@
  * Watchlist / recap: deltas between UTC snapshot days from `champion_tier_daily_snapshots`.
  */
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
+import { regionSqlConditions } from '../stats/statsRegion.js'
 import { sqlLiteral } from '../stats/sqlLiteral.js'
 
 export interface WatchlistBucketStats {
@@ -67,6 +68,7 @@ function buildFilterSql(params: {
   if (params.rankTier) {
     parts.push(`split_part(upper(trim(${a}.rank_tier::text)), '_', 1) = '${sqlLiteral(params.rankTier)}'`)
   }
+  parts.push(...regionSqlConditions(a))
   return parts.join(' AND ')
 }
 

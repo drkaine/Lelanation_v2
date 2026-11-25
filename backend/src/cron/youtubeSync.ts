@@ -8,6 +8,7 @@ import { CronStatusService } from '../services/CronStatusService.js'
 import { StaticAssetsService } from '../services/StaticAssetsService.js'
 import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
 import { createCronLogger } from '../utils/cronLogger.js'
+import { YOUTUBE_FRONTEND_COPY } from '../services/youtubeSyncPlan.js'
 
 interface YouTubeChannelConfig {
   channelId: string
@@ -122,8 +123,10 @@ export async function runYouTubeSyncOnce(): Promise<
 
   // Copy YouTube data to frontend
   await log.step('Copying YouTube data to frontend')
-  // YouTube JSON files are served from /public; no Nuxt rebuild required.
-  const copyResult = await staticAssets.copyYouTubeAssetsToFrontend(true, false)
+  const copyResult = await staticAssets.copyYouTubeAssetsToFrontend(
+    YOUTUBE_FRONTEND_COPY.restartFrontend,
+    YOUTUBE_FRONTEND_COPY.buildFrontend,
+  )
   if (copyResult.isOk()) {
     const stats = copyResult.unwrap()
     await log.info('YouTube assets copied:', stats.copied, 'files,', stats.deleted, 'backend files deleted')

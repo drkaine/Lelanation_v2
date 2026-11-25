@@ -21,3 +21,9 @@ export function planUploadsFetch(
 export function isBackfillComplete(plan: UploadsFetchPlan, fetchedCount: number): boolean {
   return plan.mode === 'incremental' || fetchedCount < plan.maxVideos
 }
+
+/**
+ * Copie YouTube vers le frontend sans redémarrage ni rebuild : nginx sert `/data/` depuis
+ * `.output/public`, que la copie met à jour (miroir). Un restart horaire coupait le site pour rien.
+ */
+export const YOUTUBE_FRONTEND_COPY = { restartFrontend: false, buildFrontend: false } as const
