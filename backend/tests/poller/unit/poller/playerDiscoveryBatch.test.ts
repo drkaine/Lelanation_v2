@@ -75,16 +75,27 @@ describe('PlayerDiscovery.fetchNextBatch', () => {
     expect(query).not.toContain('next_poll_at');
   });
 
-  it('répartition par tier : tour divisé par le poids, tiers à 0 exclus', async () => {
+  it('répartition par tier et par région : tour divisé par le poids de la région, tiers à 0 exclus', async () => {
     sqlMock.mockResolvedValue([]);
-    const weights = { GOLD: 75, IRON: 25 };
-    await new PlayerDiscovery(undefined, undefined, () => weights).fetchNextBatch(4);
+    const byPlatform: Record<string, Record<string, number>> = { euw1: { GOLD: 75, IRON: 25 }, kr: { IRON: 100 } };
+    await new PlayerDiscovery(() => ['euw1', 'kr'], undefined, (p) => byPlatform[p] ?? {}).fetchNextBatch(4);
     const [query, values] = sqlMock.mock.calls[0];
-    expect(query).toMatch(/JOIN unnest\(\?::text\[\], \?::float8\[\]\) AS w\(tier, weight\)/);
+    expect(query).toMatch(
+      /JOIN unnest\(\?::text\[\], \?::text\[\], \?::float8\[\]\) AS w\(region, tier, weight\)/,
+    );
+    expect(query).toContain('w.region = t.region::text AND w.tier = t.rank_tier::text');
     expect(query).toContain('w.weight > 0');
     expect(query).toContain('ORDER BY t.puuid) / w.weight AS turn');
-    expect(values).toContainEqual(['GOLD', 'IRON']);
-    expect(values).toContainEqual([75, 25]);
+    expect(values).toContainEqual(['EUW1', 'EUW1', 'KR']);
+    expect(values).toContainEqual(['GOLD', 'IRON', 'IRON']);
+    expect(values).toContainEqual([75, 25, 100]);
+  });
+
+  it('régions en alternance : à tour égal, départage par région (pas une région après l’autre)', async () => {
+    sqlMock.mockResolvedValue([]);
+    await new PlayerDiscovery().fetchNextBatch(4);
+    const [query] = sqlMock.mock.calls[0];
+    expect(query).toMatch(/ORDER BY turn, region\s/);
   });
 
   it('exclut les joueurs dont un duo a été pollé aujourd’hui', async () => {

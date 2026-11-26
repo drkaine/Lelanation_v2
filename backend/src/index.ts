@@ -29,6 +29,7 @@ import { setupMonitoringWatchdog } from './cron/monitoringWatchdog.js'
 import { setupPrivacyRetention } from './cron/privacyRetention.js'
 import { setupDuoRefresh } from './cron/duoRefresh.js'
 import { setupPollerSettingsSwitch } from './cron/pollerSettingsSwitch.js'
+import { setupOtpRecompute } from './cron/otpRecompute.js'
 import { httpMonitoringMiddleware } from './monitoring/monitoringRuntime.js'
 import { MetricsService } from './services/MetricsService.js'
 import { requestStop, isAnyScriptRunning } from './worker/scriptOrchestrator.js'
@@ -141,6 +142,7 @@ try {
   setupPrivacyRetention()
   setupDuoRefresh()
   setupPollerSettingsSwitch()
+  setupOtpRecompute()
 } catch (error) {
   console.error('[Server] ❌ Failed to initialize cron jobs:', error)
   // Don't exit - server can still run without cron

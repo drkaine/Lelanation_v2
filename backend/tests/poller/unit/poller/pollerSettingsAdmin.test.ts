@@ -31,6 +31,16 @@ describe('updatePollerSettings : en attente jusqu’à 00 h', () => {
     expect(v.pending?.platforms).toEqual(['kr']);
     expect(pendingSettingsFile(f)).toBe(f.replace(/\.json$/, '.pending.json'));
   });
+  it('poids par région : conservés dans les réglages en attente', () => {
+    const f = file();
+    const r = updatePollerSettings(f, {
+      platforms: ['euw1', 'kr'],
+      tierWeights: { GOLD: 100 },
+      tierWeightsByRegion: { asia: { IRON: 100 } },
+    });
+    expect(r.ok).toBe(true);
+    expect(pollerSettingsView(f, ['euw1']).pending?.tierWeightsByRegion?.asia?.IRON).toBe(100);
+  });
   it('invalide : refusé, rien écrit', () => {
     const f = file();
     expect(updatePollerSettings(f, { platforms: ['kr'], tierWeights: { GOLD: 101 } }).ok).toBe(false);

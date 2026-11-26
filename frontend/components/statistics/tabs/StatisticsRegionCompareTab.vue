@@ -72,8 +72,10 @@ function championName(championId: number): string {
       {{ p.t('statisticsPage.regionsEmpty') }}
     </p>
     <template v-else>
-      <section class="rounded-lg border border-white/10 bg-surface p-3">
-        <h3 class="text-sm font-semibold">{{ p.t('statisticsPage.regionsSummaryTitle') }}</h3>
+      <section class="ui-build-card-surface rounded-xl p-3">
+        <h3 class="text-sm font-semibold text-text-accent">
+          {{ p.t('statisticsPage.regionsSummaryTitle') }}
+        </h3>
         <p class="mb-2 text-xs text-text/60">{{ p.t('statisticsPage.regionsSummaryHint') }}</p>
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
@@ -106,9 +108,9 @@ function championName(championId: number): string {
         <section
           v-for="s in spreadSections"
           :key="s.key"
-          class="rounded-lg border border-white/10 bg-surface p-3"
+          class="ui-build-card-surface rounded-xl p-3"
         >
-          <h3 class="text-sm font-semibold">{{ p.t(s.title) }}</h3>
+          <h3 class="text-sm font-semibold text-text-accent">{{ p.t(s.title) }}</h3>
           <p class="mb-2 text-xs text-text/60">{{ p.t('statisticsPage.regionsSpreadHint') }}</p>
           <p v-if="s.rows.length === 0" class="text-sm text-text/70">
             {{ p.t('statisticsPage.regionsEmpty') }}
@@ -135,8 +137,10 @@ function championName(championId: number): string {
         </section>
       </div>
 
-      <section class="rounded-lg border border-white/10 bg-surface p-3">
-        <h3 class="mb-2 text-sm font-semibold">{{ p.t('statisticsPage.regionsTopTitle') }}</h3>
+      <section class="ui-build-card-surface rounded-xl p-3">
+        <h3 class="mb-2 text-sm font-semibold text-text-accent">
+          {{ p.t('statisticsPage.regionsTopTitle') }}
+        </h3>
         <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <div v-for="top in data.topByRegion" :key="top.region" class="space-y-2">
             <h4 class="text-sm font-semibold">{{ regionLabel(top.region) }}</h4>

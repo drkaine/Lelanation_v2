@@ -14,6 +14,7 @@ export type StatisticsMainTab =
   | 'surrender'
   | 'teamMisc'
   | 'regions'
+  | 'otpCompare'
   | 'runes'
   | 'items'
   | 'spells'

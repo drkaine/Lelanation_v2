@@ -50,8 +50,8 @@ export class PlayerDiscovery {
   constructor(
     private readonly activePlatforms: () => readonly Platform[] = () => POLLER_PLATFORMS,
     private readonly today: () => string = () => sweepDay(new Date()),
-    /** Part des joueurs par tier (%) ; tour divisé par le poids, tier à 0 ignoré. */
-    private readonly tierWeights: () => Readonly<Record<string, number>> = defaultTierWeights,
+    /** Part des joueurs par tier (%) pour une plateforme ; tour divisé par le poids, tier à 0 ignoré. */
+    private readonly tierWeights: (platform: Platform) => Readonly<Record<string, number>> = defaultTierWeights,
   ) {}
 
   async fetchNextBatch(limit: number): Promise<DiscoveryPlayer[]> {
@@ -68,7 +68,13 @@ export class PlayerDiscovery {
       this.exhausted = new Set();
     }
     // Cibles du balayage du jour pas encore pollées, tour à tour sur les tiers, au prorata des poids.
-    const weights = Object.entries(this.tierWeights());
+    const weights = active.flatMap((platform) => {
+      const [region = ''] = toDbRegions([platform]);
+      return Object.entries(this.tierWeights(platform)).map(([tier, w]) => ({ region, tier, w }));
+    });
+    const weightRegions = sql.array(weights.map((x) => x.region));
+    const weightTiers = sql.array(weights.map((x) => x.tier));
+    const weightValues = sql.array(weights.map((x) => x.w));
     const targets = await timedDbOp('player_discovery_fetch', () =>
       sql<DiscoveryRow[]>`
         SELECT puuid, region, partners, last_polled_at FROM (
@@ -76,15 +82,15 @@ export class PlayerDiscovery {
                  ROW_NUMBER() OVER (PARTITION BY t.region, t.rank_tier ORDER BY t.puuid) / w.weight AS turn
           FROM poll_targets t
           JOIN players p ON p.puuid = t.puuid
-          JOIN unnest(${sql.array(weights.map(([tier]) => tier))}::text[], ${sql.array(weights.map(([, w]) => w))}::float8[]) AS w(tier, weight)
-            ON w.tier = t.rank_tier::text AND w.weight > 0
+          JOIN unnest(${weightRegions}::text[], ${weightTiers}::text[], ${weightValues}::float8[]) AS w(region, tier, weight)
+            ON w.region = t.region::text AND w.tier = t.rank_tier::text AND w.weight > 0
           WHERE t.day = ${day}::date
             AND t.region::text = ANY(${regions}::text[])
             AND (p.last_polled_at IS NULL OR p.last_polled_at < ${day}::date)
             AND ${duoPolledTodayFilter()}
             AND NOT (p.puuid = ANY(${sql.array([...this.pending])}::text[]))
         ) c
-        ORDER BY turn
+        ORDER BY turn, region
         LIMIT ${safeLimit * 2}
       `,
     );

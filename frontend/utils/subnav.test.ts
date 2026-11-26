@@ -12,6 +12,7 @@ const SUBMENUS = [
   'components/Build/BuildMenuSteps.vue',
   'components/Build/BuildDetailsPage.vue',
   'components/matchups/MatchupSheetsIndexPageView.vue',
+  'pages/equipe.vue',
   '../packages/builds-ui/src/components/BuildsIndexPageView.vue',
 ]
 
@@ -27,5 +28,14 @@ describe('sous-nav partagée', () => {
     expect(src).toMatch(/class="[^"]*\bsubnav\b/)
     expect(src).toMatch(/subnav-link/)
     expect(src).not.toMatch(/stats-subtab\b|streamer-tab-button|matchup-sheets-tab-button/)
+  })
+})
+
+describe('/equipe : visuel du site, pleine largeur', () => {
+  it('en-tête du site et pas de conteneur étroit', () => {
+    const src = read('pages/equipe.vue')
+    expect(src).toMatch(/class="[^"]*\bteam-head\b/)
+    expect(src).toMatch(/class="[^"]*\bteam-h1\b/)
+    expect(src).not.toMatch(/max-w-(4xl|5xl|6xl)/)
   })
 })

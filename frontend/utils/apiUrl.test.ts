@@ -61,3 +61,22 @@ describe('apiUrl — région des stats', () => {
     expect(apiUrl('/api/stats/x')).toBe('http://api.test/api/stats/x?region=EUW1,KR')
   })
 })
+
+describe('apiUrl — filtre joueurs OTP', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+  it('serveur : cookie stats_otp_players → otpPlayers= après la région', () => {
+    vi.stubGlobal('tryUseNuxtApp', () => ({
+      $config: { public: { apiBase: 'http://api.test' } },
+      ssrContext: {
+        event: {
+          node: { req: { headers: { cookie: 'stats_region=KR; stats_otp_players=exclude' } } },
+        },
+      },
+    }))
+    expect(apiUrl('/api/stats/x')).toBe('http://api.test/api/stats/x?region=KR&otpPlayers=exclude')
+    expect(statsRegionPath('/api/stats/y')).toBe('/api/stats/y?region=KR&otpPlayers=exclude')
+    expect(apiUrl('/api/builds')).toBe('http://api.test/api/builds')
+  })
+})

@@ -55,6 +55,8 @@ describe('refreshPlayerDuos', () => {
     expect(texts[1]).toContain('INSERT INTO player_duos');
     expect(texts[1]).toContain('created_at >');
     expect(texts[1]).toContain('early_surrender IS NOT TRUE');
+    // part décimale (0.1) : typée float8, sinon Postgres l'infère integer depuis ga.n
+    expect(texts[1]).toContain('?::float8 * ga.n');
     expect(values[1]).toContain(since);
     expect(values[1]).toContain(until);
     expect(values[1]).toContainEqual(['EUW1', 'KR']);

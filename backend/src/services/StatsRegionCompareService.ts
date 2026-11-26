@@ -73,7 +73,7 @@ const num = (v: Count): number => (v === null ? 0 : Number(v));
 const round2 = (v: number): number => Math.round(v * 100) / 100;
 const pct = (part: number, total: number): number => (total > 0 ? round2((part / total) * 100) : 0);
 
-function spreadsOf(
+export function spreadsOf(
   regions: readonly string[],
   rateOf: (region: string, championId: number) => number | null,
   championIds: Iterable<number>,

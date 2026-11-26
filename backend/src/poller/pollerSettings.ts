@@ -27,8 +27,10 @@ const ALL_PLATFORMS: readonly Platform[] = [
 /** Réglages du poller édités depuis la page Gestion (onglet Data). */
 export interface PollerSettings {
   platforms: Platform[];
-  /** Part des joueurs pollés par tier, en %, total ≤ 100. */
+  /** Part des joueurs pollés par tier, en %, total ≤ 100 (toutes régions). */
   tierWeights: TierWeights;
+  /** Mode « par région » : poids par région de rate limit (europe, americas, asia, sea) ; absente = `tierWeights`. */
+  tierWeightsByRegion?: Partial<Record<RegionalCluster, TierWeights>>;
 }
 
 function isPlatform(value: unknown): value is Platform {
@@ -66,19 +68,42 @@ function zeroWeights(): TierWeights {
   return uniformWeights(0);
 }
 
-/** Réglages valides, sinon null. */
-export function parsePollerSettings(raw: unknown): PollerSettings | null {
-  if (!isRecord(raw) || !Array.isArray(raw.platforms) || !isRecord(raw.tierWeights)) return null;
-  if (raw.platforms.length === 0 || !raw.platforms.every(isPlatform)) return null;
-  const platforms = [...new Set<Platform>(raw.platforms)];
+/** Poids valides (tiers connus, ≥ 0, 0 < total ≤ 100), sinon null. */
+function parseTierWeights(raw: unknown): TierWeights | null {
+  if (!isRecord(raw)) return null;
   const tierWeights = zeroWeights();
-  for (const [tier, value] of Object.entries(raw.tierWeights)) {
+  for (const [tier, value] of Object.entries(raw)) {
     if (!isPollTier(tier) || typeof value !== 'number' || !Number.isFinite(value) || value < 0) return null;
     tierWeights[tier] = value;
   }
   const total = Object.values(tierWeights).reduce((a, b) => a + b, 0);
   if (total <= 0 || total > 100 + 1e-9) return null;
-  return { platforms, tierWeights };
+  return tierWeights;
+}
+
+/** Réglages valides, sinon null. */
+export function parsePollerSettings(raw: unknown): PollerSettings | null {
+  if (!isRecord(raw) || !Array.isArray(raw.platforms)) return null;
+  if (raw.platforms.length === 0 || !raw.platforms.every(isPlatform)) return null;
+  const platforms = [...new Set<Platform>(raw.platforms)];
+  const tierWeights = parseTierWeights(raw.tierWeights);
+  if (!tierWeights) return null;
+  if (raw.tierWeightsByRegion === undefined) return { platforms, tierWeights };
+  if (!isRecord(raw.tierWeightsByRegion)) return null;
+  const clusters = new Set(platforms.map((p) => RegionRouter.getCluster(p)));
+  const tierWeightsByRegion: Partial<Record<RegionalCluster, TierWeights>> = {};
+  for (const [cluster, value] of Object.entries(raw.tierWeightsByRegion)) {
+    const weights = parseTierWeights(value);
+    const known = [...clusters].find((c) => c === cluster);
+    if (!known || !weights) return null;
+    tierWeightsByRegion[known] = weights;
+  }
+  return { platforms, tierWeights, tierWeightsByRegion };
+}
+
+/** Poids d'une plateforme : ceux de sa région de rate limit en mode « par région », sinon ceux de toutes les régions. */
+export function tierWeightsFor(settings: PollerSettings, platform: Platform): TierWeights {
+  return settings.tierWeightsByRegion?.[RegionRouter.getCluster(platform)] ?? settings.tierWeights;
 }
 
 export function pollerSettingsFile(): string {

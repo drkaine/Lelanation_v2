@@ -28,6 +28,17 @@ export function adminAuthHeader(
   return null
 }
 
+/** Onglets de la page Gestion : session admin ou lelariva (le backend restreint lelariva à ces routes). */
+export function gestionAuthHeader(
+  session: StoredSession | null,
+  basicToken: string | null
+): { Authorization: string } | null {
+  if (session && canAccessTeamPage(session.user.role)) {
+    return { Authorization: `Bearer ${session.token}` }
+  }
+  return adminAuthHeader(session, basicToken)
+}
+
 export function inviteLink(origin: string, registerPath: string, code: string): string {
   return `${origin.replace(/\/+$/, '')}${registerPath}?code=${encodeURIComponent(code)}`
 }

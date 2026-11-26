@@ -3,7 +3,7 @@
  * Champions, builds, runes, meilleurs joueurs.
  */
 import { createRateLimit } from '../utils/httpRateLimit.js'
-import { regionParam, runWithStatsRegion } from '../stats/statsRegion.js'
+import { otpParam, regionParam, runWithStatsRegion } from '../stats/statsRegion.js'
 import { Router, Request, Response } from 'express'
 import { RiotStatsAggregator } from '../services/RiotStatsAggregator.js'
 import { getBuildsByChampion } from '../services/StatsBuildsService.js'
@@ -69,6 +69,7 @@ import {
 import { getOverviewAbandons, getSurrenderMatrix } from '../services/StatsAbandonsService.js'
 import { getTeamMiscStats } from '../services/StatsTeamMiscService.js'
 import { getRegionCompare } from '../services/StatsRegionCompareService.js'
+import { getOtpCompare } from '../services/StatsOtpCompareService.js'
 import { getAvailableRegions } from '../services/StatsAvailableRegionsService.js'
 import {
   getSummonerSpellsByChampion,
@@ -112,7 +113,7 @@ const aggregator = new RiotStatsAggregator()
 
 /** `?region=` (plateforme) : toutes les requêtes stats de la requête HTTP filtrent sur cette région ; absent = toutes. */
 router.use((req: Request, _res: Response, next) => {
-  runWithStatsRegion(regionParam(req.query.region), next)
+  runWithStatsRegion(regionParam(req.query.region), next, otpParam(req.query.otpPlayers))
 })
 
 /** Perf: log backend duration and set X-Backend-Time / X-Stats-Path / X-SQL-Time so the front can show everything in one place. */
@@ -528,6 +529,13 @@ router.get('/region-compare', async (req: Request, res: Response) => {
   res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
   const data = await getRegionCompare(queryString(req.query.version))
   return res.json(data ?? { regions: [], topByRegion: [], spreads: { pickRate: [], banRate: [], winRate: [] } })
+})
+
+/** GET /api/stats/otp-compare - différences OTP vs autres joueurs (catégorie, aucun joueur nommé). Query: ?version=16.9 */
+router.get('/otp-compare', async (req: Request, res: Response) => {
+  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
+  const data = await getOtpCompare(queryString(req.query.version))
+  return res.json(data ?? { groups: [], top: [], spreads: { pickRate: [], winRate: [] } })
 })
 
 /** GET /api/stats/overview-team-misc - AFK par rôle × rang, duos par paire de rôles × rang. Query: ?version=16.9 */

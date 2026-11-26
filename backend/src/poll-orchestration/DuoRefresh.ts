@@ -74,7 +74,7 @@ export async function refreshPlayerDuos(): Promise<DuoRefreshResult> {
       FROM pairs p
       JOIN player_games ga ON ga.puuid = p.a
       JOIN player_games gb ON gb.puuid = p.b
-      WHERE p.n >= ${DUO_MIN_SHARE} * ga.n AND p.n >= ${DUO_MIN_SHARE} * gb.n
+      WHERE p.n >= ${DUO_MIN_SHARE}::float8 * ga.n AND p.n >= ${DUO_MIN_SHARE}::float8 * gb.n
       ON CONFLICT (puuid_a, puuid_b) DO UPDATE
         SET games_a = EXCLUDED.games_a, games_b = EXCLUDED.games_b, updated_at = NOW()
       RETURNING puuid_a, puuid_b

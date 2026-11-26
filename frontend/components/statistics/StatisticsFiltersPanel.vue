@@ -89,6 +89,7 @@
       </div>
       <div class="flex min-h-0 flex-1 flex-col overflow-y-auto p-2 lg:flex-none">
         <StatisticsRegionFilter />
+        <StatisticsOtpPlayersFilter />
         <slot />
       </div>
       <div class="shrink-0 border-t border-primary/25 p-3 lg:hidden">

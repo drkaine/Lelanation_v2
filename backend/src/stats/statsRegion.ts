@@ -5,7 +5,15 @@ export const STATS_REGIONS = ['EUW1', 'EUN1', 'NA1', 'KR', 'BR1', 'LA1', 'LA2', 
 export type StatsRegion = (typeof STATS_REGIONS)[number]
 
 const ALLOWED: ReadonlySet<string> = new Set(STATS_REGIONS)
-const storage = new AsyncLocalStorage<StatsRegion[] | null>()
+/** Filtre joueurs OTP (`?otp=`) : tous (somme des agrégats OTP et non OTP), sans OTP, OTP seuls. */
+export type StatsOtpFilter = 'all' | 'exclude' | 'only'
+
+interface StatsRequestScope {
+  regions: StatsRegion[] | null
+  otp: StatsOtpFilter
+}
+
+const storage = new AsyncLocalStorage<StatsRequestScope>()
 
 function isStatsRegion(value: string): value is StatsRegion {
   return ALLOWED.has(value)
@@ -26,13 +34,35 @@ export function regionParam(value: unknown): StatsRegion[] | null {
   return regions.length > 0 ? regions : null
 }
 
-/** Exécute `fn` avec les régions de la requête stats (lues par les helpers SQL et le cache). */
-export function runWithStatsRegion<T>(regions: StatsRegion[] | null, fn: () => T): T {
-  return storage.run(regions && regions.length > 0 ? regions : null, fn)
+/** `?otp=` : `exclude` ou `only` ; toute autre valeur = `all`. */
+export function otpParam(value: unknown): StatsOtpFilter {
+  const raw = Array.isArray(value) ? value[0] : value
+  const v = typeof raw === 'string' ? raw.trim().toLowerCase() : ''
+  return v === 'exclude' || v === 'only' ? v : 'all'
+}
+
+/** Exécute `fn` avec les régions et le filtre OTP de la requête stats (lus par les helpers SQL et le cache). */
+export function runWithStatsRegion<T>(
+  regions: StatsRegion[] | null,
+  fn: () => T,
+  otp: StatsOtpFilter = 'all',
+): T {
+  return storage.run({ regions: regions && regions.length > 0 ? regions : null, otp }, fn)
 }
 
 export function currentStatsRegions(): StatsRegion[] | null {
-  return storage.getStore() ?? null
+  return storage.getStore()?.regions ?? null
+}
+
+export function currentStatsOtp(): StatsOtpFilter {
+  return storage.getStore()?.otp ?? 'all'
+}
+
+/** Condition OTP du contexte sur `alias.otp` ; null pour `all`. */
+export function otpSqlCondition(alias: string): string | null {
+  const otp = currentStatsOtp()
+  if (otp === 'all') return null
+  return `${alias ? `${alias}.` : ''}otp = ${otp === 'only' ? 'true' : 'false'}`
 }
 
 /** Régions explicites (validées) sinon celles du contexte de requête. */
@@ -54,10 +84,11 @@ export function regionSqlConditions(alias: string): string[] {
   return cond ? [cond] : []
 }
 
-/** Préfixe de clé de cache par régions ; vide pour toutes les régions. */
+/** Préfixe de clé de cache par régions et filtre OTP ; vide pour toutes les régions et tous les joueurs. */
 export function regionCacheKey(): string {
   const regions = currentStatsRegions()
-  return regions ? `r=${regions.join(',')}:` : ''
+  const otp = currentStatsOtp()
+  return `${regions ? `r=${regions.join(',')}:` : ''}${otp === 'all' ? '' : `otp=${otp}:`}`
 }
 
 /**

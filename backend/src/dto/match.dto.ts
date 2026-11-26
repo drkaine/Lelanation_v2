@@ -47,6 +47,8 @@ export interface ParsedParticipantDto {
   // Identite
   matchId: string;
   puuid: string;
+  /** Catégorie OTP (flag `otp_players`, posé avant agrégation). Jamais exposé par joueur. */
+  otp?: boolean;
   patch: string;
   gameDate: string;
   gameEndTimestamp: number;
@@ -144,6 +146,10 @@ export interface TeamObjectiveDto {
 
 export interface TeamStatsDto {
   matchId: string;
+  /** Au moins un OTP dans le match / dans chaque équipe (posé avant agrégation). */
+  otp?: boolean;
+  otpTeam100?: boolean;
+  otpTeam200?: boolean;
   patch: string;
   rankTier: string;
   region: string;

@@ -5,7 +5,7 @@
  */
 
 import { onMounted } from 'vue'
-import { adminAuthHeader } from '~/utils/teamAccess'
+import { adminAuthHeader, gestionAuthHeader } from '~/utils/teamAccess'
 import { USER_SESSION_KEY } from '~/utils/userSession'
 import { readStoredSession } from '~/composables/useUserSession'
 
@@ -59,7 +59,10 @@ export function useAdminAuth() {
   const getAuthHeader = getAdminAuthHeader
 
   function fetchWithAuth(url: string, init?: RequestInit): Promise<Response> {
-    const header = getAuthHeader()
+    // Bearer lelariva accepté par le backend sur les seules routes des onglets Gestion.
+    const header = import.meta.client
+      ? gestionAuthHeader(readStoredSession(), getStoredToken())
+      : null
     const opts: RequestInit = {
       ...init,
       headers: { ...init?.headers, ...(header ?? {}) },

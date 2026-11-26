@@ -35,6 +35,8 @@ export class PollerDbConsumer {
   private readonly rankEntriesCache = new Map<string, LeagueEntryDto[]>();
   private readonly pendingMatches = new Map<string, PendingMatch>();
   private attached = false;
+  /** Écritures lancées par les handlers, suivies pour l'arrêt propre (drain avant sql.end). */
+  private readonly inFlight = new Set<Promise<void>>();
 
   constructor(
     private readonly participantDiscovery: ParticipantDiscovery,
@@ -46,12 +48,32 @@ export class PollerDbConsumer {
   subscribe(): void {
     if (this.attached) return;
     this.attached = true;
-    this.eventBus.on('player:rank', (event) => void this.onPlayerRank(event));
-    this.eventBus.on('participant:rank', (event) => void this.onParticipantRank(event));
-    this.eventBus.on('match:data', (event) => void this.onMatchData(event));
-    this.eventBus.on('player:complete', (event) => void this.onPlayerComplete(event));
-    this.eventBus.on('session:complete', (event) => void this.onSessionComplete(event));
-    this.eventBus.on('poller:error', (event) => void this.onPollerError(event));
+    this.eventBus.on('player:rank', (event) => this.track(this.onPlayerRank(event)));
+    this.eventBus.on('participant:rank', (event) => this.track(this.onParticipantRank(event)));
+    this.eventBus.on('match:data', (event) => this.track(this.onMatchData(event)));
+    this.eventBus.on('player:complete', (event) => this.track(this.onPlayerComplete(event)));
+    this.eventBus.on('session:complete', (event) => this.track(this.onSessionComplete(event)));
+    this.eventBus.on('poller:error', (event) => this.onPollerError(event));
+  }
+
+  private track(work: Promise<void>): void {
+    this.inFlight.add(work);
+    void work.finally(() => this.inFlight.delete(work));
+  }
+
+  /** Attend les écritures en vol, au plus `timeoutMs`. true si tout est fini à temps. */
+  async drain(timeoutMs: number): Promise<boolean> {
+    if (this.inFlight.size === 0) return true;
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<false>((resolve) => {
+      timer = setTimeout(() => resolve(false), timeoutMs);
+    });
+    const all = Promise.allSettled([...this.inFlight]).then(() => true);
+    try {
+      return await Promise.race([all, timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   unsubscribe(): void {

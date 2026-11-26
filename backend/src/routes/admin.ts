@@ -35,6 +35,7 @@ import { getAdminBuildEngagementRecap } from '../services/AdminBuildEngagementSe
 import { readBalanceRules, writeBalanceRules } from '../services/BalanceRulesService.js'
 import { pollerSettingsView, updatePollerSettings } from '../services/PollerSettingsAdminService.js'
 import { pollerSettingsFile } from '../poller/pollerSettings.js'
+import { loadOtpSettings, otpSettingsFile, updateOtpSettings } from '../services/OtpSettingsService.js'
 import { allowedPollerPlatforms } from '../poller/utils/pollerScope.js'
 import { getAdminDataCollectStats } from '../services/AdminDataCollectService.js'
 import { getAdminCollectTimeseries } from '../services/AdminCollectTimeseriesService.js'
@@ -48,7 +49,7 @@ import {
   readPollerProcessLogTail,
 } from '../services/PollerMetricsAdminService.js'
 import { resolveRiotApiKey, riotGateway } from '../services/RiotGateway.js'
-import { requireAdmin } from '../utils/adminAuth.js'
+import { requireAdminOrGestion } from '../utils/adminAuth.js'
 import { addChannelToConfig, channelSyncStatus, type YouTubeChannelsConfig } from '../services/youtubeChannels.js'
 export type { AdminDataCollectStats } from '../services/AdminDataCollectService.js'
 
@@ -81,7 +82,7 @@ function maskKey(key: string): string {
   return key.slice(0, 4) + '…' + key.slice(-4)
 }
 
-router.use(...requireAdmin)
+router.use(...requireAdminOrGestion)
 
 router.get('/me', (_req, res) => {
   return res.json({ ok: true })
@@ -258,6 +259,25 @@ router.put('/poller-settings', (req, res) => {
   try {
     const saved = updatePollerSettings(pollerSettingsFile(), req.body)
     if (!saved.ok) return res.status(400).json({ error: 'Invalid poller settings' })
+    return res.json({ success: true, settings: saved.settings })
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+// Page Gestion > OTP : seuil OTP. Pris en compte au recalcul nocturne (cron/otpRecompute.ts).
+router.get('/otp-settings', (_req, res) => {
+  try {
+    return res.json({ settings: loadOtpSettings(otpSettingsFile()) })
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+router.put('/otp-settings', (req, res) => {
+  try {
+    const saved = updateOtpSettings(otpSettingsFile(), req.body)
+    if (!saved.ok) return res.status(400).json({ error: 'Invalid OTP settings' })
     return res.json({ success: true, settings: saved.settings })
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })

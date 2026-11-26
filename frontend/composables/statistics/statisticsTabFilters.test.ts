@@ -53,6 +53,15 @@ describe('statisticsTabFilterFlags', () => {
     })
   })
 
+  it('otpCompare: OTP vs autres, aucun filtre cohorte ni recherche', () => {
+    expect(statisticsTabFilterFlags('otpCompare')).toEqual({
+      division: false,
+      role: false,
+      otp: false,
+      championSearch: false,
+    })
+  })
+
   it('patchNotes: champion/item search, no cohort filter', () => {
     expect(statisticsTabFilterFlags('patchNotes')).toEqual({
       division: false,

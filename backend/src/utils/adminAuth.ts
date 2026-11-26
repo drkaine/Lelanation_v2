@@ -31,13 +31,37 @@ const adminAuthFailures = createFailureLimiter({
   keyPrefix: 'admin-auth-fail',
 })
 
-/** Session of a user with the admin role (Bearer token from /api/users/login). */
-async function adminSession(req: Request, res: Response, next: NextFunction) {
+/** Routes /api/admin des onglets de la page Gestion (/equipe), ouvertes aussi au rôle lelariva. */
+const GESTION_PATHS = new Set([
+  '/poller-settings',
+  '/otp-settings',
+  '/balance-rules',
+  '/cron',
+  '/youtube/trigger',
+  '/youtube/channels',
+])
+
+export function isGestionPath(path: string): boolean {
+  return GESTION_PATHS.has(path)
+}
+
+type SessionRule = (role: string, req: Request) => boolean
+
+const adminOnly: SessionRule = (role) => role === 'admin'
+const adminOrGestion: SessionRule = (role, req) =>
+  role === 'admin' || (role === 'lelariva' && isGestionPath(req.path))
+
+/** Session (Bearer token from /api/users/login) whose role the rule accepts. */
+function sessionGate(allowed: SessionRule) {
+  return (req: Request, res: Response, next: NextFunction) => adminSession(req, res, next, allowed)
+}
+
+async function adminSession(req: Request, res: Response, next: NextFunction, allowed: SessionRule) {
   if (!readBearerToken(req)) return next()
   try {
     const user = await resolveUser(req)
     if (!user) return res.status(401).json({ error: 'Invalid session' })
-    if (user.role !== 'admin') return res.status(403).json({ error: 'Admin role required' })
+    if (!allowed(user.role, req)) return res.status(403).json({ error: 'Admin role required' })
     res.locals.adminSession = true
     return next()
   } catch (err) {
@@ -81,4 +105,7 @@ function adminBasicAuth(req: Request, res: Response, next: NextFunction) {
 }
 
 /** Admin gate: admin session (Bearer) or admin Basic credentials. Use as `router.use(...requireAdmin)`. */
-export const requireAdmin: RequestHandler[] = [adminSession, adminBasicAuth]
+export const requireAdmin: RequestHandler[] = [sessionGate(adminOnly), adminBasicAuth]
+
+/** Gate du routeur /api/admin : admin partout, lelariva sur les routes des onglets Gestion. */
+export const requireAdminOrGestion: RequestHandler[] = [sessionGate(adminOrGestion), adminBasicAuth]

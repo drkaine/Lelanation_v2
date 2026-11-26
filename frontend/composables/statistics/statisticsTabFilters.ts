@@ -10,6 +10,7 @@ export type StatisticsCohortTab =
   | 'surrender'
   | 'teamMisc'
   | 'regions'
+  | 'otpCompare'
   | 'bans'
   | 'championTable'
   | 'balance'
@@ -54,12 +55,14 @@ export function statisticsTabFilterFlags(tab: StatisticsCohortTab): StatisticsTa
       t !== 'infos' &&
       t !== 'misc' &&
       t !== 'patchNotes' &&
-      t !== 'regions',
+      t !== 'regions' &&
+      t !== 'otpCompare',
     role:
       t !== 'objectives' &&
       t !== 'surrender' &&
       t !== 'teamMisc' &&
       t !== 'regions' &&
+      t !== 'otpCompare' &&
       t !== 'infos' &&
       t !== 'misc' &&
       t !== 'patchNotes',
@@ -69,6 +72,7 @@ export function statisticsTabFilterFlags(tab: StatisticsCohortTab): StatisticsTa
       t !== 'surrender' &&
       t !== 'teamMisc' &&
       t !== 'regions' &&
+      t !== 'otpCompare' &&
       t !== 'infos' &&
       t !== 'misc' &&
       t !== 'patchNotes',
@@ -79,6 +83,7 @@ export function statisticsTabFilterFlags(tab: StatisticsCohortTab): StatisticsTa
       t !== 'surrender' &&
       t !== 'teamMisc' &&
       t !== 'regions' &&
+      t !== 'otpCompare' &&
       t !== 'infos',
   }
 }

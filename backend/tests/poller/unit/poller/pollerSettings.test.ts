@@ -9,6 +9,7 @@ import {
   platformChoices,
   POLL_TIERS,
   savePollerSettings,
+  tierWeightsFor,
 } from '../../../../src/poller/pollerSettings.js';
 
 const weights = (over: Partial<Record<string, number>>) => ({
@@ -37,6 +38,44 @@ describe('parsePollerSettings', () => {
     ['pas un objet', 'x'],
   ])('refuse : %s', (_label, raw) => {
     expect(parsePollerSettings(raw)).toBeNull();
+  });
+});
+
+describe('poids par région de rate limit (europe, americas, asia, sea)', () => {
+  it('optionnels : valides pour les clusters des plateformes choisies, tier absent = 0', () => {
+    const s = parsePollerSettings({
+      platforms: ['euw1', 'kr'],
+      tierWeights: { GOLD: 100 },
+      tierWeightsByRegion: { asia: { CHALLENGER: 50, IRON: 50 } },
+    });
+    expect(s?.tierWeightsByRegion).toEqual({ asia: weights({ CHALLENGER: 50, IRON: 50 }) });
+  });
+  it('absents : pas de clé (mode toutes régions)', () => {
+    expect(parsePollerSettings({ platforms: ['kr'], tierWeights: { GOLD: 100 } })).not.toHaveProperty(
+      'tierWeightsByRegion',
+    );
+  });
+  it.each([
+    ['cluster sans plateforme choisie', { europe: { GOLD: 10 } }],
+    ['plateforme au lieu de cluster', { kr: { GOLD: 10 } }],
+    ['cluster inconnu', { xx: { GOLD: 10 } }],
+    ['total > 100', { asia: { GOLD: 60, IRON: 41 } }],
+    ['total nul', { asia: {} }],
+    ['pas un objet', 'x'],
+  ])('refuse : %s', (_label, byRegion) => {
+    expect(
+      parsePollerSettings({ platforms: ['kr'], tierWeights: { GOLD: 100 }, tierWeightsByRegion: byRegion }),
+    ).toBeNull();
+  });
+  it('tierWeightsFor : poids du cluster de la plateforme, sinon ceux de toutes les régions', () => {
+    const s = parsePollerSettings({
+      platforms: ['euw1', 'eun1', 'kr'],
+      tierWeights: { GOLD: 100 },
+      tierWeightsByRegion: { europe: { IRON: 100 } },
+    });
+    expect(s && tierWeightsFor(s, 'euw1')).toEqual(weights({ IRON: 100 }));
+    expect(s && tierWeightsFor(s, 'eun1')).toEqual(weights({ IRON: 100 }));
+    expect(s && tierWeightsFor(s, 'kr')).toEqual(weights({ GOLD: 100 }));
   });
 });
 

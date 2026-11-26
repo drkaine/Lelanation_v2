@@ -54,6 +54,7 @@ export type DuoRoleAggRow = {
   role: string;
   allyChampionId: number;
   allyRole: string;
+  otp: boolean;
   countGame: number;
   countWin: number;
   sumGoldEarned: number;
@@ -104,6 +105,7 @@ export function buildDuoRoleAggregationRows(participants: ParsedParticipantDto[]
         championTransform,
         ally.championId,
         ally.role,
+        p.otp === true,
       ].join("\u0001");
       const existing = rows.get(key);
       if (existing) {
@@ -128,6 +130,7 @@ export function buildDuoRoleAggregationRows(participants: ParsedParticipantDto[]
           role: p.role,
           allyChampionId: ally.championId,
           allyRole: ally.role,
+          otp: p.otp === true,
           countGame: 1,
           countWin: win,
           sumGoldEarned: m.goldEarned,

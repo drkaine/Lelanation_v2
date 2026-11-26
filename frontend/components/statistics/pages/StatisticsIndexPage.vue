@@ -148,6 +148,7 @@
         </div>
         <div class="flex min-h-0 flex-1 flex-col overflow-y-auto p-2 lg:flex-none">
           <StatisticsRegionFilter v-if="displayedActiveTab !== 'regions'" />
+          <StatisticsOtpPlayersFilter v-if="displayedActiveTab !== 'otpCompare'" />
           <div
             v-if="statisticsTabFilterFlags(displayedActiveTab).championSearch"
             :class="[
@@ -268,6 +269,7 @@
                 displayedActiveTab !== 'balance' &&
                 displayedActiveTab !== 'surrender' &&
                 displayedActiveTab !== 'regions' &&
+                displayedActiveTab !== 'otpCompare' &&
                 displayedActiveTab !== 'patchNotes' &&
                 displayedActiveTab !== 'misc'
               "
@@ -431,6 +433,7 @@
                 displayedActiveTab !== 'surrender' &&
                 displayedActiveTab !== 'teamMisc' &&
                 displayedActiveTab !== 'regions' &&
+                displayedActiveTab !== 'otpCompare' &&
                 displayedActiveTab !== 'patchNotes' &&
                 displayedActiveTab !== 'misc'
               "
@@ -579,6 +582,7 @@
                 displayedActiveTab !== 'surrender' &&
                 displayedActiveTab !== 'teamMisc' &&
                 displayedActiveTab !== 'regions' &&
+                displayedActiveTab !== 'otpCompare' &&
                 displayedActiveTab !== 'patchNotes' &&
                 displayedActiveTab !== 'misc'
               "
@@ -753,6 +757,9 @@
               <div v-else-if="displayedActiveTab === 'regions'" class="space-y-6">
                 <StatisticsRegionCompareTab />
               </div>
+              <div v-else-if="displayedActiveTab === 'otpCompare'" class="space-y-6">
+                <StatisticsOtpCompareTab />
+              </div>
               <div v-else-if="displayedActiveTab === 'infos'">
                 <StatisticsInfosTab />
               </div>
@@ -854,6 +861,7 @@ import { statisticsFiltersSheetPanelClass } from '~/composables/useStatisticsFil
 import { statsFetch } from '~/utils/statsFetch'
 import type { TeamMiscData } from '~/utils/statistics/teamMiscTable'
 import { parseRegionCompare, type RegionCompareData } from '~/utils/statistics/regionCompare'
+import { parseOtpCompare, type OtpCompareData } from '~/utils/statistics/otpCompare'
 import type {
   OverviewData,
   InfosMatrixData,
@@ -991,6 +999,9 @@ const StatisticsTeamMiscTab = defineAsyncComponent(
 const StatisticsRegionCompareTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsRegionCompareTab.vue')
 )
+const StatisticsOtpCompareTab = defineAsyncComponent(
+  () => import('~/components/statistics/tabs/StatisticsOtpCompareTab.vue')
+)
 const StatisticsInfosTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsInfosTab.vue')
 )
@@ -1081,6 +1092,7 @@ const allTabs = computed(() => [
   { id: 'teamMisc' as const, label: t('statisticsPage.tabTeamMisc'), widgetId: 'teamMisc' },
   { id: 'bans' as const, label: t('statisticsPage.tabBans'), widgetId: 'bans' },
   { id: 'regions' as const, label: t('statisticsPage.tabRegions'), widgetId: 'regions' },
+  { id: 'otpCompare' as const, label: t('statisticsPage.tabOtpCompare'), widgetId: 'otpCompare' },
   {
     id: 'championTable' as const,
     label: t('statisticsPage.tabChampionTable'),
@@ -1810,6 +1822,7 @@ function onStatsFilterChange() {
   if (activeTab.value === 'surrender') loadSurrenderMatrix()
   if (activeTab.value === 'teamMisc') loadTeamMisc()
   if (activeTab.value === 'regions') loadRegionCompare()
+  if (activeTab.value === 'otpCompare') loadOtpCompare()
   // if (activeTab.value === 'trends') loadProgressionsFull()
   if (statsVersionOptions.value.length <= 1) {
     loadOverviewVersionsCatalog()
@@ -2142,6 +2155,23 @@ async function loadRegionCompare() {
     regionCompareData.value = null
   } finally {
     regionComparePending.value = false
+  }
+}
+const otpCompareData = ref<OtpCompareData | null>(null)
+const otpComparePending = ref(false)
+async function loadOtpCompare() {
+  otpComparePending.value = true
+  try {
+    const params = new URLSearchParams()
+    const cur = statsVersionFilter.value?.trim() ?? ''
+    if (cur) params.set('version', cur)
+    const q = params.toString()
+    const raw = await statsFetch<unknown>(apiUrl('/api/stats/otp-compare' + (q ? `?${q}` : '')))
+    otpCompareData.value = parseOtpCompare(raw)
+  } catch {
+    otpCompareData.value = null
+  } finally {
+    otpComparePending.value = false
   }
 }
 async function loadSurrenderMatrix() {
@@ -3881,6 +3911,7 @@ async function loadStatisticsTabData(tab: typeof activeTab.value): Promise<void>
   if (tab === 'surrender') loadSurrenderMatrix()
   if (tab === 'teamMisc') loadTeamMisc()
   if (tab === 'regions') loadRegionCompare()
+  if (tab === 'otpCompare') loadOtpCompare()
   if (tab === 'pings') pingsTab.loadPingsTable()
   if (tab === 'vision') visionTab.loadVisionTable()
   if (tab === 'misc') miscTab.loadMiscTable()
@@ -3927,6 +3958,7 @@ watch([statsVersionFilter, statsRoleFilter, statsOtpFilter], () => {
   if (activeTab.value === 'surrender') loadSurrenderMatrix()
   if (activeTab.value === 'teamMisc') loadTeamMisc()
   if (activeTab.value === 'regions') loadRegionCompare()
+  if (activeTab.value === 'otpCompare') loadOtpCompare()
   if (activeTab.value === 'runes' || activeTab.value === 'items' || activeTab.value === 'spells') {
     loadOverviewDetail()
     loadOverviewDetailBaseline()
@@ -3972,6 +4004,7 @@ watch(progressionFromVersion, () => {
   if (activeTab.value === 'surrender') loadSurrenderMatrix()
   if (activeTab.value === 'teamMisc') loadTeamMisc()
   if (activeTab.value === 'regions') loadRegionCompare()
+  if (activeTab.value === 'otpCompare') loadOtpCompare()
   if (activeTab.value === 'runes' || activeTab.value === 'items' || activeTab.value === 'spells') {
     loadOverviewDetail()
     loadOverviewDetailBaseline()
@@ -4287,6 +4320,8 @@ const statisticsPageCtx = reactive({
   teamMiscPending,
   regionCompareData,
   regionComparePending,
+  otpCompareData,
+  otpComparePending,
   statsDivisionFilter,
   t,
   tierListPatchDeltaClass,

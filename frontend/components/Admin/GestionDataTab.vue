@@ -18,15 +18,53 @@
           <label
             v-for="p in group.platforms"
             :key="p"
-            class="mr-4 inline-flex items-center gap-1 text-sm"
+            class="mb-1 mr-4 inline-flex items-start gap-1 text-sm"
           >
-            <input v-model="platforms" type="checkbox" :value="p" :disabled="busy" />
-            {{ p.toUpperCase() }}
+            <input v-model="platforms" type="checkbox" class="mt-1" :value="p" :disabled="busy" />
+            <span class="flex flex-col leading-tight">
+              {{ p.toUpperCase() }}
+              <span class="text-xs text-text/70">{{ platformName(p) }}</span>
+            </span>
           </label>
         </fieldset>
       </div>
 
       <h3 class="mb-1 font-semibold">{{ t('gestion.data.tiers') }}</h3>
+      <div
+        class="mb-2 inline-flex rounded border border-primary/40 text-sm"
+        role="group"
+        :aria-label="t('gestion.data.weightsMode')"
+      >
+        <button
+          v-for="m in modes"
+          :key="m"
+          type="button"
+          class="px-3 py-1"
+          :class="mode === m ? 'bg-accent/20 font-semibold' : 'hover:bg-surface'"
+          :aria-pressed="mode === m"
+          :disabled="busy"
+          @click="setMode(m)"
+        >
+          {{ m === 'all' ? t('gestion.data.modeAll') : t('gestion.data.modeByRegion') }}
+        </button>
+      </div>
+      <template v-if="mode === 'byRegion'">
+        <p class="mb-2 text-xs text-text/70">{{ t('gestion.data.modeByRegionNote') }}</p>
+        <div class="mb-2 flex flex-wrap gap-1" role="tablist">
+          <button
+            v-for="c in activeClusters"
+            :key="c"
+            type="button"
+            role="tab"
+            class="rounded border px-2 py-0.5 text-xs uppercase"
+            :class="editedRegion === c ? 'border-accent bg-accent/20' : 'border-primary/40'"
+            :aria-selected="editedRegion === c"
+            @click="editedRegion = c"
+          >
+            {{ c }}
+          </button>
+        </div>
+      </template>
       <p class="mb-3 text-xs text-text/70">
         {{ t('gestion.data.tiersNote', { total: total.toFixed(1) }) }}
       </p>
@@ -39,7 +77,7 @@
             max="100"
             step="0.1"
             class="rounded border border-primary/40 bg-background px-2 py-1 text-sm"
-            :value="weights[tier] ?? 0"
+            :value="shownWeights[tier] ?? 0"
             :disabled="busy"
             @change="onWeight(tier, $event)"
           />
@@ -57,7 +95,7 @@
       <button
         type="button"
         class="rounded border border-accent px-4 py-2 text-sm font-semibold hover:bg-surface disabled:opacity-50"
-        :disabled="busy || platforms.length === 0 || total <= 0"
+        :disabled="busy || !canSave"
         @click="save"
       >
         {{ t('gestion.data.save') }}
@@ -68,14 +106,22 @@
 
 <script setup lang="ts">
 import { useUserSession } from '~/composables/useUserSession'
-import { rebalanceWeights, weightsTotal, type Weights } from '~/utils/pollerWeights'
+import {
+  initRegionWeights,
+  rebalanceWeights,
+  selectedClusters,
+  settingsBody,
+  weightsTotal,
+  type Weights,
+  type WeightsMode,
+} from '~/utils/pollerWeights'
 
 interface Choice {
   platform: string
   cluster: string
 }
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const { authFetch } = useUserSession()
 
 const loading = ref(true)
@@ -86,8 +132,36 @@ const platforms = ref<string[]>([])
 const weights = ref<Weights>({})
 const message = ref<{ text: string; error: boolean } | null>(null)
 const hasPending = ref(false)
+const modes: readonly WeightsMode[] = ['all', 'byRegion']
+const mode = ref<WeightsMode>('all')
+const regionWeights = ref<Record<string, Weights>>({})
+const editedRegion = ref('')
 
-const total = computed(() => weightsTotal(weights.value))
+// Régions de limite (europe, americas, asia, sea) des plateformes cochées.
+const activeClusters = computed(() => selectedClusters(choices.value, platforms.value))
+// Région éditée toujours parmi les régions de limite cochées ; nouvelle région = poids globaux.
+watch(activeClusters, list => {
+  regionWeights.value = initRegionWeights(list, weights.value, regionWeights.value)
+  if (!list.includes(editedRegion.value)) editedRegion.value = list[0] ?? ''
+})
+
+const platformName = (p: string) =>
+  te(`gestion.data.platformNames.${p}`) ? t(`gestion.data.platformNames.${p}`) : ''
+
+const shownWeights = computed<Weights>(() =>
+  mode.value === 'byRegion'
+    ? (regionWeights.value[editedRegion.value] ?? weights.value)
+    : weights.value
+)
+const total = computed(() => weightsTotal(shownWeights.value))
+// Par région : chaque région cochée doit avoir un total > 0.
+const canSave = computed(
+  () =>
+    platforms.value.length > 0 &&
+    (mode.value === 'all'
+      ? weightsTotal(weights.value) > 0
+      : activeClusters.value.every(c => weightsTotal(regionWeights.value[c] ?? weights.value) > 0))
+)
 const clusters = computed(() => {
   const map = new Map<string, string[]>()
   for (const c of choices.value) map.set(c.cluster, [...(map.get(c.cluster) ?? []), c.platform])
@@ -102,8 +176,34 @@ const strings = (v: unknown): string[] =>
 function onWeight(tier: string, event: Event) {
   const input = event.target
   if (!(input instanceof HTMLInputElement)) return
+  if (mode.value === 'byRegion' && editedRegion.value) {
+    const next = rebalanceWeights(shownWeights.value, tier, Number(input.value))
+    regionWeights.value = { ...regionWeights.value, [editedRegion.value]: next }
+    input.value = String(next[tier])
+    return
+  }
   weights.value = rebalanceWeights(weights.value, tier, Number(input.value))
   input.value = String(weights.value[tier])
+}
+
+function setMode(m: WeightsMode) {
+  if (m === 'byRegion')
+    regionWeights.value = initRegionWeights(
+      activeClusters.value,
+      weights.value,
+      regionWeights.value
+    )
+  mode.value = m
+}
+
+function toWeights(raw: unknown): Weights {
+  const rec = isRecord(raw) ? raw : {}
+  return Object.fromEntries(
+    tiers.value.map(tier => {
+      const v = rec[tier]
+      return [tier, typeof v === 'number' ? v : 0]
+    })
+  )
 }
 
 async function load() {
@@ -124,10 +224,15 @@ async function load() {
     const shown = isRecord(body.pending) ? body.pending : body.settings
     hasPending.value = isRecord(body.pending)
     platforms.value = strings(shown.platforms)
-    const raw = isRecord(shown.tierWeights) ? shown.tierWeights : {}
-    weights.value = Object.fromEntries(
-      tiers.value.map(tier => [tier, typeof raw[tier] === 'number' ? raw[tier] : 0])
+    weights.value = toWeights(shown.tierWeights)
+    const byRegion = isRecord(shown.tierWeightsByRegion) ? shown.tierWeightsByRegion : null
+    mode.value = byRegion ? 'byRegion' : 'all'
+    regionWeights.value = initRegionWeights(
+      activeClusters.value,
+      weights.value,
+      Object.fromEntries(Object.entries(byRegion ?? {}).map(([c, w]) => [c, toWeights(w)]))
     )
+    editedRegion.value = activeClusters.value[0] ?? ''
   } catch {
     message.value = { text: t('gestion.data.loadError'), error: true }
   } finally {
@@ -141,7 +246,15 @@ async function save() {
   try {
     const put = await authFetch('/api/admin/poller-settings', {
       method: 'PUT',
-      body: JSON.stringify({ platforms: platforms.value, tierWeights: weights.value }),
+      body: JSON.stringify(
+        settingsBody(
+          platforms.value,
+          activeClusters.value,
+          weights.value,
+          mode.value,
+          regionWeights.value
+        )
+      ),
     })
     if (!put.ok) throw new Error('invalid')
     hasPending.value = true

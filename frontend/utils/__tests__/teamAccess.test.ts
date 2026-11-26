@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   adminAuthHeader,
+  gestionAuthHeader,
   canAccessTeamPage,
   inviteLink,
   isLoginEndpointMissing,
@@ -57,5 +58,14 @@ describe('teamAccess', () => {
   it('a 404 on /api/users/login means the old backend: fall back to basic auth', () => {
     expect(isLoginEndpointMissing(404)).toBe(true)
     expect(isLoginEndpointMissing(401)).toBe(false)
+  })
+})
+
+describe('gestionAuthHeader : appels des onglets Gestion', () => {
+  it('session admin ou lelariva → Bearer ; sinon jeton Basic', () => {
+    expect(gestionAuthHeader(session('admin'), null)).toEqual({ Authorization: 'Bearer tok' })
+    expect(gestionAuthHeader(session('lelariva'), 'b64')).toEqual({ Authorization: 'Bearer tok' })
+    expect(gestionAuthHeader(session('lelateam'), 'b64')).toEqual({ Authorization: 'Basic b64' })
+    expect(gestionAuthHeader(session('lelateam'), null)).toBeNull()
   })
 })

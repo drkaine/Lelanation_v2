@@ -24,6 +24,7 @@ import {
 import { PollerEngine } from './poller/PollerEngine.js';
 import type { PollConfig } from './poller/types.js';
 import { POLLER_PLATFORMS, POLLER_SETTINGS } from './poller/utils/pollerScope.js';
+import { tierWeightsFor } from './poller/pollerSettings.js';
 import { createLeagueSweeper } from './poll-orchestration/LeagueSweeper.js';
 import { sweepTickDelayMs } from './poll-orchestration/leagueSweep.js';
 import { SweepGate } from './poll-orchestration/sweepGate.js';
@@ -70,7 +71,7 @@ let shuttingDown = false;
 const playerDiscovery = new PlayerDiscovery(
   () => sweepGate.activePlatforms(POLLER_PLATFORMS),
   undefined,
-  () => POLLER_SETTINGS.tierWeights,
+  (platform) => tierWeightsFor(POLLER_SETTINGS, platform),
 );
 const sinceResolver = new SinceTimestampResolver(playerDiscovery);
 const matchFilter = new MatchFilter();
@@ -520,6 +521,10 @@ async function gracefulShutdown(signal: string): Promise<void> {
     sessionPool = null;
     clearSessionPoolStatusGetter();
     dbConsumer?.unsubscribe();
+    // Écritures en vol finies avant sql.end(), sinon « write CONNECTION_ENDED ».
+    if (dbConsumer && !(await dbConsumer.drain(5_000))) {
+      orchestrationLogger.warn({ component: 'main' }, 'Poller shutdown: DB writes still in flight after 5s, closing anyway');
+    }
     dbConsumer = null;
     observability?.stop();
     ObservabilityOrchestrator.resetInstance();

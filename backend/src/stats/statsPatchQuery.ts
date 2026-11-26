@@ -5,6 +5,7 @@
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { isSafeIdentSegment, normalizeAggTableName, physicalTableName } from './statsTableMap.js'
 import { sqlLiteral } from './sqlLiteral.js'
+import { otpSqlCondition } from './statsRegion.js'
 
 export function normalizePatchMajorMinor(version: string): string {
   const parts = String(version ?? '')
@@ -104,9 +105,22 @@ function patchVersionSqlPredicate(alias: string, p: string): string {
   return `(${alias}.patch = '${esc}' OR ${alias}.patch LIKE '${esc}.%')`
 }
 
-function patchFilterClause(tableAlias: string, patchKey: string | null): string {
-  if (!patchKey || !/^\d+\.\d+$/.test(patchKey)) return 'TRUE'
-  return patchVersionSqlPredicate(tableAlias, patchKey)
+/** Tables d'agrégats portant la colonne `otp` (migration 0052). */
+const OTP_AGG_TABLES: ReadonlySet<string> = new Set([
+  'botlane_duo_vs_duo_stats', 'champion_bans_by_banner', 'champion_bucket', 'champion_duo_role_stats',
+  'champion_item_set_stats', 'champion_item_solo_stats', 'champion_jungle_path', 'champion_pick_order',
+  'champion_runes_solo_stats', 'champion_runes_stats', 'champion_shard_solo_stats', 'champion_spell_stats',
+  'champion_stats', 'champion_summoner_spell_pair_stats', 'champion_summoner_spells',
+  'champion_tier_daily_snapshots', 'champion_vs_stats', 'item_tier_daily_snapshots', 'match_outcome_stats',
+  'objective_outcome_histogram', 'team_core_stat',
+])
+
+/** Patch + filtre OTP du contexte (`?otp=`) quand la table a la colonne `otp`. */
+function patchFilterClause(tableAlias: string, patchKey: string | null, hasOtp = true): string {
+  const otp = hasOtp ? otpSqlCondition(tableAlias) : null
+  const patch = !patchKey || !/^\d+\.\d+$/.test(patchKey) ? null : patchVersionSqlPredicate(tableAlias, patchKey)
+  if (patch && otp) return `${patch} AND ${otp}`
+  return patch ?? otp ?? 'TRUE'
 }
 
 function sqlChampionCoreFragment(patchKey: string | null): string {
@@ -343,7 +357,7 @@ function sqlBansBannerFragment(patchKey: string | null): string {
 }
 
 function sqlGenericPatchTableFragment(physical: string, patchKey: string | null): string {
-  const pf = patchFilterClause('t', patchKey)
+  const pf = patchFilterClause('t', patchKey, OTP_AGG_TABLES.has(physical))
   return `(SELECT t.*, t.patch AS game_version FROM ${physical} t WHERE ${pf})`
 }
 

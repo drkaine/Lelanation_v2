@@ -5,6 +5,12 @@ import {
   regionsFromCookieHeader,
   withStatsRegions,
 } from './statsRegion'
+import {
+  type StatsOtpPlayers,
+  getStatsOtpPlayers,
+  otpPlayersFromCookieHeader,
+  withStatsOtpPlayers,
+} from './statsOtpPlayers'
 
 function getRuntimeConfigSafe(): any {
   // Outside a Nuxt app context (e.g. store calls after an await), useRuntimeConfig() reports
@@ -18,9 +24,17 @@ function currentStatsRegions(): StatsRegion[] {
   return regionsFromCookieHeader(tryUseNuxtApp()?.ssrContext?.event?.node?.req?.headers?.cookie)
 }
 
-/** Chemin relatif avec la région des stats (pour useRequestFetch, qui ne passe pas par apiUrl). */
+function currentStatsOtpPlayers(): StatsOtpPlayers {
+  if (process.client) return getStatsOtpPlayers()
+  return otpPlayersFromCookieHeader(tryUseNuxtApp()?.ssrContext?.event?.node?.req?.headers?.cookie)
+}
+
+/** Chemin relatif avec la région et le filtre OTP des stats (pour useRequestFetch, qui ne passe pas par apiUrl). */
 export function statsRegionPath(path: string): string {
-  return withStatsRegions(path, currentStatsRegions())
+  return withStatsOtpPlayers(
+    withStatsRegions(path, currentStatsRegions()),
+    currentStatsOtpPlayers()
+  )
 }
 
 export function apiUrl(rawPath: string): string {

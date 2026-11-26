@@ -40,6 +40,7 @@ import {
 } from "./duoRoleAggregation.js";
 import { runAdditiveUpsert } from "./aggregationUpsert.js";
 import { banRoleColumn } from "./banRoleColumn.js";
+import { applyOtpFlags, loadOtpPuuids } from "../services/OtpFlagService.js";
 
 export class AlreadyProcessedMatchError extends Error {
   constructor(matchId: string) {
@@ -226,6 +227,7 @@ async function upsertChampionStats(tx: any, participants: ParsedParticipantDto[]
     "champion_id",
     "champion_transform",
     "team",
+    "otp",
     "count_game",
     "count_win",
   ];
@@ -255,6 +257,7 @@ async function upsertChampionStats(tx: any, participants: ParsedParticipantDto[]
       participant.championId,
       championTransform,
       participant.teamId,
+      participant.otp === true,
     ].join("\u0001");
     const metrics = metricCols.map((c) => championStatsMetricValue(participant, c));
     const win = participantWinCount(participant);
@@ -273,6 +276,7 @@ async function upsertChampionStats(tx: any, participants: ParsedParticipantDto[]
           participant.championId,
           championTransform,
           participant.teamId,
+          participant.otp === true,
         ],
         countGame: 1,
         countWin: win,
@@ -289,7 +293,7 @@ async function upsertChampionStats(tx: any, participants: ParsedParticipantDto[]
     return `(${tuple.map((_, i) => `$${start + i + 1}`).join(", ")})`;
   });
 
-  const q = `INSERT INTO champion_stats (${allCols.join(", ")}) VALUES ${valueTuples.join(", ")} ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, team) DO UPDATE SET ${updateParts.join(", ")}`;
+  const q = `INSERT INTO champion_stats (${allCols.join(", ")}) VALUES ${valueTuples.join(", ")} ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, team, otp) DO UPDATE SET ${updateParts.join(", ")}`;
   await (tx as { unsafe: (query: string, params?: unknown[]) => Promise<unknown> }).unsafe(q, params);
 }
 
@@ -325,6 +329,7 @@ async function upsertChampionVsStats(tx: any, participants: ParsedParticipantDto
       championTransform,
       participant.opponentChampionId,
       setItem,
+      participant.otp === true,
     ];
     const key = keys.map((v) => String(v)).join("\u0001");
     const existing = rows.get(key);
@@ -361,12 +366,12 @@ async function upsertChampionVsStats(tx: any, participants: ParsedParticipantDto
 
   const q = `
     INSERT INTO champion_vs_stats (
-      patch, role, rank_tier, region, champion_id, champion_transform, opponent_champion_id, set_item,
+      patch, role, rank_tier, region, champion_id, champion_transform, opponent_champion_id, set_item, otp,
       count_win, count_game, order_items,
       ${metricCols.join(", ")}
     )
     VALUES ${valueTuples.join(", ")}
-    ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, opponent_champion_id, set_item)
+    ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, opponent_champion_id, set_item, otp)
     DO UPDATE SET
       count_game = champion_vs_stats.count_game + EXCLUDED.count_game,
       count_win = champion_vs_stats.count_win + EXCLUDED.count_win,
@@ -390,6 +395,7 @@ async function upsertChampionDuoRoleStats(tx: any, participants: ParsedParticipa
     "role",
     "ally_champion_id",
     "ally_role",
+    "otp",
     "count_game",
     "count_win",
     "sum_gold_earned",
@@ -415,6 +421,7 @@ async function upsertChampionDuoRoleStats(tx: any, participants: ParsedParticipa
       r.role,
       r.allyChampionId,
       r.allyRole,
+      r.otp,
       r.countGame,
       r.countWin,
       r.sumGoldEarned,
@@ -442,7 +449,7 @@ async function upsertChampionDuoRoleStats(tx: any, participants: ParsedParticipa
   const q = `
     INSERT INTO champion_duo_role_stats (${cols.join(", ")})
     VALUES ${valueTuples.join(", ")}
-    ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, ally_champion_id, ally_role)
+    ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, ally_champion_id, ally_role, otp)
     DO UPDATE SET
       ${updateParts.join(",\n      ")}
   `;
@@ -462,18 +469,18 @@ export async function upsertSpellOrderStats(tx: any, participants: ParsedPartici
     await tx`
       INSERT INTO champion_spell_stats (
         patch, role, rank_tier, region, champion_id, champion_transform,
-        spell_order,
+        spell_order, otp,
         spell1_casts, spell2_casts, spell3_casts, spell4_casts,
         count_game, count_win, sum_timestamp_ms
       )
       VALUES (
         ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
         ${participant.championId}, ${championTransform},
-        ${spellOrder},
+        ${spellOrder}, ${participant.otp === true},
         ${participant.spell1Casts}, ${participant.spell2Casts}, ${participant.spell3Casts}, ${participant.spell4Casts},
         1, ${participantWinCount(participant)}, ${spellTs}
       )
-      ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, spell_order_hash)
+      ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, spell_order_hash, otp)
       DO UPDATE SET
         count_game = champion_spell_stats.count_game + 1,
         count_win = champion_spell_stats.count_win + EXCLUDED.count_win,
@@ -505,6 +512,7 @@ export async function upsertItemSetStats(tx: any, participants: ParsedParticipan
           participant.region,
           participant.championId,
           championTransform,
+          participant.otp === true,
           type,
           key,
         ],
@@ -521,6 +529,7 @@ export async function upsertItemSetStats(tx: any, participants: ParsedParticipan
       "region",
       "champion_id",
       "champion_transform",
+      "otp",
       "phase",
       "item_set_key",
     ],
@@ -554,6 +563,7 @@ async function upsertItemSoloStats(tx: any, participants: ParsedParticipantDto[]
           participant.region,
           participant.championId,
           championTransform,
+          participant.otp === true,
           itemId,
         ],
         sums: [
@@ -579,6 +589,7 @@ async function upsertItemSoloStats(tx: any, participants: ParsedParticipantDto[]
       "region",
       "champion_id",
       "champion_transform",
+      "otp",
       "item_id",
     ],
     sumColumns: [
@@ -611,6 +622,7 @@ async function upsertRuneStats(tx: any, participants: ParsedParticipantDto[]): P
       participant.region,
       participant.championId,
       championTransform,
+      participant.otp === true,
     ];
 
     runeRows.push({ keys: [...base, participant.runeList, participant.shardList], sums: [1, win] });
@@ -628,7 +640,7 @@ async function upsertRuneStats(tx: any, participants: ParsedParticipantDto[]): P
     }
   }
 
-  const base = ["patch", "role", "rank_tier", "region", "champion_id", "champion_transform"];
+  const base = ["patch", "role", "rank_tier", "region", "champion_id", "champion_transform", "otp"];
   await runAdditiveUpsert(tx, {
     table: "champion_runes_stats",
     keyColumns: [...base, "rune_list", "shard_list"],
@@ -650,7 +662,7 @@ async function upsertRuneStats(tx: any, participants: ParsedParticipantDto[]): P
 }
 
 async function upsertSummonerSpellStats(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
-  const base = ["patch", "role", "rank_tier", "region", "champion_id", "champion_transform"];
+  const base = ["patch", "role", "rank_tier", "region", "champion_id", "champion_transform", "otp"];
   const pairRows: Array<{ keys: unknown[]; sums: number[] }> = [];
   const soloRows: Array<{ keys: unknown[]; sums: number[] }> = [];
 
@@ -664,6 +676,7 @@ async function upsertSummonerSpellStats(tx: any, participants: ParsedParticipant
       participant.region,
       participant.championId,
       championTransform,
+      participant.otp === true,
     ];
     const [spellD, spellF] = [participant.spellD, participant.spellF].sort((a, b) => a - b);
     const spellDCasts = spellD === participant.spellD ? participant.spellDCasts : participant.spellFCasts;
@@ -716,7 +729,7 @@ async function upsertBansByBanner(tx: any, participants: ParsedParticipantDto[])
     const roleColumn = banRoleColumn(participant.role);
 
     rows.push({
-      keys: [participant.patch, participant.rankTier, participant.region, participant.bannedChampionId],
+      keys: [participant.patch, participant.rankTier, participant.region, participant.bannedChampionId, participant.otp === true],
       sums: [
         isTeam100 ? 1 : 0,
         isTeam100 ? 0 : 1,
@@ -732,7 +745,7 @@ async function upsertBansByBanner(tx: any, participants: ParsedParticipantDto[])
   }
   await runAdditiveUpsert(tx, {
     table: "champion_bans_by_banner",
-    keyColumns: ["patch", "rank_tier", "region", "banned_champion_id"],
+    keyColumns: ["patch", "rank_tier", "region", "banned_champion_id", "otp"],
     sumColumns: [
       "count_banner_team_100",
       "count_banner_team_200",
@@ -760,6 +773,7 @@ async function upsertChampionPickOrder(tx: any, participants: ParsedParticipantD
         participant.region,
         participant.championId,
         championTransform,
+        participant.otp === true,
         participant.teamId,
         participant.pickOrder,
       ],
@@ -775,6 +789,7 @@ async function upsertChampionPickOrder(tx: any, participants: ParsedParticipantD
       "region",
       "champion_id",
       "champion_transform",
+      "otp",
       "team",
       "pick_order",
     ],
@@ -802,6 +817,7 @@ async function upsertChampionBucket(tx: any, participants: ParsedParticipantDto[
         participant.region,
         participant.championId,
         championTransform,
+        participant.otp === true,
         transformTimestampMs,
         durationBucket,
       ],
@@ -847,6 +863,7 @@ async function upsertChampionBucket(tx: any, participants: ParsedParticipantDto[
       "region",
       "champion_id",
       "champion_transform",
+      "otp",
       "transform_timestamp_ms",
       "duration_bucket",
     ],
@@ -926,7 +943,7 @@ async function upsertBotlaneDuoVsDuoStats(tx: any, payload: IngestionJobData): P
 
     await tx`
       INSERT INTO botlane_duo_vs_duo_stats (
-        patch, rank_tier, region, adc_id, support_id, opp_adc_id, opp_support_id,
+        patch, rank_tier, region, adc_id, support_id, opp_adc_id, opp_support_id, otp,
         count_win, count_game,
         sum_adc_gold_earned, sum_adc_gold_spent,
         sum_adc_max_level_lead_lane_opponent, sum_adc_max_kill_deficit, sum_adc_max_cs_advantage_on_lane_opponent,
@@ -942,6 +959,7 @@ async function upsertBotlaneDuoVsDuoStats(tx: any, payload: IngestionJobData): P
       VALUES (
         ${patch}, ${row.rankTier}, ${region},
         ${row.adc.championId}, ${row.sup.championId}, ${row.oppAdc.championId}, ${row.oppSup.championId},
+        ${row.adc.otp === true || row.sup.otp === true},
         ${row.win}, 1,
         ${am.goldEarned}, ${am.goldSpent},
         ${am.maxLevelLeadLaneOpponent}, ${am.maxKillDeficit}, ${am.maxCsAdvantageOnLaneOpponent},
@@ -952,7 +970,7 @@ async function upsertBotlaneDuoVsDuoStats(tx: any, payload: IngestionJobData): P
         ${sm.visionScoreAdvantageLaneOpponent}, ${sm.laningPhaseGoldExpAdvantage}, ${sm.earlyLaningPhaseGoldExpAdvantage},
         ${s15.phys}, ${s15.magic}, ${s15.trueDmg}, ${s15.kill}, ${s15.assist}, ${s15.death}, ${s15.vision}, ${s15.shield}, ${s15.cs}
       )
-      ON CONFLICT (patch, rank_tier, region, adc_id, support_id, opp_adc_id, opp_support_id)
+      ON CONFLICT (patch, rank_tier, region, adc_id, support_id, opp_adc_id, opp_support_id, otp)
       DO UPDATE SET
         count_win = botlane_duo_vs_duo_stats.count_win + EXCLUDED.count_win,
         count_game = botlane_duo_vs_duo_stats.count_game + EXCLUDED.count_game,
@@ -1028,16 +1046,16 @@ async function upsertTierDailySnapshots(tx: any, participants: ParsedParticipant
     const dateOfGame = snapshotDateOfGame(participant.gameDate);
     await tx`
       INSERT INTO champion_tier_daily_snapshots (
-        patch, role, rank_tier, region, champion_id, champion_transform, date_of_game,
+        patch, role, rank_tier, region, champion_id, champion_transform, date_of_game, otp,
         games, wins, count_ban
       )
       VALUES (
         ${participant.patch}, ${participant.role}::lol_role, ${participant.rankTier}::lol_rank_tier,
         ${participant.region}::lol_region,
-        ${participant.championId}, ${championTransform}, ${dateOfGame}::date,
+        ${participant.championId}, ${championTransform}, ${dateOfGame}::date, ${participant.otp === true},
         1, ${participantWinCount(participant)}, 0
       )
-      ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, date_of_game)
+      ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, date_of_game, otp)
       DO UPDATE SET
         games = champion_tier_daily_snapshots.games + EXCLUDED.games,
         wins = champion_tier_daily_snapshots.wins + EXCLUDED.wins
@@ -1049,16 +1067,16 @@ async function upsertTierDailySnapshots(tx: any, participants: ParsedParticipant
     const dateOfGame = snapshotDateOfGame(participant.gameDate);
     await tx`
       INSERT INTO champion_tier_daily_snapshots (
-        patch, role, rank_tier, region, champion_id, champion_transform, date_of_game,
+        patch, role, rank_tier, region, champion_id, champion_transform, date_of_game, otp,
         games, wins, count_ban
       )
       VALUES (
         ${participant.patch}, ${participant.role}::lol_role, ${participant.rankTier}::lol_rank_tier,
         ${participant.region}::lol_region,
-        ${bannedId}, 0, ${dateOfGame}::date,
+        ${bannedId}, 0, ${dateOfGame}::date, ${participant.otp === true},
         0, 0, 1
       )
-      ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, date_of_game)
+      ON CONFLICT (patch, role, rank_tier, region, champion_id, champion_transform, date_of_game, otp)
       DO UPDATE SET
         count_ban = champion_tier_daily_snapshots.count_ban + EXCLUDED.count_ban
     `;
@@ -1093,13 +1111,13 @@ async function upsertItemTierDailySnapshots(tx: any, participants: ParsedPartici
       const ts = firstTsByItem.get(itemId) ?? 0;
       await tx`
         INSERT INTO item_tier_daily_snapshots (
-          patch, rank_tier, region, item_id, date_of_game,
+          patch, rank_tier, region, item_id, date_of_game, otp,
           games, wins, "order", sum_achat_tmps,
           top_game, top_win, jungle_game, jungle_win, mid_game, mid_win,
           adc_game, adc_win, support_game, support_win
         )
         VALUES (
-          ${participant.patch}, ${participant.rankTier}, ${participant.region}, ${itemId}, ${dateOfGame}::date,
+          ${participant.patch}, ${participant.rankTier}, ${participant.region}, ${itemId}, ${dateOfGame}::date, ${participant.otp === true},
           1, ${winCount}, ${orderJson}, ${ts},
           ${roleCounts.top_game}, ${roleCounts.top_win},
           ${roleCounts.jungle_game}, ${roleCounts.jungle_win},
@@ -1107,7 +1125,7 @@ async function upsertItemTierDailySnapshots(tx: any, participants: ParsedPartici
           ${roleCounts.adc_game}, ${roleCounts.adc_win},
           ${roleCounts.support_game}, ${roleCounts.support_win}
         )
-        ON CONFLICT (patch, rank_tier, region, item_id, date_of_game)
+        ON CONFLICT (patch, rank_tier, region, item_id, date_of_game, otp)
         DO UPDATE SET
           games = item_tier_daily_snapshots.games + EXCLUDED.games,
           wins = item_tier_daily_snapshots.wins + EXCLUDED.wins,
@@ -1156,14 +1174,16 @@ async function upsertObjectiveOutcomeHistogram(tx: any, payload: IngestionJobDat
     const dbKey = objectiveHistogramDbKey(objective);
     await tx`
       INSERT INTO objective_outcome_histogram (
-        patch, rank_tier, region, team, objective_type, type_drake, is_soul, outcome, obj_count, count_games, sum_timestamp_ms
+        patch, rank_tier, region, team, objective_type, type_drake, is_soul, outcome, obj_count, otp, count_games, sum_timestamp_ms
       )
       VALUES (
         ${payload.teamStats.patch}, ${payload.teamStats.rankTier}, ${payload.teamStats.region},
         ${objective.team}, ${dbKey.objectiveType}, ${dbKey.typeDrake}, ${dbKey.isSoul},
-        ${objective.outcome}, ${objective.count}, 1, ${sumTs}
+        ${objective.outcome}, ${objective.count},
+        ${(objective.team === 100 ? payload.teamStats.otpTeam100 : payload.teamStats.otpTeam200) === true},
+        1, ${sumTs}
       )
-      ON CONFLICT (patch, rank_tier, region, team, objective_type, type_drake_key, is_soul, outcome, obj_count)
+      ON CONFLICT (patch, rank_tier, region, team, objective_type, type_drake_key, is_soul, outcome, obj_count, otp)
       DO UPDATE SET
         count_games = objective_outcome_histogram.count_games + 1,
         sum_timestamp_ms = objective_outcome_histogram.sum_timestamp_ms + EXCLUDED.sum_timestamp_ms,
@@ -1196,12 +1216,12 @@ function objectiveHistogramDbKey(objective: TeamObjectiveDto): {
 async function upsertMatchOutcomeStats(tx: any, payload: IngestionJobData): Promise<void> {
   await tx`
     INSERT INTO match_outcome_stats (
-      patch, rank_tier, region, count_match
+      patch, rank_tier, region, otp, count_match
     )
     VALUES (
-      ${payload.teamStats.patch}, ${payload.teamStats.rankTier}, ${payload.teamStats.region}, 1
+      ${payload.teamStats.patch}, ${payload.teamStats.rankTier}, ${payload.teamStats.region}, ${payload.teamStats.otp === true}, 1
     )
-    ON CONFLICT (patch, rank_tier)
+    ON CONFLICT (patch, rank_tier, otp)
     DO UPDATE SET
       count_match = match_outcome_stats.count_match + 1,
       region = EXCLUDED.region,
@@ -1248,7 +1268,7 @@ async function upsertTeamCoreStat(tx: any, payload: IngestionJobData): Promise<v
 
   await tx`
     INSERT INTO team_core_stat (
-      patch, rank_tier, region, team, count_win, count_game,
+      patch, rank_tier, region, team, otp, count_win, count_game,
       count_team_early_surrendered, count_team_surrendered,
       sum_champion_kills, count_elder_drake_first
     )
@@ -1257,6 +1277,7 @@ async function upsertTeamCoreStat(tx: any, payload: IngestionJobData): Promise<v
       ${stats.rankTier},
       ${stats.region},
       100,
+      ${stats.otpTeam100 === true},
       ${stats.team100Win ? 1 : 0},
       1,
       ${team100EarlySurrendered},
@@ -1264,7 +1285,7 @@ async function upsertTeamCoreStat(tx: any, payload: IngestionJobData): Promise<v
       ${Math.max(0, Math.trunc(Number(stats.team100ChampionKills) || 0))},
       ${stats.team100ElderDrakeFirst ? 1 : 0}
     )
-    ON CONFLICT (patch, rank_tier, region, team)
+    ON CONFLICT (patch, rank_tier, region, team, otp)
     DO UPDATE SET
       count_game = team_core_stat.count_game + 1,
       count_win = team_core_stat.count_win + EXCLUDED.count_win,
@@ -1276,7 +1297,7 @@ async function upsertTeamCoreStat(tx: any, payload: IngestionJobData): Promise<v
 
   await tx`
     INSERT INTO team_core_stat (
-      patch, rank_tier, region, team, count_win, count_game,
+      patch, rank_tier, region, team, otp, count_win, count_game,
       count_team_early_surrendered, count_team_surrendered,
       sum_champion_kills, count_elder_drake_first
     )
@@ -1285,6 +1306,7 @@ async function upsertTeamCoreStat(tx: any, payload: IngestionJobData): Promise<v
       ${stats.rankTier},
       ${stats.region},
       200,
+      ${stats.otpTeam200 === true},
       ${stats.team100Win ? 0 : 1},
       1,
       ${team200EarlySurrendered},
@@ -1292,7 +1314,7 @@ async function upsertTeamCoreStat(tx: any, payload: IngestionJobData): Promise<v
       ${Math.max(0, Math.trunc(Number(stats.team200ChampionKills) || 0))},
       ${stats.team200ElderDrakeFirst ? 1 : 0}
     )
-    ON CONFLICT (patch, rank_tier, region, team)
+    ON CONFLICT (patch, rank_tier, region, team, otp)
     DO UPDATE SET
       count_game = team_core_stat.count_game + 1,
       count_win = team_core_stat.count_win + EXCLUDED.count_win,
@@ -1318,9 +1340,9 @@ async function upsertChampionJunglePath(tx: any, participants: ParsedParticipant
     await tx.unsafe(
       `INSERT INTO champion_jungle_path (
          patch, rank_tier, region, champion_id, opponent_champion_id, path_hash,
-         count_win, count_game, jungle_camp_history
-       ) VALUES ($1, $2, $3::lol_region, $4, $5, $6, $7, 1, $8::jsonb)
-       ON CONFLICT (patch, rank_tier, region, champion_id, opponent_champion_id, path_hash)
+         count_win, count_game, jungle_camp_history, otp
+       ) VALUES ($1, $2, $3::lol_region, $4, $5, $6, $7, 1, $8::jsonb, $9)
+       ON CONFLICT (patch, rank_tier, region, champion_id, opponent_champion_id, path_hash, otp)
        DO UPDATE SET
          count_game = champion_jungle_path.count_game + 1,
          count_win = champion_jungle_path.count_win + EXCLUDED.count_win,
@@ -1334,6 +1356,7 @@ async function upsertChampionJunglePath(tx: any, participants: ParsedParticipant
         pathHash,
         winCount,
         historyJson,
+        participant.otp === true,
       ],
     );
   }
@@ -1358,6 +1381,7 @@ export async function runAggregationTransaction(payload: IngestionJobData): Prom
       participant.rankTierValue = normalizeLolRankTier(participant.rankTierValue);
     }
   }
+  applyOtpFlags(payload, await loadOtpPuuids(payload.participants.map((p) => p.puuid)));
 
   await sql.begin(async (tx) => {
     await upsertPlayersFromParticipants(tx, payload.participants);
