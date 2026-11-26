@@ -4468,7 +4468,8 @@
       "otp": "OTP",
       "balance": "Balance",
       "videos": "Videos",
-      "stats": "Stats"
+      "stats": "Stats",
+      "limits": "Limits"
     },
     "data": {
       "title": "Data collection (poller)",
@@ -4570,6 +4571,67 @@
       "saved": "Distribution saved, tier list recomputed.",
       "saveError": "Save failed.",
       "loadError": "Could not load the distribution."
+    },
+    "limits": {
+      "loading": "Loading…",
+      "invalid": "Value out of range or max delay below min delay.",
+      "save": "Save",
+      "defaults": "Defaults",
+      "saved": "Saved, applied immediately (poller: within 5 s).",
+      "loadError": "Could not load.",
+      "saveError": "Save rejected."
+    },
+    "statsLimits": {
+      "title": "Statistics thresholds",
+      "description": "Minimum games and list sizes. Higher = more reliable stats but fewer champions shown.",
+      "fields": {
+        "tierListMinGames": "Tier list: min games",
+        "tierListMinPickPct": "Tier list: min pick %",
+        "botlaneMinGames": "Botlane duos: min games",
+        "regionWinrateMinGames": "Regions: min games (win rate)",
+        "otpWinrateMinGames": "OTP: min games (win rate)",
+        "compareTopLimit": "Comparisons: top size",
+        "regionSpreadLimit": "Regions: gaps listed",
+        "dashboardPopulationMinGames": "Champion page: min games (population)",
+        "synergyMinPeerGames": "Synergies: min games per pair",
+        "matchupScoreMax": "Matchups: max score"
+      },
+      "notes": {
+        "tierListMinGames": "Absolute floor, integer ≥ 1. Default 10.",
+        "tierListMinPickPct": "% of total games, 0–100. The larger of the two applies. Default 0.5.",
+        "botlaneMinGames": "Integer ≥ 1. Default 10.",
+        "regionWinrateMinGames": "Integer ≥ 1. Default 20.",
+        "otpWinrateMinGames": "Integer ≥ 1. Default 10.",
+        "compareTopLimit": "Regions and OTP pages, 1–100. Default 10.",
+        "regionSpreadLimit": "1–100. Default 15.",
+        "dashboardPopulationMinGames": "Integer ≥ 1. Default 30.",
+        "synergyMinPeerGames": "Integer ≥ 1. Default 3.",
+        "matchupScoreMax": "±max scale, 0.1–100. Default 10."
+      }
+    },
+    "adminLimits": {
+      "title": "Admin limits",
+      "description": "Community votes, poller pace, windows and retention. Admin only.",
+      "fields": {
+        "voteMinTotal": "Votes: min total before auto-hide",
+        "voteMinUpvotePct": "Votes: min upvote %",
+        "pollTargetNewGames": "Poller: target new games",
+        "pollMinDelayDays": "Poller: min delay (days)",
+        "pollMaxDelayDays": "Poller: max delay (days)",
+        "pollWindowHours": "Poller: match window (hours)",
+        "rankHistoryRetentionDays": "Ranks and matches retention (days)",
+        "patchRetentionDays": "Per-patch retention (days)"
+      },
+      "notes": {
+        "voteMinTotal": "Integer ≥ 1. Default 10.",
+        "voteMinUpvotePct": "Below this %, the build becomes private. 0–100. Default 30.",
+        "pollTargetNewGames": "Delay = target ÷ games per day. Default 5.",
+        "pollMinDelayDays": "0.01–365. Default 0.25.",
+        "pollMaxDelayDays": "≥ min delay, ≤ 365. Default 30.",
+        "pollWindowHours": "1–168. Default 48.",
+        "rankHistoryRetentionDays": "Raw data purge, 1–365. Default: env or 15.",
+        "patchRetentionDays": "0 = disabled, max 90. Default: env."
+      }
     }
   }
 }

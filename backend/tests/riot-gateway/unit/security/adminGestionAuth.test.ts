@@ -51,10 +51,11 @@ async function run(path: string, authorization: string) {
 
 describe('gate admin : onglets Gestion ouverts à lelariva', () => {
   it('chemins des onglets Gestion', () => {
-    for (const p of ['/poller-settings', '/otp-settings', '/balance-rules', '/cron', '/youtube/trigger', '/youtube/channels', '/tier-distribution']) {
+    for (const p of ['/poller-settings', '/otp-settings', '/balance-rules', '/cron', '/youtube/trigger', '/youtube/channels', '/tier-distribution', '/stats-limits']) {
       expect(isGestionPath(p), p).toBe(true)
     }
     expect(isGestionPath('/riot-apikey')).toBe(false)
+    expect(isGestionPath('/admin-limits')).toBe(false)
     expect(isGestionPath('/balance-rules/../riot-apikey')).toBe(false)
   })
 
@@ -62,6 +63,8 @@ describe('gate admin : onglets Gestion ouverts à lelariva', () => {
     expect((await run('/balance-rules', 'Bearer lelariva-token')).passed).toBe(true)
     const other = await run('/riot-apikey', 'Bearer lelariva-token')
     expect(other).toEqual({ passed: false, status: 403 })
+    expect(await run('/admin-limits', 'Bearer lelariva-token')).toEqual({ passed: false, status: 403 })
+    expect((await run('/stats-limits', 'Bearer lelariva-token')).passed).toBe(true)
   })
 
   it('admin : passe partout ; membre : 403 même sur un chemin Gestion', async () => {

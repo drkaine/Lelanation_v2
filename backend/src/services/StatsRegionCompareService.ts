@@ -5,6 +5,7 @@
 import { isDatabaseConfigured, queryRawUnsafe } from '../db/query.js';
 import { toQueryStringArrayParam } from '../utils/statsFilters.js';
 import { teamMiscPatchSql } from './StatsTeamMiscService.js';
+import { getStatsLimits } from './StatsLimitsService.js';
 
 type Count = bigint | number | string | null;
 
@@ -66,8 +67,6 @@ export interface RegionCompare {
 /** Région comparée seulement avec assez de matchs ; winrate seulement avec assez de parties. */
 export const MIN_REGION_MATCHES = 100;
 export const MIN_WINRATE_GAMES = 20;
-const TOP_LIMIT = 10;
-const SPREAD_LIMIT = 15;
 
 const num = (v: Count): number => (v === null ? 0 : Number(v));
 const round2 = (v: number): number => Math.round(v * 100) / 100;
@@ -94,7 +93,7 @@ export function spreadsOf(
     if (Object.keys(byRegion).length < 2) continue;
     out.push({ championId, byRegion, spread: round2((byRegion[high] ?? 0) - (byRegion[low] ?? 0)), high, low });
   }
-  return out.sort((a, b) => b.spread - a.spread || a.championId - b.championId).slice(0, SPREAD_LIMIT);
+  return out.sort((a, b) => b.spread - a.spread || a.championId - b.championId).slice(0, getStatsLimits().regionSpreadLimit);
 }
 
 export function buildRegionCompare(
@@ -102,6 +101,7 @@ export function buildRegionCompare(
   championRows: readonly RegionChampionRow[],
   banRows: readonly RegionBanRow[],
 ): RegionCompare {
+  const { compareTopLimit: topLimit, regionWinrateMinGames: minWinrateGames } = getStatsLimits();
   const regions = summaryRows
     .map((r) => {
       const matches = num(r.matches);
@@ -144,16 +144,16 @@ export function buildRegionCompare(
       picked: p
         .map(([championId, s]) => ({ championId, rate: pct(s.picks, matches), games: s.picks }))
         .sort(byRate)
-        .slice(0, TOP_LIMIT),
+        .slice(0, topLimit),
       banned: [...(bans.get(region) ?? [])]
         .map(([championId, n]) => ({ championId, rate: pct(n, matches), games: n }))
         .sort(byRate)
-        .slice(0, TOP_LIMIT),
+        .slice(0, topLimit),
       winrate: p
-        .filter(([, s]) => s.picks >= MIN_WINRATE_GAMES)
+        .filter(([, s]) => s.picks >= minWinrateGames)
         .map(([championId, s]) => ({ championId, rate: pct(s.wins, s.picks), games: s.picks }))
         .sort(byRate)
-        .slice(0, TOP_LIMIT),
+        .slice(0, topLimit),
     };
   });
 
@@ -169,7 +169,7 @@ export function buildRegionCompare(
         names,
         (r, c) => {
           const s = picks.get(r)?.get(c);
-          return s && s.picks >= MIN_WINRATE_GAMES ? pct(s.wins, s.picks) : null;
+          return s && s.picks >= minWinrateGames ? pct(s.wins, s.picks) : null;
         },
         pickIds,
       ),

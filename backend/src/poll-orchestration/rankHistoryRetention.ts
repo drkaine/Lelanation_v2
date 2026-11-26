@@ -54,9 +54,10 @@ export async function purgePollTargets(deps: RankHistoryRetentionDeps): Promise<
 const MATCH_PURGE_BATCH = 500;
 
 /** Purge l'historique de rangs et les matchs (N jours) et les vieilles cibles de poll ; total supprimé. */
-export function createRankHistoryPurge(keepDays: number): () => Promise<number> {
+export function createRankHistoryPurge(keepDaysOf: () => number): () => Promise<number> {
   const today = () => sweepDay(new Date());
   return async () => {
+    const keepDays = keepDaysOf();
     const ranks = await purgeRankHistory(
       {
         today,

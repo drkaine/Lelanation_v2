@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_GAMES_PER_DAY,
   NEXT_POLL_AFTER_GAME_SQL,
-  POLL_DELAY_SQL,
+  pollDelaySql,
   MAX_POLL_DELAY_DAYS,
   MIN_POLL_DELAY_DAYS,
   TARGET_NEW_GAMES,
@@ -52,8 +52,8 @@ describe('pollYield — fin de poll', () => {
 describe('pollYield — anti-chevauchement à l’ingestion', () => {
   it('une partie ingérée repousse next_poll_at de chaque participant (jamais en arrière)', () => {
     expect(NEXT_POLL_AFTER_GAME_SQL).toBe(`GREATEST(COALESCE(next_poll_at, '-infinity'::timestamptz), `);
-    expect(POLL_DELAY_SQL).toContain('games_per_day');
-    expect(POLL_DELAY_SQL).toContain(`${MIN_POLL_DELAY_DAYS}::float8`);
-    expect(POLL_DELAY_SQL).toContain(`${MAX_POLL_DELAY_DAYS}::float8`);
+    expect(pollDelaySql()).toContain('games_per_day');
+    expect(pollDelaySql()).toContain(`${MIN_POLL_DELAY_DAYS}::float8`);
+    expect(pollDelaySql()).toContain(`${MAX_POLL_DELAY_DAYS}::float8`);
   });
 });

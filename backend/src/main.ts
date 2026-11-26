@@ -29,7 +29,8 @@ import { createLeagueSweeper } from './poll-orchestration/LeagueSweeper.js';
 import { sweepTickDelayMs } from './poll-orchestration/leagueSweep.js';
 import { SweepGate } from './poll-orchestration/sweepGate.js';
 import { MetricsStore } from './observability/poller-metrics/MetricsStore.js';
-import { createRankHistoryPurge, retentionDays } from './poll-orchestration/rankHistoryRetention.js';
+import { createRankHistoryPurge } from './poll-orchestration/rankHistoryRetention.js';
+import { getAdminLimits } from './services/AdminLimitsService.js';
 import { ingestionQueue, getQueueMetrics } from './queues/index.js';
 import { trimCompletedQueueJobs } from './queues/queue-cleanup.js';
 import { getMatchAggregationIntervalMs,
@@ -473,13 +474,13 @@ function startLeagueSweep(): void {
     schedule(loop, 0);
   }
 
-  const keepDays = retentionDays(process.env.DATA_RETENTION_DAYS ?? process.env.RANK_HISTORY_RETENTION_DAYS);
-  const purge = createRankHistoryPurge(keepDays);
+  const keepDaysOf = () => getAdminLimits().rankHistoryRetentionDays;
+  const purge = createRankHistoryPurge(keepDaysOf);
   const purgeLoop = async (): Promise<void> => {
     try {
       const deleted = await purge();
       if (deleted > 0) {
-        orchestrationLogger.info({ component: 'RankHistoryRetention', deleted, keepDays }, 'rank history and matches purged');
+        orchestrationLogger.info({ component: 'RankHistoryRetention', deleted, keepDays: keepDaysOf() }, 'rank history and matches purged');
       }
     } catch (error) {
       orchestrationLogger.warn(
@@ -492,7 +493,7 @@ function startLeagueSweep(): void {
   schedule(purgeLoop, 0);
 
   console.log(
-    `[poller-main] league_sweep ${POLLER_PLATFORMS.join(',')} daily from 00:01, min ${minIntervalMs}ms; raw data (ranks, matches) ${keepDays}d`,
+    `[poller-main] league_sweep ${POLLER_PLATFORMS.join(',')} daily from 00:01, min ${minIntervalMs}ms; raw data (ranks, matches) ${keepDaysOf()}d (admin)`,
   );
 }
 

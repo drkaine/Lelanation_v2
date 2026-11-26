@@ -1,12 +1,19 @@
+import { getAdminLimits } from '../services/AdminLimitsService.js';
+
 /** Fenêtre max des ids de match d'un joueur : 48 h. */
 export const POLL_WINDOW_MS = 48 * 60 * 60 * 1000;
+
+/** Fenêtre effective (réglage admin pollWindowHours, défaut 48 h). */
+export function pollWindowMs(): number {
+  return getAdminLimits().pollWindowHours * 60 * 60 * 1000;
+}
 
 /**
  * Début de fenêtre d'un joueur (secondes) : depuis son dernier poll s'il date de moins de 48 h,
  * sinon les 48 dernières heures. Jamais avant la fenêtre globale (clé perso 24 h).
  */
 export function playerSinceTimestamp(globalSinceSec: number, lastPolledAt: Date | null, nowMs: number): number {
-  const floor = nowMs - POLL_WINDOW_MS;
+  const floor = nowMs - pollWindowMs();
   const last = lastPolledAt?.getTime();
   const fromMs = last !== undefined && Number.isFinite(last) && last > floor ? Math.min(last, nowMs) : floor;
   return Math.max(globalSinceSec, Math.floor(fromMs / 1000));

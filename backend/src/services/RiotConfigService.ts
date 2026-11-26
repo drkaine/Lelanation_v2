@@ -5,6 +5,7 @@ import { join } from 'path'
 import { FileManager } from '../utils/fileManager.js'
 import { Result } from '../utils/Result.js'
 import { AppError } from '../utils/errors.js'
+import { getAdminLimits } from './AdminLimitsService.js'
 
 const DATA_RIOT = join(process.cwd(), 'data', 'riot')
 const DATA_GAME = join(process.cwd(), 'data', 'game')
@@ -171,21 +172,10 @@ export type PollerPatchRetentionConfig =
   | { enabled: false }
   | { enabled: true; days: number };
 
-const DEFAULT_POLLER_PATCH_RETENTION_DAYS = 5;
-
+/** Réglage admin patchRetentionDays (0 = désactivé) ; sans fichier : env POLLER_PATCH_RETENTION_DAYS. */
 export function getPollerPatchRetentionConfig(): PollerPatchRetentionConfig {
-  const raw = process.env.POLLER_PATCH_RETENTION_DAYS?.trim() ?? '';
-  if (!raw || raw.toLowerCase() === 'false' || raw === '0') {
-    return { enabled: false };
-  }
-  if (raw.toLowerCase() === 'true') {
-    return { enabled: true, days: DEFAULT_POLLER_PATCH_RETENTION_DAYS };
-  }
-  const n = Number.parseInt(raw, 10);
-  if (!Number.isFinite(n) || n < 1) {
-    return { enabled: false };
-  }
-  return { enabled: true, days: Math.min(n, 90) };
+  const days = getAdminLimits().patchRetentionDays;
+  return days > 0 ? { enabled: true, days } : { enabled: false };
 }
 
 /** @deprecated Prefer getPollerPatchRetentionConfig — 0 when retention disabled. */

@@ -6,6 +6,7 @@
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
 import { buildChampionScopedWhere, buildRawMatchCond } from './ChampionGlobalTableService.js'
 import { matchVersionedAggFrom } from './statsAggArchive.js'
+import { getStatsLimits } from './StatsLimitsService.js'
 import {
   normalizeStatsRoleForChampion,
   normalizedRankTiers,
@@ -24,7 +25,6 @@ import {
 } from './championDashboardMath.js'
 
 /** Un champion doit avoir au moins ce nombre de parties pour compter dans la population des percentiles. */
-const MIN_GAMES_FOR_POPULATION = 30
 
 type Scope = {
   championId: number
@@ -395,7 +395,7 @@ export async function getChampionDashboard(scope: Scope): Promise<ChampionDashbo
   const lane = laneRows[0]
 
   const population = [...byChampion.values()]
-    .filter(t => t.games >= MIN_GAMES_FOR_POPULATION)
+    .filter(t => t.games >= getStatsLimits().dashboardPopulationMinGames)
     .map(totalsToMetrics)
   const targetMetrics = totalsToMetrics(target)
   const percentiles = metricPercentiles(targetMetrics, population)

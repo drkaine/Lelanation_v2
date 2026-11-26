@@ -4,8 +4,11 @@
  * les inactifs attendent. `players.next_poll_at` porte la date, indexée.
  * Anti-chevauchement : toute partie ingérée repousse aussi la date de ses 10 joueurs.
  */
+import { getAdminLimits } from '../services/AdminLimitsService.js';
+
 const DAY_MS = 86_400_000;
 
+/** Défauts ; valeurs effectives dans les réglages admin (AdminLimitsService). */
 export const TARGET_NEW_GAMES = 5;
 export const DEFAULT_GAMES_PER_DAY = 1;
 export const MIN_POLL_DELAY_DAYS = 0.25;
@@ -20,13 +23,17 @@ export function estimateGamesPerDay(matchIds: number, sinceTimestampSec: number 
 
 /** Délai avant le prochain poll, en jours, borné. */
 export function pollDelayDays(gamesPerDay: number | null): number {
+  const { pollTargetNewGames, pollMinDelayDays, pollMaxDelayDays } = getAdminLimits();
   const rate = gamesPerDay ?? DEFAULT_GAMES_PER_DAY;
-  if (rate <= 0) return MAX_POLL_DELAY_DAYS;
-  return Math.min(MAX_POLL_DELAY_DAYS, Math.max(MIN_POLL_DELAY_DAYS, TARGET_NEW_GAMES / rate));
+  if (rate <= 0) return pollMaxDelayDays;
+  return Math.min(pollMaxDelayDays, Math.max(pollMinDelayDays, pollTargetNewGames / rate));
 }
 
-/** Même délai en SQL, pour l'ingestion (colonne games_per_day du joueur). */
-export const POLL_DELAY_SQL = `LEAST(${MAX_POLL_DELAY_DAYS}::float8, GREATEST(${MIN_POLL_DELAY_DAYS}::float8, CASE WHEN COALESCE(games_per_day, ${DEFAULT_GAMES_PER_DAY}) <= 0 THEN ${MAX_POLL_DELAY_DAYS}::float8 ELSE ${TARGET_NEW_GAMES}::float8 / COALESCE(games_per_day, ${DEFAULT_GAMES_PER_DAY}) END)) * interval '1 day'`;
+/** Même délai en SQL, pour l'ingestion (colonne games_per_day du joueur). Réglages admin relus à chaque appel. */
+export function pollDelaySql(): string {
+  const { pollTargetNewGames: target, pollMinDelayDays: min, pollMaxDelayDays: max } = getAdminLimits();
+  return `LEAST(${max}::float8, GREATEST(${min}::float8, CASE WHEN COALESCE(games_per_day, ${DEFAULT_GAMES_PER_DAY}) <= 0 THEN ${max}::float8 ELSE ${target}::float8 / COALESCE(games_per_day, ${DEFAULT_GAMES_PER_DAY}) END)) * interval '1 day'`;
+}
 
 interface PollCompletion {
   stats: { matchIdsDiscovered: number; errors: ReadonlyArray<unknown> };

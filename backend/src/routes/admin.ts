@@ -42,6 +42,10 @@ import {
   updateTierDistribution,
 } from '../services/TierDistributionService.js'
 import { clearTierListCache } from '../services/TierListService.js'
+import { getStatsLimits, updateStatsLimits } from '../services/StatsLimitsService.js'
+import { getAdminLimits, updateAdminLimits } from '../services/AdminLimitsService.js'
+import { resetRegionCompareCache } from '../services/StatsRegionCompareService.js'
+import { resetOtpCompareCache } from '../services/StatsOtpCompareService.js'
 import { statsRedisCacheDelNamespace } from '../services/statsRedisCache.js'
 import { allowedPollerPlatforms } from '../poller/utils/pollerScope.js'
 import { getAdminDataCollectStats } from '../services/AdminDataCollectService.js'
@@ -306,6 +310,36 @@ router.put('/tier-distribution', async (req, res) => {
     if (!saved.ok) return res.status(400).json({ error: 'Invalid tier distribution' })
     clearTierListCache()
     await statsRedisCacheDelNamespace('tier-list')
+    return res.json({ success: true, settings: saved.settings })
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+// Page Gestion > Stats : seuils des statistiques (admin + lelariva). Caches des stats vidés.
+router.get('/stats-limits', (_req, res) => res.json({ settings: getStatsLimits() }))
+
+router.put('/stats-limits', async (req, res) => {
+  try {
+    const saved = updateStatsLimits(req.body)
+    if (!saved.ok) return res.status(400).json({ error: 'Invalid stats limits' })
+    clearTierListCache()
+    resetRegionCompareCache()
+    resetOtpCompareCache()
+    await statsRedisCacheDelNamespace('tier-list')
+    return res.json({ success: true, settings: saved.settings })
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+// Admin seulement (hors GESTION_PATHS) : votes, cadence du poller, fenêtres et rétentions. Relu par le poller sous 5 s.
+router.get('/admin-limits', (_req, res) => res.json({ settings: getAdminLimits() }))
+
+router.put('/admin-limits', (req, res) => {
+  try {
+    const saved = updateAdminLimits(req.body)
+    if (!saved.ok) return res.status(400).json({ error: 'Invalid admin limits' })
     return res.json({ success: true, settings: saved.settings })
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })

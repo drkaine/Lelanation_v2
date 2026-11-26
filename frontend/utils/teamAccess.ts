@@ -18,6 +18,14 @@ export function teamGuardDecision(input: {
   return canAccessTeamPage(input.role) ? 'allow' : 'forbidden'
 }
 
+const SHARED_GESTION_TABS = ['team', 'data', 'otp', 'stats', 'balance', 'videos'] as const
+export type GestionTab = (typeof SHARED_GESTION_TABS)[number] | 'limits'
+
+/** Onglets de /equipe : « limits » (votes, poller, rétentions) réservé à l'admin. */
+export function gestionTabsFor(role: UserRole | null): GestionTab[] {
+  return role === 'admin' ? [...SHARED_GESTION_TABS, 'limits'] : [...SHARED_GESTION_TABS]
+}
+
 /** En-tête des appels /api/admin : session Bearer d'un admin, sinon jeton Basic historique. */
 export function adminAuthHeader(
   session: StoredSession | null,

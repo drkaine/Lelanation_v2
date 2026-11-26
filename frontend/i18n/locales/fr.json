@@ -4468,7 +4468,8 @@
       "otp": "OTP",
       "balance": "Balance",
       "videos": "Vidéos",
-      "stats": "Stats"
+      "stats": "Stats",
+      "limits": "Limites"
     },
     "data": {
       "title": "Collecte des données (poller)",
@@ -4570,6 +4571,67 @@
       "saved": "Répartition enregistrée, tier list recalculée.",
       "saveError": "Échec de l'enregistrement.",
       "loadError": "Impossible de charger la répartition."
+    },
+    "limits": {
+      "loading": "Chargement…",
+      "invalid": "Valeur hors bornes ou délai max inférieur au délai min.",
+      "save": "Enregistrer",
+      "defaults": "Valeurs par défaut",
+      "saved": "Enregistré, appliqué tout de suite (poller : sous 5 s).",
+      "loadError": "Chargement impossible.",
+      "saveError": "Enregistrement refusé."
+    },
+    "statsLimits": {
+      "title": "Seuils des statistiques",
+      "description": "Nombre minimum de parties et tailles des listes. Plus haut = stats plus fiables mais moins de champions affichés.",
+      "fields": {
+        "tierListMinGames": "Tier list : parties min",
+        "tierListMinPickPct": "Tier list : % de pick min",
+        "botlaneMinGames": "Duos botlane : parties min",
+        "regionWinrateMinGames": "Régions : parties min (winrate)",
+        "otpWinrateMinGames": "OTP : parties min (winrate)",
+        "compareTopLimit": "Comparaisons : taille des tops",
+        "regionSpreadLimit": "Régions : nb d'écarts listés",
+        "dashboardPopulationMinGames": "Fiche champion : parties min (population)",
+        "synergyMinPeerGames": "Synergies : parties min par pair",
+        "matchupScoreMax": "Matchups : score max"
+      },
+      "notes": {
+        "tierListMinGames": "Plancher absolu, entier ≥ 1. Défaut 10.",
+        "tierListMinPickPct": "% du total des parties, 0–100. Le plus grand des deux s'applique. Défaut 0,5.",
+        "botlaneMinGames": "Entier ≥ 1. Défaut 10.",
+        "regionWinrateMinGames": "Entier ≥ 1. Défaut 20.",
+        "otpWinrateMinGames": "Entier ≥ 1. Défaut 10.",
+        "compareTopLimit": "Pages Régions et OTP, 1–100. Défaut 10.",
+        "regionSpreadLimit": "1–100. Défaut 15.",
+        "dashboardPopulationMinGames": "Entier ≥ 1. Défaut 30.",
+        "synergyMinPeerGames": "Entier ≥ 1. Défaut 3.",
+        "matchupScoreMax": "Échelle ±max, 0,1–100. Défaut 10."
+      }
+    },
+    "adminLimits": {
+      "title": "Limites admin",
+      "description": "Votes communautaires, cadence du poller, fenêtres et rétentions. Réservé à l'admin.",
+      "fields": {
+        "voteMinTotal": "Votes : total min avant masquage auto",
+        "voteMinUpvotePct": "Votes : % de votes positifs min",
+        "pollTargetNewGames": "Poller : nouvelles parties visées",
+        "pollMinDelayDays": "Poller : délai min (jours)",
+        "pollMaxDelayDays": "Poller : délai max (jours)",
+        "pollWindowHours": "Poller : fenêtre des matchs (heures)",
+        "rankHistoryRetentionDays": "Rétention rangs et matchs (jours)",
+        "patchRetentionDays": "Rétention par patch (jours)"
+      },
+      "notes": {
+        "voteMinTotal": "Entier ≥ 1. Défaut 10.",
+        "voteMinUpvotePct": "Sous ce %, le build devient privé. 0–100. Défaut 30.",
+        "pollTargetNewGames": "Délai = cible ÷ parties par jour. Défaut 5.",
+        "pollMinDelayDays": "0,01–365. Défaut 0,25.",
+        "pollMaxDelayDays": "≥ délai min, ≤ 365. Défaut 30.",
+        "pollWindowHours": "1–168. Défaut 48.",
+        "rankHistoryRetentionDays": "Purge des données brutes, 1–365. Défaut : env ou 15.",
+        "patchRetentionDays": "0 = désactivé, max 90. Défaut : env."
+      }
     }
   }
 }

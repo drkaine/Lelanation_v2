@@ -4,6 +4,7 @@
  */
 import type { ChampionMatchupCoreDominanceKey } from './championMatchupLaneProfile.js'
 import { meanStd } from './championMatchupScoreCompute.js'
+import { getStatsLimits } from './StatsLimitsService.js'
 
 /**
  * Unlike the matchup z-score, not clamped and a flat cohort divides by 1e-9 (kept as is:
@@ -35,7 +36,6 @@ const AXES: Array<[ChampionMatchupCoreDominanceKey, (r: SynergyLaneSums, games: 
   ['early', (r, g) => Number(r.sum_early) / g],
 ]
 
-const MIN_PEER_GAMES = 3
 
 /** z-score per axis vs peers (self and peers under 3 games excluded) and the cohort size. */
 export function synergyLaneZ(
@@ -43,8 +43,9 @@ export function synergyLaneZ(
   peers: Array<SynergyLaneSums & { champion_id: number }>,
   championId: number
 ): { z: Record<ChampionMatchupCoreDominanceKey, number>; cohortSize: number } {
+  const minPeerGames = getStatsLimits().synergyMinPeerGames
   const cohort = peers.filter(
-    (p) => Number(p.champion_id) !== championId && Number(p.games ?? 0) >= MIN_PEER_GAMES
+    (p) => Number(p.champion_id) !== championId && Number(p.games ?? 0) >= minPeerGames
   )
   const games = Number(my.games ?? 0)
   const z = {} as Record<ChampionMatchupCoreDominanceKey, number>

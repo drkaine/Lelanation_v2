@@ -6,6 +6,7 @@ import { isDatabaseConfigured, queryRawUnsafe } from '../db/query.js';
 import { toQueryStringArrayParam } from '../utils/statsFilters.js';
 import { spreadsOf, type RegionChampionStat, type RegionSpread } from './StatsRegionCompareService.js';
 import { teamMiscPatchSql } from './StatsTeamMiscService.js';
+import { getStatsLimits } from './StatsLimitsService.js';
 
 type Count = bigint | number | string | null;
 export type OtpGroup = 'otp' | 'others';
@@ -47,7 +48,6 @@ export interface OtpCompare {
 }
 
 export const MIN_OTP_WINRATE_GAMES = 10;
-const TOP_LIMIT = 10;
 const GROUPS: readonly OtpGroup[] = ['otp', 'others'];
 
 const num = (v: Count): number => (v === null ? 0 : Number(v));
@@ -56,6 +56,7 @@ const pct = (part: number, total: number): number => (total > 0 ? round2((part /
 const asGroup = (g: string): OtpGroup | null => (g === 'otp' || g === 'others' ? g : null);
 
 export function buildOtpCompare(groupRows: readonly OtpGroupRow[], championRows: readonly OtpChampionRow[]): OtpCompare {
+  const { compareTopLimit: topLimit, otpWinrateMinGames: minWinrateGames } = getStatsLimits();
   const groups: OtpGroupSummary[] = [];
   for (const row of groupRows) {
     const group = asGroup(row.grp);
@@ -95,12 +96,12 @@ export function buildOtpCompare(groupRows: readonly OtpGroupRow[], championRows:
       picked: p
         .map(([championId, s]) => ({ championId, rate: pct(s.picks, games), games: s.picks }))
         .sort(byRate)
-        .slice(0, TOP_LIMIT),
+        .slice(0, topLimit),
       winrate: p
-        .filter(([, s]) => s.picks >= MIN_OTP_WINRATE_GAMES)
+        .filter(([, s]) => s.picks >= minWinrateGames)
         .map(([championId, s]) => ({ championId, rate: pct(s.wins, s.picks), games: s.picks }))
         .sort(byRate)
-        .slice(0, TOP_LIMIT),
+        .slice(0, topLimit),
     };
   });
 
@@ -115,7 +116,7 @@ export function buildOtpCompare(groupRows: readonly OtpGroupRow[], championRows:
         names,
         (g, c) => {
           const s = stat(g, c);
-          return s && s.picks >= MIN_OTP_WINRATE_GAMES ? pct(s.wins, s.picks) : null;
+          return s && s.picks >= minWinrateGames ? pct(s.wins, s.picks) : null;
         },
         ids,
       ),

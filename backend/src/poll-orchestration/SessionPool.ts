@@ -24,7 +24,7 @@ import { setSessionPoolStatusGetter } from './sessionPoolStatus.js';
 
 const SLOT_WAIT_MS = 200;
 const GATEWAY_QUEUE_POLL_MS = 200;
-import { playerSinceTimestamp, POLL_WINDOW_MS, RollingIdSet } from '../poller/playerSinceWindow.js';
+import { playerSinceTimestamp, pollWindowMs, RollingIdSet } from '../poller/playerSinceWindow.js';
 const SESSION_QUEUE_SAMPLE_MS = 1000;
 /** Pause balayage : vérification toutes les 5 s. */
 const HOLD_CHECK_MS = 5_000;
@@ -157,7 +157,7 @@ export class SessionPool {
 
   private resetSharedMatchIdsIfNeeded(): void {
     const now = Date.now();
-    if (now - this.sharedMatchIdsLastReset <= POLL_WINDOW_MS) {
+    if (now - this.sharedMatchIdsLastReset <= pollWindowMs()) {
       return;
     }
     const previousSize = this.sharedProcessedMatchIds.size;

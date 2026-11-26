@@ -9,11 +9,14 @@ import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchi
 import { deltaToMatchupBaseScore } from './MatchupTierService.js'
 import { assignTiersFromNotes, type LolalyticsTier } from './tierListAssign.js'
 import { sqlLiteral } from '../stats/sqlLiteral.js'
+import { getStatsLimits } from './StatsLimitsService.js'
 
 export type BotlaneVsTier = LolalyticsTier
 
 /** Minimum games per row (duo overall or duo-vs-duo matchup) for tier-list tables. */
+/** Défaut ; valeur effective : Gestion > Stats (botlaneMinGames). */
 export const MIN_BOTLANE_TIERLIST_GAMES = 10
+const botlaneMinGames = (): number => getStatsLimits().botlaneMinGames
 
 function buildBdMatchCond(version?: string | string[] | null, rankTier?: string | string[] | null): string {
   const parts: string[] = []
@@ -85,7 +88,7 @@ export async function getBotlaneDuoVsDuoTierTable(
     FROM ${fromSql}
     WHERE ${whereSql}
     GROUP BY bd.adc_id, bd.support_id, bd.opp_adc_id, bd.opp_support_id
-    HAVING SUM(bd.count_game) >= ${MIN_BOTLANE_TIERLIST_GAMES}
+    HAVING SUM(bd.count_game) >= ${botlaneMinGames()}
   `)
 
   type Cell = {
@@ -112,7 +115,7 @@ export async function getBotlaneDuoVsDuoTierTable(
         winrate: g > 0 ? w / g : 0,
       }
     })
-    .filter((c) => c.games >= MIN_BOTLANE_TIERLIST_GAMES)
+    .filter((c) => c.games >= botlaneMinGames())
 
   const allyKey = (c: Cell) => `${c.adcId}:${c.supportId}`
   const oppKey = (c: Cell) => `${c.oppAdcId}:${c.oppSupportId}`
@@ -240,7 +243,7 @@ export async function getBotlaneDuoOverallTierTable(
     FROM ${fromSql}
     WHERE ${whereSql}
     GROUP BY bd.adc_id, bd.support_id
-    HAVING SUM(bd.count_game) >= ${MIN_BOTLANE_TIERLIST_GAMES}
+    HAVING SUM(bd.count_game) >= ${botlaneMinGames()}
   `)
 
   type DuoCell = {
@@ -263,7 +266,7 @@ export async function getBotlaneDuoOverallTierTable(
         winrate: g > 0 ? w / g : 0,
       }
     })
-    .filter((c) => c.games >= MIN_BOTLANE_TIERLIST_GAMES)
+    .filter((c) => c.games >= botlaneMinGames())
 
   if (cells.length === 0) {
     const vKey = toQueryStringArrayParam(version).join(',') || null

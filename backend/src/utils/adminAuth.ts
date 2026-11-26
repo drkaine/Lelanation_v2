@@ -40,6 +40,7 @@ const GESTION_PATHS = new Set([
   '/youtube/trigger',
   '/youtube/channels',
   '/tier-distribution',
+  '/stats-limits',
 ])
 
 export function isGestionPath(path: string): boolean {

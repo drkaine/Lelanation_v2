@@ -1,8 +1,7 @@
+import { getStatsLimits } from './StatsLimitsService.js'
 
 const VALID_LANES = new Set(['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT'] as const)
 const GLOBAL_RANK_KEY = 'GLOBAL'
-const SCORE_MIN = -10
-const SCORE_MAX = 10
 
 /** Min games for a champion to be "eligible" when computing average winrate vs opponent (Delta method). */
 export const MATCHUP_DELTA_MIN_GAMES_ELIGIBLE = 1
@@ -99,11 +98,13 @@ type MatchupInputRow = {
 }
 
 function computeScoreFromAggregates(games: number, wins: number, avgKda: number, avgLevel: number): { score: number; confidence: number } {
+  const SCORE_MAX = getStatsLimits().matchupScoreMax
+  const SCORE_MIN = -SCORE_MAX
   const safeGames = Math.max(1, games)
   const smoothedWinrate = ((wins + 10) / (safeGames + 20)) * 100
-  const wrComponent = clamp(((smoothedWinrate - 50) / 50) * 10, SCORE_MIN, SCORE_MAX)
-  const kdaComponent = clamp(((avgKda - 3) / 3) * 10, SCORE_MIN, SCORE_MAX)
-  const levelComponent = clamp(((avgLevel - 14) / 4) * 10, SCORE_MIN, SCORE_MAX)
+  const wrComponent = clamp(((smoothedWinrate - 50) / 50) * SCORE_MAX, SCORE_MIN, SCORE_MAX)
+  const kdaComponent = clamp(((avgKda - 3) / 3) * SCORE_MAX, SCORE_MIN, SCORE_MAX)
+  const levelComponent = clamp(((avgLevel - 14) / 4) * SCORE_MAX, SCORE_MIN, SCORE_MAX)
   const raw = 0.8 * wrComponent + 0.1 * kdaComponent + 0.1 * levelComponent
   const confidence = clamp(safeGames / 60, 0, 1)
   const scored = Math.round(raw * confidence)
