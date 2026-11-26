@@ -51,7 +51,7 @@ async function run(path: string, authorization: string) {
 
 describe('gate admin : onglets Gestion ouverts à lelariva', () => {
   it('chemins des onglets Gestion', () => {
-    for (const p of ['/poller-settings', '/otp-settings', '/balance-rules', '/cron', '/youtube/trigger', '/youtube/channels']) {
+    for (const p of ['/poller-settings', '/otp-settings', '/balance-rules', '/cron', '/youtube/trigger', '/youtube/channels', '/tier-distribution']) {
       expect(isGestionPath(p), p).toBe(true)
     }
     expect(isGestionPath('/riot-apikey')).toBe(false)

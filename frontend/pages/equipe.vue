@@ -62,6 +62,7 @@
 
       <AdminGestionDataTab v-if="activeTab === 'data' && canSeeGestionTabs" />
       <AdminGestionOtpTab v-else-if="activeTab === 'otp' && canSeeGestionTabs" />
+      <AdminTierDistributionTab v-else-if="activeTab === 'stats' && canSeeGestionTabs" />
       <AdminBalanceRulesTab v-else-if="activeTab === 'balance' && canSeeGestionTabs" />
       <AdminVideosTab v-else-if="activeTab === 'videos' && canSeeGestionTabs" ref="videosTabRef" />
 
@@ -204,7 +205,7 @@ interface Invitation {
 const { t, locale } = useI18n()
 const localePath = useLocalePath()
 const { session, load, logout, authFetch } = useUserSession()
-const gestionTabs = ['team', 'data', 'otp', 'balance', 'videos'] as const
+const gestionTabs = ['team', 'data', 'otp', 'stats', 'balance', 'videos'] as const
 const activeTab = ref<(typeof gestionTabs)[number]>('team')
 const canSeeGestionTabs = computed(() => canAccessTeamPage(session.value?.user.role ?? null))
 /** VideosTab ne charge rien seul : load() à son montage (v-else-if). */

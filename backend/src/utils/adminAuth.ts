@@ -39,6 +39,7 @@ const GESTION_PATHS = new Set([
   '/cron',
   '/youtube/trigger',
   '/youtube/channels',
+  '/tier-distribution',
 ])
 
 export function isGestionPath(path: string): boolean {

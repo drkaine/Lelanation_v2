@@ -36,6 +36,13 @@ import { readBalanceRules, writeBalanceRules } from '../services/BalanceRulesSer
 import { pollerSettingsView, updatePollerSettings } from '../services/PollerSettingsAdminService.js'
 import { pollerSettingsFile } from '../poller/pollerSettings.js'
 import { loadOtpSettings, otpSettingsFile, updateOtpSettings } from '../services/OtpSettingsService.js'
+import {
+  loadTierDistribution,
+  tierDistributionFile,
+  updateTierDistribution,
+} from '../services/TierDistributionService.js'
+import { clearTierListCache } from '../services/TierListService.js'
+import { statsRedisCacheDelNamespace } from '../services/statsRedisCache.js'
 import { allowedPollerPlatforms } from '../poller/utils/pollerScope.js'
 import { getAdminDataCollectStats } from '../services/AdminDataCollectService.js'
 import { getAdminCollectTimeseries } from '../services/AdminCollectTimeseriesService.js'
@@ -278,6 +285,27 @@ router.put('/otp-settings', (req, res) => {
   try {
     const saved = updateOtpSettings(otpSettingsFile(), req.body)
     if (!saved.ok) return res.status(400).json({ error: 'Invalid OTP settings' })
+    return res.json({ success: true, settings: saved.settings })
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+// Page Gestion > Stats : répartition des tiers de la tier list. Appliquée tout de suite (caches vidés).
+router.get('/tier-distribution', (_req, res) => {
+  try {
+    return res.json({ settings: loadTierDistribution(tierDistributionFile()) })
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+router.put('/tier-distribution', async (req, res) => {
+  try {
+    const saved = updateTierDistribution(tierDistributionFile(), req.body)
+    if (!saved.ok) return res.status(400).json({ error: 'Invalid tier distribution' })
+    clearTierListCache()
+    await statsRedisCacheDelNamespace('tier-list')
     return res.json({ success: true, settings: saved.settings })
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })

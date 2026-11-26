@@ -4467,7 +4467,8 @@
       "data": "Data",
       "otp": "OTP",
       "balance": "Balance",
-      "videos": "Vidéos"
+      "videos": "Vidéos",
+      "stats": "Stats"
     },
     "data": {
       "title": "Collecte des données (poller)",
@@ -4543,6 +4544,32 @@
         "eliteBanrateTwoPatchAvgMin": "Elite ban min sur 2 patchs",
         "elitePresenceMax": "Elite UP présence max"
       }
+    },
+    "tierDistribution": {
+      "title": "Répartition des tiers",
+      "description": "Seuils de la tier list, sur la note × 100 (0 = moyenne du rôle). Appliqué dès l'enregistrement.",
+      "loading": "Chargement…",
+      "help": "B : note entre −B et +B. S : note ≥ seuil S, A entre B et S. S+ : note ≥ max(seuil S+, plus petit S + écart), au plus N champions par rôle. C et D en miroir.",
+      "fields": {
+        "bHalf": "Demi-largeur de B",
+        "sMin": "Seuil S",
+        "sPlusMin": "Seuil S+",
+        "extremeGap": "Écart S+ / S",
+        "extremeMax": "Max S+ / D par rôle"
+      },
+      "notes": {
+        "bHalf": "Défaut 35",
+        "sMin": "Défaut 70, doit dépasser B",
+        "sPlusMin": "Défaut 105, ≥ seuil S",
+        "extremeGap": "Défaut 30",
+        "extremeMax": "Défaut 5, entier"
+      },
+      "invalid": "Valeurs invalides : B > 0, S > B, S+ ≥ S, écart ≥ 0, max entier ≥ 0.",
+      "save": "Enregistrer",
+      "defaults": "Valeurs par défaut",
+      "saved": "Répartition enregistrée, tier list recalculée.",
+      "saveError": "Échec de l'enregistrement.",
+      "loadError": "Impossible de charger la répartition."
     }
   }
 }

@@ -4467,7 +4467,8 @@
       "data": "Data",
       "otp": "OTP",
       "balance": "Balance",
-      "videos": "Videos"
+      "videos": "Videos",
+      "stats": "Stats"
     },
     "data": {
       "title": "Data collection (poller)",
@@ -4543,6 +4544,32 @@
         "eliteBanrateTwoPatchAvgMin": "Elite 2-patch ban min",
         "elitePresenceMax": "Elite UP presence max"
       }
+    },
+    "tierDistribution": {
+      "title": "Tier distribution",
+      "description": "Tier list thresholds, on score × 100 (0 = role average). Applied on save.",
+      "loading": "Loading…",
+      "help": "B: score between −B and +B. S: score ≥ S threshold, A between B and S. S+: score ≥ max(S+ threshold, lowest S + gap), at most N champions per role. C and D mirror them.",
+      "fields": {
+        "bHalf": "B half-width",
+        "sMin": "S threshold",
+        "sPlusMin": "S+ threshold",
+        "extremeGap": "S+ / S gap",
+        "extremeMax": "Max S+ / D per role"
+      },
+      "notes": {
+        "bHalf": "Default 35",
+        "sMin": "Default 70, must exceed B",
+        "sPlusMin": "Default 105, ≥ S threshold",
+        "extremeGap": "Default 30",
+        "extremeMax": "Default 5, integer"
+      },
+      "invalid": "Invalid values: B > 0, S > B, S+ ≥ S, gap ≥ 0, max integer ≥ 0.",
+      "save": "Save",
+      "defaults": "Default values",
+      "saved": "Distribution saved, tier list recomputed.",
+      "saveError": "Save failed.",
+      "loadError": "Could not load the distribution."
     }
   }
 }
