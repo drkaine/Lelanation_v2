@@ -153,10 +153,9 @@ export function resolveSummonerSpellTooltipText(
     description?: string
     tooltip?: string
     descriptionHtml?: string
-    descriptionParsed?: string
   }
 ): string {
-  const preParsed = String(spell.descriptionHtml ?? spell.descriptionParsed ?? '').trim()
+  const preParsed = String(spell.descriptionHtml ?? '').trim()
   if (preParsed && !/\{\{[^}]+\}\}/.test(preParsed)) return preParsed
 
   const template = pickSummonerSpellTemplate(spell)

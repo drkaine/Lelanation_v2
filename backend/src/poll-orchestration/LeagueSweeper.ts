@@ -11,8 +11,12 @@ import {
   extendSweep,
   parseSweepState,
   planSweep,
+  previousSweepDay,
+  pushPolledHistory,
   recordSweep,
+  sizedPagesPerDivision,
   sweepDay,
+  sweepDayStart,
   tierQuota,
   toRankRows,
 } from './leagueSweep.js';
@@ -23,6 +27,10 @@ export interface LeagueSweeperDeps {
   saveState(state: SweepState): Promise<void>;
   /** Pages lues par division et par jour (quota de cibles par tier). */
   pagesPerDivision: number;
+  /** Plafond des pages dimensionnées. */
+  maxPagesPerDivision?: number;
+  /** Joueurs pollés entre le début de `day` et celui de `nextDay` ; absent = pas de dimensionnement. */
+  countPolled?(day: string, nextDay: string): Promise<number>;
   /** Stocke les rangs ; `targets` (sous-ensemble) devient les cibles de poll du jour. */
   storeRanks(rows: RankRow[], day: string, targets: RankRow[]): Promise<StoreRanksResult>;
   fetchApex(league: ApexLeague): Promise<{ tier?: string; entries?: ReadonlyArray<Record<string, unknown>> }>;
@@ -48,7 +56,9 @@ export class LeagueSweeper {
   async tick(): Promise<SweepTickResult> {
     const today = this.deps.today();
     const loaded = parseSweepState(await this.deps.loadState(), today);
-    const { step, state } = planSweep(loaded, today);
+    const planned = planSweep(await this.sized(loaded, today), today);
+    const { step, state } = planned;
+    const pages = state.pages ?? this.deps.pagesPerDivision;
     if (step.kind === 'idle') {
       if (state.done && !loaded.done) await this.deps.saveState(state);
       return { kind: 'idle', entries: 0, stored: 0, newPlayers: 0 };
@@ -65,11 +75,23 @@ export class LeagueSweeper {
     }
 
     const rows = toRankRows(entries, fallbackTier);
-    const targets = step.kind === 'apex' ? apexTargets(rows, tierQuota(this.deps.pagesPerDivision), today) : rows;
+    const targets = step.kind === 'apex' ? apexTargets(rows, tierQuota(pages), today) : rows;
     const { stored, newPlayers } =
       rows.length > 0 ? await this.deps.storeRanks(rows, today, targets) : { stored: 0, newPlayers: 0 };
-    await this.deps.saveState(recordSweep(state, step, entries.length, this.deps.pagesPerDivision));
+    const next = recordSweep(state, step, entries.length, pages);
+    await this.deps.saveState(
+      step.kind === 'apex' ? { ...next, apexTargets: next.apexTargets + targets.length } : next,
+    );
     return { kind: step.kind, entries: entries.length, stored, newPlayers };
+  }
+
+  /** Premier tick d'un nouveau jour : pollés de la veille ajoutés à l'historique, pages du jour recalculées. */
+  private async sized(state: SweepState, today: string): Promise<SweepState> {
+    if (state.day === today || !this.deps.countPolled) return state;
+    const yesterday = previousSweepDay(today);
+    const polledHistory = pushPolledHistory(state.polledHistory, await this.deps.countPolled(yesterday, today));
+    const max = this.deps.maxPagesPerDivision ?? this.deps.pagesPerDivision;
+    return { ...state, polledHistory, pages: sizedPagesPerDivision(polledHistory, this.deps.pagesPerDivision, max, state.apexTargets) };
   }
 
   /** Cibles du jour épuisées : relance un tour de pages si permis (voir extendSweep). */
@@ -125,9 +147,26 @@ async function storeRanks(rows: RankRow[], day: string, targets: RankRow[], plat
 }
 
 /** État de chaque plateforme sous sa clé dans la ligne unique de league_sweep_state. */
-export function createLeagueSweeper(platform: Platform, pagesPerDivision: number): LeagueSweeper {
+export function createLeagueSweeper(
+  platform: Platform,
+  pagesPerDivision: number,
+  maxPagesPerDivision?: number,
+): LeagueSweeper {
+  const [region] = toDbRegions([platform]);
   return new LeagueSweeper({
     pagesPerDivision,
+    maxPagesPerDivision,
+    countPolled:
+      maxPagesPerDivision === undefined
+        ? undefined
+        : async (day, nextDay) => {
+            const [row] = await sql<{ n: number }[]>`
+              SELECT COUNT(*)::int AS n FROM players
+              WHERE region = ${region}::lol_region
+                AND last_polled_at >= ${sweepDayStart(day)} AND last_polled_at < ${sweepDayStart(nextDay)}
+            `;
+            return row?.n ?? 0;
+          },
     today: () => sweepDay(new Date()),
     loadState: async () => {
       const [row] = await sql<{ state: unknown }[]>`SELECT state -> ${platform} AS state FROM league_sweep_state WHERE id = 1`;

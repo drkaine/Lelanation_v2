@@ -20,7 +20,11 @@ function abilityRank(slot: string): number {
   return idx === -1 ? Number.MAX_SAFE_INTEGER : idx
 }
 
-function normalizeChampionDetail(detail: any, current: Champion, fallbackId: string): Champion {
+export function normalizeChampionDetail(
+  detail: any,
+  current: Champion,
+  fallbackId: string
+): Champion {
   const championId = String(detail?.id ?? current.id ?? fallbackId)
   const rawSpells = Array.isArray(detail?.spells) ? detail.spells : []
   const sortedSpells = [...rawSpells].sort(
@@ -35,22 +39,13 @@ function normalizeChampionDetail(detail: any, current: Champion, fallbackId: str
     return {
       ...spell,
       image: spell?.image ?? { full: fallbackSpellImage },
-      description: String(
-        spell?.descriptionHtml ??
-          spell?.descriptionParsed ??
-          spell?.descriptionText ??
-          spell?.parsedText ??
-          ''
-      ),
+      description: String(spell?.descriptionHtml ?? spell?.descriptionText ?? ''),
       descriptionHtml:
         spell?.descriptionHtml ??
-        spell?.descriptionParsed ??
         (typeof spell?.description === 'string' && spell.description.includes('<')
           ? spell.description
           : undefined),
-      descriptionParsed: spell?.descriptionParsed ?? spell?.descriptionHtml,
-      descriptionText: spell?.descriptionText ?? spell?.parsedText,
-      parsedText: spell?.parsedText ?? spell?.descriptionText,
+      descriptionText: spell?.descriptionText,
       summaryHtml: spell?.summaryHtml,
       detailedTexts: spell?.detailedTexts,
       headerStats: spell?.headerStats,
@@ -63,22 +58,15 @@ function normalizeChampionDetail(detail: any, current: Champion, fallbackId: str
         ...detail.passive,
         image: detail.passive?.image ?? { full: `${championId}_Passive.png` },
         description: String(
-          detail.passive?.descriptionHtml ??
-            detail.passive?.descriptionParsed ??
-            detail.passive?.descriptionText ??
-            detail.passive?.parsedText ??
-            ''
+          detail.passive?.descriptionHtml ?? detail.passive?.descriptionText ?? ''
         ),
         descriptionHtml:
           detail.passive?.descriptionHtml ??
-          detail.passive?.descriptionParsed ??
           (typeof detail.passive?.description === 'string' &&
           detail.passive.description.includes('<')
             ? detail.passive.description
             : undefined),
-        descriptionParsed: detail.passive?.descriptionParsed ?? detail.passive?.descriptionHtml,
-        descriptionText: detail.passive?.descriptionText ?? detail.passive?.parsedText,
-        parsedText: detail.passive?.parsedText ?? detail.passive?.descriptionText,
+        descriptionText: detail.passive?.descriptionText,
       }
     : current.passive
 

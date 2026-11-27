@@ -102,7 +102,6 @@ interface BuildDiscoveryState {
   pageSize: PageSizeOption
   currentPage: number
   builds: Build[]
-  filteredBuilds: Build[]
   comparisonBuilds: string[] // Build IDs
 }
 
@@ -118,7 +117,6 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
     pageSize: 20,
     currentPage: 1,
     builds: [],
-    filteredBuilds: [],
     comparisonBuilds: [],
   }),
 
@@ -210,6 +208,11 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
       }
 
       return sorted
+    },
+
+    /** Getter (pas de copie dans le state) : la liste n'est pas sérialisée deux fois dans le payload SSR. */
+    filteredBuilds(): Build[] {
+      return this.searchResults
     },
 
     totalFilteredCount(): number {
@@ -385,7 +388,6 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
     },
 
     applyFilters() {
-      this.filteredBuilds = this.searchResults
       this.currentPage = 1
       writePaginationToStorage(this.pageSize, this.currentPage)
     },

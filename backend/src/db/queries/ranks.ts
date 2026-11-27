@@ -1,5 +1,6 @@
 import { sql } from '../client.js'
 import { normalizeLolRankTier, normalizeLolRegion } from '../../constants/lolEnums.js'
+import { sweepDay } from '../../poll-orchestration/leagueSweep.js'
 
 export type RankHistoryRow = {
   puuid: string
@@ -17,14 +18,15 @@ export async function hasRankToday(puuid: string, region: string): Promise<boole
     FROM player_rank_history
     WHERE puuid = ${puuid}
       AND region::text = ${normalizedRegion}
-      AND date = CURRENT_DATE
+      AND date = ${sweepDay(new Date())}::date
     LIMIT 1
   `
   return rows.length > 0
 }
 
 export async function insertRankHistory(entry: RankHistoryRow): Promise<void> {
-  const dateOnly = entry.rankedAt.toISOString().slice(0, 10)
+  // Jour du balayage (local, 00:01), comme les cibles : la date UTC décalait d'un jour de 00:01 à 01:00/02:00.
+  const dateOnly = sweepDay(entry.rankedAt)
   const region = normalizeLolRegion(entry.region)
   const rankTier = normalizeLolRankTier(entry.rankTier)
   await sql`
@@ -60,7 +62,7 @@ export async function getMissingRanksToday(puuids: string[], region: string): Pr
         FROM player_rank_history prh
         WHERE prh.puuid = p.puuid
           AND prh.region::text = ${normalizedRegion}
-          AND prh.date = CURRENT_DATE
+          AND prh.date = ${sweepDay(new Date())}::date
       )
   `
   return rows.map((row) => row.puuid)

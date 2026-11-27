@@ -2504,9 +2504,7 @@ function resolveSpellView(
   stackContext?: TheorycraftStackResolveContext | null
 ): Omit<ResolvedSpellView, 'id' | 'slot'> {
   const fallbackHtml = normalizeKaynFormMarkup(
-    String(
-      raw.descriptionHtml ?? raw.descriptionParsed ?? raw.descriptionText ?? raw.parsedText ?? ''
-    )
+    String(raw.descriptionHtml ?? raw.descriptionText ?? '')
   )
 
   const resolved = resolveTheorycraftSpellDescription(

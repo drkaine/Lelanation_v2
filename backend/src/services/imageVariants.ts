@@ -32,8 +32,13 @@ async function mtimeOf(file: string): Promise<number | null> {
   }
 }
 
-async function encode(src: string, out: string): Promise<void> {
-  const lossless = /\.png$/i.test(src)
+export interface VariantOptions {
+  /** Captures (patch notes) : PNG en WebP avec perte, comme les JPG (~70 % de gain contre ~30 %). */
+  lossyPng?: boolean
+}
+
+async function encode(src: string, out: string, options: VariantOptions): Promise<void> {
+  const lossless = !options.lossyPng && /\.png$/i.test(src)
   const tmp = `${out}.tmp`
   await sharp(src)
     .webp(lossless ? { lossless: true, effort: 4 } : { quality: JPEG_QUALITY, effort: 4 })
@@ -58,7 +63,10 @@ async function listSources(dir: string): Promise<string[]> {
 }
 
 /** Crée ou met à jour la variante WebP de chaque PNG/JPG du dossier (récursif). */
-export async function generateWebpVariants(dir: string): Promise<VariantReport> {
+export async function generateWebpVariants(
+  dir: string,
+  options: VariantOptions = {}
+): Promise<VariantReport> {
   const report: VariantReport = { created: 0, skipped: 0, failed: 0 }
   for (const src of await listSources(dir)) {
     const out = webpVariantPath(src)
@@ -68,7 +76,7 @@ export async function generateWebpVariants(dir: string): Promise<VariantReport> 
       continue
     }
     try {
-      await encode(src, out)
+      await encode(src, out, options)
       report.created++
     } catch {
       await fs.rm(`${out}.tmp`, { force: true })
@@ -76,4 +84,9 @@ export async function generateWebpVariants(dir: string): Promise<VariantReport> 
     }
   }
   return report
+}
+
+/** Résumés visuels des patch notes : captures lourdes, WebP avec perte qualité 90. */
+export function generatePatchNotesVariants(dir: string): Promise<VariantReport> {
+  return generateWebpVariants(dir, { lossyPng: true })
 }

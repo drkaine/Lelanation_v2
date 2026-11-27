@@ -19,6 +19,9 @@ import {
   SinceTimestampResolver,
   assertPollConfigFiltersWired,
   clearSessionPoolStatusGetter,
+  laneGatewayQueueThreshold,
+  mergeSessionPoolStatus,
+  setSessionPoolStatusGetter,
   loadPollOrchestrationEnv,
 } from './poll-orchestration/index.js';
 import { PollerEngine } from './poller/PollerEngine.js';
@@ -40,6 +43,7 @@ import { initRiotGateway, logRiotRoutingVerified, shutdownRiotGateway } from './
 import { riotConfig } from './riot-gateway/config/riotConfig.js';
 import { RiotGateway } from './riot-gateway/index.js';
 import { redis } from './redis/client.js';
+import { redisLockStore, withAggregationLock } from './services/aggregationLock.js';
 import { orchestrationLogger } from './poll-orchestration/logger.js';
 import { ObservabilityOrchestrator } from './observability/poller-metrics/index.js';
 import { PollerTuner, TUNER_MAX_DISCOVERY_FETCH } from './tuner/index.js';
@@ -66,7 +70,7 @@ const sweepGate = new SweepGate(process.env.LEAGUE_SWEEP_ENABLED === 'false' ? [
 let leaderLockRenewInterval: NodeJS.Timeout | null = null;
 let dbConsumer: PollerDbConsumer | null = null;
 let observability: ObservabilityOrchestrator | null = null;
-let sessionPool: SessionPool | null = null;
+let sessionPools: SessionPool[] = [];
 let shuttingDown = false;
 
 const playerDiscovery = new PlayerDiscovery(
@@ -235,7 +239,10 @@ async function queryDbWindowStats(windowStartMs: number, windowEndMs: number): P
 
 async function runMatchBatchAggregation(): Promise<void> {
   try {
-    await runMatchBatchAggregationOnce();
+    const res = await withAggregationLock(redisLockStore(redis), 'poller', () => runMatchBatchAggregationOnce(), {
+      ttlMs: 20 * 60_000,
+    });
+    if (!res.ran) console.log('[poller-main] match_batch_aggregation skipped: aggregation lock held');
   } catch (error) {
     console.error('[poller-main] match_batch_aggregation_failed', error);
   }
@@ -277,13 +284,6 @@ async function startSessionPool(): Promise<void> {
     availablePlayers: 1000,
   });
 
-  const playerQueue = new PlayerQueue(playerDiscovery, {
-    highWaterMark: initialParams.batchSize * initialParams.maxConcurrentSessions * 4,
-    lowWaterMark: initialParams.batchSize * initialParams.maxConcurrentSessions,
-    fetchBatchSize: initialParams.batchSize * initialParams.maxConcurrentSessions * 2,
-  });
-  await playerQueue.prime();
-
   const resolveParticipantRanks =
     riotConfig.apiKeyType === 'personal'
       ? false
@@ -297,39 +297,64 @@ async function startSessionPool(): Promise<void> {
   };
   assertPollConfigFiltersWired(basePollConfig, orchestrationLogger);
 
-  if (!observability) {
+  const obs = observability;
+  if (!obs) {
     throw new Error('observability_not_started');
   }
 
-  sessionPool = new SessionPool(
-    playerQueue,
-    engine,
-    tuner,
-    backpressure,
-    sinceResolver,
-    gateway,
-    observability,
-    dbConsumer,
-    rankFilter,
-    {
-      maxConcurrentSessions: initialParams.maxConcurrentSessions,
-      batchSize: initialParams.batchSize,
-      pollConfig: basePollConfig,
-      holdNewSessions: () => sweepGate.allHeld(POLLER_PLATFORMS),
-    },
+  // Une voie par région : rate limits Riot distincts par plateforme, une région lente
+  // (ou en balayage des rangs) ne bloque plus les autres.
+  const lanes = POLLER_PLATFORMS;
+  const gatewayQueueThreshold = laneGatewayQueueThreshold(lanes.length);
+  sessionPools = await Promise.all(
+    lanes.map(async (platform) => {
+      const playerQueue = new PlayerQueue(
+        { fetchNextBatch: (limit) => playerDiscovery.fetchNextBatch(limit, [platform]) },
+        {
+          highWaterMark: initialParams.batchSize * initialParams.maxConcurrentSessions * 4,
+          lowWaterMark: initialParams.batchSize * initialParams.maxConcurrentSessions,
+          fetchBatchSize: initialParams.batchSize * initialParams.maxConcurrentSessions * 2,
+        },
+      );
+      await playerQueue.prime();
+      return new SessionPool(
+        playerQueue,
+        engine,
+        tuner,
+        backpressure,
+        sinceResolver,
+        gateway,
+        obs,
+        dbConsumer,
+        rankFilter,
+        {
+          maxConcurrentSessions: initialParams.maxConcurrentSessions,
+          batchSize: initialParams.batchSize,
+          pollConfig: basePollConfig,
+          holdNewSessions: () => sweepGate.allHeld([platform]),
+          gatewayQueueThreshold,
+        },
+      );
+    }),
   );
 
   orchestrationLogger.info(
     {
       component: 'main',
+      lanes,
       maxConcurrentSessions: initialParams.maxConcurrentSessions,
       batchSize: initialParams.batchSize,
+      gatewayQueueThreshold,
       queueHighWater: initialParams.batchSize * initialParams.maxConcurrentSessions * 4,
     },
-    'session pool starting',
+    'session pools starting (one per region)',
   );
 
-  await sessionPool.start();
+  // start() pose son propre getter avant sa boucle : le statut fusionné le remplace ensuite.
+  const pools = sessionPools;
+  const running = pools.map((pool) => pool.start());
+  setSessionPoolStatusGetter(() => mergeSessionPoolStatus(pools.map((pool) => pool.getStatus())));
+  await Promise.all(running);
 }
 
 async function bootstrap(): Promise<void> {
@@ -433,6 +458,10 @@ function startLeagueSweep(): void {
   // Tours de balayage max par jour (1 = pas de rallonge quand toutes les cibles sont pollées).
   const roundsRaw = Number.parseInt(process.env.LEAGUE_SWEEP_MAX_ROUNDS ?? '4', 10);
   const maxRounds = Number.isFinite(roundsRaw) && roundsRaw > 0 ? roundsRaw : 4;
+  // Pages du jour = joueurs pollés (moyenne 7 j) + 5 %, plafonnées ; LEAGUE_SWEEP_AUTO_PAGES=false = fixe.
+  const maxPagesRaw = Number.parseInt(process.env.LEAGUE_SWEEP_MAX_PAGES_PER_DIVISION ?? '20', 10);
+  const maxPages = Number.isFinite(maxPagesRaw) && maxPagesRaw > 0 ? maxPagesRaw : 20;
+  const autoPages = process.env.LEAGUE_SWEEP_AUTO_PAGES !== 'false';
 
   const schedule = (fn: () => Promise<void>, delayMs: number): void => {
     if (shuttingDown) return;
@@ -444,7 +473,7 @@ function startLeagueSweep(): void {
   };
 
   for (const platform of POLLER_PLATFORMS) {
-    const sweeper = createLeagueSweeper(platform, pagesPerDivision);
+    const sweeper = createLeagueSweeper(platform, pagesPerDivision, autoPages ? maxPages : undefined);
     const loop = async (): Promise<void> => {
       let delayMs = sweepTickDelayMs('idle', minIntervalMs);
       try {
@@ -518,8 +547,8 @@ async function gracefulShutdown(signal: string): Promise<void> {
   await releasePollerLeaderLock();
 
   try {
-    await sessionPool?.shutdown(60_000);
-    sessionPool = null;
+    await Promise.all(sessionPools.map((pool) => pool.shutdown(60_000)));
+    sessionPools = [];
     clearSessionPoolStatusGetter();
     dbConsumer?.unsubscribe();
     // Écritures en vol finies avant sql.end(), sinon « write CONNECTION_ENDED ».

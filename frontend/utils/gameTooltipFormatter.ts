@@ -19,9 +19,7 @@ type SpellLike = {
   name?: string
   description?: string
   descriptionHtml?: string
-  descriptionParsed?: string
   descriptionText?: string
-  parsedText?: string
   tooltip?: string
   detailedTexts?: string[]
   headerStats?: SpellHeaderStat[]
@@ -221,10 +219,8 @@ function hasKaynFormMarkup(html: string): boolean {
 }
 
 function resolveNonSummonerSpellBodyHtml(spell: SpellLike): string {
-  const preParsed = String(spell.descriptionHtml ?? spell.descriptionParsed ?? '').trim()
-  const fallback = String(
-    spell.description ?? spell.descriptionText ?? spell.parsedText ?? spell.tooltip ?? ''
-  ).trim()
+  const preParsed = String(spell.descriptionHtml ?? '').trim()
+  const fallback = String(spell.description ?? spell.descriptionText ?? spell.tooltip ?? '').trim()
   const raw = preParsed || fallback
   if (!raw) return ''
 
@@ -242,7 +238,7 @@ function resolveNonSummonerSpellBodyHtml(spell: SpellLike): string {
   return formatTooltipMarkupHtml(raw).replace(/\n/g, '<br>')
 }
 
-/** Rich HTML from theorycraft JSON (descriptionHtml / descriptionParsed). */
+/** Rich HTML from theorycraft JSON (descriptionHtml). */
 export function resolveSpellTooltipBodyHtml(
   spell: SpellLike,
   options?: FormatSpellTooltipOptions

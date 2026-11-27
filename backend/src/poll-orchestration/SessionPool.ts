@@ -34,6 +34,11 @@ export function maxGatewayQueueBeforeSession(): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 10;
 }
 
+/** File gateway globale à toutes les régions : seuil d'un pool = base × nombre de voies. */
+export function laneGatewayQueueThreshold(lanes: number, base: number = maxGatewayQueueBeforeSession()): number {
+  return base * Math.max(1, lanes);
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -48,6 +53,8 @@ export interface SessionPoolConfig {
   pollConfig: Partial<PollConfig>;
   /** Vrai = aucune nouvelle session (ex. balayage des rangs en cours). */
   holdNewSessions?: () => boolean;
+  /** Seuil de file gateway avant une nouvelle session (défaut : MAX_GATEWAY_QUEUE). */
+  gatewayQueueThreshold?: number;
 }
 
 export interface SessionPoolStatus {
@@ -263,7 +270,7 @@ export class SessionPool {
       }
     }
 
-    const gatewayQueueThreshold = maxGatewayQueueBeforeSession();
+    const gatewayQueueThreshold = this.config.gatewayQueueThreshold ?? maxGatewayQueueBeforeSession();
     const gatewayQueueSize = this.gateway.getStatus().queue.size;
     if (gatewayQueueSize > gatewayQueueThreshold) {
       orchestrationLogger.debug(
@@ -311,7 +318,7 @@ export class SessionPool {
     const sessionStartedAt = Date.now();
     this.totalSessionsLaunched += 1;
 
-    const gatewayQueueThresholdForSession = maxGatewayQueueBeforeSession();
+    const gatewayQueueThresholdForSession = this.config.gatewayQueueThreshold ?? maxGatewayQueueBeforeSession();
     let peakGatewayQueue = this.gateway.getStatus().queue.size;
     const queueSampler = setInterval(() => {
       peakGatewayQueue = Math.max(peakGatewayQueue, this.gateway.getStatus().queue.size);

@@ -41,7 +41,20 @@ export interface OtpTop {
   picked: RegionChampionStat[];
   winrate: RegionChampionStat[];
 }
+export interface OtpPopulationRow {
+  region: string;
+  tier: string | null;
+  players: Count;
+}
+export interface OtpPopulation {
+  total: number;
+  byRegion: { region: string; players: number; pct: number }[];
+  byTier: { tier: string; players: number; pct: number }[];
+  cells: { region: string; tier: string; players: number }[];
+}
 export interface OtpCompare {
+  /** Joueurs OTP actuels (`otp_players`, tous patchs) par région et tier courant. */
+  population: OtpPopulation;
   groups: OtpGroupSummary[];
   top: OtpTop[];
   spreads: { pickRate: RegionSpread[]; winRate: RegionSpread[] };
@@ -55,7 +68,42 @@ const round2 = (v: number): number => Math.round(v * 100) / 100;
 const pct = (part: number, total: number): number => (total > 0 ? round2((part / total) * 100) : 0);
 const asGroup = (g: string): OtpGroup | null => (g === 'otp' || g === 'others' ? g : null);
 
-export function buildOtpCompare(groupRows: readonly OtpGroupRow[], championRows: readonly OtpChampionRow[]): OtpCompare {
+const TIER_ORDER = [
+  'IRON', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'EMERALD', 'DIAMOND', 'MASTER', 'GRANDMASTER', 'CHALLENGER', 'UNRANKED',
+];
+const pct1 = (part: number, total: number): number => (total > 0 ? Math.round((part / total) * 1000) / 10 : 0);
+
+export function buildOtpPopulation(rows: readonly OtpPopulationRow[]): OtpPopulation {
+  const cells = rows
+    .map((r) => ({ region: String(r.region), tier: r.tier ?? 'UNRANKED', players: num(r.players) }))
+    .filter((c) => c.players > 0);
+  const total = cells.reduce((s, c) => s + c.players, 0);
+  const sum = (key: 'region' | 'tier') => {
+    const m = new Map<string, number>();
+    for (const c of cells) m.set(c[key], (m.get(c[key]) ?? 0) + c.players);
+    return [...m];
+  };
+  const rank = (t: string) => {
+    const i = TIER_ORDER.indexOf(t);
+    return i < 0 ? TIER_ORDER.length : i;
+  };
+  return {
+    total,
+    byRegion: sum('region')
+      .map(([region, players]) => ({ region, players, pct: pct1(players, total) }))
+      .sort((a, b) => b.players - a.players || a.region.localeCompare(b.region)),
+    byTier: sum('tier')
+      .map(([tier, players]) => ({ tier, players, pct: pct1(players, total) }))
+      .sort((a, b) => rank(a.tier) - rank(b.tier)),
+    cells,
+  };
+}
+
+export function buildOtpCompare(
+  groupRows: readonly OtpGroupRow[],
+  championRows: readonly OtpChampionRow[],
+  populationRows: readonly OtpPopulationRow[] = [],
+): OtpCompare {
   const { compareTopLimit: topLimit, otpWinrateMinGames: minWinrateGames } = getStatsLimits();
   const groups: OtpGroupSummary[] = [];
   for (const row of groupRows) {
@@ -108,6 +156,7 @@ export function buildOtpCompare(groupRows: readonly OtpGroupRow[], championRows:
   const ids = new Set([...picks.values()].flatMap((m) => [...m.keys()]));
   const stat = (g: string, c: number) => picks.get(g)?.get(c);
   return {
+    population: buildOtpPopulation(populationRows),
     groups,
     top,
     spreads: {
@@ -139,7 +188,7 @@ async function compute(versions: readonly string[]): Promise<OtpCompare> {
   const patch = teamMiscPatchSql('m.patch', versions);
   const where = patch ? `WHERE ${patch}` : '';
   const from = `FROM participants pa JOIN matchs m ON m.riot_match_id = pa.riot_match_id ${where}`;
-  const [groupRows, championRows] = await Promise.all([
+  const [groupRows, championRows, populationRows] = await Promise.all([
     queryRawUnsafe<OtpGroupRow[]>(`
       SELECT ${GROUP_EXPR} AS grp, COUNT(*) AS games, COUNT(*) FILTER (WHERE pa.win) AS wins,
         COALESCE(SUM(pa.kills), 0) AS kills, COALESCE(SUM(pa.deaths), 0) AS deaths,
@@ -152,8 +201,18 @@ async function compute(versions: readonly string[]): Promise<OtpCompare> {
         COUNT(*) FILTER (WHERE pa.win) AS wins
       ${from}
       GROUP BY 1, pa.champion_id`),
+    // Tier courant = dernier relevé du balayage des rangs ; agrégé, aucun joueur renvoyé.
+    queryRawUnsafe<OtpPopulationRow[]>(`
+      WITH latest AS (
+        SELECT DISTINCT ON (h.puuid) h.puuid, h.rank_tier::text AS tier
+        FROM player_rank_history h JOIN otp_players o ON o.puuid = h.puuid
+        ORDER BY h.puuid, h.date DESC
+      )
+      SELECT p.region::text AS region, l.tier, COUNT(*) AS players
+      FROM otp_players o JOIN players p ON p.puuid = o.puuid LEFT JOIN latest l ON l.puuid = o.puuid
+      GROUP BY 1, 2`),
   ]);
-  return buildOtpCompare(groupRows, championRows);
+  return buildOtpCompare(groupRows, championRows, populationRows);
 }
 
 export async function getOtpCompare(version?: string | string[] | null): Promise<OtpCompare | null> {

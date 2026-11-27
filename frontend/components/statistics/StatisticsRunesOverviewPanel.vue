@@ -5,9 +5,12 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { RunePath } from '@lelanation/shared-types'
-import { defaultRuneTree, runeCardRows } from '~/utils/statistics/runeCardRows'
 import { pickWithAlts, runeBuildColumns, type RunePick } from '~/utils/statistics/runeBuildColumns'
-import { visibleRunePaths, type RuneTreeTab } from '~/utils/statistics/runeTreeTabs'
+import {
+  runesDetailOpenByDefault,
+  visibleRunePaths,
+  type RuneTreeTab,
+} from '~/utils/statistics/runeTreeTabs'
 import { runeSideMap, shardsForTree, sideTreeCells } from '~/utils/statistics/runePositions'
 import type { RunesDetailPayload } from '~/types/statisticsIndexPage'
 import { useRunesStore } from '~/stores/RunesStore'
@@ -33,15 +36,7 @@ const props = defineProps<{
 const { t, locale } = useI18n()
 const runesStore = useRunesStore()
 const runeTreeTab = ref<RuneTreeTab>('all')
-const detailOpen = ref(false)
-const cardTree = ref<number | null>(null)
-const activeTreeId = computed(
-  () => cardTree.value ?? defaultRuneTree(runesStore.runePaths, runeMap.value)
-)
-const cardRows = computed(() => {
-  const path = runesStore.runePaths.find(rp => rp.id === activeTreeId.value)
-  return path ? runeCardRows(path, runeMap.value, baselineRuneMap.value) : []
-})
+const detailOpen = ref(runesDetailOpenByDefault(props))
 function fmt1(v: number | null): string {
   if (v == null || !Number.isFinite(v)) return '—'
   return v.toLocaleString(locale.value, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
@@ -652,78 +647,6 @@ function runeSetLayout(
             </div>
           </div>
         </article>
-      </div>
-      <button type="button" class="rc-toggle" @click="detailOpen = !detailOpen">
-        {{ detailOpen ? t('statisticsPage.runesHideDetail') : t('statisticsPage.runesShowDetail') }}
-      </button>
-    </section>
-    <section v-else-if="!unifiedLayout && runeTreeReady" class="rc-section">
-      <header class="rc-head">
-        <h2 class="rc-title">{{ t('statisticsPage.runesTitle') }}</h2>
-        <div role="tablist" :aria-label="t('statisticsPage.runeTreeTabsAria')" class="rc-seg">
-          <button
-            v-for="rp in runesStore.runePaths"
-            :key="'rc-' + rp.id"
-            type="button"
-            role="tab"
-            :aria-selected="activeTreeId === rp.id"
-            :class="['rc-seg-btn', activeTreeId === rp.id ? 'is-active' : '']"
-            @click="cardTree = rp.id"
-          >
-            {{ rp.name }}
-          </button>
-        </div>
-        <select
-          class="rc-mselect"
-          :value="activeTreeId ?? undefined"
-          :aria-label="t('statisticsPage.runeTreeTabsAria')"
-          @change="cardTree = Number(($event.target as HTMLSelectElement).value)"
-        >
-          <option v-for="rp in runesStore.runePaths" :key="'rcm-' + rp.id" :value="rp.id">
-            {{ rp.name }}
-          </option>
-        </select>
-      </header>
-      <div class="rc-card">
-        <div v-for="r in cardRows" :key="'rcr-' + r.row" class="rc-row">
-          <span class="rc-row-label">{{
-            r.row === 0
-              ? t('statisticsPage.runesKeystone')
-              : t('statisticsPage.runesRow', { n: r.row })
-          }}</span>
-          <div class="rc-cells" :class="r.cards.length > 3 ? 'is-4' : ''">
-            <div v-for="c in r.cards" :key="'rcc-' + c.id" class="rc-cell" :title="c.name">
-              <img :src="getRuneImageUrl(gameVersion, c.icon)" :alt="c.name" class="rc-icon" />
-              <div class="rc-body">
-                <span class="rc-name">{{ c.name }}</span>
-                <div class="rc-track" aria-hidden="true">
-                  <div class="rc-fill" :style="{ width: `${c.bar}%` }" />
-                </div>
-                <span class="rc-meta">
-                  <template v-if="c.pick != null">
-                    {{ t('statisticsPage.runesPick') }} {{ fmt1(c.pick) }} % ·
-                    {{ t('statisticsPage.runesWr') }}
-                    <b>{{ fmt1(c.wr) }} %</b>
-                    <span
-                      v-if="comparisonVersion && !baselinePending && c.delta != null"
-                      :class="c.delta > 0.05 ? 'rc-up' : c.delta < -0.05 ? 'rc-down' : 'rc-flat'"
-                      >{{
-                        c.delta > 0.05
-                          ? `▲ +${fmt1(c.delta)}`
-                          : c.delta < -0.05
-                            ? `▼ −${fmt1(Math.abs(c.delta))}`
-                            : '='
-                      }}</span
-                    >
-                  </template>
-                  <template v-else>—</template>
-                </span>
-              </div>
-              <span class="rc-mwr">{{ c.pick != null ? `${fmt1(c.wr)} %` : '—' }}</span>
-            </div>
-          </div>
-        </div>
-        <p class="rc-mlegend">{{ t('statisticsPage.runesMobileLegend') }}</p>
       </div>
       <button type="button" class="rc-toggle" @click="detailOpen = !detailOpen">
         {{ detailOpen ? t('statisticsPage.runesHideDetail') : t('statisticsPage.runesShowDetail') }}
@@ -1370,237 +1293,10 @@ function runeSetLayout(
     display: none;
   }
 }
-.rc-section {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.rc-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.rc-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #f0e6d2;
-}
-.rc-seg {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 2px;
-  padding: 3px;
-  background: var(--color-chrome);
-  border: 1px solid #0a323c;
-  border-radius: 8px;
-}
-.rc-seg-btn {
-  height: 34px;
-  padding: 0 12px;
-  border-radius: 6px;
-  font-size: 14px;
-  color: #a09b8c;
-}
-.rc-seg-btn.is-active {
-  background: #0a323c;
-  color: #f0e6d2;
-  font-weight: 600;
-}
-.rc-card {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  padding: 20px 24px;
-  background: var(--color-chrome);
-  border: 1px solid #463714;
-  border-radius: 12px;
-}
-.rc-row {
-  display: grid;
-  grid-template-columns: 160px 1fr;
-  align-items: center;
-  gap: 16px;
-}
-.rc-row-label {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #a09b8c;
-}
-.rc-cells {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-}
-.rc-cells.is-4 {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-.rc-cell {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid #463714;
-  border-radius: 8px;
-}
-.rc-icon {
-  width: 40px;
-  height: 40px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  background: #0a323c;
-}
-.rc-body {
-  text-align: left;
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: 6px;
-}
-.rc-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 14px;
-  font-weight: 600;
-  color: #f0e6d2;
-}
-.rc-track {
-  height: 4px;
-  border-radius: 2px;
-  background: #1e2328;
-}
-.rc-fill {
-  height: 100%;
-  border-radius: 2px;
-  background: #c8aa6e;
-}
-.rc-meta {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 12px;
-  color: #a09b8c;
-  font-variant-numeric: tabular-nums;
-}
-.rc-meta b {
-  color: #f0e6d2;
-}
-.rc-cells.is-4 .rc-meta {
-  white-space: normal;
-}
-.rc-up {
-  color: #0ac8b9;
-}
-.rc-down {
-  color: #e2665a;
-}
-.rc-flat {
-  color: #a09b8c;
-}
 .rc-toggle {
   align-self: flex-start;
   font-size: 14px;
   font-weight: 600;
   color: #c8aa6e;
-}
-@media (max-width: 900px) {
-  .rc-row {
-    grid-template-columns: 1fr;
-  }
-  .rc-cells,
-  .rc-cells.is-4 {
-    grid-template-columns: 1fr;
-  }
-}
-.rc-mselect,
-.rc-mwr,
-.rc-mlegend {
-  display: none;
-}
-@media (max-width: 767px) {
-  .rc-head {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-  }
-  .rc-seg {
-    display: none !important;
-  }
-  .rc-mselect {
-    display: block;
-    height: 40px;
-    padding: 0 12px;
-    border: 1px solid #785a28;
-    border-radius: 8px;
-    background: var(--color-chrome);
-    color: #f0e6d2;
-    font-weight: 600;
-    font-size: 14px;
-  }
-  .rc-card {
-    padding: 14px 16px;
-    gap: 0;
-  }
-  .rc-row {
-    gap: 8px;
-    padding: 12px 0;
-    border-bottom: 1px solid #1e2328;
-  }
-  .rc-row:first-child {
-    padding-top: 0;
-  }
-  .rc-row-label {
-    font-size: 11px;
-  }
-  .rc-cells,
-  .rc-cells.is-4 {
-    gap: 4px;
-  }
-  .rc-cell {
-    padding: 4px 0;
-    border: 0;
-    gap: 10px;
-  }
-  .rc-icon {
-    width: 26px;
-    height: 26px;
-  }
-  .rc-body {
-    flex-direction: row;
-    align-items: center;
-    gap: 10px;
-  }
-  .rc-name {
-    flex: 1;
-    font-size: 13px;
-    font-weight: 500;
-  }
-  .rc-track {
-    width: 64px;
-    flex: none;
-  }
-  .rc-meta {
-    display: none;
-  }
-  .rc-mwr {
-    display: block;
-    width: 52px;
-    text-align: right;
-    font-size: 13px;
-    font-weight: 600;
-    color: #f0e6d2;
-    font-variant-numeric: tabular-nums;
-  }
-  .rc-mlegend {
-    display: block;
-    padding-top: 10px;
-    font-size: 11px;
-    color: #a09b8c;
-  }
 }
 </style>

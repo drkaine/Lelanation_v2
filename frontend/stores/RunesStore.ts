@@ -4,6 +4,7 @@ import { useVersionStore } from './VersionStore'
 import { getFallbackGameVersion } from '~/config/version'
 import { apiUrl } from '~/utils/apiUrl'
 import { getGameDataUrl } from '~/utils/staticDataUrl'
+import { publicFetchCache } from '~/utils/publicFetchCache'
 
 interface RunesState {
   runePaths: RunePath[]
@@ -49,7 +50,7 @@ export const useRunesStore = defineStore('runes', {
             const staticUrl = getGameDataUrl(version, 'runesReforged', language)
             const urlWithCacheBust = `${staticUrl}?_v=${version.replace(/\./g, '_')}`
             const staticResponse = await fetch(urlWithCacheBust, {
-              cache: 'no-cache',
+              cache: publicFetchCache(urlWithCacheBust),
             })
             if (staticResponse.ok) {
               data = await staticResponse.json()

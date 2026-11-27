@@ -2,6 +2,7 @@ import { config } from "../config/index.js";
 import { sql } from "../db/client.js";
 import { bullmqJobId } from "../queues/bullmq-job-id.js";
 import { rankQueue } from "../queues/index.js";
+import { todayIsoDate } from "../queues/rank-jobs-shared.js";
 import { normalizePlatformRegion } from "../riot/platform-region.js";
 
 const TARGET_PCT = 0.98;
@@ -119,10 +120,6 @@ type RankFillTarget = {
   puuid: string;
   region: string;
 };
-
-function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 export function computeUsedReq120s(snapshots: Record<Pipeline, PipelineSnapshot>): number {
   return (

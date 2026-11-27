@@ -2,13 +2,15 @@ import { sql } from '../db/client.js';
 import { timedDbOp } from '../observability/poller-metrics/timedDbOp.js';
 import { normalizePlatformRegion } from '../riot/platform-region.js';
 import { orchestrationLogger } from './logger.js';
+import { sweepDay } from './leagueSweep.js';
 
 function cacheKey(puuid: string, region: string, todayIso: string): string {
   return `${puuid}:${normalizePlatformRegion(region)}:${todayIso}`;
 }
 
+/** Jour du balayage (local, 00:01) : même jour que les rangs écrits, pas la date UTC. */
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return sweepDay(new Date());
 }
 
 export class RankFilter {
@@ -28,7 +30,7 @@ export class RankFilter {
         FROM player_rank_history
         WHERE puuid = ${puuid}
           AND region::text = ${normalizedRegion}
-          AND date = CURRENT_DATE
+          AND date = ${todayIso()}::date
         LIMIT 1
       `,
     );
@@ -58,7 +60,7 @@ export class RankFilter {
       sql<{ puuid: string; region: string }[]>`
         SELECT prh.puuid, prh.region
         FROM player_rank_history prh
-        WHERE prh.date = CURRENT_DATE
+        WHERE prh.date = ${day}::date
           AND prh.puuid = ANY(${sql.array(puuids, 25)})
       `,
     );

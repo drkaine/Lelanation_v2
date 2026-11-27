@@ -60,7 +60,7 @@ describe('PlayerDiscovery.fetchNextBatch', () => {
     expect(query).toContain('FROM poll_targets t');
     expect(query).toContain('p.last_polled_at,');
     expect(query).toContain('t.day = ?::date');
-    expect(query).toMatch(/p\.last_polled_at IS NULL OR p\.last_polled_at < \?::date/);
+    expect(query).toMatch(/p\.last_polled_at IS NULL OR p\.last_polled_at < \?\)/);
     expect(values).toContain('2026-11-25');
     expect(values).toContainEqual(['EUW1', 'KR']);
     expect(values).toContain(4);
@@ -98,12 +98,25 @@ describe('PlayerDiscovery.fetchNextBatch', () => {
     expect(query).toMatch(/ORDER BY turn, region\s/);
   });
 
+  it('tour calculé sur toutes les cibles du jour, avant le filtre « déjà pollé » (sinon une région affame l’autre)', async () => {
+    sqlMock.mockResolvedValue([]);
+    await new PlayerDiscovery().fetchNextBatch(4);
+    const [query] = sqlMock.mock.calls[0];
+    const rank = query.indexOf('ROW_NUMBER()');
+    const closed = query.indexOf(') r');
+    expect(rank).toBeGreaterThan(-1);
+    expect(closed).toBeGreaterThan(rank);
+    expect(query.indexOf('last_polled_at IS NULL')).toBeGreaterThan(closed);
+    expect(query.slice(rank, closed)).not.toContain('players');
+    expect(query).toContain('JOIN players p ON p.puuid = r.puuid');
+  });
+
   it('exclut les joueurs dont un duo a été pollé aujourd’hui', async () => {
     sqlMock.mockResolvedValue([]);
     await new PlayerDiscovery().fetchNextBatch(4);
     const [query] = sqlMock.mock.calls[0];
     expect(query).toContain('player_duos');
-    expect(query).toContain('last_polled_at >= CURRENT_DATE');
+    expect(query).toContain('last_polled_at >= ?');
   });
 
   it('filtre duo sans OR : un index par sens de paire', async () => {
@@ -133,6 +146,17 @@ describe('PlayerDiscovery.fetchNextBatch', () => {
     const calls = sqlMock.mock.calls.length;
     active = [];
     expect(await discovery.fetchNextBatch(4)).toEqual([]);
+    expect(sqlMock).toHaveBeenCalledTimes(calls);
+  });
+
+  it('voie par région : `only` restreint aux plateformes demandées (et actives)', async () => {
+    sqlMock.mockResolvedValue([]);
+    const discovery = new PlayerDiscovery(() => ['euw1', 'kr']);
+    await discovery.fetchNextBatch(4, ['kr']);
+    expect(sqlMock.mock.calls[0][1]).toContainEqual(['KR']);
+    expect(sqlMock.mock.calls[0][1]).not.toContainEqual(['EUW1', 'KR']);
+    const calls = sqlMock.mock.calls.length;
+    expect(await new PlayerDiscovery(() => ['euw1']).fetchNextBatch(4, ['kr'])).toEqual([]);
     expect(sqlMock).toHaveBeenCalledTimes(calls);
   });
 
@@ -191,4 +215,21 @@ describe('PlayerDiscovery.fetchNextBatch', () => {
     expect(values).toContain(0.5);
   });
 
+
+  it('borne « déjà pollé aujourd’hui » = début du jour local (pas minuit UTC)', async () => {
+    sqlMock.mockResolvedValueOnce([row('t1'), row('t2'), row('t3')]);
+    await new PlayerDiscovery(undefined, () => '2026-11-25').fetchNextBatch(1);
+    const [query, values] = sqlMock.mock.calls[0];
+    expect(query).not.toContain('CURRENT_DATE');
+    expect(values).toContainEqual(new Date(2026, 10, 25, 0, 1, 0));
+  });
+
+  it('partenaires de duo calculés après le tri et le LIMIT (pas sur toutes les cibles)', async () => {
+    sqlMock.mockResolvedValueOnce([row('t1'), row('t2'), row('t3')]);
+    await new PlayerDiscovery(undefined, () => '2026-11-25').fetchNextBatch(1);
+    const [query] = sqlMock.mock.calls[0];
+    // Sélection externe : la sous-requête des partenaires précède le FROM interne des cibles.
+    expect(query.indexOf('AS partners')).toBeGreaterThan(-1);
+    expect(query.indexOf('AS partners')).toBeLessThan(query.indexOf('FROM ('));
+  });
 });

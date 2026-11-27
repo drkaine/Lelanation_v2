@@ -4,6 +4,7 @@ import { config } from "../config/index.js";
 import { normalizePlatformRegion } from "../riot/platform-region.js";
 import { normalizeLolRankTier, normalizeLolRole } from "../constants/lolEnums.js";
 import { sql } from "../db/client.js";
+import { sweepDay } from "../poll-orchestration/leagueSweep.js";
 import { sortByPuuid } from "../db/puuidLockOrder.js";
 import { CHAMPION_STATS_METRIC_COLUMNS } from "../constants/championStatsMetricColumns.js";
 import { CHAMPION_VS_STATS_ALL_METRIC_COLUMNS } from "../constants/championVsStatsMetricColumns.js";
@@ -171,7 +172,7 @@ async function upsertPlayerRankHistoryFromParticipants(
     const region = normalizePlatformRegion(participant.region);
     const gameDate = new Date(participant.gameDate);
     if (!puuid || !Number.isFinite(gameDate.getTime())) continue;
-    const dateOnly = gameDate.toISOString().slice(0, 10);
+    const dateOnly = sweepDay(gameDate);
     const key = `${puuid}|${region}|${dateOnly}`;
     const previous = latestByDay.get(key);
     if (!previous || Number(participant.gameEndTimestamp ?? 0) >= Number(previous.gameEndTimestamp ?? 0)) {
@@ -196,7 +197,7 @@ async function upsertPlayerRankHistoryFromParticipants(
 
     await tx`
       INSERT INTO player_rank_history (puuid, date, region, rank_tier, rank_division, rank_lp)
-      VALUES (${puuid}, ${gameDate.toISOString().slice(0, 10)}::date, ${region}::lol_region, ${rankTier}::lol_rank_tier, ${rankDivision}, ${rankLp})
+      VALUES (${puuid}, ${sweepDay(gameDate)}::date, ${region}::lol_region, ${rankTier}::lol_rank_tier, ${rankDivision}, ${rankLp})
       ON CONFLICT (puuid, date, region)
       DO UPDATE SET
         rank_tier = CASE

@@ -1,6 +1,6 @@
 import { sql } from "../db/client.js";
 import { rankQueue } from "../queues/index.js";
-import { rankChildJobId, RANK_CHILD_JOB_OPTS } from "../queues/rank-jobs-shared.js";
+import { rankChildJobId, RANK_CHILD_JOB_OPTS, todayIsoDate } from "../queues/rank-jobs-shared.js";
 import { normalizePlatformRegion, platformRegionLookupKeys } from "../riot/platform-region.js";
 
 const POLL_MS = 500;
@@ -8,10 +8,6 @@ const DEFAULT_MAX_WAIT_MS = 45_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 export function rankInflightKey(puuid: string, region: string, date = todayIsoDate()): string {

@@ -7,6 +7,7 @@
 import { promises as fs } from 'fs';
 import { join, basename } from 'path';
 import { createCronLogger } from '../utils/cronLogger.js';
+import { generatePatchNotesVariants } from './imageVariants.js';
 import { getPatchVersionDir } from '../utils/fileWriter.js';
 import {
   flagBuildsPatchStale,
@@ -293,6 +294,7 @@ export async function publishPatchNotesToFrontend(
   cronName: string = 'patchNotesPublish'
 ): Promise<{ moved: number; deleted: number; index: PatchNotesIndex }> {
   const { moved, deleted } = await movePatchVersionToFrontend(patchVersion, cronName);
+  await generatePatchNotesVariants(getFrontendPatchNotesDir());
   const index = await rebuildPatchNotesIndex();
   await flagBuildsAfterPatchPublish(patchVersion, cronName);
   return { moved, deleted, index };

@@ -6,7 +6,7 @@ import { POLLER_PLATFORMS, toDbRegions } from '../poller/utils/pollerScope.js';
 import type { Platform } from '../poller/types.js';
 import { selectDuoSafeBatch } from './duoRules.js';
 import { pollDelayDays } from './pollYield.js';
-import { sweepDay } from './leagueSweep.js';
+import { sweepDay, sweepDayStart } from './leagueSweep.js';
 import { defaultTierWeights } from '../poller/pollerSettings.js';
 
 interface DiscoveryRow {
@@ -24,16 +24,16 @@ function partnersColumn() {
   )`;
 }
 
-/** Exclut `p` si un de ses partenaires de duo a déjà été pollé aujourd'hui. */
-function duoPolledTodayFilter() {
+/** Exclut `p` si un de ses partenaires de duo a déjà été pollé aujourd'hui (depuis `dayStart`). */
+function duoPolledTodayFilter(dayStart: Date) {
   return sql`NOT EXISTS (
     SELECT 1 FROM player_duos d
     JOIN players q ON q.puuid = d.puuid_b
-    WHERE d.puuid_a = p.puuid AND q.last_polled_at >= CURRENT_DATE
+    WHERE d.puuid_a = p.puuid AND q.last_polled_at >= ${dayStart}
   ) AND NOT EXISTS (
     SELECT 1 FROM player_duos d
     JOIN players q ON q.puuid = d.puuid_a
-    WHERE d.puuid_b = p.puuid AND q.last_polled_at >= CURRENT_DATE
+    WHERE d.puuid_b = p.puuid AND q.last_polled_at >= ${dayStart}
   )`;
 }
 
@@ -54,13 +54,15 @@ export class PlayerDiscovery {
     private readonly tierWeights: (platform: Platform) => Readonly<Record<string, number>> = defaultTierWeights,
   ) {}
 
-  async fetchNextBatch(limit: number): Promise<DiscoveryPlayer[]> {
+  /** `only` : voie d'une région (un pool par plateforme) ; absent = toutes les plateformes actives. */
+  async fetchNextBatch(limit: number, only?: readonly Platform[]): Promise<DiscoveryPlayer[]> {
     const safeLimit = Math.max(1, limit);
-    const active = this.activePlatforms();
+    const active = this.activePlatforms().filter((p) => !only || only.includes(p));
     if (active.length === 0) return [];
     const regions = sql.array(toDbRegions([...active]));
 
     const day = this.today();
+    const dayStart = sweepDayStart(day);
     if (day !== this.queuedDay) {
       this.queuedDay = day;
       this.queuedToday = new Set();
@@ -77,21 +79,29 @@ export class PlayerDiscovery {
     const weightValues = sql.array(weights.map((x) => x.w));
     const targets = await timedDbOp('player_discovery_fetch', () =>
       sql<DiscoveryRow[]>`
-        SELECT puuid, region, partners, last_polled_at FROM (
-          SELECT p.puuid, p.region, p.last_polled_at, ${partnersColumn()} AS partners,
-                 ROW_NUMBER() OVER (PARTITION BY t.region, t.rank_tier ORDER BY t.puuid) / w.weight AS turn
-          FROM poll_targets t
-          JOIN players p ON p.puuid = t.puuid
-          JOIN unnest(${weightRegions}::text[], ${weightTiers}::text[], ${weightValues}::float8[]) AS w(region, tier, weight)
-            ON w.region = t.region::text AND w.tier = t.rank_tier::text AND w.weight > 0
-          WHERE t.day = ${day}::date
-            AND t.region::text = ANY(${regions}::text[])
-            AND (p.last_polled_at IS NULL OR p.last_polled_at < ${day}::date)
-            AND ${duoPolledTodayFilter()}
+        SELECT p.puuid, p.region, p.last_polled_at, ${partnersColumn()} AS partners FROM (
+          -- Partenaires (sous-requête par ligne) calculés après le LIMIT, sur le lot seulement.
+          -- Tour numéroté sur toutes les cibles du jour (pollées comprises) : il avance avec les polls.
+          -- Numéroté après le filtre, la 1re cible restante a toujours le tour 1 et EUW1 gagne chaque
+          -- égalité : KR n'était plus pollé tant qu'EUW1 avait des cibles (27/11).
+          SELECT p.puuid, p.region, p.last_polled_at, r.turn
+          FROM (
+            SELECT t.puuid,
+                   ROW_NUMBER() OVER (PARTITION BY t.region, t.rank_tier ORDER BY t.puuid) / w.weight AS turn
+            FROM poll_targets t
+            JOIN unnest(${weightRegions}::text[], ${weightTiers}::text[], ${weightValues}::float8[]) AS w(region, tier, weight)
+              ON w.region = t.region::text AND w.tier = t.rank_tier::text AND w.weight > 0
+            WHERE t.day = ${day}::date
+              AND t.region::text = ANY(${regions}::text[])
+          ) r
+          JOIN players p ON p.puuid = r.puuid
+          WHERE (p.last_polled_at IS NULL OR p.last_polled_at < ${dayStart})
+            AND ${duoPolledTodayFilter(dayStart)}
             AND NOT (p.puuid = ANY(${sql.array([...this.pending])}::text[]))
-        ) c
-        ORDER BY turn, region
-        LIMIT ${safeLimit * 2}
+          ORDER BY turn, region
+          LIMIT ${safeLimit * 2}
+        ) p
+        ORDER BY p.turn, p.region
       `,
     );
 
@@ -113,8 +123,8 @@ export class PlayerDiscovery {
           SELECT p.puuid, p.region, p.last_polled_at, ${partnersColumn()} AS partners
           FROM players p
           WHERE p.region::text = ANY(${sql.array(toDbRegions(dry))}::text[])
-            AND (p.last_polled_at IS NULL OR p.last_polled_at < ${day}::date)
-            AND ${duoPolledTodayFilter()}
+            AND (p.last_polled_at IS NULL OR p.last_polled_at < ${dayStart})
+            AND ${duoPolledTodayFilter(dayStart)}
             AND NOT (p.puuid = ANY(${sql.array([...this.pending])}::text[]))
           ORDER BY p.last_seen ASC NULLS FIRST
           LIMIT ${missing}

@@ -14,6 +14,7 @@ import type { MatchDto, MatchTimelineDto } from '../riot/types.js';
 import type { ParticipantDiscovery } from './ParticipantDiscovery.js';
 import type { PlayerDiscovery } from './PlayerDiscovery.js';
 import { extractPatchFromMatch } from './matchPatch.js';
+import { sweepDay } from './leagueSweep.js';
 import type { PollerDbConsumerConfig } from './types.js';
 import { timedDbOp } from '../observability/poller-metrics/timedDbOp.js';
 import type { IngestionRankSource } from '../observability/poller-metrics/types.js';
@@ -214,7 +215,7 @@ export class PollerDbConsumer {
           rank_tier
         FROM player_rank_history
         WHERE puuid = ANY(${sql.array(puuids, 25)})
-          AND date = CURRENT_DATE
+          AND date = ${sweepDay(new Date())}::date
           AND rank_tier IS NOT NULL
           AND rank_tier <> 'UNRANKED'
         ORDER BY puuid, date DESC

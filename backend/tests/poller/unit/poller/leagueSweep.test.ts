@@ -9,6 +9,7 @@ import {
   planSweep,
   recordSweep,
   sweepDay,
+  sweepDayStart,
   sweepTickDelayMs,
   tierQuota,
   toRankRows,
@@ -40,6 +41,23 @@ describe('leagueSweep — jour du balayage', () => {
     expect(sweepDay(new Date(2026, 10, 25, 0, 0, 30))).toBe('2026-11-24');
     expect(sweepDay(new Date(2026, 10, 25, 0, 1, 0))).toBe('2026-11-25');
     expect(sweepDay(new Date(2026, 10, 25, 15, 0, 0))).toBe('2026-11-25');
+  });
+});
+
+describe('sweepDayStart — bascule de minuit (base en UTC, jour local)', () => {
+  it('instant de début = minuit local + 1 min', () => {
+    expect(sweepDayStart('2026-11-25').getTime()).toBe(new Date(2026, 10, 25, 0, 1, 0).getTime());
+  });
+
+  it('cohérent avec sweepDay : début inclus, la minute d’avant = veille', () => {
+    const start = sweepDayStart('2026-11-25');
+    expect(sweepDay(start)).toBe('2026-11-25');
+    expect(sweepDay(new Date(start.getTime() - 1))).toBe('2026-11-24');
+  });
+
+  it('joueur pollé à 00:10 local (veille en UTC) : déjà pollé « aujourd’hui »', () => {
+    const polledAt = new Date(2026, 10, 25, 0, 10, 0);
+    expect(polledAt.getTime() >= sweepDayStart(sweepDay(polledAt)).getTime()).toBe(true);
   });
 });
 

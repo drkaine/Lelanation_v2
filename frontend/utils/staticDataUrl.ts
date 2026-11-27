@@ -1,4 +1,5 @@
 import { withImageVersion } from './imageVariant'
+import { publicFetchCache } from './publicFetchCache'
 import type { JsonFetcher } from '~/utils/jsonFetcher'
 /**
  * Generate URLs for static game data and images served from frontend public directory
@@ -40,7 +41,7 @@ export function getVersionUrl(): string {
 /** Fetch JSON from `public/` without triggering Vue Router navigation on the client. */
 export async function fetchPublicJson<T>(path: string): Promise<T> {
   if (import.meta.client) {
-    const response = await fetch(path, { cache: 'no-cache' })
+    const response = await fetch(path, { cache: publicFetchCache(path) })
     if (!response.ok) {
       throw new Error(`Failed to fetch ${path}: ${response.status}`)
     }

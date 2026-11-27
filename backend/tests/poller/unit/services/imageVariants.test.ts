@@ -4,6 +4,7 @@ import { join } from 'path'
 import sharp from 'sharp'
 import { describe, expect, it } from 'vitest'
 import {
+  generatePatchNotesVariants,
   generateWebpVariants,
   isVariantSource,
   webpVariantPath,
@@ -72,5 +73,30 @@ describe('imageVariants', () => {
       skipped: 0,
       failed: 0,
     })
+  })
+})
+
+describe('imageVariants — captures patch notes', () => {
+  it('PNG en WebP avec perte (q90) : bien plus léger que le sans-perte', async () => {
+    const width = 64
+    const raw = Buffer.alloc(width * width * 3)
+    let seed = 42
+    for (let i = 0; i < raw.length; i++) {
+      seed = (seed * 1103515245 + 12345) % 2147483648
+      raw[i] = (Math.floor(i / 3) % width) * 3 + (seed % 40)
+    }
+    const lossyDir = mkdtempSync(join(tmpdir(), 'pn-lossy-'))
+    const losslessDir = mkdtempSync(join(tmpdir(), 'pn-lossless-'))
+    for (const d of [lossyDir, losslessDir]) {
+      await sharp(raw, { raw: { width, height: width, channels: 3 } })
+        .png()
+        .toFile(join(d, 'patch-16.23-fr-FR-summary.png'))
+    }
+    const report = await generatePatchNotesVariants(lossyDir)
+    await generateWebpVariants(losslessDir)
+    expect(report.created).toBe(1)
+    const lossy = statSync(join(lossyDir, 'patch-16.23-fr-FR-summary.png.webp')).size
+    const lossless = statSync(join(losslessDir, 'patch-16.23-fr-FR-summary.png.webp')).size
+    expect(lossy).toBeLessThan(lossless)
   })
 })

@@ -6,7 +6,7 @@ vi.mock('../../../../src/db/query.js', () => ({
   isDatabaseConfigured: () => true,
 }));
 
-const { buildOtpCompare, getOtpCompare, resetOtpCompareCache, MIN_OTP_WINRATE_GAMES } = await import(
+const { buildOtpCompare, buildOtpPopulation, getOtpCompare, resetOtpCompareCache, MIN_OTP_WINRATE_GAMES } = await import(
   '../../../../src/services/StatsOtpCompareService.js'
 );
 
@@ -73,7 +73,7 @@ describe('getOtpCompare : SQL sur otp_players, sans exposer les joueurs', () => 
   });
   it('groupe par appartenance à otp_players et filtre le patch', async () => {
     await getOtpCompare('16.9');
-    const texts = queryMock.mock.calls.map((c) => String(c[0]));
+    const texts = queryMock.mock.calls.map((c) => String(c[0])).filter((t) => t.includes('participants'));
     expect(texts.length).toBe(2);
     for (const t of texts) {
       expect(t).toContain('otp_players');
@@ -84,6 +84,39 @@ describe('getOtpCompare : SQL sur otp_players, sans exposer les joueurs', () => 
   it('cache par patch', async () => {
     await getOtpCompare('16.9');
     await getOtpCompare('16.9');
-    expect(queryMock).toHaveBeenCalledTimes(2);
+    expect(queryMock).toHaveBeenCalledTimes(3);
+  });
+  it('population : compte par région et tier courant, agrégé (aucun puuid renvoyé)', async () => {
+    await getOtpCompare('16.9');
+    const pop = queryMock.mock.calls.map((c) => String(c[0])).find((t) => !t.includes('participants'));
+    expect(pop).toBeDefined();
+    expect(pop).toContain('otp_players');
+    expect(pop).toContain('player_rank_history');
+    expect(pop).toMatch(/GROUP BY/i);
+    const tail = String(pop).slice(String(pop).lastIndexOf('SELECT'));
+    const outer = tail.slice(0, tail.indexOf('FROM'));
+    expect(outer).not.toMatch(/\bpuuid\b/);
+  });
+});
+
+describe('buildOtpPopulation', () => {
+  it('total, par région (tri décroissant) et par tier (ordre du ladder), joueurs sans rang en UNRANKED', () => {
+    const pop = buildOtpPopulation([
+      { region: 'EUW1', tier: 'MASTER', players: 30 },
+      { region: 'EUW1', tier: 'GOLD', players: 5 },
+      { region: 'KR', tier: 'MASTER', players: 20 },
+      { region: 'KR', tier: null, players: 2 },
+    ]);
+    expect(pop.total).toBe(57);
+    expect(pop.byRegion).toEqual([
+      { region: 'EUW1', players: 35, pct: 61.4 },
+      { region: 'KR', players: 22, pct: 38.6 },
+    ]);
+    expect(pop.byTier.map((t) => t.tier)).toEqual(['GOLD', 'MASTER', 'UNRANKED']);
+    expect(pop.byTier.find((t) => t.tier === 'MASTER')).toEqual({ tier: 'MASTER', players: 50, pct: 87.7 });
+    expect(pop.cells).toContainEqual({ region: 'KR', tier: 'UNRANKED', players: 2 });
+  });
+  it('vide → total 0', () => {
+    expect(buildOtpPopulation([])).toEqual({ total: 0, byRegion: [], byTier: [], cells: [] });
   });
 });

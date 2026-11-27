@@ -3496,6 +3496,19 @@ function extractStackDefinition(args: {
   }
 }
 
+/** Tooltip exporté : HTML + texte. Plus de copies `descriptionParsed` / `parsedText` (doublons stricts). */
+function tooltipFields(
+  descriptionHtml: string,
+  descriptionText: string
+): { descriptionHtml: string; descriptionText: string } {
+  return { descriptionHtml, descriptionText }
+}
+
+/** JSON servi au front : minifié (nginx compresse ; l'indentation ne coûtait que des octets). */
+function serializeGameData(data: unknown): string {
+  return JSON.stringify(data)
+}
+
 function buildExportedSpell(args: {
   championId: string
   slotIndex: number
@@ -3614,10 +3627,7 @@ function buildExportedSpell(args: {
           summaryText: summaryParsed.descriptionText,
         }
       : {}),
-    descriptionHtml: mainTooltip.descriptionParsed,
-    descriptionParsed: mainTooltip.descriptionParsed,
-    descriptionText: mainTooltip.descriptionText,
-    parsedText: mainTooltip.descriptionText,
+    ...tooltipFields(mainTooltip.descriptionParsed, mainTooltip.descriptionText),
     ...(cleanedDetailedSections.length > 0
       ? {
           detailedTexts: cleanedDetailedSections,
@@ -3796,10 +3806,7 @@ function enrichApheliosSpells(
       ].filter(Boolean)
       return {
         ...spell,
-        descriptionHtml,
-        descriptionParsed: descriptionHtml,
-        descriptionText,
-        parsedText: descriptionText,
+        ...tooltipFields(descriptionHtml, descriptionText),
         ...(detailedTexts.length > 0
           ? {
               detailedTexts,
@@ -3826,10 +3833,7 @@ function enrichApheliosSpells(
       return {
         ...spell,
         ...(summaryHtml ? { summaryHtml, summaryText: stripInlineHtmlTags(summaryHtml) } : {}),
-        descriptionHtml,
-        descriptionParsed: descriptionHtml,
-        descriptionText,
-        parsedText: descriptionText,
+        ...tooltipFields(descriptionHtml, descriptionText),
       }
     }
     return spell
@@ -4023,7 +4027,7 @@ export class TheorycraftDataBuilderService {
     try {
       const dirResult = await FileManager.ensureDir(join(absolutePath, '..'))
       if (dirResult.isErr()) return Result.err(dirResult.unwrapErr())
-      const content = `${JSON.stringify(data, null, 2)}\n`
+      const content = serializeGameData(data)
       await fs.writeFile(absolutePath, content, 'utf-8')
       const relativePath = relative(this.frontendPublicDir, absolutePath)
       return Result.ok({
@@ -4277,10 +4281,7 @@ export class TheorycraftDataBuilderService {
         values: effect.values,
       }))
       return {
-        descriptionHtml: passiveTooltip.descriptionParsed,
-        descriptionParsed: passiveTooltip.descriptionParsed,
-        descriptionText: passiveTooltip.descriptionText,
-        parsedText: passiveTooltip.descriptionText,
+        ...tooltipFields(passiveTooltip.descriptionParsed, passiveTooltip.descriptionText),
         tooltipRaw: passiveMainRaw,
         tooltipDetailRaws: passiveContent.extended,
         maxRank: passiveMaxRank,
@@ -4550,6 +4551,8 @@ export class TheorycraftDataBuilderService {
 }
 
 export const theorycraftTooltipTestUtils = {
+  tooltipFields,
+  serializeGameData,
   formatValueSeries,
   trimByMaxRank,
   extractBinDataValues,

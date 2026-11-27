@@ -86,6 +86,10 @@ export default defineNuxtConfig({
       build.rollupOptions = { ...build.rollupOptions, output: { ...output, manualChunks } }
     },
   },
+  features: {
+    // CSS en fichiers hashés (cache immuable) au lieu de ~220 Ko de <style> inline par page HTML.
+    inlineStyles: false,
+  },
   experimental: {
     // Désactivé : l'extraction externe ne garde que les asyncData (~108 o) et le client
     // préfère data-src au JSON inline (Pinia 240k+ o) → hydratation cassée, 500 "26".

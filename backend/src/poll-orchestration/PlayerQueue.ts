@@ -1,6 +1,10 @@
-import type { PlayerDiscovery } from './PlayerDiscovery.js';
 import { orchestrationLogger } from './logger.js';
 import type { DiscoveryPlayer } from './types.js';
+
+/** Source de joueurs : PlayerDiscovery, ou sa voie restreinte à une région. */
+export interface PlayerSource {
+  fetchNextBatch(limit: number): Promise<DiscoveryPlayer[]>;
+}
 
 const REFILL_POLL_MS = Number.parseInt(process.env.PLAYER_QUEUE_REFILL_POLL_MS ?? '2000', 10);
 
@@ -22,7 +26,7 @@ export class PlayerQueue {
   private peakQueueSize = 0;
 
   constructor(
-    private readonly discovery: PlayerDiscovery,
+    private readonly discovery: PlayerSource,
     private readonly config: PlayerQueueConfig,
   ) {}
 

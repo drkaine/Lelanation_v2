@@ -1,5 +1,6 @@
 import { WINDOW_MS } from "../redis/rate-budget.js";
 import { bullmqJobId } from "./bullmq-job-id.js";
+import { sweepDay } from "../poll-orchestration/leagueSweep.js";
 
 export const RANK_CHILD_JOB_OPTS = {
   attempts: 2,
@@ -12,8 +13,9 @@ export const RANK_PREFETCH_PRIORITY = 5;
 export const RANK_GATE_PRIORITY = 1;
 export const RANK_FILL_PRIORITY = 10;
 
+/** Jour du balayage (local, 00:01) : même date que les rangs et les cibles. */
 export function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
+  return sweepDay(new Date());
 }
 
 export function rankChildJobId(puuid: string, region: string, today: string): string {

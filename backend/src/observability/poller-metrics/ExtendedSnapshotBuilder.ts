@@ -1,5 +1,6 @@
 import type { Queue } from 'bullmq';
 import { sql } from '../../db/client.js';
+import { sweepDay } from '../../poll-orchestration/leagueSweep.js';
 import { getSessionPoolStatus } from '../../poll-orchestration/sessionPoolStatus.js';
 import { PollerTuner } from '../../tuner/PollerTuner.js';
 import type { AlertDetector } from './AlertDetector.js';
@@ -308,7 +309,7 @@ export class ExtendedSnapshotBuilder {
         sql<Array<{ count: number }>>`
           SELECT COUNT(DISTINCT puuid)::int AS count
           FROM player_rank_history
-          WHERE date = CURRENT_DATE
+          WHERE date = ${sweepDay(new Date())}::date
         `,
       ),
     ]);

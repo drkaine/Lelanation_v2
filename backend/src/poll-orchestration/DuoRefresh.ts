@@ -1,5 +1,6 @@
 import { sql } from '../db/client.js';
 import { POLLER_PLATFORMS, toDbRegions } from '../poller/utils/pollerScope.js';
+import { sweepDay } from './leagueSweep.js';
 import { DUO_MIN_GAMES, DUO_MIN_SHARE, DUO_RETENTION_DAYS } from './duoRules.js';
 
 export interface DuoRefreshResult {
@@ -18,6 +19,7 @@ export interface DuoRefreshResult {
  */
 export async function refreshPlayerDuos(): Promise<DuoRefreshResult> {
   const regions = toDbRegions(POLLER_PLATFORMS);
+  const today = sweepDay(new Date());
   return sql.begin(async (tx) => {
     const [cursor] = await tx<{ since: Date | null; until: Date | null }[]>`
       SELECT (SELECT last_match_created_at FROM duo_refresh_state WHERE id = 1) AS since,
@@ -29,7 +31,7 @@ export async function refreshPlayerDuos(): Promise<DuoRefreshResult> {
     const purge = async (): Promise<number> => {
       const deleted = await tx<{ puuid_a: string }[]>`
         DELETE FROM player_duos
-        WHERE COALESCE(last_game_at, updated_at::date) < CURRENT_DATE - ${DUO_RETENTION_DAYS}::int
+        WHERE COALESCE(last_game_at, updated_at::date) < ${today}::date - ${DUO_RETENTION_DAYS}::int
         RETURNING puuid_a
       `;
       return deleted.length;
@@ -57,7 +59,7 @@ export async function refreshPlayerDuos(): Promise<DuoRefreshResult> {
         JOIN matchs m ON m.riot_match_id = pa.riot_match_id
         WHERE m.region = ANY(${regions}::lol_region[])
           AND m.early_surrender IS NOT TRUE
-          AND m.game_date >= CURRENT_DATE - ${DUO_RETENTION_DAYS}::int
+          AND m.game_date >= ${today}::date - ${DUO_RETENTION_DAYS}::int
       ),
       player_games AS (
         SELECT puuid, COUNT(*)::int AS n FROM team GROUP BY puuid
