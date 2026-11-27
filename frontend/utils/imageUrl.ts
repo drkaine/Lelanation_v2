@@ -1,5 +1,6 @@
 import { getStaticImageUrl } from './staticDataUrl.js'
 import { isItemShopSyntheticItem } from './itemShopEvolutions'
+import { withImageVersion } from './imageVariant'
 import { getFallbackGameVersion } from '~/config/version'
 
 /**
@@ -21,10 +22,10 @@ export function getImageUrl(
 /**
  * Get champion image URL (local)
  */
-export function getChampionImageUrl(_version: string, imageName: string): string {
+export function getChampionImageUrl(version: string, imageName: string): string {
   if (!imageName) return ''
   // Use local images instead of Data Dragon
-  return `/images/game/latest/champion/${imageName}`
+  return withImageVersion(`/images/game/latest/champion/${imageName}`, version)
 }
 
 /** Kayn transformation HUD squares (Community Dragon cron). */
@@ -36,10 +37,10 @@ export function getKaynHudImageUrl(form: 'slay' | 'ass'): string {
  * Get champion splash image URL (base skin 0).
  * Stored as: /images/game/{version}/champion/splash_{ChampionId}.jpg
  */
-export function getChampionSplashImageUrl(_version: string, championId: string): string {
+export function getChampionSplashImageUrl(version: string, championId: string): string {
   if (!championId) return ''
   // Use local images instead of Data Dragon (skin 0 stored as splash_{ChampionId}.jpg)
-  return `/images/game/latest/champion/splash_${championId}.jpg`
+  return withImageVersion(`/images/game/latest/champion/splash_${championId}.jpg`, version)
 }
 
 /**
@@ -58,10 +59,10 @@ export function getDdragonItemImageUrl(version: string, imageName: string): stri
 /**
  * Get item image URL (local)
  */
-export function getItemImageUrl(_version: string, imageName: string): string {
+export function getItemImageUrl(version: string, imageName: string): string {
   if (!imageName) return ''
   // Use local images instead of Data Dragon
-  return `/images/game/latest/item/${imageName}`
+  return withImageVersion(`/images/game/latest/item/${imageName}`, version)
 }
 
 /** Synthetic shop evolutions are absent from local sync — use Data Dragon icons. */
@@ -89,10 +90,10 @@ export function handleGameItemImageError(event: Event, version: string, imageNam
 /**
  * Get summoner spell image URL (local)
  */
-export function getSpellImageUrl(_version: string, imageName: string): string {
+export function getSpellImageUrl(version: string, imageName: string): string {
   if (!imageName) return ''
   // Use local images instead of Data Dragon
-  return `/images/game/latest/spell/${imageName}`
+  return withImageVersion(`/images/game/latest/spell/${imageName}`, version)
 }
 
 /**
@@ -112,15 +113,15 @@ export function championSpellImageFolder(
  * Stored as: /images/game/latest/champion-spell/{ChampionId}/{SpellImage}.png
  */
 export function getChampionSpellImageUrl(
-  _version: string,
+  version: string,
   championFolder: string,
   imageName: string
 ): string {
   if (!imageName || !championFolder) return ''
   if (imageName.includes('/')) {
-    return `/images/game/latest/champion-spell/${imageName}`
+    return withImageVersion(`/images/game/latest/champion-spell/${imageName}`, version)
   }
-  return getImageUrl('champion-spell', 'latest', imageName, championFolder)
+  return getImageUrl('champion-spell', version, imageName, championFolder)
 }
 
 /** Resolve spell image URL using slug when available (stats pages pass numeric id + slug). */
@@ -160,9 +161,9 @@ export function resolveChampionSpellImageUrlFromSpell(
  * Get champion passive image URL (local)
  * Stored as: /images/game/latest/champion-spell/passive/{PassiveImage}.png
  */
-export function getChampionPassiveImageUrl(_version: string, imageName: string): string {
+export function getChampionPassiveImageUrl(version: string, imageName: string): string {
   if (!imageName) return ''
-  return getImageUrl('champion-spell', 'latest', imageName, 'passive')
+  return getImageUrl('champion-spell', version, imageName, 'passive')
 }
 
 /**

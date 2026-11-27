@@ -66,7 +66,7 @@
         <AdminTierDistributionTab />
         <AdminStatsLimitsTab />
       </div>
-      <AdminAdminLimitsTab v-else-if="activeTab === 'limits' && session?.user.role === 'admin'" />
+      <AdminLimitsTab v-else-if="activeTab === 'limits' && session?.user.role === 'admin'" />
       <AdminBalanceRulesTab v-else-if="activeTab === 'balance' && canSeeGestionTabs" />
       <AdminVideosTab v-else-if="activeTab === 'videos' && canSeeGestionTabs" ref="videosTabRef" />
 

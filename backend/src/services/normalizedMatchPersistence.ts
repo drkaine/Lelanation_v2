@@ -2,6 +2,7 @@
  * Persistance normalisée à l'ingestion : matchs / teams / participants (INSERT only).
  * `match_aggregated` est créé uniquement après agrégation réussie (`insertMatchAggregated`).
  */
+import { laneEventColumns } from "./laneEventColumns.js";
 import type { Sql, TransactionSql } from "postgres";
 import { extractBanByParticipantId } from "../parsers/match.parser.js";
 import { extractChampionTransformInfo } from "../parsers/championTransform.js";
@@ -494,6 +495,24 @@ export async function persistNormalizedMatch(
     );
   }
 
+  const participantsMeta = participantsInMatch
+    .map((p) =>
+      toParticipantMeta({
+        participantId: ti(p.participantId),
+        teamId: ti(p.teamId),
+        teamPosition: String(p.teamPosition ?? ""),
+        championId: ti(p.championId),
+      }),
+    )
+    .filter((p): p is NonNullable<typeof p> => p !== null);
+  const laneCounts = new Map(
+    participantsMeta.length > 0 && (timeline.info?.frames?.length ?? 0) > 0
+      ? classifyParticipantLaneEvents(matchId, timeline, participantsMeta).map(
+          (c) => [c.participantId, c] as const,
+        )
+      : [],
+  );
+
   for (const participant of participantsInMatch) {
     const jsonCols = new Set([
       "item_history",
@@ -550,13 +569,10 @@ export async function persistNormalizedMatch(
       participant.participantId,
       participant.championTransform,
     ).transformTimestampMs;
-    const row = buildParticipantRow(
-      matchId,
-      participant,
-      timeline,
-      bannedId,
-      transformTimestampMs,
-    );
+    const row = {
+      ...buildParticipantRow(matchId, participant, timeline, bannedId, transformTimestampMs),
+      ...laneEventColumns(laneCounts, ti(participant.participantId)),
+    };
     const cols = Object.keys(row).filter(isValidParticipantColumn);
     const vals = cols.map((c) => {
       const v = row[c];
@@ -582,46 +598,6 @@ export async function persistNormalizedMatch(
     );
   }
 
-  const participantsMeta = participantsInMatch
-    .map((p) =>
-      toParticipantMeta({
-        participantId: ti(p.participantId),
-        teamId: ti(p.teamId),
-        teamPosition: String(p.teamPosition ?? ""),
-        championId: ti(p.championId),
-      }),
-    )
-    .filter((p): p is NonNullable<typeof p> => p !== null);
-
-  if (participantsMeta.length > 0 && (timeline.info?.frames?.length ?? 0) > 0) {
-    const eventCounts = classifyParticipantLaneEvents(matchId, timeline, participantsMeta);
-    for (const counts of eventCounts) {
-      await tx.unsafe(
-        `UPDATE participants SET
-           kill_by_dive = $1,
-           death_by_dive = $2,
-           kill_by_gank = $3,
-           death_by_gank = $4,
-           kill_by_roaming = $5,
-           death_by_roaming = $6,
-           kill_on_objective = $7,
-           death_on_objective = $8
-         WHERE riot_match_id = $9 AND participant_id = $10`,
-        [
-          counts.killByDive,
-          counts.deathByDive,
-          counts.killByGank,
-          counts.deathByGank,
-          counts.killByRoam,
-          counts.deathByRoam,
-          counts.killOnObjective,
-          counts.deathOnObjective,
-          matchId,
-          counts.participantId,
-        ],
-      );
-    }
-  }
 }
 
 export async function isMatchAlreadyAggregated(riotMatchId: string): Promise<boolean> {

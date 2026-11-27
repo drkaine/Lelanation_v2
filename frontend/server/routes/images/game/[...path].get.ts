@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { join, sep } from 'node:path'
 import { createError } from 'h3'
+import { imageCacheControl, imageCandidates } from '../../../../utils/imageVariant'
 
 const EXT_TO_TYPE: Record<string, string> = {
   '.png': 'image/png',
@@ -29,11 +30,24 @@ export default defineEventHandler(async event => {
   }
 
   try {
-    const buf = await readFile(requestedPath)
     const ext = requestedPath.slice(requestedPath.lastIndexOf('.'))
     const contentType = EXT_TO_TYPE[ext] ?? 'application/octet-stream'
-    setHeader(event, 'Content-Type', contentType)
-    setHeader(event, 'Cache-Control', 'public, max-age=3600')
+    const candidates = imageCandidates(requestedPath, getRequestHeader(event, 'accept'))
+    let buf: Buffer | null = null
+    let servedType = contentType
+    for (const file of candidates) {
+      try {
+        buf = await readFile(file)
+        servedType = file.endsWith('.webp') && file !== requestedPath ? 'image/webp' : contentType
+        break
+      } catch (err: unknown) {
+        if (file === requestedPath) throw err
+      }
+    }
+    if (!buf) throw createError({ statusCode: 404, statusMessage: 'Not Found' })
+    setHeader(event, 'Content-Type', servedType)
+    setHeader(event, 'Vary', 'Accept')
+    setHeader(event, 'Cache-Control', imageCacheControl(typeof getQuery(event).v === 'string'))
     return buf
   } catch (err: unknown) {
     const code =

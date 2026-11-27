@@ -6,6 +6,7 @@ import { Result } from '../utils/Result.js'
 import { AppError } from '../utils/errors.js'
 import { FileManager } from '../utils/fileManager.js'
 import { isAlwaysExcludedGameItemId } from '../config/excludedGameItemIds.js'
+import { generateWebpVariants } from './imageVariants.js'
 import { movePatchVersionToFrontend, rebuildPatchNotesIndex } from './PatchNotesPublishService.js'
 
 const execAsync = promisify(exec)
@@ -485,6 +486,14 @@ export class StaticAssetsService {
 
       await FileManager.ensureDir(targetImagesDir)
       await copyRecursive(sourceImagesDir, targetImagesDir)
+
+      // Variantes WebP (servies par nginx si le navigateur les accepte) : seulement les nouvelles ou modifiées.
+      const variants = await generateWebpVariants(join(this.frontendPublicDir, 'images', 'game'))
+      if (variants.created > 0 || variants.failed > 0) {
+        console.log(
+          `[StaticAssets] WebP variants: ${variants.created} created, ${variants.failed} failed`
+        )
+      }
 
       return Result.ok({ copied, skipped })
     } catch (error) {

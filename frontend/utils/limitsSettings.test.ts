@@ -46,6 +46,10 @@ describe('limitsSettings (Gestion > Stats, Limites admin)', () => {
     expect(limitsValid(ADMIN_LIMIT_SPECS, admin)).toBe(true)
     expect(limitsValid(ADMIN_LIMIT_SPECS, { ...admin, pollMaxDelayDays: 0.1 })).toBe(false)
     expect(limitsValid(ADMIN_LIMIT_SPECS, { ...admin, patchRetentionDays: 91 })).toBe(false)
+    // pollTargetNewGames : entier ≥ 1, sans plafond (comme le backend)
+    expect(limitsValid(ADMIN_LIMIT_SPECS, { ...admin, pollTargetNewGames: 250 })).toBe(true)
+    expect(limitsValid(ADMIN_LIMIT_SPECS, { ...admin, pollTargetNewGames: 2.5 })).toBe(false)
+    expect(limitsValid(ADMIN_LIMIT_SPECS, { ...admin, pollTargetNewGames: 0.5 })).toBe(false)
   })
 
   it('parse la réponse GET ; champ manquant ou invalide → null', () => {

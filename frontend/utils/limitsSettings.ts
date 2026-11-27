@@ -65,7 +65,7 @@ export const STATS_LIMIT_SPECS: ReadonlyArray<LimitFieldSpec<StatsLimitKey>> = [
 export const ADMIN_LIMIT_SPECS: ReadonlyArray<LimitFieldSpec<AdminLimitKey>> = [
   { key: 'voteMinTotal', min: 1, integer: true, step: 1 },
   { key: 'voteMinUpvotePct', min: 0, max: 100, step: 1 },
-  { key: 'pollTargetNewGames', min: 0.1, max: 100, step: 0.5 },
+  { key: 'pollTargetNewGames', min: 1, integer: true, step: 1 },
   { key: 'pollMinDelayDays', min: 0.01, max: 365, step: 0.25 },
   { key: 'pollMaxDelayDays', min: 0.01, max: 365, step: 1 },
   { key: 'pollWindowHours', min: 1, max: 168, integer: true, step: 1 },

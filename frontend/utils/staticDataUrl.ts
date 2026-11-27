@@ -1,3 +1,4 @@
+import { withImageVersion } from './imageVariant'
 import type { JsonFetcher } from '~/utils/jsonFetcher'
 /**
  * Generate URLs for static game data and images served from frontend public directory
@@ -56,7 +57,7 @@ export async function fetchPublicJson<T>(path: string): Promise<T> {
  * Example: /images/game/16.1.1/champion/Aatrox.png
  */
 export function getStaticImageUrl(
-  _version: string,
+  version: string,
   type: 'champion' | 'item' | 'spell' | 'rune' | 'champion-spell',
   filename: string,
   subPath?: string
@@ -65,10 +66,9 @@ export function getStaticImageUrl(
   // Images should be copied from backend to frontend/public/images/game/ during sync
   // If images are not available, they will fail to load and can be handled by onerror handlers
   // latest-only images path (version argument kept for API compatibility in callers)
-  if (subPath) {
-    return `/images/game/latest/${type}/${subPath}/${filename}`
-  }
-  return `/images/game/latest/${type}/${filename}`
+  const path = subPath ? `${type}/${subPath}/${filename}` : `${type}/${filename}`
+  // ?v=patch : URL change à chaque patch → cache navigateur immuable
+  return withImageVersion(`/images/game/latest/${path}`, version)
 }
 
 /**
